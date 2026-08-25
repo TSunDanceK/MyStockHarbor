@@ -181,6 +181,12 @@ type SignalRecord = {
   trendFlipDailyBars?: number | null;
   /** Weeks since the last confirmed weekly flip. Ranking key, weekly pages. */
   trendFlipWeeklyBars?: number | null;
+  /** Date of the SESSION the daily flip confirmed on -- dailyClosed[flipIndex].
+   *  The daily pages lead with this for the same reason the weekly pair leads
+   *  with its week: the relative phrase cannot be trusted, because the newest
+   *  evaluated bar does not advance during the trading day (see
+   *  trendFlipAgeLabel). */
+  trendFlipDailyDate?: string;
   /** End date of the week the flip CONFIRMED in -- weekly[flipIndex], not the
    *  newest closed week. Those two coincide only at barsSinceFlip 0, so three
    *  of the four in-window ages printed a date that contradicted them. */
@@ -2479,6 +2485,7 @@ type TrendFlipResult = {
   trendFlipBearishWeekly: boolean;
   trendFlipDailyBars: number | null;
   trendFlipWeeklyBars: number | null;
+  trendFlipDailyDate?: string;
   trendFlipWeekEnding?: string;
 };
 
@@ -2572,6 +2579,12 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
     trendFlipBearishWeekly: qualifies(weeklyFlip, -1),
     trendFlipDailyBars: dailyFlip?.barsSinceFlip ?? null,
     trendFlipWeeklyBars: weeklyFlip?.barsSinceFlip ?? null,
+    // Same shape as the weekly date below: the bar the flip confirmed ON,
+    // indexed into the CLOSED daily series the flip was computed from.
+    trendFlipDailyDate:
+      dailyFlip && dailyClosed[dailyFlip.flipIndex]
+        ? dailyClosed[dailyFlip.flipIndex].date.slice(0, 10)
+        : undefined,
     // THE WEEK THE FLIP CONFIRMED IN, via flipIndex -- which is an index into
     // `weekly` and exists for exactly this. NOT weekly[weekly.length - 1],
     // which is the newest closed week and equals the flip week only when
@@ -2585,27 +2598,32 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
 }
 
 /**
- * "today" / "1 day ago" / "3 days ago", or the weekly equivalent.
+ * How far back the flip was, in the unit the flip was measured in.
  *
- * THE WEEK BRANCH IS OFF BY ONE FROM THE BAR COUNT, DELIBERATELY. Weekly bars
- * are counted back from the newest CLOSED week, and the week in progress is
- * never evaluated -- so barsSinceFlip 0 is already a week ago, not "this week",
- * which is what this used to say and which was never a week the screen could
- * even see. 0 -> last week, 1 -> 2 weeks ago, and so on.
+ * NEITHER BRANCH MAKES A CALENDAR CLAIM, and both are off by one from the raw
+ * bar count. The reason is the same on both timeframes: the bar the count
+ * starts from is itself already one period in the past.
  *
- * It is still only a relative phrase. Under the one-trading-day lag
- * resampleWeeklyClosed documents (the week ending Friday becomes available once
- * Monday's bar lands), "last week" can be a week out early on a Monday. The
- * WEEK-ENDING DATE never is, which is why the weekly rows lead with it and
- * carry this only as the second, subordinate chip.
+ *   WEEK. The week in progress is never evaluated -- resampleWeeklyClosed drops
+ *   it -- so barsSinceFlip 0 is the last CLOSED week, not this one.
+ *
+ *   SESSION. Same, and for a stronger reason than the intraday gate alone. The
+ *   history cache refreshes once a day, pre-open (Vercel cron 0 7 * * * UTC =
+ *   03:00 ET), on a 50h TTL through a MISS-ONLY bulk read, and FMP serves no
+ *   bar for the current day before the open. So the newest daily bar does not
+ *   advance at any point during the session: for the whole trading day,
+ *   barsSinceFlip 0 is the PREVIOUS session's close. This used to say "today",
+ *   which was false every hour the market was open.
+ *
+ * Sessions rather than days, deliberately: bars are trading bars, so a
+ * calendar phrase is wrong across every weekend and every holiday. Both units
+ * remain only a relative phrase -- the rows lead with the actual date, which is
+ * the thing that cannot drift.
  */
-function trendFlipAgeLabel(bars: number, unit: "day" | "week") {
-  if (unit === "week") {
-    if (bars <= 0) return "last week";
-    return `${bars + 1} weeks ago`;
-  }
-  if (bars <= 0) return "today";
-  return `${bars} day${bars === 1 ? "" : "s"} ago`;
+function trendFlipAgeLabel(bars: number, unit: "session" | "week") {
+  const n = Math.max(0, bars) + 1;
+  if (unit === "week") return n === 1 ? "last week" : `${n} weeks ago`;
+  return n === 1 ? "last session" : `${n} sessions ago`;
 }
 
 // Pure transform over already-fetched points -- the actual Redis/FMP fetch
@@ -3126,28 +3144,38 @@ async function buildPickersPayload(
             target: PickerItem[],
             bars: number,
             direction: "Bullish" | "Bearish",
-            unit: "day" | "week"
+            unit: "session" | "week"
           ) => {
             const age = trendFlipAgeLabel(bars, unit);
-            // Weekly LEADS WITH THE DATE. The date is the fact; the relative
-            // phrase is a convenience that the Monday lag can put a week out
-            // (see trendFlipAgeLabel). Daily has no such date and no such
-            // ambiguity, so its wording is unchanged.
-            const weekEnding = unit === "week" ? trendFlips.trendFlipWeekEnding : undefined;
+            // BOTH TIMEFRAMES LEAD WITH THE DATE. The date is the fact; the
+            // relative phrase is a convenience that can be a period out on
+            // either unit -- the Monday lag on weekly, and on daily the fact
+            // that the newest bar sits still all session (see
+            // trendFlipAgeLabel). A row with no date falls back to the phrase
+            // alone rather than printing an empty label.
+            const weekly = unit === "week";
+            const flipDate = weekly
+              ? trendFlips.trendFlipWeekEnding
+              : trendFlips.trendFlipDailyDate;
+            const dateLabel = flipDate
+              ? weekly
+                ? `week ending ${flipDate}`
+                : `session of ${flipDate}`
+              : "";
             target.push({
               symbol,
               chartPoints,
               tone: direction === "Bullish" ? "green" : "red",
-              note: weekEnding
-                ? `${direction} Trend Helper flip • week ending ${weekEnding} • ${age}`
+              note: dateLabel
+                ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
                 : `${direction} Trend Helper flip • confirmed ${age}`,
-              timeframe: unit === "week" ? "W" : "D",
-              firedIndicators: weekEnding
-                ? [`${direction} flip week ending ${weekEnding}`, age]
+              timeframe: weekly ? "W" : "D",
+              firedIndicators: dateLabel
+                ? [`${direction} flip ${dateLabel}`, age]
                 : [`${direction} flip ${age}`],
               dashboardHref: buildDashboardHref({
                 symbol,
-                timeframe: unit === "week" ? "W" : "D",
+                timeframe: weekly ? "W" : "D",
               }),
               // Two numbers, deliberately. `_score` is the RANKING term and
               // takeTop sorts it descending, so recency has to be negated
@@ -3172,10 +3200,10 @@ async function buildPickersPayload(
           };
 
           if (trendFlips.trendFlipBullish && trendFlips.trendFlipDailyBars !== null) {
-            pushTrendFlip(trendFlipBullishDaily, trendFlips.trendFlipDailyBars, "Bullish", "day");
+            pushTrendFlip(trendFlipBullishDaily, trendFlips.trendFlipDailyBars, "Bullish", "session");
           }
           if (trendFlips.trendFlipBearish && trendFlips.trendFlipDailyBars !== null) {
-            pushTrendFlip(trendFlipBearishDaily, trendFlips.trendFlipDailyBars, "Bearish", "day");
+            pushTrendFlip(trendFlipBearishDaily, trendFlips.trendFlipDailyBars, "Bearish", "session");
           }
           if (trendFlips.trendFlipBullishWeekly && trendFlips.trendFlipWeeklyBars !== null) {
             pushTrendFlip(trendFlipBullishWeekly, trendFlips.trendFlipWeeklyBars, "Bullish", "week");
