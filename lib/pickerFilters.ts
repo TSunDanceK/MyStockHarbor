@@ -17,6 +17,10 @@ export type FilterKey =
   | "belowMA200"
   | "dailyMa200Proximity"
   | "weeklyMa200Proximity"
+  | "trendFlipBullish"
+  | "trendFlipBearish"
+  | "trendFlipBullishWeekly"
+  | "trendFlipBearishWeekly"
   | "bullishRsiDivergence"
   | "bearishRsiDivergence"
   | "bullishMacdDivergence"
@@ -41,6 +45,12 @@ export const FILTER_DEFS: FilterDef[] = [
   { key: "belowMA200", label: "Below MA200", tone: "yellow" },
   { key: "dailyMa200Proximity", label: "Near 200-Day MA (Daily)", tone: "yellow" },
   { key: "weeklyMa200Proximity", label: "Near 200-Day MA (Weekly)", tone: "yellow" },
+  // Trend Helper (Slow) confirmed a direction flip within the last four bars.
+  // See computeTrendFlips in lib/server/pickersBuilder.ts for the exact rule.
+  { key: "trendFlipBullish", label: "Bullish Trend Flip (Daily)", tone: "green" },
+  { key: "trendFlipBearish", label: "Bearish Trend Flip (Daily)", tone: "red" },
+  { key: "trendFlipBullishWeekly", label: "Bullish Trend Flip (Weekly)", tone: "green" },
+  { key: "trendFlipBearishWeekly", label: "Bearish Trend Flip (Weekly)", tone: "red" },
   { key: "bullishRsiDivergence", label: "Bullish RSI Divergence", tone: "green" },
   { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
   { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },

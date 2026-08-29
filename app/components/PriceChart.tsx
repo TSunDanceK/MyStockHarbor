@@ -2,6 +2,12 @@
 
 import React, { useMemo, useState } from "react";
 import type { DivResult } from "../../lib/ta/divergence";
+import {
+  computeTrendHelper,
+  TREND_HELPER_SLOW,
+  TREND_HELPER_FAST,
+  TREND_HELPER_COLORS,
+} from "@/lib/ta/trendHelper";
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
 
 type Point = {
@@ -42,63 +48,18 @@ const CHART_COLORS = {
   stochBand: "rgba(56,189,248,0.08)",
   // Trend Helper (Noise Cutter): HMA trend line coloured by confirmed state,
   // plus a purple MA200. Mirrors the Interactive chart's version.
-  nctBull: "#3b82f6",
-  nctBear: "#eab308",
-  nctNeutral: "#94a3b8",
-  nctMa200: "#a855f7",
+  nctBull: TREND_HELPER_COLORS.bull,
+  nctBear: TREND_HELPER_COLORS.bear,
+  nctNeutral: TREND_HELPER_COLORS.neutral,
+  nctMa200: TREND_HELPER_COLORS.ma200,
 };
 
-// ── Trend Helper (Noise Cutter) math ─────────────────────────────────────────
-// HMA(n) = WMA(2·WMA(n/2) − WMA(n), √n). Coloured by a *confirmed* trend state
-// (needs `confirm` consecutive bars closing the correct side of a rising/falling
-// HMA before the colour flips), with the confirmed colour held through pullbacks
-// until the opposite direction confirms. Computed on the FULL close history
-// (passed via props) then sliced to the visible window, so the line isn't blank
-// through the HMA warm-up period.
-function wmaNullable(values: Array<number | null>, len: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (len < 1) return out;
-  const denom = (len * (len + 1)) / 2;
-  for (let i = len - 1; i < values.length; i++) {
-    let num = 0, ok = true;
-    for (let k = 0; k < len; k++) {
-      const v = values[i - k];
-      if (typeof v !== "number" || !Number.isFinite(v)) { ok = false; break; }
-      num += v * (len - k);
-    }
-    if (ok) out[i] = num / denom;
-  }
-  return out;
-}
-function hmaSeries(values: number[], len: number): Array<number | null> {
-  const half = Math.max(1, Math.floor(len / 2));
-  const sq = Math.max(1, Math.round(Math.sqrt(len)));
-  const wHalf = wmaNullable(values, half);
-  const wFull = wmaNullable(values, len);
-  const diff: Array<number | null> = values.map((_, i) => {
-    const a = wHalf[i], b = wFull[i];
-    return typeof a === "number" && typeof b === "number" ? 2 * a - b : null;
-  });
-  return wmaNullable(diff, sq);
-}
-type TrendHelperSeries = { line: Array<number | null>; state: number[] };
-function computeTrendHelper(closes: number[], trendLen: number, confirmBars: number): TrendHelperSeries {
-  const line = hmaSeries(closes, trendLen);
-  const state: number[] = new Array(closes.length).fill(0);
-  let bull = 0, bear = 0, last = 0;
-  for (let i = 0; i < closes.length; i++) {
-    const t = line[i], tp = i > 0 ? line[i - 1] : null;
-    const up = typeof t === "number" && typeof tp === "number" && closes[i] > t && t > tp;
-    const dn = typeof t === "number" && typeof tp === "number" && closes[i] < t && t < tp;
-    bull = up ? bull + 1 : 0;
-    bear = dn ? bear + 1 : 0;
-    if (bull >= confirmBars) last = 1;
-    else if (bear >= confirmBars) last = -1;
-    // else hold last confirmed state (less flicker than the source Pine)
-    state[i] = last;
-  }
-  return { line, state };
-}
+// ── Trend Helper (Noise Cutter) ────────────────────────────────────
+// The math lives in lib/ta/trendHelper.ts — the single source of truth shared
+// with InteractiveChart.tsx and the server-side picker builder. Computed on the
+// FULL close history (passed via props) then sliced to the visible window, so
+// the line isn't blank through the HMA warm-up period.
+type TrendHelperWindow = { line: Array<number | null>; state: number[] };
 
 export type Overlay =
   | "None"
@@ -402,15 +363,15 @@ export default function PriceChart(props: Props) {
   // computed when a Trend Helper overlay is active and the full close history +
   // window offset were supplied. Sliced from the full-history computation so
   // the line is populated across the whole visible window.
-  const trendSmooth = useMemo<TrendHelperSeries | null>(() => {
+  const trendSmooth = useMemo<TrendHelperWindow | null>(() => {
     if (!showTrendSmooth || !Array.isArray(fullCloses) || fullCloses.length === 0 || typeof displayStart !== "number") return null;
-    const full = computeTrendHelper(fullCloses, 55, 2);
+    const full = computeTrendHelper(fullCloses, TREND_HELPER_SLOW.trendLen, TREND_HELPER_SLOW.confirmBars);
     const end = displayStart + data.length;
     return { line: full.line.slice(displayStart, end), state: full.state.slice(displayStart, end) };
   }, [showTrendSmooth, fullCloses, displayStart, data.length]);
-  const trendFast = useMemo<TrendHelperSeries | null>(() => {
+  const trendFast = useMemo<TrendHelperWindow | null>(() => {
     if (!showTrendFast || !Array.isArray(fullCloses) || fullCloses.length === 0 || typeof displayStart !== "number") return null;
-    const full = computeTrendHelper(fullCloses, 21, 1);
+    const full = computeTrendHelper(fullCloses, TREND_HELPER_FAST.trendLen, TREND_HELPER_FAST.confirmBars);
     const end = displayStart + data.length;
     return { line: full.line.slice(displayStart, end), state: full.state.slice(displayStart, end) };
   }, [showTrendFast, fullCloses, displayStart, data.length]);

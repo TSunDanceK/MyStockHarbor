@@ -92,6 +92,13 @@ const seoGuides = [
   "/stocks-near-weekly-200-day-moving-average",
   "/stocks-with-positive-last-earnings",
   "/stocks-with-strong-earnings-growth",
+  // The four Trend Helper flip pages. Listed here, but currently filtered back
+  // out by NOINDEX_PICKER_PAGES below -- see lib/noindexPickerPages.ts for why
+  // and for the one-line-each change that flips them in.
+  "/stocks-with-bullish-trend-flip",
+  "/stocks-with-bearish-trend-flip",
+  "/stocks-with-weekly-bullish-trend-flip",
+  "/stocks-with-weekly-bearish-trend-flip",
 
   // "Popular Screens" — hand-written landing pages, each a saved fundamental
   // screen rather than a technical condition. Reachable from the Pickers
