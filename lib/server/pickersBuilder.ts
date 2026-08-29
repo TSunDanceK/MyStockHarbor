@@ -15,6 +15,11 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
+import {
+  latestTrendFlip,
+  resampleWeeklyClosed,
+  TREND_HELPER_SLOW,
+} from "../ta/trendHelper";
 import { getDailyHistoryBulk } from "./historyCache";
 import { registerSymbols } from "./stalenessQueue";
 import {
@@ -162,6 +167,30 @@ type SignalRecord = {
   dailyMa200Proximity: boolean;
   weeklyMa200Proximity: boolean;
   weeklyMa200DistancePct?: number;
+
+  // Trend Helper (Slow preset: HMA 55, confirm 2) direction flips confirmed
+  // within the last four bars. See computeTrendFlips for the whole rule --
+  // in particular why the first confirmation in a symbol's history is
+  // excluded and why the weekly pair is evaluated on closed weeks only.
+  trendFlipBullish: boolean;
+  trendFlipBearish: boolean;
+  trendFlipBullishWeekly: boolean;
+  trendFlipBearishWeekly: boolean;
+  /** Bars since the last confirmed daily flip. THE RANKING KEY for the two
+   *  daily pages -- null when the series never confirmed a direction. */
+  trendFlipDailyBars?: number | null;
+  /** Weeks since the last confirmed weekly flip. Ranking key, weekly pages. */
+  trendFlipWeeklyBars?: number | null;
+  /** Date of the SESSION the daily flip confirmed on -- dailyClosed[flipIndex].
+   *  The daily pages lead with this for the same reason the weekly pair leads
+   *  with its week: the relative phrase cannot be trusted, because the newest
+   *  evaluated bar does not advance during the trading day (see
+   *  trendFlipAgeLabel). */
+  trendFlipDailyDate?: string;
+  /** End date of the week the flip CONFIRMED in -- weekly[flipIndex], not the
+   *  newest closed week. Those two coincide only at barsSinceFlip 0, so three
+   *  of the four in-window ages printed a date that contradicted them. */
+  trendFlipWeekEnding?: string;
 
   bullishRsiDivergence: boolean;
   bearishRsiDivergence: boolean;
@@ -2444,6 +2473,159 @@ async function fetchMarket(): Promise<MarketPayload> {
   return readMarketState();
 }
 
+/* --------------------------- Trend Helper flips --------------------------- */
+
+// The four Trend Helper flip flags plus the keys the pages rank and label by.
+// One object rather than seven loose values, for the same reason TrendChecks is
+// one object: "no flip" and "not computed" have to stay distinguishable.
+type TrendFlipResult = {
+  trendFlipBullish: boolean;
+  trendFlipBearish: boolean;
+  trendFlipBullishWeekly: boolean;
+  trendFlipBearishWeekly: boolean;
+  trendFlipDailyBars: number | null;
+  trendFlipWeeklyBars: number | null;
+  trendFlipDailyDate?: string;
+  trendFlipWeekEnding?: string;
+};
+
+// Bars 0, 1, 2, 3 inclusive -- "flipped on the latest bar, or in the three
+// before it". On the weekly pair that reads as "this week or the last three".
+const TREND_FLIP_MAX_BARS = 3;
+
+// A daily bar dated today is only a CLOSE after 16:00 ET. FMP serves a partial
+// bar for the session in progress, and the builder can rebuild at any hour, so
+// without this gate a flip could appear at 11:00 and be gone by 16:00 -- the
+// page would contradict itself within a session and disagree with the chart.
+// 16:15 rather than 16:00 leaves room for the print to settle at the bell.
+//
+// Note this only ever bites DURING a session: measured in production
+// (historyCache.ts), FMP returns no today-dated bar at all before the open, so
+// the 07:00 warm never sees one.
+const US_CLOSE_MINUTES = 16 * 60 + 15;
+
+function easternNowParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const hour = Number(get("hour"));
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: (Number.isFinite(hour) ? hour % 24 : 0) * 60 + Number(get("minute") || 0),
+  };
+}
+
+/**
+ * Trend Helper (Slow: HMA 55, confirm 2) flips for one symbol, on both
+ * timeframes, from the daily history already loaded for it.
+ *
+ * FOUR RULES, each of which changes the answer:
+ *
+ *  1. SLOW ONLY. The Fast preset confirms on a single bar, which means its
+ *     noise filter is effectively off -- not something to build a page on.
+ *  2. THE FIRST CONFIRMATION IN A SYMBOL'S HISTORY IS EXCLUDED, by the flag
+ *     rather than by a bar index. That transition is the HMA becoming
+ *     computable, not a trend change, and because the state is held until the
+ *     opposite direction confirms, the flag can stay true for a couple of
+ *     hundred bars -- an index cutoff lets warm-up artefacts through.
+ *  3. THE DAILY SERIES IS TRUNCATED TO CLOSED BARS (see US_CLOSE_MINUTES).
+ *  4. THE WEEKLY SERIES IS BUILT FROM THE FULL DAILY SERIES, deliberately
+ *     including any live bar: resampleWeeklyClosed drops its trailing group,
+ *     and the live bar is what makes that group the current, unclosed week.
+ *     Passing the truncated daily series instead would make the popped group
+ *     the LAST COMPLETED week and silently cost a week of recency.
+ */
+function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
+  const { trendLen, confirmBars } = TREND_HELPER_SLOW;
+  const eastern = easternNowParts(now);
+
+  const dailyClosed =
+    pts.length &&
+    pts[pts.length - 1].date.slice(0, 10) === eastern.date &&
+    eastern.minutes < US_CLOSE_MINUTES
+      ? pts.slice(0, -1)
+      : pts;
+
+  const dailyFlip = latestTrendFlip(
+    dailyClosed.map((p) => p.close),
+    trendLen,
+    confirmBars
+  );
+
+  const weekly = resampleWeeklyClosed(pts.map((p) => ({ date: p.date, close: p.close })));
+  const weeklyFlip = latestTrendFlip(
+    weekly.map((b) => b.close),
+    trendLen,
+    confirmBars
+  );
+
+  const qualifies = (flip: typeof dailyFlip, direction: 1 | -1) =>
+    flip !== null &&
+    !flip.isFirstConfirmation &&
+    flip.direction === direction &&
+    flip.barsSinceFlip <= TREND_FLIP_MAX_BARS;
+
+  return {
+    trendFlipBullish: qualifies(dailyFlip, 1),
+    trendFlipBearish: qualifies(dailyFlip, -1),
+    trendFlipBullishWeekly: qualifies(weeklyFlip, 1),
+    trendFlipBearishWeekly: qualifies(weeklyFlip, -1),
+    trendFlipDailyBars: dailyFlip?.barsSinceFlip ?? null,
+    trendFlipWeeklyBars: weeklyFlip?.barsSinceFlip ?? null,
+    // Same shape as the weekly date below: the bar the flip confirmed ON,
+    // indexed into the CLOSED daily series the flip was computed from.
+    trendFlipDailyDate:
+      dailyFlip && dailyClosed[dailyFlip.flipIndex]
+        ? dailyClosed[dailyFlip.flipIndex].date.slice(0, 10)
+        : undefined,
+    // THE WEEK THE FLIP CONFIRMED IN, via flipIndex -- which is an index into
+    // `weekly` and exists for exactly this. NOT weekly[weekly.length - 1],
+    // which is the newest closed week and equals the flip week only when
+    // barsSinceFlip is 0; at 1, 2 and 3 it printed a date that contradicted
+    // the age shown beside it.
+    trendFlipWeekEnding:
+      weeklyFlip && weekly[weeklyFlip.flipIndex]
+        ? weekly[weeklyFlip.flipIndex].date
+        : undefined,
+  };
+}
+
+/**
+ * How far back the flip was, in the unit the flip was measured in.
+ *
+ * NEITHER BRANCH MAKES A CALENDAR CLAIM, and both are off by one from the raw
+ * bar count. The reason is the same on both timeframes: the bar the count
+ * starts from is itself already one period in the past.
+ *
+ *   WEEK. The week in progress is never evaluated -- resampleWeeklyClosed drops
+ *   it -- so barsSinceFlip 0 is the last CLOSED week, not this one.
+ *
+ *   SESSION. Same, and for a stronger reason than the intraday gate alone. The
+ *   history cache refreshes once a day, pre-open (Vercel cron 0 7 * * * UTC =
+ *   03:00 ET), on a 50h TTL through a MISS-ONLY bulk read, and FMP serves no
+ *   bar for the current day before the open. So the newest daily bar does not
+ *   advance at any point during the session: for the whole trading day,
+ *   barsSinceFlip 0 is the PREVIOUS session's close. This used to say "today",
+ *   which was false every hour the market was open.
+ *
+ * Sessions rather than days, deliberately: bars are trading bars, so a
+ * calendar phrase is wrong across every weekend and every holiday. Both units
+ * remain only a relative phrase -- the rows lead with the actual date, which is
+ * the thing that cannot drift.
+ */
+function trendFlipAgeLabel(bars: number, unit: "session" | "week") {
+  const n = Math.max(0, bars) + 1;
+  if (unit === "week") return n === 1 ? "last week" : `${n} weeks ago`;
+  return n === 1 ? "last session" : `${n} sessions ago`;
+}
+
 // Pure transform over already-fetched points -- the actual Redis/FMP fetch
 // now happens once for the whole universe via getDailyHistoryBulk() before
 // this is called (see the comment at that call site), rather than per
@@ -2679,6 +2861,10 @@ async function buildPickersPayload(
   const threeMonthBreakouts: PickerItem[] = [];
   const dailyMa200Proximity: PickerItem[] = [];
   const weeklyMa200Proximity: PickerItem[] = [];
+  const trendFlipBullishDaily: PickerItem[] = [];
+  const trendFlipBearishDaily: PickerItem[] = [];
+  const trendFlipBullishWeekly: PickerItem[] = [];
+  const trendFlipBearishWeekly: PickerItem[] = [];
   const macroSupportResistance: PickerItem[] = [];
   const divergences: PickerItem[] = [];
   const positiveLastEarnings: PickerItem[] = [];
@@ -2937,6 +3123,95 @@ async function buildPickersPayload(
           const hasDailyMa200Proximity = !!dailyMa200Candidate;
           const hasWeeklyMa200Proximity = !!weeklyMa200Candidate;
 
+          // Trend Helper (Slow) flips -- see computeTrendFlips for the rules.
+          const trendFlips = computeTrendFlips(pts);
+
+          // The four flip sections. RANKED BY RECENCY ALONE: `_score` is the
+          // negated bar count and NOTHING else -- no liquidity term and, in
+          // particular, no dynamicBoost. Every other section adds +10 for a
+          // dynamic-universe or popular-search name, which against gaps of 1
+          // would not nudge the order, it would replace it with a popularity
+          // ranking (claude/picker-ordering-classification-2026-08-22.md).
+          // The page promises "most recent flip first" and that is all this
+          // number is allowed to mean.
+          //
+          // The bar count also goes out as `firedIndicators`, which is the one
+          // per-row string the preset pages already render (the Signals
+          // column), so the quantity the rows are ordered by is one a reader
+          // can actually see. A sortable numeric column is a separate,
+          // owner-level decision -- see the PR description.
+          const pushTrendFlip = (
+            target: PickerItem[],
+            bars: number,
+            direction: "Bullish" | "Bearish",
+            unit: "session" | "week"
+          ) => {
+            const age = trendFlipAgeLabel(bars, unit);
+            // BOTH TIMEFRAMES LEAD WITH THE DATE. The date is the fact; the
+            // relative phrase is a convenience that can be a period out on
+            // either unit -- the Monday lag on weekly, and on daily the fact
+            // that the newest bar sits still all session (see
+            // trendFlipAgeLabel). A row with no date falls back to the phrase
+            // alone rather than printing an empty label.
+            const weekly = unit === "week";
+            const flipDate = weekly
+              ? trendFlips.trendFlipWeekEnding
+              : trendFlips.trendFlipDailyDate;
+            const dateLabel = flipDate
+              ? weekly
+                ? `week ending ${flipDate}`
+                : `session of ${flipDate}`
+              : "";
+            target.push({
+              symbol,
+              chartPoints,
+              tone: direction === "Bullish" ? "green" : "red",
+              note: dateLabel
+                ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
+                : `${direction} Trend Helper flip • confirmed ${age}`,
+              timeframe: weekly ? "W" : "D",
+              firedIndicators: dateLabel
+                ? [`${direction} flip ${dateLabel}`, age]
+                : [`${direction} flip ${age}`],
+              dashboardHref: buildDashboardHref({
+                symbol,
+                timeframe: weekly ? "W" : "D",
+              }),
+              // Two numbers, deliberately. `_score` is the RANKING term and
+              // takeTop sorts it descending, so recency has to be negated
+              // there; `score` is what actually ships on the item, and a bar
+              // count is far more use to a reader (and to whatever builds the
+              // display column) than a negative sort weight.
+              //
+              // CHECKED, because a bar count sitting in a field called `score`
+              // would read as a rating if anything rendered it generically:
+              // nothing does. The only path from PickerItem.score to a
+              // rendered value is entriesFromSection in PickerResultPage,
+              // which serves `kind: "section"` pages, and no page config uses
+              // that kind any more -- the preset branch these four pages take
+              // never reads it, so their Score pill stays the tracked-
+              // conditions count like every other preset page. If one of them
+              // is ever converted to `kind: "section"`, scoreLabelForEntry
+              // would show this number labelled "Score", where lower is better
+              // -- fix it there, not by making this field less honest.
+              score: bars,
+              _score: -bars,
+            });
+          };
+
+          if (trendFlips.trendFlipBullish && trendFlips.trendFlipDailyBars !== null) {
+            pushTrendFlip(trendFlipBullishDaily, trendFlips.trendFlipDailyBars, "Bullish", "session");
+          }
+          if (trendFlips.trendFlipBearish && trendFlips.trendFlipDailyBars !== null) {
+            pushTrendFlip(trendFlipBearishDaily, trendFlips.trendFlipDailyBars, "Bearish", "session");
+          }
+          if (trendFlips.trendFlipBullishWeekly && trendFlips.trendFlipWeeklyBars !== null) {
+            pushTrendFlip(trendFlipBullishWeekly, trendFlips.trendFlipWeeklyBars, "Bullish", "week");
+          }
+          if (trendFlips.trendFlipBearishWeekly && trendFlips.trendFlipWeeklyBars !== null) {
+            pushTrendFlip(trendFlipBearishWeekly, trendFlips.trendFlipWeeklyBars, "Bearish", "week");
+          }
+
           const dailyDiv = detectDivergenceFromHistory(pts, {
             lookbackBars: 45,
             leftRight: 2,
@@ -3164,6 +3439,7 @@ async function buildPickersPayload(
             dailyMa200Proximity: hasDailyMa200Proximity,
             weeklyMa200Proximity: hasWeeklyMa200Proximity,
             weeklyMa200DistancePct,
+            ...trendFlips,
             bullishRsiDivergence,
             bearishRsiDivergence,
             bullishMacdDivergence,
@@ -3284,6 +3560,22 @@ async function buildPickersPayload(
     };
   };
 
+  // Ties are the NORM here, not the exception: `_score` is a negated bar
+  // count with only four possible values, so a run of stocks that all
+  // flipped on the same bar is the usual case. takeTop's sort is stable and
+  // these arrays are filled by Promise.all under a concurrency limit -- i.e.
+  // in COMPLETION order, which is not deterministic. Pre-sorting by symbol
+  // makes a tie resolve alphabetically and the same input produce the same
+  // page twice running.
+  for (const bucket of [
+    trendFlipBullishDaily,
+    trendFlipBearishDaily,
+    trendFlipBullishWeekly,
+    trendFlipBearishWeekly,
+  ]) {
+    bucket.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }
+
   const sections: PickerSection[] = [
     buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
@@ -3329,6 +3621,39 @@ async function buildPickersPayload(
       // Weekly-aggregated points, distinct from this symbol's daily
       // signalRecords chartPoints -- can't be deduped against it.
       keepChartPoints: true,
+    }),
+    buildSection({
+      title: "Bullish Trend Flip Stocks (Daily)",
+      description:
+        "Stocks whose Trend Helper (Slow) state has confirmed a flip to bullish within the last four daily bars, most recent first.",
+      source: trendFlipBullishDaily,
+      // 40, not the 20 every other section uses: this section's ORDER is the
+      // product, and the pages it backs show 36 rows before "See more". At 20
+      // the last 16 rows would fall out of the ranked set and quietly revert to
+      // the tracked-conditions count. No keepChartPoints -- these items carry
+      // the symbol's ordinary daily points, which signalRecords already ships.
+      take: 40,
+    }),
+    buildSection({
+      title: "Bearish Trend Flip Stocks (Daily)",
+      description:
+        "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four daily bars, most recent first.",
+      source: trendFlipBearishDaily,
+      take: 40,
+    }),
+    buildSection({
+      title: "Bullish Trend Flip Stocks (Weekly)",
+      description:
+        "Stocks whose Trend Helper (Slow) state has confirmed a flip to bullish within the last four closed weeks, most recent first.",
+      source: trendFlipBullishWeekly,
+      take: 40,
+    }),
+    buildSection({
+      title: "Bearish Trend Flip Stocks (Weekly)",
+      description:
+        "Stocks whose Trend Helper (Slow) state has confirmed a flip to bearish within the last four closed weeks, most recent first.",
+      source: trendFlipBearishWeekly,
+      take: 40,
     }),
     buildSection({
       title: "Macro Support and Resistance Stocks",
