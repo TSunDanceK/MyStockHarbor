@@ -1,8 +1,10 @@
 # News as a stored dataset — spec
 
-**Status: BLOCKED AT THE GATE.** Nothing below has been built. The design rests
-on one unverified assumption and the verification cannot be run from Claude's
-sandbox. See "The gate" immediately below.
+**Status: GATE PASSED 2026-08-22, BUILT 2026-08-31.** `from=` filters — the
+probe result is recorded in the table at the foot of this file. The store, the
+merge/pin/cap rules and the staleness registration are implemented; the sector
+half is wired but its dedup threshold is still uncalibrated for sector traffic
+(see "Sector news").
 
 Owner's design, 2026-08-22. Transcribed here as the design of record; the
 wording is the owner's, the notes marked *(implementation note)* are not.
@@ -28,7 +30,10 @@ and this collapses to tuning `limit`, which is a different and much smaller job.
 owner-side. Do not start building until the probe has been run and its result
 recorded in the table at the foot of this file.
 
-**Status 2026-08-22: still unanswered, and the reason is worth recording.** The
+**Answered 2026-08-22 — see the Probe result table below. The account of the
+false start is kept because the lesson outlives the question.**
+
+**Status at the time: still unanswered, and the reason is worth recording.** The
 owner ran `/api/debug/fmp-endpoints` against production (`55c8bc86`) and the
 response carried no `newsFromGate` block — because the gate probe was on an
 unmerged branch and production was running code that predates it. Every *other*
@@ -235,10 +240,30 @@ effect, and let `?dashboardGb=` answer it once three days of counters exist.
 *(To be filled in by whoever runs the gate probe. Until this section names a
 result, the design is not cleared to build.)*
 
+**Run 2026-08-22. VERDICT: PASS — `from=` filters. Design cleared to build.**
+
 | Probe | HTTP | rows | oldest `publishedDate` | verdict |
 |---|---|---|---|---|
-| `news/stock?symbols=MU&limit=50` (no `from`) | | | | baseline |
-| `news/stock?symbols=MU&limit=50&from=<yesterday>` | | | | |
+| `news/stock?limit=50` (no `from`) | 200 | 50 | 2026-08-19 11:45:00 | baseline |
+| `news/stock?limit=50&from=2026-08-21` | 200 | 20 | 2026-08-21 03:05:00 | **PASS** |
+
+The `from` row's oldest article is on or after `from`, and the baseline reaches
+two days further back, so the parameter is being honoured rather than ignored.
+
+**Measured payloads:** 35,249 bytes for the 50-row baseline (705 bytes/article);
+14,363 bytes for the 20-row filtered response (718 bytes/article).
+
+**The per-article cost is UNCHANGED.** `from=` compresses nothing — the two
+figures are the same number per article within noise. The saving comes entirely
+from not re-fetching articles already held, which is only a saving once they are
+persisted. **Tuning `limit` alone does not unlock it**, which is why the store
+had to come first.
+
+**Also probed:** `HEAD` returns 200 with no `Content-Length`, and the response is
+a bare array with no envelope. There is no way to learn how many articles exist
+without retrieving them, so the count must come from our own store rather than
+from FMP — which is what the cold-versus-incremental counters in `newsStore.ts`
+are for.
 
 **Reading it:** if the `from` row's oldest `publishedDate` is on or after
 `from`, the parameter filters and the design is cleared. If it matches the

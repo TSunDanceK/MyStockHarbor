@@ -136,24 +136,73 @@ export const DATASETS = {
     job: "warm-earnings",
     coverage: "registered",
   },
+  news: {
+    label: "Stock news",
+    // 24h, against a 1h refresh interval. A symbol nobody views does not
+    // refresh and is SUPPOSED to go stale, so this is not "a warm was missed" --
+    // it is "nothing has looked at this in a day", which is the honest reading
+    // for a view-driven dataset.
+    ttlSeconds: 60 * 60 * 24,
+    population: "on-demand",
+    qualifier: "first view populates, later views read Redis",
+    // OBSERVED-ONLY, and for a stronger reason than screenerFundamentals: there
+    // is no registerSymbols caller because there is no universe to register.
+    // The denominator is "symbols someone has viewed", which is self-selecting
+    // by construction, so a ratio over it must not be rendered as coverage.
+    coverage: "observed-only",
+  },
+  sectorNews: {
+    label: "Sector news",
+    ttlSeconds: 60 * 60 * 24,
+    population: "on-demand",
+    qualifier: "first view populates, no earnings pin",
+    coverage: "observed-only",
+  },
 } as const satisfies Record<
   string,
   {
     label: string;
     ttlSeconds: number;
-    /** The warm job that maintains this dataset. Its cadence is READ FROM THE
-     * REGISTRY, never retyped here -- see describeCron in jobRuns.ts for what
-     * happened the last time this table carried its own copy. */
-    job: JobKey;
     /** Anything true of this dataset that the schedule does not say. */
     qualifier?: string;
     coverage: "registered" | "observed-only";
-  }
+  } & (
+    | {
+        /** The warm job that maintains this dataset. Its cadence is READ FROM
+         * THE REGISTRY, never retyped here -- see describeCron in jobRuns.ts for
+         * what happened the last time this table carried its own copy. */
+        job: JobKey;
+        population?: never;
+      }
+    | {
+        /** NO JOB, AND NOT AN OMISSION. A lazily populated dataset has no cron
+         * by design -- warming 755 symbols of news hourly would dwarf every
+         * other consumer on the FMP account. Spelled as its own variant rather
+         * than an optional `job`, so the page cannot print a blank cadence and
+         * nobody is tempted to invent a job name that does not exist to satisfy
+         * the type. */
+        population: "on-demand";
+        job?: never;
+      }
+  )
 >;
 
-/** "warm-price-pool, every 5 min" -- composed, never stored. */
-export function datasetNote(def: { job: JobKey; qualifier?: string }): string {
-  const base = `${def.job}, ${describeCron(JOBS[def.job].cron)}`;
+/**
+ * "warm-price-pool, every 5 min" -- composed, never stored.
+ *
+ * A dataset with no job says so plainly. The alternative -- printing an empty
+ * cadence, or naming a cron that does not exist -- would make a lazily
+ * populated dataset look like a broken scheduled one on the health page, which
+ * is the same class of mistake as the stale prose this function replaced.
+ */
+export function datasetNote(def: {
+  job?: JobKey;
+  population?: "on-demand";
+  qualifier?: string;
+}): string {
+  const base = def.job
+    ? `${def.job}, ${describeCron(JOBS[def.job].cron)}`
+    : "no cron — populated on first view";
   return def.qualifier ? `${base} — ${def.qualifier}` : base;
 }
 

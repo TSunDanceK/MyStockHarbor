@@ -56,6 +56,22 @@ stubbed = sub(
   'const fmpFetch = () => { throw new Error("no network in this harness"); };'
 );
 stubbed = sub(stubbed, /^import \{ beginTiming \} from ".\/server\/timing";$/m, "const beginTiming = () => () => {};");
+// newsStore is the Redis half of the stored news dataset. Stubbed as a
+// straight pass-through -- one cold window, deduped -- because what the
+// assertions below measure is how a fetched window is parsed and ranked, not
+// where it was cached.
+//
+// SUBSTITUTED BEFORE THE ai-news-briefs LINE BELOW, and that ordering is
+// load-bearing: that pattern spans newlines from the earliest remaining
+// `import {`, so an unstubbed import above it gets swallowed along with
+// everything in between -- which is how adding this import first removed the
+// unstable_cache stub and produced a ReferenceError rather than the
+// "an import survived stubbing" message the guard below is meant to give.
+stubbed = sub(
+  stubbed,
+  /^import \{ readOrRefreshSymbolNews \} from "@\/lib\/server\/newsStore";$/m,
+  'const readOrRefreshSymbolNews = async (symbol, deps) => ({ items: deps.dedupe(await deps.fetchWindow(null)), mode: "cold", added: 0 });'
+);
 stubbed = sub(
   stubbed,
   /^import \{[\s\S]*?\} from "@\/lib\/ai-news-briefs";$/m,
