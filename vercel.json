@@ -26,7 +26,7 @@
   "crons": [
     {
       "path": "/api/jobs/warm-picker-universe",
-      "schedule": "0 7 * * *"
+      "schedule": "2 7 * * *"
     },
     {
       "path": "/api/jobs/warm-earnings",
@@ -38,15 +38,15 @@
     },
     {
       "path": "/api/jobs/warm-fundamentals",
-      "schedule": "0 * * * *"
+      "schedule": "22 * * * *"
     },
     {
       "path": "/api/jobs/warm-price-pool",
-      "schedule": "*/3 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/jobs/warm-stock-data",
-      "schedule": "*/10 * * * *"
+      "schedule": "7-57/10 * * * *"
     }
   ]
 }
