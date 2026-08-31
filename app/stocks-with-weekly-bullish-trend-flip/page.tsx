@@ -5,7 +5,7 @@ import PickerResultPage, { type PickerResultConfig } from "@/app/components/Pick
 // `force-dynamic` ships Cache-Control: no-store, so every visit and every crawl
 // pays a full serverless render. 300s matches the underlying pickers cache
 // cycle. See claude/picker-pages-isr-2026-08-20.md.
-export const revalidate = 300;
+export const revalidate = 1800;
 
 export const metadata: Metadata = {
   title: "Stocks With a Weekly Bullish Trend Flip | MyStockHarbor",

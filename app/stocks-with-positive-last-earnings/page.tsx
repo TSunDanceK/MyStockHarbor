@@ -10,7 +10,7 @@ import PickerResultPage, {
 // cache cycle (and what /pickers already runs at), and the payload is
 // cron-warmed into Redis on a shorter cycle than that, so nothing here goes
 // stale. See claude/picker-pages-isr-2026-08-20.md.
-export const revalidate = 300;
+export const revalidate = 1800;
 
 // kind is "preset", not "section": ships the whole universe with
 // `positiveLastEarnings` pre-ticked so Select Screener filters in place --

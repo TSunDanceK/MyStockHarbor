@@ -19,6 +19,8 @@ import {
   readHistoryDropCounts,
 } from "@/lib/server/historyCache";
 import type { NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
+import { PICKER_ROUTES } from "@/lib/pickerRoutes";
 import { GET_WARM as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
 import { readLastBuildStats } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
@@ -167,6 +169,35 @@ export async function GET(req: NextRequest) {
       // both readable in one glance, and they want opposite fixes.
       historyForcedRefetchFailureReasons: barAge.forcedRefetchFailureReasons.join(",") || null,
     });
+
+    // REGENERATE WHEN THE DATA MOVES, not when a timer expires.
+    //
+    // The picker pages sat at revalidate=300, so any request landing after the
+    // window rebuilt the page -- and at ~46K requests/day against a few hundred
+    // real weekly visitors, that is overwhelmingly scrapers cycling the cluster
+    // and paying for a rebuild each time. 6.42M ISR writes a month against
+    // 1.39M reads is the shape of pages regenerating for nobody.
+    //
+    // This run is what actually changes their content, so this is the honest
+    // moment to invalidate them. The page constants stay as a backstop, raised
+    // to 1800, for the case where a cron run is missed entirely.
+    //
+    // DERIVED, NOT TYPED. PICKER_ROUTES is checked against the filesystem by
+    // scripts/check-picker-routes.mjs, so a page added without being listed
+    // fails a check rather than quietly never revalidating -- which is the
+    // failure mode a hand-typed list here would have had.
+    let revalidated = 0;
+    for (const route of PICKER_ROUTES) {
+      try {
+        revalidatePath(route);
+        revalidated += 1;
+      } catch {
+        // One bad path must not cost the rest of the sweep, and it must not
+        // fail a warm that has already done its real work.
+      }
+    }
+    console.log(`[warm-picker-universe] revalidated ${revalidated}/${PICKER_ROUTES.length} picker routes`);
+
     return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : "warm-picker-universe failed";
