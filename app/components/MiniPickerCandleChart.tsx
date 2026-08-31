@@ -16,9 +16,17 @@ export type MiniCandlePoint = {
   rsi14?: number;
   macdHist?: number;
   /**
-   * Trend Helper (Slow), supplied by the server for the daily trend-flip cards
-   * only. See attachTrendHelper in lib/server/pickersBuilder.ts -- there is no
-   * client-side fallback, deliberately.
+   * Trend Helper (Slow), for the daily trend-flip cards only.
+   *
+   * NOT shipped on these points. The builder sends the series separately as a
+   * section item's `trendSeries` (trendTailForPoints in lib/ta/trendHelper.ts),
+   * and PickerResultPage merges it onto the record's chartPoints with
+   * attachTrendHelper from the same file. These fields exist so that merged
+   * shape is typed.
+   *
+   * There is no client-side fallback, deliberately: HMA(55) is first non-null
+   * at index 60, so recomputing it from a 72-bar payload would leave most of
+   * the 64 drawn candles blank and mis-colour the rest.
    */
   trendLine?: number;
   trendState?: -1 | 0 | 1;
