@@ -8,7 +8,7 @@ import PickerResultPage, { type PickerResultConfig } from "@/app/components/Pick
 // cache cycle (and what /pickers already runs at), and the payload is
 // cron-warmed into Redis on a shorter cycle than that, so nothing here goes
 // stale. See claude/picker-pages-isr-2026-08-20.md.
-export const revalidate = 300;
+export const revalidate = 1800;
 
 export const metadata: Metadata = {
   title: "3-Month High Breakout Stocks | MyStockHarbor",
