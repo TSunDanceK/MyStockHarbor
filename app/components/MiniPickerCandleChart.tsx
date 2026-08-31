@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useWatermarkHidden } from "@/app/components/WatermarkVisibility";
+import { TREND_HELPER_COLORS } from "@/lib/ta/trendHelper";
 
 export type MiniCandlePoint = {
   date: string;
@@ -14,6 +15,13 @@ export type MiniCandlePoint = {
   ma200?: number;
   rsi14?: number;
   macdHist?: number;
+  /**
+   * Trend Helper (Slow), supplied by the server for the daily trend-flip cards
+   * only. See attachTrendHelper in lib/server/pickersBuilder.ts -- there is no
+   * client-side fallback, deliberately.
+   */
+  trendLine?: number;
+  trendState?: -1 | 0 | 1;
 };
 
 type ChartOverlay =
@@ -24,7 +32,12 @@ type ChartOverlay =
   | "recentHigh"
   | "rsi"
   | "macd"
-  | "trend";
+  // MA50 + MA200, used by /best-trend-score-stocks. NOT the Trend Helper --
+  // kept under this name because renaming it would change that page.
+  | "trend"
+  // The Trend Helper (Slow) HMA itself, coloured by confirmed state. Daily
+  // trend-flip pages only.
+  | "trendHelper";
 
 export type SupportResistanceZone = {
   kind: "support" | "resistance";
@@ -251,6 +264,21 @@ export default function MiniPickerCandleChart({
     return isFiniteNumber(point.ma200) ? point.ma200 : fallbackMa200[globalIndex];
   });
 
+  // Trend Helper (Slow). SERVER-SUPPLIED ONLY -- there is deliberately no client
+  // fallback, unlike ma50/ma200 above. HMA(55) needs 60 bars of warm-up and the
+  // confirmed state depends on the full history, so a value recomputed from
+  // these 72 points would be blank for 52 of the 64 visible candles and
+  // mis-coloured for the rest. Absent data means no line, which is the honest
+  // outcome.
+  const trendLineValues = visiblePoints.map((point) =>
+    isFiniteNumber(point.trendLine) ? point.trendLine : null
+  );
+  const trendStates = visiblePoints.map((point) =>
+    typeof point.trendState === "number" ? point.trendState : 0
+  );
+  const hasTrendHelper =
+    overlay === "trendHelper" && trendLineValues.some((value) => value !== null);
+
   const priceOverlayValues: number[] = [];
   const validSupportResistanceZone =
     supportResistanceZone &&
@@ -275,6 +303,12 @@ export default function MiniPickerCandleChart({
   }
   if (overlay === "ma50") {
     for (const value of ma50Values) {
+      if (isFiniteNumber(value)) priceOverlayValues.push(value);
+    }
+  }
+  // Without this the line clips off the top or bottom of the card.
+  if (overlay === "trendHelper") {
+    for (const value of trendLineValues) {
       if (isFiniteNumber(value)) priceOverlayValues.push(value);
     }
   }
@@ -513,6 +547,37 @@ export default function MiniPickerCandleChart({
             opacity="0.9"
           />
         ) : null}
+
+        {/* One segment per bar so the colour can change at the flip. Drawn
+            BEFORE the candles so the candles sit on top, matching the
+            dashboard's Basic chart. */}
+        {hasTrendHelper
+          ? visiblePoints.map((_point, index) => {
+              if (index === 0) return null;
+              const a = trendLineValues[index - 1];
+              const b = trendLineValues[index];
+              if (!isFiniteNumber(a) || !isFiniteNumber(b)) return null;
+              const state = trendStates[index];
+              const colour =
+                state > 0
+                  ? TREND_HELPER_COLORS.bull
+                  : state < 0
+                    ? TREND_HELPER_COLORS.bear
+                    : TREND_HELPER_COLORS.neutral;
+              return (
+                <line
+                  key={`th-${index}`}
+                  x1={xAt(index - 1)}
+                  y1={yAt(a)}
+                  x2={xAt(index)}
+                  y2={yAt(b)}
+                  stroke={colour}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              );
+            })
+          : null}
 
         {visiblePoints.map((point, index) => {
           const open = isFiniteNumber(point.open)
