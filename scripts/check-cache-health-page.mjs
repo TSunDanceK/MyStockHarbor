@@ -409,7 +409,7 @@ for (const job of new Set(datasetJobs)) {
 check(
   "no dataset hard-codes a cadence — it is composed from the registry",
   !/(?:label|note|qualifier):\s*"[^"]*(?:every \d+ min|daily \d{2}:\d{2}|hourly)/.test(staleness),
-  "found a literal schedule in a DATASETS string"
+  "prose here cannot be diffed against the registry, so it drifts unnoticed"
 );
 
 for (const [, job, flag] of jobEntries) {
