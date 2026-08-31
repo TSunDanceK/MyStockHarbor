@@ -726,7 +726,16 @@ export default function PickerResultsGrid({
     const marketCap: Col = { key: "marketCap", label: "Market Cap", sortType: "num", get: (e) => num(e.marketCap), cell: (e) => capCell(num(e.marketCap)) };
     const price: Col = { key: "price", label: "Stock Price", sortType: "num", get: (_e, d) => d.price, cell: (_e, d) => numCell(d.price) };
     const change: Col = { key: "change", label: "% Change", sortType: "num", get: (_e, d) => d.changePct, cell: (_e, d) => pctCell(d.changePct) };
-    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd" title={e.industry}>{truncateName(e.industry, 32)}</span> : MUTED) };
+    // TRUNCATED TO 26, PAIRED WITH .listInd's 150px CAP in PickerResultPage.
+    // This was the last column forcing horizontal scroll on the General tab.
+    // Both halves are needed: the JS truncation alone does not reclaim width
+    // (the span still sizes to its cap), and the cap alone would ellipsize a
+    // string the DOM is still carrying in full.
+    //
+    // `title` and `get` deliberately stay the FULL industry: the tooltip loses
+    // nothing, and the column must sort by the real value rather than by the
+    // shortened label the reader happens to see.
+    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd" title={e.industry}>{truncateName(e.industry, 26)}</span> : MUTED) };
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
     // Which of the six composite checks fired, strongest first.
     //
