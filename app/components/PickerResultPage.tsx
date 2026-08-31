@@ -1468,9 +1468,16 @@ export default async function PickerResultPage({ config }: { config: PickerResul
            The td caps are the belt to that braces: they stop the COLUMN
            growing even if a cell's content escapes the span. */
         .listName { display: inline-block; vertical-align: middle; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.92); }
-        .listInd { display: inline-block; vertical-align: middle; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.86); }
+        /* 150px, down from 190px -- about six characters, and the last thing
+           forcing horizontal scroll on the General tab. Paired with
+           truncateName(e.industry, 26) in PickerResultsGrid: the cap is what
+           actually reclaims the width, the truncation is what stops the DOM
+           carrying a string it never shows. The full name stays on hover.
+           Also applies to the Signals cell, which is now a bare count and so
+           is unaffected by either value. */
+        .listInd { display: inline-block; vertical-align: middle; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.86); }
         .listTable thead th.colName, .listTable tbody td.colName { max-width: 258px; }
-        .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 218px; }
+        .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 178px; }
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
