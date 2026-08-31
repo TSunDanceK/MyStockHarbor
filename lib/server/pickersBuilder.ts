@@ -761,6 +761,49 @@ async function acquirePickersLock() {
   }
 }
 
+// Budget for a lock loser waiting on the winner. Deliberately the same shape as
+// waitForHistoryCache in historyCache.ts: a short poll against a bounded wait,
+// then fall through rather than block forever on a winner that never publishes.
+const PICKERS_WAIT_STEP_MS = 300;
+const PICKERS_MAX_WAIT_MS = 12_000;
+
+function pickersSleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait for whichever request won the build lock to publish its payload.
+ *
+ * WHY WAITING BEATS BUILDING. Losing the lock with a cached payload in hand is
+ * already handled above -- that request serves the cache and never reaches here.
+ * The case this exists for is losing the lock with NOTHING cached: immediately
+ * after the payload key expires, after an outage, or after a cache-key version
+ * bump, when the key is absent for everyone at once. Every concurrent request
+ * then ran its own full ~2,900-command build, all of them redundant with the
+ * winner's, which is how a single cold start turned into millions of commands.
+ *
+ * The poll is EXISTS, not GET. readPickersCache re-attaches the off-payload
+ * chart series, so polling it would do that expensive hydration on every pass;
+ * this checks for the key at one command a time and hydrates once, at the end.
+ */
+async function waitForPickersPayload() {
+  if (!redis) return null;
+
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < PICKERS_MAX_WAIT_MS) {
+    await pickersSleep(PICKERS_WAIT_STEP_MS);
+
+    try {
+      if (await redis.exists(PICKERS_REDIS_KEY)) return await readPickersCache();
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 async function releasePickersLock(token: string | null) {
   if (!redis || !token || token === "no-redis") return;
 
@@ -4426,6 +4469,24 @@ export async function getPickersData(
     return cached.data;
   }
 
+  // LOCK LOST WITH NOTHING TO SERVE. Wait for the winner instead of starting a
+  // second full build beside it -- see waitForPickersPayload.
+  //
+  // GATED ON `!forceRefresh` for the same reason the branch above is: a forced
+  // run must actually refresh. The winner it would be waiting on may be an
+  // ordinary request that is not refreshing history at all, so adopting that
+  // payload would let a forced warm report success having forced nothing. A
+  // forced run is one cron request, not a stampede, so it is not what this is
+  // protecting against anyway.
+  if (!lockToken && !forceRefresh && !cached?.data) {
+    const published = await waitForPickersPayload();
+
+    if (published?.data) {
+      memo = { ts: now, data: published.data };
+      return published.data;
+    }
+  }
+
   try {
     const data = await buildPickersPayload(origin, { forceHistoryRefresh });
 
@@ -4594,6 +4655,24 @@ async function handlePickersRequest(
         "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
+  }
+
+  // Same single-flight wait as getPickersData -- see the note there, and on
+  // waitForPickersPayload, for why the no-cached-payload case is the one that
+  // stampedes and why a forced run is deliberately excluded.
+  if (!lockToken && !forceRefresh && !cached?.data) {
+    const published = await waitForPickersPayload();
+
+    if (published?.data) {
+      memo = { ts: now, data: published.data };
+
+      return NextResponse.json(published.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
+        },
+      });
+    }
   }
 
   try {
