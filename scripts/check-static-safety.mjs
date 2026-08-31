@@ -18,36 +18,12 @@
 // deployment and confirm 200 with real content. A preview build never issues a
 // runtime request to a prerendered dynamic path, so a green build and a correct
 // route table are both fully consistent with every request 500ing.
-import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 import { stripComments } from "./lib/source-code.mjs";
-
-const ROOT = process.cwd();
-const resolve = (spec, from) => {
-  let base;
-  if (spec.startsWith("@/")) base = path.join(ROOT, spec.slice(2));
-  else if (spec.startsWith(".")) base = path.resolve(path.dirname(from), spec);
-  else return null;                       // node_modules -- not our code
-  for (const c of [base + ".ts", base + ".tsx", path.join(base, "index.ts"), base]) {
-    if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
-  }
-  return null;
-};
-
-function imports(file) {
-  const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const out = [];
-  for (const st of sf.statements) {
-    if ((ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) && st.moduleSpecifier && ts.isStringLiteral(st.moduleSpecifier)) {
-      // type-only imports cannot pull runtime code
-      if (ts.isImportDeclaration(st) && st.importClause?.isTypeOnly) continue;
-      const r = resolve(st.moduleSpecifier.text, file);
-      if (r) out.push(r);
-    }
-  }
-  return out;
-}
+// Shared with check-page-read-cache.mjs. The two scripts ask opposite questions
+// of the same graph and must not disagree about what an import resolves to.
+import { ROOT, importsOf as imports } from "./lib/import-graph.mjs";
 
 // Findings: a Redis client constructed without PAGE_READ_CACHE, or a literal
 // no-store fetch. Both make a prerendered route throw DYNAMIC_SERVER_USAGE.

@@ -10,10 +10,32 @@
 // site owner's explicit request) never collide.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
+// PAGE_READ_CACHE, and this one changed for a reason worth recording.
+//
+// redisCacheMode.ts used to name this module as deliberately exempt, "never on
+// a static render path". That was true when it was written and is not any more:
+// pickersBuilder.ts imports this module, PickerResultPage imports
+// pickersBuilder, and #381 made all 36 picker pages prerendered. So a bare
+// client now sits in the module graph of 36 SSG routes.
+//
+// Nothing is failing today, because the calls here (checkBackfillLockout,
+// checkBackfillKey, clearBackfillFailures) are only reached from
+// handlePickersRequest -- the API handler -- and never during a page render.
+// Constructing the client is inert; only a call would throw. But "the call
+// happens to be on the other branch" is precisely the reasoning #310 shipped
+// on, and one call added to a render path would 500 all 36 routes.
+//
+// NO STALENESS RISK, which is the objection that kept it bare: PAGE_READ_CACHE
+// is `{ cache: "default" }`, and it only drops the no-store HINT. Upstash's REST
+// API is POST and Next's fetch cache only caches GET, so no auth or lockout read
+// becomes cacheable. See the note in redisCacheMode.ts.
+//
+// Found by scripts/check-page-read-cache.mjs on its first run.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const FAIL_PREFIX = "msh:earnings-backfill-fail:v2";

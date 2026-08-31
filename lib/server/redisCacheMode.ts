@@ -24,9 +24,23 @@
 // these reads become cacheable. Freshness stays governed by the page's own
 // `revalidate`, which is the intent.
 //
-// Deliberately applied ONLY to clients that a prerendered page reads through.
-// The rate-limit and auth clients (trapBlock, backfillAuth, dailyPageLimit)
-// keep the no-store default: they are never on a static render path, so they
-// gain nothing from this, and a cached auth or rate-limit read would be a
-// correctness bug rather than a performance win.
+// Applied to every client a prerendered page can reach through its module graph.
+//
+// The rate-limit clients trapBlock and dailyPageLimit keep the no-store default:
+// no page reaches them at all, so they gain nothing from this.
+//
+// backfillAuth USED TO BE ON THAT LIST and no longer is, which is the useful
+// part of this note. The stated reason was "never on a static render path" --
+// true when written, and falsified since without anyone noticing: pickersBuilder
+// imports it, PickerResultPage imports pickersBuilder, and #381 made all 36
+// picker pages prerendered. An exemption whose justification is a fact about the
+// import graph stops being valid when the graph changes, and nothing was
+// watching. scripts/check-page-read-cache.mjs now derives that reachability
+// instead of trusting a list, and it is what found this.
+//
+// Worth being precise about the other half of the old reason, because it reads
+// as a safety argument and is not one: "a cached auth read would be a
+// correctness bug" does not apply. As the paragraph above says, `cache:
+// "default"` only drops the no-store hint -- Upstash calls are POST and Next's
+// fetch cache only caches GET, so nothing here becomes cacheable either way.
 export const PAGE_READ_CACHE = { cache: "default" } as const;
