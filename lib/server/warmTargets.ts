@@ -62,9 +62,11 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 // ~0.35 GB/day, a 93% cut -- and every other call is a few-KB GET.
 //
 // WHAT THIS DOES NOT CHANGE: cadence, coverage, or which symbols get warmed.
-// warm-price-pool still runs every 3 minutes and still refreshes a quarter of
-// the universe per run, so full price coverage stays at ~12 minutes. Only the
-// to-do-list lookup got cheaper.
+// warm-price-pool still refreshes a quarter of the universe per run, so full
+// price coverage takes four of its runs -- ~20 minutes since the 2026-08-31
+// stagger moved it from */3 to */5 (#374). Only the to-do-list lookup got
+// cheaper. The cadence itself lives in the JOBS registry (jobRuns.ts); this
+// comment cites it as context and must not become another copy of it.
 //
 // ON THE TTL. 30 minutes is a staleness budget, not a performance knob. It
 // bounds how long a symbol newly admitted to the displayed set can wait before
