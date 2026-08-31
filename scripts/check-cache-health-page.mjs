@@ -391,6 +391,27 @@ for (const [job, cron] of registryCrons) {
 for (const [job] of vercelCrons) {
   check(`${job}: scheduled in vercel.json AND present in the registry`, registryCrons.has(job));
 }
+// THE DATASET TABLE MUST NOT CARRY ITS OWN COPY OF A SCHEDULE. It used to: the
+// DATASETS entries in stalenessQueue.ts spelled out "every 3 min" and "daily
+// 07:00" as prose, and nothing compared them to anything. The 2026-08-31 cron
+// stagger (#374) made both false within the hour, so /cache-health told readers
+// the price pool refreshed every three minutes and history warmed at 07:00 when
+// neither had been true since the deploy. The cadence is now composed from the
+// JOBS registry by describeCron, and these two checks are what stop a future
+// edit quietly reintroducing a hand-typed one.
+const staleness = readCode("lib/server/stalenessQueue.ts");
+const datasetJobs = [...staleness.matchAll(/job:\s*"([a-z-]+)"/g)].map((m) => m[1]);
+
+check("every dataset names a warm job", datasetJobs.length >= 6, `${datasetJobs.length} datasets`);
+for (const job of new Set(datasetJobs)) {
+  check(`dataset job "${job}" exists in the JOBS registry`, registryCrons.has(job));
+}
+check(
+  "no dataset hard-codes a cadence — it is composed from the registry",
+  !/(?:label|note|qualifier):\s*"[^"]*(?:every \d+ min|daily \d{2}:\d{2}|hourly)/.test(staleness),
+  "prose here cannot be diffed against the registry, so it drifts unnoticed"
+);
+
 for (const [, job, flag] of jobEntries) {
   const has = new RegExp(`recordJobRun\\(\\s*"${job}"`).test(tree);
   if (flag === "true") {

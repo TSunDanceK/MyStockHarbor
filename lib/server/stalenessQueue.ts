@@ -28,6 +28,7 @@
 // dataset has symbols nothing can refresh.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { JOBS, describeCron, type JobKey } from "./jobRuns";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -92,19 +93,20 @@ export const DATASETS = {
   fundamentals: {
     label: "Fundamentals (market cap, P/E)",
     ttlSeconds: 60 * 60 * 26,
-    note: "warm-fundamentals, hourly",
+    job: "warm-fundamentals",
     coverage: "registered",
   },
   profile: {
     label: "Profile (industry, sector)",
     ttlSeconds: 60 * 60 * 24 * 30,
-    note: "warm-fundamentals; effectively static, 30d is healthy",
+    job: "warm-fundamentals",
+    qualifier: "effectively static, 30d is healthy",
     coverage: "registered",
   },
   screenerFundamentals: {
     label: "Screener fundamentals",
     ttlSeconds: 60 * 60 * 30,
-    note: "warm-screener-fundamentals, daily 06:50",
+    job: "warm-screener-fundamentals",
     // OBSERVED-ONLY: markRefreshed with no registerSymbols caller. Its ratio is
     // a self-selecting denominator and the page must not render it as coverage.
     coverage: "observed-only",
@@ -112,31 +114,48 @@ export const DATASETS = {
   pricePool: {
     label: "Price pool",
     ttlSeconds: 60 * 15,
-    note: "warm-price-pool, every 3 min",
+    job: "warm-price-pool",
     coverage: "registered",
   },
   dailyHistory: {
     label: "Daily history",
     // 26h, NOT the 50h Redis TTL. These are two different questions: the Redis
     // TTL is how long a bar stays usable, this is how long before its age is a
-    // FAULT. 26h means one missed 07:00 warm shows amber the next morning, while
+    // FAULT. 26h means one missed morning warm shows amber the next day, while
     // the data itself is still there -- which is the point of the 50h TTL. Set
     // to the cache TTL, a failure would only become visible once the data had
     // already gone.
     ttlSeconds: 60 * 60 * 26,
-    note: "warm-picker-universe forced refetch, daily 07:00",
+    job: "warm-picker-universe",
+    qualifier: "forced refetch",
     coverage: "registered",
   },
   earnings: {
     label: "Earnings",
     ttlSeconds: 60 * 60 * 24 * 7,
-    note: "warm-earnings, daily 07:15",
+    job: "warm-earnings",
     coverage: "registered",
   },
 } as const satisfies Record<
   string,
-  { label: string; ttlSeconds: number; note: string; coverage: "registered" | "observed-only" }
+  {
+    label: string;
+    ttlSeconds: number;
+    /** The warm job that maintains this dataset. Its cadence is READ FROM THE
+     * REGISTRY, never retyped here -- see describeCron in jobRuns.ts for what
+     * happened the last time this table carried its own copy. */
+    job: JobKey;
+    /** Anything true of this dataset that the schedule does not say. */
+    qualifier?: string;
+    coverage: "registered" | "observed-only";
+  }
 >;
+
+/** "warm-price-pool, every 5 min" -- composed, never stored. */
+export function datasetNote(def: { job: JobKey; qualifier?: string }): string {
+  const base = `${def.job}, ${describeCron(JOBS[def.job].cron)}`;
+  return def.qualifier ? `${base} — ${def.qualifier}` : base;
+}
 
 export type DatasetKey = keyof typeof DATASETS;
 
@@ -312,7 +331,7 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     dataset,
     label: def.label,
     ttlSeconds: def.ttlSeconds,
-    note: def.note,
+    note: datasetNote(def),
     tracked: 0,
     stale: 0,
     never: 0,
