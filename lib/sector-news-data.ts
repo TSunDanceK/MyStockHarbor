@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { readOrRefreshSectorNews } from "@/lib/server/newsStore";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getSectorBySlug, type SectorDef } from "@/lib/sectors";
@@ -184,7 +185,18 @@ function mapFmpItem(item: FmpStockNewsItem, constituentSet: Set<string>): NewsIt
   };
 }
 
-async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
+/**
+ * One windowed sector fetch. `from` null is a cold start.
+ *
+ * Already chunked at SECTOR_NEWS_CHUNK_SIZE because `symbols=` is list-aware --
+ * a 40-constituent sector is ~2 calls, not 40. That was measured, and it means
+ * this half was never the expensive one; what `from` adds is not re-fetching
+ * the same window every render once the store holds it.
+ */
+async function fetchFmpSectorNewsWindow(
+  symbols: string[],
+  from: string | null
+): Promise<NewsItem[]> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey || !symbols.length) return [];
 
@@ -207,7 +219,8 @@ async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
     }
 
     const encoded = encodeURIComponent(group.join(","));
-    const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${SECTOR_NEWS_LIMIT_PER_CHUNK}&apikey=${key}`;
+    const fromParam = from ? `&from=${encodeURIComponent(from)}` : "";
+    const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${SECTOR_NEWS_LIMIT_PER_CHUNK}${fromParam}&apikey=${key}`;
 
     try {
       const res = await fmpFetch(url, { next: { revalidate: 900 } });
@@ -356,7 +369,20 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
   ]);
 
   const constituentSet = new Set(constituents);
-  const news = await fetchFmpSectorNews(constituents);
+  // Store-backed, same as the symbol feed: Redis first, FMP only when cold or
+  // due, and NO earnings pin -- pinning one constituent's earnings article
+  // inside a sector feed would present it as sector-wide coverage.
+  //
+  // OUTSTANDING, and called out rather than assumed away: the #343 dedup
+  // threshold (0.6) was calibrated on single-ticker traffic. Sector traffic is
+  // the case it has never seen -- ~40 constituents means a market-wide story
+  // arrives many times over, which is both where dedup matters most and where
+  // the threshold is least tested. Persisting the pool makes that measurable
+  // for the first time; it does not make it measured.
+  const { items: news } = await readOrRefreshSectorNews<NewsItem>(sector.slug, {
+    fetchWindow: (from) => fetchFmpSectorNewsWindow(constituents, from),
+    dedupe: dedupeNews,
+  });
 
   const rankedNews = rankSectorNews(news);
   const earningsNews = news.filter(isEarningsNewsItem);
