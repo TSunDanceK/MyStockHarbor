@@ -51,9 +51,14 @@ check(
   "a string sort under a numeric cell orders the column by something the reader cannot see"
 );
 check(
-  "its sort key is the COUNT, not a joined string",
-  /get: \(e\) => e\.firedIndicators\?\.length/.test(signalsBlock) && !/join\(/.test(signalsBlock.split("cell:")[0]),
-  "get is the sort key and cell is the display; nothing in the types ties the two together"
+  "its sort key counts SCREENER MEMBERSHIP, not indicator names",
+  /get: \(e\) => e\.reasons\?\.length/.test(signalsBlock),
+  "firedIndicators is the composite's oversold/overbought list, populated only for stocks the composite flagged -- on a page like Near 200-Day most rows are neither, so it was blank for rows that plainly satisfy the page's own condition"
+);
+check(
+  "the column no longer reads firedIndicators at all",
+  !/firedIndicators/.test(signalsBlock.split("//").join("").split("\n").filter((l) => !l.trim().startsWith("*")).join("\n")),
+  "reading both would be two quantities under one heading"
 );
 check(
   "an empty list sorts as null, not 0",
@@ -62,32 +67,34 @@ check(
 );
 check(
   "an empty list displays as MUTED, not a zero",
-  /if \(!fired\.length\) return MUTED;/.test(signalsBlock),
+  /if \(!reasons\.length\) return MUTED;/.test(signalsBlock),
   "on an unfiltered /stock-screener view most rows legitimately have no fired checks, and that blank is correct"
 );
 
-console.log("\n=== 2. Short lists keep their text ===\n");
+console.log("\n=== 2. A bare count, with the names behind it ===\n");
 
-const threshold = Number(grid.match(/const SIGNALS_COLLAPSE_AT = (\d+);/)?.[1]);
+// REPLACES the SIGNALS_COLLAPSE_AT assertions. That threshold existed to keep
+// short lists rendering as text; the column is a pure number now, so the
+// threshold is gone and asserting it would pin a design that was removed.
 check(
-  "a collapse threshold exists",
-  Number.isFinite(threshold),
-  "a blanket count is the regression this guards against"
+  "the cell renders a bare count",
+  /\{reasons\.length\}/.test(signalsBlock),
+  "the column is called Signals, so the digits do not need the word repeating after them"
 );
 check(
-  "the threshold is at least 3",
-  threshold >= 3,
-  "every daily trend-flip row carries exactly 2 entries — measured, 27 of 27 — so collapsing at 2 would replace the flip date the page is ordered by with the words '2 signals'"
+  "no collapse threshold survives",
+  !/SIGNALS_COLLAPSE_AT/.test(grid),
+  "it protected a text rendering that no longer exists, so leaving it would be dead configuration"
 );
 check(
-  "the collapse is keyed on LENGTH, not on which page it is",
-  /fired\.length >= SIGNALS_COLLAPSE_AT/.test(signalsBlock) && !/href|pathname|slug/.test(signalsBlock),
-  "a page test would need updating for every page added; a length test cannot fall out of date"
+  "the full list is on hover",
+  /title=\{reasons\.join/.test(signalsBlock),
+  "a count with nothing behind it is the #330 failure; the names are what make it a summary rather than a substitute"
 );
 check(
-  "the full list is still on hover",
-  /title=\{full\}/.test(signalsBlock),
-  "collapsing the text is only acceptable because nothing is actually lost"
+  "the row carries its note on hover",
+  /title=\{entry\.note \|\| undefined\}/.test(grid),
+  "the table renders `note` nowhere else, and on the trend-flip pages it is the flip date -- which used to reach list view through this very column"
 );
 
 console.log("\n=== 3. The layout levers, and the one that must not move ===\n");
@@ -129,6 +136,38 @@ check(
   !/\.resultWrap \{ max-width[^}]*overflow/.test(pageRaw) &&
     !/\.resultShell \{ display: grid[^}]*overflow/.test(pageRaw),
   "the sticky header and the sticky controls row both live inside these"
+);
+
+console.log("\n=== 4. The sidebar can actually shrink ===\n");
+
+const nav = fs.readFileSync(path.join(process.cwd(), "app/components/ScreenerNav.tsx"), "utf8");
+const shell = fs.readFileSync(path.join(process.cwd(), "app/components/ScreenerShell.tsx"), "utf8");
+
+check(
+  ".screenerNavItem sets min-width: 0",
+  /\.screenerNavItem \{[^}]*min-width: 0;/s.test(nav),
+  "it is a grid item, so its default min-width is auto and it refuses to shrink -- the label's ellipsis never engages and the row overflows the column instead"
+);
+check(
+  ".screenerNavLabel can still ellipsize",
+  /\.screenerNavLabel \{[^}]*min-width: 0[^}]*text-overflow: ellipsis/s.test(nav),
+  "the chain is only unbroken if every level from the row down can shrink"
+);
+check(
+  "both copies of the shell agree on the widths",
+  (() => {
+    const a = pageRaw.match(/\.resultWrap \{ max-width: (\d+)px/)?.[1];
+    const b = shell.match(/\.resultWrap \{ max-width: (\d+)px/)?.[1];
+    const c = pageRaw.match(/grid-template-columns: (\d+)px minmax/)?.[1];
+    const d = shell.match(/grid-template-columns: (\d+)px minmax/)?.[1];
+    return a === b && c === d;
+  })(),
+  "these class names are defined twice globally, so /plays and the picker pages would otherwise render different sidebars"
+);
+check(
+  "ScreenerShell uses clip, not hidden",
+  !/overflow-x:\s*hidden/.test(shell),
+  "the sidebar inside it is position: sticky, and hidden coerces the other axis to auto, making a scroll container that breaks it"
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);
