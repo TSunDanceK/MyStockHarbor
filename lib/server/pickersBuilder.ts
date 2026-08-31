@@ -4482,27 +4482,22 @@ export async function getPickersData(
   // below depend on, and making it conditional on force is what disabled them.
   const cached = await readPickersCache();
 
+  // THIS RETURN IS ALSO WHY THERE IS NO "lost the lock but has a cache" BRANCH
+  // below. An unforced request holding a cached payload is served here, before
+  // the lock is ever taken, so by the time acquirePickersLock runs the only
+  // callers left are forced ones (which must rebuild) and ones with nothing
+  // cached (handled by the single-flight wait). A branch testing
+  // `!lockToken && !forceRefresh && cached?.data` used to sit after the lock and
+  // could not fire for exactly this reason; it was removed rather than left
+  // reading as active. If this early return is ever narrowed, the lock-loser
+  // case has to be re-derived deliberately rather than inherited from dormant
+  // code that quietly starts firing.
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
     return cached.data;
   }
 
   const lockToken = await acquirePickersLock();
-
-  // `!forceRefresh` ADDED HERE ALONGSIDE THE READ CHANGE, and it is not a new
-  // policy -- it restores the exact prior behaviour. Before this change `cached`
-  // was null under force, so this branch could never fire on a forced run and a
-  // forced run that lost the lock built anyway. Now that the read is
-  // unconditional, the branch would start firing and a forced 07:00 warm could
-  // silently return the cached payload having refreshed nothing.
-  //
-  // This is the failure mode the whole separation is about, arriving from the
-  // other direction: reading the cache must not change what a forced run DOES,
-  // only what it has available to fall back to.
-  if (!lockToken && !forceRefresh && cached?.data) {
-    memo = { ts: now, data: cached.data };
-    return cached.data;
-  }
 
   // LOCK LOST WITH NOTHING TO SERVE. Wait for the winner instead of starting a
   // second full build beside it -- see waitForPickersPayload.
@@ -4678,19 +4673,6 @@ async function handlePickersRequest(
   }
 
   const lockToken = await acquirePickersLock();
-
-  // See the matching note in getPickersData: `!forceRefresh` restores the
-  // pre-change behaviour, which the unconditional read would otherwise alter.
-  if (!lockToken && !forceRefresh && cached?.data) {
-    memo = { ts: now, data: cached.data };
-
-    return NextResponse.json(cached.data, {
-      headers: {
-        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
-        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
-      },
-    });
-  }
 
   // Same single-flight wait as getPickersData -- see the note there, and on
   // waitForPickersPayload, for why the no-cached-payload case is the one that
