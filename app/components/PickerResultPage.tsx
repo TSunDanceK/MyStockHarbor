@@ -1,4 +1,5 @@
 import { getBuySignalCount } from "@/lib/signalCounts";
+import { attachTrendHelper } from "@/lib/ta/trendHelper";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
@@ -143,6 +144,12 @@ type PickerSectionItem = {
   chartFocus?: PickerChartFocus;
   dominantIndicator?: string;
   firedIndicators?: string[];
+  /**
+   * Trend Helper (Slow) for the drawn window, shipped separately from
+   * chartPoints because section chartPoints are stripped by takeTop. Merged
+   * below with attachTrendHelper.
+   */
+  trendSeries?: { dates: string[]; line: number[]; state: number[] };
 };
 
 type PickerSection = {
@@ -760,6 +767,15 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         entry.chartHref = chartHrefForEntry(config.href, entry.symbol, item.dashboardHref, item);
         if (item.supportResistanceZone) entry.supportResistanceZone = item.supportResistanceZone;
         if (Array.isArray(item.chartPoints) && item.chartPoints.length) entry.chartPoints = item.chartPoints;
+        // The Trend Helper line rides separately from the points -- see
+        // trendTailForPoints for why. Joined by DATE, never by index:
+        // entry.chartPoints is the symbol's last 72 bars with a finite close and
+        // the series covers the closed daily bars, so the two do not share
+        // indices. Same attachTrendHelper the build side uses, so there is one
+        // join rather than two that can disagree.
+        if (item.trendSeries && entry.chartPoints.length) {
+          entry.chartPoints = attachTrendHelper(entry.chartPoints, item.trendSeries);
+        }
         if (item.tone) entry.tone = item.tone;
         const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
         if (badge) entry.badge = badge;

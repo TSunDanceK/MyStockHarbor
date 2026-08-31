@@ -42,6 +42,7 @@ const js = ts.transpileModule(fs.readFileSync(SRC, "utf8"), {
 const {
   computeTrendHelper,
   attachTrendHelper,
+  trendTailForPoints,
   hmaSeries,
   latestTrendFlip,
   TREND_HELPER_SLOW,
@@ -208,6 +209,119 @@ check(
   "colours come from the shared constant, not hard-coded hexes",
   /TREND_HELPER_COLORS/.test(mini) && !/#3b82f6|#eab308|#94a3b8/.test(mini),
   "the single-source file exists to stop exactly this drift between the three charts that draw this line"
+);
+
+console.log("\n=== 5. The payload boundary, which is where the first attempt died ===\n");
+
+// #387 attached the line to the section items' chartPoints. takeTop strips
+// those -- deliberately, because they duplicate signalRecords -- so the field
+// was assigned and then discarded before the payload was written. tsc was
+// clean, the build was green, `grep -c trendLine` over an 8.97 MB response
+// returned 0, and the chart correctly drew nothing. None of the assertions
+// above could see it, because all of them stop at the module boundary.
+
+const builder = fs.readFileSync(path.join(process.cwd(), "lib/server/pickersBuilder.ts"), "utf8");
+const page = fs.readFileSync(path.join(process.cwd(), "app/components/PickerResultPage.tsx"), "utf8");
+
+// takeTop is a whitelist TWICE: an explicit destructure and an explicit object
+// literal. Rather than pin one field name, compare the whole section-item type
+// against both lists -- the next field added will be dropped the same way.
+const sectionItemBlock = builder.slice(
+  builder.indexOf("type PickerSection = {"),
+  builder.indexOf("\n};", builder.indexOf("type PickerSection = {"))
+);
+const sectionFields = [...sectionItemBlock.matchAll(/^    ([a-zA-Z_]+)\??:/gm)].map((m) => m[1]);
+
+const takeTopBlock = builder.slice(
+  builder.indexOf("const takeTop = (arr: PickerItem[]"),
+  builder.indexOf("\n  };", builder.indexOf("const takeTop = (arr: PickerItem[]"))
+);
+const destructured = (takeTopBlock.match(/\.map\(\(\{([^}]*)\}\)/s)?.[1] ?? "")
+  .split(",")
+  .map((x) => x.trim())
+  .filter(Boolean);
+
+const missingFromDestructure = sectionFields.filter((f) => !destructured.includes(f));
+const missingFromLiteral = sectionFields.filter(
+  (f) => !new RegExp(`^\\s+${f}[,:]`, "m").test(takeTopBlock)
+);
+
+check(
+  "every section-item field survives takeTop's destructure",
+  missingFromDestructure.length === 0,
+  `a field not named here is dropped from every section item with no error and no type complaint — missing: ${missingFromDestructure.join(", ") || "none"}`
+);
+check(
+  "every section-item field survives takeTop's object literal",
+  missingFromLiteral.length === 0,
+  `the literal is the second whitelist; naming a field in only one of the two still drops it — missing: ${missingFromLiteral.join(", ") || "none"}`
+);
+check(
+  "the section item type declares trendSeries",
+  sectionFields.includes("trendSeries"),
+  "declared on both PickerItem and the section item type, or it is dropped at whichever end omits it"
+);
+
+check(
+  "pushTrendFlip ships the series, not enriched chartPoints",
+  /trendSeries: weekly \? undefined : dailyTrendSeries/.test(builder) &&
+    !/chartPoints: weekly \?/.test(builder),
+  "enriched chartPoints are what takeTop discards; the series rides separately for exactly that reason"
+);
+check(
+  "the weekly sections get no series",
+  /weekly \? undefined :/.test(builder),
+  "their flip is weekly and this line is daily, so it would contradict the date printed in the row"
+);
+check(
+  "PickerResultPage merges the series onto the record's points",
+  /attachTrendHelper\(entry\.chartPoints, item\.trendSeries\)/.test(page),
+  "without this the field arrives in the payload and nothing consumes it — the same silent nothing, one stage later"
+);
+
+console.log("\n=== 6. Round trip: build -> JSON -> merge ===\n");
+
+// The real functions, across the boundary that actually broke: the payload is
+// serialised, so anything the build produces has to survive stringify/parse and
+// still make the flip-date claim the row's text makes.
+const tail = trendTailForPoints(chartPoints, trend);
+check("trendTailForPoints returns a series", Boolean(tail), `${tail?.dates.length ?? 0} bars`);
+check(
+  "it carries only the drawn window, not the whole history",
+  tail.dates.length <= 64 && tail.dates.length < trend.dates.length,
+  `sending the full series would put back most of the bytes the split exists to avoid — ${tail.dates.length} of ${trend.dates.length}`
+);
+check(
+  "warm-up bars are dropped rather than sent as nulls",
+  tail.line.every((v) => typeof v === "number" && Number.isFinite(v)),
+  "they render nothing, and on a long series they are most of it"
+);
+
+const overWire = JSON.parse(JSON.stringify(tail));
+const merged = attachTrendHelper(
+  chartPoints.map((p) => ({ ...p })),
+  overWire
+);
+const mFlip = merged.find((p) => p.date === flipDate);
+const mPos = merged.findIndex((p) => p.date === flipDate);
+
+check(
+  "the flip-date colour claim survives the payload boundary",
+  mFlip?.trendState === flip.direction,
+  `this is the end-to-end version of the assertion in section 2 — direction ${flip.direction}, state ${mFlip?.trendState}`
+);
+check(
+  "the bar before the flip still differs after the round trip",
+  mPos > 0 && merged[mPos - 1].trendState !== mFlip?.trendState
+);
+check(
+  "the merged line matches the build-side values exactly",
+  merged.every((p) => {
+    if (typeof p.trendLine !== "number") return true;
+    const i = overWire.dates.indexOf(p.date);
+    return i !== -1 && Math.abs(overWire.line[i] - p.trendLine) < 0.001;
+  }),
+  "one join is used on both sides, so a divergence here would mean the shapes have drifted apart"
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);
