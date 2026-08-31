@@ -402,7 +402,20 @@ for (const [job] of vercelCrons) {
 const staleness = readCode("lib/server/stalenessQueue.ts");
 const datasetJobs = [...staleness.matchAll(/job:\s*"([a-z-]+)"/g)].map((m) => m[1]);
 
-check("every dataset names a warm job", datasetJobs.length >= 6, `${datasetJobs.length} datasets`);
+// EITHER A JOB OR AN EXPLICIT "no cron", never neither. A lazily populated
+// dataset (news, sectorNews) has no cron by design, so requiring a job for
+// every entry would force someone to invent a job name that does not exist just
+// to satisfy the shape -- which is how the page ends up naming a cron nobody
+// runs. Counting both variants against the entry total is what stops a dataset
+// being added that declares neither and prints a blank cadence.
+const datasetEntryCount = [...staleness.matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].length;
+const lazyDatasets = (staleness.match(/population: "on-demand",/g) ?? []).length;
+
+check(
+  "every dataset either names a warm job or declares lazy population",
+  datasetJobs.length + lazyDatasets === datasetEntryCount,
+  `an entry declaring neither would render an empty cadence — ${datasetJobs.length} scheduled + ${lazyDatasets} lazy of ${datasetEntryCount}`
+);
 for (const job of new Set(datasetJobs)) {
   check(`dataset job "${job}" exists in the JOBS registry`, registryCrons.has(job));
 }

@@ -1,4 +1,5 @@
 import { keywordHits } from "@/lib/keywordMatch";
+import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
@@ -604,34 +605,86 @@ export function logResponseWindow(label: string, symbol: string, rows: unknown[]
   );
 }
 
-/** The `limit` every /news/stock request in this file asks for. */
-const FMP_NEWS_LIMIT = 50;
+/**
+ * The `limit` a single /news/stock window asks for.
+ *
+ * 15, DOWN FROM 50, AND ONLY SAFE BECAUSE THE STORE EXISTS. The old comment
+ * below was right that cutting this on its own would lose content: with nothing
+ * persisted, one request's limit WAS the entire depth available to the page.
+ * Now the store accumulates up to NEWS_STORE_CAP across refreshes, so depth is
+ * a property of the store rather than of any one call, and the request only has
+ * to cover what is new since the last one.
+ */
+const FMP_NEWS_LIMIT = 15;
 
+/**
+ * The page-facing read: Redis first, FMP only when the store is cold or due.
+ *
+ * A RENDER MAKES NO FMP CALL inside the refresh window, which is the point.
+ * Population is lazy -- first view of a symbol populates it, later views read
+ * the store, and a symbol nobody views costs nothing. There is deliberately no
+ * cron behind this: warming 755 symbols of news hourly would dwarf every other
+ * consumer on the account.
+ *
+ * The store is given the pieces it must not own. The #343 similarity dedup and
+ * the earnings matcher live here and are shared with the sector feed and the
+ * scoring path, so they are passed in rather than reimplemented -- one
+ * implementation of a rule, not two that can disagree.
+ */
 async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
+  const { items } = await readOrRefreshSymbolNews<NewsItem>(symbol, {
+    fetchWindow: (from) => fetchFmpStockNewsWindow(symbol, from),
+    dedupe: dedupeNews,
+    // The earnings pin. Once an article qualifies it survives eviction until a
+    // newer qualifying one replaces it, or 7 days pass -- which is the part
+    // only persistence makes possible. Today an earnings article vanishes the
+    // moment it leaves FMP's latest-N window regardless of relevance.
+    isEarnings: isEarningsNewsItem,
+  });
+
+  return items;
+}
+
+/**
+ * One /news/stock window. `from` null means a cold start -- the endpoint's
+ * default window, because there is nothing stored to anchor an overlap to.
+ *
+ * Verified 2026-08-22 that `from=` actually filters rather than being silently
+ * ignored: from=2026-08-21 returned nothing older than 2026-08-21T03:05:00Z,
+ * where the same request without it reached back to 2026-08-19T11:45:00Z. That
+ * gate is the assumption the whole stored-news design rests on.
+ *
+ * Note the per-article cost is unchanged -- `from=` compresses nothing. The
+ * saving comes entirely from not re-fetching articles already held, which is
+ * only a saving once they are persisted.
+ */
+async function fetchFmpStockNewsWindow(
+  symbol: string,
+  from: string | null
+): Promise<NewsItem[]> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return [];
 
   const encoded = encodeURIComponent(symbol.toUpperCase());
   const key = encodeURIComponent(apiKey);
 
+  const fromParam = from ? `&from=${encodeURIComponent(from)}` : "";
+
   const endpoints = [
-    `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${FMP_NEWS_LIMIT}&apikey=${key}`,
+    `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${FMP_NEWS_LIMIT}${fromParam}&apikey=${key}`,
     `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encoded}&limit=${FMP_NEWS_LIMIT}&apikey=${key}`,
   ];
 
   for (const url of endpoints) {
     try {
-      // 3600, not 900. /stable/news/stock is the single largest line on the FMP
-      // byte meter -- ~34% of 30-day bandwidth against a cap already at 73.6% --
-      // and it was the ONLY fetch in this file still on 900s; its siblings sit
-      // at 1800, 3600 and 86400. A 4x cut in frequency with no content loss:
-      // the feed is not 15-minute-critical, and the callers are wrapped in an
-      // unstable_cache at 3600 anyway, so 900 was buying refreshes nothing
-      // downstream could see.
-      //
-      // Deliberately NOT paired with a cut to `limit=50`. That WOULD lose
-      // content, and how much is unmeasured -- see the depth instrumentation
-      // below, which exists to answer that before anyone touches the number.
+      // The Data Cache is now the SECOND gate, not the first. newsStore decides
+      // whether a refresh happens at all; this only bounds how stale an
+      // individual window may be if one does. Left at 3600 rather than switched
+      // to no-store deliberately -- `cache: "no-store"` opts the calling route
+      // out of static rendering entirely, which is the bailout documented at
+      // the FMP history call site, and it would buy nothing here because the
+      // `from` value changes every refresh so consecutive windows never share a
+      // cache key anyway.
       const res = await fmpFetch(url, {
         next: { revalidate: 3600 },
       });
