@@ -16,6 +16,7 @@
 // the caller here -- importing any of them back would be a cycle. Passing them
 // in also keeps the one implementation of dedup shared rather than copied.
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { markRefreshed } from "./stalenessQueue";
 import {
   capNews,
@@ -26,9 +27,22 @@ import {
   type NewsMergeItem,
 } from "./newsMerge";
 
+// PAGE_READ_CACHE, because this client is on a PRERENDERED route's read path.
+//
+// This module is reached from app/stock/[symbol]/news/page.tsx, which #381's
+// route table shows as SSG. @upstash/redis defaults every REST call to
+// cache: "no-store", and a no-store fetch on a prerendered route throws
+// DYNAMIC_SERVER_USAGE at request time -- a 500, not a fallback to dynamic.
+// That is the #310 configuration, and #310 was a 3.5-hour outage.
+//
+// It shipped bare in #380. The reason it was not caught is that nothing checked:
+// the same defect had just been found by hand in lib/youtube.ts (#383), which
+// makes this the second time. scripts/check-page-read-cache.mjs now asserts the
+// rule for every Redis construction in the repo, so a third is a failing check
+// rather than another manual scan.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const NEWS_KEY_PREFIX = "msh:news:v1:";
