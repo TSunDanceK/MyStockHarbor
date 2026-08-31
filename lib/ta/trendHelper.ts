@@ -351,3 +351,44 @@ export function attachTrendHelper<T extends DatedPoint>(
     };
   });
 }
+
+/**
+ * The slice of a Trend Helper series that a set of chart points can actually
+ * use: the dates present in the last `bars` points, and nothing else.
+ *
+ * SENT ON A SECTION ITEM SO THE ENRICHED POINTS DO NOT HAVE TO BE. Shipping the
+ * enriched chartPoints array instead duplicates ~72 bars that signalRecords
+ * already carries for the same symbol -- which is exactly why takeTop in
+ * pickersBuilder.ts strips section chartPoints in the first place. The line and
+ * state are the only fields that are not already in the payload twice.
+ *
+ * Warm-up bars (null line) are dropped rather than sent as nulls: they render
+ * nothing, and on a long series they are most of it.
+ *
+ * The result is the same `{ dates, line, state }` shape attachTrendHelper
+ * consumes, so the build-side slice and the page-side merge share one join.
+ */
+export function trendTailForPoints<T extends DatedPoint>(
+  chartPoints: T[],
+  trend: { dates: string[]; line: Array<number | null>; state: number[] },
+  bars = 64
+): { dates: string[]; line: number[]; state: number[] } | undefined {
+  const wanted = new Set(
+    chartPoints.slice(Math.max(0, chartPoints.length - bars)).map((p) => p.date.slice(0, 10))
+  );
+
+  const dates: string[] = [];
+  const line: number[] = [];
+  const state: number[] = [];
+
+  for (let i = 0; i < trend.dates.length; i++) {
+    const value = trend.line[i];
+    if (!wanted.has(trend.dates[i])) continue;
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    dates.push(trend.dates[i]);
+    line.push(Number(value.toFixed(2)));
+    state.push(trend.state[i] ?? 0);
+  }
+
+  return dates.length ? { dates, line, state } : undefined;
+}
