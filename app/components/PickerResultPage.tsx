@@ -586,6 +586,13 @@ function entriesFromSection(args: {
     const chartPoints = Array.isArray(item.chartPoints) ? item.chartPoints : Array.isArray(record?.chartPoints) ? record.chartPoints : [];
     const tone = item.tone || record?.tone || args.fallbackTone;
     const note = item.note || record?.note || [item.timeframe, item.indicator].filter(Boolean).join(" · ") || "Screened setup";
+    // Computed once and used twice: the flags go on the entry, and `reasons` is
+    // derived from the same object. Without `reasons` the list view's Signals
+    // column -- which counts screener membership, not indicator names -- would
+    // render every row of a `kind: "section"` page as a dash. No live config
+    // uses that kind today, so this is the field going missing quietly rather
+    // than loudly, which is the failure mode check-signals-plumbing exists for.
+    const flags = flagsFromRecord(record);
     return {
       symbol,
       note,
@@ -595,9 +602,10 @@ function entriesFromSection(args: {
       chartPoints,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       firedIndicators: item.firedIndicators,
+      reasons: getFlagReasons(flags, ALL_REASON_DEFS),
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
       supportResistanceZone: item.supportResistanceZone,
-      ...flagsFromRecord(record),
+      ...flags,
     };
   }).filter((entry): entry is ResultEntry => Boolean(entry));
 }
@@ -1357,8 +1365,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
            coerces the other to auto, which makes a scroll container and
            silently kills position: sticky for the table header and the
            controls row. */
-        .resultWrap { max-width: 1560px; margin: 0 auto; padding: 26px 18px 58px; }
-        .resultShell { display: grid; grid-template-columns: 316px minmax(0, 1fr); gap: 22px; align-items: start; }
+        .resultWrap { max-width: 1600px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultShell { display: grid; grid-template-columns: 352px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(config.tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }

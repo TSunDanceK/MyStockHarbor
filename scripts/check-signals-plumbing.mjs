@@ -240,10 +240,16 @@ console.log("\n=== 3. A count never STANDS IN for names ===\n");
 // reached that path. The count was the symptom of broken plumbing, standing in
 // for data the column could not get.
 //
-// The Signals column now collapses to "N signals" above a threshold. That is
-// the opposite situation: the names are present, they are on the element's
-// title, and short lists still render in full. So what must be forbidden is a
-// count with no names behind it -- not the digits themselves.
+// The Signals column IS a count now, of screener membership, with the qualifying
+// names on the element's title. That is the opposite situation: the names are
+// present and one hover away. So what must be forbidden is a count with no names
+// behind it -- not the digits themselves.
+//
+// NOTE ON THE SOURCE. This column reads `reasons` (screener membership), not
+// `firedIndicators` (the composite's oversold/overbought indicator names). The
+// hop-by-hop assertions in sections 1 and 2 above still guard firedIndicators,
+// which is right -- it still feeds the cards -- but it is no longer what this
+// column displays.
 //
 // The old assertion also matched on the exact ternary the cell happened to use,
 // which is a shape test wearing a behaviour test's label: rewriting the same
@@ -261,18 +267,18 @@ check(
 );
 check(
   "an empty or absent list renders MUTED, not a zero",
-  /MUTED/.test(signalsCell) && !/0\s+signals/.test(signalsCell),
-  "an absence is not a zero -- on an unfiltered /stock-screener view most rows legitimately have no fired checks"
+  /MUTED/.test(signalsCell) && !/>\s*0\s*</.test(signalsCell),
+  "an absence is not a zero -- the unfiltered All Stocks view can genuinely match no condition, and a 0 there would claim it was measured and came out empty"
 );
 check(
-  "a collapsed count always has the full list behind it",
-  !/\$\{[a-zA-Z.]*length\}\s*signals/.test(signalsCell) || /title=\{full\}/.test(signalsCell),
-  "the #330 failure was a count with nothing behind it; a count with the names on hover is a summary, not a substitute"
+  "the count has the qualifying names behind it",
+  /title=\{reasons\.join/.test(signalsCell),
+  "the #330 failure was a count with nothing behind it; the names on hover are what make this a summary rather than a substitute"
 );
 check(
-  "short lists are never collapsed",
-  !/signals/i.test(signalsCell) || /SIGNALS_COLLAPSE_AT/.test(signalsCell),
-  "collapsing at 2 would render every daily trend-flip row as '2 signals' and hide the flip date the page is ordered by"
+  "the count is of screener membership, not indicator names",
+  /reasons\.length/.test(signalsCell) && !/firedIndicators/.test(signalsCell),
+  "firedIndicators is populated only for stocks the composite flagged overbought or oversold, so on most pages it is a different question from the one the column heading asks"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

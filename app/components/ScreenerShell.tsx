@@ -57,8 +57,19 @@ export default function ScreenerShell({
       <main className="screenerShellPage">
         <style>{`
         .screenerShellPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
-        .resultWrap { max-width: 1360px; margin: 0 auto; padding: 26px 18px 58px; }
-        .resultShell { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: 22px; align-items: start; }
+        /* THE SIDEBAR AND THE TABLE ARE ONE GRID, so they compete: widening the
+           sidebar alone takes width off the table. The room comes from raising
+           the cap first -- the shell was pinned at 1360px on wider viewports, so
+           that space was already there and unused. 352px is sized against the
+           longest row (~310px of content before the scrollbar), and the cap
+           rises by more than the sidebar takes so the table still gains.
+
+           Do not add or change an overflow value on either of these: a
+           non-visible value on one axis coerces the other to auto, making a
+           scroll container and silently killing position: sticky for anything
+           inside -- which here includes the sidebar itself. */
+        .resultWrap { max-width: 1600px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultShell { display: grid; grid-template-columns: 352px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
         .hero { border: 1px solid ${toneBorder(tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
@@ -77,8 +88,17 @@ export default function ScreenerShell({
         }
         @media (max-width: 720px) {
           .screenerShellPage, .screenerShellPage * { box-sizing: border-box; }
-          .screenerShellPage { overflow-x: hidden; }
-          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: hidden; }
+          /* clip, not hidden -- same reason as .resultWrap below. This is the
+             OUTERMOST ancestor of the sticky sidebar, so it is the one that
+             matters most. PickerResultPage's equivalent (.pickerResultPage)
+             already uses clip. */
+          .screenerShellPage { overflow-x: clip; }
+          /* clip, NOT hidden. hidden coerces the other axis to auto, which makes
+             this a scroll container and silently breaks position: sticky for
+             everything inside it -- and .screenerSidebar is sticky. The sibling
+             copy of these rules in PickerResultPage.tsx already says so; this
+             one still said hidden. Same class names, defined twice globally. */
+          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: clip; }
           .hero { border-radius: 20px; padding: 15px; }
           .eyebrow { max-width: 100%; white-space: normal; text-align: center; line-height: 1.35; }
           .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
