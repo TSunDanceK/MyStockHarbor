@@ -16,9 +16,11 @@ import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
 import {
+  computeTrendHelper,
   latestTrendFlip,
   resampleWeeklyClosed,
   TREND_HELPER_SLOW,
+  trendTailForPoints,
 } from "../ta/trendHelper";
 import { getDailyHistoryBulk } from "./historyCache";
 import { registerSymbols } from "./stalenessQueue";
@@ -61,6 +63,16 @@ type PickerChartPoint = {
   ma200?: number;
   rsi14?: number;
   macdHist?: number;
+  // Trend Helper (Slow) for the trend-flip picker cards. NOT populated on this
+  // side: the builder ships the series separately as an item's `trendSeries`,
+  // and PickerResultPage merges it onto these points with attachTrendHelper.
+  // These fields exist so that merged shape is typed.
+  //
+  // The line is never recomputed from a payload window: HMA(55) is first
+  // non-null at index 60, so 72 bars leave 12 usable of the 64 drawn, and the
+  // confirmed state depends on the whole history rather than the window.
+  trendLine?: number;
+  trendState?: -1 | 0 | 1;
 };
 
 type MarketRow = {
@@ -106,6 +118,13 @@ type PickerItem = {
   epsGrowthPct?: number | null;
   revenueGrowthPct?: number | null;
   releaseDate?: string | null;
+  /**
+   * Trend Helper (Slow) for the drawn window only, joined by date in
+   * PickerResultPage. NOT the enriched chartPoints array: those would duplicate
+   * ~72 bars signalRecords already ships for the same symbol, which is what
+   * takeTop strips. Daily trend-flip items only.
+   */
+  trendSeries?: { dates: string[]; line: number[]; state: number[] };
 };
 
 type PickerSection = {
@@ -127,6 +146,12 @@ type PickerSection = {
     dominantIndicator?: string;
     /** Every check that fired, strongest first. See CompositeResult. */
     firedIndicators?: string[];
+    /**
+     * Trend Helper (Slow) for the drawn window. Declared on BOTH this type and
+     * PickerItem deliberately -- a field missing from either end is dropped
+     * silently at that end.
+     */
+    trendSeries?: { dates: string[]; line: number[]; state: number[] };
   }[];
 };
 
@@ -2564,6 +2589,13 @@ type TrendFlipResult = {
   trendFlipWeeklyBars: number | null;
   trendFlipDailyDate?: string;
   trendFlipWeekEnding?: string;
+  /**
+   * The Slow Trend Helper over the CLOSED daily series, aligned to
+   * `dailyClosed`. Present only when a daily flip qualified -- computing it for
+   * every symbol in the universe would add a second full HMA pass to a warm run
+   * that already has a documented timeout cliff.
+   */
+  dailyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
 };
 
 // Bars 0, 1, 2, 3 inclusive -- "flipped on the latest bar, or in the three
@@ -2649,7 +2681,29 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
     flip.direction === direction &&
     flip.barsSinceFlip <= TREND_FLIP_MAX_BARS;
 
+  // GUARDED, not unconditional. Only symbols whose DAILY flip qualifies pay for
+  // a second HMA pass; that is a small minority of the universe, and doing it
+  // for everyone would add a full extra pass to a warm run with a documented
+  // timeout cliff. latestTrendFlip above is deliberately untouched -- its four
+  // qualification rules are proven and this adds nothing to them.
+  const dailyQualifies = qualifies(dailyFlip, 1) || qualifies(dailyFlip, -1);
+  const dailyTrend = dailyQualifies
+    ? (() => {
+        const series = computeTrendHelper(
+          dailyClosed.map((p) => p.close),
+          trendLen,
+          confirmBars
+        );
+        return {
+          dates: dailyClosed.map((p) => p.date.slice(0, 10)),
+          line: series.line,
+          state: series.state as number[],
+        };
+      })()
+    : undefined;
+
   return {
+    dailyTrend,
     trendFlipBullish: qualifies(dailyFlip, 1),
     trendFlipBearish: qualifies(dailyFlip, -1),
     trendFlipBullishWeekly: qualifies(weeklyFlip, 1),
@@ -3204,6 +3258,16 @@ async function buildPickersPayload(
           // Trend Helper (Slow) flips -- see computeTrendFlips for the rules.
           const trendFlips = computeTrendFlips(pts);
 
+          // The drawn window only -- see trendTailForPoints. Sending the
+          // enriched chartPoints array instead is what the first attempt did,
+          // and takeTop discarded it: section chartPoints are stripped because
+          // they duplicate signalRecords, so the line has to ride separately.
+          // The weekly sections get nothing: their flip is weekly and this line
+          // is daily, so it would contradict the date printed in the same row.
+          const dailyTrendSeries = trendFlips.dailyTrend
+            ? trendTailForPoints(chartPoints, trendFlips.dailyTrend)
+            : undefined;
+
           // The four flip sections. RANKED BY RECENCY ALONE: `_score` is the
           // negated bar count and NOTHING else -- no liquidity term and, in
           // particular, no dynamicBoost. Every other section adds +10 for a
@@ -3243,6 +3307,7 @@ async function buildPickersPayload(
             target.push({
               symbol,
               chartPoints,
+              trendSeries: weekly ? undefined : dailyTrendSeries,
               tone: direction === "Bullish" ? "green" : "red",
               note: dateLabel
                 ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
@@ -3604,7 +3669,7 @@ async function buildPickersPayload(
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, _score, score }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, firedIndicators, trendSeries, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -3616,6 +3681,11 @@ async function buildPickersPayload(
         chartFocus,
         dominantIndicator,
         firedIndicators,
+        // NAMED HERE AND IN THE DESTRUCTURE ABOVE, and it has to be both. This
+        // is a whitelist twice over, so a field added to PickerItem but not to
+        // these two lists is dropped with no error and no type complaint -- the
+        // Trend Helper line shipped that way once and rendered nothing.
+        trendSeries,
         score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
@@ -3708,8 +3778,16 @@ async function buildPickersPayload(
       // 40, not the 20 every other section uses: this section's ORDER is the
       // product, and the pages it backs show 36 rows before "See more". At 20
       // the last 16 rows would fall out of the ranked set and quietly revert to
-      // the tracked-conditions count. No keepChartPoints -- these items carry
-      // the symbol's ordinary daily points, which signalRecords already ships.
+      // the tracked-conditions count.
+      //
+      // NO keepChartPoints, still: these items ship the symbol's ordinary daily
+      // points via signalRecords. Their Trend Helper line rides along as
+      // `trendSeries` instead -- a ~1.5KB series covering the drawn window,
+      // rather than a duplicate 72-bar array. See trendTailForPoints. The
+      // earlier wording said only "these items carry the symbol's ordinary
+      // daily points", which stayed true and stopped being the whole story:
+      // it read as a reason no chart data was needed here at all, which is how
+      // the line came to be attached to chartPoints and silently stripped.
       take: 40,
     }),
     buildSection({
