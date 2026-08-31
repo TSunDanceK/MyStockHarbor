@@ -51,12 +51,12 @@ const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
  * is just a second thing that can be wrong.
  */
 export const JOBS = {
-  "warm-fundamentals": { label: "Fundamentals (hourly)", instrumented: true, cron: "0 * * * *" },
+  "warm-fundamentals": { label: "Fundamentals (hourly, :22)", instrumented: true, cron: "22 * * * *" },
   "warm-screener-fundamentals": { label: "Screener fundamentals (daily 06:50)", instrumented: true, cron: "50 6 * * *" },
-  "warm-price-pool": { label: "Price pool (every 3 min)", instrumented: true, cron: "*/3 * * * *" },
-  "warm-stock-data": { label: "Stock data (every 10 min)", instrumented: true, cron: "*/10 * * * *" },
+  "warm-price-pool": { label: "Price pool (every 5 min)", instrumented: true, cron: "*/5 * * * *" },
+  "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
   "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
-  "warm-picker-universe": { label: "Picker universe (daily 07:00)", instrumented: true, cron: "0 7 * * *" },
+  "warm-picker-universe": { label: "Picker universe (daily 07:02)", instrumented: true, cron: "2 7 * * *" },
 } as const;
 
 /**
@@ -75,7 +75,17 @@ export const JOBS = {
  */
 export function cronIntervalSeconds(cron: string): number {
   const [minute, hour] = cron.trim().split(/\s+/);
-  if (minute?.startsWith("*/")) return Math.max(60, Number(minute.slice(2)) * 60);
+
+  // BOTH STEP FORMS, and the second one is not hypothetical. Jobs are offset off
+  // minute :00 using "lo-hi/step" (see vercel.json -- four crons used to start in
+  // the same minute and saturate the FMP calls/min ceiling). Matching only "*/N"
+  // would drop "7-57/10" through to the hourly default below, and the page would
+  // then treat ten minutes of silence from a ten-minute job as perfectly normal.
+  // That is this file's own failure mode: a declaration that reads fine and is
+  // wrong (claude/traps/absence-needs-the-producer-to-have-run.md).
+  const step = minute?.includes("/") ? Number(minute.split("/")[1]) : NaN;
+  if (Number.isFinite(step) && step > 0) return Math.max(60, step * 60);
+
   if (hour === "*") return 60 * 60;
   return 60 * 60 * 24;
 }
