@@ -146,6 +146,9 @@ const HISTORY_LOCK_TTL_SECONDS = 45;
 const FMP_CALL_COUNTER_PREFIX = "msh:fmp-calls:v1";
 const FMP_SAFE_CALLS_PER_MINUTE = 300;
 const FMP_WAIT_STEP_MS = 400;
+// Ceiling on the exponential backoff below. A waiter still notices a freed slot
+// within ~1.6s, but a full FMP_MAX_WAIT_MS wait now costs ~6 polls instead of 50.
+const FMP_WAIT_STEP_MAX_MS = 1_600;
 const FMP_MAX_WAIT_MS = 20_000;
 
 type FmpHistoricalRow = {
@@ -651,10 +654,32 @@ function getFmpCounterKey(now = new Date()) {
   return `${FMP_CALL_COUNTER_PREFIX}:${bucket}`;
 }
 
+/**
+ * Reserve one slot in the current minute's FMP budget, waiting for room if the
+ * minute is already spoken for.
+ *
+ * THE WAIT MUST NOT BE A WRITE. This loop used to call INCR on every pass, so a
+ * caller waiting for capacity raised the very number it was waiting to see come
+ * down -- at a flat FMP_WAIT_STEP_MS against FMP_MAX_WAIT_MS that is up to 50
+ * increments for ONE FMP call, and none of them were ever given back. With
+ * enough waiters the counter cannot fall: the guard that exists to keep us under
+ * FMP's rate limit becomes the reason we breach it.
+ *
+ * That is the shape the 07:01 warm showed -- http-429 and capacity-timeout side
+ * by side. Those two normally point opposite ways (FMP refusing us vs. our own
+ * limiter holding us back), and seeing both at once is the tell that the limiter
+ * was manufacturing the load it was throttling.
+ *
+ * So: a reservation is exactly one INCR. If it does not fit it is handed
+ * straight back with DECR, and the wait that follows is a plain GET, which
+ * cannot inflate anything. The 300/min ceiling and FMP_MAX_WAIT_MS are
+ * deliberately unchanged -- this fixes how we wait, not what we wait for.
+ */
 export async function reserveFmpCallSlot() {
   if (!redis) return;
 
   const startedAt = Date.now();
+  let waitMs = FMP_WAIT_STEP_MS;
 
   while (true) {
     const now = new Date();
@@ -671,16 +696,30 @@ export async function reserveFmpCallSlot() {
       if (current <= FMP_SAFE_CALLS_PER_MINUTE) {
         return;
       }
+
+      // Give the slot back before waiting. A reservation that did not fit is
+      // not a call we are going to make, and leaving it counted would charge
+      // the rest of the minute for a call that never happened.
+      await redis.decr(key);
     } catch {
       return;
     }
 
-    const elapsed = Date.now() - startedAt;
-    if (elapsed >= FMP_MAX_WAIT_MS) {
-      throw new FmpHistoryError("FMP call guard wait timeout", "capacity-timeout");
-    }
+    // READ-ONLY WAIT. Re-INCR only once this says there is room. If the minute
+    // rolls over mid-wait, getFmpMinuteUsage reads the new bucket -- which is
+    // empty -- so the next pass reserves immediately rather than sitting out
+    // the remainder of a budget that no longer applies.
+    while (true) {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= FMP_MAX_WAIT_MS) {
+        throw new FmpHistoryError("FMP call guard wait timeout", "capacity-timeout");
+      }
 
-    await sleep(FMP_WAIT_STEP_MS);
+      await sleep(Math.min(waitMs, FMP_MAX_WAIT_MS - elapsed));
+      waitMs = Math.min(waitMs * 2, FMP_WAIT_STEP_MAX_MS);
+
+      if ((await getFmpMinuteUsage()) < FMP_SAFE_CALLS_PER_MINUTE) break;
+    }
   }
 }
 
