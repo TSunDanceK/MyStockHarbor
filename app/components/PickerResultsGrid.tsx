@@ -77,10 +77,16 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
   // The two DAILY trend-flip pages draw the Trend Helper (Slow) HMA itself,
   // coloured by confirmed state -- the same line the dashboard's Basic chart
-  // draws, and the same signal the page screens on. Data comes from the section
-  // items' enriched chartPoints (attachTrendHelper in pickersBuilder); there is
-  // no client fallback, so a page routed here without that data draws nothing
-  // rather than drawing something wrong.
+  // draws, and the same signal the page screens on.
+  //
+  // The data arrives as the section items' `trendSeries`, which PickerResultPage
+  // merges onto the record's chartPoints. NOT as enriched chartPoints: takeTop
+  // strips section chartPoints, so a line attached to them is discarded before
+  // the payload is written -- which is how the first attempt at this shipped a
+  // correct-looking diff that rendered nothing.
+  //
+  // There is no client fallback, so a page routed here without that series
+  // draws nothing rather than drawing something wrong.
   //
   // The WEEKLY flip pages are excluded on purpose: their flip is weekly and this
   // line is daily, so it would contradict the flip date in the same row.
