@@ -231,13 +231,55 @@ check(
   pick({ oversold: true, oversoldIndicators: OS }, "trend") === undefined
 );
 
-console.log("\n=== 3. The grid never prints a count ===\n");
+console.log("\n=== 3. A count never STANDS IN for names ===\n");
+// NARROWED, DELIBERATELY, and the distinction is the whole point.
+//
+// This section used to assert "the grid never prints a count", because of the
+// third appearance of the #330 bug: /best-trend-score-stocks rendered
+// `4/4 trend checks` -- a bare count -- precisely BECAUSE the names never
+// reached that path. The count was the symptom of broken plumbing, standing in
+// for data the column could not get.
+//
+// The Signals column IS a count now, of screener membership, with the qualifying
+// names on the element's title. That is the opposite situation: the names are
+// present and one hover away. So what must be forbidden is a count with no names
+// behind it -- not the digits themselves.
+//
+// NOTE ON THE SOURCE. This column reads `reasons` (screener membership), not
+// `firedIndicators` (the composite's oversold/overbought indicator names). The
+// hop-by-hop assertions in sections 1 and 2 above still guard firedIndicators,
+// which is right -- it still feeds the cards -- but it is no longer what this
+// column displays.
+//
+// The old assertion also matched on the exact ternary the cell happened to use,
+// which is a shape test wearing a behaviour test's label: rewriting the same
+// logic as an if-statement failed it while changing nothing a reader sees.
 const grid = codeOf(read("app/components/PickerResultsGrid.tsx"), "app/components/PickerResultsGrid.tsx");
-check(
-  "Signals cell renders MUTED when absent or empty",
-  /e\.firedIndicators\?\.length\s*\?/.test(grid) && /MUTED/.test(grid)
+const signalsCell = grid.slice(
+  grid.indexOf('const signals: Col = {'),
+  grid.indexOf("\n    };", grid.indexOf('const signals: Col = {'))
 );
-check("no '0 signals' style rendering anywhere", !/signals?["'`\s]*\}?\s*<\/|\bsignals\b.*\.length\s*\}/i.test(grid.replace(/key:\s*"signals"|label:\s*"Signals"/g, "")));
+
+check(
+  "the Signals cell was found",
+  signalsCell.length > 0,
+  "an empty slice would pass the assertions below without reading any code"
+);
+check(
+  "an empty or absent list renders MUTED, not a zero",
+  /MUTED/.test(signalsCell) && !/>\s*0\s*</.test(signalsCell),
+  "an absence is not a zero -- the unfiltered All Stocks view can genuinely match no condition, and a 0 there would claim it was measured and came out empty"
+);
+check(
+  "the count has the qualifying names behind it",
+  /title=\{reasons\.join/.test(signalsCell),
+  "the #330 failure was a count with nothing behind it; the names on hover are what make this a summary rather than a substitute"
+);
+check(
+  "the count is of screener membership, not indicator names",
+  /reasons\.length/.test(signalsCell) && !/firedIndicators/.test(signalsCell),
+  "firedIndicators is populated only for stocks the composite flagged overbought or oversold, so on most pages it is a different question from the one the column heading asks"
+);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

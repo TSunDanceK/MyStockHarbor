@@ -741,18 +741,48 @@ export default function PickerResultsGrid({
     // any other; the underlying order is by how far each check passed its own
     // trigger, which is the same order the chart deep-link's dominant indicator
     // is picked from.
+    // COUNTS SCREENER MEMBERSHIP, NOT INDICATOR NAMES. `firedIndicators` --
+    // what this column read until now -- is the composite's oversold/overbought
+    // indicator list, populated only for stocks the composite flagged. On a page
+    // like Near 200-Day most rows are neither, so the column sat blank for rows
+    // that plainly satisfy the condition the page screens on, and showed
+    // "MACD(12,26,9) · MA50" for the few that happened to be overbought too.
+    // Both halves were the same column reporting a quantity nobody asked for.
+    //
+    // `reasons` is the right quantity: getFlagReasons over ALL_REASON_DEFS in
+    // PickerResultPage, which is FILTER_DEFS + CATEGORY_FILTER_DEFS -- the same
+    // list the Screeners sidebar checkboxes are built from. It is already the
+    // card's Score pill and the "N of 30 tracked conditions met" line; the list
+    // view was the only place it was missing.
+    //
+    // A bare number, deliberately: the names are on hover and the column is
+    // called Signals, so the digits do not need the word repeating after them.
+    // This is also why there is no longer a collapse threshold -- that existed
+    // to protect a text rendering that no longer exists.
     const signals: Col = {
       key: "signals",
       label: "Signals",
-      sortType: "str",
+      sortType: "num",
       cls: "colInd",
-      get: (e) => (e.firedIndicators ?? []).join(", "),
-      cell: (e) =>
-        e.firedIndicators?.length ? (
-          <span className="listInd" title={e.firedIndicators.join(" · ")}>{e.firedIndicators.join(" · ")}</span>
-        ) : (
-          MUTED
-        ),
+      // null, not 0, when nothing matched. The comparator tests `an == null`
+      // before applying the sort direction, so nulls sink to the bottom both
+      // ways, like every other numeric column. A 0 would ride to the top of an
+      // ascending sort while the cell shows a dash.
+      //
+      // NOT floored to 1. With a filter applied every visible row scores at
+      // least 1 by construction, because the applied filter is one of the
+      // conditions counted -- but the unfiltered All Stocks view can genuinely
+      // match none, and an absence is not a zero.
+      get: (e) => e.reasons?.length || null,
+      cell: (e) => {
+        const reasons = e.reasons ?? [];
+        if (!reasons.length) return MUTED;
+        return (
+          <span className="listInd" title={reasons.join(" · ")}>
+            {reasons.length}
+          </span>
+        );
+      },
     };
     const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
@@ -1279,6 +1309,15 @@ export default function PickerResultsGrid({
                       <tr
                         key={`${entry.symbol}-${entry.note}`}
                         id={`picker-${entry.symbol}`}
+                        // THE ROW'S NOTE, ON HOVER, because the table renders it
+                        // nowhere else. It matters most on the two daily
+                        // trend-flip pages: their note carries the flip date
+                        // ("Bullish Trend Helper flip • session of 2026-08-28"),
+                        // which used to reach list view through the Signals
+                        // column and no longer does now that column is a count.
+                        // One attribute rather than a column, since every other
+                        // page's note is already implied by the page itself.
+                        title={entry.note || undefined}
                         onClick={() => { window.location.href = href; }}
                       >
                         {activeColumns.map((col) => (
