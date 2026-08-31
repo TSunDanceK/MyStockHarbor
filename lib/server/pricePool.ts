@@ -27,13 +27,18 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 //   * stable/quote (per symbol)   -> price / %chg / volume / marketCap (no PE)
 //   * stable/ratios-ttm (per sym) -> priceToEarningsRatioTTM (the only PE source)
 //   * Limit is 300 calls/MIN (no daily cap; 20GB/30d bandwidth). ~550 symbols
-//     refreshed every 15 min averages ~37 calls/min -- far under the ceiling.
+//     refreshed across a full PRICE_TARGET_RUNS rotation averages well under
+//     the ceiling.
 //
 // PRICE and PE have very different volatilities, so they refresh on independent
 // rotations, each tracked by its own timestamp on the row:
-//   * price (`ts`)   -> refreshed for the WHOLE universe every ~15 min. Each run
-//     takes the stalest-by-`ts` slice, sized so the universe is fully covered in
-//     PRICE_TARGET_RUNS cron runs (=> <=~15 min old with the */3 cron).
+//   * price (`ts`)   -> refreshed for the WHOLE universe on a rolling rotation.
+//     Each run takes the stalest-by-`ts` slice, sized so the universe is fully
+//     covered in PRICE_TARGET_RUNS cron runs. HOW LONG THAT IS IN MINUTES
+//     DEPENDS ON THE CRON, which lives in the JOBS registry (jobRuns.ts) and has
+//     already moved once -- #374 took it from */3 to */5, which stretched full
+//     coverage from ~12 to ~20 minutes. Counted in RUNS here so this comment
+//     does not have to be corrected the next time the cadence changes.
 //   * PE (`peTs`)    -> slow trickle of the stalest-by-`peTs` symbols per run;
 //     a P/E barely moves hour to hour, so full coverage in a couple hours then
 //     just rolling is plenty. Last-known PE is carried forward on a miss.
@@ -58,8 +63,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 // admitted by discovery (app/api/market/route.ts) has ts=0 here, so it wins
 // the stalest-first sort on the very next warm-price-pool run -- but if a
 // discovery batch admits enough symbols to exceed a single run's priceCap,
-// some of them queue behind each other for up to PRICE_TARGET_RUNS runs (~12
-// min). Discovery already fetches a stable/quote per admitted symbol for its
+// some of them queue behind each other for up to PRICE_TARGET_RUNS runs. Discovery already fetches a stable/quote per admitted symbol for its
 // own purposes (building the homepage-movers quote cache); seedColdPricePoolRows
 // below reuses that ALREADY-FETCHED quote to give the symbol a real baseline
 // row immediately, at zero extra FMP cost. It only fills symbols with NO
@@ -77,8 +81,9 @@ const redis =
 const PRICE_POOL_KEY = "msh:price-pool:v1";
 const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gaps
 
-// Price coverage: with the */3 cron (5 runs / 15 min) we cover the whole
-// universe in PRICE_TARGET_RUNS runs, so every price is <=~12-15 min old.
+// Price coverage: the whole universe is covered in PRICE_TARGET_RUNS runs. In
+// wall-clock terms that is that many multiples of the warm-price-pool cron in
+// the JOBS registry -- ~20 minutes at the */5 it runs on since #374.
 const PRICE_TARGET_RUNS = 4;
 const PRICE_MIN_PER_RUN = 40; // don't bother sub-slicing a tiny universe
 const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even paced)
@@ -205,8 +210,8 @@ export type ColdSeedRow = {
  * wins warm-price-pool's stalest-first sort and is typically picked up on the
  * very next cron run. But if a single discovery batch admits enough symbols to
  * exceed that run's priceCap (PRICE_MAX_PER_RUN=220), the overflow queues
- * behind other stale symbols for up to PRICE_TARGET_RUNS runs (~12 min at the
- * 3-minute cron). This gives those symbols a real row immediately instead.
+ * behind other stale symbols for up to PRICE_TARGET_RUNS runs. This gives those
+ * symbols a real row immediately instead.
  *
  * Deliberately does not touch `pe` (left null) or `peTs` (left 0) -- PE has no
  * cheap already-fetched source at discovery time, so it still only ever comes
@@ -399,7 +404,8 @@ async function fetchMoverBuckets(apiKey: string): Promise<Map<string, MoverRow>>
  * any universe symbol they cover gets a free price/%change refresh and is
  * excluded from this run's stalest-slice pick. PRICE is then refreshed for the
  * stalest slice (among symbols NOT already freshened by a bucket hit this run)
- * large enough to cover the whole universe every ~15 min (independent of PE).
+ * large enough to cover the whole universe in PRICE_TARGET_RUNS runs
+ * (independent of PE).
  * PE is refreshed for a small stalest-by-`peTs` trickle. Only touched fields
  * are written back (a single HSET) + the hash's safety expiry is reset.
  * Everything not refreshed keeps its prior value. Budget-guarded and fail-open

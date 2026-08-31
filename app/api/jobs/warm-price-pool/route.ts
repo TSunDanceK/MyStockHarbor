@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool } from "../../../../lib/server/pricePool";
@@ -23,12 +24,54 @@ export const dynamic = "force-dynamic";
 // plain GET), so it is not a one-liner and does not belong in an urgent fix.
 export const maxDuration = 300;
 
-// Every-3-min cron (see vercel.json) that refreshes the shared price pool
-// (msh:price-pool:v1). PRICE is refreshed for a stalest slice sized so the
-// whole displayed universe is covered every ~15 min; PE trickles on its own
-// slower rotation (see lib/server/pricePool.ts). READ-ONLY on page renders, so
-// a page load never spends an FMP call. Reads the symbol set from the already-
-// cached pickers payload.
+// Cron-driven refresh of the shared price pool (msh:price-pool:v1). PRICE is
+// refreshed for a stalest slice sized so the whole displayed universe is covered
+// in PRICE_TARGET_RUNS runs; PE trickles on its own slower rotation (see
+// lib/server/pricePool.ts). READ-ONLY on page renders, so a page load never
+// spends an FMP call. Reads the symbol set from the already-cached pickers
+// payload. The cadence itself is in the JOBS registry (jobRuns.ts) -- this
+// comment used to name it and was still saying "every 3 min" long after #374
+// moved it to */5.
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
+
+const PRICE_POOL_LOCK_KEY = "msh:price-pool:v1:warm-lock";
+
+// MUST EXCEED maxDuration. The cron fires every 300s and a run may take all 300s
+// of its budget, so the two can touch exactly -- which is the whole reason this
+// lock exists. A TTL at or under maxDuration would expire the lock right as the
+// overrunning run is still going, i.e. it would fail open in precisely the case
+// it was added for. Six minutes leaves a margin and still self-heals within one
+// cron period if a run dies without releasing.
+const PRICE_POOL_LOCK_TTL_SECONDS = 6 * 60;
+
+async function acquireLock() {
+  if (!redis) return "no-redis";
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const result = await redis.set(PRICE_POOL_LOCK_KEY, token, {
+    nx: true,
+    ex: PRICE_POOL_LOCK_TTL_SECONDS,
+  });
+
+  return result === "OK" ? token : null;
+}
+
+async function releaseLock(token: string | null) {
+  if (!redis || !token || token === "no-redis") return;
+
+  try {
+    // Compare before deleting: if this run overran its TTL the lock now belongs
+    // to a successor, and deleting it would hand a third run the door key.
+    const current = await redis.get<string>(PRICE_POOL_LOCK_KEY);
+    if (current === token) await redis.del(PRICE_POOL_LOCK_KEY);
+  } catch {
+    // fail open
+  }
+}
 
 function isAuthorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -46,6 +89,15 @@ export async function GET(req: NextRequest) {
       { error: "Missing FMP_API_KEY environment variable." },
       { status: 500 }
     );
+  }
+
+  const lock = await acquireLock();
+  if (!lock) {
+    // RECORDED, NOT SILENT. Mirrors warm-earnings: a skip is a healthy outcome,
+    // but an unrecorded one is indistinguishable on /cache-health from the job
+    // having stopped running at all.
+    await recordJobRun("warm-price-pool", true, { skipped: true, reason: "locked" });
+    return NextResponse.json({ ok: true, skipped: true, reason: "locked" });
   }
 
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
@@ -77,5 +129,7 @@ export async function GET(req: NextRequest) {
     // SUCCESSFUL run and reads healthy while the job has been failing.
     await recordJobRun("warm-price-pool", false, { error: message });
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  } finally {
+    await releaseLock(lock);
   }
 }
