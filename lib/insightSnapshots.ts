@@ -2,7 +2,7 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "@/lib/server/redisCacheMode";
 import type { InsightSnapshot, InsightSnapshotPoint } from "@/lib/blog";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { fetchQuoteSnapshot, type Quote } from "@/lib/server/quoteData";
+import { fetchQuoteSnapshotForRender, type Quote } from "@/lib/server/quoteData";
 import { searchSymbols, type SymbolRow } from "@/lib/server/symbolSearch";
 
 type Point = {
@@ -223,7 +223,7 @@ function normalizeSnapshot(input: unknown): InsightSnapshot | null {
 // is identical to before; only the BotID-vulnerable HTTP hop is removed.
 async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
   const [quoteData, dailyHistory, symbolResults] = await Promise.all([
-    fetchQuoteSnapshot(symbol) as Promise<Quote>,
+    fetchQuoteSnapshotForRender(symbol) as Promise<Quote>,
     getDailyHistory(symbol),
     searchSymbols(symbol, "") as Promise<SymbolRow[]>,
   ]);
