@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "@/lib/server/redisCacheMode";
 
 export type YouTubeVideo = {
   id: string;
@@ -94,9 +95,24 @@ const RESULT_CACHE_SECONDS = 60 * 60 * 24; // 24 hours
 // hour, so this ceiling is never expected to bind outside of a burst -- and
 // even sustained continuous triggering caps total usage well under the
 // daily quota, leaving headroom for any other consumer of the same key.
+// PAGE_READ_CACHE, like every other client on a page's read path.
+//
+// This was a bare Redis.fromEnv(), and it is reached from
+// app/insights/videos/[videoId]/page.tsx and app/insights/page.tsx.
+// @upstash/redis defaults every REST call to cache: "no-store", and a no-store
+// fetch on a PRERENDERED route throws DYNAMIC_SERVER_USAGE at request time --
+// a 500, not a fallback to dynamic. That is the #310 configuration exactly, and
+// #310 was a 3.5-hour production outage.
+//
+// It has not been failing only because neither of those routes is currently
+// prerendered: the videos route has no generateStaticParams, so its
+// revalidate = 1800 is inert and every request is a full render. In other
+// words the thing keeping this safe is a separate bug. Fixed first and on its
+// own, so that making that route static is a one-line change against a client
+// that is already correct rather than two risks landing together.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const YOUTUBE_CALL_COUNTER_PREFIX = "msh:yt-calls:v1";
