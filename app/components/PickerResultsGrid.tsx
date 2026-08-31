@@ -75,6 +75,16 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   const text = `${configTitle} ${entryText}`.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
+  // The two DAILY trend-flip pages draw the Trend Helper (Slow) HMA itself,
+  // coloured by confirmed state -- the same line the dashboard's Basic chart
+  // draws, and the same signal the page screens on. Data comes from the section
+  // items' enriched chartPoints (attachTrendHelper in pickersBuilder); there is
+  // no client fallback, so a page routed here without that data draws nothing
+  // rather than drawing something wrong.
+  //
+  // The WEEKLY flip pages are excluded on purpose: their flip is weekly and this
+  // line is daily, so it would contradict the flip date in the same row.
+  if (href.includes("trend-flip") && !href.includes("weekly")) return "trendHelper" as const;
   if (href.includes("best-trend")) return "trend" as const;
   // The 50-day pages drew bare candles: the chart has always computed ma50 (and
   // falls back to a local SMA when the payload omits it) but only ever drew it

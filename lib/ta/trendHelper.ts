@@ -302,3 +302,52 @@ export function isoWeekKey(dateStr: string): string {
   const week = 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000));
   return `${isoYear}-W${String(week).padStart(2, "0")}`;
 }
+
+/** The fields the date-join needs. Structurally satisfied by PickerChartPoint. */
+export type DatedPoint = { date: string };
+
+/**
+ * Copy a precomputed Trend Helper series onto chart points, JOINED BY DATE.
+ *
+ * ALIGNMENT IS THE ONE THING HERE THAT CAN SILENTLY PRODUCE A WRONG CHART. The
+ * caller's two arrays do not share indices: picker chartPoints come from points
+ * filtered for a finite close and sliced to the last 72, while the trend series
+ * comes from the closed daily series (all points, minus a live unclosed bar).
+ * Index-joining them draws a line whose colour changes a bar or two away from
+ * the flip date printed in the same row -- a chart that looks plausible and
+ * contradicts the text beside it, which is worse than drawing nothing. The date
+ * string is the only thing both sides agree on.
+ *
+ * LIVES HERE, not beside its caller, because this file imports nothing and so
+ * scripts/check-trend-helper-attach.mjs can exercise the real function against
+ * the real computeTrendHelper. In lib/server/pickersBuilder.ts -- Redis, Next
+ * and some forty modules deep -- the only testable option would have been a
+ * copy of the logic, which is the divergence this file's header exists to
+ * forbid.
+ *
+ * Only the last `bars` points get the fields: the mini chart's visible window is
+ * 64 bars (MiniPickerCandleChart's visibleLimit), so anything earlier is bytes
+ * nobody renders.
+ */
+export function attachTrendHelper<T extends DatedPoint>(
+  chartPoints: T[],
+  trend: { dates: string[]; line: Array<number | null>; state: number[] },
+  bars = 64
+): T[] {
+  const byDate = new Map<string, { line: number | null; state: number }>();
+  for (let i = 0; i < trend.dates.length; i++) {
+    byDate.set(trend.dates[i], { line: trend.line[i], state: trend.state[i] ?? 0 });
+  }
+
+  const from = Math.max(0, chartPoints.length - bars);
+  return chartPoints.map((point, index) => {
+    if (index < from) return point;
+    const hit = byDate.get(point.date.slice(0, 10));
+    if (!hit || typeof hit.line !== "number" || !Number.isFinite(hit.line)) return point;
+    return {
+      ...point,
+      trendLine: Number(hit.line.toFixed(2)),
+      trendState: (hit.state > 0 ? 1 : hit.state < 0 ? -1 : 0) as -1 | 0 | 1,
+    };
+  });
+}

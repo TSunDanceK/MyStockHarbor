@@ -16,6 +16,8 @@ import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
 import {
+  attachTrendHelper,
+  computeTrendHelper,
   latestTrendFlip,
   resampleWeeklyClosed,
   TREND_HELPER_SLOW,
@@ -61,6 +63,13 @@ type PickerChartPoint = {
   ma200?: number;
   rsi14?: number;
   macdHist?: number;
+  // Trend Helper (Slow) for the trend-flip picker cards. Attached ONLY to the
+  // items of the two daily trend-flip sections -- see attachTrendHelper. Absent
+  // everywhere else, because HMA(55) cannot be recomputed from a 72-bar window
+  // (first non-null at index 60) and the confirmed state depends on the whole
+  // history, not the window.
+  trendLine?: number;
+  trendState?: -1 | 0 | 1;
 };
 
 type MarketRow = {
@@ -2564,6 +2573,13 @@ type TrendFlipResult = {
   trendFlipWeeklyBars: number | null;
   trendFlipDailyDate?: string;
   trendFlipWeekEnding?: string;
+  /**
+   * The Slow Trend Helper over the CLOSED daily series, aligned to
+   * `dailyClosed`. Present only when a daily flip qualified -- computing it for
+   * every symbol in the universe would add a second full HMA pass to a warm run
+   * that already has a documented timeout cliff.
+   */
+  dailyTrend?: { dates: string[]; line: Array<number | null>; state: number[] };
 };
 
 // Bars 0, 1, 2, 3 inclusive -- "flipped on the latest bar, or in the three
@@ -2649,7 +2665,29 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
     flip.direction === direction &&
     flip.barsSinceFlip <= TREND_FLIP_MAX_BARS;
 
+  // GUARDED, not unconditional. Only symbols whose DAILY flip qualifies pay for
+  // a second HMA pass; that is a small minority of the universe, and doing it
+  // for everyone would add a full extra pass to a warm run with a documented
+  // timeout cliff. latestTrendFlip above is deliberately untouched -- its four
+  // qualification rules are proven and this adds nothing to them.
+  const dailyQualifies = qualifies(dailyFlip, 1) || qualifies(dailyFlip, -1);
+  const dailyTrend = dailyQualifies
+    ? (() => {
+        const series = computeTrendHelper(
+          dailyClosed.map((p) => p.close),
+          trendLen,
+          confirmBars
+        );
+        return {
+          dates: dailyClosed.map((p) => p.date.slice(0, 10)),
+          line: series.line,
+          state: series.state as number[],
+        };
+      })()
+    : undefined;
+
   return {
+    dailyTrend,
     trendFlipBullish: qualifies(dailyFlip, 1),
     trendFlipBearish: qualifies(dailyFlip, -1),
     trendFlipBullishWeekly: qualifies(weeklyFlip, 1),
@@ -3204,6 +3242,14 @@ async function buildPickersPayload(
           // Trend Helper (Slow) flips -- see computeTrendFlips for the rules.
           const trendFlips = computeTrendFlips(pts);
 
+          // Enriched points for the two DAILY flip sections only. Built once per
+          // symbol; the weekly sections keep the plain shared array, because
+          // their flip is weekly and this line is daily -- a daily line on a
+          // weekly card would contradict the flip date printed in the same row.
+          const dailyTrendChartPoints = trendFlips.dailyTrend
+            ? attachTrendHelper(chartPoints, trendFlips.dailyTrend)
+            : chartPoints;
+
           // The four flip sections. RANKED BY RECENCY ALONE: `_score` is the
           // negated bar count and NOTHING else -- no liquidity term and, in
           // particular, no dynamicBoost. Every other section adds +10 for a
@@ -3242,7 +3288,7 @@ async function buildPickersPayload(
               : "";
             target.push({
               symbol,
-              chartPoints,
+              chartPoints: weekly ? chartPoints : dailyTrendChartPoints,
               tone: direction === "Bullish" ? "green" : "red",
               note: dateLabel
                 ? `${direction} Trend Helper flip • ${dateLabel} • ${age}`
