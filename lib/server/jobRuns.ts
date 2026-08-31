@@ -90,6 +90,33 @@ export function cronIntervalSeconds(cron: string): number {
   return 60 * 60 * 24;
 }
 
+/**
+ * The cadence, in words, for display beside a dataset on /cache-health.
+ *
+ * WHY THIS IS DERIVED AND NOT TYPED OUT. stalenessQueue.ts used to carry the
+ * cadence of each warm job as prose in its own DATASETS table -- "every 3 min",
+ * "daily 07:00" -- which made it a THIRD copy of the schedule after vercel.json
+ * and the JOBS registry above. Nothing checked it, and within an hour of the
+ * 2026-08-31 cron stagger (#374) both strings were lies: the page told a reader
+ * the price pool refreshes every three minutes and the history warm runs at
+ * 07:00, when neither had been true since the deploy.
+ *
+ * That is this file's documented failure mode reappearing one module over -- a
+ * declaration that reads fine and is wrong. The registry is the single source,
+ * so the words are computed from the same cron string the check script already
+ * asserts against vercel.json, and there is no longer a copy that CAN drift.
+ */
+export function describeCron(cron: string): string {
+  const [minute, hour] = cron.trim().split(/\s+/);
+
+  const step = minute?.includes("/") ? Number(minute.split("/")[1]) : NaN;
+  if (Number.isFinite(step) && step > 0) return `every ${step} min`;
+
+  const mm = (minute ?? "0").padStart(2, "0");
+  if (hour === "*") return `hourly at :${mm}`;
+  return `daily ${(hour ?? "0").padStart(2, "0")}:${mm}`;
+}
+
 export type JobKey = keyof typeof JOBS;
 
 export type JobRun = {
