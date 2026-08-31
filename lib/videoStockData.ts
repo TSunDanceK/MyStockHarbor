@@ -17,7 +17,7 @@
 // internally, so this always returns identically-shaped data to the public
 // endpoint, with no HTTP round-trip and nothing for BotID to reject.
 
-import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
+import { fetchQuoteSnapshotForRender } from "@/lib/server/quoteData";
 
 // Ticker remapping for non-US tickers.
 // Use US-listed ADR equivalents where available — all FMP endpoints work reliably for US symbols.
@@ -65,7 +65,7 @@ export async function getVideoStockData(ticker: string): Promise<VideoStockData>
   let ma200: number | null = null;
 
   try {
-    const q = await fetchQuoteSnapshot(fmpSymbol);
+    const q = await fetchQuoteSnapshotForRender(fmpSymbol);
     price = q.price;
     marketCapRaw = q.marketCap;
     name = q.name;
