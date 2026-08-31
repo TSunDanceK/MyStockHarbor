@@ -877,6 +877,18 @@ function normalizeEarningsRows(value: unknown, fallbackSymbol: string): Earnings
 // whole universe's cached earnings in a single pipelined Redis round-trip
 // (via mget) instead of one individual REST call per symbol. For a
 // 200-symbol universe this was ~200 separate Upstash calls; now it's 1.
+// Keys per MGET. Mirrors pickerChartsCache's CHUNK_SIZE for the same reason --
+// Upstash caps a single response at 10MB and an unbounded mget over the whole
+// universe is one reply. Earnings rows are far smaller than chart series, so
+// this sits higher than that file's 40, but the ceiling is the same ceiling.
+const EARNINGS_MGET_CHUNK = 100;
+
+function chunkKeys<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 async function readCachedFmpEarningsBulk(
   symbols: string[]
 ): Promise<Map<string, EarningsRow[]>> {
@@ -893,12 +905,14 @@ async function readCachedFmpEarningsBulk(
   if (!cleanSymbols.length) return result;
 
   try {
-    const keys = cleanSymbols.map((symbol) => `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
-    const values = await redis.mget<EarningsRow[]>(...keys);
+    for (const group of chunkKeys(cleanSymbols, EARNINGS_MGET_CHUNK)) {
+      const keys = group.map((symbol) => `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
+      const values = await redis.mget<EarningsRow[]>(...keys);
 
-    cleanSymbols.forEach((symbol, i) => {
-      result.set(symbol, normalizeEarningsRows(values[i], symbol));
-    });
+      group.forEach((symbol, i) => {
+        result.set(symbol, normalizeEarningsRows(values[i], symbol));
+      });
+    }
   } catch {
     // Best-effort; a missing entry just means "no cached earnings yet".
   }
@@ -906,7 +920,24 @@ async function readCachedFmpEarningsBulk(
   return result;
 }
 
-async function queueEarningsWarmupSymbols(symbols: string[]) {
+/**
+ * Schedule a background earnings warm for symbols that have none cached.
+ *
+ * TAKES THE EARNINGS IT NEEDS RATHER THAN RE-READING THEM. This used to pipeline
+ * two GETs per symbol -- the cached rows and the due stamp -- which was ~1,400
+ * commands for a 700-symbol universe. The caller then immediately called
+ * readCachedFmpEarningsBulk over the SAME universe, so half of those 1,400 reads
+ * fetched keys that were about to be fetched again a line later.
+ *
+ * The rows now arrive as an argument and only the due stamps are read here, in
+ * bounded chunks. Ordering is safe because this function never writes an
+ * earnings key -- it writes queue membership and a due stamp -- so reading the
+ * rows before queueing cannot miss anything queueing would have produced.
+ */
+async function queueEarningsWarmupSymbols(
+  symbols: string[],
+  cachedEarnings: Map<string, EarningsRow[]>
+) {
   if (!redis) return;
 
   const now = Date.now();
@@ -922,36 +953,39 @@ async function queueEarningsWarmupSymbols(symbols: string[]) {
   if (!cleanSymbols.length) return;
 
   try {
-    // Batch-read the cached-earnings flag + due timestamp for every symbol
-    // in one pipelined round-trip instead of 2 separate Redis calls per
-    // symbol (was up to ~400 individual REST calls for a 200-symbol
-    // universe, just for this read phase).
-    const readPipeline = redis.pipeline();
-    for (const symbol of cleanSymbols) {
-      readPipeline.get<EarningsRow[]>(`${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
-      readPipeline.get<number>(`${EARNINGS_DUE_KEY_PREFIX}${symbol}`);
+    // Only the due stamps are read here; the rows came in as an argument.
+    // Chunked for the same 10MB reason as the bulk earnings read above.
+    const dueBySymbol = new Map<string, number | null>();
+    for (const group of chunkKeys(cleanSymbols, EARNINGS_MGET_CHUNK)) {
+      const keys = group.map((symbol) => `${EARNINGS_DUE_KEY_PREFIX}${symbol}`);
+      const values = await redis.mget<number[]>(...keys);
+      group.forEach((symbol, i) => dueBySymbol.set(symbol, values[i] ?? null));
     }
-    const readResults =
-      await readPipeline.exec<Array<EarningsRow[] | number | null>>();
 
     const symbolsNeedingQueue: string[] = [];
-    for (let i = 0; i < cleanSymbols.length; i++) {
-      const cached = readResults[i * 2] as EarningsRow[] | null;
-      const existingDue = readResults[i * 2 + 1] as number | null;
+    for (const symbol of cleanSymbols) {
+      const cached = cachedEarnings.get(symbol);
+      const existingDue = dueBySymbol.get(symbol);
 
       if (Array.isArray(cached) && cached.length > 0) continue;
       if (typeof existingDue === "number" && existingDue > now) continue;
 
-      symbolsNeedingQueue.push(cleanSymbols[i]);
+      symbolsNeedingQueue.push(symbol);
     }
 
     if (!symbolsNeedingQueue.length) return;
 
-    // Batch-write the queue additions + due timestamps in one more
-    // pipelined round-trip instead of 2 separate Redis calls per symbol.
+    // SADD IS VARIADIC, so the whole batch is one command rather than one per
+    // symbol. The due stamps still need one SET each: they carry a per-key TTL,
+    // and collapsing them into a hash would change the read path above, which
+    // is a data-shape change and not this branch's business.
     const writePipeline = redis.pipeline();
+    writePipeline.sadd(
+      EARNINGS_QUEUE_KEY,
+      symbolsNeedingQueue[0],
+      ...symbolsNeedingQueue.slice(1)
+    );
     for (const symbol of symbolsNeedingQueue) {
-      writePipeline.sadd(EARNINGS_QUEUE_KEY, symbol);
       writePipeline.set(`${EARNINGS_DUE_KEY_PREFIX}${symbol}`, dueAt, {
         ex: EARNINGS_CACHE_TTL_SECONDS,
       });
@@ -2860,13 +2894,14 @@ async function buildPickersPayload(
   fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
   const universe = Array.from(universeSlots);
 
+  // READ BEFORE QUEUEING, and pass the result on. These two used to run the
+  // other way round over the same universe, so every earnings key was fetched
+  // twice -- once to decide whether to queue it and once to use it.
+  const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
+
   // Queue missing earnings data for the background warmer. The picker route reads
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
-  await queueEarningsWarmupSymbols(universe);
-
-  // One pipelined bulk read for the whole universe instead of one Redis
-  // call per symbol inside the loop below.
-  const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
+  await queueEarningsWarmupSymbols(universe, earningsBySymbol);
 
   // Same idea for price history: one pipelined mget for the whole universe
   // up front instead of one Redis GET per symbol inside the loop below (was
