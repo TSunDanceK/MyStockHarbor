@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { unstable_cache } from "next/cache";
 import { fmpFetch } from "./fmpUsage";
 import { timingCache, beginTiming } from "./timing";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -80,13 +81,15 @@ export function emptyQuote(symbol: string): Quote {
 // snapshot build), never a blanket prefetch of the whole ticker universe.
 // PAGE_READ_CACHE: this client is on the render path of BOTH /insights/[slug]
 // (via getOrCreateInsightSnapshot) and /insights/videos/[videoId] (via
-// getVideoStockData), and neither call site sits inside unstable_cache, so a
-// bare client's no-store hint reaches the renderer directly.
+// getVideoStockData), so a bare client's no-store hint would reach the renderer
+// directly.
 //
-// NOTE: this does NOT by itself make either route safe to prerender.
-// fetchQuoteFromFmp below still issues a literal `cache: "no-store"` fetch on a
-// cache miss, which is not something a Redis client option can fix. See the
-// comment there.
+// This note used to end "does NOT by itself make either route safe to
+// prerender", because the FMP fetch below still issued a literal no-store call
+// on a cache miss and no Redis client option can fix that. That is now handled:
+// both of those call sites go through fetchQuoteSnapshotForRender, whose FMP
+// fetch is wrapped in unstable_cache. The bare no-store call remains, reached
+// only from /api/quote, which is force-dynamic.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
@@ -135,7 +138,7 @@ async function writeQuoteCache(symbol: string, quote: Quote) {
 // Per-instance map of in-flight fetches, keyed by normalized symbol.
 const inFlight = new Map<string, Promise<Quote>>();
 
-async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
+async function fetchQuoteFromFmpUncached(symbol: string): Promise<Quote> {
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) return emptyQuote(symbol);
@@ -143,14 +146,13 @@ async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
 
-    // THE REMAINING BLOCKER for prerendering any route that reaches this
-    // module. On a Redis cache miss this runs during the render, and a literal
-    // no-store fetch on a static route throws DYNAMIC_SERVER_USAGE -> 500.
-    // A warm cache hides it, which is exactly why it must not be reasoned about
-    // as "rarely fires": #310 shipped on that class of reasoning. Wrapping this
-    // in unstable_cache (as lib/youtube.ts does for its own no-store fetches)
-    // is the fix, and it is a freshness decision -- quotes have a 60s TTL here
-    // -- so it is deliberately not made in an outage-recovery PR.
+    // NO LONGER THE BLOCKER FOR RENDER PATHS, but still a literal no-store call,
+    // so read fetchQuoteFromFmpCached below before adding a caller. This
+    // function is now reached directly only from /api/quote, which is
+    // force-dynamic and answers Cache-Control: no-store -- the live path, and
+    // supposed to be. Every render path goes through the cached wrapper, so the
+    // DYNAMIC_SERVER_USAGE this comment used to warn about can no longer be
+    // reached from a prerendered route.
     const res = await fmpFetch(url, { cache: "no-store", headers: { accept: "application/json" } });
 
     if (!res.ok) throw new Error(`FMP quote failed: ${res.status}`);
@@ -205,16 +207,65 @@ async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
 // app/api/quote/route.ts's GET handler calls this function too, so the public
 // endpoint and any in-process caller always return identically-shaped data,
 // and now share the same Redis cache + in-flight dedupe above.
+/**
+ * The LIVE path, unchanged: a Redis miss issues a real no-store fetch.
+ *
+ * /api/quote is force-dynamic and answers `Cache-Control: no-store`, so its
+ * whole contract is freshness, and it is never prerendered -- the no-store call
+ * cannot throw there.
+ */
 export async function fetchQuoteSnapshot(symbolInput: string): Promise<Quote> {
   const endTiming = beginTiming("quote", "fetchQuoteSnapshot");
   try {
-    return await fetchQuoteSnapshotInner(symbolInput);
+    return await fetchQuoteSnapshotInner(symbolInput, fetchQuoteFromFmpUncached);
   } finally {
     endTiming();
   }
 }
 
-async function fetchQuoteSnapshotInner(symbolInput: string): Promise<Quote> {
+/**
+ * The RENDER path. Same data, but the FMP call goes through unstable_cache, so
+ * a page render can never reach a literal no-store fetch.
+ *
+ * WHY A SEPARATE ENTRY POINT rather than wrapping the fetch for everyone, which
+ * is what lib/youtube.ts does for its own no-store calls. Those functions have
+ * only page renders as consumers, so wrapping in place costs nothing. This
+ * module has a third consumer youtube does not: /api/quote, the live endpoint.
+ * unstable_cache sits IN FRONT of the 60s Redis TTL rather than replacing it, so
+ * a value served from it can be written back to Redis with a fresh TTL --
+ * widening the worst case from ~60s to ~120s. That is immaterial to the two
+ * consumers below, whose pages are cached for 30 minutes and 24 hours, and a
+ * visible regression on an endpoint that exists to be live.
+ *
+ * The revalidate matches QUOTE_CACHE_TTL_SECONDS deliberately: this module
+ * already declares 60s as its freshness budget, so the second layer reuses that
+ * number rather than inventing one.
+ */
+export async function fetchQuoteSnapshotForRender(symbolInput: string): Promise<Quote> {
+  const endTiming = beginTiming("quote", "fetchQuoteSnapshotForRender");
+  try {
+    return await fetchQuoteSnapshotInner(symbolInput, fetchQuoteFromFmpCached);
+  } finally {
+    endTiming();
+  }
+}
+
+// Same shape as getLatestYouTubeVideos / getYouTubeVideoById in lib/youtube.ts:
+// an *Uncached function doing the work, and a thin unstable_cache wrapper over
+// it keyed by its argument. Caching failures as well as successes is the point
+// there and here -- it is what stops an FMP outage being retried on every
+// render of every page.
+const fetchQuoteFromFmpCached = (symbol: string): Promise<Quote> =>
+  unstable_cache(
+    (s: string) => fetchQuoteFromFmpUncached(s),
+    ["quote-from-fmp"],
+    { revalidate: QUOTE_CACHE_TTL_SECONDS, tags: ["quotes"] }
+  )(symbol);
+
+async function fetchQuoteSnapshotInner(
+  symbolInput: string,
+  fetchFromFmp: (symbol: string) => Promise<Quote>
+): Promise<Quote> {
   const symbol = String(symbolInput ?? "").trim().toUpperCase();
   if (!symbol) return emptyQuote(String(symbolInput ?? ""));
 
@@ -226,7 +277,7 @@ async function fetchQuoteSnapshotInner(symbolInput: string): Promise<Quote> {
 
   const promise = (async () => {
     try {
-      const quote = await fetchQuoteFromFmp(symbol);
+      const quote = await fetchFromFmp(symbol);
       await writeQuoteCache(symbol, quote);
       return quote;
     } finally {
