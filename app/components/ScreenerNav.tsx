@@ -778,6 +778,18 @@ export default function ScreenerNav({
           padding: 4px 8px 2px; opacity: 0.92;
         }
         .screenerNavItem {
+          /* UNBREAKS THE min-width CHAIN, and this is the actual cause of the
+             sidebar's horizontal scrollbar -- not the column being too narrow.
+             .screenerNavGroup is a grid, so every row here is a GRID ITEM, and a
+             grid item's default min-width is auto: it refuses to shrink below
+             its content's min-content width. .screenerNavLabel below already has
+             min-width: 0 and an ellipsis and would happily truncate, but the row
+             never gets asked to, so it grows wider than the column instead. And
+             because .screenerSidebar sets overflow-y: auto, the spec computes
+             overflow-x to auto too, so a single pixel of overrun is a scrollbar.
+             Worst case is the Chart Plays links: longest labels AND the
+             "OPENS PAGE" hint, which is flex: 0 0 auto and nowrap. */
+          min-width: 0;
           display: flex; align-items: center; gap: 10px;
           padding: 9px 8px; border-radius: 11px; border: 1px solid transparent;
           color: rgba(226,232,240,0.82); text-decoration: none;
