@@ -140,6 +140,22 @@ const MIN_QUALIFIED_POINTS = 30;
 // history a request is allowed to ask for, not how much gets cached.
 const MAX_CACHED_HISTORY_DAYS = 1400;
 
+// Keys per MGET when reading history in bulk.
+//
+// NOT ONE UNBOUNDED MGET. A history entry can carry MAX_CACHED_HISTORY_DAYS
+// bars, so the whole universe in a single reply would breach Upstash's 10MB
+// per-response ceiling -- the pipeline this replaces was written that way for
+// exactly that reason, and it was right about the constraint. It was only wrong
+// that a pipeline is the answer: a pipeline of 700 GETs is 700 billed commands,
+// where 18 chunked MGETs are 18. Same 40 as pickerChartsCache, same reason.
+const HISTORY_MGET_CHUNK = 40;
+
+function chunkHistoryKeys<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
 const HISTORY_LOCK_TTL_SECONDS = 45;
 
@@ -1065,10 +1081,44 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
   return entry;
 }
 
+// One in-process fetch per symbol, the same shape as the inFlight map in
+// quoteData.ts.
+//
+// WHY THE REDIS LOCK IS NOT ALREADY ENOUGH. /stock/[symbol] calls this TWICE for
+// a single render -- once in generateMetadata and once in the page body -- and
+// on a cold symbol the two race each other. One takes the history lock and
+// fetches; the sibling finds nothing cached, loses the lock, and sits in
+// waitForHistoryCache polling every 300ms for up to 12s. That is up to 40 GETs
+// spent waiting on a fetch already running inside its own process. The lock
+// makes the duplicate wait politely; this removes it.
+//
+// FORCED CALLS DELIBERATELY BYPASS IT. A forced refetch that adopted an
+// in-flight ordinary one would report success having refreshed nothing.
+const historyInFlight = new Map<string, ReturnType<typeof getDailyHistoryInner>>();
+
 export async function getDailyHistory(symbol: string, opts: { force?: boolean } = {}) {
+  const force = opts.force ?? false;
   const endTiming = beginTiming("history", "getDailyHistory");
+
   try {
-    return await getDailyHistoryInner(symbol, opts.force ?? false);
+    if (force) return await getDailyHistoryInner(symbol, true);
+
+    const key = normalizeSymbol(symbol);
+    const existing = historyInFlight.get(key);
+    if (existing) return await existing;
+
+    const promise = (async () => {
+      try {
+        return await getDailyHistoryInner(symbol, false);
+      } finally {
+        // Cleared in a finally so a rejected fetch cannot pin a permanently
+        // failing promise in the map for the life of the instance.
+        historyInFlight.delete(key);
+      }
+    })();
+
+    historyInFlight.set(key, promise);
+    return await promise;
   } finally {
     endTiming();
   }
@@ -1209,11 +1259,15 @@ export async function getDailyHistoryBulk(
   // Skipping the read would have thrown that away to save one Redis round-trip
   // per build.
   try {
-    const pipeline = redis.pipeline();
-    for (const key of keys) {
-      pipeline.get<HistoryCacheEntry | null>(key);
+    // Accumulated separately and assigned only once every chunk has landed, so
+    // a throw partway leaves `entries` in its all-null state. A half-filled
+    // array would still be index-aligned for the symbols it reached and
+    // silently wrong for the rest.
+    const fetched: (HistoryCacheEntry | null)[] = [];
+    for (const group of chunkHistoryKeys(keys, HISTORY_MGET_CHUNK)) {
+      fetched.push(...(await redis.mget<(HistoryCacheEntry | null)[]>(...group)));
     }
-    entries = await pipeline.exec<(HistoryCacheEntry | null)[]>();
+    entries = fetched;
   } catch {
     // Best-effort; every symbol just falls through to the per-symbol path.
   }
@@ -1306,12 +1360,11 @@ export async function getCachedDailyHistoryBulk(
   if (!normalized.length || !redis) return result;
 
   try {
-    const pipeline = redis.pipeline();
-    for (const symbol of normalized) {
-      pipeline.get<HistoryCacheEntry | null>(getHistoryRedisKey(symbol));
+    const entries: (HistoryCacheEntry | null)[] = [];
+    for (const group of chunkHistoryKeys(normalized, HISTORY_MGET_CHUNK)) {
+      const keys = group.map((symbol) => getHistoryRedisKey(symbol));
+      entries.push(...(await redis.mget<(HistoryCacheEntry | null)[]>(...keys)));
     }
-
-    const entries = await pipeline.exec<(HistoryCacheEntry | null)[]>();
 
     normalized.forEach((symbol, i) => {
       const entry = entries[i];
