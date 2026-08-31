@@ -1345,8 +1345,20 @@ export default async function PickerResultPage({ config }: { config: PickerResul
 
         <style>{`
         .pickerResultPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
-        .resultWrap { max-width: 1360px; margin: 0 auto; padding: 26px 18px 58px; }
-        .resultShell { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: 22px; align-items: start; }
+        /* THE SIDEBAR AND THE TABLE ARE ONE GRID, so they compete: widening the
+           sidebar alone takes width off the table and makes the horizontal
+           scroll worse. The room comes from raising the cap first -- the shell
+           was pinned at 1360px on viewports wider than that, so the extra 200px
+           is space that was already there and unused. Of it, 28px goes to the
+           sidebar and ~172px to the table.
+
+           Do not add or change an overflow value on either of these. See the
+           note in the 720px block below: a non-visible value on one axis
+           coerces the other to auto, which makes a scroll container and
+           silently kills position: sticky for the table header and the
+           controls row. */
+        .resultWrap { max-width: 1560px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultShell { display: grid; grid-template-columns: 316px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(config.tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }

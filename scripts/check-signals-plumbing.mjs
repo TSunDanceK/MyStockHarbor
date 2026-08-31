@@ -231,13 +231,49 @@ check(
   pick({ oversold: true, oversoldIndicators: OS }, "trend") === undefined
 );
 
-console.log("\n=== 3. The grid never prints a count ===\n");
+console.log("\n=== 3. A count never STANDS IN for names ===\n");
+// NARROWED, DELIBERATELY, and the distinction is the whole point.
+//
+// This section used to assert "the grid never prints a count", because of the
+// third appearance of the #330 bug: /best-trend-score-stocks rendered
+// `4/4 trend checks` -- a bare count -- precisely BECAUSE the names never
+// reached that path. The count was the symptom of broken plumbing, standing in
+// for data the column could not get.
+//
+// The Signals column now collapses to "N signals" above a threshold. That is
+// the opposite situation: the names are present, they are on the element's
+// title, and short lists still render in full. So what must be forbidden is a
+// count with no names behind it -- not the digits themselves.
+//
+// The old assertion also matched on the exact ternary the cell happened to use,
+// which is a shape test wearing a behaviour test's label: rewriting the same
+// logic as an if-statement failed it while changing nothing a reader sees.
 const grid = codeOf(read("app/components/PickerResultsGrid.tsx"), "app/components/PickerResultsGrid.tsx");
-check(
-  "Signals cell renders MUTED when absent or empty",
-  /e\.firedIndicators\?\.length\s*\?/.test(grid) && /MUTED/.test(grid)
+const signalsCell = grid.slice(
+  grid.indexOf('const signals: Col = {'),
+  grid.indexOf("\n    };", grid.indexOf('const signals: Col = {'))
 );
-check("no '0 signals' style rendering anywhere", !/signals?["'`\s]*\}?\s*<\/|\bsignals\b.*\.length\s*\}/i.test(grid.replace(/key:\s*"signals"|label:\s*"Signals"/g, "")));
+
+check(
+  "the Signals cell was found",
+  signalsCell.length > 0,
+  "an empty slice would pass the assertions below without reading any code"
+);
+check(
+  "an empty or absent list renders MUTED, not a zero",
+  /MUTED/.test(signalsCell) && !/0\s+signals/.test(signalsCell),
+  "an absence is not a zero -- on an unfiltered /stock-screener view most rows legitimately have no fired checks"
+);
+check(
+  "a collapsed count always has the full list behind it",
+  !/\$\{[a-zA-Z.]*length\}\s*signals/.test(signalsCell) || /title=\{full\}/.test(signalsCell),
+  "the #330 failure was a count with nothing behind it; a count with the names on hover is a summary, not a substitute"
+);
+check(
+  "short lists are never collapsed",
+  !/signals/i.test(signalsCell) || /SIGNALS_COLLAPSE_AT/.test(signalsCell),
+  "collapsing at 2 would render every daily trend-flip row as '2 signals' and hide the flip date the page is ordered by"
+);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

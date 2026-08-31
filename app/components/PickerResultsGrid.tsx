@@ -741,18 +741,42 @@ export default function PickerResultsGrid({
     // any other; the underlying order is by how far each check passed its own
     // trigger, which is the same order the chart deep-link's dominant indicator
     // is picked from.
+    // THE CELL SHOWS A COUNT ABOVE THE THRESHOLD, SO `get` MUST BE THE COUNT.
+    // `get` is the sort key, not the display; leaving it as a joined string
+    // under a numeric cell would order the column by something the reader
+    // cannot see, which is the defect this column was revisited to remove.
+    //
+    // 1-2 entries keep their full text, and that is not cosmetic. On the daily
+    // trend-flip pages firedIndicators is
+    // ["Bullish flip session of 2026-08-28", "last session"] on EVERY row --
+    // measured, all 27 rows length 2 -- so a blanket count would render them
+    // all as "2 signals" and hide the flip date the whole page is ordered by.
+    // Thresholded on length rather than on which page it is, so a page added
+    // later cannot fall through the gap.
+    const SIGNALS_COLLAPSE_AT = 3;
     const signals: Col = {
       key: "signals",
       label: "Signals",
-      sortType: "str",
+      sortType: "num",
       cls: "colInd",
-      get: (e) => (e.firedIndicators ?? []).join(", "),
-      cell: (e) =>
-        e.firedIndicators?.length ? (
-          <span className="listInd" title={e.firedIndicators.join(" · ")}>{e.firedIndicators.join(" · ")}</span>
-        ) : (
-          MUTED
-        ),
+      // NULL, NOT 0, WHEN NOTHING FIRED. The comparator above tests `an == null`
+      // before applying the sort direction, so nulls sink to the bottom either
+      // way -- which is how every other numeric column treats a missing value.
+      // A 0 here would instead sort those rows to the TOP of an ascending sort
+      // while the cell shows a dash, i.e. ordering by a number nobody can see.
+      // An absence is not a zero: on an unfiltered /stock-screener view most
+      // rows legitimately have no fired checks.
+      get: (e) => e.firedIndicators?.length || null,
+      cell: (e) => {
+        const fired = e.firedIndicators ?? [];
+        if (!fired.length) return MUTED;
+        const full = fired.join(" · ");
+        return (
+          <span className="listInd" title={full}>
+            {fired.length >= SIGNALS_COLLAPSE_AT ? `${fired.length} signals` : full}
+          </span>
+        );
+      },
     };
     const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
