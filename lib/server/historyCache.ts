@@ -3,6 +3,12 @@ import { markRefreshed } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
+import {
+  mergeDailyPoints,
+  overlapVerdict,
+  shiftIsoDate,
+  toIsoUtcDate,
+} from "./historyMerge";
 
 export type Point = {
   date: string;
@@ -808,20 +814,67 @@ export async function writeHistoryEntry(
   }
 }
 
-export async function fetchAndCacheDailyHistory(symbol: string) {
-  const normalized = normalizeSymbol(symbol);
-  const fmpSymbol = buildFmpSymbol(normalized);
-  const apiKey = process.env.FMP_API_KEY;
+// ---------------------------------------------------------------------------
+// INCREMENTAL FETCH
+//
+// WHY THIS EXISTS. Until 2026-08-31 every refresh of a symbol's history threw
+// away the copy in Redis and pulled the whole series back over the wire -- ~1,188
+// rows, ~184 KB -- to learn one new closing price. Across a 755-symbol universe
+// that is ~133 MB per pass, and at ~2.5 passes/day it was ~9.7 GB/month against
+// a 20 GB / 30-day FMP cap. It put the account at 97.8% and FMP's penalty at the
+// cap is suspension. See claude/fmp-bandwidth-97pct-2026-08-30.md and
+// claude/fmp-history-payload-audit-2026-08-30.md.
+//
+// A closed daily bar is a finished fact. The only reason to re-read one is that
+// the series has been RESTATED -- a split or an adjustment rewrites every close
+// before its effective date. So: ask only for bars at or after the newest one
+// already held, plus a short overlap, and use the overlap to detect restatement.
+//
+// THE OVERLAP IS THE CORRECTNESS GUARD, NOT AN OPTIMISATION. Appending blindly
+// would stitch pre-split bars onto post-split bars and produce a fabricated gap
+// -- a 4:1 split becomes a fake 75% crash in the chart and a false signal in
+// every pattern builder. That failure is silent and wrong, which is worse than
+// the bandwidth problem being loud and expensive. If the overlapping bars do not
+// agree with what is stored, the series is refetched in full.
+//
+// DEPTH IS UNCHANGED. Redis still holds up to MAX_CACHED_HISTORY_DAYS bars and
+// every consumer -- the 260-week macro S/R pass in pickersBuilder, the 1300-day
+// HISTORY_DAYS in the bull-flag/plays/triangle builders, the charts -- reads
+// exactly what it read before. This changes how the data is REFRESHED, not what
+// it contains.
+//
+// NOTE FOR WHOEVER READS THE NEXT WARM RUN RECORD. historyRowsParsed will drop
+// from ~831k to a few thousand, because the parser now sees only new rows. That
+// is this change working, not the warm failing.
 
-  if (!apiKey) {
-    throw new FmpHistoryError("Missing FMP_API_KEY environment variable", "no-api-key");
-  }
+// Calendar days, not trading days -- it only has to span a weekend plus a public
+// holiday or two so that a Monday refresh still overlaps Friday's bar. Too short
+// and a long market closure yields no shared dates (handled: "unverifiable"
+// forces a full refetch, which is safe but costs the bytes this exists to save).
+const HISTORY_INCREMENTAL_OVERLAP_DAYS = 7;
 
+/**
+ * One FMP history request. `range` omitted means the endpoint's full default
+ * window; supplied means only that slice. Everything else -- the call-slot
+ * reservation, the error classification, the parse -- is identical either way,
+ * which is the point of having it in one place.
+ */
+async function requestHistoryRows(
+  normalized: string,
+  fmpSymbol: string,
+  apiKey: string,
+  range?: { from: string; to: string }
+) {
   await reserveFmpCallSlot();
 
-const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(
-  fmpSymbol
-)}&apikey=${encodeURIComponent(apiKey)}`;
+  const params = new URLSearchParams({ symbol: fmpSymbol, apikey: apiKey });
+
+  if (range) {
+    params.set("from", range.from);
+    params.set("to", range.to);
+  }
+
+  const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?${params.toString()}`;
 
   // `cache: "no-store"` here used to opt every route that reached this call out
   // of static rendering entirely -- the same class of bailout @upstash/redis
@@ -862,7 +915,83 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
     throw new FmpHistoryError(`FMP history error for ${normalized}: ${payload.Error}`, "fmp-error");
   }
 
-  const parsed = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined, normalized);
+  return parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined, normalized);
+}
+
+export async function fetchAndCacheDailyHistory(symbol: string) {
+  const normalized = normalizeSymbol(symbol);
+  const fmpSymbol = buildFmpSymbol(normalized);
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    throw new FmpHistoryError("Missing FMP_API_KEY environment variable", "no-api-key");
+  }
+
+  // READ HERE RATHER THAN TAKING IT AS AN ARGUMENT, so every caller gets the
+  // incremental path without a signature change -- including the forced warm,
+  // which deliberately skips its own read. On the ordinary miss path this
+  // returns null and costs one GET; under force it costs one GET and saves
+  // ~184 KB of FMP bandwidth. That trade is not close.
+  const existing = await readHistoryEntry(normalized);
+  const stored =
+    existing?.status === "qualified" && Array.isArray(existing.daily) && existing.daily.length
+      ? existing.daily
+      : null;
+
+  if (stored) {
+    const newestStored = stored[stored.length - 1]?.date;
+    const from = newestStored ? shiftIsoDate(newestStored, -HISTORY_INCREMENTAL_OVERLAP_DAYS) : null;
+
+    if (from) {
+      const fetched = await requestHistoryRows(normalized, fmpSymbol, apiKey, {
+        from,
+        // UTC is at or ahead of Eastern, so "today" here can never truncate a
+        // bar the US session has already closed.
+        to: toIsoUtcDate(Date.now()),
+      });
+
+      // NO NEW BARS IS NOT A FAILURE. No session has closed since the newest
+      // stored bar -- a weekend, a holiday, or simply before today's close. The
+      // stored series is still correct, so keep it and re-stamp the TTL. This is
+      // also the self-healing case: if refreshes are missed for days, `from`
+      // still starts from the last bar actually held.
+      //
+      // "restated" means a corporate action rewrote the series and "unverifiable"
+      // means there were no shared dates to check it against. Neither can be
+      // appended to safely, so both fall through to the full refetch below --
+      // see the block comment on overlapVerdict for why that matters.
+      const verdict = fetched.length === 0 ? "agrees" : overlapVerdict(stored, fetched);
+
+      if (verdict === "agrees") {
+        const daily =
+          fetched.length === 0
+            ? stored
+            : mergeDailyPoints(stored, fetched, MAX_CACHED_HISTORY_DAYS);
+
+        const entry: HistoryCacheEntry = {
+          symbol: normalized,
+          status: "qualified",
+          checkedAt: Date.now(),
+          source: "fmp",
+          daily,
+          parsedRows: daily.length,
+        };
+
+        recordNewestBarAge(normalized, daily);
+        await writeHistoryEntry(normalized, entry, "success");
+        return entry;
+      }
+    }
+  }
+
+  // THE FULL PATH, DELIBERATELY UNCHANGED FROM BEFORE THE INCREMENTAL FETCH
+  // LANDED. Everything above is an early return; if it does not take, this runs
+  // exactly as it always did. `parsed` stays bound here rather than being hoisted
+  // and shared with the incremental path, because the failure/success TTL split
+  // below has to mean "how many rows did the RESPONSE contain" -- a merged series
+  // length cannot answer that, and scripts/check-history-ttl.mjs asserts on this
+  // very expression to keep it honest.
+  const parsed = await requestHistoryRows(normalized, fmpSymbol, apiKey);
   const daily =
     parsed.length > MAX_CACHED_HISTORY_DAYS
       ? parsed.slice(-MAX_CACHED_HISTORY_DAYS)
@@ -1034,7 +1163,7 @@ export async function getDailyHistoryBulk(
   //
   // Under force every symbol is refetched regardless of what is cached -- that
   // is the whole point, because this path is otherwise MISS-ONLY and, with a TTL
-  // longer than 24h, the daily 07:00 warm would find every symbol present, fetch
+  // longer than 24h, the daily morning warm would find every symbol present, fetch
   // nothing, and still report success. But the cached entry is still worth
   // having: it is the fallback when a forced refetch fails, which is what stops
   // a forced run from ever producing a THINNER universe than a non-forced one.
