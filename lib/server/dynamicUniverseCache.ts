@@ -53,6 +53,34 @@ const redis =
 
 const LEGACY_KEY = "msh:dynamic-universe:v1";
 const SCORE_KEY = "msh:dynamic-universe:v2:score";
+
+/**
+ * Increment many members of one sorted set in a single command.
+ *
+ * The boost is uniform per call, so it is passed once as ARGV[1] and the
+ * members follow -- half the payload of interleaving pairs, and one less thing
+ * to get out of step.
+ */
+const ZINCRBY_MANY_LUA = `
+local boost = ARGV[1]
+for i = 2, #ARGV do
+  redis.call('ZINCRBY', KEYS[1], boost, ARGV[i])
+end
+return #ARGV - 1
+`;
+
+/**
+ * Members per EVAL. The command count is already 1 per chunk rather than 1 per
+ * symbol, so this is not about billing -- it bounds the request body, since a
+ * single ARGV carrying the whole universe is a large POST for no benefit.
+ */
+const ZINCRBY_EVAL_CHUNK = 500;
+
+function chunkMembers<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 const SEEN_KEY = "msh:dynamic-universe:v2:seen";
 
 const MAX_DYNAMIC_UNIVERSE_SIZE = 700;
@@ -354,7 +382,9 @@ export async function removeFromDynamicUniverse(symbols: string[]) {
  * longer persisted -- see the note on DynamicUniverseEntry.sources.
  *
  * Every increment is atomic (ZINCRBY), so concurrent builders no longer
- * overwrite each other's counts the way the v1 read-modify-write did.
+ * overwrite each other's counts the way the v1 read-modify-write did. That
+ * property is unchanged by the move to EVAL -- the script issues the same
+ * ZINCRBYs, it just issues them server-side as one billed command.
  */
 export async function addToDynamicUniverse(
   symbols: string[],
@@ -371,11 +401,27 @@ export async function addToDynamicUniverse(
   try {
     await seedFromLegacyIfEmpty();
 
-    // Scores must be incremented one command per symbol (ZINCRBY takes a single
-    // member), but a pipeline sends them as one HTTP round-trip.
-    const pipeline = redis.pipeline();
-    for (const symbol of cleaned) pipeline.zincrby(SCORE_KEY, scoreBoost, symbol);
-    await pipeline.exec();
+    // ONE EVAL PER CHUNK, NOT ONE COMMAND PER SYMBOL.
+    //
+    // ZINCRBY takes a single member, so this was ~700 commands per call behind a
+    // pipeline. The pipeline made it one round-trip, which is what the previous
+    // comment was measuring -- but Upstash bills COMMANDS, not round-trips, and
+    // this function is called from five builders plus the market route, so the
+    // five builders alone were ~3,500 commands per build cycle.
+    //
+    // WHY NOT DROP THE PER-SYMBOL INCREMENTS ENTIRELY, given `seen` below is one
+    // bulk ZADD. Because the two are not the same kind of value. lastSeen is an
+    // absolute overwrite, so last-writer-wins is CORRECT for it. The score is a
+    // cumulative count that ranks the universe -- read by the ZRANGE that picks
+    // the top MAX_DYNAMIC_UNIVERSE_SIZE and by the overflow prune above -- and
+    // for a count, last-writer-wins is precisely the v1 read-modify-write defect
+    // that ZINCRBY was introduced to fix. A bulk ZADD here would reintroduce it.
+    //
+    // So the atomicity is kept and only the command count changes: the script
+    // runs the same ZINCRBYs server-side, which is one billed command.
+    for (const group of chunkMembers(cleaned, ZINCRBY_EVAL_CHUNK)) {
+      await redis.eval(ZINCRBY_MANY_LUA, [SCORE_KEY], [String(scoreBoost), ...group]);
+    }
 
     // lastSeen is an absolute overwrite, so the whole batch is one ZADD.
     const seenPairs = cleaned.map((symbol) => ({ member: symbol, score: now }));
