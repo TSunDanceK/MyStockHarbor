@@ -27,6 +27,11 @@ import type {
 } from "@/app/components/LatestEarningsCard";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import {
+  normalizeEarningsRows,
+  readEarningsRows,
+  writeEarningsRows,
+} from "@/lib/server/earningsStore";
 import { beginTiming } from "./server/timing";
 
 export type {
@@ -103,6 +108,36 @@ function findClosestByDate<T extends { date?: string }>(
           Math.abs((dateTime(b.date) ?? 0) - target),
       )[0] ?? null
   );
+}
+
+/**
+ * The earnings rows for one symbol: the shared store first, FMP once on a miss.
+ *
+ * Returns the store's already-normalised rows, which are a strict subset of what
+ * this file's own coercion accepts -- FmpStableEarningsItem allows
+ * `number | string | null` and safeNumber() runs over both, so a stored row
+ * needs no special handling here.
+ */
+async function earningsRowsFromStoreOrFmp(
+  symbol: string,
+  encoded: string,
+  key: string
+): Promise<FmpStableEarningsItem[] | null> {
+  const stored = await readEarningsRows(symbol);
+  if (stored?.length) return stored as FmpStableEarningsItem[];
+
+  const fetched = await fetchFmpJson<FmpStableEarningsItem[]>(
+    `https://financialmodelingprep.com/stable/earnings?symbol=${encoded}&apikey=${key}`,
+  );
+  if (!Array.isArray(fetched)) return fetched;
+
+  // Normalised through the SAME function the cron uses, so a row written here
+  // is a row warm-earnings would have written. Awaited rather than fired and
+  // forgotten: on a serverless instance the request can end before a detached
+  // promise resolves, which would silently never populate.
+  const rows = normalizeEarningsRows(fetched, symbol);
+  await writeEarningsRows(symbol, rows);
+  return fetched;
 }
 
 async function fetchFmpJson<T>(url: string): Promise<T | null> {
@@ -443,9 +478,19 @@ async function getLatestEarningsDataInner(
 
   const [stableEarnings, stableIncomeStatements, legacyIncomeStatements, analystEstimates, surprisesA, surprisesB] =
     await Promise.all([
-      fetchFmpJson<FmpStableEarningsItem[]>(
-        `https://financialmodelingprep.com/stable/earnings?symbol=${encoded}&apikey=${key}`,
-      ),
+      // REDIS FIRST, FMP ONLY ON A MISS. warm-earnings already populates
+      // msh:pickers:earnings:v1:<SYM> and this path ignored it, fetching FMP
+      // behind a 24h revalidate instead. That cost is driven by DISTINCT
+      // SYMBOLS RENDERED PER DAY rather than by traffic -- the 24h cache
+      // collapses repeats -- so it scales with how many stock pages exist:
+      // ~616 calls/day today, ~1.3 GB/month at 3,000 symbols.
+      //
+      // ON A MISS THE STORE IS POPULATED, not just read past. A cold symbol
+      // must not render an empty earnings section -- that is content the reader
+      // came for -- and populating makes the next render free rather than
+      // repeating this fetch every 24h forever. Same shape as the news store
+      // in #380.
+      earningsRowsFromStoreOrFmp(symbol, encoded, key),
       fetchFmpJson<FmpIncomeStatement[]>(
         `https://financialmodelingprep.com/stable/income-statement?symbol=${encoded}&period=quarter&limit=6&apikey=${key}`,
       ),
