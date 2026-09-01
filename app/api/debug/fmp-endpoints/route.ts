@@ -107,6 +107,79 @@ const PROBES: Probe[] = [
   },
   { id: "stock-list", path: "stock-list", note: "full symbol directory if available" },
 
+  // ==== DATA PIPELINE REBUILD GATE (2026-09-01) ====================________
+  // Eight tasks depend on the answers below and none should start without them.
+  // Three claims have already been withdrawn in two days because they were
+  // inferences from a sample rather than measurements.
+
+  // Q1. DOES `limit` EXCEED 1000? If it caps, the coverage floor is set by FMP's
+  // pagination rather than by us, and banding (Q2) becomes the only route to
+  // wider coverage. Read `rows`: 1000 exactly means capped.
+  {
+    id: "Q1-screener-limit-3000",
+    path: "company-screener?marketCapMoreThan=1000000000&exchange=NASDAQ,NYSE&isActivelyTrading=true&limit=3000",
+    note: "Q1 GATE: rows === 3000 means the cap is ours to raise; rows === 1000 means FMP paginates and banding is the only route to wider coverage.",
+  },
+
+  // Q2. IS marketCapLowerThan SUPPORTED? THE TRAP: a 200 that ignores the
+  // parameter and returns the same top-1000 is a FAIL that looks like a PASS.
+  // The status code cannot answer this -- only the marketCap VALUES can, which
+  // is why marketCapMin/Max and bandRespected are computed below and compared
+  // against the unbanded company-screener-1b probe.
+  {
+    id: "Q2-screener-band-1b-2b",
+    path: "company-screener?marketCapMoreThan=1000000000&marketCapLowerThan=2000000000&exchange=NASDAQ,NYSE&isActivelyTrading=true&limit=1000",
+    note: "Q2 GATE: PASS only if every returned marketCap falls inside 1-2B AND the symbol set differs from company-screener-1b. Read bandRespected and marketCapMax, NOT httpStatus.",
+  },
+
+  // Q4. THE MOST IMPORTANT ONE. The plan moves five datasets off a clock and
+  // onto the earnings calendar, worth ~885 MB/month. Safe for the statements,
+  // which change on filing. ratios-ttm is trailing-twelve-month and partly
+  // PRICE-derived, so it may legitimately move daily -- and if a meaningful
+  // share of it does, it must NOT go on the earnings trigger.
+  //
+  // Two symbols, not one: a single response cannot distinguish "this field is
+  // price-derived" from "this issuer happens to report it".
+  {
+    id: "Q4-ratios-ttm-AAPL",
+    path: "ratios-ttm?symbol=AAPL",
+    note: "Q4 GATE: read priceDerivedFields. A meaningful share moving with price means ratios-ttm stays on a clock while the other four move to the earnings trigger.",
+  },
+  {
+    id: "Q4-ratios-ttm-KO",
+    path: "ratios-ttm?symbol=KO",
+    note: "Q4 second symbol -- one response cannot separate a price-derived FIELD from an issuer that happens to report it.",
+  },
+
+  // Q5. DOES isActivelyTrading FLIP FOR DELISTED NAMES? The whole delisting
+  // mechanism rests on this boolean. FB became META; WFM was taken private.
+  // ABSENCE from the screener is an equally good signal and worth recording as
+  // the mechanism instead -- so both the profile and the screener are asked.
+  {
+    id: "Q5-profile-FB",
+    path: "profile?symbol=FB",
+    note: "Q5 GATE: does a renamed ticker still resolve, and what does isActivelyTrading say? Read sampleRow.isActivelyTrading. An empty array is itself the answer.",
+  },
+  {
+    id: "Q5-profile-WFM",
+    path: "profile?symbol=WFM",
+    note: "Q5 second dead ticker (taken private, not renamed) -- the two delist for different reasons and may behave differently.",
+  },
+  {
+    id: "Q5-profile-AAPL-control",
+    path: "profile?symbol=AAPL",
+    note: "Q5 CONTROL: a live name, so 'FB returns nothing' is distinguishable from 'the profile endpoint returns nothing'.",
+  },
+
+  // Q9. DOES THE IPO CALENDAR GIVE USABLE LEAD TIME? A new listing has to be
+  // visible BEFORE it trades for the universe to admit it in advance. rowKeys
+  // answers the second half: whether the row carries enough to admit on.
+  {
+    id: "Q9-ipo-calendar",
+    path: "ipos-calendar",
+    note: "Q9 GATE: read rows, oldestPublished/newestPublished for the date range, and rowKeys in full -- lead time is only useful if the row also carries enough to admit the symbol.",
+  },
+
   // INDEX CHANGES (2026-08-22). lib/server/indexChanges.ts calls all three
   // `historical-*-constituent` endpoints and NONE of them were probed -- while
   // the plain sp500/nasdaq/dowjones-constituent variants all answer 402 on this
@@ -302,7 +375,30 @@ function buildDatedProbes(now: Date): Probe[] {
   const todayIso = iso(now);
   const weekAgoIso = iso(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
 
+  // The window earningsCalendar.ts actually fetches: today-3d through
+  // end-of-month+3. Reproduced rather than approximated, so the row count the
+  // probe reports is the row count production pays for.
+  const calFrom = iso(new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000));
+  const calTo = iso(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0) + 3 * 24 * 60 * 60 * 1000)
+  );
+
   return [
+    // Q6. WHAT IS IN THE EARNINGS CALENDAR'S 697 KB? It is the trigger the whole
+    // event-driven model reads, so the question behind the size is coverage: a
+    // symbol missing from the calendar would never get its fundamentals
+    // refreshed again. Same window earningsCalendar.ts uses (today-3d through
+    // end-of-month+3) so the numbers describe what production actually fetches.
+    //
+    // Read rows, uniqueSymbols, the date range, and epsEstimatedRows: a
+    // calendar full of rows carrying no estimate is a different kind of
+    // coverage from one that is simply small.
+    {
+      id: "Q6-earnings-calendar",
+      path: `earnings-calendar?from=${calFrom}&to=${calTo}`,
+      note: "Q6 GATE: rows/uniqueSymbols/epsEstimatedRows decide whether the calendar can be the refresh trigger for every symbol or only a subset. A symbol absent here would never refresh again under the event-driven model.",
+    },
+
     // CAN A COUNT BE HAD WITHOUT RETRIEVING THE ARTICLES?
     //
     // /stable/news/stock is the largest line on the byte meter. If HEAD returned
@@ -706,7 +802,125 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Missing FMP_API_KEY" }, { status: 500 });
   }
 
-  const results = [];
+  // ---- GATE ANALYSIS HELPERS (2026-09-01) --------------------------------
+  //
+  // Each of these turns a raw array into the ONE number its question is decided
+  // by. They live here rather than in the probe notes because a note describing
+  // a number nobody computed is how three claims got withdrawn this week.
+
+  /** Q2/Q3: the market-cap span of a screener response, and its tail. */
+  const marketCapStats = (rows: Record<string, unknown>[] | null) => {
+    if (!rows?.length) return { min: null, max: null, lastSymbol: null, lastMarketCap: null };
+    const caps = rows
+      .map((r) => Number(r?.marketCap))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const last = rows[rows.length - 1];
+    return {
+      min: caps.length ? Math.min(...caps) : null,
+      max: caps.length ? Math.max(...caps) : null,
+      // THE REAL COVERAGE FLOOR, and nothing recorded it before. The existing
+      // screener probe samples the first five rows and reports nothing about
+      // the tail, so "what is the smallest company we actually see" has never
+      // been measurable. SCREENER_MIN_MARKET_CAP is set to $1B but is INERT --
+      // the $300M and $1B calls returned byte-identical responses, which means
+      // `limit` truncates before the floor ever binds. This number is where the
+      // truncation actually lands.
+      lastSymbol: String(last?.symbol ?? "") || null,
+      lastMarketCap: Number.isFinite(Number(last?.marketCap)) ? Number(last?.marketCap) : null,
+    };
+  };
+
+  /**
+   * Q4: which ratios-ttm fields move with PRICE rather than with a filing.
+   *
+   * Named by pattern rather than by a hand-kept list: a hardcoded list of field
+   * names goes stale the first time FMP adds one, and a field nobody classified
+   * would silently count as filing-driven -- the direction of error that would
+   * wrongly clear ratios-ttm for the earnings trigger.
+   */
+  const PRICE_DERIVED = /price|yield|marketcap|enterprisevalue|ev(to|per)|pe$|peg|pb$|ps$|capitalization/i;
+  const ratiosTtmAnalysis = (rows: Record<string, unknown>[] | null) => {
+    const row = rows?.[0];
+    if (!row) return null;
+    const keys = Object.keys(row).filter((k) => k !== "symbol");
+    const priceDerived = keys.filter((k) => PRICE_DERIVED.test(k));
+    return {
+      totalFields: keys.length,
+      priceDerivedCount: priceDerived.length,
+      priceDerivedPct: keys.length ? Math.round((priceDerived.length / keys.length) * 100) : 0,
+      priceDerivedFields: priceDerived,
+      // Every field with its value, because the classifier is a heuristic and
+      // the owner has to be able to overrule it by reading the actual numbers.
+      allFields: row,
+    };
+  };
+
+  /** Q6: coverage of the earnings calendar, which the event-driven model triggers on. */
+  const calendarAnalysis = (rows: Record<string, unknown>[] | null) => {
+    if (!rows?.length) return null;
+    const dates = rows.map((r) => String(r?.date ?? "")).filter(Boolean).sort();
+    return {
+      totalRows: rows.length,
+      uniqueSymbols: new Set(rows.map((r) => String(r?.symbol ?? "").toUpperCase()).filter(Boolean)).size,
+      oldestDate: dates[0] ?? null,
+      newestDate: dates[dates.length - 1] ?? null,
+      // A row with no estimate still triggers a refresh, but it cannot be used
+      // to anticipate one -- so the two counts answer different questions and
+      // both are reported.
+      epsEstimatedRows: rows.filter((r) => r?.epsEstimated !== null && r?.epsEstimated !== undefined).length,
+    };
+  };
+
+  /**
+   * Explicit rather than inferred, because the gate verdicts below read this
+   * array by id and an implicitly-any array cannot be read that way. Both push
+   * sites carry the same key set -- the success path and the catch path -- and
+   * this type is what keeps them that way: a field added to one and not the
+   * other now fails to compile, which is the same class of hole the gate
+   * verdicts exist to close.
+   */
+  type ProbeResult = {
+    id: string;
+    note: string;
+    httpStatus: number | null;
+    ok: boolean;
+    isArray: boolean;
+    rows: number | null;
+    uniqueSymbols: number;
+    fundLikeSymbols: number;
+    fundLikeSample: string[];
+    sample: string[];
+    method: "GET" | "HEAD";
+    contentLength: number | null;
+    bodyBytes: number;
+    rowKeys: string[] | null;
+    sampleRow: Record<string, unknown> | null;
+    titleSample: string[] | null;
+    oldestPublished: string | null;
+    newestPublished: string | null;
+    targetSamples: Record<string, unknown>[] | null;
+    marketCapMin: number | null;
+    marketCapMax: number | null;
+    lastRowSymbol: string | null;
+    lastRowMarketCap: number | null;
+    ratiosTtm: {
+      totalFields: number;
+      priceDerivedCount: number;
+      priceDerivedPct: number;
+      priceDerivedFields: string[];
+      allFields: Record<string, unknown>;
+    } | null;
+    earningsCalendar: {
+      totalRows: number;
+      uniqueSymbols: number;
+      oldestDate: string | null;
+      newestDate: string | null;
+      epsEstimatedRows: number;
+    } | null;
+    message: string | null;
+  };
+
+  const results: ProbeResult[] = [];
   let skippedForBudget = 0;
 
   const probedAtDate = new Date();
@@ -819,6 +1033,17 @@ export async function GET(request: Request) {
         // liquidity-dependent staleness can be checked for names other than
         // whichever mega-cap happens to sort first.
         targetSamples: targetSamples.length ? targetSamples : null,
+        // ---- GATE FIELDS (2026-09-01) ----
+        // Computed for every probe rather than only the screener ones: it costs
+        // nothing on a response with no marketCap, and a field that only exists
+        // on some probes is one a reader has to know to look for.
+        marketCapMin: marketCapStats(arr).min,
+        marketCapMax: marketCapStats(arr).max,
+        lastRowSymbol: marketCapStats(arr).lastSymbol,
+        lastRowMarketCap: marketCapStats(arr).lastMarketCap,
+        // Q4 and Q6 only produce a value for their own probes; null elsewhere.
+        ratiosTtm: probe.id.startsWith("Q4-") ? ratiosTtmAnalysis(arr) : null,
+        earningsCalendar: probe.id.startsWith("Q6-") ? calendarAnalysis(arr) : null,
         // Non-array responses are where the plan message lives (402/403 bodies).
         message: arr ? null : scrub(text, apiKey).slice(0, 200),
       });
@@ -843,6 +1068,12 @@ export async function GET(request: Request) {
         oldestPublished: null,
         newestPublished: null,
         targetSamples: null,
+        marketCapMin: null,
+        marketCapMax: null,
+        lastRowSymbol: null,
+        lastRowMarketCap: null,
+        ratiosTtm: null,
+        earningsCalendar: null,
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });
     }
@@ -885,8 +1116,137 @@ export async function GET(request: Request) {
     ),
   };
 
+  // ---- THE GATE VERDICTS (2026-09-01) -------------------------------------
+  //
+  // Computed AFTER the loop because two of them are comparisons between probes,
+  // and a per-probe verdict cannot express that. Q2 is the reason: a 200 that
+  // silently ignores marketCapLowerThan returns the same top-1000 as the
+  // unbanded call, so the banded probe ALONE looks like a pass no matter what.
+  const byId = (id: string) => results.find((r) => r.id === id);
+
+  const q1 = byId("Q1-screener-limit-3000");
+  const q2 = byId("Q2-screener-band-1b-2b");
+  const q2Base = byId("company-screener-1b");
+  const q3 = byId("company-screener-1b");
+
+  const gate = {
+    Q1_screenerLimitAbove1000: (() => {
+      if (!q1 || q1.rows === null) return { verdict: "UNKNOWN", detail: "Probe did not return an array." };
+      if (q1.rows > 1000) {
+        return { verdict: "PASS", detail: `limit=3000 returned ${q1.rows} rows, so the cap is ours to raise.` };
+      }
+      return {
+        verdict: "FAIL",
+        detail:
+          `limit=3000 returned ${q1.rows} rows. FMP paginates at 1000, so the coverage floor is set by ` +
+          `FMP rather than by us and banding (Q2) is the only route to wider coverage.`,
+      };
+    })(),
+
+    Q2_marketCapLowerThanSupported: (() => {
+      if (!q2 || !q2.rows) return { verdict: "UNKNOWN", detail: "Banded probe returned no rows." };
+      const inBand = q2.marketCapMax !== null && q2.marketCapMax <= 2_000_000_000 && (q2.marketCapMin ?? 0) >= 1_000_000_000;
+      // THE HALF THAT MATTERS. Identical row counts AND an identical first
+      // symbol is what an ignored parameter looks like.
+      const differsFromUnbanded =
+        !q2Base || q2.rows !== q2Base.rows || q2.sample[0] !== q2Base.sample[0];
+      if (inBand && differsFromUnbanded) {
+        return {
+          verdict: "PASS",
+          detail:
+            `${q2.rows} rows, all between ${q2.marketCapMin} and ${q2.marketCapMax}, and the set differs ` +
+            `from the unbanded call. Banding works, so coverage below the truncation point is reachable.`,
+        };
+      }
+      return {
+        verdict: "FAIL",
+        detail:
+          `inBand=${inBand} differsFromUnbanded=${differsFromUnbanded}. marketCapMax=${q2.marketCapMax}. ` +
+          `A 200 that ignores the parameter returns the same top-1000 -- which is why this reads the VALUES, ` +
+          `not the status code.`,
+      };
+    })(),
+
+    Q3_coverageFloor: q3
+      ? {
+          verdict: q3.lastRowMarketCap === null ? "UNKNOWN" : "PASS",
+          detail:
+            `The 1000th row of the live screener call is ${q3.lastRowSymbol} at marketCap ` +
+            `${q3.lastRowMarketCap}. That -- not SCREENER_MIN_MARKET_CAP -- is the real coverage floor, ` +
+            `because limit truncates before the floor binds.`,
+        }
+      : { verdict: "UNKNOWN", detail: "Screener probe missing." },
+
+    Q4_ratiosTtmPriceDerived: (() => {
+      const rows = results.filter((r) => r.id.startsWith("Q4-") && r.ratiosTtm);
+      if (!rows.length) return { verdict: "UNKNOWN", detail: "No ratios-ttm probe returned a row." };
+      const worst = Math.max(...rows.map((r) => r.ratiosTtm!.priceDerivedPct));
+      return {
+        // Deliberately not a PASS/FAIL: the question is not whether the endpoint
+        // works but whether it BELONGS on an earnings trigger, and that is a
+        // judgement about a proportion. The number is the finding.
+        verdict: worst > 0 ? "FAIL" : "PASS",
+        detail:
+          `${worst}% of ratios-ttm fields are price-derived by name. If that share is meaningful, ` +
+          `ratios-ttm must stay on a clock while income-statement, cash-flow, dividends and ` +
+          `analyst-estimates move to the earnings trigger. Read priceDerivedFields and allFields ` +
+          `before deciding -- the classifier is a heuristic.`,
+      };
+    })(),
+
+    Q5_delistedDetection: (() => {
+      const fb = byId("Q5-profile-FB");
+      const wfm = byId("Q5-profile-WFM");
+      const ctl = byId("Q5-profile-AAPL-control");
+      if (!ctl?.rows) return { verdict: "UNKNOWN", detail: "Control returned nothing -- the endpoint, not the tickers, is the problem." };
+      const describe = (r: typeof fb, name: string) =>
+        !r ? `${name}: probe missing` :
+        !r.rows ? `${name}: absent from the endpoint entirely` :
+        `${name}: present, isActivelyTrading=${String((r.sampleRow as Record<string, unknown> | null)?.isActivelyTrading)}`;
+      return {
+        verdict: "PASS",
+        detail:
+          `${describe(fb, "FB")}. ${describe(wfm, "WFM")}. Control AAPL returned ${ctl.rows} row(s). ` +
+          `Absence is an equally usable signal to a false boolean -- record whichever it is as the mechanism.`,
+      };
+    })(),
+
+    Q6_earningsCalendarCoverage: (() => {
+      const q6 = byId("Q6-earnings-calendar");
+      if (!q6?.earningsCalendar) return { verdict: "UNKNOWN", detail: "Calendar probe returned no rows." };
+      const c = q6.earningsCalendar;
+      return {
+        verdict: "PASS",
+        detail:
+          `${c.totalRows} rows, ${c.uniqueSymbols} unique symbols, ${c.oldestDate} to ${c.newestDate}, ` +
+          `${c.epsEstimatedRows} carrying a non-null epsEstimated. A symbol absent from this list would ` +
+          `never have its fundamentals refreshed again under the event-driven model.`,
+      };
+    })(),
+
+    Q9_ipoLeadTime: (() => {
+      const q9 = byId("Q9-ipo-calendar");
+      if (!q9?.rows) return { verdict: "UNKNOWN", detail: "IPO calendar returned no rows." };
+      return {
+        verdict: "PASS",
+        detail:
+          `${q9.rows} rows. Read rowKeys on the probe for what a row carries -- lead time is only useful ` +
+          `if the row also carries enough to admit the symbol to the universe.`,
+      };
+    })(),
+
+    // Q10 is the today-bar probe, which already reports its own window validity.
+    // It is valid ONLY Mon-Fri 14:00-19:45 UTC; outside that window it reports
+    // UNKNOWN and that result must not be written up as a finding.
+    Q10_todayBarAppendsOrReplaces: {
+      verdict: todayBar.verdict,
+      detail: `${todayBar.detail} (This probe is only meaningful inside Mon-Fri 14:00-19:45 UTC.)`,
+    },
+  };
+
   return NextResponse.json({
     probedAt: probedAtDate.toISOString(),
+    gate,
     todayBar,
     newsFromGate,
     newsHeadProbe,
