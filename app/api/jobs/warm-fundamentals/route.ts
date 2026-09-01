@@ -25,8 +25,9 @@ export const maxDuration = 300;
 // budget, which is why nothing in the code stops you:
 //
 //   FMP Starter carries TWO limits -- 300 calls/MINUTE, and a 30-day rolling
-//   20 GB BANDWIDTH cap. As of 2026-08-22 the account is at 14.72 GB, 73.6% of
-//   that cap. reserveFmpCallSlot()/hasFmpCapacity() in historyCache.ts count
+//   BANDWIDTH cap (FMP_BANDWIDTH_CAP_BYTES in lib/server/fmpUsage.ts). On
+//   2026-08-22 the account was at 14.72 GB, 73.6% of the 20 GB the plan carried
+//   before the data boost. reserveFmpCallSlot()/hasFmpCapacity() count
 //   CALLS. Nothing anywhere counts BYTES.
 //
 // Calls and bytes are wildly non-proportional -- ~0.3 KB for /stable/quote
