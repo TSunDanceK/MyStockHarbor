@@ -12,13 +12,15 @@ import { readFmpUsage } from "@/lib/server/fmpUsage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// What the 20 GB / 30-day FMP bandwidth cap is actually being spent on, per
+// What the 30-day rolling FMP bandwidth cap is actually being spent on, per
 // endpoint, newest first.
 //
 // The per-minute guard in historyCache.ts counts CALLS. Bytes and calls are not
 // proportional -- ~0.3 KB for /stable/quote against ~66 KB for
 // /stable/news/stock -- so the guard cannot see the limit that is close (14.72
-// of 20 GB on 2026-08-22). This route reads the counters lib/server/fmpUsage.ts
+// GB on 2026-08-22, against the 20 GB the plan carried before the data boost;
+// the cap is FMP_BANDWIDTH_CAP_BYTES, which the response reports as `cap`).
+// This route reads the counters lib/server/fmpUsage.ts
 // records on every FMP response.
 //
 // READ `daysMissing` BEFORE READING THE TOTAL. The counters start the day this
