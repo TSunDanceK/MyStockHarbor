@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  EARNINGS_REDIS_KEY_PREFIX as STORE_KEY_PREFIX,
+  computeEarningsTtlSeconds,
+  normalizeEarningsRows,
+  type EarningsRow,
+} from "@/lib/server/earningsStore";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { deferSymbol, markRefreshed, registerSymbols } from "../../../../lib/server/stalenessQueue";
 import { fmpFetch } from "@/lib/server/fmpUsage";
@@ -17,7 +23,13 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
+// Key, row type, normaliser and TTL rule all live in lib/server/earningsStore.ts
+// now, because the render path writes to this same store on a cache miss. Two
+// copies of the normaliser would let the two writers disagree about what a
+// null EPS is, in a store neither owns.
+const EARNINGS_REDIS_KEY_PREFIX = STORE_KEY_PREFIX;
+// The TTL constants moved with computeEarningsTtlSeconds -- they were only
+// ever read by it.
 const EARNINGS_QUEUE_KEY = "msh:pickers:earnings:v1:queue";
 const EARNINGS_DUE_KEY_PREFIX = "msh:pickers:earnings:v1:due:";
 const EARNINGS_LOCK_KEY = "msh:pickers:earnings:v1:lock";
@@ -33,10 +45,6 @@ const EARNINGS_MIN_HEADROOM_CALLS = 90;
 // with a short 12h window right around/after a report so the freshly-released
 // actuals + the new next-date get picked up. Net effect: steady-state earnings
 // calls drop to "only symbols reporting this week".
-const EARNINGS_TTL_DAY = 24 * 60 * 60;
-const EARNINGS_TTL_MAX_SECONDS = 95 * EARNINGS_TTL_DAY; // ~one quarter
-const EARNINGS_TTL_NEAR_REPORT_SECONDS = 12 * 60 * 60; // report imminent/just passed
-const EARNINGS_TTL_UNKNOWN_SECONDS = 10 * EARNINGS_TTL_DAY; // no future date known
 
 // How often the dynamic-universe backfill enqueue is allowed to run. The
 // enqueue does one bulk read of up to ~700 cached-earnings entries to find
@@ -44,15 +52,7 @@ const EARNINGS_TTL_UNKNOWN_SECONDS = 10 * EARNINGS_TTL_DAY; // no future date kn
 // if the job itself is hit every few minutes.
 const EARNINGS_ENQUEUE_THROTTLE_SECONDS = 60 * 60;
 
-type FmpEarningsRow = {
-  symbol?: string;
-  date?: string;
-  epsActual?: number | null;
-  epsEstimated?: number | null;
-  revenueActual?: number | null;
-  revenueEstimated?: number | null;
-  lastUpdated?: string;
-};
+type FmpEarningsRow = EarningsRow;
 
 function isAuthorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -69,55 +69,10 @@ function cleanSymbol(value: string) {
     .replace(/[^A-Z0-9.-]/g, "");
 }
 
-function normalizeEarningsRows(value: unknown, fallbackSymbol: string): FmpEarningsRow[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item): FmpEarningsRow => ({
-      symbol: typeof item?.symbol === "string" ? item.symbol : fallbackSymbol,
-      date: typeof item?.date === "string" ? item.date : "",
-      epsActual:
-        typeof item?.epsActual === "number" && Number.isFinite(item.epsActual)
-          ? item.epsActual
-          : null,
-      epsEstimated:
-        typeof item?.epsEstimated === "number" && Number.isFinite(item.epsEstimated)
-          ? item.epsEstimated
-          : null,
-      revenueActual:
-        typeof item?.revenueActual === "number" && Number.isFinite(item.revenueActual)
-          ? item.revenueActual
-          : null,
-      revenueEstimated:
-        typeof item?.revenueEstimated === "number" && Number.isFinite(item.revenueEstimated)
-          ? item.revenueEstimated
-          : null,
-      lastUpdated: typeof item?.lastUpdated === "string" ? item.lastUpdated : "",
-    }))
-    .filter((item) => Boolean(item.date))
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-}
 
 // Cache lifetime for one symbol's earnings, derived from its next scheduled
 // report date. Long by default (nothing changes between reports); short right
 // around a report so the actuals + the rolled-forward next date are refreshed.
-function computeEarningsTtlSeconds(rows: FmpEarningsRow[], nowMs: number): number {
-  let nextMs: number | null = null;
-  for (const row of rows) {
-    if (!row.date) continue;
-    const t = Date.parse(row.date);
-    if (!Number.isFinite(t)) continue;
-    if (t > nowMs && (nextMs === null || t < nextMs)) nextMs = t;
-  }
-
-  if (nextMs === null) return EARNINGS_TTL_UNKNOWN_SECONDS;
-
-  const secondsUntil = Math.floor((nextMs - nowMs) / 1000);
-  if (secondsUntil <= 2 * EARNINGS_TTL_DAY) return EARNINGS_TTL_NEAR_REPORT_SECONDS;
-
-  // Cache until ~a day before the next report, capped at ~a quarter.
-  return Math.min(secondsUntil - EARNINGS_TTL_DAY, EARNINGS_TTL_MAX_SECONDS);
-}
 
 async function acquireLock() {
   if (!redis) return "no-redis";
