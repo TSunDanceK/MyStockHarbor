@@ -83,10 +83,25 @@ check(
   "that reason is what distinguishes our own limiter holding us back from FMP refusing us"
 );
 
+// RE-TARGETED when the working limit was lowered to 200. The invariant this
+// assertion was written for -- "the plan's ceiling is a fact, not a tuning
+// knob" -- is unchanged and still asserted; it just no longer lives in
+// FMP_SAFE_CALLS_PER_MINUTE, because that constant is now our own headroom
+// choice and is SUPPOSED to be tunable. Pinning the tunable number would have
+// meant this check blocked the very change it was written to permit.
 check(
-  "the 300/min ceiling is unchanged",
-  /const FMP_SAFE_CALLS_PER_MINUTE = 300;/.test(history),
+  "the plan's 300/min ceiling is still recorded as a fact",
+  /const FMP_PLAN_CALLS_PER_MINUTE = 300;/.test(history),
   "this fixes how we wait, not what we wait for — the ceiling is a property of the FMP plan"
+);
+check(
+  "the working limit is a separate, lower number",
+  (() => {
+    const plan = Number(history.match(/FMP_PLAN_CALLS_PER_MINUTE = (\d+);/)?.[1]);
+    const safe = Number(history.match(/FMP_SAFE_CALLS_PER_MINUTE = (\d+);/)?.[1]);
+    return Number.isFinite(plan) && Number.isFinite(safe) && safe < plan;
+  })(),
+  "running the working limit AT the ceiling leaves nothing for boundary drift, which is what a 21% http-429 rate looks like"
 );
 
 check(
