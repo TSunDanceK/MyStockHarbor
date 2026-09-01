@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "./fmpUsage";
 import { timingCache, beginTiming } from "./timing";
+import { tryReserveFmpCallSlot } from "./historyCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 export type Quote = {
@@ -142,6 +143,31 @@ async function fetchQuoteFromFmpUncached(symbol: string): Promise<Quote> {
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) return emptyQuote(symbol);
+
+  // COUNTED AGAINST THE MINUTE BUDGET, AND NEVER QUEUED BEHIND IT.
+  //
+  // These calls used to bypass the counter entirely -- a follow-up recorded in
+  // claude/quote-redis-cache-2026-07-21.md and never actioned -- so 575 quotes
+  // in a 15-minute window spent the plan limit while every warm job read a
+  // counter that said there was room. The warm jobs' own backoff is computed
+  // from that number, so the invisibility was not neutral: it made their pacing
+  // wrong in the direction of overspending.
+  //
+  // NOT reserveFmpCallSlot, deliberately. That one waits up to 20s for room,
+  // which is correct for a warm job and wrong here: a visitor waiting 20
+  // seconds for a price is worse than a price being briefly unavailable, and it
+  // converts a budget shortage into an availability incident. A render cannot
+  // usefully defer anyway -- it either has a price to show or it does not.
+  //
+  // Worst-case added latency is one Redis INCR, not one wait.
+  if (!(await tryReserveFmpCallSlot())) {
+    timingCache("quote", "fmp", "skip", `${symbol} no-budget`);
+    // The minute is already spent, so FMP would answer this with a 429. Being
+    // turned away here is the same outcome sooner, without deepening the
+    // shortage that caused it. The caller's Redis layer has already missed by
+    // this point, so this renders as an absent quote -- degraded, and honest.
+    return emptyQuote(symbol);
+  }
 
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
