@@ -23,6 +23,26 @@
 import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
 import { fmpFetch } from "./fmpUsage";
 
+// How often the IPO calendar is re-read from FMP.
+//
+// DAILY, AND EXPORTED, BECAUSE THREE LAYERS HAVE TO AGREE ON IT. This was
+// 1800s in three separate places -- feedCache's freshness, the fetch's
+// `next: { revalidate }`, and `export const revalidate` on
+// app/upcoming-ipos/page.tsx -- kept in step by comments asking the next
+// reader to notice. Each layer can silently veto the others: feedCache decides
+// whether the fetch is called at all, Next's Data Cache decides whether that
+// call reaches FMP, and the route's own revalidate is capped by the fetch's
+// (claude/traps/fetch-revalidate-caps-the-page.md). One exported number is
+// what makes "they agree" a fact rather than a habit.
+//
+// An IPO calendar changes at most once a day: a deal prices, or it doesn't.
+// Re-reading it 48 times a day bought nothing and spent FMP bandwidth against
+// a cap whose penalty is suspension. The page's own `revalidate` still has to
+// be a literal -- Next requires the segment config to be statically
+// analysable, so it cannot import this -- and scripts/check-ipo-cadence.mjs is
+// what holds the literal to this value.
+export const IPO_REVALIDATE_SECONDS = 24 * 60 * 60;
+
 export type ConfirmedIpo = {
   symbol: string;
   company: string;
@@ -162,10 +182,11 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
   // an upstream failure, so the route silently ships as dynamic while the log
   // blames FMP. Measured on dpl_FLJxprw2KApWGfwpRTW6SGbn1afc.
   //
-  // 1800s matches feedCache's FRESH_MS: feedCache owns freshness, and two
-  // caches with different opinions about staleness generate bugs.
+  // The revalidate is IPO_REVALIDATE_SECONDS, the same number readFeed is given
+  // below. feedCache owns freshness; this is what stops Next's Data Cache
+  // holding a different opinion about it.
   const res = await fmpFetch(url, {
-    next: { revalidate: 1800 },
+    next: { revalidate: IPO_REVALIDATE_SECONDS },
     headers: { accept: "application/json" },
   });
   if (!res.ok) throw new Error(`FMP IPO calendar failed: ${res.status}`);
@@ -182,8 +203,10 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
 export async function getUpcomingConfirmedIpos(): Promise<Feed<ConfirmedIpo>> {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  return readFeed("ipo:upcoming", () =>
-    fetchIpoRows(toIsoDate(now), toIsoDate(in30Days))
+  return readFeed(
+    "ipo:upcoming",
+    () => fetchIpoRows(toIsoDate(now), toIsoDate(in30Days)),
+    { freshSeconds: IPO_REVALIDATE_SECONDS }
   );
 }
 
@@ -192,8 +215,10 @@ export async function getUpcomingConfirmedIpos(): Promise<Feed<ConfirmedIpo>> {
 export async function getRecentIpos(): Promise<Feed<ConfirmedIpo>> {
   const now = new Date();
   const past30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const feed = await readFeed("ipo:recent", () =>
-    fetchIpoRows(toIsoDate(past30Days), toIsoDate(now))
+  const feed = await readFeed(
+    "ipo:recent",
+    () => fetchIpoRows(toIsoDate(past30Days), toIsoDate(now)),
+    { freshSeconds: IPO_REVALIDATE_SECONDS }
   );
 
   // This window is a free monitor. A month with zero US IPO listings is

@@ -57,17 +57,31 @@ const redis =
 const REDIS_PREFIX = "msh:feed";
 
 // How long a cached copy is considered fresh enough to serve without
-// re-fetching.
-const FRESH_MS = 30 * 60_000;
+// re-fetching, for a feed that does not state its own cadence. Per-feed
+// overrides go through readFeed's `freshSeconds` option.
+const DEFAULT_FRESH_SECONDS = 30 * 60;
 
-// How long a copy is retained in Redis for stale-on-error use. Much longer
-// than FRESH_MS on purpose: after FRESH_MS the entry stops being served
-// directly, but staying in Redis is what lets a failed fetch degrade to real
-// (if old) data instead of to an empty page.
-const STALE_TTL_SECONDS = 24 * 60 * 60;
+// How long a copy is retained in Redis for stale-on-error use. Longer than the
+// freshness window on purpose: after it the entry stops being served directly,
+// but staying in Redis is what lets a failed fetch degrade to real (if old)
+// data instead of to an empty page.
+//
+// THE MULTIPLE IS THE POINT, NOT THE NUMBER. Retention was a flat 24h while
+// every feed was fresh for 30 minutes, so it comfortably outlived freshness by
+// accident. A feed that asks for a daily cadence makes those two equal, and an
+// entry that expires at the exact moment it goes stale is never available to
+// degrade to -- stale-on-error, the whole reason this file exists, would go
+// quietly missing for that feed and only be noticed during an outage, which is
+// the worst possible time to find out. Deriving retention from the freshness
+// the caller actually asked for is what stops that being a thing to remember.
+const STALE_RETENTION_MULTIPLE = 7;
 
-function isFresh(entry: Entry<unknown> | undefined): boolean {
-  return !!entry && Date.now() - entry.at < FRESH_MS;
+function staleTtlSeconds(freshSeconds: number): number {
+  return Math.max(24 * 60 * 60, Math.ceil(freshSeconds * STALE_RETENTION_MULTIPLE));
+}
+
+function isFresh(entry: Entry<unknown> | undefined, freshSeconds: number): boolean {
+  return !!entry && Date.now() - entry.at < freshSeconds * 1000;
 }
 
 async function readRedis<T>(key: string): Promise<Entry<T> | undefined> {
@@ -85,10 +99,16 @@ async function readRedis<T>(key: string): Promise<Entry<T> | undefined> {
   }
 }
 
-async function writeRedis<T>(key: string, entry: Entry<T>): Promise<void> {
+async function writeRedis<T>(
+  key: string,
+  entry: Entry<T>,
+  freshSeconds: number
+): Promise<void> {
   if (!redis) return;
   try {
-    await redis.set(`${REDIS_PREFIX}:${key}`, entry, { ex: STALE_TTL_SECONDS });
+    await redis.set(`${REDIS_PREFIX}:${key}`, entry, {
+      ex: staleTtlSeconds(freshSeconds),
+    });
   } catch (err) {
     console.error(`[feed:${key}] redis write failed:`, err);
   }
@@ -102,18 +122,30 @@ async function writeRedis<T>(key: string, entry: Entry<T>): Promise<void> {
  * parse failure). Throwing is how it reports "I could not answer"; returning
  * [] means "upstream says there are genuinely none", and the two are treated
  * as the different things they are.
+ *
+ * `options.freshSeconds` sets how long a copy is served without re-fetching,
+ * defaulting to DEFAULT_FRESH_SECONDS. A caller passing it MUST pass the same
+ * number to the `next: { revalidate }` on the fetch inside `fetchItems`: this
+ * cache decides WHEN to call `fetchItems`, and Next's Data Cache decides
+ * whether that call reaches the network, so a shorter revalidate underneath
+ * silently keeps the old cadence and a longer one serves data older than this
+ * layer believes it to be. Two caches with different opinions about staleness
+ * is claude/traps/two-validators-for-one-value.md.
  */
 export async function readFeed<T>(
   key: string,
-  fetchItems: () => Promise<T[]>
+  fetchItems: () => Promise<T[]>,
+  options: { freshSeconds?: number } = {}
 ): Promise<Feed<T>> {
+  const freshSeconds = options.freshSeconds ?? DEFAULT_FRESH_SECONDS;
+
   const mem = memory[key] as Entry<T> | undefined;
-  if (isFresh(mem)) {
+  if (isFresh(mem, freshSeconds)) {
     return { items: mem!.items, ok: true, source: "memory" };
   }
 
   const stored = await readRedis<T>(key);
-  if (isFresh(stored)) {
+  if (isFresh(stored, freshSeconds)) {
     memory[key] = stored as Entry<unknown>;
     return { items: stored!.items, ok: true, source: "redis" };
   }
@@ -127,7 +159,7 @@ export async function readFeed<T>(
     const items = await fetchItems();
     const entry: Entry<T> = { at: Date.now(), items };
     memory[key] = entry as Entry<unknown>;
-    await writeRedis(key, entry);
+    await writeRedis(key, entry, freshSeconds);
     return { items, ok: true, source: "fresh" };
   } catch (err) {
     // NEVER swallow a DynamicServerError. It does not mean "upstream is down"
