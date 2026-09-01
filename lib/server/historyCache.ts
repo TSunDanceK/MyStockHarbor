@@ -160,7 +160,27 @@ const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
 const HISTORY_LOCK_TTL_SECONDS = 45;
 
 const FMP_CALL_COUNTER_PREFIX = "msh:fmp-calls:v1";
-const FMP_SAFE_CALLS_PER_MINUTE = 300;
+/**
+ * THE PLAN'S CEILING. A fact about the FMP subscription, not a tuning knob --
+ * recorded separately from the working limit below so that lowering our own
+ * headroom cannot quietly erase what the plan actually allows.
+ */
+const FMP_PLAN_CALLS_PER_MINUTE = 300;
+
+/**
+ * THE WORKING LIMIT, deliberately under the ceiling.
+ *
+ * It was 300 -- the ceiling exactly -- which leaves no room for the ways real
+ * traffic drifts across a minute boundary: the counter is bucketed per UTC
+ * minute, so a burst straddling :59/:00 is two buckets to us and one rolling
+ * window to FMP. The 07:02 warm fired ~600 history calls inside one minute and
+ * lost 21% to http-429, which is what running at exactly the ceiling looks
+ * like.
+ *
+ * 200 leaves a third of the plan as headroom for the calls this counter does
+ * not see -- and until this change, quotes were all of them.
+ */
+const FMP_SAFE_CALLS_PER_MINUTE = 200;
 const FMP_WAIT_STEP_MS = 400;
 // Ceiling on the exponential backoff below. A waiter still notices a freed slot
 // within ~1.6s, but a full FMP_MAX_WAIT_MS wait now costs ~6 polls instead of 50.
@@ -739,6 +759,58 @@ export async function reserveFmpCallSlot() {
   }
 }
 
+/**
+ * Reserve one slot WITHOUT EVER WAITING. Returns false instead of blocking.
+ *
+ * WHY THE RENDER PATH NEEDS ITS OWN DOOR. reserveFmpCallSlot waits up to
+ * FMP_MAX_WAIT_MS (20s) for room. That is right for a warm job, which has
+ * nothing better to do and a whole universe to get through. It is wrong for a
+ * page render: a visitor waiting 20 seconds for a quote is a worse outcome than
+ * the quote being briefly unavailable, and it would turn a budget shortage into
+ * an availability incident.
+ *
+ * SO: count, do not queue. The problem being fixed is that quote calls were
+ * INVISIBLE to the counter -- 575 in a 15-minute window spending the plan
+ * limit while every warm job believed it had room. Making them visible fixes
+ * the accounting, which is what the warm jobs' own backoff reads. Making them
+ * wait would fix nothing further, because a render cannot usefully defer: it
+ * either has a price to show or it does not.
+ *
+ * REFUSAL IS DELIBERATE, AND IT IS THE CHEAPER REFUSAL. When the minute is
+ * already spent, this returns false and the caller skips the request. FMP would
+ * answer that request with a 429 anyway; being turned away locally is faster,
+ * costs no plan quota, and does not deepen the shortage that caused it.
+ *
+ * Worst-case added latency: one Redis INCR. Not one wait.
+ */
+export async function tryReserveFmpCallSlot(): Promise<boolean> {
+  if (!redis) return true;
+
+  const now = new Date();
+  const key = getFmpCounterKey(now);
+  const { secondsRemaining } = getMinuteBucketParts(now);
+
+  try {
+    const current = await redis.incr(key);
+
+    if (current === 1) {
+      await redis.expire(key, Math.max(2, secondsRemaining + 2));
+    }
+
+    if (current <= FMP_SAFE_CALLS_PER_MINUTE) return true;
+
+    // Hand the slot back, exactly as the waiting path does: a reservation that
+    // did not fit is not a call anyone is going to make, and leaving it counted
+    // would charge the rest of the minute for nothing.
+    await redis.decr(key);
+    return false;
+  } catch {
+    // Fail OPEN. The counter is a pacing aid; a Redis blip must not stop a page
+    // rendering a price.
+    return true;
+  }
+}
+
 export async function getFmpMinuteUsage() {
   if (!redis) return 0;
 
@@ -748,6 +820,11 @@ export async function getFmpMinuteUsage() {
   } catch {
     return 0;
   }
+}
+
+/** The plan's own ceiling, for anything that needs to report the real limit. */
+export function getFmpPlanCallsPerMinute() {
+  return FMP_PLAN_CALLS_PER_MINUTE;
 }
 
 export async function hasFmpCapacity(requiredCalls = 1, minHeadroomCalls = 0) {
