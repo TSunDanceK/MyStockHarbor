@@ -2,13 +2,15 @@
 // historyCache.ts.
 //
 // WHY CALLS CANNOT STAND IN FOR BYTES. The plan carries two independent limits:
-// 300 calls/minute, and a 30-day rolling 20 GB bandwidth cap. Only the first is
+// 300 calls/minute, and a 30-day rolling bandwidth cap (FMP_BANDWIDTH_CAP_BYTES
+// below -- 40 GB while the data boost is live). Only the first is
 // measured anywhere. They are not proportional and not close to it -- from the
 // live FMP dashboard, /stable/quote runs ~0.3 KB per call and
 // /stable/news/stock ~66 KB, a ~200x spread. A job comfortably inside the call
 // guard can therefore be the one eating the cap, and nothing in this codebase
-// could see it. At 14.72 GB of 20 GB (73.6%) on 2026-08-22, the unmeasured
-// limit is the one that is close.
+// could see it. At 14.72 GB on 2026-08-22 -- 73.6% of the 20 GB the plan
+// carried before the data boost -- the unmeasured limit is the one that is
+// close.
 //
 // The prime suspect is historical-price-eod/full: ~200 MB for one pass over 755
 // symbols at MAX_CACHED_HISTORY_DAYS. That is ARITHMETIC, NOT A MEASUREMENT,
@@ -49,7 +51,26 @@ const FMP_BYTES_PREFIX = "msh:fmp-bytes:v1";
 // is still present rather than half-expired while being summed.
 const FMP_BYTES_TTL_SECONDS = 60 * 60 * 24 * 31;
 
-export const FMP_BANDWIDTH_CAP_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB, plan limit
+// The 30-day rolling bandwidth allowance, in bytes.
+//
+// THIS NUMBER IS NOT DERIVABLE AND MUST TRACK THE PLAN BY HAND. FMP exposes no
+// endpoint reporting the account's own allowance, so nothing here can read it;
+// it is a fact about the billing plan, typed in, and it goes stale silently
+// when the plan changes. Every percentage this file and /cache-health report is
+// computed from it, so a stale value does not fail -- it lies with confidence.
+// It already did: this read 20 GB for the whole time the data boost was live,
+// and /cache-health reported 20.4% of the cap when the truth was 10.2%. That
+// page is what decides when the boost comes off, so the error pointed the one
+// decision it feeds in exactly the wrong direction.
+//
+// The terms below are PARSED by scripts/check-ipo-cadence.mjs and summed
+// against the constant, so changing one without the other fails rather than
+// ships. That is the whole mechanism: the number cannot be verified against
+// FMP from here, but it can be held to agreeing with its own stated reason.
+//
+//   base plan   20 GB
+//   data boost  20 GB   <- live. Delete this line when the boost is dropped.
+export const FMP_BANDWIDTH_CAP_BYTES = 40 * 1024 * 1024 * 1024;
 
 function dayKey(d: Date) {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -377,7 +398,7 @@ export type FmpUsageReport = {
  * DO NOT "FIX" THE WINDOW. This is already the right shape and has been
  * reviewed as such (2026-08-22). It sums the last 30 UTC day-buckets ending
  * today, which is a genuine rolling 30-day total and matches how FMP bills the
- * 20 GB cap. Two plausible-looking "corrections" would both make it wrong:
+ * bandwidth cap. Two plausible-looking "corrections" would both make it wrong:
  *
  *   * Anchoring to a calendar month. The cap is not monthly. A month-to-date
  *     figure reads LOW for the first three weeks of every month and would say

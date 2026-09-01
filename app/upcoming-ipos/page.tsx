@@ -47,23 +47,29 @@ export const metadata: Metadata = {
   },
 };
 
-// 1800s, and this number is NOT independently chosen -- it deliberately agrees
-// with the next: { revalidate: 1800 } on the FMP fetch inside
-// lib/server/ipoCalendar.ts, because THAT is what actually governs the cadence.
+// 86400s (daily), and this number is NOT independently chosen -- it is
+// IPO_REVALIDATE_SECONDS from lib/server/ipoCalendar.ts, which is also the
+// freshness readFeed is given and the next: { revalidate } on the FMP fetch.
+// All three have to agree, and scripts/check-ipo-cadence.mjs is what proves
+// they do. It is written out as a literal only because Next requires a segment
+// config to be statically analysable and will not follow an import.
 //
 // Next takes the MINIMUM of a route's revalidate and any fetch revalidate
 // reached during its render, so a fetch-level value silently overrides a larger
 // page constant. This page previously declared 14400 (four hours) and shipped
 // as "30m" in the route table, and nothing in the source said why. See
-// claude/traps/fetch-revalidate-caps-the-page.md.
+// claude/traps/fetch-revalidate-caps-the-page.md. Raising this without raising
+// the fetch would put it straight back in that state -- the route table would
+// still read 30m and this constant would again describe a cadence the page
+// does not have.
 //
-// Stating 1800 here rather than leaving 14400 is the point: 48 revalidations a
-// day against a feed FMP serves happily is not worth optimising, but a constant
-// describing a cadence the page does not have is worth removing.
+// Daily rather than the previous 1800s: an IPO calendar changes at most once a
+// day, and 48 revalidations a day were spending FMP bandwidth against a cap
+// whose penalty is suspension.
 //
 // Was force-dynamic purely because a failed read used to be unsafe to cache;
 // refuseToCacheDegradedRender() below is what removes that.
-export const revalidate = 1800;
+export const revalidate = 86400;
 
 export default async function UpcomingIposPage() {
   const [upcomingFeed, recentFeed] = await Promise.all([

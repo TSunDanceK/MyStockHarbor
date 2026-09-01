@@ -26,7 +26,8 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 //     api/v3/quote 403) -> every field is ONE call PER TICKER.
 //   * stable/quote (per symbol)   -> price / %chg / volume / marketCap (no PE)
 //   * stable/ratios-ttm (per sym) -> priceToEarningsRatioTTM (the only PE source)
-//   * Limit is 300 calls/MIN (no daily cap; 20GB/30d bandwidth). ~550 symbols
+//   * Limit is 300 calls/MIN (no daily cap; a 30-day rolling bandwidth cap on
+//     top -- FMP_BANDWIDTH_CAP_BYTES in fmpUsage.ts). ~550 symbols
 //     refreshed across a full PRICE_TARGET_RUNS rotation averages well under
 //     the ceiling.
 //
