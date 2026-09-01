@@ -60,6 +60,12 @@
 // every real quote call still waits on.
 
 import { Redis } from "@upstash/redis";
+import {
+  REFERENCE_TTL_DAILY_SECONDS,
+  REFERENCE_TTL_MONTHLY_SECONDS,
+  readReference,
+  writeReference,
+} from "./referenceCache";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
@@ -402,6 +408,15 @@ async function fetchMonthRows(year: number, month: number): Promise<RawEarningsR
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return cached?.rows ?? [];
 
+  // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
+  // before this every cold lambda refetched the whole 697 KB month -- 108
+  // fetches per 30 days, ~73 MB. One fetch now serves every instance for a day.
+  const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
+  if (Array.isArray(shared)) {
+    monthCache.set(key, { at: Date.now(), rows: shared });
+    return shared;
+  }
+
   const from = `${key}-01`;
   const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
 
@@ -414,6 +429,12 @@ async function fetchMonthRows(year: number, month: number): Promise<RawEarningsR
     const json = await res.json();
     const rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
     monthCache.set(key, { at: Date.now(), rows });
+    // EMPTY IS NOT CACHED. A failed or restricted response parses to [] here,
+    // and storing that for a day would blank every calendar consumer until it
+    // expired -- an absence held as though it were an answer.
+    if (rows.length) {
+      await writeReference(`earnings-calendar:${key}`, rows, REFERENCE_TTL_DAILY_SECONDS);
+    }
     return rows;
   } catch {
     return cached?.rows ?? [];
@@ -427,6 +448,19 @@ async function getNameMap(): Promise<Map<string, string>> {
 
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return nameMapCache?.map ?? new Map();
+
+  // REDIS FIRST, and stored as a plain object because a Map does not survive
+  // JSON. ~38,829 symbol -> name pairs, which is a fraction of the 3.04 MB raw
+  // payload it is derived from: only the two fields the consumer reads are
+  // kept, so the shared copy is far smaller than the fetch it replaces.
+  const sharedNames = await readReference<Record<string, string>>("stock-list-names");
+  if (sharedNames && typeof sharedNames === "object") {
+    const map = new Map(Object.entries(sharedNames));
+    if (map.size) {
+      nameMapCache = { at: Date.now(), map };
+      return map;
+    }
+  }
 
   try {
     const res = await fmpFetch(`https://financialmodelingprep.com/stable/stock-list?apikey=${apiKey}`, {
@@ -446,6 +480,16 @@ async function getNameMap(): Promise<Map<string, string>> {
     }
 
     nameMapCache = { at: Date.now(), map };
+    // Monthly, per probe Q8: staleness costs a ticker where a company name
+    // should be -- cosmetic and self-correcting. Empty is not written, for the
+    // same reason as the calendar above.
+    if (map.size) {
+      await writeReference(
+        "stock-list-names",
+        Object.fromEntries(map),
+        REFERENCE_TTL_MONTHLY_SECONDS
+      );
+    }
     return map;
   } catch {
     return nameMapCache?.map ?? new Map();
