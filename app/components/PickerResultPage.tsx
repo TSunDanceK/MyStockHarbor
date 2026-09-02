@@ -13,6 +13,7 @@ import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/Pick
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
+import { isRegularSessionOpen } from "@/lib/server/marketHours";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
@@ -530,6 +531,58 @@ function formatUpdatedAt(value?: string | null) {
   });
 }
 
+/**
+ * What the price column is actually showing, and when it was true.
+ *
+ * WHY A RANGE. The footer's "Updated" is the pickers BUILD time -- when the
+ * scan ran, not when any price was fetched. Prices come from the price pool on
+ * two different policies (priceTiers.ts: 15 minutes for the attention tier, 30
+ * for the rest), so two rows in the same table can be twice apart in age and
+ * neither of them the age the footer prints. One timestamp implying a shared
+ * freshness the rows do not have is the thing this fixes. Cost tiering is
+ * legitimate; presenting stale data as current is not.
+ *
+ * WHY ABSOLUTE TIMES AND NOT "12 MINUTES AGO". These pages are ISR'd, so a
+ * relative age is baked at render and is wrong for everyone who reads it later
+ * -- it would claim to be the freshest thing on the page while being the only
+ * one that cannot self-correct. An absolute UTC stamp is true whenever it is
+ * read. Same reasoning, and the same hydration-mismatch avoidance, as
+ * formatUpdatedAt above.
+ *
+ * WHY THE MARKET STATE IS SAID OUT LOUD. Outside the session prices freeze, and
+ * that is CORRECT -- the last traded price is the price. But a reader at 22:00
+ * seeing a bare timestamp has no way to tell a two-hour-old live quote from a
+ * six-hour-old close, and at 06:00 Monday the gap is 60 hours. Saying "market
+ * closed" is what makes the frozen number honest rather than merely accurate.
+ *
+ * PRE/POST-MARKET MOVES ARE DELIBERATELY NOT SHOWN. stable/quote returns the
+ * regular-session price, so a stock that gaps after hours displays its regular
+ * close until the next open. That matches how most sites treat it -- extended
+ * hours is surfaced separately or not at all -- but it is a decision, and the
+ * "market closed" label is what stops it being a silent one.
+ */
+function formatPriceWindow(oldestTs: number | null, newestTs: number | null) {
+  if (oldestTs == null || newestTs == null) return null;
+
+  const stamp = (ms: number) =>
+    new Date(ms).toLocaleString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      hour12: false,
+    });
+
+  // Minute resolution, so a range whose ends round to the same minute prints as
+  // one time rather than as "17:04-17:04" -- which reads like a bug.
+  const from = stamp(oldestTs);
+  const to = stamp(newestTs);
+  const window = from === to ? `${to} UTC` : `${from}-${to} UTC`;
+
+  return isRegularSessionOpen()
+    ? `Prices ${window}`
+    : `Prices ${window} · market closed`;
+}
+
 // The origin used to be derived per-request from headers(). It is a constant
 // now: headers() alone forces dynamic rendering, and this value fed exactly one
 // thing -- getPickersData(origin), whose fetchMarket() self-fetches
@@ -1009,6 +1062,12 @@ async function getPickerData(config: PickerResultConfig) {
     // what's computed/sent. See PickerResultsGrid.tsx.
     const entries = buildEntries({ config, sections, signalRecords });
 
+    // Oldest / newest pooled price actually shown on this page. Filled by the
+    // price-pool merge below; both stay null when nothing pooled landed, which
+    // is a real state (a cold pool) and must not render as a fabricated range.
+    let priceOldestTs: number | null = null;
+    let priceNewestTs: number | null = null;
+
     // Merge in category-membership flags (Buy Signals, Sell Signals, Best
     // Trend, Divergence, ATH Breakouts, 3-Month Highs, Macro S/R) so
     // ScreenerNav's checkboxes for those categories can filter *this*
@@ -1071,6 +1130,20 @@ async function getPickerData(config: PickerResultConfig) {
           if (p.volume != null) entry.volume = p.volume;
           if (p.marketCap != null) entry.marketCap = p.marketCap;
           if (p.pe != null) entry.peRatio = p.pe;
+          // THE SPREAD, NOT A SINGLE MOMENT. Rows on one page are refreshed on
+          // two different policies (15 minutes for the attention tier, 30 for
+          // the rest -- lib/server/priceTiers.ts), so the oldest row in a table
+          // can be twice the age of the newest. The footer used to print one
+          // timestamp, which was the pickers BUILD time and never the price
+          // time at all; that implied every row shared an age it never had.
+          // Only rows that actually took a pooled value are counted: a symbol
+          // still showing its EOD close has nothing to say about pool freshness.
+          if (p.price != null || p.changePct != null) {
+            if (p.ts > 0) {
+              priceOldestTs = priceOldestTs == null ? p.ts : Math.min(priceOldestTs, p.ts);
+              priceNewestTs = priceNewestTs == null ? p.ts : Math.max(priceNewestTs, p.ts);
+            }
+          }
         }
       }
     } catch {
@@ -1159,6 +1232,8 @@ async function getPickerData(config: PickerResultConfig) {
 
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
+      priceOldestTs,
+      priceNewestTs,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
       dynamicUniverseCount: typeof payload.dynamicUniverseCount === "number" ? payload.dynamicUniverseCount : null,
       entries,
@@ -1266,7 +1341,7 @@ const ORDERED_PICKER_HREFS = new Set<string>([
 ]);
 
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
-  const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
 
   // Pages that ship the full universe and apply their own condition client-side
@@ -1669,6 +1744,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                   universeSize={universeSize}
                   poolSize={dynamicUniverseCount}
                   updatedLabel={formatUpdatedAt(updatedAt)}
+                  priceLabel={formatPriceWindow(priceOldestTs, priceNewestTs)}
                 />
 
                 <HideWatermarksBar />
