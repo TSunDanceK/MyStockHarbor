@@ -10,6 +10,7 @@ import { deferSymbol, markRefreshed, registerSymbols } from "../../../../lib/ser
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { Redis } from "@upstash/redis";
 import {
+  FMP_SAFE_CALLS_PER_MINUTE,
   hasFmpCapacity,
   reserveFmpCallSlot,
 } from "../../../../lib/server/historyCache";
@@ -17,6 +18,28 @@ import { readDynamicUniverse } from "../../../../lib/server/dynamicUniverseCache
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// DECLARED RATHER THAN INHERITED, and that is a decision rather than a copy of
+// the neighbouring routes.
+//
+// This route previously set no maxDuration at all, so it ran on whatever the
+// platform default happens to be. On Vercel that default is not a fixed
+// number: it is 300s for a Pro team with Fluid compute enabled and 15s for a
+// Pro team without it, and nothing in this repo -- or in anything reachable
+// from a sandbox that cannot fetch vercel.com -- records which of those this
+// project is. The plan is Pro (checked against the Vercel API); the Fluid
+// setting is a dashboard toggle and could be changed by anyone at any time
+// WITHOUT A COMMIT, which is what makes inheriting it the wrong basis for a
+// loop that now waits.
+//
+// Both pickers entry points already carry this exact lesson in their headers:
+// "Neither pickers entry point set maxDuration, so the full universe build ran
+// on Vercel's default limit -- a timeout cliff at ANY universe size, and one
+// that would bite silently as UNIVERSE_CAP grows. Set explicitly."
+//
+// So the wait below is sized against a number this file states, not against
+// one it hopes for.
+export const maxDuration = 300;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -34,9 +57,88 @@ const EARNINGS_QUEUE_KEY = "msh:pickers:earnings:v1:queue";
 const EARNINGS_DUE_KEY_PREFIX = "msh:pickers:earnings:v1:due:";
 const EARNINGS_LOCK_KEY = "msh:pickers:earnings:v1:lock";
 const EARNINGS_ENQUEUE_GUARD_KEY = "msh:pickers:earnings:v1:enqueue-guard";
-const EARNINGS_LOCK_TTL_SECONDS = 4 * 60;
+// MUST EXCEED maxDuration, same rule as the price pool's lock. It was 4
+// minutes, which was fine while a run was a handful of seconds and is NOT fine
+// now that a run may spend EARNINGS_RUN_BUDGET_MS (4 min) waiting: the lock
+// would expire while the run holding it is still going, letting a second run
+// start and duplicate its FMP calls -- failing open in exactly the case the
+// lock exists for.
+const EARNINGS_LOCK_TTL_SECONDS = 6 * 60;
+// DELIBERATELY UNCHANGED IN THIS PR. 40 is comfortably under everything below,
+// which is precisely why the wall this PR removes has never been visible. The
+// constant is sized after the earnings-season measurement, not before it.
 const EARNINGS_BATCH_SIZE = 40;
 const EARNINGS_MIN_HEADROOM_CALLS = 90;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE MINUTE IS A PAUSE. THE RUN'S OWN CLOCK IS THE ONLY THING THAT ENDS IT.
+//
+// This loop used to read:
+//
+//     const hasCapacity = await hasFmpCapacity(1, EARNINGS_MIN_HEADROOM_CALLS);
+//     if (!hasCapacity) { deferred.push(symbol); break; }
+//
+// `break`, not wait. EARNINGS_MIN_HEADROOM_CALLS is 90 against a 200 guard, so
+// the run ABANDONED ITSELF at 110 calls inside one minute and reported the
+// remainder as `deferred` -- a clean-looking record for a run that stopped
+// early. This is the identical defect #396 fixed in warmPricePool, where it
+// pinned priceRefreshed at 128-136 for days while two other changes were
+// designed around the selector instead.
+//
+// It has never bitten because EARNINGS_BATCH_SIZE is 40. It bites the moment
+// the batch is raised -- which is when the universe is growing and a silent
+// shortfall is least welcome.
+//
+// 240s against a 300s maxDuration, for the pool's reason: a run that spends
+// all 300 has nothing left for the queue bookkeeping, the run record and the
+// response, and would be killed mid-write. Worst case the last symbol starts
+// at 239.9s and then costs one reserveFmpCallSlot wait (<=20s) plus the FMP
+// round trip -- inside maxDuration, and inside the 6-minute lock.
+const EARNINGS_RUN_BUDGET_MS = 240_000;
+// Poll rather than sleeping to the bucket edge: the minute may roll over, or
+// another job may finish and free room, well before the boundary.
+const EARNINGS_BUDGET_POLL_MS = 5_000;
+
+// THE MOST CALLS THIS RUN COULD MAKE IF IT SPENT ITS WHOLE BUDGET, derived
+// from the constants above rather than typed. Nothing reads it at runtime --
+// it exists so scripts/check-earnings-minute-wall.mjs can assert that
+// EARNINGS_BATCH_SIZE stays inside what a run can actually reach. A batch
+// above this is a batch the run cannot finish, which puts the shortfall back
+// exactly where this change took it from.
+export const EARNINGS_USABLE_CALLS_PER_MINUTE =
+  FMP_SAFE_CALLS_PER_MINUTE - EARNINGS_MIN_HEADROOM_CALLS;
+export const EARNINGS_MAX_CALLS_PER_RUN = Math.floor(
+  EARNINGS_USABLE_CALLS_PER_MINUTE * (EARNINGS_RUN_BUDGET_MS / 60_000)
+);
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+/**
+ * Wait until there is FMP room for one more call, or until the run is out of
+ * its own time.
+ *
+ * Returns "out-of-time" ONLY on the run's clock. An exhausted minute is a
+ * pause; the end of the budget is the only thing that ends the run.
+ *
+ * WHY NOT LEAN ON reserveFmpCallSlot'S OWN WAIT: it waits at most
+ * FMP_MAX_WAIT_MS (20s) and then THROWS capacity-timeout, and inside
+ * fetchFmpEarnings that throw would be caught by the loop's try/catch and
+ * counted as a FAILED symbol -- which then gets deferSymbol'd for seven days.
+ * A busy minute would park a perfectly good ticker for a week. Waiting out
+ * here, outside the fetch, is what keeps pacing from being recorded as
+ * failure.
+ */
+async function waitForEarningsBudget(deadlineMs: number): Promise<"ok" | "out-of-time"> {
+  while (true) {
+    if (await hasFmpCapacity(1, EARNINGS_MIN_HEADROOM_CALLS)) return "ok";
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return "out-of-time";
+    await sleep(Math.min(EARNINGS_BUDGET_POLL_MS, remaining));
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Earnings only change once a quarter, so the flat 24h TTL was pure waste --
 // it re-fetched every symbol daily. We now derive the cache lifetime from the
@@ -204,6 +306,8 @@ export async function GET(req: NextRequest) {
   }
 
   const now = Date.now();
+  const runDeadlineMs = now + EARNINGS_RUN_BUDGET_MS;
+  let outOfTime = false;
   const fetched: string[] = [];
   const deferred: string[] = [];
   const failed: string[] = [];
@@ -220,15 +324,27 @@ export async function GET(req: NextRequest) {
     for (const symbol of cleanQueue) {
       if (fetched.length >= EARNINGS_BATCH_SIZE) break;
 
+      // The run's own clock, checked before starting a symbol rather than
+      // after. A symbol begun at the deadline still gets to finish; one begun
+      // past it would push the bookkeeping tail past maxDuration.
+      if (Date.now() >= runDeadlineMs) {
+        outOfTime = true;
+        break;
+      }
+
       const dueAt = await redis.get<number>(`${EARNINGS_DUE_KEY_PREFIX}${symbol}`);
       if (typeof dueAt === "number" && dueAt > now) {
         deferred.push(symbol);
         continue;
       }
 
-      const hasCapacity = await hasFmpCapacity(1, EARNINGS_MIN_HEADROOM_CALLS);
-      if (!hasCapacity) {
-        deferred.push(symbol);
+      // A BUSY MINUTE IS NOT A RESULT. The symbol is left in the queue with no
+      // due key written, exactly as before -- but it is no longer pushed onto
+      // `deferred`, because that list now means one thing ("not due yet")
+      // instead of two. A run that stopped at the minute wall used to report
+      // the same field as a run that had nothing to do.
+      if ((await waitForEarningsBudget(runDeadlineMs)) === "out-of-time") {
+        outOfTime = true;
         break;
       }
 
@@ -265,6 +381,10 @@ export async function GET(req: NextRequest) {
       fetched: fetched.length,
       deferred: deferred.length,
       failed: failed.length,
+      // THE SHORTFALL, NAMED. Without this a run that ran out of budget and
+      // one that drained its queue produce the same record -- which is how the
+      // `break` stayed invisible for as long as it did.
+      outOfTime,
     });
 
     return NextResponse.json({
@@ -274,6 +394,7 @@ export async function GET(req: NextRequest) {
       fetchedCount: fetched.length,
       deferredCount: deferred.length,
       failedCount: failed.length,
+      outOfTime,
       fetched,
       deferred: deferred.slice(0, 20),
       failed: failed.slice(0, 20),
