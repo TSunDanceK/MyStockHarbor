@@ -20,7 +20,7 @@ import {
 } from "../ta/ascendingTriangle";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
 
-import { addToDynamicUniverse, readDynamicUniverse } from "./dynamicUniverseCache";
+import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 import { getCompanyNameMap } from "./companyNames";
 import { PRESET_UNIVERSE } from "./presetUniverse";
 import { readMarketState } from "./marketState";
@@ -128,7 +128,9 @@ type AggregatedPoint = {
 };
 
 
-const UNIVERSE_CAP = 700;
+// One shared constant, not a fourth copy. See dynamicUniverseCache.ts,
+// which also records why its own 700 is a different quantity.
+const UNIVERSE_CAP = ANALYSIS_UNIVERSE_CAP;
 const MAX_FRESH_HISTORY_FETCHES = 275;
 const HISTORY_DAYS = 1300;
 

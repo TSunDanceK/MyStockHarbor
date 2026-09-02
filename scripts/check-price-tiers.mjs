@@ -243,13 +243,77 @@ if (!capMax || !everyMinutes) {
 // previous close.
 const preOpenRuns = Math.floor(hours.PRE_OPEN_BUFFER_MINUTES / everyMinutes);
 const repriceable = preOpenRuns * capMax;
-const TARGET_UNIVERSE = 3000; // the size this design was costed at
+
+// THE TARGET IS READ FROM THE CONSTANTS, NOT TYPED.
+//
+// It was `const TARGET_UNIVERSE = 3000; // the size this design was costed at`.
+// preOpenRuns and capMax were derived from real constants and this one was not,
+// so the assertion was only ever as true as a literal nobody would think to
+// update -- and the failure it guards is silent. Past the coverage the buffer
+// can manage, symbols open the session showing a % change computed against the
+// wrong previous close, and the check went on passing.
+//
+// The real bound on what warm-price-pool is handed is getWarmTargetSymbols:
+// the symbols a pickers build analysed, UNIONED with the rolling dynamic
+// universe. Those are two separately-capped pools, so the worst case is their
+// sum -- which is why the live figure is 759 against a 700 analysis cap, and
+// why using either one alone would understate it.
+const universeSrc = readCodeOnly("lib/server/dynamicUniverseCache.ts");
+const analysisCap = Number(
+  (universeSrc.match(/ANALYSIS_UNIVERSE_CAP = (\d+)/) ?? [])[1]
+);
+const dynamicCap = Number(
+  (universeSrc.match(/MAX_DYNAMIC_UNIVERSE_SIZE = (\d+)/) ?? [])[1]
+);
+if (!analysisCap || !dynamicCap) {
+  console.error(
+    `FAIL: could not read ANALYSIS_UNIVERSE_CAP (${analysisCap}) or ` +
+      `MAX_DYNAMIC_UNIVERSE_SIZE (${dynamicCap}) — the buffer assertion would ` +
+      `otherwise compare against NaN and pass by measuring nothing.`
+  );
+  process.exit(1);
+}
+const targetUniverse = analysisCap + dynamicCap;
+
 check(
-  "the pre-open buffer can re-price the whole costed universe before the open",
-  repriceable >= TARGET_UNIVERSE,
+  "the pre-open buffer can re-price the largest universe the caps allow",
+  repriceable >= targetUniverse,
   `${preOpenRuns} runs x ${capMax}/run = ${repriceable} symbols in the ` +
-    `${hours.PRE_OPEN_BUFFER_MINUTES}-minute buffer, against a ${TARGET_UNIVERSE}-symbol ` +
-    `target — anything left over opens the session showing yesterday's % change`
+    `${hours.PRE_OPEN_BUFFER_MINUTES}-minute buffer, against a worst case of ` +
+    `${analysisCap} analysed + ${dynamicCap} dynamic = ${targetUniverse} — anything ` +
+    `left over opens the session showing yesterday's % change, silently`
+);
+
+// The four builders must all read the shared constant. Raising three of four
+// leaves them disagreeing about how big the universe is, and each still reads
+// as correct on its own -- the symptom is a pattern page missing names the
+// screener shows, not an error.
+const BUILDERS = [
+  "lib/server/bullFlagsBuilder.ts",
+  "lib/server/descendingTrianglesBuilder.ts",
+  "lib/server/playsBuilder.ts",
+  "lib/server/pickersBuilder.ts",
+];
+const localCaps = BUILDERS.filter((f) =>
+  /const UNIVERSE_CAP = \d+/.test(readCodeOnly(f))
+);
+check(
+  "no builder re-declares the universe cap as its own literal",
+  localCaps.length === 0,
+  localCaps.length
+    ? `${localCaps.join(", ")} still hard-code it`
+    : `all ${BUILDERS.length} read ANALYSIS_UNIVERSE_CAP`
+);
+// dynamicUniverseCache is the deliberate exception and must STAY separate: it
+// prunes destructively where the builders only slice, and it is one input to a
+// build rather than the whole of it. Asserting it keeps its own number stops a
+// future tidy-up from merging two different quantities into one.
+check(
+  "the dynamic-universe retention cap is still its own separate constant",
+  /const MAX_DYNAMIC_UNIVERSE_SIZE = \d+/.test(universeSrc),
+  "it PRUNES (ZREM, destroying score history) where the builders only slice, " +
+    "and it is one input to a pickers build alongside PRESET_UNIVERSE and the " +
+    "search promotions — folding it in would be one constant changing two things"
 );
 
 // ── 5. Degradation matches the policy, and the page says so ─────────────────
