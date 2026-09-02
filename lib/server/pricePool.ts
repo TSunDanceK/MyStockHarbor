@@ -8,7 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
-import { markRefreshed, registerSymbols } from "./stalenessQueue";
+import { markRefreshed, registerSymbols, deferSymbol, readDeferred } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import {
@@ -216,6 +216,62 @@ async function waitForPriceBudget(deadlineMs: number): Promise<"ok" | "out-of-ti
 // Free "market performance" buckets checked before the per-symbol rotation.
 const MOVER_BUCKET_PATHS = ["biggest-gainers", "biggest-losers", "most-actives"] as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A SYMBOL THAT KEEPS FAILING MUST STOP BEING RETRIED EVERY RUN.
+//
+// The loop's `if (!quote && !peFetched) continue` is CORRECT for a transient:
+// a failed symbol keeps its old `ts`, stays past its TTL and sorts to the FRONT
+// of the next run's due set, so a blip costs one cron period rather than one
+// TTL. #395 argued for exactly that and it stays.
+//
+// What was missing is what happens on the Nth consecutive failure. For a
+// permanently dead ticker the same mechanism is an infinite loop: front of the
+// queue, fails, front of the queue, fails -- up to 288 calls a day, forever,
+// for a symbol that will never answer again. There was no deferSymbol for
+// pricePool anywhere.
+//
+// THE THRESHOLD IS 3, AND THE REASONING IS THE CRON PERIOD. At */5, three
+// consecutive failures span ~10-15 minutes of the session. One bad FMP minute
+// does not survive that; two would trip on a single blip plus its retry. Five
+// would be safer against false positives and costs two more runs of an
+// infinite loop, which is the thing being bounded.
+//
+// THE BACKOFF IS DERIVED FROM THE STREAK ITSELF, so there is no second piece of
+// state to keep in step: 1h at the third failure, doubling, capped at a day.
+//
+//   streak  3    4    5    6     7     8+
+//   defer   1h   2h   4h   8h   16h   24h
+//
+// WORST CASE FOR A SYMBOL THAT IS ACTUALLY ALIVE -- a trading halt, or FMP
+// briefly wrong about it: it is skipped for at most 24 hours, and because the
+// deferral expires on wall-clock time while refreshes only happen inside the
+// session, the practical worst case is ~24h plus the closed hours it lands in,
+// so about 30 hours of a frozen price. That is the cost of the cap. It is only
+// reached after eight consecutive failures, by which point "alive" is a thin
+// hypothesis -- and markRefreshed already ZREMs the deferral, so one successful
+// fetch clears the whole thing.
+//
+// A DEFERRAL THAT NEVER EXPIRES IS AN EVICTION WEARING A SMALLER NAME. Nothing
+// here removes a symbol from anything; the cap is what keeps that true.
+const PRICE_FAIL_DEFER_AFTER = 3;
+const PRICE_FAIL_DEFER_BASE_SECONDS = 60 * 60;
+const PRICE_FAIL_DEFER_MAX_SECONDS = 24 * 60 * 60;
+
+/**
+ * How long to park a symbol after `streak` consecutive failures.
+ *
+ * PURE, so the invariant check can RUN it: "no symbol can be parked
+ * permanently" is a claim about behaviour over inputs, and a regex over this
+ * file cannot test a cap.
+ */
+export function priceFailDeferSeconds(streak: number): number {
+  if (streak < PRICE_FAIL_DEFER_AFTER) return 0;
+  const doublings = streak - PRICE_FAIL_DEFER_AFTER;
+  const seconds = PRICE_FAIL_DEFER_BASE_SECONDS * 2 ** Math.min(doublings, 20);
+  return Math.min(PRICE_FAIL_DEFER_MAX_SECONDS, seconds);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type PricePoolRow = {
   price: number | null;
   changePct: number | null;
@@ -243,6 +299,16 @@ export type PricePoolRow = {
   pe: number | null;
   ts: number; // ms epoch price was last fetched
   peTs?: number; // ms epoch PE was last fetched (independent rotation)
+  /**
+   * Consecutive failed quote attempts. Reset to 0 by any success.
+   *
+   * ON THE ROW RATHER THAN IN ITS OWN KEY, deliberately. A separate hash would
+   * need an HDEL per success to clear -- and there is no hdel anywhere in this
+   * codebase, which is exactly how the price-pool and picker-chart hashes came
+   * to hold immortal fields. This rides the row it describes: written by the
+   * same HSET, expired by the same TTL, and removed by the same eviction.
+   */
+  failStreak?: number;
 };
 
 function cleanSymbol(value: string) {
@@ -299,6 +365,7 @@ export async function readPricePoolBulk(
             pe: num(row.pe),
             ts: row.ts,
             peTs: num(row.peTs) ?? 0,
+            failStreak: num(row.failStreak) ?? 0,
           });
         }
       });
@@ -653,8 +720,17 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     Math.ceil(tier2InUniverse / runsPerTier2Window());
   const priceCap = Math.min(PRICE_MAX_PER_RUN, Math.max(PRICE_MIN_PER_RUN, capNeeded));
 
+  // Symbols parked after repeated failures. READ, not merely written: the price
+  // pool picks its own work by TTL rather than asking claimStalest for the
+  // stalest N, so without this read the deferral would be write-only and the
+  // infinite retry loop would continue with a record of itself.
+  const deferred = await readDeferred("pricePool");
+
   const due = clean.filter(
-    (sym) => !bucketFreshened.has(sym) && isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
+    (sym) =>
+      !bucketFreshened.has(sym) &&
+      !deferred.has(sym) &&
+      isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
   );
 
   // TIER FIRST, THEN STALEST WITHIN TIER -- not stalest overall.
@@ -704,6 +780,11 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // not one TTL. That is a claim about behaviour, and this counter is what
   // makes it checkable instead of assumed.
   let quoteFailures = 0;
+  // Rows written for symbols that returned NOTHING, kept apart from `payload`
+  // so markRefreshed cannot be called with them. They carry the failure streak
+  // and an unchanged `ts`.
+  const failPayload: Record<string, PricePoolRow> = {};
+  let newlyDeferred = 0;
   // Did the run stop with work still due?
   //
   // RENAMED FROM capacityStopped, DELIBERATELY, BECAUSE IT NOW MEANS SOMETHING
@@ -761,7 +842,42 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       }
     }
 
-    if (!quote && !peFetched) continue; // nothing landed for this symbol
+    if (!quote && !peFetched) {
+      // NOTHING LANDED. Record the streak rather than dropping the symbol on
+      // the floor, and park it once the streak says this is not a blip.
+      //
+      // `ts` IS DELIBERATELY UNCHANGED. Advancing it would make a failed fetch
+      // look like a successful refresh -- the symbol would fall out of the due
+      // set for a full TTL and the page would keep rendering a carried-forward
+      // price as if it had just been checked. Leaving it stale is what keeps
+      // the symbol due the moment its deferral lapses.
+      //
+      // This row goes into `failPayload`, NOT `payload`: `payload`'s keys are
+      // what markRefreshed is called with, and marking a symbol that returned
+      // nothing as freshly refreshed is the same lie stockDataCache was telling.
+      if (wantPrice) {
+        const streak = (prev?.failStreak ?? 0) + 1;
+        failPayload[sym] = {
+          price: prev?.price ?? null,
+          changePct: prev?.changePct ?? null,
+          volume: prev?.volume ?? null,
+          marketCap: prev?.marketCap ?? null,
+          open: prev?.open ?? null,
+          dayHigh: prev?.dayHigh ?? null,
+          dayLow: prev?.dayLow ?? null,
+          pe: prev?.pe ?? null,
+          ts: prev?.ts ?? 0,
+          peTs: prev?.peTs ?? 0,
+          failStreak: streak,
+        };
+        const deferFor = priceFailDeferSeconds(streak);
+        if (deferFor > 0) {
+          await deferSymbol("pricePool", sym, deferFor);
+          newlyDeferred++;
+        }
+      }
+      continue;
+    }
 
     // A symbol can already have a bucket-sourced row in `payload` (bucket gave
     // price, this loop is here only for its independent PE trickle) -- merge
@@ -779,6 +895,9 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
       ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
       peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
+      // Any landing clears the streak. markRefreshed also ZREMs the deferral,
+      // so one good fetch fully un-parks a symbol.
+      failStreak: quote ? 0 : already?.failStreak ?? prev?.failStreak ?? 0,
     };
     if (quote) pxRefreshed++;
     if (quote && quote.open != null) openCarried++;
@@ -790,13 +909,20 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // registerSymbols is `nx`, seeding newcomers at 0 (never refreshed) without
   // ever overwriting a real refresh time.
   await registerSymbols("pricePool", clean);
+  // ONLY `payload`. failPayload's symbols returned nothing, and marking them
+  // refreshed would reset the staleness of exactly the symbols that most need
+  // to look stale.
   const refreshed = Object.keys(payload);
   if (refreshed.length) await markRefreshed("pricePool", refreshed);
 
   let written = 0;
   try {
-    if (Object.keys(payload).length) {
-      await redis.hset(PRICE_POOL_KEY, payload);
+    // One HSET for both. The failure rows have to be written or the streak
+    // cannot survive to the next run, but they are counted separately so
+    // `written` keeps meaning "rows carrying fresh data".
+    const merged = { ...failPayload, ...payload };
+    if (Object.keys(merged).length) {
+      await redis.hset(PRICE_POOL_KEY, merged);
       written = Object.keys(payload).length;
     }
     // Always reset the safety TTL so an all-skipped run can't let the hash lapse.
@@ -834,6 +960,12 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     due: due.length,
     deferredByCap,
     quoteFailures,
+    // Symbols parked this run after PRICE_FAIL_DEFER_AFTER consecutive
+    // failures, and how many are currently parked in total. A rising
+    // deferredSymbols with a flat newlyDeferred is a settled set of dead
+    // tickers; a rising newlyDeferred is something breaking.
+    newlyDeferred,
+    deferredSymbols: deferred.size,
     outOfTime,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,

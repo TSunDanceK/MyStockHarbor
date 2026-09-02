@@ -251,11 +251,31 @@ export async function readCachedStockDataBulk(
   return out;
 }
 
-async function fetchJson(url: string): Promise<unknown> {
+/**
+ * DID ANY ENDPOINT ACTUALLY ANSWER WITH SOMETHING?
+ *
+ * Counted HERE rather than in each of fetchOne's eight blocks, because this is
+ * the one place every endpoint goes through -- eight copies of the same
+ * increment is eight chances for the ninth endpoint to be added without one.
+ *
+ * A response counts when it carries at least one row. Not "the request
+ * succeeded": FMP answers a delisted ticker with HTTP 200 and `[]`, so
+ * res.ok is true for a symbol that no longer exists.
+ */
+type FetchTally = { answered: number };
+
+async function fetchJson(url: string, tally?: FetchTally): Promise<unknown> {
   await reserveFmpCallSlot();
   const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
   if (!res.ok) return null;
-  return res.json().catch(() => null);
+  const json = await res.json().catch(() => null);
+  if (tally && hasRows(json)) tally.answered++;
+  return json;
+}
+
+function hasRows(json: unknown): boolean {
+  if (Array.isArray(json)) return json.length > 0;
+  return !!json && typeof json === "object";
 }
 
 function firstRow(json: unknown): Record<string, unknown> | null {
@@ -288,7 +308,8 @@ function sumField(json: unknown, keys: string[], limit = 4): number | null {
 async function fetchOne(
   symbol: string,
   apiKey: string,
-  includeQuarterly: boolean
+  includeQuarterly: boolean,
+  tally: FetchTally
 ): Promise<Partial<StockData>> {
   const s = encodeURIComponent(symbol);
   const key = encodeURIComponent(apiKey);
@@ -316,7 +337,7 @@ async function fetchOne(
   // So this change buys FRESHNESS, not calls: it does not reduce the ratios-ttm
   // rotation by one request. The call saving arrives when balance-sheet lands.
   try {
-    const row = firstRow(await fetchJson(`${base}/ratios-ttm?symbol=${s}&apikey=${key}`));
+    const row = firstRow(await fetchJson(`${base}/ratios-ttm?symbol=${s}&apikey=${key}`, tally));
     if (row) {
       out.psRatio = num(row.priceToSalesRatioTTM);
       out.pbRatio = num(row.priceToBookRatioTTM);
@@ -341,7 +362,7 @@ async function fetchOne(
   if (includeQuarterly) {
   // 2) income-statement (quarter, 4) -> TTM revenue / operating income / net income / EPS
   try {
-    const json = await fetchJson(`${base}/income-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`);
+    const json = await fetchJson(`${base}/income-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`, tally);
     out.revenue = sumField(json, ["revenue"]);
     out.operatingIncome = sumField(json, ["operatingIncome"]);
     out.netIncome = sumField(json, ["netIncome", "bottomLineNetIncome"]);
@@ -352,7 +373,7 @@ async function fetchOne(
 
   // 3) cash-flow-statement (quarter, 4) -> TTM free cash flow
   try {
-    const json = await fetchJson(`${base}/cash-flow-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`);
+    const json = await fetchJson(`${base}/cash-flow-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`, tally);
     out.freeCashFlow = sumField(json, ["freeCashFlow"]);
   } catch {
     /* fail open */
@@ -360,7 +381,7 @@ async function fetchOne(
 
   // 4) dividends -> payout frequency + YoY growth (latest vs ~1yr-ago payment)
   try {
-    const json = await fetchJson(`${base}/dividends?symbol=${s}&limit=8&apikey=${key}`);
+    const json = await fetchJson(`${base}/dividends?symbol=${s}&limit=8&apikey=${key}`, tally);
     const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
     if (rows.length) {
       out.payoutFreq = str(rows[0]?.frequency);
@@ -382,7 +403,7 @@ async function fetchOne(
 
   // 5) price-target-summary -> avg price target + analyst count
   try {
-    const row = firstRow(await fetchJson(`${base}/price-target-summary?symbol=${s}&apikey=${key}`));
+    const row = firstRow(await fetchJson(`${base}/price-target-summary?symbol=${s}&apikey=${key}`, tally));
     if (row) {
       out.priceTarget =
         num(row.lastQuarterAvgPriceTarget) ??
@@ -396,7 +417,7 @@ async function fetchOne(
 
   // 6) grades-consensus -> consensus rating label
   try {
-    const row = firstRow(await fetchJson(`${base}/grades-consensus?symbol=${s}&apikey=${key}`));
+    const row = firstRow(await fetchJson(`${base}/grades-consensus?symbol=${s}&apikey=${key}`, tally));
     if (row) out.rating = str(row.consensus);
   } catch {
     /* fail open */
@@ -404,7 +425,7 @@ async function fetchOne(
 
   // 7) analyst-estimates -> forward EPS (nearest future fiscal year avg)
   try {
-    const json = await fetchJson(`${base}/analyst-estimates?symbol=${s}&period=annual&limit=1&apikey=${key}`);
+    const json = await fetchJson(`${base}/analyst-estimates?symbol=${s}&period=annual&limit=1&apikey=${key}`, tally);
     const row = firstRow(json);
     if (row) {
       out.forwardEps = num(row.epsAvg);
@@ -417,7 +438,7 @@ async function fetchOne(
   // 8) stock-price-change -> performance returns for every period in one call
   //    (fields are already percentages: "5D","1M","6M","ytd","1Y", ...).
   try {
-    const row = firstRow(await fetchJson(`${base}/stock-price-change?symbol=${s}&apikey=${key}`));
+    const row = firstRow(await fetchJson(`${base}/stock-price-change?symbol=${s}&apikey=${key}`, tally));
     if (row) {
       out.perf1w = num(row["5D"]);
       out.perf1m = num(row["1M"]);
@@ -464,6 +485,10 @@ export async function warmStockData(symbols: string[], nowMs: number) {
 
   let written = 0;
   let quarterlyRefreshes = 0;
+  // Symbols where every endpoint attempted came back with nothing. Not proof of
+  // a delisting on its own -- one bad FMP minute looks the same -- but a count
+  // that stays non-zero across runs is the signal, and it did not exist before.
+  let deadSymbols = 0;
   const refreshedSymbols: string[] = [];
   const pipeline = redis.pipeline();
   let queued = 0;
@@ -483,7 +508,8 @@ export async function warmStockData(symbols: string[], nowMs: number) {
     // budget it is not going to spend.
     if (!(await hasFmpCapacity(callsForSymbol(includeQuarterly), FMP_MIN_HEADROOM_CALLS))) break;
     if (includeQuarterly) quarterlyRefreshes++;
-    const partial = await fetchOne(symbol, apiKey, includeQuarterly);
+    const tally: FetchTally = { answered: 0 };
+    const partial = await fetchOne(symbol, apiKey, includeQuarterly, tally);
     const prev = existing.get(symbol);
     const row: StockData = {
       symbol,
@@ -522,7 +548,26 @@ export async function warmStockData(symbols: string[], nowMs: number) {
         ? scheduledLast ?? prev?.quarterlyEarningsDate
         : prev?.quarterlyEarningsDate,
     };
-    refreshedSymbols.push(symbol);
+    // A PARTIAL IS LEGITIMATE; NOTHING IS NOT.
+    //
+    // The row above is written either way -- every field falls back to `prev`,
+    // so a symbol that answered on two of five endpoints keeps the other three
+    // and is better off written than skipped. What must NOT happen is calling
+    // markRefreshed for a symbol where NO endpoint returned a row: that writes
+    // `updatedAt: nowIso` over a row of carried-forward nulls and resets the
+    // symbol's own staleness, which is the mechanism by which a fully dead
+    // universe reports entirely healthy on /cache-health. stalenessQueue.ts's
+    // own header names this failure -- "a delisted ticker would show green" --
+    // and the guard was never wired into this dataset.
+    //
+    // THE LINE IS "DID ANY ENDPOINT RETURN A ROW", NOT "DID EVERY FIELD FILL".
+    // Plenty of live symbols have no dividends and no analyst coverage, and
+    // marking those stale forever would be the same lie pointing the other way.
+    // fetchJson counts a response only when it carries at least one row, which
+    // is what separates the two: FMP answers a delisted ticker with HTTP 200
+    // and `[]`, so res.ok is true for a symbol that no longer exists.
+    if (tally.answered > 0) refreshedSymbols.push(symbol);
+    else deadSymbols++;
     pipeline.set(`${KEY_PREFIX}${symbol}`, row, { ex: TTL_SECONDS });
     queued++;
     written++;
@@ -556,5 +601,10 @@ export async function warmStockData(symbols: string[], nowMs: number) {
     // floor instead. That is the failure this number exists to make visible.
     quarterlyRefreshes,
     scheduleSize: schedule.size,
+    // Written, but NOT marked fresh. `written` counting more than
+    // `markedRefreshed` is the difference between "we stored a row" and "the
+    // row means anything", and the gap is where dead symbols live.
+    noEndpointAnswered: deadSymbols,
+    markedRefreshed: refreshedSymbols.length,
   };
 }
