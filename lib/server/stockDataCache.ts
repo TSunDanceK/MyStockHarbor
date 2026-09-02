@@ -11,6 +11,7 @@ import { Redis } from "@upstash/redis";
 import { markRefreshed, registerSymbols } from "./stalenessQueue";
 import { readEarningsSchedule } from "./earningsSchedule";
 import { fmpFetch } from "./fmpUsage";
+import { hasFmpRows } from "./fmpResponse";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -276,27 +277,14 @@ async function fetchJson(url: string, tally?: FetchTally): Promise<unknown> {
 /**
  * Did this response actually carry data about the symbol?
  *
- * THE OBJECT BRANCH USED TO BE `!!json && typeof json === "object"`, WHICH
- * ACCEPTED FMP'S ERROR BODIES. FMP answers a rate limit or a bad key with HTTP
- * 200 and `{"Error Message": "..."}` -- a non-null object, so it counted as an
- * answer, tally.answered went up, and the symbol was marked refreshed. The
- * green-forever lie this whole change exists to kill, surviving on the single
- * most likely failure mode. `{}` passed too.
- *
- * So an object has to carry at least one own key AND must not be an error
- * envelope. Both spellings are rejected: FMP uses "Error Message" on the legacy
- * endpoints and "error" on some stable ones, and accepting either is the same
- * bug.
+ * DELEGATES TO THE SHARED TEST. This logic lived here and the quote path in
+ * pricePool.ts had the same hole -- which is the "eight chances for the ninth
+ * endpoint" argument that put the tally in fetchJson, applied one level up. See
+ * lib/server/fmpResponse.ts for why FMP's 200-with-an-error-body needs a test
+ * at all.
  */
 function hasRows(json: unknown): boolean {
-  if (Array.isArray(json)) return json.length > 0;
-  if (!json || typeof json !== "object") return false;
-  const keys = Object.keys(json as Record<string, unknown>);
-  if (!keys.length) return false;
-  return !keys.some((k) => {
-    const lower = k.toLowerCase();
-    return lower === "error message" || lower === "error";
-  });
+  return hasFmpRows(json);
 }
 
 function firstRow(json: unknown): Record<string, unknown> | null {
