@@ -27,6 +27,7 @@ import { registerSymbols } from "./stalenessQueue";
 import {
   addToDynamicUniverse,
   readDynamicUniverse,
+  ANALYSIS_UNIVERSE_CAP,
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
@@ -2800,7 +2801,12 @@ function normalizeHistory(pts: Point[], days: number) {
 // FIXED 25-symbol slice per run, so full coverage of valuation/dividend/analyst
 // data stretches linearly -- ~2.8h at 416, ~4.7h at 700. REFRESH_SLICE_SIZE is
 // the dial if that matters (~8 FMP calls per symbol).
-const UNIVERSE_CAP = 700;
+//
+// The number itself now lives beside MAX_DYNAMIC_UNIVERSE_SIZE in
+// dynamicUniverseCache.ts, because it was written out here and in three pattern
+// builders with nothing comparing them. That file also records why its own 700
+// is NOT the same quantity and was left alone.
+const UNIVERSE_CAP = ANALYSIS_UNIVERSE_CAP;
 
 // Popular Searches promotion (see claude/popular-searches-universe-spec-2026-07-23.md).
 // A ticker only earns a guaranteed analyzed-universe slot once real users have
