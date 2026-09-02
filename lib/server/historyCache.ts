@@ -180,7 +180,7 @@ const FMP_PLAN_CALLS_PER_MINUTE = 300;
  * 200 leaves a third of the plan as headroom for the calls this counter does
  * not see -- and until this change, quotes were all of them.
  */
-const FMP_SAFE_CALLS_PER_MINUTE = 200;
+export const FMP_SAFE_CALLS_PER_MINUTE = 200;
 const FMP_WAIT_STEP_MS = 400;
 // Ceiling on the exponential backoff below. A waiter still notices a freed slot
 // within ~1.6s, but a full FMP_MAX_WAIT_MS wait now costs ~6 polls instead of 50.

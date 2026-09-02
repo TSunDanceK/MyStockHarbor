@@ -140,9 +140,24 @@ check(
 
 // Run the real selector. The signals are named after what they are, so a future
 // edit that swaps one for a cap-ranked list has to rename a parameter to do it.
-const SIGNAL_KEYS = ["pickerSymbols", "searchedSymbols", "moverSymbols", "universe"];
+const SIGNAL_KEYS = [
+  "presetSymbols",
+  "dollarVolumeRanked",
+  "moverSymbols",
+  "searchedSymbols",
+  "pickerSymbols",
+  "universe",
+];
 const universe = Array.from({ length: 500 }, (_, i) => `SYM${i}`);
+const NO_SIGNALS = {
+  presetSymbols: [],
+  dollarVolumeRanked: [],
+  moverSymbols: [],
+  searchedSymbols: [],
+  pickerSymbols: [],
+};
 const selected = tiers.selectTier1({
+  ...NO_SIGNALS,
   pickerSymbols: ["SYM1", "SYM2", "sym2"],
   searchedSymbols: ["SYM3"],
   moverSymbols: ["SYM4"],
@@ -162,9 +177,8 @@ check(
 // The search cap is the one input a stranger can move: public, unauthenticated,
 // rate-limited only per IP. Uncapped it would promote the universe.
 const flood = tiers.selectTier1({
-  pickerSymbols: [],
+  ...NO_SIGNALS,
   searchedSymbols: universe,
-  moverSymbols: [],
   universe,
 });
 check(
@@ -175,13 +189,136 @@ check(
 check(
   "a symbol outside the warm universe is never admitted",
   tiers.selectTier1({
-    pickerSymbols: ["NOTOURS"],
-    searchedSymbols: ["NOTOURS"],
+    ...NO_SIGNALS,
+    presetSymbols: ["NOTOURS"],
+    dollarVolumeRanked: ["NOTOURS"],
     moverSymbols: ["NOTOURS"],
+    searchedSymbols: ["NOTOURS"],
+    pickerSymbols: ["NOTOURS"],
     universe,
   }).length === 0,
   "otherwise a search box hands a stranger the power to add a symbol the site " +
     "does not display to every run"
+);
+
+// ── 2b. The base works on a site with no visitors ───────────────────────────
+console.log("\n2b. Tier 1 is non-empty with every traffic-fed signal empty");
+
+// THE ACTUAL DEFECT THIS SECTION EXISTS FOR. readAboveFold records a row when a
+// PAGE RENDERS and readSearchDemand needs three distinct searchers, so on a
+// site with no traffic both are empty and tier 1 used to collapse to the mover
+// buckets alone -- the design measured attention without checking any existed.
+// Asserted by RUNNING the selector with those two inputs empty, which is the
+// only way to tell a base that works from one that merely looks present.
+const preset = ["SYM0", "SYM1", "SYM2"];
+const noTraffic = tiers.selectTier1({
+  presetSymbols: preset,
+  dollarVolumeRanked: ["SYM10", "SYM11"],
+  moverSymbols: ["SYM20"],
+  searchedSymbols: [],
+  pickerSymbols: [],
+  universe,
+});
+check(
+  "no traffic at all still yields a tier 1",
+  noTraffic.length === 6,
+  `${noTraffic.length} symbols from preset + dollar volume + movers, with both ` +
+    `traffic-fed signals empty`
+);
+check(
+  "the hand-curated preset alone is enough",
+  tiers.selectTier1({ ...NO_SIGNALS, presetSymbols: preset, universe }).length === 3,
+  "PRESET_UNIVERSE is a hand-typed array in the bundle -- it cannot fail to " +
+    "load, cannot be empty, and needs no visitor, Redis read or FMP call, which " +
+    "is the property the traffic-fed design did not have"
+);
+// WITH THE LAYER NON-EMPTY. The first version of this asserted the ordering on
+// `noTraffic`, whose searched and picker lists are both empty -- so swapping the
+// base and the layer changed nothing and the assertion could not fail. An
+// ordering test needs both sides populated to mean anything.
+const withTraffic = tiers.selectTier1({
+  presetSymbols: preset,
+  dollarVolumeRanked: ["SYM10"],
+  moverSymbols: ["SYM20"],
+  searchedSymbols: ["SYM30", "SYM31"],
+  pickerSymbols: ["SYM40"],
+  universe,
+});
+check(
+  "the base is ordered ahead of the layer, so a cap sheds traffic signals first",
+  withTraffic.slice(0, preset.length).join(",") === preset.join(",") &&
+    withTraffic.indexOf("SYM20") < withTraffic.indexOf("SYM30"),
+  `${withTraffic.join(",")} — the reverse would let a quiet week shrink the fast tier`
+);
+
+// A selector whose whole purpose is "never return nothing" must not be the
+// thing that returns nothing by throwing. A throw here does not degrade tier 1
+// -- it propagates out of getWarmTargetSymbols and takes the work list for all
+// three warm jobs with it.
+let threw = null;
+try {
+  tiers.selectTier1({ universe });
+} catch (err) {
+  threw = err;
+}
+check(
+  "a signal set missing fields entirely degrades rather than throwing",
+  threw === null,
+  threw ? `threw ${threw.message}` : "returns whatever it can build"
+);
+
+// ── 2c. Dollar volume, and specifically not market cap ──────────────────────
+console.log("\n2c. The base ranks by dollar volume, and cold rows are unknown");
+
+const rank = (rows) =>
+  tiers.rankByDollarVolume(new Map(Object.entries(rows)), ["BIG", "MID", "COLD", "QUIET"]);
+
+// The FSLY/MSFT case, in miniature: MID is a fraction of BIG's price but trades
+// far more of it. Cap ordering puts BIG first; dollar volume does not.
+const ranked = rank({
+  BIG: { price: 1000, volume: 1_000 },      //   1,000,000 traded
+  MID: { price: 10, volume: 5_000_000 },    //  50,000,000 traded
+  QUIET: { price: 50, volume: 2_000 },      //     100,000 traded
+  COLD: { price: null, volume: null },      //  no row yet
+});
+check(
+  "a cheap heavily-traded name outranks an expensive quiet one",
+  ranked[0] === "MID" && ranked.indexOf("BIG") < ranked.indexOf("QUIET"),
+  `${ranked.join(" > ")} — a $3B name can out-trade a sleepy $50B utility, which ` +
+    `is why this is not market cap`
+);
+check(
+  "a symbol with no pool row is left OUT of the ranking, not sorted last",
+  !ranked.includes("COLD"),
+  "ranking it last asserts it is quiet when the truth is nobody has asked yet; " +
+    "isPriceDue already treats a row-less symbol as DUE, so it gets a price on " +
+    "the next run whatever tier it is in — the exposure is one run"
+);
+// VARY THE UNIVERSE ORDER, NOT THE MAP ORDER. Two earlier versions of this
+// could not fail. The first used symbols absent from the universe it passed, so
+// both rankings came back EMPTY and it compared "" to "". The second varied the
+// Map's insertion order — but rankByDollarVolume iterates the UNIVERSE ARRAY,
+// so the Map's order never reaches the sort and the result was identical with
+// the tie-break deleted.
+//
+// The universe array is the thing that actually varies: getWarmTargetSymbols
+// builds it as Array.from(new Set([...displayed, ...universeSymbols])), whose
+// order shifts between pickers builds. Without a tie-break, two symbols with
+// equal dollar volume swap places when that order shifts, and near the
+// TIER1_DOLLAR_VOLUME_CAP boundary that decides which of them is in the fast
+// tier — a membership change with no cause anyone could point to.
+const tieRows = new Map([
+  ["BIG", { price: 1, volume: 100 }],
+  ["MID", { price: 10, volume: 10 }],
+]);
+const forward = tiers.rankByDollarVolume(tieRows, ["BIG", "MID"]);
+const reversed = tiers.rankByDollarVolume(tieRows, ["MID", "BIG"]);
+check(
+  "the ranking is deterministic, so tier 1 does not flicker between runs",
+  forward.length === 2 && forward.join(",") === reversed.join(","),
+  `${forward.join(",")} vs ${reversed.join(",")} — both are 100 dollars traded, so ` +
+    `without a tie-break the two universe orders give two answers and the fast ` +
+    `tier's membership changes for no visible reason`
 );
 
 // ── 3. The TTLs mean what the page says they mean ───────────────────────────
@@ -190,10 +327,27 @@ console.log("\n3. The two policies, and what happens when the tier is unknown");
 const tier1 = new Set(["FAST"]);
 const now = 1_000_000_000;
 check(
-  "tier 1 is 15 minutes and tier 2 is 30",
-  tiers.TIER1_TTL_MS === 15 * 60_000 && tiers.TIER2_TTL_MS === 30 * 60_000,
-  `${tiers.TIER1_TTL_MS / 60_000} / ${tiers.TIER2_TTL_MS / 60_000} minutes — 30 rather ` +
-    `than 60 because an hour-old change is visibly wrong beside any other source`
+  "tier 1 is 15 minutes and the tail is 60",
+  tiers.TIER1_TTL_MS === 15 * 60_000 && tiers.TIER2_TTL_MS === 60 * 60_000,
+  `${tiers.TIER1_TTL_MS / 60_000} / ${tiers.TIER2_TTL_MS / 60_000} minutes — the tail ` +
+    `moved 30 -> 60 because 15/30 at 3,000 symbols is 7,000 calls/hour against a ` +
+    `usable ceiling of ~6,720; 15/60 is 4,500`
+);
+
+// The policy has to FIT, and that is arithmetic rather than an opinion. The
+// fast tier is a fixed count, so this holds at any universe size.
+const TARGET_FAST = 500;
+const TARGET_TOTAL = 3000;
+const callsPerHour =
+  TARGET_FAST / (tiers.TIER1_TTL_MS / 3_600_000) +
+  (TARGET_TOTAL - TARGET_FAST) / (tiers.TIER2_TTL_MS / 3_600_000);
+const usablePerHour = 140 * 60;
+check(
+  "the two policies together fit inside the usable call rate at 3,000 symbols",
+  callsPerHour <= usablePerHour * 0.8,
+  `${Math.round(callsPerHour)} calls/hour against ${usablePerHour} usable — the 80% ` +
+    `ceiling is what leaves room for history, earnings and fundamentals, which is ` +
+    `exactly what 15/30 (${Math.round(TARGET_FAST * 4 + (TARGET_TOTAL - TARGET_FAST) * 2)}) did not`
 );
 check(
   "a symbol not in tier 1 falls to the SLOWER policy, never to 'never'",
@@ -208,9 +362,16 @@ check(
   "the whole point of the split"
 );
 check(
-  "31 minutes is due for both",
+  "31 minutes is due for tier 1 but NOT yet for the 60-minute tail",
   tiers.isPriceDue(now - 31 * 60_000, "FAST", tier1, now) &&
-    tiers.isPriceDue(now - 31 * 60_000, "SLOW", tier1, now),
+    !tiers.isPriceDue(now - 31 * 60_000, "SLOW", tier1, now),
+  "the tail moved to 60; a test still passing at 31 for both would mean the " +
+    "constant moved and the policy did not"
+);
+check(
+  "61 minutes is due for both",
+  tiers.isPriceDue(now - 61 * 60_000, "FAST", tier1, now) &&
+    tiers.isPriceDue(now - 61 * 60_000, "SLOW", tier1, now),
   ""
 );
 check(
@@ -224,7 +385,37 @@ check(
 console.log("\n4. The % change rolls over before the bell, not after it");
 
 const poolCode = poolSrc;
-const capMax = Number((poolCode.match(/PRICE_MAX_PER_RUN\s*=\s*(\d+)/) ?? [])[1]);
+// PRICE_MAX_PER_RUN IS EVALUATED, NOT READ AS A LITERAL, because it is no
+// longer one. It was a typed 220 carrying the comment "bound a single run's
+// length (~<1 min even paced)" -- a constraint #396 removed when the loop
+// started spanning minute buckets, so the bound was sized for a run that no
+// longer exists and capped a four-minute one at a quarter of its reach. It is
+// now (FMP_SAFE_CALLS_PER_MINUTE - FMP_MIN_HEADROOM_CALLS) x the run budget in
+// minutes. Pulling the numbers out of that expression and multiplying them here
+// would be a second opinion about the same quantity; evaluating it is not.
+const capExprSrc = (poolCode.match(
+  /const PRICE_MAX_PER_RUN = Math\.floor\(([\s\S]*?)\);/
+) ?? [])[1];
+const safePerMin = Number(
+  (readCodeOnly("lib/server/historyCache.ts").match(
+    /FMP_SAFE_CALLS_PER_MINUTE = (\d+)/
+  ) ?? [])[1]
+);
+const headroom = Number((poolCode.match(/FMP_MIN_HEADROOM_CALLS = (\d+)/) ?? [])[1]);
+const runBudgetMs = Number(
+  (poolCode.match(/PRICE_RUN_BUDGET_MS = ([0-9_]+)/) ?? [])[1]?.replace(/_/g, "")
+);
+const capMax =
+  capExprSrc && safePerMin && headroom && runBudgetMs
+    ? Function(
+        `"use strict";
+         const FMP_SAFE_CALLS_PER_MINUTE = ${safePerMin};
+         const FMP_MIN_HEADROOM_CALLS = ${headroom};
+         const USABLE_CALLS_PER_MINUTE = FMP_SAFE_CALLS_PER_MINUTE - FMP_MIN_HEADROOM_CALLS;
+         const PRICE_RUN_BUDGET_MS = ${runBudgetMs};
+         return Math.floor(${capExprSrc});`
+      )()
+    : NaN;
 const cronSrc = readCodeOnly("lib/server/jobRuns.ts");
 const cron = (cronSrc.match(/"warm-price-pool":[^}]*cron:\s*"([^"]+)"/) ?? [])[1];
 const everyMinutes = Number((String(cron).match(/^\*\/(\d+)/) ?? [])[1]);
@@ -405,6 +596,14 @@ check(
   "and still fits inside the per-run ceiling",
   needed <= capMax,
   `${needed} <= PRICE_MAX_PER_RUN ${capMax}`
+);
+check(
+  "the per-run ceiling is derived from the run budget and the usable call rate",
+  /USABLE_CALLS_PER_MINUTE \* \(PRICE_RUN_BUDGET_MS \/ 60_000\)/.test(poolCode) &&
+    capMax === Math.floor((safePerMin - headroom) * (runBudgetMs / 60_000)),
+  `(${safePerMin} - ${headroom}) x ${runBudgetMs / 60_000} min = ${capMax} — a typed ` +
+    `number here goes stale the moment the run budget or the guard moves, which is ` +
+    `exactly how 220 came to describe a one-minute run that no longer existed`
 );
 // Scoped to the capNeeded EXPRESSION. Grepping the whole file matched the
 // exported runsPerTier1Window DEFINITION and passed even with the derivation
