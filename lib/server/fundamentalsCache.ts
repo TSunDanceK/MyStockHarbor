@@ -56,6 +56,10 @@ const PROFILE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30d -- industry/sector are sta
 // Only covers symbols the screener's own filter returns (>= its market-cap
 // floor, NASDAQ/NYSE, actively trading, equities only) -- everything else
 // still falls back to the profile fetch below, unchanged.
+// SETs per Upstash pipeline. Matches the 500 dynamicUniverseCache already uses
+// for the same reason: the command count is unchanged, this only bounds the
+// size of one request body.
+const SCREENER_WRITE_CHUNK = 500;
 const SCREENER_FUND_KEY_PREFIX = "msh:pickers:screener-fundamentals:v1:";
 // TTL comfortably spans the master-list rebuild cadence (~daily, gated by
 // ensureDailyShuffledMasterList's Eastern-day rollover in app/api/market) so a
@@ -336,9 +340,7 @@ export async function cacheScreenerFundamentals(
   if (!redis || !Array.isArray(rows) || !rows.length) return 0;
 
   const now = new Date().toISOString();
-  const pipeline = redis.pipeline();
-  const written: string[] = [];
-  let queued = 0;
+  const entries: Array<{ symbol: string; entry: ScreenerFundamentalsRow }> = [];
 
   for (const raw of rows) {
     const row = raw as Record<string, unknown>;
@@ -355,27 +357,52 @@ export async function cacheScreenerFundamentals(
       updatedAt: now,
     };
 
-    pipeline.set(`${SCREENER_FUND_KEY_PREFIX}${symbol}`, entry, {
-      ex: SCREENER_FUND_TTL_SECONDS,
-    });
-    written.push(symbol);
-    queued++;
+    entries.push({ symbol, entry });
   }
 
-  if (!queued) return 0;
+  if (!entries.length) return 0;
+
+  const written: string[] = [];
 
   try {
-    await pipeline.exec();
+    // CHUNKED, NOT ONE PIPELINE. This built a single pipeline over every row,
+    // which was ~1,000 SETs and fine. SCREENER_LIMIT is now 3,000, and 3,000
+    // JSON-encoded SETs in one Upstash REST call is a several-hundred-KB POST
+    // approaching the request-size limit.
+    //
+    // THE FAILURE WOULD HAVE BEEN SILENT AND TOTAL. The catch below returns 0,
+    // and this function is the ONLY producer of the industry/sector backfill --
+    // so an oversized pipeline writes nothing, reports `cached: 0`, and the
+    // warning that fires says "industry backfill has no free source this
+    // cycle". That reads as FMP having failed, which is exactly the
+    // absence-vs-failure confusion the header of screenerFundamentals.ts exists
+    // to record (claude/traps/absence-needs-the-producer-to-have-run.md).
+    //
+    // Chunking also means a partial failure is partial: 2,500 rows written and
+    // one chunk lost beats losing all 3,000.
+    for (let i = 0; i < entries.length; i += SCREENER_WRITE_CHUNK) {
+      const group = entries.slice(i, i + SCREENER_WRITE_CHUNK);
+      const pipeline = redis.pipeline();
+      for (const { symbol, entry } of group) {
+        pipeline.set(`${SCREENER_FUND_KEY_PREFIX}${symbol}`, entry, {
+          ex: SCREENER_FUND_TTL_SECONDS,
+        });
+      }
+      await pipeline.exec();
+      for (const { symbol } of group) written.push(symbol);
+    }
     // Staleness bookkeeping for the dataset this function IS the producer of.
     // Without it screenerFundamentals sits in the DATASETS registry with no
     // queue behind it, and the health page can only say "not instrumented" --
     // honest, but a gap where a one-line write would do.
     if (written.length) await markRefreshed("screenerFundamentals", written);
   } catch {
-    return 0; // fail open
+    // Whatever chunks landed before the throw are real and already written, so
+    // report them rather than claiming nothing happened.
+    return written.length; // fail open
   }
 
-  return queued;
+  return written.length;
 }
 
 /**
