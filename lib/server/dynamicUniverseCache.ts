@@ -83,6 +83,41 @@ function chunkMembers<T>(items: T[], size: number): T[][] {
 }
 const SEEN_KEY = "msh:dynamic-universe:v2:seen";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE TWO UNIVERSE CAPS, SIDE BY SIDE, BECAUSE THEY ARE NOT THE SAME NUMBER.
+//
+// Both are 700 today and they are different quantities. They live together so
+// that whoever raises one has to read why the other did not move -- the four
+// builders each carried their own hand-typed 700 with nothing comparing them,
+// and raising three of four would have left them quietly disagreeing about how
+// big the universe is, with the symptom being a pattern page missing names the
+// screener shows rather than an error.
+//
+// ANALYSIS_UNIVERSE_CAP -- how many symbols a single build LOOKS AT.
+//   Read by bullFlagsBuilder, descendingTrianglesBuilder, playsBuilder and
+//   pickersBuilder. It SLICES, per build, non-destructively: lowering it loses
+//   nothing, because the next build with a higher value sees the same
+//   candidates again. Its cost is TIME -- every symbol is a history fetch and a
+//   pass through the indicator stack. The thing that degrades linearly as it
+//   grows is warm-stock-data, which uses a fixed 25-symbol slice per run, so
+//   full coverage of valuation/dividend/analyst data stretches with it (~2.8h
+//   at 416, ~4.7h at 700). REFRESH_SLICE_SIZE is the dial if that matters.
+//
+// MAX_DYNAMIC_UNIVERSE_SIZE -- how much of the rolling candidate pool is KEPT.
+//   It PRUNES: pruneUniverse ZREMs everything past it from the sorted set, so
+//   lowering it DESTROYS the accumulated score history of the symbols it drops
+//   and they have to earn their way back from zero. Its cost is DATA, not time.
+//
+// They also sit on opposite sides of the same pipe: the dynamic universe is ONE
+// INPUT to a pickers build, alongside PRESET_UNIVERSE (~100 mega-caps) and the
+// popular-search promotions, and ANALYSIS_UNIVERSE_CAP bounds the UNION of all
+// three. Folding them into one constant would assert that the pool and
+// everything drawn from it are the same size, which they are not -- it is why
+// the live warm-target universe is 759 against a 700 analysis cap, and why
+// scripts/check-price-tiers.mjs sizes the pre-open buffer against their SUM.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ANALYSIS_UNIVERSE_CAP = 700;
+
 const MAX_DYNAMIC_UNIVERSE_SIZE = 700;
 const ENTRY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
