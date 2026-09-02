@@ -14,6 +14,7 @@ import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { isRegularSessionOpen } from "@/lib/server/marketHours";
+import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
@@ -1343,6 +1344,24 @@ const ORDERED_PICKER_HREFS = new Set<string>([
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
   const { entries, seoEntries, updatedAt, priceOldestTs, priceNewestTs, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
+
+  // THE ROWS THIS PAGE ACTUALLY PUTS ON SCREEN, recorded for the price-tier
+  // signal. Everything past initialVisibleCount sits behind "Show more"
+  // (PickerResultsGrid's sortedEntries.slice(0, visibleCount)), so this is the
+  // set a reader sees a % change for -- which is the claim tier 1 is supposed
+  // to be making, and the one no cron can reconstruct: 33 of the 36 picker
+  // routes are preset pages whose ordering is their own orderBy applied to a
+  // filtered signalRecords, so the page is the only thing that knows.
+  //
+  // Awaited, not detached: an unawaited promise in a server component can be
+  // torn down when the render finishes. Same Redis client and same render path
+  // as the readPricePoolBulk above it, so no new prerender exposure; it never
+  // throws, so a Redis fault costs this route its tier-1 contribution for one
+  // revalidate window and nothing else.
+  await recordAboveFold(
+    config.href,
+    seoEntries.slice(0, initialVisibleCount).map((entry) => entry.symbol)
+  );
 
   // Pages that ship the full universe and apply their own condition client-side
   // (see buildEntries + PickerFilterProvider below), so the checkboxes in
