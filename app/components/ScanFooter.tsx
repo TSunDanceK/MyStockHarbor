@@ -24,6 +24,17 @@ import { usePickerFilter } from "@/app/components/PickerFilterContext";
 //     in every case anyone could produce, so it read as a second opinion that
 //     always agreed -- noise pretending to be information.
 //
+//   * "Updated" gained a price window beside it. "Updated" is the PICKERS BUILD
+//     time -- when the scan ran -- and was the only timestamp on the line, so a
+//     reader had every reason to take it for the age of the % change column
+//     too. It never was. Prices come from the price pool on two different
+//     policies (lib/server/priceTiers.ts: 15 minutes for the attention tier, 30
+//     for the rest), so rows in one table can be twice apart in age, and
+//     outside market hours every one of them is a close rather than a quote.
+//     `priceLabel` states the real spread and says "market closed" when it is.
+//     Cost tiering is legitimate; a page presenting stale data as current is
+//     not.
+//
 //   * "Universe 613" is now "Universe 260 · Pool 353". The 613 was
 //     universeSize + dynamicUniverseCount, a sum of two things that are not the
 //     same kind of thing: 260 symbols actually analyzed, plus a ~353-name
@@ -36,11 +47,20 @@ export default function ScanFooter({
   universeSize,
   poolSize,
   updatedLabel,
+  priceLabel,
 }: {
   serverMatchCount: number;
   universeSize: number | null;
   poolSize: number | null;
   updatedLabel: string;
+  /**
+   * The spread of price ages actually on this page, already formatted, plus
+   * whether the market is open. Null when no row took a pooled price -- omitted
+   * rather than rendered as "unknown", because the rows are then showing their
+   * end-of-day close and "Updated" already describes the only timestamp there
+   * is.
+   */
+  priceLabel: string | null;
 }) {
   const { matchCount } = usePickerFilter();
   const live = matchCount ?? serverMatchCount;
@@ -52,6 +72,7 @@ export default function ScanFooter({
       {poolSize != null ? <> · Pool {poolSize}</> : null}
       {universeSize == null && poolSize == null ? <> · Universe Live</> : null}
       {" "}· Updated {updatedLabel}
+      {priceLabel ? <> · {priceLabel}</> : null}
     </div>
   );
 }

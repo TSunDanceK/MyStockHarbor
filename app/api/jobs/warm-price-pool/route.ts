@@ -10,12 +10,17 @@ export const dynamic = "force-dynamic";
 //   GET /api/jobs/warm-price-pool 504
 //   Vercel Runtime Timeout Error: Task timed out after 60 seconds
 //
-// The slice is ceil(universe/4), so as the universe grew (416 -> 663) the
-// per-run work grew with it: priceCap 166 means 166 SEQUENTIAL stable/quote
-// calls plus up to PE_MAX_PER_RUN (20) ratios-ttm calls, each awaited one at a
-// time and paced by reserveFmpCallSlot. Most runs finished just inside 60s;
-// that one did not, and the whole run was discarded -- so those symbols kept
-// stale prices until the rotation came round again.
+// The slice was ceil(universe/4) at the time, so as the universe grew
+// (416 -> 663) the per-run work grew with it: priceCap 166 means 166 SEQUENTIAL
+// stable/quote calls plus up to PE_MAX_PER_RUN (20) ratios-ttm calls, each
+// awaited one at a time and paced by reserveFmpCallSlot. Most runs finished
+// just inside 60s; that one did not, and the whole run was discarded -- so
+// those symbols kept stale prices until the rotation came round again.
+//
+// The slice is now TTL-selected rather than a fixed fraction, and skipped
+// entirely outside market hours, so a typical run is far smaller. PRICE_MAX_PER_RUN
+// still bounds the worst case -- the first run after the overnight gap, when
+// every symbol is due at once -- which is the run this limit has to survive.
 //
 // 300 (the Pro ceiling) rather than a smaller bump: the run is paced by the FMP
 // budget guard, not by CPU, so the honest fix is to stop cutting it off
@@ -25,13 +30,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 // Cron-driven refresh of the shared price pool (msh:price-pool:v1). PRICE is
-// refreshed for a stalest slice sized so the whole displayed universe is covered
-// in PRICE_TARGET_RUNS runs; PE trickles on its own slower rotation (see
-// lib/server/pricePool.ts). READ-ONLY on page renders, so a page load never
-// spends an FMP call. Reads the symbol set from the already-cached pickers
-// payload. The cadence itself is in the JOBS registry (jobRuns.ts) -- this
-// comment used to name it and was still saying "every 3 min" long after #374
-// moved it to */5.
+// refreshed for whichever symbols are past their own tier's TTL -- 15 minutes
+// for the attention tier, 30 for the rest -- and only inside the buffered US
+// session; PE trickles on its own slower rotation (see lib/server/pricePool.ts,
+// lib/server/priceTiers.ts, lib/server/marketHours.ts). READ-ONLY on page
+// renders, so a page load never spends an FMP call. Reads the symbol set from
+// the already-cached pickers payload. The cadence itself is in the JOBS
+// registry (jobRuns.ts) -- this comment used to name it and was still saying
+// "every 3 min" long after #374 moved it to */5.
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -106,8 +112,10 @@ export async function GET(req: NextRequest) {
     // Displayed symbols UNION the rolling dynamic universe, so a symbol that
     // rotates into the scan is already warm rather than arriving cold.
     // See lib/server/warmTargets.ts for why this must not be a replacement.
-    const { symbols, displayed, universe } = await getWarmTargetSymbols(base);
-    console.log(`[warm-price-pool] targets: ${symbols.length} (displayed ${displayed}, universe ${universe})`);
+    const { symbols, displayed, universe, tier1 } = await getWarmTargetSymbols(base);
+    console.log(
+      `[warm-price-pool] targets: ${symbols.length} (displayed ${displayed}, universe ${universe}, tier1 ${tier1})`
+    );
 
     const result = await warmPricePool(symbols, Date.now());
     console.log("[warm-price-pool]", JSON.stringify(result));
@@ -120,6 +128,20 @@ export async function GET(req: NextRequest) {
       // every consumer treats those fields as optional.
       priceRefreshed: result.priceRefreshed ?? null,
       openCarried: result.openCarried ?? null,
+      // A market-closed run is a healthy skip, not a failure -- but an
+      // UNRECORDED skip is indistinguishable on /cache-health from the job
+      // having stopped. Same reasoning as the lock skip above.
+      skipped: result.skipped ?? null,
+      // The tier policy, made visible. `due` at or below `priceCap` with
+      // `deferredByCap` at 0 means freshness is actually governed by the TTLs;
+      // a persistent non-zero deferral means the per-run cap is the real policy
+      // and the TTLs are aspirational. Recording it is what makes the worst
+      // case observable rather than assumed.
+      tier1: result.tier1 ?? null,
+      due: result.due ?? null,
+      deferredByCap: result.deferredByCap ?? null,
+      quoteFailures: result.quoteFailures ?? null,
+      capacityStopped: result.capacityStopped ?? null,
       reason: result.reason ?? null,
     });
     return NextResponse.json(result);
