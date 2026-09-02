@@ -68,12 +68,29 @@ const TIER1_TTL_SECONDS = 2 * 60 * 60;
 /** Top stocks by attention, plus up to 100 searched symbols. */
 export const TIER1_TTL_MS = 15 * 60_000;
 /** Everything else in the universe. */
-export const TIER2_TTL_MS = 30 * 60_000;
+export const TIER2_TTL_MS = 60 * 60_000;
 
-// 30 rather than 60 is deliberate. The bandwidth difference between them is
-// immaterial at this universe size, and during a volatile session an hour-old
-// percentage change is visibly wrong to anyone with a second source open --
-// which is worse than the saving is worth.
+// 60, CHANGED FROM 30, AND THE OLD ARGUMENT WAS NOT WRONG -- IT WAS SIZED FOR A
+// SMALLER UNIVERSE. It read: "the bandwidth difference is immaterial at this
+// universe size, and during a volatile session an hour-old percentage change is
+// visibly wrong to anyone with a second source open". Both halves were true at
+// 700 symbols. Neither survives 3,000:
+//
+//   15/30 at 3,000   7,000 calls/hour against a usable ceiling of ~6,720.
+//                    117 of 140 permitted calls a minute, sustained for nine
+//                    hours, leaving nothing for history, earnings or
+//                    fundamentals. It does not fit.
+//   15/60 at 3,000   4,500 calls/hour, 75 of 140, ~374 MB/month.
+//
+// So the trade is four times the coverage against a tail that is an hour old
+// rather than half an hour, and the fast tier -- the ~500 names anyone is
+// actually looking at -- keeps its 15 minutes. That is the whole point of
+// having tiers: the degradation lands where it is least visible.
+//
+// AN ADAPTIVE BACKOFF WAS CONSIDERED AND REJECTED. "Do not refresh what is not
+// moving" bought ~22% of a budget that already has a third spare, and its cost
+// was per-symbol drift state whose failure mode is a plausible-looking wrong
+// price with nothing reporting it. Do not build it.
 
 export const TIER1_SEARCH_PROMOTION_CAP = 100;
 
@@ -124,16 +141,96 @@ const FOLD_TTL_SECONDS = 2 * 60 * 60;
 // scripts/check-price-tiers.mjs asserts against the pages themselves.
 export const FOLD_MAX_ROWS_PER_ROUTE = 60;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A BASE THAT WORKS WITH ZERO VISITORS, AND AN ATTENTION LAYER ON TOP.
+//
+// THE DEFECT THIS FIXES IS LIVE, not hypothetical. Two of the three signals
+// this selector read were TRAFFIC-FED -- readAboveFold records a row when a
+// page renders, and readSearchDemand needs three distinct searchers before a
+// symbol counts. The site has essentially no traffic yet, so both are empty and
+// tier 1 collapsed to the mover buckets alone. The design measured attention
+// without ever checking that any existed.
+//
+// #396 made it worse. The picker signal used to be the first 400 rows of the
+// pickers payload, which was arbitrary -- ranked by position in an analysis
+// loop. Moving it to above-the-fold-on-render was right in principle and traded
+// an arbitrary signal for a near-empty one. This fixes both: the arbitrary
+// ordering stays gone, and nothing traffic-fed is load-bearing.
+//
+//   BASE   works with no visitors at all
+//     preset            ~100 hand-curated mega-caps, PRESET_UNIVERSE
+//     dollar volume     price x volume from the pool, top TIER1_DOLLAR_VOLUME_CAP
+//     movers            the free gainer/loser/most-active buckets
+//
+//   LAYER  adds as traffic arrives, never required
+//     searched          capped at TIER1_SEARCH_PROMOTION_CAP
+//     rendered rows     readAboveFold, unchanged
+//
+// DOLLAR VOLUME IS NOT MARKET CAP, AND THE DISTINCTION IS THE WHOLE POINT.
+// Market cap was rejected here in #395 and stays rejected: a live picker list
+// showed FSLY at $3.33B directly above MSFT at $3.72T, and cap ordering would
+// put a $3.7T name nobody has opened in the fast tier. Dollar volume measures
+// how much is actually being TRADED, which is much closer to "whose stale price
+// would be noticed" -- a $3B name can out-trade a sleepy $50B utility. Both
+// price and volume are already on PricePoolRow, so this costs no FMP call.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Top names by price x volume. Fixed, not a fraction of the universe. */
+export const TIER1_DOLLAR_VOLUME_CAP = 300;
+
 export type Tier1Signals = {
-  /** Symbols the last pickers build put on screen. */
-  pickerSymbols: string[];
-  /** Symbols people deliberately selected, most-wanted first. */
-  searchedSymbols: string[];
+  // ---- base: must produce a usable tier 1 with every field below it empty ----
+  /** PRESET_UNIVERSE, the hand-curated mega-caps. */
+  presetSymbols: string[];
+  /** Universe symbols ranked by pooled price x volume, heaviest first. */
+  dollarVolumeRanked: string[];
   /** Today's gainers / losers / most-actives. */
   moverSymbols: string[];
+
+  // ---- layer: traffic-fed, additive, never required ----
+  /** Symbols people deliberately selected, most-wanted first. */
+  searchedSymbols: string[];
+  /** Rows a picker page actually rendered above the fold. */
+  pickerSymbols: string[];
+
   /** The universe the warm jobs maintain; tier 1 is always a subset of it. */
   universe: string[];
 };
+
+/**
+ * Rank universe symbols by pooled dollar volume, heaviest first.
+ *
+ * COLD ROWS ARE UNKNOWN, NOT ZERO, and are left out of the ranking entirely
+ * rather than sorted to the bottom. A symbol with no pool row has no dollar
+ * volume to compare; ranking it last would be asserting it is quiet when the
+ * truth is that nobody has asked yet, and a newly admitted mover would be
+ * exactly the symbol that gets it wrong.
+ *
+ * Leaving it out is safe because tier only decides HOW OFTEN a symbol refreshes
+ * after its first price, and isPriceDue already treats a symbol with no `ts` as
+ * DUE -- so a cold symbol is picked up on the very next run whatever tier it is
+ * in, gains a row, and ranks properly from then on. The exposure is one run.
+ *
+ * The tie-break on symbol is not cosmetic: without it two runs over identical
+ * pool data could produce different tier 1 sets, and the membership of the fast
+ * tier would flicker for reasons nothing could explain.
+ */
+export function rankByDollarVolume(
+  rows: Map<string, { price: number | null; volume: number | null }>,
+  universe: string[]
+): string[] {
+  const scored: Array<{ symbol: string; dollars: number }> = [];
+  for (const raw of universe) {
+    const symbol = clean(raw);
+    const row = rows.get(symbol);
+    if (!row || row.price == null || row.volume == null) continue;
+    const dollars = row.price * row.volume;
+    if (!Number.isFinite(dollars) || dollars <= 0) continue;
+    scored.push({ symbol, dollars });
+  }
+  scored.sort((a, b) => b.dollars - a.dollars || a.symbol.localeCompare(b.symbol));
+  return scored.map((s) => s.symbol);
+}
 
 function clean(value: string) {
   return String(value || "").trim().toUpperCase();
@@ -155,10 +252,16 @@ export function selectTier1(signals: Tier1Signals): string[] {
   const universe = new Set(signals.universe.map(clean).filter(Boolean));
   if (!universe.size) return [];
 
-  const take = (list: string[], cap: number) => {
+  // `list ?? []` is not defensive clutter. deriveTier1 assembles five arrays and
+  // every one of them can be absent if a future caller forgets a field -- and a
+  // throw here does not degrade tier 1, it propagates out through
+  // getWarmTargetSymbols and takes the work list for ALL THREE warm jobs with
+  // it. A selector whose entire purpose is "never return nothing" must not be
+  // the thing that returns nothing by throwing.
+  const take = (list: string[] | undefined | null, cap: number) => {
     const out: string[] = [];
     const seen = new Set<string>();
-    for (const raw of list) {
+    for (const raw of list ?? []) {
       const symbol = clean(raw);
       // Tier 1 NEVER admits a symbol outside the warm universe. Promoting one
       // would hand a stranger with a search box the power to add work to every
@@ -173,8 +276,15 @@ export function selectTier1(signals: Tier1Signals): string[] {
 
   return Array.from(
     new Set([
-      ...take(signals.searchedSymbols, TIER1_SEARCH_PROMOTION_CAP),
+      // BASE FIRST, so that when a cap does bind it is the traffic-fed layer
+      // that gives way -- the opposite would let a quiet week shrink the fast
+      // tier, which is the failure this ordering exists to prevent.
+      ...take(signals.presetSymbols, signals.presetSymbols?.length ?? 0),
+      ...take(signals.dollarVolumeRanked, TIER1_DOLLAR_VOLUME_CAP),
       ...take(signals.moverSymbols, TIER1_MOVER_CAP),
+
+      // LAYER.
+      ...take(signals.searchedSymbols, TIER1_SEARCH_PROMOTION_CAP),
       // NO CAP. There is nothing arbitrary left to bound: this list is already
       // bounded by what the pages rendered, which is the real quantity. Adding
       // a number here would be trimming the signal until it looked right, which
