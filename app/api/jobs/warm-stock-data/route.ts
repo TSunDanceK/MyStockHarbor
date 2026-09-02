@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Raised alongside warm-price-pool, which demonstrably 504'd at 60s once the
 // universe grew. This route is arguably MORE exposed: REFRESH_SLICE_SIZE is 25
-// and CALLS_PER_SYMBOL is 8, so a full slice is ~200 sequential FMP calls in
+// and a symbol costs 5 calls on the clock-only path or 8 when its filing-driven
+// endpoints are also due, so a full slice is 125-200 sequential FMP calls in
 // one run -- a fixed cost that has always been close to the old 60s ceiling,
 // independent of universe size. It simply had not been observed failing yet.
 export const maxDuration = 300;
@@ -49,6 +50,12 @@ export async function GET(req: NextRequest) {
     const result = await warmStockData(symbols, Date.now());
     console.log("[warm-stock-data]", JSON.stringify(result));
     await recordJobRun("warm-stock-data", result.ok !== false, {
+      // How much of the run was filing-driven, and how many symbols the
+      // earnings index knew about. quarterlyRefreshes stuck at 0 across many
+      // runs means the trigger is inert and everything is riding the 120-day
+      // floor; scheduleSize at 0 means the index itself failed to build.
+      quarterlyRefreshes: result.quarterlyRefreshes ?? null,
+      scheduleSize: result.scheduleSize ?? null,
       targets: symbols.length,
       written: result.written ?? null,
       reason: result.reason ?? null,
