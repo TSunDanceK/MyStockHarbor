@@ -4,7 +4,8 @@ import { readDynamicUniverse } from "./dynamicUniverseCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readSearchDemand } from "./searchDemand";
 import { readMarketState } from "./marketState";
-import { selectTier1, writeTier1, TIER1_SEARCH_PROMOTION_CAP } from "./priceTiers";
+import { selectTier1, writeTier1, readAboveFold, TIER1_SEARCH_PROMOTION_CAP } from "./priceTiers";
+import { PICKER_ROUTES } from "../pickerRoutes";
 
 // Single source of truth for "which symbols do the background warm jobs
 // maintain data for" -- used by warm-price-pool, warm-stock-data and
@@ -208,7 +209,7 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
   // It rides this cache's TTL for the same reason the symbol list does: 30
   // minutes bounds how long a newly-interesting symbol waits to be promoted,
   // which is well inside the 15 minutes the promotion buys it back.
-  const tier1 = await deriveTier1(displayed, symbols);
+  const tier1 = await deriveTier1(symbols);
   await writeTier1(tier1);
 
   const targets: WarmTargets = {
@@ -235,7 +236,13 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
  * of three sources is worse than three, but far better than none -- an empty
  * tier 1 demotes the entire site to the 30-minute policy.
  */
-async function deriveTier1(pickerSymbols: string[], universe: string[]): Promise<string[]> {
+async function deriveTier1(universe: string[]): Promise<string[]> {
+  // What the picker pages actually put on screen, recorded by the pages
+  // themselves. NOT the first N of signalRecords: that array is pushed in
+  // universe-iteration order and never sorted, so slicing it promoted symbols
+  // for their position in an analysis loop. See priceTiers.ts.
+  const pickerSymbols = await readAboveFold(PICKER_ROUTES).catch(() => [] as string[]);
+
   const searchedSymbols = await readSearchDemand(TIER1_SEARCH_PROMOTION_CAP)
     .then((rows) => rows.map((r) => r.symbol))
     .catch(() => [] as string[]);
