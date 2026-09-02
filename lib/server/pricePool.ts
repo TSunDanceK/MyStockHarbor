@@ -9,6 +9,7 @@
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
 import { markRefreshed, registerSymbols, deferSymbol, readDeferred } from "./stalenessQueue";
+import { isFmpErrorEnvelope } from "./fmpResponse";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import {
@@ -544,10 +545,38 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteOutco
     if (!res.ok) return { kind: "refused", status: res.status };
     const json = await res.json().catch(() => null);
     if (json === null) return { kind: "refused", status: res.status };
+
+    // AN ERROR ENVELOPE IS THE SERVICE TALKING, SO IT IS "refused", NOT
+    // "empty". This hole was fixed in stockDataCache's hasRows and missed here,
+    // on the one path #404's eviction gate depends on. FMP answers a rate limit
+    // or a bad key with HTTP 200 and {"Error Message": "..."}: res.ok is true,
+    // the body is non-null, and `Array.isArray(json) ? json[0] : json` hands
+    // the envelope back AS A ROW. The call site then treated seven nulls as a
+    // successful quote -- overwriting a live price with null, stamping `ts`
+    // fresh, and CLEARING failStreak and failAt.
+    //
+    // Both of #404's directions broke from this one branch: a rate-limited
+    // afternoon nulled out live prices and marked them green, and a genuinely
+    // delisted ticker answered with an envelope had its streak reset every run,
+    // so it could never accumulate toward eviction.
+    //
+    // Classifying it "empty" would fix the first half and keep the second: an
+    // envelope must not park a symbol either.
+    if (isFmpErrorEnvelope(json)) return { kind: "refused", status: res.status };
+
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
     // HTTP 200 with no row is FMP answering "I have nothing for this symbol",
     // which is the delisting signal.
     if (!row) return { kind: "empty" };
+    // A BARE `{}` IS TREATED AS A REFUSAL, NOT AN EMPTY, AND THE REASON IS THE
+    // ASYMMETRY. FMP says "no such symbol" with `[]`, not with `{}`; a bare
+    // object with no keys is far more likely a truncated or malformed body. On
+    // an ambiguous response the two mistakes do not cost the same -- calling it
+    // refused costs one retry, calling it empty feeds a deferral and, through
+    // #404, an eviction. The non-destructive branch wins ties.
+    if (!Array.isArray(json) && !Object.keys(row).length) {
+      return { kind: "refused", status: res.status };
+    }
     return {
       kind: "row",
       quote: {
@@ -965,13 +994,29 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // onto it rather than clobbering the fresh bucket price/changePct/ts.
     const already = payload[sym];
     payload[sym] = {
-      price: quote ? quote.price : already?.price ?? prev?.price ?? null,
-      changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
-      volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
-      marketCap: quote ? quote.marketCap : already?.marketCap ?? prev?.marketCap ?? null,
-      open: quote ? quote.open : already?.open ?? prev?.open ?? null,
-      dayHigh: quote ? quote.dayHigh : already?.dayHigh ?? prev?.dayHigh ?? null,
-      dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
+      // A FIELD MISSING FROM A VALID ROW FALLS BACK, IT DOES NOT NULL OUT.
+      //
+      // These read `quote ? quote.X : ...` with no fallback ON THE QUOTE
+      // BRANCH, so a row where `price` was absent or non-finite -- `num()`
+      // returns null for both -- replaced a good stored price with null AND
+      // stamped `ts` as freshly refreshed. The mover-bucket path above already
+      // does `row.price ?? prev?.price ?? null`; the per-symbol path did not.
+      //
+      // Carrying forward is right here for the same reason it is right there: a
+      // field FMP did not send this time is unknown, not zero, and the previous
+      // value is the best answer anyone has. `ts` still advances, because the
+      // quote itself did land.
+      price: quote ? quote.price ?? prev?.price ?? null : already?.price ?? prev?.price ?? null,
+      changePct: quote
+        ? quote.changePct ?? prev?.changePct ?? null
+        : already?.changePct ?? prev?.changePct ?? null,
+      volume: quote ? quote.volume ?? prev?.volume ?? null : already?.volume ?? prev?.volume ?? null,
+      marketCap: quote
+        ? quote.marketCap ?? prev?.marketCap ?? null
+        : already?.marketCap ?? prev?.marketCap ?? null,
+      open: quote ? quote.open ?? prev?.open ?? null : already?.open ?? prev?.open ?? null,
+      dayHigh: quote ? quote.dayHigh ?? prev?.dayHigh ?? null : already?.dayHigh ?? prev?.dayHigh ?? null,
+      dayLow: quote ? quote.dayLow ?? prev?.dayLow ?? null : already?.dayLow ?? prev?.dayLow ?? null,
       // carry forward last-known PE if this run didn't (re)fetch a value
       pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
       ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,

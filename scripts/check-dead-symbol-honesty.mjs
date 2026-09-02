@@ -155,6 +155,9 @@ if (!quoteFn) {
 const classifier = await lift(
   `export ${quoteFn}`,
   `const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+   const isFmpErrorEnvelope = (j) =>
+     !!j && typeof j === "object" && !Array.isArray(j) &&
+     Object.keys(j).some((k) => ["error message", "error"].includes(k.toLowerCase()));
    let RESERVE_THROWS = false;
    const reserveFmpCallSlot = async () => { if (RESERVE_THROWS) throw new Error("capacity-timeout"); };
    let NEXT;
@@ -204,6 +207,46 @@ check(
   (await outcome(res(200, [{ price: 10, volume: 5 }]))).kind === "row",
   ""
 );
+
+// THE HOLE THIS PATH HAD AFTER hasRows WAS FIXED, on the one path #404's
+// eviction gate depends on. FMP answers a rate limit or a bad key with HTTP
+// 200 and {"Error Message": "..."}: res.ok is true, the body is non-null, and
+// `Array.isArray(json) ? json[0] : json` hands the envelope back AS A ROW. The
+// call site then read seven nulls as a successful quote -- overwriting a live
+// price, stamping ts fresh, and CLEARING failStreak and failAt, so a genuinely
+// delisted ticker answered this way could never accumulate toward eviction.
+check(
+  "an FMP error envelope is a REFUSAL, not a row and not an empty",
+  (await outcome(res(200, { "Error Message": "Limit Reach" }))).kind === "refused" &&
+    (await outcome(res(200, { error: "Invalid API KEY" }))).kind === "refused",
+  "classifying it 'empty' would fix the price corruption and keep the eviction " +
+    "half — an envelope must not park a symbol either"
+);
+// A BARE {} IS A REFUSAL, and the reason is asymmetry rather than certainty.
+// FMP says "no such symbol" with [], not with {}; a keyless object is far more
+// likely a truncated body. Calling it refused costs one retry; calling it empty
+// feeds a deferral and, through #404, an eviction. Ties go to the
+// non-destructive branch.
+check(
+  "a bare {} is a refusal, because ties go to the non-destructive branch",
+  (await outcome(res(200, {}))).kind === "refused",
+  "[] is how FMP says 'nothing for this symbol'; {} is how a response arrives " +
+    "broken"
+);
+check(
+  "the envelope test is shared, not a second copy",
+  /isFmpErrorEnvelope/.test(pool) && /hasFmpRows/.test(stock),
+  "hasRows and this are the same question about the same API — two copies is " +
+    "the 'eight chances for the ninth endpoint' argument applied to itself, and " +
+    "it is exactly how this path was missed the first time"
+);
+check(
+  "a valid row missing a field falls back rather than nulling the stored value",
+  /price: quote \? quote\.price \?\? prev\?\.price \?\? null/.test(pool),
+  "num() returns null for absent AND non-finite, so `quote ? quote.price : ...` " +
+    "replaced a good price with null while stamping ts fresh — the mover-bucket " +
+    "path already carried prev forward, the per-symbol path did not"
+);
 check(
   "only an empty increments the streak",
   /lastOutcome === "empty"/.test(pool) && /if \(wantPrice && lastOutcome === "empty"\)/.test(pool),
@@ -228,12 +271,28 @@ check(
 // ── 3. Nothing landed must not read as fresh ───────────────────────────────
 console.log("\n3. A symbol where no endpoint answered is not marked refreshed");
 
-const hasRowsFn = (stock.match(/function hasRows\([\s\S]*?\n\}/) ?? [])[0];
-if (!hasRowsFn) {
-  console.error("FAIL: could not extract hasRows from stockDataCache — measuring nothing.");
+// THE SHARED HELPER, not stockDataCache's one-line delegate. The logic moved
+// to lib/server/fmpResponse.ts when the quote path turned out to need the same
+// test, so lifting hasRows would now be lifting a call to something that is not
+// in scope -- and a check that tests a wrapper rather than the thing it wraps
+// is measuring the import statement.
+const shared = readCodeOnly("lib/server/fmpResponse.ts", { minRetainedFraction: 0.005 });
+const envelopeFn = (shared.match(/export function isFmpErrorEnvelope\([\s\S]*?\n\}/) ?? [])[0];
+const hasRowsFn = (shared.match(/export function hasFmpRows\([\s\S]*?\n\}/) ?? [])[0];
+if (!envelopeFn || !hasRowsFn) {
+  console.error(
+    "FAIL: could not extract isFmpErrorEnvelope/hasFmpRows from fmpResponse.ts — " +
+      "measuring nothing."
+  );
   process.exit(1);
 }
-const rows = await lift(`export ${hasRowsFn}`);
+const lifted = await lift(`${envelopeFn}\n${hasRowsFn}\nexport { hasFmpRows as hasRows };`);
+const rows = lifted;
+check(
+  "stockDataCache delegates to the shared test rather than keeping its own",
+  /return hasFmpRows\(json\);/.test(stock),
+  "one copy, because it is one question about one API"
+);
 
 // FMP answers a delisted ticker with HTTP 200 and [], so res.ok is true for a
 // symbol that no longer exists. That is the case this has to separate.
