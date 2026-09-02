@@ -10,7 +10,8 @@ import { deregisterSymbols } from "../../../../lib/server/stalenessQueue";
 import {
   recordAbsence,
   clearAbsence,
-  shouldEvict,
+  evictionAction,
+  claimPresetHandEditAlarm,
   evictSymbol,
   poolLooksDegraded,
   EVICTION_MIN_FAIL_STREAK,
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest) {
   const sweep = {
     absent: 0,
     evicted: [] as string[],
+    presetHandEdit: [] as string[],
     skipped: null as string | null,
   };
   if (!result.ok || !result.symbols.length) {
@@ -136,7 +138,29 @@ export async function GET(req: NextRequest) {
         if (failStreak < EVICTION_MIN_FAIL_STREAK) continue;
         const days = await recordAbsence(symbol);
         sweep.absent++;
-        if (shouldEvict(days, failStreak, row?.failAt, nowMs)) {
+        const action = evictionAction(symbol, days, failStreak, row?.failAt, nowMs);
+        if (action === "hand-edit") {
+          // A CURATED SYMBOL MET EVERY EVICTION CONDITION. Evicting it would
+          // delete its caches and change nothing: PRESET_UNIVERSE is an array
+          // in the bundle, so the next pickers build puts the ticker straight
+          // back. See symbolEviction.ts -- this is the loop, replaced by a
+          // message to a person.
+          sweep.presetHandEdit.push(symbol);
+          // ERROR, NOT WARN. Every other line this job emits is routine; this
+          // one is the only one asking somebody to change a file, and it
+          // arrives at most once a month per symbol so the level costs nothing.
+          if (await claimPresetHandEditAlarm(symbol)) {
+            console.error(
+              `[screener-fundamentals] PRESET UNIVERSE NEEDS A HAND EDIT: ${symbol} ` +
+                `has been absent from the screener for ${days} day(s) and is failing ` +
+                `quotes (streak ${failStreak}). It cannot be evicted -- it is hardcoded ` +
+                `in lib/server/presetUniverse.ts. Check whether it was renamed, ` +
+                `acquired or delisted, then edit that array and redeploy.`
+            );
+          }
+          continue;
+        }
+        if (action === "evict") {
           await evictSymbol(symbol);
           sweep.evicted.push(symbol);
         }
@@ -168,6 +192,15 @@ export async function GET(req: NextRequest) {
     // shape -- it means the corroboration window is doing its job.
     absentAndFailing: sweep.absent,
     evicted: sweep.evicted.length,
+    // THE SYMBOLS, NOT A COUNT, AND ON EVERY RUN. The log line above is
+    // rationed to once a month per symbol so it cannot become churn; this
+    // field is the standing state, so a dead curated ticker is still visible
+    // to anyone reading the record on day thirty. A count would say "something
+    // needs a hand edit" without saying what, which is not an actionable
+    // signal -- and the list is at most a handful of names. Joined rather than
+    // an array because a JobRun summary value is a scalar; null when there is
+    // nothing to report, so the field reads as "clean" rather than as "".
+    presetNeedsHandEdit: sweep.presetHandEdit.join(", ") || null,
     // WHY A DAY LOOKED CLEAN. Without this, "the sweep ran and found nothing"
     // and "the sweep never ran" are the same record -- and the second is the
     // more likely one, since it happens whenever the self-fetch is challenged

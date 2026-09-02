@@ -571,6 +571,184 @@ check(
     "candidates"
 );
 
+// ── 5. The preset list is hand-edited, never evicted ───────────────────────
+console.log("\n5. A dead PRESET_UNIVERSE symbol alarms once instead of looping");
+
+// WHY THIS IS NOT AN EVICTION. evictSymbol deletes Redis keys; PRESET_UNIVERSE
+// is a hardcoded array in the bundle. Evicting one of its symbols removes the
+// caches and changes nothing -- the next pickers build re-injects the ticker
+// from the array, it re-fails, and three days later it is evicted again. An
+// evict -> reinject -> refail loop that fills the log with one name while the
+// only real remedy, editing the file, is something nobody is told about.
+// META is in that list and FB -> META is exactly the rename case.
+//
+// RUN, NOT GREPPED, and run against the SHIPPED ARRAY rather than an injected
+// fixture: "META is exempt" is a claim about the list's contents as much as
+// about the branch, and a check that supplies its own set proves only half.
+// The alarm marker key needs no assertion of its own here -- it is a
+// `${PREFIX}${symbol}` shape, so section 2's derived scan fails if it is ever
+// dropped from PER_SYMBOL_KEYS.
+const presetSrc = readCodeOnly("lib/server/presetUniverse.ts");
+const presetLiteral = (presetSrc.match(/PRESET_UNIVERSE: string\[\] = \[([\s\S]*?)\];/) ?? [])[1];
+const presetList = presetLiteral
+  ? [...presetLiteral.matchAll(/"([^"]+)"/g)].map((m) => m[1])
+  : [];
+const actionFn = (evict.match(/export function evictionAction\([\s\S]*?\n\}/) ?? [])[0];
+const claimFn = (evict.match(/export async function claimPresetHandEditAlarm\([\s\S]*?\n\}/) ?? [])[0];
+if (!actionFn || !claimFn || presetList.length < 50 || !presetList.includes("META")) {
+  console.error(
+    `FAIL: could not extract evictionAction (${!!actionFn}), ` +
+      `claimPresetHandEditAlarm (${!!claimFn}), or the shipped preset list ` +
+      `(${presetList.length} symbols, META ${presetList.includes("META") ? "in" : "MISSING"}) ` +
+      `— an empty preset set makes every assertion below pass by exempting nothing.`
+  );
+  process.exit(1);
+}
+
+const evicting = await lift(
+  `${fn}\n${actionFn}`,
+  `const EVICTION_CORROBORATION_DAYS = ${days};
+const EVICTION_MIN_FAIL_STREAK = ${streak};
+const EVICTION_FAIL_MAX_AGE_MS = ${maxAgeMs};
+const PRESET_SYMBOLS = new Set(${JSON.stringify(presetList)});`
+);
+
+check(
+  "a preset symbol meeting EVERY eviction condition is not evicted",
+  evicting.evictionAction("META", days, streak, fresh, NOW) === "hand-edit",
+  `${days} days absent and a streak of ${streak} — the same inputs that evict ` +
+    `any other symbol. Called without a preset argument, so this is the array ` +
+    `that actually ships`
+);
+check(
+  "a symbol outside the list still evicts on those conditions",
+  evicting.evictionAction("ZZZZ", days, streak, fresh, NOW) === "evict",
+  "an exemption that swallowed everything would look identical on the record " +
+    "to a sweep that never found anything"
+);
+check(
+  "the exemption does not bypass the evidence rule",
+  evicting.evictionAction("META", 1, streak, fresh, NOW) === "keep" &&
+    evicting.evictionAction("META", days, 0, fresh, NOW) === "keep",
+  "a preset symbol with no case to answer must be silent, not alarmed about — " +
+    "otherwise the alarm fires for ~100 mega-caps and means nothing"
+);
+check(
+  "the exemption survives a formatting difference",
+  evicting.evictionAction(" meta ", days, streak, fresh, NOW) === "hand-edit",
+  "a raw `has` against a lower-cased or padded pool symbol would miss the " +
+    "exemption and evict a curated name — the exact outcome this prevents, " +
+    "reached through whitespace"
+);
+
+// THE ALARM IS ONCE PER SYMBOL, and that is the requirement rather than a
+// nicety: a message that repeats every day is the same log-filling churn the
+// loop produced, and gets muted the same way. Run against a Redis stub that
+// implements SET NX, because "does it pass nx" and "does it read the reply
+// correctly" are two different bugs and only running catches the second.
+const store = new Map();
+// THE CONSTANTS THE FUNCTION CLOSES OVER, INJECTED FROM SOURCE. Without them
+// the lifted body throws a ReferenceError inside its own try, the catch
+// returns false, and "the alarm can never be claimed" is indistinguishable
+// from "the fixture was broken" — a fail-closed catch hides a broken test as
+// readily as it hides a broken Redis. Read rather than hardcoded so a renamed
+// constant fails loudly here instead of quietly downgrading the assertion.
+const alarmPrefix = (evict.match(/PRESET_ALARM_KEY_PREFIX = "([^"]+)"/) ?? [])[1];
+const alarmTtl = Number(
+  Function(
+    `"use strict"; return (${
+      (evict.match(/PRESET_ALARM_TTL_SECONDS = ([0-9 *]+);/) ?? [])[1] ?? "0"
+    });`
+  )()
+);
+if (!alarmPrefix || !alarmTtl) {
+  console.error(
+    `FAIL: could not read PRESET_ALARM_KEY_PREFIX (${alarmPrefix}) or ` +
+      `PRESET_ALARM_TTL_SECONDS (${alarmTtl}) — the lifted claim would throw ` +
+      `into its own catch and report a false that means nothing.`
+  );
+  process.exit(1);
+}
+const stubRedis = `const PRESET_ALARM_KEY_PREFIX = ${JSON.stringify(alarmPrefix)};
+const PRESET_ALARM_TTL_SECONDS = ${alarmTtl};
+const redis = {
+  set: async (key, value, opts) => {
+    if (opts && opts.nx && __store.has(key)) return null;
+    __store.set(key, value);
+    return "OK";
+  },
+};
+const dayStamp = () => "2026-09-02";`;
+// Assigned BEFORE the lift: the module body reads it at import time, and a
+// store handed over afterwards is `undefined` in there — which is a stub that
+// throws rather than one that answers.
+globalThis.__EVICT_ALARM_STORE = store;
+const alarm = await lift(claimFn, `const __store = globalThis.__EVICT_ALARM_STORE;\n${stubRedis}`);
+const first = await alarm.claimPresetHandEditAlarm("META", NOW);
+const second = await alarm.claimPresetHandEditAlarm("META", NOW);
+const other = await alarm.claimPresetHandEditAlarm("INTC", NOW);
+check(
+  "the alarm can be claimed once and then not again",
+  first === true && second === false,
+  "SET NX makes the claim and the test one round trip, so two overlapping runs " +
+    "cannot both win it — a read-then-write would let them"
+);
+check(
+  "the claim is per symbol, not a global mute",
+  other === true,
+  "a second dead preset name must still be heard while the first is still on file"
+);
+check(
+  "the marker outlives a day by a wide margin",
+  alarmTtl >= 7 * 24 * 60 * 60 && alarmTtl <= 90 * 24 * 60 * 60,
+  `${alarmTtl / 86_400} days — a TTL near the daily cron's period is the loop ` +
+    `with extra steps, and a permanent marker makes one missed line the only ` +
+    `warning that will ever exist`
+);
+const noRedis = await lift(
+  claimFn,
+  `const PRESET_ALARM_KEY_PREFIX = "x:";
+const PRESET_ALARM_TTL_SECONDS = 1;
+const redis = null;
+const dayStamp = () => "x";`
+);
+check(
+  "with no Redis the alarm fails CLOSED",
+  (await noRedis.claimPresetHandEditAlarm("META", NOW)) === false,
+  "an alarm that cannot be de-duplicated is the loop; the run record still " +
+    "names the symbol either way, so nothing is lost by staying quiet"
+);
+
+// THE WIRING, BY ORDER RATHER THAN BY PROXIMITY. Both halves of this can
+// invert silently: the branch could fall through into evictSymbol, and the
+// record push could end up INSIDE the once-a-month claim, which would make the
+// standing state as rationed as the shouting.
+const handIdx = job.indexOf('if (action === "hand-edit")');
+const pushIdx = job.indexOf("sweep.presetHandEdit.push(symbol);");
+const claimIdx = job.indexOf("if (await claimPresetHandEditAlarm(symbol))");
+const contIdx = handIdx === -1 ? -1 : job.indexOf("continue;", handIdx);
+const evictIdx = job.indexOf("await evictSymbol(symbol);");
+check(
+  "the sweep decides through evictionAction, and hand-edit returns before it",
+  /const action = evictionAction\(symbol, days, failStreak, row\?\.failAt, nowMs\);/.test(job) &&
+    !/shouldEvict/.test(job) &&
+    handIdx !== -1 &&
+    contIdx !== -1 &&
+    evictIdx !== -1 &&
+    contIdx < evictIdx,
+  `hand-edit branch at ${handIdx}, its continue at ${contIdx}, evictSymbol at ` +
+    `${evictIdx} — the branch has to LEAVE the iteration, not merely log before ` +
+    `deleting the keys anyway`
+);
+check(
+  "the symbol is recorded on every run, and only the shouting is rationed",
+  pushIdx !== -1 && claimIdx !== -1 && pushIdx < claimIdx &&
+    /presetNeedsHandEdit: sweep\.presetHandEdit\.join\(", "\) \|\| null,/.test(job),
+  "the log line is claimed at most once a month, so the run record is what a " +
+    "person reading on day thirty sees — and it names the ticker rather than " +
+    "counting it, because 'something needs a hand edit' is not actionable"
+);
+
 console.log(
   failures === 0
     ? "\nAll eviction assertions hold.\n"

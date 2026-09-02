@@ -32,6 +32,7 @@
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { PRESET_UNIVERSE } from "./presetUniverse";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -95,6 +96,99 @@ export function shouldEvict(
   // since" is not evidence that a symbol is delisted.
   if (!failAt || !Number.isFinite(failAt)) return false;
   return nowMs - failAt <= EVICTION_FAIL_MAX_AGE_MS;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PRESET LIST CANNOT BE EVICTED, ONLY HAND-EDITED.
+//
+// PRESET_UNIVERSE's ~100 mega-caps reach this rule like anything else:
+//
+//   pickersBuilder.ts  fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length)
+//     -> universe -> signalRecords -> getWarmTargetSymbols()
+//     -> warm-screener-fundamentals  universe.filter(s => !present.has(s))
+//
+// but evictSymbol deletes Redis keys, and PRESET_UNIVERSE is a hardcoded
+// TypeScript array in the bundle. There is no key to delete. So evicting one
+// removes its caches, the next pickers build re-injects the same ticker from
+// the array, it re-fails, three days later it is evicted again -- an
+// evict -> reinject -> refail loop that never resolves, filling the eviction
+// log with one ticker while the actual remedy (edit the file, redeploy) is
+// something no human is ever told about.
+//
+// This is not hypothetical for THIS list: META is in it, and FB -> META is
+// exactly the rename case that would trigger the rule.
+//
+// SO A DEAD PRESET SYMBOL IS AN ALARM, NOT AN EVICTION. The action a person
+// has to take is a hand edit, so the output has to be a message addressed to a
+// person -- and it has to arrive ONCE, because a message that repeats daily is
+// the same log-filling churn in a different colour, and gets muted the same way.
+//
+// The exemption is deliberately wide: every preset symbol, not just the ones a
+// rename could explain. If a curated mega-cap stops quoting for three days,
+// somebody should look at it by hand whatever the cause.
+export const PRESET_SYMBOLS: ReadonlySet<string> = new Set(
+  PRESET_UNIVERSE.map((s) => s.trim().toUpperCase())
+);
+
+/** keep: no case to answer. evict: remove it. hand-edit: a person must. */
+export type EvictionAction = "keep" | "evict" | "hand-edit";
+
+/**
+ * What should happen to this symbol?
+ *
+ * PURE, and it takes the preset set as an argument DEFAULTED to the real one,
+ * so the invariant check can both run it against a fabricated set and run it
+ * against the shipped list -- "META is exempt" is a claim about the array's
+ * contents as much as about this branch, and a check that injects its own set
+ * proves only half of it.
+ *
+ * Normalised on the way in. The pool stores symbols as the screener returns
+ * them; if one ever arrives lower-cased or padded, a raw `has` would miss the
+ * exemption and evict a preset name -- the exact outcome this exists to
+ * prevent, arrived at through a formatting difference.
+ */
+export function evictionAction(
+  symbol: string,
+  absenceDays: number,
+  failStreak: number,
+  failAt: number | undefined,
+  nowMs: number,
+  presets: ReadonlySet<string> = PRESET_SYMBOLS
+): EvictionAction {
+  if (!shouldEvict(absenceDays, failStreak, failAt, nowMs)) return "keep";
+  return presets.has(String(symbol ?? "").trim().toUpperCase()) ? "hand-edit" : "evict";
+}
+
+const PRESET_ALARM_KEY_PREFIX = "msh:evict:preset-alarm:v1:";
+// LONG ENOUGH TO BE "ONCE", SHORT ENOUGH NOT TO BE "NEVER AGAIN". A permanent
+// marker means one missed log line is the only warning that will ever exist;
+// a daily one is the churn this replaces. A month is the compromise, and the
+// run record below carries the symbol EVERY day regardless -- the state is
+// always visible, it is only the shouting that is rationed.
+const PRESET_ALARM_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * Claim the right to shout about this symbol. True at most once a month.
+ *
+ * SET NX is the whole mechanism: the claim and the test are one round trip, so
+ * two runs overlapping cannot both win it. Fails CLOSED (returns false) with no
+ * Redis or on an error -- an alarm that cannot be de-duplicated is the loop,
+ * and the run record still names the symbol either way.
+ */
+export async function claimPresetHandEditAlarm(
+  symbol: string,
+  nowMs = Date.now()
+): Promise<boolean> {
+  if (!redis || !symbol) return false;
+  try {
+    const res = await redis.set(`${PRESET_ALARM_KEY_PREFIX}${symbol}`, dayStamp(nowMs), {
+      ex: PRESET_ALARM_TTL_SECONDS,
+      nx: true,
+    });
+    return res === "OK";
+  } catch {
+    return false;
+  }
 }
 
 // A run whose deferrals were suppressed wholesale, or which spent most of its
@@ -309,6 +403,12 @@ export const PER_SYMBOL_KEYS: PerSymbolKey[] = [
   // symbol that is re-admitted later starts with days of stale evidence
   // already against it, and could be evicted again on its first bad quote.
   { prefix: "msh:evict:absent:v1:", sep: "" },
+  // The hand-edit alarm marker. A preset symbol is never evicted, so this is
+  // only reachable after somebody REMOVES the ticker from PRESET_UNIVERSE --
+  // at which point it is an ordinary symbol and its marker should go with the
+  // rest of its state, or a later re-admission starts with the alarm already
+  // claimed and silently un-warnable.
+  { prefix: "msh:evict:preset-alarm:v1:", sep: "" },
 ];
 
 // THE TWO HASHES ARE THE ACTUAL LEAK. Their fields carry no TTL and the
