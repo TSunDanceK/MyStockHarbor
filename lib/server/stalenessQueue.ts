@@ -308,6 +308,35 @@ export async function deferSymbol(
 }
 
 /**
+ * Remove symbols from EVERY dataset's queue and defer set.
+ *
+ * WHY THIS DID NOT EXIST. The only ZREM in this file clears a deferral, so
+ * `tracked = ZCARD(queueKey)` only ever grew. An evicted symbol stayed a member
+ * of all eight queues forever and was counted permanently stale in every
+ * /cache-health denominator -- so removing a dead ticker made the health page
+ * WORSE, which is a fine reason nobody did it.
+ *
+ * Across all datasets rather than one, deliberately. A symbol removed from the
+ * site is removed from the site; leaving it in six queues and out of two is a
+ * state nothing else in this file can express and nothing downstream expects.
+ */
+export async function deregisterSymbols(symbols: string[]): Promise<void> {
+  if (!redis || !symbols.length) return;
+  const members = symbols.filter(Boolean);
+  if (!members.length) return;
+  try {
+    const p = redis.pipeline();
+    for (const dataset of Object.keys(DATASETS) as DatasetKey[]) {
+      p.zrem(queueKey(dataset), ...members);
+      p.zrem(deferKey(dataset), ...members);
+    }
+    await p.exec();
+  } catch {
+    // bookkeeping -- never throws into the caller
+  }
+}
+
+/**
  * The symbols currently deferred for a dataset.
  *
  * EXISTS BECAUSE NOT EVERY CONSUMER USES claimStalest. The price pool picks its
