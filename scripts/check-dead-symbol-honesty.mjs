@@ -241,11 +241,106 @@ check(
     "it is exactly how this path was missed the first time"
 );
 check(
-  "a valid row missing a field falls back rather than nulling the stored value",
-  /price: quote \? quote\.price \?\? prev\?\.price \?\? null/.test(pool),
-  "num() returns null for absent AND non-finite, so `quote ? quote.price : ...` " +
-    "replaced a good price with null while stamping ts fresh — the mover-bucket " +
-    "path already carried prev forward, the per-symbol path did not"
+  "an error envelope INSIDE AN ARRAY is a refusal too",
+  (await outcome(res(200, [{ "Error Message": "Limit Reach" }]))).kind === "refused",
+  "isFmpErrorEnvelope returns false for an array, so this used to become `row`, " +
+    "have keys, and be accepted as data — clearing failStreak and failAt, which " +
+    "is #404's eviction evidence erased. hasFmpRows keeps the array carve-out " +
+    "because its cost there is one mislabelled refresh, not a ticker that can " +
+    "never be removed"
+);
+
+// ── 2c. Which fields carry forward, and which must not ─────────────────────
+console.log("\n2c. Last-known-good carries forward; session-scoped does not");
+
+// RUN THE MERGE. The previous version of this regexed one ternary out of seven,
+// which cannot see the distinction that matters: whether a field takes the
+// `prev` branch. The instruction that produced the regression said "give the
+// quote branch a prev fallback" and it was applied to all seven fields.
+// BRACE-MATCHED, NOT REGEXED. `/export function mergePoolRow\([\s\S]*?\n\}/`
+// stops at the FIRST `}` in column 0 -- which is the closing brace of the
+// inline parameter TYPE (`}): PricePoolRow {`), not the function's. It lifted a
+// truncated fragment that would not even parse. A lazy match plus an anchor
+// that appears twice is the same shape as the [\s\S]*? failures this file
+// keeps recording.
+const braceBlock = (src, decl) => {
+  const start = src.indexOf(decl);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = src.indexOf("{", start); i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(start, i + 1);
+  }
+  return null;
+};
+const mergeFn = braceBlock(pool, "export function mergePoolRow(");
+if (!mergeFn) {
+  console.error("FAIL: could not extract mergePoolRow — measuring nothing.");
+  process.exit(1);
+}
+const merge = (await lift(mergeFn)).mergePoolRow;
+
+const PREV = {
+  price: 100, marketCap: 5e9, changePct: 1.5, volume: 900,
+  open: 99, dayHigh: 101, dayLow: 98, pe: 20, ts: 1, peTs: 1, failStreak: 0,
+};
+// A quote that LANDED but carried only price -- num() nulls every absent or
+// non-finite field, so this is what a degraded stable/quote response becomes.
+const thin = {
+  price: 123, marketCap: null, changePct: null, volume: null,
+  open: null, dayHigh: null, dayLow: null,
+};
+const merged = merge({
+  quote: thin, already: undefined, prev: PREV,
+  quoteAt: 1000, peFetched: false, peValue: null, nowMs: 1000,
+});
+
+check(
+  "session-scoped fields are NULL, not yesterday's numbers",
+  merged.open === null && merged.dayHigh === null && merged.dayLow === null &&
+    merged.volume === null && merged.changePct === null,
+  `open ${merged.open}, dayHigh ${merged.dayHigh}, dayLow ${merged.dayLow}, ` +
+    `volume ${merged.volume}, changePct ${merged.changePct} — yesterday's dayHigh ` +
+    `is not an unknown-but-similar version of today's, it is a DIFFERENT ` +
+    `SESSION'S NUMBER written under today's ts`
+);
+check(
+  "and PricePoolRow's own doc still says why",
+  /NULL IS MEANINGFUL AND MUST STAY VISIBLE/.test(
+    fs.readFileSync(path.join(ROOT, "lib/server/pricePool.ts"), "utf8")
+  ),
+  "ATR spike and the support/resistance detector read high/low and are " +
+    "DESIGNED to stop firing on null — a fallback turns that into silent wrong " +
+    "values, and in the 'the plan stopped sending OHLC' scenario it would not " +
+    "decay but FREEZE, since every later run falls back too"
+);
+check(
+  "last-known-good fields DO carry forward",
+  merge({
+    quote: { ...thin, price: null }, already: undefined, prev: PREV,
+    quoteAt: 1000, peFetched: false, peValue: null, nowMs: 1000,
+  }).price === PREV.price &&
+    merged.marketCap === PREV.marketCap &&
+    merged.pe === PREV.pe,
+  "price, marketCap and pe describe a company rather than a session, so a " +
+    "value FMP did not send is unknown and the previous one is the best answer"
+);
+check(
+  "ts advances either way, because the quote itself landed",
+  merged.ts === 1000 &&
+    merge({
+      quote: { ...thin, price: null }, already: undefined, prev: PREV,
+      quoteAt: 1000, peFetched: false, peValue: null, nowMs: 1000,
+    }).ts === 1000,
+  "a landed quote is a real refresh even when its fields are thin"
+);
+check(
+  "a run with NO quote leaves ts and the streak alone",
+  merge({
+    quote: null, already: undefined, prev: { ...PREV, failStreak: 2 },
+    quoteAt: 1000, peFetched: true, peValue: 21, nowMs: 1000,
+  }).ts === PREV.ts,
+  "the PE trickle must not stamp a price refresh that did not happen"
 );
 check(
   "only an empty increments the streak",

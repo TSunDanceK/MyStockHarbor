@@ -16,7 +16,24 @@
 // Both spellings are rejected. The legacy endpoints use "Error Message" and
 // some stable ones use "error"; accepting either is the same defect.
 
-/** An error envelope: the SERVICE reporting a fault, not data about a symbol. */
+/**
+ * An error envelope: the SERVICE reporting a fault, not data about a symbol.
+ *
+ * TESTS ONE OBJECT. It returns false for an ARRAY, and a caller that unwraps
+ * `Array.isArray(json) ? json[0] : json` must therefore test the UNWRAPPED ROW
+ * as well -- otherwise `[{"Error Message": "..."}]` sails through, becomes the
+ * row, has keys, and is accepted as data.
+ *
+ * WHY THE TWO CALLERS DIFFER, RE-TAKEN DELIBERATELY RATHER THAN INHERITED.
+ * hasFmpRows judges an array on its LENGTH, so an error inside an array counts
+ * as a row there. That carve-out was decided for the fundamentals path, where
+ * the cost is one mislabelled refresh on one symbol for one cycle. The quote
+ * path's cost is different in kind: an accepted envelope clears failStreak and
+ * failAt, which is #404's eviction evidence erased -- a delisted ticker
+ * answered that way could never accumulate toward removal. Same shape, worse
+ * consequence, so the quote path tests the row too rather than accepting the
+ * fundamentals path's trade.
+ */
 export function isFmpErrorEnvelope(json: unknown): boolean {
   if (!json || typeof json !== "object" || Array.isArray(json)) return false;
   return Object.keys(json as Record<string, unknown>).some((k) => {

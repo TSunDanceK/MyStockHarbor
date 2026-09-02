@@ -459,6 +459,79 @@ export async function seedColdPricePoolRows(
   return Object.keys(payload).length;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAST-KNOWN-GOOD vs SESSION-SCOPED. The one rule that decides whether a field
+// carries forward, and the one thing to get right before adding a field to
+// PricePoolRow.
+//
+//   CARRY FORWARD -- price, marketCap, pe. These describe a company, not a
+//   session. A value FMP did not send this time is UNKNOWN, the previous one is
+//   the best answer anyone has, and `ts` dates it.
+//
+//   DO NOT CARRY FORWARD -- open, dayHigh, dayLow, volume, changePct. These are
+//   SESSION-SCOPED. Yesterday's dayHigh is not an unknown-but-similar version
+//   of today's dayHigh; it is a DIFFERENT SESSION'S NUMBER. Writing it under
+//   today's `ts` is not staleness, it is a wrong value stated as a current one.
+//
+// PricePoolRow's own doc comment, a few lines above those fields, is the
+// argument: "NULL IS MEANINGFUL AND MUST STAY VISIBLE... MA, RSI, MACD and
+// Bollinger read close and would look fine; ATR spike and the
+// support/resistance detector read high/low and would quietly stop firing...
+// Explicit null beats absent". A fallback turns that DESIGNED stop-firing into
+// silent wrong values -- a-visible-failure-is-not-a-harmless-one pointing the
+// other way.
+//
+// AND IT WOULD NOT DECAY, IT WOULD FREEZE. The scenario shouldWarnMissingOpen
+// exists for is "stable/quote stopped carrying OHLC on this plan". In that
+// scenario EVERY subsequent run also falls back, so the carried values never
+// refresh: pinned at the last good session, on rows whose `ts` says "fetched
+// seconds ago", indefinitely. It would also split the signal, since
+// openCarried counts `quote.open` rather than what was stored -- the warning
+// would fire while the rows looked healthy.
+//
+// PURE, so scripts/check-dead-symbol-honesty.mjs can RUN it. Which branch a
+// field takes is the claim, and a regex over seven ternaries cannot see it.
+type PoolMergeInput = {
+  quote: QuoteLite | null;
+  already: PricePoolRow | undefined;
+  prev: PricePoolRow | undefined;
+  quoteAt: number;
+  peFetched: boolean;
+  peValue: number | null;
+  nowMs: number;
+};
+
+export function mergePoolRow(input: PoolMergeInput): PricePoolRow {
+  const { quote, already, prev, quoteAt, peFetched, peValue, nowMs } = input;
+  return {
+    // LAST-KNOWN-GOOD. num() returns null for absent AND non-finite, so without
+    // these a valid row missing `price` replaced a good stored price with null
+    // while stamping `ts` fresh.
+    price: quote ? quote.price ?? prev?.price ?? null : already?.price ?? prev?.price ?? null,
+    marketCap: quote
+      ? quote.marketCap ?? prev?.marketCap ?? null
+      : already?.marketCap ?? prev?.marketCap ?? null,
+
+    // SESSION-SCOPED. No prev on the quote branch: a quote that landed without
+    // these is FMP telling us today's numbers are unavailable, and null is the
+    // honest record of that.
+    changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
+    volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
+    open: quote ? quote.open : already?.open ?? prev?.open ?? null,
+    dayHigh: quote ? quote.dayHigh : already?.dayHigh ?? prev?.dayHigh ?? null,
+    dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
+
+    // carry forward last-known PE if this run didn't (re)fetch a value
+    pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
+    ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
+    peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
+    // Any landing clears the streak. markRefreshed also ZREMs the deferral,
+    // so one good fetch fully un-parks a symbol.
+    failStreak: quote ? 0 : already?.failStreak ?? prev?.failStreak ?? 0,
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Should a run warn that no quote carried a session open?
  *
@@ -568,6 +641,14 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteOutco
     // HTTP 200 with no row is FMP answering "I have nothing for this symbol",
     // which is the delisting signal.
     if (!row) return { kind: "empty" };
+    // AND AGAIN ON THE UNWRAPPED ROW. isFmpErrorEnvelope returns false for an
+    // array, so `[{"Error Message": "..."}]` passes the check above, becomes
+    // `row`, has keys, and would be accepted as data -- clearing failStreak and
+    // failAt, which is #404's eviction evidence gone. The array carve-out was
+    // decided for hasFmpRows where the cost is a mislabelled refresh; here it
+    // is a delisted ticker that can never accumulate toward removal, so this
+    // path does not inherit that trade.
+    if (isFmpErrorEnvelope(row)) return { kind: "refused", status: res.status };
     // A BARE `{}` IS TREATED AS A REFUSAL, NOT AN EMPTY, AND THE REASON IS THE
     // ASYMMETRY. FMP says "no such symbol" with `[]`, not with `{}`; a bare
     // object with no keys is far more likely a truncated or malformed body. On
@@ -993,38 +1074,15 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // price, this loop is here only for its independent PE trickle) -- merge
     // onto it rather than clobbering the fresh bucket price/changePct/ts.
     const already = payload[sym];
-    payload[sym] = {
-      // A FIELD MISSING FROM A VALID ROW FALLS BACK, IT DOES NOT NULL OUT.
-      //
-      // These read `quote ? quote.X : ...` with no fallback ON THE QUOTE
-      // BRANCH, so a row where `price` was absent or non-finite -- `num()`
-      // returns null for both -- replaced a good stored price with null AND
-      // stamped `ts` as freshly refreshed. The mover-bucket path above already
-      // does `row.price ?? prev?.price ?? null`; the per-symbol path did not.
-      //
-      // Carrying forward is right here for the same reason it is right there: a
-      // field FMP did not send this time is unknown, not zero, and the previous
-      // value is the best answer anyone has. `ts` still advances, because the
-      // quote itself did land.
-      price: quote ? quote.price ?? prev?.price ?? null : already?.price ?? prev?.price ?? null,
-      changePct: quote
-        ? quote.changePct ?? prev?.changePct ?? null
-        : already?.changePct ?? prev?.changePct ?? null,
-      volume: quote ? quote.volume ?? prev?.volume ?? null : already?.volume ?? prev?.volume ?? null,
-      marketCap: quote
-        ? quote.marketCap ?? prev?.marketCap ?? null
-        : already?.marketCap ?? prev?.marketCap ?? null,
-      open: quote ? quote.open ?? prev?.open ?? null : already?.open ?? prev?.open ?? null,
-      dayHigh: quote ? quote.dayHigh ?? prev?.dayHigh ?? null : already?.dayHigh ?? prev?.dayHigh ?? null,
-      dayLow: quote ? quote.dayLow ?? prev?.dayLow ?? null : already?.dayLow ?? prev?.dayLow ?? null,
-      // carry forward last-known PE if this run didn't (re)fetch a value
-      pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
-      ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
-      peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
-      // Any landing clears the streak. markRefreshed also ZREMs the deferral,
-      // so one good fetch fully un-parks a symbol.
-      failStreak: quote ? 0 : already?.failStreak ?? prev?.failStreak ?? 0,
-    };
+    payload[sym] = mergePoolRow({
+      quote,
+      already,
+      prev,
+      quoteAt,
+      peFetched,
+      peValue,
+      nowMs,
+    });
     if (quote) pxRefreshed++;
     if (quote && quote.open != null) openCarried++;
     if (peFetched && peValue != null) peRefreshed++;
