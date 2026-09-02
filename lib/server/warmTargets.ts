@@ -2,6 +2,9 @@ import { Redis } from "@upstash/redis";
 import { getPickersData } from "./pickersBuilder";
 import { readDynamicUniverse } from "./dynamicUniverseCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { readSearchDemand } from "./searchDemand";
+import { readMarketState } from "./marketState";
+import { selectTier1, writeTier1, TIER1_SEARCH_PROMOTION_CAP } from "./priceTiers";
 
 // Single source of truth for "which symbols do the background warm jobs
 // maintain data for" -- used by warm-price-pool, warm-stock-data and
@@ -93,6 +96,17 @@ export type WarmTargets = {
   symbols: string[];
   displayed: number;
   universe: number;
+  /**
+   * How many symbols the last derivation put in the 15-minute price tier.
+   *
+   * Reported rather than returned. The tier LIST lives in its own Redis key
+   * (priceTiers.ts) because warm-price-pool needs it on every run including the
+   * ones this cache serves from memory, and because a job that only wants the
+   * count should not have to hold ~500 strings to get it. This number exists so
+   * a run record can show the split without a second read -- a tier system
+   * nobody can see the size of is one nobody will notice has collapsed.
+   */
+  tier1: number;
 };
 
 type CachedWarmTargets = WarmTargets & { builtAt: number };
@@ -160,6 +174,7 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
       symbols: cached.symbols,
       displayed: cached.displayed,
       universe: cached.universe,
+      tier1: cached.tier1 ?? 0,
     };
   }
 
@@ -180,13 +195,60 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
   }
 
   const symbols = Array.from(new Set([...displayed, ...universeSymbols]));
+
+  // PRICE TIER 1, DERIVED HERE AND NOWHERE ELSE.
+  //
+  // This is the one place that already holds the pickers payload, and that
+  // payload is the single most expensive input the tier selection needs. Doing
+  // it in warm-price-pool would mean either a second ~8 MB read every run --
+  // the exact spend that suspended the Upstash database on 2026-08-28 -- or a
+  // second cache with its own opinion about how stale is too stale. Doing it in
+  // three jobs would mean three answers.
+  //
+  // It rides this cache's TTL for the same reason the symbol list does: 30
+  // minutes bounds how long a newly-interesting symbol waits to be promoted,
+  // which is well inside the 15 minutes the promotion buys it back.
+  const tier1 = await deriveTier1(displayed, symbols);
+  await writeTier1(tier1);
+
   const targets: WarmTargets = {
     symbols,
     displayed: displayed.length,
     universe: universeSymbols.length,
+    tier1: tier1.length,
   };
 
   await writeCachedTargets(targets);
 
   return targets;
+}
+
+/**
+ * Attention signals -> tier 1, fail-open at every step.
+ *
+ * EVERY INPUT IS FREE. Search demand and market state are small Redis reads the
+ * site already maintains, and the picker symbols are in hand. Nothing here
+ * spends an FMP call, which is what makes it safe to run on a cache miss inside
+ * a cron whose whole purpose is to conserve that budget.
+ *
+ * A signal that throws is dropped rather than fatal: tier 1 assembled from two
+ * of three sources is worse than three, but far better than none -- an empty
+ * tier 1 demotes the entire site to the 30-minute policy.
+ */
+async function deriveTier1(pickerSymbols: string[], universe: string[]): Promise<string[]> {
+  const searchedSymbols = await readSearchDemand(TIER1_SEARCH_PROMOTION_CAP)
+    .then((rows) => rows.map((r) => r.symbol))
+    .catch(() => [] as string[]);
+
+  const moverSymbols = await readMarketState()
+    .then((state) => [
+      // Movers first: a stock moving today is the one whose stale price is most
+      // visibly wrong. topTraded is volume-ranked and is the weaker signal, so
+      // it fills whatever of the cap is left.
+      ...state.topMovers.map((r) => r.symbol),
+      ...state.topTraded.map((r) => r.symbol),
+    ])
+    .catch(() => [] as string[]);
+
+  return selectTier1({ pickerSymbols, searchedSymbols, moverSymbols, universe });
 }

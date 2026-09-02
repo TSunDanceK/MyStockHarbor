@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
 import { isUnwantedBot } from "@/lib/botid-guard";
+import { isActiveMarketWindow } from "@/lib/server/marketHours";
 
 export const runtime = "nodejs";
 export const revalidate = 900;
@@ -14,39 +15,17 @@ const QUIET_STALE_SECONDS = 60 * 60;
 const ERROR_CACHE_SECONDS = 60;
 const ERROR_STALE_SECONDS = 300;
 
+// This route used to carry its own copy of getEasternParts/isActiveMarketWindow
+// -- the same Intl derivation, the same weekend rule, and the window written
+// out as `8 * 60 + 30` to `17 * 60`. That is exactly REGULAR_OPEN_MINUTES_ET
+// minus PRE_OPEN_BUFFER_MINUTES to REGULAR_CLOSE_MINUTES_ET plus
+// POST_CLOSE_BUFFER_MINUTES, so the numbers agreed by coincidence of authorship
+// and nothing would have noticed if one drifted. Now warm-price-pool gates on
+// the same predicate (lib/server/marketHours.ts), two copies would be two
+// answers to "is the market open" -- the shape of
+// claude/traps/two-validators-for-one-value.md.
+
 type Interval = "d" | "w" | "m";
-
-function getEasternParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-
-  return { weekday, hour, minute };
-}
-
-function isWeekendEastern(weekday: string) {
-  return weekday === "Sat" || weekday === "Sun";
-}
-
-function isActiveMarketWindow(date = new Date()) {
-  const { weekday, hour, minute } = getEasternParts(date);
-
-  if (isWeekendEastern(weekday)) return false;
-
-  const totalMinutes = hour * 60 + minute;
-  const start = 8 * 60 + 30;
-  const end = 17 * 60;
-
-  return totalMinutes >= start && totalMinutes <= end;
-}
 
 function getCacheControlHeader() {
   if (isActiveMarketWindow()) {
