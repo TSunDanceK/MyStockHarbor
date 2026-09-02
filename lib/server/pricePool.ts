@@ -536,6 +536,27 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // everyone to ignore it. `skipped` is on the record so it stays
   // distinguishable from the job having stopped running.
   if (!isActiveMarketWindow(new Date(nowMs))) {
+    // RESET THE TTL BEFORE RETURNING. This was a plain return in #395 and it
+    // emptied the pool every night.
+    //
+    // PRICE_POOL_HASH_TTL_SECONDS is 12 hours and its comment says "reset each
+    // run; bridges gaps" -- it exists to notice that the CRON HAS STOPPED, not
+    // that the market is shut. Once the gate started returning before the
+    // expire below, nothing refreshed it across the closed hours, and HSET does
+    // not clear or extend an existing TTL. The active window ends at 17:00 ET
+    // and reopens at 08:00 ET, a 15-hour gap on a weeknight and 63 across a
+    // weekend, so the whole hash expired at ~05:00 ET every weekday and stayed
+    // gone all weekend: every picker page fell back to end-of-day closes, and
+    // the pool rebuilt from cold each morning.
+    //
+    // A skipped run is still the cron running. Keeping the reset here restores
+    // "12 hours with no run at all" as the meaning of the TTL, at one Redis
+    // command per skip.
+    try {
+      await redis.expire(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS);
+    } catch {
+      // fail open -- the pool keeps whatever TTL it has.
+    }
     return { ok: true, skipped: true, reason: "market-closed", written: 0 };
   }
 

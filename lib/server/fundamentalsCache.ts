@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { readPricePoolBulk } from "./pricePool";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { claimStalest, deferSymbol, markRefreshed, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -98,6 +99,33 @@ const QUOTE_OFFSET_KEY = "msh:pickers:quote-offset:v1";
 
 // Bounds so a single warm run can never run away with the FMP budget.
 const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE QUOTE STAGE IS A FALLBACK NOW, NOT THE SOURCE.
+//
+// This stage existed to fetch marketCap and peRatio -- exactly two fields --
+// and batch-quote answers 402 on this plan, so it was ONE stable/quote CALL PER
+// SYMBOL, hourly, forever. The price pool has held both for every symbol in the
+// same universe the whole time: PricePoolRow carries `marketCap` and `pe`, and
+// readPricePoolBulk returns them in a single HMGET with no FMP call at all.
+// Both jobs take their work list from the same getWarmTargetSymbols, so the
+// coverage is identical by construction.
+//
+// So the pool is read first and FMP is asked only about symbols the pool has no
+// row for -- a newly admitted ticker, or one the price rotation has not reached
+// yet.
+//
+// WHAT THIS ALSO REMOVES. The comment further down records that the profile
+// stage spends the shared 90s wait budget FIRST and that the quote stage then
+// "return out"s when it is dry -- "the cost of fixing sectors is paid in P/E
+// coverage, silently". That trade is gone: the pool read costs no budget, so
+// the two stages have stopped competing. Sectors no longer cost P/E.
+//
+// THE FALLBACK IS CAPPED so that a cold or emptied pool degrades visibly rather
+// than silently reinstating the old per-symbol rotation. If poolMisses exceeds
+// this the run says so on its record instead of quietly spending the universe.
+const QUOTE_FALLBACK_MAX_PER_RUN = 100;
+// ─────────────────────────────────────────────────────────────────────────────
 // Cap on fresh profile fetches per run.
 //
 // Overridable via MSH_PROFILE_MAX_PER_RUN for a BACKFILL. Fixing the exclusion
@@ -714,8 +742,46 @@ export async function warmFundamentals(symbols: string[]) {
     ? [...cleanSymbols.filter((s) => !known.has(s)), ...stalestFirst.filter((s) => cleanSymbols.includes(s))]
     : rotateFrom(cleanSymbols, quoteOffset);
 
-  const { quotes: quoteMap, consumed: quotesConsumed, batchQuoteAvailable } =
-    await fetchQuoteFundamentals(quoteOrder, apiKey, wait);
+  // THE POOL FIRST. One HMGET, no FMP call, for the two fields this stage
+  // exists to produce.
+  //
+  // NO AGE TEST, DELIBERATELY. Since #395 the price pool only refreshes inside
+  // the buffered US session, so a row is legitimately 15 hours old at 07:00 and
+  // 63 across a weekend. Both fields here are CLOSE-DERIVED -- market cap is
+  // shares x last price, and P/E is that price over trailing EPS -- so an
+  // overnight row is not stale, it is the correct answer: the last traded price
+  // IS the price. Treating age as staleness would mean re-fetching the whole
+  // universe every morning to receive the identical numbers back.
+  //
+  // ABSENCE, NOT AGE, IS THE HEALTH SIGNAL. PRICE_POOL_HASH_TTL_SECONDS expires
+  // the whole hash if warm-price-pool genuinely stops running, so a missing row
+  // already means "nobody is maintaining this" while an old one means "the
+  // market has been shut". Those are different questions and only the first is
+  // this stage's problem.
+  const pool = await readPricePoolBulk(cleanSymbols);
+  const quoteMap = new Map<string, { marketCap: number | null; peRatio: number | null }>();
+  const poolMisses: string[] = [];
+  for (const sym of quoteOrder) {
+    const row = pool.get(sym);
+    // A row carrying NEITHER field is not a hit. It happens: a cold-seeded row
+    // (seedColdPricePoolRows) has a price but a null pe, and counting it would
+    // permanently exclude that symbol from the one path that could fill it in.
+    if (row && (row.marketCap != null || row.pe != null)) {
+      quoteMap.set(sym, { marketCap: row.marketCap, peRatio: row.pe });
+    } else {
+      poolMisses.push(sym);
+    }
+  }
+  const poolHits = quoteMap.size;
+  const fallbackOrder = poolMisses.slice(0, QUOTE_FALLBACK_MAX_PER_RUN);
+  const fallbackDeferred = poolMisses.length - fallbackOrder.length;
+
+  const { quotes: fetchedQuotes, consumed: quotesConsumed, batchQuoteAvailable } =
+    await fetchQuoteFundamentals(fallbackOrder, apiKey, wait);
+  // Fetched wins over pooled for the same symbol -- it cannot happen today
+  // (only misses are fetched) but a future edit that widens the fallback should
+  // not silently prefer the older value.
+  for (const [sym, row] of fetchedQuotes) quoteMap.set(sym, row);
 
   // Advance by POSITIONS attempted, not quotes returned -- see the note on
   // fetchQuoteFundamentals.
@@ -809,11 +875,10 @@ export async function warmFundamentals(symbols: string[]) {
   // quotesConsumed staying at 0, or lapRuns not falling after the screener cron
   // and the cadence change land.
   if (quoteMap.size < cleanSymbols.length) {
-    const lapRuns = quotesConsumed > 0 ? Math.ceil(cleanSymbols.length / quotesConsumed) : Infinity;
     console.warn(
       `[fundamentals] quote coverage ${quoteMap.size}/${cleanSymbols.length} this run` +
-        ` — offset ${quoteOffset} -> ${nextQuoteOffset}, ${quotesConsumed} consumed,` +
-        ` ~${lapRuns === Infinity ? "never" : lapRuns} runs per full lap` +
+        ` — ${poolHits} from the price pool, ${quotesConsumed} fetched for pool misses` +
+        `${fallbackDeferred > 0 ? `, ${fallbackDeferred} misses deferred past the ${QUOTE_FALLBACK_MAX_PER_RUN} cap` : ""}` +
         `${batchQuoteAvailable ? "" : " (batch-quote unavailable on this plan — one call per symbol)"}`
     );
   }
@@ -822,6 +887,17 @@ export async function warmFundamentals(symbols: string[]) {
     ok: true,
     universe: cleanSymbols.length,
     quotesFetched: quoteMap.size,
+    // WHERE THE TWO FIELDS CAME FROM. poolHits is the saving, in calls, and
+    // poolMisses is what it cost. A run where poolMisses climbs toward the
+    // universe means the price pool is not being maintained -- which is a
+    // warm-price-pool problem showing up here, and is exactly the shape that
+    // hid for a night when the market-hours gate stopped resetting the pool
+    // hash's TTL. fallbackDeferred is non-zero only when the miss list exceeds
+    // QUOTE_FALLBACK_MAX_PER_RUN, i.e. when this stage has quietly turned back
+    // into the per-symbol rotation it replaced.
+    poolHits,
+    poolMisses: poolMisses.length,
+    fallbackDeferred,
     // Where the rotation started and where it left off. Two consecutive runs
     // reporting the same pair means the offset is not advancing.
     // Which selection actually ran. Without this, "the staleness queue is

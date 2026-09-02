@@ -55,6 +55,12 @@ import { PICKER_ROUTES } from "../pickerRoutes";
 //   warm-fundamentals  0 *  ->   24 runs/day  ->  ~0.2 GB/day
 //                                  648/day        ~5 GB/day
 //
+// THOSE CRON STRINGS ARE THE ONES THAT WERE LIVE ON THE DAY OF THE MEASUREMENT
+// and are deliberately not updated -- #374 has since staggered all of them off
+// minute :00, and rewriting them here would falsify a dated observation to make
+// it look current. For what runs TODAY, read the JOBS registry in jobRuns.ts,
+// which is the source of truth and is asserted against vercel.json.
+//
 // ~150 GB a month of Redis read bandwidth to look up a few kilobytes of ticker
 // symbols. That is the shape of the spend that suspended the Upstash database
 // on 2026-08-28 (claude/outage-upstash-suspended-2026-08-28.md); user traffic
