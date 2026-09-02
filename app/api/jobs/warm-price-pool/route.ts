@@ -141,6 +141,21 @@ export async function GET(req: NextRequest) {
       due: result.due ?? null,
       deferredByCap: result.deferredByCap ?? null,
       quoteFailures: result.quoteFailures ?? null,
+      // WHY a quote did not land, which is the difference between a delisting
+      // and a bad afternoon. quotesRefused spiking with empties flat is an FMP
+      // incident and nothing should be parked; empties rising on their own is
+      // what a delisting actually looks like. deferSuppressed true means the
+      // run discarded its deferrals wholesale as untrustworthy.
+      quotesRefused: result.quotesRefused ?? null,
+      empties: result.empties ?? null,
+      priceAttempts: result.priceAttempts ?? null,
+      deferSuppressed: result.deferSuppressed ?? null,
+      // Repeatedly-failing symbols parked this run, and the standing total. A
+      // flat newlyDeferred with a steady deferredSymbols is a settled set of
+      // dead tickers doing no harm; a rising newlyDeferred is something
+      // breaking that is not about delistings.
+      newlyDeferred: result.newlyDeferred ?? null,
+      deferredSymbols: result.deferredSymbols ?? null,
       // Was `capacityStopped`, which meant "the current minute filled up" and
       // was true on essentially every run. The loop now waits out a full minute
       // bucket instead of ending on one, so the only thing that stops a run

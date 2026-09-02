@@ -8,7 +8,8 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
-import { markRefreshed, registerSymbols } from "./stalenessQueue";
+import { markRefreshed, registerSymbols, deferSymbol, readDeferred } from "./stalenessQueue";
+import { isFmpErrorEnvelope } from "./fmpResponse";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import {
@@ -216,6 +217,67 @@ async function waitForPriceBudget(deadlineMs: number): Promise<"ok" | "out-of-ti
 // Free "market performance" buckets checked before the per-symbol rotation.
 const MOVER_BUCKET_PATHS = ["biggest-gainers", "biggest-losers", "most-actives"] as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A SYMBOL THAT KEEPS FAILING MUST STOP BEING RETRIED EVERY RUN.
+//
+// The loop's `if (!quote && !peFetched) continue` is CORRECT for a transient:
+// a failed symbol keeps its old `ts`, stays past its TTL and sorts to the FRONT
+// of the next run's due set, so a blip costs one cron period rather than one
+// TTL. #395 argued for exactly that and it stays.
+//
+// What was missing is what happens on the Nth consecutive failure. For a
+// permanently dead ticker the same mechanism is an infinite loop: front of the
+// queue, fails, front of the queue, fails -- up to 288 calls a day, forever,
+// for a symbol that will never answer again. There was no deferSymbol for
+// pricePool anywhere.
+//
+// THE THRESHOLD IS 3, AND THE REASONING IS THE CRON PERIOD. At */5, three
+// consecutive failures span ~10-15 minutes of the session. One bad FMP minute
+// does not survive that; two would trip on a single blip plus its retry. Five
+// would be safer against false positives and costs two more runs of an
+// infinite loop, which is the thing being bounded.
+//
+// THE BACKOFF IS DERIVED FROM THE STREAK ITSELF, so there is no second piece of
+// state to keep in step: 1h at the third failure, doubling, capped at a day.
+//
+//   streak  3    4    5    6     7     8+
+//   defer   1h   2h   4h   8h   16h   24h
+//
+// WORST CASE FOR A SYMBOL THAT IS ACTUALLY ALIVE -- a trading halt, or FMP
+// briefly wrong about it: it is skipped for at most 24 hours, and because the
+// deferral expires on wall-clock time while refreshes only happen inside the
+// session, the practical worst case is ~24h plus the closed hours it lands in,
+// so about 30 hours of a frozen price. That is the cost of the cap. It is only
+// reached after eight consecutive failures, by which point "alive" is a thin
+// hypothesis -- and markRefreshed already ZREMs the deferral, so one successful
+// fetch clears the whole thing.
+//
+// A DEFERRAL THAT NEVER EXPIRES IS AN EVICTION WEARING A SMALLER NAME. Nothing
+// here removes a symbol from anything; the cap is what keeps that true.
+const PRICE_FAIL_DEFER_AFTER = 3;
+const PRICE_FAIL_DEFER_BASE_SECONDS = 60 * 60;
+const PRICE_FAIL_DEFER_MAX_SECONDS = 24 * 60 * 60;
+
+// Above this share of empty responses, a run's deferrals are discarded whole.
+// Half is deliberately far above anything a real delisting pattern produces --
+// this is not a sensitivity dial, it is a "the world is obviously broken" line.
+const PRICE_EMPTY_RATE_ABORT = 0.5;
+
+/**
+ * How long to park a symbol after `streak` consecutive failures.
+ *
+ * PURE, so the invariant check can RUN it: "no symbol can be parked
+ * permanently" is a claim about behaviour over inputs, and a regex over this
+ * file cannot test a cap.
+ */
+export function priceFailDeferSeconds(streak: number): number {
+  if (streak < PRICE_FAIL_DEFER_AFTER) return 0;
+  const doublings = streak - PRICE_FAIL_DEFER_AFTER;
+  const seconds = PRICE_FAIL_DEFER_BASE_SECONDS * 2 ** Math.min(doublings, 20);
+  return Math.min(PRICE_FAIL_DEFER_MAX_SECONDS, seconds);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type PricePoolRow = {
   price: number | null;
   changePct: number | null;
@@ -243,6 +305,16 @@ export type PricePoolRow = {
   pe: number | null;
   ts: number; // ms epoch price was last fetched
   peTs?: number; // ms epoch PE was last fetched (independent rotation)
+  /**
+   * Consecutive failed quote attempts. Reset to 0 by any success.
+   *
+   * ON THE ROW RATHER THAN IN ITS OWN KEY, deliberately. A separate hash would
+   * need an HDEL per success to clear -- and there is no hdel anywhere in this
+   * codebase, which is exactly how the price-pool and picker-chart hashes came
+   * to hold immortal fields. This rides the row it describes: written by the
+   * same HSET, expired by the same TTL, and removed by the same eviction.
+   */
+  failStreak?: number;
 };
 
 function cleanSymbol(value: string) {
@@ -299,6 +371,7 @@ export async function readPricePoolBulk(
             pe: num(row.pe),
             ts: row.ts,
             peTs: num(row.peTs) ?? 0,
+            failStreak: num(row.failStreak) ?? 0,
           });
         }
       });
@@ -386,6 +459,79 @@ export async function seedColdPricePoolRows(
   return Object.keys(payload).length;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAST-KNOWN-GOOD vs SESSION-SCOPED. The one rule that decides whether a field
+// carries forward, and the one thing to get right before adding a field to
+// PricePoolRow.
+//
+//   CARRY FORWARD -- price, marketCap, pe. These describe a company, not a
+//   session. A value FMP did not send this time is UNKNOWN, the previous one is
+//   the best answer anyone has, and `ts` dates it.
+//
+//   DO NOT CARRY FORWARD -- open, dayHigh, dayLow, volume, changePct. These are
+//   SESSION-SCOPED. Yesterday's dayHigh is not an unknown-but-similar version
+//   of today's dayHigh; it is a DIFFERENT SESSION'S NUMBER. Writing it under
+//   today's `ts` is not staleness, it is a wrong value stated as a current one.
+//
+// PricePoolRow's own doc comment, a few lines above those fields, is the
+// argument: "NULL IS MEANINGFUL AND MUST STAY VISIBLE... MA, RSI, MACD and
+// Bollinger read close and would look fine; ATR spike and the
+// support/resistance detector read high/low and would quietly stop firing...
+// Explicit null beats absent". A fallback turns that DESIGNED stop-firing into
+// silent wrong values -- a-visible-failure-is-not-a-harmless-one pointing the
+// other way.
+//
+// AND IT WOULD NOT DECAY, IT WOULD FREEZE. The scenario shouldWarnMissingOpen
+// exists for is "stable/quote stopped carrying OHLC on this plan". In that
+// scenario EVERY subsequent run also falls back, so the carried values never
+// refresh: pinned at the last good session, on rows whose `ts` says "fetched
+// seconds ago", indefinitely. It would also split the signal, since
+// openCarried counts `quote.open` rather than what was stored -- the warning
+// would fire while the rows looked healthy.
+//
+// PURE, so scripts/check-dead-symbol-honesty.mjs can RUN it. Which branch a
+// field takes is the claim, and a regex over seven ternaries cannot see it.
+type PoolMergeInput = {
+  quote: QuoteLite | null;
+  already: PricePoolRow | undefined;
+  prev: PricePoolRow | undefined;
+  quoteAt: number;
+  peFetched: boolean;
+  peValue: number | null;
+  nowMs: number;
+};
+
+export function mergePoolRow(input: PoolMergeInput): PricePoolRow {
+  const { quote, already, prev, quoteAt, peFetched, peValue, nowMs } = input;
+  return {
+    // LAST-KNOWN-GOOD. num() returns null for absent AND non-finite, so without
+    // these a valid row missing `price` replaced a good stored price with null
+    // while stamping `ts` fresh.
+    price: quote ? quote.price ?? prev?.price ?? null : already?.price ?? prev?.price ?? null,
+    marketCap: quote
+      ? quote.marketCap ?? prev?.marketCap ?? null
+      : already?.marketCap ?? prev?.marketCap ?? null,
+
+    // SESSION-SCOPED. No prev on the quote branch: a quote that landed without
+    // these is FMP telling us today's numbers are unavailable, and null is the
+    // honest record of that.
+    changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
+    volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
+    open: quote ? quote.open : already?.open ?? prev?.open ?? null,
+    dayHigh: quote ? quote.dayHigh : already?.dayHigh ?? prev?.dayHigh ?? null,
+    dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
+
+    // carry forward last-known PE if this run didn't (re)fetch a value
+    pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
+    ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
+    peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
+    // Any landing clears the streak. markRefreshed also ZREMs the deferral,
+    // so one good fetch fully un-parks a symbol.
+    failStreak: quote ? 0 : already?.failStreak ?? prev?.failStreak ?? 0,
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Should a run warn that no quote carried a session open?
  *
@@ -416,18 +562,105 @@ type QuoteLite = {
 // Per-symbol live quote (price/%chg/volume/marketCap). stable/quote is the only
 // working intraday quote endpoint on this plan; it returns `changePercentage`
 // (no trailing "s") and has no PE field.
-async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite | null> {
+/**
+ * WHAT A FAILED QUOTE ACTUALLY MEANS, kept separate from the fact that it
+ * failed.
+ *
+ * THIS RETURNED `QuoteLite | null` AND EVERY FAILURE MODE COLLAPSED INTO THE
+ * NULL: a 429, a 402, a 5xx, a network throw, a parse failure, and
+ * reserveFmpCallSlot's own capacity-timeout. That was harmless while nothing
+ * acted on it. It stopped being harmless the moment failStreak attached a
+ * CONSEQUENCE -- "this ticker is dead" -- to a signal that mostly means "we are
+ * being rate-limited right now".
+ *
+ * waitForPriceBudget's own comment already said this: a capacity-timeout throw
+ * inside the fetch "would show up as a quote failure rather than as the pacing
+ * it actually is". The deferral turned that mislabel into an action.
+ *
+ * IT IS NOT THEORETICAL, AND IT CONCENTRATES RATHER THAN SPREADS.
+ * warm-picker-universe logged http-429:155 on 08-30, http-429:670 on 08-31
+ * (700 of 700 symbols failed), http-429:171 on 09-01, and capacity-timeout:40
+ * on 09-02 -- a healthy day. And a failed symbol keeps its stale `ts`, so it
+ * sorts to the FRONT of the next run's due set: under a systemic cause the same
+ * cohort is retried first, under the same conditions, and fails again. Three
+ * runs of that is a streak of 3 for the whole universe.
+ *
+ *   "row"      the symbol answered. The only outcome that clears a streak.
+ *   "empty"    HTTP 200 and no row FOR THIS SYMBOL. The only outcome that is
+ *              evidence about the TICKER, and the only one that may park it.
+ *   "refused"  FMP or our own pacing declined to answer. Evidence about the
+ *              SERVICE, not the symbol. Counted, never acted on.
+ */
+type QuoteOutcome =
+  | { kind: "row"; quote: QuoteLite }
+  | { kind: "empty" }
+  | { kind: "refused"; status: number | null };
+
+async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteOutcome> {
+  // OUR OWN PACING, IN ITS OWN try/catch. reserveFmpCallSlot throws
+  // capacity-timeout after FMP_MAX_WAIT_MS, and letting that fall through to
+  // the outer catch would file our internal back-pressure as FMP's answer
+  // about the symbol -- which is exactly the mislabel this type exists to end.
   try {
     await reserveFmpCallSlot();
+  } catch {
+    return { kind: "refused", status: null };
+  }
+
+  try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
-    if (!res.ok) return null;
+    // A non-ok status is the SERVICE declining -- 429 rate limit, 402 plan, 5xx
+    // outage. None of them says anything about whether this ticker still
+    // trades.
+    if (!res.ok) return { kind: "refused", status: res.status };
     const json = await res.json().catch(() => null);
+    if (json === null) return { kind: "refused", status: res.status };
+
+    // AN ERROR ENVELOPE IS THE SERVICE TALKING, SO IT IS "refused", NOT
+    // "empty". This hole was fixed in stockDataCache's hasRows and missed here,
+    // on the one path #404's eviction gate depends on. FMP answers a rate limit
+    // or a bad key with HTTP 200 and {"Error Message": "..."}: res.ok is true,
+    // the body is non-null, and `Array.isArray(json) ? json[0] : json` hands
+    // the envelope back AS A ROW. The call site then treated seven nulls as a
+    // successful quote -- overwriting a live price with null, stamping `ts`
+    // fresh, and CLEARING failStreak and failAt.
+    //
+    // Both of #404's directions broke from this one branch: a rate-limited
+    // afternoon nulled out live prices and marked them green, and a genuinely
+    // delisted ticker answered with an envelope had its streak reset every run,
+    // so it could never accumulate toward eviction.
+    //
+    // Classifying it "empty" would fix the first half and keep the second: an
+    // envelope must not park a symbol either.
+    if (isFmpErrorEnvelope(json)) return { kind: "refused", status: res.status };
+
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
-    if (!row) return null;
+    // HTTP 200 with no row is FMP answering "I have nothing for this symbol",
+    // which is the delisting signal.
+    if (!row) return { kind: "empty" };
+    // AND AGAIN ON THE UNWRAPPED ROW. isFmpErrorEnvelope returns false for an
+    // array, so `[{"Error Message": "..."}]` passes the check above, becomes
+    // `row`, has keys, and would be accepted as data -- clearing failStreak and
+    // failAt, which is #404's eviction evidence gone. The array carve-out was
+    // decided for hasFmpRows where the cost is a mislabelled refresh; here it
+    // is a delisted ticker that can never accumulate toward removal, so this
+    // path does not inherit that trade.
+    if (isFmpErrorEnvelope(row)) return { kind: "refused", status: res.status };
+    // A BARE `{}` IS TREATED AS A REFUSAL, NOT AN EMPTY, AND THE REASON IS THE
+    // ASYMMETRY. FMP says "no such symbol" with `[]`, not with `{}`; a bare
+    // object with no keys is far more likely a truncated or malformed body. On
+    // an ambiguous response the two mistakes do not cost the same -- calling it
+    // refused costs one retry, calling it empty feeds a deferral and, through
+    // #404, an eviction. The non-destructive branch wins ties.
+    if (!Array.isArray(json) && !Object.keys(row).length) {
+      return { kind: "refused", status: res.status };
+    }
     return {
+      kind: "row",
+      quote: {
       price: num(row.price),
       changePct: num(row.changePercentage) ?? num(row.changesPercentage),
       volume: num(row.volume),
@@ -438,9 +671,11 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
       open: num(row.open),
       dayHigh: num(row.dayHigh),
       dayLow: num(row.dayLow),
+      },
     };
   } catch {
-    return null;
+    // A network throw is the service too.
+    return { kind: "refused", status: null };
   }
 }
 
@@ -653,8 +888,17 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     Math.ceil(tier2InUniverse / runsPerTier2Window());
   const priceCap = Math.min(PRICE_MAX_PER_RUN, Math.max(PRICE_MIN_PER_RUN, capNeeded));
 
+  // Symbols parked after repeated failures. READ, not merely written: the price
+  // pool picks its own work by TTL rather than asking claimStalest for the
+  // stalest N, so without this read the deferral would be write-only and the
+  // infinite retry loop would continue with a record of itself.
+  const deferred = await readDeferred("pricePool");
+
   const due = clean.filter(
-    (sym) => !bucketFreshened.has(sym) && isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
+    (sym) =>
+      !bucketFreshened.has(sym) &&
+      !deferred.has(sym) &&
+      isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
   );
 
   // TIER FIRST, THEN STALEST WITHIN TIER -- not stalest overall.
@@ -704,6 +948,18 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // not one TTL. That is a claim about behaviour, and this counter is what
   // makes it checkable instead of assumed.
   let quoteFailures = 0;
+  // The two causes, separated. `quoteFailures` still means "attempted and did
+  // not land" so historical run records stay comparable; these say WHY.
+  let quotesRefused = 0;
+  let empties = 0;
+  let priceAttempts = 0;
+  const pendingDefers: Array<{ symbol: string; seconds: number }> = [];
+  let deferSuppressed = false;
+  // Rows written for symbols that returned NOTHING, kept apart from `payload`
+  // so markRefreshed cannot be called with them. They carry the failure streak
+  // and an unchanged `ts`.
+  const failPayload: Record<string, PricePoolRow> = {};
+  let newlyDeferred = 0;
   // Did the run stop with work still due?
   //
   // RENAMED FROM capacityStopped, DELIBERATELY, BECAUSE IT NOW MEANS SOMETHING
@@ -734,6 +990,9 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // isPriceDue would re-select it four minutes early, spending the budget
     // this change exists to recover on a quote that was already fresh.
     let quoteAt = nowMs;
+    // Which of the three outcomes this symbol produced, so the failure block
+    // below can act on the CAUSE rather than on the absence of a quote.
+    let lastOutcome: "row" | "empty" | "refused" | "none" = "none";
     let peFetched = false;
     let peValue: number | null = null;
 
@@ -750,9 +1009,19 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
         outOfTime = true;
         break;
       }
-      quote = await fetchStableQuote(sym, apiKey);
+      priceAttempts++;
+      const outcome = await fetchStableQuote(sym, apiKey);
       quoteAt = Date.now();
-      if (!quote) quoteFailures++;
+      lastOutcome = outcome.kind;
+      if (outcome.kind === "row") {
+        quote = outcome.quote;
+      } else {
+        // KEPT MEANING "attempted and did not land", so the existing run-record
+        // history stays comparable across this change.
+        quoteFailures++;
+        if (outcome.kind === "empty") empties++;
+        else quotesRefused++;
+      }
     }
     if (wantPe) {
       if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) {
@@ -761,25 +1030,59 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       }
     }
 
-    if (!quote && !peFetched) continue; // nothing landed for this symbol
+    if (!quote && !peFetched) {
+      // NOTHING LANDED. Record the streak rather than dropping the symbol on
+      // the floor, and park it once the streak says this is not a blip.
+      //
+      // `ts` IS DELIBERATELY UNCHANGED. Advancing it would make a failed fetch
+      // look like a successful refresh -- the symbol would fall out of the due
+      // set for a full TTL and the page would keep rendering a carried-forward
+      // price as if it had just been checked. Leaving it stale is what keeps
+      // the symbol due the moment its deferral lapses.
+      //
+      // This row goes into `failPayload`, NOT `payload`: `payload`'s keys are
+      // what markRefreshed is called with, and marking a symbol that returned
+      // nothing as freshly refreshed is the same lie stockDataCache was telling.
+      // ONLY AN "empty" TOUCHES THE STREAK. A refusal is evidence about FMP,
+      // not about this ticker, and incrementing on it is how a rate-limited
+      // afternoon becomes a universe full of "dead" symbols.
+      if (wantPrice && lastOutcome === "empty") {
+        const streak = (prev?.failStreak ?? 0) + 1;
+        failPayload[sym] = {
+          price: prev?.price ?? null,
+          changePct: prev?.changePct ?? null,
+          volume: prev?.volume ?? null,
+          marketCap: prev?.marketCap ?? null,
+          open: prev?.open ?? null,
+          dayHigh: prev?.dayHigh ?? null,
+          dayLow: prev?.dayLow ?? null,
+          pe: prev?.pe ?? null,
+          ts: prev?.ts ?? 0,
+          peTs: prev?.peTs ?? 0,
+          failStreak: streak,
+        };
+        // BUFFERED, NOT APPLIED. See the circuit breaker after the loop: a
+        // deferral written inline cannot be taken back once the run turns out
+        // to have been a bad afternoon rather than a set of dead tickers.
+        const deferFor = priceFailDeferSeconds(streak);
+        if (deferFor > 0) pendingDefers.push({ symbol: sym, seconds: deferFor });
+      }
+      continue;
+    }
 
     // A symbol can already have a bucket-sourced row in `payload` (bucket gave
     // price, this loop is here only for its independent PE trickle) -- merge
     // onto it rather than clobbering the fresh bucket price/changePct/ts.
     const already = payload[sym];
-    payload[sym] = {
-      price: quote ? quote.price : already?.price ?? prev?.price ?? null,
-      changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
-      volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
-      marketCap: quote ? quote.marketCap : already?.marketCap ?? prev?.marketCap ?? null,
-      open: quote ? quote.open : already?.open ?? prev?.open ?? null,
-      dayHigh: quote ? quote.dayHigh : already?.dayHigh ?? prev?.dayHigh ?? null,
-      dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
-      // carry forward last-known PE if this run didn't (re)fetch a value
-      pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
-      ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
-      peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
-    };
+    payload[sym] = mergePoolRow({
+      quote,
+      already,
+      prev,
+      quoteAt,
+      peFetched,
+      peValue,
+      nowMs,
+    });
     if (quote) pxRefreshed++;
     if (quote && quote.open != null) openCarried++;
     if (peFetched && peValue != null) peRefreshed++;
@@ -790,13 +1093,56 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // registerSymbols is `nx`, seeding newcomers at 0 (never refreshed) without
   // ever overwriting a real refresh time.
   await registerSymbols("pricePool", clean);
+  // ─────────────────────────────────────────────────────────────────────────
+  // BELT AS WELL AS BRACES: A RUN THAT LOOKS LIKE A MASSACRE IS NOT ONE.
+  //
+  // Classifying outcomes (above) is the brace: a 429 no longer counts as
+  // evidence about a ticker. This is the belt, for the failure that classifying
+  // cannot catch -- FMP answering 200 with an empty body across the board, a
+  // bad API key returning empties, or any bug that turns real rows into
+  // nothing.
+  //
+  // DEAD TICKERS DO NOT ARRIVE 300 AT A TIME. Delistings are a handful a year
+  // and arrive one at a time; an empty rate above half the run's attempts is a
+  // statement about the service, whatever the status codes said. So the whole
+  // buffer is discarded rather than trimmed: a run this degraded has no
+  // trustworthy evidence in it at all, and picking the "most confident"
+  // deferrals out of untrustworthy evidence is just a smaller version of the
+  // same mistake.
+  //
+  // The streaks in failPayload are still WRITTEN. A symbol that is genuinely
+  // dead keeps accumulating across runs and gets parked on a normal day; only
+  // the ACTION is withheld.
+  const emptyRate = priceAttempts > 0 ? empties / priceAttempts : 0;
+  if (emptyRate > PRICE_EMPTY_RATE_ABORT && pendingDefers.length) {
+    deferSuppressed = true;
+    console.warn(
+      `[warm-price-pool] SUPPRESSED ${pendingDefers.length} deferral(s): ` +
+        `${empties} of ${priceAttempts} price attempts returned an empty body ` +
+        `(${Math.round(emptyRate * 100)}%). Dead tickers do not arrive in cohorts -- ` +
+        `treating this as an upstream fault, not as ${pendingDefers.length} delistings.`
+    );
+  } else {
+    for (const { symbol, seconds } of pendingDefers) {
+      await deferSymbol("pricePool", symbol, seconds);
+      newlyDeferred++;
+    }
+  }
+
+  // ONLY `payload`. failPayload's symbols returned nothing, and marking them
+  // refreshed would reset the staleness of exactly the symbols that most need
+  // to look stale.
   const refreshed = Object.keys(payload);
   if (refreshed.length) await markRefreshed("pricePool", refreshed);
 
   let written = 0;
   try {
-    if (Object.keys(payload).length) {
-      await redis.hset(PRICE_POOL_KEY, payload);
+    // One HSET for both. The failure rows have to be written or the streak
+    // cannot survive to the next run, but they are counted separately so
+    // `written` keeps meaning "rows carrying fresh data".
+    const merged = { ...failPayload, ...payload };
+    if (Object.keys(merged).length) {
+      await redis.hset(PRICE_POOL_KEY, merged);
       written = Object.keys(payload).length;
     }
     // Always reset the safety TTL so an all-skipped run can't let the hash lapse.
@@ -834,6 +1180,19 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     due: due.length,
     deferredByCap,
     quoteFailures,
+    // The two causes, separable on /cache-health. quotesRefused spiking with
+    // empties flat is an FMP incident and nothing should be parked; empties
+    // rising alone is what a delisting actually looks like.
+    quotesRefused,
+    empties,
+    priceAttempts,
+    deferSuppressed,
+    // Symbols parked this run after PRICE_FAIL_DEFER_AFTER consecutive
+    // failures, and how many are currently parked in total. A rising
+    // deferredSymbols with a flat newlyDeferred is a settled set of dead
+    // tickers; a rising newlyDeferred is something breaking.
+    newlyDeferred,
+    deferredSymbols: deferred.size,
     outOfTime,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
