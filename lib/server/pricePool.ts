@@ -12,6 +12,9 @@ import { markRefreshed, registerSymbols } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
+import { isActiveMarketWindow } from "./marketHours";
+import { isPriceDue, readTier1, TIER2_TTL_MS } from "./priceTiers";
+import { JOBS, cronIntervalSeconds } from "./jobRuns";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
 // symbol the screener can display: price, % change, volume, market cap and PE.
@@ -27,19 +30,21 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 //   * stable/quote (per symbol)   -> price / %chg / volume / marketCap (no PE)
 //   * stable/ratios-ttm (per sym) -> priceToEarningsRatioTTM (the only PE source)
 //   * Limit is 300 calls/MIN (no daily cap; a 30-day rolling bandwidth cap on
-//     top -- FMP_BANDWIDTH_CAP_BYTES in fmpUsage.ts). ~550 symbols
-//     refreshed across a full PRICE_TARGET_RUNS rotation averages well under
-//     the ceiling.
+//     top -- FMP_BANDWIDTH_CAP_BYTES in fmpUsage.ts). The working guard is
+//     lower still (FMP_SAFE_CALLS_PER_MINUTE, 200 since #392) and quote calls
+//     now count against it, which is what made the tier policy below
+//     necessary.
 //
 // PRICE and PE have very different volatilities, so they refresh on independent
 // rotations, each tracked by its own timestamp on the row:
-//   * price (`ts`)   -> refreshed for the WHOLE universe on a rolling rotation.
-//     Each run takes the stalest-by-`ts` slice, sized so the universe is fully
-//     covered in PRICE_TARGET_RUNS cron runs. HOW LONG THAT IS IN MINUTES
-//     DEPENDS ON THE CRON, which lives in the JOBS registry (jobRuns.ts) and has
-//     already moved once -- #374 took it from */3 to */5, which stretched full
-//     coverage from ~12 to ~20 minutes. Counted in RUNS here so this comment
-//     does not have to be corrected the next time the cadence changes.
+//   * price (`ts`)   -> refreshed for whichever symbols are PAST THEIR OWN
+//     TIER'S TTL: 15 minutes for the attention tier, 30 for everything else
+//     (lib/server/priceTiers.ts). Only during the buffered US session
+//     (lib/server/marketHours.ts) -- outside it the last traded price is the
+//     price, so a refresh returns what is already stored. The per-run cap is
+//     derived from that TTL and the registry's own cron rather than stated as a
+//     fraction of the universe, which is a unit that changes meaning whenever
+//     the cadence does.
 //   * PE (`peTs`)    -> slow trickle of the stalest-by-`peTs` symbols per run;
 //     a P/E barely moves hour to hour, so full coverage in a couple hours then
 //     just rolling is plenty. Last-known PE is carried forward on a miss.
@@ -64,7 +69,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 // admitted by discovery (app/api/market/route.ts) has ts=0 here, so it wins
 // the stalest-first sort on the very next warm-price-pool run -- but if a
 // discovery batch admits enough symbols to exceed a single run's priceCap,
-// some of them queue behind each other for up to PRICE_TARGET_RUNS runs. Discovery already fetches a stable/quote per admitted symbol for its
+// some of them queue behind each other across several runs. Discovery already fetches a stable/quote per admitted symbol for its
 // own purposes (building the homepage-movers quote cache); seedColdPricePoolRows
 // below reuses that ALREADY-FETCHED quote to give the symbol a real baseline
 // row immediately, at zero extra FMP cost. It only fills symbols with NO
@@ -82,12 +87,30 @@ const redis =
 const PRICE_POOL_KEY = "msh:price-pool:v1";
 const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gaps
 
-// Price coverage: the whole universe is covered in PRICE_TARGET_RUNS runs. In
-// wall-clock terms that is that many multiples of the warm-price-pool cron in
-// the JOBS registry -- ~20 minutes at the */5 it runs on since #374.
-const PRICE_TARGET_RUNS = 4;
+// Price coverage is now driven by the TIER POLICY, not by a fixed fraction of
+// the universe per run. It used to be "cover everything in PRICE_TARGET_RUNS
+// runs", which is a cadence stated in runs -- a unit that silently changes
+// meaning whenever the cron does, and did (#374 took it from */3 to */5 and
+// stretched full coverage from ~12 to ~20 minutes without a line of code
+// changing). Selection is now "whatever is past its own tier's TTL", so the
+// policy is stated in minutes and the cron cannot quietly rewrite it.
+//
+// The per-run cap is DERIVED from that policy and the real cron rather than
+// typed: to give every tier-2 symbol a refresh inside TIER2_TTL_MS you need
+// universe / (TTL / cron-period) symbols per run. Both inputs already exist and
+// are already the source of truth for other readers -- the JOBS registry is
+// what /cache-health's schedule text is computed from, for the same reason
+// (jobRuns.ts:98, after a page spent an hour telling readers a cadence that had
+// moved).
 const PRICE_MIN_PER_RUN = 40; // don't bother sub-slicing a tiny universe
 const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even paced)
+
+/** Runs available inside one tier-2 TTL, from the registry's own cron. */
+function runsPerTier2Window(): number {
+  const seconds = cronIntervalSeconds(JOBS["warm-price-pool"].cron);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 1;
+  return Math.max(1, Math.floor(TIER2_TTL_MS / (seconds * 1000)));
+}
 // PE trickle: small per-run slice; slow-moving data, so this just needs to roll.
 const PE_MAX_PER_RUN = 20;
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings + live traffic
@@ -211,8 +234,8 @@ export type ColdSeedRow = {
  * wins warm-price-pool's stalest-first sort and is typically picked up on the
  * very next cron run. But if a single discovery batch admits enough symbols to
  * exceed that run's priceCap (PRICE_MAX_PER_RUN=220), the overflow queues
- * behind other stale symbols for up to PRICE_TARGET_RUNS runs. This gives those
- * symbols a real row immediately instead.
+ * behind other stale symbols for another run or more. This gives those symbols
+ * a real row immediately instead.
  *
  * Deliberately does not touch `pe` (left null) or `peTs` (left 0) -- PE has no
  * cheap already-fetched source at discovery time, so it still only ever comes
@@ -401,12 +424,16 @@ async function fetchMoverBuckets(apiKey: string): Promise<Map<string, MoverRow>>
 }
 
 /**
- * Cron worker: refresh the pool. Spends the 3 free mover-bucket calls first --
- * any universe symbol they cover gets a free price/%change refresh and is
- * excluded from this run's stalest-slice pick. PRICE is then refreshed for the
- * stalest slice (among symbols NOT already freshened by a bucket hit this run)
- * large enough to cover the whole universe in PRICE_TARGET_RUNS runs
- * (independent of PE).
+ * Cron worker: refresh the pool.
+ *
+ * Returns immediately outside the buffered US session -- see marketHours.ts for
+ * why that is the saving that pays for the 15-minute tier.
+ *
+ * Inside it: spends the 3 free mover-bucket calls first (any universe symbol
+ * they cover gets a free price/%change refresh and is excluded from this run's
+ * pick), then refreshes whichever remaining symbols are past their own tier's
+ * TTL, most-important tier first, up to a cap derived from the tier policy and
+ * the cron period.
  * PE is refreshed for a small stalest-by-`peTs` trickle. Only touched fields
  * are written back (a single HSET) + the hash's safety expiry is reset.
  * Everything not refreshed keeps its prior value. Budget-guarded and fail-open
@@ -424,8 +451,30 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     };
   }
 
+  // MARKET-HOURS GATE, BEFORE ANY READ OR CALL.
+  //
+  // Outside the buffered session the last traded price IS the price: a refresh
+  // returns the number already in the pool. The cron fires every 5 minutes
+  // around the clock, so roughly two thirds of its runs were re-fetching a
+  // value that could not have moved. Skipping them is what makes a 15-minute
+  // tier affordable at all (see priceTiers.ts).
+  //
+  // Returns ok:true. A skip here is a HEALTHY outcome, and reporting it as a
+  // failure would make /cache-health red for sixteen hours a day and teach
+  // everyone to ignore it. `skipped` is on the record so it stays
+  // distinguishable from the job having stopped running.
+  if (!isActiveMarketWindow(new Date(nowMs))) {
+    return { ok: true, skipped: true, reason: "market-closed", written: 0 };
+  }
+
   const existing = await readPricePoolBulk(clean);
   const cleanSet = new Set(clean);
+
+  // Tier 1 is derived in warmTargets.ts and parked in its own key. An
+  // unreadable or empty set is not fatal: priceTtlMsFor defaults to tier 2, so
+  // the worst case is the whole universe on the 30-minute policy -- degraded,
+  // never stalled.
+  const tier1 = await readTier1();
 
   // Free head start from the mover buckets. Only symbols already in our own
   // universe are used -- bucket rows for names outside `clean` are ignored, so
@@ -454,18 +503,48 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     bucketFreshened.add(sym);
   }
 
-  // Price slice: stalest-by-ts among symbols NOT already freshened by a bucket
-  // hit this run. Sized to cover the whole universe in PRICE_TARGET_RUNS runs;
-  // bucket hits are pure bonus coverage on top, so this doesn't shrink the cap.
+  // Price slice: symbols PAST THEIR OWN TIER'S TTL, excluding those a free
+  // bucket hit already freshened this run.
+  //
+  // This is the change that buys back the throughput #392 cost. The old rule
+  // was "the stalest ceil(n/4)", which always found work: a symbol refreshed
+  // four minutes ago was still eligible if it happened to be the stalest, so
+  // the run spent its whole budget every time regardless of whether anything
+  // had actually aged out. Selecting on the policy instead means a run does
+  // exactly the work the policy requires and stops, and the budget it does not
+  // spend is budget the history and earnings jobs can.
   const priceCap = Math.min(
     PRICE_MAX_PER_RUN,
-    Math.max(PRICE_MIN_PER_RUN, Math.ceil(clean.length / PRICE_TARGET_RUNS))
+    Math.max(PRICE_MIN_PER_RUN, Math.ceil(clean.length / runsPerTier2Window()))
   );
-  const priceSlice = clean
-    .filter((sym) => !bucketFreshened.has(sym))
-    .sort((a, b) => (existing.get(a)?.ts ?? 0) - (existing.get(b)?.ts ?? 0))
+
+  const due = clean.filter(
+    (sym) => !bucketFreshened.has(sym) && isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
+  );
+
+  // TIER FIRST, THEN STALEST WITHIN TIER -- not stalest overall.
+  //
+  // Sorting the due set by raw timestamp would systematically favour tier 2:
+  // its symbols are ALLOWED to be twice as old, so they would always look
+  // staler and would crowd the 15-minute tier out of every capped run. Ordering
+  // by tier makes the degradation match the policy: when the cap binds, tier 2
+  // is what slips, which is the whole reason for having tiers.
+  const priceSlice = due
+    .sort((a, b) => {
+      const tierDelta = Number(tier1.has(b)) - Number(tier1.has(a));
+      if (tierDelta) return tierDelta;
+      return (existing.get(a)?.ts ?? 0) - (existing.get(b)?.ts ?? 0);
+    })
     .slice(0, priceCap);
   const priceSet = new Set(priceSlice);
+
+  // Due but not attempted this run, because the cap bound. THE POINT OF
+  // RECORDING IT is that the true worst-case staleness is otherwise assumed
+  // rather than known: every symbol counted here waits at least another cron
+  // period beyond its TTL, and a run record showing a persistent non-zero here
+  // is the signal that the cap -- not the policy -- is what actually governs
+  // freshness.
+  const deferredByCap = Math.max(0, due.length - priceSlice.length);
 
   // PE slice: stalest-by-peTs, small trickle. Independent of bucket hits (PE
   // never comes from a bucket).
@@ -479,6 +558,17 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
 
   let pxRefreshed = 0;
   let peRefreshed = 0;
+  // A quote that was attempted and did not land -- FMP non-200, a parse
+  // failure, or a throw. RECORDED RATHER THAN INFERRED. A failed symbol keeps
+  // its old `ts`, so it is still past its TTL and sorts to the front of the
+  // next run's due set five minutes later; the failure costs one cron period,
+  // not one TTL. That is a claim about behaviour, and this counter is what
+  // makes it checkable instead of assumed.
+  let quoteFailures = 0;
+  // Runs that ended early because the FMP budget ran out mid-rotation. This is
+  // the one path that DOES cost a symbol its next slot rather than five
+  // minutes, because everything after the break is never attempted at all.
+  let capacityStopped = false;
   // How many of this run's quotes actually carried a session open. The guard
   // below turns "the plan stopped sending OHLC" from an invisible degradation
   // into a line in the log and a field on the run record.
@@ -494,8 +584,12 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     let peValue: number | null = null;
 
     if (wantPrice) {
-      if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+      if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) {
+        capacityStopped = true;
+        break;
+      }
       quote = await fetchStableQuote(sym, apiKey);
+      if (!quote) quoteFailures++;
     }
     if (wantPe) {
       if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) {
@@ -568,6 +662,16 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     ok: true,
     universe: clean.length,
     priceCap,
+    tier1: tier1.size,
+    // What the policy said was due this run, and what the cap would not let us
+    // reach. `due` at or below `priceCap` with `deferredByCap` 0 is the healthy
+    // shape: it means freshness is governed by the tier TTLs, which is the
+    // thing this design promises. A persistent non-zero deferral means the cap
+    // is the real policy and the TTLs are aspirational.
+    due: due.length,
+    deferredByCap,
+    quoteFailures,
+    capacityStopped,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
     // Reported alongside priceRefreshed rather than only warned about, so the
