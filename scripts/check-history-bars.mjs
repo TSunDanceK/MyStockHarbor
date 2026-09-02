@@ -270,17 +270,71 @@ if (!barMissing.length) {
   check("Wednesday's bar is 2 weekdays behind", b.weekdaysBehindEastern("2026-08-19", MON) === 2);
   check("a 2024 bar is far behind", b.weekdaysBehindEastern("2024-05-03", MON) > 500);
 
+  // ───────────────────────────────────────────────────────────────────────
+  // THE FIXTURES BELOW ARE DERIVED FROM TODAY, AND THAT IS THE FIX.
+  //
+  // They used to be absolute dates -- LIVE "2026-08-21", MISSED "2026-08-14",
+  // HOLIDAY_SLACK "2026-08-19", BEYOND_SLACK "2026-08-18" -- chosen against the
+  // Monday this file was written (2026-08-24, see the MON pin above). But
+  // recordNewestBarAge takes NO clock: it calls weekdaysBehindEastern(newest)
+  // with the real one. So the four assertions that go through it were true only
+  // for as long as the real Monday lasted. 2026-08-21 crossed the two-weekday
+  // slack on 2026-08-26 and all four have been red every day since -- for a
+  // week, in a suite everyone reads as "2 of 45", which is exactly how a third
+  // failure gets missed.
+  //
+  // THE CODE WAS NOT WRONG. recordNewestBarAge classified every one of those
+  // fixtures correctly for the day it was actually run; the assertions were
+  // wrong, and they were wrong in the one way a passing test cannot warn you
+  // about -- they expire.
+  //
+  // Fixed by deriving each fixture from the SAME helper, against the real clock,
+  // so "exactly N weekdays behind" stays exactly N weekdays behind tomorrow.
+  // Not circular: weekdaysBehindEastern is separately pinned to fixed dates and
+  // an explicit `now` in the three assertions immediately above, which is why
+  // those three never rotted.
+  const isoUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
+  // WEEKDAYS ONLY. A real bar never carries a Saturday or Sunday date, and
+  // several calendar days map to the same "weekdays behind" -- picking a
+  // weekend one would assert the slack boundary with a date the parser can
+  // never produce, which is a fixture that agrees with the code for a reason
+  // unrelated to the rule.
+  const dateExactlyBehind = (weekdays) => {
+    for (let back = 0; back <= 60; back++) {
+      const ms = Date.now() - back * 86_400_000;
+      const dow = new Date(ms).getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const iso = isoUtc(ms);
+      if (b.weekdaysBehindEastern(iso) === weekdays) return iso;
+    }
+    return null;
+  };
+  const maxAge = Number((raw.match(/HISTORY_MAX_BAR_AGE_WEEKDAYS = (\d+)/) ?? [])[1]);
+  const CURRENT = dateExactlyBehind(0);
+  const AT_SLACK = maxAge ? dateExactlyBehind(maxAge) : null;
+  const PAST_SLACK = maxAge ? dateExactlyBehind(maxAge + 1) : null;
+  const RECENTLY_MISSED = maxAge ? dateExactlyBehind(maxAge + 3) : null;
+  const LONG_DEAD = "2024-05-03";
+  if (!maxAge || !CURRENT || !AT_SLACK || !PAST_SLACK || !RECENTLY_MISSED) {
+    console.error(
+      `FAIL: could not derive bar-age fixtures against today — slack ${maxAge}, ` +
+        `current ${CURRENT}, at-slack ${AT_SLACK}, past-slack ${PAST_SLACK}, ` +
+        `missed ${RECENTLY_MISSED}. Every assertion below would measure nothing.`
+    );
+    process.exit(1);
+  }
+
   b.readHistoryBarAgeCounts(); // reset
-  b.recordNewestBarAge("LIVE", series("2026-08-21"));
-  b.recordNewestBarAge("DEAD", series("2024-05-03"));
-  b.recordNewestBarAge("MISSED", series("2026-08-14"));
+  b.recordNewestBarAge("LIVE", series(CURRENT));
+  b.recordNewestBarAge("DEAD", series(LONG_DEAD));
+  b.recordNewestBarAge("MISSED", series(RECENTLY_MISSED));
   const got = b.readHistoryBarAgeCounts();
 
-  check("a current symbol counts fresh", got.fresh === 1, String(got.fresh));
-  check("both stale shapes count stale", got.stale === 2, String(got.stale));
+  check("a current symbol counts fresh", got.fresh === 1, `${got.fresh} — bar ${CURRENT}, 0 weekdays behind today`);
+  check("both stale shapes count stale", got.stale === 2, `${got.stale} — ${LONG_DEAD} (delisted) and ${RECENTLY_MISSED} (${maxAge + 3} weekdays behind)`);
   check(
     "each stale symbol carries its newest bar DATE",
-    got.symbols.includes("DEAD@2024-05-03") && got.symbols.includes("MISSED@2026-08-14"),
+    got.symbols.includes(`DEAD@${LONG_DEAD}`) && got.symbols.includes(`MISSED@${RECENTLY_MISSED}`),
     got.symbols.join(" ")
   );
   // GUARDED, because this assertion is precisely about the date being present:
@@ -294,26 +348,44 @@ if (!barMissing.length) {
     Boolean(dead && missed) && dead.slice(5) < missed.slice(7),
     dead && missed ? "no quote call needed" : "the date is missing from the record"
   );
-  check("newestBarSeen is the max across the run", got.newestBarSeen === "2026-08-21", String(got.newestBarSeen));
+  check(
+    "newestBarSeen is the max across the run",
+    got.newestBarSeen === CURRENT,
+    `${got.newestBarSeen} of ${[CURRENT, LONG_DEAD, RECENTLY_MISSED].join(", ")}`
+  );
 
   // THE THRESHOLD ITSELF, at its boundary. Two weekdays of slack, not one, so a
   // market holiday does not flag every live symbol the morning after -- a warn
   // that cries wolf on every public holiday is a warn people learn to ignore.
   // Calibration found this unasserted: changing the constant from 2 to 1 failed
   // nothing, because every fixture above sits far from the edge.
+  // THE CONSTANT ITSELF, PINNED SEPARATELY. The two boundary assertions below
+  // derive their fixtures FROM maxAge, so they test "the boundary is where the
+  // constant says it is" and would happily follow the constant anywhere. The
+  // absolute-date version they replace pinned the value 2 as a side effect of
+  // being absolute; losing that silently would trade one expiring assertion for
+  // one that cannot fail.
+  check(
+    "the slack is two weekdays -- not one, not three",
+    maxAge === 2,
+    `${maxAge} — one absorbs no market holiday, so every live symbol flags the ` +
+      `morning after Labor Day and the warn becomes noise; three hides a symbol ` +
+      `that missed two full sessions. Change it deliberately and update this line`
+  );
+
   b.readHistoryBarAgeCounts();
-  b.recordNewestBarAge("HOLIDAY_SLACK", series("2026-08-19")); // Wed, 2 weekdays behind
-  b.recordNewestBarAge("BEYOND_SLACK", series("2026-08-18")); // Tue, 3 weekdays behind
+  b.recordNewestBarAge("HOLIDAY_SLACK", series(AT_SLACK));
+  b.recordNewestBarAge("BEYOND_SLACK", series(PAST_SLACK));
   const edge = b.readHistoryBarAgeCounts();
   check(
-    "exactly 2 weekdays behind is FRESH (one holiday absorbed)",
+    `exactly ${maxAge} weekdays behind is FRESH (one holiday absorbed)`,
     edge.fresh === 1,
-    `${edge.fresh} fresh, ${edge.stale} stale`
+    `${edge.fresh} fresh, ${edge.stale} stale — bar ${AT_SLACK} against a slack of ${maxAge}`
   );
   check(
-    "3 weekdays behind is STALE",
+    `${maxAge + 1} weekdays behind is STALE`,
     edge.stale === 1 && edge.symbols.some((x) => x.startsWith("BEYOND_SLACK@")),
-    edge.symbols.join(" ")
+    `${edge.symbols.join(" ") || "nothing stale"} — bar ${PAST_SLACK}`
   );
   check("read-and-reset really resets", b.readHistoryBarAgeCounts().stale === 0);
 
