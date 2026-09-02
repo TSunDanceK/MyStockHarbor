@@ -490,6 +490,68 @@ function ptUpside(e: ResultEntry, d: DerivedRow): number | null {
   return ((tgt - d.price) / d.price) * 100;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICE-DERIVED RATIOS, COMPUTED HERE RATHER THAN FETCHED.
+//
+// Same pattern as forwardPe above, and for the same reason. A quarterly-static
+// numerator is stored; the ratio is a division against the pooled price at
+// render. Forward P/E has never been fetched from FMP and nobody has missed it.
+//
+// WHY AT RENDER AND NOT AT WRITE TIME. Computing these in stockDataCache would
+// freeze them at the refresh, and warm-stock-data's lap is ~4.7 hours -- so a
+// P/S "ratio" would be this morning's market cap over this quarter's revenue,
+// presented beside a live price it no longer matches. For a number whose whole
+// point is that it moves with price, the honest place is the read.
+//
+// DERIVED FIRST, STORED AS FALLBACK. ratios-ttm is still fetched for pbRatio
+// and enterpriseValue (see below), so its values still arrive. Preferring the
+// derived one strictly improves freshness and never loses a row: a symbol whose
+// revenue or cash flow has not been warmed yet still shows the fetched figure.
+// When 6c adds balance-sheet-statement and ratios-ttm goes, the fallback simply
+// stops arriving and these become the only source.
+//
+// THE 100x TRAP. FMP returns dividendYieldTTM and dividendPayoutRatioTTM as
+// FRACTIONS (0.0135) and stockDataCache multiplies by 100 for display, so
+// ResultEntry.divYield and .payoutRatio are PERCENTS -- the type comments say
+// so. A locally computed yield is a fraction too, so it needs the same x100.
+// Omitting it gives 0.0135 where 1.35 belongs: plausible on a low-yield stock,
+// absurd on a high one, and wrong everywhere. Asserted in
+// scripts/check-derived-ratios.mjs.
+//
+// NEGATIVE DENOMINATORS RETURN null, matching forwardPe's `eps <= 0` guard. A
+// loss-making company's P/FCF is not a small number, it is not a number -- and
+// showing a negative would sort it to the top of an "cheapest first" column.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function psRatio(e: ResultEntry, _d: DerivedRow): number | null {
+  const cap = num(e.marketCap);
+  const revenue = num(e.revenue);
+  if (cap == null || revenue == null || revenue <= 0) return num(e.psRatio);
+  return cap / revenue;
+}
+
+function pfcfRatio(e: ResultEntry, _d: DerivedRow): number | null {
+  const cap = num(e.marketCap);
+  const fcf = num(e.freeCashFlow);
+  if (cap == null || fcf == null || fcf <= 0) return num(e.pfcfRatio);
+  return cap / fcf;
+}
+
+/** PERCENT, not a fraction -- see the 100x note above. */
+function divYieldPct(e: ResultEntry, d: DerivedRow): number | null {
+  const dps = num(e.divPerShare);
+  if (d.price == null || d.price <= 0 || dps == null) return num(e.divYield);
+  return (dps / d.price) * 100;
+}
+
+/** PERCENT, not a fraction. No price in this one -- both inputs are filings. */
+function payoutRatioPct(e: ResultEntry, _d: DerivedRow): number | null {
+  const dps = num(e.divPerShare);
+  const eps = num(e.epsTtm);
+  if (dps == null || eps == null || eps <= 0) return num(e.payoutRatio);
+  return (dps / eps) * 100;
+}
+
 type Col = {
   key: string;
   label: string;
@@ -804,13 +866,13 @@ export default function PickerResultsGrid({
 
     const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e) => capCell(num(e.enterpriseValue)) };
     const fwdpe: Col = { key: "fwdpe", label: "Forward PE", sortType: "num", get: (e, d) => forwardPe(e, d), cell: (e, d) => numCell(forwardPe(e, d)) };
-    const ps: Col = { key: "ps", label: "PS Ratio", sortType: "num", get: (e) => num(e.psRatio), cell: (e) => numCell(num(e.psRatio)) };
+    const ps: Col = { key: "ps", label: "PS Ratio", sortType: "num", get: (e, d) => psRatio(e, d), cell: (e, d) => numCell(psRatio(e, d)) };
     const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e) => numCell(num(e.pbRatio)) };
-    const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e) => num(e.pfcfRatio), cell: (e) => numCell(num(e.pfcfRatio)) };
+    const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e, d) => pfcfRatio(e, d), cell: (e, d) => numCell(pfcfRatio(e, d)) };
 
     const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
-    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e) => num(e.divYield), cell: (e) => plainPctCell(num(e.divYield)) };
-    const payout: Col = { key: "payout", label: "Payout Ratio", sortType: "num", get: (e) => num(e.payoutRatio), cell: (e) => plainPctCell(num(e.payoutRatio)) };
+    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d) => plainPctCell(payoutRatioPct(e, d)) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
     const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
 

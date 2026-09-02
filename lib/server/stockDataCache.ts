@@ -174,7 +174,26 @@ async function fetchOne(symbol: string, apiKey: string): Promise<Partial<StockDa
   const base = "https://financialmodelingprep.com/stable";
   const out: Partial<StockData> = {};
 
-  // 1) ratios-ttm -> valuation ratios + dividend yield/payout/per-share + TTM EPS
+  // 1) ratios-ttm.
+  //
+  // FOUR OF THESE EIGHT FIELDS ARE NOW ONLY A FALLBACK. psRatio, pfcfRatio,
+  // divYield and payoutRatio are computed at render in PickerResultsGrid from
+  // values already stored here (revenue, freeCashFlow, divPerShare, epsTtm)
+  // against the pooled price -- the same pattern forwardPe has always used.
+  // They are still parsed and stored so a symbol whose numerator has not been
+  // warmed yet keeps a value instead of going blank.
+  //
+  // WHY THE CALL IS STILL MADE. pbRatio and enterpriseValue cannot be derived
+  // from anything warmed: book value per share and net debt both come from
+  // balance-sheet-statement, which nothing on a cron fetches (only
+  // app/stock/[symbol]/earnings/page.tsx, per render, limit=1). Both are
+  // RENDERED COLUMNS -- "PB Ratio" and "Ent. Value" in PickerResultsGrid -- so
+  // dropping them would remove data a reader can see, which is not a trade
+  // worth one endpoint. Adding balance-sheet-statement to the quarterly set is
+  // the move that finishes this; until then this call stays for those two.
+  //
+  // So this change buys FRESHNESS, not calls: it does not reduce the ratios-ttm
+  // rotation by one request. The call saving arrives when balance-sheet lands.
   try {
     const row = firstRow(await fetchJson(`${base}/ratios-ttm?symbol=${s}&apikey=${key}`));
     if (row) {
