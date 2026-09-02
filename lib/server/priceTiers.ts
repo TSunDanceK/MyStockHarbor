@@ -68,29 +68,41 @@ const TIER1_TTL_SECONDS = 2 * 60 * 60;
 /** Top stocks by attention, plus up to 100 searched symbols. */
 export const TIER1_TTL_MS = 15 * 60_000;
 /** Everything else in the universe. */
-export const TIER2_TTL_MS = 60 * 60_000;
+export const TIER2_TTL_MS = 30 * 60_000;
 
-// 60, CHANGED FROM 30, AND THE OLD ARGUMENT WAS NOT WRONG -- IT WAS SIZED FOR A
-// SMALLER UNIVERSE. It read: "the bandwidth difference is immaterial at this
-// universe size, and during a volatile session an hour-old percentage change is
-// visibly wrong to anyone with a second source open". Both halves were true at
-// 700 symbols. Neither survives 3,000:
+// 30 IS DELIBERATE, AND SO IS THE FACT THAT IT IS NOT 60 YET.
 //
-//   15/30 at 3,000   7,000 calls/hour against a usable ceiling of ~6,720.
-//                    117 of 140 permitted calls a minute, sustained for nine
-//                    hours, leaving nothing for history, earnings or
-//                    fundamentals. It does not fit.
-//   15/60 at 3,000   4,500 calls/hour, 75 of 140, ~374 MB/month.
+// 60 was written here first, sized for a 3,000-symbol universe where a flat
+// 15/30 policy needs ~7,000 calls/hour against a usable ceiling of ~6,720 --
+// 117 of 140 permitted calls a minute sustained for nine hours, leaving nothing
+// for history, earnings or fundamentals. That arithmetic is still correct. It
+// is just not a constraint that exists yet.
 //
-// So the trade is four times the coverage against a tail that is an hour old
-// rather than half an hour, and the fast tier -- the ~500 names anyone is
-// actually looking at -- keeps its 15 minutes. That is the whole point of
-// having tiers: the degradation lands where it is least visible.
+// AT TODAY'S 762 SYMBOLS THERE IS SPARE CAPACITY, MEASURED. Production,
+// 2026-09-02, priceCap 200:
 //
-// AN ADAPTIVE BACKOFF WAS CONSIDERED AND REJECTED. "Do not refresh what is not
-// moving" bought ~22% of a budget that already has a third spare, and its cost
-// was per-symbol drift state whose failure mode is a plausible-looking wrong
-// price with nothing reporting it. Do not build it.
+//     12:00  due 748  priceRefreshed 200  deferredByCap 548
+//     12:05  due 529  priceRefreshed 200  deferredByCap 329
+//     12:10  due 310  priceRefreshed 199  deferredByCap 110
+//     12:15  due 124  priceRefreshed 123  deferredByCap   0
+//
+// The run reaching deferredByCap 0 is the whole answer: the backlog drains
+// inside four runs and the last one stops early because nothing else is due.
+// The TTLs are already the binding policy, not the cap. Moving the tail to 60
+// now would halve the freshness of ~332 symbols to buy headroom nothing is
+// asking for -- paying the cost before the benefit arrives.
+//
+// WHAT MOVES IT. TIER2_TTL_MS goes to 60 as part of the growth step (task 7c),
+// in the same change that raises ANALYSIS_UNIVERSE_CAP, so the constraint and
+// the relief land together. scripts/check-price-tiers.mjs enforces that
+// pairing: it computes this policy's call rate against the universe the caps
+// actually allow, so raising the caps without moving this constant fails rather
+// than shipping.
+//
+// AN ADAPTIVE BACKOFF WAS CONSIDERED AND REJECTED, at either TTL. "Do not
+// refresh what is not moving" bought ~22% of a budget that already has a third
+// spare, and its cost was per-symbol drift state whose failure mode is a
+// plausible-looking wrong price with nothing reporting it. Do not build it.
 
 export const TIER1_SEARCH_PROMOTION_CAP = 100;
 

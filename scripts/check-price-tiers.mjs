@@ -327,27 +327,55 @@ console.log("\n3. The two policies, and what happens when the tier is unknown");
 const tier1 = new Set(["FAST"]);
 const now = 1_000_000_000;
 check(
-  "tier 1 is 15 minutes and the tail is 60",
-  tiers.TIER1_TTL_MS === 15 * 60_000 && tiers.TIER2_TTL_MS === 60 * 60_000,
-  `${tiers.TIER1_TTL_MS / 60_000} / ${tiers.TIER2_TTL_MS / 60_000} minutes — the tail ` +
-    `moved 30 -> 60 because 15/30 at 3,000 symbols is 7,000 calls/hour against a ` +
-    `usable ceiling of ~6,720; 15/60 is 4,500`
+  "the fast tier is 15 minutes and the tail is slower",
+  tiers.TIER1_TTL_MS === 15 * 60_000 && tiers.TIER2_TTL_MS > tiers.TIER1_TTL_MS,
+  `${tiers.TIER1_TTL_MS / 60_000} / ${tiers.TIER2_TTL_MS / 60_000} minutes — the tail's ` +
+    `exact value is decided by the fit assertion below, not pinned here`
 );
 
-// The policy has to FIT, and that is arithmetic rather than an opinion. The
-// fast tier is a fixed count, so this holds at any universe size.
+// THE POLICY MUST FIT THE UNIVERSE THE CAPS ALLOW, AND THAT IS WHAT COUPLES
+// THIS CONSTANT TO THE GROWTH STEP.
+//
+// The tail was briefly 60, sized for 3,000 symbols where 15/30 needs ~7,000
+// calls/hour against a usable ceiling of ~6,720. That arithmetic is right and
+// the constraint does not exist yet: production on 2026-09-02 reached
+// deferredByCap 0 within four runs at 762 symbols, so the TTLs are already the
+// binding policy and there is spare capacity. Moving the tail to 60 now would
+// halve the freshness of ~332 symbols to buy headroom nothing is asking for.
+//
+// So this is computed against ANALYSIS_UNIVERSE_CAP rather than against a typed
+// 3,000. Today it passes comfortably at 30; the moment someone raises that cap
+// toward 3,000 without also moving TIER2_TTL_MS, it fails. The pairing the
+// comment in priceTiers.ts promises is enforced here rather than remembered.
+//
+// The basis is the ANALYSED cap, not the analysed + dynamic sum the pre-open
+// buffer uses. Those answer different questions: the buffer is worst-case work
+// inside one window, where the sum is the honest bound; this is a SUSTAINED
+// rate over a universe whose two pools overlap heavily. The observed warm union
+// is 762 against a 700 cap, ~9% above it, which the 80% ceiling absorbs.
 const TARGET_FAST = 500;
-const TARGET_TOTAL = 3000;
+const analysedCap = Number(
+  (readCodeOnly("lib/server/dynamicUniverseCache.ts").match(
+    /ANALYSIS_UNIVERSE_CAP = (\d+)/
+  ) ?? [])[1]
+);
+if (!analysedCap) {
+  console.error("FAIL: could not read ANALYSIS_UNIVERSE_CAP — measuring nothing.");
+  process.exit(1);
+}
+const fastCount = Math.min(TARGET_FAST, analysedCap);
 const callsPerHour =
-  TARGET_FAST / (tiers.TIER1_TTL_MS / 3_600_000) +
-  (TARGET_TOTAL - TARGET_FAST) / (tiers.TIER2_TTL_MS / 3_600_000);
+  fastCount / (tiers.TIER1_TTL_MS / 3_600_000) +
+  (analysedCap - fastCount) / (tiers.TIER2_TTL_MS / 3_600_000);
 const usablePerHour = 140 * 60;
 check(
-  "the two policies together fit inside the usable call rate at 3,000 symbols",
+  "the two policies fit inside the usable call rate at the universe the caps allow",
   callsPerHour <= usablePerHour * 0.8,
-  `${Math.round(callsPerHour)} calls/hour against ${usablePerHour} usable — the 80% ` +
-    `ceiling is what leaves room for history, earnings and fundamentals, which is ` +
-    `exactly what 15/30 (${Math.round(TARGET_FAST * 4 + (TARGET_TOTAL - TARGET_FAST) * 2)}) did not`
+  `${Math.round(callsPerHour)} calls/hour at a cap of ${analysedCap} against ` +
+    `${usablePerHour} usable — the 80% ceiling leaves room for history, earnings and ` +
+    `fundamentals. Raising the cap toward 3,000 breaks this at a 30-minute tail ` +
+    `(7,000/hour) and passes at 60 (4,500), which is what makes the TTL and the ` +
+    `growth step land together`
 );
 check(
   "a symbol not in tier 1 falls to the SLOWER policy, never to 'never'",
@@ -361,18 +389,21 @@ check(
     !tiers.isPriceDue(now - 16 * 60_000, "SLOW", tier1, now),
   "the whole point of the split"
 );
+// Written against the CONSTANT rather than against a typed 31/61, so the pair
+// keeps testing the boundary wherever the tail sits. Hard-coding the minutes is
+// how a test comes to assert the policy the code used to have.
+const tailMin = tiers.TIER2_TTL_MS / 60_000;
 check(
-  "31 minutes is due for tier 1 but NOT yet for the 60-minute tail",
-  tiers.isPriceDue(now - 31 * 60_000, "FAST", tier1, now) &&
-    !tiers.isPriceDue(now - 31 * 60_000, "SLOW", tier1, now),
-  "the tail moved to 60; a test still passing at 31 for both would mean the " +
-    "constant moved and the policy did not"
+  `just under the tail's ${tailMin} minutes is due for tier 1 only`,
+  tiers.isPriceDue(now - (tailMin - 1) * 60_000, "FAST", tier1, now) &&
+    !tiers.isPriceDue(now - (tailMin - 1) * 60_000, "SLOW", tier1, now),
+  `${tailMin - 1} minutes — past the 15-minute fast policy, inside the tail's`
 );
 check(
-  "61 minutes is due for both",
-  tiers.isPriceDue(now - 61 * 60_000, "FAST", tier1, now) &&
-    tiers.isPriceDue(now - 61 * 60_000, "SLOW", tier1, now),
-  ""
+  "just over it is due for both",
+  tiers.isPriceDue(now - (tailMin + 1) * 60_000, "FAST", tier1, now) &&
+    tiers.isPriceDue(now - (tailMin + 1) * 60_000, "SLOW", tier1, now),
+  `${tailMin + 1} minutes`
 );
 check(
   "a never-fetched symbol is due, not fresh",
