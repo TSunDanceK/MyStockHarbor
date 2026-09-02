@@ -141,7 +141,11 @@ export async function GET(req: NextRequest) {
       due: result.due ?? null,
       deferredByCap: result.deferredByCap ?? null,
       quoteFailures: result.quoteFailures ?? null,
-      capacityStopped: result.capacityStopped ?? null,
+      // Was `capacityStopped`, which meant "the current minute filled up" and
+      // was true on essentially every run. The loop now waits out a full minute
+      // bucket instead of ending on one, so the only thing that stops a run
+      // early is its own time budget -- rarer, and the signal worth an alert.
+      outOfTime: result.outOfTime ?? null,
       reason: result.reason ?? null,
     });
     return NextResponse.json(result);

@@ -13,7 +13,7 @@ import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 import { isActiveMarketWindow } from "./marketHours";
-import { isPriceDue, readTier1, TIER2_TTL_MS } from "./priceTiers";
+import { isPriceDue, readTier1, TIER1_TTL_MS, TIER2_TTL_MS } from "./priceTiers";
 import { JOBS, cronIntervalSeconds } from "./jobRuns";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
@@ -105,15 +105,87 @@ const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gap
 const PRICE_MIN_PER_RUN = 40; // don't bother sub-slicing a tiny universe
 const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even paced)
 
-/** Runs available inside one tier-2 TTL, from the registry's own cron. */
-function runsPerTier2Window(): number {
+/** Runs available inside one TTL window, from the registry's own cron. */
+function runsPerWindow(ttlMs: number): number {
   const seconds = cronIntervalSeconds(JOBS["warm-price-pool"].cron);
   if (!Number.isFinite(seconds) || seconds <= 0) return 1;
-  return Math.max(1, Math.floor(TIER2_TTL_MS / (seconds * 1000)));
+  return Math.max(1, Math.floor(ttlMs / (seconds * 1000)));
+}
+
+export function runsPerTier1Window(): number {
+  return runsPerWindow(TIER1_TTL_MS);
+}
+
+export function runsPerTier2Window(): number {
+  return runsPerWindow(TIER2_TTL_MS);
 }
 // PE trickle: small per-run slice; slow-moving data, so this just needs to roll.
 const PE_MAX_PER_RUN = 20;
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings + live traffic
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE RUN OUTLIVES THE MINUTE BUCKET.
+//
+// This loop used to `break` the moment hasFmpCapacity said no, which is
+// `current + 1 + 60 <= 200` -- i.e. the instant the CURRENT MINUTE reached 140
+// calls. Production, 2026-09-02, four consecutive runs:
+//
+//     08:01  priceCap 190   priceRefreshed 136
+//     08:05  priceCap 190   priceRefreshed 132
+//     08:10  priceCap 190   priceRefreshed 128
+//     08:15  priceCap 190   priceRefreshed 136
+//
+// The cap was 190 and was NEVER the binding constraint. 140 minus the three
+// mover buckets and the PE trickle is exactly the 128-136 observed. The run
+// stopped on one exhausted minute while holding a maxDuration of 300 seconds --
+// four of every five minutes of its own budget went unused, and the route's own
+// lock comment already said "a run may take all 300s".
+//
+// `break` is the wrong verb. The minute bucket refills sixty seconds later and
+// the run is still alive to use it. So the loop now WAITS for the next bucket
+// and ends on the RUN'S OWN clock instead.
+//
+// WHY NOT LEAN ON reserveFmpCallSlot'S WAIT. It waits at most FMP_MAX_WAIT_MS
+// (20s) and then THROWS capacity-timeout (historyCache.ts). A bucket wait can
+// be up to 60s, so its wait is not sufficient here -- and inside
+// fetchStableQuote that throw is caught and returned as null, which would show
+// up as a quote failure rather than as the pacing it actually is. This wait sits
+// OUTSIDE the fetch, so a full minute boundary costs a pause, not a fake error.
+// FMP_MAX_WAIT_MS is untouched; other callers depend on it.
+//
+// THE BUDGET IS 240s, NOT 300. maxDuration is 300 and the lock TTL is sized
+// against it, but a run that spends all 300 has nothing left for the HSET, the
+// staleness bookkeeping, the TTL reset and the response -- it would be killed
+// mid-write and discard everything it just fetched, which is the exact failure
+// the 60 -> 300 bump was made to stop. 240 leaves a minute of tail. Worst-case
+// wall clock: the last symbol may START at 239.9s and then costs one
+// reserveFmpCallSlot wait (<=20s) plus the FMP round trip, so ~265s -- inside
+// maxDuration and well inside the 6-minute lock TTL.
+const PRICE_RUN_BUDGET_MS = 240_000;
+// Poll rather than sleeping to the bucket edge: the minute may roll over, or
+// another job may finish and free room, well before the boundary.
+const PRICE_BUDGET_POLL_MS = 5_000;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+/**
+ * Wait until there is FMP room for one more call, or until the run is out of
+ * its own time.
+ *
+ * Returns "out-of-time" ONLY on the run's clock. An exhausted minute is a
+ * pause; the end of the run's budget is the only thing that ends the run.
+ */
+async function waitForPriceBudget(deadlineMs: number): Promise<"ok" | "out-of-time"> {
+  while (true) {
+    if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) return "ok";
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return "out-of-time";
+    await sleep(Math.min(PRICE_BUDGET_POLL_MS, remaining));
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Free "market performance" buckets checked before the per-symbol rotation.
 const MOVER_BUCKET_PATHS = ["biggest-gainers", "biggest-losers", "most-actives"] as const;
@@ -513,10 +585,26 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // had actually aged out. Selecting on the policy instead means a run does
   // exactly the work the policy requires and stops, and the budget it does not
   // spend is budget the history and earnings jobs can.
-  const priceCap = Math.min(
-    PRICE_MAX_PER_RUN,
-    Math.max(PRICE_MIN_PER_RUN, Math.ceil(clean.length / runsPerTier2Window()))
-  );
+  // THE CAP IS DERIVED FROM THE ACTUAL MIX, NOT FROM ONE TIER.
+  //
+  // It was ceil(universe / runsPerTier2Window()), i.e. sized as though every
+  // symbol were on the 30-minute policy. They are not: the first live tier-1
+  // build came out at 415 of 759 symbols, so that formula produced
+  // ceil(759/6) = 127 -- BELOW the 139/run the fast tier alone requires, and a
+  // reduction from the 190 it replaced at the very moment the freshness
+  // requirement went up.
+  //
+  // Each tier needs its own count over its own number of runs, summed:
+  //   ceil(415/3) + ceil(344/6) = 139 + 58 = 197
+  // which is what the run actually has to do, and is under PRICE_MAX_PER_RUN.
+  // Same failure #395 named for the old formula and fixed one level too high: a
+  // quantity stated in a unit that changes meaning when something else moves.
+  const tier1InUniverse = clean.reduce((n, sym) => n + (tier1.has(sym) ? 1 : 0), 0);
+  const tier2InUniverse = clean.length - tier1InUniverse;
+  const capNeeded =
+    Math.ceil(tier1InUniverse / runsPerTier1Window()) +
+    Math.ceil(tier2InUniverse / runsPerTier2Window());
+  const priceCap = Math.min(PRICE_MAX_PER_RUN, Math.max(PRICE_MIN_PER_RUN, capNeeded));
 
   const due = clean.filter(
     (sym) => !bucketFreshened.has(sym) && isPriceDue(existing.get(sym)?.ts, sym, tier1, nowMs)
@@ -556,6 +644,10 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // Union, price-slice first (PE-only symbols are usually already in it).
   const targets = Array.from(new Set([...priceSlice, ...peSlice]));
 
+  // Fixed at the top of the working loop so every check compares against one
+  // instant, not a drifting "now".
+  const runDeadlineMs = nowMs + PRICE_RUN_BUDGET_MS;
+
   let pxRefreshed = 0;
   let peRefreshed = 0;
   // A quote that was attempted and did not land -- FMP non-200, a parse
@@ -565,10 +657,17 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // not one TTL. That is a claim about behaviour, and this counter is what
   // makes it checkable instead of assumed.
   let quoteFailures = 0;
-  // Runs that ended early because the FMP budget ran out mid-rotation. This is
-  // the one path that DOES cost a symbol its next slot rather than five
-  // minutes, because everything after the break is never attempted at all.
-  let capacityStopped = false;
+  // Did the run stop with work still due?
+  //
+  // RENAMED FROM capacityStopped, DELIBERATELY, BECAUSE IT NOW MEANS SOMETHING
+  // ELSE. It used to mean "the current minute filled up", which was true on
+  // essentially every run and therefore said nothing. Now that an exhausted
+  // minute is a pause rather than an ending, the only thing that ends a run
+  // early is the run's own time budget -- a far rarer and much more useful
+  // signal. Keeping the old name for the new meaning would leave every
+  // historical run record on /cache-health reading as if it meant the new
+  // thing, which is worse than a field that visibly changed.
+  let outOfTime = false;
   // How many of this run's quotes actually carried a session open. The guard
   // below turns "the plan stopped sending OHLC" from an invisible degradation
   // into a line in the log and a field on the run record.
@@ -580,15 +679,32 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     const wantPe = peSet.has(sym);
 
     let quote: QuoteLite | null = null;
+    // WHEN THE QUOTE ACTUALLY LANDED, not when the run started.
+    //
+    // This was `nowMs` for both, which was harmless while a run finished inside
+    // a minute. Now that a run may span four, a symbol refreshed at minute four
+    // would be stamped four minutes old the instant it was written -- and
+    // isPriceDue would re-select it four minutes early, spending the budget
+    // this change exists to recover on a quote that was already fresh.
+    let quoteAt = nowMs;
     let peFetched = false;
     let peValue: number | null = null;
 
+    // The run's own clock, checked before starting a symbol rather than after.
+    // A symbol begun at the deadline still gets to finish; one begun past it
+    // would push the write tail past maxDuration.
+    if (Date.now() >= runDeadlineMs) {
+      outOfTime = true;
+      break;
+    }
+
     if (wantPrice) {
-      if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) {
-        capacityStopped = true;
+      if ((await waitForPriceBudget(runDeadlineMs)) === "out-of-time") {
+        outOfTime = true;
         break;
       }
       quote = await fetchStableQuote(sym, apiKey);
+      quoteAt = Date.now();
       if (!quote) quoteFailures++;
     }
     if (wantPe) {
@@ -614,8 +730,8 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
       // carry forward last-known PE if this run didn't (re)fetch a value
       pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
-      ts: quote ? nowMs : already?.ts ?? prev?.ts ?? nowMs,
-      peTs: peFetched ? nowMs : already?.peTs ?? prev?.peTs ?? 0,
+      ts: quote ? quoteAt : already?.ts ?? prev?.ts ?? nowMs,
+      peTs: peFetched ? Date.now() : already?.peTs ?? prev?.peTs ?? 0,
     };
     if (quote) pxRefreshed++;
     if (quote && quote.open != null) openCarried++;
@@ -671,7 +787,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     due: due.length,
     deferredByCap,
     quoteFailures,
-    capacityStopped,
+    outOfTime,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
     // Reported alongside priceRefreshed rather than only warned about, so the
