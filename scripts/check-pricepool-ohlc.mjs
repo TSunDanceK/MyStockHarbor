@@ -135,10 +135,25 @@ check(
   fetchCount === 3,
   `${fetchCount} — quote, ratios-ttm, mover buckets`
 );
+// ORDERING, NOT PROXIMITY. This was one regex with a {0,400} window between
+// the `const row =` line and `open: num(row.open)`, and adding an error-envelope
+// guard between them pushed the second past the limit -- so a check about WHERE
+// the OHLC fields come from failed because of HOW MUCH CODE sits above them.
+// The character count was never the invariant; it was belt on top of the
+// `quoteFn` scoping that already solves the thing the note describes
+// (fetchPeTtm carries a byte-identical `const row = (...)` line, and is in a
+// different function). Both halves are still required, and in order.
+const rowDecl = quoteFn.indexOf("const row = (Array.isArray(json) ? json[0] : json)");
+const openRead = quoteFn.indexOf("open: num(row.open)");
 check(
   "the fields come off the response already being read",
-  /const row = \(Array\.isArray\(json\) \? json\[0\] : json\)[\s\S]{0,400}open: num\(row\.open\)/.test(quoteFn),
-  "scoped: fetchPeTtm carries a byte-identical `const row = (...)` line"
+  rowDecl !== -1 && openRead > rowDecl,
+  rowDecl === -1
+    ? "the `const row = (...)` line is gone from fetchStableQuote"
+    : openRead === -1
+      ? "open is no longer read off that row — a second fetch would be the way " +
+        "this regresses, and it is what this asserts against"
+      : "scoped to fetchStableQuote; fetchPeTtm carries a byte-identical line"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

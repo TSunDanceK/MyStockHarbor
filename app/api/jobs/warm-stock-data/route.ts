@@ -54,6 +54,12 @@ export async function GET(req: NextRequest) {
       // earnings index knew about. quarterlyRefreshes stuck at 0 across many
       // runs means the trigger is inert and everything is riding the 120-day
       // floor; scheduleSize at 0 means the index itself failed to build.
+      // Symbols where NO endpoint returned a row. They are written (fields are
+      // carried forward) but NOT marked refreshed, so they now go stale on
+      // /cache-health instead of resetting their own freshness every run --
+      // which is how a delisted ticker used to read green forever.
+      noEndpointAnswered: result.noEndpointAnswered ?? null,
+      markedRefreshed: result.markedRefreshed ?? null,
       quarterlyRefreshes: result.quarterlyRefreshes ?? null,
       scheduleSize: result.scheduleSize ?? null,
       targets: symbols.length,

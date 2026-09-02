@@ -308,6 +308,35 @@ export async function deferSymbol(
 }
 
 /**
+ * The symbols currently deferred for a dataset.
+ *
+ * EXISTS BECAUSE NOT EVERY CONSUMER USES claimStalest. The price pool picks its
+ * own work by TTL rather than by asking this queue for the stalest N, so the
+ * deferral it now writes would have been write-only -- a symbol parked in a set
+ * nothing reads is not deferred, it is just recorded as deferred, which is
+ * worse than no deferral at all because it looks handled.
+ *
+ * Expired entries are filtered by SCORE rather than trusted to have been
+ * cleaned: claimStalest prunes them as a side effect of its own read, and a
+ * dataset that never calls claimStalest never prunes. A deferral that outlives
+ * its own expiry is an eviction wearing a smaller name.
+ */
+export async function readDeferred(dataset: DatasetKey): Promise<Set<string>> {
+  if (!redis) return new Set();
+  try {
+    const now = Date.now();
+    const live = await redis.zrange<string[]>(deferKey(dataset), now, "+inf", {
+      byScore: true,
+    });
+    return new Set(Array.isArray(live) ? live : []);
+  } catch {
+    // fail open -- a failed read means nothing is skipped, which is the
+    // pre-deferral behaviour rather than a stall.
+    return new Set();
+  }
+}
+
+/**
  * The `limit` stalest symbols that are not currently deferred.
  *
  * Reads a slack window (limit + deferred count) rather than exactly `limit`, so
