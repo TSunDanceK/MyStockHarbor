@@ -141,6 +141,12 @@ export async function GET(req: NextRequest) {
       due: result.due ?? null,
       deferredByCap: result.deferredByCap ?? null,
       quoteFailures: result.quoteFailures ?? null,
+      // Repeatedly-failing symbols parked this run, and the standing total. A
+      // flat newlyDeferred with a steady deferredSymbols is a settled set of
+      // dead tickers doing no harm; a rising newlyDeferred is something
+      // breaking that is not about delistings.
+      newlyDeferred: result.newlyDeferred ?? null,
+      deferredSymbols: result.deferredSymbols ?? null,
       // Was `capacityStopped`, which meant "the current minute filled up" and
       // was true on essentially every run. The loop now waits out a full minute
       // bucket instead of ending on one, so the only thing that stops a run
