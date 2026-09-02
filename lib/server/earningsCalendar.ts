@@ -316,7 +316,7 @@ export type FullDayEarnings = {
   complete: boolean;
 };
 
-type RawEarningsRow = {
+export type RawEarningsRow = {
   symbol?: string;
   date?: string;
   epsActual?: number | string | null;
@@ -400,7 +400,7 @@ const monthCache = new Map<string, { at: number; rows: RawEarningsRow[] }>();
 let nameMapCache: { at: number; map: Map<string, string> } | null = null;
 const candidatesCache = new Map<string, { at: number; byDate: Map<string, EarningsCandidate[]> }>();
 
-async function fetchMonthRows(year: number, month: number): Promise<RawEarningsRow[]> {
+export async function fetchMonthRows(year: number, month: number): Promise<RawEarningsRow[]> {
   const key = monthKey(year, month);
   const cached = monthCache.get(key);
   if (cached && Date.now() - cached.at < MONTH_CACHE_MS) return cached.rows;
