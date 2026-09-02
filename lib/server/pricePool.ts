@@ -11,7 +11,11 @@ import { Redis } from "@upstash/redis";
 import { markRefreshed, registerSymbols } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
+import {
+  hasFmpCapacity,
+  reserveFmpCallSlot,
+  FMP_SAFE_CALLS_PER_MINUTE,
+} from "./historyCache";
 import { isActiveMarketWindow } from "./marketHours";
 import { isPriceDue, readTier1, TIER1_TTL_MS, TIER2_TTL_MS } from "./priceTiers";
 import { JOBS, cronIntervalSeconds } from "./jobRuns";
@@ -103,7 +107,7 @@ const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gap
 // (jobRuns.ts:98, after a page spent an hour telling readers a cadence that had
 // moved).
 const PRICE_MIN_PER_RUN = 40; // don't bother sub-slicing a tiny universe
-const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even paced)
+// PRICE_MAX_PER_RUN is derived below, once its two inputs exist.
 
 /** Runs available inside one TTL window, from the registry's own cron. */
 function runsPerWindow(ttlMs: number): number {
@@ -165,6 +169,28 @@ const PRICE_RUN_BUDGET_MS = 240_000;
 // Poll rather than sleeping to the bucket edge: the minute may roll over, or
 // another job may finish and free room, well before the boundary.
 const PRICE_BUDGET_POLL_MS = 5_000;
+
+// THE MOST CALLS ONE RUN CAN MAKE, DERIVED FROM THE RUN ITSELF.
+//
+// This was a typed 220, commented "bound a single run's length (~<1 min even
+// paced)". That comment described a constraint #396 removed: the loop no longer
+// ends on the first exhausted minute, it waits for the next bucket and runs to
+// PRICE_RUN_BUDGET_MS. So the bound was sized for a one-minute run that no
+// longer exists, and was capping a four-minute one at a quarter of its reach.
+//
+// The real ceiling is arithmetic over two constants that already exist:
+//
+//   usable rate  FMP_SAFE_CALLS_PER_MINUTE - FMP_MIN_HEADROOM_CALLS = 140/min
+//   run length   PRICE_RUN_BUDGET_MS                                = 4 min
+//                                                                   = 560 calls
+//
+// Derived rather than typed for the reason the cadence was: 220 stopped being
+// true when the run budget changed and nothing said so. Move either input and
+// this follows.
+const USABLE_CALLS_PER_MINUTE = FMP_SAFE_CALLS_PER_MINUTE - FMP_MIN_HEADROOM_CALLS;
+const PRICE_MAX_PER_RUN = Math.floor(
+  USABLE_CALLS_PER_MINUTE * (PRICE_RUN_BUDGET_MS / 60_000)
+);
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
