@@ -33,9 +33,9 @@
 // So tier 1 is assembled from signals this site ALREADY collects about where
 // attention is, each of which costs nothing extra to read:
 //
-//   picker result sets  the symbols the last build actually put on screen.
-//                       If a row is rendered with a % change, that % change is
-//                       being read.
+//   picker result sets  the rows a picker page actually PUT ON SCREEN --
+//                       recorded by the page that rendered them, not inferred
+//                       from the payload. See "above the fold" below.
 //   deliberate views    searchDemand's ticker-interest counter -- a symbol a
 //                       real person selected from search. Client-beacon only,
 //                       so crawlers that never run JS never inflate it.
@@ -81,7 +81,48 @@ export const TIER1_SEARCH_PROMOTION_CAP = 100;
 // haywire (a mover bucket returning the whole market, a picker build returning
 // an unusually large result set) cannot swallow the universe.
 export const TIER1_MOVER_CAP = 150;
-export const TIER1_PICKER_CAP = 400;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABOVE THE FOLD: THE PAGE RECORDS WHAT IT RENDERED.
+//
+// The first version of this signal took the first TIER1_PICKER_CAP (400)
+// entries of the pickers payload's signalRecords. That was wrong twice over:
+//
+//   * A picker page renders `config.maxItems ?? 36` rows; the rest sit behind
+//     "Show more" (PickerResultPage.tsx, PickerResultsGrid's
+//     sortedEntries.slice(0, visibleCount)). So 400 entries stood in for ~36
+//     rendered ones -- roughly 364 symbols promoted to the 15-minute tier for
+//     being in a payload, not for being looked at.
+//   * WHICH 400 was decided by signalRecords' order, and signalRecords is
+//     pushed inside the universe analysis loop (pickersBuilder.ts:3567) and
+//     never sorted. It is iteration order. That is a stable ordering dressed as
+//     a signal -- the exact thing this file already refuses market cap for.
+//
+// It could not be reconstructed here either: 33 of the 36 picker routes are
+// `kind: "preset"`, built by filtering signalRecords with each page's own
+// presetFilters and sorting by its own orderBy. Reproducing that in a cron
+// means importing 36 page configs and re-running the page's own logic, and the
+// answer would be a guess at what the page did rather than what it did.
+//
+// So the claim is made by the thing that can actually make it. The page writes
+// its own above-the-fold symbols on render; this reads them back. Same Redis
+// client and same render path as the readPricePoolBulk that already runs there,
+// so it carries no new prerender risk (PAGE_READ_CACHE, see redisCacheMode.ts).
+// Pages are ISR'd at 1800s, so this is ~72 writes an hour across all 36 routes.
+//
+// ONE KEY PER ROUTE, WITH ITS OWN TTL, so a page that stops being rendered
+// drops out of the signal on its own rather than lingering in a shared hash
+// until something evicts it. Absence is meaningful here: a route nobody has
+// loaded in two hours has no above-the-fold rows, and should not have any.
+const FOLD_KEY_PREFIX = "msh:picker-fold:v1:";
+// Comfortably longer than the 1800s page revalidate, so a normally-serving page
+// is always represented, and short enough that a removed or renamed route
+// disappears within a couple of hours.
+const FOLD_TTL_SECONDS = 2 * 60 * 60;
+// Nothing to do with taste: the largest maxItems any picker page declares. A
+// page rendering more than this would be under-recorded, which
+// scripts/check-price-tiers.mjs asserts against the pages themselves.
+export const FOLD_MAX_ROWS_PER_ROUTE = 60;
 
 export type Tier1Signals = {
   /** Symbols the last pickers build put on screen. */
@@ -134,7 +175,11 @@ export function selectTier1(signals: Tier1Signals): string[] {
     new Set([
       ...take(signals.searchedSymbols, TIER1_SEARCH_PROMOTION_CAP),
       ...take(signals.moverSymbols, TIER1_MOVER_CAP),
-      ...take(signals.pickerSymbols, TIER1_PICKER_CAP),
+      // NO CAP. There is nothing arbitrary left to bound: this list is already
+      // bounded by what the pages rendered, which is the real quantity. Adding
+      // a number here would be trimming the signal until it looked right, which
+      // is what the 400 was.
+      ...take(signals.pickerSymbols, Number.MAX_SAFE_INTEGER),
     ])
   );
 }
@@ -164,6 +209,55 @@ export function isPriceDue(
 ): boolean {
   if (typeof lastTs !== "number" || !Number.isFinite(lastTs) || lastTs <= 0) return true;
   return nowMs - lastTs >= priceTtlMsFor(symbol, tier1);
+}
+
+/**
+ * Record the symbols a picker page just rendered above the fold.
+ *
+ * Called from the page's own render. Never throws and never blocks a render on
+ * a Redis fault -- a lost write costs this route its tier-1 contribution for
+ * one revalidate window, nothing else.
+ */
+export async function recordAboveFold(route: string, symbols: string[]): Promise<void> {
+  if (!redis || !route || !symbols.length) return;
+  const rows = Array.from(new Set(symbols.map(clean).filter(Boolean))).slice(
+    0,
+    FOLD_MAX_ROWS_PER_ROUTE
+  );
+  if (!rows.length) return;
+  try {
+    await redis.set(`${FOLD_KEY_PREFIX}${route}`, rows, { ex: FOLD_TTL_SECONDS });
+  } catch {
+    // fail open -- never break a page render for a telemetry write.
+  }
+}
+
+/**
+ * The union of what every listed picker route last rendered above the fold.
+ *
+ * Reads by the registry rather than by SCAN: lib/pickerRoutes.ts is already
+ * asserted against the pages that exist (scripts/check-picker-routes.mjs), so
+ * it cannot silently miss a route, and one MGET is one command regardless of
+ * how many there are.
+ */
+export async function readAboveFold(routes: readonly string[]): Promise<string[]> {
+  if (!redis || !routes.length) return [];
+  try {
+    const stored = await redis.mget<(string[] | null)[]>(
+      ...routes.map((route) => `${FOLD_KEY_PREFIX}${route}`)
+    );
+    const out: string[] = [];
+    for (const rows of stored ?? []) {
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const symbol = clean(row);
+        if (symbol) out.push(symbol);
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export async function writeTier1(symbols: string[]): Promise<void> {

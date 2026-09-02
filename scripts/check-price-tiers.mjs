@@ -266,9 +266,158 @@ check(
 );
 check(
   "a run records what it deferred rather than leaving the worst case assumed",
-  /deferredByCap/.test(poolCode) && /quoteFailures/.test(poolCode) && /capacityStopped/.test(poolCode),
+  /deferredByCap/.test(poolCode) && /quoteFailures/.test(poolCode) && /outOfTime/.test(poolCode),
   "due <= priceCap with deferredByCap 0 means the TTLs are the real policy; a " +
     "persistent deferral means the cap is, and the TTLs are aspirational"
+);
+
+// ── 6. The run outlives the minute bucket ──────────────────────────────────
+console.log("\n6. A single exhausted minute pauses the run, it does not end it");
+
+// The defect this section exists for: `break` on hasFmpCapacity stopped the
+// loop at 140 calls -- the minute's ceiling -- while the function held 300
+// seconds of maxDuration. Four of every five minutes went unused, and four
+// consecutive production runs refreshed 128-136 against a cap of 190.
+check(
+  "the refresh loop never abandons the run on an exhausted minute bucket",
+  !/if \(!\(await hasFmpCapacity\([^)]*\)\)\) \{\s*\n\s*\w+ = true;\s*\n\s*break;/.test(poolCode) &&
+    /waitForPriceBudget\(runDeadlineMs\)/.test(poolCode),
+  "the bucket refills sixty seconds later and the run is still alive to use it"
+);
+check(
+  "waiting is bounded by the run's own clock, not by the minute",
+  /return "out-of-time"/.test(poolCode) && /Date\.now\(\) >= runDeadlineMs/.test(poolCode),
+  "an unbounded wait would run past maxDuration and be killed mid-write, " +
+    "discarding everything the run had already fetched"
+);
+
+const budgetMs = Number((poolCode.match(/PRICE_RUN_BUDGET_MS\s*=\s*([0-9_]+)/) ?? [])[1]?.replace(/_/g, ""));
+const routeSrc = readCodeOnly("app/api/jobs/warm-price-pool/route.ts");
+const maxDurationS = Number((routeSrc.match(/maxDuration\s*=\s*(\d+)/) ?? [])[1]);
+check(
+  "the working budget leaves room under maxDuration for the write tail",
+  budgetMs > 0 && maxDurationS > 0 && budgetMs <= (maxDurationS - 30) * 1000,
+  `${budgetMs / 1000}s budget against a ${maxDurationS}s maxDuration — a run that ` +
+    `spends all of it has nothing left for the HSET, the staleness bookkeeping ` +
+    `and the response, and would be killed mid-write`
+);
+check(
+  "a refreshed row is stamped when the quote landed, not when the run started",
+  /ts: quote \? quoteAt/.test(poolCode),
+  "a run may now span four minutes; stamping the run start would make a symbol " +
+    "look four minutes old the instant it was written and re-select it early"
+);
+
+// ── 7. The cap covers the FAST tier, not just the slow one ─────────────────
+console.log("\n7. The per-run cap is derived from the real tier mix");
+
+// Arithmetic over the real constants, not a grep for the formula. The old
+// derivation was ceil(universe / runsPerTier2Window()) -- the whole universe
+// priced as if it were all on the 30-minute policy -- which produced a cap of
+// 127 against a fast tier needing 139.
+const cronForCap = (readCodeOnly("lib/server/jobRuns.ts").match(
+  /"warm-price-pool":[^}]*cron:\s*"([^"]+)"/
+) ?? [])[1];
+const everyMin = Number((String(cronForCap).match(/^\*\/(\d+)/) ?? [])[1]);
+const runsT1 = Math.max(1, Math.floor(tiers.TIER1_TTL_MS / (everyMin * 60_000)));
+const runsT2 = Math.max(1, Math.floor(tiers.TIER2_TTL_MS / (everyMin * 60_000)));
+
+// The live split from the first tier-1 build: 415 of 759.
+const LIVE_TIER1 = 415;
+const LIVE_UNIVERSE = 759;
+const capFor = (t1, total) =>
+  Math.ceil(t1 / runsT1) + Math.ceil((total - t1) / runsT2);
+const needed = capFor(LIVE_TIER1, LIVE_UNIVERSE);
+const fastAlone = Math.ceil(LIVE_TIER1 / runsT1);
+
+check(
+  "the derived cap covers the fast tier's own requirement",
+  needed >= fastAlone,
+  `ceil(${LIVE_TIER1}/${runsT1}) + ceil(${LIVE_UNIVERSE - LIVE_TIER1}/${runsT2}) = ${needed}/run ` +
+    `against ${fastAlone} the 15-minute tier needs alone — the old ` +
+    `ceil(${LIVE_UNIVERSE}/${runsT2}) = ${Math.ceil(LIVE_UNIVERSE / runsT2)} was BELOW it`
+);
+check(
+  "and still fits inside the per-run ceiling",
+  needed <= capMax,
+  `${needed} <= PRICE_MAX_PER_RUN ${capMax}`
+);
+// Scoped to the capNeeded EXPRESSION. Grepping the whole file matched the
+// exported runsPerTier1Window DEFINITION and passed even with the derivation
+// reverted to the tier-2-only formula — a check that could not fail, which is
+// the thing this file exists to avoid (claude/traps/a-regex-over-source-has-no-scope.md).
+const capExpr = (poolCode.match(/const capNeeded =[\s\S]*?;/) ?? [])[0];
+if (!capExpr) {
+  console.error("FAIL: could not extract the capNeeded expression — measuring nothing.");
+  process.exit(1);
+}
+check(
+  "the cap expression sums both tiers rather than pricing everything as tier 2",
+  /runsPerTier1Window\(\)/.test(capExpr) && /runsPerTier2Window\(\)/.test(capExpr),
+  "one tier's cadence cannot stand in for a mixed population"
+);
+
+// ── 8. The picker signal is what rendered ──────────────────────────────────
+console.log("\n8. Tier 1's picker signal is bounded by what renders");
+
+const tiersCode = readCodeOnly("lib/server/priceTiers.ts");
+const pagePickerSrc = readCodeOnly("app/components/PickerResultPage.tsx");
+const targetsCode = readCodeOnly("lib/server/warmTargets.ts");
+
+// Scoped to deriveTier1's own body, NOT to the whole file. warmTargets still
+// reads signalRecords legitimately — it is the right source for "which symbols
+// do the warm jobs maintain data for", which is a different question from
+// "which are worth a 15-minute price". Asserting over the file would forbid the
+// correct use along with the wrong one.
+const deriveBody = (targetsCode.match(
+  /async function deriveTier1\([\s\S]*?\n\}/
+) ?? [])[0];
+if (!deriveBody) {
+  console.error("FAIL: could not extract deriveTier1 from warmTargets.ts — measuring nothing.");
+  process.exit(1);
+}
+check(
+  "the flat payload slice is gone from the tier derivation",
+  !/TIER1_PICKER_CAP/.test(tiersCode) && !/signalRecords/.test(deriveBody),
+  "signalRecords is pushed in universe-iteration order and never sorted " +
+    "(pickersBuilder.ts:3567), so slicing it ranked symbols by position in an " +
+    "analysis loop — a stable ordering dressed as a signal, the same thing " +
+    "this file refuses market cap for"
+);
+check(
+  "the page records exactly its own above-the-fold slice",
+  /recordAboveFold\(\s*config\.href,\s*seoEntries\.slice\(0, initialVisibleCount\)/.test(
+    pagePickerSrc
+  ),
+  "everything past initialVisibleCount is behind Show more, so it was never " +
+    "rendered to anyone"
+);
+check(
+  "and the union is read back by the checked route registry",
+  /readAboveFold\(PICKER_ROUTES\)/.test(targetsCode),
+  "PICKER_ROUTES is asserted against the pages that actually exist " +
+    "(scripts/check-picker-routes.mjs), so the read cannot silently miss one"
+);
+
+// The recorder's own slice cap must not be the thing that truncates a page.
+const declaredMaxItems = [
+  ...fs
+    .readdirSync(path.join(ROOT, "app"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) => {
+      const file = path.join(ROOT, "app", d.name, "page.tsx");
+      if (!fs.existsSync(file)) return [];
+      const m = fs.readFileSync(file, "utf8").match(/maxItems:\s*(\d+)/);
+      return m ? [Number(m[1])] : [];
+    }),
+];
+const foldCap = Number((tiersCode.match(/FOLD_MAX_ROWS_PER_ROUTE = (\d+)/) ?? [])[1]);
+check(
+  "the recorder's row cap is at least the largest maxItems any page declares",
+  declaredMaxItems.length > 0 && foldCap >= Math.max(...declaredMaxItems),
+  `cap ${foldCap} against a largest declared maxItems of ${Math.max(...declaredMaxItems)} ` +
+    `across ${declaredMaxItems.length} picker pages — a lower cap would silently ` +
+    `under-record the pages that show most`
 );
 
 const footerSrc = readCodeOnly("app/components/ScanFooter.tsx");
