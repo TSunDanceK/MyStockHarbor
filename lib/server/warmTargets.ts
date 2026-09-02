@@ -4,7 +4,15 @@ import { readDynamicUniverse } from "./dynamicUniverseCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readSearchDemand } from "./searchDemand";
 import { readMarketState } from "./marketState";
-import { selectTier1, writeTier1, readAboveFold, TIER1_SEARCH_PROMOTION_CAP } from "./priceTiers";
+import {
+  selectTier1,
+  writeTier1,
+  readAboveFold,
+  rankByDollarVolume,
+  TIER1_SEARCH_PROMOTION_CAP,
+} from "./priceTiers";
+import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readPricePoolBulk } from "./pricePool";
 import { PICKER_ROUTES } from "../pickerRoutes";
 
 // Single source of truth for "which symbols do the background warm jobs
@@ -238,11 +246,28 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
  * spends an FMP call, which is what makes it safe to run on a cache miss inside
  * a cron whose whole purpose is to conserve that budget.
  *
- * A signal that throws is dropped rather than fatal: tier 1 assembled from two
- * of three sources is worse than three, but far better than none -- an empty
- * tier 1 demotes the entire site to the 30-minute policy.
+ * A signal that throws is dropped rather than fatal: a tier 1 assembled from
+ * some of its sources is worse than all of them, but far better than none -- an
+ * empty tier 1 demotes the entire site to the 60-minute policy.
+ *
+ * THE BASE IS WHAT MAKES THAT SAFE. PRESET_UNIVERSE is a hand-typed array in
+ * the bundle, so it cannot fail to load, cannot be empty, and does not need a
+ * visitor, a Redis read or an FMP call. Even if every other signal here throws,
+ * tier 1 is ~100 mega-caps rather than nothing. That is the property the
+ * traffic-fed design did not have.
  */
 async function deriveTier1(universe: string[]): Promise<string[]> {
+  // ---- BASE. None of this needs a visitor. ----
+
+  // Dollar volume, price x volume, straight off the pool rows the price warm
+  // already maintains. One HMGET, no FMP call. NOT market cap -- see the note
+  // above Tier1Signals for why the two are different questions.
+  const dollarVolumeRanked = await readPricePoolBulk(universe)
+    .then((rows) => rankByDollarVolume(rows, universe))
+    .catch(() => [] as string[]);
+
+  // ---- LAYER. Empty until the site has traffic, and that is fine. ----
+
   // What the picker pages actually put on screen, recorded by the pages
   // themselves. NOT the first N of signalRecords: that array is pushed in
   // universe-iteration order and never sorted, so slicing it promoted symbols
@@ -263,5 +288,12 @@ async function deriveTier1(universe: string[]): Promise<string[]> {
     ])
     .catch(() => [] as string[]);
 
-  return selectTier1({ pickerSymbols, searchedSymbols, moverSymbols, universe });
+  return selectTier1({
+    presetSymbols: PRESET_UNIVERSE,
+    dollarVolumeRanked,
+    moverSymbols,
+    searchedSymbols,
+    pickerSymbols,
+    universe,
+  });
 }
