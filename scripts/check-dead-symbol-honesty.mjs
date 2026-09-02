@@ -133,6 +133,98 @@ check(
   "and markRefreshed already ZREMs the deferral, so one good fetch fully un-parks"
 );
 
+// ── 2b. A refusal is not evidence about the ticker ─────────────────────────
+console.log("\n2b. Only an EMPTY body can park a symbol; a refusal cannot");
+
+// THE DEFECT THIS SECTION EXISTS FOR. fetchStableQuote returned
+// `QuoteLite | null` and every failure collapsed into the null: 429, 402, 5xx,
+// network throw, parse failure, and reserveFmpCallSlot's own capacity-timeout.
+// Harmless until failStreak attached a consequence -- "this ticker is dead" --
+// to a signal that mostly means "we are being rate-limited right now".
+// Production: http-429:155 on 08-30, 670 on 08-31 (700 of 700 symbols),
+// 171 on 09-01, capacity-timeout:40 on 09-02, a healthy day.
+//
+// Asserted by RUNNING the classifier against fake responses, because the whole
+// point is which BRANCH a given response reaches -- something a regex cannot
+// see at all.
+const quoteFn = (pool.match(/async function fetchStableQuote\([\s\S]*?\n\}/) ?? [])[0];
+if (!quoteFn) {
+  console.error("FAIL: could not extract fetchStableQuote — measuring nothing.");
+  process.exit(1);
+}
+const classifier = await lift(
+  `export ${quoteFn}`,
+  `const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+   let RESERVE_THROWS = false;
+   const reserveFmpCallSlot = async () => { if (RESERVE_THROWS) throw new Error("capacity-timeout"); };
+   let NEXT;
+   const fmpFetch = async () => { if (NEXT instanceof Error) throw NEXT; return NEXT; };
+   export const setReserveThrows = (v) => { RESERVE_THROWS = v; };
+   export const setNext = (v) => { NEXT = v; };`
+);
+const res = (status, body) => ({
+  status,
+  ok: status >= 200 && status < 300,
+  json: async () => body,
+});
+const outcome = async (next, reserveThrows = false) => {
+  classifier.setReserveThrows(reserveThrows);
+  classifier.setNext(next);
+  return classifier.fetchStableQuote("X", "k");
+};
+
+check(
+  "a 429 is a refusal, not evidence about the ticker",
+  (await outcome(res(429, []))).kind === "refused",
+  "670 of 700 symbols failed this way on 08-31 — counting that as a streak " +
+    "would have parked the entire universe"
+);
+check(
+  "402, 5xx, a network throw and a parse failure are all refusals",
+  (await outcome(res(402, []))).kind === "refused" &&
+    (await outcome(res(503, []))).kind === "refused" &&
+    (await outcome(new Error("ECONNRESET"))).kind === "refused" &&
+    (await outcome(res(200, null))).kind === "refused",
+  "every one of these used to be the same `null` as a genuine delisting"
+);
+check(
+  "our OWN capacity-timeout is a refusal, caught before the fetch",
+  (await outcome(res(200, [{ price: 1 }]), true)).kind === "refused",
+  "waitForPriceBudget's comment already said this throw 'would show up as a " +
+    "quote failure rather than as the pacing it actually is' — 8a attached a " +
+    "consequence to exactly that mislabel"
+);
+check(
+  "HTTP 200 with no row is EMPTY — the one outcome that is about the ticker",
+  (await outcome(res(200, []))).kind === "empty",
+  "this is what a delisted symbol actually returns"
+);
+check(
+  "a real row is a row",
+  (await outcome(res(200, [{ price: 10, volume: 5 }]))).kind === "row",
+  ""
+);
+check(
+  "only an empty increments the streak",
+  /lastOutcome === "empty"/.test(pool) && /if \(wantPrice && lastOutcome === "empty"\)/.test(pool),
+  "a refusal is counted and never acted on"
+);
+check(
+  "quotesRefused is reported alongside quoteFailures rather than replacing it",
+  /quoteFailures,/.test(pool) && /quotesRefused,/.test(pool),
+  "quoteFailures keeps meaning 'attempted and did not land' so historical run " +
+    "records stay comparable; the new field says WHY"
+);
+check(
+  "deferrals are buffered and discarded whole above the empty-rate line",
+  /pendingDefers\.push/.test(pool) &&
+    /emptyRate > PRICE_EMPTY_RATE_ABORT/.test(pool) &&
+    /deferSuppressed = true/.test(pool),
+  "dead tickers do not arrive 300 at a time — a run that empty on more than " +
+    "half its attempts has no trustworthy evidence in it, so the whole buffer " +
+    "goes rather than the least confident part of it"
+);
+
 // ── 3. Nothing landed must not read as fresh ───────────────────────────────
 console.log("\n3. A symbol where no endpoint answered is not marked refreshed");
 
@@ -150,6 +242,25 @@ check(
   rows.hasRows([]) === false && rows.hasRows(null) === false,
   "HTTP 200 with [] is what a delisted ticker returns — counting res.ok would " +
     "mark it fresh"
+);
+// THE MOST LIKELY FAILURE MODE, AND IT USED TO PASS. FMP answers a rate limit
+// or a bad key with HTTP 200 and {"Error Message": "..."} -- a non-null object,
+// so the old `typeof json === "object"` test counted it as an answer and marked
+// the symbol refreshed. The green-forever lie surviving on the very thing most
+// likely to happen.
+check(
+  "an FMP error envelope is not an answer",
+  rows.hasRows({ "Error Message": "Limit Reach" }) === false &&
+    rows.hasRows({ error: "Invalid API KEY" }) === false &&
+    rows.hasRows([{ "Error Message": "x" }]) === true,
+  "both spellings — legacy endpoints use 'Error Message', some stable ones use " +
+    "'error'. (An error inside an ARRAY is left alone: that shape is not what " +
+    "FMP returns for these, and rejecting it would need to guess at row schemas.)"
+);
+check(
+  "an empty object is not an answer either",
+  rows.hasRows({}) === false,
+  "it carries no data about the symbol, and it also used to pass"
 );
 check(
   "a row that answered counts, even if its fields are null",

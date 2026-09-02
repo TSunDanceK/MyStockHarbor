@@ -257,6 +257,11 @@ const PRICE_FAIL_DEFER_AFTER = 3;
 const PRICE_FAIL_DEFER_BASE_SECONDS = 60 * 60;
 const PRICE_FAIL_DEFER_MAX_SECONDS = 24 * 60 * 60;
 
+// Above this share of empty responses, a run's deferrals are discarded whole.
+// Half is deliberately far above anything a real delisting pattern produces --
+// this is not a sensitivity dial, it is a "the world is obviously broken" line.
+const PRICE_EMPTY_RATE_ABORT = 0.5;
+
 /**
  * How long to park a symbol after `streak` consecutive failures.
  *
@@ -483,18 +488,69 @@ type QuoteLite = {
 // Per-symbol live quote (price/%chg/volume/marketCap). stable/quote is the only
 // working intraday quote endpoint on this plan; it returns `changePercentage`
 // (no trailing "s") and has no PE field.
-async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite | null> {
+/**
+ * WHAT A FAILED QUOTE ACTUALLY MEANS, kept separate from the fact that it
+ * failed.
+ *
+ * THIS RETURNED `QuoteLite | null` AND EVERY FAILURE MODE COLLAPSED INTO THE
+ * NULL: a 429, a 402, a 5xx, a network throw, a parse failure, and
+ * reserveFmpCallSlot's own capacity-timeout. That was harmless while nothing
+ * acted on it. It stopped being harmless the moment failStreak attached a
+ * CONSEQUENCE -- "this ticker is dead" -- to a signal that mostly means "we are
+ * being rate-limited right now".
+ *
+ * waitForPriceBudget's own comment already said this: a capacity-timeout throw
+ * inside the fetch "would show up as a quote failure rather than as the pacing
+ * it actually is". The deferral turned that mislabel into an action.
+ *
+ * IT IS NOT THEORETICAL, AND IT CONCENTRATES RATHER THAN SPREADS.
+ * warm-picker-universe logged http-429:155 on 08-30, http-429:670 on 08-31
+ * (700 of 700 symbols failed), http-429:171 on 09-01, and capacity-timeout:40
+ * on 09-02 -- a healthy day. And a failed symbol keeps its stale `ts`, so it
+ * sorts to the FRONT of the next run's due set: under a systemic cause the same
+ * cohort is retried first, under the same conditions, and fails again. Three
+ * runs of that is a streak of 3 for the whole universe.
+ *
+ *   "row"      the symbol answered. The only outcome that clears a streak.
+ *   "empty"    HTTP 200 and no row FOR THIS SYMBOL. The only outcome that is
+ *              evidence about the TICKER, and the only one that may park it.
+ *   "refused"  FMP or our own pacing declined to answer. Evidence about the
+ *              SERVICE, not the symbol. Counted, never acted on.
+ */
+type QuoteOutcome =
+  | { kind: "row"; quote: QuoteLite }
+  | { kind: "empty" }
+  | { kind: "refused"; status: number | null };
+
+async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteOutcome> {
+  // OUR OWN PACING, IN ITS OWN try/catch. reserveFmpCallSlot throws
+  // capacity-timeout after FMP_MAX_WAIT_MS, and letting that fall through to
+  // the outer catch would file our internal back-pressure as FMP's answer
+  // about the symbol -- which is exactly the mislabel this type exists to end.
   try {
     await reserveFmpCallSlot();
+  } catch {
+    return { kind: "refused", status: null };
+  }
+
+  try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
-    if (!res.ok) return null;
+    // A non-ok status is the SERVICE declining -- 429 rate limit, 402 plan, 5xx
+    // outage. None of them says anything about whether this ticker still
+    // trades.
+    if (!res.ok) return { kind: "refused", status: res.status };
     const json = await res.json().catch(() => null);
+    if (json === null) return { kind: "refused", status: res.status };
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
-    if (!row) return null;
+    // HTTP 200 with no row is FMP answering "I have nothing for this symbol",
+    // which is the delisting signal.
+    if (!row) return { kind: "empty" };
     return {
+      kind: "row",
+      quote: {
       price: num(row.price),
       changePct: num(row.changePercentage) ?? num(row.changesPercentage),
       volume: num(row.volume),
@@ -505,9 +561,11 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
       open: num(row.open),
       dayHigh: num(row.dayHigh),
       dayLow: num(row.dayLow),
+      },
     };
   } catch {
-    return null;
+    // A network throw is the service too.
+    return { kind: "refused", status: null };
   }
 }
 
@@ -780,6 +838,13 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // not one TTL. That is a claim about behaviour, and this counter is what
   // makes it checkable instead of assumed.
   let quoteFailures = 0;
+  // The two causes, separated. `quoteFailures` still means "attempted and did
+  // not land" so historical run records stay comparable; these say WHY.
+  let quotesRefused = 0;
+  let empties = 0;
+  let priceAttempts = 0;
+  const pendingDefers: Array<{ symbol: string; seconds: number }> = [];
+  let deferSuppressed = false;
   // Rows written for symbols that returned NOTHING, kept apart from `payload`
   // so markRefreshed cannot be called with them. They carry the failure streak
   // and an unchanged `ts`.
@@ -815,6 +880,9 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // isPriceDue would re-select it four minutes early, spending the budget
     // this change exists to recover on a quote that was already fresh.
     let quoteAt = nowMs;
+    // Which of the three outcomes this symbol produced, so the failure block
+    // below can act on the CAUSE rather than on the absence of a quote.
+    let lastOutcome: "row" | "empty" | "refused" | "none" = "none";
     let peFetched = false;
     let peValue: number | null = null;
 
@@ -831,9 +899,19 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
         outOfTime = true;
         break;
       }
-      quote = await fetchStableQuote(sym, apiKey);
+      priceAttempts++;
+      const outcome = await fetchStableQuote(sym, apiKey);
       quoteAt = Date.now();
-      if (!quote) quoteFailures++;
+      lastOutcome = outcome.kind;
+      if (outcome.kind === "row") {
+        quote = outcome.quote;
+      } else {
+        // KEPT MEANING "attempted and did not land", so the existing run-record
+        // history stays comparable across this change.
+        quoteFailures++;
+        if (outcome.kind === "empty") empties++;
+        else quotesRefused++;
+      }
     }
     if (wantPe) {
       if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) {
@@ -855,7 +933,10 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       // This row goes into `failPayload`, NOT `payload`: `payload`'s keys are
       // what markRefreshed is called with, and marking a symbol that returned
       // nothing as freshly refreshed is the same lie stockDataCache was telling.
-      if (wantPrice) {
+      // ONLY AN "empty" TOUCHES THE STREAK. A refusal is evidence about FMP,
+      // not about this ticker, and incrementing on it is how a rate-limited
+      // afternoon becomes a universe full of "dead" symbols.
+      if (wantPrice && lastOutcome === "empty") {
         const streak = (prev?.failStreak ?? 0) + 1;
         failPayload[sym] = {
           price: prev?.price ?? null,
@@ -870,11 +951,11 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
           peTs: prev?.peTs ?? 0,
           failStreak: streak,
         };
+        // BUFFERED, NOT APPLIED. See the circuit breaker after the loop: a
+        // deferral written inline cannot be taken back once the run turns out
+        // to have been a bad afternoon rather than a set of dead tickers.
         const deferFor = priceFailDeferSeconds(streak);
-        if (deferFor > 0) {
-          await deferSymbol("pricePool", sym, deferFor);
-          newlyDeferred++;
-        }
+        if (deferFor > 0) pendingDefers.push({ symbol: sym, seconds: deferFor });
       }
       continue;
     }
@@ -909,6 +990,42 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // registerSymbols is `nx`, seeding newcomers at 0 (never refreshed) without
   // ever overwriting a real refresh time.
   await registerSymbols("pricePool", clean);
+  // ─────────────────────────────────────────────────────────────────────────
+  // BELT AS WELL AS BRACES: A RUN THAT LOOKS LIKE A MASSACRE IS NOT ONE.
+  //
+  // Classifying outcomes (above) is the brace: a 429 no longer counts as
+  // evidence about a ticker. This is the belt, for the failure that classifying
+  // cannot catch -- FMP answering 200 with an empty body across the board, a
+  // bad API key returning empties, or any bug that turns real rows into
+  // nothing.
+  //
+  // DEAD TICKERS DO NOT ARRIVE 300 AT A TIME. Delistings are a handful a year
+  // and arrive one at a time; an empty rate above half the run's attempts is a
+  // statement about the service, whatever the status codes said. So the whole
+  // buffer is discarded rather than trimmed: a run this degraded has no
+  // trustworthy evidence in it at all, and picking the "most confident"
+  // deferrals out of untrustworthy evidence is just a smaller version of the
+  // same mistake.
+  //
+  // The streaks in failPayload are still WRITTEN. A symbol that is genuinely
+  // dead keeps accumulating across runs and gets parked on a normal day; only
+  // the ACTION is withheld.
+  const emptyRate = priceAttempts > 0 ? empties / priceAttempts : 0;
+  if (emptyRate > PRICE_EMPTY_RATE_ABORT && pendingDefers.length) {
+    deferSuppressed = true;
+    console.warn(
+      `[warm-price-pool] SUPPRESSED ${pendingDefers.length} deferral(s): ` +
+        `${empties} of ${priceAttempts} price attempts returned an empty body ` +
+        `(${Math.round(emptyRate * 100)}%). Dead tickers do not arrive in cohorts -- ` +
+        `treating this as an upstream fault, not as ${pendingDefers.length} delistings.`
+    );
+  } else {
+    for (const { symbol, seconds } of pendingDefers) {
+      await deferSymbol("pricePool", symbol, seconds);
+      newlyDeferred++;
+    }
+  }
+
   // ONLY `payload`. failPayload's symbols returned nothing, and marking them
   // refreshed would reset the staleness of exactly the symbols that most need
   // to look stale.
@@ -960,6 +1077,13 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     due: due.length,
     deferredByCap,
     quoteFailures,
+    // The two causes, separable on /cache-health. quotesRefused spiking with
+    // empties flat is an FMP incident and nothing should be parked; empties
+    // rising alone is what a delisting actually looks like.
+    quotesRefused,
+    empties,
+    priceAttempts,
+    deferSuppressed,
     // Symbols parked this run after PRICE_FAIL_DEFER_AFTER consecutive
     // failures, and how many are currently parked in total. A rising
     // deferredSymbols with a flat newlyDeferred is a settled set of dead
