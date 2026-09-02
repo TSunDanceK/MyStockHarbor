@@ -8,6 +8,8 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { markRefreshed, registerSymbols } from "./stalenessQueue";
+import { readEarningsSchedule } from "./earningsSchedule";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
@@ -45,7 +47,103 @@ const redis =
 const KEY_PREFIX = "msh:stockdata:v1:";
 const TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily-ish warm
 const REFRESH_SLICE_SIZE = 25; // symbols refreshed per run (~8 FMP calls each)
-const CALLS_PER_SYMBOL = 8;
+// ─────────────────────────────────────────────────────────────────────────────
+// WHICH ENDPOINTS ARE FILING-DRIVEN, IN ONE LIST.
+//
+// fetchOne made all eight calls for every symbol on a 10-minute clock. Three of
+// them answer questions that only change when a company FILES: an income
+// statement, a cash-flow statement and a dividend declaration do not move
+// between quarters, so re-reading them 144 times a day buys nothing.
+//
+// THE OTHER FIVE STAY ON THE CLOCK, and that is the part worth being careful
+// about. An analyst revision, a rating change or a new price target is exactly
+// the kind of event that happens BETWEEN filings -- putting them on an earnings
+// trigger would mean not noticing a downgrade until the next quarter, which is
+// a worse failure than the cost it saves. stock-price-change is price-derived
+// and ratios-ttm carries pbRatio/enterpriseValue, which move with price too.
+//
+// ONE LIST, NOT A CONDITION REPEATED PER CALL SITE. Each entry names its own
+// group, the fetch reads the group off the entry, and the per-symbol call count
+// is COUNTED from it rather than stated -- CALLS_PER_SYMBOL used to be a flat 8
+// and would have quietly become a lie the moment the split landed.
+const ENDPOINT_TRIGGERS = {
+  "ratios-ttm": "clock",
+  "income-statement": "quarterly",
+  "cash-flow-statement": "quarterly",
+  dividends: "quarterly",
+  "price-target-summary": "clock",
+  "grades-consensus": "clock",
+  "analyst-estimates": "clock",
+  "stock-price-change": "clock",
+} as const satisfies Record<string, "clock" | "quarterly">;
+
+const CLOCK_CALLS = Object.values(ENDPOINT_TRIGGERS).filter((t) => t === "clock").length;
+const QUARTERLY_CALLS = Object.values(ENDPOINT_TRIGGERS).filter((t) => t === "quarterly").length;
+
+/** What one symbol costs this run. Derived, because it is now conditional. */
+function callsForSymbol(includeQuarterly: boolean) {
+  return CLOCK_CALLS + (includeQuarterly ? QUARTERLY_CALLS : 0);
+}
+
+// THE FLOOR IS NOT OPTIONAL.
+//
+// Probe Q6 measured the earnings calendar at 1,553 symbols over a ~5-week
+// window against a universe heading for 3,000. A symbol the calendar has never
+// heard of -- a foreign listing, a fund, a recent IPO, or simply a month whose
+// read failed -- would otherwise have its income statement, cash flow and
+// dividend data frozen PERMANENTLY, with the job reporting a clean run every
+// ten minutes. Absence of a trigger must mean "refresh on the floor", never
+// "never refresh".
+const QUARTERLY_FLOOR_DAYS = 120;
+const QUARTERLY_FLOOR_MS = QUARTERLY_FLOOR_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Should this symbol's filing-driven endpoints be re-read?
+ *
+ * PURE, so the invariant check can RUN it -- "no symbol can be excluded
+ * forever" is a claim about behaviour over inputs, and a regex over this file
+ * cannot test it.
+ *
+ * Returns true when the symbol has reported since its last quarterly refresh,
+ * when it has never had one, or when the floor has elapsed regardless of what
+ * the calendar says.
+ */
+export function needsQuarterlyRefresh(
+  lastQuarterlyIso: string | null | undefined,
+  coveredEarningsDate: string | null | undefined,
+  lastEarningsIso: string | null | undefined,
+  nowMs: number
+): boolean {
+  const lastQuarterly = lastQuarterlyIso ? Date.parse(lastQuarterlyIso) : NaN;
+  // Never refreshed, or an unparseable stamp. Both mean "we hold nothing we can
+  // date", which is due.
+  if (!Number.isFinite(lastQuarterly)) return true;
+
+  // The floor, on a TIMESTAMP. This is the part that has to be time-based: it
+  // is what covers a symbol the calendar has no row for at all, where there is
+  // no date to compare.
+  if (nowMs - lastQuarterly >= QUARTERLY_FLOOR_MS) return true;
+
+  // The trigger, on the DATE ITSELF rather than on a timestamp comparison.
+  //
+  // THIS WAS A TIMESTAMP TEST AND IT DROPPED FILINGS. Comparing the report
+  // DATE (which parses to midnight UTC) against the last refresh INSTANT means
+  // a symbol whose quarterly refresh happened at 06:00 on its own report day
+  // has `reported <= lastQuarterly` from then on -- and `last` stays that same
+  // date until the following quarter, so the filing is never picked up. The
+  // floor would eventually catch it, up to 120 days later, which is precisely
+  // the freeze this design exists to avoid.
+  //
+  // Parsing to end-of-day instead would fix that and then re-fire on every run
+  // for the rest of the report day. Recording WHICH earnings date the last
+  // quarterly refresh covered fires exactly once per filing, on the day, with
+  // no clock arithmetic to get wrong.
+  const reported = lastEarningsIso ? lastEarningsIso.slice(0, 10) : null;
+  if (reported && reported !== (coveredEarningsDate ?? null)) return true;
+
+  return false;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 const FMP_MIN_HEADROOM_CALLS = 90; // leave room for price/history/earnings warmers
 
 export type StockData = {
@@ -80,6 +178,25 @@ export type StockData = {
   perfYtd: number | null;
   perf1y: number | null;
   updatedAt: string;
+  /**
+   * When the FILING-DRIVEN endpoints were last read, separate from updatedAt.
+   *
+   * They have to be separate. updatedAt advances on every clock refresh, so
+   * using it as the quarterly stamp would mean the trigger compared the last
+   * earnings date against a timestamp that moves every ten minutes -- it would
+   * fire exactly once per symbol and then never again, and the floor would
+   * never elapse either. Optional because rows written before this field
+   * existed do not carry it, and needsQuarterlyRefresh treats absent as due.
+   */
+  quarterlyUpdatedAt?: string;
+  /**
+   * The earnings date the last quarterly refresh picked up.
+   *
+   * The trigger compares this to the calendar's `last` rather than comparing a
+   * timestamp to a date -- see the note in needsQuarterlyRefresh for the
+   * filings that lost.
+   */
+  quarterlyEarningsDate?: string | null;
 };
 
 function cleanSymbol(value: string) {
@@ -168,7 +285,11 @@ function sumField(json: unknown, keys: string[], limit = 4): number | null {
   return any ? total : null;
 }
 
-async function fetchOne(symbol: string, apiKey: string): Promise<Partial<StockData>> {
+async function fetchOne(
+  symbol: string,
+  apiKey: string,
+  includeQuarterly: boolean
+): Promise<Partial<StockData>> {
   const s = encodeURIComponent(symbol);
   const key = encodeURIComponent(apiKey);
   const base = "https://financialmodelingprep.com/stable";
@@ -194,6 +315,11 @@ async function fetchOne(symbol: string, apiKey: string): Promise<Partial<StockDa
     /* fail open */
   }
 
+  // BLOCKS 2-4 ARE THE FILING-DRIVEN SET (see ENDPOINT_TRIGGERS). Skipped
+  // entirely unless this symbol has reported since its last quarterly refresh
+  // or has hit the floor. Every field they produce is carried forward from the
+  // previous row by the caller, so skipping loses nothing.
+  if (includeQuarterly) {
   // 2) income-statement (quarter, 4) -> TTM revenue / operating income / net income / EPS
   try {
     const json = await fetchJson(`${base}/income-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`);
@@ -231,6 +357,8 @@ async function fetchOne(symbol: string, apiKey: string): Promise<Partial<StockDa
     }
   } catch {
     /* fail open */
+  }
+
   }
 
   // 5) price-target-summary -> avg price target + analyst count
@@ -308,13 +436,35 @@ export async function warmStockData(symbols: string[], nowMs: number) {
   const slice = [...clean].sort((a, b) => ageOf(a) - ageOf(b)).slice(0, REFRESH_SLICE_SIZE);
 
   const nowIso = new Date(nowMs).toISOString();
+
+  // ONE READ FOR THE WHOLE SLICE. Cached for a day in its own small key, so
+  // this is a single GET rather than several hundred KB of calendar per run.
+  // An unreadable index yields an empty map, and every symbol then falls to the
+  // floor -- degraded to a 120-day cadence, never to no refresh at all.
+  const schedule = await readEarningsSchedule(nowMs);
+
   let written = 0;
+  let quarterlyRefreshes = 0;
+  const refreshedSymbols: string[] = [];
   const pipeline = redis.pipeline();
   let queued = 0;
 
   for (const symbol of slice) {
-    if (!(await hasFmpCapacity(CALLS_PER_SYMBOL, FMP_MIN_HEADROOM_CALLS))) break;
-    const partial = await fetchOne(symbol, apiKey);
+    // The earnings trigger, per symbol. `schedule` is one cached index for the
+    // whole universe (earningsSchedule.ts), so this costs no call and no read.
+    const scheduledLast = schedule.get(symbol)?.last ?? null;
+    const includeQuarterly = needsQuarterlyRefresh(
+      existing.get(symbol)?.quarterlyUpdatedAt,
+      existing.get(symbol)?.quarterlyEarningsDate,
+      scheduledLast,
+      nowMs
+    );
+    // COUNTED, NOT ASSUMED. A symbol on the clock-only path costs five calls,
+    // not eight, and reserving eight for it would idle the run against a
+    // budget it is not going to spend.
+    if (!(await hasFmpCapacity(callsForSymbol(includeQuarterly), FMP_MIN_HEADROOM_CALLS))) break;
+    if (includeQuarterly) quarterlyRefreshes++;
+    const partial = await fetchOne(symbol, apiKey, includeQuarterly);
     const prev = existing.get(symbol);
     const row: StockData = {
       symbol,
@@ -342,7 +492,18 @@ export async function warmStockData(symbols: string[], nowMs: number) {
       perfYtd: partial.perfYtd ?? prev?.perfYtd ?? null,
       perf1y: partial.perf1y ?? prev?.perf1y ?? null,
       updatedAt: nowIso,
+      // Only advanced when the filing-driven endpoints were actually read.
+      // Carrying it forward on a clock-only refresh is what keeps the trigger
+      // and the floor both meaningful.
+      quarterlyUpdatedAt: includeQuarterly ? nowIso : prev?.quarterlyUpdatedAt,
+      // The earnings date this refresh covered. Written together with the
+      // stamp above and only when the filing endpoints actually ran, so the
+      // two can never disagree about what was picked up.
+      quarterlyEarningsDate: includeQuarterly
+        ? scheduledLast ?? prev?.quarterlyEarningsDate
+        : prev?.quarterlyEarningsDate,
     };
+    refreshedSymbols.push(symbol);
     pipeline.set(`${KEY_PREFIX}${symbol}`, row, { ex: TTL_SECONDS });
     queued++;
     written++;
@@ -356,5 +517,25 @@ export async function warmStockData(symbols: string[], nowMs: number) {
     }
   }
 
-  return { ok: true, universe: clean.length, refreshed: written, written };
+  // PER-SYMBOL FRESHNESS, WHERE A HUMAN CAN SEE IT. This job has the longest
+  // lap in the system and was the one dataset stalenessQueue did not know
+  // about, so "when was AAPL's cash flow last read" had no answer anywhere.
+  // registerSymbols is `nx`, so it seeds newcomers at 0 without overwriting a
+  // real refresh; markRefreshed names only the symbols this run actually wrote,
+  // so the ratio means what /cache-health says it means.
+  await registerSymbols("stockData", clean);
+  if (refreshedSymbols.length) await markRefreshed("stockData", refreshedSymbols);
+
+  return {
+    ok: true,
+    universe: clean.length,
+    refreshed: written,
+    written,
+    // How much of this run was filing-driven. Zero across many runs means the
+    // trigger has gone inert -- an empty schedule index, or a quarterlyUpdatedAt
+    // that never advances -- and every symbol is quietly riding the 120-day
+    // floor instead. That is the failure this number exists to make visible.
+    quarterlyRefreshes,
+    scheduleSize: schedule.size,
+  };
 }

@@ -111,6 +111,17 @@ export const DATASETS = {
     // a self-selecting denominator and the page must not render it as coverage.
     coverage: "observed-only",
   },
+  stockData: {
+    label: "Stock data (valuation, dividends, analysts)",
+    // Matches TTL_SECONDS in stockDataCache. The job refreshes
+    // REFRESH_SLICE_SIZE symbols per run, so its lap is the longest in the
+    // system -- ~5h at today's universe and ~20h at 3,000 -- which is exactly
+    // why it needed a per-symbol denominator: a lap that quietly stops
+    // completing looks identical to one that is merely slow.
+    ttlSeconds: 60 * 60 * 26,
+    job: "warm-stock-data",
+    coverage: "registered",
+  },
   pricePool: {
     label: "Price pool",
     ttlSeconds: 60 * 15,
