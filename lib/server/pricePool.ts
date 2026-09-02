@@ -90,6 +90,54 @@ const redis =
     : null;
 
 const PRICE_POOL_KEY = "msh:price-pool:v1";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A HEALTH RECORD THE MARKET-HOURS SKIP CANNOT ERASE.
+//
+// #404's eviction gate reads warm-price-pool's health to decide whether today's
+// failure streaks are evidence. Reading it from the JOB RECORD does not work,
+// and the reason is a schedule collision:
+//
+//   warm-screener-fundamentals   "50 6 * * *"     06:50 UTC = 02:50 ET
+//   warm-price-pool              "*/5 * * * *"
+//
+// At 02:50 ET the market-hours gate returns early with
+// { ok: true, skipped: true, reason: "market-closed", written: 0 } -- no
+// priceAttempts, no quotesRefused, no deferredSymbols, no deferSuppressed. And
+// jobRuns.ts is explicit that it keeps ONE key per job holding only the latest
+// run: "this is not a history". So the last warm-price-pool record at sweep
+// time is ALWAYS a market-closed skip, and a gate reading it always sees a
+// record with none of the fields it tests.
+//
+// This key is written only by runs that actually did work, so it survives the
+// overnight skips and still describes the last real session.
+//
+// 36 HOURS: above the 15-hour weeknight gap between the window closing at
+// 17:00 ET and reopening at 08:00, below the 63-hour weekend one. A Monday
+// sweep therefore finds NOTHING rather than Friday's health -- which is the
+// right answer, since EVICTION_FAIL_MAX_AGE_MS is 48h and Friday's streaks are
+// already too old to evict on.
+const SESSION_HEALTH_KEY = "msh:pricepool:session-health:v1";
+const SESSION_HEALTH_TTL_SECONDS = 36 * 60 * 60;
+
+export type PricePoolSessionHealth = {
+  at: number;
+  priceAttempts: number;
+  quotesRefused: number;
+  empties: number;
+  deferredSymbols: number;
+  deferSuppressed: boolean;
+};
+
+export async function readPricePoolSessionHealth(): Promise<PricePoolSessionHealth | null> {
+  if (!redis) return null;
+  try {
+    return (await redis.get<PricePoolSessionHealth>(SESSION_HEALTH_KEY)) ?? null;
+  } catch {
+    return null;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gaps
 
 // Price coverage is now driven by the TIER POLICY, not by a fixed fraction of
@@ -315,6 +363,17 @@ export type PricePoolRow = {
    * same HSET, expired by the same TTL, and removed by the same eviction.
    */
   failStreak?: number;
+  /**
+   * When the most recent empty response was seen, ms epoch.
+   *
+   * WITHOUT THIS THE STREAK IS UNDATED, AND AN UNDATED STREAK IS EVIDENCE
+   * FOREVER. A symbol parked for up to 24 hours still carries failStreak 3 in
+   * its row the whole time -- so a daily sweep reading that row a day later
+   * sees "currently failing" when what it actually sees is "failed once,
+   * yesterday, and has not been asked since". Three such days evicts a live
+   * symbol on the strength of one bad afternoon.
+   */
+  failAt?: number;
 };
 
 function cleanSymbol(value: string) {
@@ -372,6 +431,7 @@ export async function readPricePoolBulk(
             ts: row.ts,
             peTs: num(row.peTs) ?? 0,
             failStreak: num(row.failStreak) ?? 0,
+            failAt: num(row.failAt) ?? 0,
           });
         }
       });
@@ -528,6 +588,9 @@ export function mergePoolRow(input: PoolMergeInput): PricePoolRow {
     // Any landing clears the streak. markRefreshed also ZREMs the deferral,
     // so one good fetch fully un-parks a symbol.
     failStreak: quote ? 0 : already?.failStreak ?? prev?.failStreak ?? 0,
+    // Cleared with the streak. An undated streak is evidence forever, and a
+    // dated one whose streak has been cleared is evidence about nothing.
+    failAt: quote ? 0 : already?.failAt ?? prev?.failAt ?? 0,
   };
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1060,6 +1123,9 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
           ts: prev?.ts ?? 0,
           peTs: prev?.peTs ?? 0,
           failStreak: streak,
+          // Written on the same path as the streak so the two cannot disagree
+          // about when the evidence was gathered.
+          failAt: Date.now(),
         };
         // BUFFERED, NOT APPLIED. See the circuit breaker after the loop: a
         // deferral written inline cannot be taken back once the run turns out
@@ -1147,6 +1213,26 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     }
     // Always reset the safety TTL so an all-skipped run can't let the hash lapse.
     await redis.expire(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS);
+
+    // THE SESSION HEALTH RECORD, written only on a run that did work. The
+    // market-closed path returns long before here, which is the point: the
+    // eviction gate needs the last REAL session, not the last run.
+    await redis.set<PricePoolSessionHealth>(
+      SESSION_HEALTH_KEY,
+      {
+        at: Date.now(),
+        priceAttempts,
+        quotesRefused,
+        empties,
+        // AFTER this run's deferrals, not before. `deferred` is read at the top
+        // of the run, so reporting its size alone described the state going IN
+        // -- the many-deferred signal lagged a run while its name read as
+        // current.
+        deferredSymbols: deferred.size + newlyDeferred,
+        deferSuppressed,
+      },
+      { ex: SESSION_HEALTH_TTL_SECONDS }
+    );
   } catch {
     // fail open -- a failed warm just means the pool keeps its prior values.
   }
@@ -1192,7 +1278,9 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // deferredSymbols with a flat newlyDeferred is a settled set of dead
     // tickers; a rising newlyDeferred is something breaking.
     newlyDeferred,
-    deferredSymbols: deferred.size,
+    // After this run's deferrals. Reporting `deferred.size` alone described the
+    // state going IN, so the signal lagged one run behind its own name.
+    deferredSymbols: deferred.size + newlyDeferred,
     outOfTime,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
