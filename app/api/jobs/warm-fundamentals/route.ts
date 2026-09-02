@@ -18,7 +18,14 @@ export const maxDuration = 300;
 // which does the FMP work under the shared 300/min budget guard.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// THE CADENCE IS `0 * * * *` ON PURPOSE. DO NOT "RESTORE" `*/30`.
+// THE CADENCE IS HOURLY ON PURPOSE. DO NOT "RESTORE" `*/30`.
+//
+// This block said `0 * * * *` until 2026-09-02, which stopped being true when
+// #374 staggered the crons off minute :00. The JOBS registry (jobRuns.ts) is
+// the source of truth and a check already asserts it against vercel.json --
+// this comment was simply never updated, and a comment that confidently states
+// the wrong value is worse than no comment, because it is what the next reader
+// trusts. It names no minute now for the same reason.
 //
 // It was written as */30 in the same change that added the quote-rotation
 // offset, and dialled back to hourly before merge. The reason is not the call
@@ -36,8 +43,13 @@ export const maxDuration = 300;
 // guard cannot see the limit that is actually close.
 //
 // So the cadence is held at hourly until there is a byte meter to raise it
-// against. With the rotation offset that is still a full lap of the universe
-// every ~2-3 hours, against a tail that was NEVER covered before it.
+// against.
+//
+// THE COVERAGE ARGUMENT THAT USED TO BE HERE IS OBSOLETE. It read "with the
+// rotation offset that is still a full lap of the universe every ~2-3 hours".
+// The quote stage no longer laps anything: marketCap and P/E come from the
+// price pool in one HMGET, so every symbol is covered every run and FMP is
+// asked only about pool misses. See the note above fetchQuoteFundamentals.
 //
 // When byte accounting exists (a rolling 30-day counter bucketed by endpoint,
 // beside the per-minute call counter), re-derive this number from measured
@@ -82,6 +94,13 @@ export async function GET(req: NextRequest) {
     await recordJobRun("warm-fundamentals", result.ok !== false, {
       universe: result.universe ?? null,
       quotesFetched: result.quotesFetched ?? null,
+      // Where marketCap/P-E came from. poolHits is the FMP calls not made;
+      // poolMisses climbing toward the universe means warm-price-pool has
+      // stopped maintaining the pool, and fallbackDeferred non-zero means this
+      // stage has turned back into the per-symbol rotation it replaced.
+      poolHits: result.poolHits ?? null,
+      poolMisses: result.poolMisses ?? null,
+      fallbackDeferred: result.fallbackDeferred ?? null,
       industryMissing: result.industryMissing ?? null,
       screenerCovered: result.screenerCovered ?? null,
       selection: result.quoteSelection ?? null,
