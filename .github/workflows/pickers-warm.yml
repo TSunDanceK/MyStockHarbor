@@ -1,16 +1,43 @@
 name: Warm MyStockHarbor Pickers & Earnings
 
-# Runs entirely on GitHub's own servers - no browser, no login, no secrets
-# needed. Both endpoints below are public, rate-limited GET routes (see
-# app/api/jobs/warm-picker-universe/route.ts and
-# app/api/jobs/warm-earnings/route.ts) - the same ones already wired to
-# Vercel Cron in vercel.json (07:00/07:15 UTC daily). This workflow runs
-# earlier in the morning and does a second earnings pass 2 minutes after
-# the first, mirroring the manual "click, wait 2 min, click again" routine.
+# Runs on GitHub's own servers - no browser, no login. IT DOES NEED A SECRET.
 #
-# DST note: cron below is in UTC. '3 5 * * *' = ~6:03am UK time while the
-# UK is on BST (UTC+1). When UK clocks change (late Mar / late Oct), this
-# will drift an hour until updated - ask Claude to adjust it then.
+# THE PREVIOUS VERSION OF THIS COMMENT SAID THE OPPOSITE and was wrong for
+# weeks: "no secrets needed. Both endpoints below are public, rate-limited GET
+# routes". They are not public. /api/jobs/warm-earnings gates on
+# `Bearer ${process.env.CRON_SECRET}` and returns 401 without it, and
+# /api/jobs/warm-picker-universe needs the same header to be allowed to force a
+# history refetch. Vercel's own cron sends that header automatically, which is
+# why the 07:15 run has always worked and these calls have not.
+#
+# WHAT IT COST, from the run log of 2026-09-02 (workflow run 33614228672):
+#
+#   warm-picker-universe: HTTP 200   <- in 2.0s. A forced full-universe history
+#                                       refetch is ~700 FMP calls; two seconds
+#                                       is an unforced, miss-only run that with
+#                                       a 50h TTL refreshes nothing.
+#   warm-earnings pass 1: HTTP 401
+#   warm-earnings pass 2: HTTP 401
+#   job conclusion: SUCCESS
+#
+# So warm-earnings has been doing 40 symbols a day rather than 120, and the
+# earnings-coverage puzzle recorded on 2026-09-02 (80/327, climbing slowly) is
+# explained: two thirds of the passes were rejected. Anything sized against
+# observed earnings coverage was sized against a broken job.
+#
+# The status was PRINTED on every run and nobody read it, because a workflow
+# that prints a failure and exits 0 is a green tick. That is fixed below: a
+# non-200 now fails the step.
+#
+# THE HEADER IS ADDED IN ONE PLACE, the `call` helper. A second copy of the
+# curl line is how one of three calls ends up unauthenticated, which is the
+# shape of this whole incident. scripts/check-cron-auth.mjs asserts that every
+# CRON_SECRET-gated job route reached from a workflow is reached with the
+# header, and derives the list of gated routes from the routes themselves.
+#
+# DST note: cron below is in UTC. '3 5 * * *' = ~6:03am UK time while the UK is
+# on BST (UTC+1). When UK clocks change (late Mar / late Oct), this will drift
+# an hour until updated - ask Claude to adjust it then.
 
 on:
   schedule:
@@ -20,24 +47,53 @@ on:
 jobs:
   warm:
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: https://www.mystockharbor.com
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      - name: Warm picker universe (fills the /pickers list)
+      - name: Check the secret is present
         run: |
-          curl -sS -o /dev/null -w "warm-picker-universe: HTTP %{http_code}\n" \
-            "https://www.mystockharbor.com/api/jobs/warm-picker-universe?t=$(date +%s)"
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::CRON_SECRET is not set in this repository's Actions secrets. Every call below would 401 or silently no-op, which is exactly the failure this workflow just spent weeks in. Add it under Settings > Secrets and variables > Actions, matching the value in the Vercel project."
+            exit 1
+          fi
 
-      - name: Wait 2 minutes
-        run: sleep 120
-
-      - name: Fetch earnings - pass 1
+      - name: Warm the picker universe, then two earnings passes
         run: |
-          curl -sS -o /dev/null -w "warm-earnings pass 1: HTTP %{http_code}\n" \
-            "https://www.mystockharbor.com/api/jobs/warm-earnings?t=$(date +%s)"
+          set -uo pipefail
+          failures=0
 
-      - name: Wait 2 minutes
-        run: sleep 120
+          # ONE PLACE THAT BUILDS THE REQUEST. Every call is authenticated
+          # because there is only one call site; adding a fourth target cannot
+          # forget the header.
+          #
+          # The status is checked, not merely printed. `curl -sS -o /dev/null
+          # -w "%{http_code}"` exits 0 on a 401, which is how three failing
+          # calls read as a green run for weeks.
+          call() {
+            local label="$1" url="$2" code
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${url}?t=$(date +%s)" || echo "000")
+            echo "${label}: HTTP ${code}"
+            if [ "${code}" != "200" ]; then
+              echo "::error::${label} returned ${code} (000 = curl could not complete the request). A warm job that silently does nothing is worse than one that is visibly broken."
+              failures=$((failures + 1))
+            fi
+          }
 
-      - name: Fetch earnings - pass 2
-        run: |
-          curl -sS -o /dev/null -w "warm-earnings pass 2: HTTP %{http_code}\n" \
-            "https://www.mystockharbor.com/api/jobs/warm-earnings?t=$(date +%s)"
+          call "warm-picker-universe" "${BASE_URL}/api/jobs/warm-picker-universe"
+
+          # Two passes, two minutes apart, mirroring the original routine: each
+          # run does EARNINGS_BATCH_SIZE symbols, so three passes a day is
+          # three batches. The gap lets the first pass's lock
+          # (EARNINGS_LOCK_TTL_SECONDS) clear before the next one asks.
+          sleep 120
+          call "warm-earnings pass 1" "${BASE_URL}/api/jobs/warm-earnings"
+          sleep 120
+          call "warm-earnings pass 2" "${BASE_URL}/api/jobs/warm-earnings"
+
+          if [ "${failures}" -ne 0 ]; then
+            echo "::error::${failures} of 3 warm calls did not return 200."
+            exit 1
+          fi
