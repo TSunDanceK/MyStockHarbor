@@ -48,6 +48,14 @@ export async function GET(req: NextRequest) {
   const payload = { ...summary, symbolsReturned: symbols.length };
   console.log("[warm-screener-fundamentals]", JSON.stringify(payload));
   await recordJobRun("warm-screener-fundamentals", result.ok, {
+    // THE REAL COVERAGE FLOOR, as returned rather than as configured. The
+    // screener answers market-cap-descending, so the smallest cap in the
+    // response is where the pool actually stops. While it sits well above
+    // SCREENER_MIN_MARKET_CAP the LIMIT is what bounds the pool and that
+    // constant is inert; when the two converge, the constant has started
+    // shaping the universe and is a decision again. Recording it is what makes
+    // that transition visible instead of silent.
+    observedFloor: result.observedFloor ?? null,
     rows: result.rows,
     cached: result.cached,
     reason: result.reason ?? null,

@@ -29,14 +29,69 @@ import { reserveFmpCallSlot } from "./historyCache";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { cacheScreenerFundamentals } from "./fundamentalsCache";
 
-// Kept identical to the values app/api/market/route.ts used when this lived
-// there -- this is a move, not a retune. Changing either changes which symbols
-// discovery can find, which is a separate decision from fixing the cadence.
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FLOOR AND THE LIMIT, AND WHICH ONE ACTUALLY BINDS.
+//
+// The screener returns rows market-cap-descending, so between these two the
+// LIMIT decides the coverage floor and the market-cap constant only matters if
+// the limit stops truncating first. At 1000 it never did: probe Q1 found the
+// $300M and $1B calls returned BYTE-IDENTICAL responses, because the 1000th row
+// was PATH at $9.66B -- nine times the floor. SCREENER_MIN_MARKET_CAP has
+// therefore been INERT for its whole life.
+//
+// AT 3000 IT IS STILL INERT, AND THAT IS THE POINT OF RAISING THE LIMIT.
+// Probe Q1 confirmed limit=3000 returns 3,000 rows and, with funds excluded,
+// the coverage floor lands around $2B -- still above the $1B constant, with
+// roughly $1B of margin. So the widened pool is bounded by the limit, not by
+// the floor, and the constant stays a backstop rather than becoming the thing
+// that shapes the universe.
+//
+// WHY THAT MATTERS ENOUGH TO WRITE DOWN. A constant that silently becomes
+// load-bearing is worse than one that never was: the day the 3000th row would
+// have been a $900M company, this quietly starts excluding it and nothing says
+// so. The run now reports the OBSERVED floor -- the smallest market cap in the
+// rows FMP actually returned -- so "has the constant started binding" is
+// answerable from a run record rather than from reasoning. When observedFloor
+// approaches SCREENER_MIN_MARKET_CAP, it has.
+//
+// WHAT THE LIMIT BUYS. The old $9.66B floor is why ONDS at $4.37B, up 171%,
+// could never enter the universe except by being searched or turning up in a
+// mover bucket -- which is exactly the stock a breakout screener exists to
+// find. A ~$2B floor puts that whole band in the candidate pool.
+//
+// THIS DOES NOT CHANGE THE UNIVERSE SIZE. ANALYSIS_UNIVERSE_CAP is untouched at
+// 700: the CANDIDATE SET widens and the analysed set does not, deliberately, so
+// that if something moves it is clear which change did it.
 export const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
-export const SCREENER_LIMIT = 1000;
+export const SCREENER_LIMIT = 3000;
+
+/**
+ * The smallest market cap in the returned rows.
+ *
+ * The screener answers market-cap-descending, so this is the real coverage
+ * floor -- the thing SCREENER_MIN_MARKET_CAP is only a backstop for. Null when
+ * no row carried a usable number, which is a different state from a low floor
+ * and must not read as one.
+ */
+function observedFloor(rows: unknown[]): number | null {
+  let min: number | null = null;
+  for (const row of rows) {
+    const cap = (row as { marketCap?: unknown })?.marketCap;
+    if (typeof cap !== "number" || !Number.isFinite(cap) || cap <= 0) continue;
+    if (min === null || cap < min) min = cap;
+  }
+  return min;
+}
 
 export type ScreenerRefreshResult = {
   ok: boolean;
+  /**
+   * Smallest market cap actually returned. Compare against
+   * SCREENER_MIN_MARKET_CAP: while this sits well above it, the LIMIT is what
+   * bounds the pool and the constant is inert. When they converge, the constant
+   * has started shaping the universe and is a decision again, not a backstop.
+   */
+  observedFloor?: number | null;
   /** Why it produced nothing, when it produced nothing. */
   reason?: "no-fmp-key" | "http-error" | "bad-payload" | "threw";
   status?: number;
@@ -134,7 +189,14 @@ export async function refreshScreenerFundamentals(
     // unlike in warmFundamentals' ~477-call loop.
     await flushFmpUsage();
 
-    return { ok: true, status: res.status, rows: json.length, cached, symbols };
+    return {
+      ok: true,
+      status: res.status,
+      rows: json.length,
+      cached,
+      symbols,
+      observedFloor: observedFloor(json),
+    };
   } catch (error) {
     console.warn("[screener-fundamentals] company-screener threw:", error);
     return { ok: false, reason: "threw", ...empty };
