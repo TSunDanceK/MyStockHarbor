@@ -61,6 +61,20 @@ export async function GET(req: NextRequest) {
       noEndpointAnswered: result.noEndpointAnswered ?? null,
       markedRefreshed: result.markedRefreshed ?? null,
       quarterlyRefreshes: result.quarterlyRefreshes ?? null,
+      // WHY A ZERO IS A ZERO. quarterlyRefreshes has read 0 on every run since
+      // #400 and could not say which of two things it meant. Beside these it
+      // can: 0 refreshes with quarterlyStamped === sliceSize is "nothing was
+      // due" and healthy; 0 with quarterlyStamped 0 is "everything was due and
+      // none ran" and is not. scheduleCovered answers the third state --
+      // scheduleSize is GLOBAL, so a healthy index can still cover none of this
+      // slice, and then every symbol here rides the 120-day floor in silence.
+      // Same principle as deferredByCap and outOfTime.
+      quarterlyStamped: result.quarterlyStamped ?? null,
+      sliceSize: result.sliceSize ?? null,
+      scheduleCovered: result.scheduleCovered ?? null,
+      // The run ended on its own clock rather than draining its slice. Was a
+      // silent `break` on the first exhausted minute until this change.
+      outOfTime: result.outOfTime ?? null,
       scheduleSize: result.scheduleSize ?? null,
       targets: symbols.length,
       written: result.written ?? null,
