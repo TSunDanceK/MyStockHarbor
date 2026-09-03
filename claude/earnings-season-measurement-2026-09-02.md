@@ -1,5 +1,103 @@
 # Earnings-season concentration: still UNMEASURED, and how to measure it (2026-09-02)
 
+## UPDATE 2026-09-04 (later) — measured clean, and EARNINGS_BATCH_SIZE is now DERIVED
+
+The probe was re-run with `?fresh=1` after #411's slicing. **February came back
+complete for the first time.**
+
+```
+2026-01   1,654 rows   1 fetch
+2026-02   6,018 rows   3 fetches   cappedDays: []  truncated: false
+                                   dateRange 2026-02-01 -> 2026-02-28
+distinct symbols  7,559   (was 5,572)
+busiest day       2026-02-26, 710 symbols   (unchanged)
+share in the busiest 20 trading days   0.848
+```
+
+**The estimate this all started from was 0.70. Truncated data said 0.934. The
+truth is 0.848.**
+
+And the verdict moved **safer**, not riskier — the opposite of the caveat in the
+previous brief. `impliedPeakDayRefreshes` is universe size × peak-day *share*,
+and recovering ~2,000 symbols grew the denominator while the peak day itself did
+not move. A fixed-size universe now takes a smaller slice of any given day.
+
+### EARNINGS_BATCH_SIZE: 40 → 262, and not typed
+
+`EARNINGS_BATCH_SIZE` was a typed **40**. It is now `planEarningsDay`'s answer
+for the current universe caps. Typing the measured number would have been the
+same failure this rebuild removed twice (`PRICE_TARGET_RUNS`; `priceCap` derived
+from one tier while the universe sat on two): right today, silently wrong the
+moment `ANALYSIS_UNIVERSE_CAP` moves, and wrong in the direction that quietly
+does less work.
+
+**The basis is the union of the two caps** — `ANALYSIS_UNIVERSE_CAP` +
+`MAX_DYNAMIC_UNIVERSE_SIZE` = 1,400 — not the analysed cap alone and not the
+observed 762. `getWarmTargetSymbols` hands the job the union of two separately
+capped pools, which is why the live figure runs ~9% above the analysis cap, and
+it is the same basis `check-price-tiers` uses for the pre-open buffer: worst-case
+work inside one run.
+
+| `ANALYSIS_UNIVERSE_CAP` | basis | peak-day reporters | calls on the peak run | % of the 440 ceiling | passes | batch |
+|---|---|---|---|---|---|---|
+| **700 (today)** | 1,400 | 131 | **262** | 60% | **1** | **262** |
+| 1,500 | 2,200 | 206 | 412 | **94%** | 1 | 412 |
+| 3,000 | 3,700 | 346 | 692 | 157% | **2** | 346 |
+
+All three rows are computed by `scripts/check-earnings-batch.mjs`, not written
+down. **3,000 needs two passes and multi-pass is not implemented** — that is the
+next growth blocker, and the check fails the build rather than relying on anyone
+remembering it.
+
+**The 1,500 step is tight.** 94% of the ceiling, and the model counts only
+near-report fetches — retries, the 10-day unknown-next-date bucket and the
+quarterly base rotation are all real and none is counted. Read the 6% as less
+than 6%.
+
+### The measured share, and why it is a recorded constant
+
+`EARNINGS_PEAK_DAY_SHARE = 0.0935`, in `lib/server/earningsPlan.ts`, carrying
+`EARNINGS_PEAK_SHARE_MEASURED_AT`, `EARNINGS_PEAK_SHARE_SOURCE` (months, probe,
+`requiresSlicing`) and `EARNINGS_PEAK_SHARE_WITNESSES` — the three
+`impliedPeakDayRefreshes` figures the run printed (72 at 762, 141 at 1,500, 281
+at 3,000). The check **re-derives all three from the share on every build**, so a
+share edited without re-running the probe fails against its own provenance.
+
+**Why not derive it at runtime from the cached calendar** (the better-sounding
+option): the batch must be sized for the **peak**, and the peak is seasonal. A
+job running in September would derive September's share — a fraction of
+February's — and set a batch too small for eleven months of the year, in the one
+direction that fails silently. Sizing for the peak at runtime means reading
+February *from September*, which is outside the three-months-forward window the
+calendar cache is built for. And a runtime value cannot fail a build, which is
+the whole point of the coupling. Cost if done anyway: ~1.4 MB of Redis calendar
+reads per run, one to three FMP calls for an out-of-window month, and a new
+failure mode where an empty or 402'd month shrinks the batch.
+
+**When to re-take it:** when the calendar's *shape* changes — a new
+reporting-season pattern, exchanges added or dropped from FMP's feed, or the page
+cap moving again. **Universe growth does not require a re-take**: the share is
+per-symbol, which is the whole reason it is a share.
+
+### The cost, on the record
+
+* **Peak day:** up to **262 calls** in one run (the worst case the caps allow);
+  the observed 762-symbol universe needs **144**. At ~13.7 KB per `earnings`
+  call that is ~3.6 MB on a peak day against ~0.5 MB at the old 40 — negligible
+  against a 20 GB/month cap.
+* **Typical day:** the loop stops at symbols that are actually **due**, so
+  outside earnings season it fetches far fewer than the cap regardless. Order of
+  magnitude: ~15 of our universe's symbols report on a quiet day (×2 fetches)
+  plus ~16/day of quarterly base rotation — **tens of calls, not hundreds.** The
+  batch is a ceiling on a busy day, not a workload on a quiet one.
+* **Backlog:** coverage was last seen at 80/327 — 247 symbols missing — running
+  at 40/day against a job whose extra passes were 401ing until #408. At 262 that
+  clears in **about a day** instead of six. Counting the dynamic-universe
+  symbols with no cached earnings at all (up to ~700), roughly **three days**
+  instead of seventeen.
+
+---
+
 ## UPDATE 2026-09-04 — the limit is IGNORED, and the cap eats the oldest dates
 
 `/api/debug/earnings-calendar-limit` ran against 2026-02:
