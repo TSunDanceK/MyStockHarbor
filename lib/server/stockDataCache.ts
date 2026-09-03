@@ -47,7 +47,68 @@ const redis =
 
 const KEY_PREFIX = "msh:stockdata:v1:";
 const TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily-ish warm
-const REFRESH_SLICE_SIZE = 25; // symbols refreshed per run (~8 FMP calls each)
+// ─────────────────────────────────────────────────────────────────────────────
+// THE SLICE, AND THE MINUTE WALL THAT MADE IT A FICTION.
+//
+// This was 25, and the growth plan called raising it to 40 "free since #400"
+// because a clock-only symbol costs five calls instead of eight. THE SLICE WAS
+// NEVER THE BINDING CONSTRAINT. The loop below did:
+//
+//     if (!(await hasFmpCapacity(callsForSymbol(...), FMP_MIN_HEADROOM_CALLS))) break;
+//
+// `break`, not wait -- the third instance of the defect #396 fixed in
+// warmPricePool and #406 fixed in warm-earnings. With FMP_SAFE_CALLS_PER_MINUTE
+// at 200 and FMP_MIN_HEADROOM_CALLS at 90 the usable rate is 110/min, so the
+// run stopped after:
+//
+//     22 symbols  on the clock-only path   (110 / 5)
+//     13 symbols  when filings are due     (110 / 8)
+//
+// A slice of 25 already exceeded that, and 40 would have changed NOTHING: the
+// run breaks at ~22 either way. Raising the constant alone would have shipped a
+// no-op labelled as a growth step.
+//
+// So the wait is ported first and the slice raised after. This is the same
+// shape as the method note in the plan: an endpoint or a guard stopping at a
+// suspiciously round number is telling you about its own defaults, not about
+// the world. Three for three, now four.
+//
+// 40 AGAINST THE CEILING THE BUDGET ALLOWS: 110/min x 4 min = 440 calls, which
+// is 55 symbols at the quarterly cost of eight and 88 at the clock-only five.
+// 40 fits with room either way, which is what makes it a slice size rather than
+// another wall.
+const REFRESH_SLICE_SIZE = 40; // symbols refreshed per run (5 calls each, 8 when filings are due)
+
+// 240s against the route's maxDuration of 300, for the price pool's reason: a
+// run that spends all 300 has nothing left for the pipeline write, the
+// staleness bookkeeping and the response, and would be killed mid-write.
+const STOCK_DATA_RUN_BUDGET_MS = 240_000;
+// Poll rather than sleeping to the bucket edge: the minute may roll over, or
+// another job may finish and free room, well before the boundary.
+const STOCK_DATA_BUDGET_POLL_MS = 5_000;
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+/**
+ * Wait until there is FMP room for this symbol, or until the run is out of its
+ * own time.
+ *
+ * Returns "out-of-time" ONLY on the run's clock. An exhausted minute is a
+ * pause; the end of the budget is the only thing that ends the run.
+ */
+async function waitForStockDataBudget(
+  calls: number,
+  deadlineMs: number
+): Promise<"ok" | "out-of-time"> {
+  while (true) {
+    if (await hasFmpCapacity(calls, FMP_MIN_HEADROOM_CALLS)) return "ok";
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return "out-of-time";
+    await sleep(Math.min(STOCK_DATA_BUDGET_POLL_MS, remaining));
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // WHICH ENDPOINTS ARE FILING-DRIVEN, IN ONE LIST.
 //
@@ -492,8 +553,28 @@ export async function warmStockData(symbols: string[], nowMs: number) {
   // floor -- degraded to a 120-day cadence, never to no refresh at all.
   const schedule = await readEarningsSchedule(nowMs);
 
+  const runDeadlineMs = nowMs + STOCK_DATA_RUN_BUDGET_MS;
+  let outOfTime = false;
   let written = 0;
   let quarterlyRefreshes = 0;
+  // HOW MANY OF THE SLICE ALREADY CARRY A QUARTERLY STAMP.
+  //
+  // `quarterlyRefreshes: 0` has read zero on every run since #400 and cannot
+  // say WHY. "Nothing was due" and "nothing happened" print the same number,
+  // and the second is the one worth knowing about. With this beside it:
+  //
+  //   0 refreshes, 40 of 40 stamped   nothing was due -- healthy
+  //   0 refreshes,  0 of 40 stamped   everything was due and none ran -- broken
+  //
+  // needsQuarterlyRefresh treats an absent stamp as due, so those two really
+  // are the readings; there is no third way to get zero-with-none-stamped.
+  let quarterlyStamped = 0;
+  // AND HOW MANY THE EARNINGS INDEX KNEW ABOUT. `scheduleSize` is already
+  // recorded and answers "did the index build at all" -- but it is GLOBAL, and
+  // a healthy 11,662-entry index can still cover none of THIS slice, in which
+  // case every symbol here silently rides the 120-day floor. That is the
+  // "trigger is inert" state the run record could not express.
+  let scheduleCovered = 0;
   // Symbols where every endpoint attempted came back with nothing. Not proof of
   // a delisting on its own -- one bad FMP minute looks the same -- but a count
   // that stays non-zero across runs is the signal, and it did not exist before.
@@ -512,10 +593,20 @@ export async function warmStockData(symbols: string[], nowMs: number) {
       scheduledLast,
       nowMs
     );
+    if (scheduledLast) scheduleCovered++;
+    if (Number.isFinite(Date.parse(existing.get(symbol)?.quarterlyUpdatedAt ?? ""))) {
+      quarterlyStamped++;
+    }
     // COUNTED, NOT ASSUMED. A symbol on the clock-only path costs five calls,
-    // not eight, and reserving eight for it would idle the run against a
-    // budget it is not going to spend.
-    if (!(await hasFmpCapacity(callsForSymbol(includeQuarterly), FMP_MIN_HEADROOM_CALLS))) break;
+    // not eight, and asking for eight would make the run wait for room it is
+    // not going to spend.
+    //
+    // WAIT, NOT BREAK. This was `break`, which ended the run on the first
+    // exhausted minute -- see the header. The run now ends on its own clock.
+    if ((await waitForStockDataBudget(callsForSymbol(includeQuarterly), runDeadlineMs)) === "out-of-time") {
+      outOfTime = true;
+      break;
+    }
     if (includeQuarterly) quarterlyRefreshes++;
     const tally: FetchTally = { answered: 0 };
     const partial = await fetchOne(symbol, apiKey, includeQuarterly, tally);
@@ -609,6 +700,10 @@ export async function warmStockData(symbols: string[], nowMs: number) {
     // that never advances -- and every symbol is quietly riding the 120-day
     // floor instead. That is the failure this number exists to make visible.
     quarterlyRefreshes,
+    quarterlyStamped,
+    sliceSize: slice.length,
+    scheduleCovered,
+    outOfTime,
     scheduleSize: schedule.size,
     // Written, but NOT marked fresh. `written` counting more than
     // `markedRefreshed` is the difference between "we stored a row" and "the
