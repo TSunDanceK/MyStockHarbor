@@ -8,9 +8,8 @@ import {
   recordBackfillFailure,
 } from "@/lib/server/backfillAuth";
 import {
-  EARNINGS_CALENDAR_LIMIT,
-  fetchMonthRows,
-  isTruncatedMonth,
+  EARNINGS_CALENDAR_PAGE_CAP,
+  fetchMonthRowsDetailed,
 } from "@/lib/server/earningsCalendar";
 import {
   EARNINGS_TTL_DAY,
@@ -188,14 +187,44 @@ export async function GET(request: Request) {
   const bypassCache = url.searchParams.get("fresh") === "1";
 
   const pairs: Array<{ symbol: string; date: string }> = [];
-  const perMonth: Array<{ month: string; rows: number; truncated: boolean }> = [];
+  const perMonth: Array<{
+    month: string;
+    rows: number;
+    /** A day that came back at the cap and cannot be split -- should be empty. */
+    cappedDays: string[];
+    truncated: boolean;
+    fetches: number;
+    bytes: number;
+    fromCache: boolean;
+    stoppedEarly: string | null;
+    dateRange: { from: string | null; to: string | null };
+  }> = [];
   for (const month of requested) {
     const [year, mon] = month.split("-").map(Number);
-    const rows = await fetchMonthRows(year, mon, { bypassCache });
+    const detail = await fetchMonthRowsDetailed(year, mon, { bypassCache });
+    const rows = detail.rows;
+    const dates = rows
+      .map((r) => String(r?.date ?? "").slice(0, 10))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .sort();
     perMonth.push({
       month,
       rows: rows.length,
-      truncated: isTruncatedMonth(rows.length),
+      cappedDays: detail.cappedDays,
+      // NOT A ROW COUNT AGAINST THE CAP ANY MORE. A sliced February merges to
+      // ~7,000 rows against a 4,000 page cap, so the old month-level test would
+      // have called every correctly-fetched month truncated. What makes a month
+      // untrustworthy now is an unsplittable capped day, or a walk that stopped
+      // before it finished.
+      truncated: detail.cappedDays.length > 0 || detail.stoppedEarly !== null,
+      fetches: detail.fetches,
+      bytes: detail.bytes,
+      fromCache: detail.fromCache,
+      stoppedEarly: detail.stoppedEarly,
+      // THE DATE RANGE IS THE TELL. The cap dropped the OLDEST dates: a request
+      // for 2026-02-01..28 came back starting 2026-02-11 and nothing said so.
+      // Printing what actually arrived is what makes that visible next time.
+      dateRange: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null },
     });
     for (const row of rows) {
       const symbol = String(row?.symbol ?? "").trim().toUpperCase();
@@ -217,6 +246,8 @@ export async function GET(request: Request) {
   // now costs `ok: false` in the same way an empty one does -- the two are the
   // same class of error, an absence read as an answer.
   const truncatedMonths = perMonth.filter((m) => m.truncated).map((m) => m.month);
+  const totalFetches = perMonth.reduce((sum, m) => sum + m.fetches, 0);
+  const totalBytes = perMonth.reduce((sum, m) => sum + m.bytes, 0);
 
   // THE PLAN, DERIVED. Every input here comes from a constant that lives
   // somewhere else and is checked there: the run cadence from the JOBS registry
@@ -247,7 +278,9 @@ export async function GET(request: Request) {
     months: perMonth,
     emptyMonths,
     truncatedMonths,
-    calendarLimit: EARNINGS_CALENDAR_LIMIT,
+    calendarPageCap: EARNINGS_CALENDAR_PAGE_CAP,
+    totalFetches,
+    totalBytes,
     warning:
       emptyMonths.length || truncatedMonths.length
         ? [
@@ -257,10 +290,11 @@ export async function GET(request: Request) {
                 "this result as unmeasured, not as flat."
               : null,
             truncatedMonths.length
-              ? `One or more months came back at the ${EARNINGS_CALENDAR_LIMIT}-row page ` +
-                `cap (${truncatedMonths.join(", ")}). Every figure below is a FLOOR, not a ` +
-                `measurement — raise EARNINGS_CALENDAR_LIMIT and re-run with ?fresh=1. ` +
-                `See /api/debug/earnings-calendar-limit.`
+              ? `One or more months could not be read completely ` +
+                `(${truncatedMonths.join(", ")}): a day at the ${EARNINGS_CALENDAR_PAGE_CAP}-row ` +
+                `page cap that cannot be split further, or a walk that stopped early. ` +
+                `Every figure below is a FLOOR, not a measurement. Re-run ` +
+                `/api/debug/earnings-calendar-limit — the cap or the endpoint has changed.`
               : null,
           ]
             .filter(Boolean)
