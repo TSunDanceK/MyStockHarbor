@@ -24,9 +24,11 @@ const redis =
 
 export const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
 
-const EARNINGS_TTL_DAY = 24 * 60 * 60;
+// EXPORTED because lib/server/earningsPlan.ts derives the number of fetches one
+// report costs from these two and the run cadence, rather than typing "2".
+export const EARNINGS_TTL_DAY = 24 * 60 * 60;
 const EARNINGS_TTL_MAX_SECONDS = 95 * EARNINGS_TTL_DAY; // ~one quarter
-const EARNINGS_TTL_NEAR_REPORT_SECONDS = 12 * 60 * 60; // report imminent/just passed
+export const EARNINGS_TTL_NEAR_REPORT_SECONDS = 12 * 60 * 60; // report imminent/just passed
 const EARNINGS_TTL_UNKNOWN_SECONDS = 10 * EARNINGS_TTL_DAY; // no future date known
 
 export type EarningsRow = {
