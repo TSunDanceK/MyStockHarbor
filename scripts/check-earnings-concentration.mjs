@@ -132,10 +132,31 @@ check(
 check(
   "the route reports which months came back empty, and says ok:false",
   /const emptyMonths = perMonth\.filter\(\(m\) => m\.rows === 0\)/.test(route) &&
-    /ok: emptyMonths\.length === 0,/.test(route) &&
-    /warning: emptyMonths\.length/.test(route),
+    /ok: emptyMonths\.length === 0 && truncatedMonths\.length === 0,/.test(route) &&
+    /warning:/.test(route),
   "fetchMonthRows returns [] for a 402, a network failure and an empty month " +
     "alike — and a 402 is the likely answer for half this plan's endpoints"
+);
+// A FULL PAGE IS THE SAME CLASS OF ERROR AS AN EMPTY ONE -- an absence read as
+// an answer -- and it is the one that actually happened: 2026-02 came back at
+// EXACTLY 4,000 rows and the distribution built on it was reported as a result
+// rather than as a floor. `ok` has to fall for it too, or the next reader does
+// what the last one did.
+check(
+  "a month at the page cap also costs ok:false, and is named",
+  /const truncatedMonths = perMonth\.filter\(\(m\) => m\.truncated\)/.test(route) &&
+    /truncated: isTruncatedMonth\(rows\.length\)/.test(route) &&
+    /truncatedMonths,/.test(route),
+  "an exact round row count out of an endpoint with a page cap is a cap, not a " +
+    "February — and nobody compared those two numbers by eye the first time"
+);
+check(
+  "and the re-measurement can get past the daily cache",
+  /const bypassCache = url\.searchParams\.get\("fresh"\) === "1";/.test(route) &&
+    /fetchMonthRows\(year, mon, \{ bypassCache \}\)/.test(route),
+  "the reference key holds a 24h TTL, so a re-run after raising the limit would " +
+    "read yesterday's truncated month and report that the fix did nothing — a " +
+    "fix that looks like a failure for a day is how a correct change gets reverted"
 );
 check(
   "it measures the mega-caps separately from the whole tape",
@@ -152,12 +173,35 @@ check(
 check(
   "it changes no constant and writes nothing of its own",
   !/EARNINGS_BATCH_SIZE\s*=/.test(route) &&
-    !/warm-earnings/.test(route) &&
     !/Redis\.fromEnv|redis\.set|writeReference/.test(route),
   "the constant comes after the measurement, and a probe that edits what it " +
     "measures is not a probe. (fetchMonthRows still fills the shared " +
     "earnings-calendar reference cache — that is its own caching, and it is " +
     "what keeps this to at most one FMP call per month asked for.)"
+);
+// THE PROHIBITION BECAME A REQUIREMENT. This used to forbid the string
+// "warm-earnings" outright, to keep the probe from touching the job it
+// measures. That was right when the route only counted rows, and wrong the
+// moment it started computing a pass count: the per-run ceiling has to be THE
+// REAL ONE, and a probe that reads 440 from a literal would answer the growth
+// question against a number nothing enforces.
+check(
+  "the per-run ceiling is imported from warm-earnings, not retyped",
+  /import \{ EARNINGS_MAX_CALLS_PER_RUN \} from "\.\.\/\.\.\/jobs\/warm-earnings\/route";/.test(
+    route
+  ) && /callsPerRun: EARNINGS_MAX_CALLS_PER_RUN,/.test(route),
+  "check-earnings-minute-wall.mjs already asserts that constant is derived from " +
+    "FMP_SAFE_CALLS_PER_MINUTE, the headroom and the run budget — importing it " +
+    "is what makes the plan inherit all four of those checks"
+);
+check(
+  "and the run cadence comes from the registry, not from a typed 24h",
+  /cronIntervalSeconds\(JOBS\["warm-earnings"\]\.cron\)/.test(route) &&
+    /runPeriodSeconds,/.test(route),
+  "check-cache-health-page.mjs asserts the registry cron matches vercel.json in " +
+    "both directions, so the cadence cannot drift out from under the plan — " +
+    "#374 moved a cron and stretched full price coverage from ~12 to ~20 " +
+    "minutes with no line of code changing and nobody noticing for months"
 );
 
 console.log(

@@ -7,7 +7,18 @@ import {
   getClientIp,
   recordBackfillFailure,
 } from "@/lib/server/backfillAuth";
-import { fetchMonthRows } from "@/lib/server/earningsCalendar";
+import {
+  EARNINGS_CALENDAR_LIMIT,
+  fetchMonthRows,
+  isTruncatedMonth,
+} from "@/lib/server/earningsCalendar";
+import {
+  EARNINGS_TTL_DAY,
+  EARNINGS_TTL_NEAR_REPORT_SECONDS,
+} from "@/lib/server/earningsStore";
+import { planEarningsDay } from "@/lib/server/earningsPlan";
+import { JOBS, cronIntervalSeconds } from "@/lib/server/jobRuns";
+import { EARNINGS_MAX_CALLS_PER_RUN } from "../../jobs/warm-earnings/route";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 
 export const runtime = "nodejs";
@@ -55,6 +66,11 @@ export const maxDuration = 60;
 
 const MAX_MONTHS = 3;
 const DEFAULT_MONTHS = ["2026-01", "2026-02"];
+// 762 is the universe as it stood on 2026-09-03; the other two are the growth
+// steps the plan asks about. Overridable, because the first of the three is a
+// measurement that will drift and a stale number in a default is still a
+// number somebody reads.
+const DEFAULT_UNIVERSES = [762, 1500, 3000];
 
 type DayCount = { date: string; symbols: number };
 
@@ -159,15 +175,28 @@ export async function GET(request: Request) {
     );
   }
 
-  const universeSizes = [1500, 3000];
+  const universeSizes = (url.searchParams.get("universes") ?? DEFAULT_UNIVERSES.join(","))
+    .split(",")
+    .map((v) => Number(v.trim()))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .slice(0, 6);
   const presetSet = new Set(PRESET_UNIVERSE.map((s) => s.trim().toUpperCase()));
 
+  // GO PAST THE CACHE WHEN ASKED. The reference key holds a DAILY TTL, so a
+  // re-measurement taken after raising EARNINGS_CALENDAR_LIMIT would otherwise
+  // read yesterday's truncated month and report that the fix did nothing.
+  const bypassCache = url.searchParams.get("fresh") === "1";
+
   const pairs: Array<{ symbol: string; date: string }> = [];
-  const perMonth: Array<{ month: string; rows: number }> = [];
+  const perMonth: Array<{ month: string; rows: number; truncated: boolean }> = [];
   for (const month of requested) {
     const [year, mon] = month.split("-").map(Number);
-    const rows = await fetchMonthRows(year, mon);
-    perMonth.push({ month, rows: rows.length });
+    const rows = await fetchMonthRows(year, mon, { bypassCache });
+    perMonth.push({
+      month,
+      rows: rows.length,
+      truncated: isTruncatedMonth(rows.length),
+    });
     for (const row of rows) {
       const symbol = String(row?.symbol ?? "").trim().toUpperCase();
       const date = String(row?.date ?? "").slice(0, 10);
@@ -181,18 +210,73 @@ export async function GET(request: Request) {
   // mean nothing. Said out loud rather than left for the reader to notice.
   const emptyMonths = perMonth.filter((m) => m.rows === 0).map((m) => m.month);
 
+  // A FULL PAGE IS NOT A MEASUREMENT, and this is the whole reason the first
+  // run's numbers had to be thrown away. 2026-02 came back as EXACTLY 4,000
+  // rows against a fetch that sent no limit at all, and the distribution built
+  // on it was reported as a result rather than as a floor. A truncated month
+  // now costs `ok: false` in the same way an empty one does -- the two are the
+  // same class of error, an absence read as an answer.
+  const truncatedMonths = perMonth.filter((m) => m.truncated).map((m) => m.month);
+
+  // THE PLAN, DERIVED. Every input here comes from a constant that lives
+  // somewhere else and is checked there: the run cadence from the JOBS registry
+  // (asserted against vercel.json by check-cache-health-page), the per-run
+  // ceiling from warm-earnings, and the two TTLs from earningsStore. Nothing on
+  // this line is a number typed into this file.
+  const runPeriodSeconds = cronIntervalSeconds(JOBS["warm-earnings"].cron);
+  const all = distribute("all", pairs, universeSizes);
+  const peakDayShare =
+    all.busiestDay && all.byDay.length
+      ? all.busiestDay.symbols / all.byDay.reduce((sum, d) => sum + d.symbols, 0)
+      : 0;
+  const plans = universeSizes
+    .map((universeSize) =>
+      planEarningsDay({
+        universeSize,
+        peakDayShare,
+        callsPerRun: EARNINGS_MAX_CALLS_PER_RUN,
+        runPeriodSeconds,
+        leadSeconds: EARNINGS_TTL_DAY,
+        nearReportTtlSeconds: EARNINGS_TTL_NEAR_REPORT_SECONDS,
+      })
+    )
+    .filter((p) => p !== null);
+
   return NextResponse.json({
-    ok: emptyMonths.length === 0,
+    ok: emptyMonths.length === 0 && truncatedMonths.length === 0,
     months: perMonth,
     emptyMonths,
-    warning: emptyMonths.length
-      ? "One or more months returned no rows. fetchMonthRows returns [] for a " +
-        "plan restriction, a network failure and an empty month alike — treat " +
-        "this result as unmeasured, not as flat."
-      : null,
+    truncatedMonths,
+    calendarLimit: EARNINGS_CALENDAR_LIMIT,
+    warning:
+      emptyMonths.length || truncatedMonths.length
+        ? [
+            emptyMonths.length
+              ? "One or more months returned no rows. fetchMonthRows returns [] for a " +
+                "plan restriction, a network failure and an empty month alike — treat " +
+                "this result as unmeasured, not as flat."
+              : null,
+            truncatedMonths.length
+              ? `One or more months came back at the ${EARNINGS_CALENDAR_LIMIT}-row page ` +
+                `cap (${truncatedMonths.join(", ")}). Every figure below is a FLOOR, not a ` +
+                `measurement — raise EARNINGS_CALENDAR_LIMIT and re-run with ?fresh=1. ` +
+                `See /api/debug/earnings-calendar-limit.`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        : null,
     universeSizes,
+    // WHAT THE ARITHMETIC SAYS, so the pass count is derived and printed rather
+    // than typed into a cron expression later. See lib/server/earningsPlan.ts.
+    plan: {
+      runPeriodSeconds,
+      callsPerRun: EARNINGS_MAX_CALLS_PER_RUN,
+      peakDayShare,
+      byUniverse: plans,
+    },
     distributions: [
-      distribute("all", pairs, universeSizes),
+      all,
       distribute(
         "preset",
         pairs.filter((p) => presetSet.has(p.symbol)),
@@ -204,6 +288,8 @@ export async function GET(request: Request) {
       "estimate was guessing at. impliedPeakDayRefreshes is how many symbols " +
       "of a universe that size report on the single busiest day — the floor " +
       "for EARNINGS_BATCH_SIZE if the job keeps running once a day, before " +
-      "any allowance for the 12h post-report re-fetch or for retries.",
+      "any allowance for the near-report re-fetch or for retries — `plan` is " +
+      "that same number with the re-fetch applied and the per-run ceiling " +
+      "divided out, which is the figure a pass count should come from.",
   });
 }
