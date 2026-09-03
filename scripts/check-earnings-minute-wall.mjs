@@ -19,6 +19,7 @@
 //   node scripts/check-earnings-minute-wall.mjs
 import ts from "typescript";
 import { readCodeOnly } from "./lib/source-code.mjs";
+import { loadEarningsPlan } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -46,7 +47,13 @@ const num = (src, name) =>
 const waitFn = (cron.match(/async function waitForEarningsBudget\([\s\S]*?\n\}/) ?? [])[0];
 const budgetMs = num(cron, "EARNINGS_RUN_BUDGET_MS");
 const pollMs = num(cron, "EARNINGS_BUDGET_POLL_MS");
-const batchSize = num(cron, "EARNINGS_BATCH_SIZE");
+// DERIVED, NOT READ. EARNINGS_BATCH_SIZE is no longer a literal -- it is
+// planEarningsDay's answer for the current universe caps -- so this script
+// re-derives it through the shared loader rather than regexing a number that
+// is not there any more. The `!batchSize` guard below still fires if the
+// derivation ever yields nothing, which is how this was noticed.
+const { plan: derivedPlan, missing: planMissing } = await loadEarningsPlan();
+const batchSize = derivedPlan?.batchPerPass ?? 0;
 const headroom = num(cron, "EARNINGS_MIN_HEADROOM_CALLS");
 const lockTtl = num(cron, "EARNINGS_LOCK_TTL_SECONDS");
 const maxDuration = num(cron, "maxDuration");
@@ -57,7 +64,8 @@ if (!waitFn || !budgetMs || !pollMs || !batchSize || !headroom || !lockTtl || !m
     `FAIL: could not extract waitForEarningsBudget (${!!waitFn}) or one of the ` +
       `constants — budget ${budgetMs}, poll ${pollMs}, batch ${batchSize}, headroom ` +
       `${headroom}, lock ${lockTtl}, maxDuration ${maxDuration}, safe/min ` +
-      `${safePerMinute}. This script would otherwise pass by measuring nothing.`
+      `${safePerMinute}${planMissing?.length ? `, plan inputs missing: ${planMissing.join(", ")}` : ""}. ` +
+      `This script would otherwise pass by measuring nothing.`
   );
   process.exit(1);
 }
@@ -228,9 +236,9 @@ check(
 check(
   "the batch fits inside what one run can reach",
   batchSize <= maxPerRun,
-  `${batchSize} of ${maxPerRun} — this is the assertion the batch will be raised ` +
-    `against. Above it, the run cannot finish the batch it was handed and the ` +
-    `shortfall is back where this change took it from`
+  `${batchSize} of ${maxPerRun} — the batch is DERIVED from the universe caps ` +
+    `now (see check-earnings-batch.mjs), so this is what stops the derivation ` +
+    `handing the run more than it can finish`
 );
 
 console.log(

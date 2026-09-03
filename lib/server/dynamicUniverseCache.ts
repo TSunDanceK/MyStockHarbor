@@ -118,7 +118,10 @@ const SEEN_KEY = "msh:dynamic-universe:v2:seen";
 // ─────────────────────────────────────────────────────────────────────────────
 export const ANALYSIS_UNIVERSE_CAP = 700;
 
-const MAX_DYNAMIC_UNIVERSE_SIZE = 700;
+// EXPORTED so app/api/jobs/warm-earnings can derive the largest universe the
+// caps allow -- the analysed cap UNIONED with this pool -- rather than reading
+// it out of the source with a regex the way check-price-tiers has to.
+export const MAX_DYNAMIC_UNIVERSE_SIZE = 700;
 const ENTRY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type DynamicUniverseSource = "market" | "pickers" | "plays" | "search";
