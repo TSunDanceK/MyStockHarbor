@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 type Props = {
   params: Promise<{ symbol: string }>;
 };
@@ -30,7 +31,10 @@ async function fetchJson(url: string) {
   }
 }
 
-export async function GET(_request: Request, { params }: Props) {
+export async function GET(request: Request, { params }: Props) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   const { symbol } = await params;
   const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 

@@ -115,6 +115,52 @@ export function checkBackfillKey(submitted: string): boolean {
 // Constant-time compare. The `===` above is the existing house pattern and is
 // fine in practice, but this key is new, so there is no compatibility reason
 // not to do it properly.
+/**
+ * The one guard every debug route goes through. Returns a response to send, or
+ * null to carry on.
+ *
+ * WHY THIS EXISTS RATHER THAN A FOURTEENTH COPY OF THE SAME FIFTEEN LINES. The
+ * five debug routes that were already guarded had THREE different versions of
+ * the block between them -- `{ error }` vs `{ ok: false, error }`, a
+ * `retry-after` header on one and not the others, `submitted` vs an inline
+ * lookup. Nothing had changed the rule; the copies had simply drifted the way
+ * copies do. Nine more copies would have made it worse, and the assertion in
+ * scripts/check-debug-routes-guarded.mjs would have had to match three shapes
+ * to be true.
+ *
+ * The response carries BOTH shapes' fields, so nothing that reads either one
+ * breaks: `ok: false` for the callers that check it, `error` for the ones that
+ * print it, `retryAfterSeconds` in the body AND `retry-after` in the header,
+ * which is the only variant that told a client when to come back.
+ *
+ * A ROUTE WITH NO Request OBJECT still has to be guarded -- pickers-size and
+ * universe-size take no argument today -- so the caller adds one. That is a
+ * two-character change against an unauthenticated 8 MB Redis read.
+ */
+export async function guardDebugRequest(request: Request): Promise<Response | null> {
+  const ip = getClientIp(request);
+  const lockout = await checkBackfillLockout(ip);
+  if (lockout.locked) {
+    return Response.json(
+      {
+        ok: false,
+        error: "Too many attempts.",
+        retryAfterSeconds: lockout.retryAfterSeconds,
+      },
+      { status: 429, headers: { "retry-after": String(lockout.retryAfterSeconds) } }
+    );
+  }
+
+  const submitted = new URL(request.url).searchParams.get("key") ?? "";
+  if (!checkBackfillKey(submitted)) {
+    await recordBackfillFailure(ip);
+    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  await clearBackfillFailures(ip);
+  return null;
+}
+
 export function checkCacheHealthKey(submitted: string): boolean {
   const expected = process.env.CACHE_HEALTH_KEY;
   if (!expected || !submitted) return false;

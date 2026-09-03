@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { statPickerCharts } from "@/lib/server/pickerChartsCache";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export const dynamic = "force-dynamic";
 //
 // Reads through getPickersData, so it costs no more than a normal page view.
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {

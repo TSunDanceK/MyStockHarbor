@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 // Debug-only route (same shape as app/api/debug/ipo-calendar/route.ts) to
 // confirm which of FMP's /stable search endpoints are actually reachable on
 // the current subscription, and what field names they return. The historical
@@ -27,6 +28,9 @@ async function fetchJson(url: string) {
 }
 
 export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   if (!FMP_API_KEY) {
     return NextResponse.json(
       { error: "Missing FMP_API_KEY environment variable." },
