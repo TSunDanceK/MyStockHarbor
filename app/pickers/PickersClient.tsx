@@ -566,8 +566,21 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
     const setBusy = force ? setForceRefreshing : setLoading;
     setBusy(true); setErr(null);
     try {
-      const url = force ? `/api/pickers?force=1&t=${Date.now()}` : `/api/pickers?t=${Date.now()}`;
-      const res = await fetch(url, { cache: "no-store" });
+      // THE BUSTER STAYS ON THE FORCE PATH AND GOES ON THE OTHER ONE.
+      //
+      // /api/pickers answers `public, s-maxage=3600, stale-while-revalidate` --
+      // except on force, where pickersBuilder already sends `no-store`. So the
+      // server has always distinguished the two and the client did not: the
+      // `?t=` made every URL unique, the CDN never hit, and EVERY /pickers view
+      // was a fresh Lambda serialising the whole ~8 MB payload.
+      // DashboardTicker.tsx fetches this same route with no buster and does hit
+      // the CDN, so the correct behaviour already existed one file over.
+      //
+      // On force the unique URL is what makes the request REACH the origin
+      // rather than being answered by a CDN entry keyed on `/api/pickers?force=1`
+      // -- a forced rebuild that never reaches the builder rebuilds nothing.
+      const url = force ? `/api/pickers?force=1&t=${Date.now()}` : "/api/pickers";
+      const res = await fetch(url, force ? { cache: "no-store" } : undefined);
       if (!res.ok) throw new Error("Pickers API failed");
       const data = (await res.json()) as PickersPayload;
       setSections(Array.isArray(data?.sections) ? data.sections : []);
@@ -613,7 +626,12 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
       if (!hadInitialData) { setLoading(true); }
       setErr(null);
       try {
-        const res = await fetch(`/api/pickers?t=${Date.now()}`, { cache: "no-store" });
+        // NO BUSTER: this is the silent background refresh described above, and
+        // the payload it refreshes is rebuilt once a day. Paying a Lambda and
+        // ~8 MB of serialisation per view to shave at most an hour off a
+        // daily-rebuilt payload is the wrong trade -- and the page has already
+        // server-rendered that same payload into the HTML above.
+        const res = await fetch("/api/pickers");
         if (!res.ok) throw new Error("Pickers API failed");
         const data = (await res.json()) as PickersPayload;
         if (!cancelled) {
@@ -685,7 +703,11 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
           try {
             // Use no-store so stale empty results from previous cold-start
             // failures don't get permanently cached in the browser.
-            const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "no-store" });
+            // NO no-store: /api/symbols declares `revalidate = 86400` AND
+            // `s-maxage=86400`. Company names change essentially never, this
+            // runs in batches of 8 per page view, and the no-store threw away a
+            // TWENTY-FOUR HOUR cache on every one of them.
+            const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`);
             if (!res.ok) return;
 
             const data = (await res.json()) as { results?: { symbol: string; name: string }[] };

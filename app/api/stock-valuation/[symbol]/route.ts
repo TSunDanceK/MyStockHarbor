@@ -4,6 +4,11 @@ import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
+// SIX HOURS, THE SAME NUMBER THE FMP FETCH BELOW ALREADY USES. Derived from the
+// data's lifetime rather than chosen: valuation multiples move on filings, not
+// on page views.
+const VALUATION_CACHE_SECONDS = 60 * 60 * 6;
+
 type Props = {
   params: Promise<{ symbol: string }>;
 };
@@ -321,12 +326,41 @@ export async function GET(_request: Request, { params }: Props) {
       "evToEbitdaTTM",
     ]);
 
-  return NextResponse.json({
-    peRatio,
-    priceToSalesRatio,
-    priceToBookRatio,
-    evToEbitda,
-    sourceNote:
-      "Valuation multiples from Financial Modeling Prep ratios/key metrics TTM data, with P/E fallback from quote and recent income statement data when needed.",
-  } satisfies StockValuationData);
+  // ─────────────────────────────────────────────────────────────────────────
+  // CACHED AT THE CDN AT LAST, because the precondition this file set for
+  // itself is now met.
+  //
+  // The comment above says it outright: "a 200 that might mean 'we are broken'
+  // cannot safely be stored, so the distinction has to exist before anyone adds
+  // a cache header here, not after." That distinction exists -- a bad symbol is
+  // 400, a missing key is 503, and only a genuine answer is 200 -- so this is
+  // the "after".
+  //
+  // 6 HOURS, MATCHING THE DATA. The FMP calls behind this already sit on
+  // `next: { revalidate: 60 * 60 * 6 }`, so a shorter CDN window would spend a
+  // Lambda to re-serve bytes the Data Cache would hand back unchanged, and a
+  // longer one would outlive the data it describes. The header follows the
+  // number that is already there rather than introducing a second opinion.
+  //
+  // WHAT THIS MEANS FOR THE BOT GATE, said out loud because it is a real
+  // consequence: a CDN hit does not reach isUnwantedBot(). That is the outcome
+  // we want rather than a hole -- the gate exists to stop unwanted traffic
+  // burning FMP calls and Lambda time, and a cached response burns neither.
+  // Valuation multiples are already on the public stock page; the gate protects
+  // the COST, not the content.
+  return NextResponse.json(
+    {
+      peRatio,
+      priceToSalesRatio,
+      priceToBookRatio,
+      evToEbitda,
+      sourceNote:
+        "Valuation multiples from Financial Modeling Prep ratios/key metrics TTM data, with P/E fallback from quote and recent income statement data when needed.",
+    } satisfies StockValuationData,
+    {
+      headers: {
+        "Cache-Control": `public, s-maxage=${VALUATION_CACHE_SECONDS}, stale-while-revalidate=${VALUATION_CACHE_SECONDS}`,
+      },
+    }
+  );
 }
