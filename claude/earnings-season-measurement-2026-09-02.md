@@ -1,5 +1,79 @@
 # Earnings-season concentration: still UNMEASURED, and how to measure it (2026-09-02)
 
+## UPDATE 2026-09-04 — the limit is IGNORED, and the cap eats the oldest dates
+
+`/api/debug/earnings-calendar-limit` ran against 2026-02:
+
+```
+verdict: "limit-ignored: every limit returned the same rows"
+
+limit=0      4000 rows  821,701 bytes  dateRange 2026-02-11 -> 2026-02-28
+limit=4000   4000 rows  821,701 bytes  identical: true
+limit=10000  4000 rows  821,701 bytes  identical: true
+limit=20000  4000 rows  821,701 bytes  identical: true
+```
+
+`EARNINGS_CALENDAR_LIMIT`, added in #410, does nothing. It is **removed**: a
+request parameter that is provably ignored, with an assertion saying we send it,
+is a claim the code makes and cannot keep. What replaces it is
+`EARNINGS_CALENDAR_PAGE_CAP = 4000` — FMP's number, named for what it is.
+
+**And the cap drops the OLDEST dates.** We asked for 2026-02-01 → 2026-02-28 and
+got 2026-02-11 → 2026-02-28. Ten days of peak Q4 season were absent from a 200
+that looked complete, and the earlier concentration run agrees: its earliest
+February date is 2026-02-11.
+
+### It is a production bug, not only a measurement one
+
+`fetchMonthRows` feeds the `/earnings-calendar` pages **and** the earnings
+schedule index (#400) that decides when a symbol's income statement, cash flow
+and dividends refresh. A symbol reporting inside a dropped window is invisible
+to that trigger: it does not refresh on filing, it waits for
+`QUARTERLY_FLOOR_DAYS` (120). That is the precise freeze the floor exists to
+bound, arriving through a door nobody checked.
+
+**Dormant until January.** January returned 1,655 rows uncapped and Sep–Dec are
+quiet, so nothing between now and the new year breaches the cap. It would have
+surfaced in February as *"some companies just stopped refreshing"*, with nothing
+pointing at the fetch layer.
+
+### The fix: adaptive slicing
+
+Fetch a range; if the response comes back at the cap, split it and fetch the
+halves; recurse until nothing is capped; merge. **Detection drives the split**,
+so a changed cap or a heavier season self-corrects — a fixed "two halves per
+month" would fail exactly the way the unsliced code did, silently.
+
+| | fetches | transferred | stored |
+|---|---|---|---|
+| today, a capped February | 1 | 0.82 MB | 4,000 rows — **missing ten days** |
+| sliced, a 7,000-row February | **3** | ~2.26 MB | ~7,000 rows, ~1.44 MB |
+| any month under the cap | 1 | as now | as now |
+
+205 bytes/row measured (821,701 ÷ 4,000). The 3 is not an estimate — the
+invariant check runs the splitter over a fixture that caps at 4,000 by dropping
+the oldest, and it recovers all 7,000 rows in three fetches. Once a day, behind
+the daily reference TTL.
+
+Each slice now goes through **`reserveFmpCallSlot`**, which it never did:
+`fmpFetch` records bytes for the usage meter but reserves no slot, so the
+calendar has been spending the plan's rate limit invisibly — and the warm jobs
+compute their backoff from that counter.
+
+### The verdict below is on TRUNCATED data and must be re-derived
+
+Re-run `/api/debug/earnings-concentration?fresh=1` — without `fresh=1` the 24h
+reference cache serves the truncated month and the fix reads as a failure.
+
+**Expect the numbers to move.** Early February is prime Q4 season, so the ten
+missing days may hold some of the busiest; `busiestDay: 2026-02-26, 710 symbols`
+may not be the true peak. The pass count follows directly, and 1,500 was already
+at 87% of the ceiling — a true peak only **1.15×** the truncated one puts it into
+two passes. **The table below is kept as the record of what the truncated data
+said, not carried forward as an answer.**
+
+---
+
 ## UPDATE 2026-09-03 — it was run, and the answer is a FLOOR
 
 The probe ran against 2026-01 and 2026-02 and killed the estimate:

@@ -142,18 +142,35 @@ check(
 // EXACTLY 4,000 rows and the distribution built on it was reported as a result
 // rather than as a floor. `ok` has to fall for it too, or the next reader does
 // what the last one did.
+// THE TEST MOVED WITH THE FIX, and narrowing it would have been the easy
+// mistake. Before slicing, "truncated" meant the month's row count hit the page
+// cap. After slicing a February MERGES to ~7,000 rows against a 4,000 cap, so
+// that test would have called every correctly-fetched month truncated. What
+// makes a month untrustworthy now is a day at the cap that cannot be split, or
+// a walk that stopped early -- and `ok` still has to fall for it.
 check(
-  "a month at the page cap also costs ok:false, and is named",
+  "a month that could not be read completely costs ok:false, and is named",
   /const truncatedMonths = perMonth\.filter\(\(m\) => m\.truncated\)/.test(route) &&
-    /truncated: isTruncatedMonth\(rows\.length\)/.test(route) &&
+    /truncated: detail\.cappedDays\.length > 0 \|\| detail\.stoppedEarly !== null/.test(route) &&
     /truncatedMonths,/.test(route),
-  "an exact round row count out of an endpoint with a page cap is a cap, not a " +
-    "February — and nobody compared those two numbers by eye the first time"
+  "an unsplittable capped day is the only page-cap signal left, and it should be " +
+    "unreachable — an alarm that cannot fire is how the last three of these hid"
+);
+// THE DATE RANGE IS WHAT ACTUALLY GAVE THE BUG AWAY. The cap dropped the OLDEST
+// dates: a request for 2026-02-01..28 came back starting 2026-02-11, and the
+// response said nothing. Printing what arrived is what makes that visible
+// without anyone having to think to look.
+check(
+  "the months it read report the date range they actually got",
+  /dateRange: \{ from: dates\[0\] \?\? null, to: dates\[dates\.length - 1\] \?\? null \}/.test(
+    route
+  ),
+  "ten days of peak Q4 season were absent from a 200 that looked complete"
 );
 check(
   "and the re-measurement can get past the daily cache",
   /const bypassCache = url\.searchParams\.get\("fresh"\) === "1";/.test(route) &&
-    /fetchMonthRows\(year, mon, \{ bypassCache \}\)/.test(route),
+    /fetchMonthRowsDetailed\(year, mon, \{ bypassCache \}\)/.test(route),
   "the reference key holds a 24h TTL, so a re-run after raising the limit would " +
     "read yesterday's truncated month and report that the fix did nothing — a " +
     "fix that looks like a failure for a day is how a correct change gets reverted"
