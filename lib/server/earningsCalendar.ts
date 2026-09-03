@@ -400,10 +400,81 @@ const monthCache = new Map<string, { at: number; rows: RawEarningsRow[] }>();
 let nameMapCache: { at: number; map: Map<string, string> } | null = null;
 const candidatesCache = new Map<string, { at: number; byDate: Map<string, EarningsCandidate[]> }>();
 
-export async function fetchMonthRows(year: number, month: number): Promise<RawEarningsRow[]> {
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PAGE CAP THAT SILENTLY TRUNCATED A MEASUREMENT.
+//
+// This fetch sent NO `limit`, so it got FMP's default page. On 2026-09-03 the
+// earnings-concentration probe read 2026-01 as 1,655 rows and 2026-02 as
+// EXACTLY 4,000 -- and an exact round number out of an endpoint with no limit
+// parameter is a page cap, not a February. Every figure derived from it (93.4%
+// in the busiest 20 days, 710 symbols on the peak day) is therefore a FLOOR.
+//
+// This is the same trap probe Q1 caught on the screener: SCREENER_LIMIT sat at
+// 1000 because nobody had tried raising it, and the coverage floor the whole
+// plan reasoned from was wrong by an order of magnitude. Q1 proved `limit`
+// lifts on THAT endpoint. Nobody had asked the same question of this one --
+// /api/debug/earnings-calendar-limit exists to ask it.
+//
+// WHY 10,000. It is 2.5x the observed cap, which is the point: a value that
+// merely nudges past 4,000 answers nothing when the truth is 8,000. The bound
+// on the other side is the payload -- the calendar measured 697 KB at ~1,569
+// rows, about 455 bytes a row, so 10,000 rows is ~4.4 MB. That is real but not
+// unprecedented for this database: the pickers payload getWarmTargetSymbols
+// used to read is ~8 MB, so a few MB in a daily-TTL reference key is within
+// what this Redis already carries. It is still a once-a-day write and a
+// per-cold-instance read, which is why the number is not simply enormous.
+//
+// AND IT IS NOT A GUESS THAT CAN HIDE. isTruncatedMonth below fires when a
+// month comes back at exactly the limit, which is the signal that went unread
+// the first time.
+export const EARNINGS_CALENDAR_LIMIT = 10000;
+
+/**
+ * Did this month come back at the cap?
+ *
+ * PURE, so the invariant check can RUN it: "a full page is not a measurement"
+ * is a claim about a number against a limit, and the whole reason this module
+ * needed changing is that nobody compared those two numbers by eye either.
+ *
+ * `>=` rather than `===` deliberately. If FMP's own default is lower than ours
+ * and it wins, the count lands on ITS cap and never equals ours; and a response
+ * larger than we asked for is its own kind of wrong. Either way the answer to
+ * "can I trust this month" is no.
+ */
+export function isTruncatedMonth(rowCount: number, limit = EARNINGS_CALENDAR_LIMIT): boolean {
+  if (!Number.isFinite(rowCount) || !Number.isFinite(limit) || limit <= 0) return true;
+  return rowCount >= limit;
+}
+
+export type FetchMonthOptions = {
+  /**
+   * Skip the shared reference cache and go to FMP.
+   *
+   * EXISTS FOR THE RE-MEASUREMENT, and it is not a convenience. The reference
+   * key holds a DAILY TTL, so the truncated 4,000-row February written on
+   * 2026-09-03 would be served for another 24 hours -- a re-run of the probe
+   * after raising the limit would read the same truncated month and report that
+   * the fix did nothing. A fix that looks like a failure for a day is how a
+   * correct change gets reverted.
+   *
+   * Still WRITES what it fetches, so the site gets the better data too.
+   */
+  bypassCache?: boolean;
+  /** Override the page cap. Only the limit probe passes this. */
+  limit?: number;
+};
+
+export async function fetchMonthRows(
+  year: number,
+  month: number,
+  options: FetchMonthOptions = {}
+): Promise<RawEarningsRow[]> {
   const key = monthKey(year, month);
+  const limit = options.limit ?? EARNINGS_CALENDAR_LIMIT;
   const cached = monthCache.get(key);
-  if (cached && Date.now() - cached.at < MONTH_CACHE_MS) return cached.rows;
+  if (!options.bypassCache && cached && Date.now() - cached.at < MONTH_CACHE_MS) {
+    return cached.rows;
+  }
 
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return cached?.rows ?? [];
@@ -411,10 +482,12 @@ export async function fetchMonthRows(year: number, month: number): Promise<RawEa
   // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
   // before this every cold lambda refetched the whole 697 KB month -- 108
   // fetches per 30 days, ~73 MB. One fetch now serves every instance for a day.
-  const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
-  if (Array.isArray(shared)) {
-    monthCache.set(key, { at: Date.now(), rows: shared });
-    return shared;
+  if (!options.bypassCache) {
+    const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
+    if (Array.isArray(shared)) {
+      monthCache.set(key, { at: Date.now(), rows: shared });
+      return shared;
+    }
   }
 
   const from = `${key}-01`;
@@ -422,12 +495,23 @@ export async function fetchMonthRows(year: number, month: number): Promise<RawEa
 
   try {
     const res = await fmpFetch(
-      `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&apikey=${apiKey}`,
+      `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&limit=${limit}&apikey=${apiKey}`,
       { next: { revalidate: MONTH_CACHE_MS / 1000 } }
     );
     if (!res.ok) throw new Error(`earnings-calendar failed: ${res.status}`);
     const json = await res.json();
     const rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
+    // THE SIGNAL THAT WENT UNREAD. 4,000 exactly was sitting in a probe result
+    // and read as a February. It is a log line now, so the next full page is
+    // noticed by somebody rather than reasoned from.
+    if (isTruncatedMonth(rows.length, limit)) {
+      console.warn(
+        `[earnings-calendar] ${key} returned ${rows.length} rows against a limit of ` +
+          `${limit} -- a FULL PAGE, so this month is probably truncated and anything ` +
+          `derived from it is a floor. Raise EARNINGS_CALENDAR_LIMIT or slice the ` +
+          `date range; see /api/debug/earnings-calendar-limit.`
+      );
+    }
     monthCache.set(key, { at: Date.now(), rows });
     // EMPTY IS NOT CACHED. A failed or restricted response parses to [] here,
     // and storing that for a day would blank every calendar consumer until it
