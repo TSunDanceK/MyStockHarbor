@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  checkBackfillKey,
-  checkBackfillLockout,
-  clearBackfillFailures,
-  getClientIp,
-  recordBackfillFailure,
-} from "@/lib/server/backfillAuth";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { EARNINGS_CALENDAR_PAGE_CAP } from "@/lib/server/earningsCalendar";
 
@@ -138,21 +132,9 @@ export function verdictFor(probes: Array<Pick<Probe, "rows" | "vsBaseline" | "lo
 }
 
 export async function GET(request: Request) {
-  const ip = getClientIp(request);
-  const lockout = await checkBackfillLockout(ip);
-  if (lockout.locked) {
-    return NextResponse.json(
-      { error: "Too many attempts.", retryAfterSeconds: lockout.retryAfterSeconds },
-      { status: 429 }
-    );
-  }
-
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
   const url = new URL(request.url);
-  if (!checkBackfillKey(url.searchParams.get("key") ?? "")) {
-    await recordBackfillFailure(ip);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  await clearBackfillFailures(ip);
 
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {

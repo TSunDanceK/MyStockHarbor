@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 // Debug-only route (same shape as app/api/debug/ipo-calendar/route.ts) to
 // inspect the raw shape of FMP's historical index-constituent responses
 // and the batch-quote response. FMP's own docs pages don't expose a full
@@ -28,6 +29,9 @@ async function fetchJson(url: string) {
 }
 
 export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   if (!FMP_API_KEY) {
     return NextResponse.json(
       { error: "Missing FMP_API_KEY environment variable." },

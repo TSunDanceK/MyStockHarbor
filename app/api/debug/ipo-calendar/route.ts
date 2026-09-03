@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 // Debug-only route (same shape as app/api/debug/earnings/[symbol]/route.ts)
 // to inspect the raw shape of FMP's IPO calendar response. FMP's own docs
 // pages don't expose a full field list/example for this endpoint from this
@@ -31,6 +32,9 @@ function toIsoDate(date: Date) {
 }
 
 export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   if (!FMP_API_KEY) {
     return NextResponse.json(
       { error: "Missing FMP_API_KEY environment variable." },
