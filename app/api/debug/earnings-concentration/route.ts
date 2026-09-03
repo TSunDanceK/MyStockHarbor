@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
 
-import {
-  checkBackfillKey,
-  checkBackfillLockout,
-  clearBackfillFailures,
-  getClientIp,
-  recordBackfillFailure,
-} from "@/lib/server/backfillAuth";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import {
   EARNINGS_CALENDAR_PAGE_CAP,
   fetchMonthRowsDetailed,
@@ -145,21 +139,9 @@ function distribute(
 }
 
 export async function GET(request: Request) {
-  const ip = getClientIp(request);
-  const lockout = await checkBackfillLockout(ip);
-  if (lockout.locked) {
-    return NextResponse.json(
-      { error: "Too many attempts.", retryAfterSeconds: lockout.retryAfterSeconds },
-      { status: 429 }
-    );
-  }
-
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
   const url = new URL(request.url);
-  if (!checkBackfillKey(url.searchParams.get("key") ?? "")) {
-    await recordBackfillFailure(ip);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  await clearBackfillFailures(ip);
 
   const requested = (url.searchParams.get("months") ?? DEFAULT_MONTHS.join(","))
     .split(",")

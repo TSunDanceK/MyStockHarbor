@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import {
-  checkBackfillKey,
-  checkBackfillLockout,
-  clearBackfillFailures,
-  getClientIp,
-  recordBackfillFailure,
-} from "@/lib/server/backfillAuth";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readFmpUsage } from "@/lib/server/fmpUsage";
 
 export const runtime = "nodejs";
@@ -156,22 +150,8 @@ function buildReconciliation(
 }
 
 export async function GET(req: NextRequest) {
-  const ip = getClientIp(req);
-  const lockout = await checkBackfillLockout(ip);
-  if (lockout.locked) {
-    return NextResponse.json(
-      { ok: false, error: "Too many attempts" },
-      { status: 429, headers: { "retry-after": String(lockout.retryAfterSeconds) } }
-    );
-  }
-
-  const submitted = new URL(req.url).searchParams.get("key") ?? "";
-  if (!checkBackfillKey(submitted)) {
-    await recordBackfillFailure(ip);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  await clearBackfillFailures(ip);
-
+  const denied = await guardDebugRequest(req);
+  if (denied) return denied;
   const url = new URL(req.url);
   const days = Number(url.searchParams.get("days"));
   const report = await readFmpUsage(Number.isFinite(days) && days > 0 ? days : 30);

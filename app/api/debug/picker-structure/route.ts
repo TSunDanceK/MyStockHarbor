@@ -3,6 +3,7 @@ import {
   buildPickerStructureDiagnostics,
   buildPickerJitterDiagnostics,
 } from "@/lib/server/pickersBuilder";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,9 @@ export const dynamic = "force-dynamic";
 // Deterministic: same seed, same result. It reuses the universe and history
 // this route already loads, so it costs no extra Redis and no FMP calls.
 export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   try {
     const params = new URL(request.url).searchParams;
     // ABSENT must mean the documented default, not the minimum.
