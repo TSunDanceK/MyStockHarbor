@@ -1,47 +1,43 @@
 name: Warm MyStockHarbor Pickers & Earnings
 
-# Runs on GitHub's own servers - no browser, no login. IT DOES NEED A SECRET.
+# MANUAL ONLY. The schedule lives in vercel.json, not here.
 #
-# THE PREVIOUS VERSION OF THIS COMMENT SAID THE OPPOSITE and was wrong for
-# weeks: "no secrets needed. Both endpoints below are public, rate-limited GET
-# routes". They are not public. /api/jobs/warm-earnings gates on
-# `Bearer ${process.env.CRON_SECRET}` and returns 401 without it, and
-# /api/jobs/warm-picker-universe needs the same header to be allowed to force a
-# history refetch. Vercel's own cron sends that header automatically, which is
-# why the 07:15 run has always worked and these calls have not.
+# WHY THE SCHEDULE WAS REMOVED (2026-09-03). GitHub's scheduled workflows are
+# best-effort: they are queued, delayed under load and sometimes dropped
+# entirely, and 05:03 UTC sits in one of the busiest cron windows there is.
+# Measured across all 29 scheduled runs on record, against a due time of 05:03
+# UTC (06:03 BST):
 #
-# WHAT IT COST, from the run log of 2026-09-02 (workflow run 33614228672):
+#     Aug 05-06     +162 to +163 min      fired ~08:45 BST
+#     Aug 07-14      +46 to  +80 min
+#     Aug 15-26      +29 to  +46 min      the best stretch there has ever been
+#     Aug 27        +678 min              fired 17:21 BST
+#     Aug 28        +737 min              fired 18:19 BST
+#     Aug 29 - Sep 2   +265 to +391 min   fired 10:27-12:34 BST
+#     Sep 03        DID NOT FIRE          (still absent at 10:12 BST)
 #
-#   warm-picker-universe: HTTP 200   <- in 2.0s. A forced full-universe history
-#                                       refetch is ~700 FMP calls; two seconds
-#                                       is an unforced, miss-only run that with
-#                                       a 50h TTL refreshes nothing.
-#   warm-earnings pass 1: HTTP 401
-#   warm-earnings pass 2: HTTP 401
-#   job conclusion: SUCCESS
+# IT HAS NEVER ONCE FIRED WITHIN HALF AN HOUR OF ITS SCHEDULE. The best day in
+# the record is +29 minutes; the median day is worse; and for the last week a
+# job whose entire purpose is "warm the site early in the morning" has been
+# firing at lunchtime, when it fired at all. Vercel Cron has landed on time
+# every day over the same period and attaches the Authorization header itself,
+# so there is no secret to keep in step either.
 #
-# So warm-earnings has been doing 40 symbols a day rather than 120, and the
-# earnings-coverage puzzle recorded on 2026-09-02 (80/327, climbing slowly) is
-# explained: two thirds of the passes were rejected. Anything sized against
-# observed earnings coverage was sized against a broken job.
+# THE MANUAL TRIGGER IS NOT THE BROKEN PART and is deliberately kept. Run
+# 33701587009 (2026-09-03 00:56, workflow_dispatch) returned 200 on all three
+# calls: warm-picker-universe in 172s -- a real forced build -- and each
+# earnings pass in ~4s. That is a useful "warm everything now" button, the
+# secret is already wired for it, and the authentication assertions in
+# scripts/check-cron-auth.mjs still apply to it.
 #
-# The status was PRINTED on every run and nobody read it, because a workflow
-# that prints a failure and exits 0 is a green tick. That is fixed below: a
-# non-200 now fails the step.
-#
-# THE HEADER IS ADDED IN ONE PLACE, the `call` helper. A second copy of the
-# curl line is how one of three calls ends up unauthenticated, which is the
-# shape of this whole incident. scripts/check-cron-auth.mjs asserts that every
-# CRON_SECRET-gated job route reached from a workflow is reached with the
-# header, and derives the list of gated routes from the routes themselves.
-#
-# DST note: cron below is in UTC. '3 5 * * *' = ~6:03am UK time while the UK is
-# on BST (UTC+1). When UK clocks change (late Mar / late Oct), this will drift
-# an hour until updated - ask Claude to adjust it then.
+# NO CRON ENTRIES WERE ADDED TO REPLACE THE TWO EXTRA EARNINGS PASSES. See the
+# PR for the argument; the short version is that #406 let one run span minute
+# buckets, so a single run's reach is (200-90) x 4 min = 440 calls against
+# three passes' 120, and the batch constant -- not the pass count -- is the
+# lever. It is sized from the /api/debug/earnings-concentration measurement
+# added in #407, not from a guess made here.
 
 on:
-  schedule:
-    - cron: "3 5 * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -54,7 +50,7 @@ jobs:
       - name: Check the secret is present
         run: |
           if [ -z "${CRON_SECRET}" ]; then
-            echo "::error::CRON_SECRET is not set in this repository's Actions secrets. Every call below would 401 or silently no-op, which is exactly the failure this workflow just spent weeks in. Add it under Settings > Secrets and variables > Actions, matching the value in the Vercel project."
+            echo "::error::CRON_SECRET is not set in this repository's Actions secrets. Every call below would 401 or silently no-op, which is exactly the failure this workflow spent weeks in. Add it under Settings > Secrets and variables > Actions, matching the value in the Vercel project."
             exit 1
           fi
 
@@ -70,12 +66,24 @@ jobs:
           # The status is checked, not merely printed. `curl -sS -o /dev/null
           # -w "%{http_code}"` exits 0 on a 401, which is how three failing
           # calls read as a green run for weeks.
+          #
+          # THE BODY IS PRINTED, not discarded. These routes answer with their
+          # own summary -- fetchedCount, deferredCount, outOfTime, refreshMode
+          # -- and `-o /dev/null` threw it away, so "pass 2 returned 200 in 4
+          # seconds" could not be read as either "it did 40 symbols quickly" or
+          # "the queue was empty and it did nothing". Since this is now a
+          # hand-pulled lever rather than a schedule, the person pulling it
+          # should see what it did. Capped, because the pickers payload summary
+          # is not small.
           call() {
-            local label="$1" url="$2" code
-            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            local label="$1" url="$2" body code
+            body=$(curl -sS -w $'\n%{http_code}' \
               -H "Authorization: Bearer ${CRON_SECRET}" \
-              "${url}?t=$(date +%s)" || echo "000")
+              "${url}?t=$(date +%s)" || printf '\n000')
+            code=$(printf '%s' "${body}" | tail -n 1)
             echo "${label}: HTTP ${code}"
+            printf '%s' "${body}" | head -n -1 | head -c 500
+            echo
             if [ "${code}" != "200" ]; then
               echo "::error::${label} returned ${code} (000 = curl could not complete the request). A warm job that silently does nothing is worse than one that is visibly broken."
               failures=$((failures + 1))
@@ -84,10 +92,18 @@ jobs:
 
           call "warm-picker-universe" "${BASE_URL}/api/jobs/warm-picker-universe"
 
-          # Two passes, two minutes apart, mirroring the original routine: each
-          # run does EARNINGS_BATCH_SIZE symbols, so three passes a day is
-          # three batches. The gap lets the first pass's lock
-          # (EARNINGS_LOCK_TTL_SECONDS) clear before the next one asks.
+          # Two further passes, two minutes apart, as the schedule used to do.
+          # KEPT FOR THE MANUAL PATH ONLY: when a person pulls this lever they
+          # usually want as much warmed as one press can manage, and the extra
+          # passes cost nothing on a run nobody is waiting on.
+          #
+          # The gap clears the first pass's lock (EARNINGS_LOCK_TTL_SECONDS, now
+          # 6 min). NOTE that since #406 a pass may run for up to its 240s
+          # budget, so 120s is no longer guaranteed to be enough: if pass 1 runs
+          # long, pass 2 answers { skipped: true, reason: "locked" } and does
+          # nothing. Visible now that the body is printed. Not a problem in
+          # practice yet -- both passes took ~4s on 2026-09-03 -- and not worth
+          # tuning a manual lever over.
           sleep 120
           call "warm-earnings pass 1" "${BASE_URL}/api/jobs/warm-earnings"
           sleep 120
