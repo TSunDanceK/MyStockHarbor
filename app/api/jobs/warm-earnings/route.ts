@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  EARNINGS_TTL_DAY,
+  EARNINGS_TTL_NEAR_REPORT_SECONDS,
   EARNINGS_REDIS_KEY_PREFIX as STORE_KEY_PREFIX,
   computeEarningsTtlSeconds,
   normalizeEarningsRows,
@@ -14,7 +16,17 @@ import {
   hasFmpCapacity,
   reserveFmpCallSlot,
 } from "../../../../lib/server/historyCache";
-import { readDynamicUniverse } from "../../../../lib/server/dynamicUniverseCache";
+import {
+  ANALYSIS_UNIVERSE_CAP,
+  MAX_DYNAMIC_UNIVERSE_SIZE,
+  readDynamicUniverse,
+} from "../../../../lib/server/dynamicUniverseCache";
+import {
+  EARNINGS_PEAK_DAY_SHARE,
+  planEarningsDay,
+  type EarningsDayPlan,
+} from "../../../../lib/server/earningsPlan";
+import { JOBS, cronIntervalSeconds } from "../../../../lib/server/jobRuns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,10 +76,6 @@ const EARNINGS_ENQUEUE_GUARD_KEY = "msh:pickers:earnings:v1:enqueue-guard";
 // start and duplicate its FMP calls -- failing open in exactly the case the
 // lock exists for.
 const EARNINGS_LOCK_TTL_SECONDS = 6 * 60;
-// DELIBERATELY UNCHANGED IN THIS PR. 40 is comfortably under everything below,
-// which is precisely why the wall this PR removes has never been visible. The
-// constant is sized after the earnings-season measurement, not before it.
-const EARNINGS_BATCH_SIZE = 40;
 const EARNINGS_MIN_HEADROOM_CALLS = 90;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +118,70 @@ export const EARNINGS_USABLE_CALLS_PER_MINUTE =
 export const EARNINGS_MAX_CALLS_PER_RUN = Math.floor(
   EARNINGS_USABLE_CALLS_PER_MINUTE * (EARNINGS_RUN_BUDGET_MS / 60_000)
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EARNINGS_BATCH_SIZE, DERIVED. It was a typed 40.
+//
+// 40 was never a decision -- it predates every measurement in this thread and
+// survived because the minute wall (#406) meant nothing above ~110 worked
+// anyway. Today's universe needs 144 calls on the busiest day of the season and
+// the job could make 40, so earnings coverage was structurally behind before the
+// authentication bug (#408) took two thirds of the passes away on top.
+//
+// TYPING 282, OR 262, OR ANY OF THEM IS THE FAILURE THIS REBUILD HAS REMOVED
+// TWICE. PRICE_TARGET_RUNS stated coverage in a unit that silently changed
+// meaning when the cron moved; `priceCap` was derived from one tier while the
+// universe sat on two. A batch typed once against a measurement taken once is
+// the same shape -- right today, silently wrong the moment
+// ANALYSIS_UNIVERSE_CAP moves, and wrong in the direction that just quietly
+// does less work.
+//
+// THE BASIS IS THE UNION OF THE TWO CAPS, not the analysed cap alone and not
+// the observed universe. getWarmTargetSymbols hands this job the symbols a
+// pickers build analysed UNIONED with the rolling dynamic pool, and those are
+// separately capped -- which is why the live figure is 762 against a 700
+// analysis cap, ~9% above it. check-price-tiers uses exactly this sum for the
+// pre-open buffer, for the same reason: this is worst-case work inside ONE RUN,
+// where the sum is the honest bound and either cap alone understates it.
+//
+// The pools overlap heavily, so the sum is LOOSE -- 1,400 permitted against 762
+// observed. That costs nothing: the loop stops at symbols that are actually
+// DUE, so the batch is a ceiling on a busy day rather than a workload on a
+// quiet one.
+const EARNINGS_UNIVERSE_BASIS = ANALYSIS_UNIVERSE_CAP + MAX_DYNAMIC_UNIVERSE_SIZE;
+
+export const EARNINGS_PLAN: EarningsDayPlan | null = planEarningsDay({
+  universeSize: EARNINGS_UNIVERSE_BASIS,
+  peakDayShare: EARNINGS_PEAK_DAY_SHARE,
+  callsPerRun: EARNINGS_MAX_CALLS_PER_RUN,
+  runPeriodSeconds: cronIntervalSeconds(JOBS["warm-earnings"].cron),
+  leadSeconds: EARNINGS_TTL_DAY,
+  nearReportTtlSeconds: EARNINGS_TTL_NEAR_REPORT_SECONDS,
+});
+
+// THE FALLBACK EXISTS SO THE JOB STILL RUNS, AND THE CHECK EXISTS SO IT NEVER
+// DOES. planEarningsDay returns null only if one of its inputs is zero or
+// unparseable -- all five are compile-time constants, so that means somebody
+// edited one to nonsense. Falling back to the old 40 silently would be the
+// absence-reads-as-health defect this whole series keeps finding, so it is
+// loud, and scripts/check-earnings-batch.mjs asserts the plan is not null at
+// the current caps.
+const EARNINGS_BATCH_FALLBACK = 40;
+if (!EARNINGS_PLAN) {
+  console.error(
+    "[warm-earnings] planEarningsDay returned null -- one of its inputs is zero " +
+      `or unparseable, so the batch has fallen back to ${EARNINGS_BATCH_FALLBACK} ` +
+      "and this run will do a fraction of a peak day's work."
+  );
+}
+
+// WHY batchPerPass RATHER THAN callsOnPeakRun. They are the same number while
+// one pass suffices, and they diverge exactly when it stops: at a universe
+// needing two passes, batchPerPass is half the peak day and a single daily run
+// would cover half the work while looking fully sized. That divergence is why
+// the check asserts passesNeeded === 1 at the current caps -- the constant
+// alone cannot tell you a second pass is missing.
+const EARNINGS_BATCH_SIZE = EARNINGS_PLAN?.batchPerPass ?? EARNINGS_BATCH_FALLBACK;
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -385,6 +457,13 @@ export async function GET(req: NextRequest) {
       // one that drained its queue produce the same record -- which is how the
       // `break` stayed invisible for as long as it did.
       outOfTime,
+      // THE PLAN THAT SIZED THIS RUN, on the record. A batch that came from
+      // arithmetic should be readable as arithmetic afterwards, or the next
+      // person to wonder why it is 262 has to re-derive it.
+      batchSize: EARNINGS_BATCH_SIZE,
+      batchBasisUniverse: EARNINGS_UNIVERSE_BASIS,
+      peakDayReporters: EARNINGS_PLAN?.peakDayReporters ?? null,
+      passesNeeded: EARNINGS_PLAN?.passesNeeded ?? null,
     });
 
     return NextResponse.json({
