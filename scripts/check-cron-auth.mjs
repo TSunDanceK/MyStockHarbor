@@ -1,4 +1,10 @@
-// Every scheduled caller of a CRON_SECRET-gated route must send the header.
+// Who calls the warm jobs, and who schedules them.
+//
+// TWO RULES, ADDED A DAY APART BECAUSE THEY FAILED A DAY APART: every
+// automated caller of a CRON_SECRET-gated route must send the header
+// (sections 1-4), and every warm job must have a scheduler that actually
+// fires (section 5). The workflow this file is mostly about had both defects
+// at once, and fixing the first did not touch the second.
 //
 // WHAT HAPPENED, so the assertion has a reason attached. All three calls in
 // .github/workflows/pickers-warm.yml were bare curls -- zero occurrences of
@@ -245,9 +251,83 @@ check(
   "NEXT_PUBLIC_ is inlined into the bundle at build time — same leak, longer name"
 );
 
+// ── 5. Where the schedule lives ────────────────────────────────────────────
+console.log("\n5. Vercel schedules the warm jobs; GitHub only holds the lever");
+
+// WHY THE SCHEDULE MOVED. GitHub's scheduled workflows are best-effort --
+// queued, delayed under load, sometimes dropped -- and 05:03 UTC sits in one
+// of the busiest cron windows there is. Across all 29 scheduled runs on record
+// this workflow NEVER ONCE fired within half an hour of its schedule (best:
+// +29 min), and over its last week it drifted to +265..+737 minutes before
+// missing 2026-09-03 entirely. A job whose purpose is "warm the site early in
+// the morning" was firing at lunchtime, when it fired at all.
+//
+// The manual trigger is kept, so sections 1-4 above still have a caller to be
+// true about. That is why this section is here rather than in a file of its
+// own: "is it authenticated" and "does it still have a scheduler" are the same
+// question asked of the same three calls, and separating them is how you end
+// up fixing one and shipping the other.
+check(
+  "the warm workflow is manual-only",
+  /workflow_dispatch/.test(warm) && !/^\s*schedule:/m.test(warm),
+  "GitHub's scheduler was never on time here and stopped firing altogether. " +
+    "Re-adding `schedule:` should be a deliberate act that updates this line, " +
+    "not a quiet restoration of a trigger that measurably does not work"
+);
+
+const vercelCrons = new Set(
+  (JSON.parse(read("vercel.json")).crons ?? []).map((c) =>
+    String(c.path).replace(/^\/api\/jobs\//, "")
+  )
+);
+check(
+  "vercel.json still schedules something",
+  vercelCrons.size > 0,
+  `${vercelCrons.size} cron entries — an empty list would make both assertions ` +
+    `below vacuous, which is the failure mode of checking a set against a set`
+);
+
+// THE ONE-CHANGE-NOT-TWO RULE, MADE PERMANENT. Removing a GitHub schedule
+// before the Vercel entry exists leaves a window with neither, and the symptom
+// is a job that quietly stops running -- indistinguishable, on the run record,
+// from a job that runs and finds nothing to do.
+const orphanedByWorkflow = [];
+for (const file of workflows) {
+  const src = stripYamlComments(read(`.github/workflows/${file}`));
+  for (const m of src.matchAll(/\/api\/jobs\/([A-Za-z0-9_-]+)/g)) {
+    if (gated.has(m[1]) && !vercelCrons.has(m[1]) && !orphanedByWorkflow.includes(m[1])) {
+      orphanedByWorkflow.push(m[1]);
+    }
+  }
+}
+check(
+  "every job a workflow calls is also scheduled by Vercel",
+  orphanedByWorkflow.length === 0,
+  orphanedByWorkflow.length
+    ? `no Vercel cron for: ${orphanedByWorkflow.join(", ")}`
+    : "the workflow is a hand-pulled lever now, so anything it touches needs a " +
+      "real schedule underneath it — this is what stops the next person " +
+      "removing a trigger and a cron entry in two different PRs"
+);
+
+// AND THE BROADER ONE: a warm job with no scheduler is a job that never runs.
+// check-cache-health-page.mjs already ties the JOBS REGISTRY to vercel.json in
+// both directions; this ties the ROUTES ON DISK to it, which is the gap a new
+// route falls through -- it would have no registry entry either, so nothing
+// there would notice it.
+const unscheduled = [...gated].filter((g) => !vercelCrons.has(g));
+check(
+  "every CRON_SECRET-gated job route has a Vercel cron",
+  unscheduled.length === 0,
+  unscheduled.length
+    ? `gated but unscheduled: ${unscheduled.join(", ")}`
+    : `all ${gated.size} of them — a route built to be woken by a scheduler, ` +
+      `with no scheduler, is dead code that reads as infrastructure`
+);
+
 console.log(
   failures === 0
-    ? "\nEvery scheduled caller is authenticated.\n"
+    ? "\nEvery automated caller is authenticated, and every warm job has a scheduler.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

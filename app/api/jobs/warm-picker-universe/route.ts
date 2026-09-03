@@ -2,11 +2,18 @@
 //
 // Thin re-export — all build logic lives in lib/server/pickersBuilder.ts,
 // shared with /api/pickers so the two entry points can never drift out of
-// sync again. This route exists as a distinct URL purely so the daily
-// GitHub Actions warm-up workflow (see PICKERS_EARNINGS_WARM_AUTOMATION.md,
-// project doc) has a clearly-named target to hit and so Vercel logs/
-// Observability can distinguish scheduled warm-up hits from organic
-// traffic — the underlying handler is identical to /api/pickers.
+// sync again. This route exists as a distinct URL so the scheduled warm has a
+// clearly-named target to hit and so Vercel logs/Observability can distinguish
+// warm-up hits from organic traffic — the underlying handler is identical to
+// /api/pickers.
+//
+// THE SCHEDULE IS vercel.json's `2 7 * * *`, not GitHub's. This comment used to
+// name "the daily GitHub Actions warm-up workflow" as the caller; that
+// workflow's schedule was removed on 2026-09-03 after it was measured never
+// firing within half an hour of its cron and eventually not at all. It still
+// exists as a MANUAL lever (workflow_dispatch), which is why it still appears
+// in PICKERS_EARNINGS_WARM_AUTOMATION.md — but it is no longer what wakes this
+// route on an ordinary day.
 // Neither pickers entry point set maxDuration, so the full universe build ran
 // on Vercel's default limit -- a timeout cliff at ANY universe size, and one
 // that would bite silently as UNIVERSE_CAP grows. Set explicitly.
