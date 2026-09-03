@@ -96,13 +96,23 @@ batch. Three things sit on top of it:
 1. **The post-report re-fetch.** `computeEarningsTtlSeconds` gives a symbol a
    short ~12h window right around its report so the actuals and the rolled-
    forward next date land. Budget roughly 2 calls per reporting symbol, not 1.
-2. **The cadence.** `vercel.json` runs `warm-earnings` **once a day** (`15 7 * *
-   *`). `.github/workflows/pickers-warm.yml` adds two more passes and its header
-   calls the endpoint "public, unauthenticated" — but production returns **401**
-   to an unauthenticated GET today (two such requests in the 2026-09-02 runtime
-   logs), so those passes and the `/pickers` "fetch earnings" button are both
-   doing nothing. **Confirm this before sizing.** One pass a day and three
-   passes a day are a 3x difference in the constant.
+2. **The cadence — SETTLED 2026-09-03: it is ONE pass a day.** `vercel.json`
+   runs `warm-earnings` once (`15 7 * * *`) and that is now the only automatic
+   caller. This entry previously read "confirm this before sizing"; it has been
+   confirmed, twice over:
+
+   * The two extra passes came from `.github/workflows/pickers-warm.yml`, which
+     was calling unauthenticated and getting **401** on both (#408 fixed the
+     authentication; the run log quoted there is the evidence).
+   * Its GitHub schedule was then removed entirely, because it had **never once
+     fired within half an hour of its cron** across 29 recorded runs and had
+     drifted to +4 to +12 hours before missing a day outright. The workflow is
+     a manual lever now.
+
+   So the measurement is read against **one run a day**, and the batch has to
+   cover a day in a single pass. The extra passes are not coming back: a run's
+   reach (point 3) is 440 calls against three passes' 120, so the batch is the
+   lever, not the pass count.
 3. **The run's own reach.** After PR B a single run can make
    `(FMP_SAFE_CALLS_PER_MINUTE 200 − EARNINGS_MIN_HEADROOM_CALLS 90) × 4 min =
    440` calls. `scripts/check-earnings-minute-wall.mjs` fails if
