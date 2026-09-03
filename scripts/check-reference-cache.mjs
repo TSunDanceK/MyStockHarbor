@@ -45,10 +45,20 @@ check(
 
 console.log("\n=== 2. An empty response is never cached ===\n");
 
+// CONTAINMENT, NOT PROXIMITY. This was `{0,200}` between the guard and the
+// write, and it broke twice for the same reason: readCodeOnly blanks comments
+// in place rather than deleting them, so a comment growing between the two
+// lines pushes them apart without moving a line of code. check-pricepool-ohlc
+// had the identical failure earlier in this rebuild. The question is whether
+// the write is INSIDE the guard, so slice the guard's block and look in it.
+const guardStart = cal.indexOf("if (result.rows.length) {");
+const guardBlock = guardStart === -1 ? "" : cal.slice(guardStart, cal.indexOf("\n  }", guardStart));
 check(
   "the calendar guards on rows.length before writing",
-  /if \(rows\.length\) \{[\s\S]{0,200}writeReference\(`earnings-calendar:/.test(cal),
-  "a failed or restricted response parses to [], and a day of that blanks every consumer"
+  guardBlock.includes("writeReference(`earnings-calendar:"),
+  guardStart === -1
+    ? "could not find the guard to slice"
+    : "a failed or restricted response parses to [], and a day of that blanks every consumer"
 );
 check(
   "the name map guards on map.size before writing",
@@ -73,7 +83,9 @@ check(
 );
 check(
   "the calendar uses the DAILY ttl and the name map the MONTHLY one",
-  /writeReference\(`earnings-calendar:\$\{key\}`, rows, REFERENCE_TTL_DAILY_SECONDS\)/.test(cal) &&
+  /writeReference\(`earnings-calendar:\$\{key\}`, result\.rows, REFERENCE_TTL_DAILY_SECONDS\)/.test(
+    cal
+  ) &&
     /REFERENCE_TTL_MONTHLY_SECONDS\s*\)/.test(cal),
   "swapping them would either refetch 3 MB daily or hold a stale trigger for a month"
 );
