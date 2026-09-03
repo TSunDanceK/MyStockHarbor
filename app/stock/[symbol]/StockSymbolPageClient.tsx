@@ -843,7 +843,10 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
     let cancelled = false;
     async function loadValuation() {
       setValuationLoading(true);
-      try { const res = await fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}?t=${Date.now()}`, { cache: "no-store" }); if (!res.ok) throw new Error("Valuation fetch failed"); const data = (await res.json()) as StockValuationData; if (!cancelled) setValuation(data); }
+      // NO BUSTER, NO no-store: the route now answers `public, s-maxage=6h`
+      // matching the FMP revalidate behind it, so this is a CDN hit on every
+      // view after the first instead of a Lambda plus a BotID check.
+      try { const res = await fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error("Valuation fetch failed"); const data = (await res.json()) as StockValuationData; if (!cancelled) setValuation(data); }
       catch { if (!cancelled) setValuation(null); }
       finally { if (!cancelled) setValuationLoading(false); }
     }
@@ -855,7 +858,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
     let cancelled = false;
     async function loadAnalystRating() {
       setAnalystRatingLoading(true);
-      try { const res = await fetch(`/api/stock-analyst-rating/${encodeURIComponent(symbol)}?t=${Date.now()}`, { cache: "no-store" }); if (!res.ok) throw new Error("Analyst rating fetch failed"); const data = (await res.json()) as AnalystRatingData; if (!cancelled) setAnalystRating(data); }
+      // Same as valuation above; the route's header is 12h, matching its own
+      // FMP revalidate.
+      try { const res = await fetch(`/api/stock-analyst-rating/${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error("Analyst rating fetch failed"); const data = (await res.json()) as AnalystRatingData; if (!cancelled) setAnalystRating(data); }
       catch { if (!cancelled) setAnalystRating(null); }
       finally { if (!cancelled) setAnalystRatingLoading(false); }
     }

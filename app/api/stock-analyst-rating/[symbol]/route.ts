@@ -4,6 +4,11 @@ import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
+// TWELVE HOURS, matching the `next: { revalidate: 60 * 60 * 12 }` the FMP fetch
+// below already carries. A shorter CDN window spends a Lambda to re-serve bytes
+// the Data Cache would hand back unchanged; a longer one outlives the data.
+const ANALYST_CACHE_SECONDS = 60 * 60 * 12;
+
 type Props = {
   params: Promise<{ symbol: string }>;
 };
@@ -189,5 +194,17 @@ export async function GET(_request: Request, { params }: Props) {
       "Analyst price targets and ratings consensus from Financial Modeling Prep, aggregated across covering analysts.",
   };
 
-  return NextResponse.json(payload);
+  // CACHEABLE FOR THE SAME REASON AS /api/stock-valuation, and with the same
+  // caveat about the bot gate: a CDN hit does not reach isUnwantedBot(), which
+  // is the point -- the gate protects the COST of a request, and a cached
+  // response costs neither an FMP call nor a Lambda. Analyst ratings are
+  // already rendered on the public stock page.
+  //
+  // The failure paths above stay uncached: a bad symbol is 400, a missing key
+  // is 503. Only an answer is stored.
+  return NextResponse.json(payload, {
+    headers: {
+      "Cache-Control": `public, s-maxage=${ANALYST_CACHE_SECONDS}, stale-while-revalidate=${ANALYST_CACHE_SECONDS}`,
+    },
+  });
 }
