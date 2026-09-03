@@ -4,6 +4,7 @@ import {
   readStalestUniverseSlice,
   statDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,10 @@ export const dynamic = "force-dynamic";
 // `stalest` is a sample from the rotation primitive the scan wheel will use --
 // oldest-seen first. Reads only; costs one page view's worth of Redis.
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await guardDebugRequest(request);
+  if (denied) return denied;
+
   try {
     // SEQUENTIAL, deliberately not Promise.all. readDynamicUniverse performs
     // the one-time v1 -> v2 seed on its first call, so reading the cardinalities
