@@ -8,6 +8,7 @@ import {
   getDayEarningsForRender,
   getFullDayEarnings,
   populateNextMissingDate,
+  claimCalendarScan,
   isDateFullyPopulated,
   getWindowStartDate,
   getWindowEndDate,
@@ -153,6 +154,10 @@ function resolveCalendarView(params: SearchParams): CalendarView {
 // cache() keeps generateMetadata and the page component to one fetch of the
 // selected day per request rather than two.
 const loadDay = cache((selectedDate: string) => getDayEarningsForRender(selectedDate));
+// SHARED WITH THE RENDER, so the completeness marker is read ONCE rather than
+// twice. getFullDayEarnings already reads it internally and the page then read
+// it again through isDateFullyPopulated -- two GETs for one fact.
+const loadDayComplete = cache((selectedDate: string) => isDateFullyPopulated(selectedDate));
 
 export async function generateMetadata({
   searchParams,
@@ -234,7 +239,73 @@ const TICKER_DAYS_AHEAD = 14;
 const TICKER_MAX_ITEMS = 18;
 const TICKER_MAX_PER_DAY = 3;
 
-async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarningsItem[]> {
+// ─────────────────────────────────────────────────────────────────────────────
+// WHAT A PAGE VIEW COSTS IN REDIS COMMANDS, and why that is the point.
+//
+// This page is not an FMP problem -- the window self-limits, and the comment on
+// the after() block below is right that the scans short-circuit once it is
+// filled. It is a REDIS AND LAMBDA problem, and Redis command volume is what
+// suspended the database on 2026-08-28.
+//
+// Counted per request, steady state, on a cold instance:
+//
+//   getMonthDaysWithEarnings  2   month rows + the stock-list name map
+//   loadDay                   2   day items + the completeness marker
+//   isDateFullyPopulated      1   the SAME completeness marker, read again
+//   getUpcomingTickerItems   14   TICKER_DAYS_AHEAD x readDayItemsCache
+//   after(): populate         3   hour usage, fill frontier, frontier re-park
+//                            --
+//                            22
+//
+// THE after() SCAN IS CHEAPER THAN IT LOOKS, corrected rather than assumed:
+// once the frontier is parked past the window end, findNextIncompleteDate's
+// loop runs ZERO times, so the short-circuit really is 3 commands rather than a
+// walk of the ~95-day window. The gate below is not about those 3; it is about
+// the thundering herd when the window DOES roll forward and every concurrent
+// visitor starts filling it at once.
+//
+// WHY AN IN-PROCESS MEMO RATHER THAN unstable_cache. The obvious answer is
+// Next's Data Cache, keyed by date, which would also help a cold instance --
+// and lib/stock-news-data.ts and quoteData.ts both use it. It is not used here
+// because THIS SEGMENT DECLARES force-dynamic, and whether that changes how
+// unstable_cache behaves inside it is a framework question this sandbox cannot
+// settle: there is no build (the ISR'd screener pages exceed Next's 60s
+// per-page budget without Upstash credentials), no Redis and no deploy. Getting
+// it wrong is either silent (a cache that never caches, achieving nothing) or
+// loud in the worst way (DYNAMIC_SERVER_USAGE, which is the #310 outage shape).
+//
+// The memo below is this module's own established pattern -- monthCache,
+// candidatesCache and nameMapCache in earningsCalendar.ts are all exactly this
+// -- it needs no framework guarantee, and it can be RUN by an invariant check.
+// It also targets the thing this PR is about: a page that costs the same for
+// the thousandth visitor as the first. A warm instance now serves the second
+// and subsequent views from memory.
+const TICKER_MEMO_MS = 5 * 60_000;
+let tickerMemo: { key: string; at: number; items: UpcomingEarningsItem[] } | null = null;
+
+/** Read-through memo. Exported shape kept pure so the check can run it. */
+export function readMemo<T>(
+  memo: { key: string; at: number; value: T } | null,
+  key: string,
+  nowMs: number,
+  ttlMs: number
+): T | null {
+  if (!memo || memo.key !== key) return null;
+  // ABSENT AND EXPIRED MUST BOTH MISS. A memo that returns a value for a key it
+  // does not hold is a cache that serves the wrong day's earnings, which on
+  // this page is a wrong answer rather than a stale one.
+  // BOTH NUMBERS CHECKED. `nowMs - at >= undefined` is FALSE, so an unusable
+  // TTL made the memo serve forever -- found by an assertion that called this
+  // with three arguments instead of four and then failed on the expiry case.
+  // The fail-open was in the code, not only in the test.
+  if (!Number.isFinite(nowMs) || !Number.isFinite(ttlMs)) return null;
+  if (nowMs - memo.at >= ttlMs) return null;
+  return memo.value;
+}
+
+async function getUpcomingTickerItemsUncached(
+  todayDate: string
+): Promise<UpcomingEarningsItem[]> {
   try {
     const dates: string[] = [];
     const cursor = new Date(`${todayDate}T00:00:00Z`);
@@ -294,6 +365,34 @@ async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarnin
   }
 }
 
+/**
+ * The ticker's fourteen day-reads, once per instance per TICKER_MEMO_MS.
+ *
+ * THE BIGGEST SINGLE ITEM ON THE PAGE: fourteen Redis GETs for a scrolling
+ * strip of upcoming names, identical for every visitor on a given day, paid per
+ * request. Five minutes is a staleness budget rather than a performance knob --
+ * the underlying days change only as the background fill advances, and a strip
+ * of upcoming tickers is the part of this page least sensitive to being five
+ * minutes behind.
+ */
+async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarningsItem[]> {
+  const hit = readMemo(
+    tickerMemo && { key: tickerMemo.key, at: tickerMemo.at, value: tickerMemo.items },
+    todayDate,
+    Date.now(),
+    TICKER_MEMO_MS
+  );
+  if (hit) return hit;
+
+  const items = await getUpcomingTickerItemsUncached(todayDate);
+  // NOT CACHED WHEN EMPTY. An empty ticker is what a Redis blip returns, and
+  // holding that for five minutes turns one bad read into five minutes of an
+  // empty strip -- the absence-read-as-an-answer shape this repo keeps finding.
+  if (items.length) tickerMemo = { key: todayDate, at: Date.now(), items };
+  return items;
+}
+
+
 export default async function EarningsCalendarPage({
   searchParams,
 }: {
@@ -325,7 +424,7 @@ export default async function EarningsCalendarPage({
     getMonthDaysWithEarnings(year, month),
     // Shared with generateMetadata via cache() -- this does not re-fetch.
     loadDay(selectedDate),
-    isDateFullyPopulated(selectedDate),
+    loadDayComplete(selectedDate),
     getUpcomingTickerItems(todayDate),
   ]);
 
@@ -337,6 +436,20 @@ export default async function EarningsCalendarPage({
   // scans short-circuit at zero cost until it rolls forward.
   after(async () => {
     try {
+      // ONE SCAN PER GATE_SECONDS ACROSS ALL INSTANCES, not one per visitor.
+      //
+      // The steady-state scan is only 3 commands, so this is not really about
+      // those. It is about the window ROLLING FORWARD: at that moment every
+      // concurrent visitor starts walking the frontier and calling
+      // getFullDayEarnings, and they all do the same work against the same
+      // dates. QUOTE_HOURLY_CAP bounds the FMP side globally; nothing bounded
+      // the Redis side or the duplicated effort.
+      //
+      // SET NX is the whole mechanism: the claim and the test are one round
+      // trip, so two instances cannot both win it. Failing to claim is the
+      // normal outcome and costs one command.
+      if (!(await claimCalendarScan())) return;
+
       // Finish quoting the viewed date beyond the seed the render painted
       // (cap-limited, mostly cache hits), then keep the window frontier moving.
       if (!dateComplete) {
