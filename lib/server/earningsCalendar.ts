@@ -1136,6 +1136,46 @@ async function findNextIncompleteDate(): Promise<string | null> {
 // Finds and populates the next not-yet-complete date(s) in the window, front-
 // to-back. Called fire-and-forget from every real page load (respecting the
 // hourly cap) and directly with bypassCap:true from the owner Backfill route.
+// ─────────────────────────────────────────────────────────────────────────────
+// ONE BACKGROUND SCAN PER WINDOW, NOT ONE PER VISITOR.
+//
+// /earnings-calendar runs populateNextMissingDate in after() on every request.
+// In steady state that is cheap -- the frontier is parked past the window end,
+// so the scan loop runs zero times and the whole thing is three commands.
+//
+// THE COST IS AT THE MOMENT THE WINDOW ROLLS FORWARD. Then every concurrent
+// visitor starts walking the frontier and calling getFullDayEarnings against
+// the SAME dates: the same Redis reads, the same writes, the same work, N
+// times over. QUOTE_HOURLY_CAP bounds the FMP side globally and nothing bounded
+// the rest.
+//
+// Five minutes because the window moves once a day. A scan that runs 288 times
+// a day instead of once per visitor is already the whole win, and a shorter
+// gate buys nothing the frontier does not already give.
+const CALENDAR_SCAN_GATE_KEY = "msh:earnings-cal:scan-gate:v1";
+const CALENDAR_SCAN_GATE_SECONDS = 5 * 60;
+
+/**
+ * Claim the right to run the background fill. True for at most one caller per
+ * CALENDAR_SCAN_GATE_SECONDS.
+ *
+ * SET NX makes the claim and the test one round trip, so two instances cannot
+ * both win it. Fails CLOSED with no Redis -- without a shared marker there is
+ * nothing to serialise on, and an ungated scan is what this exists to stop.
+ */
+export async function claimCalendarScan(nowMs = Date.now()): Promise<boolean> {
+  if (!redis) return false;
+  try {
+    const res = await redis.set(CALENDAR_SCAN_GATE_KEY, String(nowMs), {
+      ex: CALENDAR_SCAN_GATE_SECONDS,
+      nx: true,
+    });
+    return res === "OK";
+  } catch {
+    return false;
+  }
+}
+
 export async function populateNextMissingDate(
   opts: { bypassCap?: boolean; maxDates?: number } = {}
 ): Promise<{ populated: string[] }> {
