@@ -1,4 +1,4 @@
-// A limit that is never sent, and a page cap read as a month.
+// A page cap that drops the oldest dates, and the slicing that answers it.
 //
 // WHAT HAPPENED. lib/server/earningsCalendar.ts fetched a whole month of
 // earnings dates and sent NO `limit`, so it got FMP's default page. The
@@ -12,15 +12,27 @@
 // had tried raising it, and the coverage floor the whole plan reasoned from was
 // wrong by an order of magnitude.
 //
-// TWO RULES, AND THE SECOND IS THE ONE THAT WOULD HAVE CAUGHT IT:
+// #410 SENT A LIMIT AND THE PROBE ANSWERED: "limit-ignored: every limit
+// returned the same rows". 0, 4,000, 10,000 and 20,000 all returned 4,000 rows
+// and 821,701 bytes, identical sets. The parameter does nothing. Worse, the cap
+// DROPS THE OLDEST DATES: a request for 2026-02-01..28 came back starting
+// 2026-02-11, and nothing in the response said so.
 //
-//   the limit must actually be SENT -- "a limit that was never sent silently
-//   capped a measurement, and the same mistake in the fix would be worse than
-//   the original"
+// AND IT IS A PRODUCTION BUG, not a measurement one. fetchMonthRows feeds the
+// earnings schedule index that decides when a symbol's fundamentals refresh, so
+// a symbol reporting inside a dropped window never refreshes on filing -- it
+// waits for QUARTERLY_FLOOR_DAYS. Dormant until January, because every month
+// between now and then is under the cap.
 //
-//   a response AT the limit must be treated as truncated -- because the first
-//   failure was not that the cap existed, it was that 4,000 exactly went past
-//   a reader unremarked
+// THE RULES THIS LOCKS DOWN:
+//
+//   a response AT the cap is split, not accepted -- RUN the splitter over a
+//   fixture that returns a full page
+//
+//   merged slices carry no duplicate (symbol, date) -- boundaries overlap on
+//   purpose, and a double count would inflate the very measurement this fixes
+//
+//   a single day at the cap is REPORTED, never returned short as though whole
 //
 // And a third, from the decision that rests on all of it: the pass count must
 // be DERIVED from peak demand and the per-run ceiling. A hand-typed
@@ -56,7 +68,8 @@ const num = (src, name) =>
     )()
   );
 
-const limit = num(calendar, "EARNINGS_CALENDAR_LIMIT");
+const cap = num(calendar, "EARNINGS_CALENDAR_PAGE_CAP");
+const fetchBudget = num(calendar, "MAX_CALENDAR_FETCHES");
 const ttlDay = num(store, "EARNINGS_TTL_DAY");
 const nearTtl = num(store, "EARNINGS_TTL_NEAR_REPORT_SECONDS");
 // BRACE-MATCHED, NOT `[\s\S]*?\n\}`. planEarningsDay takes an inline object
@@ -86,7 +99,22 @@ const erase = (src) =>
 
 const grabFunction = (tsSrc, name) => {
   const src = erase(tsSrc);
-  const start = src.indexOf(`export function ${name}(`);
+  // Non-exported helpers are dependencies of the exported ones (midpointDate
+  // needs addDays), and re-implementing them in a fixture would test the copy
+  // rather than the code.
+  //
+  // LONGEST PREFIX FIRST. Matching bare `function ${name}(` against an
+  // `export async function` starts the slice AFTER the `async`, and the lifted
+  // body then has `await` inside a synchronous function -- a syntax error
+  // rather than a wrong answer, which is the only reason it was noticed.
+  let start = -1;
+  for (const prefix of ["export async function ", "async function ", "export function ", "function "]) {
+    const at = src.indexOf(`${prefix}${name}(`);
+    if (at !== -1) {
+      start = at;
+      break;
+    }
+  }
   if (start === -1) return null;
   const bodyStart = src.indexOf("{", src.indexOf(")", start));
   if (bodyStart === -1) return null;
@@ -98,82 +126,316 @@ const grabFunction = (tsSrc, name) => {
   return null;
 };
 
-const truncFn = grabFunction(calendar, "isTruncatedMonth");
+const truncFn = grabFunction(calendar, "isCappedPage");
 const perFn = grabFunction(plan, "fetchesPerReport");
 const planFn = grabFunction(plan, "planEarningsDay");
 
-if (!limit || !ttlDay || !nearTtl || !truncFn || !perFn || !planFn) {
+if (!cap || !fetchBudget || !ttlDay || !nearTtl || !truncFn || !perFn || !planFn) {
   console.error(
-    `FAIL: could not read EARNINGS_CALENDAR_LIMIT (${limit}), EARNINGS_TTL_DAY ` +
+    `FAIL: could not read EARNINGS_CALENDAR_PAGE_CAP (${cap}), ` +
+      `MAX_CALENDAR_FETCHES (${fetchBudget}), EARNINGS_TTL_DAY ` +
       `(${ttlDay}), EARNINGS_TTL_NEAR_REPORT_SECONDS (${nearTtl}), or extract ` +
-      `isTruncatedMonth (${!!truncFn}) / fetchesPerReport (${!!perFn}) / ` +
+      `isCappedPage (${!!truncFn}) / fetchesPerReport (${!!perFn}) / ` +
       `planEarningsDay (${!!planFn}). This script would otherwise pass by ` +
       `measuring nothing.`
   );
   process.exit(1);
 }
 
-// ── 1. The limit is sent ───────────────────────────────────────────────────
-console.log("\n1. The limit reaches the URL, which is the whole defect");
+// ── 1. The cap is a fact about the endpoint, not a wish ────────────────────
+console.log("\n1. The cap drives the split; the ignored parameter is gone");
 
 check(
-  "the earnings-calendar fetch sends the limit",
-  /earnings-calendar\?from=\$\{from\}&to=\$\{to\}&limit=\$\{limit\}&apikey=/.test(calendar),
-  `EARNINGS_CALENDAR_LIMIT is ${limit} — this PR exists because a limit that ` +
-    `was never sent silently capped a measurement, so the same mistake in the ` +
-    `fix would be worse than the original`
+  "the ignored `limit` parameter is no longer sent",
+  !/[?&]limit=/.test(calendar),
+  `the probe proved it does nothing (0/4000/10000/20000 all returned 4,000 rows ` +
+    `and byte-identical sets), and a request parameter that is provably ignored ` +
+    `-- with an assertion saying we send it -- is a claim the code cannot keep`
 );
 check(
-  "the value sent is the constant, or an explicit override",
-  /const limit = options\.limit \?\? EARNINGS_CALENDAR_LIMIT;/.test(calendar),
-  "the probe passes its own limits; everything else gets the one constant, so " +
-    "there is no second place a page cap can be decided"
+  "the constant is the OBSERVED cap",
+  cap === 4000,
+  `${cap}, measured 2026-09-03 and 2026-09-04. It is FMP's number, not ours, ` +
+    `which is why it is named for what it is`
 );
 check(
-  "the limit is well clear of the cap that truncated the measurement",
-  limit >= 2 * 4000,
-  `${limit} against the observed 4,000 — a value that merely nudges past the ` +
-    `cap answers nothing when the truth is 8,000, and isTruncatedMonth is what ` +
-    `says so if even this is short`
+  "there is a bound on how many fetches one range may cost",
+  fetchBudget > 0 && fetchBudget < 64,
+  `${fetchBudget} — a binary split over a month is ~5 levels and at most ~62 ` +
+    `fetches even if every slice is capped, which would mean the endpoint had ` +
+    `started returning 4,000 rows for a single day. Bounding it turns a runaway ` +
+    `into a recorded stop`
+);
+// SLICED TO fetchCalendarRange. Testing the whole file for the call passed
+// while the walk did NOT reserve, because getNameMap reserves too -- a grep
+// satisfied by an unrelated call site one function over.
+const rangeSrc = grabFunction(calendar, "fetchCalendarRange") ?? "";
+check(
+  "the range fetch reserves a call slot",
+  /await reserveFmpCallSlot\(\);/.test(rangeSrc),
+  "fmpFetch records BYTES for the usage meter but does not reserve a slot, so " +
+    "the calendar has been spending the plan's rate limit invisibly — and the " +
+    "warm jobs compute their own backoff from that counter, so an uncounted " +
+    "call makes their pacing wrong in the direction of overspending. One a day " +
+    "was easy to overlook; several per month per schedule rebuild is not"
 );
 
-// ── 2. A full page is not a measurement ────────────────────────────────────
-console.log("\n2. A response AT the limit is truncated, not complete");
+// ── 2. A response AT the cap is a page, not a range ────────────────────────
+console.log("\n2. A full page is split, not accepted");
 
-const trunc = await lift(truncFn, `const EARNINGS_CALENDAR_LIMIT = ${limit};`);
+const capped = await lift(grabFunction(calendar, "isCappedPage"), `const EARNINGS_CALENDAR_PAGE_CAP = ${cap};`);
 check(
-  "exactly the limit reads as truncated",
-  trunc.isTruncatedMonth(limit) === true && trunc.isTruncatedMonth(4000, 4000) === true,
-  "4,000 out of 4,000 is a page cap, not a February — the number was sitting in " +
-    "a probe result and was read as a month"
+  "exactly the cap reads as capped",
+  capped.isCappedPage(cap) === true && capped.isCappedPage(4000, 4000) === true,
+  "4,000 out of 4,000 is a page, not a February"
 );
 check(
-  "more than the limit is truncated too",
-  trunc.isTruncatedMonth(limit + 1) === true,
-  ">= rather than ===: if FMP's own default is lower than ours and wins, the " +
-    "count never equals ours, and a response larger than we asked for is its " +
-    "own kind of wrong"
+  "more than the cap too",
+  capped.isCappedPage(cap + 1) === true,
+  ">= rather than ===: a changed cap should still trip it"
 );
 check(
-  "a short month is not",
-  trunc.isTruncatedMonth(1655) === false && trunc.isTruncatedMonth(limit - 1) === false,
-  "1,655 rows for 2026-01 is what an untruncated month looks like — the gate " +
-    "must not fire on every month or it is an off switch"
+  "a short page is not",
+  capped.isCappedPage(1655) === false && capped.isCappedPage(cap - 1) === false,
+  "1,655 rows for an uncapped 2026-01 is what a whole month looks like — a gate " +
+    "that fires on everything is an off switch"
 );
 check(
-  "a nonsense count or limit refuses to vouch for the month",
-  trunc.isTruncatedMonth(NaN) === true &&
-    trunc.isTruncatedMonth(100, 0) === true &&
-    trunc.isTruncatedMonth(100, NaN) === true,
-  "absence is a reason to distrust the month, never a pass — the recurring " +
-    "defect in this repo is a missing value reading as health"
+  "a nonsense count or cap refuses to vouch for the page",
+  capped.isCappedPage(NaN) === true &&
+    capped.isCappedPage(100, 0) === true &&
+    capped.isCappedPage(100, NaN) === true,
+  "absence is a reason to distrust the page, never a pass"
+);
+
+// THE SPLITTER, RUN. Whether a capped response causes a split is a claim about
+// control flow over responses, and grepping for `walk(` cannot see it.
+const midMod = await lift(
+  `${grabFunction(calendar, "addDays")}\n${grabFunction(calendar, "midpointDate")}`
 );
 check(
-  "a full page is logged where the fetch happens",
-  /if \(isTruncatedMonth\(rows\.length, limit\)\) \{/.test(calendar) &&
-    /console\.warn\(/.test(calendar),
-  "the first failure was not that the cap existed, it was that nobody noticed " +
-    "the number; a signal nothing emits is a signal nobody reads"
+  "the midpoint halves a range and never escapes it",
+  midMod.midpointDate("2026-02-01", "2026-02-28") === "2026-02-14" &&
+    midMod.midpointDate("2026-02-01", "2026-02-02") === "2026-02-01" &&
+    midMod.midpointDate("2026-02-05", "2026-02-05") === "2026-02-05",
+  "a two-day range must still make progress, and a one-day range must be the " +
+    "fixed point the recursion stops at"
+);
+
+// ── 2b. The merge ─────────────────────────────────────────────────────────
+console.log("\n2b. Overlapping slices merge without double-counting");
+
+const merge = await lift(grabFunction(calendar, "mergeCalendarRows"));
+const row = (symbol, date, extra = {}) => ({ symbol, date, ...extra });
+const bag = new Map();
+merge.mergeCalendarRows(bag, [row("AAPL", "2026-02-14"), row("MSFT", "2026-02-14")]);
+merge.mergeCalendarRows(bag, [row("AAPL", "2026-02-14"), row("NVDA", "2026-02-15")]);
+check(
+  "a symbol-date arriving from two slices is stored once",
+  bag.size === 3,
+  "slices overlap by a day ON PURPOSE, so a boundary date arrives twice — and " +
+    "double-counting it would inflate the concentration measurement this exists " +
+    "to fix, which is the same hazard collapseDuplicateDates was written for"
+);
+const rich = new Map();
+merge.mergeCalendarRows(rich, [row("AAPL", "2026-02-14", { epsActual: 1.2, epsEstimated: 1.1 })]);
+merge.mergeCalendarRows(rich, [row("AAPL", "2026-02-14")]);
+check(
+  "the richer row wins, whichever order it arrives in",
+  rich.get("AAPL|2026-02-14")?.epsActual === 1.2,
+  "the feed itself repeats a symbol on one date (getCandidatesByDate says so), " +
+    "and last-wins would let a sparser duplicate erase a populated row"
+);
+const richLater = new Map();
+merge.mergeCalendarRows(richLater, [row("AAPL", "2026-02-14")]);
+merge.mergeCalendarRows(richLater, [row("AAPL", "2026-02-14", { epsActual: 1.2 })]);
+check(
+  "...and that is not just first-wins in disguise",
+  richLater.get("AAPL|2026-02-14")?.epsActual === 1.2,
+  "ties go to first seen; more data wins outright"
+);
+check(
+  "rows without a usable symbol or date are dropped, not keyed as blanks",
+  (() => {
+    const m = new Map();
+    merge.mergeCalendarRows(m, [row("", "2026-02-14"), row("AAPL", ""), row("AAPL", "nope")]);
+    return m.size === 0;
+  })(),
+  "a `|` key built from two empty strings collides every malformed row into one " +
+    "entry that then reads as a real company"
+);
+
+// ── 2c. The splitter, run against a cap that behaves like FMP's ───────────
+console.log("\n2c. A February that overflows the cap is recovered in full");
+
+// THE FIXTURE DROPS THE OLDEST DATES, exactly as the real endpoint does. That
+// is the whole bug: a request for 2026-02-01..28 came back starting 2026-02-11
+// with nothing to say so. A stub that truncated the END instead would let a
+// splitter that never revisits early dates pass.
+const rangeFn = await lift(
+  [
+    grabFunction(calendar, "addDays"),
+    grabFunction(calendar, "midpointDate"),
+    grabFunction(calendar, "isCappedPage"),
+    grabFunction(calendar, "mergeCalendarRows"),
+    grabFunction(calendar, "fetchCalendarRange"),
+  ].join("\n"),
+  `const EARNINGS_CALENDAR_PAGE_CAP = ${cap};
+const MAX_CALENDAR_FETCHES = ${fetchBudget};
+const MONTH_CACHE_MS = 1000;
+const reserveFmpCallSlot = async () => globalThis.__CAL_RESERVE();
+const fmpFetch = async (url) => globalThis.__CAL_FETCH(url);`
+);
+
+// 7,000 symbol-days across February: 250 a day, every day. Above the 4,000 cap
+// for the month, under it for either half.
+const FEB_PER_DAY = 250;
+const febRows = [];
+for (let d = 1; d <= 28; d++) {
+  const date = `2026-02-${String(d).padStart(2, "0")}`;
+  for (let i = 0; i < FEB_PER_DAY; i++) febRows.push({ symbol: `S${d}_${i}`, date });
+}
+// A ROW ON THE SAFETY DAY ITSELF. Without one, the first slice's `from` of
+// 2026-01-31 returns nothing outside the month and the trim assertion below
+// passes with the filter deleted -- an assertion that cannot fail, found by
+// deleting the filter and watching it stay green.
+febRows.push({ symbol: "JANUARY", date: "2026-01-31" });
+let fetchLog = [];
+globalThis.__CAL_RESERVE = async () => {};
+globalThis.__CAL_FETCH = async (url) => {
+  const from = /from=(\d{4}-\d{2}-\d{2})/.exec(url)?.[1];
+  const to = /to=(\d{4}-\d{2}-\d{2})/.exec(url)?.[1];
+  fetchLog.push([from, to]);
+  const inRange = febRows.filter((r) => r.date >= from && r.date <= to);
+  // OLDEST DROPPED, newest kept -- the observed behaviour.
+  const served = inRange.length > cap ? inRange.slice(inRange.length - cap) : inRange;
+  return { ok: true, status: 200, text: async () => JSON.stringify(served) };
+};
+
+const feb = await rangeFn.fetchCalendarRange("2026-02-01", "2026-02-28", { apiKey: "k" });
+check(
+  "a full page is split rather than accepted",
+  feb.fetches > 1 && feb.slices.some((s) => s.capped),
+  `${feb.fetches} fetches, ${feb.slices.filter((s) => s.capped).length} of them capped — ` +
+    `the unsliced code took the one capped page and returned it as a February`
+);
+check(
+  "and every row of the month comes back, including the ones the cap dropped",
+  feb.rows.length === 28 * FEB_PER_DAY,
+  `${feb.rows.length} of ${28 * FEB_PER_DAY} (the 2026-01-31 row is trimmed). The ` +
+    `single capped fetch would have ` +
+    `returned ${cap}, missing the oldest ${28 * FEB_PER_DAY - cap} rows — ten days ` +
+    `of peak Q4 season`
+);
+check(
+  "the earliest day is present, which is the one the cap ate",
+  feb.rows.some((r) => r.date === "2026-02-01") && feb.rows.some((r) => r.date === "2026-02-28"),
+  "the observed truncation kept 2026-02-11 -> 2026-02-28 and silently dropped " +
+    "the first ten days"
+);
+check(
+  "no (symbol, date) appears twice after the merge",
+  new Set(feb.rows.map((r) => `${r.symbol}|${r.date}`)).size === feb.rows.length,
+  `${feb.rows.length} rows, ${new Set(feb.rows.map((r) => `${r.symbol}|${r.date}`)).size} keys — ` +
+    `adjacent slices overlap by a day on purpose, so this is the assertion that ` +
+    `stops the overlap inflating every count downstream`
+);
+check(
+  "nothing outside the requested range survives the trim",
+  feb.rows.every((r) => r.date >= "2026-02-01" && r.date <= "2026-02-28") &&
+    !feb.rows.some((r) => r.symbol === "JANUARY"),
+  "the safety day really does pull in 2026-01-31 here, so the filter is the only " +
+    "thing keeping it out; the caller asked for a month"
+);
+check(
+  "the slices really do overlap, rather than the trim hiding a gap",
+  fetchLog.some(([from]) => from === "2026-01-31"),
+  "`to` is demonstrably inclusive but nothing observed settles `from`, so each " +
+    "slice asks from one day early — correct under both readings, where " +
+    "assuming inclusivity and being wrong drops one day per boundary"
+);
+check(
+  "no day is reported as unreadable when the range is merely dense",
+  feb.cappedDays.length === 0 && feb.stoppedEarly === null,
+  "a February at 250 reports a day splits cleanly; the alarm is for a cap that " +
+    "moved, not for a busy month"
+);
+
+// A SINGLE DAY AT THE CAP -- the floor of the recursion, and the case the brief
+// asked to be stated. It cannot be split further, so it must be NAMED rather
+// than returned short as though it were whole.
+const heavy = [];
+for (let i = 0; i < cap + 10; i++) heavy.push({ symbol: `H${i}`, date: "2026-02-05" });
+globalThis.__CAL_FETCH = async (url) => {
+  const from = /from=(\d{4}-\d{2}-\d{2})/.exec(url)?.[1];
+  const to = /to=(\d{4}-\d{2}-\d{2})/.exec(url)?.[1];
+  const inRange = heavy.filter((r) => r.date >= from && r.date <= to);
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(inRange.slice(Math.max(0, inRange.length - cap))),
+  };
+};
+const oneDay = await rangeFn.fetchCalendarRange("2026-02-05", "2026-02-05", { apiKey: "k" });
+check(
+  "a single day at the cap is NAMED, not returned short in silence",
+  oneDay.cappedDays.includes("2026-02-05"),
+  "it should be unreachable -- the busiest day measured is 710 symbols against " +
+    "a 4,000 cap -- so if it ever fires the cap or the endpoint has changed. " +
+    "Keeping an alarm that 'cannot' fire is the point: the last three of these " +
+    "hid behind exactly that reasoning"
+);
+check(
+  "...and it still returns the rows it did get, rather than nothing",
+  oneDay.rows.length === cap,
+  "a capped page is incomplete, not wrong — binning it would pay for the fetch " +
+    "and throw the data away"
+);
+check(
+  "...and does not recurse forever on a range it cannot split",
+  oneDay.fetches === 1,
+  "midpointDate is a fixed point at from === to, so the floor has to be an " +
+    "explicit stop rather than a shrinking range"
+);
+
+// THE BUDGET, and the FMP guard, both run.
+globalThis.__CAL_FETCH = async () => ({
+  ok: true,
+  status: 200,
+  text: async () => JSON.stringify(Array.from({ length: cap }, (_, i) => ({ symbol: `X${i}`, date: "2026-02-10" }))),
+});
+// The alarm fires once per unsplittable day, which is right in production and
+// eighteen lines of noise here. Silenced for this case only -- the single-day
+// case above deliberately leaves its one line visible, because an alarm nobody
+// has ever seen fire is one nobody trusts.
+const realError = console.error;
+console.error = () => {};
+const runaway = await rangeFn.fetchCalendarRange("2026-01-01", "2026-12-31", { apiKey: "k" });
+console.error = realError;
+check(
+  "an endpoint that caps everything stops at the fetch budget",
+  runaway.stoppedEarly?.startsWith("fetch-budget") === true &&
+    runaway.fetches <= fetchBudget,
+  `${runaway.fetches} fetches, stopped: ${runaway.stoppedEarly} — a cap that ` +
+    `moved to something tiny would otherwise walk a year down to single days`
+);
+globalThis.__CAL_RESERVE = async () => {
+  throw new Error("capacity-timeout");
+};
+const noBudget = await rangeFn.fetchCalendarRange("2026-02-01", "2026-02-28", { apiKey: "k" });
+check(
+  "no FMP capacity stops the walk and says so, rather than throwing the month away",
+  noBudget.stoppedEarly === "fmp-capacity" && noBudget.fetches === 0,
+  "a partial month with a reason beats an empty one with none — and the reason " +
+    "is what tells you it was the budget rather than the endpoint"
+);
+globalThis.__CAL_RESERVE = async () => {};
+check(
+  "no API key is a stated reason, not an empty month",
+  (await rangeFn.fetchCalendarRange("2026-02-01", "2026-02-28", { apiKey: "" })).stoppedEarly ===
+    "no-api-key",
+  "[] for a missing key and [] for a quiet month are the same value and " +
+    "opposite facts"
 );
 
 // ── 3. The pass count is derived, not typed ────────────────────────────────
@@ -406,7 +668,7 @@ check(
 
 console.log(
   failures === 0
-    ? "\nThe limit is sent, a full page is not a measurement, and the passes are derived.\n"
+    ? "\nA full page is split, the merge de-duplicates, and the passes are derived.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

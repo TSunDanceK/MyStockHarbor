@@ -401,49 +401,260 @@ let nameMapCache: { at: number; map: Map<string, string> } | null = null;
 const candidatesCache = new Map<string, { at: number; byDate: Map<string, EarningsCandidate[]> }>();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THE PAGE CAP THAT SILENTLY TRUNCATED A MEASUREMENT.
+// THE PAGE CAP, AND WHY THE FIX IS SLICING RATHER THAN A BIGGER LIMIT.
 //
-// This fetch sent NO `limit`, so it got FMP's default page. On 2026-09-03 the
-// earnings-concentration probe read 2026-01 as 1,655 rows and 2026-02 as
-// EXACTLY 4,000 -- and an exact round number out of an endpoint with no limit
-// parameter is a page cap, not a February. Every figure derived from it (93.4%
-// in the busiest 20 days, 710 symbols on the peak day) is therefore a FLOOR.
+// #410 added `limit=10000` to this fetch on the theory that the 4,000 rows
+// February returned was FMP's default page. /api/debug/earnings-calendar-limit
+// then answered, against 2026-02:
 //
-// This is the same trap probe Q1 caught on the screener: SCREENER_LIMIT sat at
-// 1000 because nobody had tried raising it, and the coverage floor the whole
-// plan reasoned from was wrong by an order of magnitude. Q1 proved `limit`
-// lifts on THAT endpoint. Nobody had asked the same question of this one --
-// /api/debug/earnings-calendar-limit exists to ask it.
+//     verdict: "limit-ignored: every limit returned the same rows"
+//     limit=0      4000 rows  821,701 bytes  dateRange 2026-02-11 -> 2026-02-28
+//     limit=4000   4000 rows  821,701 bytes  identical: true
+//     limit=10000  4000 rows  821,701 bytes  identical: true
+//     limit=20000  4000 rows  821,701 bytes  identical: true
 //
-// WHY 10,000. It is 2.5x the observed cap, which is the point: a value that
-// merely nudges past 4,000 answers nothing when the truth is 8,000. The bound
-// on the other side is the payload -- the calendar measured 697 KB at ~1,569
-// rows, about 455 bytes a row, so 10,000 rows is ~4.4 MB. That is real but not
-// unprecedented for this database: the pickers payload getWarmTargetSymbols
-// used to read is ~8 MB, so a few MB in a daily-TTL reference key is within
-// what this Redis already carries. It is still a once-a-day write and a
-// per-cold-instance read, which is why the number is not simply enormous.
+// THE PARAMETER IS IGNORED. So `limit` is no longer sent: a request parameter
+// that is provably ignored, with an assertion saying we send it, is a claim the
+// code makes and cannot keep. The constant it becomes is the OBSERVED CAP,
+// which is a fact about the endpoint rather than a wish about it.
 //
-// AND IT IS NOT A GUESS THAT CAN HIDE. isTruncatedMonth below fires when a
-// month comes back at exactly the limit, which is the signal that went unread
-// the first time.
-export const EARNINGS_CALENDAR_LIMIT = 10000;
+// AND THE CAP DROPS THE OLDEST DATES, NOT THE NEWEST. We asked for 2026-02-01
+// to 2026-02-28 and got 2026-02-11 to 2026-02-28. Ten days of peak Q4 season
+// were silently absent and nothing in the response said so.
+//
+// THIS IS A PRODUCTION BUG, NOT A MEASUREMENT ONE. fetchMonthRows feeds the
+// /earnings-calendar pages AND the earnings schedule index (#400,
+// earningsSchedule.ts) that decides when a symbol's income statement, cash flow
+// and dividends refresh. A symbol whose report date falls in a dropped window
+// is invisible to that trigger: it does not refresh on filing, it waits for
+// QUARTERLY_FLOOR_DAYS. That is the precise freeze the floor exists to bound,
+// arriving through a door nobody checked -- and it is DORMANT until January,
+// because every month between now and then is well under the cap. It would
+// have surfaced in February as "some companies just stopped refreshing", with
+// nothing pointing here.
+//
+// 4,000 exactly, observed 2026-09-03 and 2026-09-04. Not a guess and not ours.
+export const EARNINGS_CALENDAR_PAGE_CAP = 4000;
+
+// HOW MANY FETCHES ONE RANGE MAY COST, and why there is a bound at all. The
+// split is binary over a date range, so a month needs at most log2(31) ~ 5
+// levels and about 62 fetches even if EVERY slice is capped -- which would mean
+// the endpoint had started returning 4,000 rows for a single day, i.e. the API
+// changed under us. Bounding it turns that from a runaway into a recorded stop.
+const MAX_CALENDAR_FETCHES = 40;
 
 /**
- * Did this month come back at the cap?
+ * Did this ONE FETCH come back at the page cap?
  *
- * PURE, so the invariant check can RUN it: "a full page is not a measurement"
- * is a claim about a number against a limit, and the whole reason this module
- * needed changing is that nobody compared those two numbers by eye either.
+ * NOT "is this month truncated" any more, and the rename is the point: after
+ * slicing, a merged February is ~7,000 rows against a 4,000 cap, so the old
+ * month-level test would have called every correctly-fetched month truncated.
+ * A cap applies to a response, not to a range.
  *
- * `>=` rather than `===` deliberately. If FMP's own default is lower than ours
- * and it wins, the count lands on ITS cap and never equals ours; and a response
- * larger than we asked for is its own kind of wrong. Either way the answer to
- * "can I trust this month" is no.
+ * PURE, so the invariant check can RUN it. `>=` rather than `===` because a
+ * changed cap should still trip it -- the answer to "can I trust this page" is
+ * no either way.
  */
-export function isTruncatedMonth(rowCount: number, limit = EARNINGS_CALENDAR_LIMIT): boolean {
-  if (!Number.isFinite(rowCount) || !Number.isFinite(limit) || limit <= 0) return true;
-  return rowCount >= limit;
+export function isCappedPage(rowCount: number, pageCap = EARNINGS_CALENDAR_PAGE_CAP): boolean {
+  if (!Number.isFinite(rowCount) || !Number.isFinite(pageCap) || pageCap <= 0) return true;
+  return rowCount >= pageCap;
+}
+
+function addDays(iso: string, days: number): string {
+  const t = Date.parse(`${iso}T00:00:00Z`);
+  return new Date(t + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The day halfway between two dates, floored. Equal dates return themselves. */
+export function midpointDate(from: string, to: string): string {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return from;
+  return addDays(from, Math.floor((b - a) / 86_400_000 / 2));
+}
+
+/**
+ * Merge rows, keeping ONE per (symbol, date).
+ *
+ * TWO REASONS, and only the first is about slicing. Adjacent slices deliberately
+ * OVERLAP by a day (see fetchCalendarRange), so a boundary date arrives twice
+ * and would be counted twice by everything downstream -- including the
+ * concentration measurement this whole thread exists to fix. Same hazard
+ * historyCache.ts's collapseDuplicateDates was written for.
+ *
+ * The second is that the FEED ITSELF repeats: this module's own
+ * getCandidatesByDate already says "earnings-calendar routinely repeats a
+ * symbol -- several rows on the same date... which surfaced as duplicate table
+ * rows (e.g. JOE listed 2-4x on 29-31 Jul)". So duplicates are not new, they
+ * were being collapsed one layer up, and collapsing them here is strictly
+ * closer to the truth for every consumer: the calendar page collapses per
+ * symbol anyway, the schedule index reads only dates, and the concentration
+ * route de-duplicates internally.
+ *
+ * RICHEST WINS, ties to first seen -- the same rule getCandidatesByDate already
+ * applies ("keep the single best entry: most data"). Taking whichever arrived
+ * last would let a sparser duplicate erase a populated row.
+ */
+export function mergeCalendarRows(
+  into: Map<string, RawEarningsRow>,
+  rows: RawEarningsRow[]
+): void {
+  const filled = (row: RawEarningsRow) =>
+    [row.epsActual, row.epsEstimated, row.revenueActual, row.revenueEstimated].filter(
+      (v) => v !== null && v !== undefined && v !== ""
+    ).length;
+
+  for (const row of rows) {
+    const symbol = String(row?.symbol ?? "").trim().toUpperCase();
+    const date = String(row?.date ?? "").slice(0, 10);
+    if (!symbol || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const key = `${symbol}|${date}`;
+    const existing = into.get(key);
+    if (!existing || filled(row) > filled(existing)) into.set(key, row);
+  }
+}
+
+export type CalendarSlice = { from: string; to: string; rows: number; capped: boolean };
+
+export type CalendarRangeResult = {
+  rows: RawEarningsRow[];
+  /** Every fetch made, in order, so the split is visible rather than inferred. */
+  slices: CalendarSlice[];
+  fetches: number;
+  /** Bytes as transferred, summed across slices -- including capped ones. */
+  bytes: number;
+  /**
+   * Days that came back AT the cap and cannot be split further. Should be
+   * empty forever; if it is not, the cap or the API changed.
+   */
+  cappedDays: string[];
+  /** Set when the fetch budget or the FMP minute budget ended the walk. */
+  stoppedEarly: string | null;
+};
+
+/**
+ * Fetch a date range, splitting whenever a response comes back at the cap.
+ *
+ * WHY ADAPTIVE RATHER THAN A FIXED "TWO HALVES PER MONTH". A fixed split
+ * hard-codes today's cap and today's report density. FMP can change the cap and
+ * a heavier season can breach it again -- at which point a fixed split fails
+ * exactly the way the unsliced code did, silently. Detection drives the split,
+ * so the code self-corrects: a quiet month costs one fetch, and a February
+ * costs as many as its density needs.
+ *
+ * THE SLICES OVERLAP BY A DAY, DELIBERATELY, and that is instead of assuming an
+ * answer about `from`. `to` is demonstrably inclusive -- we asked for
+ * 2026-02-28 and got rows dated 2026-02-28 -- but nothing observed so far
+ * settles `from`, and this sandbox cannot ask FMP. An overlap is correct under
+ * BOTH readings: if `from` is inclusive the shared day arrives twice and is
+ * de-duplicated, and if it is exclusive the shared day still arrives once from
+ * the earlier slice. Assuming inclusivity and being wrong would drop one day
+ * per boundary -- the same silent hole, in smaller pieces.
+ *
+ * CAPPED ROWS ARE KEPT, NOT DISCARDED. A capped page is incomplete, not wrong;
+ * its rows are real and the halves' rows merge over them. Throwing them away
+ * would pay for the fetch and bin the data.
+ */
+export async function fetchCalendarRange(
+  from: string,
+  to: string,
+  options: { pageCap?: number; apiKey?: string } = {}
+): Promise<CalendarRangeResult> {
+  const pageCap = options.pageCap ?? EARNINGS_CALENDAR_PAGE_CAP;
+  const apiKey = options.apiKey ?? process.env.FMP_API_KEY ?? "";
+  const merged = new Map<string, RawEarningsRow>();
+  const result: CalendarRangeResult = {
+    rows: [],
+    slices: [],
+    fetches: 0,
+    bytes: 0,
+    cappedDays: [],
+    stoppedEarly: null,
+  };
+  if (!apiKey) {
+    result.stoppedEarly = "no-api-key";
+    return result;
+  }
+
+  const walk = async (sliceFrom: string, sliceTo: string): Promise<void> => {
+    if (result.stoppedEarly) return;
+    if (result.fetches >= MAX_CALENDAR_FETCHES) {
+      result.stoppedEarly = `fetch-budget:${MAX_CALENDAR_FETCHES}`;
+      return;
+    }
+
+    // COUNTED AGAINST THE MINUTE BUDGET. This fetch never was: fmpFetch records
+    // BYTES for the usage meter but does not reserve a call slot, so the
+    // calendar has been spending the plan's rate limit invisibly. One
+    // unreserved call a day was easy to overlook; several per month, several
+    // months per schedule rebuild, is not -- and the warm jobs compute their
+    // own backoff from that counter, so an invisible call makes their pacing
+    // wrong in the direction of overspending.
+    try {
+      await reserveFmpCallSlot();
+    } catch {
+      // Out of budget rather than out of data. Keep what merged so far and say
+      // why -- a partial month with a reason beats an empty one with none.
+      result.stoppedEarly = "fmp-capacity";
+      return;
+    }
+
+    // THE SAFETY DAY, for the `from` question above.
+    const requestFrom = addDays(sliceFrom, -1);
+    let rows: RawEarningsRow[] = [];
+    try {
+      const res = await fmpFetch(
+        `https://financialmodelingprep.com/stable/earnings-calendar?from=${requestFrom}&to=${sliceTo}&apikey=${apiKey}`,
+        { next: { revalidate: MONTH_CACHE_MS / 1000 } }
+      );
+      result.fetches++;
+      if (!res.ok) throw new Error(`earnings-calendar failed: ${res.status}`);
+      const text = await res.text();
+      result.bytes += text.length;
+      const json = JSON.parse(text);
+      rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
+    } catch {
+      // One bad slice must not lose the rest of the range.
+      result.slices.push({ from: sliceFrom, to: sliceTo, rows: 0, capped: false });
+      return;
+    }
+
+    mergeCalendarRows(merged, rows);
+    const capped = isCappedPage(rows.length, pageCap);
+    result.slices.push({ from: sliceFrom, to: sliceTo, rows: rows.length, capped });
+    if (!capped) return;
+
+    // THE FLOOR OF THE RECURSION. A single day cannot be split, so a day at the
+    // cap is a day we cannot read completely -- and it must SAY so rather than
+    // returning short as though it were whole. It should be unreachable: the
+    // busiest day measured is 710 symbols against a 4,000 cap, so a capped day
+    // means the cap moved or the endpoint changed.
+    if (sliceFrom === sliceTo) {
+      result.cappedDays.push(sliceFrom);
+      console.error(
+        `[earnings-calendar] ${sliceFrom} returned ${rows.length} rows at the ${pageCap} ` +
+          `page cap and CANNOT BE SPLIT FURTHER. That day is incomplete and every ` +
+          `count derived from it is a floor. The cap or the endpoint has changed -- ` +
+          `re-run /api/debug/earnings-calendar-limit.`
+      );
+      return;
+    }
+
+    const mid = midpointDate(sliceFrom, sliceTo);
+    await walk(sliceFrom, mid);
+    await walk(addDays(mid, 1), sliceTo);
+  };
+
+  await walk(from, to);
+
+  // TRIMMED BACK TO WHAT WAS ASKED FOR. The safety day pulls in a row from the
+  // day before the range; the caller asked for a month and the cache is keyed
+  // by month.
+  result.rows = [...merged.values()].filter((row) => {
+    const date = String(row?.date ?? "").slice(0, 10);
+    return date >= from && date <= to;
+  });
+  return result;
 }
 
 export type FetchMonthOptions = {
@@ -453,76 +664,75 @@ export type FetchMonthOptions = {
    * EXISTS FOR THE RE-MEASUREMENT, and it is not a convenience. The reference
    * key holds a DAILY TTL, so the truncated 4,000-row February written on
    * 2026-09-03 would be served for another 24 hours -- a re-run of the probe
-   * after raising the limit would read the same truncated month and report that
+   * after fixing the fetch would read the same truncated month and report that
    * the fix did nothing. A fix that looks like a failure for a day is how a
    * correct change gets reverted.
    *
    * Still WRITES what it fetches, so the site gets the better data too.
    */
   bypassCache?: boolean;
-  /** Override the page cap. Only the limit probe passes this. */
-  limit?: number;
+  /** Override the observed page cap. Only the probes pass this. */
+  pageCap?: number;
 };
+
+export type MonthFetchResult = CalendarRangeResult & { month: string; fromCache: boolean };
+
+/** The detailed form, for the probes. fetchMonthRows is this minus the detail. */
+export async function fetchMonthRowsDetailed(
+  year: number,
+  month: number,
+  options: FetchMonthOptions = {}
+): Promise<MonthFetchResult> {
+  const key = monthKey(year, month);
+  const empty = (rows: RawEarningsRow[], fromCache: boolean): MonthFetchResult => ({
+    month: key,
+    fromCache,
+    rows,
+    slices: [],
+    fetches: 0,
+    bytes: 0,
+    cappedDays: [],
+    stoppedEarly: null,
+  });
+
+  const cached = monthCache.get(key);
+  if (!options.bypassCache && cached && Date.now() - cached.at < MONTH_CACHE_MS) {
+    return empty(cached.rows, true);
+  }
+
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return empty(cached?.rows ?? [], Boolean(cached));
+
+  // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
+  // before this every cold lambda refetched the whole month.
+  if (!options.bypassCache) {
+    const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
+    if (Array.isArray(shared)) {
+      monthCache.set(key, { at: Date.now(), rows: shared });
+      return empty(shared, true);
+    }
+  }
+
+  const from = `${key}-01`;
+  const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
+  const result = await fetchCalendarRange(from, to, { pageCap: options.pageCap, apiKey });
+
+  if (result.rows.length) {
+    monthCache.set(key, { at: Date.now(), rows: result.rows });
+    // EMPTY IS NOT CACHED. A failed or restricted response parses to [] here,
+    // and storing that for a day would blank every calendar consumer until it
+    // expired -- an absence held as though it were an answer.
+    await writeReference(`earnings-calendar:${key}`, result.rows, REFERENCE_TTL_DAILY_SECONDS);
+  }
+  return { ...result, month: key, fromCache: false };
+}
 
 export async function fetchMonthRows(
   year: number,
   month: number,
   options: FetchMonthOptions = {}
 ): Promise<RawEarningsRow[]> {
-  const key = monthKey(year, month);
-  const limit = options.limit ?? EARNINGS_CALENDAR_LIMIT;
-  const cached = monthCache.get(key);
-  if (!options.bypassCache && cached && Date.now() - cached.at < MONTH_CACHE_MS) {
-    return cached.rows;
-  }
-
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return cached?.rows ?? [];
-
-  // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
-  // before this every cold lambda refetched the whole 697 KB month -- 108
-  // fetches per 30 days, ~73 MB. One fetch now serves every instance for a day.
-  if (!options.bypassCache) {
-    const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
-    if (Array.isArray(shared)) {
-      monthCache.set(key, { at: Date.now(), rows: shared });
-      return shared;
-    }
-  }
-
-  const from = `${key}-01`;
-  const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
-
-  try {
-    const res = await fmpFetch(
-      `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&limit=${limit}&apikey=${apiKey}`,
-      { next: { revalidate: MONTH_CACHE_MS / 1000 } }
-    );
-    if (!res.ok) throw new Error(`earnings-calendar failed: ${res.status}`);
-    const json = await res.json();
-    const rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
-    // THE SIGNAL THAT WENT UNREAD. 4,000 exactly was sitting in a probe result
-    // and read as a February. It is a log line now, so the next full page is
-    // noticed by somebody rather than reasoned from.
-    if (isTruncatedMonth(rows.length, limit)) {
-      console.warn(
-        `[earnings-calendar] ${key} returned ${rows.length} rows against a limit of ` +
-          `${limit} -- a FULL PAGE, so this month is probably truncated and anything ` +
-          `derived from it is a floor. Raise EARNINGS_CALENDAR_LIMIT or slice the ` +
-          `date range; see /api/debug/earnings-calendar-limit.`
-      );
-    }
-    monthCache.set(key, { at: Date.now(), rows });
-    // EMPTY IS NOT CACHED. A failed or restricted response parses to [] here,
-    // and storing that for a day would blank every calendar consumer until it
-    // expired -- an absence held as though it were an answer.
-    if (rows.length) {
-      await writeReference(`earnings-calendar:${key}`, rows, REFERENCE_TTL_DAILY_SECONDS);
-    }
-    return rows;
-  } catch {
-    return cached?.rows ?? [];
-  }
+  return (await fetchMonthRowsDetailed(year, month, options)).rows;
 }
 
 async function getNameMap(): Promise<Map<string, string>> {

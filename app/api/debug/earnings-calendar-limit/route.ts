@@ -8,7 +8,7 @@ import {
   recordBackfillFailure,
 } from "@/lib/server/backfillAuth";
 import { fmpFetch } from "@/lib/server/fmpUsage";
-import { EARNINGS_CALENDAR_LIMIT } from "@/lib/server/earningsCalendar";
+import { EARNINGS_CALENDAR_PAGE_CAP } from "@/lib/server/earningsCalendar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -250,7 +250,7 @@ export async function GET(request: Request) {
     month,
     from,
     to,
-    configuredLimit: EARNINGS_CALENDAR_LIMIT,
+    observedPageCap: EARNINGS_CALENDAR_PAGE_CAP,
     verdict,
     probes,
     howToRead:
