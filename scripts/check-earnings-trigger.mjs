@@ -221,9 +221,17 @@ check(
   "a flat 8 stops being true the moment a symbol can cost 5, and reserving " +
     "eight for a five-call symbol idles the run against a budget it will not spend"
 );
+// THE SHAPE MOVED AND THE RULE DID NOT. The capacity test used to be inline
+// (`hasFmpCapacity(callsForSymbol(...))`) and is now inside
+// waitForStockDataBudget, because breaking on the first exhausted minute was
+// the #396/#406 defect a third time. Both halves are asserted rather than the
+// old literal: the derived count is what the wait is ASKED for, and the wait is
+// what passes it to hasFmpCapacity -- so a helper that quietly asked for a
+// different number would fail here.
 check(
   "the capacity check reserves the derived count",
-  /hasFmpCapacity\(callsForSymbol\(includeQuarterly\)/.test(cacheSrc),
+  /waitForStockDataBudget\(callsForSymbol\(includeQuarterly\), runDeadlineMs\)/.test(cacheSrc) &&
+    /hasFmpCapacity\(calls, FMP_MIN_HEADROOM_CALLS\)/.test(cacheSrc),
   "the one place the count is spent must be the one place it is computed"
 );
 
