@@ -22,7 +22,11 @@
 // grep that counted those would pass on the explanation alone.
 //
 //   node scripts/check-capacity-waits.mjs
+import fs from "node:fs";
+import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
+
+const ROOT = process.cwd();
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -149,6 +153,207 @@ check(
   "a forced run is excluded from the wait",
   loserSites === 2 && !/!lockToken && !cached\?\.data/.test(pickers),
   "a forced run must actually refresh, and the winner it would adopt may not be refreshing history at all"
+);
+
+// ── The abandon-on-capacity shape, across every warm job ────────────────────
+//
+// FOUR INSTANCES OF ONE DEFECT, FIXED ONE AT A TIME: #396 (price pool), #406
+// (earnings), #416 (stock data) and now the forced history refetch. Each time
+// the shape was "this minute is spent, so give up the rest of the run's work"
+// -- and each time it was found by reading the next job rather than by anything
+// failing. Three fixes did not prevent the fourth.
+//
+// THE JOB LIST IS SCANNED, NEVER HAND-TYPED. A hand-typed list is how the
+// fourth survived three fixes; it is also how a hand-listed six debug routes
+// became nine when the directory was actually scanned. The scan walks
+// app/api/jobs/ for routes and follows the lib/server modules they import, so a
+// job added next month is covered by existing.
+console.log("\n=== Abandon-on-capacity: no job gives up the run for one minute ===\n");
+
+const jobsDir = path.join(ROOT, "app/api/jobs");
+const jobNames = fs
+  .readdirSync(jobsDir, { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+  .sort();
+
+check(
+  "the job directory was scanned",
+  jobNames.length >= 5,
+  `${jobNames.join(", ")} — a scan finding nothing passes trivially, which is the ` +
+    `failure mode of a derived list`
+);
+
+// Every file a job can reach that could contain the shape: the route itself
+// plus the lib/server modules it imports directly.
+const reachable = new Set();
+for (const job of jobNames) {
+  const rel = `app/api/jobs/${job}/route.ts`;
+  if (!fs.existsSync(path.join(ROOT, rel))) continue;
+  reachable.add(rel);
+  const src = readCodeOnly(rel, { minRetainedFraction: 0.005 });
+  for (const m of src.matchAll(/from "(?:[./]*)(?:lib\/)?server\/([a-zA-Z]+)"/g)) {
+    const dep = `lib/server/${m[1]}.ts`;
+    if (fs.existsSync(path.join(ROOT, dep))) reachable.add(dep);
+  }
+  for (const m of src.matchAll(/from "@\/lib\/server\/([a-zA-Z]+)"/g)) {
+    const dep = `lib/server/${m[1]}.ts`;
+    if (fs.existsSync(path.join(ROOT, dep))) reachable.add(dep);
+  }
+}
+check(
+  "the scan reached the modules the jobs actually use",
+  reachable.size >= 8,
+  `${reachable.size} files — routes plus the lib/server modules they import`
+);
+
+// THE SHAPE IS THE NEGATION, NOT THE `break` NEXT TO IT.
+//
+// The first draft matched `if (!(await hasFmpCapacity(...))) break|return` --
+// the give-up keyword adjacent to the test. Calibration killed it: rewriting the
+// site to set a flag and THEN return, three lines down, walked straight past the
+// regex. An abandon spelled over four lines is still an abandon.
+//
+// So the rule is the NEGATED test itself. Every legitimate use in this codebase
+// is POSITIVE and sits inside a waitFor…Budget loop -- `if (await
+// hasFmpCapacity(n, headroom)) return "ok";` -- because the question there is
+// "may I proceed", asked repeatedly. Asking "am I out of room" and branching on
+// yes is the abandon, whatever the branch then does.
+const ABANDON = /if\s*\(\s*(?:[A-Za-z_$][\w$]*\s*&&\s*)?!\s*\(?\s*await\s+hasFmpCapacity\(/g;
+
+// ONE EXEMPTION, AND IT IS NAMED RATHER THAN REGEXED AWAY.
+//
+// This scan found a FIFTH site the brief did not know about -- which is the
+// argument for scanning, and also the moment to be careful: the tempting move
+// is to narrow the pattern until the inconvenient hit disappears, and that
+// turns a rule into a rule-shaped thing.
+//
+// fetchMoverBuckets is a genuine exception on the merits. It makes THREE calls
+// TOTAL regardless of universe size, they are a best-effort enrichment of the
+// tier-1 signal, and warmPricePool runs every five minutes. "Remaining work"
+// here is at most two optional calls that the next run retries in five minutes.
+// Waiting a run budget for them would push warmPricePool past its own cron tick
+// to enrich a signal whose base (presets + dollar volume) does not depend on it.
+//
+// The defect is "give up the run's REMAINING WORK for one minute". Three calls
+// that retry in five minutes is not that.
+const EXEMPT = new Map([
+  [
+    "lib/server/pricePool.ts:fetchMoverBuckets",
+    "3 calls total, best-effort tier-1 enrichment, retried by the next 5-minute run",
+  ],
+]);
+
+const abandons = [];
+const exemptedFound = new Set();
+for (const rel of [...reachable].sort()) {
+  const src = readCodeOnly(rel, { minRetainedFraction: 0.005 });
+  for (const m of src.matchAll(ABANDON)) {
+    const line = src.slice(0, m.index).split("\n").length;
+    // Attributed to the ENCLOSING FUNCTION, not the line number: an exemption
+    // keyed by line silently moves to whatever code arrives at that line next.
+    const before = src.slice(0, m.index);
+    const fnMatch = [...before.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g)].pop();
+    const key = `${rel}:${fnMatch ? fnMatch[1] : `line-${line}`}`;
+    if (EXEMPT.has(key)) {
+      exemptedFound.add(key);
+      continue;
+    }
+    abandons.push(`${key} (line ${line})`);
+  }
+}
+check(
+  "no warm job abandons its remaining work when the minute is spent",
+  abandons.length === 0,
+  abandons.length
+    ? `${abandons.join(", ")} — the minute's exhaustion is a PAUSE. Port the ` +
+      `waitFor…Budget(deadlineMs) shape from #416 rather than adding a fifth answer.`
+    : `${reachable.size} reachable files clean — #396, #406, #416 and the forced ` +
+      `history refetch all fixed the same line, and three fixes did not prevent ` +
+      `the fourth`
+);
+
+// AN EXEMPTION THAT NO LONGER MATCHES ANYTHING IS AN EXEMPTION OUTLIVING ITS
+// REASON -- and the next site to land in that function inherits a pass nobody
+// granted it.
+const staleExemptions = [...EXEMPT.keys()].filter((k) => !exemptedFound.has(k));
+check(
+  "every exemption still describes a site that exists",
+  staleExemptions.length === 0,
+  staleExemptions.length
+    ? `stale: ${staleExemptions.join(", ")} — the code changed and the exemption did not`
+    : [...EXEMPT].map(([k, why]) => `${k}: ${why}`).join(" · ")
+);
+
+// The detector has to be able to fire, or this section is decoration.
+// FOUR FIXTURES, because the first draft passed against one and missed the real
+// rewrite. Two must fire and two must not.
+const FIRES = [
+  // the literal line #396/#406/#416 removed
+  "if (!(await hasFmpCapacity(calls, HEADROOM))) break;",
+  // the same abandon spelled over several lines, which the adjacent-keyword
+  // regex walked straight past
+  "if (force && !(await hasFmpCapacity(1, HEADROOM))) {\n  ranOut = true;\n  return;\n}",
+];
+const SPARED = [
+  // the wait, which is what the fix looks like
+  'if ((await waitForHistoryBudget(d)) === "out-of-time") break;',
+  // the POSITIVE test inside a waitFor loop -- the legitimate use
+  'if (await hasFmpCapacity(calls, HEADROOM)) return "ok";',
+];
+check(
+  "the detector fires on both spellings of the abandon and spares the fix",
+  FIRES.every((f) => [...f.matchAll(ABANDON)].length === 1) &&
+    SPARED.every((f) => [...f.matchAll(ABANDON)].length === 0),
+  "run against fixtures rather than assumed — the first draft of this rule " +
+    "passed on the one-line form and missed the multi-line one, which is the " +
+    "form the calibration actually produced"
+);
+
+// ── The wait cannot outlive the function that is doing it ───────────────────
+//
+// THE ONE FAILURE MODE THIS CHANGE COULD INTRODUCE. Waiting instead of
+// abandoning makes runs longer, and a run that waits past its own maxDuration
+// is killed by the platform: no run record, no counters, no reason. That is
+// strictly worse than abandoning, which at least reports what it gave up on.
+console.log("\n=== The run budget fits inside the function timeout ===\n");
+
+const budgetMs = Number(
+  Function(
+    `"use strict"; return (${
+      (history.match(/HISTORY_RUN_BUDGET_MS = ([0-9_ *]+);/) ?? [])[1] ?? "0"
+    });`
+  )()
+);
+const warmRoute = readCodeOnly("app/api/jobs/warm-picker-universe/route.ts");
+const maxDurationSec = Number((warmRoute.match(/maxDuration = (\d+)/) ?? [])[1]);
+check(
+  "both numbers were read from source, not typed here",
+  budgetMs > 0 && maxDurationSec > 0,
+  `budget ${budgetMs / 1000}s, maxDuration ${maxDurationSec}s — typed here, this ` +
+    `assertion would compare two numbers this file invented`
+);
+check(
+  "the history budget leaves a tail inside maxDuration",
+  budgetMs / 1000 <= maxDurationSec - 60,
+  `${budgetMs / 1000}s budget against a ${maxDurationSec}s timeout — the 60s tail ` +
+    `covers the indicator pass, the payload write, the chart-hash write and 36 ` +
+    `revalidatePath calls. A wait that outlives the function records NOTHING, ` +
+    `which is worse than the abandon it replaces`
+);
+check(
+  "the budget is long enough to be worth having",
+  budgetMs > 60_000,
+  `${budgetMs / 1000}s against a flat 20s per-call ceiling — a budget shorter ` +
+    `than a few per-call waits would not change the outcome it exists to change`
+);
+check(
+  "the run record says WHICH clock ended the pass",
+  /historyRanOutOfTime: barAge\.ranOutOfTime,/.test(warmRoute) &&
+    /historyDeferredOutOfTime: barAge\.deferredOutOfTime,/.test(warmRoute),
+  "a symbol abandoned by a 20-second per-call wait and one deferred because the " +
+    "run spent its budget are different facts wanting opposite responses; folded " +
+    "into forcedRefetchFailures they read identically"
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);
