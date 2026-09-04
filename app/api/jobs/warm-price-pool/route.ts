@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
-import { warmPricePool } from "../../../../lib/server/pricePool";
+import { warmPricePool, keepPricePoolAlive } from "../../../../lib/server/pricePool";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 
 export const runtime = "nodejs";
@@ -127,10 +127,27 @@ export async function GET(req: NextRequest) {
     // claude/traps/two-validators-for-one-value.md, and /api/history already
     // paid for that once.
     if (!isActiveMarketWindow()) {
+      // THE TTL RESET COMES WITH THE GATE, OR THE GATE IS #395 AGAIN.
+      //
+      // warmPricePool's own market gate resets PRICE_POOL_HASH_TTL_SECONDS
+      // before returning -- that reset IS #398, and it exists because HSET does
+      // not extend an existing TTL, so a pool nothing writes to across a
+      // 15-hour weeknight gap simply expires. Returning here means
+      // warmPricePool is never called, which puts that reset on an unreachable
+      // path and empties the pool overnight exactly as #395 did.
+      //
+      // Caught in review of #419, before it shipped. The saving is real and the
+      // gate stays; the reset is hoisted to the same decision instead, through
+      // the single exported keep-alive so there is no second expire to drift.
+      const poolKeptAlive = await keepPricePoolAlive();
       await recordJobRun("warm-price-pool", true, {
         skipped: true,
         reason: "market-closed",
         written: 0,
+        // RECORDED, because a keep-alive nobody can see is how the last one hid
+        // for a fortnight. `false` here on a market-closed run means the pool is
+        // now counting down to an expiry with nothing to stop it.
+        poolKeptAlive,
         // NAMED SO THE SKIP IS DISTINGUISHABLE FROM THE OLD ONE. The previous
         // market-closed record was written after a full target derivation; this
         // one is written instead of it. Without the flag the two are the same

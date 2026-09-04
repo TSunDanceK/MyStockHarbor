@@ -842,6 +842,42 @@ async function fetchMoverBuckets(apiKey: string): Promise<Map<string, MoverRow>>
  * Everything not refreshed keeps its prior value. Budget-guarded and fail-open
  * throughout.
  */
+/**
+ * Extend the pool hash's TTL without touching its contents.
+ *
+ * THE WHOLE OF #398, EXTRACTED SO IT CANNOT BE ORPHANED AGAIN.
+ *
+ * PRICE_POOL_HASH_TTL_SECONDS is 12 hours and it exists to notice that THE CRON
+ * HAS STOPPED, not that the market is shut. HSET neither clears nor extends an
+ * existing TTL, so anything that returns from a warm run without resetting it
+ * lets the hash expire across the closed hours: the active window ends 17:00 ET
+ * and reopens 08:00 ET, a 15-hour weeknight gap and 63 across a weekend.
+ *
+ * #395 introduced exactly that by returning from warmPricePool's market gate
+ * before the reset. The pool emptied at ~05:00 ET every weekday, every picker
+ * page fell back to end-of-day closes, and it took a fortnight to notice.
+ *
+ * #398 fixed it INSIDE this module -- and that fix was silently undone the
+ * moment a caller learned to skip warmPricePool entirely, because the reset
+ * lived on a path only warmPricePool could reach. So it is a named export now:
+ * a gate anywhere in the system can keep the pool alive without importing the
+ * reasoning, and there is exactly ONE expire call to keep correct rather than a
+ * second copy in a route (claude/traps/two-validators-for-one-value.md).
+ *
+ * Returns whether the reset actually landed, so a caller can RECORD it. A
+ * keep-alive nobody can see is how this regression hid for two weeks.
+ */
+export async function keepPricePoolAlive(): Promise<boolean> {
+  if (!redis) return false;
+  try {
+    await redis.expire(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS);
+    return true;
+  } catch {
+    // fail open -- the pool keeps whatever TTL it has.
+    return false;
+  }
+}
+
 export async function warmPricePool(symbols: string[], nowMs: number) {
   const apiKey = process.env.FMP_API_KEY;
   const clean = uniqueClean(symbols);
@@ -883,11 +919,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // A skipped run is still the cron running. Keeping the reset here restores
     // "12 hours with no run at all" as the meaning of the TTL, at one Redis
     // command per skip.
-    try {
-      await redis.expire(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS);
-    } catch {
-      // fail open -- the pool keeps whatever TTL it has.
-    }
+    await keepPricePoolAlive();
     return { ok: true, skipped: true, reason: "market-closed", written: 0 };
   }
 
@@ -1219,7 +1251,10 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       written = Object.keys(payload).length;
     }
     // Always reset the safety TTL so an all-skipped run can't let the hash lapse.
-    await redis.expire(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS);
+    // THROUGH THE SAME KEEP-ALIVE the market gate uses, so there is one expire
+    // in this module rather than two that can drift on how long the pool may
+    // live -- and so scripts/check-pool-keepalive.mjs can assert that.
+    await keepPricePoolAlive();
 
     // THE SESSION HEALTH RECORD, written only on a run that did work. The
     // market-closed path returns long before here, which is the point: the
