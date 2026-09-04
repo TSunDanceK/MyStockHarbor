@@ -62,15 +62,45 @@ const redis =
 const TIER1_KEY = "msh:price-tier1:v1";
 // Outlives the warm-targets cache that writes it, so a failed rebuild degrades
 // to a slightly stale tier list rather than to no tier list -- which would
-// silently demote the whole universe to 30 minutes.
+// silently demote the whole universe to the hourly tail.
 const TIER1_TTL_SECONDS = 2 * 60 * 60;
 
 /** Top stocks by attention, plus up to 100 searched symbols. */
 export const TIER1_TTL_MS = 15 * 60_000;
 /** Everything else in the universe. */
-export const TIER2_TTL_MS = 30 * 60_000;
+export const TIER2_TTL_MS = 60 * 60_000;
 
-// 30 IS DELIBERATE, AND SO IS THE FACT THAT IT IS NOT 60 YET.
+// 60, AND THE REASON IS THE RENDERING SURFACE RATHER THAN THE BUDGET.
+//
+// The paragraph below is the 2026-09-02 reasoning for 30 and it is left intact:
+// its arithmetic was right and its measurement was real. What changed is not the
+// cost side -- FMP is at 11.4% of cap and the backlog still drains in four runs
+// -- but WHERE THE NUMBER IS SEEN.
+//
+//   * Picker routes move to a 3600s ISR window. A page rebuilt hourly CANNOT
+//     DISPLAY anything fresher than an hour whatever this constant says, so
+//     refreshing the tail every 30 minutes buys freshness the rendering surface
+//     throws away. That argument did not exist on 1 September.
+//
+//   * The 1 September objection -- "picker lists render a % change on every row;
+//     during a volatile session an hour-old change is visibly wrong to anyone
+//     checking against another source" -- was never about cost, so none of the
+//     cost findings since answer it. It is answered by product position instead:
+//     this site has no intraday candles, is aimed at screening and longer
+//     horizons, and sends readers who need a live tick to TradingView (which is
+//     an affiliate line, not a concession). ScanFooter prints real ages, so the
+//     spread is stated rather than hidden.
+//
+//   * IT DOES NOT REACH THE PAGES THAT LOOK LIKE QUOTE PAGES. The stock detail
+//     page and the dashboard both fetch /api/quote client-side on every load,
+//     and that route has its OWN 60-second Redis cache and never consults the
+//     price pool. Their displayed price is <=60s old at any tier. Verified by
+//     reading every readPricePoolBulk caller: the pool feeds picker rows, sector
+//     panels, the earnings calendar, fundamentals and the eviction sweep -- not
+//     the two pages a reader would spot-check against a broker.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// THE 2026-09-02 REASONING FOR 30, KEPT BECAUSE IT IS STILL THE COST MODEL.
 //
 // 60 was written here first, sized for a 3,000-symbol universe where a flat
 // 15/30 policy needs ~7,000 calls/hour against a usable ceiling of ~6,720 --
@@ -92,12 +122,11 @@ export const TIER2_TTL_MS = 30 * 60_000;
 // now would halve the freshness of ~332 symbols to buy headroom nothing is
 // asking for -- paying the cost before the benefit arrives.
 //
-// WHAT MOVES IT. TIER2_TTL_MS goes to 60 as part of the growth step (task 7c),
-// in the same change that raises ANALYSIS_UNIVERSE_CAP, so the constraint and
-// the relief land together. scripts/check-price-tiers.mjs enforces that
-// pairing: it computes this policy's call rate against the universe the caps
-// actually allow, so raising the caps without moving this constant fails rather
-// than shipping.
+// WHAT MOVED IT, IN THE END. Not the growth step it was sized for -- the ISR
+// window. The pairing check in scripts/check-price-tiers.mjs still stands and
+// still computes this policy's rate against ANALYSIS_UNIVERSE_CAP; moving to 60
+// early simply means the growth step no longer has to move it, and the check
+// now passes at 3,000 rather than failing there.
 //
 // AN ADAPTIVE BACKOFF WAS CONSIDERED AND REJECTED, at either TTL. "Do not
 // refresh what is not moving" bought ~22% of a budget that already has a third
@@ -189,6 +218,58 @@ export const FOLD_MAX_ROWS_PER_ROUTE = 60;
 
 /** Top names by price x volume. Fixed, not a fraction of the universe. */
 export const TIER1_DOLLAR_VOLUME_CAP = 300;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW BIG TIER 1 IS, AS A RULE RATHER THAN AS A NUMBER.
+//
+// The target is ~200 and it is the owner's decision. What is written here is
+// the RULE that produces it, because a constant typed once against today's
+// universe goes silently wrong the moment ANALYSIS_UNIVERSE_CAP moves -- the
+// same failure as a hand-typed EARNINGS_BATCH_SIZE, and this file has already
+// paid for one arbitrary number (the 400 above).
+//
+// THE RULE: every curated mega-cap, plus the hundred most-traded names.
+//
+//   PRESET_UNIVERSE.length  ~100  hand-curated, non-negotiable -- these are the
+//                                 tickers a first-time visitor is most likely
+//                                 to recognise and spot-check
+//   TIER1_TRADED_HEAD        100  the head of the dollar-volume ranking, which
+//                                 is "whose stale price would be NOTICED"
+//                                 ------
+//                                 ~200
+//
+// It is derived from the caller's OWN preset list rather than by importing
+// PRESET_UNIVERSE here, so selectTier1 stays pure over its arguments and the
+// invariant check can run it against a fabricated list as well as the shipped
+// one. Grow the curated list and the fast tier grows with it, which is correct:
+// those names were added because somebody thought they mattered.
+//
+// SCALING. Deliberately NOT a share of the universe. At 3,000 symbols a 28%
+// share would be 840 names in the 15-minute tier -- 3,360 calls/hour for the
+// fast tier alone -- and nothing about a bigger universe makes more names
+// worth watching closely. The head of the traded list is the same head.
+//
+// WHAT HAPPENS WHEN IT BINDS. selectTier1 assembles base-first (presets, then
+// dollar volume, then movers) and only then the traffic-fed layer, so the cap
+// takes from the layer first. A quiet week cannot shrink the fast tier; a busy
+// one cannot swell it past this.
+export const TIER1_TRADED_HEAD = 100;
+
+/**
+ * The size of tier 1, from the curated list that anchors it.
+ *
+ * PURE and exported so the invariant check can RUN it rather than re-derive the
+ * arithmetic and prove only that two copies agree.
+ *
+ * A FLOOR, because the degradation is asymmetric. If a caller ever passes an
+ * empty preset list the cap must still admit the traded head -- a tier 1 of
+ * zero puts the entire universe on the hourly policy, which is the collapse
+ * readTier1's own fail-open exists to prevent.
+ */
+export function tier1CapFor(presetCount: number): number {
+  const presets = Number.isFinite(presetCount) && presetCount > 0 ? Math.floor(presetCount) : 0;
+  return presets + TIER1_TRADED_HEAD;
+}
 
 export type Tier1Signals = {
   // ---- base: must produce a usable tier 1 with every field below it empty ----
@@ -286,7 +367,7 @@ export function selectTier1(signals: Tier1Signals): string[] {
     return out;
   };
 
-  return Array.from(
+  const selected = Array.from(
     new Set([
       // BASE FIRST, so that when a cap does bind it is the traffic-fed layer
       // that gives way -- the opposite would let a quiet week shrink the fast
@@ -304,13 +385,26 @@ export function selectTier1(signals: Tier1Signals): string[] {
       ...take(signals.pickerSymbols, Number.MAX_SAFE_INTEGER),
     ])
   );
+
+  // THE OVERALL CAP, APPLIED LAST AND TO THE UNION.
+  //
+  // Before this, tier 1's size was whatever the five per-signal caps happened to
+  // sum to after de-duplication -- observed at 384, 403 and 475 on three
+  // consecutive production runs. A quantity that moves by 90 names between runs
+  // is not a policy, and nothing was stating what it should be.
+  //
+  // Slicing the assembled union rather than lowering the per-signal caps keeps
+  // each signal's own bound meaningful (one haywire signal still cannot swallow
+  // the universe) and makes the ordering above load-bearing: the base survives,
+  // the traffic-fed layer is what gets trimmed.
+  return selected.slice(0, tier1CapFor(signals.presetSymbols?.length ?? 0));
 }
 
 /**
  * The freshness policy for one symbol, in ms.
  *
  * Tier 2 is the default on purpose: an unreadable tier list, an empty one, or a
- * symbol nobody has looked at all degrade to 30 minutes, never to "never
+ * symbol nobody has looked at all degrade to the hourly tail, never to "never
  * refresh".
  */
 export function priceTtlMsFor(symbol: string, tier1: ReadonlySet<string>): number {

@@ -44,7 +44,7 @@ import { JOBS, cronIntervalSeconds } from "./jobRuns";
 // PRICE and PE have very different volatilities, so they refresh on independent
 // rotations, each tracked by its own timestamp on the row:
 //   * price (`ts`)   -> refreshed for whichever symbols are PAST THEIR OWN
-//     TIER'S TTL: 15 minutes for the attention tier, 30 for everything else
+//     TIER'S TTL: 15 minutes for the attention tier, 60 for everything else
 //     (lib/server/priceTiers.ts). Only during the buffered US session
 //     (lib/server/marketHours.ts) -- outside it the last traded price is the
 //     price, so a refresh returns what is already stored. The per-run cap is
@@ -896,7 +896,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
 
   // Tier 1 is derived in warmTargets.ts and parked in its own key. An
   // unreadable or empty set is not fatal: priceTtlMsFor defaults to tier 2, so
-  // the worst case is the whole universe on the 30-minute policy -- degraded,
+  // the worst case is the whole universe on the hourly policy -- degraded,
   // never stalled.
   const tier1 = await readTier1();
 
@@ -940,7 +940,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // THE CAP IS DERIVED FROM THE ACTUAL MIX, NOT FROM ONE TIER.
   //
   // It was ceil(universe / runsPerTier2Window()), i.e. sized as though every
-  // symbol were on the 30-minute policy. They are not: the first live tier-1
+  // symbol were on the hourly policy. They are not: the first live tier-1
   // build came out at 415 of 759 symbols, so that formula produced
   // ceil(759/6) = 127 -- BELOW the 139/run the fast tier alone requires, and a
   // reduction from the 190 it replaced at the very moment the freshness
