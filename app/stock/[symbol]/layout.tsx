@@ -72,7 +72,42 @@ export default function StockSymbolLayout({ children }: { children: ReactNode })
 // bailing, and the route table reports static whether or not it is. And a route
 // showing as cached does not mean the HTML has DATA in it. Both rules were
 // learned the hard way; see claude/picker-pages-isr-2026-08-20.md.
-export const revalidate = 900;
+// ─────────────────────────────────────────────────────────────────────────────
+// 3600, NOT 900, AND THE REASON IS THAT THIS ROUTE IS THE BILL.
+//
+// ISR Writes are 7.7M and $30.80 of a $67.48 Vercel bill -- 46%, the largest
+// single line by a wide margin -- and this is the only ISR surface with a path
+// space bigger than a few dozen. The bound is exact on the other side: every
+// other revalidating page in app/ sits at 1800s or slower over ~84 paths, which
+// is a hard ceiling of ~4,000 regenerations a day however much traffic arrives.
+// /stock/[symbol] at 900s is 96 a day PER PATH, across three tabs per symbol.
+// Nothing else can be the line.
+//
+// WHAT A REGENERATION HERE ACTUALLY REBUILDS, which is why stretching it is
+// cheap: the server render holds the SHELL -- company name, sector, profile,
+// income statement -- and every one of those is on a 24-hour FMP cache. Nothing
+// in it changes between 15 minutes and an hour.
+//
+// WHAT IS NOT ON THIS CLOCK, and this is the part that makes 3600 safe rather
+// than a freshness cut. The three things a reader would notice are fetched
+// CLIENT-SIDE with their own caches, on every load, regardless of this value:
+//
+//   price          /api/quote           60s Redis cache, tryReserveFmpCallSlot
+//   valuation      /api/stock-valuation its own cache
+//   analyst rating /api/stock-analyst-rating  its own cache
+//
+// The chart is server-seeded (initialHistory) and the client fetch is skipped
+// when it is, so the CHART is on this clock -- daily candles, where an hour is
+// immaterial and the last bar is a running close either way. That is the one
+// real change and it is the one this route can afford.
+//
+// AND THE SEED IS WHY THIS ALSO CUTS REDIS. Each regeneration calls
+// getDailyHistory(), a ~110 KB read (lib/server/redisBandwidth.ts). Stretching
+// 900 -> 3600 cuts those fourfold. The size of that saving is NOT asserted here:
+// #419's caller-tagged meter is what will measure it, and the honest sequence is
+// to let it, rather than to claim a number the way the first version of this
+// change did.
+export const revalidate = 3600;
 
 // Returns no params ON PURPOSE. Without a generateStaticParams export at all,
 // a dynamic segment cannot be ISR at all -- measured, not assumed: with the
