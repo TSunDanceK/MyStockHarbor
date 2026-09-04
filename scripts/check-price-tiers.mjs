@@ -321,6 +321,77 @@ check(
     `tier's membership changes for no visible reason`
 );
 
+// ── 2d. Tier 1 has a STATED size, derived from the curated list ─────────────
+const presetSrc = readCodeOnly("lib/server/presetUniverse.ts");
+const presetCount = [
+  ...((presetSrc.match(/PRESET_UNIVERSE: string\[\] = \[([\s\S]*?)\];/) ?? [])[1] ?? "").matchAll(
+    /"([^"]+)"/g
+  ),
+].length;
+if (!presetCount) {
+  console.error("FAIL: could not count PRESET_UNIVERSE — the tier-1 size would be invented.");
+  process.exit(1);
+}
+const TARGET_FAST = tiers.tier1CapFor(presetCount);
+
+console.log("\n2d. The fast tier's size is a rule, not whatever the caps summed to");
+
+// BEFORE THIS, TIER 1 HAD NO STATED SIZE. It was the de-duplicated union of five
+// per-signal caps, and production logged it at 384, 403 and 475 on three
+// consecutive runs. A quantity that moves by ninety names between runs is not a
+// policy. The rule now is: every curated mega-cap, plus the hundred most-traded
+// names.
+check(
+  "the cap is derived from the caller's preset count, not typed",
+  tiers.tier1CapFor(100) === 100 + tiers.TIER1_TRADED_HEAD &&
+    tiers.tier1CapFor(140) === 140 + tiers.TIER1_TRADED_HEAD &&
+    tiers.tier1CapFor(100) !== tiers.tier1CapFor(140),
+  `${tiers.tier1CapFor(presetCount)} at today's ${presetCount} curated names — grow ` +
+    `the curated list and the fast tier grows with it, which is correct: those ` +
+    `names were added because somebody thought they mattered`
+);
+check(
+  "an empty preset list still admits the traded head",
+  tiers.tier1CapFor(0) === tiers.TIER1_TRADED_HEAD &&
+    tiers.tier1CapFor(-5) === tiers.TIER1_TRADED_HEAD &&
+    tiers.tier1CapFor(NaN) === tiers.TIER1_TRADED_HEAD,
+  "a cap of zero would put the ENTIRE universe on the hourly policy — the " +
+    "collapse readTier1's fail-open exists to prevent, reached through a " +
+    "different door"
+);
+
+// RUN WITH EVERY SIGNAL OVERFLOWING. The cap is only meaningful when it binds,
+// and a fixture whose signals fit inside it proves nothing about the slice.
+const bigPreset = Array.from({ length: 100 }, (_, i) => `SYM${i}`);
+const overflowing = tiers.selectTier1({
+  presetSymbols: bigPreset,
+  dollarVolumeRanked: Array.from({ length: 300 }, (_, i) => `SYM${100 + i}`),
+  moverSymbols: Array.from({ length: 150 }, (_, i) => `SYM${150 + i}`),
+  searchedSymbols: Array.from({ length: 100 }, (_, i) => `SYM${300 + i}`),
+  pickerSymbols: Array.from({ length: 100 }, (_, i) => `SYM${400 + i}`),
+  universe,
+});
+check(
+  "the union is capped at the derived size",
+  overflowing.length === tiers.tier1CapFor(bigPreset.length),
+  `${overflowing.length} of a possible 500 — uncapped, this fixture returns every ` +
+    `signal it was given, which is what the live selector was doing`
+);
+check(
+  "the BASE survives when the cap binds, and the traffic-fed layer gives way",
+  bigPreset.every((symbol) => overflowing.includes(symbol)) &&
+    !overflowing.includes("SYM300") &&
+    !overflowing.includes("SYM400"),
+  "presets are in, searched (SYM300) and rendered rows (SYM400) are out — the " +
+    "opposite would let a busy week evict the curated mega-caps from the fast " +
+    "tier, and a quiet one shrink it"
+);
+check(
+  "a tier 1 that fits under the cap is not padded",
+  tiers.selectTier1({ ...NO_SIGNALS, presetSymbols: ["SYM0", "SYM1"], universe }).length === 2,
+  "the cap is a ceiling, not a target — nothing is promoted to fill it"
+);
+
 // ── 3. The TTLs mean what the page says they mean ───────────────────────────
 console.log("\n3. The two policies, and what happens when the tier is unknown");
 
@@ -353,7 +424,13 @@ check(
 // inside one window, where the sum is the honest bound; this is a SUSTAINED
 // rate over a universe whose two pools overlap heavily. The observed warm union
 // is 762 against a 700 cap, ~9% above it, which the 80% ceiling absorbs.
-const TARGET_FAST = 500;
+// DERIVED FROM THE RULE, NOT TYPED. This was `const TARGET_FAST = 500`, an
+// assumption about tier 1's size written when its size was whatever five
+// per-signal caps happened to sum to -- observed at 384, 403 and 475 on three
+// consecutive production runs. Tier 1 now has a stated cap, so this reads it
+// from the same function the code uses rather than carrying a second opinion
+// that goes stale silently and makes the fit assertion below measure a policy
+// nothing ships.
 const analysedCap = Number(
   (readCodeOnly("lib/server/dynamicUniverseCache.ts").match(
     /ANALYSIS_UNIVERSE_CAP = (\d+)/
@@ -371,11 +448,12 @@ const usablePerHour = 140 * 60;
 check(
   "the two policies fit inside the usable call rate at the universe the caps allow",
   callsPerHour <= usablePerHour * 0.8,
-  `${Math.round(callsPerHour)} calls/hour at a cap of ${analysedCap} against ` +
-    `${usablePerHour} usable — the 80% ceiling leaves room for history, earnings and ` +
-    `fundamentals. Raising the cap toward 3,000 breaks this at a 30-minute tail ` +
-    `(7,000/hour) and passes at 60 (4,500), which is what makes the TTL and the ` +
-    `growth step land together`
+  `${Math.round(callsPerHour)} calls/hour at a cap of ${analysedCap}, tier 1 ` +
+    `${TARGET_FAST} (${presetCount} curated + ${tiers.TIER1_TRADED_HEAD} traded), ` +
+    `tail ${tiers.TIER2_TTL_MS / 60_000}m, against ${usablePerHour} usable — the 80% ` +
+    `ceiling leaves room for history, earnings and fundamentals. This is the ` +
+    `assertion that used to couple the tail to the growth step; the tail moved ` +
+    `early for the ISR window instead, so it now passes at 3,000 as well`
 );
 check(
   "a symbol not in tier 1 falls to the SLOWER policy, never to 'never'",

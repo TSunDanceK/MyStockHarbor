@@ -537,8 +537,8 @@ function formatUpdatedAt(value?: string | null) {
  *
  * WHY A RANGE. The footer's "Updated" is the pickers BUILD time -- when the
  * scan ran, not when any price was fetched. Prices come from the price pool on
- * two different policies (priceTiers.ts: 15 minutes for the attention tier, 30
- * for the rest), so two rows in the same table can be twice apart in age and
+ * two different policies (priceTiers.ts: 15 minutes for the attention tier, 60
+ * for the rest), so two rows in the same table can be FOUR TIMES apart in age and
  * neither of them the age the footer prints. One timestamp implying a shared
  * freshness the rows do not have is the thing this fixes. Cost tiering is
  * legitimate; presenting stale data as current is not.
@@ -1132,9 +1132,11 @@ async function getPickerData(config: PickerResultConfig) {
           if (p.marketCap != null) entry.marketCap = p.marketCap;
           if (p.pe != null) entry.peRatio = p.pe;
           // THE SPREAD, NOT A SINGLE MOMENT. Rows on one page are refreshed on
-          // two different policies (15 minutes for the attention tier, 30 for
+          // two different policies (15 minutes for the attention tier, 60 for
           // the rest -- lib/server/priceTiers.ts), so the oldest row in a table
-          // can be twice the age of the newest. The footer used to print one
+          // can be FOUR TIMES the age of the newest. The footer prints the real
+          // observed range rather than the policy, so widening the split needs
+          // no change here -- which is the property that made widening it safe. The footer used to print one
           // timestamp, which was the pickers BUILD time and never the price
           // time at all; that implied every row shared an age it never had.
           // Only rows that actually took a pooled value are counted: a symbol
