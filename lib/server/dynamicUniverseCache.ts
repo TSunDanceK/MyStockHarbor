@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { readTombstoned, EVICTION_TOMBSTONE_WEEKDAYS } from "./symbolEviction";
 
 // The site-wide rolling universe: which tickers MyStockHarbor currently cares
 // about. Fed by the market route's discovery map and by search demand; read by
@@ -436,6 +437,44 @@ export async function addToDynamicUniverse(
 
   const now = Date.now();
 
+  // ───────────────────────────────────────────────────────────────────────
+  // THE RE-ADMISSION GATE. This is the door an evicted symbol comes back
+  // through, and until now it was unguarded.
+  //
+  // That was correct while absence was the only eviction route: an
+  // absence-evicted symbol is missing from the screener, so discovery never
+  // offers it again. The stale-bar route (#417) evicts symbols that ARE in the
+  // screener, so they are re-offered on the next build and the cycle is
+  // evict -> re-admit -> still stale -> evict, each round deleting and
+  // rebuilding that symbol's caches for nothing.
+  //
+  // Blocked for EVICTION_TOMBSTONE_WEEKDAYS, then eligible again with no manual
+  // step -- see symbolEviction.ts for why the period is a third of the
+  // threshold that caused the eviction rather than a round number of days.
+  //
+  // ELIGIBLE IS NOT ADMITTED. A symbol whose tombstone lapses is simply offered
+  // to this function again; it still has to earn a place by score like anything
+  // else, still enters at zero, and still has to survive the corroboration
+  // window if it goes stale again -- evictSymbol deleted its absence record and
+  // its stale-bar day evidence, so the second eviction is no cheaper than the
+  // first.
+  //
+  // ONE ZMSCORE, and it fails OPEN: an unreadable gate admits, because the worst
+  // case there is the churn this damps, while a fail-closed read would be a
+  // discovery pass that admits nothing at all.
+  const tombstoned = await readTombstoned(cleaned, now);
+  const admissible = tombstoned.size
+    ? cleaned.filter((symbol) => !tombstoned.has(symbol))
+    : cleaned;
+  if (tombstoned.size) {
+    console.log(
+      `[dynamic-universe] held back ${tombstoned.size} recently evicted symbol(s) ` +
+        `for the remainder of their ${EVICTION_TOMBSTONE_WEEKDAYS}-trading-day tombstone: ` +
+        `${[...tombstoned].slice(0, 12).join(", ")}`
+    );
+  }
+  if (!admissible.length) return;
+
   try {
     await seedFromLegacyIfEmpty();
 
@@ -457,12 +496,16 @@ export async function addToDynamicUniverse(
     //
     // So the atomicity is kept and only the command count changes: the script
     // runs the same ZINCRBYs server-side, which is one billed command.
-    for (const group of chunkMembers(cleaned, ZINCRBY_EVAL_CHUNK)) {
+    for (const group of chunkMembers(admissible, ZINCRBY_EVAL_CHUNK)) {
       await redis.eval(ZINCRBY_MANY_LUA, [SCORE_KEY], [String(scoreBoost), ...group]);
     }
 
     // lastSeen is an absolute overwrite, so the whole batch is one ZADD.
-    const seenPairs = cleaned.map((symbol) => ({ member: symbol, score: now }));
+    // `admissible`, NOT `cleaned` -- BOTH sets, or the gate is decoration. A
+    // tombstoned symbol kept out of the score set but written to `seen` would be
+    // a member of one half of a pair the whole module keeps in step, and
+    // pruneUniverse reads `seen` to decide what to expire.
+    const seenPairs = admissible.map((symbol) => ({ member: symbol, score: now }));
     const [first, ...rest] = seenPairs;
     await redis.zadd(SEEN_KEY, first, ...rest);
   } catch (error) {
