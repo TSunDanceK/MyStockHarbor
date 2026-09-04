@@ -18,6 +18,7 @@
 //   node scripts/check-picker-routes.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { readCodeOnly } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 let failures = 0;
@@ -85,14 +86,62 @@ check(
 
 console.log("\n=== 3. The backstop is uniform ===\n");
 
-const wrongRevalidate = registry.filter((r) => {
+// UNIFORM, AND NOT SHORTER THAN THE PRICES IT SHOWS.
+//
+// This used to pin the literal 1800, which made it a test of a value rather
+// than of a property: moving the window -- which is the point of the ISR work --
+// failed it for the right pages for the wrong reason. Two properties matter and
+// neither is the number.
+//
+//   UNIFORMITY. A shorter timer on one page reinstates the rebuild-per-scrape
+//   cost for that page alone, and it is invisible: the page looks identical.
+//
+//   THE PAIRING. A page rebuilt every N seconds cannot display a price fresher
+//   than N, so a window SHORTER than the price tier's policy is spend on
+//   freshness the pool cannot supply -- and a window longer than it is spend on
+//   a refresh the page throws away. Read from lib/server/priceTiers.ts rather
+//   than retyped, so moving either side without the other fails here.
+const declared = registry.map((r) => {
   const src = fs.readFileSync(path.join(ROOT, "app", r, "page.tsx"), "utf8");
-  return !/export const revalidate = 1800;/.test(src);
+  const m = src.match(/^export const revalidate = (\d+);/m);
+  return { route: r, seconds: m ? Number(m[1]) : null };
 });
+const noRevalidate = declared.filter((d) => d.seconds === null).map((d) => d.route);
+const windows = new Set(declared.map((d) => d.seconds));
 check(
-  "every picker page declares the 1800 backstop",
-  wrongRevalidate.length === 0,
-  `a shorter timer on one page reinstates the rebuild-per-scrape cost for that page alone — ${wrongRevalidate.join(", ") || "all 1800"}`
+  "every picker page declares a route-level revalidate",
+  noRevalidate.length === 0,
+  noRevalidate.join(", ") || `all ${declared.length} declare one`
+);
+check(
+  "they all declare the SAME window",
+  windows.size === 1,
+  `${[...windows].join(", ")} — a shorter timer on one page reinstates the ` +
+    `rebuild-per-scrape cost for that page alone, and the page looks identical`
+);
+const pickerWindowSec = declared[0]?.seconds ?? 0;
+const tier2Ms = Number(
+  Function(
+    `"use strict"; return (${
+      (readCodeOnly("lib/server/priceTiers.ts").match(
+        /TIER2_TTL_MS = ([0-9 *_]+);/
+      ) ?? [])[1] ?? "0"
+    });`
+  )()
+);
+check(
+  "the tier-2 policy was read from priceTiers, not retyped",
+  tier2Ms > 0,
+  `${tier2Ms / 60_000} minutes — typed here instead, the pairing below would ` +
+    `compare the window against a number this file invented`
+);
+check(
+  "the window is not SHORTER than the price policy the page displays",
+  pickerWindowSec * 1000 >= tier2Ms,
+  `${pickerWindowSec / 60}m window against a ${tier2Ms / 60_000}m tail — a page ` +
+    `rebuilt more often than its prices are refreshed pays for renders that ` +
+    `cannot show anything new. This is the coupling the tier change and the ISR ` +
+    `change rest on, enforced rather than remembered`
 );
 
 console.log("\n=== 4. No NEW inert route-level revalidate ===\n");
