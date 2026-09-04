@@ -251,7 +251,7 @@ if (!barMissing.length) {
   const decls = raw
     .split("\n")
     .filter((l) =>
-      /^(let historyStaleNewestCount|let historyFreshNewestCount|const historyStaleNewest |let historyNewestBarSeen|const MAX_DIAGNOSTIC_SYMBOLS|let historyForcedRefetchFailures|const historyForcedRefetchFailureSymbols|const historyForcedFailureReasons|export const HISTORY_MAX_BAR_AGE_WEEKDAYS)/.test(l)
+      /^(let historyStaleNewestCount|let historyFreshNewestCount|const historyStaleNewest |let historyNewestBarSeen|const MAX_DIAGNOSTIC_SYMBOLS|let historyForcedRefetchFailures|const historyForcedRefetchFailureSymbols|const historyForcedFailureReasons|const historyNewestBarStamps|export const HISTORY_MAX_BAR_AGE_WEEKDAYS)/.test(l)
     )
     .map((l) => l.replace(/^export\s+/, ""))
     .join("\n");

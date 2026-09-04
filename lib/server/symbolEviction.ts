@@ -22,6 +22,44 @@
 // one does not. pricePool's failStreak (#403) is exactly that second signal and
 // already exists, which is why this builds on it rather than adding a probe.
 //
+// ─────────────────────────────────────────────────────────────────────────────
+// THE THIRD SIGNAL, AND WHY TWO WERE NOT ENOUGH.
+//
+// The 2026-09-04 sweep ran cleanly -- sweepSkipped null, the gate passed -- and
+// reported `absentAndFailing: 0`. Nine tickers whose newest daily bar is
+// between two weeks and fourteen months old were not among them, and the reason
+// is structural rather than a threshold that wants nudging:
+//
+//   ABSENCE       the screener URL sends isActivelyTrading=true, so a symbol
+//                 FMP has not updated stays IN the response and is never
+//                 `missing`
+//   FAIL STREAK   stable/quote still answers for it, so failStreak stays 0
+//
+// Two signals, ONE SOURCE, and that source is wrong. Probe Q5 measured it
+// directly: FB still reads isActivelyTrading: true years after becoming META.
+// A rule built from two views of the same wrong answer cannot catch the case it
+// was built for.
+//
+// STALE BARS ARE INDEPENDENT OF FMP'S METADATA, which is the whole point. A
+// symbol that has not printed a daily bar in fourteen months is dead whatever a
+// flag says, and the observation is already in Redis, so it keeps the
+// "already paid for" property the other two have. It is wired in as an
+// ALTERNATIVE ROUTE to the same eviction -- the absence rule is unchanged, both
+// routes go through the same preset gate, and both need the same corroboration
+// window.
+//
+// WHAT THE THIRD SIGNAL DOES NOT FIX. An evicted symbol is ZREMed from the
+// dynamic-universe score set, and discovery re-admits from the screener --
+// which, for a stale-bar symbol, still returns it. So a stale-barred symbol CAN
+// come back. It comes back at score 0 against a pool capped at 700 whose
+// established members carry hundreds, so pruneUniverse drops it again before it
+// reaches a build, and the loop's period is months rather than the four days a
+// naive reading suggests. That is a damping argument, not an impossibility
+// argument, and it is the reason this file does NOT also add a re-admission
+// tombstone: evictSymbol's closing comment declines to gate re-admission on
+// purpose, and reversing that decision is its own change.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // EVICTION IS DESTRUCTIVE AND MUST NOT TURN ON ONE READING. pruneUniverse ZREMs
 // the score, so an evicted symbol restarts from zero and has to earn its way
 // back. One bad screener response, one FMP outage, one deploy in the middle of
@@ -67,6 +105,72 @@ export const EVICTION_MIN_FAIL_STREAK = 3;
 // a full day without being asked. A window at exactly the cap would race it.
 export const EVICTION_FAIL_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW STALE A DAILY SERIES HAS TO BE BEFORE IT IS EVIDENCE OF DEATH.
+//
+// DELIBERATELY NOT HISTORY_MAX_BAR_AGE_WEEKDAYS. That constant is 2, and it is
+// a FRESHNESS WARNING -- it exists to flag a symbol worth looking at, and it is
+// tuned to absorb exactly one market holiday. Evicting on it would delete a
+// stock that missed two sessions over Thanksgiving.
+//
+// THE MEASURED SPREAD, 2026-09-04, from warm-picker-universe's own
+// recordNewestBarAge (8 of 659 refetched symbols past the freshness warning,
+// nine named across two mornings):
+//
+//   HES  2025-07-18   294 weekdays        FI   2025-12-08   193
+//   WBA  2025-08-28   265                 DAY  2026-02-03   152
+//   IPG  2025-11-26   201                 MMC  2026-02-09   148
+//   ------------------------------------- the gap -------------------------
+//   BK   2026-06-29    48   ambiguous
+//   EA   2026-08-10    18   probably alive
+//   WBS  2026-08-20    10   probably alive
+//
+// 63 IS ONE QUARTER OF TRADING (252/4), AND THAT IS WHY IT IS NOT 100. The
+// widest empty band in that list runs from 48 to 148, and its midpoint would
+// be the most "robust" threshold available -- but fitting a threshold to the
+// midpoint of nine observations is fitting it to nine observations, and the
+// tenth dead ticker will not respect the gap. A quarter is a unit that exists
+// independently of this list, and it lines up with what can actually happen to
+// a LISTED symbol:
+//
+//   * an SEC trading suspension is capped at TEN BUSINESS DAYS by statute
+//     (Exchange Act 12(k)). 63 is six times that ceiling.
+//   * the longest US exchange closure in modern history is four sessions
+//     (9/11, and Sandy in 2012). 63 is fifteen times that.
+//   * an exchange halt pending delinquent filings can run longer than either,
+//     and those end in a resumption or a delisting -- see the note on halts
+//     below.
+//
+// WHICH OF THE NINE IT CATCHES: the top six. BK (48) is 15 weekdays short and
+// is the one this deliberately does not take a view on; EA (18) and WBS (10)
+// are nowhere near it. If 63 is wrong it is wrong on BK, and BK would have to
+// lose another three trading weeks of bars -- and then satisfy the
+// corroboration window on top -- before the rule touched it.
+//
+// A HALTED STOCK IS NOT A DELISTED ONE, and at this threshold that distinction
+// stops mattering. A merger pending for three months, a regulatory suspension
+// six times longer than the statutory cap, a symbol frozen through a full
+// reporting quarter: whether the ticker technically still exists, a chart with
+// no bars for a quarter is not something this site should be serving, and a
+// symbol that does come back is re-admitted by discovery like any other.
+export const EVICTION_STALE_BAR_WEEKDAYS = 63;
+
+// HOW FRESH THE BAR OBSERVATION ITSELF HAS TO BE.
+//
+// The stamp is written only when a symbol is actually refetched. A symbol that
+// stops being refetched keeps its old stamp while the weekdays-behind
+// arithmetic climbs, so a live symbol we simply stopped looking at would drift
+// past the threshold on its own -- the signal measuring OUR failure and
+// reporting it as the symbol's.
+//
+// Same shape and same number as EVICTION_FAIL_MAX_AGE_MS, and for the same
+// reason: undated evidence is evidence forever. 48h and not 24: the stamp is
+// written by warm-picker-universe at 07:02 UTC and read by this sweep at 06:50,
+// so it is ALWAYS 23.8 hours old by the time it is used. A 24h window would sit
+// twelve minutes from failing every single day; 48h leaves exactly one missed
+// morning warm of slack and no more.
+export const EVICTION_BAR_STAMP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
 const ABSENCE_KEY_PREFIX = "msh:evict:absent:v1:";
 // Longer than the corroboration window so a streak can accumulate, short enough
 // that a symbol which reappears stops counting rather than carrying old days
@@ -96,6 +200,41 @@ export function shouldEvict(
   // since" is not evidence that a symbol is delisted.
   if (!failAt || !Number.isFinite(failAt)) return false;
   return nowMs - failAt <= EVICTION_FAIL_MAX_AGE_MS;
+}
+
+/**
+ * Should this symbol be removed on the STALE-BAR route instead?
+ *
+ * The independent path. Nothing here consults the screener or the quote
+ * endpoint, because both of those are FMP telling us whether FMP thinks the
+ * symbol is alive, and that is the answer this route exists to route around.
+ *
+ * PURE, and it takes `weekdaysBehind` as a NUMBER rather than a date plus a
+ * clock. The arithmetic lives in historyCache (weekdaysBehindEastern, which is
+ * separately pinned to fixed dates in scripts/check-history-bars.mjs); keeping
+ * it out of here means the invariant check can run this predicate without
+ * importing a module that opens a Redis client, and means one bug in the
+ * calendar cannot be counted as two passing tests.
+ */
+export function staleBarsShouldEvict(
+  staleDays: number,
+  weekdaysBehind: number | null,
+  observedAtMs: number | undefined,
+  nowMs: number
+): boolean {
+  // SAME WINDOW AS THE ABSENCE ROUTE, deliberately. A stale series is a slow
+  // signal and hardly ever flickers, so the corroboration window buys less here
+  // than it does there -- but it costs almost nothing, and the one thing it
+  // does still catch is a garbled or half-written stamp, which is exactly the
+  // failure a route that deletes data must not act on first sight.
+  if (staleDays < EVICTION_CORROBORATION_DAYS) return false;
+  if (weekdaysBehind === null || !Number.isFinite(weekdaysBehind)) return false;
+  if (weekdaysBehind < EVICTION_STALE_BAR_WEEKDAYS) return false;
+  // THE OBSERVATION MUST BE ABOUT TODAY. Without this the rule measures how
+  // long since WE last looked, not how long since the symbol last traded --
+  // see EVICTION_BAR_STAMP_MAX_AGE_MS.
+  if (!observedAtMs || !Number.isFinite(observedAtMs)) return false;
+  return nowMs - observedAtMs <= EVICTION_BAR_STAMP_MAX_AGE_MS;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,8 +294,42 @@ export function evictionAction(
   nowMs: number,
   presets: ReadonlySet<string> = PRESET_SYMBOLS
 ): EvictionAction {
-  if (!shouldEvict(absenceDays, failStreak, failAt, nowMs)) return "keep";
+  return actionFor(shouldEvict(absenceDays, failStreak, failAt, nowMs), symbol, presets);
+}
+
+/**
+ * ONE PRESET GATE, TWO EVIDENCE RULES.
+ *
+ * Split out the moment there was a second route to eviction, and not as tidying:
+ * the #404 rule is that a curated symbol is NEVER evicted, only shouted about,
+ * and a second copy of `presets.has(normalise(symbol))` is a second place for
+ * that rule to be subtly different. A stale-barred META has to reach the same
+ * hand-edit alarm an absent-and-failing META does, and the only way to be sure
+ * of that is for there to be one branch.
+ */
+function actionFor(
+  fired: boolean,
+  symbol: string,
+  presets: ReadonlySet<string>
+): EvictionAction {
+  if (!fired) return "keep";
   return presets.has(String(symbol ?? "").trim().toUpperCase()) ? "hand-edit" : "evict";
+}
+
+/** The stale-bar route's action, through the same gate. */
+export function staleBarEvictionAction(
+  symbol: string,
+  staleDays: number,
+  weekdaysBehind: number | null,
+  observedAtMs: number | undefined,
+  nowMs: number,
+  presets: ReadonlySet<string> = PRESET_SYMBOLS
+): EvictionAction {
+  return actionFor(
+    staleBarsShouldEvict(staleDays, weekdaysBehind, observedAtMs, nowMs),
+    symbol,
+    presets
+  );
 }
 
 const PRESET_ALARM_KEY_PREFIX = "msh:evict:preset-alarm:v1:";
@@ -353,6 +526,103 @@ export async function recordAbsence(symbol: string, nowMs = Date.now()): Promise
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE STALE-BAR ROUTE'S OWN DAY EVIDENCE, AND WHY IT CANNOT SHARE THE ABSENCE KEY.
+//
+// The two routes look alike and their evidence is incompatible. `clearAbsence`
+// is called for every symbol PRESENT in the screener response -- and a
+// stale-barred symbol is present, every single day, by construction. Sharing
+// the key would wipe the stale-bar evidence at the top of every sweep and the
+// corroboration threshold could never be reached. The route would look wired in
+// and evict nothing, forever, which is the failure mode this PR is fixing one
+// level up.
+//
+// A HASH, NOT ~760 PER-SYMBOL KEYS. The absence route can afford a key per
+// symbol because `recordAbsence` only fires for symbols already carrying a
+// failure streak -- a handful. This route's CLEAR path is the expensive half:
+// every symbol whose bars are fine has to have its evidence dropped, and that
+// is the whole universe every morning. As per-symbol DELs that is ~760 Redis
+// commands a day to delete keys that mostly do not exist. As a hash it is one
+// HGETALL, one HSET and one HDEL, and the read tells us which fields actually
+// exist so the HDEL only names those.
+//
+// The cost of a hash is that fields carry no TTL, so this key is in
+// PER_SYMBOL_HASHES and the read below drops stamps outside the window (and
+// the caller HDELs a field that empties). A field cannot outlive its evidence.
+const STALE_BAR_DAYS_HASH = "msh:evict:stale-bar-days:v1";
+
+// Same window as ABSENCE_TTL_SECONDS, for the same reason: long enough for a
+// streak to accumulate, short enough that a gap resets the evidence. The rule
+// is "stale on N days recently", not "stale on N days ever".
+export const STALE_BAR_EVIDENCE_DAYS = 10;
+
+/**
+ * Today's day stamp folded into a stored list, with anything out of the window
+ * dropped.
+ *
+ * PURE so the invariant check can run it. A SET of day stamps rather than a
+ * counter, for the identical reason recordAbsence is: an INCR lets one day's
+ * two runs manufacture two days of corroboration.
+ */
+export function mergeStaleBarDay(stored: unknown, nowMs: number): string[] {
+  const cutoff = dayStamp(nowMs - STALE_BAR_EVIDENCE_DAYS * 24 * 60 * 60 * 1000);
+  const existing = typeof stored === "string" ? stored.split(",") : [];
+  const days = new Set(existing.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= cutoff));
+  days.add(dayStamp(nowMs));
+  return Array.from(days).sort().slice(-EVICTION_CORROBORATION_DAYS * 2);
+}
+
+/** Every symbol's stale-bar day evidence, pruned to the window. One HGETALL. */
+export async function readStaleBarDays(nowMs = Date.now()): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!redis) return out;
+  const cutoff = dayStamp(nowMs - STALE_BAR_EVIDENCE_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    const raw = await redis.hgetall<Record<string, string>>(STALE_BAR_DAYS_HASH);
+    for (const [symbol, value] of Object.entries(raw ?? {})) {
+      const days = (typeof value === "string" ? value.split(",") : []).filter(
+        (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= cutoff
+      );
+      out.set(symbol, days);
+    }
+  } catch {
+    // fail open -- no evidence means no eviction on this route today, which is
+    // the safe direction for a destructive action.
+  }
+  return out;
+}
+
+/**
+ * Persist the day evidence: one HSET for the symbols still stale, one HDEL for
+ * the ones that recovered or aged out.
+ *
+ * `clear` is passed rather than derived from the universe, so the command names
+ * only fields that were actually in the hash.
+ */
+export async function writeStaleBarDays(
+  updates: Record<string, string[]>,
+  clear: string[]
+): Promise<void> {
+  if (!redis) return;
+  try {
+    const entries = Object.entries(updates);
+    if (entries.length) {
+      await redis.hset(
+        STALE_BAR_DAYS_HASH,
+        Object.fromEntries(entries.map(([sym, days]) => [sym, days.join(",")]))
+      );
+    }
+    if (clear.length) {
+      for (let i = 0; i < clear.length; i += 500) {
+        await redis.hdel(STALE_BAR_DAYS_HASH, ...clear.slice(i, i + 500));
+      }
+    }
+  } catch {
+    // bookkeeping -- a failed write means the evidence restarts, never that a
+    // symbol is evicted on evidence it does not have.
+  }
+}
+
 /** Clear the evidence. Called the moment a symbol reappears in the screener. */
 export async function clearAbsence(symbols: string[]): Promise<void> {
   if (!redis || !symbols.length) return;
@@ -414,7 +684,20 @@ export const PER_SYMBOL_KEYS: PerSymbolKey[] = [
 // THE TWO HASHES ARE THE ACTUAL LEAK. Their fields carry no TTL and the
 // key-level expiry is reset on every run, so a dead field is immortal. There is
 // no `hdel` anywhere else in this codebase -- these are the first two.
-export const PER_SYMBOL_HASHES = ["msh:price-pool:v1", "msh:picker-charts:v1"];
+export const PER_SYMBOL_HASHES = [
+  "msh:price-pool:v1",
+  "msh:picker-charts:v1",
+  // THE THIRD SIGNAL'S TWO HASHES, and they are here for the reason the note
+  // above gives rather than for symmetry. Neither carries a per-field TTL, so
+  // an evicted symbol left in them is a field that never expires: the bar stamp
+  // would keep an evicted ticker in every `barStampsRead` denominator forever,
+  // and a leftover day-evidence field means a symbol re-admitted later starts
+  // with days of stale evidence already against it and could be evicted again
+  // on its first bad morning. Exactly the reasoning that put
+  // msh:evict:absent:v1: in the key list.
+  "msh:history:newest-bar:v1",
+  "msh:evict:stale-bar-days:v1",
+];
 
 // The sorted sets a symbol is a member of. Unlike the string keys these have no
 // TTL of their own either, and an evicted symbol left in a staleness queue is
