@@ -1,5 +1,24 @@
 # Earnings-season concentration: still UNMEASURED, and how to measure it (2026-09-02)
 
+> ## BLOCKED 2026-09-04 — READ THIS BEFORE RAISING `ANALYSIS_UNIVERSE_CAP`
+>
+> The growth sequence below (700 → 1,500 → 3,000) is sequenced against the
+> EARNINGS ceiling. **It is no longer the binding one.** Redis bandwidth is:
+> ~207 GB/month against a 200 GB plan cap at today's 762 symbols, and every term
+> scales linearly with the universe, so 1,500 projects to roughly twice the cap.
+>
+> That is a harder constraint than the one measured here: an earnings shortfall
+> degrades coverage, an over-cap Redis bill is an invoice or a throttle.
+>
+> **Do not raise `ANALYSIS_UNIVERSE_CAP` on the strength of the earnings work
+> alone.** `scripts/check-redis-bandwidth.mjs` fails the build if it rises above
+> `REDIS_OVERAGE_MEASURED_AT_CAP` while the projection is over the plan limit.
+> The measurement, the options and what it takes to clear 1,500:
+> `claude/redis-bandwidth-2026-09-04.md`.
+>
+> Everything below about the earnings ceiling remains correct and still has to be
+> satisfied — it is now the *second* gate, not the first.
+
 ## UPDATE 2026-09-04 (later) — measured clean, and EARNINGS_BATCH_SIZE is now DERIVED
 
 The probe was re-run with `?fresh=1` after #411's slicing. **February came back
