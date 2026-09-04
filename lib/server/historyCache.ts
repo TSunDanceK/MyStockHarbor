@@ -477,6 +477,14 @@ export const HISTORY_MAX_BAR_AGE_WEEKDAYS = 2;
 // different, separately visible facts -- a run where most symbols fell back is a
 // successful-looking run that refreshed almost nothing.
 let historyForcedRefetchFailures = 0;
+// DID THE RUN END ON ITS OWN CLOCK? Distinct from a refetch FAILURE, and the
+// distinction is the whole point of the change that added it: a symbol that
+// fell back because its 20-second per-call wait expired is a defect, and one
+// that fell back because the run genuinely ran out of its 240 seconds is the
+// policy working. Folded into one count they read identically -- the same
+// reason #416 added `outOfTime` beside `deferredByCap`.
+let historyRanOutOfTime = false;
+let historyDeferredOutOfTime = 0;
 // SYMBOL -> REASON, and a separate UNCAPPED histogram.
 //
 // The histogram is the diagnostic and it is deliberately not sampled: a capped
@@ -697,6 +705,10 @@ export function readHistoryBarAgeCounts(): {
   symbols: string[];
   newestBarSeen: string | null;
   forcedRefetchFailures: number;
+  /** True when the forced pass stopped on the RUN's clock rather than per-call. */
+  ranOutOfTime: boolean;
+  /** Symbols the run never reached because its budget expired first. */
+  deferredOutOfTime: number;
   forcedRefetchFailureSymbols: string[];
   /** "reason:count", uncapped and sorted by count. The diagnostic. */
   forcedRefetchFailureReasons: string[];
@@ -708,6 +720,8 @@ export function readHistoryBarAgeCounts(): {
     symbols: [...historyStaleNewest].map(([sym, date]) => `${sym}@${date}`),
     newestBarSeen: historyNewestBarSeen,
     forcedRefetchFailures: historyForcedRefetchFailures,
+    ranOutOfTime: historyRanOutOfTime,
+    deferredOutOfTime: historyDeferredOutOfTime,
     // "SYM:reason", so the sample carries its own diagnosis rather than needing
     // to be cross-referenced against the histogram.
     forcedRefetchFailureSymbols: [...historyForcedRefetchFailureSymbols].map(
@@ -722,6 +736,8 @@ export function readHistoryBarAgeCounts(): {
   historyStaleNewest.clear();
   historyNewestBarSeen = null;
   historyForcedRefetchFailures = 0;
+  historyRanOutOfTime = false;
+  historyDeferredOutOfTime = 0;
   historyForcedRefetchFailureSymbols.clear();
   historyForcedFailureReasons.clear();
   return out;
@@ -825,6 +841,108 @@ function getMinuteBucketParts(now = new Date()) {
 function getFmpCounterKey(now = new Date()) {
   const { bucket } = getMinuteBucketParts(now);
   return `${FMP_CALL_COUNTER_PREFIX}:${bucket}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FOURTH ABANDON-ON-CAPACITY, AND WHY THIS ONE DID NOT LOOK LIKE THE OTHERS.
+//
+// #396 (price pool), #406 (earnings) and #416 (stock data) all fixed the same
+// shape: `if (!(await hasFmpCapacity(...))) break;` -- a job giving up its
+// remaining work because THIS MINUTE is spent, when it had minutes of its own
+// budget left. This is the fourth instance and it is worth saying plainly that
+// it is NOT that line. There is no `break` on this path.
+//
+// It is the same defect wearing different clothes. reserveFmpCallSlot waits up
+// to FMP_MAX_WAIT_MS -- a flat 20 seconds -- and then THROWS capacity-timeout.
+// The forced-refetch loop below catches that per symbol and falls back to the
+// cached entry. So the thing deciding to give up is a per-call constant with no
+// relationship to how much time the RUN has:
+//
+//   2026-09-04 07:02, warm-picker-universe, maxDuration 300s
+//     [pickers] build complete: universe 700 ... 142414ms
+//     40 forced refetches threw and fell back. Reasons: capacity-timeout:40
+//
+// A run that finished in 142 seconds abandoned 40 symbols after 20 seconds each
+// while ~158 seconds of its own function budget went unused. Identical
+// reasoning to the other three: the minute's exhaustion is a PAUSE, and only
+// the run's own clock should end the work.
+//
+// THE FIX FOLLOWS #416 RATHER THAN #396 OR #406, deliberately. All three are
+// the same `waitFor...Budget(deadlineMs) -> "ok" | "out-of-time"` shape, but
+// #416's loop is the one this loop actually resembles: "for each symbol in a
+// bounded slice, wait for room, then do the work". #396 sits inside a tiered
+// refresh with its own per-tier accounting and #406 inside a batched fetch
+// whose batch size is itself derived from the budget. Copying either would have
+// meant importing machinery this loop has no use for -- and a fourth slightly
+// different answer to "wait for budget" is precisely what these four PRs exist
+// to stop.
+//
+// WHY THE WAIT IS HERE AND NOT INSIDE reserveFmpCallSlot. Lowering the deadline
+// into the reservation would mean threading it through getDailyHistoryBulk ->
+// getDailyHistory -> getDailyHistoryInner -> requestHistoryRows, changing four
+// signatures to teach the innermost one about a caller's clock. Waiting BEFORE
+// dispatch instead leaves reserveFmpCallSlot's 20 seconds exactly as it is, as
+// the backstop it already was -- and it rarely fires now, because a task is
+// only dispatched once there is already room.
+// THE RUN BUDGET, SIZED AGAINST THE CALLER'S FUNCTION TIMEOUT.
+//
+// warm-picker-universe declares maxDuration = 300. A wait that outlives the
+// function is worse than an abandon, because the function is killed and records
+// NOTHING -- no run record, no counters, no reason. That is the one failure mode
+// this change could introduce and scripts/check-capacity-waits.mjs asserts
+// against it directly, reading both numbers from source.
+//
+// 240s leaves a 60-second tail for everything the build does after history: the
+// indicator pass over 700 symbols, the payload write, the chart-hash write and
+// 36 revalidatePath calls. The 2026-09-04 run did the whole build in 142s with
+// 40 symbols abandoned, so the tail is comfortably inside 60.
+//
+// AND THE BUDGET IS WHAT MAKES FULL COVERAGE POSSIBLE AT ALL, which is the
+// argument for this number rather than a smaller one:
+//
+//   240s x (200 - 40 headroom) per minute  =  640 fetches available
+//   the analysed universe                  =  700 symbols
+//
+// So a forced run can now reach essentially the whole universe on the run's own
+// clock, where a flat 20-second per-call ceiling could not. It does not promise
+// to: 640 < 700, the incremental path means most fetches are cheap, and
+// `outOfTime` on the run record is what says which happened rather than leaving
+// it to be assumed.
+export const HISTORY_RUN_BUDGET_MS = 240_000;
+
+const HISTORY_BUDGET_POLL_MS = 2_000;
+
+// HEADROOM, AND WHY IT IS THE SMALLEST OF THE FIVE.
+//
+// Every module that shares the 200/min budget reserves some of it for the
+// others: fundamentals 60, price pool 60, stock data 90, earnings 90, sector
+// news 40. This one is 40 for a reason specific to when it runs.
+//
+// The forced history refetch happens at 07:02 UTC -- outside the market window,
+// so warm-price-pool is returning market-closed and spending nothing, and ahead
+// of warm-earnings at 07:15. The only concurrent consumer is warm-stock-data
+// (every 10 minutes) and whatever live traffic a page render produces. Reserving
+// 90 here would idle a third of the budget against jobs that are not running.
+//
+// It is a floor, not a target: reserveFmpCallSlot's own FMP_SAFE_CALLS_PER_MINUTE
+// ceiling still applies underneath, so this only decides when this loop chooses
+// to WAIT rather than when a call is allowed.
+const HISTORY_MIN_HEADROOM_CALLS = 40; // 07:02 has the budget largely to itself
+
+/**
+ * Wait until there is FMP room for one history fetch, or until the run is out
+ * of its own time.
+ *
+ * Same contract as waitForStockDataBudget: "out-of-time" is returned ONLY on
+ * the caller's clock. An exhausted minute is a pause.
+ */
+async function waitForHistoryBudget(deadlineMs: number): Promise<"ok" | "out-of-time"> {
+  while (true) {
+    if (await hasFmpCapacity(1, HISTORY_MIN_HEADROOM_CALLS)) return "ok";
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return "out-of-time";
+    await sleep(Math.min(HISTORY_BUDGET_POLL_MS, remaining));
+  }
 }
 
 /**
@@ -1539,9 +1657,34 @@ export async function getDailyHistoryBulk(
 
   if (misses.length) {
     const limit = createLimiter(10);
+    // THE RUN'S OWN CLOCK, STARTED HERE rather than passed in, so every caller
+    // of this function gets the behaviour without a new argument to forget.
+    // Only the forced path can reach the wait below, and force is what the
+    // daily warm asks for.
+    const runDeadlineMs = Date.now() + HISTORY_RUN_BUDGET_MS;
     await Promise.all(
       misses.map((symbol) =>
         limit(async () => {
+          // WAIT FOR ROOM, DO NOT ABANDON. Only under force: an unforced miss is
+          // one symbol on a render path, where waiting minutes for a budget is
+          // the wrong trade and reserveFmpCallSlot's own 20 seconds is right.
+          //
+          // Counted BEFORE the fetch, so a run that ends on its clock reports
+          // how many symbols it never reached rather than how many it happened
+          // to have started.
+          if (force && (await waitForHistoryBudget(runDeadlineMs)) === "out-of-time") {
+            historyRanOutOfTime = true;
+            historyDeferredOutOfTime++;
+            const stillCached = cachedBySymbol.get(symbol);
+            if (stillCached) {
+              result.set(symbol, pointsOf(stillCached));
+              return;
+            }
+            // No cached entry to fall back on: try anyway rather than returning
+            // nothing. reserveFmpCallSlot's 20-second backstop still bounds it,
+            // and a symbol with no history at all is the one case where a slow
+            // answer beats no answer.
+          }
           try {
             result.set(symbol, await getDailyHistory(symbol, { force }));
           } catch (error) {

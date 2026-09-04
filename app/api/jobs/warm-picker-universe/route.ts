@@ -22,6 +22,7 @@ export const dynamic = "force-dynamic";
 
 import {
   HISTORY_MAX_BAR_AGE_WEEKDAYS,
+  HISTORY_RUN_BUDGET_MS,
   dropNewestBarStamps,
   flushNewestBarStamps,
   readHistoryBarAgeCounts,
@@ -132,6 +133,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (barAge.ranOutOfTime) {
+      console.warn(
+        `[warm-picker-universe] the forced history pass ran out of its ${HISTORY_RUN_BUDGET_MS / 1000}s budget with ${barAge.deferredOutOfTime} symbol(s) unreached; those fell back to their cached entry. This is the run's own clock, not a per-call timeout -- if it persists, the budget or the universe size is the thing to move, not the wait.`
+      );
+    }
+
     if (barAge.forcedRefetchFailures > 0) {
       console.warn(
         `[warm-picker-universe] ${barAge.forcedRefetchFailures} forced refetches threw and fell back to their cached entry. Reasons: ${barAge.forcedRefetchFailureReasons.join(", ") || "unclassified"}. Sample: ${barAge.forcedRefetchFailureSymbols.join(", ")}`
@@ -183,6 +190,16 @@ export async function GET(req: NextRequest) {
       historyFreshNewestCount: barAge.fresh,
       historyStaleNewestSymbols: barAge.symbols.join(",") || null,
       historyForcedRefetchFailures: barAge.forcedRefetchFailures,
+      // WHICH CLOCK ENDED THE PASS. Before this the two were the same fact on
+      // the record: a symbol abandoned after a flat 20-second per-call wait and
+      // one deferred because the run genuinely spent its 240 seconds both showed
+      // up as a forced-refetch failure. The first is a defect, the second is the
+      // policy working, and they want opposite responses.
+      //
+      // `historyRanOutOfTime false` with a non-zero failure count now means the
+      // failures are real (http-429, network, parse) rather than contention.
+      historyRanOutOfTime: barAge.ranOutOfTime,
+      historyDeferredOutOfTime: barAge.deferredOutOfTime,
       // RECORDED, NOT JUST WARNED. The count alone cannot answer the question
       // that matters -- is it the same symbols every morning, or a different
       // twenty each time? The first is a class of symbol and wants a name; the
