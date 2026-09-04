@@ -1661,7 +1661,8 @@ export async function getDailyHistoryBulk(
     // of this function gets the behaviour without a new argument to forget.
     // Only the forced path can reach the wait below, and force is what the
     // daily warm asks for.
-    const runDeadlineMs = Date.now() + HISTORY_RUN_BUDGET_MS;
+    const passStartedAt = Date.now();
+    const runDeadlineMs = passStartedAt + HISTORY_RUN_BUDGET_MS;
     await Promise.all(
       misses.map((symbol) =>
         limit(async () => {
@@ -1717,6 +1718,35 @@ export async function getDailyHistoryBulk(
         })
       )
     );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // A console.log, DURING the run, and that is the entire point.
+    //
+    // #422 sized HISTORY_RUN_BUDGET_MS at 240s against a 300s maxDuration and
+    // asserted the 60-second tail STRUCTURALLY. It has never been measured. The
+    // evidence was a 142-second whole-build run, which does not decompose into
+    // history time versus tail time -- and the real worst case is tighter than
+    // 240 + tail, because a fetch dispatched just before the deadline still runs
+    // on reserveFmpCallSlot's 20-second backstop: 240 + up to 20 + tail.
+    //
+    // WHY NOT A RUN-RECORD FIELD. Because the failure this measures is the
+    // function being KILLED at 300s, and a killed function records nothing --
+    // no run record, no counters, no reason. The failure presents as SILENCE.
+    // A log line already written survives in Vercel's logs and says how far it
+    // got; a field on a record that never gets written does not.
+    //
+    // The counters ride along for the same reason. They are on the run record
+    // already; this puts them somewhere a killed run still leaves them behind.
+    // Read, not reset -- readHistoryBarAgeCounts still owns the reset.
+    if (force) {
+      const elapsedMs = Date.now() - passStartedAt;
+      console.log(
+        `[history] forced pass complete: ${misses.length} symbols, ${elapsedMs}ms ` +
+          `of a ${HISTORY_RUN_BUDGET_MS}ms budget, ranOutOfTime ` +
+          `${historyRanOutOfTime}, deferredOutOfTime ${historyDeferredOutOfTime}, ` +
+          `forcedRefetchFailures ${historyForcedRefetchFailures}`
+      );
+    }
   }
 
   return result;
