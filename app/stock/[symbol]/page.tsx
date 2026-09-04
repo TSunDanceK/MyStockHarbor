@@ -320,7 +320,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   // Run history + quote in parallel; we only need these for meta generation.
   const [rawHistory, quoteResult] = await Promise.all([
-    getDailyHistory(upper).catch(() => []),
+    getDailyHistory(upper, { caller: "stock-page" }).catch(() => []),
     fetchQuote(upper),
   ]);
   const quote = quoteResult.quote;
@@ -393,7 +393,7 @@ export default async function StockPage({ params }: Props) {
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
       // returned nothing for this symbol.
-      getDailyHistory(upper).then(
+      getDailyHistory(upper, { caller: "stock-page-meta" }).then(
         (pts) => ({ points: pts as Point[], failed: false }),
         () => ({ points: [] as Point[], failed: true })
       ),

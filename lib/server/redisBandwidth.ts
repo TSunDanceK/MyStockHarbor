@@ -97,12 +97,21 @@ export const BYTES_MEASURED_BY =
 export type RedisReadSource =
   | "picker-payload"
   | "picker-charts"
+  // SPLIT FROM history-bulk, and the split is the point rather than tidiness.
+  // #418 metered only the two BULK paths, so the twelve single-symbol readers --
+  // /api/history, the stock page and its news/earnings tabs, the dashboard, the
+  // SPX page, insight snapshots, and the three plays builders, which read ~700
+  // symbols each ONE AT A TIME -- all reported as zero. The bytes are identical
+  // per symbol; only the call shape differs. A meter that ranks a reader at zero
+  // because of how it loops is a meter that answers "who reads history" wrong.
+  | "history-single"
   | "history-bulk"
   | "price-pool";
 
 const BYTES_PER_UNIT: Record<RedisReadSource, number> = {
   "picker-payload": BYTES_PER_SYMBOL_PICKER_PAYLOAD,
   "picker-charts": BYTES_PER_SYMBOL_PICKER_CHARTS,
+  "history-single": BYTES_PER_SYMBOL_HISTORY,
   "history-bulk": BYTES_PER_SYMBOL_HISTORY,
   "price-pool": BYTES_PER_SYMBOL_PRICE_POOL,
 };
@@ -113,19 +122,64 @@ function dayKey(nowMs = Date.now()) {
   return `${UNITS_KEY_PREFIX}${new Date(nowMs).toISOString().slice(0, 10).replace(/-/g, "")}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WHY THE FIELD KEY CARRIES A CALLER, AND WHY IT CARRIES AN HOUR.
+//
+// "history-bulk: 2.5 GB/day" identifies a KEYSPACE, not a reader, and the whole
+// question this meter was built to answer is WHO. Three readers with wildly
+// different fixes -- a daily cron, a five-minute cron, and a scraper hitting a
+// public route -- are indistinguishable in a single per-source total.
+//
+// The HOUR is the second half of the same question and it is what makes the
+// answer falsifiable rather than argued. The three shapes are unmistakable in a
+// 24-bar profile and impossible to tell apart in a daily total:
+//
+//   flat across all 24 hours          a cron
+//   diurnal, quiet 02:00-06:00 UTC    human traffic
+//   flat AND high, no overnight dip   scrapers
+//
+// Both live as extra FIELDS on the day hash rather than as extra KEYS: an
+// hourly key would make a 7-day report 168 HGETALLs, which is a meter that
+// costs what it measures.
+const CALLER_PATTERN = /^[a-z0-9-]{1,40}$/;
+
+/** Unattributed reads are labelled, not dropped -- a silent bucket is a gap. */
+export const UNATTRIBUTED_CALLER = "unattributed";
+
+function safeCaller(caller: string | undefined): string {
+  if (!caller || !CALLER_PATTERN.test(caller)) return UNATTRIBUTED_CALLER;
+  return caller;
+}
+
+function hourField(source: RedisReadSource, nowMs: number) {
+  const hh = String(new Date(nowMs).getUTCHours()).padStart(2, "0");
+  return `${source}:h${hh}:units`;
+}
+
 /**
  * Record that `units` symbols were read from `source`.
  *
  * Fails open and silent: a meter that can break the thing it measures is worse
  * than no meter. One pipeline, two HINCRBYs and an EXPIRE.
  */
-export async function recordRedisRead(source: RedisReadSource, units: number): Promise<void> {
+export async function recordRedisRead(
+  source: RedisReadSource,
+  units: number,
+  caller?: string
+): Promise<void> {
   if (!redis || !Number.isFinite(units) || units <= 0) return;
   try {
-    const key = dayKey();
+    const nowMs = Date.now();
+    const key = dayKey(nowMs);
+    const who = safeCaller(caller);
     const p = redis.pipeline();
+    // The source total stays, unchanged in meaning, so the #418 report keeps
+    // working across the deploy rather than reading as a collapse to zero.
     p.hincrby(key, `${source}:units`, Math.round(units));
     p.hincrby(key, `${source}:reads`, 1);
+    p.hincrby(key, `${source}:${who}:units`, Math.round(units));
+    p.hincrby(key, `${source}:${who}:reads`, 1);
+    p.hincrby(key, hourField(source, nowMs), Math.round(units));
     p.expire(key, UNITS_TTL_SECONDS);
     await p.exec();
   } catch {
@@ -135,16 +189,34 @@ export async function recordRedisRead(source: RedisReadSource, units: number): P
 
 export type RedisBandwidthRow = {
   source: RedisReadSource;
+  /** Which code path did the reading. See the note on CALLER_PATTERN. */
+  caller: string;
   units: number;
   reads: number;
   bytes: number;
   unitsPerRead: number;
 };
 
+/**
+ * Units read in each UTC hour, summed across the window, one entry per source.
+ *
+ * THE SHAPE IS THE ANSWER, not the total. Cron reads are flat; human traffic
+ * dips overnight; scrapers are flat and high. Those three want completely
+ * different fixes and a daily total cannot tell them apart.
+ */
+export type RedisHourlyProfile = {
+  source: RedisReadSource;
+  /** 24 entries, index = UTC hour. */
+  units: number[];
+  /** max/mean over the 24. ~1 is flat (cron-shaped); >2 is peaky (traffic). */
+  peakToMean: number;
+};
+
 export type RedisBandwidthReport = {
   days: number;
   daysMissing: number;
   rows: RedisBandwidthRow[];
+  hourly: RedisHourlyProfile[];
   totalBytes: number;
   bytesPerDay: number;
   /** Projected 30-day total at the observed daily rate. */
@@ -164,6 +236,7 @@ export async function readRedisBandwidth(days = 7): Promise<RedisBandwidthReport
     days,
     daysMissing: days,
     rows: [],
+    hourly: [],
     totalBytes: 0,
     bytesPerDay: 0,
     projectedMonthBytes: 0,
@@ -193,21 +266,54 @@ export async function readRedisBandwidth(days = 7): Promise<RedisBandwidthReport
     return empty;
   }
 
-  const rows: RedisBandwidthRow[] = REDIS_READ_SOURCES.map((source) => {
-    const units = totals.get(`${source}:units`) ?? 0;
-    const reads = totals.get(`${source}:reads`) ?? 0;
+  // PER CALLER, DERIVED FROM THE FIELDS PRESENT rather than from a list of
+  // callers kept here -- a hand-typed list is how the caller added next month
+  // reports as nothing at all.
+  const rows: RedisBandwidthRow[] = [];
+  for (const [field, units] of totals) {
+    const parts = field.split(":");
+    if (parts.length !== 3 || parts[2] !== "units") continue;
+    const [source, caller] = parts as [RedisReadSource, string, string];
+    if (!(source in BYTES_PER_UNIT)) continue;
+    // The hourly buckets share the three-part shape; they are not callers.
+    if (/^h\d{2}$/.test(caller)) continue;
+    rows.push({
+      source,
+      caller,
+      units,
+      reads: totals.get(`${source}:${caller}:reads`) ?? 0,
+      bytes: units * BYTES_PER_UNIT[source],
+      unitsPerRead: 0,
+    });
+  }
+  for (const row of rows) {
+    row.unitsPerRead = row.reads > 0 ? Math.round(row.units / row.reads) : 0;
+  }
+  rows.sort((a, b) => b.bytes - a.bytes);
+
+  const hourly: RedisHourlyProfile[] = REDIS_READ_SOURCES.map((source) => {
+    const units = Array.from({ length: 24 }, (_, h) =>
+      totals.get(`${source}:h${String(h).padStart(2, "0")}:units`) ?? 0
+    );
+    const total = units.reduce((a, b) => a + b, 0);
+    const mean = total / 24;
     return {
       source,
       units,
-      reads,
-      bytes: units * BYTES_PER_UNIT[source],
-      unitsPerRead: reads > 0 ? Math.round(units / reads) : 0,
+      // 0 rather than Infinity when nothing was read: an unmeasured source must
+      // not render as the peakiest thing on the page.
+      peakToMean: mean > 0 ? Math.max(...units) / mean : 0,
     };
-  })
-    .filter((row) => row.reads > 0)
-    .sort((a, b) => b.bytes - a.bytes);
+  }).filter((profile) => profile.units.some((u) => u > 0));
 
-  const totalBytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+  // FROM THE PER-SOURCE TOTALS, not by summing the per-caller rows. The two
+  // agree today; if a write ever lands one and not the other, the total is the
+  // one that matches the #418 report and the caller rows are the newer, more
+  // fragile half.
+  const totalBytes = REDIS_READ_SOURCES.reduce(
+    (sum, source) => sum + (totals.get(`${source}:units`) ?? 0) * BYTES_PER_UNIT[source],
+    0
+  );
   const observedDays = Math.max(1, days - daysMissing);
   const bytesPerDay = totalBytes / observedDays;
 
@@ -215,6 +321,7 @@ export async function readRedisBandwidth(days = 7): Promise<RedisBandwidthReport
     days,
     daysMissing,
     rows,
+    hourly,
     totalBytes,
     bytesPerDay,
     projectedMonthBytes: bytesPerDay * 30,

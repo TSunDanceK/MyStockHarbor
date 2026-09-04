@@ -625,6 +625,50 @@ function readPickersNotePercent(points: Point[], bars: number) {
   return slice.length ? slice : points;
 }
 
+/**
+ * The displayed symbols, from the cached payload, WITHOUT building and WITHOUT
+ * re-attaching the chart series.
+ *
+ * WHY THIS EXISTS, AND IT IS THE POINT OF THE CHANGE IT SHIPPED IN.
+ *
+ * warmTargets called getPickersData() to get `signalRecords.map(r => r.symbol)`
+ * -- a few kilobytes of tickers. Its own header priced that at "the ~8 MB read",
+ * which is what readPickersCache costs. But getPickersData does not only READ:
+ * on a payload miss it BUILDS, and a build reads the entire universe's history
+ * out of Redis at ~110 KB a symbol, about 80 MB, ten times the figure that
+ * comment budgeted for.
+ *
+ * The warm-targets key lives 30 minutes and the pickers payload lives 60, so
+ * roughly every other warm-targets miss landed on an expired payload. Measured
+ * in production overnight on 2026-09-04, market shut, no human traffic:
+ *
+ *   01:00:14  warm-price-pool -> [warm-targets] cache miss -> [pickers] build complete
+ *   02:05:14  warm-price-pool -> [warm-targets] cache miss -> [pickers] build complete
+ *   03:10:14  warm-price-pool -> [warm-targets] cache miss -> [pickers] build complete
+ *
+ * A five-minute cron, hourly, rebuilding the whole site to look up a list of
+ * tickers -- and then returning `skipped: market-closed` without using it.
+ *
+ * So this reader does two things getPickersData cannot be asked to do:
+ *   * it NEVER builds. A miss is a miss and the caller decides.
+ *   * it skips readPickerChartsBulk, because a symbol list does not need the
+ *     ~11 KB a symbol of chart series. ~1.5 MB instead of ~9.4.
+ */
+export async function readPickersSymbolsIfCached(): Promise<string[] | null> {
+  if (!redis) return null;
+  try {
+    const entry = await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY);
+    if (!entry || typeof entry !== "object" || !entry.data) return null;
+    const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
+    await recordRedisRead("picker-payload", records.length, "warm-targets");
+    const symbols = records.map((record) => record.symbol).filter(Boolean);
+    return symbols.length ? symbols : null;
+  } catch {
+    // fail open -- the caller falls back to its own stale list, never to a build
+    return null;
+  }
+}
+
 async function readPickersCache() {
   if (!redis) return null;
 
@@ -2989,6 +3033,7 @@ async function buildPickersPayload(
   }
 
   const historyBySymbol = await getDailyHistoryBulk(universe, {
+    caller: "pickers-build",
     force: forceHistoryRefresh,
   });
 
@@ -4030,7 +4075,7 @@ export async function buildPickerStructureDiagnostics() {
   fill(dynamicUniverse, UNIVERSE_CAP);
   const universe = Array.from(slots);
 
-  const historyBySymbol = await getDailyHistoryBulk(universe);
+  const historyBySymbol = await getDailyHistoryBulk(universe, { caller: "picker-diagnostics" });
   const boost = (sym: string) => (dynamicSet.has(sym) ? 10 : 0) + (popularSet.has(sym) ? 10 : 0);
 
   const rows: PickerStructureRow[] = [];
@@ -4279,7 +4324,7 @@ export async function buildPickerJitterDiagnostics(opts: {
   fill(dynamicUniverse, UNIVERSE_CAP);
   const universe = Array.from(slots);
 
-  const historyBySymbol = await getDailyHistoryBulk(universe);
+  const historyBySymbol = await getDailyHistoryBulk(universe, { caller: "picker-diagnostics" });
   const rows: JitterRow[] = universe.map((symbol) => {
     const pts = normalizeHistory(historyBySymbol.get(symbol) ?? [], 1300);
     return {

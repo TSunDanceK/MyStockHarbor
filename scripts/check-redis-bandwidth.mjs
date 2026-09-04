@@ -226,11 +226,18 @@ check(
     `per-symbol figure entirely`
 );
 check(
-  "the bulk history read is metered where it happens",
-  /await recordRedisRead\("history-bulk", normalized\.length\);/.test(history) &&
+  "the bulk history read is metered where it happens, with its caller",
+  /await recordRedisRead\("history-bulk", normalized\.length, caller\);/.test(history) &&
     (history.match(/recordRedisRead\("history-bulk"/g) ?? []).length === 2,
   "both bulk read paths — getDailyHistoryBulk and getCachedDailyHistoryBulk — " +
     "move the same bytes, and metering one would rank the other at zero"
+);
+check(
+  "the SINGLE-symbol read is metered too",
+  /await recordRedisRead\("history-single", 1, caller\);/.test(history),
+  "the three plays builders read ~700 symbols each ONE AT A TIME; metering only " +
+    "the bulk paths reported them at zero bytes while they moved the same ~110 KB " +
+    "a symbol — the loop shape is not a property of the bytes"
 );
 check(
   "the picker payload and its chart series are metered SEPARATELY",
