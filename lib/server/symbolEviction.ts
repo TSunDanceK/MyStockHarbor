@@ -180,6 +180,107 @@ const ABSENCE_TTL_SECONDS = 10 * 24 * 60 * 60;
 
 const EVICTED_KEY = "msh:evict:log:v1";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE TOMBSTONE, AND WHY IT HAS AN EXPIRY.
+//
+// evictSymbol's own comment below says the log "deliberately does NOT gate
+// re-admission". That was the right call when the only eviction route was
+// absence: an absence-evicted symbol is absent from the screener, so discovery
+// never sees it again and there is nothing to gate. The stale-bar route (#417)
+// broke that assumption -- a stale-barred symbol IS in the screener response,
+// by construction, so discovery re-admits it and the cycle is:
+//
+//   evict -> re-admit -> still stale -> corroborate over
+//   EVICTION_CORROBORATION_DAYS -> evict again
+//
+// Each round deletes and rebuilds that symbol's caches for nothing.
+//
+// A PERMANENT TOMBSTONE STOPS THAT AND COSTS TOO MUCH. A halt that lifts or a
+// listing that returns would be invisible until somebody noticed by hand, and
+// there is no appetite for manual review work here. So: blocked for a period,
+// then eligible again automatically. Owner's decision, 2026-09-04.
+//
+// THE PERIOD IS DERIVED FROM THE THING THAT CAUSED THE EVICTION, not from a
+// round number of days, and it is in the same unit.
+//
+//   EVICTION_STALE_BAR_WEEKDAYS   63   the bars whose ABSENCE convicted it
+//   EVICTION_TOMBSTONE_WEEKDAYS   21   one third of them
+//
+// THE RULE: the tombstone lapses once the symbol has had the chance to print a
+// third of the bars whose absence caused the eviction. A ticker that genuinely
+// resumed has ~21 sessions of history by then, so at re-admission it is
+// unambiguously fresh -- no second eviction, no churn. One that has not resumed
+// still looks exactly as dead as it did.
+//
+// WHY A THIRD RATHER THAN A HALF OR A QUARTER. The lower bound is not binding:
+// any fraction of 63 comfortably exceeds the EVICTION_CORROBORATION_DAYS window
+// (3 days) that the churn cycle runs on, so every candidate prevents the tight
+// loop. The binding consideration is the OTHER side -- how long a genuinely
+// resumed ticker stays invisible -- where smaller is better. A third is where
+// "has it resumed?" first has a real answer rather than a one-bar guess.
+//
+// WHAT IT ACTUALLY PREVENTS. Without it the cycle is bounded below by the
+// corroboration window: re-admission plus 3 distinct days. 21 trading days is
+// ~29 calendar days, so one tombstone absorbs roughly NINE eviction cycles that
+// would each have deleted and refetched the symbol's history, fundamentals,
+// news and chart series.
+//
+// COST IF IT IS TOO LONG: a resumed ticker waits up to a trading month to come
+// back. Against a dynamic universe whose entries age out after 14 days
+// (ENTRY_MAX_AGE_MS), that is one rotation -- and the symbol returns through
+// ordinary discovery when it does, at score zero, on its merits.
+export const EVICTION_TOMBSTONE_WEEKDAYS = Math.round(EVICTION_STALE_BAR_WEEKDAYS / 3);
+
+/**
+ * Is this symbol still inside its post-eviction tombstone?
+ *
+ * PURE over the eviction timestamp so the invariant check can RUN it. Takes
+ * WEEKDAYS-to-ms conversion as its own business rather than a caller's: the
+ * threshold is expressed in trading days because the cause is, and the calendar
+ * conversion is the approximation -- 7/5 of a calendar week per trading week --
+ * stated here once rather than at each call site.
+ *
+ * A symbol with no eviction record is NOT tombstoned. Absence of a record is
+ * absence of an eviction, which is the reading that fails open.
+ */
+export function isTombstoned(evictedAtMs: number | undefined | null, nowMs: number): boolean {
+  if (typeof evictedAtMs !== "number" || !Number.isFinite(evictedAtMs) || evictedAtMs <= 0) {
+    return false;
+  }
+  const calendarMs = EVICTION_TOMBSTONE_WEEKDAYS * (7 / 5) * 24 * 60 * 60 * 1000;
+  // A record from the FUTURE is a clock problem, not a tombstone. Treating it as
+  // one would block a symbol for as long as the skew lasts, silently.
+  if (evictedAtMs > nowMs) return false;
+  return nowMs - evictedAtMs < calendarMs;
+}
+
+/**
+ * The symbols among `symbols` that are still tombstoned. One ZMSCORE.
+ *
+ * Returns a SET rather than filtering the input, so a caller can report how
+ * many it blocked as well as acting on it -- a gate nobody can count is the
+ * shape claude/ keeps recording.
+ */
+export async function readTombstoned(
+  symbols: string[],
+  nowMs = Date.now()
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!redis || !symbols.length) return out;
+  try {
+    const scores = (await redis.zmscore(EVICTED_KEY, symbols)) as (number | null)[] | null;
+    if (!Array.isArray(scores)) return out;
+    symbols.forEach((symbol, i) => {
+      if (isTombstoned(scores[i] ?? undefined, nowMs)) out.add(symbol);
+    });
+  } catch {
+    // FAIL OPEN. An unreadable tombstone must not block the universe: the worst
+    // case without it is the churn this exists to damp, and the worst case with
+    // a fail-closed read is a discovery pass that admits nothing at all.
+  }
+  return out;
+}
+
 /**
  * Should this symbol be removed?
  *
@@ -754,6 +855,25 @@ export async function evictSymbol(
     // so a symbol vanishing from the site has an answer. It deliberately does
     // NOT gate re-admission: if the symbol comes back and the screener returns
     // it, discovery should admit it like any other.
+    // A PRESET CAN NEVER ACQUIRE A TOMBSTONE, AND NOT ONLY BECAUSE IT CANNOT BE
+    // EVICTED. evictionAction and staleBarEvictionAction both return "hand-edit"
+    // for a preset, so this function is unreachable for one today -- but the
+    // eviction log is now a GATE rather than an audit trail, and a gate must not
+    // depend on every caller upstream having got its branch right. If a preset
+    // ever reaches here, the log entry is the thing that would keep a curated
+    // mega-cap out of its own universe for a trading month, silently.
+    //
+    // Belt and braces, asserted in scripts/check-symbol-eviction.mjs: the rule
+    // is "a symbol that cannot be evicted must not be able to acquire a
+    // tombstone through any other door", and this is the door.
+    if (PRESET_SYMBOLS.has(String(symbol ?? "").trim().toUpperCase())) {
+      console.error(
+        `[eviction] REFUSED to tombstone preset symbol ${symbol} -- it reached ` +
+          `evictSymbol, which the #404 hand-edit rule says cannot happen. The keys ` +
+          `above were deleted; the re-admission gate is deliberately not applied.`
+      );
+      return out;
+    }
     await redis.zadd(EVICTED_KEY, { score: nowMs, member: symbol });
   } catch {
     // fail open -- a failed eviction costs storage, not correctness, and the
