@@ -252,7 +252,11 @@ if (bulk.length <= 200) {
 }
 check(
   "it takes a force option",
-  /export async function getDailyHistoryBulk\(\s*symbols: string\[\],\s*opts: \{ force\?: boolean \}/.test(bulk)
+  /export async function getDailyHistoryBulk\(\s*symbols: string\[\],\s*opts: \{ force\?: boolean; caller\?: string \}/.test(
+    bulk
+  ),
+  "the caller tag joined the options object in the read-path attribution work; " +
+    "`force` is still the first field and still optional"
 );
 check(
   "force sends every symbol to the miss path",
@@ -276,11 +280,13 @@ check(
 );
 check(
   "getDailyHistory takes force too",
-  /export async function getDailyHistory\(symbol: string, opts: \{ force\?: boolean \} = \{\}\)/.test(codeOnly)
+  /export async function getDailyHistory\(\s*symbol: string,\s*opts: \{ force\?: boolean; caller\?: string \} = \{\}\s*\)/.test(
+    codeOnly
+  )
 );
 check(
   "force skips the READ, not the lock",
-  /const cached = force \? null : await readHistoryEntry\(normalized\);/.test(codeOnly),
+  /const cached = force \? null : await readHistoryEntry\(normalized, caller\);/.test(codeOnly),
   "waiting on another caller's in-flight fetch is still a fresh result"
 );
 check(

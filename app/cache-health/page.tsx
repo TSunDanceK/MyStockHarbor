@@ -345,12 +345,15 @@ export default async function CacheHealthPage({
           {redisBandwidth.rows.length ? (
             <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
               <thead>
-                <tr><th style={th}>Source</th><th style={th}>Bytes</th><th style={th}>Share</th><th style={th}>Reads</th><th style={th}>Symbols / read</th></tr>
+                <tr><th style={th}>Caller</th><th style={th}>Bytes</th><th style={th}>Share</th><th style={th}>Reads</th><th style={th}>Symbols / read</th></tr>
               </thead>
               <tbody>
                 {redisBandwidth.rows.map((row) => (
-                  <tr key={row.source}>
-                    <td style={cell}>{row.source}</td>
+                  <tr key={`${row.source}:${row.caller}`}>
+                    <td style={cell}>
+                      <div>{row.caller}</div>
+                      <div style={{ color: "#64748b", fontSize: 11 }}>{row.source}</div>
+                    </td>
                     <td style={cell}>{fmtBytes(row.bytes)}</td>
                     <td style={cell}>
                       {redisBandwidth.totalBytes > 0
@@ -369,6 +372,50 @@ export default async function CacheHealthPage({
               deploy. Zero here means <em>not yet measured</em>, not zero bandwidth.
             </p>
           )}
+
+          {/* THE SHAPE IS THE ANSWER, NOT THE TOTAL.
+              Three readers want three completely different fixes and a daily
+              total cannot tell them apart:
+                flat across 24h            a cron
+                dips 02:00-06:00 UTC       human traffic
+                flat AND high, no dip      scrapers
+              peakToMean near 1 is flat. This is what settles the question
+              rather than arguing it from three log lines. */}
+          {redisBandwidth.hourly.length ? (
+            <div style={{ marginTop: 18 }}>
+              <h3 style={{ fontSize: 12, color: "#e2e8f0", margin: "0 0 8px" }}>
+                Units read by UTC hour — flat means a cron, a dip means people
+              </h3>
+              {redisBandwidth.hourly.map((profile) => {
+                const peak = Math.max(...profile.units, 1);
+                return (
+                  <div key={profile.source} style={{ marginBottom: 12 }}>
+                    <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 4 }}>
+                      {profile.source} · peak/mean {profile.peakToMean.toFixed(2)}{" "}
+                      {profile.peakToMean < 1.6 ? "(flat — cron-shaped)" : "(peaky — traffic-shaped)"}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 44 }}>
+                      {profile.units.map((units, hour) => (
+                        <div
+                          key={hour}
+                          title={`${String(hour).padStart(2, "0")}:00 UTC — ${units.toLocaleString()} symbols`}
+                          style={{
+                            flex: 1,
+                            height: `${Math.max(2, (units / peak) * 100)}%`,
+                            background: units > 0 ? "#38bdf8" : "rgba(255,255,255,0.10)",
+                            borderRadius: 2,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "#64748b", fontSize: 10, marginTop: 2 }}>
+                      <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </section>
 
         {/* ── One row per dataset ─────────────────────────────────────── */}

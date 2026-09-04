@@ -452,7 +452,7 @@ async function getEarningsData(symbol: string) {
     fetchFmpJson<unknown[]>(`/balance-sheet-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=1`),
     fetchFmpJson<unknown[]>(`/revenue-product-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
     fetchFmpJson<unknown[]>(`/revenue-geographic-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
-    getDailyHistory(symbol).catch(() => [] as Point[]),
+    getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
   ]);
 
   const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
@@ -834,7 +834,7 @@ async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
-  const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean).catch(() => []), fetchQuoteForMeta(clean)]);
+  const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => []), fetchQuoteForMeta(clean)]);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", price, date);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";

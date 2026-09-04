@@ -129,7 +129,7 @@ check(
 
 check(
   "a forced call bypasses the shared promise",
-  /if \(force\) return await getDailyHistoryInner\(symbol, true\);/.test(getDaily),
+  /if \(force\) return await getDailyHistoryInner\(symbol, true, caller\);/.test(getDaily),
   "adopting an in-flight ordinary fetch would let a forced refresh report success having refreshed nothing"
 );
 
