@@ -8,13 +8,22 @@ import {
 } from "../../../../lib/server/pricePool";
 import { deregisterSymbols } from "../../../../lib/server/stalenessQueue";
 import {
+  readNewestBarStamps,
+  weekdaysBehindEastern,
+} from "../../../../lib/server/historyCache";
+import {
   recordAbsence,
   clearAbsence,
   evictionAction,
   claimPresetHandEditAlarm,
   evictSymbol,
   poolLooksDegraded,
+  readStaleBarDays,
+  writeStaleBarDays,
+  mergeStaleBarDay,
+  staleBarEvictionAction,
   EVICTION_MIN_FAIL_STREAK,
+  EVICTION_STALE_BAR_WEEKDAYS,
 } from "../../../../lib/server/symbolEviction";
 
 export const runtime = "nodejs";
@@ -76,7 +85,22 @@ export async function GET(req: NextRequest) {
   // something to be absent from.
   const sweep = {
     absent: 0,
+    // THE THIRD SIGNAL, COUNTED SEPARATELY AND NEVER FOLDED IN. `absentAndFailing: 0`
+    // was informative precisely because it named its condition; a single
+    // "candidates" number would make "nothing is dead" and "the metadata signal
+    // is blind again" the same reading, which is the whole reason this signal
+    // exists.
+    staleBarred: 0,
+    // The denominator for the one above, and the blindness detector. 0 stamps
+    // read means warm-picker-universe has not flushed any -- so `staleBarred: 0`
+    // says nothing at all, exactly as `quarterlyRefreshes: 0` said nothing
+    // before #416 gave it `quarterlyStamped`.
+    barStampsRead: 0,
     evicted: [] as string[],
+    // WHICH SIGNAL FIRED, for the destructive half. The counts above are about
+    // detection; this is about what was actually deleted and on whose evidence.
+    evictedByAbsence: 0,
+    evictedByStaleBars: 0,
     presetHandEdit: [] as string[],
     skipped: null as string | null,
   };
@@ -163,13 +187,119 @@ export async function GET(req: NextRequest) {
         if (action === "evict") {
           await evictSymbol(symbol);
           sweep.evicted.push(symbol);
+          sweep.evictedByAbsence++;
         }
       }
+
+      // ─────────────────────────────────────────────────────────────────────
+      // THE THIRD SIGNAL. Independent of FMP's metadata, which is the point:
+      // both rules above ask FMP whether the symbol is alive, and probe Q5
+      // measured FMP still answering `isActivelyTrading: true` for FB years
+      // after it became META. A symbol that has not printed a daily bar in a
+      // quarter is dead whatever that flag says.
+      //
+      // Runs AFTER the absence pass and skips anything it already handled, so a
+      // symbol carrying all three signals is evicted once and attributed to the
+      // route that found it first.
+      //
+      // Reads two hashes: the bar observations warm-picker-universe flushed at
+      // 07:02 yesterday, and this route's own day evidence. Deliberately not
+      // ~760 reads of msh:history:v7:<SYM> -- see historyCache's note.
+      const stamps = await readNewestBarStamps();
+      sweep.barStampsRead = stamps.size;
+      const staleDayEvidence = await readStaleBarDays(nowMs);
+      const handled = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
+      const staleUpdates: Record<string, string[]> = {};
+      const staleRecovered: string[] = [];
+      const staleBarEvicted: string[] = [];
+
+      for (const symbol of universe) {
+        if (handled.has(symbol)) continue;
+        const stamp = stamps.get(symbol);
+        const behind = stamp ? weekdaysBehindEastern(stamp.newest) : null;
+        const isStale = behind !== null && behind >= EVICTION_STALE_BAR_WEEKDAYS;
+
+        if (!isStale) {
+          // RECOVERING CLEARS THE EVIDENCE, the mirror of clearAbsence. Named
+          // rather than blanket-cleared: only fields the read actually returned
+          // are sent to HDEL, so a clean universe costs no command at all.
+          if (staleDayEvidence.has(symbol)) staleRecovered.push(symbol);
+          continue;
+        }
+
+
+        sweep.staleBarred++;
+        const days = mergeStaleBarDay(
+          (staleDayEvidence.get(symbol) ?? []).join(","),
+          nowMs
+        );
+        staleUpdates[symbol] = days;
+
+        const action = staleBarEvictionAction(
+          symbol,
+          days.length,
+          behind,
+          stamp?.observedAt,
+          nowMs
+        );
+        if (action === "hand-edit") {
+          // THE #404 RULE HOLDS WHATEVER FIRED IT. A curated symbol is never
+          // evicted, only shouted about -- and it reaches the identical alarm
+          // through the identical preset gate, because staleBarEvictionAction
+          // and evictionAction share one.
+          sweep.presetHandEdit.push(symbol);
+          if (await claimPresetHandEditAlarm(symbol)) {
+            console.error(
+              `[screener-fundamentals] PRESET UNIVERSE NEEDS A HAND EDIT: ${symbol} ` +
+                `last printed a daily bar on ${stamp?.newest} -- ${behind} trading ` +
+                `days ago -- across ${days.length} day(s) of evidence. It cannot be ` +
+                `evicted -- it is hardcoded in lib/server/presetUniverse.ts. Check ` +
+                `whether it was renamed, acquired or delisted, then edit that array ` +
+                `and redeploy.`
+            );
+          }
+          continue;
+        }
+        if (action === "evict") {
+          await evictSymbol(symbol);
+          sweep.evicted.push(symbol);
+          sweep.evictedByStaleBars++;
+          staleBarEvicted.push(`${symbol}@${stamp?.newest}`);
+        }
+      }
+      // Written after the loop so one HSET and one HDEL carry the whole day.
+      // An evicted symbol's field is removed by evictSymbol (PER_SYMBOL_HASHES),
+      // so it is deliberately not re-written here.
+      // ANYTHING IN THE HASH WITH NO EVIDENCE WRITTEN TODAY GOES. That is the
+      // recovered universe symbols above, and also fields for symbols that have
+      // since left the universe entirely -- the loop never reaches those, so
+      // without this line their evidence would sit in the hash forever, which is
+      // the immortal-field problem PER_SYMBOL_HASHES exists to avoid.
+      for (const symbol of staleDayEvidence.keys()) {
+        if (!(symbol in staleUpdates) && !staleRecovered.includes(symbol)) {
+          staleRecovered.push(symbol);
+        }
+      }
+      await writeStaleBarDays(
+        Object.fromEntries(
+          Object.entries(staleUpdates).filter(([sym]) => !sweep.evicted.includes(sym))
+        ),
+        staleRecovered
+      );
+      if (staleBarEvicted.length) {
+        console.warn(
+          `[screener-fundamentals] evicted ${staleBarEvicted.length} symbol(s) whose ` +
+            `newest daily bar is at least ${EVICTION_STALE_BAR_WEEKDAYS} trading days ` +
+            `old, independently of FMP's isActivelyTrading flag: ${staleBarEvicted.join(", ")}`
+        );
+      }
+
       if (sweep.evicted.length) {
         await deregisterSymbols(sweep.evicted);
         console.warn(
           `[screener-fundamentals] evicted ${sweep.evicted.length} symbol(s) ` +
-            `absent from the screener AND failing quotes: ${sweep.evicted.join(", ")}`
+            `(${sweep.evictedByAbsence} absent from the screener AND failing quotes, ` +
+            `${sweep.evictedByStaleBars} on stale bars): ${sweep.evicted.join(", ")}`
         );
       }
     } catch (error) {
@@ -191,7 +321,24 @@ export async function GET(req: NextRequest) {
     // corroboration threshold. `absent` far above `evicted` is the healthy
     // shape -- it means the corroboration window is doing its job.
     absentAndFailing: sweep.absent,
+    // THE THIRD SIGNAL'S OWN COUNT, NOT FOLDED INTO THE ONE ABOVE. Both rules
+    // above ask FMP whether the symbol is alive and FMP is wrong about exactly
+    // the symbols they exist to catch (probe Q5: FB still reads
+    // isActivelyTrading: true). When the metadata goes blind again this field is
+    // what says so -- `absentAndFailing: 0` beside `staleBarred: 6` reads
+    // completely differently from both at zero.
+    staleBarred: sweep.staleBarred,
+    // THE DENOMINATOR FOR IT, and the reason `staleBarred: 0` is readable at
+    // all. Zero stamps means warm-picker-universe never flushed any and the
+    // signal is blind, which is a fault; a full universe of stamps with zero
+    // stale is a clean day. Same principle as #416's `quarterlyStamped`.
+    barStampsRead: sweep.barStampsRead,
     evicted: sweep.evicted.length,
+    // WHICH SIGNAL ACTUALLY DELETED SOMETHING. The two counts above are
+    // detection; a destructive action deserves its own attribution, and without
+    // it a rising `evicted` cannot be traced to the rule that caused it.
+    evictedByAbsence: sweep.evictedByAbsence,
+    evictedByStaleBars: sweep.evictedByStaleBars,
     // THE SYMBOLS, NOT A COUNT, AND ON EVERY RUN. The log line above is
     // rationed to once a month per symbol so it cannot become churn; this
     // field is the standing state, so a dead curated ticker is still visible
