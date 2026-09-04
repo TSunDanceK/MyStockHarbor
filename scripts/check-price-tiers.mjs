@@ -322,17 +322,44 @@ check(
 );
 
 // ── 2d. Tier 1 has a STATED size, derived from the curated list ─────────────
-const presetSrc = readCodeOnly("lib/server/presetUniverse.ts");
-const presetCount = [
-  ...((presetSrc.match(/PRESET_UNIVERSE: string\[\] = \[([\s\S]*?)\];/) ?? [])[1] ?? "").matchAll(
-    /"([^"]+)"/g
-  ),
-].length;
+// IMPORTED, NOT REGEXED. This counted quoted strings out of presetUniverse.ts
+// while the check three lines up IMPORTS priceTiers and runs tier1CapFor -- two
+// ways to get one number, in a repo carrying
+// claude/traps/two-validators-for-one-value.md. The process.exit guard stopped
+// it failing silently to zero; it could still fail to a wrong NON-zero count,
+// and a wrong preset count makes TARGET_FAST wrong, which makes the call-rate
+// fit assertion below measure a policy nothing ships.
+//
+// presetUniverse.ts is a bare exported array with no imports, so it loads
+// through the same helper with no patching at all.
+const presets = await load("lib/server/presetUniverse.ts");
+const presetCount = presets.PRESET_UNIVERSE?.length ?? 0;
 if (!presetCount) {
-  console.error("FAIL: could not count PRESET_UNIVERSE — the tier-1 size would be invented.");
+  console.error("FAIL: could not import PRESET_UNIVERSE — the tier-1 size would be invented.");
   process.exit(1);
 }
 const TARGET_FAST = tiers.tier1CapFor(presetCount);
+
+// THE IMPORT FIXED THE TWO-VALIDATORS PROBLEM; THESE FIX WHAT IT DID NOT.
+//
+// Calibration found the gap: inflating TARGET_FAST by 400 left every assertion
+// green, because the call-rate fit below has enough slack at today's cap to
+// absorb a wrong fast-tier size in the generous direction. An imported number
+// is not automatically a checked one.
+check(
+  "the fast-tier size is the module's own rule applied to the shipped list",
+  TARGET_FAST === tiers.tier1CapFor(presets.PRESET_UNIVERSE.length),
+  `${TARGET_FAST} = tier1CapFor(${presets.PRESET_UNIVERSE.length}) — nothing may sit ` +
+    `between importing the list and asking the module how big the tier should be`
+);
+check(
+  "the imported preset list is a plausible curated universe",
+  presetCount >= 50 && presetCount <= 400,
+  `${presetCount} names — a band, not a pin: the list is edited by hand and its ` +
+    `exact size is not the property. A count outside this is a broken import ` +
+    `landing as a plausible-looking number, which is the failure the process.exit ` +
+    `guard alone could not catch`
+);
 
 console.log("\n2d. The fast tier's size is a rule, not whatever the caps summed to");
 
@@ -362,29 +389,77 @@ check(
 
 // RUN WITH EVERY SIGNAL OVERFLOWING. The cap is only meaningful when it binds,
 // and a fixture whose signals fit inside it proves nothing about the slice.
-const bigPreset = Array.from({ length: 100 }, (_, i) => `SYM${i}`);
+//
+// THE RANGES ARE DISJOINT, AND THE FIRST VERSION'S WERE NOT. It set movers to
+// SYM150-SYM299 and searched to SYM300-SYM399, both INSIDE dollarVolumeRanked's
+// SYM100-SYM399. So "movers are absent from the result" could not distinguish
+// "the cap excluded them" from "they were de-duplicated into dollar volume" --
+// the assertion passed for a reason unrelated to the property it names. A
+// fixture whose parts are indistinguishable from each other cannot test which
+// one won.
+//
+// It also needs a WIDER universe than the shared 500-symbol one: `take` drops
+// anything outside the universe, so a fixture symbol beyond it would be absent
+// for that reason instead, which is the same defect through a different door.
+// Asserted explicitly below rather than assumed.
+const wideUniverse = Array.from({ length: 750 }, (_, i) => `SYM${i}`);
+const range = (start, count) => Array.from({ length: count }, (_, i) => `SYM${start + i}`);
+const bigPreset = range(0, 100); //           0- 99
+const fxDollarVolume = range(100, 300); //  100-399
+const fxMovers = range(400, 150); //        400-549
+const fxSearched = range(550, 100); //      550-649
+const fxPicker = range(650, 100); //        650-749
+const allFixture = [bigPreset, fxDollarVolume, fxMovers, fxSearched, fxPicker];
+check(
+  "the fixture's five signals share no symbols",
+  new Set(allFixture.flat()).size === allFixture.reduce((n, l) => n + l.length, 0),
+  `${new Set(allFixture.flat()).size} distinct across ${allFixture.reduce((n, l) => n + l.length, 0)} ` +
+    `entries — overlapping ranges make "excluded by the cap" and "de-duplicated ` +
+    `into an earlier signal" the same observation`
+);
+check(
+  "every fixture symbol is inside the universe",
+  allFixture.flat().every((sym) => wideUniverse.includes(sym)),
+  "take() drops anything outside the universe, so a symbol beyond it would be " +
+    "absent for that reason and the cap assertion would pass without the cap"
+);
 const overflowing = tiers.selectTier1({
   presetSymbols: bigPreset,
-  dollarVolumeRanked: Array.from({ length: 300 }, (_, i) => `SYM${100 + i}`),
-  moverSymbols: Array.from({ length: 150 }, (_, i) => `SYM${150 + i}`),
-  searchedSymbols: Array.from({ length: 100 }, (_, i) => `SYM${300 + i}`),
-  pickerSymbols: Array.from({ length: 100 }, (_, i) => `SYM${400 + i}`),
-  universe,
+  dollarVolumeRanked: fxDollarVolume,
+  moverSymbols: fxMovers,
+  searchedSymbols: fxSearched,
+  pickerSymbols: fxPicker,
+  universe: wideUniverse,
 });
 check(
   "the union is capped at the derived size",
   overflowing.length === tiers.tier1CapFor(bigPreset.length),
-  `${overflowing.length} of a possible 500 — uncapped, this fixture returns every ` +
+  `${overflowing.length} of a possible ${wideUniverse.length} — uncapped, this fixture returns every ` +
     `signal it was given, which is what the live selector was doing`
 );
 check(
   "the BASE survives when the cap binds, and the traffic-fed layer gives way",
   bigPreset.every((symbol) => overflowing.includes(symbol)) &&
-    !overflowing.includes("SYM300") &&
-    !overflowing.includes("SYM400"),
-  "presets are in, searched (SYM300) and rendered rows (SYM400) are out — the " +
-    "opposite would let a busy week evict the curated mega-caps from the fast " +
-    "tier, and a quiet one shrink it"
+    fxDollarVolume.slice(0, 100).every((symbol) => overflowing.includes(symbol)),
+  "all 100 presets and the first 100 dollar-volume names — the opposite would " +
+    "let a busy week evict the curated mega-caps from the fast tier, and a " +
+    "quiet one shrink it"
+);
+// THE STRUCTURAL EXCLUSION, ASSERTED RATHER THAN LEFT AS A COMMENT. Movers,
+// searched symbols and rendered rows get ZERO slots every run, because presets
+// plus dollar volume exhaust the cap first. That is documented in priceTiers.ts
+// and it is a real property of the shipped selector, so it is pinned here: if a
+// promotion layer is ever added, this assertion is what says so out loud rather
+// than letting the behaviour change unremarked.
+check(
+  "movers, searched symbols and rendered rows reach tier 1 in ZERO slots",
+  fxMovers.every((s2) => !overflowing.includes(s2)) &&
+    fxSearched.every((s2) => !overflowing.includes(s2)) &&
+    fxPicker.every((s2) => !overflowing.includes(s2)),
+  "presets (100) + dollar volume fill all 200 slots, so the three signals below " +
+    "them are gathered and sliced off every run. Harmless today because " +
+    "/api/quote never reads the pool; recorded because the code reads as though " +
+    "five signals compete"
 );
 check(
   "a tier 1 that fits under the cap is not padded",

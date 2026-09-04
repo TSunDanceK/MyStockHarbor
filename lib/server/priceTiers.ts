@@ -216,7 +216,15 @@ export const FOLD_MAX_ROWS_PER_ROUTE = 60;
 // price and volume are already on PricePoolRow, so this costs no FMP call.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Top names by price x volume. Fixed, not a fraction of the universe. */
+/**
+ * Top names by price x volume. Fixed, not a fraction of the universe.
+ *
+ * CURRENTLY UNREACHABLE, and left at 300 on purpose. The union cap in
+ * selectTier1 binds at ~100 of these long before this per-signal cap does, so
+ * lowering it to 100 would describe today's behaviour while quietly removing
+ * the headroom a promotion layer would need. See the block above the cap in
+ * selectTier1 for the full accounting.
+ */
 export const TIER1_DOLLAR_VOLUME_CAP = 300;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -385,6 +393,42 @@ export function selectTier1(signals: Tier1Signals): string[] {
       ...take(signals.pickerSymbols, Number.MAX_SAFE_INTEGER),
     ])
   );
+
+  // ───────────────────────────────────────────────────────────────────────
+  // THREE OF THESE FIVE SIGNALS CANNOT REACH TIER 1, AND THAT IS CURRENTLY FINE.
+  //
+  // Say it here rather than leave a reader to work it out, because the code
+  // reads as though five signals compete and they do not. With today's numbers:
+  //
+  //   presets              ~100 (uncapped, always first)
+  //   dollar volume         300 candidates -- fills the remaining ~100
+  //   ------------------------- tier1CapFor(100) = 200 slots exhausted here ---
+  //   movers                150 candidates -> ZERO slots, every run
+  //   searched              100 candidates -> ZERO slots, every run
+  //   rendered rows       uncapped         -> ZERO slots, every run
+  //
+  // TIER1_DOLLAR_VOLUME_CAP = 300 is dead for the same reason: the union cap
+  // binds at ~100 of those 300 long before the per-signal cap does. The number
+  // is not wrong, it is unreachable.
+  //
+  // The 1 September spec named "up to 100 searched symbols" as a tier-1
+  // component. That promotion can no longer fire.
+  //
+  // WHY IT IS HARMLESS TODAY, and the reason is one #420 established rather
+  // than assumed: /api/quote never reads this pool. A searched symbol already
+  // shows at <=60s on the stock detail page and the dashboard whatever tier it
+  // is in. The promotion only ever mattered for surfaces that DO read the pool
+  // and render faster than their price policy -- and the picker pages, which
+  // were the case it was designed for, render hourly since #421.
+  //
+  // THE OPEN QUESTION, RECORDED RATHER THAN ANSWERED. Whether a promotion layer
+  // is worth having (200 base + up to 100 promoted, cap 300) depends on which
+  // pool-reading surfaces render FASTER than hourly. /earnings-calendar is
+  // force-dynamic and reads the pool, so it may be one. That is measurement
+  // work, deliberately parked, and the three signals stay wired up precisely so
+  // the option stays open -- deleting them would foreclose it and cost nothing
+  // today, which is the wrong trade for a decision nobody has taken yet.
+  // ───────────────────────────────────────────────────────────────────────
 
   // THE OVERALL CAP, APPLIED LAST AND TO THE UNION.
   //
