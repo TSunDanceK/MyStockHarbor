@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { recordRedisRead } from "./redisBandwidth";
 
 // Off-payload storage for the pickers' per-symbol chart series.
 //
@@ -51,6 +52,24 @@ const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
+
+// THE 2026-08-06 MEASUREMENT, AS DATA RATHER THAN AS PROSE.
+//
+// The figure is in the header above and it was unreadable to anything but a
+// person: readCodeOnly strips comments, so a check asserting against it was
+// measuring a blank line. Same fix as EARNINGS_PEAK_SHARE_SOURCE -- a number the
+// build has to agree with has to be something the build can see.
+//
+// It is the only LIVE byte figure this system has for a chart series, which
+// makes it the cross-check that decides whether a reconstructed measurement is
+// credible at all. scripts/check-redis-bandwidth.mjs rebuilds the series from
+// buildPickerChartPoints' own field set and requires the result to land within
+// 5% of this.
+export const PICKER_CHARTS_MEASURED_AVG_CHARS = 11_016;
+export const PICKER_CHARTS_MEASURED_AT = "2026-08-06";
+export const PICKER_CHARTS_MEASURED_SOURCE =
+  "/api/debug/pickers-size in production, universe 260: payloadChars 3,382,852, " +
+  "signalRecordChars 3,060,650, avgChartChars 11,016";
 
 const PICKER_CHARTS_KEY = "msh:picker-charts:v1";
 
@@ -155,6 +174,12 @@ export async function readPickerChartsBulk(
 
   const fields = Array.from(new Set(symbols.map(cleanSymbol).filter(Boolean)));
   if (!fields.length) return out;
+
+  // ~11 KB per symbol, and the whole universe is read on every picker page
+  // regeneration that misses the in-process memo. Counted before the chunk loop
+  // so a partial read still reports what it asked for -- the bandwidth is spent
+  // on the request, not on the reply being usable.
+  await recordRedisRead("picker-charts", fields.length);
 
   for (const group of chunk(fields, CHUNK_SIZE)) {
     try {
