@@ -3,6 +3,7 @@ import { markRefreshed } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
+import { recordRedisRead } from "./redisBandwidth";
 import {
   mergeDailyPoints,
   overlapVerdict,
@@ -1322,6 +1323,12 @@ export async function getDailyHistoryBulk(
   }
 
   const keys = normalized.map((symbol) => getHistoryRedisKey(symbol));
+  // METERED HERE, NOT AT THE CALLER. This read moves ~110 KB per symbol -- the
+  // single largest per-symbol figure in the system, eight times a picker
+  // payload's chart series -- and it happens on EVERY build whether or not a
+  // single bar is refetched from FMP. The FMP meter cannot see it, because from
+  // FMP's point of view a warm build costs nothing. See redisBandwidth.ts.
+  await recordRedisRead("history-bulk", normalized.length);
   let entries: (HistoryCacheEntry | null)[] = normalized.map(() => null);
 
   // THE READ HAPPENS EVEN UNDER FORCE, and that is deliberate. What force
@@ -1435,6 +1442,8 @@ export async function getCachedDailyHistoryBulk(
     new Set(symbols.map((symbol) => normalizeSymbol(symbol)).filter(Boolean))
   );
   if (!normalized.length || !redis) return result;
+
+  await recordRedisRead("history-bulk", normalized.length);
 
   try {
     const entries: (HistoryCacheEntry | null)[] = [];

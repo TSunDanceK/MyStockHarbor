@@ -9,6 +9,7 @@ import {
   recordCacheHealthFailure,
 } from "@/lib/server/backfillAuth";
 import { readFmpUsage, FMP_BANDWIDTH_CAP_BYTES } from "@/lib/server/fmpUsage";
+import { readRedisBandwidth, BYTES_MEASURED_AT } from "@/lib/server/redisBandwidth";
 import { getFmpMinuteUsage } from "@/lib/server/historyCache";
 import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/stalenessQueue";
 import { readJobRuns } from "@/lib/server/jobRuns";
@@ -205,14 +206,19 @@ export default async function CacheHealthPage({
   // 0..0 per dataset, 30 day-hashes for bytes, one mget for job runs. If this
   // page ever needs a scan to answer something, that answer belongs in a
   // counter instead (spec, "The page must be cheap to load").
-  const [usage, minuteCalls, datasets, jobs] = await Promise.all([
+  const [usage, minuteCalls, datasets, jobs, redisBandwidth] = await Promise.all([
     readFmpUsage(30),
     getFmpMinuteUsage(),
     readAllDatasetHealth(),
     readJobRuns(),
+    // 7 days, not 30: the meter shipped 2026-09-04, so a 30-day window would be
+    // 23 days of zeroes rendered beside 7 of data. The window widens on its own
+    // once there is a month to widen into.
+    readRedisBandwidth(7),
   ]);
 
   const pctCap = (usage.totalWireBytes / FMP_BANDWIDTH_CAP_BYTES) * 100;
+  const pctRedisCap = (redisBandwidth.projectedMonthBytes / redisBandwidth.capBytes) * 100;
 
   const cell: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 13, verticalAlign: "top" };
   const th: React.CSSProperties = { ...cell, color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 };
@@ -268,6 +274,63 @@ export default async function CacheHealthPage({
             </table>
           ) : (
             <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 12 }}>No byte samples recorded yet.</p>
+          )}
+        </section>
+
+        {/* ── The limit that was ACTUALLY binding ─────────────────────── */}
+        <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 18 }}>
+          <h2 style={{ fontSize: 14, margin: 0, color: "#e2e8f0" }}>Redis bandwidth — projected 30-day</h2>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 10 }}>
+            <strong style={{ fontSize: 30 }}>{fmtBytes(redisBandwidth.projectedMonthBytes)}</strong>
+            <span style={{ color: "#94a3b8", fontSize: 14 }}>
+              of {fmtBytes(redisBandwidth.capBytes)} · {pctRedisCap.toFixed(1)}%
+            </span>
+          </div>
+          <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 999, marginTop: 10, overflow: "hidden" }}>
+            <div style={{ width: `${Math.min(100, pctRedisCap)}%`, height: "100%", background: pctRedisCap >= 85 ? "#ef4444" : pctRedisCap >= 60 ? "#eab308" : "#22c55e" }} />
+          </div>
+          {/* THE POINT OF THE WHOLE PANEL, said in one line. Commands are
+              unlimited on this plan and bandwidth is not, so the 17M -> 338k
+              command reduction bought nothing here — while FMP, the meter that
+              existed, sat at ~11%. */}
+          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
+            Bandwidth is the metered dimension on this plan; commands are not. Bytes are derived
+            from per-symbol constants measured {BYTES_MEASURED_AT} and re-derived from the writing
+            modules on every build (<code>scripts/check-redis-bandwidth.mjs</code>) — so this is a
+            projection from counted reads, not from counted bytes.
+          </p>
+          {redisBandwidth.daysMissing > 0 ? (
+            <p style={{ color: "#eab308", fontSize: 12, marginTop: 8 }}>
+              {redisBandwidth.daysMissing} of {redisBandwidth.days} days have no data — the meter
+              was not running for those. Treat this as a <strong>floor</strong>.
+            </p>
+          ) : null}
+          {redisBandwidth.rows.length ? (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
+              <thead>
+                <tr><th style={th}>Source</th><th style={th}>Bytes</th><th style={th}>Share</th><th style={th}>Reads</th><th style={th}>Symbols / read</th></tr>
+              </thead>
+              <tbody>
+                {redisBandwidth.rows.map((row) => (
+                  <tr key={row.source}>
+                    <td style={cell}>{row.source}</td>
+                    <td style={cell}>{fmtBytes(row.bytes)}</td>
+                    <td style={cell}>
+                      {redisBandwidth.totalBytes > 0
+                        ? `${((row.bytes / redisBandwidth.totalBytes) * 100).toFixed(1)}%`
+                        : "—"}
+                    </td>
+                    <td style={cell}>{row.reads.toLocaleString()}</td>
+                    <td style={cell}>{row.unitsPerRead.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 12 }}>
+              No reads recorded yet — the meter starts counting on the first instrumented read after
+              deploy. Zero here means <em>not yet measured</em>, not zero bandwidth.
+            </p>
           )}
         </section>
 
