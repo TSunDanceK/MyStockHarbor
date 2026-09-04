@@ -160,9 +160,16 @@ check(
 
 // AND THE CLAIM IS THE FIRST THING IN THE BLOCK, or the herd has already done
 // the reads by the time it is asked.
+// ANCHORED ON THE CALL, NOT ON THE BARE NAME. `"claimCalendarScan()"` also
+// matches a DECLARATION of the same function, so an anchor written that way is
+// only correct while the declaration happens to sit outside the searched range
+// -- which is a property of where the code is today, not of what is asserted.
+// Ten defects have been caught in the failing direction here and this shape was
+// the last of them; scripts/check-assertion-anchors.mjs now fails the build on
+// it rather than leaving it to review.
 const afterIdx = page.indexOf("after(async () => {");
-const claimIdx = page.indexOf("claimCalendarScan()", afterIdx);
-const workIdx = page.indexOf("getFullDayEarnings(selectedDate", afterIdx);
+const claimIdx = page.indexOf("await claimCalendarScan()", afterIdx);
+const workIdx = page.indexOf("await getFullDayEarnings(selectedDate", afterIdx);
 check(
   "...and it is claimed before any of the work",
   afterIdx !== -1 && claimIdx !== -1 && workIdx !== -1 && claimIdx < workIdx,

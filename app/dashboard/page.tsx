@@ -151,7 +151,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
     await Promise.all([
-      getDailyHistory(symbol).catch(() => [] as Point[]),
+      getDailyHistory(symbol, { caller: "dashboard" }).catch(() => [] as Point[]),
       getInitialQuoteAndName(symbol),
       getInitialBenchmarks(),
       getInitialNews(symbol),

@@ -3,7 +3,7 @@ import { markRefreshed } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
-import { recordRedisRead } from "./redisBandwidth";
+import { recordRedisRead, UNATTRIBUTED_CALLER } from "./redisBandwidth";
 import {
   mergeDailyPoints,
   overlapVerdict,
@@ -1015,13 +1015,23 @@ async function waitForHistoryCache(symbol: string, maxWaitMs = 12_000) {
   return null;
 }
 
-export async function readHistoryEntry(symbol: string) {
+export async function readHistoryEntry(symbol: string, caller = UNATTRIBUTED_CALLER) {
   const normalized = normalizeSymbol(symbol);
 
   if (!redis) {
     timingCache("history", "redis", "skip", "no-credentials");
     return null;
   }
+
+  // THE SINGLE-SYMBOL METER, AND IT IS HERE BECAUSE EVERY SINGLE-SYMBOL READER
+  // PASSES THROUGH THIS ONE GET. #418 metered only the bulk paths, so the three
+  // plays builders -- which read ~700 symbols each, one at a time -- reported
+  // zero bytes while moving the same ~110 KB per symbol as a bulk read. The
+  // loop shape is not a property of the bytes.
+  //
+  // Counted before the read, not after: the bandwidth is spent on the request,
+  // and a read that comes back null still crossed the network.
+  await recordRedisRead("history-single", 1, caller);
 
   try {
     const entry = await redis.get<HistoryCacheEntry>(getHistoryRedisKey(normalized));
@@ -1310,12 +1320,20 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
 // in-flight ordinary one would report success having refreshed nothing.
 const historyInFlight = new Map<string, ReturnType<typeof getDailyHistoryInner>>();
 
-export async function getDailyHistory(symbol: string, opts: { force?: boolean } = {}) {
+export async function getDailyHistory(
+  symbol: string,
+  opts: { force?: boolean; caller?: string } = {}
+) {
   const force = opts.force ?? false;
+  // WHO IS ASKING. Defaulted rather than required, so an unattributed read is
+  // reported as "unattributed" instead of vanishing -- and
+  // scripts/check-history-readers.mjs fails on any call site that leaves it
+  // unset, so the default is a safety net rather than the normal case.
+  const caller = opts.caller;
   const endTiming = beginTiming("history", "getDailyHistory");
 
   try {
-    if (force) return await getDailyHistoryInner(symbol, true);
+    if (force) return await getDailyHistoryInner(symbol, true, caller);
 
     const key = normalizeSymbol(symbol);
     const existing = historyInFlight.get(key);
@@ -1323,7 +1341,7 @@ export async function getDailyHistory(symbol: string, opts: { force?: boolean } 
 
     const promise = (async () => {
       try {
-        return await getDailyHistoryInner(symbol, false);
+        return await getDailyHistoryInner(symbol, false, caller);
       } finally {
         // Cleared in a finally so a rejected fetch cannot pin a permanently
         // failing promise in the map for the life of the instance.
@@ -1338,14 +1356,14 @@ export async function getDailyHistory(symbol: string, opts: { force?: boolean } 
   }
 }
 
-async function getDailyHistoryInner(symbol: string, force = false) {
+async function getDailyHistoryInner(symbol: string, force = false, caller?: string) {
   const normalized = normalizeSymbol(symbol);
   // FORCE SKIPS THE READ, NOT THE LOCK. Under force we refetch regardless of
   // what is cached, but if another caller already holds this symbol's lock it is
   // already doing a live fetch -- waiting on that is a fresh result, so the
   // wait-for-other-request path below stays exactly as it is. Force means
   // "ignore the TTL", not "ignore the other fetch in flight".
-  const cached = force ? null : await readHistoryEntry(normalized);
+  const cached = force ? null : await readHistoryEntry(normalized, caller);
 
   if (cached) {
     if (cached.status === "qualified" && Array.isArray(cached.daily)) {
@@ -1436,9 +1454,10 @@ function createLimiter(limit: number) {
 // about.
 export async function getDailyHistoryBulk(
   symbols: string[],
-  opts: { force?: boolean } = {}
+  opts: { force?: boolean; caller?: string } = {}
 ): Promise<Map<string, Point[]>> {
   const force = opts.force ?? false;
+  const caller = opts.caller;
   const result = new Map<string, Point[]>();
 
   const normalized = Array.from(
@@ -1464,7 +1483,7 @@ export async function getDailyHistoryBulk(
   // payload's chart series -- and it happens on EVERY build whether or not a
   // single bar is refetched from FMP. The FMP meter cannot see it, because from
   // FMP's point of view a warm build costs nothing. See redisBandwidth.ts.
-  await recordRedisRead("history-bulk", normalized.length);
+  await recordRedisRead("history-bulk", normalized.length, caller);
   let entries: (HistoryCacheEntry | null)[] = normalized.map(() => null);
 
   // THE READ HAPPENS EVEN UNDER FORCE, and that is deliberate. What force
@@ -1570,7 +1589,8 @@ export async function getDailyHistoryBulk(
  * how many it actually had.
  */
 export async function getCachedDailyHistoryBulk(
-  symbols: string[]
+  symbols: string[],
+  caller?: string
 ): Promise<Map<string, Point[]>> {
   const result = new Map<string, Point[]>();
 
@@ -1579,7 +1599,7 @@ export async function getCachedDailyHistoryBulk(
   );
   if (!normalized.length || !redis) return result;
 
-  await recordRedisRead("history-bulk", normalized.length);
+  await recordRedisRead("history-bulk", normalized.length, caller);
 
   try {
     const entries: (HistoryCacheEntry | null)[] = [];
@@ -1608,9 +1628,9 @@ export async function getCachedDailyHistoryBulk(
   return result;
 }
 
-export async function getCachedDailyHistory(symbol: string) {
+export async function getCachedDailyHistory(symbol: string, caller?: string) {
   const normalized = normalizeSymbol(symbol);
-  const cached = await readHistoryEntry(normalized);
+  const cached = await readHistoryEntry(normalized, caller);
 
   if (
     cached &&

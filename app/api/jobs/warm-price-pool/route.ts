@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
-import { warmPricePool } from "../../../../lib/server/pricePool";
+import { warmPricePool, keepPricePoolAlive } from "../../../../lib/server/pricePool";
+import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,60 @@ export async function GET(req: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {
+    // THE GATE COMES FIRST, AND IT DID NOT.
+    //
+    // warmPricePool's own market-hours check is inside warmPricePool, so this
+    // route derived its target list -- the single most expensive thing it does
+    // -- and only then discovered there was nothing to do. Observed in
+    // production overnight on 2026-09-04: a warm-targets miss at 01:00, 02:05
+    // and 03:10 UTC, each rebuilding the entire picker universe, each followed
+    // immediately by `{"skipped":true,"reason":"market-closed","written":0}`.
+    //
+    // The window is shut for ~15 hours a day plus weekends, which is over half
+    // of this job's 288 daily runs doing work for a run that cannot use it.
+    //
+    // CHECKED AGAINST THE SAME PREDICATE warmPricePool uses, not a second copy
+    // of the hours -- two answers to "is the market open" is
+    // claude/traps/two-validators-for-one-value.md, and /api/history already
+    // paid for that once.
+    if (!isActiveMarketWindow()) {
+      // THE TTL RESET COMES WITH THE GATE, OR THE GATE IS #395 AGAIN.
+      //
+      // warmPricePool's own market gate resets PRICE_POOL_HASH_TTL_SECONDS
+      // before returning -- that reset IS #398, and it exists because HSET does
+      // not extend an existing TTL, so a pool nothing writes to across a
+      // 15-hour weeknight gap simply expires. Returning here means
+      // warmPricePool is never called, which puts that reset on an unreachable
+      // path and empties the pool overnight exactly as #395 did.
+      //
+      // Caught in review of #419, before it shipped. The saving is real and the
+      // gate stays; the reset is hoisted to the same decision instead, through
+      // the single exported keep-alive so there is no second expire to drift.
+      const poolKeptAlive = await keepPricePoolAlive();
+      await recordJobRun("warm-price-pool", true, {
+        skipped: true,
+        reason: "market-closed",
+        written: 0,
+        // RECORDED, because a keep-alive nobody can see is how the last one hid
+        // for a fortnight. `false` here on a market-closed run means the pool is
+        // now counting down to an expiry with nothing to stop it.
+        poolKeptAlive,
+        // NAMED SO THE SKIP IS DISTINGUISHABLE FROM THE OLD ONE. The previous
+        // market-closed record was written after a full target derivation; this
+        // one is written instead of it. Without the flag the two are the same
+        // line on /cache-health and the saving is invisible.
+        targetsSkipped: true,
+      });
+      // No releaseLock here: the `finally` below owns it, and releasing twice
+      // means the second call can delete a token a LATER run has already taken.
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "market-closed",
+        targetsSkipped: true,
+      });
+    }
+
     // Displayed symbols UNION the rolling dynamic universe, so a symbol that
     // rotates into the scan is already warm rather than arriving cold.
     // See lib/server/warmTargets.ts for why this must not be a replacement.

@@ -350,7 +350,7 @@ async function fetchMarket(_origin: string, _forceFresh = false): Promise<Market
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
-  const pts = await getDailyHistory(symbol);
+  const pts = await getDailyHistory(symbol, { caller: "plays" });
 
   return pts
     .map((p) => ({
@@ -741,7 +741,7 @@ async function buildPlaysPayload(
   const limit = pLimit(10);
 
   async function getHistoryForScan(symbol: string) {
-    const cachedPoints = await getCachedDailyHistory(symbol);
+    const cachedPoints = await getCachedDailyHistory(symbol, "plays");
 
     if (symbol === normalizedDebugSymbol && debugSymbolScan) {
       debugSymbolScan.cacheHadHistory = cachedPoints.length > 0;

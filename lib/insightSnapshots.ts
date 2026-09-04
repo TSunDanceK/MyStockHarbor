@@ -224,7 +224,7 @@ function normalizeSnapshot(input: unknown): InsightSnapshot | null {
 async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
   const [quoteData, dailyHistory, symbolResults] = await Promise.all([
     fetchQuoteSnapshotForRender(symbol) as Promise<Quote>,
-    getDailyHistory(symbol),
+    getDailyHistory(symbol, { caller: "insight-snapshot" }),
     searchSymbols(symbol, "") as Promise<SymbolRow[]>,
   ]);
 

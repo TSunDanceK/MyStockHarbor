@@ -199,7 +199,14 @@ check(
   "the counters are incremented once per slice symbol, before the wait",
   /if \(scheduledLast\) scheduleCovered\+\+;/.test(cache) &&
     /quarterlyStamped\+\+;/.test(cache) &&
-    cache.indexOf("quarterlyStamped++") < cache.indexOf("waitForStockDataBudget(callsForSymbol"),
+    // ANCHORED ON THE `await`, NOT THE BARE NAME. `waitForStockDataBudget(` also
+    // matches its own declaration, which sits ABOVE the loop -- so the ordering
+    // this asserts was only correct because the declaration's parameter list
+    // happens to be on the next line. That is a fact about formatting, not
+    // about the code. scripts/check-assertion-anchors.mjs now fails the build
+    // on that shape.
+    cache.indexOf("quarterlyStamped++") <
+      cache.indexOf("await waitForStockDataBudget(callsForSymbol"),
   "counted after the wait, they would describe only the symbols the run " +
     "reached — and on a capacity-bound run that is the subset that says least"
 );

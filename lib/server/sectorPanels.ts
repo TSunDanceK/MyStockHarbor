@@ -387,7 +387,7 @@ async function buildSectorBreadth(slug: string): Promise<SectorBreadth> {
   const empty: SectorBreadth = { sampled: 0, above50: 0, above200: 0, builtAt: Date.now() };
   if (!constituents.length) return empty;
 
-  const histories = await getCachedDailyHistoryBulk(constituents);
+  const histories = await getCachedDailyHistoryBulk(constituents, "sector-panels");
   if (!histories.size) return empty;
 
   let sampled = 0;

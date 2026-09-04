@@ -64,7 +64,7 @@ type SpxChartRead = {
 
 async function getSpxChartPoints(): Promise<SpxChartRead> {
   try {
-    const points = await getDailyHistory("^GSPC");
+    const points = await getDailyHistory("^GSPC", { caller: "spx-page" });
 
     const mapped = points
       .map((point) => ({
