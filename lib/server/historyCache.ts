@@ -508,8 +508,17 @@ let historyNewestBarSeen: string | null = null;
 // forced failures against the same cap. A sample that saturates is not a sample.
 const MAX_DIAGNOSTIC_SYMBOLS = 40;
 
-/** Weekdays strictly between `isoDate` and today (Eastern), today excluded. */
-function weekdaysBehindEastern(isoDate: string, now = new Date()) {
+/**
+ * Weekdays strictly between `isoDate` and today (Eastern), today excluded.
+ *
+ * EXPORTED for the delisting sweep, which runs in a DIFFERENT job (and a
+ * different lambda) from the one that fetches bars. The arithmetic has to
+ * happen at SWEEP time rather than at observation time -- a symbol observed
+ * once at "40 weekdays behind" is 41 the next morning, and freezing the number
+ * at write time would make a stalled symbol look permanently as stale as it was
+ * on the day we last looked, which is the wrong direction to be wrong in.
+ */
+export function weekdaysBehindEastern(isoDate: string, now = new Date()) {
   const barMs = Date.parse(`${isoDate}T00:00:00Z`);
   if (!Number.isFinite(barMs)) return null;
 
@@ -544,6 +553,133 @@ function recordNewestBarAge(symbol: string, daily: Point[]) {
   } else {
     historyFreshNewestCount++;
   }
+
+  // UNCAPPED, AND NOT THE DIAGNOSTIC MAP ABOVE. That one is a SAMPLE of stale
+  // symbols capped at 40 for a log line; this is the whole observation, fresh
+  // symbols included, because the sweep that reads it has to be able to tell
+  // "this symbol printed a bar yesterday" from "this symbol is not in the
+  // hash", and a sample cannot answer either.
+  historyNewestBarStamps.set(symbol, `${newest}|${Date.now()}`);
+}
+
+// ---------------------------------------------------------------------------
+// THE NEWEST-BAR OBSERVATION, PERSISTED FOR A DIFFERENT JOB
+//
+// The counters above are module state in the lambda that fetched the bars, and
+// they are read-and-reset by warm-picker-universe. The delisting sweep runs in
+// warm-screener-fundamentals, twelve minutes EARLIER and in a different
+// invocation, so it can never see them. It needs the same fact -- when did this
+// symbol last print a bar -- and it has to get it out of Redis.
+//
+// WHY A HASH AND NOT THE HISTORY ENTRIES THEMSELVES. `msh:history:v7:<SYM>`
+// already holds the answer, and reading it needs no FMP call, which is what
+// made the signal attractive in the first place. But answering it that way
+// costs ~760 GETs of a ~250-bar JSON document every morning -- megabytes of
+// transfer and three orders of magnitude more Redis commands than #415 just
+// spent a whole PR removing from one page. One HSET a day and one HGETALL a day
+// carries the same information in two commands.
+//
+// WHY THE OBSERVATION TIME IS STORED WITH IT, and this is the part that keeps
+// the signal honest. A stamp is only rewritten when a symbol is actually
+// refetched. If a symbol stops being refetched -- it left the universe, its
+// fetch throws every morning, the job dies -- its stamp FREEZES while the
+// weekdays-behind arithmetic keeps climbing, so a live symbol would look
+// progressively deader the longer we failed to look at it. Absence of a fresh
+// observation is not evidence of death; it is absence of evidence. Same shape
+// as EVICTION_FAIL_MAX_AGE_MS one module over: undated evidence is evidence
+// forever.
+//
+// The fields carry no TTL of their own, so they are cleaned up the way the two
+// per-symbol hashes are -- symbolEviction's PER_SYMBOL_HASHES includes this
+// key, and an evicted symbol's field goes with the rest of its state.
+//
+// KNOWN, BOUNDED LEAK, stated rather than left to be discovered. A symbol that
+// leaves the universe without being evicted is never refetched again, so its
+// field stops being rewritten and nothing removes it -- exactly the `nx`
+// accumulation measured on the /cache-health denominators
+// (claude/staleness-denominators-2026-09-04.md), at the same ~16%-of-universe
+// scale. It costs bytes on one HGETALL a day and it inflates `barStampsRead`;
+// it cannot cause a wrong eviction, because a field nothing rewrites fails the
+// observation-age guard within 48 hours. Fixing it belongs with the general
+// reconcile described in that report, not here.
+const NEWEST_BAR_STAMP_HASH = "msh:history:newest-bar:v1";
+
+const historyNewestBarStamps = new Map<string, string>();
+
+export type NewestBarStamp = {
+  /** The newest bar date FMP served, "YYYY-MM-DD". */
+  newest: string;
+  /** When we observed it. Epoch ms. */
+  observedAt: number;
+};
+
+/**
+ * Split a stored `"YYYY-MM-DD|<ms>"` value.
+ *
+ * PURE and exported so the invariant check can run it. Returns null for
+ * anything it cannot fully parse -- a half-read stamp must not become a
+ * confident answer about a symbol we are deciding whether to delete.
+ */
+export function parseNewestBarStamp(raw: unknown): NewestBarStamp | null {
+  if (typeof raw !== "string") return null;
+  const [newest, at] = raw.split("|");
+  if (!newest || !/^\d{4}-\d{2}-\d{2}$/.test(newest)) return null;
+  const observedAt = Number(at);
+  if (!Number.isFinite(observedAt) || observedAt <= 0) return null;
+  return { newest, observedAt };
+}
+
+/**
+ * Write every newest-bar observation this run made, in one command, and clear
+ * the buffer.
+ *
+ * Read-and-reset like the counters, and for the same reason: a run that threw
+ * must not donate its partial observations to the next one. Returns the number
+ * of symbols written so the run record can say whether the signal was fed at
+ * all -- `staleBarred: 0` against a hash nothing has written is the blindness
+ * this whole field exists to make visible.
+ */
+export async function flushNewestBarStamps(): Promise<number> {
+  const pending = Object.fromEntries(historyNewestBarStamps);
+  historyNewestBarStamps.clear();
+  const count = Object.keys(pending).length;
+  if (!redis || !count) return 0;
+  try {
+    await redis.hset(NEWEST_BAR_STAMP_HASH, pending);
+    return count;
+  } catch {
+    // fail open -- a missed flush leaves yesterday's stamps in place, and the
+    // observation-age guard in symbolEviction is what stops those being read as
+    // today's evidence.
+    return 0;
+  }
+}
+
+/** Discard buffered stamps without writing them. The failure path. */
+export function dropNewestBarStamps(): void {
+  historyNewestBarStamps.clear();
+}
+
+/**
+ * Every symbol's last observed bar date, for the delisting sweep.
+ *
+ * ONE HGETALL. Unparseable fields are dropped rather than defaulted, so a
+ * corrupt value reads as "no observation" and the symbol is left alone.
+ */
+export async function readNewestBarStamps(): Promise<Map<string, NewestBarStamp>> {
+  const out = new Map<string, NewestBarStamp>();
+  if (!redis) return out;
+  try {
+    const raw = await redis.hgetall<Record<string, string>>(NEWEST_BAR_STAMP_HASH);
+    for (const [symbol, value] of Object.entries(raw ?? {})) {
+      const stamp = parseNewestBarStamp(value);
+      if (stamp) out.set(symbol, stamp);
+    }
+  } catch {
+    // fail open -- an empty map means the sweep records `barStampsRead: 0` and
+    // evicts nothing on this signal, which is the safe direction.
+  }
+  return out;
 }
 
 /**

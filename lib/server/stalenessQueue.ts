@@ -127,6 +127,28 @@ export const DATASETS = {
     ttlSeconds: 60 * 15,
     job: "warm-price-pool",
     coverage: "registered",
+    // THE ONLY DATASET WHOSE REFRESHES ARE GATED ON THE MARKET BEING OPEN, and
+    // saying so here is what stops the health page calling it broken for
+    // fifteen hours a day.
+    //
+    // warmPricePool returns early with { skipped: true, reason: "market-closed" }
+    // outside the buffered window, so from 21:01 UTC until 12:00 the next
+    // morning -- and all weekend -- nothing refreshes, and a 15-minute policy
+    // means 100% of the universe is past its TTL within the first quarter hour.
+    // Observed 2026-09-04 07:26 UTC: `0 / 886`, `886 past its TTL`, red, "100%
+    // of observed symbols past their own TTL". Every word of that is correct
+    // and the colour is wrong.
+    //
+    // This is the same defect as `quarterlyRefreshes: 0` before #416 in a
+    // different place: a page that cannot tell IDLE-BECAUSE-CORRECT from BROKEN
+    // reports the more alarming of the two, every night, until the alarm is
+    // ignored -- and then the one night it means something, it is ignored too.
+    //
+    // DECLARED IN THE REGISTRY rather than as `if (d.dataset === "pricePool")`
+    // in the page, for the reason `coverage` is: the next gated dataset should
+    // get this by declaring it, not by somebody remembering to edit a condition
+    // in a JSX file.
+    refreshWindow: "market-hours",
   },
   dailyHistory: {
     label: "Daily history",
@@ -177,6 +199,17 @@ export const DATASETS = {
     /** Anything true of this dataset that the schedule does not say. */
     qualifier?: string;
     coverage: "registered" | "observed-only";
+    /**
+     * Set when this dataset's warm job refuses to run outside the buffered US
+     * trading window. Absent means "refreshes whenever its cron fires", which
+     * is every other dataset here.
+     *
+     * The page reads it to decide whether being past TTL is a FAULT or the
+     * expected state. It is deliberately not a boolean: "market-hours" names
+     * the gate (isActiveMarketWindow) so a second kind of window later has
+     * somewhere to go that is not a second boolean.
+     */
+    refreshWindow?: "market-hours";
   } & (
     | {
         /** The warm job that maintains this dataset. Its cadence is READ FROM
@@ -431,6 +464,12 @@ export type DatasetHealth = {
   seededAtMs: number | null;
   instrumented: boolean;
   /**
+   * True when refreshes are gated on the market being open, so "past its TTL"
+   * outside that window is the expected state rather than a failure. See the
+   * note on pricePool in DATASETS.
+   */
+  marketHoursOnly: boolean;
+  /**
    * FALSE when this dataset has no registerSymbols caller, so `tracked` counts
    * only the symbols something happened to refresh. `stale / tracked` is then a
    * ratio of a set to itself and cannot express a coverage failure at all. The
@@ -458,6 +497,8 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     seededAtMs: null,
     instrumented: false,
     coverageEstablished: def.coverage === "registered",
+    marketHoursOnly:
+      "refreshWindow" in def && def.refreshWindow === "market-hours",
   };
   if (!redis) return base;
 

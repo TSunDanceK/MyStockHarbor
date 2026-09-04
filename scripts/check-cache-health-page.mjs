@@ -436,6 +436,29 @@ for (const [, job, flag] of jobEntries) {
 
 const stalenessSrc = readCode("lib/server/stalenessQueue.ts");
 const datasetKeys = [...stalenessSrc.matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
+// ONE ENTRY'S OWN TEXT, NOT `${ds}: \{[\s\S]*?<field>`. That lazy form runs
+// straight past the entry it names and finds the field in a LATER one: the
+// first draft of the refreshWindow assertions below reported fundamentals,
+// profile, screenerFundamentals and stockData as declaring a market-hours gate,
+// because the nearest `refreshWindow:` after each of them is pricePool's. Four
+// assertions failing for a reason unrelated to the code — and had the property
+// been the other way round, four passing for one.
+//
+// The registry is one object with two-space-indented entries, so an entry ends
+// at the next line that is exactly `  },`.
+const datasetBlock = (ds) => {
+  const start = stalenessSrc.indexOf(`\n  ${ds}: {`);
+  if (start === -1) return "";
+  const end = stalenessSrc.indexOf("\n  },", start);
+  return end === -1 ? stalenessSrc.slice(start) : stalenessSrc.slice(start, end);
+};
+check(
+  "each dataset entry can be isolated from its neighbours",
+  datasetKeys.every((ds) => datasetBlock(ds).length > 0) &&
+    !datasetBlock("fundamentals").includes("pricePool"),
+  "a per-entry assertion written as a lazy match reads the NEXT entry's fields " +
+    "— which is how four of these first reported the wrong answer"
+);
 check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
 for (const ds of datasetKeys) {
   const has =
@@ -461,7 +484,7 @@ console.log("\n=== Coverage: a ratio of a set to itself is not coverage ===\n");
 // not the point; the point is that the next dataset added without a denominator
 // cannot render green.
 for (const ds of datasetKeys) {
-  const declared = new RegExp(`${ds}:\\s*\\{[\\s\\S]*?coverage:\\s*"(registered|observed-only)"`).exec(stalenessSrc)?.[1];
+  const declared = /coverage:\s*"(registered|observed-only)"/.exec(datasetBlock(ds))?.[1];
   const registers = new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
   check(`${ds}: declares a coverage kind`, Boolean(declared), declared ?? "MISSING");
   if (declared === "registered") {
@@ -474,6 +497,51 @@ for (const ds of datasetKeys) {
     );
   }
 }
+
+console.log("\n=== Refresh windows: idle because correct is not broken ===\n");
+// SAME COUPLING AS `coverage`, ONE PROPERTY OVER. A dataset whose warm job
+// refuses to run outside the trading window is SUPPOSED to be past its TTL for
+// fifteen hours a day, and the page rendered that red every night -- correct
+// wording, wrong colour, on a page whose whole job is being unambiguous at a
+// glance. A permanent red is a red nobody reads.
+//
+// Declared in the registry, and asserted against the tree in BOTH directions,
+// so a stale declaration cannot silence a dataset that is genuinely broken and
+// a missing one cannot leave a gated dataset shouting.
+const marketGatedJobs = new Set();
+const GATED_MODULES = ["lib/server/pricePool.ts"];
+for (const mod of GATED_MODULES) {
+  if (/isActiveMarketWindow/.test(readCode(mod))) marketGatedJobs.add(mod);
+}
+check(
+  "the module the declaration is about really gates on the trading window",
+  marketGatedJobs.has("lib/server/pricePool.ts"),
+  "warmPricePool returns { skipped: true, reason: 'market-closed' } outside " +
+    "isActiveMarketWindow — if that ever stops being true the declaration is a lie"
+);
+for (const ds of datasetKeys) {
+  const declared = /refreshWindow:\s*"market-hours"/.test(datasetBlock(ds));
+  if (ds === "pricePool") {
+    check(
+      `${ds}: declares its market-hours gate`,
+      declared,
+      "without it the page reads 100% past TTL as a fault every night and all weekend"
+    );
+  } else {
+    check(
+      `${ds}: does NOT claim a market-hours gate`,
+      !declared,
+      "every other dataset runs on its own cron around the clock, and a false " +
+        "declaration would silence a real failure"
+    );
+  }
+}
+check(
+  "DatasetHealth carries the flag, derived from the registry",
+  /marketHoursOnly:\s*boolean/.test(stalenessSrc) &&
+    /def\.refreshWindow === "market-hours"/.test(stalenessSrc),
+  "a field the page reads must be computed from the declaration, not typed twice"
+);
 
 // The page must act on it, not merely receive it. A field threaded through and
 // then rendered identically is the same green panel with more code behind it.
@@ -528,12 +596,22 @@ if (statusFn) {
     seededAtMs: Date.now(),
     instrumented: true,
     coverageEstablished: true,
+    marketHoursOnly: false,
     ...over,
   });
 
+  // EVERY EXISTING CALL BELOW PASSES `marketOpen` EXPLICITLY. Leaving it off
+  // would make it `undefined` -- falsy, so the market-window branch is skipped
+  // and every assertion still passes, for a reason that has nothing to do with
+  // what it claims. That is the same shape as the three-argument readMemo call
+  // that turned out to be hiding `nowMs - at >= undefined`: a test bug that
+  // passes is a test that measures nothing.
+  const OPEN = true;
+  const SHUT = false;
+
   // The shape that produced "24 / 24, within policy": every observed symbol
   // fresh, nothing declaring what ought to be there.
-  const perfectButUncovered = statusFor(row({ coverageEstablished: false }));
+  const perfectButUncovered = statusFor(row({ coverageEstablished: false }), OPEN);
   check(
     "an uncovered dataset with EVERY observed symbol fresh is not ok",
     perfectButUncovered.status !== "ok",
@@ -544,15 +622,71 @@ if (statusFn) {
   // And it must not be reachable from the other direction either: an uncovered
   // dataset that happens to look BAD is still an unearned measurement, not a
   // verdict about the dataset.
-  const staleUncovered = statusFor(row({ coverageEstablished: false, stale: 90 }));
+  const staleUncovered = statusFor(row({ coverageEstablished: false, stale: 90 }), OPEN);
   check("an uncovered dataset with stale symbols is still uncovered", staleUncovered.status === "uncovered", staleUncovered.status);
 
   // The control: coverage established, so the ordinary judgements still apply.
-  check("a covered, fresh dataset is ok", statusFor(row({})).status === "ok");
-  check("a covered, mostly-stale dataset is a fault", statusFor(row({ stale: 90 })).status === "fault");
+  check("a covered, fresh dataset is ok", statusFor(row({}), OPEN).status === "ok");
+  check("a covered, mostly-stale dataset is a fault", statusFor(row({ stale: 90 }), OPEN).status === "fault");
+  // ── A GATED DATASET OUTSIDE ITS WINDOW ────────────────────────────────
+  //
+  // Measured on the live page, 2026-09-04 07:26 UTC: price pool `0 / 886`,
+  // `886 past its TTL`, red, "100% of observed symbols past their own TTL".
+  // Every word correct, the colour wrong -- warmPricePool refuses to run
+  // outside the buffered window, and a 15-minute policy puts the whole universe
+  // past TTL a quarter of an hour after the gate shuts. Roughly fifteen hours a
+  // day of red, plus weekends, on a page whose entire job is being unambiguous
+  // at a glance.
+  const overnight = statusFor(row({ marketHoursOnly: true, stale: 100 }), SHUT);
+  check(
+    "a market-hours dataset, 100% past TTL with the market shut, is not a fault",
+    overnight.status !== "fault" && overnight.status !== "warn",
+    `${overnight.status} — ${overnight.why}`
+  );
+  check(
+    "...and it is not green either",
+    overnight.status === "seeded",
+    "the page does not know the last session's run was healthy, only that " +
+      "nothing was SUPPOSED to run since — green would be the opposite error"
+  );
+  check(
+    "...and it says WHY, not just what",
+    /trading window/.test(overnight.why) && /100%/.test(overnight.why),
+    overnight.why
+  );
+
+  // THE BRANCH MUST STILL BE ABLE TO FAULT. A neutral status that can never
+  // escalate is a dead job reading calm forever -- the exact failure the
+  // `seeded` branch above this one was tightened to avoid.
+  const midSession = statusFor(row({ marketHoursOnly: true, stale: 100 }), OPEN);
+  check(
+    "the same dataset IS a fault while the window is open",
+    midSession.status === "fault",
+    `${midSession.status} — a price pool that stops refreshing during the ` +
+      `session must be red within the quarter hour, exactly as before`
+  );
+  check(
+    "the exemption is not handed to every dataset just because the market is shut",
+    statusFor(row({ marketHoursOnly: false, stale: 100 }), SHUT).status === "fault",
+    "fundamentals, profile and the rest run on their own crons around the " +
+      "clock — a shut market says nothing about them"
+  );
+  check(
+    "a gated dataset that is genuinely fine reads ok, shut or open",
+    statusFor(row({ marketHoursOnly: true, stale: 0 }), SHUT).status === "ok" &&
+      statusFor(row({ marketHoursOnly: true, stale: 0 }), OPEN).status === "ok",
+    "the branch is reached only when something is actually past TTL"
+  );
+  check(
+    "an uncovered gated dataset is still uncovered, shut or not",
+    statusFor(row({ marketHoursOnly: true, coverageEstablished: false, stale: 100 }), SHUT)
+      .status === "uncovered",
+    "the coverage question is not a freshness question and must win first"
+  );
+
   check(
     "an uninstrumented dataset is still unknown, not uncovered",
-    statusFor(row({ instrumented: false, coverageEstablished: false })).status === "unknown",
+    statusFor(row({ instrumented: false, coverageEstablished: false }), OPEN).status === "unknown",
     "nothing measured and no denominator are different problems with different fixes"
   );
 }
