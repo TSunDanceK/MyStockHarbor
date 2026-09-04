@@ -3,6 +3,7 @@ import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool } from "../../../../lib/server/pricePool";
+import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,43 @@ export async function GET(req: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {
+    // THE GATE COMES FIRST, AND IT DID NOT.
+    //
+    // warmPricePool's own market-hours check is inside warmPricePool, so this
+    // route derived its target list -- the single most expensive thing it does
+    // -- and only then discovered there was nothing to do. Observed in
+    // production overnight on 2026-09-04: a warm-targets miss at 01:00, 02:05
+    // and 03:10 UTC, each rebuilding the entire picker universe, each followed
+    // immediately by `{"skipped":true,"reason":"market-closed","written":0}`.
+    //
+    // The window is shut for ~15 hours a day plus weekends, which is over half
+    // of this job's 288 daily runs doing work for a run that cannot use it.
+    //
+    // CHECKED AGAINST THE SAME PREDICATE warmPricePool uses, not a second copy
+    // of the hours -- two answers to "is the market open" is
+    // claude/traps/two-validators-for-one-value.md, and /api/history already
+    // paid for that once.
+    if (!isActiveMarketWindow()) {
+      await recordJobRun("warm-price-pool", true, {
+        skipped: true,
+        reason: "market-closed",
+        written: 0,
+        // NAMED SO THE SKIP IS DISTINGUISHABLE FROM THE OLD ONE. The previous
+        // market-closed record was written after a full target derivation; this
+        // one is written instead of it. Without the flag the two are the same
+        // line on /cache-health and the saving is invisible.
+        targetsSkipped: true,
+      });
+      // No releaseLock here: the `finally` below owns it, and releasing twice
+      // means the second call can delete a token a LATER run has already taken.
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "market-closed",
+        targetsSkipped: true,
+      });
+    }
+
     // Displayed symbols UNION the rolling dynamic universe, so a symbol that
     // rotates into the scan is already warm rather than arriving cold.
     // See lib/server/warmTargets.ts for why this must not be a replacement.

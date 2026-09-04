@@ -109,7 +109,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const daily = await getDailyHistory(symbol);
+    const daily = await getDailyHistory(symbol, { caller: "api-history" });
     const points = aggregate(daily, interval);
 
     return NextResponse.json(

@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { getPickersData } from "./pickersBuilder";
+import { getPickersData, readPickersSymbolsIfCached } from "./pickersBuilder";
 import { readDynamicUniverse } from "./dynamicUniverseCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readSearchDemand } from "./searchDemand";
@@ -79,6 +79,29 @@ import { PICKER_ROUTES } from "../pickerRoutes";
 // expensive read happens 45 times a day instead of 648 -- ~5.06 GB/day down to
 // ~0.35 GB/day, a 93% cut -- and every other call is a few-KB GET.
 //
+// ─────────────────────────────────────────────────────────────────────────────
+// THAT ~0.35 GB/DAY WAS WRONG BY TEN TIMES, AND THE ERROR IS INSTRUCTIVE.
+//
+// It prices a miss at "the ~8 MB read", which is what readPickersCache costs.
+// But getPickersData does not only READ. On a payload miss it BUILDS, and a
+// build reads every symbol's history out of Redis at ~110 KB a symbol -- about
+// 80 MB. This key lives 30 minutes and the pickers payload lives 60, so roughly
+// every other miss landed on an expired payload and a five-minute cron rebuilt
+// the entire site.
+//
+// Measured in production 2026-09-04, market shut, no human traffic: hourly
+// `[warm-targets] cache miss` -> `[pickers] build complete` -> warm-price-pool
+// returning `{"skipped":true,"reason":"market-closed"}` without using the list
+// it had just paid 80 MB and ten seconds for. See
+// claude/history-read-path-2026-09-04.md.
+//
+// The paragraph above is left standing rather than corrected in place: it was
+// true of the change it described, and the defect was that its cost model went
+// stale when getPickersData's miss path became expensive. A number written in a
+// comment is a measurement with no expiry date on it, which is why the fix is
+// the meter in redisBandwidth.ts and not a better paragraph.
+// ─────────────────────────────────────────────────────────────────────────────
+//
 // WHAT THIS DOES NOT CHANGE: cadence, coverage, or which symbols get warmed.
 // warm-price-pool still refreshes a quarter of the universe per run, so full
 // price coverage takes four of its runs -- ~20 minutes since the 2026-08-31
@@ -106,6 +129,32 @@ const redis =
 
 const WARM_TARGETS_KEY = "msh:warm-targets:v1";
 const WARM_TARGETS_TTL_SECONDS = 30 * 60;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FALLBACK COPY, AND WHY A SECOND KEY RATHER THAN A LONGER TTL.
+//
+// The 30-minute TTL above is a STALENESS BUDGET -- it says how long a newly
+// displayed symbol may wait before the warm jobs know about it. Lengthening it
+// would trade that budget away. This key trades nothing: it is the same list,
+// kept for a week, and it is read only when the fresh one has expired AND the
+// pickers payload is not cached either.
+//
+// WHAT IT REPLACES. That combination used to fall through to getPickersData(),
+// which BUILDS on a payload miss -- ~80 MB of Redis history reads and ten
+// seconds, from a five-minute cron, to obtain a list of ~760 tickers. Measured
+// hourly overnight with the market shut (see readPickersSymbolsIfCached).
+//
+// A day-old symbol list is a far smaller error than a full rebuild an hour: the
+// list is the union of the displayed set and the rolling dynamic universe, and
+// both move by a handful of tickers a day. Nothing downstream is fast enough to
+// notice -- warm-stock-data laps in ~3h and warm-fundamentals is hourly, the
+// same argument the 30-minute budget already rests on.
+//
+// A WEEK, NOT FOREVER. Long enough that no ordinary outage exhausts it, short
+// enough that a permanently broken payload eventually reports an empty list
+// rather than warming a set of tickers from an abandoned universe forever.
+const WARM_TARGETS_FALLBACK_KEY = "msh:warm-targets:v1:last-good";
+const WARM_TARGETS_FALLBACK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export type WarmTargets = {
   symbols: string[];
@@ -148,6 +197,16 @@ async function readCachedTargets(): Promise<CachedWarmTargets | null> {
   }
 }
 
+async function readFallbackTargets(): Promise<CachedWarmTargets | null> {
+  if (!redis) return null;
+  try {
+    const cached = await redis.get<CachedWarmTargets>(WARM_TARGETS_FALLBACK_KEY);
+    return isUsable(cached) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
 async function writeCachedTargets(targets: WarmTargets) {
   if (!redis) return;
   // NEVER CACHE AN EMPTY LIST. An empty result means the pickers read failed or
@@ -156,11 +215,14 @@ async function writeCachedTargets(targets: WarmTargets) {
   // reporting a clean run against zero targets.
   if (!targets.symbols.length) return;
   try {
-    await redis.set<CachedWarmTargets>(
-      WARM_TARGETS_KEY,
-      { ...targets, builtAt: Date.now() },
-      { ex: WARM_TARGETS_TTL_SECONDS }
-    );
+    const entry: CachedWarmTargets = { ...targets, builtAt: Date.now() };
+    // BOTH, IN ONE PIPELINE. Written together so the fallback can never be
+    // older than the last successful derivation, and cannot drift into being a
+    // list nothing ever refreshed.
+    const p = redis.pipeline();
+    p.set(WARM_TARGETS_KEY, entry, { ex: WARM_TARGETS_TTL_SECONDS });
+    p.set(WARM_TARGETS_FALLBACK_KEY, entry, { ex: WARM_TARGETS_FALLBACK_TTL_SECONDS });
+    await p.exec();
   } catch (error) {
     // fail open -- a failed write costs bandwidth on the next run, not
     // correctness.
@@ -193,14 +255,55 @@ export async function getWarmTargetSymbols(base: string): Promise<WarmTargets> {
     };
   }
 
-  // Cache miss. This is the ~8 MB read; log it so the cut is visible in Vercel
-  // logs and a regression to per-run reads is obvious rather than silent.
+  // Cache miss. Log it so the cut is visible in Vercel logs and a regression to
+  // per-run reads is obvious rather than silent.
   console.log("[warm-targets] cache miss -- deriving from the pickers payload");
 
-  const payload = await getPickersData(base);
-  const displayed = Array.from(
-    new Set((payload.signalRecords ?? []).map((r) => r.symbol).filter(Boolean))
-  );
+  // A READ THAT CANNOT BECOME A BUILD.
+  //
+  // This used to be `await getPickersData(base)`, and that call does not only
+  // read: on a payload miss it rebuilds the whole picker universe, which reads
+  // every symbol's history out of Redis at ~110 KB each. The pickers payload
+  // lives 60 minutes and this cache 30, so roughly every other miss landed on
+  // an expired payload and a five-minute cron rebuilt the site. Observed
+  // hourly, overnight, with the market shut and the caller then skipping.
+  //
+  // readPickersSymbolsIfCached returns null instead of building, and skips the
+  // chart re-attach the symbol list never needed.
+  let cachedSymbols = await readPickersSymbolsIfCached();
+
+  if (!cachedSymbols) {
+    // The payload is not cached. Serve the last good list rather than becoming
+    // the thing that rebuilds it -- a day-old symbol list costs a handful of
+    // tickers' freshness; a rebuild here costs ~80 MB and ten seconds, every
+    // hour, forever.
+    const fallback = await readFallbackTargets();
+    if (fallback) {
+      console.log(
+        `[warm-targets] payload not cached -- serving the last good list ` +
+          `(${fallback.symbols.length} symbols, ` +
+          `${Math.round((Date.now() - fallback.builtAt) / 60000)}m old) rather than building`
+      );
+      return {
+        symbols: fallback.symbols,
+        displayed: fallback.displayed,
+        universe: fallback.universe,
+        tier1: fallback.tier1 ?? 0,
+      };
+    }
+
+    // NO FRESH KEY, NO PAYLOAD, NO FALLBACK. A genuine cold start -- a new
+    // deploy against an empty namespace -- and the only remaining option is to
+    // build. Left in deliberately: the alternative is warm jobs that never
+    // start, which is a silent site-wide freshness failure rather than a bill.
+    console.warn(
+      "[warm-targets] cold start -- no cached payload and no fallback list, building"
+    );
+    const payload = await getPickersData(base);
+    cachedSymbols = (payload.signalRecords ?? []).map((r) => r.symbol).filter(Boolean);
+  }
+
+  const displayed = Array.from(new Set(cachedSymbols.filter(Boolean)));
 
   let universeSymbols: string[] = [];
   try {

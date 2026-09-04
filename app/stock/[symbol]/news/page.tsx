@@ -219,7 +219,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   const [rawHistory, { price, date }] = await Promise.all([
-    getDailyHistory(upper).catch(() => []),
+    getDailyHistory(upper, { caller: "stock-news" }).catch(() => []),
     fetchQuoteForMeta(upper),
   ]);
 
