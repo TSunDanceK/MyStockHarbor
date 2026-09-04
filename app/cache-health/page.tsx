@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/backfillAuth";
 import { readFmpUsage, FMP_BANDWIDTH_CAP_BYTES } from "@/lib/server/fmpUsage";
 import { getFmpMinuteUsage } from "@/lib/server/historyCache";
+import { isActiveMarketWindow } from "@/lib/server/marketHours";
 import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/stalenessQueue";
 import { readJobRuns } from "@/lib/server/jobRuns";
 
@@ -80,7 +81,7 @@ type Status = "ok" | "warn" | "fault" | "unknown" | "seeded" | "uncovered";
  * silently omitted it would be another instance of the exact failure that made
  * this page necessary.
  */
-function statusFor(d: DatasetHealth): { status: Status; why: string } {
+function statusFor(d: DatasetHealth, marketOpen: boolean): { status: Status; why: string } {
   if (!d.instrumented) {
     return { status: "unknown", why: "no staleness set yet — not measured, not necessarily healthy" };
   }
@@ -142,6 +143,35 @@ function statusFor(d: DatasetHealth): { status: Status; why: string } {
   // shown in its own column, and the all-never case is handled above.
   const observed = Math.max(0, d.tracked - d.never);
   const pct = observed > 0 ? d.stale / observed : 0;
+
+  // IDLE BECAUSE CORRECT IS NOT BROKEN, and until now this page could not say
+  // the difference. warmPricePool refuses to run outside the buffered trading
+  // window, so from 21:01 UTC to 12:00 the next morning -- and all weekend --
+  // nothing refreshes and a 15-minute policy puts the entire universe past its
+  // TTL within a quarter of an hour. The page rendered that red for roughly
+  // fifteen hours a day, every day, and the reading was CORRECT every time:
+  // "100% of observed symbols past their own TTL" is exactly true and exactly
+  // the wrong colour.
+  //
+  // A permanent red is a red nobody reads, which is how the one that means
+  // something gets missed. Same failure as `quarterlyRefreshes: 0` before #416.
+  //
+  // NEUTRAL, NOT GREEN. The page genuinely does not know whether the last
+  // session's run was healthy -- only that nothing was SUPPOSED to run since.
+  // Rendering it green would be the opposite error, and the Oldest column plus
+  // the warm-jobs table below still carry the real evidence.
+  //
+  // It stays capable of faulting: while the window is OPEN this branch is
+  // skipped entirely and the ratio judgement below applies unchanged, so a
+  // price pool that stops refreshing during the session is red within the
+  // quarter hour, exactly as before.
+  if (!marketOpen && d.marketHoursOnly && pct >= 0.05) {
+    return {
+      status: "seeded",
+      why: `${Math.round(pct * 100)}% past their own TTL — expected: this dataset only refreshes inside the buffered US trading window, which is shut`,
+    };
+  }
+
   if (pct >= 0.25) return { status: "fault", why: `${Math.round(pct * 100)}% of observed symbols past their own TTL` };
   if (pct >= 0.05) return { status: "warn", why: `${Math.round(pct * 100)}% of observed symbols past their own TTL` };
   // Coverage is a separate question from staleness, and a mostly-unobserved
@@ -211,6 +241,13 @@ export default async function CacheHealthPage({
     readAllDatasetHealth(),
     readJobRuns(),
   ]);
+
+  // COMPUTED ONCE, PASSED IN. Pure arithmetic over Intl -- no Redis, no fetch,
+  // nothing that could make this page dynamic in a new way. Read here rather
+  // than inside statusFor so every row is judged against the same instant and
+  // so the function stays pure over its arguments, which is what lets the
+  // invariant check run it.
+  const marketOpen = isActiveMarketWindow();
 
   const pctCap = (usage.totalWireBytes / FMP_BANDWIDTH_CAP_BYTES) * 100;
 
@@ -283,7 +320,7 @@ export default async function CacheHealthPage({
             </thead>
             <tbody>
               {datasets.map((d) => {
-                const { status, why } = statusFor(d);
+                const { status, why } = statusFor(d, marketOpen);
                 const fresh = Math.max(0, d.tracked - d.stale - d.never);
                 return (
                   <tr key={d.dataset}>
@@ -318,6 +355,13 @@ export default async function CacheHealthPage({
           <p style={{ color: "#64748b", fontSize: 11, marginTop: 8 }}>
             Status is judged against each dataset&apos;s own TTL, never a global threshold — a 30-day-old
             profile is healthy, a 30-day-old price is a fault.
+          </p>
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR.seeded, marginRight: 7 }} />
+            The US market is currently <strong style={{ color: "#94a3b8" }}>{marketOpen ? "open" : "shut"}</strong> (buffered
+            window). Datasets that only refresh inside it are <em>supposed</em> to be past their TTL
+            while it is shut, so they read neutral rather than red — being idle on purpose is not the
+            same as being broken, and a red that is on every night is a red nobody reads.
           </p>
           <p style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR.uncovered, marginRight: 7 }} />

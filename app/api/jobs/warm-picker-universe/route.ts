@@ -22,6 +22,8 @@ export const dynamic = "force-dynamic";
 
 import {
   HISTORY_MAX_BAR_AGE_WEEKDAYS,
+  dropNewestBarStamps,
+  flushNewestBarStamps,
   readHistoryBarAgeCounts,
   readHistoryDropCounts,
 } from "@/lib/server/historyCache";
@@ -80,6 +82,19 @@ export async function GET(req: NextRequest) {
     // history namespace urgent rather than tidy.
     const drops = readHistoryDropCounts();
     const barAge = readHistoryBarAgeCounts();
+    // ONE HSET, AND THE ONLY PLACE THE DELISTING SWEEP CAN GET THIS.
+    //
+    // The bar-age counters above are module state in THIS lambda. The sweep
+    // that has to act on them runs in warm-screener-fundamentals, twelve
+    // minutes earlier and in a different invocation, so it can never see them.
+    // Persisting the per-symbol observation is what turns a log line into a
+    // signal something can act on -- see historyCache's note on why it is a
+    // hash and not ~760 reads of the history entries themselves.
+    //
+    // Read-and-reset like the counters, and inside `recorded` for the same
+    // reason: a run that threw halfway must not publish a partial universe of
+    // observations that the sweep would then read as complete.
+    const barStampsWritten = await flushNewestBarStamps();
     recorded = true;
 
     // "The warm ran" and "the warm refreshed anything" are different facts, and
@@ -160,6 +175,11 @@ export async function GET(req: NextRequest) {
       historyDropSymbols: drops.symbols.join(",") || null,
       historyNewestBarSeen: barAge.newestBarSeen,
       historyStaleNewestCount: barAge.stale,
+      // WHAT THE DELISTING SWEEP WILL SEE TOMORROW MORNING. The sweep records
+      // `barStampsRead`; this is the other end of the same wire, so a mismatch
+      // between the two says the write failed rather than that nothing is
+      // stale. 0 here means the sweep's third signal is blind.
+      barStampsWritten,
       historyFreshNewestCount: barAge.fresh,
       historyStaleNewestSymbols: barAge.symbols.join(",") || null,
       historyForcedRefetchFailures: barAge.forcedRefetchFailures,
@@ -215,6 +235,13 @@ export async function GET(req: NextRequest) {
     if (!recorded) {
       readHistoryDropCounts();
       readHistoryBarAgeCounts();
+      // DISCARDED, NOT FLUSHED. A half-finished run's observations are a
+      // partial universe, and the sweep cannot tell a partial flush from a
+      // complete one -- every symbol the run never reached would keep
+      // yesterday's stamp and age by a day for free. Dropping them leaves the
+      // whole set one day older, which the observation-age guard in
+      // symbolEviction already refuses to act on.
+      dropNewestBarStamps();
       readLastBuildStats();
     }
     await recordJobRun("warm-picker-universe", false, { error: message });

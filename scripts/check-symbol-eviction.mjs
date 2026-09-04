@@ -50,6 +50,30 @@ const evict = readCodeOnly("lib/server/symbolEviction.ts");
 const queue = readCodeOnly("lib/server/stalenessQueue.ts");
 const job = readCodeOnly("app/api/jobs/warm-screener-fundamentals/route.ts");
 
+// AST EXTRACTION, NOT `[\s\S]*?\n\}`. That regex stops at the first line
+// beginning with a closing brace, and a TypeScript signature can produce one
+// before the function ends -- an inline parameter object type closes `}): T {`
+// in column 0. It has silently truncated a lift in this repo before
+// (claude/traps/), and a truncated lift is a syntax error at best and a
+// half-function that passes at worst. The AST knows where the function ends.
+const evictAst = ts.createSourceFile(
+  "symbolEviction.ts",
+  evict,
+  ts.ScriptTarget.Latest,
+  true
+);
+const grabFn = (name) => {
+  let out = null;
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      out = node.getText(evictAst).replace(/^export\s+/, "");
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(evictAst);
+  return out;
+};
+
 const lift = async (src, extra = "") => {
   const js = ts.transpileModule(`${extra}\n${src}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
@@ -593,7 +617,50 @@ const presetLiteral = (presetSrc.match(/PRESET_UNIVERSE: string\[\] = \[([\s\S]*
 const presetList = presetLiteral
   ? [...presetLiteral.matchAll(/"([^"]+)"/g)].map((m) => m[1])
   : [];
-const actionFn = (evict.match(/export function evictionAction\([\s\S]*?\n\}/) ?? [])[0];
+const actionFn = grabFn("evictionAction");
+// THE SHARED PRESET GATE. evictionAction delegates to it, so a lift without it
+// throws a ReferenceError -- which is how this was caught rather than reasoned
+// about.
+const gateFn = grabFn("actionFor");
+const staleFn = grabFn("staleBarsShouldEvict");
+const staleActionFn = grabFn("staleBarEvictionAction");
+const mergeDayFn = grabFn("mergeStaleBarDay");
+const dayStampFn = grabFn("dayStamp");
+const staleWeekdays = Number((evict.match(/EVICTION_STALE_BAR_WEEKDAYS = (\d+)/) ?? [])[1]);
+const staleEvidenceDays = Number((evict.match(/STALE_BAR_EVIDENCE_DAYS = (\d+)/) ?? [])[1]);
+const barStampMaxAgeMs = Number(
+  Function(
+    `"use strict"; return (${
+      (evict.match(/EVICTION_BAR_STAMP_MAX_AGE_MS = ([0-9 *]+);/) ?? [])[1] ?? "0"
+    });`
+  )()
+);
+const freshnessWarnWeekdays = Number(
+  (readCodeOnly("lib/server/historyCache.ts").match(
+    /HISTORY_MAX_BAR_AGE_WEEKDAYS = (\d+)/
+  ) ?? [])[1]
+);
+if (
+  !gateFn ||
+  !staleFn ||
+  !staleActionFn ||
+  !mergeDayFn ||
+  !dayStampFn ||
+  !staleWeekdays ||
+  !staleEvidenceDays ||
+  !barStampMaxAgeMs ||
+  !freshnessWarnWeekdays
+) {
+  console.error(
+    `FAIL: could not extract the stale-bar route — actionFor ${!!gateFn}, ` +
+      `staleBarsShouldEvict ${!!staleFn}, staleBarEvictionAction ${!!staleActionFn}, ` +
+      `mergeStaleBarDay ${!!mergeDayFn}, dayStamp ${!!dayStampFn}, ` +
+      `threshold ${staleWeekdays}, evidence window ${staleEvidenceDays}, ` +
+      `stamp age ${barStampMaxAgeMs}, freshness warn ${freshnessWarnWeekdays}. ` +
+      `Every assertion in section 5 would pass by measuring nothing.`
+  );
+  process.exit(1);
+}
 const claimFn = (evict.match(/export async function claimPresetHandEditAlarm\([\s\S]*?\n\}/) ?? [])[0];
 if (!actionFn || !claimFn || presetList.length < 50 || !presetList.includes("META")) {
   console.error(
@@ -606,10 +673,14 @@ if (!actionFn || !claimFn || presetList.length < 50 || !presetList.includes("MET
 }
 
 const evicting = await lift(
-  `${fn}\n${actionFn}`,
+  `${fn}\n${gateFn}\n${actionFn}\n${staleFn}\n${staleActionFn}\n${dayStampFn}\n${mergeDayFn}\n` +
+    `export { evictionAction, staleBarsShouldEvict, staleBarEvictionAction, mergeStaleBarDay };`,
   `const EVICTION_CORROBORATION_DAYS = ${days};
 const EVICTION_MIN_FAIL_STREAK = ${streak};
 const EVICTION_FAIL_MAX_AGE_MS = ${maxAgeMs};
+const EVICTION_STALE_BAR_WEEKDAYS = ${staleWeekdays};
+const EVICTION_BAR_STAMP_MAX_AGE_MS = ${barStampMaxAgeMs};
+const STALE_BAR_EVIDENCE_DAYS = ${staleEvidenceDays};
 const PRESET_SYMBOLS = new Set(${JSON.stringify(presetList)});`
 );
 
@@ -747,6 +818,328 @@ check(
   "the log line is claimed at most once a month, so the run record is what a " +
     "person reading on day thirty sees — and it names the ticker rather than " +
     "counting it, because 'something needs a hand edit' is not actionable"
+);
+
+// ── 6. The third signal: stale bars, independent of FMP's metadata ──────────
+console.log("\n6. Stale bars evict, and the freshness warning does not");
+
+// WHY THERE IS A THIRD SIGNAL AT ALL. The 2026-09-04 sweep passed its gate and
+// reported absentAndFailing: 0 while nine tickers sat with bars between two
+// weeks and fourteen months old. Both existing signals ask FMP whether the
+// symbol is alive -- the screener filters isActivelyTrading=true so a stale
+// symbol stays IN the response, and stable/quote still answers so failStreak
+// stays 0. Two views of one wrong answer.
+//
+// THE ARITHMETIC IS LIFTED FROM historyCache, not reimplemented here. Asserting
+// a threshold against a second copy of weekdaysBehindEastern would prove the
+// two copies agree, which is not the claim.
+const historySrc = readCodeOnly("lib/server/historyCache.ts");
+const historyAst = ts.createSourceFile("historyCache.ts", historySrc, ts.ScriptTarget.Latest, true);
+const grabHistory = (name) => {
+  let out = null;
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      out = node.getText(historyAst).replace(/^export\s+/, "");
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(historyAst);
+  return out;
+};
+const calFns = ["getEasternParts", "weekdaysBehindEastern", "parseNewestBarStamp"].map(
+  (n) => [n, grabHistory(n)]
+);
+const calMissing = calFns.filter(([, src]) => !src).map(([n]) => n);
+if (calMissing.length) {
+  console.error(
+    `FAIL: could not extract ${calMissing.join(", ")} from historyCache — every ` +
+      `weekday figure below would be a number this file invented.`
+  );
+  process.exit(1);
+}
+const cal = await lift(
+  `${calFns.map(([, src]) => src).join("\n")}\n` +
+    `export { weekdaysBehindEastern, parseNewestBarStamp };`
+);
+
+// BOTH ENDS PINNED, so these cannot rot. check-history-bars learned this the
+// expensive way: four assertions there were true only for as long as the real
+// Monday they were written on lasted, and were red for a week inside a suite
+// everybody reads as a count. A fixture pinned at one end drifts; pinned at
+// both it is arithmetic.
+const SWEEP_DAY = new Date("2026-09-04T06:50:00Z");
+const behind = (iso) => cal.weekdaysBehindEastern(iso, SWEEP_DAY);
+
+// THE REAL NINE, from warm-picker-universe's own recordNewestBarAge output on
+// the morning this rule was written. Not invented: these are the symbols the
+// two existing signals failed to catch.
+const OBSERVED = [
+  { sym: "HES", newest: "2025-07-18", verdict: "dead" },
+  { sym: "WBA", newest: "2025-08-28", verdict: "dead" },
+  { sym: "IPG", newest: "2025-11-26", verdict: "dead" },
+  { sym: "FI", newest: "2025-12-08", verdict: "dead" },
+  { sym: "DAY", newest: "2026-02-03", verdict: "dead" },
+  { sym: "MMC", newest: "2026-02-09", verdict: "dead" },
+  { sym: "BK", newest: "2026-06-29", verdict: "ambiguous" },
+  { sym: "EA", newest: "2026-08-10", verdict: "alive" },
+  { sym: "WBS", newest: "2026-08-20", verdict: "alive" },
+];
+const NOW_S = SWEEP_DAY.getTime();
+const freshStamp = NOW_S - 23.8 * 60 * 60 * 1000; // the real 07:02 -> 06:50 gap
+const fires = (o) =>
+  evicting.staleBarsShouldEvict(days, behind(o.newest), freshStamp, NOW_S);
+const caught = OBSERVED.filter(fires).map((o) => o.sym);
+const spared = OBSERVED.filter((o) => !fires(o)).map((o) => o.sym);
+
+check(
+  "every symbol the observation called certainly dead is caught",
+  OBSERVED.filter((o) => o.verdict === "dead").every(fires),
+  `caught ${caught.join(", ")} at ${staleWeekdays} trading days — ` +
+    OBSERVED.map((o) => `${o.sym} ${behind(o.newest)}`).join(" · ")
+);
+check(
+  "the two symbols the observation called alive are spared",
+  OBSERVED.filter((o) => o.verdict === "alive").every((o) => !fires(o)),
+  `spared ${spared.join(", ")} — EA at ${behind("2026-08-10")} and WBS at ` +
+    `${behind("2026-08-20")} trading days are a data gap, not a death, and a ` +
+    `threshold that takes them is wrong whatever it catches`
+);
+check(
+  "the ambiguous one is left alone, and by a real margin",
+  !fires(OBSERVED.find((o) => o.sym === "BK")) &&
+    staleWeekdays - behind("2026-06-29") >= 10,
+  `BK at ${behind("2026-06-29")} against a threshold of ${staleWeekdays} — ` +
+    `${staleWeekdays - behind("2026-06-29")} trading days of margin. This is the ` +
+    `judgement call the threshold deliberately does not take a view on; a margin ` +
+    `of one or two would mean it had taken it by accident`
+);
+
+// THE ASSERTION THE BRIEF ASKED FOR FIRST, and the one most likely to be got
+// wrong by reuse: HISTORY_MAX_BAR_AGE_WEEKDAYS is 2 and exists to FLAG a symbol
+// worth a look. Evicting on it deletes a stock that missed two sessions over a
+// holiday.
+check(
+  "a symbol at the FRESHNESS WARNING threshold is never evicted",
+  !evicting.staleBarsShouldEvict(days, freshnessWarnWeekdays, freshStamp, NOW_S) &&
+    !evicting.staleBarsShouldEvict(days, freshnessWarnWeekdays + 1, freshStamp, NOW_S) &&
+    staleWeekdays > freshnessWarnWeekdays * 10,
+  `warn at ${freshnessWarnWeekdays}, evict at ${staleWeekdays} — ${
+    staleWeekdays / freshnessWarnWeekdays
+  }x apart. The warning absorbs one market holiday; the eviction rule is a ` +
+    `full quarter of trading, six times the statutory ten-business-day cap on ` +
+    `an SEC suspension`
+);
+check(
+  "past the threshold is ELIGIBLE, and still needs corroboration",
+  evicting.staleBarsShouldEvict(days, staleWeekdays, freshStamp, NOW_S) === true &&
+    evicting.staleBarsShouldEvict(1, staleWeekdays * 10, freshStamp, NOW_S) === false &&
+    evicting.staleBarsShouldEvict(days - 1, staleWeekdays * 10, freshStamp, NOW_S) === false,
+  `${days} distinct days, same window as the absence route — a stale series ` +
+    `hardly ever flickers, but a garbled or half-written stamp does, and a rule ` +
+    `that deletes data must not act on one reading of one`
+);
+
+// THE FROZEN-STAMP DEFECT, which is the failure mode this signal invents and
+// nothing else in the file guards. The stamp is only rewritten when a symbol is
+// actually refetched, so a symbol we STOP looking at keeps its old bar date
+// while the weekdays-behind arithmetic climbs on its own. Without the age
+// guard, the rule measures our own failure and bills it to the ticker.
+check(
+  "an observation older than the window proves nothing",
+  evicting.staleBarsShouldEvict(days, staleWeekdays * 10, NOW_S - barStampMaxAgeMs - 1, NOW_S) ===
+    false &&
+    evicting.staleBarsShouldEvict(days, staleWeekdays * 10, undefined, NOW_S) === false &&
+    evicting.staleBarsShouldEvict(days, staleWeekdays * 10, NaN, NOW_S) === false,
+  `${barStampMaxAgeMs / 3_600_000}h — a symbol nothing refetches ages past any ` +
+    `threshold for free, so an undated observation is evidence forever, the ` +
+    `identical defect EVICTION_FAIL_MAX_AGE_MS closes on the other route`
+);
+check(
+  "the observation window survives the 23.8h the schedule guarantees",
+  barStampMaxAgeMs > 24 * 60 * 60 * 1000 &&
+    evicting.staleBarsShouldEvict(days, staleWeekdays, freshStamp, NOW_S) === true,
+  `stamps are written at 07:02 UTC and read at 06:50, so they are ALWAYS 23.8h ` +
+    `old in use — a 24h window would sit twelve minutes from failing every day`
+);
+check(
+  "a missing observation is not a dead symbol",
+  evicting.staleBarsShouldEvict(days, null, freshStamp, NOW_S) === false &&
+    cal.parseNewestBarStamp("2026-08-20") === null &&
+    cal.parseNewestBarStamp("garbage|123") === null &&
+    cal.parseNewestBarStamp("2026-08-20|0") === null &&
+    cal.parseNewestBarStamp(undefined) === null,
+  "a symbol absent from the hash, or a half-written field, must read as 'no " +
+    "observation' — never as 'no bars'"
+);
+
+// THE #404 RULE, THROUGH THE NEW ROUTE. A curated symbol reaching eviction is
+// the evict -> reinject -> refail loop; it has to reach the hand-edit alarm
+// whichever signal found it, and the only way to be sure is one preset gate.
+check(
+  "a PRESET symbol past the stale-bar threshold gets the hand-edit alarm, never an eviction",
+  evicting.staleBarEvictionAction("META", days, staleWeekdays * 10, freshStamp, NOW_S) ===
+    "hand-edit" &&
+    evicting.staleBarEvictionAction(" meta ", days, staleWeekdays * 10, freshStamp, NOW_S) ===
+      "hand-edit" &&
+    evicting.staleBarEvictionAction("ZZZZ", days, staleWeekdays * 10, freshStamp, NOW_S) ===
+      "evict",
+  "called without a preset argument, so this is the SHIPPED array — and META " +
+    "is the case that matters, since FB -> META is the rename this signal " +
+    "exists to catch"
+);
+check(
+  "the exemption does not bypass the stale-bar evidence rule either",
+  evicting.staleBarEvictionAction("META", 1, staleWeekdays * 10, freshStamp, NOW_S) === "keep" &&
+    evicting.staleBarEvictionAction("META", days, freshnessWarnWeekdays, freshStamp, NOW_S) ===
+      "keep",
+  "an alarm that fires for a preset symbol with no case to answer is an alarm " +
+    "for ~100 mega-caps, which is no alarm"
+);
+check(
+  "both routes share ONE preset gate rather than two copies of it",
+  /return actionFor\(shouldEvict\(/.test(evict) &&
+    /staleBarsShouldEvict\(staleDays, weekdaysBehind, observedAtMs, nowMs\),/.test(evict) &&
+    (evict.match(/presets\.has\(String\(symbol/g) ?? []).length === 1,
+  `${(evict.match(/presets\.has\(String\(symbol/g) ?? []).length} normalising ` +
+    `lookup in the module — a second copy is a second place for "never evict a ` +
+    `preset" to be subtly different`
+);
+
+// THE EVIDENCE KEY IS ITS OWN, and this is not tidiness. clearAbsence is called
+// for every symbol PRESENT in the screener response, and a stale-barred symbol
+// is present every single day by construction. Sharing the key would wipe the
+// evidence at the top of every sweep and the corroboration threshold could
+// never be reached -- a route that looks wired in and evicts nothing, forever.
+const absencePrefix = (evict.match(/ABSENCE_KEY_PREFIX = "([^"]+)"/) ?? [])[1];
+const staleHash = (evict.match(/STALE_BAR_DAYS_HASH = "([^"]+)"/) ?? [])[1];
+check(
+  "the stale-bar evidence does not live behind clearAbsence",
+  !!absencePrefix && !!staleHash && !staleHash.startsWith(absencePrefix),
+  `${staleHash} vs ${absencePrefix} — clearAbsence fires for every symbol in ` +
+    `the screener response, and a stale-barred symbol IS in it`
+);
+check(
+  "one day's two runs cannot manufacture two days of corroboration",
+  evicting.mergeStaleBarDay(evicting.mergeStaleBarDay("", NOW_S).join(","), NOW_S).length === 1,
+  "a set of day stamps, not an INCR — the same reason recordAbsence is not one"
+);
+check(
+  "evidence outside the window is dropped rather than carried forward",
+  (() => {
+    const old = "2020-01-01";
+    const merged = evicting.mergeStaleBarDay(`${old},2020-01-02`, NOW_S);
+    return merged.length === 1 && !merged.includes(old);
+  })() &&
+    evicting.mergeStaleBarDay(
+      Array.from({ length: 3 }, (_, i) =>
+        new Date(NOW_S - i * 86_400_000).toISOString().slice(0, 10)
+      ).join(","),
+      NOW_S
+    ).length === 3,
+  `${staleEvidenceDays}-day window — the rule is "stale on N days recently", ` +
+    `not "stale on N days ever", so a gap has to reset the evidence`
+);
+check(
+  "both new hashes are cleaned up on eviction",
+  /"msh:history:newest-bar:v1"/.test(evict) &&
+    /"msh:evict:stale-bar-days:v1"/.test(evict) &&
+    /PER_SYMBOL_HASHES = \[[\s\S]*?"msh:history:newest-bar:v1"[\s\S]*?"msh:evict:stale-bar-days:v1"[\s\S]*?\]/.test(
+      evict
+    ),
+  "neither carries a per-field TTL, so a leftover field is immortal — a stale " +
+    "bar stamp would keep an evicted ticker in every barStampsRead denominator, " +
+    "and leftover day evidence means a re-admitted symbol starts with days " +
+    "already against it"
+);
+
+// ── 7. The sweep wires the third signal in, and says which one fired ────────
+console.log("\n7. The run record distinguishes the signals");
+
+const warm = readCodeOnly("app/api/jobs/warm-picker-universe/route.ts");
+// ANCHORED ON THE SUMMARY CALL, not on the first or last recordJobRun in the
+// file: these routes record twice, and the catch-block record carries only
+// { error }. Three assertions in #416 passed against a record that could never
+// have held the fields they were testing for.
+const recIdx = job.indexOf('await recordJobRun("warm-screener-fundamentals", result.ok, {');
+const record = recIdx === -1 ? "" : job.slice(recIdx);
+check(
+  "the sweep's run record was located",
+  recIdx !== -1,
+  "anchored on the summary call — the catch-block record carries only { error }"
+);
+check(
+  "the record names the stale-bar signal separately from the metadata one",
+  /absentAndFailing: sweep\.absent,/.test(record) &&
+    /staleBarred: sweep\.staleBarred,/.test(record) &&
+    /barStampsRead: sweep\.barStampsRead,/.test(record),
+  "absentAndFailing: 0 beside staleBarred: 6 says the metadata signal went " +
+    "blind; both at zero with a full barStampsRead says nothing is dead; " +
+    "barStampsRead: 0 says the third signal is blind too. One folded count " +
+    "answers none of the three"
+);
+check(
+  "the record attributes the DESTRUCTIVE half to a signal as well",
+  /evictedByAbsence: sweep\.evictedByAbsence,/.test(record) &&
+    /evictedByStaleBars: sweep\.evictedByStaleBars,/.test(record),
+  "a rising `evicted` that cannot be traced to the rule that caused it is the " +
+    "one number on this record that costs data"
+);
+check(
+  "the write end of the wire is recorded too",
+  /barStampsWritten,/.test(warm) && /await flushNewestBarStamps\(\)/.test(warm),
+  "barStampsWritten in warm-picker-universe against barStampsRead in the sweep " +
+    "— a mismatch says the write failed, rather than that nothing is stale"
+);
+// SLICED, NOT `{0,400}` APART. readCodeOnly blanks comments in place rather
+// than removing them, so offsets survive and a proximity window is broken by a
+// comment growing between the two halves — which is exactly how the equivalent
+// assertion in check-reference-cache went red for a reason unrelated to the
+// code. The claim is "inside the !recorded block", so slice the block.
+const notRecordedIdx = warm.indexOf("if (!recorded) {");
+const notRecordedBlock =
+  notRecordedIdx === -1
+    ? ""
+    : warm.slice(notRecordedIdx, warm.indexOf("\n    }", notRecordedIdx));
+check(
+  "a run that threw discards its observations instead of publishing a partial universe",
+  notRecordedIdx !== -1 && /dropNewestBarStamps\(\);/.test(notRecordedBlock),
+  "the sweep cannot tell a partial flush from a complete one, and every symbol " +
+    "the run never reached would keep yesterday's stamp and age a day for free"
+);
+check(
+  "the stale-bar pass runs behind the same pool-degraded gate",
+  job.indexOf("sweep.skipped = `pool-degraded:${degraded}`") <
+    job.indexOf("const stamps = await readNewestBarStamps();") &&
+    job.indexOf("const stamps = await readNewestBarStamps();") !== -1,
+  "a degraded morning is a morning the whole pipeline's evidence is suspect, " +
+    "not just the price pool's"
+);
+const staleHandIdx = job.indexOf("const action = staleBarEvictionAction(");
+const staleContIdx = staleHandIdx === -1 ? -1 : job.indexOf("continue;", staleHandIdx);
+const staleEvictIdx = staleHandIdx === -1 ? -1 : job.indexOf("await evictSymbol(symbol);", staleHandIdx);
+check(
+  "on the stale-bar route too, hand-edit LEAVES the iteration before evictSymbol",
+  staleHandIdx !== -1 &&
+    staleContIdx !== -1 &&
+    staleEvictIdx !== -1 &&
+    staleContIdx < staleEvictIdx,
+  `decision at ${staleHandIdx}, continue at ${staleContIdx}, evictSymbol at ` +
+    `${staleEvictIdx} — logging before deleting the keys anyway is the loop with ` +
+    `a warning attached`
+);
+check(
+  "a symbol already handled by the absence route is not evicted twice",
+  /const handled = new Set\(\[\.\.\.sweep\.evicted, \.\.\.sweep\.presetHandEdit\]\);/.test(job) &&
+    /if \(handled\.has\(symbol\)\) continue;/.test(job),
+  "a symbol carrying all three signals is one eviction attributed to the route " +
+    "that found it, not two"
+);
+check(
+  "recovering clears the stale-bar evidence, and only for fields that exist",
+  /if \(staleDayEvidence\.has\(symbol\)\) staleRecovered\.push\(symbol\);/.test(job) &&
+    /await writeStaleBarDays\(/.test(job),
+  "the mirror of clearAbsence — and named rather than blanket-cleared, so a " +
+    "clean universe costs no command at all"
 );
 
 console.log(
