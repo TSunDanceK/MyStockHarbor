@@ -339,6 +339,18 @@ export async function GET(req: NextRequest) {
     // it a rising `evicted` cannot be traced to the rule that caused it.
     evictedByAbsence: sweep.evictedByAbsence,
     evictedByStaleBars: sweep.evictedByStaleBars,
+    // WHICH SIGNAL SET A TOMBSTONE, and it is not the same question as which
+    // signal evicted. An absence eviction's tombstone is belt-and-braces -- that
+    // symbol is gone from the screener, so discovery was never going to re-offer
+    // it. A stale-bar eviction's tombstone is load-bearing: that symbol IS in
+    // the screener and WILL be re-offered on the next build, which is the churn
+    // the tombstone exists to stop. Folded into one count, a rising number could
+    // not be read as either.
+    //
+    // Derived from the same counters rather than tallied separately: every
+    // eviction writes exactly one log entry, so the split is the eviction split.
+    tombstonedByAbsence: sweep.evictedByAbsence,
+    tombstonedByStaleBars: sweep.evictedByStaleBars,
     // THE SYMBOLS, NOT A COUNT, AND ON EVERY RUN. The log line above is
     // rationed to once a month per symbol so it cannot become churn; this
     // field is the standing state, so a dead curated ticker is still visible

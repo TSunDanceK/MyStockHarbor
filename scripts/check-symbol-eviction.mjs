@@ -1142,6 +1142,202 @@ check(
     "clean universe costs no command at all"
 );
 
+// ── 8. The tombstone: blocked for a period, then eligible again ─────────────
+console.log("\n8. Re-admission is gated for a derived period, not forever");
+
+const tombstoneFn = grabFn("isTombstoned");
+const tombWeekdaysExpr = (evict.match(/EVICTION_TOMBSTONE_WEEKDAYS = ([^;]+);/) ?? [])[1];
+if (!tombstoneFn || !tombWeekdaysExpr) {
+  console.error(
+    `FAIL: could not extract isTombstoned (${!!tombstoneFn}) or the tombstone ` +
+      `period (${tombWeekdaysExpr}) — every assertion below would measure nothing.`
+  );
+  process.exit(1);
+}
+const tomb = await lift(
+  `const EVICTION_STALE_BAR_WEEKDAYS = ${staleWeekdays};
+const EVICTION_TOMBSTONE_WEEKDAYS = ${tombWeekdaysExpr};
+${tombstoneFn}
+export { isTombstoned, EVICTION_TOMBSTONE_WEEKDAYS };`
+);
+const TOMB_DAYS = tomb.EVICTION_TOMBSTONE_WEEKDAYS;
+const DAY = 24 * 60 * 60 * 1000;
+const NOW_T = 1_800_000_000_000;
+
+// DERIVED FROM THE CAUSE, NOT TYPED. The brief's instruction was explicit:
+// relate the period to the threshold that caused the eviction and express it in
+// the same unit. Asserted by RE-DERIVING it, so typing 21 fails.
+check(
+  "the tombstone period is derived from the stale-bar threshold",
+  /EVICTION_TOMBSTONE_WEEKDAYS = Math\.round\(EVICTION_STALE_BAR_WEEKDAYS \/ 3\)/.test(evict) &&
+    TOMB_DAYS === Math.round(staleWeekdays / 3),
+  `${TOMB_DAYS} trading days from a ${staleWeekdays}-day threshold — a typed 21 ` +
+    `would stop moving the day the threshold moved, which is how EARNINGS_BATCH_SIZE ` +
+    `and PRICE_TARGET_RUNS both went wrong`
+);
+check(
+  "it comfortably outlasts the churn cycle it exists to break",
+  TOMB_DAYS * (7 / 5) > days * 3,
+  `${TOMB_DAYS} trading days (~${Math.round(TOMB_DAYS * 1.4)} calendar) against a ` +
+    `cycle bounded below by ${days} corroboration days — roughly ` +
+    `${Math.floor((TOMB_DAYS * 1.4) / days)} eviction rounds absorbed, each of which ` +
+    `would have deleted and refetched that symbol's history, fundamentals, news ` +
+    `and chart series`
+);
+check(
+  "it is NOT permanent",
+  TOMB_DAYS > 0 && TOMB_DAYS < staleWeekdays,
+  "a permanent tombstone makes a halt that lifts or a listing that returns " +
+    "invisible until somebody notices by hand, and there is no appetite for " +
+    "manual review work here — that is the whole reason it has an expiry"
+);
+
+// RUN, not read. Which side of the boundary a timestamp falls on is behaviour.
+const calendarMs = TOMB_DAYS * (7 / 5) * DAY;
+check(
+  "a symbol evicted today is blocked, and one evicted before the period is not",
+  tomb.isTombstoned(NOW_T - DAY, NOW_T) === true &&
+    tomb.isTombstoned(NOW_T - calendarMs + DAY, NOW_T) === true &&
+    tomb.isTombstoned(NOW_T - calendarMs - DAY, NOW_T) === false,
+  `boundary at ~${Math.round(calendarMs / DAY)} calendar days — trading days are ` +
+    `the unit because the cause is, and 7/5 is the conversion`
+);
+check(
+  "no eviction record is NOT a tombstone",
+  tomb.isTombstoned(undefined, NOW_T) === false &&
+    tomb.isTombstoned(null, NOW_T) === false &&
+    tomb.isTombstoned(0, NOW_T) === false &&
+    tomb.isTombstoned(NaN, NOW_T) === false,
+  "absence of a record is absence of an eviction — the reading that fails open, " +
+    "because a gate that blocks on missing data blocks the whole universe on a " +
+    "bad read"
+);
+check(
+  "a record from the FUTURE is a clock problem, not a tombstone",
+  tomb.isTombstoned(NOW_T + DAY, NOW_T) === false,
+  "treating skew as an eviction would block a symbol for as long as the skew " +
+    "lasts, silently"
+);
+
+// ── 8b. A preset can never acquire one, through any door ────────────────────
+console.log("\n8b. Presets are never tombstoned");
+
+const evictFn = grabFn("evictSymbol");
+if (!evictFn) {
+  console.error("FAIL: could not extract evictSymbol — the preset assertion would measure nothing.");
+  process.exit(1);
+}
+const zaddIdx = evictFn.indexOf("await redis.zadd(EVICTED_KEY");
+const presetGuardIdx = evictFn.indexOf("if (PRESET_SYMBOLS.has(");
+check(
+  "evictSymbol refuses to log a preset symbol, before the zadd",
+  presetGuardIdx !== -1 && zaddIdx !== -1 && presetGuardIdx < zaddIdx,
+  `guard at ${presetGuardIdx}, zadd at ${zaddIdx} — the #404 rule says a preset ` +
+    `reaches hand-edit and never eviction, so this is unreachable today. It is ` +
+    `here because the log is now a GATE rather than an audit trail, and a gate ` +
+    `must not depend on every caller upstream having got its branch right: one ` +
+    `entry would keep a curated mega-cap out of its own universe for a trading month`
+);
+check(
+  "the refusal is loud, and leaves before the gate is applied",
+  /REFUSED to tombstone preset symbol/.test(evictFn) &&
+    evictFn.indexOf("REFUSED to tombstone") < zaddIdx,
+  "silent would be worse than the bug — nothing else in the system can report " +
+    "that the hand-edit rule was bypassed"
+);
+check(
+  "both eviction routes still send presets to hand-edit rather than evictSymbol",
+  evicting.evictionAction("META", days, streak, fresh, NOW) === "hand-edit" &&
+    evicting.staleBarEvictionAction("META", days, staleWeekdays * 10, NOW - 60_000, NOW) ===
+      "hand-edit",
+  "the guard above is the second lock; this is the first, and it is the one " +
+    "that should never be reached"
+);
+
+// ── 8c. The gate is applied at the door, and to both sets ───────────────────
+console.log("\n8c. The re-admission door consults it");
+
+const universeSrc = readCodeOnly("lib/server/dynamicUniverseCache.ts");
+const gateIdx = universeSrc.indexOf("const tombstoned = await readTombstoned(cleaned, now);");
+const scoreIdx = universeSrc.indexOf("for (const group of chunkMembers(admissible, ZINCRBY_EVAL_CHUNK))");
+const seenIdx = universeSrc.indexOf("const seenPairs = admissible.map(");
+check(
+  "addToDynamicUniverse reads the tombstone before writing anything",
+  gateIdx !== -1 && scoreIdx !== -1 && gateIdx < scoreIdx,
+  `gate at ${gateIdx}, score write at ${scoreIdx} — this is the door an evicted ` +
+    `symbol comes back through, and it was unguarded`
+);
+check(
+  "BOTH the score set and the seen set are filtered",
+  scoreIdx !== -1 && seenIdx !== -1 && !/chunkMembers\(cleaned,/.test(universeSrc) &&
+    !/const seenPairs = cleaned\.map\(/.test(universeSrc),
+  "the module keeps score and seen in step by construction, and pruneUniverse " +
+    "reads `seen` to decide what to expire — filtering one and not the other is " +
+    "a member of half a pair"
+);
+// RUN IT AGAINST A REDIS THAT THROWS. The first draft of this assertion was
+// `<regex on the body> || /FAIL OPEN. An unreadable tombstone/.test(evict)` --
+// and that second branch can NEVER match, because `evict` is readCodeOnly and
+// comments are stripped. An `||` with a dead branch is an assertion resting
+// entirely on the half nobody checked. Behaviour is the claim, so run it.
+const readTombFn = grabFn("readTombstoned");
+if (!readTombFn) {
+  console.error("FAIL: could not extract readTombstoned — the fail-open assertion would measure nothing.");
+  process.exit(1);
+}
+const tombOpen = await lift(
+  `const redis = { zmscore: async () => { throw new Error("upstash is down"); } };
+${tombstoneFn}
+${readTombFn}
+export { readTombstoned };`,
+  `const EVICTION_STALE_BAR_WEEKDAYS = ${staleWeekdays};
+const EVICTION_TOMBSTONE_WEEKDAYS = ${tombWeekdaysExpr};
+const EVICTED_KEY = "x";`
+);
+let tombThrew = false;
+let blockedOnError = null;
+try {
+  blockedOnError = await tombOpen.readTombstoned(["AAAA", "BBBB"], NOW_T);
+} catch {
+  tombThrew = true;
+}
+check(
+  "the gate fails OPEN when Redis throws",
+  !tombThrew && blockedOnError instanceof Set && blockedOnError.size === 0,
+  `${tombThrew ? "threw" : `blocked ${blockedOnError?.size ?? "?"}`} — an unreadable ` +
+    `gate must ADMIT: the worst case there is the churn it damps, while ` +
+    `fail-closed is a discovery pass that admits nothing at all`
+);
+check(
+  "the record says which SIGNAL set a tombstone, not just how many",
+  /tombstonedByAbsence: sweep\.evictedByAbsence,/.test(job) &&
+    /tombstonedByStaleBars: sweep\.evictedByStaleBars,/.test(job),
+  "an absence tombstone is belt-and-braces (that symbol is gone from the " +
+    "screener anyway); a stale-bar tombstone is load-bearing (that symbol WILL " +
+    "be re-offered). Folded into one count a rising number reads as neither"
+);
+
+// ── 8d. Expiry means ELIGIBLE, not admitted, and not cheaper ────────────────
+console.log("\n8d. A lapsed tombstone is not a shortcut");
+
+check(
+  "eviction deletes the evidence that would make a second eviction cheaper",
+  /"msh:evict:absent:v1:"/.test(evict) &&
+    /"msh:evict:stale-bar-days:v1"/.test(evict),
+  "the absence day-stamps and the stale-bar day evidence both go with the " +
+    "symbol's other state, so a re-admitted symbol restarts the corroboration " +
+    "window from zero rather than inheriting days already against it"
+);
+check(
+  "a re-admitted symbol still has to earn the corroboration window",
+  evicting.staleBarsShouldEvict(0, staleWeekdays * 10, NOW - 60_000, NOW) === false &&
+    evicting.staleBarsShouldEvict(days - 1, staleWeekdays * 10, NOW - 60_000, NOW) === false &&
+    evicting.staleBarsShouldEvict(days, staleWeekdays * 10, NOW - 60_000, NOW) === true,
+  `${days} distinct days again, from zero — the second eviction is neither ` +
+    `cheaper nor faster than the first, which is what stops a lapsed tombstone ` +
+    `being a shortcut`
+);
+
 console.log(
   failures === 0
     ? "\nAll eviction assertions hold.\n"
