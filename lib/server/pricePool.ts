@@ -9,6 +9,7 @@
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
 import { markRefreshed, registerSymbols, deferSymbol, readDeferred } from "./stalenessQueue";
+import { recordRedisRead } from "./redisBandwidth";
 import { isFmpErrorEnvelope } from "./fmpResponse";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -404,6 +405,12 @@ export async function readPricePoolBulk(
 
   const fields = uniqueClean(symbols);
   if (!fields.length) return out;
+
+  // The smallest of the four metered reads by an order of magnitude (~220 B a
+  // symbol against history's ~110 KB), and it is metered anyway: a ranking whose
+  // bottom entry is assumed rather than counted is a ranking with an assumption
+  // in it, and this one runs every five minutes.
+  await recordRedisRead("price-pool", fields.length);
 
   try {
     // Upstash's hmget returns an object keyed by field name; some versions

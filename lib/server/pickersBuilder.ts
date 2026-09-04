@@ -23,6 +23,7 @@ import {
   trendTailForPoints,
 } from "../ta/trendHelper";
 import { getDailyHistoryBulk } from "./historyCache";
+import { recordRedisRead } from "./redisBandwidth";
 import { registerSymbols } from "./stalenessQueue";
 import {
   addToDynamicUniverse,
@@ -638,6 +639,10 @@ async function readPickersCache() {
     // alone -- that's a cache entry written by a deploy predating this change,
     // and it must keep working through the rollout.
     const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
+    // The stripped payload's own bytes, ~2 KB per record. readPickerChartsBulk
+    // below meters the other ~11 KB per symbol separately, because the two move
+    // for different reasons and the whole point of the meter is to rank them.
+    await recordRedisRead("picker-payload", records.length);
     const missing = records
       .filter((record) => !Array.isArray(record.chartPoints) || !record.chartPoints.length)
       .map((record) => record.symbol);
