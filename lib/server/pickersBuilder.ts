@@ -24,6 +24,12 @@ import {
 } from "../ta/trendHelper";
 import { getDailyHistoryBulk } from "./historyCache";
 import { recordRedisRead } from "./redisBandwidth";
+import {
+  chunkByBytes,
+  jsonByteLength,
+  REQUEST_BYTE_BUDGET,
+  UPSTASH_MAX_REQUEST_BYTES,
+} from "./chunkByBytes";
 import { registerSymbols } from "./stalenessQueue";
 import {
   addToDynamicUniverse,
@@ -470,6 +476,59 @@ const MEMORY_CACHE_MS = 60_000;
 // is still Redis-cached, so it is the same cost as any post-TTL rebuild).
 const PICKERS_REDIS_KEY = "msh:pickers:v9:charts-off-payload";
 const PICKERS_REDIS_TTL_SECONDS = 60 * 60;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v10: A MANIFEST PLUS CHUNKS, BECAUSE v9 IS ONE VALUE AND IT IS TOO BIG.
+//
+// STRLEN msh:pickers:v9:charts-off-payload = 7,248,807 -- 6.9MB stored against
+// a 10MB REQUEST limit, and the request carries the value JSON-escaped inside
+// a JSON command array. Upstash rejected that write on 2026-09-05, 09-07 and
+// 09-10. An over-limit write returns an error rather than truncating, so the
+// stale value stays and the fail-open handler swallows it.
+//
+// A NEW VERSION RATHER THAN A SECOND SHAPE UNDER THE OLD KEY. v9 is a single
+// string and v10 is a manifest plus N chunk keys; overloading one key with two
+// shapes means every reader has to sniff which it got, forever. v9 is left to
+// expire on its own 60-minute TTL -- no migration, no deletion, and a rollback
+// is just a deploy.
+//
+// THE MANIFEST IS WRITTEN LAST, AND THAT IS THE WHOLE CONCURRENCY STORY.
+// Writing chunks :0, :1, ... in place would let a reader observe a half-written
+// set. Chunks go under a BUILD-SCOPED prefix that no reader knows about until
+// the manifest naming it lands, so a reader either sees the old manifest and
+// reads a complete old payload, or the new one and reads a complete new one.
+// Never a mix.
+const PICKERS_MANIFEST_KEY = "msh:pickers:v10:manifest";
+const PICKERS_CHUNK_PREFIX = "msh:pickers:v10:chunk";
+// Longer than the manifest's TTL so a chunk can never expire out from under a
+// manifest that still points at it -- the same reasoning as
+// PICKER_CHARTS_TTL_SECONDS against PICKERS_REDIS_TTL_SECONDS one module over.
+const PICKERS_CHUNK_TTL_SECONDS = 3 * 60 * 60;
+
+// THE SYMBOL LIST, ON ITS OWN KEY, WRITTEN BY THE BUILDER.
+//
+// warmTargets.ts's header argued against exactly this, and its reason was
+// explicit: it "means writing to this key from pickersBuilder.ts, a 117KB file
+// that cannot be edited through the GitHub connector." That was a TOOLING
+// constraint, not a design one, and Claude Code is not the GitHub connector --
+// so the argument no longer binds and the clean shape is available.
+//
+// Longer-lived than the manifest for the same reason the chunks are: the three
+// crons that read it should not fall through to the expensive path just
+// because a build is a few minutes late.
+const PICKERS_SYMBOLS_KEY = "msh:pickers:v10:symbols";
+const PICKERS_SYMBOLS_TTL_SECONDS = 3 * 60 * 60;
+
+/** What the manifest carries: which chunk keys, in order, and how to size them. */
+type PickersManifest = {
+  cachedAt: number;
+  buildId: string;
+  chunkKeys: string[];
+  /** Records across all chunks. A reader that reassembles fewer has lost one. */
+  recordCount: number;
+  /** Everything in the payload except signalRecords, which is the chunked part. */
+  head: Omit<PickersPayload, "signalRecords">;
+};
 const PICKERS_LOCK_KEY = "msh:pickers:v8:macro-sr-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
@@ -657,6 +716,29 @@ function readPickersNotePercent(points: Point[], bars: number) {
 export async function readPickersSymbolsIfCached(): Promise<string[] | null> {
   if (!redis) return null;
   try {
+    // ITS OWN SMALL KEY FIRST, AND THIS FUNCTION EXISTS TO BE CHEAP.
+    //
+    // It was already the cheap path -- it skipped the chart re-attach -- but it
+    // still pulled the whole ~1.5MB stripped payload to take `.symbol` off each
+    // record. Under v10 that would be a manifest read plus an MGET of every
+    // chunk, which is the opposite of cheap: this is called by three crons and
+    // regressing it into the expensive path is the defect #419 removed.
+    //
+    // The builder now writes the symbol list to its own key at build time, so
+    // the common case is one GET of a few KB.
+    const list = await redis.get<string[]>(PICKERS_SYMBOLS_KEY);
+    if (Array.isArray(list) && list.length) {
+      await recordRedisRead("picker-symbols", list.length, "warm-targets");
+      return list;
+    }
+
+    // ROLLOUT AND FAILURE FALLBACK, deliberately kept. For one TTL after deploy
+    // the symbol key does not exist yet, and a build that wrote chunks but
+    // failed before the symbol key would leave it stale. Falling back to v9
+    // here costs a big read on those runs and is still an order of magnitude
+    // cheaper than what it protects: without it, warmTargets sees null, finds
+    // no payload, and #419's last-good fallback carries it -- correct, but it
+    // means the symbol list stops refreshing until this key returns.
     const entry = await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY);
     if (!entry || typeof entry !== "object" || !entry.data) return null;
     const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
@@ -669,11 +751,54 @@ export async function readPickersSymbolsIfCached(): Promise<string[] | null> {
   }
 }
 
+/**
+ * Reassemble the v10 payload from its manifest, or null.
+ *
+ * ONE MGET FOR THE CHUNKS. The manifest names them in order, so this is a
+ * manifest GET plus one MGET rather than a read per chunk.
+ *
+ * A SHORT READ IS A NULL, NOT A THIN PAYLOAD. If any chunk is missing -- it
+ * expired, or the write was interrupted between chunks and the manifest is
+ * from an older build that has since lost one -- returning what did come back
+ * would serve a picker universe silently missing a few hundred symbols, and
+ * every page would render fine. The caller treats null as a miss and falls
+ * back, which is the honest outcome. recordCount is on the manifest for exactly
+ * this test.
+ */
+async function readPickersV10(): Promise<CachedPickersPayload | null> {
+  if (!redis) return null;
+  const manifest = await redis.get<PickersManifest>(PICKERS_MANIFEST_KEY);
+  if (!manifest || typeof manifest !== "object") return null;
+  if (!Array.isArray(manifest.chunkKeys) || !manifest.head) return null;
+
+  const chunks = manifest.chunkKeys.length
+    ? ((await redis.mget<PickerItem[][]>(...manifest.chunkKeys)) ?? [])
+    : [];
+
+  const records: PickerItem[] = [];
+  for (const chunk of chunks) {
+    if (!Array.isArray(chunk)) return null; // a missing chunk, not an empty one
+    records.push(...chunk);
+  }
+  if (records.length !== manifest.recordCount) return null;
+
+  return {
+    cachedAt: manifest.cachedAt,
+    data: { ...manifest.head, signalRecords: records } as PickersPayload,
+  };
+}
+
 async function readPickersCache() {
   if (!redis) return null;
 
   try {
-    const entry = await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY);
+    // v10 FIRST, v9 AS THE ROLLOUT FALLBACK. For one TTL after deploy the only
+    // thing in Redis is a v9 value written by the previous build, and dropping
+    // straight to a rebuild for an hour would be a self-inflicted version of
+    // the exact cost #419 removed. v9 is not written any more, so this branch
+    // goes quiet on its own within 60 minutes and can be deleted next time
+    // anyone is in this file.
+    const entry = (await readPickersV10()) ?? (await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY));
     if (!entry || typeof entry !== "object") return null;
     if (!entry.data || typeof entry.data !== "object") return null;
 
@@ -779,7 +904,7 @@ function splitPickersPayload(data: PickersPayload): {
 //
 // THAT IS INFERENCE AND THIS REPLACES IT WITH A NUMBER. The value length alone
 // cannot test it -- the whole question is what the escaping does -- so both are
-// logged.
+// measured.
 //
 // THE WIRE FIGURE IS RECONSTRUCTED, NOT READ OFF THE SOCKET, and the difference
 // matters when reading it. @upstash/redis does not expose the request body, so
@@ -798,35 +923,182 @@ function splitPickersPayload(data: PickersPayload): {
 // bytes, and a payload full of company names has non-ASCII in it. Buffer.byteLength
 // is the figure the ceiling is actually about.
 //
-// COST: one extra JSON.stringify of a ~7MB object per build, on a path that
-// runs at most a few times an hour. Worth it while the diagnosis is unconfirmed;
-// the chunking work in the follow-up PR removes the need for the reconstruction
-// by making the request size something the code chooses rather than discovers.
-function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
+// THE PASS-THROUGH BRANCH IS NOT DECORATION. #427 measured one write, of an
+// object, so it could stringify unconditionally. This now measures the chunk
+// writes too, and a chunk value that is already a string would be double-quoted
+// by a blind JSON.stringify -- reporting an inflation that the real client
+// never applies. Same construction as defaultSerializer, or the reconstruction
+// stops being one.
+function setRequestBytes(key: string, value: unknown, ttlSeconds: number) {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  const valueBytes = Buffer.byteLength(serialized, "utf8");
+  const bodyBytes = Buffer.byteLength(
+    JSON.stringify(["set", key, serialized, "ex", ttlSeconds]),
+    "utf8"
+  );
+  return { valueBytes, bodyBytes };
+}
+
+/** The same figure, guarded: a measurement must never break the write. */
+function tryMeasureSet(key: string, value: unknown, ttlSeconds: number) {
   try {
-    const value = JSON.stringify(entry);
-    const valueBytes = Buffer.byteLength(value, "utf8");
-    const body = JSON.stringify([
-      "set",
-      PICKERS_REDIS_KEY,
-      value,
-      "ex",
-      PICKERS_REDIS_TTL_SECONDS,
-    ]);
-    const bodyBytes = Buffer.byteLength(body, "utf8");
-    const inflationPct = valueBytes > 0 ? ((bodyBytes / valueBytes - 1) * 100).toFixed(1) : "0.0";
-    console.log(
-      `[pickers] payload write (${label}): ${valueBytes} bytes serialized value, ` +
-        `${bodyBytes} bytes request body (+${inflationPct}% escaping), ` +
-        `${((bodyBytes / (10 * 1024 * 1024)) * 100).toFixed(1)}% of the 10MB request limit`
-    );
-  } catch (error) {
-    // A measurement must never be able to break the write it measures.
+    return setRequestBytes(key, value, ttlSeconds);
+  } catch {
+    return null;
+  }
+}
+
+const pctOfLimit = (bytes: number) =>
+  `${((bytes / UPSTASH_MAX_REQUEST_BYTES) * 100).toFixed(1)}%`;
+
+// COST: one extra JSON.stringify of the records per build, on a path that runs
+// at most a few times an hour. #427 paid the same cost for one ~7MB object;
+// this pays it spread across the chunks. Worth it while the diagnosis is
+// unconfirmed -- and the number it now reports is the one that matters after
+// chunking, which is the LARGEST single body rather than the total.
+function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
+  const measured = tryMeasureSet(PICKERS_REDIS_KEY, entry, PICKERS_REDIS_TTL_SECONDS);
+  if (!measured) {
+    console.warn(`[pickers] payload write (${label}): size could not be measured`);
+    return;
+  }
+  const { valueBytes, bodyBytes } = measured;
+  const inflationPct = valueBytes > 0 ? ((bodyBytes / valueBytes - 1) * 100).toFixed(1) : "0.0";
+  console.log(
+    `[pickers] payload write (${label}): ${valueBytes} bytes serialized value, ` +
+      `${bodyBytes} bytes request body (+${inflationPct}% escaping), ` +
+      `${pctOfLimit(bodyBytes)} of the 10MB request limit`
+  );
+}
+
+/**
+ * Write the payload as byte-bounded chunks plus a manifest.
+ *
+ * SEPARATE AWAITED REQUESTS. NOT A PIPELINE, AND NOT Promise.all.
+ *
+ * This is the entire fix, and both halves of it are easy to get wrong:
+ *
+ *   An Upstash REST PIPELINE sends every command in ONE POST body. Chunking
+ *   into a pipeline moves exactly the same bytes in exactly the same request
+ *   and fixes nothing -- it would look correct, review correct, and still
+ *   breach. The idiomatic implementation in this codebase is the broken one:
+ *   writeCachedTargets in warmTargets.ts uses redis.pipeline() for precisely
+ *   this kind of paired write.
+ *
+ *   AND SO DOES Promise.all, WHICH THE BRIEF DID NOT ANTICIPATE.
+ *   @upstash/redis sets `enableAutoPipelining` to TRUE by default
+ *   (chunk-K7RP6Y36.mjs:4488) and nothing in this project turns it off --
+ *   PAGE_READ_CACHE only sets `cache`. Measured against the installed client
+ *   by stubbing fetch: three SEQUENTIALLY AWAITED sets produce three request
+ *   bodies; three CONCURRENT sets produce ONE body containing all three.
+ *   Concurrency here is a pipeline with a different name.
+ *
+ * So: a plain `for ... of` with an `await` inside. It costs one round trip per
+ * chunk on a path that runs a few times an hour, and that is the price of the
+ * fix working at all. scripts/check-request-size.mjs asserts both halves.
+ *
+ * THE MANIFEST LANDS LAST. Chunks go under a build-scoped prefix no reader
+ * knows about until the manifest names them, so a concurrent reader sees a
+ * complete old payload or a complete new one, never a mix.
+ */
+async function writePickersChunked(stripped: PickersPayload) {
+  if (!redis) return;
+
+  const { signalRecords, ...head } = stripped;
+  const records = Array.isArray(signalRecords) ? signalRecords : [];
+
+  const { groups, oversized } = chunkByBytes(records, jsonByteLength);
+  if (oversized) {
+    // Not fatal: chunkByBytes yields an over-budget item alone rather than
+    // throwing, so that one request may be rejected while the rest land. A
+    // single record over 5MB would be a record-shape defect worth knowing
+    // about, and this is the only place that could report it.
     console.warn(
-      "[pickers] payload write size could not be measured",
-      error instanceof Error ? error.message : error
+      `[pickers] ${oversized} signalRecord(s) exceed the ${REQUEST_BYTE_BUDGET}-byte ` +
+        `request budget on their own -- those chunks may be rejected`
     );
   }
+
+  // BUILD-SCOPED, so an in-flight reader on the previous manifest is untouched
+  // and two concurrent builds cannot interleave their chunks.
+  const buildId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const chunkKeys = groups.map((_, i) => `${PICKERS_CHUNK_PREFIX}:${buildId}:${i}`);
+
+  // #427'S MEASUREMENT, CARRIED FORWARD TO THE SHAPE THAT REPLACED ITS WRITE.
+  //
+  // The question it was added to answer -- "is the request body near 10MB?" --
+  // is now asked of N bodies instead of one, and the two figures answer
+  // different halves of it:
+  //
+  //   LARGEST body    the only one the 10MB ceiling is about. A total under
+  //                   the limit says nothing; one chunk over it is the breach.
+  //   TOTAL bytes     what actually goes over the wire, so it stays comparable
+  //                   with the single-write number #427 was logging and with
+  //                   the Redis bandwidth meter.
+  //
+  // Reporting only the total would be the defect this series keeps finding: a
+  // sum that cannot express the thing the limit applies to.
+  let totalBodyBytes = 0;
+  let largestBodyBytes = 0;
+  let totalValueBytes = 0;
+  let unmeasured = 0;
+  const account = (measured: { valueBytes: number; bodyBytes: number } | null) => {
+    if (!measured) {
+      unmeasured++;
+      return;
+    }
+    totalValueBytes += measured.valueBytes;
+    totalBodyBytes += measured.bodyBytes;
+    largestBodyBytes = Math.max(largestBodyBytes, measured.bodyBytes);
+  };
+
+  for (let i = 0; i < groups.length; i++) {
+    account(tryMeasureSet(chunkKeys[i], groups[i], PICKERS_CHUNK_TTL_SECONDS));
+    // AWAITED IN THE LOOP, AND THAT IS THE POINT RATHER THAN AN OVERSIGHT.
+    // See the note above: a pipeline or Promise.all here collapses these back
+    // into one request body and reinstates the breach. Said in prose because
+    // this project does not enable no-await-in-loop -- a disable directive for
+    // a rule that is off warns as unused, and the next lint cleanup would
+    // delete it and take the explanation with it.
+    await redis.set(chunkKeys[i], groups[i], { ex: PICKERS_CHUNK_TTL_SECONDS });
+  }
+
+  const manifest: PickersManifest = {
+    cachedAt: Date.now(),
+    buildId,
+    chunkKeys,
+    recordCount: records.length,
+    head,
+  };
+
+  // The symbol list, before the manifest. A few KB, and it is what three crons
+  // read instead of the payload -- see readPickersSymbolsIfCached. Written
+  // before the manifest so a reader that sees a fresh manifest never sees a
+  // staler symbol list than the payload it names.
+  const symbols = records.map((record) => record.symbol).filter(Boolean);
+  account(tryMeasureSet(PICKERS_SYMBOLS_KEY, symbols, PICKERS_SYMBOLS_TTL_SECONDS));
+  await redis.set(PICKERS_SYMBOLS_KEY, symbols, { ex: PICKERS_SYMBOLS_TTL_SECONDS });
+
+  // LAST, and on its own. Everything it points at is already durable.
+  //
+  // MEASURED TOO, and not as a formality: the manifest carries `head` -- every
+  // field of the payload except signalRecords -- so it is the one request whose
+  // size does NOT fall with the chunk budget. If the head ever grows, this is
+  // the body that breaches, and chunking harder would not help.
+  account(tryMeasureSet(PICKERS_MANIFEST_KEY, manifest, PICKERS_REDIS_TTL_SECONDS));
+  await redis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
+
+  const requests = groups.length + 2;
+  const inflationPct =
+    totalValueBytes > 0 ? ((totalBodyBytes / totalValueBytes - 1) * 100).toFixed(1) : "0.0";
+  console.log(
+    `[pickers] payload write (chunked): ${records.length} records in ${groups.length} ` +
+      `chunk(s) under a ${REQUEST_BYTE_BUDGET}-byte budget, ${requests} requests, ` +
+      `${totalValueBytes} bytes serialized value, ${totalBodyBytes} bytes total request ` +
+      `body (+${inflationPct}% escaping), largest single body ${largestBodyBytes} bytes ` +
+      `(${pctOfLimit(largestBodyBytes)} of the 10MB request limit)` +
+      `${unmeasured ? `, ${unmeasured} request(s) unmeasured` : ""}, manifest ${buildId}`
+  );
 }
 
 async function writePickersCache(data: PickersPayload, reduced?: () => PickersPayload) {
@@ -847,15 +1119,12 @@ async function writePickersCache(data: PickersPayload, reduced?: () => PickersPa
       );
     }
 
-    const entry: CachedPickersPayload = {
-      cachedAt: Date.now(),
-      data: stripped,
-    };
-
-    logPayloadWriteSize(entry);
-    await redis.set(PICKERS_REDIS_KEY, entry, {
-      ex: PICKERS_REDIS_TTL_SECONDS,
-    });
+    // NO CachedPickersPayload ENVELOPE ON THIS PATH ANY MORE. The manifest
+    // carries its own cachedAt, so wrapping the payload a second time would
+    // have put two timestamps in the store with nothing saying which one a
+    // reader should believe. The reduced fallback below still writes the v9
+    // envelope, because that write is unchanged.
+    await writePickersChunked(stripped);
     return;
   } catch (error) {
     console.warn(
