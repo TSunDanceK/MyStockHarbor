@@ -29,6 +29,7 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { JOBS, describeCron, type JobKey } from "./jobRuns";
+import { EARNINGS_STALE_AFTER_SECONDS } from "./earningsFreshness";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -165,8 +166,26 @@ export const DATASETS = {
   },
   earnings: {
     label: "Earnings",
-    ttlSeconds: 60 * 60 * 24 * 7,
+    // DERIVED, and it was a typed `60 * 60 * 24 * 7`.
+    //
+    // 7 days was the only number in this table with no argument behind it, and
+    // it was wrong against the dataset's own cache rule by a factor of
+    // thirteen. computeEarningsTtlSeconds holds a symbol's rows for up to 95
+    // days between reports, markRefreshed only fires when the job refetches,
+    // and the job only refetches once the key has expired -- so a correctly
+    // cached symbol at rest was reported as past its TTL for 94 days in every
+    // 95. Observed 2026-09-11: `12 / 349`, `337 past their TTL`, "96% of
+    // observed symbols past their own TTL". Every word of that was correct and
+    // none of it was a fault.
+    //
+    // This is the pricePool disease in a second dataset -- a page that cannot
+    // tell IDLE-BECAUSE-CORRECT from BROKEN, reporting the more alarming of the
+    // two every single day. See lib/server/earningsFreshness.ts for the full
+    // trace, the three terms this number is made of, and what moved to the
+    // job's run record to keep a same-day signal.
+    ttlSeconds: EARNINGS_STALE_AFTER_SECONDS,
     job: "warm-earnings",
+    qualifier: "refetched on key expiry, not on a clock",
     coverage: "registered",
   },
   news: {
@@ -395,6 +414,51 @@ export async function readDeferred(dataset: DatasetKey): Promise<Set<string>> {
     // fail open -- a failed read means nothing is skipped, which is the
     // pre-deferral behaviour rather than a stall.
     return new Set();
+  }
+}
+
+/**
+ * The symbols whose last refresh is older than this dataset's own policy.
+ *
+ * THE LIST BEHIND THE NUMBER. readDatasetHealth already returns `stale` as a
+ * ZCOUNT, and a count is enough to colour a row but not enough to compare two
+ * beliefs: "337 past TTL" and "6 due" differ by 331, and 331 is satisfied by
+ * any 331 symbols. warm-earnings needs to know WHICH, so it can say whether the
+ * symbols the page is worried about are ones it has queued or ones it has never
+ * heard of. Those are different faults and only one of them is real.
+ *
+ * SAME BOUNDS AS `stale`, deliberately: score in [1, cutoff], so the
+ * never-refreshed (score 0) are excluded here exactly as they are there and the
+ * two can be compared without one silently containing the other.
+ *
+ * RETURNS null ON FAILURE, NOT []. This is the whole reason it is not written
+ * inline at the call site. An empty array from a failed read means "nothing is
+ * rotting", which is the absence-reads-as-health defect this series keeps
+ * finding -- and here it would land on the one signal whose job is to notice
+ * rot. `null` makes the caller choose, and warm-earnings records the null
+ * rather than a zero.
+ *
+ * BOUNDED by `limit` so this can never become a scan on a dataset whose
+ * denominator has run away. A truncated list still detects a fault; it only
+ * understates how big one is, and the caller has `stale` from
+ * readDatasetHealth for the true count.
+ */
+export async function readPastTtl(
+  dataset: DatasetKey,
+  limit = 1000
+): Promise<string[] | null> {
+  if (!redis) return null;
+  try {
+    const cutoff = Date.now() - DATASETS[dataset].ttlSeconds * 1000;
+    if (cutoff < 1) return [];
+    const rows = await redis.zrange<string[]>(queueKey(dataset), 1, cutoff, {
+      byScore: true,
+      offset: 0,
+      count: Math.max(1, limit),
+    });
+    return Array.isArray(rows) ? rows.map(String) : null;
+  } catch {
+    return null;
   }
 }
 

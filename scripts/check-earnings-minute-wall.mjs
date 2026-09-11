@@ -19,7 +19,7 @@
 //   node scripts/check-earnings-minute-wall.mjs
 import ts from "typescript";
 import { readCodeOnly } from "./lib/source-code.mjs";
-import { loadEarningsPlan } from "./lib/earnings-plan.mjs";
+import { loadEarningsPlan, sliceWarmEarningsRunRecord } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -177,7 +177,13 @@ const sliceCall = (anchor) => {
   const end = cron.indexOf("});", start);
   return end === -1 ? "" : cron.slice(start, end);
 };
-const recordCall = sliceCall('recordJobRun("warm-earnings", true, {\n');
+// THROUGH THE SHARED HELPER, not sliceCall. The old anchor here was
+// `recordJobRun("warm-earnings", true, {\n`, which encoded the second argument
+// into a search for the first -- so when that argument stopped being `true`
+// this check went red on correct code, as did the identical anchor in
+// check-earnings-batch. sliceCall stays for the response body below, which has
+// no such argument.
+const recordCall = sliceWarmEarningsRunRecord(cron);
 const responseCall = sliceCall("NextResponse.json({\n");
 check(
   "a run that ran out of budget is distinguishable on the STORED record",
