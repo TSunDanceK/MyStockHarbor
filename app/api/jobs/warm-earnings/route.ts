@@ -8,7 +8,16 @@ import {
   type EarningsRow,
 } from "@/lib/server/earningsStore";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
-import { deferSymbol, markRefreshed, registerSymbols } from "../../../../lib/server/stalenessQueue";
+import {
+  deferSymbol,
+  markRefreshed,
+  readPastTtl,
+  registerSymbols,
+} from "../../../../lib/server/stalenessQueue";
+import {
+  EARNINGS_ENQUEUE_THROTTLE_SECONDS,
+  unexplainedStaleSymbols,
+} from "../../../../lib/server/earningsFreshness";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { Redis } from "@upstash/redis";
 import {
@@ -220,11 +229,12 @@ async function waitForEarningsBudget(deadlineMs: number): Promise<"ok" | "out-of
 // actuals + the new next-date get picked up. Net effect: steady-state earnings
 // calls drop to "only symbols reporting this week".
 
-// How often the dynamic-universe backfill enqueue is allowed to run. The
-// enqueue does one bulk read of up to ~700 cached-earnings entries to find
-// which are missing; throttling it to once an hour keeps that read rare even
-// if the job itself is hit every few minutes.
-const EARNINGS_ENQUEUE_THROTTLE_SECONDS = 60 * 60;
+// EARNINGS_ENQUEUE_THROTTLE_SECONDS MOVED to lib/server/earningsFreshness.ts
+// and is imported above. It is not just this route's pacing knob any more: it
+// is one of the three terms the /cache-health staleness policy for this dataset
+// is derived from -- the lag between a key expiring and anything noticing it
+// has. A constant another module's arithmetic depends on should not live in a
+// route handler.
 
 type FmpEarningsRow = EarningsRow;
 
@@ -448,11 +458,74 @@ export async function GET(req: NextRequest) {
     if (fetched.length) await markRefreshed("earnings", fetched);
     for (const sym of failed) await deferSymbol("earnings", sym);
 
-    await recordJobRun("warm-earnings", true, {
+    // ─────────────────────────────────────────────────────────────────────
+    // THE TWO BELIEFS, COMPARED, AND THE RUN GOES RED WHEN THEY DISAGREE.
+    //
+    // WHAT WENT UNDETECTED. On 2026-09-11 this job recorded `checked 6 ·
+    // fetched 6 · deferred 0 · failed 0 · outOfTime false` -- a clean green
+    // line -- while /cache-health reported 337 of 349 earnings symbols past
+    // their TTL. Nothing in either record could see the other, so a
+    // fifty-six-fold disagreement about the same dataset sat on the same page
+    // for days with no line to draw between them.
+    //
+    // WHY THIS IS NOT A SUBTRACTION. `337 - 6 = 331` is satisfied by any 331
+    // symbols. The fault worth catching is an ORPHAN -- a symbol registered in
+    // the staleness queue that has fallen out of BOTH enqueue sources
+    // (enqueueDynamicUniverseMissing's dynamic universe and pickersBuilder's
+    // analysed set), so its key expires and nothing will ever queue it again.
+    // An orphan is invisible to a count comparison and obvious to a set
+    // difference, so this is a set difference.
+    //
+    // READ AFTER THE BOOKKEEPING WRITES, not before: registerSymbols and
+    // markRefreshed have already landed, so symbols this run just fetched are
+    // no longer past TTL and symbols it just registered sit at score 0, which
+    // readPastTtl excludes. Reading first would report this run's own work as
+    // rot.
+    //
+    // null IS NOT ZERO. readPastTtl returns null when the read failed, and
+    // that is recorded as null rather than collapsed to an empty list -- a
+    // failed read must not be able to produce the all-clear. The run stays
+    // `ok` in that case, because fail-open is the house style and a bookkeeping
+    // read that could redden a warm job is a worse failure than a missing
+    // signal, but the record says plainly that it could not tell.
+    const pastTtl = await readPastTtl("earnings");
+    const unexplained = pastTtl === null ? null : unexplainedStaleSymbols(pastTtl, cleanQueue);
+    const datasetRotting = unexplained !== null && unexplained.length > 0;
+    if (datasetRotting) {
+      console.error(
+        `[warm-earnings] ${unexplained.length} symbol(s) are past the earnings ` +
+          `staleness policy and are NOT in this job's work queue, so nothing will ` +
+          `refetch them: ${unexplained.slice(0, 20).join(", ")}`
+      );
+    }
+
+    await recordJobRun("warm-earnings", !datasetRotting, {
       checked: cleanQueue.length,
       fetched: fetched.length,
       deferred: deferred.length,
       failed: failed.length,
+      // THE COMPARISON, ON THE RECORD AND SIDE BY SIDE. `checked` is what this
+      // job believes is due; `stalenessPastTtl` is what the staleness queue
+      // says is past policy. They are printed together so the next person does
+      // not have to hold two panels of the same page in their head to notice
+      // they disagree.
+      stalenessPastTtl: pastTtl === null ? null : pastTtl.length,
+      unexplainedStale: unexplained === null ? null : unexplained.length,
+      // JOINED, NOT AN ARRAY. JobRun["summary"] is deliberately flat
+      // (Record<string, string | number | boolean | null>) so the page can
+      // render any job's record without knowing its shape. A sample of the
+      // names is worth more than the count alone -- an orphan is identified by
+      // which ticker it is -- so it goes in as text.
+      unexplainedSample:
+        unexplained === null ? null : unexplained.slice(0, 10).join(", "),
+      // The remainder this run did not get to. Not a fault on its own -- a peak
+      // day legitimately exceeds one batch -- but it is the other half of
+      // "visibly comparable", and a backlog that never shrinks is only
+      // readable if the number is there on each run.
+      unattempted: Math.max(
+        0,
+        cleanQueue.length - (fetched.length + deferred.length + failed.length)
+      ),
       // THE SHORTFALL, NAMED. Without this a run that ran out of budget and
       // one that drained its queue produce the same record -- which is how the
       // `break` stayed invisible for as long as it did.
@@ -467,8 +540,10 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      ok: true,
+      ok: !datasetRotting,
       checked: cleanQueue.length,
+      stalenessPastTtl: pastTtl === null ? null : pastTtl.length,
+      unexplainedStale: unexplained === null ? null : unexplained.length,
       dynamicEnqueued,
       fetchedCount: fetched.length,
       deferredCount: deferred.length,

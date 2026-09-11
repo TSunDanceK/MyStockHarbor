@@ -27,9 +27,13 @@ export const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
 // EXPORTED because lib/server/earningsPlan.ts derives the number of fetches one
 // report costs from these two and the run cadence, rather than typing "2".
 export const EARNINGS_TTL_DAY = 24 * 60 * 60;
-const EARNINGS_TTL_MAX_SECONDS = 95 * EARNINGS_TTL_DAY; // ~one quarter
+// EXPORTED for lib/server/earningsFreshness.ts, which derives the /cache-health
+// staleness policy for this dataset from the longest lifetime this rule can
+// hand out. The policy WAS a typed 7 days, against a rule whose ceiling is 95 --
+// see the comment on EARNINGS_STALE_AFTER_SECONDS for what that cost.
+export const EARNINGS_TTL_MAX_SECONDS = 95 * EARNINGS_TTL_DAY; // ~one quarter
 export const EARNINGS_TTL_NEAR_REPORT_SECONDS = 12 * 60 * 60; // report imminent/just passed
-const EARNINGS_TTL_UNKNOWN_SECONDS = 10 * EARNINGS_TTL_DAY; // no future date known
+export const EARNINGS_TTL_UNKNOWN_SECONDS = 10 * EARNINGS_TTL_DAY; // no future date known
 
 export type EarningsRow = {
   symbol?: string;
