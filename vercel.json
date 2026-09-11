@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/jobs/warm-screener-fundamentals",
-      "schedule": "50 6 * * *"
+      "schedule": "50 7 * * *"
     },
     {
       "path": "/api/jobs/warm-fundamentals",
