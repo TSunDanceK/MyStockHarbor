@@ -349,15 +349,121 @@ export async function readRedisBandwidth(days = 7): Promise<RedisBandwidthReport
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The universe cap in force when the overage was measured.
+ * The universe cap in force when the bandwidth measurement was taken.
  *
  * Not a copy of ANALYSIS_UNIVERSE_CAP kept in step by hand -- it is the value
- * the 2026-09-04 measurement was taken AT, and scripts/check-redis-bandwidth.mjs
- * fails if ANALYSIS_UNIVERSE_CAP moves above it while the projection is still
- * over the plan cap. Lowering it needs no ceremony; raising it means re-taking
- * the measurement, which is the point.
+ * the measurement was taken AT, and scripts/check-redis-bandwidth.mjs fails if
+ * ANALYSIS_UNIVERSE_CAP moves above it. Lowering it needs no ceremony; raising
+ * it means re-taking the measurement, which is the point.
  */
 export const REDIS_OVERAGE_MEASURED_AT_CAP = 700;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RE-DERIVED 2026-09-11. THE GATE STAYS; ITS ARITHMETIC WAS OBSOLETE.
+//
+// The block above was calibrated against a 207 GB/month projection at cap 700 --
+// over a 200 GB plan cap -- and every sentence justifying it was arithmetic on
+// that number: "at 1,500 the projection is roughly twice the plan cap", "twice
+// the cap is a bill or a throttle". THE MEASUREMENT IT RESTS ON NO LONGER
+// EXISTS. #419 (the history read path), #420 (tier 2 hourly) and #421 (ISR
+// windows) landed between, and #419 also closed the meter's own hole -- twelve
+// single-symbol readers reporting zero bytes -- so the current figure counts
+// MORE and reads LESS.
+//
+//     2026-09-04   ~207 GB/month projected, at cap 700, meter under-counting
+//     2026-09-11     48.60 GB/month projected, at cap 700, hole closed
+//
+// At 1,500 the projection would now be ~104 GB, 52% of the plan cap, not 200%.
+// Leaving that prose in place would have meant the next person to read it being
+// told a number that is wrong by a factor of four, in the direction that stops
+// them looking.
+//
+// TWO RULES NOW, AND THEY ARE NOT THE SAME RULE.
+//
+//   THE BUDGET RULE -- the projection at the configured cap must fit under the
+//   plan limit. This is the honest check, and the comment above records that it
+//   could not be used because it was RED ON MAIN from the day it would have
+//   landed: "a check that is red on main from the day it lands is a check that
+//   gets muted". At 24.3% of the plan cap it is now green, so it can finally be
+//   the rule it was always meant to be -- and it goes red if the bill regresses,
+//   which the direction rule alone could never detect.
+//
+//   THE DECISION RULE -- ANALYSIS_UNIVERSE_CAP may not exceed the cap the
+//   measurement was taken at. This is NOT a budget statement any more and must
+//   not be read as one: the budget would permit roughly 2,880 symbols
+//   (redisAffordableUniverseCap below computes it). It is the rule that raising
+//   the universe is a deliberate act with a fresh measurement behind it rather
+//   than a one-character edit, and the owner has not taken that decision.
+//
+// THE SECOND RULE IS WHY THE FIRST DOES NOT UNBLOCK GROWTH. Replacing the
+// ceiling with the affordable figure would have made this file the growth
+// decision, which is not what re-deriving a gate means.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The projected monthly Redis bandwidth at REDIS_OVERAGE_MEASURED_AT_CAP.
+ *
+ * A MEASUREMENT WITH ITS DATE ATTACHED, like every other byte figure in this
+ * file, because the last one went stale silently and took four sentences of
+ * reasoning with it.
+ */
+export const REDIS_PROJECTION_MEASURED_BYTES = Math.round(48.6 * 1024 * 1024 * 1024);
+export const REDIS_PROJECTION_MEASURED_AT = "2026-09-11";
+/**
+ * The universe cap the projection above was measured at.
+ *
+ * SEPARATE FROM REDIS_OVERAGE_MEASURED_AT_CAP AND ASSERTED EQUAL TO IT, which
+ * is not redundancy. The gate blocks ANALYSIS_UNIVERSE_CAP from rising past the
+ * ceiling -- so raising THE CEILING, alone, weakens the gate and changes
+ * nothing that a check comparing the cap to it can see. Found exactly that way:
+ * a breakage run set the ceiling to the affordable 2,880 and every assertion
+ * stayed green. Tying the ceiling to a figure that is part of the measurement's
+ * own provenance means moving it requires claiming a measurement that was taken
+ * there.
+ */
+export const REDIS_PROJECTION_MEASURED_AT_CAP = 700;
+export const REDIS_PROJECTION_MEASURED_SOURCE =
+  "/cache-health Redis bandwidth panel, 7-day window projected to 30 days, at " +
+  "ANALYSIS_UNIVERSE_CAP 700, after #419 closed the single-symbol metering hole. " +
+  "The previous figure was ~207 GB on 2026-09-04, taken before that fix.";
+
+/**
+ * The largest universe the measured bill would still fit the plan cap at.
+ *
+ * PURE AND EXPORTED so scripts/check-redis-bandwidth.mjs can RUN it rather than
+ * re-derive the division and prove only that two copies agree. Every term in
+ * the bill scales linearly with the universe, which is the assumption this
+ * rests on and the reason the model is a single multiplication rather than a
+ * simulation.
+ *
+ * INFORMATIONAL, NOT A PERMISSION. The gate is the smaller of this and
+ * REDIS_OVERAGE_MEASURED_AT_CAP; see the block above for why those are two
+ * different questions.
+ */
+export function redisAffordableUniverseCap(
+  measuredBytes = REDIS_PROJECTION_MEASURED_BYTES,
+  measuredAtCap = REDIS_OVERAGE_MEASURED_AT_CAP,
+  planCapBytes = REDIS_BANDWIDTH_CAP_BYTES
+): number {
+  if (!(measuredBytes > 0) || !(measuredAtCap > 0) || !(planCapBytes > 0)) return 0;
+  return Math.floor((measuredAtCap * planCapBytes) / measuredBytes);
+}
+
+/**
+ * The projected bill at any universe size, scaled from the measurement.
+ *
+ * Separate from the function above so the check can assert the BUDGET rule
+ * directly -- "the projection at the configured cap fits under the plan limit"
+ * -- rather than inferring it from a ceiling.
+ */
+export function redisProjectedBytesAt(
+  universeCap: number,
+  measuredBytes = REDIS_PROJECTION_MEASURED_BYTES,
+  measuredAtCap = REDIS_OVERAGE_MEASURED_AT_CAP
+): number {
+  if (!(measuredAtCap > 0) || !(universeCap > 0)) return 0;
+  return (measuredBytes * universeCap) / measuredAtCap;
+}
 
 /** Sanity: the ceiling is about the cap that actually ships. */
 export const CONFIGURED_UNIVERSE_CAP = ANALYSIS_UNIVERSE_CAP;

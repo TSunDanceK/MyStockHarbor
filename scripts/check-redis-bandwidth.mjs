@@ -27,6 +27,7 @@
 //   node scripts/check-redis-bandwidth.mjs
 import ts from "typescript";
 import { readCodeOnly } from "./lib/source-code.mjs";
+import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -251,20 +252,138 @@ console.log("\n3. The growth blocker fails the build rather than arriving as an 
 
 const cap = numFrom(readCodeOnly("lib/server/dynamicUniverseCache.ts"), "ANALYSIS_UNIVERSE_CAP");
 const ceiling = numFrom(meter, "REDIS_OVERAGE_MEASURED_AT_CAP");
-check(
-  "the configured cap and the measured ceiling were both read",
-  Number.isFinite(cap) && Number.isFinite(ceiling),
-  `ANALYSIS_UNIVERSE_CAP ${cap}, measured at ${ceiling}`
+
+/**
+ * One `export const NAME = <expr>;` declaration, lifted VERBATIM.
+ *
+ * WHY NOT numFrom. That helper parses `[0-9_ *]+`, and
+ * REDIS_PROJECTION_MEASURED_BYTES is `Math.round(48.6 * 1024 * 1024 * 1024)` --
+ * a decimal inside a call, which it reads as NaN. Widening the regex until it
+ * evaluates arbitrary expressions is how a source reader starts evaluating
+ * identifiers it should not. Taking the whole declaration and letting the
+ * module system evaluate it is both simpler and impossible to get subtly wrong:
+ * the check runs the real value rather than a reconstruction of it.
+ */
+const declOf = (src, name) =>
+  (src.match(new RegExp(`export const ${name} = [^;]+;`)) ?? [])[0] ?? "";
+
+// RE-DERIVED 2026-09-11, AND RUN RATHER THAN RESTATED. The two functions below
+// come out of the meter itself, so the numbers in these messages cannot drift
+// from the ones the gate uses -- which is exactly what happened to the prose
+// this replaces. It asserted "at 1,500 the projection is ~2x the plan cap"
+// against a 207 GB baseline that #419/#420/#421 have since taken to 48.60,
+// making the claim wrong by a factor of four in the reassuring direction.
+const decls = [
+  declOf(meter, "REDIS_PROJECTION_MEASURED_BYTES"),
+  declOf(meter, "REDIS_OVERAGE_MEASURED_AT_CAP"),
+  declOf(meter, "REDIS_BANDWIDTH_CAP_BYTES"),
+  declOf(meter, "REDIS_PROJECTION_MEASURED_AT_CAP"),
+];
+if (decls.some((d) => !d)) {
+  console.error(
+    "FAIL: could not lift the budget constants. This script would otherwise " +
+      "pass by measuring nothing."
+  );
+  process.exit(1);
+}
+const budgetMod = await lift(
+  [
+    ...decls,
+    grabFunction(meter, "redisAffordableUniverseCap"),
+    grabFunction(meter, "redisProjectedBytesAt"),
+  ].join("\n")
 );
+const measured = budgetMod.REDIS_PROJECTION_MEASURED_BYTES;
+const planCap = budgetMod.REDIS_BANDWIDTH_CAP_BYTES;
+const affordable = budgetMod.redisAffordableUniverseCap();
+const projectedAtCap = budgetMod.redisProjectedBytesAt(cap);
+const GB = 1024 ** 3;
+
 check(
-  "ANALYSIS_UNIVERSE_CAP has not been raised past the cap the overage was measured at",
+  "the configured cap, the measured ceiling and the plan cap were all read",
+  Number.isFinite(cap) && Number.isFinite(ceiling) && planCap > 0 && measured > 0,
+  `ANALYSIS_UNIVERSE_CAP ${cap}, measured at ${ceiling}, plan cap ` +
+    `${(planCap / GB).toFixed(0)} GB, measurement ${(measured / GB).toFixed(2)} GB/month`
+);
+
+// THE BUDGET RULE, WHICH COULD NOT BE WRITTEN BEFORE. The meter's own comment
+// records why: "the honest budget check is RED TODAY, at the cap we already
+// run. A check that is red on main from the day it lands is a check that gets
+// muted." At 24.3% of the plan cap it is green, so it can finally be the rule,
+// and it catches a regression in the bill that the direction rule cannot see.
+check(
+  "the projected bill at the configured cap fits under the plan cap",
+  projectedAtCap > 0 && projectedAtCap < planCap,
+  `${(projectedAtCap / GB).toFixed(2)} GB against ${(planCap / GB).toFixed(0)} GB — ` +
+    `${((projectedAtCap / planCap) * 100).toFixed(1)}% of plan. Was ~207 GB (over) ` +
+    `on 2026-09-04, before #419 closed the metering hole and #419/#420/#421 cut ` +
+    `the traffic`
+);
+
+// THE DECISION RULE, AND IT IS NOT THE BUDGET. The budget would permit ~2,880
+// symbols; the cap stays where the measurement was taken because raising the
+// universe is a decision with a fresh measurement behind it, not a
+// one-character edit. Stating the affordable figure in the message is
+// deliberate -- the next person should see both numbers rather than inherit the
+// old prose's wrong one.
+check(
+  "ANALYSIS_UNIVERSE_CAP has not been raised past the cap the measurement was taken at",
   cap <= ceiling,
   cap <= ceiling
-    ? `${cap} <= ${ceiling}. At 762 symbols the bill is ~207 GB/month against a ` +
-      `200 GB cap; every term scales linearly, so 1,500 is ~2x the cap. Raising ` +
-      `this is a bill or a throttle, not a degradation — re-take the measurement first.`
-    : `${cap} > ${ceiling} — the universe cap was raised while the Redis bill is ` +
-      `already over the plan limit. See claude/redis-bandwidth-2026-09-04.md.`
+    ? `${cap} <= ${ceiling}. The BILL would permit ~${affordable} at the measured ` +
+      `${(measured / GB).toFixed(2)} GB/month, and that is not permission: the ` +
+      `ceiling is where the measurement was taken, so raising it means re-taking ` +
+      `it. For scale, 1,500 projects to ` +
+      `${(budgetMod.redisProjectedBytesAt(1500) / GB).toFixed(0)} GB (` +
+      `${((budgetMod.redisProjectedBytesAt(1500) / planCap) * 100).toFixed(0)}% of plan) ` +
+      `and 3,000 to ${(budgetMod.redisProjectedBytesAt(3000) / GB).toFixed(0)} GB (` +
+      `${((budgetMod.redisProjectedBytesAt(3000) / planCap) * 100).toFixed(0)}%), so the ` +
+      `old 700 -> 1,500 -> 3,000 sequence is still blocked at its last step by the ` +
+      `bill alone.`
+    : `${cap} > ${ceiling} — the universe cap was raised past the cap the bandwidth ` +
+      `measurement was taken at. Re-take it first.`
+);
+// DERIVED, PROVED BY RUNNING IT ON OTHER INPUTS. Comparing the function's
+// answer to the same division computed here only proves two copies agree -- and
+// a breakage that replaced the body with a typed `return 2880` passed it,
+// because 2,880 is the right answer today. A function that ignores its
+// arguments cannot survive being called with different ones.
+check(
+  "the affordable ceiling is DERIVED from the measurement, not written down",
+  affordable === Math.floor((ceiling * planCap) / measured) &&
+    affordable > ceiling &&
+    // WITHIN ROUNDING, because the function floors and floor() does not
+    // distribute over multiplication -- floor(x)*3 and floor(3x) differ by up
+    // to 2. Asserting exact equality here failed on correct code, which is a
+    // check calibrating itself rather than its subject.
+    Math.abs(
+      budgetMod.redisAffordableUniverseCap(measured * 2, ceiling, planCap) - affordable / 2
+    ) <= 1 &&
+    Math.abs(
+      budgetMod.redisAffordableUniverseCap(measured, ceiling * 3, planCap) - affordable * 3
+    ) <= 3,
+  `${affordable} = ${ceiling} x ${(planCap / GB).toFixed(0)} GB / ` +
+    `${(measured / GB).toFixed(2)} GB, and it halves at twice the bill and triples ` +
+    `at three times the basis — it moves when the measurement does, which is what ` +
+    `the last calibration could not do`
+);
+// AND RAISING THE CEILING ALONE IS NOT A WAY ROUND THE GATE. The gate compares
+// ANALYSIS_UNIVERSE_CAP to the ceiling, so editing the ceiling upward weakens
+// it invisibly. Tying it to the cap the measurement was taken at means moving
+// it requires claiming a measurement taken there.
+check(
+  "the ceiling is the cap the measurement was actually taken at",
+  ceiling === budgetMod.REDIS_PROJECTION_MEASURED_AT_CAP,
+  `${ceiling} — found by breaking it: setting the ceiling to the affordable ` +
+    `${affordable} left every other assertion here green while the gate had ` +
+    `stopped gating`
+);
+check(
+  "the measurement carries its date and where it came from",
+  /REDIS_PROJECTION_MEASURED_AT = "\d{4}-\d{2}-\d{2}"/.test(meter) &&
+    /REDIS_PROJECTION_MEASURED_SOURCE =/.test(meter),
+  "the figure it replaces had four sentences of reasoning built on it and no " +
+    "date, so it went stale silently and took the reasoning with it"
 );
 check(
   "the plan cap is named rather than assumed",
