@@ -484,30 +484,73 @@ console.log("\n5. Pickers payload (section membership)");
 
 // ── 6. THE SINGLETONS: earnings calendar, newest-bar stamps, price pool ───────
 console.log("\n6. Singleton keys");
+
+// THE TYPE IS READ, NOT GUESSED. Dump #1 (2026-09-12T11:08:18Z) lost
+// msh:earnings-schedule:v1 to `WRONGTYPE Operation against a key holding the wrong
+// kind of value, command was ["hgetall", ...]` -- it is written with redis.set of
+// a plain object (earningsSchedule.ts:146) and read with redis.get (:117), so it
+// is a JSON STRING and never was a hash. The declared kind below is now a HINT
+// that TYPE overrides, so a key whose shape changes costs a line in the report
+// rather than the dataset.
+const KIND_BY_REDIS_TYPE = { hash: "hash", zset: "zset", string: "json", list: "list", set: "set" };
+
+async function readSingleton(key, declaredKind) {
+  let actual = null;
+  try {
+    actual = await redis.type(key);
+  } catch {
+    // TYPE itself failing is worth knowing but not worth aborting for.
+  }
+  const kind = KIND_BY_REDIS_TYPE[String(actual ?? "").toLowerCase()] ?? declaredKind;
+  if (actual && kind !== declaredKind) {
+    report.warnings.push(
+      `${key}: declared kind "${declaredKind}" but TYPE says "${actual}" -- read as "${kind}". ` +
+        `Update the declared kind; the dump succeeded either way.`
+    );
+  }
+
+  if (kind === "hash") return { kind, value: await redis.hgetall(key) };
+  if (kind === "zset") {
+    const raw = await redis.zrange(key, 0, -1, { withScores: true });
+    const pairs = [];
+    for (let i = 0; i + 1 < raw.length; i += 2) {
+      pairs.push({ member: String(raw[i]), score: Number(raw[i + 1]) });
+    }
+    return { kind, value: pairs };
+  }
+  if (kind === "list") return { kind, value: await redis.lrange(key, 0, -1) };
+  if (kind === "set") return { kind, value: await redis.smembers(key) };
+  // "json" -- a plain value written with redis.set; the client deserialises it.
+  return { kind, value: await redis.get(key) };
+}
+
+const entryCountOf = (value) => {
+  if (value == null) return 0;
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === "object") return Object.keys(value).length;
+  return 1;
+};
+
 for (const [name, key, kind] of [
   ["earnings-day-items", KEYS.earningsDayItems, "hash"],
   ["earnings-day-complete", KEYS.earningsDayComplete, "hash"],
-  ["earnings-schedule", KEYS.earningsSchedule, "hash"],
+  // redis.set of a plain object (earningsSchedule.ts:146) -> a JSON string, not a hash.
+  ["earnings-schedule", KEYS.earningsSchedule, "json"],
   ["history-newest-bar", KEYS.newestBar, "hash"],
   ["price-pool", KEYS.pricePool, "hash"],
   ["dynamic-universe-seen", KEYS.universeSeen, "zset"],
 ]) {
   try {
-    let value = null;
-    if (kind === "hash") value = await redis.hgetall(key);
-    else if (kind === "zset") {
-      const raw = await redis.zrange(key, 0, -1, { withScores: true });
-      const pairs = [];
-      for (let i = 0; i + 1 < raw.length; i += 2) pairs.push({ member: String(raw[i]), score: Number(raw[i + 1]) });
-      value = pairs;
-    }
-    const n = Array.isArray(value) ? value.length : value ? Object.keys(value).length : 0;
-    report.datasets[name] = { key, kind, entries: n, present: n > 0 };
-    report.files.push(writeJson(`${name}.json`, { dumpedAt: DUMPED_AT, dataset: name, key, kind, entries: n, value }));
-    console.log(`   ${name.padEnd(24)} ${String(n).padStart(6)} entries`);
+    const { kind: readAs, value } = await readSingleton(key, kind);
+    const n = entryCountOf(value);
+    report.datasets[name] = { key, declaredKind: kind, readAs, entries: n, present: n > 0 };
+    report.files.push(
+      writeJson(`${name}.json`, { dumpedAt: DUMPED_AT, dataset: name, key, readAs, entries: n, value })
+    );
+    console.log(`   ${name.padEnd(24)} ${String(n).padStart(6)} entries  (${readAs})`);
   } catch (e) {
     report.warnings.push(`${name} (${key}) read failed: ${String(e?.message ?? e)}`);
-    report.datasets[name] = { key, kind, entries: 0, present: false, error: true };
+    report.datasets[name] = { key, declaredKind: kind, entries: 0, present: false, error: true };
   }
 }
 
@@ -517,10 +560,26 @@ for (const [name, key, kind] of [
 // Stooq/SEC comparison can ever prove.
 const totalBytes = report.files.reduce((s, f) => s + (f.bytes ?? 0), 0);
 report.totalBytes = totalBytes;
+// EVERY FIGURE HERE IS AGAINST THE UNION, AND THE UNION IS THE WRONG DENOMINATOR
+// FOR MOST QUESTIONS. It is the union of the symbols key, the dynamic zset and the
+// history-key scan, so a dataset with its own larger population reads over 100%
+// (screener-fundamentals hit 286.1% in dump #1, against SCREENER_LIMIT = 3,000)
+// and a product question like "what fraction of what RENDERS has an industry" gets
+// an answer about a different set entirely.
+//
+// The per-population cut lives in scripts/step0-analyse-dump.mjs, which reads a
+// finished dump and reports against the analysis universe, the rendered payload
+// and the union separately. It is NOT duplicated here: two implementations of one
+// figure is how they drift (claude/traps/two-validators-for-one-value.md). This
+// block stays as the raw sweep, labelled as such.
+report.coverageDenominator =
+  `union of the pickers symbols key, the dynamic universe zset and the history key scan ` +
+  `(${universe.length} symbols). NOT the analysis universe. Run ` +
+  `scripts/step0-analyse-dump.mjs on this directory for the per-population cut.`;
 report.coverageVerdict = Object.fromEntries(
   Object.entries(report.datasets)
     .filter(([, d]) => typeof d.coverageOfDumpUniversePct === "number")
-    .map(([k, d]) => [k, `${d.coverageOfDumpUniversePct}% of ${universe.length}`])
+    .map(([k, d]) => [k, `${d.coverageOfDumpUniversePct}% of the ${universe.length}-symbol UNION`])
 );
 
 // Written last and listed in its own files[] before serialising, so the report
