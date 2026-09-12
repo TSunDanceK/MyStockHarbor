@@ -1,0 +1,112 @@
+name: Step 0 — re-analyse a frozen dump
+
+# READS AN EXISTING ARTEFACT. NEVER TOUCHES REDIS.
+#
+# WHY THIS EXISTS RATHER THAN A SECOND DUMP. The 2026-09-12T11:08:18Z dump is the
+# canonical freeze. Answering a question about it by re-dumping would answer a
+# question about a DIFFERENT and strictly worse snapshot: the profile dataset sits
+# on a 30-day TTL with only ~50 of its 651 entries ever refreshed, so every day
+# that passes costs entries that cannot be recovered. Questions about what was
+# frozen get answered from the frozen files.
+#
+# AND WHY IT RUNS HERE RATHER THAN IN A CLAUDE SESSION. api.github.com is
+# reachable from the sandbox, but the artifact download redirects to
+# productionresultssa13.blob.core.windows.net, which the egress policy denies with
+# 403 CONNECT. A runner can fetch its own repo's artifacts; the sandbox cannot. So
+# the analysis goes where the bytes already are.
+#
+# NO UPSTASH SECRETS ARE PASSED TO THIS WORKFLOW, deliberately. It has no reason
+# to reach the database, and not giving it the credentials is a stronger guarantee
+# than a comment saying it will not use them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run ID that produced the dump artifact (e.g. 34690240239)"
+        required: true
+      artifact_name:
+        description: "Artifact name to download"
+        required: false
+        default: step0-dump
+      symbols:
+        description: "Comma-separated symbols to look up by name"
+        required: false
+        default: EA,WBS,EQR,MRSH,FISV,MMC,FI
+
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # NO `npm ci`. The analysis script imports only node: builtins, so installing
+      # 439 packages to read JSON would be a minute spent for nothing -- and it
+      # keeps this job unable to reach Upstash even by accident, since the client
+      # is not present.
+      - name: Download the frozen dump
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: dump
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # THE PATH IS NOT ASSUMED. upload-artifact rooted the original at the least
+      # common ancestor of its two paths, so the files sit under dump/step0-dump/
+      # rather than dump/. Guessing wrong here would produce "no universe.json"
+      # and read as an empty dump rather than a wrong path.
+      - name: Locate the dump directory
+        id: locate
+        run: |
+          set -euo pipefail
+          found=$(find dump -name universe.json -printf '%h\n' | head -n 1)
+          if [ -z "${found}" ]; then
+            echo "::error::No universe.json anywhere under dump/ — the artifact did not contain a Step 0 dump. Contents:"
+            find dump -maxdepth 3 -type f | head -n 40
+            exit 1
+          fi
+          echo "dir=${found}" >> "$GITHUB_OUTPUT"
+          echo "Found the dump at ${found}"
+          ls -la "${found}"
+
+      - name: Analyse
+        id: analyse
+        env:
+          DUMP_DIR: ${{ steps.locate.outputs.dir }}
+          SYMBOLS: ${{ inputs.symbols }}
+        run: |
+          set -o pipefail
+          node scripts/step0-analyse-dump.mjs "${DUMP_DIR}" "${SYMBOLS}" 2>&1 | tee analysis.log
+
+      - name: Put the re-cut headline in the run summary
+        if: always()
+        env:
+          DUMP_DIR: ${{ steps.locate.outputs.dir }}
+        run: |
+          {
+            echo "## Step 0 — re-analysis of a frozen dump"
+            echo
+            echo "Source run: \`${{ inputs.run_id }}\` · artifact \`${{ inputs.artifact_name }}\`"
+            echo
+            echo '```'
+            cat analysis.log 2>/dev/null || echo "(no analysis.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: step0-analysis-${{ inputs.run_id }}
+          path: |
+            ${{ steps.locate.outputs.dir }}/ANALYSIS.json
+            analysis.log
+          retention-days: 90
+          if-no-files-found: warn
