@@ -1,0 +1,201 @@
+name: Relay — run a networked task on a runner
+
+# ONE WORKFLOW, MERGED ONCE, DISPATCHED MANY TIMES.
+#
+# WHY IT EXISTS. Every networked phase of the Stooq/SEC migration has to run on a
+# runner, because the agent sandbox's egress policy refuses stooq.com, stooq.pl,
+# www.sec.gov and data.sec.gov with 403 CONNECT (re-tested 2026-09-12T13:01Z --
+# a policy denial, so it will not change today), and Actions artifacts download
+# via a blob host the sandbox also cannot reach.
+#
+# AND WHY IT IS PARAMETERISED. workflow_dispatch only registers for workflow files
+# on the DEFAULT BRANCH, so every new workflow file costs a merge-and-wait round
+# trip before it can run even once. That cost was paid twice in one day -- #436
+# gated Step 0, #444 gated Phase 0 -- and phases 1, 2 and 5 were all queued behind
+# the same toll. A `task` input converts each of those from a merge into a
+# dispatch. The step bodies still live in scripts/, which a feature branch CAN
+# change freely: dispatching with `ref` pointed at a branch runs that branch's
+# script through this workflow. Only the workflow file itself has to be on main.
+#
+# ── THE CREDENTIAL SPLIT IS THE PART NOT TO COLLAPSE ────────────────────────
+# Folding everything into one job would have quietly weakened a real guarantee.
+# Today's read-only posture is structural, not conventional: the Step 0 workflow
+# is given Upstash's READ-ONLY token, and the analyse workflow is given no Upstash
+# secrets at all, so a write is refused by the server rather than by care. A single
+# job that references a write credential in one branch of a `case` makes that
+# credential reachable from every branch.
+#
+# So there are TWO jobs and exactly one runs, chosen by the task:
+#
+#   read-only  no secrets referenced AT ALL. Cannot reach Redis even by accident,
+#              because the client has nothing to authenticate with.
+#   stateful   references the Upstash credentials. Reserved for tasks that must
+#              actually write, and kept empty of read-only work so the blast
+#              radius stays equal to the task that needs it.
+#
+# A task added to the wrong list is a security regression, not a config typo.
+# scripts/check-relay-isolation.mjs asserts the split.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        # FREE TEXT, NOT A CHOICE LIST, and that is the point. A choice list lives
+        # in this file, so adding a phase to it would need a merge to main -- the
+        # exact toll this relay exists to remove. The task name is routed by
+        # scripts/relay-run.mjs, which a feature branch can extend and dispatch
+        # in the same minute via `ref`.
+        #
+        # A task whose name begins with write- is routed to the credentialled job
+        # below. That prefix is a security boundary, not a convention.
+        description: "Task name (see TASKS in scripts/relay-run.mjs). write- prefix = needs credentials"
+        required: true
+        default: stooq-access
+      run_id:
+        description: "Run ID of the dump artifact to read (blank = skip download)"
+        required: false
+        default: "34690240239"
+      artifact_name:
+        description: "Artifact name to download"
+        required: false
+        default: step0-dump
+      symbols:
+        description: "Task-specific symbol list"
+        required: false
+        default: ""
+      payers:
+        description: "phase0 only: high-dividend test group"
+        required: false
+        default: KO,XOM,T
+      nonpayers:
+        description: "phase0 only: non-payer control group"
+        required: false
+        default: GOOGL,BRK.B
+
+jobs:
+  # ── NO CREDENTIALS. Everything that only reads a frozen artifact and public
+  # endpoints lands here, and it cannot touch the database because it has no way
+  # to authenticate to it.
+  read-only:
+    if: ${{ !startsWith(inputs.task, 'write-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # No `npm ci`. These scripts import only node: builtins and use global
+      # fetch, and not installing the Upstash client keeps the job unable to reach
+      # the database even if a future edit tried to.
+      - name: Download the frozen dump
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: dump
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # THE PATH IS NOT ASSUMED. upload-artifact rooted the original at the least
+      # common ancestor of its paths, so the files sit one level down. Guessing
+      # would read as an empty dump rather than a wrong path.
+      - name: Locate the dump directory
+        id: locate
+        if: inputs.run_id != ''
+        run: |
+          set -euo pipefail
+          found=$(find dump -name universe.json -printf '%h\n' | head -n 1)
+          if [ -z "${found}" ]; then
+            echo "::error::No universe.json under dump/ — the artifact is not a Step 0 dump. Contents:"
+            find dump -maxdepth 3 -type f | head -n 40
+            exit 1
+          fi
+          echo "dir=${found}" >> "$GITHUB_OUTPUT"
+          ls -la "${found}"
+
+      - name: Run the task
+        env:
+          DUMP_DIR: ${{ steps.locate.outputs.dir }}
+          SYMBOLS: ${{ inputs.symbols }}
+          PAYERS: ${{ inputs.payers }}
+          NONPAYERS: ${{ inputs.nonpayers }}
+          TASK: ${{ inputs.task }}
+        run: |
+          set -o pipefail
+          node scripts/relay-run.mjs "${TASK}" 2>&1 | tee task.log
+
+      - name: Put the output in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Relay — ${{ inputs.task }}"
+            echo
+            echo "Dump: run \`${{ inputs.run_id }}\` · artifact \`${{ inputs.artifact_name }}\`"
+            echo
+            echo '```'
+            cat task.log 2>/dev/null || echo "(no task.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-${{ inputs.task }}-${{ github.run_id }}
+          path: |
+            task.log
+            ${{ steps.locate.outputs.dir }}/*.json
+          retention-days: 90
+          if-no-files-found: warn
+
+  # ── WRITES TO REDIS. Only the ingest, and it is the only job that references
+  # the Upstash credentials. It is gated behind the task name rather than a
+  # boolean so that "which tasks can write" is answerable by reading the `if`.
+  #
+  # NOTE FOR WHOEVER ENABLES THIS: the repo's Actions secret is Upstash's
+  # READ-ONLY token by deliberate choice. A write from here will be refused by the
+  # server, and that refusal is CORRECT -- it is not a bad credential to debug.
+  # Writing bars to a parallel namespace needs a decision to add a write token,
+  # which reverses a deliberate posture and is the owner's call to make.
+  stateful:
+    if: ${{ startsWith(inputs.task, 'write-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+
+      - name: Run the write task
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          SYMBOLS: ${{ inputs.symbols }}
+          TASK: ${{ inputs.task }}
+        run: |
+          set -o pipefail
+          node scripts/relay-run.mjs "${TASK}" --allow-writes 2>&1 | tee task.log
+
+      - name: Put the output in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Relay — ${{ inputs.task }}"
+            echo
+            echo '```'
+            cat task.log 2>/dev/null || echo "(no task.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-${{ inputs.task }}-${{ github.run_id }}
+          path: task.log
+          retention-days: 90
+          if-no-files-found: warn
