@@ -1,0 +1,104 @@
+name: Phase 0 — Stooq adjustment methodology
+
+# ANSWERS ONE QUESTION, BEFORE ANY INGEST IS WRITTEN: does Stooq adjust for
+# dividends the way FMP does? If not, every moving average on every dividend
+# payer shifts, the weekly MA200 picker shifts most (five-year reach), and the
+# A5 section diff must be read as "correct changes" rather than "Stooq defects".
+#
+# WHY A WORKFLOW. stooq.com answers 403 CONNECT from the agent sandbox (policy
+# denial, re-tested 2026-09-12T13:01Z), and the frozen dump is an Actions
+# artifact whose download redirects to a blob host the sandbox also cannot reach.
+# A runner has both. Same relay pattern as step0-analyse.yml.
+#
+# NO UPSTASH SECRETS AND NO FMP KEY are passed. This job reads a frozen artifact
+# and a public CSV endpoint; it has no reason to reach the database or the paid
+# API, and withholding the credentials is a stronger guarantee than a comment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run ID that produced the dump artifact"
+        required: true
+        default: "34690240239"
+      artifact_name:
+        description: "Artifact name to download"
+        required: false
+        default: step0-dump
+      payers:
+        description: "High-dividend symbols (the test group)"
+        required: false
+        default: KO,XOM,T
+      nonpayers:
+        description: "Non-payers (the control group)"
+        required: false
+        default: GOOGL,BRK.B
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # No `npm ci`. The probe imports only node: builtins and uses global fetch.
+      - name: Download the frozen dump
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: dump
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # THE PATH IS NOT ASSUMED -- upload-artifact rooted the original at the
+      # least common ancestor of its two paths, so the files sit one level down.
+      # Guessing wrong here would read as an empty dump rather than a wrong path.
+      - name: Locate the dump directory
+        id: locate
+        run: |
+          set -euo pipefail
+          found=$(find dump -name history-bars.ndjson.gz -printf '%h\n' | head -n 1)
+          if [ -z "${found}" ]; then
+            echo "::error::No history-bars.ndjson.gz under dump/ — there is nothing to compare Stooq against. Contents:"
+            find dump -maxdepth 3 -type f | head -n 40
+            exit 1
+          fi
+          echo "dir=${found}" >> "$GITHUB_OUTPUT"
+          ls -la "${found}"
+
+      - name: Probe
+        env:
+          PAYERS: ${{ inputs.payers }}
+          NONPAYERS: ${{ inputs.nonpayers }}
+        run: |
+          set -o pipefail
+          node scripts/phase0-adjustment-probe.mjs "${{ steps.locate.outputs.dir }}" 2>&1 | tee phase0.log
+
+      - name: Put the verdict in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Phase 0 — Stooq adjustment methodology"
+            echo
+            echo "Frozen dump: run \`${{ inputs.run_id }}\` · artifact \`${{ inputs.artifact_name }}\`"
+            echo
+            echo '```'
+            cat phase0.log 2>/dev/null || echo "(no phase0.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-adjustment-${{ inputs.run_id }}
+          path: |
+            ${{ steps.locate.outputs.dir }}/PHASE0-ADJUSTMENT.json
+            phase0.log
+          retention-days: 90
+          if-no-files-found: warn
