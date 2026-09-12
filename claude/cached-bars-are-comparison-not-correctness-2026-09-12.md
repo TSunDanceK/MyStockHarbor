@@ -103,6 +103,44 @@ tail for it. `MMC` has no bars in the dump at all, so nothing can be said about 
 tail from this data. The original claim came from the same stamp-versus-series
 confusion as the EA error.
 
+### THE FOUR-WEEK TAIL IS NOT IN THE REPO'S DOCS ONLY — IT IS IN #431's COMMIT
+
+This is the part worth not losing, because it is the clearest measure of what the
+error cost. `b302968b` ("September loose ends", #431) states, in its own commit
+message:
+
+> MMC -> MRSH on 2026-01-14 (NYSE, rebrand to Marsh) and FI -> FISV on 2025-11-11
+> (NYSE -> Nasdaq, reinstating the original ticker). **FMP kept serving each retired
+> symbol for about four weeks after the change.**
+
+Against the frozen dump, that sentence does not hold for either symbol:
+
+| Symbol | #431's claim | Frozen series | Verdict |
+|---|---|---|---|
+| `FI` | ~4 weeks of bars after 2025-11-11 | last bar **exactly 2025-11-11** | **Contradicted.** Clean stop on the rename day, no tail |
+| `MMC` | ~4 weeks of bars after 2026-01-14 | **no bars at all** | **Unsupported.** No data either way |
+
+**One stamp-versus-series confusion produced three wrong rows, not two.** EA was the
+one that got retracted loudly because it carried a dramatic conclusion; `FI` and
+`MMC` are the quiet two, sitting in a merged commit message where nothing would ever
+re-check them. The cost of reading a derived stamp instead of the series it was
+derived from was not one bad finding — it was a bad finding, plus two claims about
+upstream behaviour that had been accepted and recorded.
+
+This does **not** disturb #431's actual change. The renames are real and verified
+independently (dated exchange actions), the hand-edits to `presetUniverse.ts` were
+correct, and the `#404` argument still stands — an eviction path treating "no new
+bars" as "delisted" would still have wrongly removed two live S&P 500 mega-caps.
+What falls is only the characterisation of *how* FMP behaved around the rename, and
+with it the idea that a predictable "~4 week grace tail" is something the triage can
+lean on. It is not a pattern; it was never measured.
+
+**What replaces it:** nothing, deliberately. The frozen series gives three different
+shapes for three renames/delistings (clean stop on the day, no bars at all, five days
+past the event). Three symbols, three behaviours, no rule. That is itself the finding
+— the bulk-file triage in this doc exists precisely because per-symbol upstream
+behaviour is not predictable enough to encode.
+
 Note what that does to the automation question. `#404`'s hand-edit rule exists
 because eviction-on-no-bars would have wrongly removed MMC and FI. EA shows the
 same rule would have been **right about EA for the wrong reason** — it was going
