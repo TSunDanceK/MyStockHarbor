@@ -326,15 +326,23 @@ export default async function CacheHealthPage({
           <div style={{ height: 8, background: "rgba(255,255,255,0.08)", borderRadius: 999, marginTop: 10, overflow: "hidden" }}>
             <div style={{ width: `${Math.min(100, pctRedisCap)}%`, height: "100%", background: pctRedisCap >= 85 ? "#ef4444" : pctRedisCap >= 60 ? "#eab308" : "#22c55e" }} />
           </div>
-          {/* THE POINT OF THE WHOLE PANEL, said in one line. Commands are
-              unlimited on this plan and bandwidth is not, so the 17M -> 338k
-              command reduction bought nothing here — while FMP, the meter that
-              existed, sat at ~11%. */}
+          {/* CORRECTED 2026-09-12. This line said "Bandwidth is the metered
+              dimension on this plan; commands are not", carrying
+              redisBandwidth.ts:5's error onto a page used to DECIDE things —
+              which is worse than a wrong comment, because a reader acts on it.
+              The Upstash console reads PAY AS YOU GO: 1.9m commands at
+              $0.20/100K = $3.80 of a $3.82 bill, with bandwidth's 47 GB inside
+              a 200 GB included allowance. So commands are what bills, and the
+              17M -> 338k reduction was worth ~$33/month rather than nothing.
+              The panel still measures BANDWIDTH, which is the useful thing it
+              can measure cheaply — it just must not claim that is the bill. */}
           <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
-            Bandwidth is the metered dimension on this plan; commands are not. Bytes are derived
-            from per-symbol constants measured {BYTES_MEASURED_AT} and re-derived from the writing
-            modules on every build (<code>scripts/check-redis-bandwidth.mjs</code>) — so this is a
-            projection from counted reads, not from counted bytes.
+            <strong>Commands are what bills on this plan</strong> — pay-as-you-go, $0.20 per 100K,
+            ~99% of the invoice — while bandwidth&apos;s first 200 GB each month are included. This
+            panel measures bandwidth, so read it as a shape-of-traffic signal, not as the bill.
+            Bytes are derived from per-symbol constants measured {BYTES_MEASURED_AT} and re-derived
+            from the writing modules on every build (<code>scripts/check-redis-bandwidth.mjs</code>)
+            — so this is a projection from counted reads, not from counted bytes.
           </p>
           {redisBandwidth.daysMissing > 0 ? (
             <p style={{ color: "#eab308", fontSize: 12, marginTop: 8 }}>

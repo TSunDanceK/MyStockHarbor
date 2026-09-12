@@ -243,11 +243,25 @@ function hourField(source: RedisReadSource, nowMs: number) {
 // On the BULK paths that was cheap: one call per read, units = the whole
 // universe. On the SINGLE-symbol path it fired PER SYMBOL. The three plays
 // builders read ~700 symbols one at a time, so a single build spent ~4,200
-// billed write commands measuring itself -- against a plan where commands are
-// ~99% of the invoice and bandwidth sits inside its free allowance. The meter
-// built to find the bill had become a line on it, and its own justification --
-// "on a plan where commands are unlimited and bandwidth is the cap, that is free
-// in the dimension that matters" -- was the defect, not the reasoning.
+// billed write commands measuring itself.
+//
+// HOW MUCH THAT IS WORTH, MEASURED RATHER THAN ARGUED -- AND IT IS SMALL.
+// /cache-health's caller breakdown, read 2026-09-12 11:41 UTC over its 7-day
+// window (app/cache-health/page.tsx calls readRedisBandwidth(7)):
+//
+//   pickers-build  history-single?  no -- history-BULK   7.38 GB   57.1%
+//   unattributed                    picker-charts        3.42 GB   26.5%
+//   plays                           history-single      73.8 MB    0.6%
+//
+// THE SINGLE-SYMBOL PATH IS 0.6% OF THE BILL. So this change is a CLEANUP, not a
+// saving: 6:1 write amplification on pure instrumentation is wrong at any rate,
+// and nothing should queue behind fixing it. An earlier version of this session's
+// reasoning had the meter as the largest write source; that was withdrawn once
+// for circular arithmetic (claude/traps/a-residual-cannot-validate-its-own-total.md)
+// and is now dead on measurement. The two rows that matter are pickers-build and
+// picker-charts at 83.6% between them, both 700-symbol bulk reads, and
+// picker-charts has NO ATTRIBUTED CALLER -- the second-largest line on the bill
+// does not know what drives it. That is the next thing to find out, not this.
 //
 // WHY AN ACCUMULATOR COLLAPSES IT SO FAR. Those ~700 reads all carry the SAME
 // source, the same caller and (nearly always) the same UTC hour, so they all
