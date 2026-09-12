@@ -130,3 +130,55 @@ ingest has to extract the fields it needs and store those.
 - `claude/traps/inference-about-a-source-you-cannot-open.md` — the shape this run
   avoided: the answer came from measuring the endpoints rather than reasoning
   about what Stooq probably serves.
+
+## Phase 5 ran, and its first version passed a wrong number
+
+Runs [34701164242] (unguarded) and [34701520555] (guarded), 10 mega-caps.
+
+**The unguarded run reported `10/10 extracted, 0 failures, WITHIN THRESHOLD —
+dataset usable`. It also emitted `BRK.B: 941,481 shares as of 2011-04-29`.**
+Berkshire class B has roughly 1.3 billion shares. That figure is Class A-shaped
+and fifteen years stale, and a `marketCap` built on it is wrong by three orders of
+magnitude.
+
+The threshold counted **fetches**, so a 200 response became a data-quality claim.
+That is the same fail-open shape as the 09-05, 09-07 and 09-10 breaches, produced
+fresh, in an ingest written the same day the rule was restated.
+
+### The guarded run
+
+```
+BRK.B   REJECTED — stale: share count as of 2011-04-29 is 5616 days old (limit 400)
+unusable total   1  (10.0% of attempted)
+```
+
+And the magnitude cross-check against the frozen dump corroborates the rest far
+more strongly than expected:
+
+| Symbol | shares × last close ÷ frozen FMP marketCap |
+|---|---|
+| MSFT, KO | **1.000** |
+| NVDA | 0.995 |
+| XOM, JPM | 0.992 |
+| PG | 0.978 |
+| GOOGL | 1.011 |
+| AAPL | 1.053 |
+| JNJ | not run — no frozen pairing, and reported as such |
+
+Ratios at 1.000 say FMP's `marketCap` is itself shares × close on the same share
+count. Eight independent agreements is the strongest evidence so far that the
+extraction is right where it claims to be right.
+
+### Three things this does NOT establish
+
+- **The multi-class guard is unproven.** It fired zero times. `GOOGL` is genuinely
+  dual-class and was *not* flagged, which means either Alphabet reports one
+  combined figure or only one class appeared at the newest date. The guard that
+  actually caught `BRK.B` was **staleness**. Necessary, not demonstrated
+  sufficient.
+- **TTM EPS is not always available.** `XOM`'s diagnostic reads *4 rows in the
+  unit, 4 with start+end, 2 in a 60–120 day frame* — it files diluted EPS mostly
+  in annual frames. So 4-quarter TTM coverage is a property of the filer, not of
+  the extractor, and 8 of 9 is the honest figure rather than a bug to chase.
+- **Nothing here is in Redis.** The artifact is the deliverable; the write-token
+  decision is untouched.
