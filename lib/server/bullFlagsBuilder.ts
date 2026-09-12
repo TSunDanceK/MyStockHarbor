@@ -15,6 +15,7 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
+import { flushRedisReadMeter } from "./redisBandwidth";
 
 import { addToDynamicUniverse, readDynamicUniverse, ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 import { getCompanyNameMap } from "./companyNames";
@@ -1154,6 +1155,29 @@ export async function getBullFlagsData(
 
   try {
     const data = await buildPlaysPayload(origin, forceRefresh, debugSymbol);
+    // FLUSH THE READ METER ONCE, HERE, rather than per symbol inside the loop.
+    // This build just made ~700 single-symbol history reads; each used to write a
+    // 6-command pipeline (~4,200 billed write commands to measure one build).
+    // recordRedisRead now accumulates in process and this is the flush. See the
+    // header of lib/server/redisBandwidth.ts.
+    //
+    // NOT IN A `finally`: a build that throws leaves its pending reads to
+    // METER_AUTOFLUSH_READS, which caps the loss at 249 reads rather than a whole
+    // build, and wrapping every return path to save those would trade real
+    // complexity for bookkeeping precision the page already reports as a floor.
+    // WRAPPED, because this call sits INSIDE the try/catch that decides whether
+    // the fresh payload is written. A throw here would fall through to the
+    // degraded-cache fallback: a healthy build silently discarded to record a
+    // statistic. scripts/check-forced-build-safety.mjs proved that live -- it
+    // executes this function against stubbed I/O, and an unresolvable meter
+    // turned "FORCED + healthy + good cache" from fresh-healthy into cached-good
+    // with zero writes. Exactly the failure this file's own meter warns about:
+    // "a meter that can break the thing it measures is worse than no meter."
+    try {
+      await flushRedisReadMeter();
+    } catch {
+      // bookkeeping -- never into a build path
+    }
 
     if (!debugSymbol) {
       memo = {
