@@ -321,6 +321,26 @@ const ok = Object.entries(results).filter(([, r]) => !r.error);
 if (ok.length < 2) {
   console.log("  INCONCLUSIVE — fewer than two symbols produced a comparison.");
   console.log("  Do not proceed to the ingest on this; the failures above are the finding.");
+
+  // WHEN THE FAILURE IS ACCESS, THE ACCESS QUESTION IS THE REAL FINDING, and it
+  // is answered here rather than in a second dispatch. A browser-verification
+  // interstitial on the per-symbol quote endpoint says nothing about the BULK
+  // ARCHIVE, which is what the ingest actually needs -- a different, documented
+  // service on the same host. Establishing which endpoints an automated client
+  // can reach decides whether the whole plan is viable, so it is worth more than
+  // the adjustment question it replaces.
+  const challenged = Object.values(results).filter((r) =>
+    (r.attempts ?? []).some((a) => /got HTML, not CSV/.test(a))
+  );
+  if (challenged.length) {
+    console.log("");
+    console.log("  EVERY FETCH WAS REFUSED WITH HTML, NOT DATA. Surveying which Stooq");
+    console.log("  endpoints an honest automated client can reach, before concluding");
+    console.log("  anything about the migration's viability.");
+    console.log("");
+    const { surveyStooqAccess } = await import("./stooq-access-probe.mjs");
+    await surveyStooqAccess();
+  }
 } else {
   const payerSpreads = ok.filter(([, r]) => r.payer).map(([, r]) => r.ratioSpread);
   const nonSpreads = ok.filter(([, r]) => !r.payer).map(([, r]) => r.ratioSpread);
