@@ -3365,7 +3365,22 @@ async function buildPickersPayload(
   // denominator: the symbols it failed to refresh show as stale instead of
   // vanishing from the count.
   if (forceHistoryRefresh) {
-    await registerSymbols("dailyHistory", universe);
+    // AUTHORITATIVE, and this is the one call site that can honestly claim it.
+    //
+    // `universe` is handed to getDailyHistoryBulk two lines below, so the list
+    // registered and the list refreshed are the same array -- which is exactly
+    // what "these are the symbols this dataset is responsible for" has to mean
+    // for a prune to be safe. Symbols outside it are not refreshed by anything,
+    // so counting them was counting a population nothing maintains.
+    //
+    // WHAT IT CLEARS. writeHistoryEntry calls markRefreshed on every successful
+    // history write, and getDailyHistory is reached from /stock/[symbol], its
+    // sub-pages, /api/history, the dashboard, the insight snapshots and
+    // /markets/spx -- so the dailyHistory denominator had accumulated every
+    // symbol anyone or any crawler ever viewed: 2,892 against a universe of
+    // ~762 on 2026-09-11, growing 842 in the preceding six days. markRefreshed
+    // no longer adds members; this clears what it already added.
+    await registerSymbols("dailyHistory", universe, { authoritative: true });
   }
 
   const historyBySymbol = await getDailyHistoryBulk(universe, {

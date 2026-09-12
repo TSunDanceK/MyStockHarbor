@@ -449,9 +449,30 @@ export default async function CacheHealthPage({
                           : `${fresh} / ${d.tracked}`}
                       {d.never > 0 ? <div style={{ color: "#64748b", fontSize: 11 }}>{d.never} never refreshed</div> : null}
                     </td>
-                    <td style={cell}>{d.instrumented ? d.stale : "—"}</td>
+                    <td style={cell}>
+                      {d.instrumented ? d.stale : "—"}
+                      {/* THE SPLIT, SHOWN RATHER THAN SUMMED AWAY. `d.stale` is
+                          now each symbol judged against its own tier's policy,
+                          which is the correct single number -- but a single
+                          number cannot be checked by eye against a two-policy
+                          dataset, and this row spent weeks red because nobody
+                          could see which policy produced it. */}
+                      {d.instrumented && d.tiers
+                        ? (
+                          <div style={{ color: "#64748b", fontSize: 11 }}>
+                            {d.tiers
+                              .map((t) => `${t.stale}/${t.tracked} @ ${fmtDuration(t.ttlSeconds)}`)
+                              .join(" · ")}
+                          </div>
+                        )
+                        : null}
+                    </td>
                     <td style={cell}>{fmtAge(d.oldestMs)}</td>
-                    <td style={cell}>{fmtDuration(d.ttlSeconds)}</td>
+                    <td style={cell}>
+                      {d.tiers
+                        ? d.tiers.map((t) => fmtDuration(t.ttlSeconds)).join(" / ")
+                        : fmtDuration(d.ttlSeconds)}
+                    </td>
                     <td style={cell}>{d.instrumented ? d.deferred : "—"}</td>
                     <td style={cell}>
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
