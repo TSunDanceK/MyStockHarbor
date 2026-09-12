@@ -21,12 +21,13 @@
 //   * The workflow supplies Upstash's READ-ONLY token. A write would be refused
 //     by the server, so the guarantee does not rest on this file being careful.
 //   * NOTHING FROM lib/server/ IS IMPORTED, and that is deliberate rather than
-//     tidy. Importing historyCache would pull in redisBandwidth, whose
-//     recordRedisRead accumulates and then flushes HINCRBY + EXPIRE -- writes the
-//     read-only token refuses. It would fail open and silently, so the dump would
-//     still work while quietly trying to write on every read. This file talks to
-//     Redis directly and duplicates the key names, with the source of each named
-//     in KEYS below so a rename is findable.
+//     tidy. Importing historyCache pulls in redisBandwidth, whose recordRedisRead
+//     WRITES -- HINCRBY plus EXPIRE, either once per read or once per flush
+//     depending on which version of that file is deployed. Both are writes the
+//     read-only token refuses, and both fail open and silently, so the dump would
+//     appear to work while attempting a refused write on every read. This file
+//     talks to Redis directly and duplicates the key names, with the source of
+//     each named in KEYS below so a rename stays findable.
 //
 // NO FORCED PICKERS BUILD, AND THAT IS A DELIBERATE DEPARTURE FROM THE BRIEF.
 // Step 0 as written asks for "the current pickers payload, forced
@@ -59,6 +60,11 @@ const KEYS = {
   fundamentals: "msh:pickers:fundamentals:v1:",
   profile: "msh:pickers:profile:v1:",
   screenerFundamentals: "msh:pickers:screener-fundamentals:v1:",
+  // lib/server/fundamentalsCache.ts  PROFILE_EMPTY_KEY_PREFIX -- a 7d tombstone for
+  // symbols FMP genuinely has no industry for. Dumped because it is the only thing
+  // that separates "no industry exists" from "never fetched", and /cache-health
+  // cannot tell those apart.
+  profileEmpty: "msh:pickers:profile-noindustry:v1:",
   // lib/server/stockDataCache.ts  KEY_PREFIX -- holds rating / priceTarget / analystCount
   stockData: "msh:stockdata:v1:",
   // lib/server/pickersBuilder.ts  PICKERS_MANIFEST_KEY / _CHUNK_PREFIX / _SYMBOLS_KEY / EARNINGS_*
@@ -298,7 +304,7 @@ console.log("\n3. Per-symbol datasets");
  * members; scanning finds everything still there, including symbols no list
  * mentions any more. Both numbers go in the report.
  */
-async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK } = {}) {
+async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analyse } = {}) {
   const scanned = await scanPrefix(`${prefix}*`);
   const symbols = [...new Set([...scanned.map((k) => suffixOf(k, prefix)), ...universe])].sort();
   const keys = symbols.map((s) => `${prefix}${s}`);
@@ -327,6 +333,11 @@ async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK } = {}
     keysScanned: scanned.length,
     present,
     coverageOfDumpUniversePct: pct,
+    // KEY-EXISTS IS NOT VALUE-PRESENT, and conflating them is exactly the gap
+    // /cache-health has: its counts "record refreshes but nothing declares which
+    // symbols ought to be fresh". An analyser, where one is supplied, reports what
+    // the values actually CONTAIN.
+    ...(analyse ? { content: analyse(values) } : {}),
   };
   report.files.push(
     writeJson(`${name}.json`, { dumpedAt: DUMPED_AT, dataset: name, key: `${prefix}<SYM>`, present, values })
@@ -336,7 +347,56 @@ async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK } = {}
 }
 
 await dumpPerSymbol("fundamentals", KEYS.fundamentals);
-await dumpPerSymbol("profile", KEYS.profile);
+
+// ── THE HEADLINE FIGURE ───────────────────────────────────────────────────────
+// /cache-health reports Profile coverage as 50 / 885 with "94% have never been
+// refreshed", and CANNOT say whether the other 835 hold an industry at all: the
+// page's own caveat is that its counts "record refreshes but nothing declares
+// which symbols ought to be fresh". A refresh count is not a value count.
+//
+// This is the number the Industry column's fate turns on, so it is measured
+// directly: how many profile keys carry a NON-EMPTY industry or sector, in FMP's
+// taxonomy. SIC codes will not reproduce that taxonomy, so whatever is missing
+// here is missing permanently. If it lands near 50 rather than near 885, the
+// column needs a decision now rather than after the probe.
+const nonEmpty = (v) => typeof v === "string" && v.trim() !== "" && !["-", "n/a", "na", "null", "none", "unknown"].includes(v.trim().toLowerCase());
+
+function analyseProfile(values) {
+  let withIndustry = 0;
+  let withSector = 0;
+  let withBoth = 0;
+  let withNeither = 0;
+  const industries = new Map();
+  for (const v of Object.values(values)) {
+    const ind = nonEmpty(v?.industry) ? String(v.industry).trim() : null;
+    const sec = nonEmpty(v?.sector) ? String(v.sector).trim() : null;
+    if (ind) {
+      withIndustry++;
+      industries.set(ind, (industries.get(ind) ?? 0) + 1);
+    }
+    if (sec) withSector++;
+    if (ind && sec) withBoth++;
+    if (!ind && !sec) withNeither++;
+  }
+  const total = Object.keys(values).length;
+  return {
+    keysPresent: total,
+    withNonEmptyIndustry: withIndustry,
+    withNonEmptySector: withSector,
+    withBoth,
+    withNeither,
+    distinctIndustryLabels: industries.size,
+    industryHistogram: Object.fromEntries([...industries.entries()].sort((a, b) => b[1] - a[1])),
+    note:
+      "withNonEmptyIndustry is the figure that matters: it counts VALUES, not refreshes. " +
+      "/cache-health's 50/885 is a refresh count and cannot answer this.",
+  };
+}
+
+await dumpPerSymbol("profile", KEYS.profile, { analyse: analyseProfile });
+// The tombstone: symbols FMP itself had no industry for. Subtracting these from
+// the gap is what separates "unavailable" from "never fetched".
+await dumpPerSymbol("profile-noindustry-tombstones", KEYS.profileEmpty);
 await dumpPerSymbol("screener-fundamentals", KEYS.screenerFundamentals);
 await dumpPerSymbol("earnings-rows", KEYS.earningsRow, { chunkSize: 50 });
 // stockdata carries rating / priceTarget / analystCount and is the biggest of the
@@ -465,8 +525,46 @@ report.coverageVerdict = Object.fromEntries(
 
 // Written last and listed in its own files[] before serialising, so the report
 // describes the complete artefact set including itself.
+// AT THE TOP OF THE REPORT, because it is the finding that cannot wait for the
+// probe: everything else here can be re-measured while FMP's key still works.
+const prof = report.datasets.profile?.content;
+report.headline = prof
+  ? {
+      question: "How many symbols still carry industry/sector in FMP's taxonomy?",
+      withNonEmptyIndustry: prof.withNonEmptyIndustry,
+      withNonEmptySector: prof.withNonEmptySector,
+      profileKeysPresent: prof.keysPresent,
+      dumpUniverse: universe.length,
+      knownNoIndustryTombstones: report.datasets["profile-noindustry-tombstones"]?.present ?? 0,
+      industryPctOfUniverse: universe.length
+        ? Number(((prof.withNonEmptyIndustry / universe.length) * 100).toFixed(1))
+        : 0,
+      verdict:
+        prof.withNonEmptyIndustry >= universe.length * 0.8
+          ? "TAXONOMY LARGELY INTACT — the 94%-never-refreshed figure was about refreshes, not values."
+          : prof.withNonEmptyIndustry <= universe.length * 0.2
+            ? "TAXONOMY MOSTLY LOST — the Industry column needs a decision now, not after the probe."
+            : "TAXONOMY PARTIAL — decide per-symbol fallback before the swap.",
+      whyThisIsFirst:
+        "SIC codes from SEC will not reproduce FMP's industry taxonomy, so whatever is " +
+        "absent here is absent permanently. /cache-health cannot answer this: its counts " +
+        "record refreshes, and nothing there declares which symbols ought to be fresh.",
+    }
+  : { error: "profile dataset produced no content analysis" };
+
 report.files.push({ file: "REPORT.json", bytes: null });
 fs.writeFileSync(path.join(OUT, "REPORT.json"), JSON.stringify(report, null, 2));
+
+if (report.headline?.withNonEmptyIndustry != null) {
+  const h = report.headline;
+  console.log("\n══ HEADLINE: the industry/sector taxonomy ══");
+  console.log(`   non-empty industry   ${h.withNonEmptyIndustry} / ${h.dumpUniverse}  (${h.industryPctOfUniverse}%)`);
+  console.log(`   non-empty sector     ${h.withNonEmptySector}`);
+  console.log(`   profile keys present ${h.profileKeysPresent}`);
+  console.log(`   known-no-industry    ${h.knownNoIndustryTombstones} tombstones`);
+  console.log(`   distinct labels      ${prof.distinctIndustryLabels}`);
+  console.log(`   ${h.verdict}`);
+}
 
 console.log("\n── Coverage at dump time ──");
 for (const [k, v] of Object.entries(report.coverageVerdict)) console.log(`   ${k.padEnd(24)} ${v}`);
