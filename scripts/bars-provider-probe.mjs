@@ -75,12 +75,31 @@ const TARGETS = [
   },
 ];
 
+// ORDER MATTERS HERE, AND THE FIRST VERSION GOT IT WRONG.
+//
+// It tested "is the body HTML" BEFORE "is this an auth rejection", and so filed
+// Alpaca's reply -- HTTP 401 with nginx's stock `401 Authorization Required` page
+// -- as RED alongside Stooq. Those are not the same thing at all:
+//
+//   Stooq   HTTP 200 + a JavaScript verification interstitial
+//           = "we do not serve automated clients"        <- genuinely RED
+//   Alpaca  HTTP 401 + an nginx auth page, in HTML
+//           = "you need credentials"                     <- GREEN, just not JSON
+//
+// Classifying on the body's CONTENT TYPE is classifying on a proxy for the
+// question. The question is whether the host refuses automation or refuses
+// anonymity, and the status code answers it directly. So: challenge markers
+// first, because a challenge can be served at any status; then an explicit
+// 401/403, whatever the body format; then everything else.
 const classify = (status, contentType, bodyHead, isJson) => {
   if (CHALLENGE_MARKERS.some((m) => bodyHead.includes(m))) return "RED — browser challenge";
-  if (/^\s*<(!doctype|html)/i.test(bodyHead)) return "RED — HTML, not an API response";
-  if (isJson && (status === 401 || status === 403))
-    return "GREEN — reachable, needs a key (JSON error body)";
+  if (status === 401 || status === 403) {
+    return isJson
+      ? "GREEN — reachable, needs a key (JSON error body)"
+      : "GREEN — reachable, needs a key (non-JSON auth page)";
+  }
   if (isJson && status === 200) return "GREEN — reachable, returned data";
+  if (/^\s*<(!doctype|html)/i.test(bodyHead)) return "RED — HTML at a non-auth status";
   if (isJson) return `AMBER — JSON but HTTP ${status}`;
   return `AMBER — ${contentType || "no content-type"} at HTTP ${status}`;
 };
