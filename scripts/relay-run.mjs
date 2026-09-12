@@ -29,6 +29,10 @@ import { spawnSync } from "node:child_process";
 // phase is an edit HERE, on a branch, with no workflow change and no merge.
 const TASKS = {
   "stooq-access": { script: "scripts/stooq-access-probe.mjs", args: () => [] },
+  // Added on a branch and dispatched the same minute, with no workflow edit and
+  // no merge -- which is the whole reason routing lives here instead of in a
+  // case statement inside relay.yml.
+  "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
   "phase0-adjustment": {
     script: "scripts/phase0-adjustment-probe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
