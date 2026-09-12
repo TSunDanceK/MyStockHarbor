@@ -343,6 +343,61 @@ async function acquirePlaysLock() {
   }
 }
 
+// Budget for a lock loser waiting on the winner. Same shape and same figures as
+// pickersBuilder's PICKERS_WAIT_STEP_MS / PICKERS_MAX_WAIT_MS, which is where
+// this pattern comes from: a short poll against a bounded wait, then fall
+// through rather than block forever on a winner that never publishes.
+const PLAYS_WAIT_STEP_MS = 300;
+const PLAYS_MAX_WAIT_MS = 12_000;
+
+function playsSleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait for whichever request won the build lock to publish its payload.
+ *
+ * PORTED FROM pickersBuilder.waitForPickersPayload (#377/#378), WHICH THIS FILE
+ * SHOULD HAVE HAD SINCE 2026-08-31. That fix was applied to the file the August
+ * outage was found in and never to this one or its two siblings, all of which
+ * had the identical lock-loser shape. See
+ * claude/plays-builders-missing-single-flight-2026-09-12.md and
+ * claude/traps/a-defect-found-in-one-file-lives-in-its-siblings.md.
+ *
+ * WHY WAITING BEATS BUILDING. Losing the lock WITH something cached is handled
+ * by the branch above, which serves it. The case this exists for is losing the
+ * lock with NOTHING cached -- right after PLAYS_REDIS_TTL_SECONDS lapses, after
+ * an eviction or outage, or after a cache-key version bump, when the key is
+ * absent for everyone at once. Every concurrent request then ran its own full
+ * build: ~700 single-symbol history reads, which is ~700 GETs plus ~4,200 billed
+ * instrumentation writes (recordRedisRead fires per symbol on the singular path
+ * and costs 6 commands a time), all of it redundant with the winner's. That is
+ * how one cold start became the 2026-08-27/28 command storm.
+ *
+ * THE POLL IS EXISTS, NOT GET, and the reason differs from the pickers version.
+ * There the concern was that readPickersCache re-hydrates off-payload chart
+ * series; readPlaysCache is a plain GET with no hydration. But the value is
+ * still the whole payload, so polling it would move those bytes on every pass.
+ * EXISTS is one command and no payload; the read happens once, on success.
+ */
+async function waitForPlaysPayload() {
+  if (!redis) return null;
+
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < PLAYS_MAX_WAIT_MS) {
+    await playsSleep(PLAYS_WAIT_STEP_MS);
+
+    try {
+      if (await redis.exists(PLAYS_REDIS_KEY)) return await readPlaysCache();
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 async function releasePlaysLock(token: string | null) {
   if (!redis || !token || token === "no-redis") return;
 
@@ -1068,6 +1123,32 @@ export async function getBullFlagsData(
           "X-Plays-Cache": "lock-fallback",
         },
       };
+    }
+
+    // LOCK LOST WITH NOTHING TO SERVE. Wait for the winner instead of starting a
+    // second full build beside it -- see waitForPlaysPayload.
+    //
+    // GATED ON `!forceRefresh` AND `!debugSymbol` for the same reason the branch
+    // above is gated on debugSymbol: a forced run must actually refresh, and the
+    // winner it would be waiting on may be an ordinary request that is not
+    // refreshing history at all, so adopting that payload would let a forced warm
+    // report success having forced nothing. A forced run is one cron request, not
+    // a stampede, so it is not what this protects against. A debugSymbol run
+    // wants its own single-symbol trace, not a shared payload.
+    if (!forceRefresh && !debugSymbol) {
+      const published = await waitForPlaysPayload();
+
+      if (published?.data) {
+        memo = { ts: now, data: published.data };
+
+        return {
+          data: published.data,
+          headers: {
+            "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+            "X-Plays-Cache": "lock-wait",
+          },
+        };
+      }
     }
   }
 
