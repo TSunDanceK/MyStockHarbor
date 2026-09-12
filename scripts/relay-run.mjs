@@ -33,6 +33,11 @@ const TASKS = {
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
   "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
+  "nasdaq-refill": {
+    script: "scripts/nasdaq-refill-analysis.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "listing-split": {
     script: "scripts/listing-split.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
