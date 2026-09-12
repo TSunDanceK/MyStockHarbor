@@ -1308,10 +1308,14 @@ check(
     `gate must ADMIT: the worst case there is the churn it damps, while ` +
     `fail-closed is a discovery pass that admits nothing at all`
 );
+// THE SPLIT, NOT ITS SOURCE. This assertion used to spell out
+// `tombstonedByAbsence: sweep.evictedByAbsence` -- it pinned the ALIAS, which
+// was the defect, so it would have gone red on the change that removed it.
+// What it is actually about is that the two signals stay separately reported;
+// where the numbers come from is asserted below.
 check(
   "the record says which SIGNAL set a tombstone, not just how many",
-  /tombstonedByAbsence: sweep\.evictedByAbsence,/.test(job) &&
-    /tombstonedByStaleBars: sweep\.evictedByStaleBars,/.test(job),
+  /tombstonedByAbsence: /.test(job) && /tombstonedByStaleBars: /.test(job),
   "an absence tombstone is belt-and-braces (that symbol is gone from the " +
     "screener anyway); a stale-bar tombstone is load-bearing (that symbol WILL " +
     "be re-offered). Folded into one count a rising number reads as neither"
@@ -1336,6 +1340,71 @@ check(
   `${days} distinct days again, from zero — the second eviction is neither ` +
     `cheaper nor faster than the first, which is what stops a lapsed tombstone ` +
     `being a shortcut`
+);
+
+// ── The tombstone counters report tombstones, not evictions ────────────────
+console.log("\nThe run record counts tombstones that were actually written");
+
+// WHAT WAS WRONG. `tombstonedByAbsence` and `tombstonedByStaleBars` were
+// ALIASES of the eviction counters, on the stated reasoning that "every
+// eviction writes exactly one log entry". The preset guard added in the same
+// PR (#424) made that false in the same file: a preset reaching evictSymbol is
+// deleted and returns BEFORE the zadd. The catch does the same for a Redis
+// failure after the deletes. So the record over-reported in exactly the case
+// the guard exists for -- the case where anyone would be reading it.
+check(
+  "evictSymbol reports whether it tombstoned, rather than the caller assuming",
+  /tombstoned: boolean/.test(evict) && /out\.tombstoned = true;/.test(evict),
+  "a flag the function sets is the only thing that can distinguish the preset " +
+    "return and the catch from a normal eviction"
+);
+check(
+  "the flag is set AFTER the zadd is awaited",
+  /await redis\.zadd\(EVICTED_KEY[^;]*;\s*out\.tombstoned = true;/.test(evict),
+  "set before the await, a throw leaves it true and the alias is back one line " +
+    "further down"
+);
+check(
+  "the run record no longer aliases the eviction counters",
+  !/tombstonedByAbsence: sweep\.evictedByAbsence/.test(job) &&
+    !/tombstonedByStaleBars: sweep\.evictedByStaleBars/.test(job) &&
+    /tombstonedByAbsence: sweep\.tombstonedByAbsence,/.test(job) &&
+    /tombstonedByStaleBars: sweep\.tombstonedByStaleBars,/.test(job),
+  "the two numbers are allowed to differ now, and the run that makes them " +
+    "differ is the one worth reading"
+);
+check(
+  "both eviction sites tally the flag they got back",
+  (job.match(/if \(evicted\.tombstoned\) sweep\.tombstoned/g) ?? []).length === 2 &&
+    /if \(evicted\.tombstoned\) sweep\.tombstonedByAbsence\+\+;/.test(job) &&
+    /if \(evicted\.tombstoned\) sweep\.tombstonedByStaleBars\+\+;/.test(job),
+  "two call sites, two signals — tallying one and aliasing the other would " +
+    "reintroduce the defect on whichever half nobody checked"
+);
+
+// ── The preset list has no ticker the sweep is alarming about ──────────────
+console.log("\nThe hand-edit alarm has been acted on");
+
+const presets = readCodeOnly("lib/server/presetUniverse.ts");
+// THE TWO NAMES ARE SPELLED OUT, and that is not a list this check maintains
+// forever. They are the two the sweep raised on 2026-09-11 (`presetNeedsHandEdit
+// MMC, FI`), both ticker RENAMES rather than delistings -- MMC -> MRSH on
+// 2026-01-14 with the rebrand to Marsh, FI -> FISV on 2025-11-11 moving to
+// Nasdaq. A regression here means somebody restored a symbol FMP stopped
+// serving bars for four weeks after its own rename, which is worth one line.
+for (const [dead, live] of [["MMC", "MRSH"], ["FI", "FISV"]]) {
+  check(
+    `the retired ticker ${dead} is gone and ${live} is in its place`,
+    !new RegExp(`"${dead}"`).test(presets) && new RegExp(`"${live}"`).test(presets),
+    `${dead} stopped receiving daily bars because the company renamed, not ` +
+      `because it died — both are live S&P 500 mega-caps`
+  );
+}
+check(
+  "the preset list is still the size the header claims",
+  (presets.match(/"[A-Z][A-Z0-9.]*"/g) ?? []).length === 100,
+  "~100 largest US companies; a rename that dropped a name instead of " +
+    "replacing it would leave a guaranteed slot empty"
 );
 
 console.log(

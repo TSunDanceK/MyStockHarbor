@@ -830,8 +830,16 @@ export const PER_SYMBOL_ZSETS = [
 export async function evictSymbol(
   symbol: string,
   nowMs = Date.now()
-): Promise<{ keys: number; hashes: number; zsets: number }> {
-  const out = { keys: 0, hashes: 0, zsets: 0 };
+): Promise<{ keys: number; hashes: number; zsets: number; tombstoned: boolean }> {
+  // `tombstoned` IS REPORTED RATHER THAN INFERRED, and that is the whole point
+  // of this field. The run record used to derive its tombstone counts by
+  // aliasing the eviction counts -- "every eviction writes exactly one log
+  // entry" -- and the preset guard below broke that in the same PR that added
+  // it: a preset reaching here is evicted and returns BEFORE the zadd. The
+  // catch does the same for a Redis failure after the deletes. So the two
+  // numbers could differ, and the one case where they do is exactly the case
+  // the guard exists for, which is when the record most needs to be true.
+  const out = { keys: 0, hashes: 0, zsets: 0, tombstoned: false };
   if (!redis || !symbol) return out;
 
   try {
@@ -875,6 +883,9 @@ export async function evictSymbol(
       return out;
     }
     await redis.zadd(EVICTED_KEY, { score: nowMs, member: symbol });
+    // SET AFTER THE AWAIT, never before it. A flag set optimistically and then
+    // left true by a throw is the same lie the alias was, moved one line.
+    out.tombstoned = true;
   } catch {
     // fail open -- a failed eviction costs storage, not correctness, and the
     // evidence is still on file for the next run to retry.

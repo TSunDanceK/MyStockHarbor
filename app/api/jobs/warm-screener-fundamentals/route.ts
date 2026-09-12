@@ -39,6 +39,43 @@ class SweepSkipped extends Error {}
 // so that job finds a freshly populated screener-fundamentals cache rather than
 // an expired one.
 //
+// ─────────────────────────────────────────────────────────────────────────────
+// AND AFTER warm-picker-universe, WHICH IS WHY IT MOVED 06:50 -> 07:50.
+//
+// THE DIAGNOSIS THIS CORRECTS, twice. The sweep logged `barStampsRead 0` on
+// 2026-09-05 and that was first read as "the stale-bar signal is inert". It was
+// then re-read as a TTL race with a twelve-minute margin. BOTH ARE WRONG, and
+// the second one is wrong in a checkable way: the stamp hash carries NO TTL at
+// all (historyCache.ts, "The fields carry no TTL of their own"), so there is no
+// expiry to race. The 09-05 zero was the deploy-day artifact -- #417 merged at
+// 09:38 on 09-04, after that day's 07:02 producer run, so the first stamps were
+// written at 07:02 on 09-05, twelve minutes AFTER the 06:50 sweep that read
+// none. Once, by construction, not intermittently.
+//
+// THE TWELVE MINUTES ARE REAL, AND THEY ARE SOMEWHERE ELSE. The binding
+// constraint is EVICTION_BAR_STAMP_MAX_AGE_MS (48h), the observation-age guard
+// in symbolEviction. At 06:50 the sweep consumed stamps written at 07:02 the
+// PREVIOUS day -- 23h48m old, fine. But one missed producer run makes them
+// 47h48m old: TWELVE MINUTES INSIDE THE 48-HOUR GUARD. A single failed picker
+// build, on any day, and the stale-bar signal silently disappears -- and
+// `staleBarred: 0` against a blind reader is exactly the reading this signal's
+// `barStampsRead` denominator exists to make impossible.
+//
+// AT 07:50 the stamps are ~48 MINUTES old on a normal day and ~24h48m after one
+// missed producer run, so the signal survives a missed run instead of nearly
+// dying on one. Two consecutive missed runs still correctly blind it, which is
+// the behaviour the guard is for.
+//
+// THE ORDER IS AN INVARIANT, NOT A COINCIDENCE OF TWO CRON STRINGS, and
+// scripts/check-bar-stamp-ordering.mjs asserts it by RUNNING the arithmetic
+// over vercel.json and EVICTION_BAR_STAMP_MAX_AGE_MS -- so moving either cron
+// back fails the build rather than quietly restoring the twelve minutes.
+//
+// The warm-fundamentals constraint above still holds: it runs hourly at :22, so
+// 07:50 still lands before one (08:22) with a 30h screener TTL that never
+// expires in between either way.
+// ─────────────────────────────────────────────────────────────────────────────
+//
 // WHY IT EXISTS AS ITS OWN JOB. One company-screener call carries
 // marketCap/sector/industry for ~1000 symbols, and caching it is what lets
 // warmFundamentals skip a per-symbol `profile` fetch for most of the universe.
@@ -101,6 +138,13 @@ export async function GET(req: NextRequest) {
     // detection; this is about what was actually deleted and on whose evidence.
     evictedByAbsence: 0,
     evictedByStaleBars: 0,
+    // TALLIED FROM WHAT evictSymbol ACTUALLY DID, not aliased off the two
+    // counts above. See the note on its return type: a preset reaching that
+    // function is evicted and NOT tombstoned, and a Redis failure after the
+    // deletes does the same -- so an alias over-reports in precisely the cases
+    // the record is consulted for.
+    tombstonedByAbsence: 0,
+    tombstonedByStaleBars: 0,
     presetHandEdit: [] as string[],
     skipped: null as string | null,
   };
@@ -185,9 +229,10 @@ export async function GET(req: NextRequest) {
           continue;
         }
         if (action === "evict") {
-          await evictSymbol(symbol);
+          const evicted = await evictSymbol(symbol);
           sweep.evicted.push(symbol);
           sweep.evictedByAbsence++;
+          if (evicted.tombstoned) sweep.tombstonedByAbsence++;
         }
       }
 
@@ -261,9 +306,10 @@ export async function GET(req: NextRequest) {
           continue;
         }
         if (action === "evict") {
-          await evictSymbol(symbol);
+          const evicted = await evictSymbol(symbol);
           sweep.evicted.push(symbol);
           sweep.evictedByStaleBars++;
+          if (evicted.tombstoned) sweep.tombstonedByStaleBars++;
           staleBarEvicted.push(`${symbol}@${stamp?.newest}`);
         }
       }
@@ -347,10 +393,16 @@ export async function GET(req: NextRequest) {
     // the tombstone exists to stop. Folded into one count, a rising number could
     // not be read as either.
     //
-    // Derived from the same counters rather than tallied separately: every
-    // eviction writes exactly one log entry, so the split is the eviction split.
-    tombstonedByAbsence: sweep.evictedByAbsence,
-    tombstonedByStaleBars: sweep.evictedByStaleBars,
+    // TALLIED FROM evictSymbol'S OWN ANSWER, not derived from the eviction
+    // counts. They were aliases, on the reasoning that "every eviction writes
+    // exactly one log entry" -- which the preset guard added in the same PR
+    // (#424) made false: a preset reaching evictSymbol returns BEFORE the zadd,
+    // so it is evicted and not tombstoned. A Redis failure after the deletes
+    // does the same. The counts diverging is rare, and the case where they
+    // diverge is precisely the case the guard exists for -- which is when this
+    // record most needs to be true rather than plausible.
+    tombstonedByAbsence: sweep.tombstonedByAbsence,
+    tombstonedByStaleBars: sweep.tombstonedByStaleBars,
     // THE SYMBOLS, NOT A COUNT, AND ON EVERY RUN. The log line above is
     // rationed to once a month per symbol so it cannot become churn; this
     // field is the standing state, so a dead curated ticker is still visible

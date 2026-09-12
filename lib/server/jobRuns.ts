@@ -52,7 +52,10 @@ const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
  */
 export const JOBS = {
   "warm-fundamentals": { label: "Fundamentals (hourly, :22)", instrumented: true, cron: "22 * * * *" },
-  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 06:50)", instrumented: true, cron: "50 6 * * *" },
+  // MOVED 06:50 -> 07:50 so the delisting sweep reads bar stamps the SAME
+  // morning's warm-picker-universe (07:02) wrote, instead of yesterday's.
+  // scripts/check-bar-stamp-ordering.mjs asserts the ordering and the margin.
+  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 07:50)", instrumented: true, cron: "50 7 * * *" },
   "warm-price-pool": { label: "Price pool (every 5 min)", instrumented: true, cron: "*/5 * * * *" },
   "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
   "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
