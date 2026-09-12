@@ -319,12 +319,17 @@ const variantsOf = (sym) => ({
 
 // Every awkward-shaped symbol ANYWHERE in the dump, not just in the analysis
 // universe -- a dashed key sitting outside the universe is exactly the finding.
+// A ":" means the string is a NAMESPACED KEY, not a ticker -- the history dataset
+// carries `due:BRK.B` refresh markers, which swept in on the first run and printed
+// as if they were symbols. A marker is not a spelling variant of anything.
+const isTicker = (sym) => !sym.includes(":");
 const shapeCandidates = new Set();
-for (const set of Object.values(datasets)) {
-  for (const sym of set) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
-}
-for (const sym of analysis) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
-for (const sym of unionAll) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
+const addCandidate = (sym) => {
+  if (isTicker(sym) && /[.-]/.test(sym)) shapeCandidates.add(sym);
+};
+for (const set of Object.values(datasets)) for (const sym of set) addCandidate(sym);
+for (const sym of analysis) addCandidate(sym);
+for (const sym of unionAll) addCandidate(sym);
 
 const dottedInAnalysis = [...analysis].filter((s) => DOTTED.test(s)).sort();
 console.log(`  dotted tickers in the ${analysis.size}-symbol ANALYSIS universe: ${dottedInAnalysis.length}` +
@@ -344,6 +349,7 @@ const SHAPE_DATASETS = [
 
 const shapeRows = {};
 const splitSpelling = [];
+const seenPairs = new Set();
 for (const sym of [...shapeCandidates].sort()) {
   const { dotted, dashed } = variantsOf(sym);
   const row = { dotted, dashed, inAnalysis: analysis.has(sym), datasets: {} };
@@ -362,7 +368,14 @@ for (const sym of [...shapeCandidates].sort()) {
     if (dotted === dashed) return false;
     return set.has(dotted) !== set.has(dashed);
   }).map(([label]) => label);
-  if (disagrees.length) splitSpelling.push({ symbol: sym, dotted, dashed, disagrees });
+  // KEYED BY THE PAIR, NOT THE SYMBOL. When both spellings are present as
+  // candidates (BRK.B from the universe, BRK-B from the zset) they normalise to
+  // one pair and would otherwise be counted twice -- the first run reported 19
+  // findings for 18 distinct pairs.
+  if (disagrees.length && !seenPairs.has(dashed)) {
+    seenPairs.add(dashed);
+    splitSpelling.push({ pair: `${dotted}|${dashed}`, dotted, dashed, disagrees });
+  }
 }
 
 for (const sym of [...shapeCandidates].sort()) {
