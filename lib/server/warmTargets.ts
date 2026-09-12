@@ -120,6 +120,30 @@ import { PICKER_ROUTES } from "../pickerRoutes";
 // one means writing to this key from pickersBuilder.ts, a 117KB file that
 // cannot be edited through the GitHub connector, to shave minutes off a lag
 // nothing downstream is fast enough to notice.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPERSEDED 2026-09-11, AND THE REASON IT WAS SUPERSEDED IS THE INTERESTING
+// PART. The paragraph above is kept rather than deleted: it is a dated record
+// of a real constraint, and the constraint was TOOLING-BOUND, not design-bound.
+//
+// "a file that cannot be edited through the GitHub connector" was true of the
+// connector and is not true of Claude Code. With the limit gone the argument
+// collapses, and the clean shape becomes available: pickersBuilder writes the
+// symbol list to its OWN small key (msh:pickers:v10:symbols) at build time, and
+// readPickersSymbolsIfCached reads a few KB instead of pulling the whole
+// stripped payload to take one field off each record.
+//
+// The file is also 201,176 bytes now, not the 117KB that paragraph cites -- it
+// was 190,930 before this change. Correcting it because a stale size is what
+// makes a stale constraint sound current.
+//
+// WHAT DOES NOT CHANGE: the fallback below. readPickersSymbolsIfCached can
+// still return null -- the symbol key has its own TTL, a build can fail between
+// writing chunks and writing it, and for one TTL after this deploys it does not
+// exist at all. The 7-day last-good list added in #419 is what stops that
+// turning into a full universe rebuild from a five-minute cron, and it is still
+// the only thing standing between a payload miss and that rebuild.
+// ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 
 const redis =
