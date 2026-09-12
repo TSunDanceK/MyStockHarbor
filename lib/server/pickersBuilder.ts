@@ -767,6 +767,68 @@ function splitPickersPayload(data: PickersPayload): {
   return { stripped: { ...data, signalRecords }, series };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW BIG THE PAYLOAD WRITE ACTUALLY IS, BOTH WAYS.
+//
+// Upstash has sent "Max Request Size Limit is Reached" for this database three
+// times (2026-09-05, 09-07, 09-10, all at 07:21-07:22 UTC). The limit applies
+// to the REQUEST BODY, not the stored value, and STRLEN on
+// msh:pickers:v9:charts-off-payload reads 7,248,807 -- 6.9MB stored against a
+// 10MB ceiling. claude/upstash-request-size-2026-09-11.md §4 infers that JSON
+// escaping inflates that by ~15% on the wire and puts it near the limit.
+//
+// THAT IS INFERENCE AND THIS REPLACES IT WITH A NUMBER. The value length alone
+// cannot test it -- the whole question is what the escaping does -- so both are
+// logged.
+//
+// THE WIRE FIGURE IS RECONSTRUCTED, NOT READ OFF THE SOCKET, and the difference
+// matters when reading it. @upstash/redis does not expose the request body, so
+// this rebuilds it with the client's own construction, verified against the
+// installed copy:
+//
+//   defaultSerializer   strings/numbers/booleans pass through, everything else
+//                       goes through JSON.stringify      (chunk-K7RP6Y36.mjs:331)
+//   SetCommand          ["set", key, value, "ex", ttl]   (:2255)
+//   the fetch           body: JSON.stringify(command)    (:148)
+//
+// So the number below is the exact body that call will build, given the same
+// inputs -- not an estimate, and not a measurement of the socket either.
+//
+// BYTES, NOT .length. String.length counts UTF-16 code units; the limit is in
+// bytes, and a payload full of company names has non-ASCII in it. Buffer.byteLength
+// is the figure the ceiling is actually about.
+//
+// COST: one extra JSON.stringify of a ~7MB object per build, on a path that
+// runs at most a few times an hour. Worth it while the diagnosis is unconfirmed;
+// the chunking work in the follow-up PR removes the need for the reconstruction
+// by making the request size something the code chooses rather than discovers.
+function logPayloadWriteSize(entry: CachedPickersPayload, label = "full") {
+  try {
+    const value = JSON.stringify(entry);
+    const valueBytes = Buffer.byteLength(value, "utf8");
+    const body = JSON.stringify([
+      "set",
+      PICKERS_REDIS_KEY,
+      value,
+      "ex",
+      PICKERS_REDIS_TTL_SECONDS,
+    ]);
+    const bodyBytes = Buffer.byteLength(body, "utf8");
+    const inflationPct = valueBytes > 0 ? ((bodyBytes / valueBytes - 1) * 100).toFixed(1) : "0.0";
+    console.log(
+      `[pickers] payload write (${label}): ${valueBytes} bytes serialized value, ` +
+        `${bodyBytes} bytes request body (+${inflationPct}% escaping), ` +
+        `${((bodyBytes / (10 * 1024 * 1024)) * 100).toFixed(1)}% of the 10MB request limit`
+    );
+  } catch (error) {
+    // A measurement must never be able to break the write it measures.
+    console.warn(
+      "[pickers] payload write size could not be measured",
+      error instanceof Error ? error.message : error
+    );
+  }
+}
+
 async function writePickersCache(data: PickersPayload, reduced?: () => PickersPayload) {
   if (!redis) return;
 
@@ -790,6 +852,7 @@ async function writePickersCache(data: PickersPayload, reduced?: () => PickersPa
       data: stripped,
     };
 
+    logPayloadWriteSize(entry);
     await redis.set(PICKERS_REDIS_KEY, entry, {
       ex: PICKERS_REDIS_TTL_SECONDS,
     });
@@ -809,6 +872,10 @@ async function writePickersCache(data: PickersPayload, reduced?: () => PickersPa
       data: reduced(),
     };
 
+    // The fallback path is measured too. It is the write that actually lands on
+    // a day the full one breaches, so its size is the more interesting of the
+    // two on exactly the days this instrumentation exists for.
+    logPayloadWriteSize(entry, "reduced");
     await redis.set(PICKERS_REDIS_KEY, entry, {
       ex: PICKERS_REDIS_TTL_SECONDS,
     });
