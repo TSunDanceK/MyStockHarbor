@@ -51,15 +51,30 @@ So the pipeline handles the dual-class shape correctly whenever the symbol arriv
 FMP's spelling, which is what happens to everything sourced from the screener. The
 break is specifically at **the boundary where a human writes a ticker with a dot**.
 
-`BRK.B` is hand-written, in five places: `lib/curatedSymbols.ts`,
+`BRK.B` is hand-written in **six** places: `lib/curatedSymbols.ts`,
 `lib/server/presetUniverse.ts`, `lib/server/symbolSearch.ts`,
-`lib/server/earningsCalendar.ts` and `app/api/market/route.ts`. It is the only dotted
-entry in any of them.
+`lib/server/earningsCalendar.ts`, `app/api/market/route.ts` and
+`app/components/DashboardClient.tsx`. It is the only dotted entry in any of them.
 
-**That is still a latent scaling bug, but a sharper one.** Not "dual-class names will
-break as the universe grows" — screener-sourced growth is safe. It is: *every future
-hand-edit that spells a ticker the human way rather than the vendor way breaks
-silently, and the `#404` hand-edit rule guarantees there will be more hand-edits.*
+*(An earlier version of this file said five and omitted `DashboardClient.tsx`, from
+memory rather than a scan. `scripts/check-symbol-spelling.mjs` now prints the file
+list on every run, so the number is measured instead of remembered — which is the
+whole argument of the closing section below.)*
+
+**Do not call this a "latent scaling bug" — that points at the wrong mitigation.**
+A scaling bug is fixed by watching the size of things, and the size of things is not
+what drives this one. Screener-sourced growth to 1,500 or 3,000 symbols is **safe**:
+those names arrive dashed and stay consistent.
+
+**The vector is hand-edits, and that is worse than scale**, because `#404`'s rule
+*institutionalises* them. That rule exists precisely so a human edits these lists by
+hand — eviction-on-no-bars would have wrongly removed renamed mega-caps, so renames
+get hand-applied, deliberately, indefinitely. So the frequency of this defect is tied
+to **how often a person edits a list**, which is a standing repo practice with no
+upper bound and no relationship to universe size.
+
+Concretely: *every future hand-edit that spells a ticker the human way rather than the
+vendor way breaks silently.*
 The dump already holds 18 dashed dual-class and preferred names in the screener cache
 (`BF-B`, `BRK-A`, `CIG-C`, `CMS-PB`, `CTA-PA`, `CTA-PB`, `EP-PC`, `FITB-PA`,
 `FITB-PM`, `MER-PK`, `MKC-V`, `MOG-A`, `OAK-PA`, `OAK-PB`, `PBR-A`, `SEAL-PB`,
@@ -85,6 +100,27 @@ universes. Deduplication is by exact string, so:
 
 This was not part of the question. It fell out of asking the question about the class
 rather than about the one symbol, which is the argument for having done it that way.
+
+### And it is a DENOMINATOR error, which is the day's recurring shape
+
+**The 912 union is inflated.** It counts Berkshire twice. So:
+
+- the 700 and the 696 are **less disjoint by company** than their sizes suggest;
+- **`699/700 = 99.9%` carries a caveat**: the denominator is 700 *symbol strings*, not
+  700 *distinct companies*. If the universe holds split spellings, those are different
+  quantities.
+
+Probably immaterial at one known split — but **the count is unmeasured**, and that is
+the point rather than a reassurance. This is the fifth denominator error in one day,
+after `50/885` (refresh count read as value count), `651/912` (wrong population),
+`78%` (profile-key coverage read as industry coverage), and a screener figure reading
+>100% because its key space is larger than the universe. Each was a different
+mistake; all five were the same shape — **a ratio whose numerator and denominator
+were not counting the same kind of thing.**
+
+The consolation is that one fix settles both problems: normalising on the fundamentals
+path makes the spellings converge, which repairs the lookup *and* de-duplicates the
+union.
 
 ## What to do, in order
 
@@ -118,6 +154,33 @@ is linked from the PR:
 
 Neither changes the finding. The corrected counts are **18 pairs** and **21 → 19
 awkward-shaped strings**.
+
+## Why this one became a check, and not a sixth trap doc
+
+Five trap docs were written on 2026-09-12. On the same day, in the same session,
+`claude/traps/an-unchecked-cd.md` — which **already existed** — did not prevent an
+unchecked `git reset --hard` chained behind a `git checkout` that had already aborted.
+The doc was right, present, and inert.
+
+Meanwhile `scripts/check-forced-build-safety.mjs` caught a real defect in that day's
+meter change (a flush inside the try/catch that decides whether a fresh payload is
+written, so a throw sent a healthy FORCED build down the degraded-cache path), and
+`check-fundamentals-from-pool.mjs` is the only reason anyone knew to look at the price
+pool's TTL at all.
+
+**Docs inform. Checks enforce.** Five trap docs in a day is a good record and a weak
+control. So this property is enforced rather than described:
+`scripts/check-symbol-spelling.mjs` asserts that no dotted ticker appears in the
+source outside a documented allowlist, and that the allowlist has no stale entries —
+so the fix cannot land while leaving the allowlist behind as standing permission for
+the next one. It fires at the moment of the hand-edit, which is the moment the vector
+acts.
+
+Three failure modes were reproduced against a modified tree before it was committed:
+a hand-edit adding a dotted ticker (fails), the bug fixed with the allowlist left
+behind (fails), and the scan itself broken so it reads nothing (**fails loudly rather
+than passing green** — the fail-green shape `scripts/lib/source-code.mjs` exists to
+prevent).
 
 ## Related
 
