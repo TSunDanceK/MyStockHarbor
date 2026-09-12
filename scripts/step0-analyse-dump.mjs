@@ -87,12 +87,30 @@ const rendered = new Set(
 console.log(`Step 0 dump analysis — ${DIR}`);
 console.log(`dumpedAt (from the artefact)  ${universe.dumpedAt ?? "unknown"}`);
 console.log(`\nPOPULATIONS, and why there is more than one`);
-console.log(`  analysis universe (msh:pickers:v10:symbols) ${analysis.size}   <- what a build looked at`);
-console.log(`  rendered records  (payload signalRecords)    ${rendered.size}   <- what picker pages show`);
+// THESE TWO ARE THE SAME SET BY CONSTRUCTION, and presenting them as two
+// denominators was spurious rigour. pickersBuilder.ts:1078-1080 writes the symbols
+// key AS `records.map(r => r.symbol).filter(Boolean)` -- it IS the payload's
+// signalRecords. So the identity is ASSERTED rather than assumed: they can
+// legitimately diverge, because PICKERS_SYMBOLS_TTL_SECONDS (3h) outlives
+// PICKERS_REDIS_TTL_SECONDS (1h), so a manifest can expire while the symbol list
+// survives. A divergence is a finding about TTL skew, not a second denominator.
+const symbolsKeyMatchesPayload =
+  analysis.size === rendered.size && [...analysis].every((s) => rendered.has(s));
+console.log(`  analysis universe / rendered records         ${analysis.size}   <- the same set; see below`);
+if (!symbolsKeyMatchesPayload) {
+  console.log(
+    `  ! THE SYMBOL LIST AND THE PAYLOAD DISAGREE: symbols key ${analysis.size}, ` +
+      `payload records ${rendered.size}. The symbols key TTL (3h) outlives the manifest's (1h), ` +
+      `so this is TTL skew -- the payload was rebuilt or expired independently. Both are reported.`
+  );
+}
 console.log(`  dynamic zset      (msh:dynamic-universe:v2)  ${zsetScores.size}`);
 console.log(`  union the dump swept                         ${unionAll.size}`);
 
 // ── Per-dataset symbol sets ──────────────────────────────────────────────────
+/** Per-symbol series facts, populated only for LOOKUP symbols. */
+const seriesTail = new Map();
+
 async function historySymbols() {
   const p = path.join(DIR, "history-bars.ndjson.gz");
   if (!fs.existsSync(p)) return new Set();
@@ -106,7 +124,23 @@ async function historySymbols() {
     try {
       const row = JSON.parse(line);
       if (row?._meta) continue;
-      if (row?.symbol) out.add(String(row.symbol));
+      if (!row?.symbol) continue;
+      const sym = String(row.symbol);
+      out.add(sym);
+      // THE LAST BAR IN THE SERIES, not the stamp hash. msh:history:newest-bar:v1
+      // is a separate key written alongside the entry, so it can disagree with the
+      // series it describes -- and an "did the upstream stop serving this symbol"
+      // question is decided by the SERIES. Kept only for the lookup set, to avoid
+      // holding 863 x 1,188 bars in memory.
+      if (LOOKUP.includes(sym)) {
+        const daily = Array.isArray(row?.entry?.daily) ? row.entry.daily : [];
+        seriesTail.set(sym, {
+          barCount: row?.barCount ?? daily.length,
+          firstBarDate: daily[0]?.date ?? null,
+          lastBarDate: daily[daily.length - 1]?.date ?? null,
+          status: row?.entry?.status ?? null,
+        });
+      }
     } catch {
       // a truncated final line is not worth failing the analysis over
     }
@@ -135,12 +169,44 @@ const withIndustry = new Set(
     .map(([s]) => s)
 );
 
+// THE PROFILE KEY IS NOT THE ONLY SOURCE OF AN INDUSTRY, and scoring only the
+// profile overstates the gap badly. fundamentalsCache.ts builds its row as
+// `industry: p?.industry ?? sc?.industry ?? null` -- the SCREENER row is a
+// fallback. And the profile fetch is SKIPPED when the screener already has one:
+// `const noIndustry = !profile?.industry && !screener?.industry`. So a mega-cap
+// covered by the screener never gets a profile key, and its absence is expected
+// rather than a loss.
+//
+// That is why the first 40 "missing profile" symbols are AAPL, AMZN, AVGO, BRK.B,
+// COST, CRM, CSCO, CVX and friends: they are the preset mega-caps, which the
+// screener covers. The number that matters is industry from EITHER source.
+const screenerValues = readJson("screener-fundamentals.json")?.values ?? {};
+const withIndustryScreener = new Set(
+  Object.entries(screenerValues)
+    .filter(([, v]) => nonEmpty(v?.industry))
+    .map(([s]) => s)
+);
+const withIndustryEither = new Set([...withIndustry, ...withIndustryScreener]);
+const withSectorScreener = new Set(
+  Object.entries(screenerValues)
+    .filter(([, v]) => nonEmpty(v?.sector))
+    .map(([s]) => s)
+);
+const withSectorProfile = new Set(
+  Object.entries(profileValues)
+    .filter(([, v]) => nonEmpty(v?.sector))
+    .map(([s]) => s)
+);
+const withSectorEither = new Set([...withSectorProfile, ...withSectorScreener]);
+
 const datasets = {
   history: await historySymbols(),
   fundamentals: keysOf("fundamentals.json"),
   "profile (key present)": new Set(Object.keys(profileValues)),
   "profile (industry non-empty)": withIndustry,
   "screener-fundamentals": keysOf("screener-fundamentals.json"),
+  "industry from EITHER source": withIndustryEither,
+  "sector from EITHER source": withSectorEither,
   "earnings-rows": keysOf("earnings-rows.json"),
   stockdata: keysOf("stockdata.json"),
 };
@@ -186,6 +252,16 @@ for (const [name, set] of Object.entries(datasets)) {
 // ── THE HEADLINE, RE-CUT ─────────────────────────────────────────────────────
 const industryInAnalysis = inter(withIndustry, analysis);
 const industryInRendered = inter(withIndustry, rendered);
+const eitherInAnalysis = inter(withIndustryEither, analysis);
+const sectorEitherInAnalysis = inter(withSectorEither, analysis);
+// BOTH FIELDS, NOT JUST INDUSTRY. fundamentalsCache.ts records that testing only
+// `industry` marked sector-only gaps as covered, so those symbols never got a
+// fetch and their sector stayed null forever -- which left /cheap-tech-stocks
+// (sector = Technology) permanently truncated. The gap set is therefore "missing
+// industry OR missing sector", from either source.
+const missingEither = [...analysis]
+  .filter((s) => !withIndustryEither.has(s) || !withSectorEither.has(s))
+  .sort();
 const missingInAnalysis = [...analysis].filter((s) => !withIndustry.has(s)).sort();
 const outsideAnalysis = [...withIndustry].filter((s) => !analysis.has(s)).sort();
 
@@ -193,17 +269,24 @@ console.log(`\n══ THE HEADLINE, AGAINST THE DENOMINATOR THE QUESTION MEANT �
 console.log(`  industry present, of the ${analysis.size} ANALYSIS universe   ${industryInAnalysis}  (${pct(industryInAnalysis, analysis.size)}%)`);
 console.log(`  industry present, of the ${rendered.size} RENDERED records    ${industryInRendered}  (${pct(industryInRendered, rendered.size)}%)`);
 console.log(`  industry present, total keys anywhere              ${withIndustry.size}`);
-console.log(`  ANALYSIS-universe symbols with NO industry         ${missingInAnalysis.length}`);
+console.log(`  ANALYSIS-universe symbols with no PROFILE industry ${missingInAnalysis.length}`);
+console.log(`  ── and now the figure that actually matters ──`);
+console.log(`  industry from EITHER profile or screener, of ${analysis.size}   ${eitherInAnalysis}  (${pct(eitherInAnalysis, analysis.size)}%)`);
+console.log(`  sector   from EITHER profile or screener, of ${analysis.size}   ${sectorEitherInAnalysis}  (${pct(sectorEitherInAnalysis, analysis.size)}%)`);
+console.log(`  ANALYSIS-universe symbols missing industry OR sector  ${missingEither.length}  <- THE BACKFILL TARGET`);
 console.log(`  industry keys OUTSIDE the analysis universe        ${outsideAnalysis.length}  <- cached but not rendered`);
 const verdict =
-  pct(industryInAnalysis, analysis.size) >= 90
+  pct(eitherInAnalysis, analysis.size) >= 90
     ? "FALLBACK IS COSMETIC — the gaps are almost entirely outside what renders."
     : pct(industryInAnalysis, analysis.size) >= 70
       ? "FALLBACK IS REAL BUT BOUNDED — decide a per-symbol rule before the swap."
       : "WORSE THAN THE UNION FIGURE SUGGESTED — the gaps are concentrated in what renders.";
 console.log(`  ${verdict}`);
 if (missingInAnalysis.length) {
-  console.log(`  first 40 missing: ${missingInAnalysis.slice(0, 40).join(", ")}`);
+  console.log(`  first 40 missing a profile key: ${missingInAnalysis.slice(0, 40).join(", ")}`);
+}
+if (missingEither.length) {
+  console.log(`  ALL missing industry-or-sector: ${missingEither.join(", ")}`);
 }
 
 // ── TARGETED SYMBOL LOOKUP ───────────────────────────────────────────────────
@@ -227,12 +310,18 @@ for (const sym of LOOKUP) {
     hasNonEmptyIndustry: withIndustry.has(sym),
     industry: nonEmpty(profileValues[sym]?.industry) ? profileValues[sym].industry : null,
     newestBarStamp: stamp,
+    // From the series itself. If this disagrees with newestBarStamp, the stamp is
+    // the stale one -- it is a separate key.
+    series: seriesTail.get(sym) ?? null,
   };
   lookupOut[sym] = row;
   console.log(
     `  ${sym.padEnd(6)} ${where.length ? where.join(" + ") : "NOT IN ANY UNIVERSE"}` +
       ` | bars ${row.hasBars ? "yes" : "no "} | industry ${row.industry ?? "-"}` +
-      (stamp ? ` | newestBar ${stamp}` : "")
+      (row.series
+        ? ` | SERIES ${row.series.firstBarDate}..${row.series.lastBarDate} (${row.series.barCount} bars, ${row.series.status})`
+        : "") +
+      (stamp ? ` | stampHash ${String(stamp).split("|")[0]}` : "")
   );
 }
 
@@ -259,6 +348,13 @@ const out = {
     industryKeysAnywhere: withIndustry.size,
     analysisUniverseMissingIndustry: missingInAnalysis.length,
     industryKeysOutsideAnalysisUniverse: outsideAnalysis.length,
+    industryFromEitherSource: eitherInAnalysis,
+    pctIndustryFromEitherSource: pct(eitherInAnalysis, analysis.size),
+    sectorFromEitherSource: sectorEitherInAnalysis,
+    pctSectorFromEitherSource: pct(sectorEitherInAnalysis, analysis.size),
+    backfillTargetCount: missingEither.length,
+    backfillTargets: missingEither,
+    symbolsKeyMatchesPayload,
     verdict,
     missingSymbols: missingInAnalysis,
   },
