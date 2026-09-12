@@ -255,48 +255,105 @@ console.log(
 );
 
 // ── 3. What a Nasdaq-only universe leaves on the page ────────────────────────
-// THE METHOD AND ITS LIMIT, stated up front. Section membership is filtered from
-// the FROZEN payload rather than recomputed, because recomputing the signals would
-// mean reimplementing pickersBuilder -- and a reimplementation cannot be evidence
-// about the thing it reimplements. The consequence is that the filtered count is
-// EXACT for a section showing every qualifier (foundCount == shownCount) and a
-// LOWER BOUND for a capped section, where removing NYSE names would promote more
-// Nasdaq names into the cap. Both are labelled.
+// THE DUMP STORES signalRecords, NOT sections. Sections are built at render time
+// by buildSection({source, take}), so the frozen payload has no section list to
+// filter -- the first version of this script looked for one and correctly reported
+// that it could not answer.
+//
+// That turns out to be BETTER, not worse. Each record carries the per-symbol
+// BOOLEANS the sections are selected from -- oversold, dailyMa200Proximity,
+// trendFlipBullishWeekly and so on -- so the qualifying POOL can be counted
+// directly. No signal is recomputed and nothing is reimplemented, which matters
+// because a reimplementation of pickersBuilder could not be evidence about
+// pickersBuilder.
+//
+// And counting the pool rather than the displayed list makes the answer EXACT
+// instead of a lower bound: a section shows min(take, qualifying), so the
+// Nasdaq-only count is min(take, qualifyingNasdaq) -- the promotion of Nasdaq
+// names into a freed cap is accounted for rather than ignored.
+//
+// FOUR SECTIONS CANNOT BE RESOLVED THIS WAY and are named rather than guessed:
+// their source arrays are derived rankings (a trend score, a drawdown threshold,
+// a high-water comparison) with no corresponding boolean on the record. Mapping
+// them would mean inferring the builder's filter, which is exactly the guess this
+// whole exercise avoids.
+const SECTION_FLAGS = [
+  ["Oversold Stocks Today", "oversold", 20],
+  ["Overbought Stocks Today", "overbought", 20],
+  ["Stocks With Positive Last Earnings", "positiveLastEarnings", 20],
+  ["Stocks With Strong Earnings Growth", "strongEarningsGrowth", 20],
+  ["Daily MA200 Proximity", "dailyMa200Proximity", 20],
+  ["Weekly MA200 Proximity", "weeklyMa200Proximity", 20],
+  ["Bullish Trend Flip (Daily)", "trendFlipBullish", 40],
+  ["Bearish Trend Flip (Daily)", "trendFlipBearish", 40],
+  ["Bullish Trend Flip (Weekly)", "trendFlipBullishWeekly", 40],
+  ["Bearish Trend Flip (Weekly)", "trendFlipBearishWeekly", 40],
+];
+const DIVERGENCE_FLAGS = [
+  "bullishRsiDivergence",
+  "bearishRsiDivergence",
+  "bullishMacdDivergence",
+  "bearishMacdDivergence",
+];
+const UNRESOLVED_SECTIONS = [
+  ["Best Trend Score Stocks", "ranked by a composite trend score, no boolean on the record"],
+  ["Stocks Down 20% From All-Time Highs", "a drawdown threshold, not a stored flag"],
+  ["All-Time High Breakout Stocks", "a high-water comparison, not a stored flag"],
+  ["3-Month High Breakout Stocks", "a high-water comparison, not a stored flag"],
+];
+
 const payload = readJson("pickers-payload.json");
-const sections = payload?.data?.sections ?? payload?.sections ?? [];
+const records =
+  (Array.isArray(payload?.signalRecords) && payload.signalRecords) ||
+  (Array.isArray(payload?.v9?.data?.signalRecords) && payload.v9.data.signalRecords) ||
+  [];
+
 console.log(`\n══ 3. SECTIONS UNDER A NASDAQ-ONLY UNIVERSE ══`);
-if (!sections.length) {
-  console.log(`  no sections found in the frozen payload — cannot answer this part.`);
+console.log(`  signal records in the frozen payload: ${records.length}`);
+const sectionOut = [];
+if (!records.length) {
+  console.log(`  no signal records — cannot answer this part, and that is the finding`);
 } else {
-  console.log(`  ${"section".padEnd(52)} now  nasdaq   basis`);
-  const sectionOut = [];
-  for (const s of sections) {
-    const items = Array.isArray(s?.items) ? s.items : [];
-    const kept = items.filter((it) => nasdaqSet.has(String(it?.symbol)));
-    const capped = typeof s?.foundCount === "number" && typeof s?.shownCount === "number"
-      ? s.foundCount > s.shownCount
-      : null;
-    const basis = capped === null ? "unknown" : capped ? "LOWER BOUND (capped)" : "exact (shows all)";
+  const inUniverse = records.filter((r) => r?.symbol);
+  console.log(`  ${"section".padEnd(36)} qualify  nasdaq   shown now -> nasdaq-only`);
+  const rowFor = (label, pred, take) => {
+    const all = inUniverse.filter(pred);
+    const nas = all.filter((r) => nasdaqSet.has(String(r.symbol)));
+    const nowShown = Math.min(take, all.length);
+    const nasShown = Math.min(take, nas.length);
     console.log(
-      `  ${String(s.title ?? "?").slice(0, 52).padEnd(52)} ${String(items.length).padStart(3)}  ${String(kept.length).padStart(6)}   ${basis}`
+      `  ${label.padEnd(36)} ${String(all.length).padStart(7)}  ${String(nas.length).padStart(6)}   ` +
+        `${String(nowShown).padStart(9)} -> ${nasShown}`
     );
     sectionOut.push({
-      title: s.title,
-      now: items.length,
-      nasdaqOnly: kept.length,
-      foundCount: s.foundCount ?? null,
-      shownCount: s.shownCount ?? null,
-      capped,
-      basis,
+      section: label,
+      qualifyingAll: all.length,
+      qualifyingNasdaq: nas.length,
+      take,
+      shownNow: nowShown,
+      shownNasdaqOnly: nasShown,
+      exact: true,
     });
-  }
-  const dead = sectionOut.filter((s) => s.nasdaqOnly <= 3);
-  const halved = sectionOut.filter((s) => s.nasdaqOnly > 3 && s.now > 0 && s.nasdaqOnly / s.now < 0.5);
-  console.log(`\n  sections left with <=3 names: ${dead.length} of ${sectionOut.length}`);
-  for (const s of dead) console.log(`    ${s.now} -> ${s.nasdaqOnly}   ${s.title}`);
-  console.log(`  sections losing more than half: ${halved.length}`);
-  for (const s of halved) console.log(`    ${s.now} -> ${s.nasdaqOnly}   ${s.title}`);
-  fs.writeFileSync(path.join(DIR, "LISTING-SECTIONS.json"), JSON.stringify(sectionOut, null, 2));
+  };
+  for (const [label, flag, take] of SECTION_FLAGS) rowFor(label, (r) => r?.[flag] === true, take);
+  rowFor("Bullish & Bearish Divergence", (r) => DIVERGENCE_FLAGS.some((f) => r?.[f] === true), 20);
+  rowFor("Macro Support and Resistance", (r) => Boolean(r?.supportResistanceZone), 20);
+
+  const dead = sectionOut.filter((s) => s.shownNasdaqOnly <= 3);
+  const halved = sectionOut.filter(
+    (s) => s.shownNasdaqOnly > 3 && s.shownNow > 0 && s.shownNasdaqOnly / s.shownNow < 0.5
+  );
+  console.log(`\n  sections left showing <=3 names: ${dead.length} of ${sectionOut.length} resolved`);
+  for (const s of dead) console.log(`    ${s.shownNow} -> ${s.shownNasdaqOnly}   ${s.section}`);
+  console.log(`  sections losing more than half of what they show: ${halved.length}`);
+  for (const s of halved) console.log(`    ${s.shownNow} -> ${s.shownNasdaqOnly}   ${s.section}`);
+
+  console.log(`\n  NOT RESOLVABLE from the stored record (named, not guessed):`);
+  for (const [label, why] of UNRESOLVED_SECTIONS) console.log(`    ${label} — ${why}`);
+  fs.writeFileSync(
+    path.join(DIR, "LISTING-SECTIONS.json"),
+    JSON.stringify({ resolved: sectionOut, unresolved: UNRESOLVED_SECTIONS }, null, 2)
+  );
 }
 
 // ── 4. The benchmark tiles ───────────────────────────────────────────────────
