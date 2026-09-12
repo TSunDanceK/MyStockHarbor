@@ -125,7 +125,8 @@ nyseRanked.slice(0, 50).forEach((s, i) => {
 const nyseDvTotal = nyse.reduce((a, s) => a + dv(s), 0);
 const top50Dv = nyseRanked.slice(0, 50).reduce((a, s) => a + dv(s), 0);
 console.log(`\n  the top 50 are ${((top50Dv / nyseDvTotal) * 100).toFixed(1)}% of all non-Nasdaq dollar volume`);
-console.log(`  so the loss is CONCENTRATED: ${nyse.length} names, half the money in the top 50`);
+console.log(`  so the loss is CONCENTRATED, though "half" would overstate it: ${nyse.length} names,`);
+console.log(`  and the top 50 carry ${((top50Dv / nyseDvTotal) * 100).toFixed(1)}% of the lost dollar volume — not 50%.`);
 
 // ── 2. THE REFILLED 700 — and the part that is not measurable ────────────────
 console.log(`\n══ 2. A REFILLED 700 ══`);
@@ -142,7 +143,15 @@ console.log(`  ENTRANTS NEEDING A FULL BACKFILL:             ${Math.max(0, entra
 
 const nasdaqDvSorted = [...nasdaq].sort((a, b) => dv(b) - dv(a));
 const allDvSorted = [...analysis].sort((a, b) => dv(b) - dv(a));
-console.log(`\n  TODAY'S floor (700th by dollar volume):       ${fmtUsd(dv(allDvSorted[allDvSorted.length - 1]))}/day`);
+// A FLOOR OF ZERO IS AN ARTEFACT GAP, NOT A MARKET FACT. Some universe members
+// have no bars in the frozen dump at all -- MMC is one -- so their dollar volume
+// computes as 0 and lands last. Reporting "the 700th name trades $0/day" would be
+// a measurement artefact dressed as a finding, so the count of zero-volume members
+// is named and the floor is also given excluding them.
+const zeroVol = analysis.filter((s) => dv(s) === 0);
+const nonZeroSorted = allDvSorted.filter((s) => dv(s) > 0);
+console.log(`\n  universe members with NO volume in the dump:  ${zeroVol.length}${zeroVol.length && zeroVol.length <= 12 ? ` (${zeroVol.join(", ")})` : ""}`);
+console.log(`  TODAY'S floor, excluding those:              ${fmtUsd(dv(nonZeroSorted[nonZeroSorted.length - 1]))}/day`);
 console.log(`  Nasdaq-only floor at ${nasdaq.length} names:               ${fmtUsd(dv(nasdaqDvSorted[nasdaqDvSorted.length - 1]))}/day`);
 console.log(`  Nasdaq median:                               ${fmtUsd(dv(nasdaqDvSorted[Math.floor(nasdaq.length / 2)]))}/day`);
 console.log(`\n  ⚠ THE ENTRANTS' DOLLAR-VOLUME FLOOR IS NOT MEASURABLE HERE.`);
