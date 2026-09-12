@@ -123,13 +123,46 @@ if (!gateBlock) {
   console.error("FAIL: could not extract the market-hours gate — measuring nothing.");
   process.exit(1);
 }
+// THE RESET MAY BE INLINE OR BEHIND THE HELPER, and this assertion used to
+// accept only the inline form. It matched `redis.expire(PRICE_POOL_KEY, ...)`
+// literally inside the gate, so when the same call was moved into
+// `keepPricePoolAlive()` -- which does exactly that expire and nothing else --
+// the check went red against CORRECT code and stayed red on main. A red check
+// that describes a fixed bug is worse than no check: it teaches everyone that
+// red is normal, and the next real failure arrives into an audience that has
+// stopped reading. See claude/traps/a-regex-over-source-has-no-scope.md.
+//
+// So the property is asserted in TWO parts, because accepting the helper name
+// alone would let a future no-op helper satisfy it:
+//   (a) the gate resets the TTL, inline or via the helper, before returning
+//   (b) the helper actually issues the expire
+const resetsInline =
+  /redis\.expire\(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS\)/.test(gateBlock);
+const resetsViaHelper = /keepPricePoolAlive\(\)/.test(gateBlock);
 check(
   "a skipped run still resets the pool hash TTL",
-  /redis\.expire\(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS\)/.test(gateBlock),
+  resetsInline || resetsViaHelper,
   "#395 returned before the reset at the bottom of the function, and HSET does " +
     "not extend an existing TTL — so the hash expired mid-gap and the pool was " +
-    "rebuilt from cold every morning"
+    "rebuilt from cold every morning" +
+    (resetsViaHelper ? " (satisfied via keepPricePoolAlive)" : "")
 );
+
+// (b). Only meaningful when the gate delegates -- an inline reset is its own
+// evidence. Without this, renaming the helper's body to a no-op would leave the
+// assertion above green while the pool expired again exactly as it did in #395.
+if (resetsViaHelper && !resetsInline) {
+  const helperBlock = (pool.match(
+    /export async function keepPricePoolAlive\([\s\S]*?\n\}/
+  ) ?? [])[0];
+  check(
+    "and the helper it delegates to actually issues the expire",
+    Boolean(helperBlock) &&
+      /redis\.expire\(PRICE_POOL_KEY, PRICE_POOL_HASH_TTL_SECONDS\)/.test(helperBlock),
+    "the gate calling a helper proves nothing on its own — this is what stops " +
+      "the indirection from hollowing out the guarantee it was refactored into"
+  );
+}
 
 // The arithmetic, over the real constants, because "12 hours felt like enough"
 // is exactly how this broke. The TTL must outlast the longest run-to-run gap
