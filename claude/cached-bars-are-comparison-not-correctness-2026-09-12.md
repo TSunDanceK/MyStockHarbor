@@ -82,6 +82,32 @@ correlated, not identical, and Stooq's own coverage of the awkward shapes
 (share classes, ADRs, LPs, thin caps) is exactly what A3 is for and is still
 unmeasured. Do not wire eviction straight to the right-hand branch.
 
+## The profile dataset was itself decaying, and Step 0 caught it
+
+Worth recording because it is the clearest case of why the freeze was urgent
+rather than tidy.
+
+The dump found **651 of the 912 swept symbols carrying a non-empty industry and
+sector** — against a `/cache-health` panel reporting Profile coverage as 50/885
+with "94% have never been refreshed". The panel was counting refreshes; the values
+were largely still there.
+
+But `PROFILE_TTL_SECONDS` is **30 days**, and only ~50 had been refreshed. So
+roughly **601 of those 651 were living out an old fetch on a rolling expiry** —
+each one due to vanish 30 days after whenever it was last written, with nothing
+scheduled to rewrite it and no free source able to reproduce FMP's taxonomy
+afterwards.
+
+**Step 0 earned its keep on this dataset alone.** A week later that number would
+have been materially smaller, and the difference would have been unrecoverable —
+not "harder to get", but gone, because SIC codes do not reproduce an industry
+taxonomy and no other free source has FMP's labels.
+
+It is also the sharpest illustration of the caveat this document is about: the
+panel was *correct* about the thing it measured and *misleading* about the thing
+anyone would act on. A refresh count and a value count are different questions,
+and only one of them tells you what you still have.
+
 ## Related
 
 - `claude/traps/a-reconstruction-cannot-corroborate-its-source.md` — the same
