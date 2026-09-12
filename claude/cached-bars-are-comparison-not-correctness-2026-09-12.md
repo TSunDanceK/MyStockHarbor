@@ -181,13 +181,50 @@ Measured from the frozen dump against the 700:
 
 - **industry from either source: 699 — 99.9%**
 - **sector from either source: 699 — 99.9%**
-- **symbols missing industry OR sector: 1** (`BRK.B`, and likely a symbol-shape
-  issue rather than a data gap: it is the only dotted ticker in the preset list, and
-  `buildFmpSymbol` maps dots to dashes)
+- **symbols missing industry OR sector: 1** — `BRK.B`. A symbol-shape issue rather
+  than a data gap, but see below: the mechanism is the OPPOSITE of the obvious one.
 
 So the taxonomy was never mostly in the decaying cache, the fallback is cosmetic,
 and a backfill sized off the profile key alone would have fetched 154 symbols that
 already had an industry.
+
+### BRK.B: the dot-to-dash mapping is MISSING on this path, not applied
+
+An earlier draft of this section said the gap was "likely a symbol-shape issue …
+`buildFmpSymbol` maps dots to dashes", implying the mapping caused it. **That is
+backwards.** `buildFmpSymbol` (`lib/server/historyCache.ts:378`) is the only
+dot-to-dash mapping in the codebase, it is called from exactly one place
+(`historyCache.ts:1320`), and that place is the **bars** path. Which is why `BRK.B`
+has a healthy series and a blank taxonomy, not the reverse.
+
+What the code actually says, all of it read rather than inferred:
+
+| Layer | Symbol reaching FMP | Redis key |
+|---|---|---|
+| Bars (`historyCache.ts`) | `BRK-B` — `buildFmpSymbol` maps the dot | dotted, mapping is request-only |
+| Fundamentals (`fundamentalsCache.ts`) | `BRK.B` — **no mapping exists on this path** | `msh:pickers:profile:v1:BRK.B` |
+
+`cleanSymbol` **preserves** dots and hyphens by design, in both copies
+(`lib/symbol.ts`, `fundamentalsCache.ts:183`) — "keeps the dot and hyphen that real
+tickers use (BRK.B, PBR-A)". Every list in the repo stores the dotted spelling
+(`curatedSymbols.ts`, `presetUniverse.ts`, `symbolSearch.ts`, `earningsCalendar.ts`,
+`app/api/market/route.ts`). So `fundamentalsCache.ts:568` requests
+`/stable/profile?symbol=BRK.B`, and `:692` keys the result on `BRK.B`.
+
+**What is measured, and what is not.** Measured: the two paths disagree; only the
+bars path maps; `BRK.B` is the only dotted ticker in the 700 and the only symbol
+missing taxonomy from either source. **Not measured:** that FMP rejects the dotted
+spelling. There is no FMP call available from the sandbox and no key to make one
+with, so the upstream half of this is inference — strong inference, since
+`buildFmpSymbol` exists at all only because FMP wants the dash, but inference.
+Do not write it up as a demonstrated cause.
+
+**The decisive measurement that IS available, and has not been taken:** whether the
+frozen screener cache holds a `msh:pickers:screener-fundamentals:v1:BRK-B` key. The
+screener is fed by FMP's own screener endpoint, so it reports FMP's spelling. If the
+dashed key is in the dump, then the data was there all along under a name nothing
+looks up, the cause is settled without any FMP call, and the fix is a mapping rather
+than a backfill. That is a dump question, answerable from the existing artefact.
 
 **Two consequences for the build.** The migration asset is the **union of both
 caches**, and the dump froze both (2,609 screener entries). And when the Industry
