@@ -92,6 +92,14 @@ const writePickersCache = async (data) => { bench.writes.push(data); };
 const buildReducedPickersPayload = (d) => d;
 const acquirePickersLock = async () => bench.lock;
 const releasePickersLock = async () => {};
+// Bookkeeping, stubbed like every other I/O call. Recorded so the harness can
+// assert the build path does not DEPEND on it: getPickersData wraps its own call
+// in try/catch precisely so an unresolvable meter cannot discard a healthy
+// payload, and this stub is what lets the rest of the bench run at all.
+const flushRedisReadMeter = async () => {
+  bench.meterFlushes = (bench.meterFlushes ?? 0) + 1;
+  if (bench.meterThrows) throw new Error("meter unavailable");
+};
 const buildPickersPayload = async (origin, opts) => {
   bench.builds.push(opts ?? {});
   if (bench.buildThrows) throw new Error("build failed");
@@ -134,6 +142,8 @@ function reset(over = {}) {
   bench.builds = [];
   bench.keyOk = false;
   bench.cronOk = false;
+  bench.meterThrows = false;
+  bench.meterFlushes = 0;
   Object.assign(bench, over);
   m.resetMemo();
 }
@@ -167,6 +177,23 @@ reset({ cache: GOOD_CACHE, built: HEALTHY });
 out = await m.getPickersData("o", { forceRefresh: true });
 check("FORCED + healthy + good cache: the fresh payload IS written", bench.writes.length === 1 && bench.writes[0].label === "fresh-healthy");
 check("FORCED + healthy + good cache: the fresh payload is returned", out.label === "fresh-healthy", out.label);
+check("FORCED + healthy + good cache: the read meter was flushed", bench.meterFlushes === 1, `${bench.meterFlushes} flush(es)`);
+
+// THE METER MUST NOT BE ABLE TO DISCARD A BUILD, and this is the assertion that
+// says so. The flush added on 2026-09-12 sits inside the try/catch that decides
+// whether the fresh payload is written, so an unwrapped throw there fell straight
+// through to the degraded-cache fallback: a healthy forced build silently
+// dropped, zero writes, cached-good returned. That is how it was FOUND -- this
+// harness failed on exactly these two labels before the call site was wrapped.
+// lib/server/redisBandwidth.ts's own rule is the one at stake: "a meter that can
+// break the thing it measures is worse than no meter."
+reset({ cache: GOOD_CACHE, built: HEALTHY, meterThrows: true });
+out = await m.getPickersData("o", { forceRefresh: true });
+check(
+  "a THROWING read meter cannot discard a healthy forced build",
+  bench.writes.length === 1 && bench.writes[0].label === "fresh-healthy" && out.label === "fresh-healthy",
+  `${bench.writes.length} write(s), returned ${out.label}`
+);
 
 reset({ cache: null, built: DEGRADED });
 out = await m.getPickersData("o", { forceRefresh: true });

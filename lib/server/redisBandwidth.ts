@@ -2,17 +2,48 @@
 //
 // WHY THIS EXISTS, AND WHY IT IS THE METER THAT WAS MISSING.
 //
-// The Upstash plan meters BANDWIDTH. Commands are unlimited on it -- so the
-// 17M -> 338k command reduction of #414/#415 bought real latency and real
-// safety and bought NOTHING against the limit that binds. Owner's figures:
+// CORRECTED 2026-09-12. THE ORIGINAL CLAIM HERE WAS BACKWARDS AND IT MIS-STEERED
+// MONTHS OF PRIORITISATION. It said:
 //
-//   2026-09-01   5 GB      2026-09-02   9 GB      2026-09-03   6 GB
-//   average 6.67 GB/day  ->  ~207 GB/month against a 200 GB cap
+//   "The Upstash plan meters BANDWIDTH. Commands are unlimited on it -- so the
+//    17M -> 338k command reduction of #414/#415 bought real latency and real
+//    safety and bought NOTHING against the limit that binds."
 //
-// FMP, the meter we DO have, sat at 11.4% of its cap over the same window. The
-// unmeasured limit was the one at 100%, which is the identical shape as
-// fmpUsage.ts's own opening note one file over: a plausible number reasoned out
-// from constants is the thing that stops people looking.
+// Read from the Upstash console for MSH-Market-Cache on 2026-09-12:
+//
+//   Plan: PAY AS YOU GO
+//   Commands   1.9m    "Unlimited"     writes 1,440,133 · reads 457,157
+//   Bandwidth   47 GB  "Unlimited"     first 200 GB/month included, then $0.03/GB
+//   Storage    185 MB / 100 GB
+//   Cost       $3.83                   budget cap $50
+//
+//   1,900,000 / 100,000 x $0.20 = $3.80, plus ~$0.02 storage and $0.00 bandwidth
+//   (inside the free 200 GB) = $3.82 -- the billed figure to the cent.
+//
+// "Unlimited" on that console means UNCAPPED, NOT FREE: the bandwidth panel says
+// "Unlimited" while its own tooltip states the per-GB charge, and the commands
+// panel uses the same wording. COMMANDS BILL AT $0.20/100K AND ARE ~99% OF THE
+// INVOICE. Bandwidth is inside its included allowance and is not what bills.
+//
+// So the #414/#415 reduction was worth ~$33/month -- roughly nine times the
+// current total bill -- and historyCache.ts:150 ("700 GETs is 700 billed
+// commands, where 18 chunked MGETs are 18") and dynamicUniverseCache.ts
+// ("Upstash bills COMMANDS, not round-trips") had it right all along while this
+// file said the opposite.
+//
+// The old figures are kept because they are still true about bandwidth and still
+// dated: 2026-09-01 5 GB, 09-02 9 GB, 09-03 6 GB, average 6.67 GB/day. What was
+// wrong was the conclusion drawn from them, not the numbers.
+//
+// A SINGLE AUTHORITATIVE STATEMENT OF THE BILLING MODEL, cited by every file that
+// reasons about cost, is still outstanding and is the real fix -- two files
+// disagreeing in comments is what let this survive. This correction is the
+// minimum that stops THIS file justifying the behaviour it no longer has.
+//
+// The original note's own lesson survives its error, and is worth keeping in the
+// form it was meant: FMP, the meter we DID have, sat at 11.4% of its cap while
+// this one was unmeasured -- "a plausible number reasoned out from constants is
+// the thing that stops people looking."
 //
 // SHAPE
 //   msh:redis-units:v1:<YYYYMMDD>   Redis HASH, one per UTC day, 31-day TTL
@@ -28,9 +59,18 @@
 // EARNINGS_PEAK_DAY_SHARE does: a bare number with no history is exactly as bad
 // as a typed one.
 //
-// THE COST OF THE METER: one HINCRBY pipeline per instrumented read. On a plan
-// where commands are unlimited and bandwidth is the cap, that is free in the
-// dimension that matters -- which is the whole point of the file.
+// THE COST OF THE METER, AND IT WAS NOT FREE. This paragraph used to read: "one
+// HINCRBY pipeline per instrumented read. On a plan where commands are unlimited
+// and bandwidth is the cap, that is free in the dimension that matters." Both
+// halves were wrong the same way -- a pipeline is one round trip and SIX BILLED
+// COMMANDS, and commands are the dimension that bills. On the single-symbol path
+// that fired per symbol, so one ~700-symbol plays build spent ~4,200 write
+// commands measuring itself.
+//
+// It now ACCUMULATES IN PROCESS and writes once per flush -- see
+// recordRedisRead and flushRedisReadMeter below. Same counters, same arithmetic,
+// ~6 commands a build instead of ~4,200. The cost of the meter is a floor on its
+// own accuracy rather than a line on the invoice.
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -190,11 +230,131 @@ function hourField(source: RedisReadSource, nowMs: number) {
   return `${source}:h${hh}:units`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE METER USED TO BE THE BILL. IT ACCUMULATES IN PROCESS NOW.
+//
+// Until 2026-09-12 this function wrote on every call: a pipeline of five
+// HINCRBYs and an EXPIRE. A pipeline is ONE round trip and SIX BILLED COMMANDS,
+// which is the distinction dynamicUniverseCache.ts corrected four files over and
+// the header of this file got wrong in the other direction (see the note above
+// BYTES_PER_SYMBOL_PICKER_PAYLOAD, and claude/traps/
+// a-reconstruction-cannot-corroborate-its-source.md for what that error cost).
+//
+// On the BULK paths that was cheap: one call per read, units = the whole
+// universe. On the SINGLE-symbol path it fired PER SYMBOL. The three plays
+// builders read ~700 symbols one at a time, so a single build spent ~4,200
+// billed write commands measuring itself.
+//
+// HOW MUCH THAT IS WORTH, MEASURED RATHER THAN ARGUED -- AND IT IS SMALL.
+// /cache-health's caller breakdown, read 2026-09-12 11:41 UTC over its 7-day
+// window (app/cache-health/page.tsx calls readRedisBandwidth(7)):
+//
+//   pickers-build  history-single?  no -- history-BULK   7.38 GB   57.1%
+//   unattributed                    picker-charts        3.42 GB   26.5%
+//   plays                           history-single      73.8 MB    0.6%
+//
+// THE SINGLE-SYMBOL PATH IS 0.6% OF THE BILL. So this change is a CLEANUP, not a
+// saving: 6:1 write amplification on pure instrumentation is wrong at any rate,
+// and nothing should queue behind fixing it. An earlier version of this session's
+// reasoning had the meter as the largest write source; that was withdrawn once
+// for circular arithmetic (claude/traps/a-residual-cannot-validate-its-own-total.md)
+// and is now dead on measurement. The two rows that matter are pickers-build and
+// picker-charts at 83.6% between them, both 700-symbol bulk reads, and
+// picker-charts has NO ATTRIBUTED CALLER -- the second-largest line on the bill
+// does not know what drives it. That is the next thing to find out, not this.
+//
+// WHY AN ACCUMULATOR COLLAPSES IT SO FAR. Those ~700 reads all carry the SAME
+// source, the same caller and (nearly always) the same UTC hour, so they all
+// target the same five fields. Accumulating turns 700 six-command writes into
+// one six-command write with larger deltas. The counters are HINCRBY, so a sum
+// applied once is arithmetically identical to the increments applied one at a
+// time; nothing about the reported numbers changes.
+//
+// TWO FLUSH TRIGGERS, AND THE THRESHOLD IS THE LOAD-BEARING ONE.
+//
+//   flushRedisReadMeter()  explicit, at the end of a job or build. The common
+//                          path, and what makes a build cost 6 commands.
+//   METER_AUTOFLUSH_READS  a safety net: flush once this many reads are pending
+//                          regardless of who calls what.
+//
+// The threshold exists because "every handler must remember to flush" is the
+// shape this codebase keeps paying for -- a new route that forgets it would
+// silently under-report forever, and a meter that reads zero looks exactly like
+// a reader that stopped. With the threshold, forgetting degrades to "flushes
+// every 250 reads" (a 250x cut instead of 700x), never to losing everything.
+// Fail-safe, not fail-open-to-zero.
+//
+// WHAT THIS COSTS IN ACCURACY, STATED PLAINLY: an invocation that crashes or is
+// frozen between its last flush and its end loses the reads pending at that
+// moment. So /cache-health's Redis figures become a FLOOR rather than a total.
+// That is not a new kind of claim on that page -- the FMP figures it sits beside
+// are already a floor for the same class of reason, and the panel's own report
+// already says how much of the window the meter was running for, because "a
+// floor presented as a measurement is how a small number stops people looking".
+// Bounded by METER_AUTOFLUSH_READS: at most 249 reads' worth of units, never a
+// whole build.
+const METER_AUTOFLUSH_READS = 250;
+
+/** dayKey -> field -> pending delta. Keyed by day so a UTC rollover mid-batch lands on the right hash. */
+const pendingUnits = new Map<string, Map<string, number>>();
+let pendingReads = 0;
+
+function addPending(dayKeyStr: string, field: string, delta: number) {
+  let fields = pendingUnits.get(dayKeyStr);
+  if (!fields) {
+    fields = new Map<string, number>();
+    pendingUnits.set(dayKeyStr, fields);
+  }
+  fields.set(field, (fields.get(field) ?? 0) + delta);
+}
+
+/**
+ * Write every pending counter and clear the accumulator.
+ *
+ * Call it at the end of a job or a build. Safe to call when nothing is pending
+ * (it returns without touching Redis), and safe to call twice.
+ *
+ * THE ACCUMULATOR IS CLEARED BEFORE THE AWAIT, not after. A second caller
+ * arriving mid-flush must not see and re-send the same deltas, and a flush that
+ * throws must not leave them queued to be double-counted by the next one --
+ * over-reporting the bill is worse than under-reporting it, because it is the
+ * direction that gets acted on.
+ */
+export async function flushRedisReadMeter(): Promise<void> {
+  if (!redis || !pendingUnits.size) return;
+
+  const batch = [...pendingUnits.entries()];
+  pendingUnits.clear();
+  pendingReads = 0;
+
+  try {
+    for (const [key, fields] of batch) {
+      const p = redis.pipeline();
+      for (const [field, delta] of fields) {
+        if (delta > 0) p.hincrby(key, field, delta);
+      }
+      p.expire(key, UNITS_TTL_SECONDS);
+      await p.exec();
+    }
+  } catch {
+    // bookkeeping -- never throws into a render path
+  }
+}
+
+/** Pending reads not yet written. Exported so scripts/check-redis-bandwidth.mjs can assert the batching. */
+export function pendingRedisReadCount(): number {
+  return pendingReads;
+}
+
 /**
  * Record that `units` symbols were read from `source`.
  *
+ * NO LONGER TOUCHES REDIS. Accumulates in process; flushRedisReadMeter() writes.
+ * Still async, and every existing caller still awaits it, so the call sites did
+ * not have to change to get the saving.
+ *
  * Fails open and silent: a meter that can break the thing it measures is worse
- * than no meter. One pipeline, two HINCRBYs and an EXPIRE.
+ * than no meter.
  */
 export async function recordRedisRead(
   source: RedisReadSource,
@@ -206,19 +366,22 @@ export async function recordRedisRead(
     const nowMs = Date.now();
     const key = dayKey(nowMs);
     const who = safeCaller(caller);
-    const p = redis.pipeline();
-    // The source total stays, unchanged in meaning, so the #418 report keeps
-    // working across the deploy rather than reading as a collapse to zero.
-    p.hincrby(key, `${source}:units`, Math.round(units));
-    p.hincrby(key, `${source}:reads`, 1);
-    p.hincrby(key, `${source}:${who}:units`, Math.round(units));
-    p.hincrby(key, `${source}:${who}:reads`, 1);
-    p.hincrby(key, hourField(source, nowMs), Math.round(units));
-    p.expire(key, UNITS_TTL_SECONDS);
-    await p.exec();
+    const rounded = Math.round(units);
+
+    // The same five fields the per-read pipeline wrote, unchanged in meaning.
+    addPending(key, `${source}:units`, rounded);
+    addPending(key, `${source}:reads`, 1);
+    addPending(key, `${source}:${who}:units`, rounded);
+    addPending(key, `${source}:${who}:reads`, 1);
+    addPending(key, hourField(source, nowMs), rounded);
+
+    pendingReads += 1;
   } catch {
     // bookkeeping -- never throws into a render path
+    return;
   }
+
+  if (pendingReads >= METER_AUTOFLUSH_READS) await flushRedisReadMeter();
 }
 
 export type RedisBandwidthRow = {
