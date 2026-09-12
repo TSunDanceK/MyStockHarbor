@@ -123,3 +123,42 @@ export async function loadEarningsPlan() {
 
   return { inputs, missing: [], planAt, plan: planAt(inputs.basis) };
 }
+
+/**
+ * The warm-earnings route's MAIN recordJobRun call, sliced out of the source.
+ *
+ * SHARED BECAUSE BOTH CALLERS ANCHORED ON THE SAME LITERAL AND BOTH BROKE.
+ * check-earnings-batch and check-earnings-minute-wall each carried
+ * `recordJobRun("warm-earnings", true, {\n` as their anchor, which bakes the
+ * SECOND ARGUMENT into a slice that is only trying to find the FIRST. The
+ * moment that argument stopped being the literal `true` -- when the run learned
+ * to go red on a rotting dataset -- both slices returned "" and both checks
+ * failed on correct code, in two files, for one reason.
+ *
+ * Anchored on the call and its job name only. The `\n` is kept: it is what
+ * distinguishes the multi-line record from the single-line lock-skip one near
+ * the top of the route, which carries { skipped, reason } and none of the
+ * fields either caller is looking for. lastIndexOf as well, as a second
+ * defence, for the same reason the old comments give.
+ *
+ * Returns "" when nothing matched, and every caller already renders that as a
+ * distinct "sliced the wrong call" message rather than as a content failure --
+ * which is the reason this refactor was legible when it broke.
+ */
+export const sliceWarmEarningsRunRecord = (routeSrc) => {
+  const anchor = 'recordJobRun("warm-earnings",';
+  let start = -1;
+  for (let at = routeSrc.lastIndexOf(anchor); at !== -1; at = routeSrc.lastIndexOf(anchor, at - 1)) {
+    const open = routeSrc.indexOf("{", at);
+    const nl = routeSrc.indexOf("\n", at);
+    // The multi-line one: the brace opens and the line ends immediately after.
+    if (open !== -1 && nl !== -1 && nl > open && routeSrc.slice(open + 1, nl).trim() === "") {
+      start = at;
+      break;
+    }
+    if (at === 0) break;
+  }
+  if (start === -1) return "";
+  const end = routeSrc.indexOf("});", start);
+  return end === -1 ? "" : routeSrc.slice(start, end);
+};
