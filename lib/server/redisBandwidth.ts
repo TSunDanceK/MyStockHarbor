@@ -76,6 +76,28 @@ export const BYTES_PER_SYMBOL_PICKER_CHARTS = 10_963;
  * charts, over 260 symbols) and it is the weakest number in this file. It is
  * also ~15% of the picker term and ~5% of the bill, so being 20% wrong about it
  * moves nothing that matters.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * AND IT IS WRONG BY MORE THAN 20%. Measured 2026-09-11:
+ *
+ *   STRLEN msh:pickers:v9:charts-off-payload  =  7,248,807  over 700 records
+ *                                             =  ~10,356 bytes per record
+ *
+ * That is FIVE TIMES this constant, and it is a direct measurement of the
+ * stripped payload against a residual computed a month ago at a third of the
+ * universe. The direct one wins.
+ *
+ * NOT CORRECTED HERE, DELIBERATELY, and this note is the alternative to a
+ * silent edit. Changing it multiplies the reported picker-payload bandwidth by
+ * five, which would move the /cache-health projection and the growth gate in
+ * check-redis-bandwidth.mjs on the strength of one STRLEN. #427 logs the real
+ * serialized size on every build; a few days of that settles it properly, and
+ * a chunking PR is the wrong place to re-baseline a meter.
+ *
+ * The chunking projection in chunkByBytes.ts uses the measurement rather than
+ * this constant, so the thing that must not breach is sized against the larger
+ * of the two.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 export const BYTES_PER_SYMBOL_PICKER_PAYLOAD = 2_000;
 /** One symbol's stored daily history entry: ~1,188 bars of OHLCV. */
@@ -96,6 +118,12 @@ export const BYTES_MEASURED_BY =
 
 export type RedisReadSource =
   | "picker-payload"
+  // THE SYMBOL LIST, SPLIT OUT FROM picker-payload BECAUSE IT IS NOW A
+  // DIFFERENT READ. Three crons used to pull the whole ~1.5MB stripped payload
+  // to take one field off each record; they now read a few KB from their own
+  // key. Folding it into picker-payload would hide the improvement inside the
+  // number it improves, which is the opposite of what this meter is for.
+  | "picker-symbols"
   | "picker-charts"
   // SPLIT FROM history-bulk, and the split is the point rather than tidiness.
   // #418 metered only the two BULK paths, so the twelve single-symbol readers --
@@ -110,6 +138,12 @@ export type RedisReadSource =
 
 const BYTES_PER_UNIT: Record<RedisReadSource, number> = {
   "picker-payload": BYTES_PER_SYMBOL_PICKER_PAYLOAD,
+  // A ticker string plus JSON punctuation. Measured rather than guessed:
+  // JSON.stringify(["AAPL"]).length is 8 for one 4-character symbol, and the
+  // universe averages ~4.3 characters, so ~9 bytes a symbol including the
+  // comma. Three orders of magnitude below the payload it replaces, which is
+  // the point of recording it separately.
+  "picker-symbols": 9,
   "picker-charts": BYTES_PER_SYMBOL_PICKER_CHARTS,
   "history-single": BYTES_PER_SYMBOL_HISTORY,
   "history-bulk": BYTES_PER_SYMBOL_HISTORY,
