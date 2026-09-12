@@ -103,27 +103,123 @@ function trailingDilutedEps(facts) {
   }
   const quarters = [...byPeriod.values()].sort((a, b) => (a.end < b.end ? 1 : -1)).slice(0, 4);
   if (quarters.length < 4) {
-    return { eps: null, quarters: quarters.length, note: `only ${quarters.length} distinct quarters` };
+    // DIAGNOSTICS, NOT JUST A COUNT. XOM came back with "only 2 distinct quarters"
+    // and that is a symptom with several possible causes -- rows without start/end,
+    // annual-only reporting, or a day-window that is too tight. Reporting how many
+    // rows existed and how many survived each filter turns the next investigation
+    // into reading a number instead of re-deriving it.
+    const withPeriod = usd.filter((r) => r?.start && r?.end && typeof r.val === "number").length;
+    return {
+      eps: null,
+      quarters: quarters.length,
+      note:
+        `only ${quarters.length} distinct quarters — ${usd.length} rows in the unit, ` +
+        `${withPeriod} with start+end, ${byPeriod.size} in a 60-120 day frame`,
+    };
   }
   const eps = quarters.reduce((sum, q) => sum + q.val, 0);
   return { eps, quarters: 4, periods: quarters.map((q) => `${q.start}..${q.end}`), note: null };
 }
 
-/** Most recently filed common shares outstanding. */
+/**
+ * Most recently filed common shares outstanding — with the two ways this silently
+ * produces a WRONG NUMBER rather than no number, both found by running it.
+ *
+ * THE FIRST RUN RETURNED 941,481 SHARES FOR BRK.B, AS OF 2011-04-29. Berkshire
+ * class B has roughly 1.3 billion; 941,481 is a Class A-shaped figure fifteen
+ * years stale. It was not reported as a failure — the fetch succeeded, so the run
+ * printed "WITHIN THRESHOLD — dataset usable" while carrying a number that would
+ * have put a mega-cap's marketCap out by three orders of magnitude. A threshold
+ * that counts FETCH success and calls that data quality is the fail-open shape
+ * this repo keeps shipping.
+ *
+ * MULTI-CLASS FILERS ARE AMBIGUOUS, NOT MERELY AWKWARD. companyfacts flattens
+ * each class into its own row, so a dual-class company yields several rows sharing
+ * one `end` date with different `val`s, and nothing in the row says which class it
+ * is. Picking the newest by `filed` therefore picks a class at random. There is no
+ * safe guess, so this REFUSES rather than choosing: an ambiguous symbol is a
+ * failure with a stated reason, which a human can act on, instead of a plausible
+ * number nobody re-checks.
+ *
+ * STALENESS IS THE SECOND GUARD, and it is independent. A share count from 2011 is
+ * wrong even when it is unambiguous, and a company that stopped filing is exactly
+ * the case where the newest row is old.
+ */
+const MAX_SHARES_AGE_DAYS = Number(process.env.SEC_MAX_SHARES_AGE_DAYS ?? 400);
+
 function sharesOutstanding(facts) {
   const candidates = [
-    facts?.dei?.EntityCommonStockSharesOutstanding,
-    facts?.["us-gaap"]?.CommonStockSharesOutstanding,
-  ].filter(Boolean);
-  for (const node of candidates) {
-    const rows = node?.units?.shares;
-    if (!Array.isArray(rows) || !rows.length) continue;
-    const best = rows
-      .filter((r) => typeof r?.val === "number" && r.val > 0)
-      .sort((a, b) => String(b.filed ?? "").localeCompare(String(a.filed ?? "")))[0];
-    if (best) return { shares: best.val, asOf: best.end ?? null, filed: best.filed ?? null };
+    ["dei:EntityCommonStockSharesOutstanding", facts?.dei?.EntityCommonStockSharesOutstanding],
+    ["us-gaap:CommonStockSharesOutstanding", facts?.["us-gaap"]?.CommonStockSharesOutstanding],
+  ].filter(([, node]) => node);
+
+  for (const [concept, node] of candidates) {
+    const rows = (node?.units?.shares ?? []).filter(
+      (r) => typeof r?.val === "number" && r.val > 0 && r.end
+    );
+    if (!rows.length) continue;
+
+    const newestEnd = rows.map((r) => r.end).sort().at(-1);
+    const atNewest = rows.filter((r) => r.end === newestEnd);
+    const distinctVals = new Set(atNewest.map((r) => r.val));
+
+    if (distinctVals.size > 1) {
+      return {
+        shares: null,
+        asOf: newestEnd,
+        concept,
+        reject: `multi-class: ${distinctVals.size} different share counts share end=${newestEnd} ` +
+          `(${[...distinctVals].join(", ")}) — companyfacts does not say which class, so any pick is a guess`,
+      };
+    }
+
+    const best = atNewest.sort((a, b) => String(b.filed ?? "").localeCompare(String(a.filed ?? "")))[0];
+    const ageDays = (Date.now() - Date.parse(best.end)) / 86400000;
+    if (Number.isFinite(ageDays) && ageDays > MAX_SHARES_AGE_DAYS) {
+      return {
+        shares: null,
+        asOf: best.end,
+        concept,
+        reject: `stale: share count as of ${best.end} is ${Math.round(ageDays)} days old ` +
+          `(limit ${MAX_SHARES_AGE_DAYS})`,
+      };
+    }
+    return { shares: best.val, asOf: best.end, filed: best.filed ?? null, concept, reject: null };
   }
-  return { shares: null, asOf: null, filed: null };
+  return { shares: null, asOf: null, concept: null, reject: "no shares-outstanding concept found" };
+}
+
+// ── THE CROSS-CHECK, and why the frozen dump is the right yardstick ──────────
+// The multi-class and staleness guards above are structural: they catch the two
+// ways the extraction is KNOWN to go wrong. A magnitude check catches the ways it
+// is not yet known to go wrong, which is the category BRK.B fell into before it
+// was diagnosed.
+//
+// The frozen dump holds FMP's marketCap per symbol and the cached daily series.
+// shares x last close should land near FMP's figure; an order-of-magnitude
+// disagreement means the share count is a different class, a different unit, or a
+// different company. Per the standing rule, the frozen bars are ground truth for
+// COMPARISON, not for CORRECTNESS -- so a mismatch is reported as "these two
+// disagree and the SEC value is not safe to use unreviewed", never as "FMP is
+// right and SEC is wrong".
+const MAGNITUDE_LOW = Number(process.env.SEC_XCHECK_LOW ?? 0.5);
+const MAGNITUDE_HIGH = Number(process.env.SEC_XCHECK_HIGH ?? 2);
+
+function loadFrozen(dir) {
+  const out = { marketCap: new Map(), lastClose: new Map(), available: false };
+  try {
+    const fundPath = path.join(dir, "fundamentals.json");
+    if (fs.existsSync(fundPath)) {
+      const vals = JSON.parse(fs.readFileSync(fundPath, "utf8"))?.values ?? {};
+      for (const [sym, row] of Object.entries(vals)) {
+        if (typeof row?.marketCap === "number" && row.marketCap > 0) out.marketCap.set(sym, row.marketCap);
+      }
+      out.available = out.marketCap.size > 0;
+    }
+  } catch (e) {
+    console.log(`  (frozen fundamentals unreadable: ${String(e?.message ?? e)})`);
+  }
+  return out;
 }
 
 console.log("PHASE 5 — SEC fundamentals inputs (shares outstanding + trailing diluted EPS)");
@@ -159,8 +255,48 @@ const symbols = SYMBOL_ARG
   : ["AAPL", "MSFT", "KO", "XOM", "BRK-B"];
 console.log(`\nsymbols requested: ${symbols.length} — ${symbols.join(", ")}`);
 
+const frozen = loadFrozen(OUT_DIR);
+console.log(
+  frozen.available
+    ? `\ncross-check: ${frozen.marketCap.size} frozen FMP marketCap values available`
+    : `\ncross-check: UNAVAILABLE — no frozen fundamentals in ${OUT_DIR}. The magnitude ` +
+      `guard cannot run, and that is reported per symbol rather than passing silently.`
+);
+
+// Last close per symbol, read out of the frozen series rather than fetched.
+const lastClose = new Map();
+{
+  const barsPath = path.join(OUT_DIR, "history-bars.ndjson.gz");
+  if (fs.existsSync(barsPath)) {
+    const zlib = await import("node:zlib");
+    const readline = await import("node:readline");
+    const want = new Set(
+      (SYMBOL_ARG ? SYMBOL_ARG.split(",") : []).map((x) => x.trim().toUpperCase()).filter(Boolean)
+    );
+    const rl = readline.createInterface({
+      input: fs.createReadStream(barsPath).pipe(zlib.createGunzip()),
+      crlfDelay: Infinity,
+    });
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row?._meta || !row?.symbol) continue;
+        const sym = String(row.symbol);
+        if (want.size && !want.has(sym)) continue;
+        const daily = Array.isArray(row?.entry?.daily) ? row.entry.daily : [];
+        const close = daily[daily.length - 1]?.close;
+        if (typeof close === "number" && close > 0) lastClose.set(sym, close);
+      } catch {
+        // a truncated final line is not worth failing the ingest over
+      }
+    }
+  }
+}
+
 const rows = {};
 const failures = [];
+const rejected = [];
 const started = Date.now();
 
 for (const symbol of symbols) {
@@ -180,6 +316,38 @@ for (const symbol of symbols) {
     );
     const shares = sharesOutstanding(doc?.facts);
     const eps = trailingDilutedEps(doc?.facts);
+
+    // A STRUCTURAL REJECTION IS A FAILURE, NOT A NULL COLUMN. The first run
+    // recorded BRK.B as extracted-with-a-null and reported 0% failures; the whole
+    // point of the guards is that the run stops calling that a success.
+    if (shares.reject) {
+      rejected.push({ symbol, reason: shares.reject });
+      console.log(`  ${symbol.padEnd(7)} REJECTED — ${shares.reject}`);
+      continue;
+    }
+
+    // The magnitude cross-check. Only possible where both a frozen marketCap and a
+    // frozen last close exist; where they do not, that is SAID rather than passed.
+    const close = lastClose.get(symbol) ?? lastClose.get(symbol.replace(/\./g, "-"));
+    const fmpCap = frozen.marketCap.get(symbol) ?? frozen.marketCap.get(symbol.replace(/\./g, "-"));
+    let xcheck = { ran: false, note: "no frozen marketCap or close for this symbol" };
+    if (typeof close === "number" && typeof fmpCap === "number" && shares.shares) {
+      const implied = shares.shares * close;
+      const ratio = implied / fmpCap;
+      const ok = ratio >= MAGNITUDE_LOW && ratio <= MAGNITUDE_HIGH;
+      xcheck = { ran: true, impliedMarketCap: implied, frozenMarketCap: fmpCap, ratio, ok };
+      if (!ok) {
+        const reason =
+          `magnitude: shares x last close = ${implied.toExponential(3)} vs frozen FMP ` +
+          `marketCap ${fmpCap.toExponential(3)} (ratio ${ratio.toFixed(4)}, band ` +
+          `${MAGNITUDE_LOW}-${MAGNITUDE_HIGH}). The two sources disagree; the SEC share ` +
+          `count is not safe to use unreviewed. This does NOT establish which is right`;
+        rejected.push({ symbol, reason });
+        console.log(`  ${symbol.padEnd(7)} REJECTED — ${reason}`);
+        continue;
+      }
+    }
+
     rows[symbol] = {
       symbol,
       cik,
@@ -191,13 +359,16 @@ for (const symbol of symbols) {
       epsQuarters: eps.quarters,
       epsPeriods: eps.periods ?? null,
       epsNote: eps.note,
+      sharesConcept: shares.concept,
+      crossCheck: xcheck,
       // NO RAW FACTS. One companyfacts document is 3.79 MB parsed (AAPL), a third
       // of Upstash's 10 MB per-request ceiling, so storing it would fail any batch
       // write -- and the repo's fail-open handlers would swallow that error.
     };
     console.log(
       `  ${symbol.padEnd(7)} shares ${shares.shares ?? "—"} (as of ${shares.asOf ?? "—"}) · ` +
-        `EPS ${eps.eps?.toFixed(2) ?? "—"} over ${eps.quarters}q${eps.note ? ` [${eps.note}]` : ""}`
+        `EPS ${eps.eps?.toFixed(2) ?? "—"} over ${eps.quarters}q${eps.note ? ` [${eps.note}]` : ""}` +
+        (xcheck.ran ? ` · xcheck ratio ${xcheck.ratio.toFixed(3)} OK` : ` · xcheck not run`)
     );
   } catch (e) {
     failures.push({ symbol, reason: String(e?.message ?? e) });
@@ -208,19 +379,27 @@ for (const symbol of symbols) {
 const elapsed = (Date.now() - started) / 1000;
 const attempted = symbols.length;
 const ok = Object.keys(rows).length;
-const ratio = attempted ? failures.length / attempted : 0;
+// THE THRESHOLD NOW MEASURES USABLE OUTPUT, NOT SUCCESSFUL FETCHES. The first run
+// scored 0% failures while emitting a fifteen-year-stale share count for a
+// mega-cap, because a 200 response counted as a success. A rejected value is a
+// symbol this run did not deliver, and it belongs in the numerator.
+const unusable = failures.length + rejected.length;
+const ratio = attempted ? unusable / attempted : 0;
 
 console.log(`\n══ RESULT ══`);
 console.log(`  attempted        ${attempted}`);
 console.log(`  extracted        ${ok}`);
-console.log(`  failed           ${failures.length}  (${(ratio * 100).toFixed(1)}%)`);
+console.log(`  fetch failures   ${failures.length}`);
+console.log(`  REJECTED values  ${rejected.length}  <- passed the fetch, failed a sanity guard`);
+console.log(`  unusable total   ${unusable}  (${(ratio * 100).toFixed(1)}% of attempted)`);
 console.log(`  elapsed          ${elapsed.toFixed(1)}s  (${(attempted / Math.max(elapsed, 0.001)).toFixed(1)} req/s effective)`);
 const withEps = Object.values(rows).filter((r) => r.trailingDilutedEps != null).length;
 const withShares = Object.values(rows).filter((r) => r.sharesOutstanding != null).length;
 console.log(`  with shares      ${withShares} of ${ok}`);
 console.log(`  with 4q EPS      ${withEps} of ${ok}`);
 
-for (const f of failures) console.log(`  FAILED ${f.symbol}: ${f.reason}`);
+for (const f of failures) console.log(`  FAILED   ${f.symbol}: ${f.reason}`);
+for (const r of rejected) console.log(`  REJECTED ${r.symbol}: ${r.reason}`);
 
 const outPath = path.join(OUT_DIR, "SEC-FUNDAMENTALS.json");
 fs.writeFileSync(
@@ -233,6 +412,8 @@ fs.writeFileSync(
       attempted,
       extracted: ok,
       failures,
+      rejected,
+      unusable,
       failureRatio: ratio,
       elapsedSeconds: elapsed,
       rows,
