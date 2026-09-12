@@ -27,7 +27,12 @@
 //
 //   node scripts/check-earnings-batch.mjs
 import { readCodeOnly } from "./lib/source-code.mjs";
-import { loadEarningsPlan, grabFunction, lift } from "./lib/earnings-plan.mjs";
+import {
+  loadEarningsPlan,
+  grabFunction,
+  lift,
+  sliceWarmEarningsRunRecord,
+} from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -216,8 +221,13 @@ check(
 // ── 4. The run says what sized it ─────────────────────────────────────────
 console.log("\n4. A batch that came from arithmetic reads as arithmetic afterwards");
 
-const recordIdx = route.lastIndexOf('recordJobRun("warm-earnings", true, {\n');
-const recordCall = recordIdx === -1 ? "" : route.slice(recordIdx, route.indexOf("});", recordIdx));
+// ANCHORED THROUGH THE SHARED HELPER. This line used to carry
+// `recordJobRun("warm-earnings", true, {\n` -- an anchor for the FIRST argument
+// that baked in the SECOND. When the run learned to go red on a rotting
+// dataset the literal `true` became `!datasetRotting`, the slice returned "",
+// and this check failed on correct code. So did the identical anchor in
+// check-earnings-minute-wall. One anchor now, in scripts/lib/earnings-plan.mjs.
+const recordCall = sliceWarmEarningsRunRecord(route);
 check(
   "the run record carries the batch and the basis it was derived from",
   /checked: cleanQueue\.length/.test(recordCall) &&
