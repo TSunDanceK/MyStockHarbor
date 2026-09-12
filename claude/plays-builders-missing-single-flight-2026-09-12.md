@@ -71,3 +71,13 @@ Two fixes, and they are independent:
    read, which cuts ~4,200 writes per regeneration to ~6.
 
 Neither has been applied. This document records the finding only.
+
+## Why it went unnoticed for twelve days
+
+Recorded separately as
+`claude/traps/a-defect-found-in-one-file-lives-in-its-siblings.md`: #377/#378
+diagnosed the mechanism correctly and fixed the file the bug was found in, and
+nothing searched for the same shape in three near-identical siblings. All three
+take an NX lock, so a review scanning for "is there a lock" finds one in every
+file; the lock was never the missing piece. One `grep` for `waitFor` across
+`lib/server/*Builder.ts` is the whole check.
