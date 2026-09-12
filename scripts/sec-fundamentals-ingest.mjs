@@ -103,27 +103,143 @@ function trailingDilutedEps(facts) {
   }
   const quarters = [...byPeriod.values()].sort((a, b) => (a.end < b.end ? 1 : -1)).slice(0, 4);
   if (quarters.length < 4) {
-    return { eps: null, quarters: quarters.length, note: `only ${quarters.length} distinct quarters` };
+    // DIAGNOSTICS, NOT JUST A COUNT. XOM came back with "only 2 distinct quarters"
+    // and that is a symptom with several possible causes -- rows without start/end,
+    // annual-only reporting, or a day-window that is too tight. Reporting how many
+    // rows existed and how many survived each filter turns the next investigation
+    // into reading a number instead of re-deriving it.
+    const withPeriod = usd.filter((r) => r?.start && r?.end && typeof r.val === "number").length;
+    return {
+      eps: null,
+      quarters: quarters.length,
+      note:
+        `only ${quarters.length} distinct quarters — ${usd.length} rows in the unit, ` +
+        `${withPeriod} with start+end, ${byPeriod.size} in a 60-120 day frame`,
+    };
   }
   const eps = quarters.reduce((sum, q) => sum + q.val, 0);
   return { eps, quarters: 4, periods: quarters.map((q) => `${q.start}..${q.end}`), note: null };
 }
 
-/** Most recently filed common shares outstanding. */
+/**
+ * Most recently filed common shares outstanding — with the two ways this silently
+ * produces a WRONG NUMBER rather than no number, both found by running it.
+ *
+ * THE FIRST RUN RETURNED 941,481 SHARES FOR BRK.B, AS OF 2011-04-29. Berkshire
+ * class B has roughly 1.3 billion; 941,481 is a Class A-shaped figure fifteen
+ * years stale. It was not reported as a failure — the fetch succeeded, so the run
+ * printed "WITHIN THRESHOLD — dataset usable" while carrying a number that would
+ * have put a mega-cap's marketCap out by three orders of magnitude. A threshold
+ * that counts FETCH success and calls that data quality is the fail-open shape
+ * this repo keeps shipping.
+ *
+ * MULTI-CLASS FILERS ARE AMBIGUOUS, NOT MERELY AWKWARD. companyfacts flattens
+ * each class into its own row, so a dual-class company yields several rows sharing
+ * one `end` date with different `val`s, and nothing in the row says which class it
+ * is. Picking the newest by `filed` therefore picks a class at random. There is no
+ * safe guess, so this REFUSES rather than choosing: an ambiguous symbol is a
+ * failure with a stated reason, which a human can act on, instead of a plausible
+ * number nobody re-checks.
+ *
+ * STALENESS IS THE SECOND GUARD, and it is independent. A share count from 2011 is
+ * wrong even when it is unambiguous, and a company that stopped filing is exactly
+ * the case where the newest row is old.
+ */
+const MAX_SHARES_AGE_DAYS = Number(process.env.SEC_MAX_SHARES_AGE_DAYS ?? 400);
+
+/**
+ * Sum of the four most recent distinct quarterly periods for a USD concept. Same
+ * period-dedup discipline as the EPS path, for the same reason: companyfacts
+ * repeats a quarter across amendments and frames.
+ */
+function trailingSum(rows) {
+  if (!Array.isArray(rows)) return null;
+  const byPeriod = new Map();
+  for (const row of rows) {
+    if (!row?.start || !row?.end || typeof row.val !== "number") continue;
+    const days = (Date.parse(row.end) - Date.parse(row.start)) / 86400000;
+    if (!(days > 60 && days < 120)) continue;
+    const key = `${row.start}..${row.end}`;
+    const prev = byPeriod.get(key);
+    if (!prev || String(row.filed ?? "") > String(prev.filed ?? "")) byPeriod.set(key, row);
+  }
+  const q = [...byPeriod.values()].sort((a, b) => (a.end < b.end ? 1 : -1)).slice(0, 4);
+  return q.length === 4 ? q.reduce((sum, r) => sum + r.val, 0) : null;
+}
+
 function sharesOutstanding(facts) {
   const candidates = [
-    facts?.dei?.EntityCommonStockSharesOutstanding,
-    facts?.["us-gaap"]?.CommonStockSharesOutstanding,
-  ].filter(Boolean);
-  for (const node of candidates) {
-    const rows = node?.units?.shares;
-    if (!Array.isArray(rows) || !rows.length) continue;
-    const best = rows
-      .filter((r) => typeof r?.val === "number" && r.val > 0)
-      .sort((a, b) => String(b.filed ?? "").localeCompare(String(a.filed ?? "")))[0];
-    if (best) return { shares: best.val, asOf: best.end ?? null, filed: best.filed ?? null };
+    ["dei:EntityCommonStockSharesOutstanding", facts?.dei?.EntityCommonStockSharesOutstanding],
+    ["us-gaap:CommonStockSharesOutstanding", facts?.["us-gaap"]?.CommonStockSharesOutstanding],
+  ].filter(([, node]) => node);
+
+  for (const [concept, node] of candidates) {
+    const rows = (node?.units?.shares ?? []).filter(
+      (r) => typeof r?.val === "number" && r.val > 0 && r.end
+    );
+    if (!rows.length) continue;
+
+    const newestEnd = rows.map((r) => r.end).sort().at(-1);
+    const atNewest = rows.filter((r) => r.end === newestEnd);
+    const distinctVals = new Set(atNewest.map((r) => r.val));
+
+    if (distinctVals.size > 1) {
+      return {
+        shares: null,
+        asOf: newestEnd,
+        concept,
+        reject: `multi-class: ${distinctVals.size} different share counts share end=${newestEnd} ` +
+          `(${[...distinctVals].join(", ")}) — companyfacts does not say which class, so any pick is a guess`,
+      };
+    }
+
+    const best = atNewest.sort((a, b) => String(b.filed ?? "").localeCompare(String(a.filed ?? "")))[0];
+    const ageDays = (Date.now() - Date.parse(best.end)) / 86400000;
+    if (Number.isFinite(ageDays) && ageDays > MAX_SHARES_AGE_DAYS) {
+      return {
+        shares: null,
+        asOf: best.end,
+        concept,
+        reject: `stale: share count as of ${best.end} is ${Math.round(ageDays)} days old ` +
+          `(limit ${MAX_SHARES_AGE_DAYS})`,
+      };
+    }
+    return { shares: best.val, asOf: best.end, filed: best.filed ?? null, concept, reject: null };
   }
-  return { shares: null, asOf: null, filed: null };
+  return { shares: null, asOf: null, concept: null, reject: "no shares-outstanding concept found" };
+}
+
+// ── THE CROSS-CHECK, and why the frozen dump is the right yardstick ──────────
+// The multi-class and staleness guards above are structural: they catch the two
+// ways the extraction is KNOWN to go wrong. A magnitude check catches the ways it
+// is not yet known to go wrong, which is the category BRK.B fell into before it
+// was diagnosed.
+//
+// The frozen dump holds FMP's marketCap per symbol and the cached daily series.
+// shares x last close should land near FMP's figure; an order-of-magnitude
+// disagreement means the share count is a different class, a different unit, or a
+// different company. Per the standing rule, the frozen bars are ground truth for
+// COMPARISON, not for CORRECTNESS -- so a mismatch is reported as "these two
+// disagree and the SEC value is not safe to use unreviewed", never as "FMP is
+// right and SEC is wrong".
+const MAGNITUDE_LOW = Number(process.env.SEC_XCHECK_LOW ?? 0.5);
+const MAGNITUDE_HIGH = Number(process.env.SEC_XCHECK_HIGH ?? 2);
+
+function loadFrozen(dir) {
+  const out = { marketCap: new Map(), lastClose: new Map(), available: false };
+  try {
+    const fundPath = path.join(dir, "fundamentals.json");
+    if (fs.existsSync(fundPath)) {
+      const vals = JSON.parse(fs.readFileSync(fundPath, "utf8"))?.values ?? {};
+      for (const [sym, row] of Object.entries(vals)) {
+        if (typeof row?.marketCap === "number" && row.marketCap > 0) out.marketCap.set(sym, row.marketCap);
+      }
+      out.available = out.marketCap.size > 0;
+    }
+  } catch (e) {
+    console.log(`  (frozen fundamentals unreadable: ${String(e?.message ?? e)})`);
+  }
+  return out;
 }
 
 console.log("PHASE 5 — SEC fundamentals inputs (shares outstanding + trailing diluted EPS)");
@@ -154,13 +270,78 @@ for (const probe of ["BRK-B", "BRK.B", "BF-B", "BF.B"]) {
   console.log(`  spelling probe ${probe.padEnd(6)} ${cikByTicker.has(probe) ? `CIK ${cikByTicker.get(probe)}` : "absent"}`);
 }
 
-const symbols = SYMBOL_ARG
-  ? SYMBOL_ARG.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
-  : ["AAPL", "MSFT", "KO", "XOM", "BRK-B"];
-console.log(`\nsymbols requested: ${symbols.length} — ${symbols.join(", ")}`);
+// THE FULL ANALYSIS UNIVERSE BY DEFAULT, not a hand-picked sample. Ten mega-caps
+// answer "does the extraction work on easy names"; the coverage question is about
+// the other 690, and the shape of the failures is the deliverable.
+let symbols;
+if (SYMBOL_ARG) {
+  symbols = SYMBOL_ARG.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+  console.log(`\nsymbols from argument: ${symbols.length}`);
+} else {
+  const uniPath = path.join(OUT_DIR, "universe.json");
+  if (!fs.existsSync(uniPath)) {
+    console.error(`FATAL: no symbols given and no universe.json in ${OUT_DIR}.`);
+    process.exit(2);
+  }
+  const uni = JSON.parse(fs.readFileSync(uniPath, "utf8"));
+  symbols = (uni?.pickersSymbolsKey ?? []).map(String);
+  if (!symbols.length) {
+    console.error("FATAL: universe.json has no pickersSymbolsKey — refusing to run on an empty set.");
+    process.exit(2);
+  }
+  console.log(`\nsymbols from the frozen ANALYSIS UNIVERSE: ${symbols.length}`);
+}
+
+// RAW-ROW DIAGNOSTIC for named symbols. The multi-class guard fired zero times and
+// GOOGL -- genuinely dual-class -- came through at ratio 1.011, which is either
+// correct handling or luck. Those are distinguishable only by looking at the rows.
+const DEBUG_SYMBOLS = new Set(
+  (process.env.SEC_DEBUG_SYMBOLS ?? "GOOGL,BRK.B,BRK-B")
+    .split(",").map((x) => x.trim().toUpperCase()).filter(Boolean)
+);
+
+const frozen = loadFrozen(OUT_DIR);
+console.log(
+  frozen.available
+    ? `\ncross-check: ${frozen.marketCap.size} frozen FMP marketCap values available`
+    : `\ncross-check: UNAVAILABLE — no frozen fundamentals in ${OUT_DIR}. The magnitude ` +
+      `guard cannot run, and that is reported per symbol rather than passing silently.`
+);
+
+// Last close per symbol, read out of the frozen series rather than fetched.
+const lastClose = new Map();
+{
+  const barsPath = path.join(OUT_DIR, "history-bars.ndjson.gz");
+  if (fs.existsSync(barsPath)) {
+    const zlib = await import("node:zlib");
+    const readline = await import("node:readline");
+    const want = new Set(
+      (SYMBOL_ARG ? SYMBOL_ARG.split(",") : []).map((x) => x.trim().toUpperCase()).filter(Boolean)
+    );
+    const rl = readline.createInterface({
+      input: fs.createReadStream(barsPath).pipe(zlib.createGunzip()),
+      crlfDelay: Infinity,
+    });
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row?._meta || !row?.symbol) continue;
+        const sym = String(row.symbol);
+        if (want.size && !want.has(sym)) continue;
+        const daily = Array.isArray(row?.entry?.daily) ? row.entry.daily : [];
+        const close = daily[daily.length - 1]?.close;
+        if (typeof close === "number" && close > 0) lastClose.set(sym, close);
+      } catch {
+        // a truncated final line is not worth failing the ingest over
+      }
+    }
+  }
+}
 
 const rows = {};
 const failures = [];
+const rejected = [];
 const started = Date.now();
 
 for (const symbol of symbols) {
@@ -180,6 +361,68 @@ for (const symbol of symbols) {
     );
     const shares = sharesOutstanding(doc?.facts);
     const eps = trailingDilutedEps(doc?.facts);
+
+    if (DEBUG_SYMBOLS.has(symbol)) {
+      // WHAT companyfacts ACTUALLY CONTAINS, printed in full. The guard assumes a
+      // dual-class filer yields several rows sharing one end date. If companyfacts
+      // omits dimensional (per-class) facts and keeps only the default context,
+      // that assumption is wrong and the guard says nothing about dual-class
+      // safety. The rows settle it; reasoning about it would not.
+      for (const [label, node] of [
+        ["dei:EntityCommonStockSharesOutstanding", doc?.facts?.dei?.EntityCommonStockSharesOutstanding],
+        ["us-gaap:CommonStockSharesOutstanding", doc?.facts?.["us-gaap"]?.CommonStockSharesOutstanding],
+      ]) {
+        const dbg = node?.units?.shares ?? [];
+        console.log(`    [debug ${symbol}] ${label}: ${dbg.length} rows`);
+        for (const r of dbg.slice(-8)) {
+          console.log(
+            `      end=${r.end} val=${r.val} filed=${r.filed ?? "?"} form=${r.form ?? "?"}` +
+              `${r.frame ? ` frame=${r.frame}` : ""}`
+          );
+        }
+      }
+    }
+
+    // TRAILING BUYBACK, for the deviation hypothesis. If the ratio drifts above 1
+    // on heavy repurchasers, the cause is a share count from a filing cover date
+    // that predates buybacks since -- which makes the error SYSTEMATIC and
+    // one-directional rather than random, and therefore boundable. Measured, not
+    // asserted.
+    const buyback = trailingSum(
+      doc?.facts?.["us-gaap"]?.PaymentsForRepurchaseOfCommonStock?.units?.USD
+    );
+
+    // A STRUCTURAL REJECTION IS A FAILURE, NOT A NULL COLUMN. The first run
+    // recorded BRK.B as extracted-with-a-null and reported 0% failures; the whole
+    // point of the guards is that the run stops calling that a success.
+    if (shares.reject) {
+      rejected.push({ symbol, reason: shares.reject });
+      console.log(`  ${symbol.padEnd(7)} REJECTED — ${shares.reject}`);
+      continue;
+    }
+
+    // The magnitude cross-check. Only possible where both a frozen marketCap and a
+    // frozen last close exist; where they do not, that is SAID rather than passed.
+    const close = lastClose.get(symbol) ?? lastClose.get(symbol.replace(/\./g, "-"));
+    const fmpCap = frozen.marketCap.get(symbol) ?? frozen.marketCap.get(symbol.replace(/\./g, "-"));
+    let xcheck = { ran: false, note: "no frozen marketCap or close for this symbol" };
+    if (typeof close === "number" && typeof fmpCap === "number" && shares.shares) {
+      const implied = shares.shares * close;
+      const ratio = implied / fmpCap;
+      const ok = ratio >= MAGNITUDE_LOW && ratio <= MAGNITUDE_HIGH;
+      xcheck = { ran: true, impliedMarketCap: implied, frozenMarketCap: fmpCap, ratio, ok };
+      if (!ok) {
+        const reason =
+          `magnitude: shares x last close = ${implied.toExponential(3)} vs frozen FMP ` +
+          `marketCap ${fmpCap.toExponential(3)} (ratio ${ratio.toFixed(4)}, band ` +
+          `${MAGNITUDE_LOW}-${MAGNITUDE_HIGH}). The two sources disagree; the SEC share ` +
+          `count is not safe to use unreviewed. This does NOT establish which is right`;
+        rejected.push({ symbol, reason });
+        console.log(`  ${symbol.padEnd(7)} REJECTED — ${reason}`);
+        continue;
+      }
+    }
+
     rows[symbol] = {
       symbol,
       cik,
@@ -191,13 +434,17 @@ for (const symbol of symbols) {
       epsQuarters: eps.quarters,
       epsPeriods: eps.periods ?? null,
       epsNote: eps.note,
+      sharesConcept: shares.concept,
+      crossCheck: xcheck,
+      trailingBuybackUsd: buyback,
       // NO RAW FACTS. One companyfacts document is 3.79 MB parsed (AAPL), a third
       // of Upstash's 10 MB per-request ceiling, so storing it would fail any batch
       // write -- and the repo's fail-open handlers would swallow that error.
     };
     console.log(
       `  ${symbol.padEnd(7)} shares ${shares.shares ?? "—"} (as of ${shares.asOf ?? "—"}) · ` +
-        `EPS ${eps.eps?.toFixed(2) ?? "—"} over ${eps.quarters}q${eps.note ? ` [${eps.note}]` : ""}`
+        `EPS ${eps.eps?.toFixed(2) ?? "—"} over ${eps.quarters}q${eps.note ? ` [${eps.note}]` : ""}` +
+        (xcheck.ran ? ` · xcheck ratio ${xcheck.ratio.toFixed(3)} OK` : ` · xcheck not run`)
     );
   } catch (e) {
     failures.push({ symbol, reason: String(e?.message ?? e) });
@@ -208,19 +455,154 @@ for (const symbol of symbols) {
 const elapsed = (Date.now() - started) / 1000;
 const attempted = symbols.length;
 const ok = Object.keys(rows).length;
-const ratio = attempted ? failures.length / attempted : 0;
+// THE THRESHOLD NOW MEASURES USABLE OUTPUT, NOT SUCCESSFUL FETCHES. The first run
+// scored 0% failures while emitting a fifteen-year-stale share count for a
+// mega-cap, because a 200 response counted as a success. A rejected value is a
+// symbol this run did not deliver, and it belongs in the numerator.
+const unusable = failures.length + rejected.length;
+const ratio = attempted ? unusable / attempted : 0;
 
 console.log(`\n══ RESULT ══`);
 console.log(`  attempted        ${attempted}`);
 console.log(`  extracted        ${ok}`);
-console.log(`  failed           ${failures.length}  (${(ratio * 100).toFixed(1)}%)`);
+console.log(`  fetch failures   ${failures.length}`);
+console.log(`  REJECTED values  ${rejected.length}  <- passed the fetch, failed a sanity guard`);
+console.log(`  unusable total   ${unusable}  (${(ratio * 100).toFixed(1)}% of attempted)`);
 console.log(`  elapsed          ${elapsed.toFixed(1)}s  (${(attempted / Math.max(elapsed, 0.001)).toFixed(1)} req/s effective)`);
 const withEps = Object.values(rows).filter((r) => r.trailingDilutedEps != null).length;
 const withShares = Object.values(rows).filter((r) => r.sharesOutstanding != null).length;
 console.log(`  with shares      ${withShares} of ${ok}`);
 console.log(`  with 4q EPS      ${withEps} of ${ok}`);
 
-for (const f of failures) console.log(`  FAILED ${f.symbol}: ${f.reason}`);
+// FAILURE REASONS GROUPED, NOT LISTED. At 700 symbols a per-symbol list is
+// unreadable and the shape is what decides whether the gap is code or filer
+// behaviour. Names are printed only for the small buckets.
+const groupReasons = (arr) => {
+  const buckets = new Map();
+  for (const r of arr) {
+    const kind = String(r.reason).split(":")[0].trim();
+    if (!buckets.has(kind)) buckets.set(kind, []);
+    buckets.get(kind).push(r.symbol);
+  }
+  return [...buckets.entries()].sort((a, b) => b[1].length - a[1].length);
+};
+if (failures.length) {
+  console.log(`\n  FETCH FAILURES by kind:`);
+  for (const [kind, syms] of groupReasons(failures)) {
+    console.log(`    ${String(syms.length).padStart(4)} ${kind}`);
+    if (syms.length <= 12) console.log(`         ${syms.join(", ")}`);
+  }
+}
+if (rejected.length) {
+  console.log(`\n  REJECTED by guard:`);
+  for (const [kind, syms] of groupReasons(rejected)) {
+    console.log(`    ${String(syms.length).padStart(4)} ${kind}`);
+    if (syms.length <= 25) console.log(`         ${syms.join(", ")}`);
+  }
+}
+
+// ── EPS COVERAGE IS THE P/E COLUMN'S COVERAGE ────────────────────────────────
+// Stated as its own headline because it is the number that decides whether the
+// column can ship, and it is NOT the same as shares coverage. XOM showed the gap
+// is filer behaviour -- diluted EPS filed in annual frames -- so this will not be
+// 100% and the shortfall is not a bug to chase.
+const epsShort = Object.values(rows).filter((r) => r.trailingDilutedEps == null);
+console.log(`\n══ COVERAGE, AGAINST THE ${attempted}-SYMBOL DENOMINATOR ══`);
+const pctOf = (n) => `${((n / attempted) * 100).toFixed(1)}%`;
+console.log(`  usable SHARES      ${withShares} / ${attempted}  ${pctOf(withShares)}`);
+console.log(`  usable TTM EPS     ${withEps} / ${attempted}  ${pctOf(withEps)}   <- THE P/E COLUMN'S COVERAGE`);
+console.log(`  neither            ${attempted - ok} / ${attempted}  ${pctOf(attempted - ok)}  (rejected or failed outright)`);
+if (epsShort.length) {
+  const byNote = new Map();
+  for (const r of epsShort) {
+    const k = /only (\d+) distinct/.test(r.epsNote ?? "")
+      ? `only N distinct quarters (${(r.epsNote.match(/only (\d+)/) ?? [])[1]}q)`
+      : String(r.epsNote ?? "unknown");
+    byNote.set(k, (byNote.get(k) ?? 0) + 1);
+  }
+  console.log(`  EPS shortfall reasons, over ${epsShort.length} symbols with shares but no TTM EPS:`);
+  for (const [k, n] of [...byNote.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`    ${String(n).padStart(4)} ${k}`);
+  }
+}
+
+// ── THE MAGNITUDE DISTRIBUTION, AS A HISTOGRAM ───────────────────────────────
+const checked = Object.values(rows).filter((r) => r.crossCheck?.ran);
+console.log(`\n══ MAGNITUDE: shares x last close vs frozen FMP marketCap ══`);
+console.log(`  cross-checkable: ${checked.length} of ${ok} extracted (needs both a frozen marketCap and a close)`);
+if (checked.length) {
+  const ratios = checked.map((r) => r.crossCheck.ratio).sort((a, b) => a - b);
+  const q = (f) => ratios[Math.min(ratios.length - 1, Math.floor(f * (ratios.length - 1)))];
+  console.log(`  min ${q(0).toFixed(4)} · p05 ${q(0.05).toFixed(4)} · p25 ${q(0.25).toFixed(4)} · ` +
+    `MEDIAN ${q(0.5).toFixed(4)} · p75 ${q(0.75).toFixed(4)} · p95 ${q(0.95).toFixed(4)} · max ${q(1).toFixed(4)}`);
+  const BINS = [
+    ["< 0.90", (x) => x < 0.9],
+    ["0.90-0.95", (x) => x >= 0.9 && x < 0.95],
+    ["0.95-0.99", (x) => x >= 0.95 && x < 0.99],
+    ["0.99-1.01", (x) => x >= 0.99 && x <= 1.01],
+    ["1.01-1.05", (x) => x > 1.01 && x <= 1.05],
+    ["1.05-1.10", (x) => x > 1.05 && x <= 1.1],
+    ["> 1.10", (x) => x > 1.1],
+  ];
+  for (const [label, pred] of BINS) {
+    const n = ratios.filter(pred).length;
+    const bar = "#".repeat(Math.round((n / ratios.length) * 50));
+    console.log(`    ${label.padEnd(10)} ${String(n).padStart(4)}  ${bar}`);
+  }
+  const outside = checked
+    .filter((r) => r.crossCheck.ratio < 0.95 || r.crossCheck.ratio > 1.05)
+    .sort((a, b) => Math.abs(b.crossCheck.ratio - 1) - Math.abs(a.crossCheck.ratio - 1));
+  console.log(`\n  OUTSIDE 0.95-1.05: ${outside.length} of ${checked.length} ` +
+    `(${((outside.length / checked.length) * 100).toFixed(1)}%)`);
+  for (const r of outside.slice(0, 40)) {
+    console.log(
+      `    ${r.symbol.padEnd(7)} ratio ${r.crossCheck.ratio.toFixed(4)} · shares as of ${r.sharesAsOf} · ` +
+        `buyback(4q) ${r.trailingBuybackUsd == null ? "—" : r.trailingBuybackUsd.toExponential(2)}`
+    );
+  }
+  if (outside.length > 40) console.log(`    ... and ${outside.length - 40} more (see the JSON)`);
+
+  // ── THE BUYBACK HYPOTHESIS, TESTED RATHER THAN ASSERTED ────────────────────
+  // The proposal: a ratio above 1 means the share count predates repurchases made
+  // since the filing's cover date, so the error is SYSTEMATIC and one-directional
+  // and therefore boundable. If true, heavy repurchasers cluster above 1 and the
+  // correlation is positive. If the correlation is near zero, the deviation is
+  // something else and a 5% band cannot be justified on this reasoning.
+  const pairs = checked
+    .filter((r) => r.trailingBuybackUsd != null && r.trailingBuybackUsd > 0 && r.crossCheck.frozenMarketCap > 0)
+    .map((r) => ({
+      symbol: r.symbol,
+      intensity: r.trailingBuybackUsd / r.crossCheck.frozenMarketCap,
+      dev: r.crossCheck.ratio - 1,
+    }));
+  console.log(`\n  BUYBACK HYPOTHESIS — ${pairs.length} symbols with both a 4q buyback and a ratio`);
+  if (pairs.length >= 10) {
+    const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    const mx = mean(pairs.map((p) => p.intensity));
+    const my = mean(pairs.map((p) => p.dev));
+    const cov = mean(pairs.map((p) => (p.intensity - mx) * (p.dev - my)));
+    const sx = Math.sqrt(mean(pairs.map((p) => (p.intensity - mx) ** 2)));
+    const sy = Math.sqrt(mean(pairs.map((p) => (p.dev - my) ** 2)));
+    const r = sx > 0 && sy > 0 ? cov / (sx * sy) : 0;
+    const sorted = [...pairs].sort((a, b) => b.intensity - a.intensity);
+    const topDecile = sorted.slice(0, Math.max(1, Math.floor(pairs.length / 10)));
+    const botDecile = sorted.slice(-Math.max(1, Math.floor(pairs.length / 10)));
+    console.log(`    mean buyback intensity (4q spend / marketCap): ${(mx * 100).toFixed(2)}%`);
+    console.log(`    PEARSON r(intensity, ratio-1) = ${r.toFixed(4)}`);
+    console.log(`    heaviest-decile mean deviation ${(mean(topDecile.map((p) => p.dev)) * 100).toFixed(2)}%`);
+    console.log(`    lightest-decile mean deviation ${(mean(botDecile.map((p) => p.dev)) * 100).toFixed(2)}%`);
+    console.log(
+      Math.abs(r) >= 0.3
+        ? `    >>> SUPPORTED: the deviation tracks repurchase intensity, so the error is\n` +
+          `        systematic and one-directional. A bounded correction is defensible.`
+        : `    >>> NOT SUPPORTED at r=${r.toFixed(4)}. The deviation does NOT track buybacks,\n` +
+          `        so it cannot be bounded by this reasoning and a 5% band needs another\n` +
+          `        justification. Do not adopt the hypothesis on the AAPL anecdote.`
+    );
+  } else {
+    console.log(`    too few pairs (${pairs.length}) to compute a correlation worth reporting`);
+  }
+}
 
 const outPath = path.join(OUT_DIR, "SEC-FUNDAMENTALS.json");
 fs.writeFileSync(
@@ -233,6 +615,8 @@ fs.writeFileSync(
       attempted,
       extracted: ok,
       failures,
+      rejected,
+      unusable,
       failureRatio: ratio,
       elapsedSeconds: elapsed,
       rows,
