@@ -30,6 +30,8 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { JOBS, describeCron, type JobKey } from "./jobRuns";
 import { EARNINGS_STALE_AFTER_SECONDS } from "./earningsFreshness";
+import { TIER1_TTL_MS, TIER2_TTL_MS, readTier1 } from "./priceTiers";
+import { ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -125,7 +127,33 @@ export const DATASETS = {
   },
   pricePool: {
     label: "Price pool",
-    ttlSeconds: 60 * 15,
+    // THE SLOW TIER'S POLICY, and it was a typed `60 * 15` -- the FAST tier's.
+    //
+    // #420 split this dataset in two: ~200 tier-1 symbols refresh every 15
+    // minutes and the remaining ~560 every 60 (priceTtlMsFor). This registry
+    // kept the single 15-minute number, so the page judged every tier-2 symbol
+    // against a policy four times tighter than the one its own warm job holds
+    // it to -- which makes a healthy tier-2 symbol read as past TTL for 45
+    // minutes in every hour.
+    //
+    // Observed 2026-09-11 15:38 UTC, WITH THE MARKET OPEN, so the
+    // refreshWindow branch below does not explain it: `342 / 884`, `542 past
+    // TTL`, "61% of observed symbols past their own TTL". 542 against a tier-2
+    // population of roughly that size is the whole reading.
+    //
+    // This is the #417 defect reacquired through a different door -- a healthy
+    // dataset reading as broken every day -- and the door was a policy column
+    // that did not move when the policy did.
+    //
+    // TIER 2 IS THE HEADLINE because tier 2 is the DEFAULT: priceTtlMsFor
+    // returns TIER2_TTL_MS for any symbol not in the tier-1 set, including
+    // when the tier list is unreadable. The page shows the split beside it;
+    // the status logic reads this field and now judges each symbol against its
+    // own tier, so a tier-1 symbol that goes 20 minutes without a refresh is
+    // still a fault.
+    ttlSeconds: TIER2_TTL_MS / 1000,
+    fastTierTtlSeconds: TIER1_TTL_MS / 1000,
+    tieredPolicy: "price-tier-1",
     job: "warm-price-pool",
     coverage: "registered",
     // THE ONLY DATASET WHOSE REFRESHES ARE GATED ON THE MARKET BEING OPEN, and
@@ -229,7 +257,25 @@ export const DATASETS = {
      * somewhere to go that is not a second boolean.
      */
     refreshWindow?: "market-hours";
+    /**
+     * Set when this dataset's symbols are judged against TWO policies rather
+     * than one, naming the fast-tier membership list.
+     *
+     * DECLARED IN THE REGISTRY for the same reason refreshWindow is: the next
+     * split policy should arrive by declaring it, not by somebody remembering
+     * to edit a condition. Named rather than boolean so a second tiering later
+     * has somewhere to go.
+     *
+     * `ttlSeconds` is then the SLOW tier (the default, per priceTtlMsFor) and
+     * `fastTierTtlSeconds` the fast one. Both are required together; a dataset
+     * with one and not the other will not type-check.
+     */
+    tieredPolicy?: "price-tier-1";
+    fastTierTtlSeconds?: number;
   } & (
+    | { tieredPolicy: "price-tier-1"; fastTierTtlSeconds: number }
+    | { tieredPolicy?: never; fastTierTtlSeconds?: never }
+  ) & (
     | {
         /** The warm job that maintains this dataset. Its cadence is READ FROM
          * THE REGISTRY, never retyped here -- see describeCron in jobRuns.ts for
@@ -291,11 +337,54 @@ export async function markRefreshed(
   try {
     const members = symbols.map((s) => ({ score: atMs, member: s }));
     const p = redis.pipeline();
+    // ───────────────────────────────────────────────────────────────────────
+    // `xx` ON A REGISTERED DATASET: UPDATE THE SCORE, NEVER ADD THE MEMBER.
+    //
+    // THE CONTRACT THIS FILE ALREADY DOCUMENTS, forty lines above, in the
+    // comment on DATASETS:
+    //
+    //     registerSymbols(...)  declares the DENOMINATOR
+    //     markRefreshed(...)    supplies the NUMERATOR
+    //
+    // A bare zadd adds absent members, so markRefreshed was writing the
+    // denominator too -- and for `dailyHistory` that is not theoretical. Its
+    // only markRefreshed caller is writeHistoryEntry, reached from
+    // getDailyHistory, which is called by /stock/[symbol], its /earnings and
+    // /news sub-pages, /api/history, the dashboard, the insight snapshots and
+    // /markets/spx. So EVERY SYMBOL ANYONE OR ANY CRAWLER EVER LOOKED AT joined
+    // the daily-history denominator permanently, `^GSPC` included.
+    //
+    // THE EVIDENCE THAT THIS IS THE DOMINANT CAUSE, from the page's own
+    // numbers on 2026-09-11 rather than from reasoning about it:
+    //
+    //     dailyHistory   763 / 2892     registered from the universe + renders
+    //     fundamentals   759 /  884     registered from the universe
+    //     pricePool      342 /  884     registered from the universe
+    //
+    // All three are registered `nx` from the same rotating universe and none of
+    // them removes a symbol that leaves it, so universe churn inflates all
+    // three at the SAME rate. Two sit at 884 against an observed universe of
+    // ~762 -- about 122 of churn residue, ~16%. The third is at 2,892. Churn
+    // therefore accounts for roughly 122 of dailyHistory's 2,130 excess and the
+    // second writer accounts for the rest: about 94% of it. The growth rate
+    // agrees -- 842 in six days is ~140 new distinct symbols a day, which is
+    // crawler-shaped traffic across /stock/* and is not a 20%-per-day turnover
+    // of a 700-symbol universe that somehow left the other two datasets alone.
+    //
+    // WHY NOT APPLIED TO EVERY DATASET. screenerFundamentals, news and
+    // sectorNews are declared `coverage: "observed-only"` precisely because
+    // they have no registerSymbols caller -- markRefreshed adding members IS
+    // their denominator, and `xx` would empty them. So the behaviour is driven
+    // off the declaration that already means exactly this, and
+    // check-cache-health-page.mjs already asserts that declaration matches the
+    // tree.
+    const addsMembers = DATASETS[dataset].coverage === "observed-only";
     // Upstash's zadd takes (key, ...members); chunked so one enormous warm run
     // cannot build a single oversized command.
     for (let i = 0; i < members.length; i += 500) {
       const slice = members.slice(i, i + 500);
-      p.zadd(queueKey(dataset), slice[0], ...slice.slice(1));
+      if (addsMembers) p.zadd(queueKey(dataset), slice[0], ...slice.slice(1));
+      else p.zadd(queueKey(dataset), { xx: true }, slice[0], ...slice.slice(1));
     }
     p.zrem(deferKey(dataset), ...symbols);
     await p.exec();
@@ -315,9 +404,14 @@ export async function markRefreshed(
  * symbols that already succeeded, so a dataset missing half the universe would
  * report 100% fresh on the half it has.
  */
-export async function registerSymbols(dataset: DatasetKey, symbols: string[]): Promise<void> {
+export async function registerSymbols(
+  dataset: DatasetKey,
+  symbols: string[],
+  options: { authoritative?: boolean } = {}
+): Promise<void> {
   if (!redis || !symbols.length) return;
   try {
+    if (options.authoritative) await reconcileToList(dataset, symbols);
     const p = redis.pipeline();
     for (let i = 0; i < symbols.length; i += 500) {
       const slice = symbols.slice(i, i + 500).map((s) => ({ score: 0, member: s }));
@@ -329,6 +423,76 @@ export async function registerSymbols(dataset: DatasetKey, symbols: string[]): P
     // exactly the reading this key exists to prevent.
     p.set(seededKey(dataset), Date.now(), { nx: true });
     await p.exec();
+  } catch {
+    // bookkeeping -- never throws into the caller
+  }
+}
+
+/**
+ * The smallest list this file will accept as a whole universe.
+ *
+ * DERIVED, NOT TYPED. The reconcile below deletes every tracked symbol absent
+ * from its argument, so a caller that hands it a truncated list would silently
+ * shrink a denominator -- and a shrinking denominator makes every ratio on
+ * /cache-health look BETTER, which is the direction nobody investigates. Half
+ * the analysis cap is a floor no real universe has ever been near and every
+ * partial one would be well under.
+ *
+ * Same shape as writeTier1's "NEVER WRITE AN EMPTY LIST": the guard is against
+ * the caller's own bad day, not against a bug in this function.
+ */
+const AUTHORITATIVE_FLOOR = Math.floor(ANALYSIS_UNIVERSE_CAP / 2);
+
+/**
+ * Remove tracked symbols that are absent from the caller's authoritative list.
+ *
+ * WHY THIS IS NEEDED AT ALL, given `xx` on markRefreshed stops the bleeding:
+ * `xx` stops NEW members arriving, it does not remove the ones already there.
+ * dailyHistory is carrying ~2,130 symbols that were never universe members,
+ * and left alone they would age one by one into the `stale` column -- so
+ * fixing the cause without clearing the backlog would make that row look WORSE
+ * for months while being more correct. Both halves or neither.
+ *
+ * OPT-IN, AND ONLY ONE CALLER USES IT. Four other sites call registerSymbols
+ * with what their comments describe as the whole universe, and pruning those
+ * too would make every denominator mean "currently maintained", which is the
+ * better definition. It is not done here because "the comment says it is the
+ * whole universe" is not the same as proving it for a job that refreshes a
+ * slice per run, and a wrong prune fails in the reassuring direction. The
+ * dailyHistory caller is the one where the list is provably the same `universe`
+ * array that is then handed to getDailyHistoryBulk two lines later.
+ *
+ * DEFER ENTRIES GO TOO, matching deregisterSymbols: a deferral for a symbol
+ * nothing tracks any more is an orphan in a set that only claimStalest prunes.
+ */
+async function reconcileToList(dataset: DatasetKey, symbols: string[]): Promise<void> {
+  if (!redis) return;
+  const keep = new Set(symbols.map((s) => String(s).toUpperCase()).filter(Boolean));
+  if (keep.size < AUTHORITATIVE_FLOOR) {
+    console.warn(
+      `[staleness] refusing to reconcile ${dataset}: ${keep.size} symbols is below ` +
+        `the ${AUTHORITATIVE_FLOOR} floor, so this list is a partial one and ` +
+        `pruning against it would shrink the denominator rather than correct it`
+    );
+    return;
+  }
+  try {
+    const tracked = ((await redis.zrange<string[]>(queueKey(dataset), 0, -1)) ?? []).map(String);
+    const drop = tracked.filter((sym) => !keep.has(sym.toUpperCase()));
+    if (!drop.length) return;
+    const p = redis.pipeline();
+    for (let i = 0; i < drop.length; i += 500) {
+      const slice = drop.slice(i, i + 500);
+      p.zrem(queueKey(dataset), ...slice);
+      p.zrem(deferKey(dataset), ...slice);
+    }
+    await p.exec();
+    // LOUD, because a silent prune is indistinguishable from a silent wipe.
+    console.log(
+      `[staleness] ${dataset}: reconciled to ${keep.size} authoritative symbols, ` +
+        `dropped ${drop.length} no longer maintained (${drop.slice(0, 10).join(", ")}` +
+        `${drop.length > 10 ? ", ..." : ""})`
+    );
   } catch {
     // bookkeeping -- never throws into the caller
   }
@@ -442,6 +606,15 @@ export async function readDeferred(dataset: DatasetKey): Promise<Set<string>> {
  * denominator has run away. A truncated list still detects a fault; it only
  * understates how big one is, and the caller has `stale` from
  * readDatasetHealth for the true count.
+ *
+ * SINGLE-POLICY DATASETS ONLY, and that is a real limitation rather than a
+ * caveat. `ttlSeconds` is now the SLOW tier for a dataset that declares
+ * `tieredPolicy`, so calling this for one would judge its fast-tier symbols
+ * four times too leniently and quietly under-report them -- the same
+ * one-policy-for-a-two-policy-dataset defect readTieredHealth exists to fix,
+ * one layer up. Its only caller today is warm-earnings, which is not tiered,
+ * and scripts/check-cache-health-accuracy.mjs asserts that every call site
+ * names an untiered dataset so this stays true by check rather than by luck.
  */
 export async function readPastTtl(
   dataset: DatasetKey,
@@ -540,7 +713,112 @@ export type DatasetHealth = {
    * page must render this state distinctly rather than showing the number.
    */
   coverageEstablished: boolean;
+  /**
+   * The per-tier breakdown, for a dataset whose symbols are judged against more
+   * than one policy. Null for every single-policy dataset, which is all of them
+   * but the price pool.
+   *
+   * `stale` above is the SUM of these, so the page's status logic needs no
+   * knowledge of tiering at all -- it reads one number that is now correct
+   * instead of one that was computed against the wrong policy for two thirds of
+   * the population. This field exists so the page can SHOW the split, which is
+   * the half of the fix that makes the number checkable by eye.
+   */
+  tiers: DatasetTier[] | null;
 };
+
+export type DatasetTier = {
+  label: string;
+  ttlSeconds: number;
+  /** Tracked symbols in this tier. */
+  tracked: number;
+  /** Of those, past THIS tier's policy (never-refreshed excluded). */
+  stale: number;
+};
+
+/**
+ * Split a tiered dataset's staleness by tier, judging each symbol against its
+ * own policy.
+ *
+ * TWO COMMANDS, NOT A SCAN, which is the constraint this whole file is shaped
+ * by. The naive version reads every member's score; this reads:
+ *
+ *   ZCOUNT over the SLOW cutoff   -- everything past the slow policy, both tiers
+ *   ZMSCORE over the tier-1 list  -- exact scores for the ~200 fast symbols
+ *
+ * and derives the rest by subtraction, because {past the slow cutoff} is a
+ * subset of {past the fast cutoff} and the fast tier's exact scores are known.
+ * Tier 1 is capped at presets + 100, so the second command's size is bounded by
+ * a constant rather than by the universe.
+ *
+ * AN UNREADABLE TIER LIST DEGRADES TO ALL-TIER-2, which is exactly what
+ * priceTtlMsFor itself does with an empty set. The page then judges everything
+ * at 60 minutes -- the lenient direction, and the same answer the code under
+ * test would give. Degrading the other way would recreate the bug being fixed.
+ */
+async function readTieredHealth(
+  dataset: DatasetKey,
+  slowTtlSeconds: number,
+  fastTtlSeconds: number,
+  nowMs: number
+): Promise<{ stale: number; tiers: DatasetTier[] } | null> {
+  if (!redis) return null;
+  try {
+    const fastMembers = Array.from(await readTier1());
+    const slowCutoff = nowMs - slowTtlSeconds * 1000;
+    const fastCutoff = nowMs - fastTtlSeconds * 1000;
+
+    const [trackedRaw, pastSlowAll] = await Promise.all([
+      redis.zcard(queueKey(dataset)),
+      redis.zcount(queueKey(dataset), 1, slowCutoff),
+    ]);
+    const tracked = Number(trackedRaw) || 0;
+
+    let fastTracked = 0;
+    let fastStale = 0;
+    let fastPastSlow = 0;
+    // Chunked for the same request-size reason as every other bulk command in
+    // this file, even though the tier-1 cap makes one chunk the normal case.
+    for (let i = 0; i < fastMembers.length; i += 500) {
+      const slice = fastMembers.slice(i, i + 500);
+      if (!slice.length) continue;
+      // Awaited in the loop on purpose: bounded by the tier-1 cap, and one
+      // request per chunk is the point everywhere else in this codebase.
+      const scores = (await redis.zmscore(queueKey(dataset), slice)) as
+        | (number | null)[]
+        | null;
+      if (!Array.isArray(scores)) continue;
+      for (const raw of scores) {
+        if (raw === null || raw === undefined) continue;
+        const score = Number(raw);
+        if (!Number.isFinite(score)) continue;
+        fastTracked++;
+        // Score 0 is NEVER-REFRESHED and is counted separately everywhere else
+        // on this page; folding it in here would double-report it against the
+        // `never` column beside it.
+        if (score < 1) continue;
+        if (score <= fastCutoff) fastStale++;
+        if (score <= slowCutoff) fastPastSlow++;
+      }
+    }
+
+    const slowTracked = Math.max(0, tracked - fastTracked);
+    const slowStale = Math.max(0, (Number(pastSlowAll) || 0) - fastPastSlow);
+
+    return {
+      stale: fastStale + slowStale,
+      tiers: [
+        { label: "fast", ttlSeconds: fastTtlSeconds, tracked: fastTracked, stale: fastStale },
+        { label: "rest", ttlSeconds: slowTtlSeconds, tracked: slowTracked, stale: slowStale },
+      ],
+    };
+  } catch {
+    // Fail open to the single-policy reading. It is the number this page showed
+    // before, so a failure here is a regression to the old behaviour rather
+    // than a blank row.
+    return null;
+  }
+}
 
 /**
  * Aggregates for one dataset. Four O(log n) commands, no scan, no per-symbol
@@ -563,11 +841,13 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     coverageEstablished: def.coverage === "registered",
     marketHoursOnly:
       "refreshWindow" in def && def.refreshWindow === "market-hours",
+    tiers: null,
   };
   if (!redis) return base;
 
   try {
-    const cutoff = Date.now() - def.ttlSeconds * 1000;
+    const nowMs = Date.now();
+    const cutoff = nowMs - def.ttlSeconds * 1000;
     const [tracked, stale, never, deferred, oldest, seeded] = await Promise.all([
       redis.zcard(queueKey(dataset)),
       // `1` excludes the never-refreshed (score 0) so the two counts do not
@@ -582,10 +862,19 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     const oldestScore = Array.isArray(oldest) && oldest.length >= 2 ? Number(oldest[1]) : null;
     const trackedN = Number(tracked) || 0;
 
+    // JUDGED PER TIER WHERE THE REGISTRY SAYS SO. `stale` above came from one
+    // ZCOUNT against one cutoff, which is the right answer for eight of the
+    // nine datasets and was wrong for two thirds of the ninth.
+    const tiered =
+      "tieredPolicy" in def && def.tieredPolicy && typeof def.fastTierTtlSeconds === "number"
+        ? await readTieredHealth(dataset, def.ttlSeconds, def.fastTierTtlSeconds, nowMs)
+        : null;
+
     return {
       ...base,
       tracked: trackedN,
-      stale: Number(stale) || 0,
+      stale: tiered ? tiered.stale : Number(stale) || 0,
+      tiers: tiered ? tiered.tiers : null,
       never: Number(never) || 0,
       deferred: Number(deferred) || 0,
       oldestMs: oldestScore && oldestScore > 0 ? oldestScore : null,
