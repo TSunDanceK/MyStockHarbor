@@ -17,6 +17,22 @@
 // does NOT 403 the whole request -- it silently falls back to the normal
 // cached response, since force isn't required to use this endpoint at
 // all; only the expensive bypass needs gating.
+// maxDuration IS SET BECAUSE THE BUILDER NOW WAITS, and this is the only entry
+// point that can reach that wait: app/plays/*/page.tsx calls the builder with
+// `cacheOnly: true`, so an ISR regeneration never builds and never waits. This
+// route is `force-dynamic` and is fetched by the page on mount, so it is where
+// a cold-cache build actually happens.
+//
+// This route set no maxDuration, so it ran on whatever the platform default
+// happens to be. Per app/api/jobs/warm-earnings/route.ts, on Vercel that
+// default is NOT a fixed number: 300s for a Pro team with Fluid compute enabled
+// and 15s for a Pro team without it, nothing in this repo records which this
+// project is, and the Fluid setting is a dashboard toggle that can change
+// WITHOUT A COMMIT. Inheriting it is the wrong basis for a path that now waits
+// up to DESCENDING_MAX_WAIT_MS (12s) before it even starts building -- under a 15s
+// default that is 80% of the budget spent waiting. warm-earnings set this
+// explicitly for exactly this reason; so does this route.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
