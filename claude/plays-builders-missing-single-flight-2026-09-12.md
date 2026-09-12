@@ -45,9 +45,32 @@ alone (6 per single-symbol read — `redisBandwidth.ts:209–218` via
 
 - **Warm cache:** the lock loser returns cached data. The 1-hour
   `PLAYS_REDIS_TTL_SECONDS` outlives the 30-minute `revalidate`, so this is the
-  normal case and the ISR window is a real bound — 48/day/page.
-- **Cold cache:** the window bounds nothing. Every concurrent request runs its own
-  full build. N simultaneous requests cost N × 4,200 writes, not 4,200.
+  normal case.
+- **Cold cache:** every concurrent request runs its own full build. N simultaneous
+  requests cost N × 4,200 writes, not 4,200.
+
+## Correction, same day: the ISR window was never the bound
+
+An earlier revision of this document said the exposure was bounded at 48
+regenerations/day/page by `revalidate = 1800`. **It is not bounded by that at
+all.** All three pages call the builder with `cacheOnly: true`
+(`app/plays/page.tsx:55` and siblings), which returns 503 on a miss and **never
+builds**. So an ISR regeneration cannot reach the lock, the build, or the wait.
+
+The builds happen in `app/api/plays/route.ts` and its two siblings — all
+`force-dynamic`, all fetched by the page on mount. There is **no ISR window
+limiting them**: every visitor's mount-time fetch against a cold cache is a
+candidate builder. The `force=1` path has been gated behind
+`EARNINGS_BACKFILL_KEY` plus a per-IP lockout since 2026-07-20, so the
+*deliberate* expensive path is closed; the *accidental* one, N concurrent
+ordinary requests on a cold cache, was not.
+
+This is the third unit this same quantity has been attached to in one day — per
+pickers build, then per ISR regeneration, now per API request — which makes the
+document recording that error an instance of it. See
+`claude/traps/a-derived-quantity-attached-to-the-wrong-event.md`, and read its
+rule as applying to this file too: **name the event and check it, every time the
+number is reused.**
 
 The cold-cache window is reachable: a deploy empties the in-memory memo, and a key
 version bump, an eviction, or a lapsed TTL empties Redis. A deploy plus a traffic
