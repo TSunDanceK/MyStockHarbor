@@ -289,6 +289,107 @@ if (missingEither.length) {
   console.log(`  ALL missing industry-or-sector: ${missingEither.join(", ")}`);
 }
 
+// ── SYMBOL-SHAPE PROBE: A LATENT SCALING BUG, NOT ONE BLANK CELL ─────────────
+// WHY THIS IS NOT A BRK.B QUESTION. `buildFmpSymbol` (lib/server/historyCache.ts:378)
+// maps dot -> dash, it is the ONLY such mapping in the codebase, and it has exactly
+// one call site (:1320) -- on the BARS path. fundamentalsCache.ts has no equivalent:
+// `cleanSymbol` DELIBERATELY preserves dots ("keeps the dot and hyphen that real
+// tickers use (BRK.B, PBR-A)"), so :568 requests /stable/profile?symbol=BRK.B and
+// :692 keys the result on the dotted spelling.
+//
+// So the rule is structural: EVERY DOTTED TICKER GETS BARS AND NO TAXONOMY. Today
+// the 700-symbol analysis universe happens to hold exactly one dotted ticker, which
+// makes the bug read as cosmetic. It is not -- BRK.A, BF.A, BF.B and the rest of the
+// dual-class universe all carry dots, and growing the universe to 1,500 or 3,000 is
+// on the roadmap. The bug manifests once BECAUSE THE UNIVERSE IS SMALL.
+//
+// This probe measures two things the inference cannot supply on its own: the size of
+// the affected class today, and whether the screener cache holds the DASHED spelling
+// (it is fed by FMP's own screener endpoint, so it carries FMP's spelling). A dashed
+// key present means the data was there all along under a name nothing looks up --
+// which settles the cause with no FMP call, and makes the fix a mapping rather than
+// a backfill.
+console.log(`\n══ SYMBOL-SHAPE PROBE — the dual-class class, not one ticker ══`);
+
+const DOTTED = /\./;
+const variantsOf = (sym) => ({
+  dotted: sym.replace(/-/g, "."),
+  dashed: sym.replace(/\./g, "-"),
+});
+
+// Every awkward-shaped symbol ANYWHERE in the dump, not just in the analysis
+// universe -- a dashed key sitting outside the universe is exactly the finding.
+const shapeCandidates = new Set();
+for (const set of Object.values(datasets)) {
+  for (const sym of set) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
+}
+for (const sym of analysis) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
+for (const sym of unionAll) if (/[.-]/.test(sym)) shapeCandidates.add(sym);
+
+const dottedInAnalysis = [...analysis].filter((s) => DOTTED.test(s)).sort();
+console.log(`  dotted tickers in the ${analysis.size}-symbol ANALYSIS universe: ${dottedInAnalysis.length}` +
+  (dottedInAnalysis.length ? ` — ${dottedInAnalysis.join(", ")}` : ""));
+console.log(`  awkward-shaped (dot or hyphen) symbols anywhere in the dump: ${shapeCandidates.size}`);
+console.log(`  CLASS SIZE TODAY IS THE POINT: one manifestation is not one bug.`);
+
+// The pairs table. For each candidate, does each spelling appear in the datasets
+// that matter -- and does the OTHER spelling appear where this one is missing?
+const SHAPE_DATASETS = [
+  ["history", datasets.history],
+  ["profile-key", datasets["profile (key present)"]],
+  ["screener", datasets["screener-fundamentals"]],
+  ["industry-either", withIndustryEither],
+  ["sector-either", withSectorEither],
+];
+
+const shapeRows = {};
+const splitSpelling = [];
+for (const sym of [...shapeCandidates].sort()) {
+  const { dotted, dashed } = variantsOf(sym);
+  const row = { dotted, dashed, inAnalysis: analysis.has(sym), datasets: {} };
+  for (const [label, set] of SHAPE_DATASETS) {
+    row.datasets[label] = {
+      dotted: set.has(dotted),
+      dashed: dotted === dashed ? null : set.has(dashed),
+    };
+  }
+  shapeRows[sym] = row;
+
+  // THE FINDING TO LOOK FOR: the two spellings disagree within one dataset. That is
+  // the same ticker filed under two names, and it means a lookup by one spelling
+  // misses data that is present under the other.
+  const disagrees = SHAPE_DATASETS.filter(([, set]) => {
+    if (dotted === dashed) return false;
+    return set.has(dotted) !== set.has(dashed);
+  }).map(([label]) => label);
+  if (disagrees.length) splitSpelling.push({ symbol: sym, dotted, dashed, disagrees });
+}
+
+for (const sym of [...shapeCandidates].sort()) {
+  const row = shapeRows[sym];
+  const cells = SHAPE_DATASETS.map(([label]) => {
+    const d = row.datasets[label];
+    const mark = (v) => (v === null ? "·" : v ? "Y" : "n");
+    return `${label}=${mark(d.dotted)}/${mark(d.dashed)}`;
+  }).join("  ");
+  console.log(`  ${sym.padEnd(8)} ${row.inAnalysis ? "[universe]" : "[   -    ]"}  dot/dash: ${cells}`);
+}
+
+if (splitSpelling.length) {
+  console.log(`\n  ★ SPLIT SPELLING FOUND — ${splitSpelling.length} symbol(s) filed under two names:`);
+  for (const r of splitSpelling) {
+    console.log(`    ${r.dotted} vs ${r.dashed} — disagree in: ${r.disagrees.join(", ")}`);
+  }
+  console.log(`    CAUSE SETTLED WITHOUT AN FMP CALL. The data exists under a spelling`);
+  console.log(`    nothing looks up, so the fix is a mapping on the fundamentals path,`);
+  console.log(`    not a backfill. Worth doing BEFORE the universe grows, not after.`);
+} else {
+  console.log(`\n  NO SPLIT SPELLING in the frozen dump. The dashed variant is absent too,`);
+  console.log(`  so this dump CANNOT settle whether FMP rejects the dotted spelling --`);
+  console.log(`  that stays inference and needs an FMP call to confirm. Say so; do not`);
+  console.log(`  report the absence as proof of either direction.`);
+}
+
 // ── TARGETED SYMBOL LOOKUP ───────────────────────────────────────────────────
 // The capability historyStaleNewestSymbols has never had: answer "where is this
 // symbol, across every dataset" without a per-symbol investigation.
@@ -360,6 +461,16 @@ const out = {
   },
   coverage: rows,
   symbolLookup: lookupOut,
+  // The class, not the instance: how many awkward-shaped tickers exist, and whether
+  // any is filed under two spellings. See the SYMBOL-SHAPE PROBE comment above.
+  symbolShape: {
+    dottedInAnalysisUniverse: dottedInAnalysis,
+    dottedInAnalysisUniverseCount: dottedInAnalysis.length,
+    awkwardShapedAnywhereCount: shapeCandidates.size,
+    splitSpelling,
+    splitSpellingCount: splitSpelling.length,
+    rows: shapeRows,
+  },
 };
 const outPath = path.join(DIR, "ANALYSIS.json");
 fs.writeFileSync(outPath, JSON.stringify(out, null, 2));
