@@ -52,5 +52,14 @@ export function emitPayload(name, text, { requested = requestedPayload() } = {})
   console.log(`\n${BEGIN} ${name} bytes=${bytes}`);
   console.log(text);
   console.log(`${END} ${name} bytes=${bytes}`);
+
+  // ── A PER-LINE CENSUS, BECAUSE THE TOTAL SAYS "WRONG" BUT NOT "WHERE" ─────
+  // The payload is read back out of a job log and copied into a fixture BY
+  // HAND, which is the error-prone step this whole module exists around. A
+  // total byte count catches a bad copy — it caught an 8-byte slip across 40
+  // lines — but then leaves you bisecting 40 lines by eye to find it. The
+  // census makes the mismatch point at its own line. Costs ~5 bytes per line.
+  const census = text.split("\n").map((l) => Buffer.byteLength(l, "utf8")).join(",");
+  console.log(`[capture] ${name} line-bytes: ${census}`);
   return true;
 }
