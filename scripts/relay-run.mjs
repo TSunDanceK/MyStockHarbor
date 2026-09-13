@@ -106,6 +106,10 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Read-only: asks data.sec.gov/submissions whether a registrant is still
+  // filing. Absence from the ticker file is not proof of deregistration, and
+  // retiring a symbol on a lookup miss would discard its filing history.
+  "sec-symbol-status": { script: "scripts/sec-symbol-status.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

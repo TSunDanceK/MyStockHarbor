@@ -154,6 +154,7 @@ jobs:
             task.log
             ${{ steps.locate.outputs.dir }}/*.json
             data/sec/*.json
+            sec-symbol-status.json
           retention-days: 90
           if-no-files-found: warn
 
