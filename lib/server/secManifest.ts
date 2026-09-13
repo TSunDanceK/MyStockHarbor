@@ -120,6 +120,8 @@ export type SecManifestEntry = {
    * tells step 3 which kind of re-read to do.
    */
   reverifyReason?: "periodic-report" | "amendment" | "unconfirmed" | null;
+  /** When re-reading was first requested. The queue drains oldest-first. */
+  enqueuedAt?: number | null;
 };
 
 export type SecManifest = {
@@ -167,6 +169,7 @@ export function emptyEntry(cik: string | null, exchange: string | null = null): 
     lastAmendment: null,
     ambiguousSameDayFilings: null,
     reverifyReason: null,
+    enqueuedAt: null,
     notInTickerMapSince: null,
     absentRefreshCount: 0,
     delisted: false,
@@ -778,4 +781,99 @@ export function exchangeHistogram(manifest: SecManifest): Record<string, number>
     out[key] = (out[key] ?? 0) + 1;
   }
   return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
+}
+
+// ── The re-read queue ───────────────────────────────────────────────────────
+//
+// THERE IS NO CONDITIONAL CHECK, AND THAT IS MEASURED RATHER THAN ASSUMED.
+// Do not add an If-Modified-Since here later and take the silence for success.
+//
+// Probed 2026-09-13 against ARM, HSBC and AAPL (scripts/sec-reread-probe.mjs,
+// relay task `sec-reread`), every conditional paired with a negative control:
+//
+//   companyfacts   Last-Modified ABSENT, ETag ABSENT   on all three
+//   submissions    Last-Modified ABSENT, ETag ABSENT   on all three
+//
+// No validator is offered anywhere, so a conditional request is not something
+// that works badly here -- it is something that cannot be expressed. This
+// re-tests build-brief §3.7 rather than trusting it.
+//
+// THE isXBRL FLAG WAS THE OTHER CANDIDATE AND IT SPLITS THE WRONG WAY:
+//
+//   ARM    23 of 23 6-Ks tagged   -> gates nothing, every 6-K re-reads anyway
+//   HSBC    0 of 25 6-Ks tagged   -> a quarter reported via 6-K is
+//                                    indistinguishable from a press release
+//
+// It over-triggers on one filer and under-triggers on the other. No threshold
+// fixes both, and a filer-specific rule is a heuristic that fails silently on
+// the filer nobody tested. So a 6-K costs a full re-read, and the DRAIN RATE is
+// the only lever. That is a deliberate acceptance, not an oversight.
+//
+// WHY THAT IS AFFORDABLE, measured over the same four days:
+//   49 distinct 6-K filers + 75 distinct 8-K filers / 4 days ~= 30 events/day
+//   ~150 KB wire each (ARM 50,774 · HSBC ~113,000 · AAPL 271,819)
+//   => 4-5 MB/day against 10 requests/SECOND and no daily cap
+// Bandwidth and rate limit are both non-issues.
+
+/**
+ * How many re-reads one drain invocation may perform.
+ *
+ * SIZED AGAINST WORK PER DOCUMENT, AND THE MEASUREMENT MOVED THE ANSWER.
+ * Parse time was expected to be the binding constraint; measured, it is not.
+ * A synthetic companyfacts-shaped document of AAPL's decoded size:
+ *
+ *   3.80 MB decoded · JSON.parse median 21 ms · ~182 MB/s
+ *   heap delta 5.7 MB, about 1.5x the decoded size · 24,840 fact rows
+ *
+ * So a full day's ~30 re-reads is well under a second of parse. What the
+ * numbers actually constrain is CONCURRENCY, not count: ten documents parsed in
+ * parallel is ~57 MB of live heap on top of everything else the function holds,
+ * and the decoded document must never be retained -- extract, keep the ~20 KB
+ * fact set, discard (build brief §4: never store raw companyfacts).
+ *
+ * 40 per invocation therefore clears a normal day many times over while leaving
+ * the 300 s budget dominated by network round-trips, which at ~0.5-1 s each is
+ * the real per-symbol cost. The backfill is what makes a backlog large, and it
+ * drains over days by design rather than in one run.
+ *
+ * MEASURED IN THE AGENT SANDBOX, NOT IN A VERCEL FUNCTION. Treat as an order of
+ * magnitude; re-measure in situ before raising it.
+ */
+export const SEC_REREAD_DRAIN_PER_RUN = 40;
+
+/** Re-read one document at a time. See the heap figures above. */
+export const SEC_REREAD_CONCURRENCY = 1;
+
+/**
+ * The queue, read straight off the manifest.
+ *
+ * THE MANIFEST IS THE QUEUE. A separate Redis structure would add commands to
+ * every run against a budget of three, and the flag already says who is waiting.
+ * Ordered so the drain has nothing left to decide:
+ *
+ *   amendment        first -- a restatement changes charts already published
+ *   periodic-report  next  -- the quarter actually landed
+ *   unconfirmed      last  -- a 6-K or 8-K that probably carries nothing
+ *
+ * and oldest-first within each, so nothing starves behind a busy filer.
+ */
+export function secRereadQueue(
+  manifest: SecManifest,
+  limit = SEC_REREAD_DRAIN_PER_RUN
+): { symbol: string; reason: string; enqueuedAt: number | null }[] {
+  const rank = { amendment: 0, "periodic-report": 1, unconfirmed: 2 } as Record<string, number>;
+  return Object.entries(manifest.symbols)
+    .filter(([, e]) => e.needsReverify && e.cik)
+    .map(([symbol, e]) => ({
+      symbol,
+      reason: e.reverifyReason ?? "unconfirmed",
+      enqueuedAt: e.enqueuedAt ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        (rank[a.reason] ?? 3) - (rank[b.reason] ?? 3) ||
+        (a.enqueuedAt ?? 0) - (b.enqueuedAt ?? 0) ||
+        (a.symbol < b.symbol ? -1 : 1)
+    )
+    .slice(0, limit);
 }

@@ -25,6 +25,22 @@ import { getEasternParts } from "./marketHours";
 export const PERIODIC_FORMS = ["10-Q", "10-K", "20-F", "6-K"] as const;
 
 /**
+ * Forms that trigger a RE-READ without being a period report.
+ *
+ * 8-K is a domestic filer's material-event notice, and §3.8's Item 4.02 (a
+ * non-reliance determination, i.e. "our previous numbers were wrong") arrives on
+ * one. It must therefore enqueue a re-read -- but it must NOT set lastAccession,
+ * because an 8-K is not the quarter. 75 distinct 8-K filers over the measured
+ * four days.
+ */
+export const REREAD_ONLY_FORMS = ["8-K"] as const;
+
+export function isRereadOnlyForm(form: string): boolean {
+  const base = form.trim().toUpperCase().replace(/\/A$/, "");
+  return (REREAD_ONLY_FORMS as readonly string[]).includes(base);
+}
+
+/**
  * `/A` is the restatement signal and it is tracked SEPARATELY from the periodic
  * set. 12,637 amended filings over 29 days market-wide, of which 28 10-K/A and
  * 44 10-Q/A -- about two a day. The 8-K Item 4.02 route does not exist for
