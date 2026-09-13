@@ -212,6 +212,51 @@ reports the real filenames verbatim; the wanted month is matched against those.
 When nothing matches, the output carries the months that **do** exist, which is
 the answer a second guess would not give.
 
+### The classification step, and why it was rewritten
+
+The 2026-09-13 run returned `resolved 0 of 18` and called it
+`NO-GO -- no dimensioned revenue rows on these axes exist`. **Zero of eighteen
+resolving is a join-failure signature, not an absence signature**: an irrelevant
+axis resolves and is then filtered out as the wrong axis, it does not fail to
+resolve. Apple discloses revenue by five product lines and five geographies in
+every 10-K, so a result claiming otherwise was far more likely to be the lookup.
+
+Four things changed:
+
+- **No tag pre-filter before the dimension lookup.** The old code collected
+  dimension hashes *after* a revenue-tag filter, so the filter decided the answer
+  before the evidence was gathered. Every row for the target is now kept — 969
+  rows is nothing — and `dimensionedRowsByTag` shows which tags the dimensioned
+  rows are actually filed under. `REVENUE_TAGS` survives only as an annotation
+  (`isRevenueTag`), never as a gate.
+- **The join key is discovered, not assumed.** `num.tsv` and `dim.tsv` need not
+  spell the hash column the same way, so the key column is looked up by candidate
+  name and `joinKeyColumnUsed` reports which one matched — making the join key
+  part of the output rather than an assumption buried inside it.
+- **Three fates per hash, not one count.** `not-in-dim.tsv` /
+  `resolved-product-axis` / `resolved-geography-axis` / `resolved-other-axis`.
+  "Resolved 0 of 18" could not tell a missing key from a wrong axis, and that
+  distinction is the entire question. `sampleDimhValuesVerbatim` and
+  `sampleDimRowsVerbatim` print both sides of the join verbatim, so a padding,
+  case or prefix mismatch is visible at a glance. `segt` is read and reported as
+  a distinct-value histogram.
+- **Verdict vocabulary.** **`NO-GO` only when dimensions RESOLVED and none carry
+  a product or geography axis.** Everything else is `INCONCLUSIVE` with the
+  reason named — join key not found, join returned nothing, num.tsv truncated.
+  Same rule as section 1's hide list: a lookup that returns nothing is not
+  evidence that nothing exists.
+
+One field was also renamed. `undimensionedRevenueRows` counted rows with no
+*resolved* segments string, silently merging "carries no dimension" with
+"dimension did not resolve" — the two cases this section exists to separate. They
+are now `rowsWithNoDimension` and `rowsDimensionedButUnresolved`.
+
+**The pass condition is a known answer, not a non-empty result.** `sanityCheck`
+states Apple's actual disclosure (~5 product lines, ~5 geographic segments) and
+fails when the extraction cannot see roughly that in a dataset demonstrably
+containing the filing — because at that point the extraction is wrong, not the
+dataset.
+
 **The default target is `AAPL`, not ARM.** The 2026-09-13 run returned ARM's
 forms as `["20-F","6-K"]` with zero 8-Ks — a foreign private issuer, whose
 segment disclosures sit differently from the 10-K filers these datasets are
