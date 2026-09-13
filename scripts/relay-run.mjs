@@ -48,6 +48,10 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Read-only: fetches two public pipe-delimited text files and prints them.
+  // Needed because the sandbox is refused www.nasdaqtrader.com by policy, and
+  // that directory is where the news path's company name actually comes from.
+  "company-name-sample": { script: "scripts/company-name-sample.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
