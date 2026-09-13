@@ -1,6 +1,6 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow, newsProviderMode } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, feedMaxAgeDays } from "@/lib/server/news";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -1155,30 +1155,6 @@ function rankNews(news: NewsItem[], symbol = "", companyName = "") {
  * argue about.
  */
 const NEWS_SCORE_WINDOW_DAYS = 14;
-/**
- * How far back the FEED will walk to fill its slots. Separate from the SCORE's
- * window on purpose, and much longer: a headline from six weeks ago is still
- * worth reading and is not evidence of what the tone is right now.
- *
- * 90 days is a floor, not a target. Past a quarter a card claiming to be part of
- * the current picture is from a different one, and a short feed on a thin ticker
- * is the honest outcome.
- */
-const NEWS_FEED_MAX_AGE_DAYS = 90;
-/**
- * The same window for the free stack, and it is shorter for a measured reason.
- *
- * Google News backfills thin-coverage names with whatever the index still holds
- * -- CYRX returned 55 items spanning 3,453 days, one from 2017 -- so a 90-day
- * feed window that is honest against FMP's latest-N window is not honest against
- * a search index. 45 days at display; the store still holds 120 so the earnings
- * pin can reach back.
- *
- * GATED ON THE ACTIVE PROVIDER rather than applied to everything, because
- * shortening the window for FMP would change today's live page -- and step 3's
- * requirement is that nothing moves until step 7 flips the flag.
- */
-const FREE_FEED_MAX_AGE_DAYS = 45;
 /** Lighter feed size, below the large cards. */
 const MAX_COMPACT_NEWS_ITEMS = 10;
 /**
@@ -2250,13 +2226,15 @@ async function buildStockNewsBaseData(
   // Similarity dedup does that job properly, so the feed can simply walk back
   // until it is full.
   //
-  // The floor is 90 days rather than unbounded: past a quarter a headline is
+  // The floor is bounded rather than open-ended: past a quarter a headline is
   // not news, and a card claiming to be part of the current picture should not
   // be from another one. Running short is the correct outcome for a thin
   // ticker -- fewer cards is honest, padding with year-old stories is not.
-  const feedMaxAgeDays =
-    newsProviderMode() === "free" ? FREE_FEED_MAX_AGE_DAYS : NEWS_FEED_MAX_AGE_DAYS;
-  const oldestAllowedMs = Date.now() - feedMaxAgeDays * 86_400_000;
+  //
+  // THE WINDOW IS THE PROVIDER'S, so it lives beside the flag that picks it --
+  // see feedMaxAgeDays in lib/server/news/index.ts. 90 days on FMP, 45 on free.
+  const feedWindowDays = feedMaxAgeDays();
+  const oldestAllowedMs = Date.now() - feedWindowDays * 86_400_000;
   const withinFeedWindow = feedPool.filter((item) => {
     if (!item.pubDate) return false;
     const t = new Date(item.pubDate).getTime();
@@ -2273,7 +2251,7 @@ async function buildStockNewsBaseData(
   // the only way the feed can under-deliver -- there is no gate left to blame.
   console.log(
     `[news-feed] ${upper} pool=${displayNewsPool.length} afterFilters=${feedPool.length}` +
-      ` within${feedMaxAgeDays}d=${withinFeedWindow.length}` +
+      ` within${feedWindowDays}d=${withinFeedWindow.length}` +
       ` lead=${detailedNews.length}/${maxDetailedItems} compact=${compactNews.length}/${MAX_COMPACT_NEWS_ITEMS}`
   );
 

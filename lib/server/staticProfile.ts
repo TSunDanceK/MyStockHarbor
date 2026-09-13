@@ -89,8 +89,21 @@ export type ResolvedProfile = StaticProfileRow & {
  * the symbol does not appear on a sector page, because sector membership is
  * built from the same field. Both are graceful, both are visible in the log
  * line below, and neither is silent.
+ *
+ * PER-SYMBOL ONLY. A caller resolving a whole universe wants resolveProfileBulk
+ * further down, which reports its misses once instead of once each.
  */
 export function resolveProfile(
+  symbol: string,
+  cached: { sector?: string | null; industry?: string | null } | null | undefined
+): ResolvedProfile {
+  const resolved = resolveQuiet(symbol, cached);
+  if (resolved.source === "none") console.warn(missLine(symbol));
+  return resolved;
+}
+
+/** The lookup without the log line. Both public entry points share it. */
+function resolveQuiet(
   symbol: string,
   cached: { sector?: string | null; industry?: string | null } | null | undefined
 ): ResolvedProfile {
@@ -103,14 +116,63 @@ export function resolveProfile(
     return { sector: cachedSector, industry: cachedIndustry, source: "cache" };
   }
 
-  const upper = String(symbol ?? "").trim().toUpperCase();
-  const snap = staticProfileFor(upper);
+  const snap = staticProfileFor(symbol);
   if (snap) return { ...snap, source: "snapshot" };
 
-  console.warn(
-    `[static-profile] ${upper}: no cached sector and none in data/static-profile.json — ` +
-      `regenerate it (relay task "static-profile"). The card falls back to the generated ` +
-      `data card and the symbol will not appear on a sector page until it is there.`
-  );
   return { sector: null, industry: null, source: "none" };
+}
+
+function missLine(symbol: string): string {
+  const upper = String(symbol ?? "").trim().toUpperCase();
+  return (
+    `[static-profile] ${upper}: no cached sector and none in data/static-profile.json — ` +
+    `regenerate it (relay task "static-profile"). The card falls back to the generated ` +
+    `data card and the symbol will not appear on a sector page until it is there.`
+  );
+}
+
+/**
+ * The same lookup over many symbols, with the misses reported ONCE.
+ *
+ * ── WHY THIS EXISTS AND IS NOT JUST A LOOP ─────────────────────────────────
+ * lib/server/sectorUniverse.ts resolves the entire candidate universe on every
+ * index rebuild — hundreds of symbols, most of them missing from the cache once
+ * it has aged. Calling resolveProfile in that loop would emit hundreds of
+ * identical warn lines per rebuild, and a refresh trigger that scrolls past is
+ * not a refresh trigger: the CIK map's works precisely because a miss is rare
+ * enough to stand out. So the bulk path counts them and says it once.
+ *
+ * THE COUNT IS THE SIGNAL, not the individual symbols, so only the first few are
+ * named. A jump from 3 misses to 300 is the thing worth seeing, and it is the
+ * thing a per-symbol wall would bury.
+ */
+export function resolveProfileBulk(
+  entries: Iterable<{
+    symbol: string;
+    cached?: { sector?: string | null; industry?: string | null } | null;
+  }>,
+  context: string
+): Map<string, ResolvedProfile> {
+  const out = new Map<string, ResolvedProfile>();
+  const missed: string[] = [];
+
+  for (const entry of entries) {
+    const upper = String(entry?.symbol ?? "").trim().toUpperCase();
+    if (!upper) continue;
+    const resolved = resolveQuiet(upper, entry.cached);
+    out.set(upper, resolved);
+    if (resolved.source === "none") missed.push(upper);
+  }
+
+  if (missed.length) {
+    console.warn(
+      `[static-profile] ${context}: ${missed.length} of ${out.size} symbols have no cached ` +
+        `sector and none in data/static-profile.json — regenerate it (relay task ` +
+        `"static-profile"). They will not appear on a sector page and their cards fall back ` +
+        `to the generated data card. First ${Math.min(10, missed.length)}: ` +
+        `${missed.slice(0, 10).join(", ")}`
+    );
+  }
+
+  return out;
 }

@@ -241,11 +241,11 @@ check(
   "the taxonomy came from the Step 0 dump, which already held it"
 );
 
-console.log("\n=== 6. Not yet load-bearing ===\n");
+console.log("\n=== 6. Load-bearing since step 7 ===\n");
 check(
-  "NEWS_PROVIDER still defaults to fmp",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(readCodeOnly("lib/server/news/index.ts")),
-  "the snapshot only becomes load-bearing at step 7"
+  "NEWS_PROVIDER defaults to free",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(readCodeOnly("lib/server/news/index.ts")),
+  "which is what makes this snapshot the only floor under sector and industry"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

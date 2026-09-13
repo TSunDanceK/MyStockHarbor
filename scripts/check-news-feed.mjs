@@ -98,7 +98,11 @@ stubbed = sub(
   stubbed,
   /^import \{[^}]*\} from "@\/lib\/server\/news";$/m,
   'const fetchSymbolNewsWindow = () => { throw new Error("no network in this harness"); };\n' +
-    'const newsProviderMode = () => "fmp";'
+    // Step 7 replaced the newsProviderMode import here with feedMaxAgeDays.
+    // The stub returns the FMP window because every fixture below was written
+    // against it; the gating itself is checked in section 8 and in
+    // scripts/check-provider-flip.mjs, not here.
+    'const feedMaxAgeDays = () => 90;'
 );
 stubbed = sub(stubbed, /^import \{[\s\S]*?\} from "@\/lib\/server\/news\/text";$/m, textSrc);
 // Type-only, so it is erased at transpile anyway -- but the guard below reads
@@ -126,7 +130,7 @@ for (const [marker, what] of [
   ["function keywordHits", "keywordMatch inlined"],
   ["function stripHtmlTags", "news/text inlined"],
   ["const fetchSymbolNewsWindow", "provider seam stubbed"],
-  ["const newsProviderMode", "provider mode stubbed"],
+  ["const feedMaxAgeDays", "feed window stubbed"],
   ["const readOrRefreshSymbolNews", "newsStore stubbed"],
   ["const getAiNewsBriefs", "ai-news-briefs stubbed"],
 ]) {
@@ -321,7 +325,15 @@ check("the video/podcast filter survives", /isVideoOrLowQualitySource/.test(code
 check("the low-value SEO filter survives", /isLowValueNewsItem\(item\)/.test(code));
 
 console.log("\n=== 6. The feed fills its slots, with a floor ===\n");
-check("90-day floor on how far back the feed walks", /NEWS_FEED_MAX_AGE_DAYS = 90/.test(code));
+// Step 7 moved both window constants into lib/server/news/index.ts, beside the
+// flag that chooses between them. The floor is still asserted, and so is the
+// fact that this file no longer carries a second copy of the number.
+check(
+  "90-day floor on how far back the feed walks, on the fmp rollback",
+  /NEWS_FEED_MAX_AGE_DAYS = 90/.test(codeOf(read("lib/server/news/index.ts"), "lib/server/news/index.ts")) &&
+    /feedMaxAgeDays\(\)/.test(code) &&
+    !/MAX_AGE_DAYS = \d/.test(code)
+);
 check("5 large cards and 10 compact", /options\.maxDetailedItems \?\? 5, 5/.test(code) && /MAX_COMPACT_NEWS_ITEMS = 10/.test(code));
 check(
   "the news page asks for 5",
@@ -462,12 +474,12 @@ const registry = codeOf(read("lib/server/news/index.ts"), "lib/server/news/index
 const adapter = codeOf(read("lib/server/news/fmpProvider.ts"), "lib/server/news/fmpProvider.ts");
 
 check(
-  "NEWS_PROVIDER still defaults to FMP",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(registry),
-  'flipping the default is spec step 7, and doing it before the free adapters exist points the site at an empty provider list'
+  "NEWS_PROVIDER defaults to free, with fmp as the explicit rollback",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(registry),
+  'step 7 flipped it; the fmp spelling is the flick-back and has to keep working exactly'
 );
 check(
-  "an unbuilt \"free\" never resolves to an empty provider list",
+  "\"free\" never resolves to an empty provider list",
   /FREE_PROVIDERS\.length/.test(registry) && /return \[fmpNewsProvider\]/.test(registry),
   "an empty list would empty the news feed on every page with no error anywhere"
 );

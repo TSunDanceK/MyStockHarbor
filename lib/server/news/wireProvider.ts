@@ -1,7 +1,7 @@
 // The wire adapters — GlobeNewswire and PR Newswire.
 //
-// Step 4 of claude/news-adapter-spec-2026-09-13.md. Behind NEWS_PROVIDER, which
-// still defaults to "fmp".
+// Step 4 of claude/news-adapter-spec-2026-09-13.md, behind NEWS_PROVIDER — which
+// step 7 flipped to default "free", so this is live.
 //
 // ── WHY THE WIRES ARE THE ONE LEG THAT MAY KEEP ITS EXTRACTS AND IMAGES ─────
 // A press release is issued FOR republication. That is the whole distinction

@@ -18,7 +18,8 @@ export const maxDuration = 300;
 // this repository is public and forkable, and relay.yml's credential split is a
 // security property, not an inconvenience. Production already holds the key, so
 // the capture happens where the key already is and no new credential is created
-// anywhere. Same shape as app/api/debug/news-sources.
+// anywhere. Same shape as the news-sources probe, which step 7 deleted once
+// its verdicts were spent — this one goes the same way once the capture is in.
 //
 // sector and industry are NOT here. They were snapshotted at zero cost from the
 // Step 0 dump, which already carried them 100% populated for 2,619 symbols.

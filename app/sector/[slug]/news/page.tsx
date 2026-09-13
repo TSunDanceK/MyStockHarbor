@@ -173,12 +173,12 @@ function snippet(item: NewsItem, sectorName: string) {
  * This read `fmpSymbols` alone, which only FMP items carry. Every free adapter
  * puts its attribution in `tickers` instead — deliberately, because
  * `fmpSymbolMatched` is a hard preference in rankNews rather than a confidence
- * signal (see the note in wireProvider). So on the day NEWS_PROVIDER flips to
- * "free" this would have returned null for EVERY item on this page: no ticker
- * pill, no generated card on the compact rows, and nothing to explain it.
+ * signal (see the note in wireProvider). So once NEWS_PROVIDER defaulted to
+ * "free" at step 7 this would have returned null for EVERY item on this page: no
+ * ticker pill, no generated card on the compact rows, and nothing to explain it.
  *
- * Reading both changes nothing today — FMP items carry no `tickers` — and is
- * what keeps this page working across the flip.
+ * Reading both cost nothing before the flip — FMP items carry no `tickers` — and
+ * is what carried this page across it.
  */
 function primarySymbol(item: NewsItem, constituents: string[]) {
   const set = new Set(constituents);

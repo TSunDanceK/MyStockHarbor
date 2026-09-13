@@ -8,6 +8,7 @@ import {
   readCachedScreenerFundamentals,
 } from "./fundamentalsCache";
 import { SECTORS, sectorSlugFromLabel } from "@/lib/sectors";
+import { resolveProfileBulk } from "@/lib/server/staticProfile";
 
 // ---------------------------------------------------------------------------
 // Sector -> constituents, built entirely from caches we already fill.
@@ -98,11 +99,46 @@ async function buildSectorIndex(): Promise<SectorIndex> {
   if (!symbols.length) return index;
 
   // Both reads are Redis-only mgets. The screener rows cover more symbols; the
-  // fundamentals rows are fresher. Prefer whichever actually has a sector.
+  // fundamentals rows are fresher. Prefer whichever actually has a sector, and
+  // fall through to the committed snapshot when neither does — see below.
   const [fundamentals, screener] = await Promise.all([
     readCachedFundamentalsBulk(symbols).catch(() => new Map()),
     readCachedScreenerFundamentals(symbols).catch(() => new Map()),
   ]);
+
+  // ── THE SNAPSHOT IS THE THIRD LEG, ADDED AT STEP 7 ───────────────────────
+  // Both reads above are caches with a TTL, and after the flip there is no FMP
+  // call left to refill them. A symbol whose rows have both expired used to
+  // recover on the next warm; now it would simply fall out of its sector page
+  // and stay out. data/static-profile.json is the floor that stops that.
+  //
+  // BULK, NOT resolveProfile IN THE LOOP: this runs over the whole candidate
+  // universe, so a per-symbol warn would be hundreds of lines per rebuild and
+  // the refresh trigger would be buried in its own output. resolveProfileBulk
+  // says it once with a count.
+  // WHICHEVER CACHE LEG MAPS, not merely whichever is non-empty. The original
+  // read was `slug(fund.sector) ?? slug(scr.sector)`, so a fundamentals row
+  // carrying a label SECTORS does not know already fell through to the screener
+  // row; collapsing that to `fund.sector ?? scr.sector` would have quietly
+  // dropped the second chance. Resolving the slug first keeps it, and an
+  // unmappable label on both legs now passes null so the snapshot gets its turn
+  // rather than the symbol simply vanishing.
+  //
+  // NO `industry` PASSED HERE, deliberately: resolveProfile counts EITHER field
+  // as a cache hit, so a row with an industry and no sector would report "cache"
+  // with a null sector and suppress the snapshot leg — for a caller that reads
+  // nothing but the sector. Sector membership is the only question on this path.
+  const cachedSectorFor = (symbol: string): string | null => {
+    const fund = fundamentals.get(symbol)?.sector ?? null;
+    if (sectorSlugFromLabel(fund)) return fund;
+    const scr = screener.get(symbol)?.sector ?? null;
+    return sectorSlugFromLabel(scr) ? scr : null;
+  };
+
+  const resolved = resolveProfileBulk(
+    symbols.map((symbol) => ({ symbol, cached: { sector: cachedSectorFor(symbol) } })),
+    "sector index"
+  );
 
   const buckets = new Map<string, Array<{ symbol: string; marketCap: number }>>();
   for (const sector of SECTORS) buckets.set(sector.slug, []);
@@ -111,8 +147,7 @@ async function buildSectorIndex(): Promise<SectorIndex> {
     const fund = fundamentals.get(symbol) ?? null;
     const scr = screener.get(symbol) ?? null;
 
-    const slug =
-      sectorSlugFromLabel(fund?.sector ?? null) ?? sectorSlugFromLabel(scr?.sector ?? null);
+    const slug = sectorSlugFromLabel(resolved.get(symbol)?.sector ?? null);
 
     if (!slug) continue;
 

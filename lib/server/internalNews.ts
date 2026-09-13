@@ -42,6 +42,7 @@
 import { getStockNewsBaseData } from "@/lib/stock-news-data";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
+import { resolveProfile } from "@/lib/server/staticProfile";
 import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
 import type { NewsItem } from "@/lib/server/news/types";
 
@@ -111,10 +112,14 @@ export async function getInternalNewsPayload(
   // never fetches on a miss and never throws, so the worst case is no bucket
   // and the generated card. It adds no FMP call to a route that is already
   // cached for 15 minutes.
+  //
+  // AND THE SAME SNAPSHOT FLOOR UNDER IT since step 7 — see the longer note on
+  // the stock news page. resolveProfile adds no I/O: the snapshot is bundled.
   const fundamentals = (await readCachedFundamentalsBulk([symbol])).get(symbol) ?? null;
+  const profile = resolveProfile(symbol, fundamentals);
   const sectorBucket = bucketFor(
-    sectorSlugFromLabel(fundamentals?.sector ?? null),
-    fundamentals?.industry ?? null
+    sectorSlugFromLabel(profile.sector),
+    profile.industry
   );
 
   // Per bucket, as everywhere else: three cards can draw from three different

@@ -30,6 +30,7 @@ import NewsCardArt from "@/app/components/NewsCardArt";
 import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
+import { resolveProfile } from "@/lib/server/staticProfile";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
   getLatestEarningsData,
@@ -473,10 +474,17 @@ export default async function StockNewsPage({ params }: Props) {
   //
   // Sector comes back as FMP's own label ("Technology"), so it goes through
   // sectorSlugFromLabel to reach the slugs lib/server/news/art.ts maps.
+  //
+  // STEP 7 PUT THE SNAPSHOT UNDER THIS READ. Before the flip an empty cache row
+  // meant no sector and the generated card, and the cache always refilled itself
+  // from FMP within the day. There is no FMP call left to refill it, so
+  // resolveProfile falls through to data/static-profile.json — still no network
+  // request, still no throw, and it logs any symbol that neither leg answers for.
   const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  const profile = resolveProfile(upper, fundamentals);
   const artBucket = bucketFor(
-    sectorSlugFromLabel(fundamentals?.sector ?? null),
-    fundamentals?.industry ?? null
+    sectorSlugFromLabel(profile.sector),
+    profile.industry
   );
 
   // The sparkline window for the generated card. Last ~30 sessions: long enough
