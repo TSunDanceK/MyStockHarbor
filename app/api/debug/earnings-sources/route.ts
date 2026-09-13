@@ -1268,11 +1268,14 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     };
   }
 
-  // --- Stage D: num.tsv -> revenue rows carrying a dimension ---------------
-  // The big one. Filtered to the target's accessions and to revenue tags; only
-  // the dimh values are retained, never the rows.
+  // --- Stage D: num.tsv -> EVERY row for the target, classified afterwards -
+  //
+  // NO TAG PRE-FILTER. The first version filtered to revenue tags BEFORE
+  // collecting dimension hashes, which let the filter decide the answer before
+  // the evidence was gathered -- and then reported the result as a fact about
+  // Apple's disclosures. 969 rows for one filing is nothing to hold, so every
+  // row is kept and every classification happens below, where it can be shown.
   const wantedAdsh = new Set(Object.keys(adshRows));
-  const dimhWanted = new Set<string>();
   type NumRow = {
     adsh: string;
     tag: string;
@@ -1284,10 +1287,11 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     dimn: string;
     value: string;
   };
-  const revenueRows: NumRow[] = [];
+  const targetRows: NumRow[] = [];
   let numHeader: ReturnType<typeof tsvIndexer> | null = null;
   let numDataRows = 0;
   let numMatchedAdsh = 0;
+  const ROW_CAP = 5000;
 
   const numRes = await streamEntry(
     url,
@@ -1304,32 +1308,41 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
       const adsh = numHeader.get(f, "adsh");
       if (!wantedAdsh.has(adsh)) return;
       numMatchedAdsh++;
-      const tag = numHeader.get(f, "tag");
-      // The three canonical spellings, OR any tag whose name contains
-      // "revenue". A filer using a spelling outside the canonical set would
-      // otherwise yield zero rows and the verdict would read NO-GO -- absence
-      // of a tag reported as absence of the disaggregation. The broader match
-      // costs nothing here because the rows are already filtered to this
-      // company's accession numbers.
-      if (!REVENUE_TAGS.has(tag.toLowerCase()) && !/revenue/i.test(tag)) return;
-      const dimh = numHeader.get(f, "dimh");
-      if (dimh && dimh !== "0x00000000") dimhWanted.add(dimh);
-      if (revenueRows.length < 400) {
-        revenueRows.push({
-          adsh,
-          tag,
-          version: numHeader.get(f, "version"),
-          ddate: numHeader.get(f, "ddate"),
-          qtrs: numHeader.get(f, "qtrs"),
-          uom: numHeader.get(f, "uom"),
-          dimh,
-          dimn: numHeader.get(f, "dimn"),
-          value: numHeader.get(f, "value"),
-        });
-      }
+      if (targetRows.length >= ROW_CAP) return;
+      targetRows.push({
+        adsh,
+        tag: numHeader.get(f, "tag"),
+        version: numHeader.get(f, "version"),
+        ddate: numHeader.get(f, "ddate"),
+        qtrs: numHeader.get(f, "qtrs"),
+        uom: numHeader.get(f, "uom"),
+        dimh: numHeader.get(f, "dimh"),
+        dimn: numHeader.get(f, "dimn"),
+        value: numHeader.get(f, "value"),
+      });
     }
   );
   const numIdx = numHeader as ReturnType<typeof tsvIndexer> | null;
+
+  // A hash of all zeros is XBRL's "no dimensions". Anything else is a real
+  // dimension that SHOULD resolve in dim.tsv.
+  const isUndimensioned = (h: string) => !h || /^0x0+$/.test(h);
+  const allDimh = new Set(targetRows.map((r) => r.dimh).filter((h) => !isUndimensioned(h)));
+
+  // Per tag: how many rows, and how many of them carry a dimension. This is the
+  // evidence the old pre-filter destroyed -- it shows WHICH tags the
+  // disaggregated rows are filed under, rather than assuming it is one of three.
+  const byTag: Record<string, { rows: number; dimensioned: number; undimensioned: number }> = {};
+  for (const r of targetRows) {
+    const b = (byTag[r.tag] ??= { rows: 0, dimensioned: 0, undimensioned: 0 });
+    b.rows++;
+    if (isUndimensioned(r.dimh)) b.undimensioned++;
+    else b.dimensioned++;
+  }
+  const dimensionedByTag = Object.entries(byTag)
+    .filter(([, b]) => b.dimensioned > 0)
+    .sort((a, b) => b[1].dimensioned - a[1].dimensioned);
+
   stages.D_num = {
     entry: numEntry.name,
     uncompressedMB: +(numEntry.uncompressedSize / 1048576).toFixed(1),
@@ -1338,15 +1351,40 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     columns: numIdx?.cols ?? null,
     missingExpectedColumns: numIdx?.missing(["adsh", "tag", "ddate", "qtrs", "uom", "dimh", "value"]) ?? null,
     rowsForTarget: numMatchedAdsh,
-    revenueRowsKept: revenueRows.length,
-    distinctDimensionHashes: dimhWanted.size,
+    rowsKept: targetRows.length,
+    rowsCapped: numMatchedAdsh > ROW_CAP,
+    distinctTags: Object.keys(byTag).length,
+    distinctDimensionHashes: allDimh.size,
+    rowsCarryingADimension: targetRows.filter((r) => !isUndimensioned(r.dimh)).length,
+    // EVERY tag with dimensioned rows, not just the revenue ones. If the
+    // disaggregation is filed under a tag the revenue filter never matched,
+    // it is visible here instead of being reported as absent.
+    dimensionedRowsByTag: Object.fromEntries(dimensionedByTag.slice(0, 40)),
+    // Verbatim, for comparison against dim.tsv's keys below. A padding, case or
+    // 0x-prefix difference between the two sides is visible here at a glance and
+    // no amount of counting would show it.
+    sampleDimhValuesVerbatim: [...allDimh].slice(0, 8),
+    sampleRowsVerbatim: targetRows.filter((r) => !isUndimensioned(r.dimh)).slice(0, 5),
   };
 
   // --- Stage E: dim.tsv -> the member labels, verbatim ---------------------
-  const dimLabels: Record<string, Record<string, string>> = {};
+  //
+  // THE JOIN KEY IS DISCOVERED, NOT ASSUMED. The previous run resolved 0 of 18
+  // hashes, which is a join-failure signature rather than an absence signature:
+  // irrelevant axes would resolve and then be filtered out as the wrong axis,
+  // not fail to resolve at all. NUM and DIM do not necessarily spell the hash
+  // column the same way, so the column is looked up by candidate name and the
+  // one actually used is REPORTED -- making the join key part of the output
+  // rather than an assumption inside it.
+  const DIM_KEY_CANDIDATES = ["dimh", "dimhash", "dim_hash", "dimhashkey", "hash"];
+  const dimRecords: Record<string, Record<string, string>> = {};
+  const dimSampleVerbatim: Record<string, string>[] = [];
+  const segtValues: Record<string, number> = {};
   let dimHeader: ReturnType<typeof tsvIndexer> | null = null;
+  let dimKeyCol: string | null = null;
   let dimRows = 0;
-  const dimRes = dimhWanted.size
+
+  const dimRes = allDimh.size
     ? await streamEntry(
         url,
         dimEntry,
@@ -1354,53 +1392,146 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
         (line, no) => {
           if (no === 1) {
             dimHeader = tsvIndexer(line);
+            dimKeyCol = DIM_KEY_CANDIDATES.find((c) => dimHeader?.idx[c] !== undefined) ?? null;
             return;
           }
           dimRows++;
-          if (!dimHeader) return;
+          if (!dimHeader || !dimKeyCol) return;
           const f = line.split("\t");
-          const dimh = dimHeader.get(f, "dimh");
-          if (!dimhWanted.has(dimh)) return;
-          dimLabels[dimh] = {
-            // VERBATIM, as the brief asked. No trimming of the axis prefix, no
-            // prettifying -- the exact string is what an adapter would have to
-            // match on, so an edited one would answer a different question.
-            segments: dimHeader.get(f, "segments"),
-            segt: dimHeader.get(f, "segt"),
-            segc: dimHeader.get(f, "segc"),
-            segd: dimHeader.get(f, "segd"),
-            segr: dimHeader.get(f, "segr"),
-          };
-          if (Object.keys(dimLabels).length >= dimhWanted.size) return false;
+          const whole = Object.fromEntries(dimHeader.cols.map((c, i) => [c, f[i] ?? ""]));
+
+          // The first few rows verbatim WHATEVER they are, so the two key
+          // formats can be compared side by side even when nothing matches.
+          if (dimSampleVerbatim.length < 5) dimSampleVerbatim.push(whole);
+
+          // segt is in the column list and nothing read it before. Counted as a
+          // distinct-value histogram, which is what says whether it is a flag,
+          // a count or free text.
+          const segt = dimHeader.get(f, "segt");
+          if (segt !== "" && Object.keys(segtValues).length < 50) {
+            segtValues[segt] = (segtValues[segt] ?? 0) + 1;
+          }
+
+          const key = dimHeader.get(f, dimKeyCol);
+          if (!allDimh.has(key)) return;
+          dimRecords[key] = whole;
+          if (Object.keys(dimRecords).length >= allDimh.size && no > 6) return false;
         }
       )
     : null;
   const dimIdx = dimHeader as ReturnType<typeof tsvIndexer> | null;
+
+  const segmentsOf = (h: string) => dimRecords[h]?.segments ?? dimRecords[h]?.SEGMENTS ?? "";
+  const PRODUCT_AXIS = /ProductOrServiceAxis/i;
+  const GEO_AXIS = /StatementGeographicalAxis/i;
+
+  // Each hash gets ONE of three fates, and the distinction is the whole
+  // question. "resolved 0 of 18" could not tell them apart.
+  const hashClassification = [...allDimh].map((h) => {
+    const rec = dimRecords[h];
+    if (!rec) return { dimh: h, status: "not-in-dim.tsv" as const, segments: null };
+    const seg = segmentsOf(h);
+    const status = PRODUCT_AXIS.test(seg)
+      ? ("resolved-product-axis" as const)
+      : GEO_AXIS.test(seg)
+        ? ("resolved-geography-axis" as const)
+        : ("resolved-other-axis" as const);
+    return { dimh: h, status, segments: seg, segt: rec.segt ?? null };
+  });
+
+  const notInDim = hashClassification.filter((c) => c.status === "not-in-dim.tsv");
+  const resolved = hashClassification.filter((c) => c.status !== "not-in-dim.tsv");
+  const productHashes = hashClassification.filter((c) => c.status === "resolved-product-axis");
+  const geoHashes = hashClassification.filter((c) => c.status === "resolved-geography-axis");
+
   stages.E_dim = {
     entry: dimEntry.name,
-    ...(dimRes ?? { skipped: "no dimensioned revenue rows found in stage D" }),
+    ...(dimRes ?? { skipped: "stage D found no dimensioned rows for this target at all" }),
     dataRows: dimRows,
     columns: dimIdx?.cols ?? null,
-    resolved: Object.keys(dimLabels).length,
-    ofWanted: dimhWanted.size,
+    // The join key, made visible. If this is null, dim.tsv carries none of the
+    // candidate names and the join could never have worked.
+    joinKeyColumnUsed: dimKeyCol,
+    joinKeyCandidatesTried: DIM_KEY_CANDIDATES,
+    numSideKeyColumn: "dimh",
+    // Both sides of the join, verbatim, side by side.
+    sampleDimRowsVerbatim: dimSampleVerbatim,
+    segtDistinctValues: segtValues,
+    segtNote:
+      Object.keys(segtValues).length === 0
+        ? "segt was empty on every sampled row"
+        : `segt took ${Object.keys(segtValues).length} distinct value(s) across the rows read -- ${Object.keys(segtValues).length <= 3 ? "few enough that it is a flag or a small enumeration" : "many enough that it is a count or free text"}`,
+    wanted: allDimh.size,
+    resolved: resolved.length,
+    notFound: notInDim.length,
   };
 
   // --- The actual go/no-go ------------------------------------------------
-  const joined = revenueRows.map((r) => ({
-    ...r,
-    segmentsVerbatim: dimLabels[r.dimh]?.segments ?? null,
-  }));
-  const byProduct = joined.filter((r) => /ProductOrServiceAxis/i.test(String(r.segmentsVerbatim ?? "")));
-  const byGeography = joined.filter((r) => /StatementGeographicalAxis/i.test(String(r.segmentsVerbatim ?? "")));
+  //
+  // VERDICT VOCABULARY. NO-GO is reserved for the one case it can honestly
+  // describe: dimensions RESOLVED and none of them carry a product or
+  // geography axis. Everything else is INCONCLUSIVE with the reason named.
+  // Same rule as section 1's hide list -- a lookup that returns nothing is not
+  // evidence that nothing exists.
+  // REVENUE_TAGS is now an ANNOTATION, not a filter. It marks which recovered
+  // splits sit on a revenue tag, which is what the Revenue Breakdown card
+  // needs to know -- but it no longer decides what gets looked at, because that
+  // is how the previous run concluded "absent" without ever testing the join.
+  const isRevenueTag = (t: string) => REVENUE_TAGS.has(t.toLowerCase()) || /revenue/i.test(t);
 
-  const verdict =
-    byProduct.length && byGeography.length
-      ? "GO -- both ProductOrServiceAxis and StatementGeographicalAxis revenue splits recovered"
-      : byProduct.length || byGeography.length
-        ? `PARTIAL -- ${byProduct.length ? "ProductOrServiceAxis" : "StatementGeographicalAxis"} recovered, the other absent in this month's filing`
-        : numRes.ok && !numRes.truncated
-          ? "NO-GO for this month -- the filing is present and num.tsv was read in full, but no dimensioned revenue rows on these axes exist in it"
-          : "INCONCLUSIVE -- num.tsv was truncated before the file ended, so absence here is not evidence of absence";
+  const rowsFor = (hashes: { dimh: string }[]) => {
+    const set = new Set(hashes.map((h) => h.dimh));
+    return targetRows.filter((r) => set.has(r.dimh));
+  };
+  const productRows = rowsFor(productHashes);
+  const geoRows = rowsFor(geoHashes);
+  const distinctMembers = (rows: NumRow[]) => [...new Set(rows.map((r) => segmentsOf(r.dimh)).filter(Boolean))];
+  const productMembers = distinctMembers(productRows);
+  const geoMembers = distinctMembers(geoRows);
+
+  let verdict: string;
+  if (!numRes.ok || numRes.truncated) {
+    verdict = `INCONCLUSIVE -- num.tsv did not complete (${numRes.truncated ?? "read failed"}), so nothing here is evidence of absence.`;
+  } else if (allDimh.size === 0) {
+    verdict = `INCONCLUSIVE -- not one of ${numMatchedAdsh} rows for ${targetSymbol} carries a dimension hash. Before concluding anything about disclosures, check D_num.columns: if the NUM side has no 'dimh' column under that name, the hash was never read.`;
+  } else if (!dimKeyCol) {
+    verdict = `INCONCLUSIVE -- JOIN KEY NOT FOUND. dim.tsv carries none of ${DIM_KEY_CANDIDATES.join("/")}; its real columns are in E_dim.columns. The join could never have matched, so this says nothing about the filing.`;
+  } else if (resolved.length === 0) {
+    verdict = `INCONCLUSIVE -- JOIN FAILED, not absence. ${allDimh.size} dimension hashes were read from ${targetSymbol}'s rows and NONE matched dim.tsv on '${dimKeyCol}'. Genuinely irrelevant axes would resolve and then be filtered out as the wrong axis; failing to resolve at all is a key mismatch. Compare D_num.sampleDimhValuesVerbatim against E_dim.sampleDimRowsVerbatim.`;
+  } else if (productMembers.length && geoMembers.length) {
+    verdict = `GO -- both axes recovered: ${productMembers.length} product member(s) and ${geoMembers.length} geographic member(s).`;
+  } else if (productMembers.length || geoMembers.length) {
+    verdict = `PARTIAL -- ${productMembers.length ? "ProductOrServiceAxis" : "StatementGeographicalAxis"} recovered; the other resolved no members. ${resolved.length} of ${allDimh.size} hashes resolved, so the join works and this is a real observation about the filing.`;
+  } else {
+    verdict = `NO-GO -- ${resolved.length} of ${allDimh.size} hashes RESOLVED and none carries a product or geography axis. The join works, so this is a genuine statement about what this filing discloses. Axes actually present are in axisHistogram.`;
+  }
+
+  // SANITY ANCHOR. Apple's 10-K discloses revenue by five product lines and
+  // five geographic segments. If the extraction cannot see roughly that in a
+  // dataset that demonstrably contains the filing, the extraction is wrong --
+  // "it returned something" is not the pass condition.
+  const EXPECT_MIN = 4;
+  const sanity =
+    targetSymbol === "AAPL"
+      ? {
+          applies: true,
+          expectation: `AAPL's 10-K discloses ~5 product lines (iPhone, Mac, iPad, Wearables, Services) and ~5 geographic segments (Americas, Europe, Greater China, Japan, Rest of Asia Pacific)`,
+          productMembersFound: productMembers.length,
+          geographyMembersFound: geoMembers.length,
+          passes: productMembers.length >= EXPECT_MIN && geoMembers.length >= EXPECT_MIN,
+          note:
+            productMembers.length >= EXPECT_MIN && geoMembers.length >= EXPECT_MIN
+              ? "Matches the known disclosure. The extraction is reading what the filing actually contains."
+              : `Does NOT match the known disclosure (expected >=${EXPECT_MIN} of each). Treat this as a fault in the extraction, not a fact about Apple.`,
+        }
+      : { applies: false, note: `no known-answer anchor for ${targetSymbol}; only AAPL has one wired in` };
+
+  const axisHistogram: Record<string, number> = {};
+  for (const c of resolved) {
+    for (const axis of (c.segments ?? "").match(/[A-Za-z]+Axis/g) ?? []) {
+      axisHistogram[axis] = (axisHistogram[axis] ?? 0) + 1;
+    }
+  }
 
   return {
     month,
@@ -1409,10 +1540,30 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     symbol: targetSymbol,
     cik: cikNumeric,
     verdict,
-    productSplits: byProduct.map((r) => ({ ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: r.segmentsVerbatim })),
-    geographySplits: byGeography.map((r) => ({ ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: r.segmentsVerbatim })),
-    allDistinctSegmentStrings: [...new Set(joined.map((r) => r.segmentsVerbatim).filter(Boolean))],
-    undimensionedRevenueRows: joined.filter((r) => !r.segmentsVerbatim).length,
+    sanityCheck: sanity,
+    dimensionHashes: {
+      total: allDimh.size,
+      resolved: resolved.length,
+      notInDimTsv: notInDim.length,
+      resolvedButOtherAxis: resolved.length - productHashes.length - geoHashes.length,
+      // Every hash with its fate and its verbatim segments string.
+      classification: hashClassification,
+    },
+    axisHistogram,
+    productSplits: productRows.slice(0, 60).map((r) => ({ tag: r.tag, isRevenueTag: isRevenueTag(r.tag), ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: segmentsOf(r.dimh) })),
+    geographySplits: geoRows.slice(0, 60).map((r) => ({ tag: r.tag, isRevenueTag: isRevenueTag(r.tag), ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: segmentsOf(r.dimh) })),
+    splitsOnRevenueTags: {
+      product: productRows.filter((r) => isRevenueTag(r.tag)).length,
+      geography: geoRows.filter((r) => isRevenueTag(r.tag)).length,
+      note: "the axis decides recovery; this only says how many of the recovered rows sit on a revenue-named tag",
+    },
+    distinctProductMembers: productMembers,
+    distinctGeographyMembers: geoMembers,
+    // Renamed: the old `undimensionedRevenueRows` counted rows with no RESOLVED
+    // segments string, which silently merged "no dimension" with "dimension did
+    // not resolve" -- the two cases this whole section exists to separate.
+    rowsWithNoDimension: targetRows.filter((r) => isUndimensioned(r.dimh)).length,
+    rowsDimensionedButUnresolved: targetRows.filter((r) => !isUndimensioned(r.dimh) && !dimRecords[r.dimh]).length,
     stages,
   };
 }
