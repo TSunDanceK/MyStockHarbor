@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "@/lib/server/jobRuns";
+import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import {
   readManifest,
   writeManifest,
@@ -74,11 +75,31 @@ const CONSECUTIVE_FAILURE_ALARM = 4;
 /** SEC's fair-access policy requires a declared agent carrying a contact. */
 const SEC_UA = process.env.SEC_USER_AGENT || "";
 
-function isAuthorized(req: NextRequest) {
+/**
+ * TWO WAYS IN, AND BOTH ARE NEEDED.
+ *
+ * Vercel's cron sends `Authorization: Bearer $CRON_SECRET` and must keep
+ * working exactly as it does -- that path is unchanged, checked first, and
+ * still fails OPEN when CRON_SECRET is unset, which is the house convention
+ * every other warm job follows.
+ *
+ * But a header cannot be typed into an address bar, so with the Bearer check
+ * alone the first real run of this job could only happen after a merge to main
+ * -- testing the thing after shipping it, which is the order this whole build
+ * has been arranged to avoid. So `?key=` is accepted too, through the same
+ * guardDebugRequest every debug route uses: same key, same IP lockout, same
+ * 401/429 bodies.
+ *
+ * Returns a Response to send, or null to carry on.
+ */
+async function authorize(req: NextRequest): Promise<Response | null> {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
   const auth = req.headers.get("authorization") || "";
-  return auth === `Bearer ${secret}`;
+  // The cron path, first and cheapest. Not routed through guardDebugRequest,
+  // because a valid Bearer must never record a key failure against Vercel's IP
+  // and eventually lock the scheduler out of its own job.
+  if (!secret || auth === `Bearer ${secret}`) return null;
+  return guardDebugRequest(req);
 }
 
 /**
@@ -132,9 +153,8 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = await authorize(req);
+  if (denied) return denied;
 
   const started = Date.now();
   const url = new URL(req.url);
@@ -144,6 +164,12 @@ export async function GET(req: NextRequest) {
   const fromOverride = url.searchParams.get("from");
   const toOverride = url.searchParams.get("to");
   const dryRun = url.searchParams.get("dryRun") === "1";
+  // THE ESCAPE HATCH for a refused spike -- see mapChangeThreshold in
+  // secManifest.ts. Without it a legitimate mass change (an index
+  // reconstitution, a wave of renames) leaves the guard refusing every week
+  // forever and the map never updating, flagged on each run but with no way to
+  // say "I have looked at it, apply it".
+  const applyMapChanges = url.searchParams.get("applyMapChanges") === "1";
 
   if (!SEC_UA) {
     // Named as its own failure. Without a declared agent SEC answers 403 with
@@ -192,13 +218,16 @@ export async function GET(req: NextRequest) {
   const cikChanges =
     tickers.source === "none"
       ? null
-      : reconcileCiks(manifest, tickers.map);
+      : reconcileCiks(manifest, tickers.map, { override: applyMapChanges });
 
   // Exchange is reconciled on EVERY run with a map, not only on a refresh: it
   // is a field copy with no destructive branch, so there is nothing to guard
   // and nothing to lose by doing it often. It deliberately does not go through
   // reconcileCiks -- a venue change is not a reason to discard a fact set.
-  const exchanges = tickers.source === "none" ? null : reconcileExchanges(manifest, tickers.map);
+  const exchanges =
+    tickers.source === "none"
+      ? null
+      : reconcileExchanges(manifest, tickers.map, { sourceHasExchangeColumn: tickers.shape === "fields+data" });
 
   // DELISTING IS COUNTED PER REFRESH, NOT PER RUN, so it is gated on a refresh
   // having actually succeeded this run. Absence from the committed fallback
@@ -208,7 +237,7 @@ export async function GET(req: NextRequest) {
   const refreshSucceeded = "ok" in refresh && refresh.ok === true;
   const delistings =
     refreshSucceeded && tickers.source === "redis"
-      ? reconcileDelistings(manifest, tickers.map)
+      ? reconcileDelistings(manifest, tickers.map, { override: applyMapChanges })
       : null;
 
   // The discard is the irreversible half, so it happens only for changes that
@@ -335,6 +364,8 @@ export async function GET(req: NextRequest) {
       ? Object.entries(exchanges.histogram).map(([k, n]) => `${k}:${n}`).join(" ")
       : null,
     exchangesFilled: exchanges?.filled ?? 0,
+    exchangeBlankRows: exchanges?.noVenueRecorded ?? 0,
+    mapChangesOverridden: applyMapChanges,
     exchangesChanged: exchanges?.updated.length ?? 0,
     tickerFileShape: tickers.shape,
     symbolsWithExchange: tickers.withExchange,
@@ -374,8 +405,8 @@ export async function GET(req: NextRequest) {
           updated: exchanges.updated.slice(0, 25),
           note:
             tickers.shape === "legacy-object"
-              ? "The ticker file in use is the LEGACY shape (company_tickers.json), which has no exchange column — every symbol reads (unknown) until company_tickers_exchange.json is committed or refreshed. Not a failure, and existing exchange values were NOT blanked."
-              : "an exchange change updates the field and nothing else; only a CIK change invalidates",
+              ? "The ticker file in use is the LEGACY shape (company_tickers.json), which has no exchange column — every symbol reads (unknown) until company_tickers_exchange.json is committed or refreshed. Nothing was written: not a failure, and existing exchange values were NOT blanked."
+              : "an exchange change updates the field and nothing else; only a CIK change invalidates. A blank exchange is a real answer (SEC lists the filer with no venue) and reads as (none recorded), distinct from (unknown).",
         }
       : { skipped: "no ticker map available" },
     delisting: delistings
