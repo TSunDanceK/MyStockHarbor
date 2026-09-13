@@ -1,8 +1,8 @@
 # News adapter spec — build instructions (2026-09-13)
 
 Built on **measured verdicts**, not assumptions. Probe route:
-`app/api/debug/news-sources` on this branch. Two runs from `iad1`, preview.
-Delete the probe once this ships.
+`app/api/debug/news-sources`. Three runs from `iad1` — two preview, one
+production. Delete the probe once this ships.
 
 Context: `claude/news-as-stored-dataset-spec-2026-08-22.md` (the store, unchanged),
 `claude/stooq-inaccessible-sec-viable-2026-09-12.md` (the precedent — Stooq was the
@@ -14,17 +14,21 @@ now measured from inside a function before anything is built on it).
 | Source | Verdict | Evidence |
 |---|---|---|
 | **Google News RSS search** | **PASS — per-symbol primary** | 100 items / 95d (MU), 100 / 149d (PLAB), 100% precision (ASTS) |
-| **data.sec.gov submissions** | PASS | 1,001 filings, `sicDescription`, works without SEC_USER_AGENT |
+| **data.sec.gov submissions** | PASS | 1,001 filings, `sicDescription`; works with or without SEC_USER_AGENT |
+| **sec.gov/files/company_tickers.json** | PASS **with UA set** | 10,426 ticker→CIK entries, 798 KB |
 | **GlobeNewswire** | PASS | ticker in `<category>`, `dc:subject`, `dc:keyword` |
 | **PR Newswire** | PASS | `prn:industry`, `prn:subject`, `media:credit` = "PRNewswire" |
 | **MarketWatch** | PASS | `media:credit` = "Sean Rayford/Getty Images" |
 | **CNBC** | PASS | 30 items, `metadata:sponsored` flag |
-| **Nasdaq rssoutbound** | **BLOCKED — do not use** | 25s timeout, both attempts, every feed |
-| **sec.gov/files/company_tickers.json** | 403 | commit it as a static file instead |
+| **Nasdaq rssoutbound** | **BLOCKED — do not use** | 25s timeout, both attempts, every feed, preview **and** production |
 | **Business Wire** | dead feed token | dropped |
 
 **Nasdaq is not a fallback, a retry candidate, or a "try again later".** It answered
-fine from a residential network and refuses Vercel entirely. Do not reintroduce it.
+fine from a residential network and refuses Vercel from both environments. Do not
+reintroduce it.
+
+Production and preview returned materially identical results for every other source,
+so preview is a fair proxy for future probing.
 
 ## What does NOT change
 
@@ -101,16 +105,21 @@ type NewsItem = {
 Google News is a **plain text search with no notion of a ticker.** Measured:
 
 ```
-q=MU                              85% precision  (Missouri Tigers football,
+q=MU                              86% precision  (Missouri Tigers football,
                                                   a Ugandan BBC story,
                                                   a college soccer box score)
-q="Micron Technology" stock       98% precision, 95-day span   <- USE THIS
+q="Micron Technology" stock       97-98% precision, 95-day span   <- USE THIS
 ```
 
 ```
 https://news.google.com/rss/search?q=<QUERY>&hl=en-US&gl=US&ceid=US:en
 QUERY = `"${cleanName}" stock`
 ```
+
+The residual 2-3% are not junk — they are the same clickbait headlines each run
+("Not Nvidia, Not Palantir. This Might Be September's Most Important AI
+Infrastructure Stock"), which are genuinely about the company but withhold the name
+from the headline. The scorer only reads titles, so 97% is a floor.
 
 **`cleanName` needs a normaliser.** The universe holds display names like
 `Micron Technology, Inc. - Common Stock`, and querying that verbatim would be far
@@ -157,14 +166,20 @@ because releases are issued for republication.
 
 ## 3. SEC adapter
 
-- `https://data.sec.gov/submissions/CIK##########.json` — works today without
-  `SEC_USER_AGENT`, but **set it anyway** (fair-access policy; ≤10 req/sec).
+- `https://data.sec.gov/submissions/CIK##########.json` — 1,001 filings for MU,
+  with `tickers`, `exchanges` and `sicDescription`. Works with or without
+  `SEC_USER_AGENT`, but it is now set on Production and must stay set (fair-access
+  policy; ≤10 req/sec).
+- **`SEC_USER_AGENT` is Production-only.** That is why the two preview runs saw
+  `company_tickers.json` 403 while production returns it fine. Set it on Preview too,
+  or accept that preview probes will keep reporting a false block on `www.sec.gov`.
 - `sicDescription` is a free sector label. Compare against the existing taxonomy
   before trusting either.
-- **Commit the ticker→CIK map as a static file.** `sec.gov/files/company_tickers.json`
-  403s from Vercel, and the map changes rarely. Fetch once, commit as
-  `data/cik-map.json`, refresh by hand. This removes a runtime dependency rather
-  than working around a block.
+- **Still commit the ticker→CIK map as a static file**, but for the real reason:
+  it is **798 KB** and changes rarely, so fetching it at runtime is waste, not a
+  workaround for a block. Fetch once, commit as `data/cik-map.json`, refresh by hand.
+  10,426 entries, shaped as `{index: {cik_str, ticker, title}}` — build the inverse
+  map at build time.
 - Render filings as items: `form` + `items` codes → a plain-English title
   ("Form 8-K — Item 5.02, officer appointment"). These rows have no snippet by
   nature; the template builders cover it.
