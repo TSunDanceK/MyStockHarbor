@@ -27,7 +27,8 @@ export const maxDuration = 60;
 // XML is parsed with regexes rather than a parser dependency -- crude, but a
 // probe only needs field names and counts, not a correct tree).
 //
-// SAFE TO DELETE once the adapter lands and the verdicts are recorded.
+// See README.md in this folder. SAFE TO DELETE once the adapter lands and the
+// verdicts are recorded.
 
 type Probe = {
   group: "per-stock" | "headlines" | "wire" | "reference";
@@ -38,23 +39,22 @@ type Probe = {
 };
 
 // SEC's fair-access policy requires a declared User-Agent carrying a contact
-// address, and will block a generic one. Set SEC_USER_AGENT in Vercel env to
-// something like "MyStockHarbor <you@example.com>". The fallback is
-// deliberately obvious so an unset var shows up in the results rather than
-// silently looking like a network failure.
+// address, and will block a generic one. Set SEC_USER_AGENT in Vercel env, in
+// BOTH Production and Preview, to something like
+// "MyStockHarbor contact@example.com". The fallback is deliberately obvious so
+// an unset var shows up in the results rather than silently looking like a
+// network failure.
 const SEC_UA = process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (CONTACT-NOT-SET)";
 const GENERIC_UA =
   "Mozilla/5.0 (compatible; MyStockHarborBot/1.0; +https://www.mystockharbor.com)";
 
 function buildProbes(symbols: string[]): Probe[] {
-  const perStock: Probe[] = symbols.flatMap((s) => [
-    {
-      group: "per-stock" as const,
-      name: `nasdaq rssoutbound symbol=${s}`,
-      url: `https://www.nasdaq.com/feed/rssoutbound?symbol=${encodeURIComponent(s)}`,
-      kind: "xml" as const,
-    },
-  ]);
+  const perStock: Probe[] = symbols.map((s) => ({
+    group: "per-stock" as const,
+    name: `nasdaq rssoutbound symbol=${s}`,
+    url: `https://www.nasdaq.com/feed/rssoutbound?symbol=${encodeURIComponent(s)}`,
+    kind: "xml" as const,
+  }));
 
   return [
     ...perStock,
@@ -333,13 +333,23 @@ export async function GET(request: Request) {
 
   const pass = results.filter((r) => r.verdict === "PASS").length;
 
+  // Reported, never echoed: the value carries an email address and this output
+  // gets pasted around. A set-but-malformed value otherwise looks identical to
+  // a network failure on the two sec.gov probes.
+  const rawSecUa = process.env.SEC_USER_AGENT ?? "";
+  const secUserAgent = {
+    set: Boolean(rawSecUa),
+    hasContact: rawSecUa.includes("@"),
+    length: rawSecUa.length,
+  };
+
   return Response.json(
     {
       ok: true,
       probedAt: new Date().toISOString(),
       region: process.env.VERCEL_REGION ?? null,
       env: process.env.VERCEL_ENV ?? null,
-      secUserAgentSet: Boolean(process.env.SEC_USER_AGENT),
+      secUserAgent,
       symbols,
       summary: `${pass}/${results.length} PASS`,
       results,
