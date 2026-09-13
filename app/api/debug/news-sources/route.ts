@@ -10,81 +10,134 @@ export const maxDuration = 60;
 // WHY IT EXISTS
 // -------------
 // FMP needs removing from the news path (commercial licence quoted at $20K;
-// see claude/news-api-market-survey-2026-09-13.md). The candidates were probed
-// from outside Vercel and answered, but the IP the request comes from is the
-// part that matters: SEC and Nasdaq both treat datacentre ranges differently
-// from residential ones, and an answer obtained from somewhere else is not
-// evidence about this site.
+// see claude/news-api-market-survey-2026-09-13.md). The candidates all answered
+// when probed from outside Vercel -- but the IP the request comes from is the
+// part that matters, and run 1 proved it: every Nasdaq feed timed out from
+// iad1 while answering fine elsewhere.
 //
-// This route exists to settle that BEFORE any adapter is written, in the same
-// spirit as /api/debug/fmp-endpoints -- measured verdicts, no assumptions
-// carried forward.
+// RUN 1 VERDICTS (2026-09-13, iad1, preview)
+// ------------------------------------------
+//   FAIL  nasdaq rssoutbound  x8, all uniform 12s timeouts -> block, not load
+//   PASS  google news rss     100 items / 95 days for MU, 452ms
+//   PASS  data.sec.gov        1001 filings, sicDescription present
+//   PASS  globenewswire       ticker in <category>
+//   PASS  prnewswire          prn:industry, media:credit = "PRNewswire"
+//   PASS  marketwatch         media:credit = "Sean Rayford/Getty Images"
+//   PASS  cnbc                30 items, metadata:sponsored flag
+//   FAIL  businesswire        951 bytes, no items -- dead feed token, dropped
+//   FAIL  sec company_tickers 403 (SEC_USER_AGENT was unset)
+//
+// WHAT RUN 2 ADDS
+// ---------------
+// 1. Nasdaq at 25s with one retry. A uniform timeout could in principle be a
+//    slow origin; this settles block-versus-slow rather than assuming.
+// 2. Google News query precision. It is a PLAIN TEXT SEARCH with no notion of
+//    a ticker: q=MU matches Manchester United. Five query shapes are scored by
+//    what fraction of returned headlines actually mention the company, so the
+//    production query shape is chosen on evidence. AAPL is in the set on
+//    purpose -- "Apple" is the worst precision case available.
 //
 // DELIBERATELY INERT
 // ------------------
 // No Redis reads or writes, no FMP calls, no cache population, no new npm
 // package (the lockfile cannot be regenerated from the agent sandbox, so the
-// XML is parsed with regexes rather than a parser dependency -- crude, but a
-// probe only needs field names and counts, not a correct tree).
+// XML is parsed with regexes -- a probe needs field names and counts, not a
+// correct tree).
 //
-// See README.md in this folder. SAFE TO DELETE once the adapter lands and the
-// verdicts are recorded.
+// See README.md in this folder. SAFE TO DELETE once the adapter lands.
 
 type Probe = {
-  group: "per-stock" | "headlines" | "wire" | "reference";
+  group: "per-stock" | "headlines" | "wire" | "reference" | "query-shape";
   name: string;
   url: string;
   kind: "xml" | "json";
   note?: string;
+  retry?: boolean;
+  timeoutMs?: number;
+  // When set, headlines are scored for whether they actually mention this
+  // company / ticker -- the precision measure for text-search sources.
+  expect?: { name: string; ticker: string };
 };
 
-// SEC's fair-access policy requires a declared User-Agent carrying a contact
-// address, and will block a generic one. Set SEC_USER_AGENT in Vercel env, in
-// BOTH Production and Preview, to something like
-// "MyStockHarbor contact@example.com". The fallback is deliberately obvious so
-// an unset var shows up in the results rather than silently looking like a
-// network failure.
 const SEC_UA = process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (CONTACT-NOT-SET)";
 const GENERIC_UA =
   "Mozilla/5.0 (compatible; MyStockHarborBot/1.0; +https://www.mystockharbor.com)";
 
-function buildProbes(symbols: string[]): Probe[] {
-  const perStock: Probe[] = symbols.map((s) => ({
-    group: "per-stock" as const,
-    name: `nasdaq rssoutbound symbol=${s}`,
-    url: `https://www.nasdaq.com/feed/rssoutbound?symbol=${encodeURIComponent(s)}`,
-    kind: "xml" as const,
-  }));
+// Company names for the probe symbols. Production reads these from the
+// universe; hardcoded here so the probe is self-contained.
+const NAMES: Record<string, string> = {
+  MU: "Micron Technology",
+  PLAB: "Photronics",
+  AAPL: "Apple",
+  ASTS: "AST SpaceMobile",
+  CYRX: "Cryoport",
+};
 
-  return [
-    ...perStock,
-    // Category feeds: one poll serves the headlines page AND seeds every
-    // sector page, which is the whole reason news stops scaling per symbol.
+function gnews(query: string) {
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+}
+
+function buildProbes(symbols: string[]): Probe[] {
+  // --- Nasdaq, retested properly before being written off -----------------
+  const nasdaq: Probe[] = [
+    {
+      group: "per-stock",
+      name: "nasdaq rssoutbound symbol=MU",
+      url: "https://www.nasdaq.com/feed/rssoutbound?symbol=MU",
+      kind: "xml",
+      retry: true,
+      timeoutMs: 25000,
+      note: "run 1: 12s timeout. 25s + retry settles block-vs-slow",
+    },
     {
       group: "headlines",
       name: "nasdaq category=Markets",
       url: "https://www.nasdaq.com/feed/rssoutbound?category=Markets",
       kind: "xml",
+      retry: true,
+      timeoutMs: 25000,
     },
-    {
-      group: "headlines",
-      name: "nasdaq category=Earnings",
-      url: "https://www.nasdaq.com/feed/rssoutbound?category=Earnings",
-      kind: "xml",
-    },
-    {
-      group: "headlines",
-      name: "nasdaq category=Stocks",
-      url: "https://www.nasdaq.com/feed/rssoutbound?category=Stocks",
-      kind: "xml",
-      note: "category value guessed -- confirm against the category values seen on items",
-    },
+  ];
+
+  // --- Google News query shapes, scored for precision ---------------------
+  // The whole question: does a text search return this company's news, or
+  // everything containing these characters?
+  const shapes: Probe[] = [
+    { label: "bare ticker", q: "MU" },
+    { label: "ticker + stock", q: "MU stock" },
+    { label: "name in quotes", q: '"Micron Technology"' },
+    { label: "name in quotes + stock", q: '"Micron Technology" stock' },
+    { label: "name + ticker qualifier", q: '"Micron Technology" (MU) stock' },
+  ].map((s) => ({
+    group: "query-shape" as const,
+    name: `gnews MU — ${s.label} — q=${s.q}`,
+    url: gnews(s.q),
+    kind: "xml" as const,
+    expect: { name: "Micron", ticker: "MU" },
+  }));
+
+  // --- Google News per symbol, using the name-based shape ----------------
+  const perStock: Probe[] = symbols.map((sym) => {
+    const name = NAMES[sym] ?? sym;
+    return {
+      group: "per-stock" as const,
+      name: `gnews ${sym} — "${name}" stock`,
+      url: gnews(`"${name}" stock`),
+      kind: "xml" as const,
+      expect: { name: name.split(" ")[0], ticker: sym },
+    };
+  });
+
+  return [
+    ...nasdaq,
+    ...shapes,
+    ...perStock,
     {
       group: "headlines",
       name: "marketwatch topstories",
       url: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
       kind: "xml",
-      note: "carries media:content AND media:credit -- the image-permission signal",
+      note: "media:credit carries the image-permission signal",
     },
     {
       group: "headlines",
@@ -93,20 +146,11 @@ function buildProbes(symbols: string[]): Probe[] {
       kind: "xml",
     },
     {
-      group: "headlines",
-      name: "google news rss search (MU)",
-      url: "https://news.google.com/rss/search?q=Micron+Technology+stock&hl=en-US&gl=US&ceid=US:en",
-      kind: "xml",
-      note: "settles whether the existing fallback in lib/stock-news-data.ts is alive or dead code",
-    },
-    // Wires: the one leg where longer extracts and the wire's own images are
-    // defensible, because releases are issued for republication.
-    {
       group: "wire",
       name: "globenewswire public companies",
       url: "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire---Public-Companies",
       kind: "xml",
-      note: "items self-tag to securities (stock symbols + ISINs)",
+      note: "ticker arrives in <category>",
     },
     {
       group: "wire",
@@ -115,25 +159,17 @@ function buildProbes(symbols: string[]): Probe[] {
       kind: "xml",
     },
     {
-      group: "wire",
-      name: "businesswire home",
-      url: "https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeEFpRXw==",
-      kind: "xml",
-    },
-    // Reference data: free sector labels and the ticker->CIK map.
-    {
       group: "reference",
       name: "sec submissions (MU CIK 723125)",
       url: "https://data.sec.gov/submissions/CIK0000723125.json",
       kind: "json",
-      note: "gives tickers, exchanges, sicDescription and filings.recent",
     },
     {
       group: "reference",
       name: "sec company_tickers.json",
       url: "https://www.sec.gov/files/company_tickers.json",
       kind: "json",
-      note: "ticker -> CIK map; confirm the real entry count",
+      note: "run 1: 403 with SEC_USER_AGENT unset",
     },
   ];
 }
@@ -142,7 +178,7 @@ function isSec(url: string) {
   return url.includes("sec.gov");
 }
 
-async function fetchWithTimeout(url: string, ms: number) {
+async function fetchOnce(url: string, ms: number) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
@@ -169,7 +205,6 @@ async function fetchWithTimeout(url: string, ms: number) {
   }
 }
 
-// Split a feed into item blocks. Handles both RSS <item> and Atom <entry>.
 function itemBlocks(xml: string): string[] {
   const rss = xml.match(/<item[\s>][\s\S]*?<\/item>/gi);
   if (rss && rss.length) return rss;
@@ -177,12 +212,17 @@ function itemBlocks(xml: string): string[] {
   return atom ?? [];
 }
 
-// Distinct child tag names across the sampled items, so the adapter author can
-// see what is actually available rather than what the docs claim.
+// Inline HTML inside <description> pollutes a naive tag scan (run 1 reported
+// "a", "b", "br", "p", "strong" as GlobeNewswire fields). Strip descriptions
+// before scanning so the field list is the feed's real vocabulary.
 function fieldNames(blocks: string[]): string[] {
   const seen = new Set<string>();
   for (const block of blocks.slice(0, 10)) {
-    const inner = block.replace(/^<(item|entry)[\s>][^>]*>?/i, "");
+    const inner = block
+      .replace(/^<(item|entry)[\s>][^>]*>?/i, "")
+      .replace(/<description[\s\S]*?<\/description>/gi, "")
+      .replace(/<content[\s\S]*?<\/content>/gi, "")
+      .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "");
     const tags = inner.match(/<([a-zA-Z][\w:.-]*)(\s|\/?>)/g) ?? [];
     for (const raw of tags) {
       const name = raw.replace(/^<|[\s/>]+$/g, "");
@@ -199,6 +239,11 @@ function tagValue(block: string, tag: string): string | null {
   if (!m) return null;
   return m[1]
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x2019;/g, "’")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -221,29 +266,54 @@ function dateRange(blocks: string[]) {
   };
 }
 
+// The precision measure. A text-search feed will happily return articles that
+// merely contain the characters searched for, so count how many headlines
+// actually name the company, and surface the ones that do not.
+function precision(blocks: string[], expect: { name: string; ticker: string }) {
+  const titles = blocks
+    .map((b) => tagValue(b, "title"))
+    .filter((t): t is string => Boolean(t));
+  if (!titles.length) return null;
+
+  const nameRe = new RegExp(expect.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const tickerRe = new RegExp(`\\b${expect.ticker}\\b`);
+
+  const hits = titles.filter((t) => nameRe.test(t) || tickerRe.test(t));
+  const misses = titles.filter((t) => !nameRe.test(t) && !tickerRe.test(t));
+
+  return {
+    titles: titles.length,
+    matched: hits.length,
+    matchPct: Math.round((hits.length / titles.length) * 100),
+    // The off-target headlines are the whole point -- eyeball these.
+    sampleMisses: misses.slice(0, 5).map((t) => t.slice(0, 110)),
+    sampleHits: hits.slice(0, 3).map((t) => t.slice(0, 110)),
+  };
+}
+
 function firstItemSample(block: string | undefined) {
   if (!block) return null;
   const pick = [
     "title",
     "link",
+    "source",
     "pubDate",
     "guid",
     "dc:creator",
     "category",
     "nasdaq:tickers",
+    "prn:industry",
+    "prn:subject",
     "media:credit",
-    "media:content",
-    "description",
+    "metadata:sponsored",
   ];
   const out: Record<string, string> = {};
   for (const tag of pick) {
     const v = tagValue(block, tag);
-    if (v) out[tag] = v.slice(0, 200);
+    if (v) out[tag] = v.slice(0, 180);
   }
-  // media:content / media:credit are frequently self-closing with the value in
-  // an attribute, so the tag-pair read above misses them.
   const selfClosing = block.match(/<(media:content|media:thumbnail|enclosure)[^>]*\/?>/gi) ?? [];
-  if (selfClosing.length) out["_mediaTags"] = selfClosing.slice(0, 3).join(" ").slice(0, 300);
+  if (selfClosing.length) out["_mediaTags"] = selfClosing.slice(0, 2).join(" ").slice(0, 240);
   return out;
 }
 
@@ -263,10 +333,15 @@ export async function GET(request: Request) {
   const results = await Promise.all(
     probes.map(async (p) => {
       const base = { group: p.group, name: p.name, url: p.url, note: p.note };
-      try {
-        const { status, contentType, body, ms } = await fetchWithTimeout(p.url, 12000);
+      const timeout = p.timeoutMs ?? 12000;
+      let attempts = 0;
+
+      const attempt = async (): Promise<Record<string, unknown>> => {
+        attempts += 1;
+        const { status, contentType, body, ms } = await fetchOnce(p.url, timeout);
         const common = {
           ...base,
+          attempts,
           status,
           contentType: contentType.split(";")[0],
           bytes: body.length,
@@ -276,7 +351,6 @@ export async function GET(request: Request) {
         if (status < 200 || status >= 300) {
           return { ...common, verdict: "FAIL", reason: `HTTP ${status}` };
         }
-
         const head = body.slice(0, 200).trimStart().toLowerCase();
         if (head.startsWith("<!doctype html") || head.startsWith("<html")) {
           return { ...common, verdict: "FAIL", reason: "returned HTML, not a feed" };
@@ -289,20 +363,15 @@ export async function GET(request: Request) {
           return {
             ...common,
             verdict: "PASS",
-            topLevelKeys: Object.keys(data).slice(0, 30),
             entryCount: filings
               ? (filings.accessionNumber?.length ?? 0)
               : Object.keys(data).length,
-            recentFields: filings ? Object.keys(filings) : undefined,
             sample: filings
               ? {
                   name: data.name,
                   tickers: data.tickers,
                   exchanges: data.exchanges,
                   sicDescription: data.sicDescription,
-                  form0: filings.form?.[0],
-                  filingDate0: filings.filingDate?.[0],
-                  items0: filings.items?.[0],
                 }
               : (Object.values(data)[0] ?? null),
           };
@@ -318,30 +387,40 @@ export async function GET(request: Request) {
           itemCount: blocks.length,
           ...dateRange(blocks),
           fields: fieldNames(blocks),
-          firstItem: firstItemSample(blocks[0]),
+          precision: p.expect ? precision(blocks, p.expect) : undefined,
+          firstItem: p.expect ? undefined : firstItemSample(blocks[0]),
         };
+      };
+
+      try {
+        return await attempt();
       } catch (err) {
         const e = err as Error;
-        return {
-          ...base,
-          verdict: "FAIL",
-          reason: e.name === "AbortError" ? "timeout after 12s" : `${e.name}: ${e.message}`,
-        };
+        const firstReason =
+          e.name === "AbortError" ? `timeout after ${timeout / 1000}s` : `${e.name}: ${e.message}`;
+        if (!p.retry) return { ...base, attempts, verdict: "FAIL", reason: firstReason };
+        try {
+          const retried = await attempt();
+          return { ...retried, note: `${p.note ?? ""} (first attempt: ${firstReason})`.trim() };
+        } catch (err2) {
+          const e2 = err2 as Error;
+          return {
+            ...base,
+            attempts,
+            verdict: "FAIL",
+            reason:
+              e2.name === "AbortError"
+                ? `timeout after ${timeout / 1000}s on both attempts -- treat as blocked`
+                : `${e2.name}: ${e2.message}`,
+          };
+        }
       }
     })
   );
 
   const pass = results.filter((r) => r.verdict === "PASS").length;
 
-  // Reported, never echoed: the value carries an email address and this output
-  // gets pasted around. A set-but-malformed value otherwise looks identical to
-  // a network failure on the two sec.gov probes.
   const rawSecUa = process.env.SEC_USER_AGENT ?? "";
-  const secUserAgent = {
-    set: Boolean(rawSecUa),
-    hasContact: rawSecUa.includes("@"),
-    length: rawSecUa.length,
-  };
 
   return Response.json(
     {
@@ -349,9 +428,15 @@ export async function GET(request: Request) {
       probedAt: new Date().toISOString(),
       region: process.env.VERCEL_REGION ?? null,
       env: process.env.VERCEL_ENV ?? null,
-      secUserAgent,
+      secUserAgent: {
+        set: Boolean(rawSecUa),
+        hasContact: rawSecUa.includes("@"),
+        length: rawSecUa.length,
+      },
       symbols,
       summary: `${pass}/${results.length} PASS`,
+      readingGuide:
+        "query-shape rows: compare precision.matchPct and read precision.sampleMisses -- that is what a text search returns when it does not know what a ticker is.",
       results,
     },
     { headers: { "cache-control": "no-store" } }
