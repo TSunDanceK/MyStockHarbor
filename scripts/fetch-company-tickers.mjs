@@ -15,12 +15,15 @@
 //   node scripts/fetch-company-tickers.mjs
 //   SEC_USER_AGENT="MyStockHarbor you@example.com" node scripts/fetch-company-tickers.mjs
 //
-// Or dispatch .github/workflows/relay.yml with task `company-tickers`.
+// Or dispatch .github/workflows/relay.yml with task `company-tickers`; the
+// workflow uploads data/sec/*.json as a build artifact, so the file can be
+// downloaded rather than saved out of a browser -- which is how the previous
+// copy arrived with a stray byte at the head of it.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
-const URL_ = "https://www.sec.gov/files/company_tickers.json";
+const URL_ = "https://www.sec.gov/files/company_tickers_exchange.json";
 const OUT = path.join(process.cwd(), "data/sec/company-tickers.json");
 
 // SEC's fair-access policy requires a declared agent carrying a contact address
@@ -50,9 +53,28 @@ try {
   process.exit(1);
 }
 
-const rows = Object.values(parsed);
-const withTicker = rows.filter((r) => r?.ticker && r?.cik_str !== undefined);
-const distinct = new Set(withTicker.map((r) => String(r.ticker).toUpperCase()));
+// THE COLUMNS ARE READ BY NAME, not by position. company_tickers_exchange.json
+// is { fields: [...], data: [[...], ...] }, and a positional read is one column
+// insertion away from filing every exchange under `name`.
+if (!Array.isArray(parsed.fields) || !Array.isArray(parsed.data)) {
+  console.error("FAIL  200 but not the fields+data shape this endpoint serves");
+  console.error(`      top-level keys: ${Object.keys(parsed).slice(0, 8).join(", ")}`);
+  process.exit(1);
+}
+const iTicker = parsed.fields.findIndex((f) => String(f).toLowerCase() === "ticker");
+const iCik = parsed.fields.findIndex((f) => String(f).toLowerCase() === "cik");
+const iExchange = parsed.fields.findIndex((f) => String(f).toLowerCase() === "exchange");
+if (iTicker === -1 || iCik === -1) {
+  console.error(`FAIL  required column missing (fields: ${parsed.fields.join(",")})`);
+  process.exit(1);
+}
+const rows = parsed.data.filter(Array.isArray);
+const distinct = new Set(rows.filter((r) => r[iTicker]).map((r) => String(r[iTicker]).toUpperCase()));
+const exchanges = {};
+for (const r of rows) {
+  const e = iExchange === -1 ? "(no column)" : String(r[iExchange] ?? "").trim() || "(blank)";
+  exchanges[e] = (exchanges[e] ?? 0) + 1;
+}
 
 // Measured 2026-09-13: 10,426 tickers. A file an order of magnitude smaller is
 // a truncated or wrong response, not a quiet month on the markets.
@@ -72,6 +94,7 @@ fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, text);
 
 console.log(`OK    ${distinct.size} distinct tickers, ${rows.length} rows`);
+console.log(`      exchanges ${Object.entries(exchanges).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(" ")}`);
 console.log(`      bytes   ${text.length}`);
 console.log(`      sha256  ${crypto.createHash("sha256").update(text).digest("hex")}`);
 console.log(`      written ${path.relative(process.cwd(), OUT)}`);

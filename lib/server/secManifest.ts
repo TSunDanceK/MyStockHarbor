@@ -20,6 +20,7 @@
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import type { TickerEntry } from "./secTickerMap";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -33,6 +34,19 @@ export const SEC_SCORE_VERSION = 1;
 
 export type SecManifestEntry = {
   cik: string | null;
+  /**
+   * Listing venue, from company_tickers_exchange.json. Observed: Nasdaq, NYSE,
+   * OTC. Null when unknown.
+   *
+   * CARRIED FROM THE FIRST WRITE even though nothing consumes it yet. Step 3
+   * and the page will: if the bars deal lands Nasdaq-only, NYSE symbols lose
+   * their price history and the Price Reaction card has to be dropped FOR THOSE
+   * SYMBOLS -- a per-symbol decision conditional on this field, not a global
+   * flag. Retrofitting it across a populated manifest is a migration, and a
+   * migration that half-succeeds leaves symbols whose exchange is unknown
+   * indistinguishable from symbols genuinely not on an exchange.
+   */
+  exchange: string | null;
   /** Accession of the most recent PERIODIC filing seen for this symbol. */
   lastAccession: string | null;
   /** Filing date (YYYYMMDD) of that accession. */
@@ -86,9 +100,10 @@ export type SecManifest = {
   symbols: Record<string, SecManifestEntry>;
 };
 
-export function emptyEntry(cik: string | null): SecManifestEntry {
+export function emptyEntry(cik: string | null, exchange: string | null = null): SecManifestEntry {
   return {
     cik,
+    exchange,
     lastAccession: null,
     lastFiled: null,
     contentHash: null,
@@ -170,22 +185,24 @@ export type SeedResult = {
 export function seedManifest(
   manifest: SecManifest,
   universe: string[],
-  cikByTicker: Map<string, string>,
+  cikByTicker: Map<string, TickerEntry>,
   tickerMapPresent: boolean
 ): SeedResult {
   const withoutCik: string[] = [];
   let added = 0;
 
   for (const symbol of universe) {
-    const cik = cikByTicker.get(symbol) ?? null;
+    const found = cikByTicker.get(symbol) ?? null;
+    const cik = found?.cik ?? null;
     if (!cik) withoutCik.push(symbol);
     const existing = manifest.symbols[symbol];
     if (existing) {
-      // Fill a CIK that was missing last time without touching anything else.
+      // Fill what was missing last time without touching anything else.
       if (!existing.cik && cik) existing.cik = cik;
+      if (!existing.exchange && found?.exchange) existing.exchange = found.exchange;
       continue;
     }
-    manifest.symbols[symbol] = emptyEntry(cik);
+    manifest.symbols[symbol] = emptyEntry(cik, found?.exchange ?? null);
     added++;
   }
 
@@ -290,7 +307,7 @@ export function mapChangeThreshold(symbolCount: number): number {
  */
 export function reconcileCiks(
   manifest: SecManifest,
-  cikByTicker: Map<string, string>,
+  cikByTicker: Map<string, TickerEntry>,
   now = Date.now()
 ): CikChangeResult {
   const changes: CikChange[] = [];
@@ -303,13 +320,15 @@ export function reconcileCiks(
       absentFromMap++;
       continue;
     }
+    // ONLY THE CIK IS CONSIDERED HERE. Exchange is reconciled separately and
+    // deliberately does NOT enter this path -- see reconcileExchanges.
     if (!entry.cik) {
-      entry.cik = fresh;
+      entry.cik = fresh.cik;
       filled++;
       continue;
     }
-    if (entry.cik !== fresh) {
-      changes.push({ symbol, previousCik: entry.cik, newCik: fresh, at: now });
+    if (entry.cik !== fresh.cik) {
+      changes.push({ symbol, previousCik: entry.cik, newCik: fresh.cik, at: now });
     }
   }
 
@@ -419,7 +438,7 @@ export type DelistingResult = {
  */
 export function reconcileDelistings(
   manifest: SecManifest,
-  cikByTicker: Map<string, string>,
+  cikByTicker: Map<string, TickerEntry>,
   now = Date.now()
 ): DelistingResult {
   const entries = Object.entries(manifest.symbols);
@@ -507,4 +526,85 @@ export function reconcileDelistings(
         ? `${newlyAbsent.length} newly absent, ${stillAbsent.length} still absent, ${reappeared.length} reappeared, ${newlyDelisted.length} newly delisted`
         : null,
   };
+}
+
+// ── Exchange ────────────────────────────────────────────────────────────────
+
+export type ExchangeResult = {
+  updated: { symbol: string; previous: string | null; next: string }[];
+  filled: number;
+  unchanged: number;
+  /** Entries the map carried no exchange for. NOT cleared -- see below. */
+  noExchangeInMap: number;
+  histogram: Record<string, number>;
+};
+
+/**
+ * Update the exchange field from a resolved ticker map.
+ *
+ * AN EXCHANGE CHANGE IS NOT AN INVALIDATION, and keeping it out of
+ * reconcileCiks is the point rather than an organisational preference. A
+ * company moving NYSE -> Nasdaq keeps its CIK, keeps its filings and keeps
+ * every number already stored; nothing about the fact set is suspect. Routing
+ * it through the invalidation path would discard a perfectly good fact set and
+ * re-fetch it from SEC because a venue changed. Only a CIK change means the
+ * data might belong to somebody else.
+ *
+ * So this function has no threshold, no guard and no destructive branch: it
+ * writes a field. The spike guards exist where an inference could be wrong and
+ * expensive; this is an observation being copied.
+ *
+ * A KNOWN EXCHANGE IS NEVER OVERWRITTEN WITH NULL. The legacy committed file
+ * carries no exchange column at all, so a run that fell back to it would
+ * otherwise blank the field for the whole universe -- absence in the source is
+ * not a move to "no exchange".
+ */
+export function reconcileExchanges(
+  manifest: SecManifest,
+  cikByTicker: Map<string, TickerEntry>
+): ExchangeResult {
+  const updated: ExchangeResult["updated"] = [];
+  let filled = 0;
+  let unchanged = 0;
+  let noExchangeInMap = 0;
+
+  for (const [symbol, entry] of Object.entries(manifest.symbols)) {
+    const fresh = cikByTicker.get(symbol);
+    if (!fresh) continue;
+    if (!fresh.exchange) {
+      noExchangeInMap++;
+      continue;
+    }
+    if (!entry.exchange) {
+      entry.exchange = fresh.exchange;
+      filled++;
+      continue;
+    }
+    if (entry.exchange !== fresh.exchange) {
+      updated.push({ symbol, previous: entry.exchange, next: fresh.exchange });
+      entry.exchange = fresh.exchange;
+      continue;
+    }
+    unchanged++;
+  }
+
+  return { updated, filled, unchanged, noExchangeInMap, histogram: exchangeHistogram(manifest) };
+}
+
+/**
+ * What share of the universe sits on each venue.
+ *
+ * Needed BEFORE the Nasdaq-only bars negotiation concludes rather than after:
+ * the size of the NYSE slice is the size of the population that would lose its
+ * price history, and therefore the cost of the deal. Counted from the MANIFEST
+ * rather than from the ticker map, because the universe is the thing being
+ * priced, not SEC's whole file.
+ */
+export function exchangeHistogram(manifest: SecManifest): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const entry of Object.values(manifest.symbols)) {
+    const key = entry.exchange ?? "(unknown)";
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
 }
