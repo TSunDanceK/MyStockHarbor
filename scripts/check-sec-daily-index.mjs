@@ -763,7 +763,102 @@ check("exchange is reconciled on every run with a map, not gated on a refresh",
 check("the exchange histogram reaches the job output",
   /exchangeHistogram: exchanges\?\.histogram/.test(routeCode));
 check("the Redis budget is stated as three, not still claiming two",
-  /redisCommands: dryRun \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
+  /redisCommands: dryRun \|\| inspectionOnly \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
+
+// ── 12. The manifest is BOUNDED — the pre-merge question ───────────────────
+//
+// 1,441 filing rows in four days is ~90,000 a year. The manifest is one key with
+// no TTL, read and written every run, so if filings ACCUMULATED in it the value
+// would grow without bound and the GET/SET would become the dominant cost of
+// every run including no-ops. The property that makes it safe is that every
+// write is an ASSIGNMENT, never an append -- asserted here rather than believed.
+console.log("\n12. Manifest size is independent of filing volume");
+const applySrc = grabFunction(ROUTE_SRC, "applyFilings");
+check("applyFilings never pushes onto an entry field",
+  !/entry\.[A-Za-z]+\.push\(/.test(applySrc) && !/entry\.[A-Za-z]+ = \[\s*\.\.\.entry\./.test(applySrc),
+  "an append would make the value grow with every filing forever");
+check("the only array field is REPLACED, not extended",
+  /entry\.ambiguousSameDayFilings =\s*\n?\s*sameDay\.length > 1/.test(applySrc),
+  "same-day accessions, overwritten each run and bounded by one day's filings for one symbol");
+// Asserted precisely: it is never assigned INTO the manifest, and it does
+// appear in the response. A proximity regex matched the surrounding code and
+// said the opposite.
+check("the per-day filing list is never assigned into the manifest",
+  !/manifest\.[A-Za-z]+\s*=\s*filingsBySymbol/.test(routeCode) &&
+  !/symbols\[[^\]]+\][^=]*=\s*filingsBySymbol/.test(routeCode) &&
+  !new RegExp("entry\\.[A-Za-z]+\\s*=\\s*filingsBySymbol").test(routeCode),
+  "filingsBySymbol is response-only");
+check("...and it IS in the response, where the volume is free",
+  /\n\s*filingsBySymbol,/.test(routeCode));
+
+// Measured at the real universe size, worst case, every field populated.
+const sizeAt = (n, full) => {
+  const syms = {};
+  for (let i = 0; i < n; i++) {
+    syms["SYM" + i] = full
+      ? { cik: String(1000000 + i).padStart(10, "0"), exchange: "Nasdaq", exchangeKnown: true,
+          lastAccession: "0001973239-26-000012", lastFiled: "20260911", contentHash: "a".repeat(64),
+          nextExpected: "2026-11-04", nextExpectedSource: "announcement", verifiedAt: 1789400000000,
+          needsReverify: true, scoreVersion: 1, reverifyReason: "periodic-report",
+          lastAmendment: { accession: "0000723125-26-000050", form: "10-Q/A", filed: "20260912" },
+          ambiguousSameDayFilings: ["a", "b", "c"], notInTickerMapSince: null, absentRefreshCount: 0,
+          delisted: false, retickeredTo: null }
+      : man.emptyEntry(String(1000000 + i).padStart(10, "0"), "Nasdaq");
+  }
+  return JSON.stringify({ ...man.emptyManifest(), symbols: syms }).length;
+};
+const worst = sizeAt(696, true);
+check("worst-case manifest at 696 symbols stays well inside Upstash's 10 MB ceiling",
+  worst < 1048576, `${(worst / 1024).toFixed(0)} KB (${((worst / 10485760) * 100).toFixed(1)}% of the ceiling)`);
+check("size scales with SYMBOLS, not with filings",
+  Math.abs(sizeAt(1392, true) / worst - 2) < 0.05,
+  "doubling the universe doubles it; a year of filings does not change it at all");
+
+// ── 13. Absence no longer feeds the failure counter ────────────────────────
+console.log("\n13. Absent is not a failure");
+check("absent increments the ABSENCE counter, not the failure counter",
+  /consecutiveAbsent \+= 1;/.test(routeCode) &&
+  !/outcome === "absent"[\s\S]{0,200}consecutive \+= 1/.test(routeCode),
+  "measured: a Saturday-only run took consecutiveIndexFailures 0 -> 1");
+check("a parse resets BOTH counters", /consecutive = 0;\s*\n\s*consecutiveAbsent = 0;/.test(routeCode));
+check("a real failure still increments the failure counter",
+  /outcome: "failed"[\s\S]{0,400}/.test(routeCode) && /consecutive \+= 1;/.test(routeCode));
+check("a long absence run is still caught, separately and far looser",
+  /IMPLAUSIBLE_ABSENCE_RUN = 10/.test(routeCode) && /absenceImplausible/.test(routeCode),
+  "a block answering with a small body would otherwise read as holidays forever");
+check("an implausible absence run makes the job NOT ok", /!absenceImplausible &&/.test(routeCode));
+
+// ── 14. from/to does not mutate the watermark ──────────────────────────────
+console.log("\n14. A range walk is inspection, not a write");
+check("from/to alone is inspection-only", /const inspectionOnly = explicitRange && !persistRange;/.test(routeCode),
+  "measured: a from/to run rewound the persisted watermark 20260912 -> 20260911");
+check("...so nothing is written", /dryRun \|\| inspectionOnly \? false : await writeManifest/.test(routeCode));
+check("...and the response says so rather than leaving it to be inferred",
+  /watermarkMoved:/.test(routeCode) && /rangeNote:/.test(routeCode));
+check("&persist=1 opts back in", /persistRange = url\.searchParams\.get\("persist"\) === "1"/.test(routeCode));
+
+// ── 15. 6-K is recorded as unconfirmed, without narrowing the form set ─────
+console.log("\n15. 6-K stays in, but is marked unconfirmed");
+const six = man.emptyManifest();
+man.seedManifest(six, ["ARM", "INTU", "MU"], FIXTURE_CIK.size ? new Map([
+  ["ARM", { cik: "0001973239", exchange: "Nasdaq" }],
+  ["INTU", { cik: "0000896878", exchange: "Nasdaq" }],
+  ["MU", { cik: "0000723125", exchange: "Nasdaq" }],
+]) : new Map(), true);
+route.applyFilings(six, [
+  { symbol: "ARM", form: "6-K", filed: "20260911", accession: "0001973239-26-000012", amendment: false },
+  { symbol: "INTU", form: "10-K", filed: "20260911", accession: "0000896878-26-000030", amendment: false },
+  { symbol: "MU", form: "10-Q/A", filed: "20260911", accession: "0000723125-26-000050", amendment: true },
+]);
+check("6-K still counts as periodic — ARM reports its quarter through one",
+  six.symbols.ARM.lastAccession === "0001973239-26-000012" && six.symbols.ARM.needsReverify === true,
+  "narrowing the form set would silently lose ARM's quarterly numbers");
+check("...but is marked UNCONFIRMED so step 3 can check before downloading 272 KB",
+  six.symbols.ARM.reverifyReason === "unconfirmed", six.symbols.ARM.reverifyReason);
+check("a 10-K is a periodic-report, worth a full read", six.symbols.INTU.reverifyReason === "periodic-report");
+check("an amendment outranks both", six.symbols.MU.reverifyReason === "amendment");
+check("the form set is unchanged — 6-K and 20-F are still periodic",
+  idx.isPeriodicForm("6-K") && idx.isPeriodicForm("20-F"));
 
 console.log(
   failures === 0

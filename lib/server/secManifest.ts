@@ -104,14 +104,49 @@ export type SecManifestEntry = {
    * data/sec/README.md).
    */
   retickeredTo?: string | null;
+  /**
+   * WHY this symbol needs re-reading, so step 3 can spend differently on each.
+   *
+   * 6-K IS 89% OF THE PERIODIC SIGNAL AND IS NOT A PERIODIC REPORT. Measured
+   * over 2026-09-08..11: of 55 periodic filers, 2 filed a 10-K, 4 a 10-Q and 49
+   * a 6-K -- HSBC, GSK, SNN and BIDU each filed one on all four days. 6-K is the
+   * foreign-private-issuer catch-all: press releases, director dealings, AGM
+   * notices, buyback announcements.
+   *
+   * Narrowing the form set is NOT the fix. ARM is an FPI and reports its
+   * quarter through a 6-K, so dropping 6-K would silently lose the quarterly
+   * numbers for the very page this project was audited against, while appearing
+   * to work. Instead the RE-READ is made conditional, and this field is what
+   * tells step 3 which kind of re-read to do.
+   */
+  reverifyReason?: "periodic-report" | "amendment" | "unconfirmed" | null;
 };
 
 export type SecManifest = {
   version: 1;
   /** Last daily index date (YYYYMMDD) successfully processed. */
   lastIndexDate: string | null;
-  /** Consecutive index fetch failures. Reset on ANY success. See 3.6. */
+  /**
+   * Consecutive index FAILURES -- a refusal, a 5xx, a timeout. Reset on any
+   * parse. An ABSENT day never touches this: see consecutiveIndexAbsent.
+   */
   consecutiveIndexFailures: number;
+  /**
+   * Consecutive days with no index published, counted SEPARATELY.
+   *
+   * Absence is normal -- every weekend and every market holiday -- so feeding it
+   * into the failure counter alarms on days when nothing is wrong: a cron
+   * walking one day at a time through Thanksgiving or Christmas reaches four
+   * consecutive absences without anything being broken. Measured, not
+   * suspected: a Saturday-only run took the counter 0 -> 1.
+   *
+   * But it is still counted, because a silent block that happened to answer
+   * with a small 403 body would otherwise look like absence forever and never
+   * alarm at all. There is no ten-day stretch with no EDGAR publication, so
+   * that is the implausibility threshold -- a different question from "is SEC
+   * refusing us", asked separately.
+   */
+  consecutiveIndexAbsent?: number;
   seededAt: number | null;
   updatedAt: number | null;
   symbols: Record<string, SecManifestEntry>;
@@ -131,6 +166,7 @@ export function emptyEntry(cik: string | null, exchange: string | null = null): 
     scoreVersion: SEC_SCORE_VERSION,
     lastAmendment: null,
     ambiguousSameDayFilings: null,
+    reverifyReason: null,
     notInTickerMapSince: null,
     absentRefreshCount: 0,
     delisted: false,
@@ -142,6 +178,7 @@ export function emptyManifest(): SecManifest {
     version: 1,
     lastIndexDate: null,
     consecutiveIndexFailures: 0,
+    consecutiveIndexAbsent: 0,
     seededAt: null,
     updatedAt: null,
     symbols: {},
