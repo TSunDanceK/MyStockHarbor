@@ -21,7 +21,7 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readCodeOnly } from "./lib/source-code.mjs";
+import { readCodeOnly, eventTypeSource } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -41,14 +41,14 @@ const loadTs = async (source, tag) => {
 
 // --------------------------------------------------------------- the adapter
 let src = read("lib/server/news/wireProvider.ts")
+  .replace(/^import \{ deriveEventType \} from "\.\/eventType";$/m, () => eventTypeSource())
   .replace(/^import \{ stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
   .replace("export const wireProvider: NewsProvider =", "export const wireProvider =")
-  .replace(/const SUBJECT_EVENT_TYPES: Array<\[RegExp, NonNullable<NewsItem\["eventType"\]>\]>/, "const SUBJECT_EVENT_TYPES")
   .replace(/export function imageVerdictFor\(imageUrl: string \| null, credit: string \| null\): NewsItem\["imageVerdict"\]/,
            "export function imageVerdictFor(imageUrl, credit)")
-  .replace(/let eventType: NewsItem\["eventType"\] = null;/, "let eventType = null;");
+;
 if (/^import /m.test(src)) {
   console.error("FAIL: an import survived inlining:\n" + src.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
   process.exit(1);

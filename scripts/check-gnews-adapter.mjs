@@ -18,7 +18,7 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readCodeOnly } from "./lib/source-code.mjs";
+import { readCodeOnly, eventTypeSource } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -48,6 +48,7 @@ const loadTs = async (source, tag) => {
 // Its three imports are inlined from source, not stubbed: the normaliser decides
 // the query and the text helpers decide the title, so a stub would test the stub.
 let adapterSrc = read("lib/server/news/gnewsProvider.ts")
+  .replace(/^import \{ deriveEventType \} from "\.\/eventType";$/m, () => eventTypeSource())
   .replace(/^import \{ normaliseCompanyName, assessCompanyName \} from ".\/companyName";$/m,
     () => read("lib/server/news/companyName.ts")
       .replace(/^import \{ cleanName \} from "@\/lib\/server\/companyNames";$/m,

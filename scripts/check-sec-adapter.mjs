@@ -22,7 +22,7 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readCodeOnly } from "./lib/source-code.mjs";
+import { readCodeOnly, eventTypeSource } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -42,6 +42,7 @@ const loadTs = async (source, tag) => {
 
 // --------------------------------------------------------------- the adapter
 let src = read("lib/server/news/secProvider.ts")
+  .replace(/^import \{ eventTypeFromForm \} from "\.\/eventType";$/m, () => eventTypeSource())
   .replace(/^import cikMap from "@\/data\/cik-map\.json";$/m,
     () => `const cikMap = ${read("data/cik-map.json")};`)
   .replace(/^import \{ stripHtmlTags \} from ".\/text";$/m,
@@ -361,22 +362,30 @@ check(
   !/from "@\/lib\/sectors"/.test(read("lib/server/news/secProvider.ts"))
 );
 
-console.log("\n=== 9. eventType (§7) is noted, not implemented ===\n");
-const secDoc = read("lib/server/news/secProvider.ts");
+console.log("\n=== 9. eventType (§7), implemented in step 6 ===\n");
 check(
-  "the code says where form type would feed eventType",
-  /eventType/.test(secDoc) && /§7|section 7/i.test(secDoc),
-  "form type is the highest-priority signal in that cascade, so the note belongs where the form is parsed"
+  "the 10-Q is an earnings item",
+  items.find((i) => i.title.startsWith("Form 10-Q"))?.eventType === "earnings",
+  "the periodic report IS the earnings disclosure"
 );
 check(
-  "no item actually carries an eventType yet",
-  items.every((i) => i.eventType === undefined),
-  "step 6, not this one"
+  "the Item 2.02 8-K is earnings from its ITEM CODE, not its form",
+  items.find((i) => i.title.includes("results of operations"))?.eventType === "earnings",
+  "every 8-K is 'a current report'; the item code is what says it is the numbers"
 );
 check(
-  "the note is a comment, not dead code",
-  !/eventType\s*[:=]/.test(secSrc),
-  "readCodeOnly strips comments; if this matches, something real got written"
+  "insider paperwork is 'filing' — the truthful floor, not a guess",
+  items.filter((i) => /Form (3|4|5|144) —/.test(i.title)).every((i) => i.eventType === "filing")
+);
+check(
+  "EVERY SEC item carries an eventType; this leg never abstains",
+  items.length > 0 && items.every((i) => i.eventType != null),
+  "a filing is a filing whatever the form says, so there is no null case here"
+);
+check(
+  "the derivation is the SHARED cascade, not a table restated in this adapter",
+  /eventTypeFromForm\(/.test(secSrc) && !/ITEM_EVENT_TYPES|FORM_EVENT_TYPES/.test(secSrc),
+  "§7's priority order split across three adapters is one nobody can read"
 );
 
 console.log("\n=== 10. Registered, and still off by default ===\n");

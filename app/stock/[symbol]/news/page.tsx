@@ -26,7 +26,8 @@ import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
 import GeneratedNewsArt from "@/app/components/GeneratedNewsArt";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
-import { bucketFor, pickArt, type NewsArt } from "@/lib/server/news/art";
+import { bucketFor, bucketForItem, pickArt, type NewsArt } from "@/lib/server/news/art";
+import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
@@ -80,6 +81,12 @@ type NewsItem = {
   // supplies a stable guid; FMP does not, so selection falls back to the link,
   // which is stable for the same article too.
   guid?: string | null;
+  // What kind of event the article reports (§7, derived in step 6). Typed from
+  // the canonical NewsItem rather than restated, so the union cannot drift here
+  // and leave art.ts mapping a member this file does not know about. Absent on
+  // every FMP item, which is why null falling through to sector is the common
+  // path and not the exception.
+  eventType?: StoredNewsItem["eventType"];
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -289,7 +296,11 @@ function DetailedNewsSection({
   newsScore: LiveNewsScore;
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
-  /** Sector art bucket for this symbol, or null when nothing maps. */
+  /**
+   * The SECTOR art bucket for this symbol, or null when nothing maps. Per-item
+   * event buckets are chosen inside, from each item's eventType; this is the
+   * fallback the null case falls through to.
+   */
   artBucket: string | null;
   changePct: number | null;
   sparkPoints: number[];
@@ -302,10 +313,26 @@ function DetailedNewsSection({
   // COMPACT ROWS ARE NOT IN THIS LOOP, and that is the design, not an omission:
   // they always take the generated data card, which stays legible at 56px where
   // a shrunk illustration does not.
-  const taken = new Set<number>();
-  const leadArt: Array<NewsArt | null> = detailedNews.map((item) =>
-    pickArt(artBucket, item.guid ?? item.link, taken)
-  );
+  // ── taken IS PER BUCKET, NOT PER PAGE ────────────────────────────────────
+  // Step 0 chose one bucket for the whole section, so a single Set was enough.
+  // Step 6 chooses per item — an earnings story takes event-earnings while the
+  // one below it takes the sector bucket — and index 2 of one bucket is a
+  // completely different image from index 2 of another. Sharing one Set across
+  // them would make the no-repeat rule block images it has never used, and skew
+  // every selection after the first. Keyed by bucket, the rule means what it
+  // says within each bucket and nothing across them.
+  const takenByBucket = new Map<string, Set<number>>();
+  const leadArt: Array<NewsArt | null> = detailedNews.map((item) => {
+    // §6: eventType picks the bucket, and null falls through to sector.
+    const bucket = bucketForItem(item.eventType, artBucket);
+    if (!bucket) return null;
+    let taken = takenByBucket.get(bucket);
+    if (!taken) {
+      taken = new Set<number>();
+      takenByBucket.set(bucket, taken);
+    }
+    return pickArt(bucket, item.guid ?? item.link, taken);
+  });
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>

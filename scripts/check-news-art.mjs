@@ -156,11 +156,28 @@ if (uncounted.length) {
   );
 }
 
-console.log("\n=== 4. Step 0 selects on sector, not eventType ===\n");
+console.log("\n=== 4. Sector selection, and where eventType takes over ===\n");
+// STEP 0 SHIPPED SECTOR SELECTION ONLY and this section asserted that no event
+// bucket was reachable — correct then, and deliberately reversed by step 6,
+// which supplies eventType and turns §6's full rule on. What stays true, and is
+// what this now guards, is the DIVISION: bucketFor() is still sector-and-
+// industry only, and every event bucket goes through bucketForItem().
 check(
-  "no event-* bucket is selected yet",
-  !/event-/.test(artCode),
-  "eventType is derived by the adapters — that is step 6, and selecting on it now would read as working while always missing"
+  "bucketFor() is still sector/industry only — no event bucket reaches it",
+  (() => {
+    // The FUNCTION BODY, not everything between two names: EVENT_BUCKETS is
+    // declared between bucketFor and bucketForItem in the file, so a slice
+    // bounded by the two names contains it and this check fails on itself.
+    const start = artCode.indexOf("export function bucketFor(");
+    const body = artCode.slice(start, artCode.indexOf("\n}", start));
+    return start > 0 && body.length > 40 && !/event-/.test(body);
+  })(),
+  "the sector half is what the null case falls through to, and it must not start choosing event art"
+);
+check(
+  "event buckets are reachable ONLY through bucketForItem",
+  /export function bucketForItem\(/.test(artCode) && /EVENT_BUCKETS\[eventType\]/.test(artCode),
+  "scripts/check-event-type.mjs owns the rest of that rule; this only guards the split"
 );
 check(
   "a bucket absent from the manifest yields no art",
@@ -173,13 +190,31 @@ console.log("\n=== 5. Selection: the real module, against a synthetic manifest =
 // running the selection logic against it would assert that nothing happens — a
 // test that passes because the feature is switched off. A synthetic manifest is
 // what makes the no-repeat rule and the bucket mapping observable at all.
-const artModuleSrc = read("lib/server/news/art.ts").replace(
-  /^import manifest from "@\/public\/news-art\/manifest.json";$/m,
-  () => 'const manifest = { "sector-banks": 4, "sector-semiconductors": 6 };'
-);
+const artModuleSrc = read("lib/server/news/art.ts")
+  .replace(
+    /^import manifest from "@\/public\/news-art\/manifest.json";$/m,
+    () => 'const manifest = { "sector-banks": 4, "sector-semiconductors": 6 };'
+  )
+  // Step 6 added a type-only import for EventType. Erasing it keeps this
+  // harness about art selection, which is what it is for.
+  .replace(/^import type \{ EventType \} from ".\/eventType";$/m, "")
+  .replace(/const EVENT_BUCKETS: Record<EventType, string>/, "const EVENT_BUCKETS")
+  .replace(
+    /export function bucketForItem\(\n  eventType: EventType \| null \| undefined,\n  sectorBucket: string \| null\n\): string \| null \{/,
+    "export function bucketForItem(eventType, sectorBucket) {"
+  );
 if (/^import /m.test(artModuleSrc)) {
-  console.error("FAIL: an import survived substitution.");
+  console.error("FAIL: an import survived substitution:\n" +
+    artModuleSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
   process.exit(1);
+}
+// Positive markers, so a substitution that stops matching is loud rather than
+// silently loading a module with a binding missing.
+for (const [marker, why] of [
+  ['const manifest = { "sector-banks"', "the synthetic manifest was not substituted"],
+  ["export function bucketForItem(eventType, sectorBucket) {", "bucketForItem was not de-typed"],
+]) {
+  if (!artModuleSrc.includes(marker)) { console.error(`FAIL: ${why}.`); process.exit(1); }
 }
 const artJs = ts.transpileModule(artModuleSrc, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

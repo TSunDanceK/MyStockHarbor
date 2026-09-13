@@ -13,12 +13,16 @@
 // today the manifest is empty entirely, so every card takes the generated card.
 // When images land, raising the count is the only change needed here.
 //
-// ── EVENT BUCKETS ARE NOT USED YET ─────────────────────────────────────────
-// §6's full rule is `eventType ? pick(event-*) : pick(sector-*)`, but eventType
-// is derived by the adapters and that is step 6. Step 0 selects on sector only,
-// which the spec is explicit is "a perfectly good default". The event-* entries
-// may already be in the manifest; nothing here reads them.
+// ── EVENT BUCKETS, LIVE SINCE STEP 6 ───────────────────────────────────────
+// §6's full rule is `eventType ? pick(event-*) : pick(sector-*)`. Step 0 shipped
+// the sector half, which the spec is explicit is "a perfectly good default";
+// step 6 supplies eventType and bucketForItem() implements the choice.
+//
+// null IS NOT A DEFAULT EVENT BUCKET. It falls through to sector, because a
+// wrong event type puts event-earnings art on a lawsuit story and asserts
+// something false, where a sector illustration asserts nothing.
 import manifest from "@/public/news-art/manifest.json";
+import type { EventType } from "./eventType";
 
 const BUCKET_COUNTS = manifest as Record<string, number>;
 
@@ -107,6 +111,50 @@ export function bucketFor(sector: string | null, industry: string | null): strin
 
   const slug = (sector ?? "").toLowerCase().trim();
   return SECTOR_BUCKETS[slug] ?? null;
+}
+
+/**
+ * eventType -> art bucket.
+ *
+ * ── THE NAMES DO NOT MATCH, AND THAT IS THE WHOLE REASON THIS MAP EXISTS ───
+ * The type union is singular ("deal", "filing"); the shipped library is plural
+ * ("event-deals", "event-filings"). `event-${eventType}` reads like the obvious
+ * implementation and silently resolves to a bucket that is not in the manifest,
+ * which means bucketCount 0, which means NO art at all on exactly the items
+ * that had the strongest evidence. It would not have failed a build — the same
+ * shape as the 0-vs-1 index bug the merge exposed, where only a visitor sees it.
+ *
+ * Written out in full, and scripts/check-news-art.mjs asserts every member of
+ * the union reaches a bucket the manifest actually holds images for.
+ */
+const EVENT_BUCKETS: Record<EventType, string> = {
+  earnings: "event-earnings",
+  filing: "event-filings",
+  analyst: "event-analyst",
+  deal: "event-deals",
+  macro: "event-macro",
+};
+
+/**
+ * §6's selection rule: the event bucket when the item has an eventType, the
+ * symbol's sector bucket when it does not.
+ *
+ * ONE DELIBERATE DEVIATION, and it is defensive rather than a rule change: an
+ * eventType whose bucket holds no images falls through to sector instead of
+ * returning a bucket with nothing in it. Both branches are degenerate at that
+ * point, and sector art beats no art. It is the manifest-is-the-only-source-of-
+ * counts rule applied to the event half — if the event art is ever removed, the
+ * cards quietly go back to sector illustrations rather than quietly go blank.
+ */
+export function bucketForItem(
+  eventType: EventType | null | undefined,
+  sectorBucket: string | null
+): string | null {
+  if (eventType) {
+    const bucket = EVENT_BUCKETS[eventType];
+    if (bucketCount(bucket) > 0) return bucket;
+  }
+  return sectorBucket;
 }
 
 /** How many images a bucket holds. 0 for a bucket with none, or one absent. */

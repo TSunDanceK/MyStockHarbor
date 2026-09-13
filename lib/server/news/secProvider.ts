@@ -20,6 +20,7 @@
 // set and a truthful default is sent when it is not — an anonymous request that
 // works is still a request that should not be made anonymously.
 import cikMap from "@/data/cik-map.json";
+import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
 import type { NewsItem, NewsProvider } from "./types";
 
@@ -140,12 +141,11 @@ type SubmissionsShape = {
  * Exported for the harness: the sandbox cannot reach data.sec.gov, so the
  * parser is the half that has to be testable offline.
  *
- * ── WHERE eventType WOULD COME FROM, and why it is not here ────────────────
- * §7 ranks SEC form type as the HIGHEST-priority eventType signal, above the
- * wires' prn:subject and above title keywords — a 10-Q is an earnings filing
- * with no ambiguity at all. That derivation is step 6 and the mapping is
- * deliberately not written yet, but the shape is: 10-K/10-Q/8-K Item 2.02 ->
- * "earnings", SC 13D/13G -> "deal", everything else -> "filing".
+ * ── eventType COMES FROM THE FORM, and it is §7's strongest signal ─────────
+ * Implemented in step 6. A form is assigned by the filer, not matched out of
+ * prose, so this leg cannot be wrong the way the title leg can — and it has a
+ * truthful floor: when the form says nothing more specific, "filing" is still
+ * literally what the item is. See lib/server/news/eventType.ts.
  */
 export function parseSubmissions(
   body: SubmissionsShape,
@@ -195,6 +195,10 @@ export function parseSubmissions(
       guid: accessions[i] ?? null,
       // ATTRIBUTION, NOT A MODE SWITCH — see the note on fetchForSymbol.
       tickers: [symbol.toUpperCase()],
+      // Step 6: the FORM leg, §7's highest-priority signal, now implemented in
+      // lib/server/news/eventType.ts. It never returns null — "filing" is the
+      // truthful floor for anything filed — so every SEC item selects event art.
+      eventType: eventTypeFromForm(forms[i], items[i] ?? ""),
       provider: "sec",
     });
   }

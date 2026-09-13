@@ -20,6 +20,7 @@
 // they are memoised outright. fetchForSymbol filters that shared set rather than
 // asking the wire about a symbol.
 import { stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription } from "./text";
+import { deriveEventType } from "./eventType";
 import type { NewsItem, NewsProvider } from "./types";
 
 const GLOBENEWSWIRE_URL =
@@ -49,15 +50,6 @@ const US_EXCHANGE_PREFIXES = new Set([
 ]);
 
 /** PR Newswire's prn:subject / dc:subject -> the NewsItem eventType enum. */
-const SUBJECT_EVENT_TYPES: Array<[RegExp, NonNullable<NewsItem["eventType"]>]> = [
-  [/earning|quarterly result|annual result|financial result/i, "earnings"],
-  [/dividend|stock split|buyback|share repurchase/i, "earnings"],
-  [/acquisition|merger|joint venture|takeover|divestiture|licensing/i, "deal"],
-  [/analyst|rating|price target|coverage/i, "analyst"],
-  [/sec filing|prospectus|proxy|8-k|10-q|10-k/i, "filing"],
-  [/economic|regulat|policy|trade show|government|tariff/i, "macro"],
-];
-
 function tagAll(block: string, tag: string): string[] {
   const out: string[] = [];
   // Escaped because prn:industry and dc:subject contain a colon.
@@ -179,10 +171,10 @@ export function parseWireFeed(xml: string, source: WireSource, nowMs = Date.now(
       .map(clean)
       .filter((v) => v.length > 4);
 
-    let eventType: NewsItem["eventType"] = null;
-    for (const [pattern, type] of SUBJECT_EVENT_TYPES) {
-      if (subjects.some((s) => pattern.test(s))) { eventType = type; break; }
-    }
+    // Step 6: the subject leg, falling through to the title leg when the issuer
+    // supplied no usable subject. The cascade and every pattern in it live in
+    // lib/server/news/eventType.ts — see the note there on why it is one file.
+    const { eventType } = deriveEventType({ subjects, title });
 
     const imageUrl = block.match(/<media:content[^>]*url="([^"]+)"/)?.[1] ?? null;
     const credit = clean(tag1(block, "media:credit")) || null;

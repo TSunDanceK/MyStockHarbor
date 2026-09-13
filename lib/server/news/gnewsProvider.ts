@@ -17,6 +17,7 @@
 // normaliser, which is why that step shipped first.
 import { normaliseCompanyName, assessCompanyName } from "./companyName";
 import { stripHtmlTags, containsHtmlMarkup, decodeHtml } from "./text";
+import { deriveEventType } from "./eventType";
 import type { NewsItem, NewsProvider } from "./types";
 
 const FEED_URL = "https://news.google.com/rss/search";
@@ -141,6 +142,11 @@ export function parseGoogleNewsFeed(xml: string, symbol: string, nowMs = Date.no
       // would switch off the text-relevance filter that catches the residual
       // 2-3% of off-topic results this feed returns.
       tickers: [symbol.toUpperCase()],
+      // Step 6: the TITLE leg, which is the only one a headline can reach and
+      // the weakest in §7's cascade. It is null far more often than not, and
+      // that is the intended behaviour — null selects sector art, which asserts
+      // nothing, where a wrong event type asserts something false.
+      eventType: deriveEventType({ title }).eventType,
       provider: "gnews",
     });
   }
