@@ -32,6 +32,9 @@ The agent sandbox cannot substitute for it either — `data.sec.gov`,
     # override the symbol set
     /api/debug/earnings-sources?key=...&symbols=ARM,AAPL,MU,PLAB,ASTS
 
+    # supply the SEC User-Agent in the URL (see "Requires" below)
+    /api/debug/earnings-sources?key=...&ua=MyStockHarbor%20you@example.com
+
 Default symbols are `ARM,AAPL,MU,PLAB,ASTS` — one mega cap, one mid, two small,
 one recent IPO.
 
@@ -54,18 +57,46 @@ sections 1, 2 and 5 down with it for no reason.
 
 ## Requires
 
-- **`SEC_USER_AGENT`**, in Preview. SEC's fair-access policy requires a declared
-  User-Agent carrying a contact address and blocks generic ones; all three SEC
-  sections fail for the wrong reason without it. Roughly
+- **A declared SEC User-Agent**, from either source. SEC's fair-access policy
+  requires one carrying a contact address and blocks generic ones; every SEC
+  section fails for the wrong reason without it. Roughly
   `MyStockHarbor contact@example.com`.
+
+  - `?ua=<value>` — takes precedence, URL-encoded.
+  - `SEC_USER_AGENT` — used when `?ua=` is absent or blank.
+
+  **Why the query parameter exists.** `SEC_USER_AGENT` does not propagate to
+  Preview on this project and three redeploys did not fix it, so every SEC
+  section returned `403 Request Rate Threshold Exceeded`. **Read that as SEC's
+  block for an undeclared agent, not as an actual rate limit** — backing off and
+  retrying will not clear it; only a declared agent will. The probe is
+  key-guarded and throwaway, so carrying the agent in the URL is an acceptable
+  trade here. It would not be in production code.
+
+  No contact address is hardcoded anywhere — **this repo is public**, and an
+  address committed here would stay in the history forever.
+
+  The agent is **threaded as a parameter through every SEC call**, never held in
+  a module-level variable. A serverless instance is reused across concurrent
+  invocations, so a shared mutable agent would let one caller's address be sent
+  on another caller's request. The value is also sanitised (CR/LF and control
+  characters stripped, capped at 256) — a header value carrying a newline makes
+  `fetch` throw, and that throw would surface as "SEC unreachable" rather than
+  "your parameter is malformed".
 - **`ALPHAVANTAGE_API_KEY`**, only for `sections=av`. Absent, that section
   reports `ok: false` with the reason and spends nothing.
 
 Vercel captures env vars at build time, so adding either one needs a rebuild,
-not just a save. The response reports `secUserAgent.set` / `.hasContact` and
-`alphaVantageKey.set` so an unset value is visible as itself rather than looking
-like a network failure. Neither value is ever echoed — one contains an email
-address, the other is a credential, and this output gets pasted around.
+not just a save. The response reports `secUserAgent.source` (`"query"` / `"env"` / `"none"`),
+`.set`, `.hasContact`, `.length`, `.sanitized` and a `note`, all describing
+**whichever source was actually used** — so `set: true` with `source: "query"`
+means the header really was sent. `alphaVantageKey.set` does the same for that
+key. **Neither value is ever echoed** — one carries an email address, the other
+is a credential, and this output gets pasted around.
+
+`source: "none"` means requests went out with a placeholder carrying no contact
+address, and a `403` after that is the undeclared-agent block, not SEC being
+down.
 
 ## Reading the output
 

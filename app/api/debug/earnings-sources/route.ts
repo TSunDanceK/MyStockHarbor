@@ -57,7 +57,21 @@ export const maxDuration = 300;
 //
 // See README.md in this folder. SAFE TO DELETE once the adapter lands.
 
-const SEC_UA = process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (CONTACT-NOT-SET)";
+// The User-Agent is THREADED THROUGH EVERY SEC CALL rather than read from a
+// module-level variable, and that is a correctness requirement, not tidiness.
+// A serverless instance is reused across concurrent invocations, so a mutable
+// module-level UA set per request would let one caller's agent -- which carries
+// an email address -- be sent on another caller's request. A parameter cannot
+// cross-contaminate.
+const SEC_UA_FALLBACK = "MyStockHarbor/1.0 (CONTACT-NOT-SET)";
+
+// A header value cannot carry CR, LF or other control characters: fetch() will
+// throw on them, and the throw would surface as "SEC unreachable" rather than
+// "your ua parameter is malformed". Stripped and capped here so a bad value is
+// reported as a bad value.
+function sanitizeUa(raw: string): string {
+  return raw.replace(/[\r\n\t\0]/g, " ").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 256);
+}
 const AV_KEY = process.env.ALPHAVANTAGE_API_KEY || "";
 
 const DEFAULT_SYMBOLS = ["ARM", "AAPL", "MU", "PLAB", "ASTS"];
@@ -159,9 +173,9 @@ type RawFetch = {
   ms: number;
 };
 
-function secHeaders(): Record<string, string> {
+function secHeaders(ua: string): Record<string, string> {
   return {
-    "user-agent": SEC_UA,
+    "user-agent": ua,
     "accept-encoding": "gzip, deflate",
     accept: "application/json,text/plain,*/*",
   };
@@ -211,11 +225,11 @@ function describeError(err: unknown, timeoutMs: number): string {
 // unresolved rather than silently dropped.
 type CikMap = { map: Record<string, { cik: string; title: string }>; diag: Record<string, unknown> };
 
-async function resolveCiks(symbols: string[]): Promise<CikMap> {
+async function resolveCiks(symbols: string[], ua: string): Promise<CikMap> {
   const url = "https://www.sec.gov/files/company_tickers.json";
   const timeoutMs = 30000;
   try {
-    const r = await timedFetch(url, timeoutMs, secHeaders());
+    const r = await timedFetch(url, timeoutMs, secHeaders(ua));
     if (r.status !== 200) {
       return {
         map: {},
@@ -399,11 +413,11 @@ function analyseConcept(
   };
 }
 
-async function probeCompanyFacts(symbol: string, cik: string, cutoffMs: number) {
+async function probeCompanyFacts(symbol: string, cik: string, cutoffMs: number, ua: string) {
   const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
   const timeoutMs = 60000;
   try {
-    const r = await timedFetch(url, timeoutMs, secHeaders());
+    const r = await timedFetch(url, timeoutMs, secHeaders(ua));
     const common = {
       symbol,
       cik,
@@ -649,11 +663,11 @@ function analyseAcceptance(rows: { form: string; filingDate: string; acceptance:
   };
 }
 
-async function probeSubmissions(symbol: string, cik: string, cutoffMs: number) {
+async function probeSubmissions(symbol: string, cik: string, cutoffMs: number, ua: string) {
   const url = `https://data.sec.gov/submissions/CIK${cik}.json`;
   const timeoutMs = 45000;
   try {
-    const r = await timedFetch(url, timeoutMs, secHeaders());
+    const r = await timedFetch(url, timeoutMs, secHeaders(ua));
     const common = { symbol, cik, url, status: r.status, contentType: r.contentType, bytes: r.bytes, ms: r.ms };
     if (r.status !== 200) {
       return { ...common, ok: false, reason: `HTTP ${r.status}`, bodyHead: r.body.slice(0, 300) };
@@ -754,7 +768,9 @@ async function probeSubmissions(symbol: string, cik: string, cutoffMs: number) {
 //
 // node:zlib and node:stream are builtins -- no package, no lockfile change.
 
-const ZIP_UA = { "user-agent": SEC_UA, accept: "application/zip,*/*" };
+function zipHeaders(ua: string) {
+  return { "user-agent": ua, accept: "application/zip,*/*" };
+}
 
 type ZipEntry = {
   name: string;
@@ -776,14 +792,14 @@ function readU64(b: Buffer, o: number) {
   return Number(b.readBigUInt64LE(o));
 }
 
-async function rangeFetch(url: string, start: number, end: number, timeoutMs: number) {
+async function rangeFetch(url: string, start: number, end: number, timeoutMs: number, ua: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
-      headers: { ...ZIP_UA, range: `bytes=${start}-${end}` },
+      headers: { ...zipHeaders(ua), range: `bytes=${start}-${end}` },
     });
     const buf = Buffer.from(await res.arrayBuffer());
     return { status: res.status, buf };
@@ -848,12 +864,12 @@ function parseCentralDirectory(cd: Buffer): ZipEntry[] {
 async function streamEntry(
   url: string,
   entry: ZipEntry,
-  opts: { deadlineMs: number; maxInflatedBytes: number },
+  opts: { deadlineMs: number; maxInflatedBytes: number; ua: string },
   onLine: (line: string, lineNo: number) => boolean | void
 ) {
   // The central directory's extra-field length and the LOCAL header's can
   // differ, so the data offset has to come from the local header itself.
-  const head = await rangeFetch(url, entry.localHeaderOffset, entry.localHeaderOffset + 29, 30000);
+  const head = await rangeFetch(url, entry.localHeaderOffset, entry.localHeaderOffset + 29, 30000, opts.ua);
   if (head.buf.length < 30 || readU32(head.buf, 0) !== 0x04034b50) {
     return { ok: false as const, reason: `local header not found at offset ${entry.localHeaderOffset}` };
   }
@@ -872,7 +888,7 @@ async function streamEntry(
     const res = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
-      headers: { ...ZIP_UA, range: `bytes=${dataStart}-${dataEnd}` },
+      headers: { ...zipHeaders(opts.ua), range: `bytes=${dataStart}-${dataEnd}` },
     });
     if (res.status !== 206 && res.status !== 200) {
       return { ok: false as const, reason: `range request returned HTTP ${res.status}` };
@@ -982,7 +998,7 @@ const REVENUE_TAGS = new Set(
   ].map((t) => t.toLowerCase())
 );
 
-async function probeDataSets(month: string, targetSymbol: string, targetCik: string, overallDeadline: number) {
+async function probeDataSets(month: string, targetSymbol: string, targetCik: string, overallDeadline: number, ua: string) {
   const url = `${DATASET_BASE}/${month}_notes.zip`;
   const stages: Record<string, unknown> = {};
   const cikNumeric = String(Number(targetCik));
@@ -992,7 +1008,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 30000);
     const started = Date.now();
-    const head = await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", headers: ZIP_UA });
+    const head = await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", headers: zipHeaders(ua) });
     clearTimeout(t);
     stages.A_head = {
       url,
@@ -1020,7 +1036,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
   let entries: ZipEntry[] = [];
   try {
     const tailLen = Math.min(65557, totalSize);
-    const tail = await rangeFetch(url, totalSize - tailLen, totalSize - 1, 30000);
+    const tail = await rangeFetch(url, totalSize - tailLen, totalSize - 1, 30000, ua);
     if (tail.status !== 206) {
       stages.B_centralDirectory = {
         status: tail.status,
@@ -1057,7 +1073,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
       }
       if (loc === -1) return { month, url, ok: false, reason: "ZIP64 sentinel present but no ZIP64 locator", stages };
       const z64Offset = readU64(tail.buf, loc + 8);
-      const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, 30000);
+      const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, 30000, ua);
       if (readU32(z64.buf, 0) !== 0x06064b50) {
         return { month, url, ok: false, reason: "ZIP64 EOCD signature mismatch", stages };
       }
@@ -1066,7 +1082,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
       cdOffset = readU64(z64.buf, 48);
     }
 
-    const cd = await rangeFetch(url, cdOffset, cdOffset + cdSize - 1, 45000);
+    const cd = await rangeFetch(url, cdOffset, cdOffset + cdSize - 1, 45000, ua);
     entries = parseCentralDirectory(cd.buf);
     stages.B_centralDirectory = {
       zip64,
@@ -1108,7 +1124,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
   const subRes = await streamEntry(
     url,
     subEntry,
-    { deadlineMs: Math.min(overallDeadline, Date.now() + 90000), maxInflatedBytes: 512 * 1048576 },
+    { deadlineMs: Math.min(overallDeadline, Date.now() + 90000), maxInflatedBytes: 512 * 1048576, ua },
     (line, no) => {
       if (no === 1) {
         subHeader = tsvIndexer(line);
@@ -1177,7 +1193,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
   const numRes = await streamEntry(
     url,
     numEntry,
-    { deadlineMs: overallDeadline, maxInflatedBytes: 4096 * 1048576 },
+    { deadlineMs: overallDeadline, maxInflatedBytes: 4096 * 1048576, ua },
     (line, no) => {
       if (no === 1) {
         numHeader = tsvIndexer(line);
@@ -1235,7 +1251,7 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     ? await streamEntry(
         url,
         dimEntry,
-        { deadlineMs: overallDeadline, maxInflatedBytes: 1024 * 1048576 },
+        { deadlineMs: overallDeadline, maxInflatedBytes: 1024 * 1048576, ua },
         (line, no) => {
           if (no === 1) {
             dimHeader = tsvIndexer(line);
@@ -1644,13 +1660,13 @@ async function measuredFetch(url: string, headers: Record<string, string>, timeo
   }
 }
 
-async function probeConditional(symbol: string, cik: string) {
+async function probeConditional(symbol: string, cik: string, ua: string) {
   const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
   const timeoutMs = 60000;
   const steps: CondStep[] = [];
 
   try {
-    const base = await measuredFetch(url, secHeaders(), timeoutMs);
+    const base = await measuredFetch(url, secHeaders(ua), timeoutMs);
     const lastModified = base.headers.get("last-modified");
     const etag = base.headers.get("etag");
     steps.push({
@@ -1668,7 +1684,7 @@ async function probeConditional(symbol: string, cik: string) {
     }
 
     const run = async (step: string, header: Record<string, string>, note?: string) => {
-      const r = await measuredFetch(url, { ...secHeaders(), ...header }, timeoutMs);
+      const r = await measuredFetch(url, { ...secHeaders(ua), ...header }, timeoutMs);
       steps.push({
         step,
         requestHeader: Object.entries(header).map(([k, v]) => `${k}: ${v}`)[0],
@@ -1794,14 +1810,15 @@ type IdxDay = {
 async function fetchOneIdx(
   d: Date,
   targetCiks: Record<string, string>,
-  captureDetail: boolean
+  captureDetail: boolean,
+  ua: string
 ): Promise<IdxDay> {
   const url = idxUrl(d);
   const date = url.slice(-12, -4);
   const timeoutMs = 45000;
   try {
     const r = await timedFetch(url, timeoutMs, {
-      "user-agent": SEC_UA,
+      "user-agent": ua,
       "accept-encoding": "gzip, deflate",
       accept: "text/plain,*/*",
     });
@@ -1872,7 +1889,8 @@ async function probeDailyIndex(
   days: number,
   detailDays: number,
   targetCiks: Record<string, string>,
-  deadline: number
+  deadline: number,
+  ua: string
 ) {
   const dates = businessDaysBack(days, new Date());
   const results: IdxDay[] = [];
@@ -1888,7 +1906,7 @@ async function probeDailyIndex(
     }
     const batch = dates.slice(i, i + POOL);
     results.push(
-      ...(await Promise.all(batch.map((d, k) => fetchOneIdx(d, targetCiks, i + k < detailDays))))
+      ...(await Promise.all(batch.map((d, k) => fetchOneIdx(d, targetCiks, i + k < detailDays, ua))))
     );
   }
 
@@ -1976,13 +1994,13 @@ const BULK_CANDIDATES: { name: string; url: string }[] = [
   { name: "companyfacts.zip (alt path)", url: "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/companyfacts.zip" },
 ];
 
-async function probeBulkArchive(name: string, url: string) {
+async function probeBulkArchive(name: string, url: string, ua: string) {
   const timeoutMs = 45000;
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
-    const head = await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", headers: ZIP_UA });
+    const head = await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", headers: zipHeaders(ua) });
     clearTimeout(t);
 
     const contentLength = head.headers.get("content-length");
@@ -2003,7 +2021,7 @@ async function probeBulkArchive(name: string, url: string) {
     // EOCD only.
     const total = Number(contentLength);
     const tailLen = Math.min(65557, total);
-    const tail = await rangeFetch(url, total - tailLen, total - 1, timeoutMs);
+    const tail = await rangeFetch(url, total - tailLen, total - 1, timeoutMs, ua);
     if (tail.status !== 206) {
       return { ...base, ok: true, rangeSupported: false, note: `server answered ${tail.status} to a Range request; a cold start would have to download all ${base.sizeMB} MB` };
     }
@@ -2032,7 +2050,7 @@ async function probeBulkArchive(name: string, url: string) {
       }
       if (loc !== -1) {
         const z64Offset = readU64(tail.buf, loc + 8);
-        const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, timeoutMs);
+        const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, timeoutMs, ua);
         if (readU32(z64.buf, 0) === 0x06064b50) {
           entryCount = readU64(z64.buf, 32);
           cdSize = readU64(z64.buf, 40);
@@ -2043,7 +2061,7 @@ async function probeBulkArchive(name: string, url: string) {
 
     // A 64 KB sample of the central directory, not the whole thing.
     const sampleLen = Math.min(65536, cdSize);
-    const cdSample = await rangeFetch(url, cdOffset, cdOffset + sampleLen - 1, timeoutMs);
+    const cdSample = await rangeFetch(url, cdOffset, cdOffset + sampleLen - 1, timeoutMs, ua);
     const sampleEntries = parseCentralDirectory(cdSample.buf);
 
     return {
@@ -2071,7 +2089,8 @@ async function probeRefresh(
   symbols: string[],
   ciks: Record<string, { cik: string; title: string }>,
   opts: { condSymbols: number; idxDays: number; detailDays: number },
-  deadline: number
+  deadline: number,
+  ua: string
 ) {
   const condTargets = symbols.filter((s) => ciks[s]).slice(0, opts.condSymbols);
   const targetCiks = Object.fromEntries(symbols.filter((s) => ciks[s]).map((s) => [s, ciks[s].cik]));
@@ -2083,17 +2102,18 @@ async function probeRefresh(
   // added to rule out, manufactured by the probe measuring itself. The whole
   // section still fits the budget comfortably.
   const conditional = [];
-  for (const s of condTargets) conditional.push(await probeConditional(s, ciks[s].cik));
+  for (const s of condTargets) conditional.push(await probeConditional(s, ciks[s].cik, ua));
 
   const dailyIndex = await probeDailyIndex(
     opts.idxDays,
     opts.detailDays,
     targetCiks,
-    Math.min(deadline, Date.now() + 150000)
+    Math.min(deadline, Date.now() + 150000),
+    ua
   );
 
   const bulk = [];
-  for (const c of BULK_CANDIDATES) bulk.push(await probeBulkArchive(c.name, c.url));
+  for (const c of BULK_CANDIDATES) bulk.push(await probeBulkArchive(c.name, c.url, ua));
 
   const condOk = conditional.filter((c) => c.ok);
   const agreement = [...new Set(condOk.map((c) => `${c.imsSupported}/${c.inmSupported}`))];
@@ -2142,6 +2162,18 @@ export async function GET(request: Request) {
     .filter(Boolean)
     .slice(0, 8);
 
+  // WHICH AGENT, AND FROM WHERE. SEC_USER_AGENT does not propagate to Preview on
+  // this project -- three redeploys did not fix it -- so every SEC section came
+  // back 403 "Request Rate Threshold Exceeded", which is SEC's fair-access block
+  // for an UNDECLARED agent rather than an actual rate limit. ?ua= overrides it
+  // for this throwaway, key-guarded probe. Nothing is hardcoded: this repo is
+  // public, and a contact address committed here would be committed forever.
+  const rawQueryUa = (params.get("ua") ?? "").trim();
+  const rawEnvUa = (process.env.SEC_USER_AGENT ?? "").trim();
+  const uaSource: "query" | "env" | "none" = rawQueryUa ? "query" : rawEnvUa ? "env" : "none";
+  const rawUa = uaSource === "query" ? rawQueryUa : uaSource === "env" ? rawEnvUa : "";
+  const ua = sanitizeUa(rawUa) || SEC_UA_FALLBACK;
+
   const requested = (params.get("sections") ?? "free").toLowerCase();
   const sections =
     requested === "all"
@@ -2158,14 +2190,14 @@ export async function GET(request: Request) {
   const cikNeeded = sections.some(
     (s) => s === "sec-facts" || s === "sec-submissions" || s === "datasets" || s === "refresh"
   );
-  const ciks = cikNeeded ? await resolveCiks(symbols) : { map: {}, diag: { skipped: true } };
+  const ciks = cikNeeded ? await resolveCiks(symbols, ua) : { map: {}, diag: { skipped: true } };
   if (cikNeeded) out.cikResolution = ciks.diag;
 
   if (sections.includes("sec-facts")) {
     out.companyFacts = await Promise.all(
       symbols.map((s) =>
         ciks.map[s]
-          ? probeCompanyFacts(s, ciks.map[s].cik, cutoffMs)
+          ? probeCompanyFacts(s, ciks.map[s].cik, cutoffMs, ua)
           : Promise.resolve({ symbol: s, ok: false, reason: "no CIK resolved -- not probed", concepts: null })
       )
     );
@@ -2176,7 +2208,7 @@ export async function GET(request: Request) {
     const subs = await Promise.all(
       symbols.map((s) =>
         ciks.map[s]
-          ? probeSubmissions(s, ciks.map[s].cik, cutoffMs)
+          ? probeSubmissions(s, ciks.map[s].cik, cutoffMs, ua)
           : Promise.resolve({ symbol: s, ok: false, reason: "no CIK resolved -- not probed" })
       )
     );
@@ -2214,7 +2246,7 @@ export async function GET(request: Request) {
         monthDerivedFrom: params.get("month")
           ? "explicit &month= parameter"
           : `${target}'s ${annual?.form} filed ${annual?.filingDate}`,
-        ...(await probeDataSets(month, target, ciks.map[target].cik, overallDeadline)),
+        ...(await probeDataSets(month, target, ciks.map[target].cik, overallDeadline, ua)),
       };
     }
   }
@@ -2233,7 +2265,8 @@ export async function GET(request: Request) {
         idxDays: Math.max(1, Math.min(60, Number(params.get("idxDays") ?? 30))),
         detailDays: Math.max(1, Math.min(10, Number(params.get("detailDays") ?? 5))),
       },
-      overallDeadline
+      overallDeadline,
+      ua
     );
   }
 
@@ -2254,8 +2287,6 @@ export async function GET(request: Request) {
     };
   }
 
-  const rawSecUa = process.env.SEC_USER_AGENT ?? "";
-
   return Response.json(
     {
       ok: true,
@@ -2266,9 +2297,24 @@ export async function GET(request: Request) {
       symbols,
       sectionsRun: sections,
       sectionsAvailable: ALL_SECTIONS,
-      // The value itself is never echoed: it contains an email address and this
-      // output gets pasted around.
-      secUserAgent: { set: Boolean(rawSecUa), hasContact: rawSecUa.includes("@"), length: rawSecUa.length },
+      // The value itself is NEVER echoed -- it carries an email address and this
+      // output gets pasted around. These four fields describe whichever source
+      // was actually used for the requests above, not the env var specifically,
+      // so `set: true` with `source: "query"` means the header really was sent.
+      secUserAgent: {
+        source: uaSource,
+        set: Boolean(rawUa),
+        hasContact: rawUa.includes("@"),
+        length: rawUa.length,
+        // A value that needed stripping is reported rather than silently used:
+        // a mangled agent is exactly as blocked as a missing one, and the 403
+        // would otherwise look like SEC rather than like the parameter.
+        sanitized: rawUa !== sanitizeUa(rawUa),
+        note:
+          uaSource === "none"
+            ? "NEITHER ?ua= NOR SEC_USER_AGENT is set. Requests went out with a placeholder carrying no contact address, which SEC blocks with 403 'Request Rate Threshold Exceeded' -- read that as an undeclared agent, not a rate limit."
+            : `User-Agent taken from ${uaSource === "query" ? "the ?ua= parameter" : "SEC_USER_AGENT"}${rawUa.includes("@") ? "" : " -- WARNING: it carries no @, and SEC's fair-access policy requires a contact address"}`,
+      },
       alphaVantageKey: { set: Boolean(AV_KEY) },
       quarterWindowStart: new Date(cutoffMs).toISOString().slice(0, 10),
       readingGuide: {
