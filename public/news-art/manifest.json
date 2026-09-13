@@ -1,8 +1,8 @@
 {
   "event-analyst": 4,
   "event-deals": 4,
-  "event-earnings": 5,
-  "event-filings": 4,
+  "event-earnings": 8,
+  "event-filings": 10,
   "event-macro": 4,
   "sector-aerospace": 6,
   "sector-auto": 6,
