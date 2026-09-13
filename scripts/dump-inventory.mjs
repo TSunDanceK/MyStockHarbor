@@ -24,11 +24,22 @@ for (const file of fs.readdirSync(DUMP_DIR).sort()) {
   try { parsed = JSON.parse(fs.readFileSync(full, "utf8")); }
   catch { console.log(`${file}  ${bytes}B  (not JSON)`); continue; }
 
-  const rows = Array.isArray(parsed) ? parsed
+  // THE DUMP IS A REDIS DUMP, not a list of records: most files are
+  // {dumpedAt, dataset, key, present, values} where `values` maps a Redis key to
+  // the cached row. The first pass of this script only looked for rows/symbols/
+  // data arrays and therefore reported every one of them as an opaque object —
+  // including the two that carry the taxonomy this whole question was about.
+  let rows = Array.isArray(parsed) ? parsed
     : Array.isArray(parsed?.rows) ? parsed.rows
     : Array.isArray(parsed?.symbols) ? parsed.symbols
     : Array.isArray(parsed?.data) ? parsed.data
     : null;
+
+  if (!rows && parsed?.values && typeof parsed.values === "object") {
+    const vals = Object.values(parsed.values);
+    rows = vals.filter((v) => v && typeof v === "object" && !Array.isArray(v));
+    console.log(`${file}  ${bytes}B  redis dump "${parsed.key ?? parsed.dataset}" — ${Object.keys(parsed.values).length} keys`);
+  }
 
   if (!rows) {
     console.log(`${file}  ${bytes}B  object, keys: ${Object.keys(parsed).slice(0, 12).join(",")}`);
@@ -43,5 +54,11 @@ for (const file of fs.readdirSync(DUMP_DIR).sort()) {
   );
   if (hits.length && first) {
     console.log(`    sample: ${JSON.stringify(Object.fromEntries(hits.concat(["symbol"]).filter((k) => k in first).map((k) => [k, first[k]])))}`);
+    // How many rows actually carry a usable sector — the number that decides
+    // whether this file is a viable snapshot source or just a shape that looks
+    // right. A cache full of nulls is not coverage.
+    const withSector = rows.filter((r) => r && typeof r.sector === "string" && r.sector.trim()).length;
+    const withIndustry = rows.filter((r) => r && typeof r.industry === "string" && r.industry.trim()).length;
+    console.log(`    populated: sector ${withSector}/${rows.length}, industry ${withIndustry}/${rows.length}`);
   }
 }
