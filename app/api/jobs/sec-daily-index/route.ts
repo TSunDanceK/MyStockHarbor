@@ -5,9 +5,11 @@ import {
   writeManifest,
   seedManifest,
   symbolsByCik,
+  reconcileCiks,
+  discardFactSets,
   type SecManifest,
 } from "@/lib/server/secManifest";
-import { loadTickerMap } from "@/lib/server/secTickerMap";
+import { resolveTickerMap, refreshTickerMap } from "@/lib/server/secTickerMap";
 import {
   addDays,
   fetchDailyIndex,
@@ -159,12 +161,43 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "manifest unreadable (Redis unconfigured or read failed)" }, { status: 503 });
   }
 
-  // ── Seed, idempotent ──────────────────────────────────────────────────────
-  const tickers = loadTickerMap();
+  // ── The ticker map: refresh if due, then reconcile ────────────────────────
+  //
+  // THE COMMITTED FILE IS THE SEED AND FALLBACK, NOT THE SOURCE OF TRUTH. A file
+  // committed once goes stale, and the dangerous staleness is not absence but
+  // REASSIGNMENT -- a delisted ticker later given to a different company routes
+  // companyfacts at the wrong company under a symbol that still looks valid.
+  // Absence is loud; reassignment is not.
+  let tickers = await resolveTickerMap();
+  const refresh =
+    tickers.refreshDue || url.searchParams.get("refreshTickers") === "1"
+      ? await refreshTickerMap(SEC_UA, { force: url.searchParams.get("forceTickers") === "1" })
+      : { attempted: false as const };
+
+  if ("ok" in refresh && refresh.ok && !refresh.notModified) {
+    // Re-read so the reconciliation below runs against what was just stored,
+    // not against the copy read before the fetch.
+    tickers = await resolveTickerMap();
+  }
+
   const universe = (await readDynamicUniverse())
     .slice(0, ANALYSIS_UNIVERSE_CAP)
     .map((e) => e.symbol);
-  const seed = seedManifest(manifest, universe, tickers.map, tickers.present);
+  const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
+
+  // Reconcile BEFORE the index is read, so a symbol whose CIK moved is matched
+  // on its new CIK the same run rather than a day later.
+  const cikChanges =
+    tickers.source === "none"
+      ? null
+      : reconcileCiks(manifest, tickers.map);
+
+  // The discard is the irreversible half, so it happens only for changes that
+  // were actually applied.
+  const discarded =
+    cikChanges?.applied && cikChanges.changes.length
+      ? await discardFactSets(cikChanges.changes.map((c) => c.symbol))
+      : 0;
 
   const bySymbolCik = symbolsByCik(manifest);
 
@@ -238,7 +271,10 @@ export async function GET(req: NextRequest) {
 
   const failedDays = days.filter((d) => d.outcome === "failed").length;
   const alarming = consecutive >= CONSECUTIVE_FAILURE_ALARM;
-  const ok = failedDays === 0 && !alarming && (dryRun || written);
+  // A suspected map shape change is not a healthy run even when every date
+  // parsed -- something upstream is wrong and nothing was applied because of it.
+  const ok =
+    failedDays === 0 && !alarming && (dryRun || written) && !(cikChanges?.suspectedMapShapeChange ?? false);
 
   const summary = {
     datesConsidered: dates.length,
@@ -251,8 +287,19 @@ export async function GET(req: NextRequest) {
     symbolsWithFilings: Object.keys(filingsBySymbol).length,
     universe: seed.symbols,
     withCik: seed.withCik,
-    tickerMapPresent: seed.tickerMapPresent,
-    redisCommands: dryRun ? 1 : 2,
+    tickerMapSource: tickers.source,
+    tickerMapCount: tickers.count,
+    tickerMapLastModified: tickers.lastModified,
+    tickerRefreshed: "ok" in refresh ? refresh.ok : false,
+    tickerNotModified: "notModified" in refresh ? refresh.notModified : false,
+    cikChanges: cikChanges?.changes.length ?? 0,
+    cikChangesApplied: cikChanges?.applied ?? false,
+    factSetsDiscarded: discarded,
+    suspectedMapShapeChange: cikChanges?.suspectedMapShapeChange ?? false,
+    // One GET for the manifest, one for the ticker map, one SET for the
+    // manifest. Up from two: the ticker map is read daily (seeding and
+    // reconciliation both need it) and written weekly.
+    redisCommands: dryRun ? 2 : 3,
     ms: Date.now() - started,
   };
 
@@ -262,9 +309,31 @@ export async function GET(req: NextRequest) {
     ok,
     ...summary,
     // Stated rather than left to be inferred from zero matches.
-    tickerMapNote: seed.tickerMapPresent
-      ? null
-      : `data/sec/company-tickers.json is not committed, so ${seed.withoutCik.length} symbol(s) have no CIK and the index can match nothing. See data/sec/README.md. This is NOT "no filings today".`,
+    tickerMapNote:
+      tickers.source !== "none"
+        ? tickers.source === "committed-file"
+          ? "Using the COMMITTED FILE — Redis has no refreshed copy yet. That file is a seed and fallback, not the source of truth; a stale map can route a reassigned ticker at the wrong company."
+          : null
+        : `Neither Redis nor data/sec/company-tickers.json has a ticker map, so ${seed.withoutCik.length} symbol(s) have no CIK and the index can match nothing. See data/sec/README.md. This is NOT "no filings today".`,
+    tickerRefresh: refresh,
+    // How often SEC actually changes the file. Weekly is a guess until these
+    // accumulate; notModified week after week says weekly is too often.
+    tickerMapAge: {
+      fetchedAt: tickers.fetchedAt,
+      lastChangedAt: tickers.lastChangedAt,
+      lastModified: tickers.lastModified,
+      stale: tickers.stale,
+      refreshWasDue: tickers.refreshDue,
+    },
+    cikReassignment: cikChanges
+      ? {
+          ...cikChanges,
+          factSetsDiscarded: discarded,
+          note:
+            cikChanges.note ??
+            "no CIK changed under an existing symbol; nothing was invalidated",
+        }
+      : { skipped: "no ticker map available to reconcile against" },
     alarmNote: alarming
       ? `${consecutive} consecutive index failures (threshold ${CONSECUTIVE_FAILURE_ALARM}). A weekend is two; a holiday weekend three. Four means www.sec.gov is refusing us, not that EDGAR published nothing.`
       : null,
