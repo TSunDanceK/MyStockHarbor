@@ -118,9 +118,15 @@ check(
 );
 
 // THE ASSERTION THAT MATTERS. Every count must have its files, both sizes.
+//
+// ONE-INDEXED, matching the committed library: a bucket of 4 is -01 through -04
+// and there is no -00 anywhere in the set. This check found the disagreement the
+// moment the real library landed — 52 files asked for that do not exist, 52 that
+// do left unreachable — which is precisely the failure it exists for, since the
+// page renders either way and only a visitor sees the broken image.
 const missing = [];
 for (const [bucket, count] of Object.entries(manifest)) {
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 1; i <= count; i += 1) {
     const nn = String(i).padStart(2, "0");
     if (!files.has(`${bucket}-${nn}.webp`)) missing.push(`${bucket}-${nn}.webp`);
     if (!files.has(`${bucket}-${nn}-sm.webp`)) missing.push(`${bucket}-${nn}-sm.webp`);
@@ -136,7 +142,7 @@ check(
 // manifest is raised, and that is the safe order to do it in.
 const counted = new Set();
 for (const [bucket, count] of Object.entries(manifest)) {
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 1; i <= count; i += 1) {
     const nn = String(i).padStart(2, "0");
     counted.add(`${bucket}-${nn}.webp`);
     counted.add(`${bucket}-${nn}-sm.webp`);
@@ -159,7 +165,7 @@ check(
 check(
   "a bucket absent from the manifest yields no art",
   /BUCKET_COUNTS\[bucket\]/.test(artCode) && /return 0;/.test(artCode),
-  "five sector buckets are empty by design and the library ships incomplete"
+  "counts come from the manifest alone — never from counting files, and never guessed"
 );
 
 console.log("\n=== 5. Selection: the real module, against a synthetic manifest ===\n");
@@ -192,13 +198,19 @@ check(
     art.bucketFor("healthcare", "Biotechnology") === "sector-biotech"
 );
 check(
-  "an unmapped sector yields no bucket",
-  art.bucketFor("utilities", null) === null && art.bucketFor(null, null) === null
+  "every site sector now maps to a bucket that holds art",
+  art.bucketFor("utilities", null) === "sector-utilities",
+  "utilities had no bucket until the full library landed — it does now"
+);
+check(
+  "an unrecognised sector still yields no bucket",
+  art.bucketFor("not-a-sector", null) === null && art.bucketFor(null, null) === null,
+  "the no-art path must stay reachable, or the generated card becomes dead code"
 );
 check(
   "a bucket with no manifest entry yields no art",
-  art.pickArt("sector-staples", "any-key") === null && art.pickArt(null, "any-key") === null,
-  "the five empty buckets fall back to the generated card"
+  art.pickArt("sector-nonesuch", "any-key") === null && art.pickArt(null, "any-key") === null,
+  "a bucket the manifest does not name must fall back to the generated card, not guess a filename"
 );
 check(
   "the same article always gets the same image",
@@ -245,10 +257,31 @@ check(
 );
 check(
   "the srcset offers both pre-generated sizes and nothing else",
-  art.pickArt("sector-banks", "k").srcSet === "/news-art/sector-banks-0" +
-    (art.hashKey("k") % 4) + "-sm.webp 320w, /news-art/sector-banks-0" +
-    (art.hashKey("k") % 4) + ".webp 1200w",
+  (() => {
+    // The expected name is built from the 0-based slot PLUS ONE, independently
+    // of artAt, so this fails if the +1 is dropped rather than agreeing with
+    // whatever the module happens to do.
+    const nn = String((art.hashKey("k") % 4) + 1).padStart(2, "0");
+    return (
+      art.pickArt("sector-banks", "k").srcSet ===
+      `/news-art/sector-banks-${nn}-sm.webp 320w, /news-art/sector-banks-${nn}.webp 1200w`
+    );
+  })(),
   art.pickArt("sector-banks", "k").srcSet
+);
+check(
+  "no selectable name is -00 — the library starts at -01",
+  (() => {
+    for (let i = 0; i < 200; i += 1) {
+      if (art.pickArt("sector-banks", `key-${i}`).src.includes("-00.webp")) return false;
+    }
+    // And the top of the range is reachable: a bucket of 4 must be able to
+    // produce -04, which an unshifted index never would.
+    const seen = new Set();
+    for (let i = 0; i < 400; i += 1) seen.add(art.pickArt("sector-banks", `key-${i}`).src);
+    return seen.has("/news-art/sector-banks-04.webp");
+  })(),
+  "0-based names asked for 52 files that do not exist and left 52 that do unreachable"
 );
 check(
   "art dimensions are the policy's 1200x675",

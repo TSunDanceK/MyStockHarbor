@@ -1,54 +1,41 @@
 # news-art
 
-Generated illustration library for news cards. See §6 of
-`claude/news-adapter-spec-2026-09-13.md` and `claude/image-policy-2026-09-13.md`.
+Generated illustration library for news cards. Rules, conversion settings and
+storage limits: `claude/image-policy-2026-09-13.md`. Selection and the cascade:
+§6 of `claude/news-adapter-spec-2026-09-13.md`.
 
-## Status: the code is wired, the images are not here yet
+**No counts are recorded in this file, on purpose.** `manifest.json` is the only
+source of truth for how many images a bucket holds, and a second copy of those
+numbers anywhere is a copy that goes stale. What is here is the naming
+convention, which does not change.
 
-`manifest.json` is **empty**, and that is deliberate rather than a mistake. The
-cascade treats a bucket absent from the manifest as "no art", so every card
-currently renders the generated data card. Nothing 404s.
+## Naming — ONE-INDEXED
 
-**Do not add counts to `manifest.json` before the matching `.webp` files are in
-this folder.** The manifest is the only thing the lookup reads — a count without
-a file is a broken image on a live page, which is worse than no art at all.
-`scripts/check-news-art.mjs` fails if the two disagree, so run it after dropping
-files in.
+    <bucket>-<nn>.webp       1200x675   lead cards
+    <bucket>-<nn>-sm.webp     320x180   compact rows
+
+`<nn>` starts at **01**, not 00. A bucket of four is `-01` through `-04`.
+
+This is worth stating plainly because the spec's `pick()` formula is written
+0-based (`hash % count`) and was implemented that way: when the full library
+landed it asked for 52 files that do not exist and left 52 that do unreachable.
+`lib/server/news/art.ts` now adds the 1 at filename construction only, keeping the
+index 0-based through the collision walk. The committed files were not renamed.
 
 ## Adding art
 
-Two pre-generated sizes per image, centre-cropped to the exact aspect:
+1. Put both sizes in this folder, continuing the bucket's numbering.
+2. Raise that bucket's count in `manifest.json`.
 
-    <bucket>-<nn>.webp       1200x675   lead cards
-    <bucket>-<nn>-sm.webp     320x180   compact rows (unused today, see §6)
+In that order. The manifest is what the lookup reads, so a count raised before
+its files exist is a broken image on a live page — the one failure mode nothing
+else would catch, since the page renders regardless and only a visitor sees it.
 
-`<nn>` is zero-padded from `00`. Then raise that bucket's count in
-`manifest.json` to the number of images present.
+Run `node scripts/check-news-art.mjs` afterwards: it fails if any count lacks its
+files, and notes any files present that no count reaches yet.
 
-Rules from the image policy, in short: never commit the source JPGs; add, never
-replace (git keeps every version of a binary forever); plain `<img srcset>`,
-never `next/image`; always set `width` and `height`.
+A bucket absent from `manifest.json` resolves to no art and the card falls back
+to the generated data card, so the library can grow a bucket at a time.
 
-## Target counts
-
-From `claude/image-policy-2026-09-13.md`, measured on the real set 2026-09-13 —
-89 images across 20 buckets. Paste into `manifest.json` as the files land:
-
-```json
-{
-  "event-analyst": 4, "event-deals": 4, "event-earnings": 5,
-  "event-filings": 4, "event-macro": 4,
-  "sector-auto": 4, "sector-banks": 6, "sector-biotech": 6,
-  "sector-crypto": 4, "sector-ecommerce": 4, "sector-energy": 4,
-  "sector-gaming": 4, "sector-industrials": 4, "sector-media": 4,
-  "sector-medtech": 4, "sector-retail": 4, "sector-semiconductors": 6,
-  "sector-software": 6, "sector-telecom": 4, "sector-travel": 4
-}
-```
-
-The `event-*` buckets are selected only once `eventType` exists — that is step 6.
-Step 0 uses the `sector-*` buckets only.
-
-Five sector buckets are empty by design and are absent from the list above:
-staples, realestate, materials, aerospace, insurance. They fall back to the
-generated data card until they are generated.
+The `event-*` buckets are not selected yet — `eventType` comes from the adapters,
+which is step 6. Step 0 selects `sector-*` only.

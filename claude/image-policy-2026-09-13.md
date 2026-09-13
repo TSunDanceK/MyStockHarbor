@@ -41,8 +41,9 @@ wire at full size, exactly as committed.
    the FMP bandwidth emergency — a large per-view payload, repeated.
 3. **Core Web Vitals, during an active SEO recovery.** The `<img>` carries no `width`
    or `height`, so every datasheet causes layout shift as it loads. LCP on those pages
-   is whatever the PNG takes to arrive. `claude/seo-recovery-progress-2026-08-15.md`
-   is tracking exactly the thing this undermines.
+   is whatever the PNG takes to arrive — which undermines exactly what the ongoing
+   SEO recovery work is trying to move. (That doc lives in the Claude Project and is
+   not mirrored here, so it is deliberately not cited by path.)
 4. **Git keeps all of it forever.** 38 MB is in history permanently, and grows with
    each new datasheet.
 
@@ -120,18 +121,20 @@ they are 8× the size of the entire planned image library, for ten pictures.
 
 ## Current bucket counts
 
-```json
-{
-  "event-analyst": 4, "event-deals": 4, "event-earnings": 5,
-  "event-filings": 4, "event-macro": 4,
-  "sector-auto": 4, "sector-banks": 6, "sector-biotech": 6,
-  "sector-crypto": 4, "sector-ecommerce": 4, "sector-energy": 4,
-  "sector-gaming": 4, "sector-industrials": 4, "sector-media": 4,
-  "sector-medtech": 4, "sector-retail": 4, "sector-semiconductors": 6,
-  "sector-software": 6, "sector-telecom": 4, "sector-travel": 4
-}
-```
+**Not restated here — read `public/news-art/manifest.json`.**
 
-Five sector buckets still to generate: staples, realestate, materials, aerospace,
-insurance. The art cascade falls back to the generated data card for any bucket with
-no images, so this ships incomplete without waiting.
+This section used to carry a copy of the counts, and it went stale the moment the
+library grew: it listed 89 images across 20 buckets, with staples, realestate,
+materials, aerospace and insurance "still to generate", while the committed
+manifest had 171 images across 26 buckets including all five of those and
+utilities besides. Rule 6 above already says the manifest is the source of truth;
+a second copy of the numbers in prose is what contradicts it.
+
+`node scripts/check-news-art.mjs` asserts the manifest and the folder agree.
+
+## Naming is one-indexed
+
+`<bucket>-01.webp` upward, with no `-00` in the set. Recorded here because §6 of
+`claude/news-adapter-spec-2026-09-13.md` writes `pick()` as `hash % count`, which
+is 0-based, and the two disagreeing cost 52 unreachable images on the first run
+against the real library. See `public/news-art/README.md`.

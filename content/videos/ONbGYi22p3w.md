@@ -1,6 +1,6 @@
 ---
 ticker: ONDS
-datasheetImage: /images/datasheets/onds-june-2026.png
+datasheetImage: /images/datasheets/onds-june-2026.webp
 statLabel1: Market cap
 statValue1: "~$4.4B"
 statLabel2: Q1 2026 revenue

@@ -74,10 +74,11 @@ const INDUSTRY_BUCKETS: Array<[RegExp, string]> = [
 /**
  * Sector -> bucket, the fallback when industry is missing or unrecognised.
  *
- * These are the site's own slugs from lib/sectors.ts. Several land on buckets
- * that are empty by design (staples, realestate, materials), which is not a
- * mistake -- it resolves to no art and the caller draws the generated card.
- * "utilities" has no bucket at all and is absent deliberately.
+ * These are the site's own slugs from lib/sectors.ts. Every one of them now
+ * resolves to a bucket that holds art; the three that were empty when this map
+ * was written (staples, realestate, materials) were filled by the full library,
+ * as was utilities. A slug missing from here still resolves to no art and the
+ * caller draws the generated card, which is the behaviour to keep.
  */
 const SECTOR_BUCKETS: Record<string, string> = {
   technology: "sector-software",
@@ -90,6 +91,9 @@ const SECTOR_BUCKETS: Record<string, string> = {
   "basic-materials": "sector-materials",
   "real-estate": "sector-realestate",
   "communication-services": "sector-media",
+  // Added when the full library landed: sector-utilities has art now, where the
+  // first cut of this map had no bucket to point it at.
+  utilities: "sector-utilities",
 };
 
 /** The art bucket for a symbol, or null when nothing maps. */
@@ -131,8 +135,22 @@ export function hashKey(key: string): number {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/**
+ * THE LIBRARY IS ONE-INDEXED; EVERYTHING ELSE HERE IS ZERO-INDEXED.
+ *
+ * `sector-energy-01.webp` through `-10.webp`, with no `-00` in the whole set.
+ * §6's `pick()` formula is written 0-based (`hash % count`) and was implemented
+ * that way, which asked for 52 files that do not exist and left 52 that do
+ * unreachable — the manifest and the folder disagreeing in a way only a visitor
+ * would have seen, as a broken image.
+ *
+ * The +1 lives HERE, at name construction, and nowhere else. `index` stays
+ * 0-based through `hash % count`, the collision walk and the `taken` set, so the
+ * re-hash-on-collision rule and its tests are untouched by the correction. The
+ * committed files are not renamed: the naming predates the formula.
+ */
 function artAt(bucket: string, index: number): NewsArt {
-  const stem = `/news-art/${bucket}-${pad(index)}`;
+  const stem = `/news-art/${bucket}-${pad(index + 1)}`;
   return {
     // srcset offers the small variant for narrow viewports. Both files are
     // pre-generated at fixed sizes; nothing is transformed at request time.
