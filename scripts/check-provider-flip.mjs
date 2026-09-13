@@ -257,6 +257,18 @@ check(
   check("every adapter hanging throws rather than returning []", threw);
 }
 
+// HYGIENE, AND LABELLED AS SUCH. Dropping clearTimeout() is NOT behaviourally
+// observable here -- the timer is unref'd so it holds nothing open, and a
+// reject after the promise has settled is a no-op -- so no runtime assertion can
+// catch it, and a mutation test found exactly that. It still leaves three
+// pending timers per render for up to the full budget, so the intent is pinned
+// here rather than left to be re-litigated.
+check(
+  "the timeout timer is cleared on both settle paths",
+  (readCodeOnly("lib/server/news/index.ts").match(/clearTimeout\(timer\)/g) ?? []).length === 2,
+  "one for resolve, one for reject; not observable at runtime, hence asserted on the source"
+);
+
 console.log("\n=== 5. AN EMPTY PROVIDER LIST STILL CANNOT EMPTY THE FEED ===\n");
 check(
   "the guard is still there",
