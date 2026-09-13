@@ -391,6 +391,22 @@ keyword match. Keep the keyword list small and in one place.
    fetch it replaced, cold and incremental; `scripts/check-news-feed.mjs` §8 pins the
    default, the no-empty-provider-list rule and the adapter's continued existence.
 2. Company-name normaliser + unit tests against the real universe.
+   **SHIPPED 2026-09-13.** `lib/server/news/companyName.ts`, tested by
+   `scripts/check-company-name.mjs` against 155 verbatim directory names in
+   `scripts/fixtures/company-names.txt` (pulled through the relay — the sandbox is
+   refused `www.nasdaqtrader.com`). **§1's algorithm above is incomplete and the
+   fixture is what proved it:** only about half of real names use the ` - `
+   separator it says to cut at. `Chevron Corporation Common Stock` and
+   `Boeing Company (The) Common Stock` join the instrument clause with a space, so a
+   dash-only cut leaves it attached. The dash cut is kept (it is the only thing that
+   handles ` - Units` and ` - 7.875% Notes due 2028`) and the instrument clause is
+   then removed by `cleanName` in `lib/server/companyNames.ts`, which the screener
+   cards have used against this same feed for months — shared, not restated. The
+   suffix list is §1's plus `Incorporated`/`Limited`/`LLC`/`LP`/`Holding` and the
+   dotless forms, each justified by a named row in the fixture. All 55 symbols the
+   site publishes on normalise correctly; `MSTR -> "Strategy"` and `POST -> "Post"`
+   are the override candidates, and funds/notes/preferreds are detected rather than
+   searched.
 3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
 4. Wire adapters.
 5. SEC filings adapter + committed CIK map.

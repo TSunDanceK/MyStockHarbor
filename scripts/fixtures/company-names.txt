@@ -1,0 +1,175 @@
+# Real Nasdaq Trader display names — the fixture for the news company-name normaliser.
+#
+# PROVENANCE. Pulled 2026-09-13 by scripts/company-name-sample.mjs, run through the
+# relay (.github/workflows/relay.yml, task company-name-sample, run 34752651036)
+# because the agent sandbox is refused www.nasdaqtrader.com with 403 CONNECT.
+# These are the Security Name column verbatim, which is exactly what
+# lib/stock-news-data.ts's fetchCompanyName hands the news path — uncleaned.
+#
+# NOT INVENTED, AND THAT IS THE POINT. A normaliser tested against names someone
+# made up tests the imagination of whoever wrote them. Half of these join the
+# instrument clause with a plain space rather than the " - " the spec describes,
+# which is a fact no invented fixture would have contained.
+#
+# COVERED    the symbols this site actually publishes insight posts on (content/insights/)
+# SYSTEMATIC every 131st row of the 13,214-row directory, so the awkward shapes
+#            (ADRs, funds, notes, preferreds, SPAC units) arrive unselected
+#
+# Refresh by re-dispatching the relay task and replacing this file wholesale.
+COVERED
+AAL|American Airlines Group, Inc. - Common Stock
+AAPL|Apple Inc. - Common Stock
+ACHR|Archer Aviation Inc. Class A Common Stock
+AMZN|Amazon.com, Inc. - Common Stock
+ASTS|AST SpaceMobile, Inc. - Class A Common Stock
+AVAV|AeroVironment, Inc. - Common Stock
+AVGO|Broadcom Inc. - Common Stock
+BA|Boeing Company (The) Common Stock
+BABA|Alibaba Group Holding Limited American Depositary Shares each representing eight Ordinary share
+BBAI|BigBear.ai, Inc. Common Stock
+CELH|Celsius Holdings, Inc. - Common Stock
+CHWY|Chewy, Inc. Class A Common Stock
+CLSK|CleanSpark, Inc. - Common Stock
+COIN|Coinbase Global, Inc. - Class A Common Stock
+COST|Costco Wholesale Corporation - Common Stock
+CVNA|Carvana Co. Class A Common Stock
+CVX|Chevron Corporation Common Stock
+DIS|Walt Disney Company (The) Common Stock
+DKNG|DraftKings Inc. - Class A Common Stock
+GEV|GE Vernova Inc. Common Stock
+GME|GameStop Corporation Common Stock
+HUM|Humana Inc. Common Stock
+INTC|Intel Corporation - Common Stock
+IONQ|IonQ, Inc. Common Stock
+ISRG|Intuitive Surgical, Inc. - Common Stock
+MARA|MARA Holdings, Inc. - Common Stock
+META|Meta Platforms, Inc. - Class A Common Stock
+MRVL|Marvell Technology, Inc. - Common Stock
+MSFT|Microsoft Corporation - Common Stock
+MSTR|Strategy Inc - Class A Common Stock
+MU|Micron Technology, Inc. - Common Stock
+NIO|NIO Inc. American depositary shares, each  representing one Class A ordinary share
+NKE|Nike, Inc. Common Stock
+NOC|Northrop Grumman Corporation Common Stock
+NOW|ServiceNow, Inc. Common Stock
+NVDA|NVIDIA Corporation - Common Stock
+ONDS|Ondas Inc - Common Stock
+ORCL|Oracle Corporation Common Stock
+PFE|Pfizer, Inc. Common Stock
+PLTR|Palantir Technologies Inc. - Class A Common Stock
+QBTS|D-Wave Quantum Inc. - Common Stock
+QS|QuantumScape Corporation - Common Stock
+RCL|Royal Caribbean Cruises Ltd. Common Stock
+RGTI|Rigetti Computing, Inc.  - Common stock
+RIOT|Riot Platforms, Inc. - Common Stock
+SOFI|SoFi Technologies, Inc.  - Common Stock
+SOUN|SoundHound AI, Inc. - Class A Common Stock
+TMUS|T-Mobile US, Inc. - Common Stock
+TSLA|Tesla, Inc.  - Common Stock
+TXN|Texas Instruments Incorporated - Common Stock
+UHS|Universal Health Services, Inc. Common Stock
+VRT|Vertiv Holdings, LLC Class A Common Stock
+VZ|Verizon Communications Inc. Common Stock
+WFC|Wells Fargo & Company Common Stock
+ZS|Zscaler, Inc. - Common Stock
+SYSTEMATIC
+AAAP|Pacer Barings CLO Market Flex ETF
+AEP|American Electric Power Company, Inc. - Common Stock
+ALRM|Alarm.com Holdings, Inc. - Common Stock
+ARHS|Arhaus, Inc. - Class A Common Stock
+AXINU|Axiom Intelligence Acquisition Corp 1 - Units
+BIAF|bioAffinity Technologies, Inc. - Common Stock
+BRLT|Brilliant Earth Group, Inc. - Class A Common Stock
+CANC|Tema Oncology ETF
+CHA|Chagee Holdings Limited - American Depositary Shares, each representing 1 Class A ordinary share
+COLL|Collegium Pharmaceutical, Inc. - Common Stock
+CVBF|CVB Financial Corporation - Common Stock
+DOX|Amdocs Limited - Ordinary Shares
+ELE|Elemental Royalty Corporation - Common Stock
+EYPT|EyePoint, Inc. - Common Stock
+FIYY|GraniteShares YieldBOOST 20Y Treasuries ETF
+FTXR|First Trust Nasdaq Transportation ETF
+GLBE|Global-E Online Ltd. - ordinary shares
+GWRS|Global Water Resources, Inc. - common stock
+HSIC|Henry Schein, Inc. - Common Stock
+IGAC|Invest Green Acquisition Corporation - Class A Ordinary Shares
+IQQQ|ProShares Nasdaq-100 High Income ETF
+KC|Kingsoft Cloud Holdings Limited - American Depositary Shares
+LEDS|SemiLEDS Corporation - Common Stock
+LULG|Leverage Shares 2X Long LULU Daily ETF
+MFMO|Motley Fool Momentum Factor ETF
+MTAKU|Market Technology Acquisition Corp - Unit
+NEWTO|NewtekOne, Inc. - 8.50% Fixed Rate Senior Notes due 2031
+NVDG|Leverage Shares 2X Long NVDA Daily ETF
+OPAL|OPAL Fuels Inc. - Class A Common Stock
+PCAP|ProCap Acquisition Corp - Class A Ordinary Shares
+PMVP|PMV Pharmaceuticals, Inc. - Common Stock
+PYZ|Invesco Dorsey Wright Basic Materials Momentum ETF
+RCGE|RockCreek Global Equality ETF
+ROCY|JPMorgan Equity Premium Yield ETF
+SEDG|SolarEdge Technologies, Inc. - Common Stock
+SMCZ|Defiance Daily Target 2X Short SMCI ETF
+STBA|S&T Bancorp, Inc. - Common Stock
+TCX|Tucows Inc. - Common Stock
+TRGS|TRG Latin America Acquisitions Corp. - Class A Ordinary Shares
+UK|Ucommune International Ltd  - Class A Ordinary Shares
+VIGI|Vanguard International Dividend Appreciation ETF
+WHFCL|WhiteHorse Finance, Inc. - 7.875% Notes due 2028
+XSLL|Xsolla SPAC 1 - Class A Ordinary Shares
+ABEV|Ambev S.A. American Depositary Shares (Each representing 1 Common Share)
+AGM$H|Federal Agricultural Mortgage Corporation 6.500% Non-Cumulative Preferred Stock, Series H
+AMTM|Amentum Holdings, Inc. Common Stock
+ASIA|Matthews Pacific Tiger Active ETF
+BABW|Roundhill BABA WeeklyPay ETF
+BEMB|iShares J.P. Morgan Broad USD Emerging Markets Bond ETF
+BKSY|BlackSky Technology Inc. Class A Common Stock
+BSL|Blackstone Senior Floating Rate 2027 Term Fund Common Shares of Beneficial Interest
+CAT|Caterpillar, Inc. Common Stock
+CHGG|Chegg, Inc. Common Stock
+CODI$C|Compass Diversified Holdings 7.875% Series C Cumulative Preferred Shares
+CSL|Carlisle Companies Incorporated Common Stock
+DC|Dakota Gold Corp. Common Stock
+DGZ|DB Gold Short ETN due February 15, 2038
+DSX|Diana Shipping inc. common stock
+EFC|Ellington Financial Inc. Common Stock
+EPIN|Harbor International Equity ETF
+EW|Edwards Lifesciences Corporation Common Stock
+FENG|Phoenix New Media Limited American Depositary Shares, each representing 48 Class A ordinary shares.
+FLS|Flowserve Corporation Common Stock
+FTMA|Franklin Massachusetts Municipal Income ETF
+GENW|Genter Capital International Dividend ETF
+GOF|Guggenheim Strategic Opportunities Fund Common Shares of Beneficial Interest
+HAIL|State Street SPDR S&P Kensho Smart Mobility ETF
+HPP|Hudson Pacific Properties, Inc. Common Stock
+IBMS|iShares iBonds Dec 2030 Term Muni Bond ETF
+IMTG|Invesco Agency MBS ETF
+IVLU|iShares MSCI Intl Value Factor ETF
+JHMU|John Hancock Dynamic Municipal Bond ETF
+KDVD|Keeley Dividend ETF
+LABD|Direxion Daily S&P Biotech Bear 3X ETF
+LQDD|MicroSectors -3x Short Investment Grade Corporate Bond (LQD) ETNs
+MD|Pediatrix Medical Group, Inc. Common Stock
+MLPX|Global X MLP & Energy Infrastructure ETF
+MTBA|Simplify MBS ETF
+NEE$N|NextEra Energy Capital Holdings Inc. Series N Junior Subordinated Debentures due March 1, 2079
+NRT|North European Oil Royality Trust Common Stock
+OCTH|Innovator Premium Income 20 Barrier ETF - October
+PAC|Grupo Aeroportuario Del Pacifico, S.A. B. de C.V. Grupo Aeroportuario Del Pacifico, S.A. de C.V. (each representing 10 Series B shares)
+PFIG|Invesco Fundamental Investment Grade Corporate Bond  ETF
+POST|Post Holdings, Inc. Common Stock
+PW|Power REIT (MD) Common Stock
+RAC|Rithm Acquisition Corp. Class A Ordinary Shares
+RJVI|RJ Eagle Vertical Income ETF
+RXO|RXO, Inc. Common Stock
+SCYB|Schwab High Yield Bond ETF
+SIZE|iShares MSCI USA Size Factor ETF
+SONY|Sony Group Corporation American Depositary Shares
+SSFI|Day Hagan Smart Sector Fixed Income ETF
+TBG|TBG Dividend Focus ETF
+TIPE|Northern Trust 2031 Inflation-Linked Distributing Ladder ETF
+TRTN$B|Triton International Limited 8.00% Series B Cumulative Redeemable Perpetual Preference Shares
+UGA|United States Gasoline Fund LP
+UWMC|UWM Holdings Corporation Class A Common Stock
+VNSE|Natixis Vaughan Nelson Select ETF
+XFLX|FundX Flexible ETF
+XVAP|FT Vest AAPL & Target Income ETF
