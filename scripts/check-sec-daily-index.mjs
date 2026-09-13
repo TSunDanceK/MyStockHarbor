@@ -53,9 +53,10 @@ const idx = await lift(
 const man = await lift(
   [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"),
    grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
-   grabFunction(MANIFEST_SRC, "reassignmentThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, reassignmentThreshold, reconcileCiks };",
-  "const SEC_SCORE_VERSION = 1;"
+   grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
+   grabFunction(MANIFEST_SRC, "reconcileDelistings")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings };",
+  "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;"
 );
 
 const tick = await lift(
@@ -327,7 +328,7 @@ check("filling a null CIK is a fill, not an invalidation",
 // ── 10. THE SPIKE GUARD — the destructive case ──────────────────────────────
 console.log("\n10. A spike refuses to apply");
 check("the threshold scales with the universe but never below 5",
-  man.reassignmentThreshold(5) === 5 && man.reassignmentThreshold(700) === 7 && man.reassignmentThreshold(10000) === 100);
+  man.mapChangeThreshold(5) === 5 && man.mapChangeThreshold(700) === 7 && man.mapChangeThreshold(10000) === 100);
 const spikeSyms = Array.from({ length: 200 }, (_, i) => `S${i}`);
 const spikeCik = new Map(spikeSyms.map((s, i) => [s, String(i).padStart(10, "0")]));
 const spikeMan = man.emptyManifest();
@@ -354,6 +355,91 @@ check("a run at exactly the threshold still applies",
   })(),
   "7 of 700 is the threshold; a real reassignment must not be blocked");
 
+// ── 10b. Absence is a probable delisting, not a reassignment ────────────────
+console.log("\n10b. Delisting");
+const dl = (syms) => {
+  const m = man.emptyManifest();
+  const cik = new Map(syms.map((x, i) => [x, String(i).padStart(10, "0")]));
+  man.seedManifest(m, syms, cik, true);
+  for (const x of syms) m.symbols[x].contentHash = "filings";
+  return { m, cik };
+};
+const { m: dm, cik: dcik } = dl(["AAPL", "ARM", "MU", "PLAB", "ASTS"]);
+const without = (map, drop) => new Map([...map].filter(([k]) => k !== drop));
+
+const r1 = man.reconcileDelistings(dm, without(dcik, "PLAB"));
+check("first absence records notInTickerMapSince", dm.symbols.PLAB.notInTickerMapSince !== null && dm.symbols.PLAB.absentRefreshCount === 1);
+check("...but does NOT mark delisted", dm.symbols.PLAB.delisted === false);
+check("...and clears nothing — the filings stay", dm.symbols.PLAB.contentHash === "filings" && dm.symbols.PLAB.cik !== null,
+  "absence is not reassignment");
+check("...reported as newly absent", r1.newlyAbsent.length === 1 && r1.applied === true);
+
+man.reconcileDelistings(dm, without(dcik, "PLAB"));
+check("second refresh still absent: count 2, still not delisted",
+  dm.symbols.PLAB.absentRefreshCount === 2 && dm.symbols.PLAB.delisted === false);
+
+const firstSeen = dm.symbols.PLAB.notInTickerMapSince;
+const r3 = man.reconcileDelistings(dm, without(dcik, "PLAB"));
+check("THIRD consecutive refresh marks it delisted",
+  dm.symbols.PLAB.delisted === true && dm.symbols.PLAB.absentRefreshCount === 3, JSON.stringify(r3.newlyDelisted));
+check("...notInTickerMapSince still points at the FIRST absence, not the third",
+  dm.symbols.PLAB.notInTickerMapSince === firstSeen);
+check("...and the filings are STILL there — never deleted on absence",
+  dm.symbols.PLAB.contentHash === "filings" && dm.symbols.PLAB.cik !== null,
+  "delisted data is the best record of what that company filed");
+check("...no other symbol was touched",
+  ["AAPL", "ARM", "MU", "ASTS"].every((x) => dm.symbols[x].delisted === false && dm.symbols[x].absentRefreshCount === 0));
+
+man.reconcileDelistings(dm, dcik);
+check("reappearance clears the flag, the counter AND the timestamp",
+  dm.symbols.PLAB.delisted === false && dm.symbols.PLAB.absentRefreshCount === 0 && dm.symbols.PLAB.notInTickerMapSince === null,
+  "a symbol missing for one refresh was missed, not delisted");
+
+// A blink must not accumulate a strike.
+const { m: bm, cik: bcik } = dl(["AAPL", "PLAB"]);
+man.reconcileDelistings(bm, without(bcik, "PLAB"));
+man.reconcileDelistings(bm, bcik);
+man.reconcileDelistings(bm, without(bcik, "PLAB"));
+man.reconcileDelistings(bm, without(bcik, "PLAB"));
+check("absence must be CONSECUTIVE — a reappearance resets the clock",
+  bm.symbols.PLAB.absentRefreshCount === 2 && bm.symbols.PLAB.delisted === false,
+  "2 strikes after the reset, not 3");
+
+// ── 10c. The partial-map guard ──────────────────────────────────────────────
+console.log("\n10c. A valid-but-partial map marks nobody delisted");
+const partialSyms = Array.from({ length: 200 }, (_, i) => `P${i}`);
+const { m: pm, cik: pcik } = dl(partialSyms);
+// Passes the 5,000-ticker floor elsewhere, yet drops most of OUR universe.
+const partial = new Map([...pcik].slice(0, 20));
+const pr = man.reconcileDelistings(pm, partial);
+check("180 newly absent are DETECTED", pr.newlyAbsent.length === 180);
+check("...and NOTHING is applied", pr.applied === false && pr.suspectedPartialMap === true);
+check("...no absence timestamp was recorded at all",
+  partialSyms.every((x) => pm.symbols[x].notInTickerMapSince === null && pm.symbols[x].absentRefreshCount === 0),
+  "recording it would delist them all three refreshes later");
+check("...and the reason names the map, not the market", /map is partial/.test(pr.note), pr.note?.slice(0, 70));
+check("the delisting guard uses the SAME threshold as CIK reconciliation",
+  pr.threshold === man.mapChangeThreshold(200));
+
+// The guard must not jam on a steady state of genuinely delisted names.
+const { m: sm, cik: scik } = dl(Array.from({ length: 700 }, (_, i) => `Q${i}`));
+const dropped = Array.from({ length: 20 }, (_, i) => `Q${i}`);
+let steady = new Map(scik);
+for (const d of dropped) steady.delete(d);
+// First refresh: 20 newly absent against a threshold of 7 -> blocked, correctly.
+check("20 vanishing at once is blocked", man.reconcileDelistings(sm, steady).applied === false);
+// Now the realistic shape: a few at a time, already-absent ones staying absent.
+const { m: tm, cik: tcik } = dl(Array.from({ length: 700 }, (_, i) => `R${i}`));
+let live = new Map(tcik);
+let everApplied = true;
+for (let round = 0; round < 6; round++) {
+  for (let k = 0; k < 3; k++) live.delete(`R${round * 3 + k}`);
+  if (!man.reconcileDelistings(tm, live).applied) everApplied = false;
+}
+check("a few delistings a refresh, accumulating, never jams the guard", everApplied === true,
+  "guarding on the STANDING absent set instead of the newly absent one would jam after the first few");
+check("...and they do reach delisted", tm.symbols.R0.delisted === true, `R0 count=${tm.symbols.R0.absentRefreshCount}`);
+
 // ── 11. The job wires it in the right order ─────────────────────────────────
 console.log("\n11. Job ordering");
 // Compared at the CALL SITES, not the import list -- both names appear in the
@@ -367,6 +453,11 @@ check("fact sets are discarded only when the changes were APPLIED",
   /cikChanges\?\.applied && cikChanges\.changes\.length/.test(routeCode));
 check("a suspected map shape change makes the run NOT ok",
   /suspectedMapShapeChange \?\? false\)/.test(routeCode));
+check("delisting is gated on a SUCCESSFUL REFRESH, not on every run",
+  /refreshSucceeded && tickers\.source === "redis"/.test(routeCode),
+  "counted per refresh; counting per run would delist after three days rather than three weeks");
+check("a suspected partial map also makes the run NOT ok",
+  /suspectedPartialMap \?\? false\)/.test(routeCode));
 check("the Redis budget is stated as three, not still claiming two",
   /redisCommands: dryRun \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
 

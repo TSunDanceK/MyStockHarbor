@@ -30,6 +30,36 @@ adopting none:
    changed shape rather than the market doing something unusual. Nothing is
    applied, the previous CIKs stand, and the run reports itself unhealthy.
 
+### Absence is a probable delisting, not a reassignment
+
+A symbol in the manifest but **absent** from a freshly validated map is not
+cleared — the committed fallback is smaller than the live map by construction,
+so clearing on absence would wipe the store every time the fallback answered.
+
+Instead `notInTickerMapSince` is recorded on first absence and **cleared the
+moment the symbol reappears**. After **three consecutive successful refreshes**
+still absent, `delisted: true`.
+
+**Counted in refreshes, not runs.** The job runs daily and refreshes weekly, so
+counting runs would call a symbol delisted after three *days* against a map
+fetched once. The reconciliation is gated on a refresh having actually
+succeeded, and skipped entirely when the map came from the committed fallback.
+
+**Nothing is ever deleted.** The flag changes how the page *presents* the
+filings — as history rather than as current — not whether they exist. A delisted
+company's numbers are not wrong, they are over, and showing them undated is the
+actual failure. A delisted issuer can also still file (a final 10-K, a Form 25
+or 15), so the daily index keeps matching it.
+
+The **same spike guard** applies, on *newly* absent symbols: above
+`max(5, 1% of the universe)` nothing is recorded, no counter moves, and the run
+reports unhealthy. A valid-but-partial map — one clearing the 5,000-ticker floor
+while still missing thousands of real rows — would otherwise start the clock on
+all of them at once and delist them together three refreshes later. Guarding on
+*newly* absent rather than on the standing absent set matters: genuinely
+delisted symbols stay absent forever, and a guard counting them would jam
+permanently after the first few.
+
 `lastModified` and `lastChangedAt` are stored so **how often SEC actually
 changes the file** becomes measurable. Weekly is a guess until those accumulate;
 a run of `notModified` says weekly is more often than necessary.
