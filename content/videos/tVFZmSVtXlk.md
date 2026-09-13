@@ -1,6 +1,6 @@
 ---
 ticker: IFX
-datasheetImage: /images/datasheets/ifx-june-2026.png
+datasheetImage: /images/datasheets/ifx-june-2026.webp
 statLabel1: Market cap
 statValue1: "~€106.6B"
 statLabel2: Q2 FY26 revenue

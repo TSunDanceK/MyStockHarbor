@@ -41,8 +41,9 @@ wire at full size, exactly as committed.
    the FMP bandwidth emergency — a large per-view payload, repeated.
 3. **Core Web Vitals, during an active SEO recovery.** The `<img>` carries no `width`
    or `height`, so every datasheet causes layout shift as it loads. LCP on those pages
-   is whatever the PNG takes to arrive. `claude/seo-recovery-progress-2026-08-15.md`
-   is tracking exactly the thing this undermines.
+   is whatever the PNG takes to arrive — which undermines exactly what the ongoing
+   SEO recovery work is trying to move. (That doc lives in the Claude Project and is
+   not mirrored here, so it is deliberately not cited by path.)
 4. **Git keeps all of it forever.** 38 MB is in history permanently, and grows with
    each new datasheet.
 

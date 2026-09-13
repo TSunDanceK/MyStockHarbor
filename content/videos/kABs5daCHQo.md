@@ -1,6 +1,6 @@
 ---
 ticker: AVAV
-datasheetImage: /images/datasheets/avav-june-2026.png
+datasheetImage: /images/datasheets/avav-june-2026.webp
 statLabel1: Market cap
 statValue1: ~$8.1B
 statLabel2: Q3 FY26 revenue
