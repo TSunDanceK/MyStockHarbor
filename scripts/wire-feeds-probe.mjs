@@ -132,8 +132,12 @@ const wireMatched = summary.filter((r) => r[1] === "wire").reduce((a, r) => a + 
 console.log(`\nWIRE ITEMS RESOLVING TO A UNIVERSE SYMBOL: ${wireMatched}/${wireTotal}` +
   (wireTotal ? ` = ${((wireMatched / wireTotal) * 100).toFixed(1)}%` : ""));
 console.log(`exchange prefixes seen: ${[...prefixCounts].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p}=${n}`).join(", ") || "(none)"}`);
+// ONE LINE PER ITEM. GlobeNewswire pretty-prints its XML, so a verbatim item
+// spans ~40 log lines and pushes everything before it out of the tail the job
+// log is read from. Collapsing inter-tag whitespace changes no content — the
+// parser is whitespace-insensitive and the fixture is used through the parser.
 for (const [name, blocks] of verbatim) {
   console.log(`\n----- VERBATIM ${name} (${blocks.length}) -----`);
-  for (const b of blocks) console.log("<item>" + b + "</item>");
+  for (const b of blocks) console.log("<item>" + b.replace(/>\s+</g, "><").trim() + "</item>");
 }
 console.log("\n[wire-feeds-probe] done");
