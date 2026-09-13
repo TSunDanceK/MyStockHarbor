@@ -253,6 +253,42 @@ check("the manifest key is versioned", /msh:sec:manifest:v1/.test(MANIFEST_SRC))
 check("the manifest carries no TTL", !/\bex:\s*\d|expire\(/.test(MANIFEST_SRC),
   "a TTL means eviction means a cold key means a render that has to fetch");
 
+// ── 7b. The committed data file is actually usable ─────────────────────────
+//
+// It landed with a stray "#" at byte 0 and did not parse. That failed loudly --
+// loadTickerMap reports present:false -- but "the fallback is broken" is only
+// discovered on the day the fetch fails, which is the worst day to discover it.
+// Asserted here so the committed copy is checked on every run of the suite.
+console.log("\n7b. The committed ticker file");
+const TICKER_PATH = "data/sec/company-tickers.json";
+if (!fs.existsSync(path.join(ROOT, TICKER_PATH))) {
+  check(`${TICKER_PATH} is present`, false, "not committed yet — see data/sec/README.md");
+} else {
+  const rawTicker = read(TICKER_PATH);
+  check("it starts with '{' — no stray prefix byte", rawTicker[0] === "{", JSON.stringify(rawTicker.slice(0, 3)));
+  let parsedTicker = null;
+  try { parsedTicker = tick.parseTickerFile(rawTicker); } catch (err) { parsedTicker = err.message; }
+  check("it parses through the real loader's parser", parsedTicker instanceof Map,
+    parsedTicker instanceof Map ? `${parsedTicker.size} tickers` : String(parsedTicker).slice(0, 100));
+  if (parsedTicker instanceof Map) {
+    const v = tick.validateTickerMap(parsedTicker);
+    check("it passes the same validation the refresh applies", v.ok, v.reason ?? `${parsedTicker.size} tickers`);
+    check("the five probe symbols resolve",
+      ["AAPL", "ARM", "MU", "PLAB", "ASTS"].every((x) => parsedTicker.has(x)),
+      ["AAPL", "ARM", "MU", "PLAB", "ASTS"].map((x) => `${x}=${parsedTicker.get(x) ?? "MISSING"}`).join(" "));
+    check("CIKs are stored padded to ten digits",
+      [...parsedTicker.values()].every((c) => /^\d{10}$/.test(c)));
+    // THE FIXTURE IS NO LONGER MERELY SELF-CONSISTENT. It was written with
+    // invented CIKs because the file was not in the tree; now that it is, the
+    // acceptance window above is asserted against the real mapping, so a wrong
+    // CIK in the fixture can no longer make the test pass for the wrong reason.
+    const fixtureMismatch = [...FIXTURE_CIK.entries()].filter(([sym, cik]) => parsedTicker.get(sym) !== cik);
+    check("the acceptance fixture's CIKs match the committed file exactly",
+      fixtureMismatch.length === 0,
+      fixtureMismatch.length ? fixtureMismatch.map(([s, c]) => `${s}: fixture ${c} vs real ${parsedTicker.get(s)}`).join(" | ") : "all five");
+  }
+}
+
 // ── 8. The ticker map is a seed and fallback, not the source of truth ───────
 console.log("\n8. Ticker map refresh");
 const bigMap = (extra = {}) => {

@@ -115,6 +115,24 @@ export function loadTickerMap(force = false): TickerMap {
   try {
     const text = fs.readFileSync(file, "utf8");
     const map = parseTickerFile(text);
+    // THE COMMITTED FILE IS VALIDATED TOO, not just the refresh.
+    //
+    // It arrived with a stray "#" at byte 0 -- an upload artifact -- which made
+    // JSON.parse throw, so this branch reported present:false and the gap was
+    // loud. But a file that PARSED while being truncated or wrong would have
+    // been adopted silently, because validation only guarded the network path.
+    // The fallback deserves the same scepticism as the fetch: it is the copy
+    // that answers when the fetch fails, which is exactly when nobody is
+    // looking.
+    //
+    // NOT tolerated by stripping junk before the first "{". A lenient parse
+    // that reads a corrupted file as data is the trap this whole pipeline is
+    // built to avoid -- the failure has to stay loud.
+    const valid = validateTickerMap(map);
+    if (!valid.ok) {
+      cached = { present: false, count: map.size, map: new Map(), source: TICKER_FILE, error: `rejected: ${valid.reason}` };
+      return cached;
+    }
     cached = { present: true, count: map.size, map, source: TICKER_FILE, error: null };
   } catch (err) {
     cached = {
