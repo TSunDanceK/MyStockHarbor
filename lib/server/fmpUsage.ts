@@ -343,7 +343,7 @@ export async function fmpFetch(url: string, init?: RequestInit): Promise<Respons
   // memoize it outright -- with no network request at all. This wrapper cannot
   // see that: `fetch` returns a Response either way, and the sample is recorded
   // either way. Where one symbol's news is fetched twice in a pass (fetchNews
-  // and fetchEarningsNews both call fetchFmpStockNews with the same URL), the
+  // and fetchEarningsNews both call fetchStoredSymbolNews with the same URL), the
   // meter counts two calls where at most one crossed the network.
   //
   // So the totals are an UPPER BOUND. That is the right side to err on for a

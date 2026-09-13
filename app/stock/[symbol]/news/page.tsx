@@ -24,6 +24,12 @@ import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
+import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import NewsCardArt from "@/app/components/NewsCardArt";
+import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
+import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import { sectorSlugFromLabel } from "@/lib/sectors";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
   getLatestEarningsData,
@@ -66,7 +72,21 @@ type NewsItem = {
   // FMP stock-news items usually include a thumbnail image; the Google
   // News RSS fallback in lib/stock-news-data.ts does not, so this can be
   // null/undefined and rendering below must handle that gracefully.
+  //
+  // NOT RENDERED ANY MORE — see lib/news-image-policy.ts. The field is still
+  // carried because the items are stored with it and hiding the render is not
+  // the same as dropping the data.
   image?: string | null;
+  // The art hash key (§6 of claude/news-adapter-spec-2026-09-13.md). Google News
+  // supplies a stable guid; FMP does not, so selection falls back to the link,
+  // which is stable for the same article too.
+  guid?: string | null;
+  // What kind of event the article reports (§7, derived in step 6). Typed from
+  // the canonical NewsItem rather than restated, so the union cannot drift here
+  // and leave art.ts mapping a member this file does not know about. Absent on
+  // every FMP item, which is why null falling through to sector is the common
+  // path and not the exception.
+  eventType?: StoredNewsItem["eventType"];
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -268,7 +288,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // one. This keeps the whole page fast and indexable while still offering an
 // AI read on demand.
 function DetailedNewsSection({
-  symbol, companyName, trend, newsScore, detailedNews, compactNews,
+  symbol, companyName, trend, newsScore, detailedNews, compactNews, artBucket, changePct, sparkPoints,
 }: {
   symbol: string;
   companyName: string;
@@ -276,7 +296,42 @@ function DetailedNewsSection({
   newsScore: LiveNewsScore;
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
+  /**
+   * The SECTOR art bucket for this symbol, or null when nothing maps. Per-item
+   * event buckets are chosen inside, from each item's eventType; this is the
+   * fallback the null case falls through to.
+   */
+  artBucket: string | null;
+  changePct: number | null;
+  sparkPoints: number[];
 }) {
+  // ART IS CHOSEN ONCE FOR THE WHOLE SECTION, before rendering, because the
+  // no-repeat rule in §6 is a property of the page rather than of any one card:
+  // `taken` has to be shared across the five leads for re-hash-on-collision to
+  // mean anything. Buckets hold as few as four images against five lead cards.
+  //
+  // COMPACT ROWS ARE NOT IN THIS LOOP, and that is the design, not an omission:
+  // they always take the generated data card, which stays legible at 56px where
+  // a shrunk illustration does not.
+  // ── taken IS PER BUCKET, NOT PER PAGE ────────────────────────────────────
+  // Step 0 chose one bucket for the whole section, so a single Set was enough.
+  // Step 6 chooses per item — an earnings story takes event-earnings while the
+  // one below it takes the sector bucket — and index 2 of one bucket is a
+  // completely different image from index 2 of another. Sharing one Set across
+  // them would make the no-repeat rule block images it has never used, and skew
+  // every selection after the first. Keyed by bucket, the rule means what it
+  // says within each bucket and nothing across them.
+  const takenByBucket = new Map<string, Set<number>>();
+  const leadArt: CardArt[] = detailedNews.map((item) =>
+    planCardArt({
+      variant: "lead",
+      eventType: item.eventType,
+      sectorBucket: artBucket,
+      key: item.guid ?? item.link,
+      taken: takenByBucket,
+      canGenerate: true,
+    })
+  );
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
@@ -285,11 +340,30 @@ function DetailedNewsSection({
         {detailedNews.length ? (
           detailedNews.map((item, index) => (
             <article key={`${item.link}-${index}`} style={{ ...newsLeadCardStyle, borderLeft: index === 0 ? "3px solid rgba(59,130,246,0.75)" : "3px solid rgba(255,255,255,0.08)" }}>
-              {item.image ? (
+              {/*
+                THE PUBLISHER THUMBNAIL, HIDDEN AND NOT DELETED. The site had no
+                right to display it: FMP passed through other people's image
+                URLs and were never the rights holder. See lib/news-image-policy.ts
+                for the full reasoning and for what re-enabling would also need.
+                Left intact so a licensed source is a flag, not an excavation.
+              */}
+              {SHOW_PUBLISHER_IMAGES && item.image ? (
                 <div style={newsThumbWrapStyle}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
                 </div>
-              ) : null}
+              ) : (
+                <div style={newsThumbWrapStyle}>
+                  <NewsCardArt
+                    plan={leadArt[index]}
+                    symbol={symbol}
+                    changePct={changePct}
+                    points={sparkPoints}
+                    sizes="(max-width: 700px) 100vw, 700px"
+                    style={newsThumbImgStyle}
+                  />
+                </div>
+              )}
               <div style={newsMetaRowStyle}>
                 <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
                 <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
@@ -329,9 +403,31 @@ function DetailedNewsSection({
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {compactNews.map((item, index) => (
               <article key={`${item.link}-compact-${index}`} className="compactNewsRow" style={compactNewsRowStyle}>
-                {item.image ? (
+                {/* Hidden, not deleted — see the lead card above and
+                    lib/news-image-policy.ts. */}
+                {SHOW_PUBLISHER_IMAGES && item.image ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
-                ) : null}
+                ) : (
+                  /* planCardArt returns the generated card for every compact
+                     row: §6 is explicit that at 56px the ticker and move are
+                     legible and a shrunk illustration is not. The rule lives
+                     there, not here, so all three surfaces share it. */
+                  <NewsCardArt
+                    plan={planCardArt({
+                      variant: "compact",
+                      sectorBucket: artBucket,
+                      key: item.guid ?? item.link,
+                      taken: takenByBucket,
+                      canGenerate: true,
+                    })}
+                    symbol={symbol}
+                    changePct={changePct}
+                    points={sparkPoints}
+                    sizes="56px"
+                    style={compactThumbStyle}
+                  />
+                )}
                 <div style={{ minWidth: 88, flexShrink: 0 }}>
                   <div style={compactSourceStyle}>{compactSource(item.source)}</div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
@@ -362,9 +458,36 @@ export default async function StockNewsPage({ params }: Props) {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
     lastRsi, isDataUnavailable, priceVs50, priceVs200,
     recentHigh, recentLow, newsScore, earningsScore, detailedNews, compactNews,
+    history,
   } = newsData;
 
   const latestEarnings = await getLatestEarningsData(upper, earningsScore.tone);
+
+  // ── News card art (step 0 of claude/news-adapter-spec-2026-09-13.md) ──────
+  //
+  // A CACHED REDIS READ AND NOTHING ELSE. readCachedFundamentalsBulk is an mget
+  // that never fetches on a miss and never throws, so the worst case is an empty
+  // map -- no bucket, and every card draws the generated data card. It adds no
+  // FMP call to the render path, which the whole stored-news design exists to
+  // protect.
+  //
+  // Sector comes back as FMP's own label ("Technology"), so it goes through
+  // sectorSlugFromLabel to reach the slugs lib/server/news/art.ts maps.
+  const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  const artBucket = bucketFor(
+    sectorSlugFromLabel(fundamentals?.sector ?? null),
+    fundamentals?.industry ?? null
+  );
+
+  // The sparkline window for the generated card. Last ~30 sessions: long enough
+  // to have a shape, short enough that "recent price action" is honest.
+  const sparkPoints = history.slice(-30).map((point) => point.close).filter(Number.isFinite);
+  const sparkFirst = sparkPoints[0];
+  const sparkLast = sparkPoints[sparkPoints.length - 1];
+  const artChangePct =
+    sparkPoints.length >= 2 && typeof sparkFirst === "number" && sparkFirst > 0
+      ? ((sparkLast - sparkFirst) / sparkFirst) * 100
+      : null;
 
   const leadSummary = buildLeadSummary({ symbol: upper, companyName, trend, newsScore, earningsScore });
   const whatItMeans = buildWhatItMeans({ symbol: upper, trend, newsScore, rsi: lastRsi, priceVs50 });
@@ -468,7 +591,7 @@ export default async function StockNewsPage({ params }: Props) {
 
         <section className="newsGrid" style={newsGridStyle}>
           <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
-            <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} />
+            <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} artBucket={artBucket} changePct={artChangePct} sparkPoints={sparkPoints} />
             <AiInsightCard
               symbol={upper}
               companyName={companyName}

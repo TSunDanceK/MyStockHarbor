@@ -225,3 +225,31 @@ export function readCodeOnly(relPath, opts = {}) {
   const full = path.join(process.cwd(), relPath);
   return stripComments(fs.readFileSync(full, "utf8"), { file: relPath, ...opts });
 }
+
+/**
+ * lib/server/news/eventType.ts, de-typed and with its exports stripped, ready to
+ * be substituted in place of an adapter's `import ... from "./eventType"` line.
+ *
+ * WHY IT IS SHARED. Three adapters import the cascade, so three harnesses need
+ * the same substitution. Written out three times it would rot in three places at
+ * different rates — and a substitution that silently stops matching is exactly
+ * the failure this idiom already had once (a stub that quietly stopped applying
+ * while every assertion kept passing). One copy, one thing to fix.
+ *
+ * The caller still has to guard that the result landed: check for
+ * "function deriveEventType" in the inlined source and fail loudly if it is
+ * absent, rather than loading a module with a missing binding.
+ */
+export function eventTypeSource() {
+  return readCodeOnly("lib/server/news/eventType.ts", { dropLines: false })
+    .replace(/^import type \{ NewsItem \} from ".\/types";$/m, "")
+    .replace(/^export type EventType = NonNullable<NewsItem\["eventType"\]>;$/m, "")
+    .replace(/^export type EventTypeLeg = .*$/m, "")
+    .replace(/^export type EventTypeInputs = \{[\s\S]*?^\};$/m, "")
+    .replace(/const ITEM_EVENT_TYPES: Record<string, EventType>/, "const ITEM_EVENT_TYPES")
+    .replace(/const (FORM|SUBJECT|TITLE)_EVENT_TYPES: Array<\[RegExp, EventType\]>/g, "const $1_EVENT_TYPES")
+    .replace(/export function eventTypeFromForm\(form: string, items: string\): EventType/, "function eventTypeFromForm(form, items)")
+    .replace(/export function eventTypeFromSubjects\(subjects: string\[\]\): EventType \| null/, "function eventTypeFromSubjects(subjects)")
+    .replace(/export function eventTypeFromTitle\(title: string\): EventType \| null/, "function eventTypeFromTitle(title)")
+    .replace(/export function deriveEventType\(inputs: EventTypeInputs\): \{[\s\S]*?^\} \{/m, "function deriveEventType(inputs) {");
+}
