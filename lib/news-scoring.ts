@@ -23,22 +23,25 @@
 // stock-news-data.ts importing from this file -- the seam is already correct.
 // ---------------------------------------------------------------------------
 
+// The news DATA MODEL and the text/instrumentation helpers moved to
+// lib/server/news/ when the FMP path went behind the NewsProvider interface
+// (step 1 of claude/news-adapter-spec-2026-09-13.md). They are re-exported from
+// their new home rather than from stock-news-data, which no longer owns them --
+// so this module stays the single import for the sector pages and nothing there
+// had to change.
+export type { NewsItem, FmpStockNewsItem } from "@/lib/server/news/types";
+export { stripHtmlTags, containsHtmlMarkup, cleanRssDescription } from "@/lib/server/news/text";
+export { logResponseWindow } from "@/lib/server/news/responseWindow";
+
 export type {
-  NewsItem,
   NewsScoreResult,
   EarningsScoreResult,
   ScoreTone,
-  FmpStockNewsItem,
 } from "@/lib/stock-news-data";
 
 export {
-  // Text hygiene
-  stripHtmlTags,
-  containsHtmlMarkup,
-  cleanRssDescription,
   // Item-level classification
   keywordHits,
-  logResponseWindow,
   isVideoOrLowQualitySource,
   isEarningsNewsItem,
   isEarningsExceptionSource,

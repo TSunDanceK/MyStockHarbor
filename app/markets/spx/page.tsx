@@ -464,7 +464,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 closed at 7,712 on Friday, September 4 — about 1.1% below its record closing high of 7,798.99 set on August 13 — pulling back from Thursday's 7,747.71 close after a much-stronger-than-expected August jobs report reignited worries that the Federal Reserve may need to hold rates higher for longer rather than cut them. The index is still up roughly 13% for the year after rallying for most of the week as Treasury yields eased, before Friday's data reversed some of that relief — further Fed commentary and how policymakers weigh labor-market strength against inflation are the key things to watch from here.
+                The S&amp;P 500 closed at 7,663.20 on Friday, September 11 — up 0.94% on the day and about 1.7% below its record closing high of 7,798.99 set on August 13 — after a volatile week in which the index slid to 7,591.79 by Thursday as surging oil prices and a hot inflation report pushed traders to price in real odds of a Federal Reserve rate hike, before Friday's pullback in crude helped stocks recover most of the week's losses. The index is up roughly 12% for the year, with next week's September 15–16 Fed meeting now the market's central focus.
               </div>
 
               <div
@@ -685,7 +685,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX closed at 7,712 on Friday, September 4 — about 1.1% below its all-time high closing record of 7,798.99 set on Wednesday, August 13 — after a choppy week that ended on a sour note. Stocks rallied Monday through Thursday as Treasury yields retreated and a weaker dollar helped sentiment, with the index adding 1.1% on Thursday alone to close at 7,747.71. That reversed on Friday after the Labor Department reported 162,000 new jobs for August, far above the roughly 45,000–55,000 economists expected, pushing the odds of a Fed rate hike at the September meeting back up toward the 50–60% range and sending the 10-year Treasury yield to around 4.77–4.79%. Individual-investor sentiment (AAII) actually improved on the week, with bullish respondents climbing to 39.7% from 32.9% and bearish respondents easing to 37.6% from 44.4% — but under the surface, market breadth remains a concern after narrowing sharply through late August, with leadership still concentrated in a handful of mega-cap AI names.
+    the SPX closed at 7,663.20 on Friday, September 11 — a 0.94% gain that clawed back most of a rough week and left the index about 1.7% below its all-time high closing record of 7,798.99 set on Wednesday, August 13. Stocks fell in four of the prior five sessions, bottoming near 7,591.79 on Thursday, as escalating U.S.-Iran tensions around the Strait of Hormuz pushed Brent crude above $105 a barrel and WTI above $100 for the first time since May, and an August producer-price report showing 5.4% annual inflation (up from 4.8% in July) added to concerns the Fed may need to raise rates rather than cut them. The 10-year Treasury yield spiked to around 4.95% — its highest since 2023 — and odds of a hike at the Fed's September 15–16 meeting jumped from roughly 70% to as high as 90% mid-week. Friday's relief rally came as oil prices eased back about 3%, and the gains were broad-based across large-cap value and technology names alike — but market breadth remains fragile after narrowing sharply since mid-August, with leadership still concentrated in a handful of mega-cap AI names.
   </div>
 </div>
           </section>
@@ -813,15 +813,15 @@ export default async function SPXPage() {
                 <div style={insightIconStyle("yellow")}>📈</div>
                 <div>
                   <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
-                    Near record highs, whipsawed by a hot jobs report
+                    Whipsawed by an oil and inflation shock
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    A strong labor market cuts both ways for stocks
+                    A geopolitical oil spike scrambled the rate-cut narrative
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed Friday, September 4 at 7,712, about 1.1% below its record close of 7,798.99 set on August 13. The index had rallied through midweek — gaining 1.1% on Thursday to 7,747.71 as Treasury yields eased — before August's jobs report (162,000 new positions versus roughly 45,000–55,000 expected) reignited concern that a resilient labor market could keep the Fed from cutting rates, or even push it toward a hike. Individual-investor sentiment (AAII) improved on the week even so, with bullish respondents rising to 39.7% from 32.9%.
+                The SPX closed Friday, September 11 at 7,663.20, up 0.94% on the day but still about 1.7% below its record close of 7,798.99 set on August 13. The index had slid as low as 7,591.79 on Thursday as escalating Iran-related tensions around the Strait of Hormuz sent Brent crude above $105 a barrel and a hotter-than-expected August producer-price report (5.4% annual inflation) forced traders to price in real odds of a Fed rate hike at next week's meeting. Friday's roughly 3% pullback in oil prices helped the index recover most of the week's losses in a single broad-based session.
               </div>
             </div>
 
@@ -850,7 +850,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Market breadth thinned out sharply through late August, with roughly half of S&amp;P 500 members trading above their own 50-day moving average versus around 70% in mid-August. This week's rally looked somewhat broader as Treasury yields fell, but leadership still leans heavily on a handful of AI-linked mega-caps, and Friday's jobs-driven pullback is a reminder of how sensitive this market remains to a single data point.
+                Market breadth was already thin heading into September — roughly half of S&amp;P 500 members were trading above their own 50-day moving average versus around 70% in mid-August — and this week's oil-and-inflation scare put further pressure on participation even as the index-level damage looked modest. Friday's rebound was encouragingly broad, spanning both value and technology names, but one strong session isn't enough to undo weeks of narrowing leadership, and the market remains sensitive to a single geopolitical or data headline.
               </div>
             </div>
 
@@ -867,7 +867,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The S&amp;P 500 remains above its rising daily 50-day (roughly 7,700) and 200-day (roughly 7,645) moving averages, and the broader weekly trend structure stays bullish. RSI(14) has cooled from the overbought extreme near 74–75 touched in early August into a calmer, closer-to-neutral reading — but with the index still within about 1.1% of its record high, there's less room for error if sentiment turns.
+                The S&amp;P 500 briefly dipped below its rising daily 50-day moving average (roughly 7,650–7,700) during Thursday's low before Friday's rally pushed it back above that level; the 200-day average (roughly 7,650) was not tested. RSI(14), which had already cooled from the overbought extreme near 74–75 touched in early August, fell further during the week's slide before firming again on Friday — a reset in momentum rather than a break in the broader uptrend, but with the index still about 1.7% below its record high, there's less room for error if oil or the Fed surprise to the downside.
               </div>
             </div>
           </section>
@@ -901,11 +901,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500's uptrend remains intact heading deeper into September, even after a bumpy finish to the week. The index closed at 7,712 on Friday, down modestly on the day, after touching 7,747.71 on Thursday — itself a 1.1% daily gain — and sits about 1.1% below its record closing high of 7,798.99 set on Wednesday, August 13. The index is up roughly 13% for the year. Sell-side targets have kept climbing this year: JPMorgan and Goldman Sachs have both raised their year-end 2026 targets to 8,000, while UBS has gone further, to 8,100 — all still above current levels.
+                The S&amp;P 500's uptrend survived its first real stress test in weeks. The index closed at 7,663.20 on Friday, up 0.94% on the day, after tumbling to 7,591.79 on Thursday — its lowest close in several weeks — and sits about 1.7% below its record closing high of 7,798.99 set on Wednesday, August 13. The index is up roughly 12% for the year. Sell-side targets have not budged despite the volatility: JPMorgan and Goldman Sachs both still hold year-end 2026 targets of 8,000, while UBS's target remains higher, at 8,100 — all above current levels.
               </p>
 
               <p style={{ margin: 0 }}>
-                This week's swings were driven by a genuine shift in the interest-rate outlook rather than a one-off headline. Stocks rallied Monday through Thursday as Treasury yields retreated — helped along by a stronger yen weighing on the dollar — with Fed Governor Chris Waller signaling mid-week that he leaned toward holding rates steady rather than raising them. That relief evaporated on Friday when the Labor Department reported 162,000 new jobs for August, far above the roughly 45,000–55,000 expected, alongside an upward revision to July's payrolls from a decline to a modest gain. Traders responded by pushing the probability of a Fed rate hike at the September meeting back up into the 50–60% range, and the 10-year Treasury yield rose to around 4.77–4.79%.
+                This week's swings were driven by a genuine geopolitical and inflation shock rather than a one-off headline. Escalating U.S.-Iran tensions around the Strait of Hormuz sent Brent crude above $105 a barrel and WTI above $100 for the first time since May — Saudi Arabia reported production at its lowest level since 1990 — while an August producer-price report showed prices up 5.4% year-over-year, above forecasts and up from 4.8% in July. Traders responded by pushing the odds of a Fed rate hike at the September 15–16 meeting from roughly 70% up toward 90% mid-week, and the 10-year Treasury yield spiked to around 4.95%, its highest level since 2023. Oil prices eased back about 3% on Friday as tensions cooled slightly, and stocks recovered most of the week's losses in a broad, risk-on session.
               </p>
 
               <div
@@ -922,12 +922,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the Fed path and the breadth:</strong> a resilient labor market is good news for the economy but complicates the rate-cut case markets had been leaning on, and Friday's reaction shows how quickly sentiment can flip on a single data point. Underneath the index-level moves, breadth remains a live concern — market participation narrowed sharply through late August and leadership still skews toward a handful of AI-linked mega-caps. RSI has cooled from the overbought extreme near 74–75 touched in early August into a calmer, closer-to-neutral zone, and individual-investor sentiment (AAII) has actually firmed a little, with bullish respondents up to 39.7% from 32.9% the prior week. From here, additional Fed commentary, the next round of jobs and inflation data, and whether participation can broaden beyond mega-cap tech look more likely to move this market than any single headline.
+                  <strong style={{ color: "#fca5a5" }}>Watch the Fed path and the breadth:</strong> a hawkish repricing driven by an oil shock is a different animal than one driven by strong growth — it raises costs for the economy without the offsetting benefit of resilient demand, and this week's whipsaw shows how quickly sentiment can swing on a single geopolitical or inflation headline. Underneath the index-level moves, breadth remains a live concern — participation had already narrowed sharply since mid-August, and leadership still skews toward a handful of AI-linked mega-caps, even after Friday's broad-based bounce. RSI cooled further during the slide before firming on Friday's rally, a reset rather than a breakdown. From here, next week's September 15–16 Fed decision, any further movement in oil prices, and whether market breadth can hold up through the volatility look more likely to move this market than any single headline.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, and the daily 50-day moving average (roughly 7,700) has remained above the 200-day (roughly 7,645) for months. This week's round trip — a yield-driven rally followed by a jobs-report pullback — is the kind of volatility a genuine uptrend can absorb, keeping the 8,000–8,100 targets from JPMorgan, Goldman Sachs and UBS as the more relevant markers for the rest of the year, provided the labor-market data doesn't force the Fed's hand.
+                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, and the daily 50-day moving average (roughly 7,650–7,700) held above the 200-day (roughly 7,650) even at the week's low. This week's round trip — an oil-and-inflation-driven slide followed by a broad-based rally — is the kind of volatility a genuine uptrend can absorb, keeping the 8,000–8,100 targets from JPMorgan, Goldman Sachs and UBS as the more relevant markers for the rest of the year, provided the Fed's September meeting and the path of oil prices don't force a more serious reassessment.
               </p>
             </div>
           </section>
@@ -968,19 +968,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  Coming off a week that saw the S&amp;P 500 swing from a 1.1% one-day gain to a jobs-report-driven pullback, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,650–7,800 range — this week's volatility still has plenty of support beneath it before the longer-term trend would be threatened.
+                  Coming off a week that saw the S&amp;P 500 swing from a nearly 2.7%-from-peak trough to a broad Friday rally, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,590–7,800 range — this week's volatility still has plenty of support beneath it before the longer-term trend would be seriously threatened.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: the S&amp;P 500 is up roughly 13% for the year and sits only about 1.1% below the record closing high of 7,798.99 it set on August 13. Its daily 200-day moving average, at roughly 7,645, sits comfortably beneath current levels, and the index remains within reach of the 8,000 year-end targets from JPMorgan and Goldman Sachs and UBS's higher 8,100 target.
+                  The bigger picture: the S&amp;P 500 is up roughly 12% for the year and sits only about 1.7% below the record closing high of 7,798.99 it set on August 13. Its daily 200-day moving average, at roughly 7,650, sits comfortably beneath current levels — even Thursday's 7,591.79 low didn't seriously threaten it — and the index remains within reach of the 8,000 year-end targets from JPMorgan and Goldman Sachs and UBS's higher 8,100 target.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether the August records were real — a run of cooling inflation data made them real, and this week's rally on falling Treasury yields reinforced that the market still wants to believe the Fed's next move is a cut, not a hike. It's whether a stronger-than-expected labor market like Friday's forces the Fed to hold rates higher for longer, especially with breadth still narrow and leadership concentrated in a handful of AI names.
+                  The real question isn't whether the August records were real — a run of cooling data made them real, and Friday's broad rally reinforced that the market still wants to believe this week's oil-driven inflation scare was a shock rather than a trend. It's whether continued turmoil around the Strait of Hormuz keeps energy prices elevated long enough to force the Fed's hand at next week's meeting, especially with breadth still narrow and leadership concentrated in a handful of AI names.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>Until the 200-day moving average — unbroken for months and still hundreds of points below the market — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
+                  <strong>Until the 200-day moving average — unbroken for months and still well below the market even after this week's low — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -1002,10 +1002,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026, with an intraday record near 7,817 — the index has since traded in a range and closed at 7,712 on Friday, September 4, about 1.1% below that record"],
-                  ["⚠️", "Risk", "a much-stronger-than-expected August jobs report (162,000 vs. roughly 45,000–55,000 expected) revived fears the Fed could hold rates higher for longer, pushing the odds of a September rate hike back toward 50–60% and the 10-year Treasury yield to about 4.77–4.79%"],
-                  ["🔎", "Weekly structure", "still bullish — price sits well above its 50-week and 200-week moving averages, with RSI cooling from an overbought reading in early August into a calmer, closer-to-neutral zone"],
-                  ["🟡", "Current stance", "up roughly 13% for the year after a week that swung from a yield-driven rally to a jobs-report pullback; further Fed commentary and how policymakers read the labor market are the next big catalysts"],
+                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026, with an intraday record near 7,817 — the index tumbled as low as 7,591.79 this week before rebounding to close at 7,663.20 on Friday, September 11, about 1.7% below that record"],
+                  ["⚠️", "Risk", "an oil-and-inflation shock — Brent crude above $105 and an August PPI print showing 5.4% annual inflation — pushed the odds of a September 15–16 Fed rate hike as high as 90% mid-week and sent the 10-year Treasury yield to about 4.95%, its highest since 2023"],
+                  ["🔎", "Weekly structure", "still bullish — price sits well above its 50-week and 200-week moving averages and never seriously tested its 200-day average even at the week's low, with RSI resetting lower during the slide before firming on Friday's rebound"],
+                  ["🟡", "Current stance", "up roughly 12% for the year after a week that swung from an oil-driven selloff to a broad Friday rally; next week's Fed meeting and the path of oil prices are the next big catalysts"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1068,7 +1068,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 holding just below its all-time highs after touching a record close of 7,798.99 on Wednesday, August 13 and an intraday record near 7,817 — the index has spent the weeks since consolidating in a roughly 7,650–7,800 range, rallying to 7,747.71 by Thursday, September 3 before slipping back to 7,712 on Friday as a stronger-than-expected jobs report revived Fed rate-hike concerns. The broader trend structure remains bullish, with the index comfortably above its rising daily and weekly moving averages. Momentum has cooled from an overbought RSI near 74–75 in early August to a calmer, closer-to-neutral reading, while breadth — which narrowed sharply through late August — remains a swing factor to watch, with leadership still tilted toward a handful of AI-linked mega-caps.
+              The weekly chart shows the S&amp;P 500 holding just below its all-time highs after touching a record close of 7,798.99 on Wednesday, August 13 and an intraday record near 7,817 — the index has spent the weeks since consolidating in a roughly 7,590–7,800 range, tumbling to 7,591.79 by Thursday, September 10 as an oil-and-inflation shock revived Fed rate-hike fears, before a broad-based rally lifted it back to 7,663.20 by Friday. The broader trend structure remains bullish, with the index comfortably above its rising daily and weekly moving averages even at the week's low. Momentum cooled further during the slide from an already-calmer post-August reading, before firming again on Friday's bounce, while breadth — which narrowed sharply through late August — remains a swing factor to watch, with leadership still tilted toward a handful of AI-linked mega-caps.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1124,16 +1124,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX closes back below its rising daily 50-day moving average (roughly 7,700) on a weekly basis
+                    SPX closes back below its rising daily 50-day moving average (roughly 7,650–7,700) on a weekly basis, rather than just an intraday dip like Thursday's
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The Fed's September meeting delivers a rate hike, or clearly opens the door to one, rather than holding steady
+                    The Fed's September 15–16 meeting delivers a rate hike, or clearly signals more hikes are likely, rather than holding steady
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Treasury yields keep climbing on hawkish Fed commentary, with the 10-year pushing meaningfully above its current ~4.77–4.79% level
+                    Oil prices resume climbing on renewed Iran/Strait of Hormuz escalation, or the 10-year Treasury yield pushes meaningfully above its recent ~4.95% high
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below the 200-day moving average (roughly 7,645) — the primary trend line that's held for months
+                    Weekly close below the 200-day moving average (roughly 7,650) — the primary trend line that held even through this week's low
                   </li>
                 </ul>
               </div>
@@ -1151,13 +1151,13 @@ export default async function SPXPage() {
                     Price reclaims the record high of 7,798.99 and pushes on toward the 8,000–8,100 year-end targets from JPMorgan, Goldman Sachs and UBS
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The Fed signals it's comfortable holding rates steady, or still leaning toward a cut, despite the strong jobs data
+                    The Fed signals it's comfortable holding rates steady at next week's meeting despite the recent inflation scare
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Treasury yields stabilize or ease back from their post-jobs-report levels, taking pressure off equity valuations
+                    Oil prices continue easing back from this week's spike and the 10-year Treasury yield retreats from its ~4.95% high, taking pressure off equity valuations
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Breadth stops narrowing, with the share of members above their 50-day moving average climbing back toward the ~70% seen in mid-August
+                    Breadth stops narrowing and Friday's broad, risk-on participation carries into next week rather than fading
                   </li>
                 </ul>
               </div>
@@ -1193,7 +1193,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,712 on Friday, September 4, only about 1.1% below its record close of 7,798.99 set on August 13, and up roughly 13% for the year — and the index rallied through most of the week before a stronger-than-expected jobs report triggered Friday's pullback. None of the bullish sell-side calls have been walked back; JPMorgan and Goldman Sachs both hold 8,000 targets, and UBS has gone further, to 8,100.
+                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,663.20 on Friday, September 11, only about 1.7% below its record close of 7,798.99 set on August 13, and up roughly 12% for the year — and the index clawed back most of a rough week in a single broad-based session after an oil-and-inflation scare drove it as low as 7,591.79 on Thursday. None of the bullish sell-side calls have been walked back; JPMorgan and Goldman Sachs both hold 8,000 targets, and UBS has gone further, to 8,100.
               </p>
 
               <div
@@ -1210,12 +1210,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this week's rally leaned heavily on the market's confidence that the Fed is done raising rates — and Friday showed how fast that confidence can wobble on a single strong jobs report. Breadth has narrowed sharply since mid-August, with leadership still concentrated in a handful of AI-linked mega-caps, even as individual-investor sentiment (AAII) has actually firmed, with bullish respondents up to 39.7% from 32.9% the prior week. A much-stronger-than-expected August jobs report and the 10-year Treasury yield's climb to around 4.77–4.79% are reminders that the path to lower rates isn't a straight line. None of that means the uptrend is over — the 200-day moving average is nowhere close — but it's a reminder that a rally built on rate-cut hopes is vulnerable to strong economic data, not just weak data.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this week showed how fast sentiment can swing when a real-world shock — not just a data surprise — hits the market. Rising U.S.-Iran tensions pushed oil prices to their highest levels in months, and the resulting inflation scare briefly pushed Fed rate-hike odds for next week's meeting as high as 90%, up from roughly 70% just days earlier. Breadth has narrowed sharply since mid-August, with leadership still concentrated in a handful of AI-linked mega-caps, even after Friday's broad-based bounce. None of that means the uptrend is over — the 200-day moving average was never seriously threatened, even at the week's low — but it's a reminder that a rally built partly on rate-cut hopes is vulnerable to geopolitical shocks and inflation surprises alike, not just weak economic data.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX near 7,700–7,750 is sitting just below a fresh all-time high, up solidly for the year, with sell-side targets still pointing higher into next year. But with breadth narrowing, leadership still concentrated in a handful of AI names, and the Fed's next move now genuinely uncertain after a hot jobs report, chasing this specific level looks less compelling than waiting for either a broadening in participation or clearer signals from the Fed's September meeting.
+                The SPX near 7,650–7,700 is sitting a little further below its all-time high than it was a week ago, up solidly for the year, with sell-side targets still pointing higher into next year. But with breadth narrowing, leadership still concentrated in a handful of AI names, and the Fed's next move now genuinely uncertain heading into a live meeting, chasing this specific level looks less compelling than waiting for either a broadening in participation or clearer signals out of next week's Fed decision.
               </p>
             </div>
           </section>

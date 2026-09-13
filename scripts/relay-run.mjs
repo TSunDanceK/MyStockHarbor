@@ -33,6 +33,16 @@ const TASKS = {
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
   "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
+  "nasdaq-refill": {
+    script: "scripts/nasdaq-refill-analysis.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  "listing-split": {
+    script: "scripts/listing-split.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "phase0-adjustment": {
     script: "scripts/phase0-adjustment-probe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
@@ -46,6 +56,49 @@ const TASKS = {
   "sec-fundamentals": {
     script: "scripts/sec-fundamentals-ingest.mjs",
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
+    needsDump: true,
+  },
+  // Read-only: fetches two public pipe-delimited text files and prints them.
+  // Needed because the sandbox is refused www.nasdaqtrader.com by policy, and
+  // that directory is where the news path's company name actually comes from.
+  "company-name-sample": { script: "scripts/company-name-sample.mjs", args: () => [] },
+  // Read-only: fetches a public RSS feed and prints it. Needed because the
+  // sandbox is refused news.google.com by policy, and the adapter's parser must
+  // be tested against the feed's real shape.
+  "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // Read-only, but needs the frozen universe to compute the match ratio: the
+  // question "how many wire items are about a stock we cover" cannot be answered
+  // without the symbol set.
+  "wire-feeds": {
+    script: "scripts/wire-feeds-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. Needs the dump for the universe: both the CIK map and the
+  // sicDescription comparison are scoped to the symbols the site covers.
+  "sec": {
+    script: "scripts/sec-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. One poll of all three free news sources, digested to the raw
+  // inputs §7's cascade reads — no judgement made on the runner, so the
+  // measurement describes the shipped derivation and not a copy of it.
+  "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
+  // Read-only, NO NETWORK AT ALL: inventories the frozen dump already on the
+  // runner. Asked before building the static-profile snapshot, because if the
+  // dump carries the taxonomy the snapshot costs no FMP calls whatsoever.
+  "dump-inventory": {
+    script: "scripts/dump-inventory.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, NO NETWORK: builds the static profile snapshot from the taxonomy
+  // already in the frozen dump, captured while the FMP licence was live. See the
+  // script header for why there are no FMP calls in it.
+  "static-profile": {
+    script: "scripts/static-profile-build.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
   // Fetches SEC's ticker file on a runner, because the agent sandbox is refused

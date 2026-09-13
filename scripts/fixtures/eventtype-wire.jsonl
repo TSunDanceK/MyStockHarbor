@@ -1,0 +1,51 @@
+# One real poll of both wire feeds, digested to the inputs §7's subject and
+# title legs read. Captured 2026-09-13 by the relay (task eventtype-sample,
+# symbols=eventtype-wire, run 34768185891). 20 items per feed. Verified
+# 7,574 bytes AND per-line against the emitter's byte census — which earned its
+# keep immediately: it caught two lines transcribed with `&amp;` where the feed
+# sends a bare `&`. PR Newswire's prn:subject uses a bare `&`; GlobeNewswire's
+# dc:subject uses `&amp;`. A real per-feed difference, not a typo.
+#
+# NOTE, against step 4's measurement: BOTH feeds carry subject elements here.
+# Step 4 read only prn:subject/dc:subject and found PR Newswire's; GlobeNewswire
+# populates dc:subject too, which is why the subject leg reaches it at all.
+{"src":"wire","feed":"globenewswire","title":"NEW MID-TERM FINANCIAL TARGETS – ISS TO ACCELERATE HIGHER-QUALITY GROWTH AND EXPAND MARGINS","subjects":["Regulatory information","European Regulatory News"]}
+{"src":"wire","feed":"globenewswire","title":"Roche’s collaborator MediLink announces phase III data for Tam-Peli showing significantly improved overall survival in Chinese patient population with relapsed small-cell lung cancer","subjects":["Company Announcement"]}
+{"src":"wire","feed":"globenewswire","title":"Capgemini signe un accord définitif de vente de Capgemini Government Solutions","subjects":["Mergers and Acquisitions","European Regulatory News"]}
+{"src":"wire","feed":"globenewswire","title":"Capgemini signs a definitive agreement to sell Capgemini Government Solutions","subjects":["Mergers and Acquisitions","European Regulatory News"]}
+{"src":"wire","feed":"globenewswire","title":"Computer Modelling Group Announces Annual General Meeting Voting Results","subjects":["Annual Meetings &amp; Shareholder Rights"]}
+{"src":"wire","feed":"globenewswire","title":"Skyworks Announces Extension of Expiration Date of Exchange Offers for Qorvo’s Senior Notes due 2029 and 2031","subjects":["Financing Agreements"]}
+{"src":"wire","feed":"globenewswire","title":"Axe Compute Announces Inducement Grant Under Nasdaq Listing Rule 5635(c)(4)","subjects":["Changes in company's own shares"]}
+{"src":"wire","feed":"globenewswire","title":"Pan Global Engages Adelaide Capital for Investor Relations Advisory","subjects":["Business Contracts"]}
+{"src":"wire","feed":"globenewswire","title":"EverCommerce Announces an Increase and Extension of its Share Repurchase Program","subjects":["Major shareholder announcements"]}
+{"src":"wire","feed":"globenewswire","title":"Maxim Power Corp. Announces TSX Acceptance of Normal Course Issuer Bid","subjects":["Changes in company's own shares"]}
+{"src":"wire","feed":"globenewswire","title":"Grupo Aeroportuario del Pacifico Announces the Execution of Bank Credit Facilities Totaling Ps. 8,000 Million","subjects":["Financing Agreements"]}
+{"src":"wire","feed":"globenewswire","title":"Capital Power and Alpine Canada Launch a Partnership to Fuel the Future of Canadian Winter Sport","subjects":["Partnerships","Product / Services Announcement","Sports"]}
+{"src":"wire","feed":"globenewswire","title":"Imperial Petroleum Inc. Declares Dividend on Series A Preferred Shares","subjects":["Dividend Reports and Estimates"]}
+{"src":"wire","feed":"globenewswire","title":"ArrowMark Financial Corp. Announces Q2 Results and Special Distribution of $0.10 and Monthly Cash Distribution of $0.15 per Share for September 2026","subjects":["Corporate Action"]}
+{"src":"wire","feed":"globenewswire","title":"Eastern International Ltd. Announces Receipt of Nasdaq Notification Regarding Minimum Bid Price Deficiency","subjects":["Press releases"]}
+{"src":"wire","feed":"globenewswire","title":"“BEYOND THE EXTREME\" Digital Music Night Debuts at ICEBAR Stockholm","subjects":["Product / Services Announcement"]}
+{"src":"wire","feed":"globenewswire","title":"Interim results for the six months ended June 30, 2026","subjects":["Press releases"]}
+{"src":"wire","feed":"globenewswire","title":"FRO – Declares special one-time dividend after sale of two VLLCs","subjects":["Regulatory information","European Regulatory News"]}
+{"src":"wire","feed":"globenewswire","title":"Cellectis to Host Conference Call and Webcast on September 14 to Provide a Business Update","subjects":["Company Regulatory Filings","European Regulatory News"]}
+{"src":"wire","feed":"globenewswire","title":"Cellectis organise une conférence téléphonique et un webcast le 14 septembre pour présenter un point d’activité","subjects":["Company Regulatory Filings","European Regulatory News"]}
+{"src":"wire","feed":"prnewswire","title":"Insurance Agent Nick Hogan Explains What First-Time Homeowners Often Miss About Homeowners Insurance in HelloNation","subjects":["Broadcast Feed Annoucement"]}
+{"src":"wire","feed":"prnewswire","title":"Amid a Changing Global Landscape, Countries Seek Investment Opportunities at CIFIT","subjects":["Trade Show News","Foreign Policy & International Affairs"]}
+{"src":"wire","feed":"prnewswire","title":"Achieve Publishes New Online Guidance for Freedom Debt Relief and Achieve Customers","subjects":["Joint Ventures","Hispanic"]}
+{"src":"wire","feed":"prnewswire","title":"ICW Group Honors 25th Anniversary of Sept. 11 Through Day of Service","subjects":["Corporate Social Responsibility","Not For Profit"]}
+{"src":"wire","feed":"prnewswire","title":"KB HOME OPENS LAKESIDE BLUFFS: NEW TOWNHOMES FROM THE $490Ks IN LAKE STEVENS, WASHINGTON","subjects":[]}
+{"src":"wire","feed":"prnewswire","title":"abrdn Global Infrastructure Income Fund (ASGI) Announces Transferable Rights Offering Terms","subjects":["Stock Offering"]}
+{"src":"wire","feed":"prnewswire","title":"Greenberg Traurig Advises Ryman Hospitality Properties on $1.38B Grande Lakes Orlando Resort Acquisition","subjects":["Acquisitions, Mergers and Takeovers"]}
+{"src":"wire","feed":"prnewswire","title":"abrdn Asia-Pacific Income Fund, Inc. (FAX) Announces New Managed Distribution Policy and Declares Monthly Distribution","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"abrdn Healthcare Opportunities Fund (THQ) and abrdn World Healthcare Fund (THW) Announce New Managed Distribution Policies and Declare Monthly Distributions","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"abrdn Income Credit Strategies Fund (ACP) Announces Change to Monthly Distribution Expected to Be Maintained for at Least the Next 12 Months","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"Certain Aberdeen Investments U.S. Closed-End Funds Declare Distribution Dates and Amounts","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"abrdn Global Premier Properties Fund (AWP) Announces New Managed Distribution Policy and Declares Monthly Distribution","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"The Generation Essential Group's Receipt of NYSE Letter Regarding Class A Ordinary Shares Trading Price","subjects":["Restructuring & Recapitalization","Stock Offering","Venture Capital"]}
+{"src":"wire","feed":"prnewswire","title":"ARES DYNAMIC CREDIT ALLOCATION FUND DECLARES A MONTHLY DISTRIBUTION OF $0.1125 PER SHARE","subjects":["Dividends"]}
+{"src":"wire","feed":"prnewswire","title":"Jaguar LAA, Inc. Announces Acquisition of Assets Related to the Laminar Program","subjects":["Acquisitions, Mergers and Takeovers","Financing Agreements"]}
+{"src":"wire","feed":"prnewswire","title":"St. Johns County Outlines Preparations for Proposed Property Tax Amendment 3","subjects":["Federal and State Legislation"]}
+{"src":"wire","feed":"prnewswire","title":"ChoiceOne Bank Receives Habitat for Humanity of Kent County Opportunity Award","subjects":["Awards","Corporate Social Responsibility"]}
+{"src":"wire","feed":"prnewswire","title":"Frank Russo Calls on Florida's Faith Communities to Put Humanity Over the Dollar","subjects":["Religion","Advocacy Group Opinion","Not For Profit"]}
+{"src":"wire","feed":"prnewswire","title":"The Big Picture TV Series Spotlights Middle Tennessee Real Estate, Homes, Land and Lifestyle on REAL Shows Network","subjects":["New Products & Services"]}
+{"src":"wire","feed":"prnewswire","title":"o15 Capital Partners Announces Realization of $31 Million Senior Secured Credit Facility to Simplify Compliance","subjects":["Financing Agreements"]}
