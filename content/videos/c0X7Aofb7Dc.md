@@ -1,5 +1,5 @@
 ---
-datasheetImage: /images/datasheets/humanoid-robots-june-2026.png
+datasheetImage:
 statLabel1: Actuator cost share
 statValue1: "~50% of BOM"
 statLabel2: Modules per robot
