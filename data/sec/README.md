@@ -2,33 +2,50 @@
 
 ## `company-tickers.json` — the SEED AND FALLBACK, not the source of truth
 
-**A file committed once goes stale, and the dangerous staleness is not absence —
-it is REASSIGNMENT.** A delisted ticker later given to a different company makes
-a stale map route `companyfacts` at the wrong company under a symbol that still
-looks perfectly valid. Absence is loud; reassignment is silent, per-symbol, and
-indistinguishable from correct output.
+The live map is now **`company_tickers_exchange.json`**:
 
-So the live map is refreshed weekly into Redis (`msh:sec:tickers:v1`) by the
-daily-index job, and this file is what answers when that fetch fails or has not
-run yet. `resolveTickerMap()` always reports which copy answered — `redis`,
-`committed-file`, or `none` — and the job surfaces it. A run on the committed
-file says so in `tickerMapNote`.
+    { "fields": ["cik","name","ticker","exchange"],
+      "data": [[1045810,"NVIDIA CORP","NVDA","Nasdaq"], ...] }
 
-Three defences sit around the refresh, because adopting a bad map is worse than
-adopting none:
+**Columns are read by NAME from `fields`, never by position.** A positional read
+is one column insertion away from filing every exchange under `name`, and it
+would look entirely plausible doing it.
 
-1. **The payload is validated before it is adopted** — ≥ 5,000 tickers and three
-   sentinel symbols present. A truncated response would otherwise read
-   downstream as thousands of symbols changing CIK at once.
-2. **A CIK change under an existing symbol is an invalidation, not an update.**
-   The stored fact set may belong to a different company, so it is discarded —
-   `contentHash`, `lastAccession`, `lastFiled` and the amendment state cleared,
-   the symbol re-enqueued — and logged with **both** CIKs. A genuine ticker move
-   and a reassignment look identical and both need exactly this.
-3. **A spike refuses to apply.** Reassignment happens one symbol at a time, so
-   more than `max(5, 1% of the universe)` changes in a run means the map source
-   changed shape rather than the market doing something unusual. Nothing is
-   applied, the previous CIKs stand, and the run reports itself unhealthy.
+**Both shapes are readable.** The previous `company_tickers.json` — an object of
+objects with no exchange column — still parses, reports
+`shape: "legacy-object"`, and yields `exchange: null` rather than an invented
+value. A hard swap would have left the pipeline unable to read the copy actually
+in the tree, broken from the moment the URL changed until a human replaced a
+798 KB file by hand. `loadTickerMap()` and the job both report which shape they
+got, so an empty exchange histogram reads as *the old file is committed*, never
+as *the universe has no exchanges*.
+
+**Every guard is unchanged and applies to both shapes and both paths**
+(committed file and refresh): the ≥5,000-ticker floor, the three sentinel
+symbols, a ten-digit CIK check, and no tolerance for junk before the first `{`.
+
+### `exchange`, and why it is in the manifest from the first write
+
+Observed values: `Nasdaq`, `NYSE`, `OTC`. Nothing consumes it yet — step 3 and
+the page will. If the bars deal lands Nasdaq-only, NYSE symbols lose their price
+history and the Price Reaction card has to be dropped **for those symbols**: a
+per-symbol decision conditional on this field, not a global flag. Retrofitting
+it across a populated manifest is a migration, and one that half-succeeds leaves
+symbols whose exchange is unknown indistinguishable from symbols genuinely not
+on an exchange.
+
+The job reports `exchangeHistogram` over the **manifest**, not over SEC's whole
+file — the universe is what is being priced. The NYSE slice is the population
+that would lose price history, so it is wanted before the negotiation concludes,
+not after.
+
+**An exchange change is not an invalidation.** A company moving NYSE → Nasdaq
+keeps its CIK, its filings and every stored number; `reconcileExchanges` writes
+the field and returns. It has no threshold, no guard and no destructive branch —
+the spike guards exist where an inference could be wrong and expensive, and this
+is an observation being copied. Only a **CIK** change invalidates. A map with no
+exchange column never blanks a known venue: absence in the source is not a move
+to "no exchange".
 
 ### Absence is a probable delisting, not a reassignment
 

@@ -54,8 +54,9 @@ const man = await lift(
   [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"),
    grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
    grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
-   grabFunction(MANIFEST_SRC, "reconcileDelistings")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings };",
+   grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
+   grabFunction(MANIFEST_SRC, "exchangeHistogram")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram };",
   "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;"
 );
 
@@ -109,8 +110,11 @@ const plainDay = (d, label) => header(label) + noise(d, 60);
 
 // FIXTURE CIKs, self-consistent with the rows above. Not an assertion about SEC.
 const FIXTURE_CIK = new Map([
-  ["AAPL", "0000320193"], ["ARM", "0001973239"], ["MU", "0000723125"],
-  ["PLAB", "0000810136"], ["ASTS", "0001780312"],
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+  ["ARM", { cik: "0001973239", exchange: "Nasdaq" }],
+  ["MU", { cik: "0000723125", exchange: "Nasdaq" }],
+  ["PLAB", { cik: "0000810136", exchange: "Nasdaq" }],
+  ["ASTS", { cik: "0001780312", exchange: "Nasdaq" }],
 ]);
 
 const manifest = man.emptyManifest();
@@ -267,9 +271,10 @@ if (!fs.existsSync(path.join(ROOT, TICKER_PATH))) {
   const rawTicker = read(TICKER_PATH);
   check("it starts with '{' — no stray prefix byte", rawTicker[0] === "{", JSON.stringify(rawTicker.slice(0, 3)));
   let parsedTicker = null;
-  try { parsedTicker = tick.parseTickerFile(rawTicker); } catch (err) { parsedTicker = err.message; }
+  let tickerShape = null;
+  try { ({ map: parsedTicker, shape: tickerShape } = tick.parseTickerFile(rawTicker)); } catch (err) { parsedTicker = err.message; }
   check("it parses through the real loader's parser", parsedTicker instanceof Map,
-    parsedTicker instanceof Map ? `${parsedTicker.size} tickers` : String(parsedTicker).slice(0, 100));
+    parsedTicker instanceof Map ? `${parsedTicker.size} tickers, shape=${tickerShape}` : String(parsedTicker).slice(0, 100));
   if (parsedTicker instanceof Map) {
     const v = tick.validateTickerMap(parsedTicker);
     check("it passes the same validation the refresh applies", v.ok, v.reason ?? `${parsedTicker.size} tickers`);
@@ -277,15 +282,33 @@ if (!fs.existsSync(path.join(ROOT, TICKER_PATH))) {
       ["AAPL", "ARM", "MU", "PLAB", "ASTS"].every((x) => parsedTicker.has(x)),
       ["AAPL", "ARM", "MU", "PLAB", "ASTS"].map((x) => `${x}=${parsedTicker.get(x) ?? "MISSING"}`).join(" "));
     check("CIKs are stored padded to ten digits",
-      [...parsedTicker.values()].every((c) => /^\d{10}$/.test(c)));
+      [...parsedTicker.values()].every((v) => /^\d{10}$/.test(v.cik)));
+    // BOTH SHAPES ARE READABLE and the committed copy may be either while the
+    // swap to company_tickers_exchange.json is in flight. The check states
+    // which one is in the tree rather than asserting a shape the repo may not
+    // have yet -- and says plainly when exchange data is therefore absent.
+    const withEx = [...parsedTicker.values()].filter((v) => v.exchange).length;
+    if (tickerShape === "fields+data") {
+      check("exchange is carried for effectively every symbol",
+        withEx >= parsedTicker.size * 0.9, `${withEx} of ${parsedTicker.size}`);
+      const hist = {};
+      for (const v of parsedTicker.values()) hist[v.exchange ?? "(none)"] = (hist[v.exchange ?? "(none)"] ?? 0) + 1;
+      check("the observed venues are the documented ones",
+        ["Nasdaq", "NYSE", "OTC"].some((x) => hist[x] > 0),
+        Object.entries(hist).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(" "));
+    } else {
+      check("LEGACY shape in the tree: no exchange column, and it is reported as such",
+        tickerShape === "legacy-object" && withEx === 0,
+        "company_tickers_exchange.json has not been committed yet — exchange reads (unknown) until it is, and nothing pretends otherwise");
+    }
     // THE FIXTURE IS NO LONGER MERELY SELF-CONSISTENT. It was written with
     // invented CIKs because the file was not in the tree; now that it is, the
     // acceptance window above is asserted against the real mapping, so a wrong
     // CIK in the fixture can no longer make the test pass for the wrong reason.
-    const fixtureMismatch = [...FIXTURE_CIK.entries()].filter(([sym, cik]) => parsedTicker.get(sym) !== cik);
+    const fixtureMismatch = [...FIXTURE_CIK.entries()].filter(([sym, v]) => parsedTicker.get(sym)?.cik !== v.cik);
     check("the acceptance fixture's CIKs match the committed file exactly",
       fixtureMismatch.length === 0,
-      fixtureMismatch.length ? fixtureMismatch.map(([s, c]) => `${s}: fixture ${c} vs real ${parsedTicker.get(s)}`).join(" | ") : "all five");
+      fixtureMismatch.length ? fixtureMismatch.map(([s, v]) => `${s}: fixture ${v.cik} vs real ${parsedTicker.get(s)?.cik}`).join(" | ") : "all five");
   }
 }
 
@@ -293,30 +316,135 @@ if (!fs.existsSync(path.join(ROOT, TICKER_PATH))) {
 console.log("\n8. Ticker map refresh");
 const bigMap = (extra = {}) => {
   const m = new Map();
-  for (let i = 0; i < 6000; i++) m.set(`T${i}`, String(i).padStart(10, "0"));
-  for (const t of ["AAPL", "MU", "PLAB"]) m.set(t, "0000000001");
+  for (let i = 0; i < 6000; i++) m.set(`T${i}`, { cik: String(i).padStart(10, "0"), exchange: "Nasdaq" });
+  for (const t of ["AAPL", "MU", "PLAB"]) m.set(t, { cik: "0000000001", exchange: "Nasdaq" });
   for (const [k, v] of Object.entries(extra)) m.set(k, v);
   return m;
 };
 check("a full map validates", tick.validateTickerMap(bigMap()).ok);
-check("a SHORT payload is rejected, not adopted", tick.validateTickerMap(new Map([["AAPL", "1"]])).ok === false,
-  tick.validateTickerMap(new Map([["AAPL", "1"]])).reason);
+const shortMap = new Map([["AAPL", { cik: "0000000001", exchange: "Nasdaq" }]]);
+check("a SHORT payload is rejected, not adopted", tick.validateTickerMap(shortMap).ok === false,
+  tick.validateTickerMap(shortMap).reason);
 const noSentinel = bigMap();
 noSentinel.delete("AAPL");
 check("a map missing a sentinel ticker is rejected", tick.validateTickerMap(noSentinel).ok === false,
   tick.validateTickerMap(noSentinel).reason);
+const badCik = bigMap();
+badCik.set("AAPL", { cik: "not-a-cik", exchange: "Nasdaq" });
+check("a malformed CIK is rejected", tick.validateTickerMap(badCik).ok === false, tick.validateTickerMap(badCik).reason);
 check("rejection happens BEFORE any invalidation could be computed from it",
   /validateTickerMap/.test(TICKER_SRC) && TICKER_SRC.indexOf("const valid = validateTickerMap(map)") < TICKER_SRC.indexOf("lastChangedAt: base.contentChanged"),
   "a truncated payload would otherwise read as thousands of symbols changing CIK");
+const e = (cik, exchange = "Nasdaq") => ({ cik, exchange });
 check("the same mapping hashes the same regardless of insertion order",
-  tick.hashTickerMap(new Map([["A", "1"], ["B", "2"]])) === tick.hashTickerMap(new Map([["B", "2"], ["A", "1"]])));
-check("a changed mapping hashes differently",
-  tick.hashTickerMap(new Map([["A", "1"]])) !== tick.hashTickerMap(new Map([["A", "2"]])));
+  tick.hashTickerMap(new Map([["A", e("1")], ["B", e("2")]])) === tick.hashTickerMap(new Map([["B", e("2")], ["A", e("1")]])));
+check("a changed CIK hashes differently",
+  tick.hashTickerMap(new Map([["A", e("1")]])) !== tick.hashTickerMap(new Map([["A", e("2")]])));
+check("a changed EXCHANGE also hashes differently",
+  tick.hashTickerMap(new Map([["A", e("1", "NYSE")]])) !== tick.hashTickerMap(new Map([["A", e("1", "Nasdaq")]])),
+  "a hash ignoring exchange would report the file unchanged on the one refresh where the column moved");
 check("CIKs are padded to ten digits", tick.padCik(320193) === "0000320193" && tick.padCik("0000320193") === "0000320193");
 check("the refresh records which source answered", /source: "redis"/.test(TICKER_SRC) && /"committed-file"/.test(TICKER_SRC));
 check("Last-Modified is stored so the real change cadence is measurable",
   /lastModified/.test(TICKER_SRC) && /lastChangedAt/.test(TICKER_SRC));
 check("a 304 is treated as unchanged rather than as a failure", /notModified/.test(TICKER_SRC));
+
+// ── 8b. The exchange file shape, read by column NAME ────────────────────────
+console.log("\n8b. company_tickers_exchange.json");
+const EX_FILE = JSON.stringify({
+  fields: ["cik", "name", "ticker", "exchange"],
+  data: [
+    [1045810, "NVIDIA CORP", "NVDA", "Nasdaq"],
+    [320193, "Apple Inc.", "AAPL", "Nasdaq"],
+    [19617, "JPMORGAN CHASE & CO", "JPM", "NYSE"],
+    [1750, "AAR CORP", "AIR", "NYSE"],
+    [99999, "SOME OTC CO", "OTCX", "OTC"],
+    [88888, "NO VENUE CO", "NOVEN", ""],
+  ],
+});
+const ex = tick.parseTickerFile(EX_FILE);
+check("the fields+data shape is recognised", ex.shape === "fields+data", ex.shape);
+check("ticker -> cik is read by column name", ex.map.get("AAPL").cik === "0000320193", ex.map.get("AAPL")?.cik);
+check("exchange is carried through", ex.map.get("JPM").exchange === "NYSE" && ex.map.get("NVDA").exchange === "Nasdaq");
+check("an empty exchange becomes null, not an empty string", ex.map.get("NOVEN").exchange === null);
+check("all three observed venues parse", ["Nasdaq", "NYSE", "OTC"].every((v) => [...ex.map.values()].some((e) => e.exchange === v)));
+
+// COLUMN ORDER IS NOT ASSUMED. A positional read would file every exchange
+// under `name` the day SEC inserts a column.
+const REORDERED = JSON.stringify({
+  fields: ["ticker", "exchange", "cik", "name"],
+  data: [["AAPL", "Nasdaq", 320193, "Apple Inc."]],
+});
+const reord = tick.parseTickerFile(REORDERED);
+check("a REORDERED fields array still reads correctly",
+  reord.map.get("AAPL").cik === "0000320193" && reord.map.get("AAPL").exchange === "Nasdaq",
+  JSON.stringify(reord.map.get("AAPL")));
+let threw = null;
+try { tick.parseTickerFile(JSON.stringify({ fields: ["name", "exchange"], data: [["x", "y"]] })); } catch (err) { threw = err.message; }
+check("a file missing a required column throws rather than returning an empty map", !!threw, String(threw).slice(0, 80));
+
+// The legacy shape is still readable, and says so.
+const LEGACY = JSON.stringify({ "0": { cik_str: 320193, ticker: "AAPL", title: "Apple Inc." } });
+const leg = tick.parseTickerFile(LEGACY);
+check("the legacy object-of-objects shape still parses", leg.shape === "legacy-object" && leg.map.get("AAPL").cik === "0000320193");
+check("...with exchange null rather than invented", leg.map.get("AAPL").exchange === null,
+  "the legacy file has no exchange column; null is the honest value");
+let junkThrew = null;
+try { tick.parseTickerFile("#" + LEGACY); } catch (err) { junkThrew = err.message; }
+check("junk before the first { is still NOT tolerated", !!junkThrew,
+  "a lenient parse reading a corrupted file as data is the trap this pipeline avoids");
+
+// ── 8c. An exchange change is not an invalidation ───────────────────────────
+console.log("\n8c. Exchange is a field copy, not a reconciliation");
+const xm = man.emptyManifest();
+man.seedManifest(xm, ["AAPL", "JPM"], new Map([
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+  ["JPM", { cik: "0000019617", exchange: "NYSE" }],
+]), true);
+check("exchange is carried from the FIRST write", xm.symbols.AAPL.exchange === "Nasdaq" && xm.symbols.JPM.exchange === "NYSE");
+for (const sym of ["AAPL", "JPM"]) Object.assign(xm.symbols[sym], { contentHash: "filings", lastAccession: "0000000000-26-000001", needsReverify: false });
+
+// JPM moves NYSE -> Nasdaq. CIK unchanged.
+const movedVenue = new Map([
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+  ["JPM", { cik: "0000019617", exchange: "Nasdaq" }],
+]);
+const xr = man.reconcileExchanges(xm, movedVenue);
+check("the venue move is recorded", xr.updated.length === 1 && xr.updated[0].symbol === "JPM", JSON.stringify(xr.updated));
+check("the field is updated", xm.symbols.JPM.exchange === "Nasdaq");
+check("NOTHING is invalidated — filings, accession and hash all survive",
+  xm.symbols.JPM.contentHash === "filings" && xm.symbols.JPM.lastAccession === "0000000000-26-000001" &&
+  xm.symbols.JPM.needsReverify === false,
+  "only a CIK change means the data might belong to somebody else");
+check("the CIK reconciliation sees no change at all", man.reconcileCiks(xm, movedVenue).changes.length === 0,
+  "exchange must not inherit the invalidation path");
+
+// A map with no exchange column must not blank a known venue.
+const blanked = new Map([
+  ["AAPL", { cik: "0000320193", exchange: null }],
+  ["JPM", { cik: "0000019617", exchange: null }],
+]);
+const br = man.reconcileExchanges(xm, blanked);
+check("a legacy/no-exchange map does NOT blank a known venue",
+  xm.symbols.AAPL.exchange === "Nasdaq" && xm.symbols.JPM.exchange === "Nasdaq" && br.noExchangeInMap === 2,
+  "absence in the source is not a move to 'no exchange'");
+
+// The histogram the bars negotiation needs.
+const hm = man.emptyManifest();
+man.seedManifest(hm, ["A", "B", "C", "D", "E"], new Map([
+  ["A", { cik: "0000000001", exchange: "Nasdaq" }],
+  ["B", { cik: "0000000002", exchange: "Nasdaq" }],
+  ["C", { cik: "0000000003", exchange: "NYSE" }],
+  ["D", { cik: "0000000004", exchange: "OTC" }],
+  ["E", { cik: "0000000005", exchange: null }],
+]), true);
+const hist = man.exchangeHistogram(hm);
+check("the histogram counts the UNIVERSE by venue",
+  hist.Nasdaq === 2 && hist.NYSE === 1 && hist.OTC === 1 && hist["(unknown)"] === 1, JSON.stringify(hist));
+check("...sorted with the largest venue first", Object.keys(hist)[0] === "Nasdaq");
+check("...and unknown is a bucket, not a silent drop",
+  Object.values(hist).reduce((a, b) => a + b, 0) === 5,
+  "the NYSE slice is the population that loses price history if bars go Nasdaq-only");
 
 // ── 9. A CIK change is an invalidation, never a merge ───────────────────────
 console.log("\n9. CIK reassignment");
@@ -330,7 +458,7 @@ for (const sym of Object.keys(reMan.symbols)) {
   });
 }
 const moved = new Map(FIXTURE_CIK);
-moved.set("PLAB", "0009999999"); // reassigned
+moved.set("PLAB", { cik: "0009999999", exchange: "Nasdaq" }); // reassigned
 const res = man.reconcileCiks(reMan, moved);
 check("one CIK change is detected", res.changes.length === 1 && res.changes[0].symbol === "PLAB", JSON.stringify(res.changes));
 check("...and it is applied", res.applied === true && res.suspectedMapShapeChange === false);
@@ -349,7 +477,7 @@ check("every OTHER symbol is untouched",
 const gapMan = man.emptyManifest();
 man.seedManifest(gapMan, ["AAPL", "PLAB"], FIXTURE_CIK, true);
 gapMan.symbols.PLAB.contentHash = "keepme";
-const gapRes = man.reconcileCiks(gapMan, new Map([["AAPL", "0000320193"]]));
+const gapRes = man.reconcileCiks(gapMan, new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]));
 check("a symbol ABSENT from the map is left alone, not wiped",
   gapMan.symbols.PLAB.contentHash === "keepme" && gapRes.absentFromMap === 1,
   "the fallback map is smaller than the live one; clearing on absence would wipe the store");
@@ -366,12 +494,12 @@ console.log("\n10. A spike refuses to apply");
 check("the threshold scales with the universe but never below 5",
   man.mapChangeThreshold(5) === 5 && man.mapChangeThreshold(700) === 7 && man.mapChangeThreshold(10000) === 100);
 const spikeSyms = Array.from({ length: 200 }, (_, i) => `S${i}`);
-const spikeCik = new Map(spikeSyms.map((s, i) => [s, String(i).padStart(10, "0")]));
+const spikeCik = new Map(spikeSyms.map((s, i) => [s, { cik: String(i).padStart(10, "0"), exchange: "Nasdaq" }]));
 const spikeMan = man.emptyManifest();
 man.seedManifest(spikeMan, spikeSyms, spikeCik, true);
 for (const s of spikeSyms) spikeMan.symbols[s].contentHash = "precious";
 // Every symbol's CIK moves at once -- the shape of a changed map source.
-const shifted = new Map(spikeSyms.map((s, i) => [s, String(i + 500000).padStart(10, "0")]));
+const shifted = new Map(spikeSyms.map((s, i) => [s, { cik: String(i + 500000).padStart(10, "0"), exchange: "Nasdaq" }]));
 const spikeRes = man.reconcileCiks(spikeMan, shifted);
 check("200 changes are DETECTED", spikeRes.changes.length === 200);
 check("...and NONE are applied", spikeRes.applied === false && spikeRes.suspectedMapShapeChange === true);
@@ -382,11 +510,11 @@ check("...and the reason names the map source, not the market",
 check("a run at exactly the threshold still applies",
   (() => {
     const syms = Array.from({ length: 700 }, (_, i) => `X${i}`);
-    const base = new Map(syms.map((s, i) => [s, String(i).padStart(10, "0")]));
+    const base = new Map(syms.map((s, i) => [s, { cik: String(i).padStart(10, "0"), exchange: "Nasdaq" }]));
     const m2 = man.emptyManifest();
     man.seedManifest(m2, syms, base, true);
     const next = new Map(base);
-    for (let i = 0; i < 7; i++) next.set(`X${i}`, String(i + 900000).padStart(10, "0"));
+    for (let i = 0; i < 7; i++) next.set(`X${i}`, { cik: String(i + 900000).padStart(10, "0"), exchange: "Nasdaq" });
     return man.reconcileCiks(m2, next).applied === true;
   })(),
   "7 of 700 is the threshold; a real reassignment must not be blocked");
@@ -395,7 +523,7 @@ check("a run at exactly the threshold still applies",
 console.log("\n10b. Delisting");
 const dl = (syms) => {
   const m = man.emptyManifest();
-  const cik = new Map(syms.map((x, i) => [x, String(i).padStart(10, "0")]));
+  const cik = new Map(syms.map((x, i) => [x, { cik: String(i).padStart(10, "0"), exchange: "NYSE" }]));
   man.seedManifest(m, syms, cik, true);
   for (const x of syms) m.symbols[x].contentHash = "filings";
   return { m, cik };
@@ -494,6 +622,11 @@ check("delisting is gated on a SUCCESSFUL REFRESH, not on every run",
   "counted per refresh; counting per run would delist after three days rather than three weeks");
 check("a suspected partial map also makes the run NOT ok",
   /suspectedPartialMap \?\? false\)/.test(routeCode));
+check("exchange is reconciled on every run with a map, not gated on a refresh",
+  /tickers\.source === "none" \? null : reconcileExchanges\(/.test(routeCode),
+  "a field copy with no destructive branch has nothing to guard");
+check("the exchange histogram reaches the job output",
+  /exchangeHistogram: exchanges\?\.histogram/.test(routeCode));
 check("the Redis budget is stated as three, not still claiming two",
   /redisCommands: dryRun \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
 

@@ -139,6 +139,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # THE FILE A TASK PRODUCES HAS TO LEAVE THE RUNNER, or the task is a
+      # log that says a fetch worked. `steps.locate.outputs.dir` is only set
+      # when a dump was downloaded, so for a task with no dump that glob
+      # resolved to nothing and company-tickers discarded the 798 KB file it
+      # had just fetched and validated. That is why the committed copy came in
+      # through a browser save and arrived with a stray byte at byte 0.
       - name: Upload the output
         if: always()
         uses: actions/upload-artifact@v4
@@ -147,6 +153,7 @@ jobs:
           path: |
             task.log
             ${{ steps.locate.outputs.dir }}/*.json
+            data/sec/*.json
           retention-days: 90
           if-no-files-found: warn
 

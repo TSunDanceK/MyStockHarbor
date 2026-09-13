@@ -27,8 +27,12 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 export const TICKER_FILE = "data/sec/company-tickers.json";
-export const TICKER_URL = "https://www.sec.gov/files/company_tickers.json";
-export const TICKER_REDIS_KEY = "msh:sec:tickers:v1";
+export const TICKER_URL = "https://www.sec.gov/files/company_tickers_exchange.json";
+// v2: the stored VALUE SHAPE changed with the move to the exchange file -- a v1
+// blob would deserialise into a map of strings where the code now expects
+// objects, and every `.cik` read would be undefined. Cheap to bump, silent to
+// get wrong.
+export const TICKER_REDIS_KEY = "msh:sec:tickers:v2";
 
 /**
  * A COMMITTED FILE GOES STALE, AND STALENESS HERE IS NOT ABSENCE.
@@ -53,12 +57,26 @@ const redis =
 export type TickerMap = {
   present: boolean;
   count: number;
-  map: Map<string, string>;
+  map: Map<string, TickerEntry>;
   source: string;
   error: string | null;
+  /** Which layout the file was in. Reported, never inferred by the caller. */
+  shape: TickerFileShape | null;
+  /** How many entries carry an exchange. Zero on the legacy file. */
+  withExchange: number;
 };
 
-type TickerRow = { cik_str?: number | string; ticker?: string; title?: string };
+/** What the map carries per symbol. `exchange` is null when the source file
+ *  does not supply one -- see parseTickerFile's two shapes. */
+export type TickerEntry = { cik: string; exchange: string | null };
+
+/** Legacy shape: an object of objects, no exchange column. */
+type LegacyRow = { cik_str?: number | string; ticker?: string; title?: string };
+
+/** Current shape: column names plus row arrays. */
+type ExchangeFile = { fields?: string[]; data?: unknown[][] };
+
+export type TickerFileShape = "fields+data" | "legacy-object";
 
 let cached: TickerMap | null = null;
 
@@ -67,19 +85,60 @@ export function padCik(value: number | string): string {
   return String(value).replace(/\D/g, "").padStart(10, "0");
 }
 
-export function parseTickerFile(text: string): Map<string, string> {
-  const parsed = JSON.parse(text) as Record<string, TickerRow>;
-  const map = new Map<string, string>();
-  for (const row of Object.values(parsed)) {
-    if (!row?.ticker || row.cik_str === undefined) continue;
-    const symbol = String(row.ticker).trim().toUpperCase();
-    if (!symbol) continue;
-    // FIRST WINS. Dual-class names appear as separate rows sharing one CIK, so
-    // order cannot change the answer -- scripts/sec-fundamentals-ingest.mjs
-    // already establishes this and the same rule is kept here deliberately.
-    if (!map.has(symbol)) map.set(symbol, padCik(row.cik_str));
+export function parseTickerFile(text: string): { map: Map<string, TickerEntry>; shape: TickerFileShape } {
+  const parsed = JSON.parse(text) as ExchangeFile | Record<string, LegacyRow>;
+  const map = new Map<string, TickerEntry>();
+
+  // ── Current shape: company_tickers_exchange.json ──────────────────────────
+  //   { "fields": ["cik","name","ticker","exchange"],
+  //     "data": [[1045810,"NVIDIA CORP","NVDA","Nasdaq"], ...] }
+  //
+  // THE COLUMNS ARE READ BY NAME FROM `fields`, NOT BY POSITION. A positional
+  // read is one column insertion away from filing every exchange under `name`,
+  // and it would look entirely plausible doing it.
+  const asExchange = parsed as ExchangeFile;
+  if (Array.isArray(asExchange.fields) && Array.isArray(asExchange.data)) {
+    const idx = (name: string) => asExchange.fields!.findIndex((f) => String(f).toLowerCase() === name);
+    const iCik = idx("cik");
+    const iTicker = idx("ticker");
+    const iExchange = idx("exchange");
+    if (iCik === -1 || iTicker === -1) {
+      throw new Error(`fields+data file is missing a required column (fields: ${asExchange.fields!.join(",")})`);
+    }
+    for (const row of asExchange.data!) {
+      if (!Array.isArray(row)) continue;
+      const ticker = String(row[iTicker] ?? "").trim().toUpperCase();
+      if (!ticker || row[iCik] === undefined || row[iCik] === null) continue;
+      // FIRST WINS, as on the legacy file: dual-class names appear as separate
+      // rows sharing one CIK, so order cannot change the answer.
+      if (map.has(ticker)) continue;
+      const rawExchange = iExchange === -1 ? null : row[iExchange];
+      const exchange = rawExchange === null || rawExchange === undefined || String(rawExchange).trim() === ""
+        ? null
+        : String(rawExchange).trim();
+      map.set(ticker, { cik: padCik(row[iCik] as number | string), exchange });
+    }
+    return { map, shape: "fields+data" };
   }
-  return map;
+
+  // ── Legacy shape: company_tickers.json, an object of objects, no exchange ──
+  //
+  // STILL READ, and deliberately. The committed fallback is whichever file was
+  // last supplied, and a hard swap would have left the pipeline unable to read
+  // the copy that is actually in the tree -- broken from the moment the URL
+  // changed until a human replaced a 798 KB file by hand. It is reported as
+  // legacy with `withExchange: 0` rather than quietly presented as equivalent.
+  let sawRow = false;
+  for (const row of Object.values(parsed as Record<string, LegacyRow>)) {
+    if (!row || typeof row !== "object") continue;
+    sawRow = true;
+    if (!row.ticker || row.cik_str === undefined) continue;
+    const ticker = String(row.ticker).trim().toUpperCase();
+    if (!ticker || map.has(ticker)) continue;
+    map.set(ticker, { cik: padCik(row.cik_str), exchange: null });
+  }
+  if (!sawRow) throw new Error("not a ticker file: neither fields+data nor an object of ticker rows");
+  return { map, shape: "legacy-object" };
 }
 
 /**
@@ -94,19 +153,27 @@ export function parseTickerFile(text: string): Map<string, string> {
 export const MIN_EXPECTED_TICKERS = 5000;
 const SENTINEL_TICKERS = ["AAPL", "MU", "PLAB"];
 
-export function validateTickerMap(map: Map<string, string>): { ok: boolean; reason: string | null } {
+export function validateTickerMap(map: Map<string, TickerEntry>): { ok: boolean; reason: string | null } {
   if (map.size < MIN_EXPECTED_TICKERS) {
     return { ok: false, reason: `only ${map.size} tickers (expected >= ${MIN_EXPECTED_TICKERS}; measured 10,426 on 2026-09-13)` };
   }
   const missing = SENTINEL_TICKERS.filter((t) => !map.has(t));
   if (missing.length) return { ok: false, reason: `sentinel ticker(s) absent: ${missing.join(", ")} -- this is not the ticker file` };
+  const badCik = [...map.entries()].find(([, e]) => !/^\d{10}$/.test(e.cik));
+  if (badCik) return { ok: false, reason: `malformed CIK for ${badCik[0]}: ${JSON.stringify(badCik[1].cik)}` };
   return { ok: true, reason: null };
 }
 
 /** Stable hash of the mapping itself, so a real change is detectable without validators. */
-export function hashTickerMap(map: Map<string, string>): string {
+export function hashTickerMap(map: Map<string, TickerEntry>): string {
   const rows = [...map.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return crypto.createHash("sha256").update(rows.map(([t, c]) => `${t}:${c}`).join("\n")).digest("hex");
+  // Exchange is IN the hash: a company moving NYSE -> Nasdaq changes nothing
+  // about its CIK, and a hash that ignored it would report the file unchanged
+  // on the one refresh where the exchange column did something.
+  return crypto
+    .createHash("sha256")
+    .update(rows.map(([t, e]) => `${t}:${e.cik}:${e.exchange ?? ""}`).join("\n"))
+    .digest("hex");
 }
 
 export function loadTickerMap(force = false): TickerMap {
@@ -114,7 +181,8 @@ export function loadTickerMap(force = false): TickerMap {
   const file = path.join(process.cwd(), TICKER_FILE);
   try {
     const text = fs.readFileSync(file, "utf8");
-    const map = parseTickerFile(text);
+    const { map, shape } = parseTickerFile(text);
+    const withExchange = [...map.values()].filter((e) => e.exchange).length;
     // THE COMMITTED FILE IS VALIDATED TOO, not just the refresh.
     //
     // It arrived with a stray "#" at byte 0 -- an upload artifact -- which made
@@ -130,10 +198,10 @@ export function loadTickerMap(force = false): TickerMap {
     // built to avoid -- the failure has to stay loud.
     const valid = validateTickerMap(map);
     if (!valid.ok) {
-      cached = { present: false, count: map.size, map: new Map(), source: TICKER_FILE, error: `rejected: ${valid.reason}` };
+      cached = { present: false, count: map.size, map: new Map(), source: TICKER_FILE, error: `rejected: ${valid.reason}`, shape, withExchange: 0 };
       return cached;
     }
-    cached = { present: true, count: map.size, map, source: TICKER_FILE, error: null };
+    cached = { present: true, count: map.size, map, source: TICKER_FILE, error: null, shape, withExchange };
   } catch (err) {
     cached = {
       present: false,
@@ -141,6 +209,8 @@ export function loadTickerMap(force = false): TickerMap {
       map: new Map(),
       source: TICKER_FILE,
       error: (err as Error)?.message ?? String(err),
+      shape: null,
+      withExchange: 0,
     };
   }
   return cached;
@@ -158,11 +228,15 @@ export type StoredTickerMap = {
   /** When the mapping last genuinely differed, as opposed to merely being re-fetched. */
   lastChangedAt: number;
   count: number;
-  map: Record<string, string>;
+  shape: TickerFileShape;
+  withExchange: number;
+  map: Record<string, TickerEntry>;
 };
 
 export type ResolvedTickerMap = {
-  map: Map<string, string>;
+  map: Map<string, TickerEntry>;
+  shape: TickerFileShape | null;
+  withExchange: number;
   count: number;
   /** Which copy actually answered. Never inferred by the caller. */
   source: "redis" | "committed-file" | "none";
@@ -199,6 +273,8 @@ export async function resolveTickerMap(now = Date.now()): Promise<ResolvedTicker
     return {
       map: new Map(Object.entries(stored.map)),
       count: stored.count,
+      shape: stored.shape ?? null,
+      withExchange: stored.withExchange ?? 0,
       source: "redis",
       fetchedAt: stored.fetchedAt,
       lastModified: stored.lastModified,
@@ -211,6 +287,8 @@ export async function resolveTickerMap(now = Date.now()): Promise<ResolvedTicker
   return {
     map: file.map,
     count: file.count,
+    shape: file.shape,
+    withExchange: file.withExchange,
     source: file.present ? "committed-file" : "none",
     fetchedAt: null,
     lastModified: null,
@@ -232,6 +310,8 @@ export type RefreshResult = {
   notModified: boolean;
   conditionalSent: boolean;
   count: number | null;
+  shape: TickerFileShape | null;
+  withExchange: number | null;
   lastModified: string | null;
   previousLastModified: string | null;
   contentChanged: boolean;
@@ -266,6 +346,8 @@ export async function refreshTickerMap(
     notModified: false,
     conditionalSent: false,
     count: null,
+    shape: null,
+    withExchange: null,
     lastModified: null,
     previousLastModified: previous?.lastModified ?? null,
     contentChanged: false,
@@ -300,6 +382,8 @@ export async function refreshTickerMap(
       base.ok = true;
       base.notModified = true;
       base.count = previous?.count ?? null;
+      base.shape = previous?.shape ?? null;
+      base.withExchange = previous?.withExchange ?? null;
       // The stored copy is still correct; only its fetchedAt is bumped, so the
       // weekly cadence does not re-ask tomorrow.
       if (previous && redis) {
@@ -317,9 +401,10 @@ export async function refreshTickerMap(
       return base;
     }
 
-    let map: Map<string, string>;
+    let map: Map<string, TickerEntry>;
+    let shape: TickerFileShape;
     try {
-      map = parseTickerFile(body);
+      ({ map, shape } = parseTickerFile(body));
     } catch (err) {
       base.rejected = `200 but the body is not the ticker JSON: ${(err as Error)?.message}`;
       return base;
@@ -336,6 +421,8 @@ export async function refreshTickerMap(
 
     const contentHash = hashTickerMap(map);
     base.count = map.size;
+    base.shape = shape;
+    base.withExchange = [...map.values()].filter((e) => e.exchange).length;
     base.contentChanged = !previous || previous.contentHash !== contentHash;
     base.ok = true;
 
@@ -348,6 +435,8 @@ export async function refreshTickerMap(
         contentHash,
         lastChangedAt: base.contentChanged ? now : (previous?.lastChangedAt ?? now),
         count: map.size,
+        shape,
+        withExchange: [...map.values()].filter((e) => e.exchange).length,
         map: Object.fromEntries(map),
       };
       try {

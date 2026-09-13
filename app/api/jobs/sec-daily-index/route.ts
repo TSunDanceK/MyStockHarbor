@@ -7,6 +7,7 @@ import {
   symbolsByCik,
   reconcileCiks,
   reconcileDelistings,
+  reconcileExchanges,
   discardFactSets,
   type SecManifest,
 } from "@/lib/server/secManifest";
@@ -193,6 +194,12 @@ export async function GET(req: NextRequest) {
       ? null
       : reconcileCiks(manifest, tickers.map);
 
+  // Exchange is reconciled on EVERY run with a map, not only on a refresh: it
+  // is a field copy with no destructive branch, so there is nothing to guard
+  // and nothing to lose by doing it often. It deliberately does not go through
+  // reconcileCiks -- a venue change is not a reason to discard a fact set.
+  const exchanges = tickers.source === "none" ? null : reconcileExchanges(manifest, tickers.map);
+
   // DELISTING IS COUNTED PER REFRESH, NOT PER RUN, so it is gated on a refresh
   // having actually succeeded this run. Absence from the committed fallback
   // means nothing -- that file is smaller than the live map by construction --
@@ -319,6 +326,18 @@ export async function GET(req: NextRequest) {
     newlyDelisted: delistings?.newlyDelisted.length ?? 0,
     reappeared: delistings?.reappeared.length ?? 0,
     suspectedPartialMap: delistings?.suspectedPartialMap ?? false,
+    // Flattened to a string HERE because recordJobRun's summary is scalars
+    // only -- the structured histogram rides in the response body below. The
+    // NYSE slice is the population that loses price history if the bars deal
+    // lands Nasdaq-only, so it belongs on /cache-health too, not just in a
+    // one-off response nobody keeps.
+    exchanges: exchanges
+      ? Object.entries(exchanges.histogram).map(([k, n]) => `${k}:${n}`).join(" ")
+      : null,
+    exchangesFilled: exchanges?.filled ?? 0,
+    exchangesChanged: exchanges?.updated.length ?? 0,
+    tickerFileShape: tickers.shape,
+    symbolsWithExchange: tickers.withExchange,
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
@@ -331,6 +350,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok,
     ...summary,
+    exchangeHistogram: exchanges?.histogram ?? null,
     // Stated rather than left to be inferred from zero matches.
     tickerMapNote:
       tickers.source !== "none"
@@ -348,6 +368,16 @@ export async function GET(req: NextRequest) {
       stale: tickers.stale,
       refreshWasDue: tickers.refreshDue,
     },
+    exchange: exchanges
+      ? {
+          ...exchanges,
+          updated: exchanges.updated.slice(0, 25),
+          note:
+            tickers.shape === "legacy-object"
+              ? "The ticker file in use is the LEGACY shape (company_tickers.json), which has no exchange column — every symbol reads (unknown) until company_tickers_exchange.json is committed or refreshed. Not a failure, and existing exchange values were NOT blanked."
+              : "an exchange change updates the field and nothing else; only a CIK change invalidates",
+        }
+      : { skipped: "no ticker map available" },
     delisting: delistings
       ? {
           ...delistings,
