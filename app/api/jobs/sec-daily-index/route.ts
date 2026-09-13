@@ -6,6 +6,7 @@ import {
   seedManifest,
   symbolsByCik,
   reconcileCiks,
+  reconcileDelistings,
   discardFactSets,
   type SecManifest,
 } from "@/lib/server/secManifest";
@@ -192,6 +193,17 @@ export async function GET(req: NextRequest) {
       ? null
       : reconcileCiks(manifest, tickers.map);
 
+  // DELISTING IS COUNTED PER REFRESH, NOT PER RUN, so it is gated on a refresh
+  // having actually succeeded this run. Absence from the committed fallback
+  // means nothing -- that file is smaller than the live map by construction --
+  // and counting daily against a map fetched weekly would call a symbol
+  // delisted after three days rather than three weeks.
+  const refreshSucceeded = "ok" in refresh && refresh.ok === true;
+  const delistings =
+    refreshSucceeded && tickers.source === "redis"
+      ? reconcileDelistings(manifest, tickers.map)
+      : null;
+
   // The discard is the irreversible half, so it happens only for changes that
   // were actually applied.
   const discarded =
@@ -273,8 +285,14 @@ export async function GET(req: NextRequest) {
   const alarming = consecutive >= CONSECUTIVE_FAILURE_ALARM;
   // A suspected map shape change is not a healthy run even when every date
   // parsed -- something upstream is wrong and nothing was applied because of it.
+  // Either map-derived guard firing means the run is NOT healthy: something
+  // upstream is wrong and work was deliberately skipped because of it.
   const ok =
-    failedDays === 0 && !alarming && (dryRun || written) && !(cikChanges?.suspectedMapShapeChange ?? false);
+    failedDays === 0 &&
+    !alarming &&
+    (dryRun || written) &&
+    !(cikChanges?.suspectedMapShapeChange ?? false) &&
+    !(delistings?.suspectedPartialMap ?? false);
 
   const summary = {
     datesConsidered: dates.length,
@@ -296,6 +314,11 @@ export async function GET(req: NextRequest) {
     cikChangesApplied: cikChanges?.applied ?? false,
     factSetsDiscarded: discarded,
     suspectedMapShapeChange: cikChanges?.suspectedMapShapeChange ?? false,
+    delistingChecked: delistings !== null,
+    newlyAbsentFromTickerMap: delistings?.newlyAbsent.length ?? 0,
+    newlyDelisted: delistings?.newlyDelisted.length ?? 0,
+    reappeared: delistings?.reappeared.length ?? 0,
+    suspectedPartialMap: delistings?.suspectedPartialMap ?? false,
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
@@ -325,6 +348,24 @@ export async function GET(req: NextRequest) {
       stale: tickers.stale,
       refreshWasDue: tickers.refreshDue,
     },
+    delisting: delistings
+      ? {
+          ...delistings,
+          // Truncated in the response; the manifest carries the full state.
+          newlyAbsent: delistings.newlyAbsent.slice(0, 25),
+          stillAbsent: delistings.stillAbsent.slice(0, 25),
+          reappeared: delistings.reappeared.slice(0, 25),
+          refreshesRequired: 3,
+          note:
+            delistings.note ??
+            "every symbol in the manifest is present in the ticker map; nothing absent, nothing delisted",
+        }
+      : {
+          skipped:
+            refreshSucceeded
+              ? "the ticker map came from the committed fallback, which is smaller than the live map by construction -- absence against it is not evidence of delisting"
+              : "no successful ticker-map refresh this run, and delisting is counted per refresh rather than per run",
+        },
     cikReassignment: cikChanges
       ? {
           ...cikChanges,

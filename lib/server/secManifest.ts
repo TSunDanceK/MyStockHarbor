@@ -56,6 +56,23 @@ export type SecManifestEntry = {
    * cannot be decided here -- see secDailyIndex.ts. Flagged for step 3.
    */
   ambiguousSameDayFilings?: string[] | null;
+  /**
+   * First time this symbol was absent from a freshly validated ticker map.
+   * Cleared the moment it reappears -- a symbol that blinks out for one refresh
+   * has not been delisted, it has been missed.
+   */
+  notInTickerMapSince?: number | null;
+  /** Consecutive successful REFRESHES with the symbol still absent. Not runs. */
+  absentRefreshCount?: number;
+  /**
+   * Probably delisted. The page uses this to present the filings as HISTORY
+   * rather than as current -- a delisted company's numbers are not wrong, they
+   * are over, and showing them undated is the actual failure. Nothing is ever
+   * deleted on the strength of it: the filings remain the best record of what
+   * that company filed, and a delisted issuer can still file (a final 10-K, a
+   * Form 25 or 15) so the daily index keeps matching it.
+   */
+  delisted?: boolean;
 };
 
 export type SecManifest = {
@@ -82,6 +99,9 @@ export function emptyEntry(cik: string | null): SecManifestEntry {
     scoreVersion: SEC_SCORE_VERSION,
     lastAmendment: null,
     ambiguousSameDayFilings: null,
+    notInTickerMapSince: null,
+    absentRefreshCount: 0,
+    delisted: false,
   };
 }
 
@@ -232,7 +252,10 @@ export type CikChangeResult = {
 };
 
 /**
- * How many CIK changes in one run before the run refuses to apply any of them.
+ * How many map-derived changes in one run before the run refuses to apply any
+ * of them. SHARED by CIK reassignment and by delisting detection, because both
+ * are inferences drawn from the same file and both are wrong in the same way
+ * when that file is partial.
  *
  * A REASSIGNMENT IS ONE SYMBOL AT A TIME. A ticker being reused by a different
  * company is rare and independent across symbols, so several dozen in one night
@@ -245,7 +268,7 @@ export type CikChangeResult = {
  * says so loudly. A genuine mass reassignment -- which would be unprecedented --
  * needs a human to look, which is the correct cost for an irreversible sweep.
  */
-export function reassignmentThreshold(symbolCount: number): number {
+export function mapChangeThreshold(symbolCount: number): number {
   return Math.max(5, Math.ceil(symbolCount * 0.01));
 }
 
@@ -290,7 +313,7 @@ export function reconcileCiks(
     }
   }
 
-  const threshold = reassignmentThreshold(Object.keys(manifest.symbols).length);
+  const threshold = mapChangeThreshold(Object.keys(manifest.symbols).length);
   if (changes.length > threshold) {
     return {
       changes,
@@ -354,4 +377,134 @@ export async function discardFactSets(symbols: string[]): Promise<number> {
     console.error("[sec-manifest] fact-set discard failed", err);
     return 0;
   }
+}
+
+// ── Delisting ───────────────────────────────────────────────────────────────
+
+/**
+ * Consecutive successful refreshes a symbol must be absent for before it is
+ * called delisted.
+ *
+ * COUNTED IN REFRESHES, NOT RUNS, and that distinction is the whole mechanism.
+ * The job runs daily but only refreshes the ticker map weekly, so counting runs
+ * would call a symbol delisted after three DAYS against a map that was fetched
+ * once. Three refreshes is three weeks of the symbol genuinely not being in
+ * SEC's file.
+ */
+export const DELIST_REFRESHES = 3;
+
+export type DelistingResult = {
+  applied: boolean;
+  newlyAbsent: string[];
+  stillAbsent: string[];
+  reappeared: string[];
+  newlyDelisted: string[];
+  threshold: number;
+  suspectedPartialMap: boolean;
+  note: string | null;
+};
+
+/**
+ * Reconcile the manifest against a freshly validated ticker map, for absence.
+ *
+ * ONLY CALL THIS WHEN A REFRESH ACTUALLY SUCCEEDED. Absence from the committed
+ * fallback means nothing -- that file is smaller than the live map by
+ * construction, and counting against it would march the whole universe toward
+ * "delisted" at one strike per deploy. The caller gates on the refresh result;
+ * this function cannot tell which map it was handed.
+ *
+ * NOTHING IS EVER DELETED. A delisted company's filings are still the best
+ * record of what that company filed; the flag changes how the page PRESENTS
+ * them, not whether they exist.
+ */
+export function reconcileDelistings(
+  manifest: SecManifest,
+  cikByTicker: Map<string, string>,
+  now = Date.now()
+): DelistingResult {
+  const entries = Object.entries(manifest.symbols);
+  const threshold = mapChangeThreshold(entries.length);
+
+  const newlyAbsent: string[] = [];
+  const stillAbsent: string[] = [];
+  const reappeared: string[] = [];
+
+  for (const [symbol, entry] of entries) {
+    const present = cikByTicker.has(symbol);
+    if (present) {
+      if (entry.notInTickerMapSince || entry.absentRefreshCount || entry.delisted) reappeared.push(symbol);
+      continue;
+    }
+    if (entry.notInTickerMapSince) stillAbsent.push(symbol);
+    else newlyAbsent.push(symbol);
+  }
+
+  // THE SPIKE GUARD, on NEWLY absent only.
+  //
+  // A valid-but-partial map -- one that clears the 5,000-ticker floor while
+  // still missing thousands of real rows -- would otherwise start the delisting
+  // clock on all of them at once, and three refreshes later mark them delisted
+  // together. Guarding on newly absent rather than on the standing absent set
+  // matters: a handful of genuinely delisted symbols stay absent forever, and a
+  // guard that counted them would jam permanently after the first few.
+  if (newlyAbsent.length > threshold) {
+    return {
+      applied: false,
+      newlyAbsent,
+      stillAbsent,
+      reappeared,
+      newlyDelisted: [],
+      threshold,
+      suspectedPartialMap: true,
+      note:
+        `${newlyAbsent.length} symbols newly absent from the ticker map in one refresh, over the threshold of ${threshold}. ` +
+        `NOTHING WAS APPLIED -- no absence recorded, no counter incremented, no symbol marked delisted. ` +
+        `Delisting happens a few names at a time, so a batch this size means the map is partial rather than the market having emptied. ` +
+        `The map passed validation, which is exactly why this second guard exists.`,
+    };
+  }
+
+  const newlyDelisted: string[] = [];
+
+  for (const symbol of reappeared) {
+    const entry = manifest.symbols[symbol];
+    // CLEARED THE MOMENT IT REAPPEARS. A symbol missing from one refresh and
+    // back in the next was missed, not delisted, and must not carry a strike.
+    entry.notInTickerMapSince = null;
+    entry.absentRefreshCount = 0;
+    entry.delisted = false;
+  }
+
+  for (const symbol of newlyAbsent) {
+    const entry = manifest.symbols[symbol];
+    entry.notInTickerMapSince = now;
+    entry.absentRefreshCount = 1;
+  }
+
+  for (const symbol of stillAbsent) {
+    const entry = manifest.symbols[symbol];
+    entry.absentRefreshCount = (entry.absentRefreshCount ?? 1) + 1;
+    if (!entry.delisted && entry.absentRefreshCount >= DELIST_REFRESHES) {
+      entry.delisted = true;
+      newlyDelisted.push(symbol);
+      console.warn(
+        `[sec-manifest] DELISTED ${symbol}: absent from the ticker map for ${entry.absentRefreshCount} consecutive refreshes ` +
+          `since ${new Date(entry.notInTickerMapSince ?? now).toISOString()}. Filings retained and presented as history.`
+      );
+    }
+  }
+
+  return {
+    applied: true,
+    newlyAbsent,
+    stillAbsent,
+    reappeared,
+    newlyDelisted,
+    threshold,
+    suspectedPartialMap: false,
+    note:
+      newlyDelisted.length || newlyAbsent.length || reappeared.length
+        ? `${newlyAbsent.length} newly absent, ${stillAbsent.length} still absent, ${reappeared.length} reappeared, ${newlyDelisted.length} newly delisted`
+        : null,
+  };
 }
