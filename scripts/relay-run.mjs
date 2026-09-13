@@ -93,6 +93,14 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only, NO NETWORK: builds the static profile snapshot from the taxonomy
+  // already in the frozen dump, captured while the FMP licence was live. See the
+  // script header for why there are no FMP calls in it.
+  "static-profile": {
+    script: "scripts/static-profile-build.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
