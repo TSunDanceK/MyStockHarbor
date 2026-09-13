@@ -111,11 +111,24 @@ if (!wanted || wanted === "eventtype-sec") {
     const forms = recent.form ?? [];
     const n = Math.min(forms.length, SEC_PER_SYMBOL);
     console.log(`  ${symbol}: ${forms.length} filings, taking ${n}`);
+    // AGGREGATED BY (form, items), WITH A COUNT — unlike a headline, a filing's
+    // derivation inputs are categorical, and 120 identical `Form 4 / no items`
+    // rows carry exactly as much information as one row saying n=120. The
+    // distribution the measurement reports is unchanged; the payload is ~6x
+    // smaller and survives the log tail comfortably.
+    const counts = new Map();
     for (let i = 0; i < n; i += 1) {
-      sec.push({ src: "sec", symbol, form: forms[i] ?? "", items: (recent.items ?? [])[i] ?? "" });
+      const key = `${forms[i] ?? ""}\u0000${(recent.items ?? [])[i] ?? ""}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of counts) {
+      const [form, items] = key.split("\u0000");
+      sec.push({ src: "sec", symbol, form, items, n: count });
     }
     await sleep(200);
   }
+  const totalFilings = sec.reduce((a, r) => a + r.n, 0);
+  console.log(`  ${sec.length} distinct (form, items) shapes over ${totalFilings} filings`);
   emitPayload("eventtype-sec", sec.map((r) => JSON.stringify(r)).join("\n"));
 }
 
