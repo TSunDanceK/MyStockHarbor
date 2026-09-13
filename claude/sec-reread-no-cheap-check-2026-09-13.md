@@ -61,6 +61,36 @@ is dominated by the network round-trip rather than by CPU.
 Measured in the agent sandbox, not in a Vercel function — an order of magnitude,
 to be re-measured in situ before `SEC_REREAD_DRAIN_PER_RUN` is raised.
 
+## The drain is sized on PEAK inflow, not on the month it was measured in
+
+The four-day window this pipeline was measured over contained **six** 10-K/10-Q
+filings across a 700-large-cap universe, because mid-September is the quietest
+part of the cycle. Sizing on it would let the queue **grow through earnings
+season** and clear it in the weeks after — exactly backwards. A stale page in
+February is invisible; a stale page the morning after a result is the product
+failing, and that is when the page is busiest.
+
+**The peak is reused, not re-derived.** `earningsPlan.ts` already carries
+`EARNINGS_PEAK_DAY_SHARE = 0.0935`, measured from January and February 2026 with
+its own provenance, witnesses and a check that re-derives the figure from the
+share:
+
+```
+0.0935 × ANALYSIS_UNIVERSE_CAP 700     =  66 reporters on the busiest day
++ background 6-K/8-K, measured         =  32/day
+                                       =  98/day peak inflow
+drain 150/run                          = 1.53× margin
+                                       =  52 symbols/day of net drain at peak
+```
+
+A symbol filing both a 10-Q and its Item 2.02 8-K enqueues **once** — the queue
+is per symbol — so reporters and their earnings 8-Ks do not double-count.
+
+`SEC_REREAD_DRAIN_PER_RUN` is **derived** from those two constants rather than
+typed, so a bigger universe or a changed calendar shape moves it instead of
+leaving it silently stale. 150 sequential reads is ~60 s inside a 300 s budget
+and ~2.5 req/s against SEC's 10/s.
+
 ## Where to look first IF the drain rate ever becomes binding
 
 **Not now, and not a rule.** Recorded because the observation is real and would

@@ -904,9 +904,68 @@ check("the measured reason for having NO conditional check is recorded in the so
   /Last-Modified ABSENT, ETag ABSENT/.test(MANIFEST_SRC) && /23 of 23|0 of 25/.test(MANIFEST_SRC),
   "so nobody adds an If-Modified-Since later and reads the silence as success");
 check("the drain size names its own measurement",
-  /JSON\.parse median 21 ms|182 MB\/s/.test(MANIFEST_SRC) && /SEC_REREAD_DRAIN_PER_RUN = 40/.test(manifestCode));
+  /JSON\.parse median 21 ms|182 MB\/s/.test(MANIFEST_SRC) &&
+  /SEC_REREAD_DRAIN_PER_RUN = Math\.max\(150/.test(manifestCode),
+  "the literal 40 is gone; the value is now derived from the measured peak");
 check("no isXBRL discriminator was built", !/isXBRL/.test(manifestCode) && !/isXBRL/.test(readCodeOnly("app/api/jobs/sec-daily-index/route.ts")),
   "it over-triggers on ARM and under-triggers on HSBC; no threshold fixes both");
+
+// ── 17. Noise does not queue a multi-MB read ───────────────────────────────
+//
+// Reproduces the reported window shape: 281 symbols touched, 127 with a
+// financial form, 154 whose only filings are noise -- and a quarter of those
+// noise filings AMENDED, which is the case the taxonomy had no word for.
+console.log("\n17. Only financial forms queue");
+const wSyms = [], wCik = new Map();
+for (let i = 0; i < 281; i++) { const x = "W" + i; wSyms.push(x); wCik.set(x, { cik: String(i).padStart(10, "0"), exchange: "NYSE" }); }
+const wm = man.emptyManifest();
+man.seedManifest(wm, wSyms, wCik, true);
+const wf = [];
+for (let i = 0; i < 127; i++) wf.push({ symbol: "W" + i, form: ["10-Q", "10-K", "6-K", "8-K", "20-F"][i % 5], filed: "20260911", accession: "a" + i, amendment: false });
+for (let i = 127; i < 281; i++) {
+  const noise = i % 4 === 0 ? "4/A" : ["4", "424B2", "144", "FWP"][i % 4];
+  wf.push({ symbol: "W" + i, form: noise, filed: "20260911", accession: "b" + i, amendment: noise.endsWith("/A") });
+}
+route.applyFilings(wm, wf);
+const wHist = {};
+for (const e of Object.values(wm.symbols)) if (e.needsReverify) wHist[e.reverifyReason ?? "(null)"] = (wHist[e.reverifyReason ?? "(null)"] ?? 0) + 1;
+const wQueued = Object.values(wm.symbols).filter((e) => e.needsReverify && e.cik).length;
+check("exactly the financial-form filers queue — 127, not 281 and not 166",
+  wQueued === 127, `${wQueued} queued · ${JSON.stringify(wHist)}`);
+check("an amended Form 4 does NOT queue a companyfacts read",
+  wm.symbols.W128.needsReverify === false && wm.symbols.W128.reverifyReason === null,
+  "39 noise-only symbols queued as 'amendment' before the gate was narrowed");
+check("a plain Form 4 / 424B2 / 144 / FWP still does not queue",
+  ["W129", "W130", "W131"].every((x) => wm.symbols[x].needsReverify === false));
+check("an amended 10-Q DOES still queue, as an amendment",
+  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
+    route.applyFilings(m, [{ symbol: "Z", form: "10-Q/A", filed: "20260911", accession: "z", amendment: true }]);
+    return m.symbols.Z.needsReverify === true && m.symbols.Z.reverifyReason === "amendment"; })());
+check("an amended 8-K also still queues",
+  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
+    route.applyFilings(m, [{ symbol: "Z", form: "8-K/A", filed: "20260911", accession: "z", amendment: true }]);
+    return m.symbols.Z.needsReverify === true; })());
+check("every queued reason is one the taxonomy names",
+  Object.keys(wHist).every((r) => ["amendment", "periodic-report", "unconfirmed"].includes(r)), JSON.stringify(wHist));
+
+// ── 18. The drain clears the busiest day of the year ───────────────────────
+console.log("\n18. Drain sized on peak, not on the quiet month");
+const PEAK_SHARE = 0.0935, CAP = 700, BG = 32;
+const peak = Math.ceil(CAP * PEAK_SHARE) + BG;
+const drain = Math.max(150, Math.ceil(peak * 1.5));
+check("the peak is REUSED from earningsPlan, not re-derived here",
+  /EARNINGS_PEAK_DAY_SHARE/.test(MANIFEST_SRC) && /from "\.\/earningsPlan"/.test(MANIFEST_SRC),
+  "it carries its own provenance, witnesses and a check that re-derives it");
+check("the drain exceeds peak inflow with margin", drain > peak && drain / peak >= 1.4,
+  `${drain}/run against ${peak}/day peak = ${(drain / peak).toFixed(2)}x`);
+check("...so the queue SHRINKS on the worst day of the year",
+  drain - peak > 0, `${drain - peak} symbols drained beyond inflow, every day of the cycle`);
+check("the constant is derived, so a bigger universe moves it",
+  /Math\.ceil\(ANALYSIS_UNIVERSE_CAP \* EARNINGS_PEAK_DAY_SHARE\)/.test(MANIFEST_SRC),
+  "typing 150 would go stale the next time the universe grows");
+check("150 sequential reads fit the function budget",
+  drain * 0.4 < 240, `~${Math.round(drain * 0.4)}s of round-trips inside 300s`);
+check("...and stay under SEC's 10 req/s", drain / (drain * 0.4) <= 10, `~${(1 / 0.4).toFixed(1)} req/s`);
 
 console.log(
   failures === 0

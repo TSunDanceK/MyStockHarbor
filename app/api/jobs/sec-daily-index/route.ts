@@ -5,6 +5,7 @@ import {
   readManifest,
   secRereadQueue,
   SEC_REREAD_DRAIN_PER_RUN,
+  SEC_REREAD_PEAK_INFLOW,
   writeManifest,
   seedManifest,
   symbolsByCik,
@@ -129,7 +130,18 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
     if (!entry) continue;
     touched.add(f.symbol);
 
-    if (f.amendment) {
+    // THE AMENDMENT GATE IS NARROWED TO FINANCIAL FORMS, and this was a real
+    // defect rather than a tidy-up. `isAmendment` matches any form ending "/A",
+    // so a Form 4/A -- an amended insider transaction, common and entirely
+    // routine -- set needsReverify and queued a multi-MB companyfacts read.
+    //
+    // MEASURED against the reported window shape (281 symbols touched, 127 with
+    // a financial form, 154 noise-only): 166 queued, of which 39 were noise-only
+    // symbols that had filed an amended Form 4. The taxonomy was right and the
+    // gate was wrong -- "amendment" is only meaningful for a form that carries
+    // numbers. isPeriodicForm and isRereadOnlyForm both strip the suffix, so
+    // 10-Q/A and 8-K/A still qualify and 4/A, 144/A and 424B2/A do not.
+    if (f.amendment && (isPeriodicForm(f.form) || isRereadOnlyForm(f.form))) {
       // A restatement is recorded as its own event. Folding it into
       // lastAccession would lose the fact that an already-published period
       // moved, which 3.8 requires be attributable rather than merely detected.
@@ -399,6 +411,7 @@ export async function GET(req: NextRequest) {
     // The re-read queue, read straight off the manifest -- no extra Redis.
     rereadQueued: Object.values(manifest.symbols).filter((e) => e.needsReverify && e.cik).length,
     rereadDrainPerRun: SEC_REREAD_DRAIN_PER_RUN,
+    rereadPeakInflowPerDay: SEC_REREAD_PEAK_INFLOW,
     universe: seed.symbols,
     withCik: seed.withCik,
     tickerMapSource: tickers.source,
