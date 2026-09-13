@@ -64,7 +64,7 @@ permanently after the first few.
 changes the file** becomes measurable. Weekly is a guess until those accumulate;
 a run of `notModified` says weekly is more often than necessary.
 
-## The committed file — NOT YET PRESENT
+## The committed file — PRESENT
 
 SEC's ticker→CIK file, served at
 `https://www.sec.gov/files/company_tickers.json`. Measured 2026-09-13 from
@@ -76,7 +76,22 @@ lets an unknown ticker **404 before any network call** — the gate that bounds
 cold-fetch exposure at 10,426 requests ever instead of at whatever a scraper
 asks for.
 
-### Why it is missing
+**Committed 2026-09-13** by the owner: 797,931 bytes, 10,426 distinct tickers,
+all five probe symbols resolving. It arrived with a stray `#` at byte 0 — an
+upload artifact — which made `JSON.parse` throw; that one byte was removed and
+nothing else was touched. `scripts/check-sec-daily-index.mjs` now asserts on
+every suite run that the committed file starts with `{`, parses through the
+real loader's parser, passes the same validation the refresh applies, and
+resolves the probe symbols.
+
+`loadTickerMap()` validates the committed file too, not just the network path —
+the `#` failed loudly, but a file that *parsed* while being truncated would have
+been adopted silently, and the fallback is the copy that answers when the fetch
+fails, which is exactly when nobody is looking. It is **not** tolerated by
+stripping junk before the first `{`: a lenient parse reading a corrupted file as
+data is the trap this pipeline exists to avoid.
+
+### If it ever needs re-fetching
 
 The agent sandbox is refused `www.sec.gov` with `403 CONNECT tunnel failed`
 (re-tested 2026-09-13), so the session that built this could not download it.
