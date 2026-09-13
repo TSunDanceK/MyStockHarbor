@@ -38,6 +38,11 @@ const codeOf = (src, file) => stripComments(src, { file, dropLines: true });
 // ---------------------------------------------------------------- load module
 const raw = read("lib/stock-news-data.ts");
 const keywordSrc = read("lib/keywordMatch.ts").replace(/^export /gm, "");
+// Text hygiene moved to lib/server/news/text.ts when the FMP path went behind
+// the NewsProvider interface. INLINED RATHER THAN STUBBED, like keywordHits
+// above it: parseRss below routes its titles and descriptions through these, so
+// a stub would have the harness measure its own placeholder.
+const textSrc = read("lib/server/news/text.ts").replace(/^export /gm, "");
 
 // EVERY replacement goes through a FUNCTION, never a replacement string.
 // keywordMatch.ts contains `"\\$&"` inside its regex-escape helper, and as a
@@ -72,6 +77,25 @@ stubbed = sub(
   /^import \{ readOrRefreshSymbolNews \} from "@\/lib\/server\/newsStore";$/m,
   'const readOrRefreshSymbolNews = async (symbol, deps) => ({ items: deps.dedupe(await deps.fetchWindow(null)), mode: "cold", added: 0 });'
 );
+// The provider seam (step 1 of claude/news-adapter-spec-2026-09-13.md). The
+// window fetch now comes from whichever adapter NEWS_PROVIDER selects, so it is
+// stubbed exactly as fmpFetch was -- nothing below reaches the network, and a
+// throw says so rather than looking like an empty upstream.
+//
+// ALL THREE OF THESE ARE SUBSTITUTED BEFORE THE ai-news-briefs LINE, and that
+// ordering is load-bearing for the same reason the newsStore stub records: the
+// ai-news-briefs pattern spans newlines from the earliest remaining `import {`,
+// and the text import below is multi-line, so leaving it unstubbed here would
+// have that pattern swallow everything in between.
+stubbed = sub(
+  stubbed,
+  /^import \{ fetchSymbolNewsWindow \} from "@\/lib\/server\/news";$/m,
+  'const fetchSymbolNewsWindow = () => { throw new Error("no network in this harness"); };'
+);
+stubbed = sub(stubbed, /^import \{[\s\S]*?\} from "@\/lib\/server\/news\/text";$/m, textSrc);
+// Type-only, so it is erased at transpile anyway -- but the guard below reads
+// the TypeScript source, where it is still a line beginning "import ".
+stubbed = sub(stubbed, /^import type \{ NewsItem \} from "@\/lib\/server\/news\/types";$/m, "");
 stubbed = sub(
   stubbed,
   /^import \{[\s\S]*?\} from "@\/lib\/ai-news-briefs";$/m,
@@ -89,6 +113,17 @@ const js = ts.transpileModule(stubbed, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+
+// logResponseWindow moved to lib/server/news/responseWindow.ts with the adapter
+// split (step 1 of claude/news-adapter-spec-2026-09-13.md): the adapters are
+// what hold a raw upstream response, so that is where the reading belongs.
+//
+// LOADED AS THE REAL MODULE, not stubbed, and it needs no stubbing to be: that
+// file imports nothing, which is the same property newsMerge.ts is kept to.
+const windowJs = ts.transpileModule(read("lib/server/news/responseWindow.ts"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+}).outputText;
+const rw = await import(`data:text/javascript;base64,${Buffer.from(windowJs).toString("base64")}`);
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-08-22T12:00:00Z");
@@ -292,7 +327,7 @@ const capture = (rows, limit = 50) => {
   const real = console.log;
   console.log = (line) => lines.push(String(line));
   try {
-    m.logResponseWindow("test", "MU", rows, limit);
+    rw.logResponseWindow("test", "MU", rows, limit);
   } finally {
     console.log = real;
   }
@@ -369,7 +404,12 @@ check(
 );
 
 console.log("\n=== 7d. Measured before our filters, and on one limit constant ===\n");
-const newsSrc = codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
+// THE ADAPTER, not lib/stock-news-data.ts. The FMP window fetch moved behind the
+// NewsProvider interface in step 1 of claude/news-adapter-spec-2026-09-13.md;
+// these two assertions are about that fetch, so they follow it. Reading the old
+// file would have left both of them passing against text that no longer contains
+// the call site -- a negative result from a file that is no longer the subject.
+const newsSrc = codeOf(read("lib/server/news/fmpProvider.ts"), "lib/server/news/fmpProvider.ts");
 check(
   "the reading is taken on the RAW response, before mapping or filtering",
   /if \(!Array\.isArray\(data\)\) continue;[\s\S]{0,200}logResponseWindow\("stock"[\s\S]{0,120}const items = data/.test(newsSrc),
@@ -384,6 +424,44 @@ check(
 check(
   "sector news takes the same reading through the same function",
   /logResponseWindow\(\s*"sector"/.test(codeOf(read("lib/sector-news-data.ts"), "lib/sector-news-data.ts"))
+);
+
+console.log("\n=== 8. The provider seam (news-adapter spec step 1) ===\n");
+// Step 1 of claude/news-adapter-spec-2026-09-13.md is a pure refactor, so what
+// is worth asserting is not what it added but what it must not have moved. Each
+// of these is a one-line mistake to make and none of them would fail anything.
+const registry = codeOf(read("lib/server/news/index.ts"), "lib/server/news/index.ts");
+const adapter = codeOf(read("lib/server/news/fmpProvider.ts"), "lib/server/news/fmpProvider.ts");
+
+check(
+  "NEWS_PROVIDER still defaults to FMP",
+  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(registry),
+  'flipping the default is spec step 7, and doing it before the free adapters exist points the site at an empty provider list'
+);
+check(
+  "an unbuilt \"free\" never resolves to an empty provider list",
+  /FREE_PROVIDERS\.length/.test(registry) && /return \[fmpNewsProvider\]/.test(registry),
+  "an empty list would empty the news feed on every page with no error anywhere"
+);
+check(
+  "the FMP adapter is still in the tree, implementing the interface",
+  /export const fmpNewsProvider: NewsProvider = \{/.test(adapter) &&
+    /id: "fmp"/.test(adapter) &&
+    /fetchForSymbol/.test(adapter) &&
+    /fetchMarket/.test(adapter),
+  "the owner's requirement is that going back to FMP is a switch, not an unpick"
+);
+check(
+  "the registry does not swallow an upstream failure into an empty window",
+  !/catch/.test(registry),
+  "newsStore treats a throw as 'serve what is stored'; [] would instead look like a successful empty fetch and rewrite the record"
+);
+check(
+  "the store is still fed by the provider seam rather than a provider directly",
+  /fetchWindow: \(from\) => fetchSymbolNewsWindow\(/.test(
+    codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts")
+  ),
+  "naming an adapter at the call site is how the flag stops deciding anything"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

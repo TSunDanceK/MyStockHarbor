@@ -1,5 +1,13 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
+import { fetchSymbolNewsWindow } from "@/lib/server/news";
+import {
+  cleanRssDescription,
+  containsHtmlMarkup,
+  decodeHtml,
+  stripHtmlTags,
+} from "@/lib/server/news/text";
+import type { NewsItem } from "@/lib/server/news/types";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
@@ -24,56 +32,6 @@ export type Point = {
   high?: number;
   low?: number;
   volume?: number;
-};
-
-export type NewsItem = {
-  title: string;
-  link: string;
-  pubDate: string | null;
-  source: string | null;
-  description: string | null;
-  /**
-   * Thumbnail image URL, when the upstream source provides one. FMP's
-   * stock-news endpoint usually includes this; the Google News RSS fallback
-   * does not, so this is null for those items.
-   */
-  image?: string | null;
-  /**
-   * Ticker symbols supplied by the upstream FMP stock-news endpoint.
-   * These are used as the strongest relevance signal before falling back
-   * to text/company-name matching.
-   */
-  fmpSymbols?: string[];
-  /** True when the item came back from a symbol-specific FMP request. */
-  fmpSymbolMatched?: boolean;
-  /**
-   * Position in the raw upstream response, before any filtering or ranking.
-   *
-   * MEASUREMENT ONLY, and the reason it has to be stamped rather than inferred:
-   * every stage between the fetch and the render filters, dedupes and re-sorts,
-   * so by the time an item is displayed its position tells you nothing about how
-   * deep into the fetched list it came from. That depth is the ONLY thing that
-   * says whether `limit=50` is buying anything -- see logNewsDepth.
-   */
-  sourceIndex?: number;
-};
-
-export type FmpStockNewsItem = {
-  symbol?: string;
-  symbols?: string[] | string;
-  ticker?: string;
-  tickers?: string[] | string;
-  publishedDate?: string;
-  date?: string;
-  publisher?: string;
-  title?: string;
-  image?: string;
-  site?: string;
-  text?: string;
-  content?: string;
-  description?: string;
-  url?: string;
-  link?: string;
 };
 
 export type ScoreTone = "green" | "yellow" | "red";
@@ -139,52 +97,6 @@ type BuildOptions = {
   maxDetailedItems?: number;
   includeInsight?: boolean;
 };
-
-function decodeHtml(value: string) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
-}
-
-// Some upstream sources (mainly the Google News RSS fallback used for
-// thin-coverage / freshly-listed tickers) occasionally hand back a
-// title/description that is itself a raw HTML snippet -- e.g.
-// `<a href="...">Headline</a>&nbsp;<font color="#6f6f6f">Source</font>` --
-// rather than plain text. Since titles/descriptions are rendered as plain
-// React text (never dangerouslySetInnerHTML'd), any literal "<...>" that
-// slips through shows up as visible, broken-looking markup on the page.
-// stripHtmlTags is the one place that unwraps CDATA, strips tags, and
-// collapses whitespace; both cleanRssDescription (below) and the title
-// handling in parseRss/fetchFmpStockNews route through it so there's a
-// single implementation to keep in sync.
-export function stripHtmlTags(value: string) {
-  return decodeHtml(
-    value
-      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-  );
-}
-
-// A legitimate headline never contains a literal HTML tag. When one does
-// (see stripHtmlTags' comment above), that's a strong signal the whole item
-// is a malformed auto-generated snippet rather than real editorial content
-// -- better to drop it than show a "cleaned" but still nonsensical
-// duplicate-of-itself headline.
-export function containsHtmlMarkup(value: string) {
-  return /<[a-z][^>]*>/i.test(value);
-}
-
-export function cleanRssDescription(value: string | null) {
-  if (!value) return null;
-  const cleaned = stripHtmlTags(value);
-  return cleaned || null;
-}
 
 function parseRss(xml: string): NewsItem[] {
   const items: NewsItem[] = [];
@@ -489,37 +401,6 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
-function extractFmpSymbols(item: FmpStockNewsItem, requestedSymbol: string): string[] {
-  const symbols = new Set<string>();
-
-  const addValue = (value: unknown) => {
-    if (Array.isArray(value)) {
-      value.forEach(addValue);
-      return;
-    }
-
-    if (typeof value !== "string") return;
-
-    value
-      .split(/[,.|\s]+/)
-      .map((part) => part.trim().toUpperCase())
-      .filter(Boolean)
-      .forEach((part) => symbols.add(part));
-  };
-
-  addValue(item.symbol);
-  addValue(item.symbols);
-  addValue(item.ticker);
-  addValue(item.tickers);
-
-  // The FMP request itself is symbol-specific. Some FMP responses include the
-  // symbol field, some do not. Keep the requested symbol as a trusted upstream
-  // relevance signal so display cards do not disappear after text filtering.
-  addValue(requestedSymbol);
-
-  return [...symbols];
-}
-
 function articleMatchesRequestedSymbol(item: NewsItem, symbol: string) {
   const target = symbol.trim().toUpperCase();
   if (!target) return false;
@@ -532,95 +413,11 @@ function articleMatchesRequestedSymbol(item: NewsItem, symbol: string) {
 }
 
 /**
- * How many articles a raw FMP news response holds, and how they are spread
- * across days.
+ * The page-facing read: Redis first, and the active news provider only when the
+ * store is cold or due. Which provider that is belongs to NEWS_PROVIDER
+ * (lib/server/news/index.ts), not to this function -- it is FMP today.
  *
- * WHAT THIS DECIDES. `limit=50` has been an open question all day, argued from
- * arithmetic rather than data: 50 articles fetched to display 15 looks like
- * obvious waste and may not be, because dedup collapses the same story reported
- * by several outlets and a busy ticker can burn 20 of those 50 on one morning.
- * The number that settles it is how many DAYS a 50-article response actually
- * spans. If a response reliably covers a week or more, 50 is buying a complete
- * window and a headline count derived from it is EXACT. If it saturates -- 50
- * articles inside two days -- then the window is truncated and any count derived
- * from it is a FLOOR that must read "50+ in N days", never a total.
- *
- * Free. Every figure here is already in a payload that has been fetched and
- * parsed; this adds no FMP call and no second request.
- *
- * MEASURED ON THE RAW RESPONSE, before any of our filtering. The question is
- * what FMP returns for a given `limit`, not what survives isLowValueNewsItem --
- * filtering first would measure our own rules and attribute the result to FMP
- * (claude/traps/measuring-the-wrong-layer.md).
- *
- * ORDERING IS TESTED, NOT ASSUMED. The whole "truncation happens at the old
- * end, so recent days are complete" argument rests on FMP returning
- * newest-first. Comparing the first and last rows does not establish that: a
- * shuffled array whose extremes happen to fall in order passes that test. Every
- * adjacent pair is checked, and the count of inversions is reported so a
- * partially-ordered response is distinguishable from a sorted one and from a
- * random one. If `monotonic=false` shows up in the logs, the analysis above does
- * not hold and the limit question reopens on different terms.
- */
-export function logResponseWindow(label: string, symbol: string, rows: unknown[], limit: number): void {
-  const dates: { key: string; t: number }[] = [];
-  for (const row of rows) {
-    const r = row as Record<string, unknown>;
-    const raw = String(r?.publishedDate ?? r?.date ?? "").trim();
-    if (!raw) continue;
-    const t = new Date(raw).getTime();
-    if (!Number.isFinite(t)) continue;
-    dates.push({ key: new Date(t).toISOString().slice(0, 10), t });
-  }
-
-  if (!dates.length) {
-    console.log(`[news-window] ${label} ${symbol} rows=${rows.length} dated=0 — no usable dates`);
-    return;
-  }
-
-  // Per-day counts, in calendar order so the shape is readable at a glance.
-  const perDay = new Map<string, number>();
-  for (const d of dates) perDay.set(d.key, (perDay.get(d.key) ?? 0) + 1);
-  const days = [...perDay.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-
-  // Every adjacent pair, not the endpoints. See the note above.
-  let inversions = 0;
-  for (let i = 1; i < dates.length; i++) {
-    if (dates[i].t > dates[i - 1].t) inversions += 1;
-  }
-
-  const spanDays = days.length;
-  const maxDay = Math.max(...days.map(([, n]) => n));
-  // Saturated = FMP gave us everything it was asked for, so there is very
-  // likely more it did not send. `rows === limit` is the signal; a short
-  // response means the ticker simply has no more.
-  const saturated = rows.length >= limit;
-
-  console.log(
-    `[news-window] ${label} ${symbol} rows=${rows.length}/${limit}` +
-      ` saturated=${saturated} distinctDays=${spanDays} maxPerDay=${maxDay}` +
-      ` monotonic=${inversions === 0} inversions=${inversions}` +
-      ` oldest=${days[days.length - 1][0]} newest=${days[0][0]}` +
-      ` perDay=[${days.map(([d, n]) => `${d}:${n}`).join(",")}]`
-  );
-}
-
-/**
- * The `limit` a single /news/stock window asks for.
- *
- * 15, DOWN FROM 50, AND ONLY SAFE BECAUSE THE STORE EXISTS. The old comment
- * below was right that cutting this on its own would lose content: with nothing
- * persisted, one request's limit WAS the entire depth available to the page.
- * Now the store accumulates up to NEWS_STORE_CAP across refreshes, so depth is
- * a property of the store rather than of any one call, and the request only has
- * to cover what is new since the last one.
- */
-const FMP_NEWS_LIMIT = 15;
-
-/**
- * The page-facing read: Redis first, FMP only when the store is cold or due.
- *
- * A RENDER MAKES NO FMP CALL inside the refresh window, which is the point.
+ * A RENDER MAKES NO UPSTREAM CALL inside the refresh window, which is the point.
  * Population is lazy -- first view of a symbol populates it, later views read
  * the store, and a symbol nobody views costs nothing. There is deliberately no
  * cron behind this: warming 755 symbols of news hourly would dwarf every other
@@ -631,9 +428,12 @@ const FMP_NEWS_LIMIT = 15;
  * scoring path, so they are passed in rather than reimplemented -- one
  * implementation of a rule, not two that can disagree.
  */
-async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
+async function fetchStoredSymbolNews(symbol: string, companyName: string): Promise<NewsItem[]> {
   const { items } = await readOrRefreshSymbolNews<NewsItem>(symbol, {
-    fetchWindow: (from) => fetchFmpStockNewsWindow(symbol, from),
+    // WHICH PROVIDER THIS IS rests on NEWS_PROVIDER, not on this call site --
+    // see lib/server/news/index.ts. In step 1 it is always the FMP adapter, and
+    // the adapter is the code that used to sit inline here.
+    fetchWindow: (from) => fetchSymbolNewsWindow(symbol, companyName, from),
     dedupe: dedupeNews,
     // The earnings pin. Once an article qualifies it survives eviction until a
     // newer qualifying one replaces it, or 7 days pass -- which is the part
@@ -643,121 +443,6 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
   });
 
   return items;
-}
-
-/**
- * One /news/stock window. `from` null means a cold start -- the endpoint's
- * default window, because there is nothing stored to anchor an overlap to.
- *
- * Verified 2026-08-22 that `from=` actually filters rather than being silently
- * ignored: from=2026-08-21 returned nothing older than 2026-08-21T03:05:00Z,
- * where the same request without it reached back to 2026-08-19T11:45:00Z. That
- * gate is the assumption the whole stored-news design rests on.
- *
- * Note the per-article cost is unchanged -- `from=` compresses nothing. The
- * saving comes entirely from not re-fetching articles already held, which is
- * only a saving once they are persisted.
- */
-async function fetchFmpStockNewsWindow(
-  symbol: string,
-  from: string | null
-): Promise<NewsItem[]> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return [];
-
-  const encoded = encodeURIComponent(symbol.toUpperCase());
-  const key = encodeURIComponent(apiKey);
-
-  const fromParam = from ? `&from=${encodeURIComponent(from)}` : "";
-
-  const endpoints = [
-    `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${FMP_NEWS_LIMIT}${fromParam}&apikey=${key}`,
-    `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encoded}&limit=${FMP_NEWS_LIMIT}&apikey=${key}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      // The Data Cache is now the SECOND gate, not the first. newsStore decides
-      // whether a refresh happens at all; this only bounds how stale an
-      // individual window may be if one does. Left at 3600 rather than switched
-      // to no-store deliberately -- `cache: "no-store"` opts the calling route
-      // out of static rendering entirely, which is the bailout documented at
-      // the FMP history call site, and it would buy nothing here because the
-      // `from` value changes every refresh so consecutive windows never share a
-      // cache key anyway.
-      const res = await fmpFetch(url, {
-        next: { revalidate: 3600 },
-      });
-
-      if (!res.ok) continue;
-
-      const data = (await res.json()) as unknown;
-      if (!Array.isArray(data)) continue;
-
-      // Before any filtering. See logResponseWindow.
-      logResponseWindow("stock", symbol.toUpperCase(), data, FMP_NEWS_LIMIT);
-
-      const items = data
-        .map((item: FmpStockNewsItem, index: number): NewsItem | null => {
-          const title = typeof item.title === "string" ? item.title.trim() : "";
-          const link =
-            typeof item.url === "string" && item.url.trim()
-              ? item.url.trim()
-              : typeof item.link === "string"
-                ? item.link.trim()
-                : "";
-
-          if (!title || !link) return null;
-          if (containsHtmlMarkup(title)) return null;
-
-          const fmpSymbols = extractFmpSymbols(item, symbol);
-          const descriptionSource =
-            typeof item.text === "string" && item.text.trim()
-              ? item.text
-              : typeof item.content === "string" && item.content.trim()
-                ? item.content
-                : typeof item.description === "string"
-                  ? item.description
-                  : "";
-
-          return {
-            title: stripHtmlTags(title),
-            link,
-            pubDate:
-              typeof item.publishedDate === "string" && item.publishedDate.trim()
-                ? item.publishedDate
-                : typeof item.date === "string" && item.date.trim()
-                  ? item.date
-                  : null,
-            source:
-              typeof item.site === "string" && item.site.trim()
-                ? item.site.trim()
-                : typeof item.publisher === "string" && item.publisher.trim()
-                  ? item.publisher.trim()
-                  : "FMP News",
-            description: descriptionSource.trim()
-              ? cleanRssDescription(descriptionSource.slice(0, 650))
-              : null,
-            image:
-              typeof item.image === "string" && item.image.trim()
-                ? item.image.trim()
-                : null,
-            fmpSymbols,
-            fmpSymbolMatched: fmpSymbols.includes(symbol.toUpperCase()),
-            // Stamped here, at the only point where the upstream ordering is
-            // still intact.
-            sourceIndex: index,
-          };
-        })
-        .filter((item): item is NewsItem => Boolean(item));
-
-      if (items.length) return items;
-    } catch {
-      continue;
-    }
-  }
-
-  return [];
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
@@ -820,7 +505,7 @@ async function fetchGoogleNewsFallback(
 }
 
 async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchFmpStockNews(symbol);
+  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
   const filteredFmp = fmpNews.filter((item) => !isVideoOrLowQualitySource(item));
 
   if (filteredFmp.length) {
@@ -889,8 +574,8 @@ function logNewsDepth(label: string, symbol: string, fetched: number, kept: News
   );
 }
 
-async function fetchEarningsNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchFmpStockNews(symbol);
+async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
 
   const kept = mergeNewsPools([
     fmpNews

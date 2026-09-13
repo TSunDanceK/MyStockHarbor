@@ -381,6 +381,15 @@ keyword match. Keep the keyword list small and in one place.
 
 0. **Art cascade against existing data, and hide the publisher image.** See §0. The only urgent step. Ships alone, needs no adapter.
 1. Provider interface + `NEWS_PROVIDER` flag, FMP behind it. **No behaviour change.** Ship and verify nothing moved.
+   **SHIPPED 2026-09-13.** `lib/server/news/` holds the interface (`types.ts`), the
+   flag (`index.ts`) and the FMP adapter (`fmpProvider.ts`); the text helpers and the
+   response-window reading moved out of `lib/stock-news-data.ts` with it, because the
+   adapters are called BY that file and importing them back would be a cycle.
+   `NEWS_PROVIDER` defaults to `"fmp"` until step 7 — that is the one place this file's
+   snippet above describes the end state rather than the current code. Verified: same
+   request URL and byte-identical `NewsItem[]` out of the adapter as out of the inline
+   fetch it replaced, cold and incremental; `scripts/check-news-feed.mjs` §8 pins the
+   default, the no-empty-provider-list rule and the adapter's continued existence.
 2. Company-name normaliser + unit tests against the real universe.
 3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
 4. Wire adapters.
