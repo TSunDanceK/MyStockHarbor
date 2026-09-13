@@ -98,6 +98,14 @@ type NewsItem = {
 };
 ```
 
+`tickers` is deliberately left unset by the FMP adapter in step 1 — FMP's symbols
+already arrive as `fmpSymbols`, which every consumer and every stored Redis record
+reads, and writing the same list under a second name would have changed stored bytes
+for no gain. **Resolve it in step 3, not later:** the Google News adapter populates
+`tickers`, and one read shim treats `fmpSymbols` as a legacy alias so existing
+records keep working. One place, not scattered — two names for one concept is exactly
+what this shape exists to prevent.
+
 ## 1. Google News adapter — the per-symbol primary
 
 ### Query construction, and why it matters
@@ -121,14 +129,65 @@ The residual 2-3% are not junk — they are the same clickbait headlines each ru
 Infrastructure Stock"), which are genuinely about the company but withhold the name
 from the headline. The scorer only reads titles, so 97% is a floor.
 
-**`cleanName` needs a normaliser.** The universe holds display names like
-`Micron Technology, Inc. - Common Stock`, and querying that verbatim would be far
-worse than the measured result. Strip, in order: everything from ` - ` onward, then
-trailing `, Inc.` / `Inc.` / `Corporation` / `Corp.` / `Company` / `Co.` / `Ltd.` /
-`plc` / `Holdings` / `Group` / `N.V.` / `S.A.`, then trim punctuation.
-`Micron Technology, Inc. - Common Stock` → `Micron Technology`.
+### The normaliser — CORRECTED 2026-09-13
 
-Unit-test the normaliser against a sample of the real universe before trusting it.
+**An earlier version of this section was wrong and is recorded here so the mistake
+is not repeated.** It said: strip everything from `" - "` onward, then trailing
+corporate suffixes. That rule was generalised from a single example
+(`Micron Technology, Inc. - Common Stock`) and it fails on roughly **half** the
+universe, because half the directory joins the instrument clause with a plain space:
+
+```
+Micron Technology, Inc. - Common Stock     the shape the old rule assumed
+Chevron Corporation Common Stock           no dash at all
+Boeing Company (The) Common Stock          and a parenthetical in the way
+Nike, Inc. Common Stock
+GameStop Corporation Common Stock
+```
+
+A dash-only cut leaves `Chevron Corporation Common Stock` intact and sends it to
+Google News verbatim — precisely the failure the normaliser exists to prevent.
+**Testing against 155 real directory names is what caught it; invented fixtures all
+carry the assumed shape and would have hidden it.** Source real names for the
+fixture, commit them with provenance, and the test runs offline afterwards.
+
+**Reuse `lib/server/companyNames.ts`, do not write a new rule.** Its instrument-suffix
+handling has run against this same feed for months and already covers the
+space-joined form, the `(The)` parenthetical, ADR share-ratio clauses and the
+directory's self-repeating names. The order that works:
+
+1. the dash cut — still needed, it is the only thing that handles `" - Units"` and
+   `" - 7.875% Notes due 2028"`
+2. the existing `companyNames.ts` instrument rule
+3. corporate-suffix stripping
+
+Result: 105 of 155 produce a searchable term, and **all 55 symbols the site actually
+publishes on are correct** — MU → `Micron Technology`, BABA → `Alibaba`,
+VRT → `Vertiv`, WFC → `Wells Fargo`, QBTS → `D-Wave Quantum`.
+
+### Names that cannot be searched by name
+
+**48 of 155 are funds, notes or preferreds**, not companies — *Keeley Dividend ETF*,
+*NextEra … Junior Subordinated Debentures due March 1, 2079*. Their names are product
+descriptions. `assessCompanyName` returns `fund-or-note` and **they never reach a
+per-symbol query.** (Worth noting beyond news: 31% of the universe not being a
+company is a finding for the universe work too.)
+
+**Some real companies normalise to a common word.** MSTR → `Strategy`,
+POST → `Post`. Querying `"Strategy" stock` returns articles about strategy.
+
+**Handle this with the classification, not a hand-maintained alias list** — an alias
+table rots and nobody remembers to update it. Where `assessCompanyName` flags a name
+as generic, switch to the ticker-qualified shape:
+
+```
+QUERY = `"${cleanName}" (${symbol}) stock`
+```
+
+Measured at 96% for unambiguous names versus 98% — a small cost that only applies
+where it buys a lot. It also absorbs recent renames without maintenance: MSTR was
+MicroStrategy until recently and headlines still use both, and the ticker anchors
+both spellings.
 
 ### Date filtering is not optional
 
@@ -219,17 +278,42 @@ no image at all (all Google News items)                -> deny
 default                                                 -> deny
 ```
 
-Then select generated art:
+### Library art goes on the LEAD CARDS ONLY
+
+The page renders **5 large cards and 10 compact rows**. Buckets currently hold
+**4 images** (6 for semiconductors, software, biotech, banks), because one prompt
+produced one kept image. Spread across 15 rows that repeats each image three or four
+times on a single page — visibly.
+
+So:
+
+```
+lead cards (5)    -> library art, or the generated data card if the bucket is empty
+compact rows (10) -> the generated data card, always
+```
+
+Four images across five leads barely repeats. And at 56px tall a generated card
+showing ticker, price move and sparkline is **legible**, which a shrunk illustration
+of a wafer is not — so this is the better product as well as the cheaper one. The
+`-sm.webp` 320×180 variants ship anyway and sit unused until buckets grow.
+
+### Selecting the art
 
 ```
 art = eventType ? pick(`event-${eventType}`) : pick(`sector-${sectorSlug}`)
 pick(bucket) = `/news-art/${bucket}-${pad(hash(guid) % count(bucket))}.webp`
 ```
 
-Hash the guid so an article always gets the same image — stable across renders,
+Counts come from `public/news-art/manifest.json` — never from counting files by hand.
+Hash the guid so an article always gets the same image: stable across renders,
 cache-friendly, no flicker. Re-hash on collision so no image repeats on one page.
-Fall back to the generated data card where a bucket has no images yet, so this can
-ship with three sectors done.
+
+Five sector buckets are empty (staples, realestate, materials, aerospace, insurance).
+Any bucket absent from the manifest falls back to the generated card, so this ships
+incomplete and fills in later.
+
+**Serve with a plain `<img srcset>`, never `next/image`**, and always set `width`
+and `height`. See `claude/image-policy-2026-09-13.md` for why.
 
 ## 7. `eventType` derivation
 
@@ -240,13 +324,18 @@ keyword match. Keep the keyword list small and in one place.
 
 1. Provider interface + `NEWS_PROVIDER` flag, FMP behind it. **No behaviour change.** Ship and verify nothing moved.
 2. Company-name normaliser + unit tests against the real universe.
-3. Google News adapter, per-symbol, with the date filter.
+3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
 4. Wire adapters.
 5. SEC filings adapter + committed CIK map.
 6. Image cascade + art selection.
 7. Flip the default to `free`.
 
 Each step ships on its own. Do not combine 1 and 3.
+
+**Surface the active provider on the cache-health page.** At step 7 the failure mode
+is that something fails to register and the site silently keeps calling FMP — the one
+thing this work exists to stop. A log line nobody reads is not enough; make it
+visible. See `claude/silent-failure-traps.md`.
 
 ## 9. Do not
 
@@ -255,6 +344,8 @@ Each step ships on its own. Do not combine 1 and 3.
 - Do not resolve Google redirect links.
 - Do not delete or gut the FMP adapter.
 - Do not rehost or cache any publisher image.
+- Do not put library art on the compact rows.
+- Do not build an alias list for ambiguous company names — use the classification.
 - Do not remove the image column — **hide it** with a code comment explaining why,
   per the owner's standing convention, so it is not switched back on by accident.
 - Do not claim a bandwidth saving figure. Measure it after.
