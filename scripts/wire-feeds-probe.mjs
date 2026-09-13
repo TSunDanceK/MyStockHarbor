@@ -18,6 +18,7 @@
 //   node scripts/wire-feeds-probe.mjs <dumpDir>
 import fs from "node:fs";
 import path from "node:path";
+import { emitPayload } from "./lib/relay-capture.mjs";
 
 const DUMP_DIR = process.argv[2] || "";
 const UA =
@@ -119,7 +120,7 @@ for (const [name, group, url] of FEEDS) {
   // Verbatim items are held back and printed AFTER the summary: the job log is
   // read from the tail, and a release description is long enough to push the
   // numbers out of reach.
-  if (group === "wire") verbatim.push([name, blocks.slice(0, 4)]);
+  if (group === "wire") verbatim.push([name, blocks.slice(0, 8)]);
 }
 
 console.log("\n================ SUMMARY");
@@ -132,12 +133,12 @@ const wireMatched = summary.filter((r) => r[1] === "wire").reduce((a, r) => a + 
 console.log(`\nWIRE ITEMS RESOLVING TO A UNIVERSE SYMBOL: ${wireMatched}/${wireTotal}` +
   (wireTotal ? ` = ${((wireMatched / wireTotal) * 100).toFixed(1)}%` : ""));
 console.log(`exchange prefixes seen: ${[...prefixCounts].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p}=${n}`).join(", ") || "(none)"}`);
-// ONE LINE PER ITEM. GlobeNewswire pretty-prints its XML, so a verbatim item
-// spans ~40 log lines and pushes everything before it out of the tail the job
-// log is read from. Collapsing inter-tag whitespace changes no content — the
-// parser is whitespace-insensitive and the fixture is used through the parser.
+// ONE PAYLOAD PER DISPATCH, PRINTED LAST, BYTE-ACCOUNTED. See
+// scripts/lib/relay-capture.mjs for why an Actions artifact does not work here.
+// Whitespace between tags is still collapsed: it changes no content, and the
+// fixture is only ever read through the parser.
 for (const [name, blocks] of verbatim) {
-  console.log(`\n----- VERBATIM ${name} (${blocks.length}) -----`);
-  for (const b of blocks) console.log("<item>" + b.replace(/>\s+</g, "><").trim() + "</item>");
+  const xml = blocks.map((b) => "<item>" + b.replace(/>\s+</g, "><").trim() + "</item>").join("\n");
+  emitPayload(name, xml);
 }
 console.log("\n[wire-feeds-probe] done");
