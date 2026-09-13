@@ -72,6 +72,17 @@ const MAX_DAYS_PER_RUN = 10;
  */
 const CONSECUTIVE_FAILURE_ALARM = 4;
 
+/**
+ * Consecutive ABSENT days before absence itself becomes suspicious.
+ *
+ * The longest genuine run is a weekend either side of a two-day holiday -- four.
+ * Ten is comfortably past anything the calendar produces, so it catches the one
+ * case the absent/failed split could otherwise hide forever: a block that
+ * happens to answer with a small 403 body and therefore reads as "no index
+ * published" every single day.
+ */
+const IMPLAUSIBLE_ABSENCE_RUN = 10;
+
 /** SEC's fair-access policy requires a declared agent carrying a contact. */
 const SEC_UA = process.env.SEC_USER_AGENT || "";
 
@@ -121,6 +132,7 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
       // moved, which 3.8 requires be attributable rather than merely detected.
       entry.lastAmendment = { accession: f.accession, form: f.form, filed: f.filed };
       entry.needsReverify = true;
+      entry.reverifyReason = "amendment";
     }
 
     if (!isPeriodicForm(f.form)) continue;
@@ -140,6 +152,13 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
       entry.lastFiled = newest.filed;
     }
     entry.needsReverify = true;
+    // A 10-Q/10-K/20-F is a report; a 6-K is a catch-all that is USUALLY not
+    // one. Both set needsReverify -- the 6-K genuinely might carry ARM's
+    // quarter -- but only the first is worth a full companyfacts payload
+    // without checking first. Amendment wins if one was also seen.
+    if (entry.reverifyReason !== "amendment") {
+      entry.reverifyReason = newest.form.toUpperCase().startsWith("6-K") ? "unconfirmed" : "periodic-report";
+    }
 
     const sameDay = list.filter((f) => f.filed === newest.filed);
     // ARM files 6-Ks in pairs on the same day. Which one carries the period
@@ -164,6 +183,14 @@ export async function GET(req: NextRequest) {
   const fromOverride = url.searchParams.get("from");
   const toOverride = url.searchParams.get("to");
   const dryRun = url.searchParams.get("dryRun") === "1";
+  // A DEBUG-LOOKING PARAMETER MUST NOT MUTATE LIVE STATE AS A SIDE EFFECT.
+  // Measured: a from/to run rewound the persisted watermark 20260912 -> 20260911.
+  // Self-healing and harmless in that instance, but a walk-range override reads
+  // as inspection, so it is now non-persisting unless persistence is asked for
+  // explicitly -- and the response says which happened either way.
+  const explicitRange = Boolean(url.searchParams.get("from") || url.searchParams.get("to"));
+  const persistRange = url.searchParams.get("persist") === "1";
+  const inspectionOnly = explicitRange && !persistRange;
   // THE ESCAPE HATCH for a refused spike -- see mapChangeThreshold in
   // secManifest.ts. Without it a legitimate mass change (an index
   // reconstitution, a wave of renames) leaves the guard refusing every week
@@ -259,6 +286,7 @@ export async function GET(req: NextRequest) {
   const days: Record<string, unknown>[] = [];
   const filingsBySymbol: Record<string, SymbolFiling[]> = {};
   let consecutive = manifest.consecutiveIndexFailures;
+  let consecutiveAbsent = manifest.consecutiveIndexAbsent ?? 0;
   let lastProcessed: string | null = null;
 
   for (const date of dates) {
@@ -268,9 +296,9 @@ export async function GET(req: NextRequest) {
       const filings = intersect(res.parsed.rows, bySymbolCik);
       const applied = applyFilings(manifest, filings);
       for (const f of filings) (filingsBySymbol[f.symbol] ??= []).push(f);
-      // ANY success resets the counter -- a weekend inside a healthy run must
-      // not accumulate toward an alarm.
+      // ANY success resets both counters.
       consecutive = 0;
+      consecutiveAbsent = 0;
       lastProcessed = date;
       days.push({
         date,
@@ -289,8 +317,11 @@ export async function GET(req: NextRequest) {
 
     if (res.outcome === "absent") {
       // Expected: weekend or market holiday. The watermark still advances --
-      // there is no index to come back for -- and nothing alarms.
-      consecutive += 1;
+      // there is no index to come back for -- and this does NOT touch the
+      // failure counter. Measured: a Saturday-only run moved it 0 -> 1, and a
+      // cron walking one day at a time through a holiday stretch would reach
+      // the alarm threshold with nothing wrong.
+      consecutiveAbsent += 1;
       lastProcessed = date;
       days.push({
         date,
@@ -313,12 +344,17 @@ export async function GET(req: NextRequest) {
 
   if (lastProcessed) manifest.lastIndexDate = lastProcessed;
   manifest.consecutiveIndexFailures = consecutive;
+  manifest.consecutiveIndexAbsent = consecutiveAbsent;
 
   // ── ONE WRITE ─────────────────────────────────────────────────────────────
-  const written = dryRun ? false : await writeManifest(manifest);
+  const written = dryRun || inspectionOnly ? false : await writeManifest(manifest);
 
   const failedDays = days.filter((d) => d.outcome === "failed").length;
   const alarming = consecutive >= CONSECUTIVE_FAILURE_ALARM;
+  // A separate, far looser question: absence is normal, but TEN consecutive days
+  // with no index published does not happen, so that shape is a block answering
+  // with a small body rather than a run of holidays.
+  const absenceImplausible = consecutiveAbsent >= IMPLAUSIBLE_ABSENCE_RUN;
   // A suspected map shape change is not a healthy run even when every date
   // parsed -- something upstream is wrong and nothing was applied because of it.
   // Either map-derived guard firing means the run is NOT healthy: something
@@ -326,7 +362,8 @@ export async function GET(req: NextRequest) {
   const ok =
     failedDays === 0 &&
     !alarming &&
-    (dryRun || written) &&
+    (dryRun || inspectionOnly || written) &&
+    !absenceImplausible &&
     !(cikChanges?.suspectedMapShapeChange ?? false) &&
     !(delistings?.suspectedPartialMap ?? false);
 
@@ -336,7 +373,9 @@ export async function GET(req: NextRequest) {
     absent: days.filter((d) => d.outcome === "absent").length,
     failed: failedDays,
     consecutiveIndexFailures: consecutive,
+    consecutiveIndexAbsent: consecutiveAbsent,
     alarming,
+    absenceImplausible,
     watermark: manifest.lastIndexDate,
     symbolsWithFilings: Object.keys(filingsBySymbol).length,
     universe: seed.symbols,
@@ -374,7 +413,10 @@ export async function GET(req: NextRequest) {
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
-    redisCommands: dryRun ? 2 : 3,
+    redisCommands: dryRun || inspectionOnly ? 2 : 3,
+    // Stated rather than left to be inferred from a watermark that did not move.
+    watermarkMoved: !dryRun && !inspectionOnly && written,
+    inspectionOnly,
     ms: Date.now() - started,
   };
 
@@ -444,6 +486,9 @@ export async function GET(req: NextRequest) {
             "no CIK changed under an existing symbol; nothing was invalidated",
         }
       : { skipped: "no ticker map available to reconcile against" },
+    absenceNote: absenceImplausible
+      ? `${consecutiveAbsent} consecutive days with no index published. The calendar does not produce a run that long — this is more likely a block answering with a small body than a holiday stretch. Absence does NOT feed consecutiveIndexFailures, which is why that counter is still ${consecutive}.`
+      : null,
     alarmNote: alarming
       ? `${consecutive} consecutive index failures (threshold ${CONSECUTIVE_FAILURE_ALARM}). A weekend is two; a holiday weekend three. Four means www.sec.gov is refusing us, not that EDGAR published nothing.`
       : null,
@@ -452,5 +497,8 @@ export async function GET(req: NextRequest) {
     days,
     filingsBySymbol,
     manifestWritten: written,
+    rangeNote: inspectionOnly
+      ? "from/to was supplied, so this run is INSPECTION ONLY: nothing was written and the persisted watermark is untouched. Add &persist=1 to make a range walk durable."
+      : null,
   });
 }

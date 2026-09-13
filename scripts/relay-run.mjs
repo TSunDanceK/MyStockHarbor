@@ -110,6 +110,11 @@ const TASKS = {
   // filing. Absence from the ticker file is not proof of deregistration, and
   // retiring a symbol on a lookup miss would discard its filing history.
   "sec-symbol-status": { script: "scripts/sec-symbol-status.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only: measures what it COSTS to find out whether a filer's numbers
+  // changed -- conditional requests on companyfacts and submissions, both with
+  // negative controls, plus whether submissions' isXBRL flag can tell a
+  // quarter-carrying 6-K from a press release.
+  "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

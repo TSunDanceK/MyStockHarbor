@@ -155,6 +155,7 @@ jobs:
             ${{ steps.locate.outputs.dir }}/*.json
             data/sec/*.json
             sec-symbol-status.json
+            sec-reread-probe.json
           retention-days: 90
           if-no-files-found: warn
 
