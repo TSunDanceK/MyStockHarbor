@@ -48,6 +48,11 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Fetches SEC's ticker file on a runner, because the agent sandbox is refused
+  // www.sec.gov with 403 CONNECT. Read-only by name and by nature: it writes a
+  // file into the workspace, which the workflow uploads as an artifact, and
+  // touches no credential.
+  "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
