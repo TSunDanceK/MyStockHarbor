@@ -86,6 +86,32 @@ until step 6 refines it.
 
 Nothing else. No adapter, no provider interface changes, no store changes.
 
+**SHIPPED 2026-09-13 — items 1 and 2. ITEM 3 IS OUTSTANDING AND IS THE OWNER'S.**
+
+- **1 (done, and wider than stated).** Four render sites were hotlinking, not one:
+  the stock news page (lead + compact), the sector news page (lead + compact),
+  `/headlines`, and the dashboard news strip. All four are now guarded by the single
+  `SHOW_PUBLISHER_IMAGES` flag in `lib/news-image-policy.ts`, render code left intact.
+  Hiding only the stock page would have left three quarters of the exposure running.
+- **2 (done).** `lib/server/news/art.ts` selects the bucket and the image;
+  `app/components/GeneratedNewsArt.tsx` draws the generated data card as an inline
+  SVG. Bucket selection reads the cached per-symbol `industry` first and falls back to
+  sector, because the bucket taxonomy is finer than the site's eleven sectors —
+  "technology" alone cannot choose between semiconductors and software, and roughly
+  half the library is unreachable from sector alone. It costs no extra call: the
+  industry is already beside the sector in `fundamentalsCache`.
+- **3 (NOT done — the images are not in the repo and cannot be produced here).**
+  `public/news-art/` ships with an **empty `manifest.json`**, so every card currently
+  draws the generated data card and nothing 404s. Dropping the 89 `.webp` files in and
+  raising the counts (they are recorded ready-to-paste in `public/news-art/README.md`)
+  is the only remaining step, and it needs no code change.
+  `scripts/check-news-art.mjs` fails if a manifest count has no file behind it, which
+  is the failure mode that would otherwise reach a live page as a broken image.
+
+The sector news page, `/headlines` and the dashboard strip now render **no** image:
+the generated card needs a per-item price move and sparkline that those pages do not
+load. Wiring art there is a follow-up, not part of step 0.
+
 ## What this buys
 
 - The exposure stops this week instead of next month.

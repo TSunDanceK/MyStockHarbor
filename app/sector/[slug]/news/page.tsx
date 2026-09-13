@@ -28,6 +28,7 @@ import {
   NewsScoreWatermark,
 } from "@/app/components/WatermarkVisibility";
 import WhyThisMatters from "@/app/stock/[symbol]/news/WhyThisMatters";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 
 export const runtime = "nodejs";
 
@@ -558,7 +559,18 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                       : "3px solid rgba(255,255,255,0.08)",
                 }}
               >
-                {item.image ? (
+{/*
+                  HIDDEN, NOT DELETED. The site had no right to display these:
+                  FMP passed through other people's image URLs and were never the
+                  rights holder. lib/news-image-policy.ts carries the reasoning
+                  and is the single flag that turns them back on.
+
+                  No generated data card here: it needs the per-item price move
+                  and sparkline, which this page does not load. Step 0 of
+                  claude/news-adapter-spec-2026-09-13.md wires the art cascade on
+                  the stock news page only.
+                */}
+                {SHOW_PUBLISHER_IMAGES && item.image ? (
                   <div style={newsThumbWrapStyle}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
@@ -661,7 +673,8 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                   className="compactNewsRow"
                   style={compactNewsRowStyle}
                 >
-                  {item.image ? (
+                  {/* Hidden, not deleted — see the lead card above. */}
+                  {SHOW_PUBLISHER_IMAGES && item.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
                   ) : null}

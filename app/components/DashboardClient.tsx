@@ -11,6 +11,7 @@ import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -1162,7 +1163,13 @@ export default function DashboardClient({
               <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  {item.image ? (
+                  {/*
+                    HIDDEN, NOT DELETED — publisher thumbnails passed through by
+                    FMP, who were never the rights holder. See
+                    lib/news-image-policy.ts for the reasoning and the flag.
+                  */}
+                  {SHOW_PUBLISHER_IMAGES && item.image ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img src={item.image} alt="" loading="lazy" style={{ width: isMobile ? 52 : 104, height: isMobile ? 52 : 104, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
                   ) : null}
                   <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
