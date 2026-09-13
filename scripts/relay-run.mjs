@@ -64,6 +64,13 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only. Needs the dump for the universe: both the CIK map and the
+  // sicDescription comparison are scoped to the symbols the site covers.
+  "sec": {
+    script: "scripts/sec-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
