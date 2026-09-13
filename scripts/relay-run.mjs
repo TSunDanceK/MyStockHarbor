@@ -91,6 +91,10 @@ const TASKS = {
   // because "is it about MU" and "is it worth reading" are different questions
   // and only the first had ever been measured.
   "churn-sample": { script: "scripts/churn-sample.mjs", args: () => [] },
+  // Read-only: how long each free news adapter actually takes, cold, against
+  // the real hosts. Asked before choosing a per-adapter timeout budget, because
+  // the sandbox cannot reach any of the three and a guessed budget is a guess.
+  "news-timing": { script: "scripts/news-timing-probe.mjs", args: () => [] },
   // Read-only, NO NETWORK AT ALL: inventories the frozen dump already on the
   // runner. Asked before building the static-profile snapshot, because if the
   // dump carries the taxonomy the snapshot costs no FMP calls whatsoever.
