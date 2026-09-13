@@ -71,6 +71,10 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only. One poll of all three free news sources, digested to the raw
+  // inputs §7's cascade reads — no judgement made on the runner, so the
+  // measurement describes the shipped derivation and not a copy of it.
+  "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
