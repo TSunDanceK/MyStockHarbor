@@ -967,6 +967,46 @@ check("150 sequential reads fit the function budget",
   drain * 0.4 < 240, `~${Math.round(drain * 0.4)}s of round-trips inside 300s`);
 check("...and stay under SEC's 10 req/s", drain / (drain * 0.4) <= 10, `~${(1 / 0.4).toFixed(1)} req/s`);
 
+// ── 19. The manifest is read in exactly one place ──────────────────────────
+//
+// PRE-MERGE PROPERTY: 417 KB is free once a day and ruinous per visitor. This
+// asserts it stays that way rather than being true today by accident.
+console.log("\n19. Nothing on a render path touches the manifest");
+const readers = [];
+const walk = (dir) => {
+  for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`;
+    if (e.isDirectory()) { walk(rel); continue; }
+    if (!/\.(ts|tsx)$/.test(e.name)) continue;
+    if (rel === "lib/server/secManifest.ts") continue;
+    const src = readCodeOnly(rel);
+    if (/readManifest|writeManifest|SEC_MANIFEST_KEY|secRereadQueue/.test(src)) readers.push(rel);
+  }
+};
+walk("app"); walk("lib");
+check("only job routes touch the manifest", readers.every((r) => r.startsWith("app/api/jobs/")),
+  readers.join(", ") || "none");
+check("...and it is exactly one file today", readers.length === 1, readers.join(", "));
+check("no .tsx file references it at all", !readers.some((r) => r.endsWith(".tsx")),
+  "a page importing it would pull 417 KB into a render");
+check("the manifest module is not imported by any page or component",
+  !readers.some((r) => r.startsWith("app/") && !r.startsWith("app/api/")));
+
+// ── 20. The cold path cannot eat the universe's budget ─────────────────────
+console.log("\n20. Separate budgets, universe guaranteed");
+check("the off-universe cold fetch has its OWN constant",
+  /SEC_COLD_FETCH_DRAIN_PER_RUN/.test(MANIFEST_SRC));
+check("...distinct from the universe drain",
+  !/SEC_COLD_FETCH_DRAIN_PER_RUN = SEC_REREAD_DRAIN_PER_RUN/.test(readCodeOnly("lib/server/secManifest.ts")),
+  "one allowance would let a cold burst starve the earnings-season refresh");
+check("...and smaller, so a cold burst starves itself first",
+  (() => { const m = readCodeOnly("lib/server/secManifest.ts").match(/SEC_COLD_FETCH_DRAIN_PER_RUN = (\d+)/); return m && Number(m[1]) < 150; })());
+check("the priority inversion is named where the constant is",
+  /priority inversion/.test(MANIFEST_SRC) && /nobody asked for/.test(MANIFEST_SRC));
+check("the ADR overlap is recorded as UNRESOLVED, not assumed",
+  /does NOT establish that FPI interim results appear/.test(MANIFEST_SRC) && /OVER-estimate/.test(MANIFEST_SRC),
+  "and the direction of the error is named, which is what makes it safe to leave open");
+
 console.log(
   failures === 0
     ? "\nThe change detector reproduces the measured window.\n"

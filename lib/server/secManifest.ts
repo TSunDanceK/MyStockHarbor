@@ -849,6 +849,24 @@ export const SEC_REREAD_BACKGROUND_PER_DAY = 32;
  *
  * A symbol filing both a 10-Q and its Item 2.02 8-K enqueues ONCE -- the queue
  * is per symbol -- so reporters and their earnings 8-Ks do not double-count.
+ *
+ * THE BACKGROUND TERM IS NOT CONSTANT, AND THE OVERLAP IS UNRESOLVED. 32/day was
+ * measured in mid-September. FPIs file interim results on 6-Ks in the same
+ * season as everyone else, so the background co-peaks with the reporter count
+ * rather than sitting flat underneath it.
+ *
+ * Whether that co-peak is ALREADY inside the 66 depends on whether the calendar
+ * EARNINGS_PEAK_DAY_SHARE was measured from carries ADRs. Its recorded
+ * provenance (earningsPlan.ts: FMP's calendar, 2026-01 and 2026-02, 7,559
+ * distinct symbols, busiest day 710) shows a population far broader than US
+ * common stock -- but it does NOT establish that FPI interim results appear in
+ * it, so this is stated as unresolved rather than assumed either way.
+ *
+ * The sum is therefore an OVER-estimate if the populations overlap and correct
+ * if they do not. That is the safe direction: over-estimating inflow makes the
+ * drain larger than it needs to be, which costs round-trips rather than
+ * freshness. Resolving it needs the calendar checked for a known ADR reporter --
+ * worth doing before anyone LOWERS this number, and irrelevant to raising it.
  */
 export const SEC_REREAD_PEAK_INFLOW =
   Math.ceil(ANALYSIS_UNIVERSE_CAP * EARNINGS_PEAK_DAY_SHARE) + SEC_REREAD_BACKGROUND_PER_DAY;
@@ -882,6 +900,30 @@ export const SEC_REREAD_PEAK_INFLOW =
  * figures as an order of magnitude and re-measure in situ before raising this.
  */
 export const SEC_REREAD_DRAIN_PER_RUN = Math.max(150, Math.ceil(SEC_REREAD_PEAK_INFLOW * 1.5));
+
+/**
+ * The OFF-UNIVERSE cold-fetch budget, and it is deliberately a different number.
+ *
+ * THESE TWO MUST NEVER SHARE A BUDGET. Earnings pages are not limited to the
+ * universe -- an off-universe symbol is fetched on request (build brief §4's
+ * cold path) -- so if both drained from one allowance a burst of cold requests
+ * would compete with the universe's earnings-season refresh, and the symbols
+ * with actual traffic would lose to symbols nobody asked for. That is a
+ * priority inversion with no feedback loop: the cold requests are unbounded and
+ * attacker-influenceable, the refresh is the product working.
+ *
+ * So the universe's SEC_REREAD_DRAIN_PER_RUN is GUARANTEED -- the cold path
+ * cannot consume any part of it -- and cold fetches get their own smaller,
+ * separately exhaustible allowance. A cold burst starves itself and nothing
+ * else.
+ *
+ * NOTHING CONSUMES THIS YET. Step 3 builds the drain and step 8 the lazy path;
+ * the constant exists now so that when they land the separation is already the
+ * default rather than a refactor nobody remembers to do. Per-IP capping of cold
+ * ENQUEUES (not requests -- a request cap 403'd a real user on /insights/videos,
+ * see firewall-asn-audit) is step 8's, and this budget is the backstop behind it.
+ */
+export const SEC_COLD_FETCH_DRAIN_PER_RUN = 25;
 
 /** Re-read one document at a time. See the heap figures above. */
 export const SEC_REREAD_CONCURRENCY = 1;
