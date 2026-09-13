@@ -168,6 +168,14 @@ raw per-hour counts are reported alongside.
 
 ### The datasets ZIP is range-read, never downloaded
 
+**`parseCentralDirectory` is truncation-safe**, which it was not at first. It
+bounded its extra-field walk by a length read out of the record and never by the
+buffer, so the deliberately truncated 64 KB sample 6d feeds it walked off the end
+(`RangeError: offset out of range, <= 65534, received 65542`). Both bulk archives
+crashed there — which was also the proof that both URLs were right and real bytes
+had come back. It now stops cleanly at a partial record and reports `complete`,
+so "missing" reads as "not read" rather than "not in the archive".
+
 `num.tsv` inflates to gigabytes; buffering it in a function is an OOM crash, and
 a crash reports nothing. Instead the last 64 KB is fetched, the ZIP central
 directory is parsed out of it, and every entry's exact compressed range and
@@ -191,9 +199,25 @@ NOT MEASURED, not absent** — the verdict string says so itself rather than
 leaving the reader to notice.
 
 The month is **derived from the target's own filing dates** via section 2, not
-guessed: a "recent" archive that predates or postdates ARM's filing contains no
-ARM rows at all, and that emptiness would read as "the axes are not recoverable"
-when it only means the wrong month was opened. Override with `&month=YYYY_MM`.
+guessed: an archive that predates or postdates the target's filing contains no
+rows for it at all, and that emptiness would read as "the axes are not
+recoverable" when it only means the wrong month was opened. Override with
+`&month=YYYY_MM`.
+
+**The filename is discovered, not constructed.** `2026_05_notes.zip` was built
+from a convention and `HEAD` returned `404` — and a `404` on a constructed URL
+says only *the pattern is wrong*, nothing about the month, the archive, or SEC.
+Stage `0_discovery` fetches SEC's own index pages, extracts every `.zip` href and
+reports the real filenames verbatim; the wanted month is matched against those.
+When nothing matches, the output carries the months that **do** exist, which is
+the answer a second guess would not give.
+
+**The default target is `AAPL`, not ARM.** The 2026-09-13 run returned ARM's
+forms as `["20-F","6-K"]` with zero 8-Ks — a foreign private issuer, whose
+segment disclosures sit differently from the 10-K filers these datasets are
+built around. A target with no 10-K now raises
+`foreignPrivateIssuerWarning`, so an empty result reads as *wrong filer type*
+rather than *the axes are not recoverable*. Override with `&datasetSymbol=`.
 
 Column positions are read from each file's header row, never hardcoded — SEC has
 added columns between releases, and a fixed index silently reads the neighbouring
@@ -238,9 +262,29 @@ inconsistent CDN edge, which two symbols already catches.
 `iad1`, so reachability is the question. Three outcomes, kept separate:
 
 - `parsed` — the file was read.
-- `absentNoIndex` — **`404`, which is correct on a market holiday.** Not a
-  failure. Collapsing this into failures would invent an outage.
-- `failed` — anything else. Only this means `www.sec.gov` refused.
+- `absentNoIndex` — **EDGAR published no index that day** (a market holiday or
+  weekend). Not a failure.
+- `failed` — only this means `www.sec.gov` refused.
+
+**SEC answers `403`, not `404`, for a daily index that does not exist.** Measured
+2026-09-13: 20260907 (US Labor Day) returned `403` with a 243-byte body. The
+first version keyed the absent bucket off `404`, so it never fired and every
+public holiday read as an outage.
+
+A `403` **cannot be classified from its own response** — the same status means
+"nothing published that day" and "you are blocked". So it is left provisional
+per-day and settled across the whole window:
+
+| Window | Verdict |
+|---|---|
+| some days parsed, one 403 | `noPublication` → `absentNoIndex` |
+| every day 403, none parsed | `blocked` → `failed` |
+
+The discriminator is the **spread**, not anything in the individual response;
+body size (a real index is megabytes, a refusal a few hundred bytes)
+corroborates but does not decide, and a large-bodied `403` stays `failed`.
+`refusalClassification.rule` states which applied — read it before trusting
+either bucket.
 
 The quarter in the URL is **derived, not hardcoded**. The brief's example says
 `QTR3`, which is right only for Jul–Sep; a 30-day window run in early October
@@ -256,6 +300,10 @@ the evidence that `/A` can only live inside the Form Type. If
 not the market** — read `topFormTypes` before building a detector.
 
 **6d — bulk vs per-symbol.** `HEAD` plus a range-read of the ZIP index only.
+`zipFormat` reports whether a **classic** 22-byte EOCD or a **ZIP64** record was
+found — an archive of ~800k filers cannot be a classic ZIP (entry count caps at
+65535, offsets at 4 GB), and reading one as the other gives a silently wrong
+`entryCount`.
 The archives are gigabyte-scale and are **never downloaded**: `entryCount` — the
 number that decides one-download-vs-700-requests — lives in the 22-byte
 end-of-central-directory record at the very end of the file. The central

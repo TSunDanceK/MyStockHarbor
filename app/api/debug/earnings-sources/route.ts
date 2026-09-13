@@ -808,10 +808,36 @@ async function rangeFetch(url: string, start: number, end: number, timeoutMs: nu
   }
 }
 
-function parseCentralDirectory(cd: Buffer): ZipEntry[] {
+type CdParse = { entries: ZipEntry[]; complete: boolean; bytesConsumed: number };
+
+// BOUNDS-SAFE AGAINST A TRUNCATED BUFFER, and that is the fix for a real crash
+// rather than defensive padding.
+//
+// Section 3 hands this a COMPLETE central directory. Section 6d deliberately
+// hands it a 64 KB SAMPLE of a central directory that is tens of MB long, so
+// its final record is cut in half by construction. The first version bounded
+// the extra-field walk by `extraStart + extraLen` -- a length read out of the
+// record itself -- and never against `cd.length`, so on the truncated sample it
+// walked straight off the end:
+//
+//   RangeError: The value of "offset" is out of range.
+//               It must be >= 0 and <= 65534. Received 65542
+//
+// Reproduced locally against a 901-entry archive sliced at 65536 bytes: the
+// complete directory parses all 901, the truncated one throws. Both bulk
+// archives crashed here, which is also the proof that both URLs were RIGHT and
+// that real bytes came back -- the crash happened after a successful fetch.
+//
+// Every read is now guarded, and a record that does not fit ENDS the parse
+// cleanly instead of throwing. `complete` says whether the buffer ran out, so a
+// caller can tell "this archive has 8 entries" from "I only looked at the first
+// 8 of them".
+function parseCentralDirectory(cd: Buffer): CdParse {
   const entries: ZipEntry[] = [];
   let p = 0;
-  while (p + 46 <= cd.length && readU32(cd, p) === 0x02014b50) {
+  const fits = (offset: number, width: number) => offset >= 0 && offset + width <= cd.length;
+
+  while (fits(p, 46) && readU32(cd, p) === 0x02014b50) {
     const method = readU16(cd, p + 10);
     let compressedSize = readU32(cd, p + 20);
     let uncompressedSize = readU32(cd, p + 24);
@@ -819,6 +845,12 @@ function parseCentralDirectory(cd: Buffer): ZipEntry[] {
     const extraLen = readU16(cd, p + 30);
     const commentLen = readU16(cd, p + 32);
     let localHeaderOffset = readU32(cd, p + 42);
+
+    // The whole record -- name, extra and comment -- must be present before any
+    // of it is trusted. A half-read name is a wrong name, not a short one.
+    const recordEnd = p + 46 + nameLen + extraLen + commentLen;
+    if (recordEnd > cd.length) break;
+
     const name = cd.toString("utf8", p + 46, p + 46 + nameLen);
 
     // ZIP64 extra field. Present fields appear IN ORDER and only for the ones
@@ -826,32 +858,36 @@ function parseCentralDirectory(cd: Buffer): ZipEntry[] {
     // -- reading them at fixed offsets gets the wrong number whenever only some
     // of them overflowed.
     const extraStart = p + 46 + nameLen;
+    const extraEnd = Math.min(extraStart + extraLen, cd.length);
     let e = extraStart;
-    while (e + 4 <= extraStart + extraLen) {
+    while (e + 4 <= extraEnd) {
       const headerId = readU16(cd, e);
       const dataSize = readU16(cd, e + 2);
       if (headerId === 0x0001) {
         let q = e + 4;
-        if (uncompressedSize === 0xffffffff) {
+        if (uncompressedSize === 0xffffffff && fits(q, 8)) {
           uncompressedSize = readU64(cd, q);
           q += 8;
         }
-        if (compressedSize === 0xffffffff) {
+        if (compressedSize === 0xffffffff && fits(q, 8)) {
           compressedSize = readU64(cd, q);
           q += 8;
         }
-        if (localHeaderOffset === 0xffffffff) {
+        if (localHeaderOffset === 0xffffffff && fits(q, 8)) {
           localHeaderOffset = readU64(cd, q);
           q += 8;
         }
       }
+      // A zero dataSize would spin forever on a corrupt record.
+      if (dataSize <= 0) break;
       e += 4 + dataSize;
     }
 
     entries.push({ name, method, compressedSize, uncompressedSize, localHeaderOffset });
-    p = extraStart + extraLen + commentLen;
+    p = recordEnd;
   }
-  return entries;
+
+  return { entries, complete: !fits(p, 46) || readU32(cd, p) !== 0x02014b50, bytesConsumed: p };
 }
 
 // Stream ONE zip entry, inflate it, and hand each line to a callback. Returns
@@ -990,6 +1026,47 @@ function tsvIndexer(headerLine: string) {
 
 const DATASET_BASE = "https://www.sec.gov/files/dera/data/financial-statement-and-notes-data-sets";
 
+// THE FILENAME IS DISCOVERED, NOT CONSTRUCTED, and the 404 that prompted this is
+// the reason. `2026_05_notes.zip` was built from a convention, HEAD returned 404,
+// and a 404 on a constructed URL says only "the pattern is wrong" -- it is not
+// evidence about the month, the archive, or SEC. SEC has moved these paths
+// before, so guessing harder is not the fix.
+//
+// These index pages are probed, every .zip href is extracted, and the real
+// filenames are reported verbatim. If nothing matches the wanted month the
+// output carries the list of months that DO exist, which answers the question a
+// second guess would not.
+const DATASET_INDEX_CANDIDATES = [
+  "https://www.sec.gov/dera/data/financial-statement-and-notes-data-set.html",
+  "https://www.sec.gov/files/dera/data/financial-statement-and-notes-data-sets/",
+  "https://www.sec.gov/data-research/sec-markets-data/financial-statement-notes-data-sets",
+];
+
+async function discoverDatasetUrls(ua: string) {
+  const pages: Record<string, unknown>[] = [];
+  const found = new Map<string, string>();
+
+  for (const index of DATASET_INDEX_CANDIDATES) {
+    try {
+      const r = await timedFetch(index, 30000, {
+        "user-agent": ua,
+        "accept-encoding": "gzip, deflate",
+        accept: "text/html,*/*",
+      });
+      const hrefs = [...r.body.matchAll(/href\s*=\s*["']([^"']+\.zip)["']/gi)].map((m) => m[1]);
+      for (const href of hrefs) {
+        const abs = href.startsWith("http") ? href : new URL(href, index).toString();
+        found.set(abs.split("/").pop() ?? abs, abs);
+      }
+      pages.push({ index, status: r.status, bytes: r.bytes, ms: r.ms, zipHrefs: hrefs.length });
+    } catch (err) {
+      pages.push({ index, error: describeError(err, 30000) });
+    }
+  }
+
+  return { pages, filenames: [...found.keys()].sort(), byName: found };
+}
+
 const REVENUE_TAGS = new Set(
   [
     "Revenues",
@@ -999,9 +1076,27 @@ const REVENUE_TAGS = new Set(
 );
 
 async function probeDataSets(month: string, targetSymbol: string, targetCik: string, overallDeadline: number, ua: string) {
-  const url = `${DATASET_BASE}/${month}_notes.zip`;
   const stages: Record<string, unknown> = {};
   const cikNumeric = String(Number(targetCik));
+
+  // --- Stage 0: find the real filename -------------------------------------
+  const discovery = await discoverDatasetUrls(ua);
+  const monthToken = month.replace("-", "_");
+  const matched = discovery.filenames.find((f) => f.includes(monthToken));
+  const constructed = `${DATASET_BASE}/${month}_notes.zip`;
+  const url = matched ? (discovery.byName.get(matched) as string) : constructed;
+
+  stages["0_discovery"] = {
+    indexPagesProbed: discovery.pages,
+    distinctZipFilenamesFound: discovery.filenames.length,
+    // Verbatim, and capped only for readability -- the point is to see SEC's
+    // ACTUAL naming convention rather than the one assumed.
+    filenamesSample: discovery.filenames.slice(0, 40),
+    wantedMonthToken: monthToken,
+    matchedFilename: matched ?? null,
+    urlSource: matched ? "discovered from SEC's own index page" : "CONSTRUCTED fallback -- discovery found no filename containing the month token, so a 404 below says nothing about the archive",
+    urlUsed: url,
+  };
 
   // --- Stage A: does it exist and how big is it -----------------------------
   try {
@@ -1083,11 +1178,15 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     }
 
     const cd = await rangeFetch(url, cdOffset, cdOffset + cdSize - 1, 45000, ua);
-    entries = parseCentralDirectory(cd.buf);
+    const parsedCd = parseCentralDirectory(cd.buf);
+    entries = parsedCd.entries;
     stages.B_centralDirectory = {
       zip64,
       declaredEntries: entryCount,
       parsedEntries: entries.length,
+      // A mismatch against declaredEntries means the directory was cut short,
+      // so a missing entry below is "not read" rather than "not in the archive".
+      centralDirectoryFullyParsed: parsedCd.complete,
       centralDirectoryBytes: cdSize,
       bytesFetchedSoFar: tailLen + cd.buf.length,
       entries: entries.map((e) => ({
@@ -1791,7 +1890,12 @@ function idxUrl(d: Date) {
 type IdxDay = {
   date: string;
   url: string;
-  outcome: "parsed" | "absent" | "failed";
+  // "refused" is PROVISIONAL. A 403 alone cannot say whether EDGAR published
+  // nothing that day or whether we are blocked, so the outcome is settled by
+  // probeDailyIndex once the whole window is in -- see classifyRefusals.
+  outcome: "parsed" | "absent" | "failed" | "refused";
+  refusalBodyBytes?: number;
+  refusalBodyHead?: string;
   status?: number;
   ms?: number;
   bytes?: number;
@@ -1823,8 +1927,28 @@ async function fetchOneIdx(
       accept: "text/plain,*/*",
     });
     if (r.status === 404) {
-      // EXPECTED on a market holiday. Not a failure, and counted separately.
+      // EXPECTED on a day with no publication. Not a failure.
       return { date, url, outcome: "absent", status: 404, ms: r.ms, bytes: r.bytes };
+    }
+    if (r.status === 403) {
+      // MEASURED 2026-09-13: SEC serves 403 -- not 404 -- for a daily index
+      // that does not exist. 20260907 (US Labor Day) came back 403 with a
+      // 243-byte body and landed in `failures`, i.e. the bucket that means
+      // www.sec.gov refused us, so every public holiday read as an outage.
+      //
+      // A 403 cannot be classified from the single response: the SAME status
+      // means "nothing published that day" and "you are blocked". It is left
+      // provisional here and settled across the window by classifyRefusals.
+      return {
+        date,
+        url,
+        outcome: "refused",
+        status: 403,
+        ms: r.ms,
+        bytes: r.bytes,
+        refusalBodyBytes: r.bytes,
+        refusalBodyHead: r.body.slice(0, 200).replace(/\s+/g, " ").trim(),
+      };
     }
     if (r.status !== 200) {
       return { date, url, outcome: "failed", status: r.status, ms: r.ms, bytes: r.bytes, reason: `HTTP ${r.status}` };
@@ -1885,6 +2009,42 @@ async function fetchOneIdx(
   }
 }
 
+// A 403 on ONE day among many that parsed is a day with no EDGAR publication.
+// A 403 on EVERY day is a block. The discriminator is the SPREAD across the
+// window, not anything in the individual response -- which is why this cannot
+// live in fetchOneIdx, and why the first version got Labor Day wrong.
+//
+// The body size corroborates it: a real index is megabytes, a refusal page is a
+// few hundred bytes. Both signals are reported so the call is checkable rather
+// than taken on trust, and neither is collapsed into the other.
+const REFUSAL_BODY_MAX = 4096;
+
+function classifyRefusals(results: IdxDay[]) {
+  const refused = results.filter((r) => r.outcome === "refused");
+  const parsedCount = results.filter((r) => r.outcome === "parsed").length;
+  if (!refused.length) return { refused, reclassified: "none" as const, rule: "no 403 responses in this window" };
+
+  const allSmall = refused.every((r) => (r.refusalBodyBytes ?? 0) <= REFUSAL_BODY_MAX);
+
+  if (parsedCount === 0) {
+    for (const r of refused) r.outcome = "failed";
+    return {
+      refused,
+      reclassified: "blocked" as const,
+      rule: `every day in the window returned 403 and none parsed -- this is a BLOCK on www.sec.gov, not a run of holidays`,
+    };
+  }
+
+  for (const r of refused) r.outcome = (r.refusalBodyBytes ?? 0) <= REFUSAL_BODY_MAX ? "absent" : "failed";
+  return {
+    refused,
+    reclassified: "noPublication" as const,
+    rule:
+      `${parsedCount} day(s) in the same window parsed normally, so www.sec.gov is answering; a 403 on a single date is EDGAR having published no index that day ` +
+      `(a US market holiday or weekend). Bodies ${allSmall ? "all were" : "were NOT all"} under ${REFUSAL_BODY_MAX} bytes, which is the corroborating signal.`,
+  };
+}
+
 async function probeDailyIndex(
   days: number,
   detailDays: number,
@@ -1909,6 +2069,9 @@ async function probeDailyIndex(
       ...(await Promise.all(batch.map((d, k) => fetchOneIdx(d, targetCiks, i + k < detailDays, ua))))
     );
   }
+
+  // Settle the provisional 403s before anything is counted.
+  const refusalClassification = classifyRefusals(results);
 
   const parsed = results.filter((r) => r.outcome === "parsed");
   const absent = results.filter((r) => r.outcome === "absent");
@@ -1939,6 +2102,19 @@ async function probeDailyIndex(
           : "no files parsed and no failures -- every requested day was absent (404); widen the window",
     daysRequested: days,
     counts: { parsed: parsed.length, absentNoIndex: absent.length, failed: failed.length },
+    // SEC answers 403 for a daily index that does not exist, so this is how a
+    // holiday is told apart from a block. Read `rule` before trusting either.
+    refusalClassification: {
+      responsesWith403: refusalClassification.refused.length,
+      verdict: refusalClassification.reclassified,
+      rule: refusalClassification.rule,
+      dates: refusalClassification.refused.map((r) => ({
+        date: r.date,
+        bodyBytes: r.refusalBodyBytes,
+        bodyHead: r.refusalBodyHead,
+        classifiedAs: r.outcome,
+      })),
+    },
     absentDates: absent.map((d) => d.date),
     failures: failed.map((d) => ({ date: d.date, status: d.status, reason: d.reason })),
     truncated,
@@ -2026,19 +2202,30 @@ async function probeBulkArchive(name: string, url: string, ua: string) {
       return { ...base, ok: true, rangeSupported: false, note: `server answered ${tail.status} to a Range request; a cold start would have to download all ${base.sizeMB} MB` };
     }
 
+    // Starts at length-22 so the 4-byte read always fits; Math.min guards a
+    // tail shorter than one EOCD record.
     let eocd = -1;
-    for (let i = tail.buf.length - 22; i >= 0; i--) {
+    for (let i = Math.min(tail.buf.length - 22, tail.buf.length - 4); i >= 0; i--) {
       if (readU32(tail.buf, i) === 0x06054b50) {
         eocd = i;
         break;
       }
     }
-    if (eocd === -1) return { ...base, ok: true, rangeSupported: true, note: "no EOCD signature in the tail -- not a plain ZIP, or a comment longer than 64 KB" };
+    if (eocd === -1) {
+      return {
+        ...base,
+        ok: true,
+        rangeSupported: true,
+        zipFormat: "unrecognised" as const,
+        note: "no EOCD signature in the tail -- not a plain ZIP, or a comment longer than 64 KB",
+      };
+    }
 
     let entryCount = readU16(tail.buf, eocd + 10);
     let cdSize = readU32(tail.buf, eocd + 12);
     let cdOffset = readU32(tail.buf, eocd + 16);
     let zip64 = false;
+    let zip64LocatorFound = false;
     if (entryCount === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
       zip64 = true;
       let loc = -1;
@@ -2048,6 +2235,7 @@ async function probeBulkArchive(name: string, url: string, ua: string) {
           break;
         }
       }
+      zip64LocatorFound = loc !== -1;
       if (loc !== -1) {
         const z64Offset = readU64(tail.buf, loc + 8);
         const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, timeoutMs, ua);
@@ -2062,17 +2250,26 @@ async function probeBulkArchive(name: string, url: string, ua: string) {
     // A 64 KB sample of the central directory, not the whole thing.
     const sampleLen = Math.min(65536, cdSize);
     const cdSample = await rangeFetch(url, cdOffset, cdOffset + sampleLen - 1, timeoutMs, ua);
-    const sampleEntries = parseCentralDirectory(cdSample.buf);
+    const sampled = parseCentralDirectory(cdSample.buf);
 
     return {
       ...base,
       ok: true,
       rangeSupported: true,
+      // WHICH FORMAT WAS ACTUALLY FOUND. The classic 22-byte EOCD caps entry
+      // count at 65535 and offsets at 4 GB; past either, the real numbers live
+      // in a ZIP64 record that a ZIP64 locator points at. Reported because an
+      // archive of ~800k filers cannot be a classic ZIP and reading it as one
+      // would silently give a wrong entryCount.
+      zipFormat: zip64 ? ("zip64" as const) : ("classic" as const),
+      zip64LocatorFound: zip64 ? zip64LocatorFound : null,
       zip64,
       entryCount,
       centralDirectoryBytes: cdSize,
       centralDirectoryMB: +(cdSize / 1048576).toFixed(1),
-      sampleEntryNames: sampleEntries.slice(0, 8).map((e) => e.name),
+      sampleEntryNames: sampled.entries.slice(0, 8).map((e) => e.name),
+      sampleEntriesParsed: sampled.entries.length,
+      sampleIsTruncated: sampleLen < cdSize,
       bytesActuallyFetched: tailLen + cdSample.buf.length,
       note: `entry count and sizes read from the archive index; ${base.sizeMB} MB was NOT downloaded`,
     };
@@ -2227,9 +2424,19 @@ export async function GET(request: Request) {
     // ARM rows, and an empty result would then read as "the axes are not
     // recoverable" when it only means the wrong month was opened. Overridable
     // with &month=YYYY_MM.
-    const target = params.get("datasetSymbol")?.toUpperCase() || "ARM";
+    // DEFAULT AAPL, NOT ARM. The 2026-09-13 run returned ARM's forms as
+    // ["20-F","6-K"] with zero 8-Ks: it is a foreign private issuer, and its
+    // segment disclosures sit differently from the 10-K filers these datasets
+    // are built around. Targeting it tested the wrong kind of filer. Override
+    // with &datasetSymbol=.
+    const target = params.get("datasetSymbol")?.toUpperCase() || "AAPL";
     const filings = submissionsBySymbol[target] ?? [];
     const annual = filings.find((f) => /^(10-K|20-F)/.test(f.form)) ?? filings[0];
+    // A target whose forms carry no 10-K is a foreign private issuer. Flagged
+    // rather than silently probed, since an empty result for such a filer would
+    // read as "the axes are not recoverable" when it means "wrong filer type".
+    const forms = [...new Set(filings.map((f) => f.form))];
+    const isForeignPrivateIssuer = forms.length > 0 && !forms.some((f) => f.startsWith("10-K"));
     const derived = annual?.filingDate ? annual.filingDate.slice(0, 7).replace("-", "_") : null;
     const month = params.get("month") || derived;
 
@@ -2243,6 +2450,11 @@ export async function GET(request: Request) {
       out.dataSets = { ok: false, reason: `no CIK resolved for ${target}`, target };
     } else {
       out.dataSets = {
+        target,
+        targetForms: forms,
+        foreignPrivateIssuerWarning: isForeignPrivateIssuer
+          ? `${target} files ${forms.join("/")} and no 10-K -- it is a foreign private issuer. These datasets are built around 10-K filers, so an empty result here means WRONG FILER TYPE, not "the axes are not recoverable". Re-run with &datasetSymbol=AAPL or MU.`
+          : null,
         monthDerivedFrom: params.get("month")
           ? "explicit &month= parameter"
           : `${target}'s ${annual?.form} filed ${annual?.filingDate}`,
