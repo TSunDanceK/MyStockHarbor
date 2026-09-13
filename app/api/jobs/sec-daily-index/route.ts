@@ -3,6 +3,8 @@ import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import {
   readManifest,
+  secRereadQueue,
+  SEC_REREAD_DRAIN_PER_RUN,
   writeManifest,
   seedManifest,
   symbolsByCik,
@@ -18,6 +20,7 @@ import {
   fetchDailyIndex,
   intersect,
   isPeriodicForm,
+  isRereadOnlyForm,
   isWeekend,
   latestProcessableDate,
   type SymbolFiling,
@@ -132,7 +135,21 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
       // moved, which 3.8 requires be attributable rather than merely detected.
       entry.lastAmendment = { accession: f.accession, form: f.form, filed: f.filed };
       entry.needsReverify = true;
+      entry.enqueuedAt ??= Date.now();
       entry.reverifyReason = "amendment";
+    }
+
+    // 8-K ENQUEUES A RE-READ BUT IS NOT A PERIOD REPORT. §3.8's Item 4.02 --
+    // a non-reliance determination, i.e. "our previous numbers were wrong" --
+    // arrives on an 8-K, so it must trigger a re-read. It must NOT set
+    // lastAccession: an 8-K is a material-event notice, not the quarter, and
+    // recording it as the latest periodic filing would make the manifest claim
+    // a report that does not exist.
+    if (isRereadOnlyForm(f.form)) {
+      entry.needsReverify = true;
+      entry.enqueuedAt ??= Date.now();
+      if (!entry.reverifyReason) entry.reverifyReason = "unconfirmed";
+      continue;
     }
 
     if (!isPeriodicForm(f.form)) continue;
@@ -152,6 +169,7 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
       entry.lastFiled = newest.filed;
     }
     entry.needsReverify = true;
+    entry.enqueuedAt ??= Date.now();
     // A 10-Q/10-K/20-F is a report; a 6-K is a catch-all that is USUALLY not
     // one. Both set needsReverify -- the 6-K genuinely might carry ARM's
     // quarter -- but only the first is worth a full companyfacts payload
@@ -378,6 +396,9 @@ export async function GET(req: NextRequest) {
     absenceImplausible,
     watermark: manifest.lastIndexDate,
     symbolsWithFilings: Object.keys(filingsBySymbol).length,
+    // The re-read queue, read straight off the manifest -- no extra Redis.
+    rereadQueued: Object.values(manifest.symbols).filter((e) => e.needsReverify && e.cik).length,
+    rereadDrainPerRun: SEC_REREAD_DRAIN_PER_RUN,
     universe: seed.symbols,
     withCik: seed.withCik,
     tickerMapSource: tickers.source,
@@ -496,6 +517,9 @@ export async function GET(req: NextRequest) {
     symbolsWithoutCik: seed.withoutCik.slice(0, 20),
     days,
     filingsBySymbol,
+    // What step 3 would take next, in order: amendments first, then real
+    // reports, then the 6-K/8-K events that probably carry nothing.
+    rereadQueueHead: secRereadQueue(manifest, 25),
     manifestWritten: written,
     rangeNote: inspectionOnly
       ? "from/to was supplied, so this run is INSPECTION ONLY: nothing was written and the persisted watermark is untouched. Add &persist=1 to make a range walk durable."

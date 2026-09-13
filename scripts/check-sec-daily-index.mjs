@@ -55,9 +55,9 @@ const man = await lift(
    grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
    grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
-   grabFunction(MANIFEST_SRC, "exchangeHistogram")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram };",
-  "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;"
+   grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
+  "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
 );
 
 const tick = await lift(
@@ -71,7 +71,8 @@ const tick = await lift(
 
 const route = await lift(
   grabFunction(ROUTE_SRC, "applyFilings") + "\nexport { applyFilings };",
-  `const isPeriodicForm = (f) => ["10-Q","10-K","20-F","6-K"].includes(String(f).trim().toUpperCase().replace(/\\/A$/, ""));`
+  `const isPeriodicForm = (f) => ["10-Q","10-K","20-F","6-K"].includes(String(f).trim().toUpperCase().replace(/\\/A$/, ""));
+   const isRereadOnlyForm = (f) => ["8-K"].includes(String(f).trim().toUpperCase().replace(/\\/A$/, ""));`
 );
 
 // ── 1. The quarter is derived ───────────────────────────────────────────────
@@ -859,6 +860,53 @@ check("a 10-K is a periodic-report, worth a full read", six.symbols.INTU.reverif
 check("an amendment outranks both", six.symbols.MU.reverifyReason === "amendment");
 check("the form set is unchanged — 6-K and 20-F are still periodic",
   idx.isPeriodicForm("6-K") && idx.isPeriodicForm("20-F"));
+
+// ── 16. 8-K enqueues a re-read but is not a period report ──────────────────
+console.log("\n16. 8-K, and the re-read queue");
+const q = man.emptyManifest();
+man.seedManifest(q, ["ARM", "INTU", "MU", "KO", "PG"], new Map([
+  ["ARM", { cik: "0001973239", exchange: "Nasdaq" }],
+  ["INTU", { cik: "0000896878", exchange: "Nasdaq" }],
+  ["MU", { cik: "0000723125", exchange: "Nasdaq" }],
+  ["KO", { cik: "0000021344", exchange: "NYSE" }],
+  ["PG", { cik: "0000080424", exchange: "NYSE" }],
+]), true);
+route.applyFilings(q, [
+  { symbol: "KO", form: "8-K", filed: "20260911", accession: "0000021344-26-000044", amendment: false },
+  { symbol: "ARM", form: "6-K", filed: "20260911", accession: "0001973239-26-000012", amendment: false },
+  { symbol: "INTU", form: "10-K", filed: "20260911", accession: "0000896878-26-000030", amendment: false },
+  { symbol: "MU", form: "10-Q/A", filed: "20260911", accession: "0000723125-26-000050", amendment: true },
+]);
+check("an 8-K enqueues a re-read", q.symbols.KO.needsReverify === true && q.symbols.KO.reverifyReason === "unconfirmed");
+check("...but does NOT become lastAccession — it is not the quarter",
+  q.symbols.KO.lastAccession === null && q.symbols.KO.lastFiled === null,
+  "Item 4.02 arrives on an 8-K, so it must trigger a read; recording it as the latest periodic filing would claim a report that does not exist");
+check("a symbol with no filing is not enqueued", q.symbols.PG.needsReverify === false);
+check("everything enqueued carries a timestamp",
+  [q.symbols.KO, q.symbols.ARM, q.symbols.INTU, q.symbols.MU].every((e) => typeof e.enqueuedAt === "number"));
+
+const queue = man.secRereadQueue(q);
+check("the queue orders amendment -> report -> unconfirmed",
+  queue.map((x) => x.symbol).slice(0, 2).join(",") === "MU,INTU",
+  queue.map((x) => `${x.symbol}:${x.reason}`).join(" "));
+check("...with the 6-K and 8-K last", queue.slice(2).every((x) => x.reason === "unconfirmed"));
+check("the queue is capped", man.secRereadQueue(q, 2).length === 2);
+check("a symbol with no CIK is never queued — there is nothing to fetch",
+  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["ZZ"], new Map(), true);
+    m.symbols.ZZ.needsReverify = true; return man.secRereadQueue(m).length === 0; })());
+check("the queue needs NO extra Redis — it is read off the manifest",
+  !/redis\./i.test(grabFunction(MANIFEST_SRC, "secRereadQueue") ?? ""),
+  "a separate structure would add commands to every run against a budget of three");
+
+// The evidence must stay attached to the decision.
+const manifestCode = readCodeOnly("lib/server/secManifest.ts");
+check("the measured reason for having NO conditional check is recorded in the source",
+  /Last-Modified ABSENT, ETag ABSENT/.test(MANIFEST_SRC) && /23 of 23|0 of 25/.test(MANIFEST_SRC),
+  "so nobody adds an If-Modified-Since later and reads the silence as success");
+check("the drain size names its own measurement",
+  /JSON\.parse median 21 ms|182 MB\/s/.test(MANIFEST_SRC) && /SEC_REREAD_DRAIN_PER_RUN = 40/.test(manifestCode));
+check("no isXBRL discriminator was built", !/isXBRL/.test(manifestCode) && !/isXBRL/.test(readCodeOnly("app/api/jobs/sec-daily-index/route.ts")),
+  "it over-triggers on ARM and under-triggers on HSBC; no threshold fixes both");
 
 console.log(
   failures === 0
