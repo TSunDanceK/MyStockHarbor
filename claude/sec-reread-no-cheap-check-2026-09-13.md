@@ -91,6 +91,41 @@ typed, so a bigger universe or a changed calendar shape moves it instead of
 leaving it silently stale. 150 sequential reads is ~60 s inside a 300 s budget
 and ~2.5 req/s against SEC's 10/s.
 
+### The background term is not constant, and the overlap is unresolved
+
+32/day was measured in **mid-September**. FPIs file interim results on 6-Ks in
+the same season as everyone else, so the background **co-peaks** with the
+reporter count rather than sitting flat underneath it.
+
+Whether that co-peak is already inside the 66 depends on whether the calendar
+`EARNINGS_PEAK_DAY_SHARE` was measured from carries ADRs. Its recorded
+provenance — FMP's calendar, 2026-01 and 2026-02, **7,559 distinct symbols**,
+busiest day 710 — shows a population far broader than US common stock, but does
+**not** establish that FPI interim results appear in it. Recorded as unresolved
+rather than assumed either way.
+
+The sum is therefore an **over-estimate if the populations overlap** and correct
+if they do not. That is the safe direction: over-estimating inflow makes the
+drain larger than needed, which costs round-trips rather than freshness.
+Resolving it means checking the calendar for a known ADR reporter — worth doing
+before anyone **lowers** the number, irrelevant to raising it.
+
+### The off-universe cold path does not share this budget
+
+Earnings pages are deliberately not limited to the universe, so a cold request
+for an off-universe symbol also produces a fetch. If both drained from one
+allowance, a burst of cold requests would compete with the universe's
+earnings-season refresh and **the symbols with actual traffic would lose to
+symbols nobody asked for** — a priority inversion with no feedback loop, where
+the cold side is unbounded and externally influenceable and the refresh is the
+product working.
+
+`SEC_REREAD_DRAIN_PER_RUN` (150) is **guaranteed**; cold fetches get their own
+smaller `SEC_COLD_FETCH_DRAIN_PER_RUN` (25). A cold burst starves itself and
+nothing else. Neither is consumed yet — step 3 builds the drain, step 8 the lazy
+path — but the separation is the default now rather than a refactor nobody
+remembers.
+
 ## Where to look first IF the drain rate ever becomes binding
 
 **Not now, and not a rule.** Recorded because the observation is real and would
