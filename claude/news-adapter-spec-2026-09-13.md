@@ -5,6 +5,7 @@ Built on **measured verdicts**, not assumptions. Probe route:
 production. Delete the probe once this ships.
 
 Context: `claude/news-as-stored-dataset-spec-2026-08-22.md` (the store, unchanged),
+`claude/image-policy-2026-09-13.md` (how images are served and why),
 `claude/stooq-inaccessible-sec-viable-2026-09-12.md` (the precedent — Stooq was the
 first source to refuse this site's IPs; Nasdaq is the second, so source viability is
 now measured from inside a function before anything is built on it).
@@ -42,6 +43,58 @@ The August stored-dataset design survives intact and must be reused as-is:
 
 Only the **adapter behind it** changes. If the plan seems to require touching the
 store, the plan is wrong.
+
+---
+
+# 0. FIRST — stop serving publisher images
+
+**Do this before any adapter work. It is the only urgent part of this project.**
+
+## Why it is not step 6
+
+The image question was never downstream of the FMP question. **FMP aggregated other
+people's articles and passed through other people's image URLs.** They were never the
+rights holder — no FMP plan at any price could have granted the right to display a
+Getty photograph, because FMP cannot sublicense what they do not own.
+
+The site is hotlinking publisher images **today**, supplied under a plan FMP have
+themselves said does not cover this usage. Hotlinked-with-attribution-and-a-link is
+the milder end of the spectrum, but it is running now and step 6 is weeks away.
+
+## Why it can ship first
+
+Nothing in it depends on the new adapters:
+
+| needs | already available? |
+|---|---|
+| hide the publisher image | yes — it is the `image` field on items we already store |
+| `sector-*` bucket selection | yes — sector is already known per symbol |
+| the generated data card | yes — ticker, price move and sparkline are already on the page |
+| `eventType` bucket selection | **no** — waits for the adapters |
+
+`eventType` only picks a *better* bucket. Sector art is a perfectly good default
+until step 6 refines it.
+
+## Scope
+
+1. **Hide the publisher image render.** Per the owner's standing convention: hide with
+   a code comment explaining why, do not delete. If a licensed source ever arrives it
+   is one flag, not an archaeology exercise.
+2. Wire the art cascade from §6 using what exists: **library art on the 5 lead cards,
+   generated data card on the 10 compact rows**, bucket chosen by sector.
+3. Ship `public/news-art/` (89 images, 20 buckets, `manifest.json`) alongside it.
+
+Nothing else. No adapter, no provider interface changes, no store changes.
+
+## What this buys
+
+- The exposure stops this week instead of next month.
+- The pages do not go imageless in the meantime.
+- **The art system gets seen in real use while the library is still small enough to
+  change cheaply.** If four-per-bucket reads as repetitive on a real ticker page, that
+  is worth discovering now rather than after the remaining buckets are generated.
+
+---
 
 ## Provider interface — the flick-back requirement
 
@@ -278,6 +331,9 @@ no image at all (all Google News items)                -> deny
 default                                                 -> deny
 ```
 
+**No FMP-supplied image is ever allowed**, whatever its credit field says — FMP was
+never the rights holder. Step 0 hides that render entirely.
+
 ### Library art goes on the LEAD CARDS ONLY
 
 The page renders **5 large cards and 10 compact rows**. Buckets currently hold
@@ -310,7 +366,8 @@ cache-friendly, no flicker. Re-hash on collision so no image repeats on one page
 
 Five sector buckets are empty (staples, realestate, materials, aerospace, insurance).
 Any bucket absent from the manifest falls back to the generated card, so this ships
-incomplete and fills in later.
+incomplete and fills in later. **More images are being added over the coming days —
+the manifest is the only thing that needs updating when they land.**
 
 **Serve with a plain `<img srcset>`, never `next/image`**, and always set `width`
 and `height`. See `claude/image-policy-2026-09-13.md` for why.
@@ -322,12 +379,13 @@ keyword match. Keep the keyword list small and in one place.
 
 ## 8. Build order
 
+0. **Art cascade against existing data, and hide the publisher image.** See §0. The only urgent step. Ships alone, needs no adapter.
 1. Provider interface + `NEWS_PROVIDER` flag, FMP behind it. **No behaviour change.** Ship and verify nothing moved.
 2. Company-name normaliser + unit tests against the real universe.
 3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
 4. Wire adapters.
 5. SEC filings adapter + committed CIK map.
-6. Image cascade + art selection.
+6. `eventType` refinement of the art cascade — `event-*` buckets now that the adapters supply the classification.
 7. Flip the default to `free`.
 
 Each step ships on its own. Do not combine 1 and 3.
@@ -343,6 +401,7 @@ visible. See `claude/silent-failure-traps.md`.
 - Do not add a warm cron for per-symbol news.
 - Do not resolve Google redirect links.
 - Do not delete or gut the FMP adapter.
+- Do not display an FMP-supplied image under any circumstances.
 - Do not rehost or cache any publisher image.
 - Do not put library art on the compact rows.
 - Do not build an alias list for ambiguous company names — use the classification.
