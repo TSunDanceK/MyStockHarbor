@@ -45,6 +45,13 @@ let src = read("lib/server/news/wireProvider.ts")
   .replace(/^import \{ stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  // The timing helpers, inlined rather than stubbed: they are no-ops unless
+  // MSH_TIMING=1, so running the real ones proves the per-feed instrumentation
+  // cannot change what the adapter parses. Added when pollAll started timing
+  // each wire host separately -- the fan-out timer blamed "wire" for 70s and
+  // could not say which of the two feeds it was.
+  .replace(/^import \{ beginTiming \} from "\.\.\/timing";$/m,
+    () => read("lib/server/timing.ts").replace(/^export /gm, ""))
   .replace("export const wireProvider: NewsProvider =", "export const wireProvider =")
   .replace(/export function imageVerdictFor\(imageUrl: string \| null, credit: string \| null\): NewsItem\["imageVerdict"\]/,
            "export function imageVerdictFor(imageUrl, credit)")

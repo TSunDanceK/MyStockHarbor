@@ -130,6 +130,62 @@ export function activeNewsProviders(): NewsProvider[] {
 }
 
 /**
+ * How long one adapter gets before the render gives up on it.
+ *
+ * ── MEASURED, AND THE MEASUREMENT WAS ALARMING ─────────────────────────────
+ * One cold render of /stock/AMD/news on the preview, with MSH_TIMING on:
+ *
+ *   [timing] news adapter sec   AMD      70ms
+ *   [timing] news adapter gnews AMD     573ms
+ *   [timing] news adapter wire  AMD   70630ms   <-- seventy seconds
+ *   [timing] news fanOut        AMD   70634ms
+ *   [timing] page stockNews     AMD   71133ms
+ *
+ * The page took SEVENTY-ONE SECONDS and the wire adapter was 99.3% of it. The
+ * same 70s appears on /api/internal-news, so the dashboard strip pays it too.
+ *
+ * It is not the wires being slow. From a GitHub runner both feeds answer in
+ * 12-330ms. From Vercel they hang — the same shape as Stooq and Nasdaq
+ * refusing this site's IPs (claude/stooq-inaccessible-sec-viable-2026-09-12.md),
+ * and the reason source viability here is measured from inside a function
+ * rather than from a laptop.
+ *
+ * 5 SECONDS, CHOSEN FROM THE NUMBERS RATHER THAN GUESSED. The slowest healthy
+ * leg ever measured is Google News at 573ms in-render and 720ms cold from a
+ * runner; 5s is roughly 7x that, so a legitimately slow source still lands.
+ * Anything that has not answered by then is not slow, it is not answering.
+ *
+ * ── WHAT A TIMEOUT COSTS, STATED SO IT IS NOT DISCOVERED LATER ─────────────
+ * The content a crawler indexes can vary between renders when a source is
+ * slow. That is acceptable for a news page — the content varies anyway — and it
+ * is strictly better than the alternative, which is a 71-second render that
+ * times out at the platform and indexes nothing at all.
+ *
+ * PARTIAL RESULTS ARE STILL STORED. A timed-out leg rejects, allSettled keeps
+ * the rest, and a successful Google News fetch is never discarded because the
+ * wires hung. Only an all-adapters failure throws, and the store then serves
+ * what it holds.
+ */
+export const ADAPTER_TIMEOUT_MS = 5_000;
+
+/** Rejects if `work` has not settled within `ms`. */
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    // unref() so a pending timer cannot hold a serverless invocation open past
+    // the response -- the race is settled either way by then.
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} exceeded ${ms}ms`));
+    }, ms);
+    (timer as unknown as { unref?: () => void }).unref?.();
+
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error: unknown) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+/**
  * One per-symbol window, from whichever providers are active.
  *
  * This is what lib/stock-news-data.ts hands the store as its `fetchWindow`. It
@@ -180,7 +236,11 @@ export async function fetchSymbolNewsWindow(
     providers.map(async (provider) => {
       const endLeg = beginTiming("news", `adapter ${provider.id} ${symbol}`);
       try {
-        return await provider.fetchForSymbol(symbol, companyName, sinceIso);
+        return await withTimeout(
+          provider.fetchForSymbol(symbol, companyName, sinceIso),
+          ADAPTER_TIMEOUT_MS,
+          `[news] adapter ${provider.id} for ${symbol}`
+        );
       } finally {
         endLeg();
       }

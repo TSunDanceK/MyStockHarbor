@@ -63,6 +63,7 @@ for (const [binding, id] of ADAPTERS) {
     re,
     `const ${binding} = { id: "${id}", fetchMarket: async () => [],\n` +
       `  fetchForSymbol: async () => {\n` +
+      `    if (globalThis.__hanging?.has("${id}")) await new Promise((r) => setTimeout(r, 20000));\n` +
       `    if (globalThis.__failing?.has("${id}")) throw new Error("${id} is down");\n` +
       `    return [{ title: "from ${id}", link: "l-${id}", pubDate: null }];\n` +
       `  } };`
@@ -217,6 +218,44 @@ check(
   /Promise\.allSettled\(/.test(readCodeOnly("lib/server/news/index.ts")) &&
     !/Promise\.all\(\s*$/m.test(readCodeOnly("lib/server/news/index.ts"))
 );
+
+console.log("\n=== 4c. A HANGING ADAPTER CANNOT HOLD THE RENDER ===\n");
+// MEASURED, NOT HYPOTHETICAL. A cold /stock/AMD/news render on the preview took
+// 71,133ms, of which the wire adapter was 70,630ms. The page waited seventy
+// seconds for one source. This is the assertion that stops that returning.
+const hanging = (ids, fn) => {
+  globalThis.__hanging = new Set(ids);
+  try { return fn(); } finally { delete globalThis.__hanging; }
+};
+check(
+  "the timeout budget is a real number, and not so tight it cuts off a healthy source",
+  news.ADAPTER_TIMEOUT_MS >= 2_000 && news.ADAPTER_TIMEOUT_MS <= 15_000,
+  `${news.ADAPTER_TIMEOUT_MS}ms — the slowest healthy leg measured is Google News at 573ms in-render`
+);
+{
+  const started = Date.now();
+  const items = await hanging(["wire"], () => news.fetchSymbolNewsWindow("MU", "Micron", null));
+  const elapsed = Date.now() - started;
+  check(
+    "a hanging adapter is abandoned, and the other two still arrive",
+    items.map((i) => i.title).join(",") === "from gnews,from sec",
+    `got [${items.map((i) => i.title).join(", ")}]`
+  );
+  check(
+    "...and the wait is bounded by the budget, not by the hang",
+    elapsed < news.ADAPTER_TIMEOUT_MS + 1_500,
+    `${elapsed}ms against a ${news.ADAPTER_TIMEOUT_MS}ms budget`
+  );
+}
+{
+  // ALL THREE HANGING IS STILL A THROW, not an empty window -- the same
+  // contract as an all-failure, for the same reason: an empty result would be
+  // written down as "this symbol has no news".
+  let threw = false;
+  try { await hanging(["gnews", "wire", "sec"], () => news.fetchSymbolNewsWindow("MU", "Micron", null)); }
+  catch { threw = true; }
+  check("every adapter hanging throws rather than returning []", threw);
+}
 
 console.log("\n=== 5. AN EMPTY PROVIDER LIST STILL CANNOT EMPTY THE FEED ===\n");
 check(
