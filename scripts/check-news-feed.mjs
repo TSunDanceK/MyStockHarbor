@@ -104,6 +104,21 @@ stubbed = sub(
     // scripts/check-provider-flip.mjs, not here.
     'const feedMaxAgeDays = () => 90;'
 );
+// INLINED, NOT STUBBED, for the same reason as news/text below: scoreNews now
+// asks isFilingChurn whether an item carries any tone at all, and a stub
+// returning false would make every churn assertion below pass by construction.
+//
+// AND IT RUNS BEFORE THE news/text SUBSTITUTION, which is not cosmetic
+// ordering. That pattern is multi-line (`[\s\S]*?`), so with this import left
+// in place it matched from THIS line's "import {" all the way to text.ts's
+// closing brace and swallowed the churn import whole. The marker guard below
+// caught it on the first run -- which is the failure that guard was added for,
+// firing on exactly the shape its comment predicts.
+stubbed = sub(
+  stubbed,
+  /^import \{ isFilingChurn \} from "@\/lib\/server\/news\/filingChurn";$/m,
+  read("lib/server/news/filingChurn.ts").replace(/^export /gm, "")
+);
 stubbed = sub(stubbed, /^import \{[\s\S]*?\} from "@\/lib\/server\/news\/text";$/m, textSrc);
 // Type-only, so it is erased at transpile anyway -- but the guard below reads
 // the TypeScript source, where it is still a line beginning "import ".
@@ -131,6 +146,7 @@ for (const [marker, what] of [
   ["function stripHtmlTags", "news/text inlined"],
   ["const fetchSymbolNewsWindow", "provider seam stubbed"],
   ["const feedMaxAgeDays", "feed window stubbed"],
+  ["function isFilingChurn", "the churn grammar inlined"],
   ["const readOrRefreshSymbolNews", "newsStore stubbed"],
   ["const getAiNewsBriefs", "ai-news-briefs stubbed"],
 ]) {
@@ -196,6 +212,40 @@ const fresh = [
 ];
 const freshScore = m.scoreNews(fresh, NOW);
 check("three headlines from this week DO produce a score", freshScore.available === true);
+
+// ── Institutional-holding churn must not be read as a market opinion ────────
+// The reported page scored "59/100, slightly bullish" over a pool that was
+// mostly 13F notices. capNews bounds how many reach the score; this is the
+// other half — the survivors carry no tone and must not be counted as if they
+// did. Note the ASYMMETRY with the page, which keeps a couple of them on
+// display: worth a glance, not worth a sentiment reading.
+const CHURN_TITLES = [
+  "Chokshi & Queen Wealth Advisors Inc Takes Position in Micron Technology, Inc. $MU",
+  "OceanIQ Capital LLC Buys New Stake in Micron Technology, Inc. $MU",
+  "NBH Bank Invests $668,000 in Micron Technology, Inc. $MU",
+  "Nvest Financial LLC Reduces Stake in Micron Technology, Inc. $MU",
+  "Micron Technology, Inc. $MU Position Decreased by Riverview Capital Advisers LLC",
+];
+const churnOnly = CHURN_TITLES.map((t, i) => item(t, i + 1));
+check(
+  "a pool of nothing but holding notices produces NO score",
+  m.scoreNews(churnOnly, NOW).available === false,
+  m.scoreNews(churnOnly, NOW).reason?.slice(0, 90)
+);
+// AND THE SCORE IS UNMOVED BY THEM, which the check above cannot show on its
+// own: an empty pool falls back to `ranked`, so "no score" could come from the
+// fallback rather than from the exclusion.
+const withChurn = m.scoreNews([...fresh, ...churnOnly], NOW);
+check(
+  "...and adding five of them to three real headlines changes nothing",
+  withChurn.available === freshScore.available && withChurn.score === freshScore.score,
+  `${freshScore.score} -> ${withChurn.score}`
+);
+check(
+  "...while five ordinary headlines in their place DO move it",
+  m.scoreNews([...fresh, ...CHURN_TITLES.map((_, i) => item(`Micron cuts guidance on weak demand ${i}`, i + 1))], NOW).score !== freshScore.score,
+  "otherwise the assertion above would pass for a pool the score simply ignores"
+);
 check("...and it reads bullish", freshScore.score > 58, `score ${freshScore.score}`);
 
 // The boundary, both sides. A window nothing is ever outside is not a window.

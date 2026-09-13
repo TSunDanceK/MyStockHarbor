@@ -30,6 +30,7 @@ import {
 import WhyThisMatters from "@/app/stock/[symbol]/news/WhyThisMatters";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import NewsCardArt from "@/app/components/NewsCardArt";
 
 export const runtime = "nodejs";
@@ -161,7 +162,12 @@ function moveColour(value: number | null | undefined) {
 
 function snippet(item: NewsItem, sectorName: string) {
   const text = item.description ? stripAnyHtml(item.description) : "";
-  if (text.length > 40) return text.length > 320 ? `${text.slice(0, 317)}...` : text;
+  // THE SHARED PREDICATE, and unifying it fixed a real one-character
+  // disagreement: this page tested `> 40` and the stock page `>= 40`, so a
+  // description of exactly forty characters was an excerpt on one page and a
+  // generated sentence on the other. Harmless while the footer lied about both;
+  // not harmless once the footer reports which one happened.
+  if (hasPublisherExcerpt(text)) return text.length > 320 ? `${text.slice(0, 317)}...` : text;
   return `${compactSource(item.source)} is covering a development in the ${sectorName.toLowerCase()} sector. The useful question is usually whether peers move with it or whether it stays company-specific.`;
 }
 
@@ -692,9 +698,15 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                     flexWrap: "wrap",
                   }}
                 >
+                  {/* PER ITEM — see lib/news-attribution.ts and the note on the
+                      stock news page. Same sentence builder, so the two pages
+                      cannot describe the same item differently. */}
                   <span>
-                    Article excerpt provided by the FMP news feed. AI is used only for the optional
-                    &quot;Why this matters&quot; read.
+                    {newsAttribution({
+                      provider: item.provider,
+                      source: item.source,
+                      description: item.description,
+                    })}
                   </span>
                   <a
                     href={item.link}

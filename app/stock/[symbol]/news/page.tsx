@@ -31,6 +31,7 @@ import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
 import { resolveProfile } from "@/lib/server/staticProfile";
+import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
   getLatestEarningsData,
@@ -88,6 +89,13 @@ type NewsItem = {
   // every FMP item, which is why null falling through to sector is the common
   // path and not the exception.
   eventType?: StoredNewsItem["eventType"];
+  // WHICH ADAPTER PRODUCED THIS, and it is on the local type now because the
+  // footer needs it. That footer used to hardcode "Article excerpt provided by
+  // the FMP news feed" on every card; saying truthfully what a card's text is
+  // takes knowing where it came from, and this local view of the item had
+  // silently dropped the field the store already carries. Typed from the
+  // canonical NewsItem, like eventType above, so the union cannot drift.
+  provider?: StoredNewsItem["provider"];
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -205,7 +213,11 @@ function stripAnyHtml(value: string): string {
 
 function getArticleSnippet(item: NewsItem, symbol: string) {
   const text = stripAnyHtml(item.description ?? "").trim();
-  if (text && text.length >= 40) return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
+  // THE SAME PREDICATE THE FOOTER USES, imported rather than restated. The
+  // footer claims one of "excerpt" or "generated" and it has to be the one that
+  // actually happened here; two copies of a length test are two copies that can
+  // drift, and that drift is how the old hardcoded FMP line became false.
+  if (hasPublisherExcerpt(text)) return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
   return `${stripAnyHtml(item.title)} is one of the latest ${symbol} headlines from ${compactSource(item.source)}. Use the full article link for the complete source context.`;
 }
 
@@ -386,7 +398,12 @@ function DetailedNewsSection({
                 fallbackText={buildWhyItMatters(item, symbol, trend, newsScore)}
               />
               <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <span>Article excerpt provided by the FMP news feed. AI is used only for the optional "Why this matters" read.</span>
+                {/* PER ITEM, not one hardcoded sentence. See lib/news-attribution.ts:
+                    post-flip most cards carry no publisher excerpt at all and
+                    the summary above is built from the item's own data, so a
+                    blanket "article excerpt provided by" is a false provenance
+                    claim on the majority of the page. */}
+                <span>{newsAttribution({ provider: item.provider, source: item.source, description: item.description })}</span>
                 <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
               </div>
             </article>

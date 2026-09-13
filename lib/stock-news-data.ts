@@ -1,6 +1,7 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
 import { fetchSymbolNewsWindow, feedMaxAgeDays } from "@/lib/server/news";
+import { isFilingChurn } from "@/lib/server/news/filingChurn";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -1205,8 +1206,25 @@ export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult
   }
 
   const ranked = rankNews(news);
-  const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
-  const pool = highValue.length ? highValue : ranked;
+  // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
+  // the two treatments differ for a reason rather than by oversight. "Chokshi &
+  // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
+  // reader's glance -- institutions are accumulating -- so a couple stay on the
+  // page. It carries no TONE: reading it as bullish is inventing sentiment out
+  // of a 13F filing, and the reported page scored "59/100, slightly bullish"
+  // over a pool that was mostly these. capNews already bounds how many reach
+  // here; this stops the survivors being read as a market opinion.
+  const highValue = ranked.filter(
+    (item) => !isLowValueNewsItem(item) && !isFilingChurn(item.title)
+  );
+  // THE FALLBACK EXCLUDES CHURN TOO, and that is the half a first pass missed.
+  // `highValue.length ? highValue : ranked` exists so a symbol covered only by
+  // low-value sources still gets a reading rather than a blank. Reaching past it
+  // to the RAW list means a pool of nothing but holding notices comes back
+  // "balanced, neutral" — a tone read off 13F paperwork, which is the reported
+  // bug in its purest form. A symbol with no scorable coverage should say so.
+  const scorable = ranked.filter((item) => !isFilingChurn(item.title));
+  const pool = highValue.length ? highValue : scorable;
 
   // THE WINDOW, applied before anything else. An item with no publish date is
   // excluded rather than assumed recent: it cannot be SHOWN to be inside the

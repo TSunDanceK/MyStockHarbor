@@ -479,6 +479,14 @@ environment lookup and a module-level array — so the panel costs no request.
 - Do not rehost or cache any publisher image.
 - Do not put library art on the compact rows.
 - Do not build an alias list for ambiguous company names — use the classification.
+- Do not add a publisher denylist for filing churn. The one already in
+  `lib/stock-news-data.ts` named the offending publisher and still let 13 of 15
+  cards through, because a list matches a spelling. Shape rule only —
+  `lib/server/news/filingChurn.ts`. See
+  `claude/traps/precision-is-not-worth-reading.md`.
+- Do not measure a new source on precision alone. Precision was 96-100% on the
+  feed that shipped a page of 13F notices; nothing measured whether an item was
+  worth reading. Measure composition too.
 - Do not remove the image column — **hide it** with a code comment explaining why,
   per the owner's standing convention, so it is not switched back on by accident.
 - Do not claim a bandwidth saving figure. Measure it after.
