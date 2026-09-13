@@ -246,6 +246,47 @@ Four things changed:
   Same rule as section 1's hide list: a lookup that returns nothing is not
   evidence that nothing exists.
 
+**Axis names in `dim.tsv` have the `Axis` suffix stripped** —
+`ProductOrServiceAxis` is stored as `ProductOrService`, `StatementGeographicalAxis`
+as `Geographical`, `StatementBusinessSegmentsAxis` as `BusinessSegments`. A
+classifier matching the full element name sends every hash to "other axis", and
+**`axisHistogram` coming back `{}` beside 63 resolved hashes is the tell**.
+
+Nothing strips a literal `"Axis"`. The left-hand side of each `key=value;` pair
+*is* the axis, whatever it is called; it is reported verbatim in `axisHistogram`
+and anything unmatched is listed in `unrecognisedAxes`. The output is therefore
+self-describing for axes nobody anticipated, and it survives SEC changing the
+convention back.
+
+**Three breakdowns, not two, and they are not interchangeable.** Apple discloses
+geography twice, over different populations:
+
+| Bucket | Axis | Content |
+|---|---|---|
+| `product` | `ProductOrService=` | iPhone, Mac, iPad, Wearables, Services |
+| `operatingSegments` | `BusinessSegments=` | Americas, Europe, Greater China, Japan, Rest of Asia Pacific — the reportable segments, the analogue of the live page's "By region" card |
+| `geographical` | `Geographical=` | US, CN, other — the narrower country disclosure |
+
+They are reported separately and **never merged — the percentages do not sum
+across them**. `ConsolidationItems=OperatingSegments` rides on the same hash as
+the segment rows and is what makes them the segment figures rather than a
+rollup, so it is kept and surfaced per row.
+
+**`dim.tsv` has a TSV parsing hazard.** Free-text members
+(`InvestmentIdentifier=Senior Secured, Maturity Date September 2029, Prime -
+0.05%, … 7.75% Exit Fee;"`) break the column split — one such row turned up
+inside `segt`, a column that otherwise only holds `0`. A shifted row **silently
+mislabels a dimension rather than failing**, which is the worst shape this bug
+could take. So a row is used only if it yields exactly the header's column
+count; mismatches are counted in `E_dim.malformedRows` (split by direction, with
+verbatim samples), and a wanted hash lost that way gets its own fate,
+`malformed-row-in-dim.tsv`, distinct from `not-in-dim.tsv`.
+
+**The anchor outranks the verdict.** `NO-GO` alongside `sanityCheck.passes:
+false` is self-contradicting, and worse than no answer because it reads as
+settled. When the known-answer check fails the verdict is `INCONCLUSIVE`
+carrying the anchor's reason — the extraction is the suspect, not the filing.
+
 One field was also renamed. `undimensionedRevenueRows` counted rows with no
 *resolved* segments string, silently merging "carries no dimension" with
 "dimension did not resolve" — the two cases this section exists to separate. They

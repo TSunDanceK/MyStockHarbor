@@ -1383,6 +1383,10 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
   let dimHeader: ReturnType<typeof tsvIndexer> | null = null;
   let dimKeyCol: string | null = null;
   let dimRows = 0;
+  let dimTooManyFields = 0;
+  let dimTooFewFields = 0;
+  const dimMalformedSample: string[] = [];
+  const dimMalformedWanted = new Set<string>();
 
   const dimRes = allDimh.size
     ? await streamEntry(
@@ -1398,6 +1402,34 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
           dimRows++;
           if (!dimHeader || !dimKeyCol) return;
           const f = line.split("\t");
+
+          // A SHIFTED ROW MISLABELS A DIMENSION RATHER THAN FAILING, which is
+          // the worst shape this bug could take: a wrong axis name attached to
+          // a real hash, carried silently into the output.
+          //
+          // dim.tsv contains free-text members -- an InvestmentIdentifier member
+          // reading `Senior Secured, Maturity Date September 2029, Prime -
+          // 0.05%, ... 7.75% Exit Fee;"` turned up in segt, a column that
+          // otherwise only ever holds "0". Text like that carries commas, quotes
+          // and evidently whitespace that breaks the column split.
+          //
+          // So a row is used ONLY if it yields exactly the header's column
+          // count. Mismatches are counted and sampled rather than parsed
+          // leniently, and the two directions are counted separately because
+          // they mean different things: too many fields is a broken split
+          // inside a value, too few is a row cut short (an embedded newline).
+          if (f.length !== dimHeader.cols.length) {
+            if (f.length > dimHeader.cols.length) dimTooManyFields++;
+            else dimTooFewFields++;
+            if (dimMalformedSample.length < 3) dimMalformedSample.push(line.slice(0, 300));
+            // The key usually survives -- it is the first column, before
+            // whatever broke -- so a WANTED hash lost this way is recorded as
+            // its own fate rather than silently becoming "not in dim.tsv".
+            const maybeKey = f[dimHeader.idx[dimKeyCol]] ?? "";
+            if (allDimh.has(maybeKey)) dimMalformedWanted.add(maybeKey);
+            return;
+          }
+
           const whole = Object.fromEntries(dimHeader.cols.map((c, i) => [c, f[i] ?? ""]));
 
           // The first few rows verbatim WHATEVER they are, so the two key
@@ -1422,27 +1454,76 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
   const dimIdx = dimHeader as ReturnType<typeof tsvIndexer> | null;
 
   const segmentsOf = (h: string) => dimRecords[h]?.segments ?? dimRecords[h]?.SEGMENTS ?? "";
-  const PRODUCT_AXIS = /ProductOrServiceAxis/i;
-  const GEO_AXIS = /StatementGeographicalAxis/i;
 
-  // Each hash gets ONE of three fates, and the distinction is the whole
-  // question. "resolved 0 of 18" could not tell them apart.
+  // THE AXIS NAMES IN dim.tsv HAVE THE "Axis" SUFFIX STRIPPED:
+  //   ProductOrServiceAxis          is stored as  ProductOrService
+  //   StatementGeographicalAxis     is stored as  Geographical
+  //   StatementBusinessSegmentsAxis is stored as  BusinessSegments
+  //
+  // The previous classifier matched the full element name, so all 63 resolved
+  // hashes fell through to "other axis" and axisHistogram came back {} beside
+  // them -- the tell that the matcher, not the data, was wrong.
+  //
+  // Nothing here strips a literal "Axis". The left-hand side of each "key=value"
+  // pair IS the axis, whatever it is called, and it is reported verbatim. That
+  // makes the histogram self-describing for axes nobody anticipated, and it
+  // survives SEC changing the convention back.
+  function parseSegments(seg: string) {
+    return seg
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const i = part.indexOf("=");
+        return i === -1
+          ? { axis: part, member: "" }
+          : { axis: part.slice(0, i).trim(), member: part.slice(i + 1).trim() };
+      });
+  }
+
+  // Matched against the STORED form, with the full element name also accepted so
+  // the classifier keeps working whichever convention the file uses.
+  const AXIS_KIND: { kind: "product" | "operatingSegments" | "geographical"; re: RegExp }[] = [
+    { kind: "product", re: /^(us-gaap[:_])?ProductOrService(Axis)?$/i },
+    { kind: "operatingSegments", re: /^(us-gaap[:_])?(Statement)?BusinessSegments(Axis)?$/i },
+    { kind: "geographical", re: /^(us-gaap[:_])?(Statement)?Geographical(Axis)?$/i },
+  ];
+  const kindOf = (axis: string) => AXIS_KIND.find((a) => a.re.test(axis))?.kind ?? null;
+  const CONSOLIDATION = /^(us-gaap[:_])?ConsolidationItems(Axis)?$/i;
+
   const hashClassification = [...allDimh].map((h) => {
     const rec = dimRecords[h];
-    if (!rec) return { dimh: h, status: "not-in-dim.tsv" as const, segments: null };
+    if (!rec) {
+      return {
+        dimh: h,
+        // Lost to a broken column split is NOT the same as absent from the file.
+        status: dimMalformedWanted.has(h) ? ("malformed-row-in-dim.tsv" as const) : ("not-in-dim.tsv" as const),
+        segments: null,
+        axes: [],
+        kinds: [],
+      };
+    }
     const seg = segmentsOf(h);
-    const status = PRODUCT_AXIS.test(seg)
-      ? ("resolved-product-axis" as const)
-      : GEO_AXIS.test(seg)
-        ? ("resolved-geography-axis" as const)
-        : ("resolved-other-axis" as const);
-    return { dimh: h, status, segments: seg, segt: rec.segt ?? null };
+    const axes = parseSegments(seg);
+    const kinds = [...new Set(axes.map((a) => kindOf(a.axis)).filter(Boolean))] as string[];
+    // ConsolidationItems=OperatingSegments rides on the same hash and is what
+    // makes those rows the segment figures rather than a rollup. Kept.
+    const consolidationItems = axes.find((a) => CONSOLIDATION.test(a.axis))?.member ?? null;
+    return { dimh: h, status: "resolved" as const, segments: seg, segt: rec.segt ?? null, axes, kinds, consolidationItems };
   });
 
   const notInDim = hashClassification.filter((c) => c.status === "not-in-dim.tsv");
-  const resolved = hashClassification.filter((c) => c.status !== "not-in-dim.tsv");
-  const productHashes = hashClassification.filter((c) => c.status === "resolved-product-axis");
-  const geoHashes = hashClassification.filter((c) => c.status === "resolved-geography-axis");
+  const malformed = hashClassification.filter((c) => c.status === "malformed-row-in-dim.tsv");
+  const resolved = hashClassification.filter((c) => c.status === "resolved");
+  const withKind = (k: string) => resolved.filter((c) => c.kinds.includes(k));
+  const productHashes = withKind("product");
+  const segmentHashes = withKind("operatingSegments");
+  const geoHashes = withKind("geographical");
+
+  // Every axis seen, verbatim, whether or not it was recognised.
+  const axisHistogram: Record<string, number> = {};
+  for (const c of resolved) for (const a of c.axes) axisHistogram[a.axis] = (axisHistogram[a.axis] ?? 0) + 1;
+  const unrecognisedAxes = Object.keys(axisHistogram).filter((a) => !kindOf(a) && !CONSOLIDATION.test(a));
 
   stages.E_dim = {
     entry: dimEntry.name,
@@ -1461,76 +1542,125 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
       Object.keys(segtValues).length === 0
         ? "segt was empty on every sampled row"
         : `segt took ${Object.keys(segtValues).length} distinct value(s) across the rows read -- ${Object.keys(segtValues).length <= 3 ? "few enough that it is a flag or a small enumeration" : "many enough that it is a count or free text"}`,
+    // The parse hazard, reported rather than absorbed.
+    malformedRows: {
+      tooManyFields: dimTooManyFields,
+      tooFewFields: dimTooFewFields,
+      total: dimTooManyFields + dimTooFewFields,
+      wantedHashesLostToIt: [...dimMalformedWanted],
+      sampleVerbatim: dimMalformedSample,
+      note: "rows whose tab-split did not yield exactly the header's column count are NOT parsed -- a shifted row would attach a wrong axis name to a real hash and carry it silently into the output",
+    },
     wanted: allDimh.size,
     resolved: resolved.length,
     notFound: notInDim.length,
+    lostToMalformedRows: malformed.length,
   };
 
   // --- The actual go/no-go ------------------------------------------------
   //
   // VERDICT VOCABULARY. NO-GO is reserved for the one case it can honestly
-  // describe: dimensions RESOLVED and none of them carry a product or
-  // geography axis. Everything else is INCONCLUSIVE with the reason named.
-  // Same rule as section 1's hide list -- a lookup that returns nothing is not
-  // evidence that nothing exists.
-  // REVENUE_TAGS is now an ANNOTATION, not a filter. It marks which recovered
-  // splits sit on a revenue tag, which is what the Revenue Breakdown card
-  // needs to know -- but it no longer decides what gets looked at, because that
-  // is how the previous run concluded "absent" without ever testing the join.
+  // describe: dimensions RESOLVED and none carrying a product or geography
+  // axis. Everything else is INCONCLUSIVE with the reason named.
+  //
+  // AND THE ANCHOR OUTRANKS IT. A NO-GO alongside sanityCheck.passes:false is a
+  // self-contradicting answer, and it is worse than no answer because it reads
+  // as settled. When the known-answer check fails, the verdict is INCONCLUSIVE
+  // carrying the anchor's reason -- the extraction is the suspect, not the
+  // filing.
   const isRevenueTag = (t: string) => REVENUE_TAGS.has(t.toLowerCase()) || /revenue/i.test(t);
 
   const rowsFor = (hashes: { dimh: string }[]) => {
     const set = new Set(hashes.map((h) => h.dimh));
     return targetRows.filter((r) => set.has(r.dimh));
   };
-  const productRows = rowsFor(productHashes);
-  const geoRows = rowsFor(geoHashes);
-  const distinctMembers = (rows: NumRow[]) => [...new Set(rows.map((r) => segmentsOf(r.dimh)).filter(Boolean))];
-  const productMembers = distinctMembers(productRows);
-  const geoMembers = distinctMembers(geoRows);
+  const memberFor = (h: string, kind: string) =>
+    (hashClassification.find((c) => c.dimh === h)?.axes ?? [])
+      .filter((a) => kindOf(a.axis) === kind)
+      .map((a) => a.member)
+      .join("|");
+
+  const breakdownFor = (hashes: typeof resolved, kind: string) => {
+    const rows = rowsFor(hashes);
+    return {
+      hashes: hashes.length,
+      rows: rows.length,
+      members: [...new Set(rows.map((r) => memberFor(r.dimh, kind)).filter(Boolean))],
+      rowsOnRevenueTags: rows.filter((r) => isRevenueTag(r.tag)).length,
+      sample: rows.slice(0, 40).map((r) => ({
+        tag: r.tag,
+        isRevenueTag: isRevenueTag(r.tag),
+        ddate: r.ddate,
+        qtrs: r.qtrs,
+        value: r.value,
+        member: memberFor(r.dimh, kind),
+        consolidationItems: hashClassification.find((c) => c.dimh === r.dimh)?.consolidationItems ?? null,
+        segments: segmentsOf(r.dimh),
+      })),
+    };
+  };
+
+  // THREE BREAKDOWNS, NOT TWO, AND THEY ARE NOT INTERCHANGEABLE.
+  // Apple discloses geography twice and the two are different populations:
+  // BusinessSegments= gives the reportable operating segments (Americas,
+  // Europe, Greater China, Japan, Rest of Asia Pacific) -- the analogue of the
+  // live page's "By region" card -- while Geographical= gives the narrower
+  // country disclosure (US, CN, OtherCountries). Merging them would produce
+  // percentages that do not sum.
+  const product = breakdownFor(productHashes, "product");
+  const operatingSegments = breakdownFor(segmentHashes, "operatingSegments");
+  const geographical = breakdownFor(geoHashes, "geographical");
+
+  // Either geographic disclosure can satisfy the anchor; which one did is
+  // reported rather than assumed, since a different filer may publish only one.
+  const geographyBest = Math.max(operatingSegments.members.length, geographical.members.length);
+  const geographySource =
+    operatingSegments.members.length >= geographical.members.length ? "BusinessSegments (operating segments)" : "Geographical (country)";
+
+  const EXPECT_MIN = 4;
+  const anchorApplies = targetSymbol === "AAPL";
+  const anchorPasses = product.members.length >= EXPECT_MIN && geographyBest >= EXPECT_MIN;
+  const sanity = anchorApplies
+    ? {
+        applies: true,
+        expectation:
+          "AAPL's 10-K discloses ~5 product lines (iPhone, Mac, iPad, Wearables, Services) and ~5 reportable segments (Americas, Europe, Greater China, Japan, Rest of Asia Pacific), plus a narrower country split (US, CN, other)",
+        productMembersFound: product.members.length,
+        geographyMembersFound: geographyBest,
+        geographySatisfiedBy: geographySource,
+        operatingSegmentMembers: operatingSegments.members.length,
+        geographicalMembers: geographical.members.length,
+        passes: anchorPasses,
+        note: anchorPasses
+          ? "Matches the known disclosure. The extraction is reading what the filing actually contains."
+          : `Does NOT match the known disclosure (expected >=${EXPECT_MIN} products and >=${EXPECT_MIN} geographies). Treat this as a fault in the extraction, not a fact about Apple.`,
+      }
+    : { applies: false, note: `no known-answer anchor for ${targetSymbol}; only AAPL has one wired in` };
 
   let verdict: string;
   if (!numRes.ok || numRes.truncated) {
     verdict = `INCONCLUSIVE -- num.tsv did not complete (${numRes.truncated ?? "read failed"}), so nothing here is evidence of absence.`;
   } else if (allDimh.size === 0) {
-    verdict = `INCONCLUSIVE -- not one of ${numMatchedAdsh} rows for ${targetSymbol} carries a dimension hash. Before concluding anything about disclosures, check D_num.columns: if the NUM side has no 'dimh' column under that name, the hash was never read.`;
+    verdict = `INCONCLUSIVE -- not one of ${numMatchedAdsh} rows for ${targetSymbol} carries a dimension hash. Check D_num.columns before concluding anything about disclosures.`;
   } else if (!dimKeyCol) {
-    verdict = `INCONCLUSIVE -- JOIN KEY NOT FOUND. dim.tsv carries none of ${DIM_KEY_CANDIDATES.join("/")}; its real columns are in E_dim.columns. The join could never have matched, so this says nothing about the filing.`;
+    verdict = `INCONCLUSIVE -- JOIN KEY NOT FOUND. dim.tsv carries none of ${DIM_KEY_CANDIDATES.join("/")}; its real columns are in E_dim.columns.`;
   } else if (resolved.length === 0) {
-    verdict = `INCONCLUSIVE -- JOIN FAILED, not absence. ${allDimh.size} dimension hashes were read from ${targetSymbol}'s rows and NONE matched dim.tsv on '${dimKeyCol}'. Genuinely irrelevant axes would resolve and then be filtered out as the wrong axis; failing to resolve at all is a key mismatch. Compare D_num.sampleDimhValuesVerbatim against E_dim.sampleDimRowsVerbatim.`;
-  } else if (productMembers.length && geoMembers.length) {
-    verdict = `GO -- both axes recovered: ${productMembers.length} product member(s) and ${geoMembers.length} geographic member(s).`;
-  } else if (productMembers.length || geoMembers.length) {
-    verdict = `PARTIAL -- ${productMembers.length ? "ProductOrServiceAxis" : "StatementGeographicalAxis"} recovered; the other resolved no members. ${resolved.length} of ${allDimh.size} hashes resolved, so the join works and this is a real observation about the filing.`;
+    verdict = `INCONCLUSIVE -- JOIN FAILED, not absence. ${allDimh.size} hashes were read and NONE matched dim.tsv on '${dimKeyCol}'. Compare D_num.sampleDimhValuesVerbatim against E_dim.sampleDimRowsVerbatim.`;
+  } else if (anchorApplies && !anchorPasses) {
+    // The anchor outranks GO/PARTIAL/NO-GO alike.
+    verdict =
+      `INCONCLUSIVE -- ${resolved.length} of ${allDimh.size} hashes resolved, but the known-answer check FAILED: ` +
+      `${product.members.length} product member(s) and ${geographyBest} geographic member(s), against ~5 and ~5 that AAPL's 10-K is known to disclose. ` +
+      `The extraction is the suspect, not the filing. Axes actually seen are in axisHistogram` +
+      (unrecognisedAxes.length ? `; unrecognised axis names: ${unrecognisedAxes.slice(0, 10).join(", ")}` : "") + ".";
+  } else if (product.members.length && geographyBest) {
+    verdict =
+      `GO -- both axes recovered: ${product.members.length} product member(s) and ${geographyBest} geographic member(s) ` +
+      `via ${geographySource}${operatingSegments.members.length && geographical.members.length ? `, with both geographic disclosures present and reported separately` : ""}.`;
+  } else if (product.members.length || geographyBest) {
+    verdict = `PARTIAL -- ${product.members.length ? "product" : "geography"} recovered; the other resolved no members. ${resolved.length} of ${allDimh.size} hashes resolved, so the join works and this is a real observation about the filing.`;
   } else {
     verdict = `NO-GO -- ${resolved.length} of ${allDimh.size} hashes RESOLVED and none carries a product or geography axis. The join works, so this is a genuine statement about what this filing discloses. Axes actually present are in axisHistogram.`;
-  }
-
-  // SANITY ANCHOR. Apple's 10-K discloses revenue by five product lines and
-  // five geographic segments. If the extraction cannot see roughly that in a
-  // dataset that demonstrably contains the filing, the extraction is wrong --
-  // "it returned something" is not the pass condition.
-  const EXPECT_MIN = 4;
-  const sanity =
-    targetSymbol === "AAPL"
-      ? {
-          applies: true,
-          expectation: `AAPL's 10-K discloses ~5 product lines (iPhone, Mac, iPad, Wearables, Services) and ~5 geographic segments (Americas, Europe, Greater China, Japan, Rest of Asia Pacific)`,
-          productMembersFound: productMembers.length,
-          geographyMembersFound: geoMembers.length,
-          passes: productMembers.length >= EXPECT_MIN && geoMembers.length >= EXPECT_MIN,
-          note:
-            productMembers.length >= EXPECT_MIN && geoMembers.length >= EXPECT_MIN
-              ? "Matches the known disclosure. The extraction is reading what the filing actually contains."
-              : `Does NOT match the known disclosure (expected >=${EXPECT_MIN} of each). Treat this as a fault in the extraction, not a fact about Apple.`,
-        }
-      : { applies: false, note: `no known-answer anchor for ${targetSymbol}; only AAPL has one wired in` };
-
-  const axisHistogram: Record<string, number> = {};
-  for (const c of resolved) {
-    for (const axis of (c.segments ?? "").match(/[A-Za-z]+Axis/g) ?? []) {
-      axisHistogram[axis] = (axisHistogram[axis] ?? 0) + 1;
-    }
   }
 
   return {
@@ -1541,27 +1671,31 @@ async function probeDataSets(month: string, targetSymbol: string, targetCik: str
     cik: cikNumeric,
     verdict,
     sanityCheck: sanity,
+    // Verbatim axis names as stored, recognised or not. Self-describing for
+    // axes nobody anticipated.
+    axisHistogram,
+    unrecognisedAxes,
+    breakdowns: {
+      product,
+      // Reported SEPARATELY and deliberately not merged -- different
+      // populations, and the percentages do not sum across them.
+      operatingSegments: {
+        ...operatingSegments,
+        note: "BusinessSegments= -- the reportable operating segments, the analogue of the live page's 'By region' card. ConsolidationItems=OperatingSegments on the same hash is what makes these the segment figures rather than a rollup.",
+      },
+      geographical: {
+        ...geographical,
+        note: "Geographical= -- the narrower country disclosure (US/CN/other). A DIFFERENT population from operatingSegments; do not merge them.",
+      },
+    },
     dimensionHashes: {
       total: allDimh.size,
       resolved: resolved.length,
       notInDimTsv: notInDim.length,
-      resolvedButOtherAxis: resolved.length - productHashes.length - geoHashes.length,
-      // Every hash with its fate and its verbatim segments string.
+      lostToMalformedRows: malformed.length,
+      resolvedButNoRecognisedAxis: resolved.filter((c) => c.kinds.length === 0).length,
       classification: hashClassification,
     },
-    axisHistogram,
-    productSplits: productRows.slice(0, 60).map((r) => ({ tag: r.tag, isRevenueTag: isRevenueTag(r.tag), ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: segmentsOf(r.dimh) })),
-    geographySplits: geoRows.slice(0, 60).map((r) => ({ tag: r.tag, isRevenueTag: isRevenueTag(r.tag), ddate: r.ddate, qtrs: r.qtrs, value: r.value, segments: segmentsOf(r.dimh) })),
-    splitsOnRevenueTags: {
-      product: productRows.filter((r) => isRevenueTag(r.tag)).length,
-      geography: geoRows.filter((r) => isRevenueTag(r.tag)).length,
-      note: "the axis decides recovery; this only says how many of the recovered rows sit on a revenue-named tag",
-    },
-    distinctProductMembers: productMembers,
-    distinctGeographyMembers: geoMembers,
-    // Renamed: the old `undimensionedRevenueRows` counted rows with no RESOLVED
-    // segments string, which silently merged "no dimension" with "dimension did
-    // not resolve" -- the two cases this whole section exists to separate.
     rowsWithNoDimension: targetRows.filter((r) => isUndimensioned(r.dimh)).length,
     rowsDimensionedButUnresolved: targetRows.filter((r) => !isUndimensioned(r.dimh) && !dimRecords[r.dimh]).length,
     stages,
