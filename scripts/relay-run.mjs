@@ -52,6 +52,10 @@ const TASKS = {
   // Needed because the sandbox is refused www.nasdaqtrader.com by policy, and
   // that directory is where the news path's company name actually comes from.
   "company-name-sample": { script: "scripts/company-name-sample.mjs", args: () => [] },
+  // Read-only: fetches a public RSS feed and prints it. Needed because the
+  // sandbox is refused news.google.com by policy, and the adapter's parser must
+  // be tested against the feed's real shape.
+  "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
