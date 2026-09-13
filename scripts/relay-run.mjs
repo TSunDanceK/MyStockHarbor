@@ -58,6 +58,33 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Read-only: fetches two public pipe-delimited text files and prints them.
+  // Needed because the sandbox is refused www.nasdaqtrader.com by policy, and
+  // that directory is where the news path's company name actually comes from.
+  "company-name-sample": { script: "scripts/company-name-sample.mjs", args: () => [] },
+  // Read-only: fetches a public RSS feed and prints it. Needed because the
+  // sandbox is refused news.google.com by policy, and the adapter's parser must
+  // be tested against the feed's real shape.
+  "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // Read-only, but needs the frozen universe to compute the match ratio: the
+  // question "how many wire items are about a stock we cover" cannot be answered
+  // without the symbol set.
+  "wire-feeds": {
+    script: "scripts/wire-feeds-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. Needs the dump for the universe: both the CIK map and the
+  // sicDescription comparison are scoped to the symbols the site covers.
+  "sec": {
+    script: "scripts/sec-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only. One poll of all three free news sources, digested to the raw
+  // inputs §7's cascade reads — no judgement made on the runner, so the
+  // measurement describes the shipped derivation and not a copy of it.
+  "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

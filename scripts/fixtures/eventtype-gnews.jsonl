@@ -1,0 +1,200 @@
+# One real Google News poll, digested to the ONE input §7's title leg reads.
+# Captured 2026-09-13 by the relay (task eventtype-sample, symbols=eventtype-gnews,
+# run 34767797875). 192 items: the 16 symbols of eventtype-sample-queries.json at
+# 12 headlines each. Verified 24,903 bytes against the emitter's own accounting.
+#
+# The " - Publisher" suffix is still on these titles because the PROBE does not
+# strip it; the adapter does, so the measurement applies stripPublisherSuffix
+# before deriving, exactly as production does.
+{"src":"gnews","symbol":"AAPL","title":"AAPL: Apple Stock Slips After $1,999 Foldable Duo, iPhone 18 Fail to Wow Wall Street - TradingView"}
+{"src":"gnews","symbol":"AAPL","title":"Bank of America resets Apple stock price target after iPhone Duo launch - thestreet.com"}
+{"src":"gnews","symbol":"AAPL","title":"Can New iPhone Duo Power Apple's Stock Higher? - Yahoo Finance"}
+{"src":"gnews","symbol":"AAPL","title":"Apple, Taiwan Semi Lead Five Stocks Near Buy Points - Investor's Business Daily"}
+{"src":"gnews","symbol":"AAPL","title":"Cramer reveals his favorite Mag 7 stock and looks at the 'wow factor' of another - cnbc.com"}
+{"src":"gnews","symbol":"AAPL","title":"Stocks to Watch Thursday Recap: Apple, Oracle, TSMC - WSJ"}
+{"src":"gnews","symbol":"AAPL","title":"Apple and Taiwan Semiconductor Manufacturing Just Announced a Cutting-Edge Chip. 1 Stock Offers Far Greater Upside. - The Motley Fool"}
+{"src":"gnews","symbol":"AAPL","title":"‘Apple and Microsoft Look Like Value Stocks’: Morningstar on SanDisk’s 2,107% Year - 24/7 Wall St."}
+{"src":"gnews","symbol":"AAPL","title":"Oracle, SpaceX, Cooper Cos., Macy’s, Apple, Navan, and More Stocks That Explain Today’s Market - Barron's"}
+{"src":"gnews","symbol":"AAPL","title":"Apple: The Products Are Great, The Price Is Not - Seeking Alpha"}
+{"src":"gnews","symbol":"AAPL","title":"Josh Brown says Apple's stock chart just gave you a classic 'tell.' What it means - cnbc.com"}
+{"src":"gnews","symbol":"AAPL","title":"Can New iPhone Duo Power Apple's Stock Higher? - The Motley Fool"}
+{"src":"gnews","symbol":"AVGO","title":"Prediction: 2 AI Semiconductor Stocks That Will Join Micron and Broadcom in the $1 Trillion Club by 2028 - Yahoo Finance"}
+{"src":"gnews","symbol":"AVGO","title":"Broadcom CEO Hock Tan Says Demand Already Exceeds Broadcom's $115 Billion AI Forecast. Here's What That Means for the Stock. - The Globe and Mail"}
+{"src":"gnews","symbol":"AVGO","title":"Jim Cramer's least-favorite tech stock gets a new analyst endorsement — our take - cnbc.com"}
+{"src":"gnews","symbol":"AVGO","title":"Broadcom's AI Chip Revenue Grew 221% Last Quarter. A $1,000 Investment a Year Ago Would Be Worth This Much Today. - The Motley Fool"}
+{"src":"gnews","symbol":"AVGO","title":"Broadcom vs. Micron Technology: Which Technology Stock Is a Better Buy in 2026? - The Motley Fool"}
+{"src":"gnews","symbol":"AVGO","title":"Marvell Rises 5% as Piper Sandler Starts Coverage With $270 Target; Broadcom Edges Higher, NVIDIA Holds Steady - 24/7 Wall St."}
+{"src":"gnews","symbol":"AVGO","title":"Broadcom Stock Fell 3% After Earnings Despite Immense AI Chip Demand - Morningstar"}
+{"src":"gnews","symbol":"AVGO","title":"Jim Cramer has strong message for Nvidia, Broadcom investors - thestreet.com"}
+{"src":"gnews","symbol":"AVGO","title":"Forget the Magnificent Seven Stocks, Gary Black Says This Tech Giant Is Cheaper - Benzinga"}
+{"src":"gnews","symbol":"AVGO","title":"3 Top AI Chip Stocks to Buy with 43%+ Upside, According to Analysts - tipranks.com"}
+{"src":"gnews","symbol":"AVGO","title":"Broadcom CEO Hock Tan Says Demand Already Exceeds Broadcom's $115 Billion AI Forecast. Here's What That Means for the Stock. - The Motley Fool"}
+{"src":"gnews","symbol":"AVGO","title":"What's Going On With Broadcom Stock Friday - Yahoo Finance"}
+{"src":"gnews","symbol":"BABA","title":"BABA Stock Slides Premarket: Alibaba's New AI Push Into Robotics Fails To Lift Retail Mood - Stocktwits"}
+{"src":"gnews","symbol":"BABA","title":"Why Billionaire Founder Jack Ma Just Bought $76.5 Million Worth of Alibaba Stock - Yahoo Finance"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba Stock Signal Has Never Been Wrong - Forbes"}
+{"src":"gnews","symbol":"BABA","title":"Sep 10, 2026: DHL and Alibaba.com partner to bring AI-powered logistics capabilities to small and medium-sized enterprises worldwide - DHL Group"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba (BABA) Stock Looks Discounted On Its 31% Three Year Return - simplywall.st"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba plunges after announcing $10.2 billion share placement to fund AI push - cnbc.com"}
+{"src":"gnews","symbol":"BABA","title":"BABA Investor Alert: Alibaba Group Holding Limited Securities Class Action Notice - Contact Levi &amp; Korsinsky - PR Newswire"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba.com President: AI agents can talk, but can they actually do the work? - Fortune"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba Group (NYSE:BABA) Stock Price Down 2.7% - What's Next? - MarketBeat"}
+{"src":"gnews","symbol":"BABA","title":"Alibaba shares slide after $10.2 billion AI share sale offered at sharp discount - Reuters"}
+{"src":"gnews","symbol":"BABA","title":"Bernstein Revamps Alibaba Stock Target After $10.2 Billion Raise - Yahoo Finance"}
+{"src":"gnews","symbol":"BABA","title":"How Equity Raise Concerns Will Impact Alibaba Stock Investors - simplywall.st"}
+{"src":"gnews","symbol":"COST","title":"Should You Buy Costco Stock Right Now With $2,000 and Hold for 5 Years? - Yahoo Finance"}
+{"src":"gnews","symbol":"COST","title":"Costco Stock Price Forecast: Here's What a $10,000 Investment Today Could Be Worth by September 2027 - The Globe and Mail"}
+{"src":"gnews","symbol":"COST","title":"Costco Price Prediction: A $1,200 Target Comes Into Focus - 24/7 Wall St."}
+{"src":"gnews","symbol":"COST","title":"Costco: The Valuation Re-Rating Is Just Getting Started (Q4 Earnings Preview) - Seeking Alpha"}
+{"src":"gnews","symbol":"COST","title":"Costco Stock Price Forecast: Here's What a $10,000 Investment Today Could Be Worth by September 2027 - The Motley Fool"}
+{"src":"gnews","symbol":"COST","title":"Costco Stock Price Forecast: Here's What a $10,000 Investment Today Could Be Worth by September 2027 - The Globe and Mail"}
+{"src":"gnews","symbol":"COST","title":"Costco Wholesale Corporation $COST Shares Acquired by Saudi Central Bank - MarketBeat"}
+{"src":"gnews","symbol":"COST","title":"Costco Wholesale stock steadies as strong fiscal 2026 sales support upside targets - ad-hoc-news.de"}
+{"src":"gnews","symbol":"COST","title":"Costco Wholesale Corporation Stock (COST) Opinions on Analyst Upgrade Following Sales Reports - Quiver Quantitative"}
+{"src":"gnews","symbol":"COST","title":"Should You Buy Costco Stock Right Now With $2,000 and Hold for 5 Years? - The Motley Fool"}
+{"src":"gnews","symbol":"COST","title":"Costco (COST) Stock Looks Fully Priced On Its 107% Five Year Run - simplywall.st"}
+{"src":"gnews","symbol":"COST","title":"Is Now a Good Time to Buy Costco Wholesale Stock? - Yahoo Finance"}
+{"src":"gnews","symbol":"DKNG","title":"Why Is DKNG Stock Rising Today? - Stocktwits"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings vs. Flutter: Which Stock Has Better Growth Prospects? - Yahoo Finance"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings (DKNG) Stock May Trade At A Sales Discount But A Sector Premium - simplywall.st"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings Stock Could Pop on Prediction Market Court Decisions - Barron's"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings tokenized stock hits $39M volume on Solana in 3 hours, outpacing memecoins. - Pluang"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings Stock at $23.87: IC360 Deal Puts Predictions Risk in Focus - TechStock²"}
+{"src":"gnews","symbol":"DKNG","title":"DraftKings: Football Is Back And The Stock Looks Interesting After The Decline (Rating Upgrade) - Seeking Alpha"}
+{"src":"gnews","symbol":"DKNG","title":"Price Prediction: DKNG Stock Will Hit $50 on This Date - 24/7 Wall St."}
+{"src":"gnews","symbol":"DKNG","title":"Dear DraftKings Stock Fans, Mark Your Calendars for September 9 - webull.com"}
+{"src":"gnews","symbol":"DKNG","title":"Dear DraftKings Stock Fans, Mark Your Calendars for September 9 - Barchart.com"}
+{"src":"gnews","symbol":"DKNG","title":"Could DraftKings (DKNG) Stock Turn Margin Pressure Into a Bigger Growth Opportunity? - Yahoo Finance"}
+{"src":"gnews","symbol":"DKNG","title":"Michael Burry Bets on Sportsbooks DraftKings and Flutter, Sending Stocks Higher After-Hours - Stocktwits"}
+{"src":"gnews","symbol":"HUM","title":"Is Humana Stock Outperforming the Dow? - Yahoo Finance"}
+{"src":"gnews","symbol":"HUM","title":"Humana Inc. $HUM Shares Acquired by The Manufacturers Life Insurance Company - MarketBeat"}
+{"src":"gnews","symbol":"HUM","title":"Is Humana Stock Outperforming the Dow? - webull.com"}
+{"src":"gnews","symbol":"HUM","title":"Humana Inc. stock outperforms competitors on strong trading day - MarketWatch"}
+{"src":"gnews","symbol":"HUM","title":"Cantor Fitzgerald reiterates Neutral rating on Humana stock - Investing.com"}
+{"src":"gnews","symbol":"HUM","title":"New Study Links Integrated Specialty Pharmacy Care to Faster Access and Lower Costs - Stock Titan"}
+{"src":"gnews","symbol":"HUM","title":"Humana Inc. (HUM) Stock Analysis: Navigating A 4.25% Upside Amid Healthcare Growth - DirectorsTalk Interviews"}
+{"src":"gnews","symbol":"HUM","title":"How Humana Inc. (HUM) Affects Rotational Strategy Timing - Stock Traders Daily"}
+{"src":"gnews","symbol":"HUM","title":"Humana (HUM) Stock Trades Down, Here Is Why - Yahoo Finance"}
+{"src":"gnews","symbol":"HUM","title":"Humana Inc. $HUM Shares Sold by National Pension Service - MarketBeat"}
+{"src":"gnews","symbol":"HUM","title":"Cantor Fitzgerald reiterates Neutral rating on Humana stock By Investing.com - Investing.com Canada"}
+{"src":"gnews","symbol":"HUM","title":"Here's Why Investors Should Retain Humana Stock for Now - Yahoo Finance"}
+{"src":"gnews","symbol":"IONQ","title":"IonQ (NYSE: IONQ) Raises 2026 Full-Year Revenue Guidance - IonQ"}
+{"src":"gnews","symbol":"IONQ","title":"Why IonQ (IONQ) Stock Is Down Today - Yahoo Finance"}
+{"src":"gnews","symbol":"IONQ","title":"RGTI Vs QBTS Vs INFQ Vs IONQ: Which Quantum Computing Stock Is Retail Most Bullish On? - Stocktwits"}
+{"src":"gnews","symbol":"IONQ","title":"What It Would Take for IonQ Stock to Reach $100 - The Motley Fool"}
+{"src":"gnews","symbol":"IONQ","title":"Takeaways From IonQ’s Investor Day: A New Quantum System and $1.8 Billion Deal - Barron's"}
+{"src":"gnews","symbol":"IONQ","title":"IonQ (IONQ) Stock Looks Fully Priced On Its Superion 256 Launch - simplywall.st"}
+{"src":"gnews","symbol":"IONQ","title":"Why IonQ (IONQ) Stock Is Down Today - TradingView"}
+{"src":"gnews","symbol":"IONQ","title":"Why Is IonQ Stock Sinking? - Trefis"}
+{"src":"gnews","symbol":"IONQ","title":"Why I Wouldn't Touch IonQ, Even With Quantum Computing Stocks Soaring - Yahoo Finance"}
+{"src":"gnews","symbol":"IONQ","title":"IonQ’s CEO Says ‘Q-Day’ Hits in 2028. The Stock Says Investors Stopped Listening - 24/7 Wall St."}
+{"src":"gnews","symbol":"IONQ","title":"Not IonQ, Not Rigetti Computing. This Quantum Computing Stock Could Be September's Biggest Winner. - The Motley Fool"}
+{"src":"gnews","symbol":"IONQ","title":"If I Could Only Buy 1 Quantum Computing Stock, This Would Be It - Yahoo Finance"}
+{"src":"gnews","symbol":"META","title":"Meta Announces Quarterly Cash Dividend - Meta Investor Relations"}
+{"src":"gnews","symbol":"META","title":"Why Cathie Wood Is Selling Google and Buying More Meta Platforms Stock - Barchart.com"}
+{"src":"gnews","symbol":"META","title":"AppLovin vs. Meta Platforms: Which Technology Stock Is a Better Buy in 2026? - Yahoo Finance"}
+{"src":"gnews","symbol":"META","title":"Meta: The Market Misunderstanding Of This Stock Is Quite Baffling (NASDAQ:META) - Seeking Alpha"}
+{"src":"gnews","symbol":"META","title":"Why Meta Platforms Stock Only Bumped Slightly Higher on Friday - The Motley Fool"}
+{"src":"gnews","symbol":"META","title":"JPMorgan resets Meta stock price target for the rest of 2026 - thestreet.com"}
+{"src":"gnews","symbol":"META","title":"Meta Added $100 Billion in One Day. A 350-Ad Scandal Arrived Hours Later. - 24/7 Wall St."}
+{"src":"gnews","symbol":"META","title":"Meta Stock Scores Wall Street Upgrade After Muse AI App Launch - Investor's Business Daily"}
+{"src":"gnews","symbol":"META","title":"Meta Stock (META) Dips as Company Loses Senior AI Researcher - tipranks.com"}
+{"src":"gnews","symbol":"META","title":"What's Going On With Meta Platforms Stock Thursday? - Meta Platforms (NASDAQ:META) - Benzinga"}
+{"src":"gnews","symbol":"META","title":"Meta Might Be Building AWS For AI Compute (NASDAQ:META) - Seeking Alpha"}
+{"src":"gnews","symbol":"META","title":"Meta’s stock jumps as new personal AI agent Muse addresses a major investor concern - MarketWatch"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Stock (NASDAQ:MSFT) Notches Up as it Offers Guide to Using AI in Education - tipranks.com"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Stock: Is Now the Right Time to Buy or Should You Hold Off? - Yahoo Finance"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft: Big Tech Winner Still On Sale (NASDAQ:MSFT) - Seeking Alpha"}
+{"src":"gnews","symbol":"MSFT","title":"Nvidia stock edges higher on Microsoft data center expansion report - Investing.com"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Stock: Is Now the Right Time to Buy or Should You Hold Off? - The Motley Fool"}
+{"src":"gnews","symbol":"MSFT","title":"Expect Microsoft to Be Anything But Slow For The Rest of September - Yahoo Finance"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Remains Down Over 12 Months: A Wall Street Bull Expects 75% Gains to Materialize Soon - Yahoo Finance"}
+{"src":"gnews","symbol":"MSFT","title":"Is Microsoft Stock Overvalued At 28x Earnings? - Trefis"}
+{"src":"gnews","symbol":"MSFT","title":"What It Means for MSFT Stock Investors as Microsoft Switches to 2 Business Segments - Barchart.com"}
+{"src":"gnews","symbol":"MSFT","title":"OpenAI Judge Discloses Microsoft Stock, Stays on Copyright Case - Bloomberg Law News"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Stock: Azure's revenue is finally public. Its margin isn't - techi.com"}
+{"src":"gnews","symbol":"MSFT","title":"Microsoft Stock (MSFT) Opinions on Recent Earnings and Business Reorganization - Quiver Quantitative"}
+{"src":"gnews","symbol":"NIO","title":"NIO Stock Extends Rally: China’s 'Hottest' Memory-Chip Company Just Won An EV Backer - Stocktwits"}
+{"src":"gnews","symbol":"NIO","title":"Nio Just Dropped 25% in a Month. Is It Time to Sell? - Yahoo Finance"}
+{"src":"gnews","symbol":"NIO","title":"NIO (NIO) Stock Dropped, What Is Behind The Latest Attention? - simplywall.st"}
+{"src":"gnews","symbol":"NIO","title":"Unbelievable, this NioLifer sold all his NIO shares. Even someone who's been superbullish on NIO is quitting - Moomoo"}
+{"src":"gnews","symbol":"NIO","title":"NIO Stock Slides as Sales Outlook Falls Short - Barron's"}
+{"src":"gnews","symbol":"NIO","title":"NIO (NIO) Stock Looks Like A Bargain On Cash Flow And Sales - webull.com"}
+{"src":"gnews","symbol":"NIO","title":"UBS initiates Nio stock with buy rating on premium positioning - Investing.com"}
+{"src":"gnews","symbol":"NIO","title":"NIO's Next Earnings Report on September 1 Could Send the Stock Soaring. Here's Why. - Yahoo Finance"}
+{"src":"gnews","symbol":"NIO","title":"Why Is Nio Stock Falling, and is it a Buying Opportunity? - The Motley Fool"}
+{"src":"gnews","symbol":"NIO","title":"NIO Stock Jumps Overnight: Deutsche Bank's 304% Profit Growth Outlook Drowns Out Pentagon Military Tag Concerns - Stocktwits"}
+{"src":"gnews","symbol":"NIO","title":"NIO Stock Drops. The Weak Chinese Car Market Is Too Much to Overcome. - Barron's"}
+{"src":"gnews","symbol":"NIO","title":"NIO Stock Jumps Overnight: Premium SUV Demand Lifts Average Selling Price To $65,300 - Stocktwits"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow Jumps 25% in 3 Months: Buy, Sell or Hold the Stock? - Yahoo Finance"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow Leads Five Stocks To Watch Near Buy Points - Investor's Business Daily"}
+{"src":"gnews","symbol":"NOW","title":"Why ServiceNow Stock Popped 33% Last Month - The Motley Fool"}
+{"src":"gnews","symbol":"NOW","title":"The Next Palantir Stock Is Hiding in Plain Sight (90% of Fortune 500 Use It) - MarketWise"}
+{"src":"gnews","symbol":"NOW","title":"Needham raises ServiceNow stock price target on AI positioning - Investing.com"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow (NOW) Stock Still Looks Expensive After Fresh AI Ecosystem News - simplywall.st"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow Faces A Reality Check (NYSE:NOW) - Seeking Alpha"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow Inc. stock underperforms Friday when compared to competitors despite daily gains - MarketWatch"}
+{"src":"gnews","symbol":"NOW","title":"Prediction: ServiceNow Will be Worth This in 2028 - 24/7 Wall St."}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow Stock (NOW) Opinions on Recent Price Action and Valuation Reset - Quiver Quantitative"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow, Inc. (NOW) Is a Trending Stock: Facts to Know Before Betting on It - Yahoo Finance"}
+{"src":"gnews","symbol":"NOW","title":"ServiceNow (NOW) Expands With Genesys, Is The Stock Still Cheap? - simplywall.st"}
+{"src":"gnews","symbol":"ORCL","title":"Larry Ellison Ends Plan to Sell Up to $7.5 Billion in Oracle Stock - Yahoo Finance"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle's stock edges up on earnings beat as cloud infrastructure revenue more than doubles - cnbc.com"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle to spend $700 million more on restructuring costs as it ramps up AI spending - Reuters"}
+{"src":"gnews","symbol":"ORCL","title":"Barclays resets Oracle stock price target - thestreet.com"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle Stock Is Rising. Why It’s So Much More Than a Bet on OpenAI. - Barron's"}
+{"src":"gnews","symbol":"ORCL","title":"Has Oracle Become A Weaker Business, Or Just A Cheaper Stock? - Trefis"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle Stock Is Down 17% This Year, But Options Traders Bet on a Blowout - TradingView"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle Says Its Expiring AI Contracts Are Renewing 20% Higher - The Motley Fool"}
+{"src":"gnews","symbol":"ORCL","title":"The weakest link in the U.S. stock market’s AI rally? Oracle is set to report its earnings tonight. - Moomoo"}
+{"src":"gnews","symbol":"ORCL","title":"Oracle options are doing something curious heading into earnings - cnbc.com"}
+{"src":"gnews","symbol":"ORCL","title":"Larry Ellison Scraps Plan to Sell Up to $7.5 Billion Worth of Oracle Stock - WSJ"}
+{"src":"gnews","symbol":"ORCL","title":"Why Oracle's 'Solid' Results Aren't Giving Its Stock A Big Boost - Investor's Business Daily"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir stock gains analyst support as AI sovereignty push lifts price targets - ad-hoc-news.de"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Stock Could Make a Dramatic Move Over the Next Year (Hint: It Implies a Big Move) - The Motley Fool"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Technologies Stock Surged On Evidence That Was Already Public - Yahoo Finance"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Grew Revenue 85% and Raised Full-Year Guidance by 10 Points — So Why Is PLTR Down 26% YTD? - TradingKey"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Technologies (PLTR) Expands Nvidia AI Tie Up On A Valuation That Already Looks Full - simplywall.st"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Stock Remains Attractive Even After a 50% Rally in August - Barchart.com"}
+{"src":"gnews","symbol":"PLTR","title":"After Earnings, Is Palantir a Buy, a Sell, or Fairly Valued? - Morningstar"}
+{"src":"gnews","symbol":"PLTR","title":"Palantir Technologies (NASDAQ:PLTR) Displays High-Growth Leadership and Momentum on CAN SLIM Screen - ChartMill"}
+{"src":"gnews","symbol":"PLTR","title":"Why is Palantir Technologies stock surging today? - Investing.com"}
+{"src":"gnews","symbol":"PLTR","title":"As Palantir Stock Jumps, An Income-Generating Trade Aims For A Big Annualized Return - Investor's Business Daily"}
+{"src":"gnews","symbol":"PLTR","title":"Is Palantir Stock an Undervalued AI Stock to Buy? - The Motley Fool"}
+{"src":"gnews","symbol":"PLTR","title":"Is Palantir Stock an Undervalued AI Stock to Buy? - The Globe and Mail"}
+{"src":"gnews","symbol":"SOFI","title":"SoFi Technologies, Inc. $SOFI Shares Sold by Wellington Management Group LLP - MarketBeat"}
+{"src":"gnews","symbol":"SOFI","title":"Where Will SoFi Stock Be in 5 Years? - Yahoo Finance"}
+{"src":"gnews","symbol":"SOFI","title":"Down 30% This Year, Is It Finally Time to Buy SoFi Stock? - The Motley Fool"}
+{"src":"gnews","symbol":"SOFI","title":"SoFi Stock Is Down More Than 40%. Here’s Why I’m Not Selling. - 24/7 Wall St."}
+{"src":"gnews","symbol":"SOFI","title":"SoFi Technologies: Growth Is Doing The Heavy Lifting, And I Am Buying The Setup (SOFI) - Seeking Alpha"}
+{"src":"gnews","symbol":"SOFI","title":"SoFi (SOFI) Stock Could Be 38% Overvalued On Tokenized Equity Push - simplywall.st"}
+{"src":"gnews","symbol":"SOFI","title":"SoFi Technologies Stock (SOFI) Opinions on Recent Earnings and Partnerships - Quiver Quantitative"}
+{"src":"gnews","symbol":"SOFI","title":"Tidal Investments LLC Has $9.65 Million Stock Position in SoFi Technologies, Inc. $SOFI - MarketBeat"}
+{"src":"gnews","symbol":"SOFI","title":"Why SoFi (SOFI) Stock Is Down Today - Yahoo Finance"}
+{"src":"gnews","symbol":"SOFI","title":"Where Will SoFi Stock Be in 5 Years? - The Motley Fool"}
+{"src":"gnews","symbol":"SOFI","title":"SoFi Technologies Firing On All Cylinders: Discounted Profitable Growth Prospects - Seeking Alpha"}
+{"src":"gnews","symbol":"SOFI","title":"NewEdge Advisors LLC Acquires 153,164 Shares of SoFi Technologies, Inc. $SOFI - MarketBeat"}
+{"src":"gnews","symbol":"TSLA","title":"Tesla: Shares Fall as Market Disappointed With Cybercab Launch Event - Morningstar"}
+{"src":"gnews","symbol":"TSLA","title":"Is Tesla Stock a Buy in September 2026? - Yahoo Finance"}
+{"src":"gnews","symbol":"TSLA","title":"The Tesla Network Is Dead: JPMorgan’s Bombshell Note Reveals Nearly All Robotaxi Billions Flow to TSLA, Not You - 24/7 Wall St."}
+{"src":"gnews","symbol":"TSLA","title":"Tesla's stock drops 6% as Cybercab update 'underwhelms' Wall Street - cnbc.com"}
+{"src":"gnews","symbol":"TSLA","title":"In A SpaceX-Tesla Merger, Elon Musk May Be The Big Winner. What It May Mean For Other Investors. - Investor's Business Daily"}
+{"src":"gnews","symbol":"TSLA","title":"Fantastic News for Tesla Stock Investors! - The Motley Fool"}
+{"src":"gnews","symbol":"TSLA","title":"Is Tesla Stock Priced For Its Earnings Or Its Robots? - Trefis"}
+{"src":"gnews","symbol":"TSLA","title":"Tesla Shares Suffer Slow Summer After SpaceX IPO, Earnings Rout - Bloomberg.com"}
+{"src":"gnews","symbol":"TSLA","title":"China’s Auto Threat Isn’t Just About EVs. Tesla Is Caught in the Middle. - Barron's"}
+{"src":"gnews","symbol":"TSLA","title":"Here’s Why Tesla Stock Is Up 7% Today—Its Best Day In Months - Forbes"}
+{"src":"gnews","symbol":"TSLA","title":"Tesla Stock Has Been on a Hot Streak Ahead of Big Event This Week - Investopedia"}
+{"src":"gnews","symbol":"TSLA","title":"Tesla Stock (TSLA) Opinions on Optimus and Robotaxi Innovations - Quiver Quantitative"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services (UHS) Stock Looks Undervalued As Returns Already Look Strong - Yahoo Finance"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services Inc. Cl B stock outperforms competitors despite losses on the day - MarketWatch"}
+{"src":"gnews","symbol":"UHS","title":"What Could Universal Health Services (UHS) Gain From Integrating Virtual And Inpatient Care? - simplywall.st"}
+{"src":"gnews","symbol":"UHS","title":"UBS reiterates Universal Health Services stock rating at buy - Investing.com"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services Stock: Analyst Estimates &amp; Ratings - Barchart.com"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services, Inc. (UHS) Stock Analysis: Exploring A 14.15% Upside Potential - DirectorsTalk Interviews"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services Inc. Cl B stock outperforms competitors on strong trading day - MarketWatch"}
+{"src":"gnews","symbol":"UHS","title":"Why Is Universal Health Services (UHS) Up 5.7% Since Last Earnings Report? - Yahoo Finance"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services (UHS) Stock Looks Cheap On Earnings While Returns Look Strong - simplywall.st"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services (UHS) Stock Looks Undervalued As Shares Fell 29% YTD - Yahoo Finance"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services Inc. Cl B stock outperforms competitors on strong trading day - MarketWatch"}
+{"src":"gnews","symbol":"UHS","title":"Universal Health Services Inc. Cl B stock underperforms Wednesday when compared to competitors despite daily gains - MarketWatch"}

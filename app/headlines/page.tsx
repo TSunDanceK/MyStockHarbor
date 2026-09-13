@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getGeneralMarketHeadlines, type GeneralHeadline } from "@/lib/general-market-news";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 
 const PAGE_TITLE = "Market Headlines | Latest Stock Market News | MyStockHarbor";
 const PAGE_DESCRIPTION =
@@ -241,8 +242,14 @@ export default async function HeadlinesPage() {
 function HeadlineCard({ item }: { item: GeneralHeadline }) {
   return (
     <article style={headlineCardStyle}>
-      {item.image ? (
+      {/*
+        HIDDEN, NOT DELETED — the site had no right to display publisher
+        thumbnails passed through by FMP, who were never the rights holder.
+        lib/news-image-policy.ts has the reasoning and the single flag.
+      */}
+      {SHOW_PUBLISHER_IMAGES && item.image ? (
         <div style={headlineThumbWrapStyle}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.image} alt="" loading="lazy" style={headlineThumbImgStyle} />
         </div>
       ) : null}

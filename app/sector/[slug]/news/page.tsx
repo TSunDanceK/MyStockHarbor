@@ -28,6 +28,9 @@ import {
   NewsScoreWatermark,
 } from "@/app/components/WatermarkVisibility";
 import WhyThisMatters from "@/app/stock/[symbol]/news/WhyThisMatters";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
+import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import NewsCardArt from "@/app/components/NewsCardArt";
 
 export const runtime = "nodejs";
 
@@ -163,9 +166,23 @@ function snippet(item: NewsItem, sectorName: string) {
 }
 
 /** The constituent this article is primarily about, when FMP tagged one. */
+/**
+ * The constituent this article is about, or null.
+ *
+ * ── BOTH ATTRIBUTION FIELDS, AND WHY THAT IS NOT COSMETIC ──────────────────
+ * This read `fmpSymbols` alone, which only FMP items carry. Every free adapter
+ * puts its attribution in `tickers` instead — deliberately, because
+ * `fmpSymbolMatched` is a hard preference in rankNews rather than a confidence
+ * signal (see the note in wireProvider). So on the day NEWS_PROVIDER flips to
+ * "free" this would have returned null for EVERY item on this page: no ticker
+ * pill, no generated card on the compact rows, and nothing to explain it.
+ *
+ * Reading both changes nothing today — FMP items carry no `tickers` — and is
+ * what keeps this page working across the flip.
+ */
 function primarySymbol(item: NewsItem, constituents: string[]) {
   const set = new Set(constituents);
-  for (const symbol of item.fmpSymbols ?? []) {
+  for (const symbol of [...(item.fmpSymbols ?? []), ...(item.tickers ?? [])]) {
     if (set.has(symbol)) return symbol;
   }
   return null;
@@ -537,6 +554,37 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
   const { detailedNews, compactNews, newsScore, constituents } = data;
   const sectorDef = getSectorBySlug(data.slug);
 
+  // ── THE SLUG IS THE SECTOR, so there is no lookup to do ──────────────────
+  // The stock news page reaches a bucket through a cached fundamentals read
+  // (industry first, then sector). This page already knows the sector — it is
+  // the route — so bucketFor takes it directly and costs nothing at all. No
+  // industry here by nature: a sector feed spans many.
+  //
+  // Step 0 left this page imageless because the generated data card needs a
+  // per-item price move and sparkline this page does not load. That reasoning
+  // applied to the FALLBACK and was taken to rule out the library art too,
+  // which it never did: the library art needs no price data.
+  const sectorBucket = bucketFor(data.slug, null);
+
+  // PER BUCKET, for the same reason as the stock page: with eventType live,
+  // adjacent cards can draw from different buckets, and index 2 of one is a
+  // different image from index 2 of another.
+  const takenByBucket = new Map<string, Set<number>>();
+  const leadArt: CardArt[] = detailedNews.map((item) =>
+    planCardArt({
+      variant: "lead",
+      eventType: item.eventType,
+      sectorBucket,
+      key: item.guid ?? item.link,
+      taken: takenByBucket,
+      // A sector feed article that resolves to no constituent has no ticker to
+      // put on a generated card, so the plan comes back "none" rather than
+      // drawing an empty one. Every sector slug maps to a bucket that holds
+      // art, so in practice the lead cards take library art regardless.
+      canGenerate: primarySymbol(item, constituents) !== null,
+    })
+  );
+
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
@@ -558,12 +606,34 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                       : "3px solid rgba(255,255,255,0.08)",
                 }}
               >
-                {item.image ? (
+{/*
+                  HIDDEN, NOT DELETED. The site had no right to display these:
+                  FMP passed through other people's image URLs and were never the
+                  rights holder. lib/news-image-policy.ts carries the reasoning
+                  and is the single flag that turns them back on.
+                */}
+                {SHOW_PUBLISHER_IMAGES && item.image ? (
                   <div style={newsThumbWrapStyle}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
                   </div>
-                ) : null}
+                ) : (
+                  <div style={newsThumbWrapStyle}>
+                    {/* THE FALLBACK IS THINNER HERE THAN ON THE STOCK PAGE, and
+                        says so honestly: this page loads no prices, so a
+                        generated card shows the ticker with the flat no-data
+                        state rather than inventing a move. It is reached only
+                        when a bucket holds no art, which no sector slug does. */}
+                    <NewsCardArt
+                      plan={leadArt[index]}
+                      symbol={symbol ?? ""}
+                      changePct={null}
+                      points={[]}
+                      sizes="(max-width: 700px) 100vw, 700px"
+                      style={newsThumbImgStyle}
+                    />
+                  </div>
+                )}
 
                 <div style={newsMetaRowStyle}>
                   <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
@@ -661,10 +731,31 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                   className="compactNewsRow"
                   style={compactNewsRowStyle}
                 >
-                  {item.image ? (
+                  {/* Hidden, not deleted — see the lead card above. */}
+                  {SHOW_PUBLISHER_IMAGES && item.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
-                  ) : null}
+                  ) : (
+                    /* Nothing is drawn for an article that resolves to no
+                       constituent — canGenerate false — because this card's
+                       whole content is the ticker, and a ticker card with no
+                       ticker is worse than a blank slot. The row already falls
+                       back to the publisher name for its own label there. */
+                    <NewsCardArt
+                      plan={planCardArt({
+                        variant: "compact",
+                        sectorBucket,
+                        key: item.guid ?? item.link,
+                        taken: takenByBucket,
+                        canGenerate: symbol !== null,
+                      })}
+                      symbol={symbol ?? ""}
+                      changePct={null}
+                      points={[]}
+                      sizes="56px"
+                      style={compactThumbStyle}
+                    />
+                  )}
                   <div style={{ minWidth: 88, flexShrink: 0 }}>
                     <div style={compactSourceStyle}>{symbol ?? compactSource(item.source)}</div>
                     <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>

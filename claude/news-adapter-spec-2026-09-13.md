@@ -86,6 +86,32 @@ until step 6 refines it.
 
 Nothing else. No adapter, no provider interface changes, no store changes.
 
+**SHIPPED 2026-09-13 — items 1 and 2. ITEM 3 IS OUTSTANDING AND IS THE OWNER'S.**
+
+- **1 (done, and wider than stated).** Four render sites were hotlinking, not one:
+  the stock news page (lead + compact), the sector news page (lead + compact),
+  `/headlines`, and the dashboard news strip. All four are now guarded by the single
+  `SHOW_PUBLISHER_IMAGES` flag in `lib/news-image-policy.ts`, render code left intact.
+  Hiding only the stock page would have left three quarters of the exposure running.
+- **2 (done).** `lib/server/news/art.ts` selects the bucket and the image;
+  `app/components/GeneratedNewsArt.tsx` draws the generated data card as an inline
+  SVG. Bucket selection reads the cached per-symbol `industry` first and falls back to
+  sector, because the bucket taxonomy is finer than the site's eleven sectors —
+  "technology" alone cannot choose between semiconductors and software, and roughly
+  half the library is unreachable from sector alone. It costs no extra call: the
+  industry is already beside the sector in `fundamentalsCache`.
+- **3 (NOT done — the images are not in the repo and cannot be produced here).**
+  `public/news-art/` ships with an **empty `manifest.json`**, so every card currently
+  draws the generated data card and nothing 404s. Dropping the 89 `.webp` files in and
+  raising the counts (they are recorded ready-to-paste in `public/news-art/README.md`)
+  is the only remaining step, and it needs no code change.
+  `scripts/check-news-art.mjs` fails if a manifest count has no file behind it, which
+  is the failure mode that would otherwise reach a live page as a broken image.
+
+The sector news page, `/headlines` and the dashboard strip now render **no** image:
+the generated card needs a per-item price move and sparkline that those pages do not
+load. Wiring art there is a follow-up, not part of step 0.
+
 ## What this buys
 
 - The exposure stops this week instead of next month.
@@ -381,7 +407,32 @@ keyword match. Keep the keyword list small and in one place.
 
 0. **Art cascade against existing data, and hide the publisher image.** See §0. The only urgent step. Ships alone, needs no adapter.
 1. Provider interface + `NEWS_PROVIDER` flag, FMP behind it. **No behaviour change.** Ship and verify nothing moved.
+   **SHIPPED 2026-09-13.** `lib/server/news/` holds the interface (`types.ts`), the
+   flag (`index.ts`) and the FMP adapter (`fmpProvider.ts`); the text helpers and the
+   response-window reading moved out of `lib/stock-news-data.ts` with it, because the
+   adapters are called BY that file and importing them back would be a cycle.
+   `NEWS_PROVIDER` defaults to `"fmp"` until step 7 — that is the one place this file's
+   snippet above describes the end state rather than the current code. Verified: same
+   request URL and byte-identical `NewsItem[]` out of the adapter as out of the inline
+   fetch it replaced, cold and incremental; `scripts/check-news-feed.mjs` §8 pins the
+   default, the no-empty-provider-list rule and the adapter's continued existence.
 2. Company-name normaliser + unit tests against the real universe.
+   **SHIPPED 2026-09-13.** `lib/server/news/companyName.ts`, tested by
+   `scripts/check-company-name.mjs` against 155 verbatim directory names in
+   `scripts/fixtures/company-names.txt` (pulled through the relay — the sandbox is
+   refused `www.nasdaqtrader.com`). **§1's algorithm above is incomplete and the
+   fixture is what proved it:** only about half of real names use the ` - `
+   separator it says to cut at. `Chevron Corporation Common Stock` and
+   `Boeing Company (The) Common Stock` join the instrument clause with a space, so a
+   dash-only cut leaves it attached. The dash cut is kept (it is the only thing that
+   handles ` - Units` and ` - 7.875% Notes due 2028`) and the instrument clause is
+   then removed by `cleanName` in `lib/server/companyNames.ts`, which the screener
+   cards have used against this same feed for months — shared, not restated. The
+   suffix list is §1's plus `Incorporated`/`Limited`/`LLC`/`LP`/`Holding` and the
+   dotless forms, each justified by a named row in the fixture. All 55 symbols the
+   site publishes on normalise correctly; `MSTR -> "Strategy"` and `POST -> "Post"`
+   are the override candidates, and funds/notes/preferreds are detected rather than
+   searched.
 3. Google News adapter, per-symbol, with the date filter. Resolve `tickers`/`fmpSymbols` here.
 4. Wire adapters.
 5. SEC filings adapter + committed CIK map.
