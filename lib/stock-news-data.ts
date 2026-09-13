@@ -505,16 +505,41 @@ async function fetchGoogleNewsFallback(
   }
 }
 
-async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
-  const filteredFmp = fmpNews.filter((item) => !isVideoOrLowQualitySource(item));
+/**
+ * The display feed, from an ALREADY-FETCHED store read.
+ *
+ * ── WHY THIS TAKES `stored` RATHER THAN FETCHING ───────────────────────────
+ * It used to call fetchStoredSymbolNews itself, and so did fetchEarningsNews,
+ * and buildStockNewsBaseData ran the two in a Promise.all. That is the same
+ * store read TWICE, CONCURRENTLY, per render. It was visible in production logs
+ * the whole time as a doubled line:
+ *
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *
+ * The cost was two full adapter passes on a cold page -- Google News, both
+ * wires and SEC, twice -- but the REAL problem was correctness: two concurrent
+ * readOrRefresh passes on one Redis key, each reading the same pre-merge state
+ * and each writing its own merge back. Last write wins, so one pass's articles
+ * could be dropped by the other's write. A lost-update race, not a slow page.
+ *
+ * One read, passed to both consumers, removes both at once.
+ */
+function selectDisplayNews(stored: NewsItem[]): NewsItem[] {
+  const filtered = stored.filter((item) => !isVideoOrLowQualitySource(item));
+  return filtered.length ? mergeNewsPools([filtered]).slice(0, 50) : [];
+}
 
-  if (filteredFmp.length) {
-    return mergeNewsPools([filteredFmp]).slice(0, 50);
-  }
-
-  // FMP returned nothing usable for this symbol — fall back to Google News
-  // RSS so the page still shows headlines. These items will have no image.
+/**
+ * The Google News fallback, kept as a SEPARATE step for the empty case only.
+ *
+ * It stays outside selectDisplayNews because it is a network call and that
+ * function is now pure -- the caller decides whether the fallback is worth a
+ * request, and on the free stack it almost never is: Google News is already the
+ * primary adapter, so an empty store means the search returned nothing and
+ * asking the same host a second question is unlikely to change that.
+ */
+async function fetchNewsFallback(symbol: string, companyName: string): Promise<NewsItem[]> {
   const googleNews = await fetchGoogleNewsFallback(symbol, companyName);
 
   return mergeNewsPools([
@@ -575,8 +600,9 @@ function logNewsDepth(label: string, symbol: string, fetched: number, kept: News
   );
 }
 
-async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
+/** The earnings slice of the SAME store read — see selectDisplayNews. */
+function selectEarningsNews(stored: NewsItem[], symbol: string): NewsItem[] {
+  const fmpNews = stored;
 
   const kept = mergeNewsPools([
     fmpNews
@@ -2137,10 +2163,14 @@ async function buildStockNewsBaseData(
     fetchCompanyName(upper),
   ]);
 
-  const [news, earningsNews] = await Promise.all([
-    fetchNews(upper, companyName),
-    fetchEarningsNews(upper, companyName),
-  ]);
+  // ONE STORE READ, TWO CONSUMERS. This was `Promise.all([fetchNews(...),
+  // fetchEarningsNews(...)])` and each of those fetched the store itself, so
+  // every render ran the whole adapter fan-out twice and raced two writes on
+  // one Redis key. See the note on selectDisplayNews.
+  const storedNews = await fetchStoredSymbolNews(upper, companyName);
+  const displayNews = selectDisplayNews(storedNews);
+  const news = displayNews.length ? displayNews : await fetchNewsFallback(upper, companyName);
+  const earningsNews = selectEarningsNews(storedNews, upper);
 
   const closes = history.map((point) => point.close);
   const ma50 = movingAverage(closes, 50);

@@ -31,6 +31,7 @@ import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
 import { resolveProfile } from "@/lib/server/staticProfile";
+import { beginTiming } from "@/lib/server/timing";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
@@ -467,10 +468,20 @@ export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
+  // ── TOTAL, so the news numbers have a denominator ─────────────────────────
+  // history, quote, earnings and benchmarks already report through
+  // lib/server/timing.ts; news did not, and neither did the page as a whole. A
+  // per-adapter duration with nothing to divide it by cannot answer "is news
+  // even the expensive part of this render", which is the question that decides
+  // whether optimising it is worth doing at all. Off unless MSH_TIMING=1.
+  const endPage = beginTiming("page", `stockNews ${upper}`);
+
   // 5 large cards, 10 compact. The feed walks back up to 90 days to fill them
   // now that similarity dedup has replaced the one-article-per-date rule, so the
   // old 3 was a limit set by how little the source gate cleared.
+  const endNews = beginTiming("page", `newsBaseData ${upper}`);
   const newsData = await getStockNewsBaseData(upper, { maxDetailedItems: 5 });
+  endNews();
 
   const {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
@@ -479,7 +490,9 @@ export default async function StockNewsPage({ params }: Props) {
     history,
   } = newsData;
 
+  const endEarnings = beginTiming("page", `latestEarnings ${upper}`);
   const latestEarnings = await getLatestEarningsData(upper, earningsScore.tone);
+  endEarnings();
 
   // ── News card art (step 0 of claude/news-adapter-spec-2026-09-13.md) ──────
   //
@@ -497,7 +510,9 @@ export default async function StockNewsPage({ params }: Props) {
   // from FMP within the day. There is no FMP call left to refill it, so
   // resolveProfile falls through to data/static-profile.json — still no network
   // request, still no throw, and it logs any symbol that neither leg answers for.
+  const endFundamentals = beginTiming("page", `fundamentals ${upper}`);
   const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  endFundamentals();
   const profile = resolveProfile(upper, fundamentals);
   const artBucket = bucketFor(
     sectorSlugFromLabel(profile.sector),
@@ -527,6 +542,10 @@ export default async function StockNewsPage({ params }: Props) {
   // Stocks" internal-linking module (see lib/curatedSymbols.ts and
   // app/components/RelatedStocks.tsx).
   const relatedSymbols = getRelatedSymbols(upper);
+
+  // EVERY await is behind us; what follows is JSX construction. This is the
+  // number the other [timing] lines are a share OF.
+  endPage();
 
   return (
     <WatermarkVisibilityProvider>

@@ -554,5 +554,110 @@ check(
   "naming an adapter at the call site is how the flag stops deciding anything"
 );
 
+
+console.log("\n=== 9. ONE STORE READ PER RENDER ===\n");
+// THE REGRESSION THIS PINS, which ran in production for the whole migration:
+// fetchNews and fetchEarningsNews each called fetchStoredSymbolNews, and the
+// builder ran them in a Promise.all. Two concurrent readOrRefresh passes on one
+// Redis key -- two adapter fan-outs, and two writes racing where the later one
+// could drop the earlier one's merged articles. It was visible as a doubled
+// [gnews] line in the logs and nothing failed.
+const newsDataCode = codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
+// THE DECLARATION IS NOT A CALL SITE. The first version counted
+// `async function fetchStoredSymbolNews(` as one and reported 2 for correct
+// code -- an assertion that fails on the fixed state is as useless as one that
+// passes on the broken state.
+const storeCalls = [...newsDataCode.matchAll(/\bfetchStoredSymbolNews\s*\(/g)].filter(
+  (m) => !/function\s+$/.test(newsDataCode.slice(Math.max(0, m.index - 20), m.index))
+).length;
+check(
+  "fetchStoredSymbolNews is CALLED from exactly one place",
+  storeCalls === 1,
+  `${storeCalls} call site(s) — a second one is the doubled fan-out and the write race coming back`
+);
+// AND THE CONSUMERS CANNOT FETCH AT ALL. A call-site count alone would pass if
+// someone reintroduced the read under a different name; a selector declared
+// without `async` cannot await a store read whatever it is called.
+for (const fn of ["selectDisplayNews", "selectEarningsNews"]) {
+  check(
+    `${fn} is a pure selector, not an async fetch`,
+    new RegExp(`(?<!async )function ${fn}\\(`).test(newsDataCode) &&
+      !new RegExp(`async function ${fn}\\(`).test(newsDataCode),
+    "it takes the already-fetched store; a function that cannot await cannot double-fetch"
+  );
+}
+check(
+  "the builder reads the store once and hands it to both consumers",
+  /const storedNews = await fetchStoredSymbolNews\(/.test(newsDataCode) &&
+    /selectDisplayNews\(storedNews\)/.test(newsDataCode) &&
+    /selectEarningsNews\(storedNews[,)]/.test(newsDataCode)
+);
+// The empty-store fallback is still reachable, and still only then: it is a
+// network call and must not run when the store answered.
+check(
+  "the Google News fallback runs only when the store yielded nothing",
+  /displayNews\.length \? displayNews : await fetchNewsFallback\(/.test(newsDataCode),
+  "an unconditional fallback would add a request to every render"
+);
+
+console.log("\n=== 10. THE STORE WRITES DO NOT BLOCK THE READER ===\n");
+const storeCode = codeOf(read("lib/server/newsStore.ts"), "lib/server/newsStore.ts");
+check(
+  "after() comes from next/server, not a detached promise",
+  /import \{ after \} from "next\/server";/.test(storeCode),
+  "a floating promise in a serverless function can be killed the moment the response is sent"
+);
+// AWAITED INSIDE after() IS CORRECT — the deferred callback has to await its own
+// writes or they are dropped. The property is that none of them is awaited
+// OUTSIDE one, so the after() blocks are removed before looking. The first
+// version tested `!/await writeStored\(/` over the whole file and failed on the
+// correct code, which would have pushed the fix toward dropping the await.
+const outsideAfter = (() => {
+  let out = "";
+  let i = 0;
+  while (i < storeCode.length) {
+    // `after(` ALONE WOULD ALSO MATCH A DECLARATION of that identifier, which
+    // scripts/check-assertion-anchors.mjs flagged on the first version of this.
+    // Anchored on the two call shapes actually used instead.
+    const nextCall = /after\((?:async )?\(\) =>/g;
+    nextCall.lastIndex = i;
+    const hit = nextCall.exec(storeCode);
+    const at = hit ? hit.index : -1;
+    if (at < 0) { out += storeCode.slice(i); break; }
+    out += storeCode.slice(i, at);
+    // Walk to the matching close paren so nested parens do not end it early.
+    let depth = 0;
+    let j = at + "after".length;
+    for (; j < storeCode.length; j += 1) {
+      if (storeCode[j] === "(") depth += 1;
+      else if (storeCode[j] === ")") { depth -= 1; if (depth === 0) { j += 1; break; } }
+    }
+    i = j;
+  }
+  return out;
+})();
+check(
+  "the after() blocks were actually found and removed",
+  outsideAfter.length < storeCode.length && /writeStored/.test(storeCode),
+  "if the stripper matched nothing the checks below would pass over the whole file"
+);
+for (const [write, why] of [
+  ["writeStored", "the store itself"],
+  ["recordRefreshStats", "the refresh counters"],
+  ["markViewed", "the staleness mark"],
+]) {
+  check(
+    `${write} is not awaited outside after() (${why})`,
+    !new RegExp(`await ${write}\\(`).test(outsideAfter),
+    "the reader already holds the items; it consumes none of these"
+  );
+}
+check(
+  "...and all three are inside an after() callback",
+  /after\(async \(\) => \{[\s\S]*?writeStored\([\s\S]*?recordRefreshStats\([\s\S]*?\}\)/.test(storeCode) &&
+    /after\(\(\) => markViewed\(/.test(storeCode),
+  "not awaited AND not deferred would mean simply dropped"
+);
+
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

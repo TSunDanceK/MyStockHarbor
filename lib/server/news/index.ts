@@ -32,6 +32,7 @@
 // FMP's taxonomy, so from here the snapshot is the floor and a symbol outside
 // it resolves to null — no bucket, the generated card, and absent from sector
 // pages. lib/server/staticProfile.ts logs every one of those misses.
+import { beginTiming } from "../timing";
 import { fmpNewsProvider } from "./fmpProvider";
 import { gnewsProvider } from "./gnewsProvider";
 import { wireProvider } from "./wireProvider";
@@ -154,9 +155,60 @@ export async function fetchSymbolNewsWindow(
 ): Promise<NewsItem[]> {
   const providers = activeNewsProviders();
 
-  const windows = await Promise.all(
-    providers.map((provider) => provider.fetchForSymbol(symbol, companyName, sinceIso))
+  // ── allSettled, AND THE ALL-FAILED CASE STILL THROWS ──────────────────────
+  // Promise.all lost two good windows to one bad one: a single adapter
+  // rejecting discarded whatever the other two had already returned, and the
+  // store then saw a throw and served stale. Google News succeeding is not a
+  // reason to lose Google News because SEC was down.
+  //
+  // BUT A NAIVE allSettled BREAKS THE CONTRACT ABOVE, and that is the trap.
+  // Returning [] when every adapter failed would look to newsStore.ts like a
+  // SUCCESSFUL EMPTY FETCH: it would merge nothing, rewrite the key, count a
+  // refresh, and a populated store would decay toward empty on repeated
+  // upstream failure. "No news exists" and "nobody answered" are different
+  // facts and only one of them may be written down.
+  //
+  // So: some succeeded -> return what arrived. NONE succeeded -> throw, exactly
+  // as Promise.all did, and the store keeps what it holds.
+  // ── TIMED PER ADAPTER AND FOR THE FAN-OUT AS A WHOLE ──────────────────────
+  // Off unless MSH_TIMING=1, in which case each helper is a boolean check and a
+  // pass-through (lib/server/timing.ts). Per-adapter AND total, because the
+  // question "does the page wait for the slowest source or the sum" cannot be
+  // answered by either number alone.
+  const endFanOut = beginTiming("news", `fanOut ${symbol}`);
+  const settled = await Promise.allSettled(
+    providers.map(async (provider) => {
+      const endLeg = beginTiming("news", `adapter ${provider.id} ${symbol}`);
+      try {
+        return await provider.fetchForSymbol(symbol, companyName, sinceIso);
+      } finally {
+        endLeg();
+      }
+    })
+  );
+  endFanOut();
+
+  const fulfilled = settled.filter(
+    (result): result is PromiseFulfilledResult<NewsItem[]> => result.status === "fulfilled"
   );
 
-  return windows.flat();
+  if (!fulfilled.length) {
+    const reasons = settled
+      .map((result, i) => `${providers[i]?.id ?? i}: ${String((result as PromiseRejectedResult).reason)}`)
+      .join("; ");
+    // The message is the whole diagnosis: newsStore catches this and serves
+    // stored items, so without it an all-down upstream is invisible.
+    throw new Error(`[news] every adapter failed for ${symbol} — ${reasons}`);
+  }
+
+  if (fulfilled.length < settled.length) {
+    const failed = settled
+      .map((result, i) => (result.status === "rejected" ? providers[i]?.id ?? String(i) : null))
+      .filter(Boolean);
+    console.warn(
+      `[news] ${symbol}: ${failed.join(", ")} failed, serving ${fulfilled.length} of ${settled.length} adapters`
+    );
+  }
+
+  return fulfilled.flatMap((result) => result.value);
 }

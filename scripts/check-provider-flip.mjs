@@ -56,12 +56,26 @@ for (const [binding, id] of ADAPTERS) {
     console.error("Either the adapter was removed (spec §9 forbids it) or the import shape changed.");
     process.exit(1);
   }
+  // EACH STAND-IN CAN BE MADE TO FAIL, so the partial-failure contract below is
+  // exercised rather than described. globalThis because the module is loaded
+  // from its own file and cannot close over a local here.
   src = src.replace(
     re,
-    `const ${binding} = { id: "${id}", fetchForSymbol: async () => [], fetchMarket: async () => [] };`
+    `const ${binding} = { id: "${id}", fetchMarket: async () => [],\n` +
+      `  fetchForSymbol: async () => {\n` +
+      `    if (globalThis.__failing?.has("${id}")) throw new Error("${id} is down");\n` +
+      `    return [{ title: "from ${id}", link: "l-${id}", pubDate: null }];\n` +
+      `  } };`
   );
 }
 src = src.replace(/^import type \{[\s\S]*?\} from "\.\/types";$/m, "");
+// The timing helpers, inlined rather than stubbed. They are no-ops unless
+// MSH_TIMING=1, so inlining the real ones proves the instrumentation cannot
+// change what the fan-out returns -- which a stub would simply assume.
+src = src.replace(
+  /^import \{ beginTiming \} from "\.\.\/timing";$/m,
+  fs.readFileSync(path.join(ROOT, "lib/server/timing.ts"), "utf8").replace(/^export /gm, "")
+);
 
 if (/^import /m.test(src)) {
   console.error("FAIL: an import survived stubbing — the module would not load:");
@@ -149,6 +163,59 @@ check(
 check(
   "the two windows are not the same number",
   news.FREE_FEED_MAX_AGE_DAYS !== news.NEWS_FEED_MAX_AGE_DAYS
+);
+
+console.log("\n=== 4b. PARTIAL ADAPTER FAILURE ===\n");
+// THE CONTRACT HAS TWO HALVES AND ONLY ONE IS OBVIOUS.
+//
+// Promise.all lost two good windows to one bad one. allSettled fixes that, but
+// a NAIVE allSettled breaks the other half: newsStore.ts has no try/catch around
+// this call ON PURPOSE, so it reads a throw as "upstream failed, keep what is
+// stored". Returning [] when every adapter failed would instead look like a
+// successful empty fetch -- merge nothing, rewrite the key, count a refresh --
+// and a populated store would decay toward empty on repeated failure.
+//
+// "No news exists" and "nobody answered" are different facts. Both halves run.
+const failing = (ids, fn) => {
+  globalThis.__failing = new Set(ids);
+  try { return fn(); } finally { delete globalThis.__failing; }
+};
+const windowIds = async (down) =>
+  (await failing(down, () => news.fetchSymbolNewsWindow("MU", "Micron", null))).map((i) => i.title);
+
+check(
+  "all three up: all three windows arrive",
+  (await windowIds([])).join(",") === "from gnews,from wire,from sec"
+);
+check(
+  "one adapter down: the other two still arrive",
+  (await windowIds(["sec"])).join(",") === "from gnews,from wire",
+  "a Form 4 feed being down is not a reason to lose the Google News feed"
+);
+check(
+  "two adapters down: the survivor still arrives",
+  (await windowIds(["sec", "wire"])).join(",") === "from gnews"
+);
+check(
+  "ALL adapters down: it THROWS, it does not return []",
+  await (async () => {
+    try { await windowIds(["gnews", "wire", "sec"]); return false; }
+    catch { return true; }
+  })(),
+  "[] would be written down as 'this symbol has no news' and evict a populated store"
+);
+check(
+  "...and the throw names which adapters failed",
+  await (async () => {
+    try { await windowIds(["gnews", "wire", "sec"]); return false; }
+    catch (err) { return /gnews/.test(err.message) && /sec/.test(err.message); }
+  })(),
+  "newsStore swallows this to serve stored items, so without the message an all-down upstream is invisible"
+);
+check(
+  "the fan-out is allSettled, not all",
+  /Promise\.allSettled\(/.test(readCodeOnly("lib/server/news/index.ts")) &&
+    !/Promise\.all\(\s*$/m.test(readCodeOnly("lib/server/news/index.ts"))
 );
 
 console.log("\n=== 5. AN EMPTY PROVIDER LIST STILL CANNOT EMPTY THE FEED ===\n");
