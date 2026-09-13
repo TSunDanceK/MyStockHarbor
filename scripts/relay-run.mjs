@@ -85,6 +85,14 @@ const TASKS = {
   // inputs §7's cascade reads — no judgement made on the runner, so the
   // measurement describes the shipped derivation and not a copy of it.
   "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
+  // Read-only, NO NETWORK AT ALL: inventories the frozen dump already on the
+  // runner. Asked before building the static-profile snapshot, because if the
+  // dump carries the taxonomy the snapshot costs no FMP calls whatsoever.
+  "dump-inventory": {
+    script: "scripts/dump-inventory.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
