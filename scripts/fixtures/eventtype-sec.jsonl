@@ -1,0 +1,117 @@
+# One real poll of data.sec.gov submissions for the same 16 symbols, digested to
+# the inputs §7's form leg reads. Captured 2026-09-13 by the relay (task
+# eventtype-sample, symbols=eventtype-sec, run 34768081146). Verified 6,841
+# bytes against the emitter's own accounting.
+#
+# AGGREGATED BY (form, items) WITH A COUNT: 108 distinct shapes over 320 real
+# filings, 20 per symbol. A filing's derivation inputs are categorical, so 19
+# identical "Form 4, no items" rows carry exactly the information of one row
+# saying n=19 — unlike a headline, where every row is distinct and IS the signal.
+{"src":"sec","symbol":"AAPL","form":"4","items":"","n":11}
+{"src":"sec","symbol":"AAPL","form":"3","items":"","n":1}
+{"src":"sec","symbol":"AAPL","form":"8-K/A","items":"5.02","n":1}
+{"src":"sec","symbol":"AAPL","form":"144","items":"","n":4}
+{"src":"sec","symbol":"AAPL","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"AAPL","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"AAPL","form":"SD","items":"","n":1}
+{"src":"sec","symbol":"AVGO","form":"S-4","items":"","n":1}
+{"src":"sec","symbol":"AVGO","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"AVGO","form":"8-K","items":"2.02,8.01,9.01","n":1}
+{"src":"sec","symbol":"AVGO","form":"4","items":"","n":7}
+{"src":"sec","symbol":"AVGO","form":"144","items":"","n":5}
+{"src":"sec","symbol":"AVGO","form":"8-K","items":"8.01","n":1}
+{"src":"sec","symbol":"AVGO","form":"144/A","items":"","n":4}
+{"src":"sec","symbol":"BABA","form":"6-K","items":"","n":14}
+{"src":"sec","symbol":"BABA","form":"4","items":"","n":4}
+{"src":"sec","symbol":"BABA","form":"13F-HR","items":"","n":1}
+{"src":"sec","symbol":"BABA","form":"N-PX","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"3","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"4","items":"","n":5}
+{"src":"sec","symbol":"COST","form":"8-K","items":"8.01,9.01","n":2}
+{"src":"sec","symbol":"COST","form":"11-K","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"144","items":"","n":4}
+{"src":"sec","symbol":"COST","form":"S-3ASR","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"SD","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"COST","form":"3/A","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"SCHEDULE 13G","items":"","n":1}
+{"src":"sec","symbol":"COST","form":"SCHEDULE 13G/A","items":"","n":1}
+{"src":"sec","symbol":"DKNG","form":"4","items":"","n":13}
+{"src":"sec","symbol":"DKNG","form":"8-K","items":"1.01,2.03,7.01,9.01","n":1}
+{"src":"sec","symbol":"DKNG","form":"144","items":"","n":1}
+{"src":"sec","symbol":"DKNG","form":"SCHEDULE 13G","items":"","n":3}
+{"src":"sec","symbol":"DKNG","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"DKNG","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"HUM","form":"4","items":"","n":8}
+{"src":"sec","symbol":"HUM","form":"8-K","items":"7.01","n":2}
+{"src":"sec","symbol":"HUM","form":"3","items":"","n":3}
+{"src":"sec","symbol":"HUM","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"HUM","form":"8-K","items":"5.02,9.01","n":1}
+{"src":"sec","symbol":"HUM","form":"8-K","items":"2.02,7.01,9.01","n":1}
+{"src":"sec","symbol":"HUM","form":"11-K","items":"","n":2}
+{"src":"sec","symbol":"HUM","form":"8-K","items":"1.01,2.03,9.01","n":1}
+{"src":"sec","symbol":"HUM","form":"SCHEDULE 13G/A","items":"","n":1}
+{"src":"sec","symbol":"IONQ","form":"4","items":"","n":3}
+{"src":"sec","symbol":"IONQ","form":"144","items":"","n":4}
+{"src":"sec","symbol":"IONQ","form":"8-K","items":"7.01,9.01","n":1}
+{"src":"sec","symbol":"IONQ","form":"8-K","items":"5.02,8.01,9.01","n":1}
+{"src":"sec","symbol":"IONQ","form":"3","items":"","n":2}
+{"src":"sec","symbol":"IONQ","form":"SCHEDULE 13G","items":"","n":1}
+{"src":"sec","symbol":"IONQ","form":"S-8 POS","items":"","n":1}
+{"src":"sec","symbol":"IONQ","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"IONQ","form":"424B7","items":"","n":1}
+{"src":"sec","symbol":"IONQ","form":"8-K","items":"3.02,9.01","n":1}
+{"src":"sec","symbol":"IONQ","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"IONQ","form":"8-K","items":"8.01,9.01","n":2}
+{"src":"sec","symbol":"IONQ","form":"SCHEDULE 13G/A","items":"","n":1}
+{"src":"sec","symbol":"META","form":"4","items":"","n":18}
+{"src":"sec","symbol":"META","form":"144","items":"","n":2}
+{"src":"sec","symbol":"MSFT","form":"4","items":"","n":19}
+{"src":"sec","symbol":"MSFT","form":"PX14A6G","items":"","n":1}
+{"src":"sec","symbol":"NIO","form":"4","items":"","n":6}
+{"src":"sec","symbol":"NIO","form":"144","items":"","n":5}
+{"src":"sec","symbol":"NIO","form":"6-K","items":"","n":9}
+{"src":"sec","symbol":"NOW","form":"4","items":"","n":16}
+{"src":"sec","symbol":"NOW","form":"144","items":"","n":3}
+{"src":"sec","symbol":"NOW","form":"S-8","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"8-K","items":"2.02,8.01,9.01","n":2}
+{"src":"sec","symbol":"ORCL","form":"4","items":"","n":10}
+{"src":"sec","symbol":"ORCL","form":"144","items":"","n":2}
+{"src":"sec","symbol":"ORCL","form":"424B5","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"10-K","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"SD","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"3","items":"","n":1}
+{"src":"sec","symbol":"ORCL","form":"8-K","items":"5.02,7.01,9.01","n":1}
+{"src":"sec","symbol":"PLTR","form":"4","items":"","n":10}
+{"src":"sec","symbol":"PLTR","form":"144","items":"","n":7}
+{"src":"sec","symbol":"PLTR","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"PLTR","form":"8-K","items":"2.02,7.01,9.01","n":1}
+{"src":"sec","symbol":"PLTR","form":"SCHEDULE 13G","items":"","n":1}
+{"src":"sec","symbol":"SOFI","form":"4","items":"","n":16}
+{"src":"sec","symbol":"SOFI","form":"144","items":"","n":2}
+{"src":"sec","symbol":"SOFI","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"SOFI","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"TSLA","form":"4","items":"","n":6}
+{"src":"sec","symbol":"TSLA","form":"144","items":"","n":4}
+{"src":"sec","symbol":"TSLA","form":"10-Q","items":"","n":2}
+{"src":"sec","symbol":"TSLA","form":"8-K","items":"2.02,9.01","n":2}
+{"src":"sec","symbol":"TSLA","form":"SCHEDULE 13G/A","items":"","n":2}
+{"src":"sec","symbol":"TSLA","form":"SD","items":"","n":1}
+{"src":"sec","symbol":"TSLA","form":"10-K/A","items":"","n":1}
+{"src":"sec","symbol":"TSLA","form":"SCHEDULE 13G","items":"","n":1}
+{"src":"sec","symbol":"TSLA","form":"S-8","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"1.01,2.03,9.01","n":2}
+{"src":"sec","symbol":"UHS","form":"S-8","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"2.03,8.01,9.01","n":1}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"1.01,9.01","n":1}
+{"src":"sec","symbol":"UHS","form":"424B5","items":"","n":2}
+{"src":"sec","symbol":"UHS","form":"FWP","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"POSASR","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"10-Q","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"SCHEDULE 13G/A","items":"","n":1}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"2.02,9.01","n":1}
+{"src":"sec","symbol":"UHS","form":"4","items":"","n":6}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"5.07","n":1}
+{"src":"sec","symbol":"UHS","form":"8-K","items":"5.02","n":1}

@@ -11,6 +11,9 @@ import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
+import type { CardArt } from "@/lib/server/news/art";
+import NewsCardArt from "@/app/components/NewsCardArt";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -19,11 +22,15 @@ type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
 type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
 export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
-type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; image?: string | null; link?: string | null; };
+// Mirrors lib/server/internalNews.ts. `art` is resolved SERVER-SIDE and arrives
+// as four strings: the bucket, the manifest and the no-repeat rule all stay out
+// of this bundle, and there is one implementation of the selection rule rather
+// than two that can drift.
+type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; image?: string | null; link?: string | null; art?: CardArt; };
 // trend and newsScoreLabel are null when they could not be established. This
 // card sits beside the Overview card fixed in #317 and was still rendering
 // "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
-export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; };
+export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
 export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable"; reportDate?: string | null; epsSurprisePercent?: number | null; revenueSurprisePercent?: number | null; };
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
 type DivergenceState = "bullish" | "bearish" | "none";
@@ -1161,12 +1168,38 @@ export default function DashboardClient({
             {news.cards.map((item, idx) => (
               <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  {item.image ? (
-                    <img src={item.image} alt="" loading="lazy" style={{ width: isMobile ? 52 : 104, height: isMobile ? 52 : 104, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
-                  ) : null}
-                  <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
-                </div>
+                {/*
+                  HIDDEN, NOT DELETED — publisher thumbnails passed through by
+                  FMP, who were never the rights holder. See
+                  lib/news-image-policy.ts for the reasoning and the flag.
+
+                  ── A BANNER, WHERE THE PUBLISHER THUMB WAS A 104px SQUARE ──
+                  Not a redesign: with the flag off this slot has rendered
+                  NOTHING since step 0, so there is no live layout being
+                  changed. The library art is 16:9, and object-fit cover in a
+                  square crops most of an illustration away — the old square
+                  existed to hold arbitrary publisher photos, which crop
+                  acceptably and these do not. Full card width is also what
+                  makes these LEAD cards rather than compact rows: each carries
+                  a headline, a four-line summary and a link, which is the lead
+                  shape, so it takes the lead treatment.
+                */}
+                {SHOW_PUBLISHER_IMAGES && item.image ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={item.image} alt="" loading="lazy" style={{ width: isMobile ? 52 : 104, height: isMobile ? 52 : 104, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
+                ) : (
+                  <div style={{ borderRadius: 9, overflow: "hidden", background: "rgba(255,255,255,0.04)", lineHeight: 0 }}>
+                    <NewsCardArt
+                      plan={item.art ?? { kind: "generated", variant: "lead" }}
+                      symbol={news.symbol}
+                      changePct={news.changePct ?? null}
+                      points={news.sparkPoints ?? []}
+                      sizes={isMobile ? "100vw" : "33vw"}
+                      style={{ width: "100%", height: "auto", display: "block" }}
+                    />
+                  </div>
+                )}
+                <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
                 <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{item.summary}</div>
                 {item.link ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "start", color: "#9cc0ff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Read full article ↗</a> : null}
               </div>

@@ -1,0 +1,82 @@
+[
+ {
+  "symbol": "AAPL",
+  "cik": "0000320193",
+  "query": "\"Apple\" stock"
+ },
+ {
+  "symbol": "AVGO",
+  "cik": "0001730168",
+  "query": "\"Broadcom\" stock"
+ },
+ {
+  "symbol": "BABA",
+  "cik": "0001577552",
+  "query": "\"Alibaba\" stock"
+ },
+ {
+  "symbol": "COST",
+  "cik": "0000909832",
+  "query": "\"Costco Wholesale\" stock"
+ },
+ {
+  "symbol": "DKNG",
+  "cik": "0001883685",
+  "query": "\"DraftKings\" stock"
+ },
+ {
+  "symbol": "HUM",
+  "cik": "0000049071",
+  "query": "\"Humana\" stock"
+ },
+ {
+  "symbol": "IONQ",
+  "cik": "0001824920",
+  "query": "\"IonQ\" stock"
+ },
+ {
+  "symbol": "META",
+  "cik": "0001326801",
+  "query": "\"Meta Platforms\" stock"
+ },
+ {
+  "symbol": "MSFT",
+  "cik": "0000789019",
+  "query": "\"Microsoft\" stock"
+ },
+ {
+  "symbol": "NIO",
+  "cik": "0001736541",
+  "query": "\"NIO\" stock"
+ },
+ {
+  "symbol": "NOW",
+  "cik": "0001373715",
+  "query": "\"ServiceNow\" stock"
+ },
+ {
+  "symbol": "ORCL",
+  "cik": "0001341439",
+  "query": "\"Oracle\" stock"
+ },
+ {
+  "symbol": "PLTR",
+  "cik": "0001321655",
+  "query": "\"Palantir Technologies\" stock"
+ },
+ {
+  "symbol": "SOFI",
+  "cik": "0001818874",
+  "query": "\"SoFi Technologies\" stock"
+ },
+ {
+  "symbol": "TSLA",
+  "cik": "0001318605",
+  "query": "\"Tesla\" stock"
+ },
+ {
+  "symbol": "UHS",
+  "cik": "0000352915",
+  "query": "\"Universal Health Services\" stock"
+ }
+]
