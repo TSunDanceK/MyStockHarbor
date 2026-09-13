@@ -54,6 +54,7 @@ const tag1 = (block, tag) => tagAll(block, tag)[0] ?? null;
 const clean = (s) => (s ?? "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").trim();
 
 const prefixCounts = new Map();
+const verbatim = [];
 const summary = [];
 
 for (const [name, group, url] of FEEDS) {
@@ -115,12 +116,10 @@ for (const [name, group, url] of FEEDS) {
   }
   summary.push([name, group, blocks.length, withTicker, inUniverse]);
 
-  // Verbatim items for the fixtures. Wires only — the two headline feeds are
-  // step 4's other half and are counted here, not parsed yet.
-  if (group === "wire") {
-    console.log(`----- VERBATIM (first 3 of ${blocks.length}) -----`);
-    for (const b of blocks.slice(0, 3)) console.log("<item>" + b + "</item>");
-  }
+  // Verbatim items are held back and printed AFTER the summary: the job log is
+  // read from the tail, and a release description is long enough to push the
+  // numbers out of reach.
+  if (group === "wire") verbatim.push([name, blocks.slice(0, 4)]);
 }
 
 console.log("\n================ SUMMARY");
@@ -133,4 +132,8 @@ const wireMatched = summary.filter((r) => r[1] === "wire").reduce((a, r) => a + 
 console.log(`\nWIRE ITEMS RESOLVING TO A UNIVERSE SYMBOL: ${wireMatched}/${wireTotal}` +
   (wireTotal ? ` = ${((wireMatched / wireTotal) * 100).toFixed(1)}%` : ""));
 console.log(`exchange prefixes seen: ${[...prefixCounts].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p}=${n}`).join(", ") || "(none)"}`);
+for (const [name, blocks] of verbatim) {
+  console.log(`\n----- VERBATIM ${name} (${blocks.length}) -----`);
+  for (const b of blocks) console.log("<item>" + b + "</item>");
+}
 console.log("\n[wire-feeds-probe] done");
