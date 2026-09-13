@@ -60,6 +60,14 @@ export const JOBS = {
   "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
   "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
   "warm-picker-universe": { label: "Picker universe (daily 07:02)", instrumented: true, cron: "2 7 * * *" },
+  // 04:00 UTC, AND THE TIME IS THE POINT. EDGAR dissemination runs to 22:00 ET,
+  // so a date's daily index is not final until after that. 04:00 UTC is 00:00 ET
+  // on EDT and 23:00 ET on EST -- past the close in both, without needing the
+  // cron to move twice a year. Anything in the 07:00 UTC cluster would be fine
+  // too; 04:00 keeps it off the shoulder of six other jobs. The job bounds its
+  // own request to latestProcessableDate() regardless, so an early fire asks for
+  // a date that exists rather than 403ing on one that does not.
+  "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
 } as const;
 
 /**
