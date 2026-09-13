@@ -56,6 +56,14 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // Read-only, but needs the frozen universe to compute the match ratio: the
+  // question "how many wire items are about a stock we cover" cannot be answered
+  // without the symbol set.
+  "wire-feeds": {
+    script: "scripts/wire-feeds-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
