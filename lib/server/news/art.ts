@@ -165,6 +165,68 @@ export function bucketCount(bucket: string | null): number {
 }
 
 /**
+ * What ONE news card shows. The whole rule, in one place.
+ *
+ * ── WHY THIS IS A FUNCTION AND NOT THREE INLINE TERNARIES ─────────────────
+ * It was three inline ternaries, and the check script could only assert on the
+ * source text of each. Those assertions were worthless: wrapping a render in
+ * `{false ? ... : null}` left every identifier they grepped for in place and
+ * they all passed while the page rendered nothing — which is precisely the
+ * regression that put the sector page and the dashboard strip out of action for
+ * a whole step without anything failing.
+ *
+ * As a function it is testable by calling it, and the three surfaces share one
+ * rule instead of three copies that agree only as long as someone remembers.
+ *
+ * THE RULE, from §6:
+ *   compact -> the generated data card, ALWAYS. Not a fallback: at 56px a
+ *              ticker and a move are legible where a shrunk illustration is not.
+ *   lead    -> library art for the item's bucket; the generated card when the
+ *              bucket holds none.
+ *   ...and "none" only when the generated card has nothing to draw either,
+ *   which means no ticker to put on it.
+ */
+export type CardArt =
+  | { kind: "library"; art: NewsArt }
+  | { kind: "generated"; variant: "lead" | "compact" }
+  | { kind: "none" };
+
+export function planCardArt(input: {
+  variant: "lead" | "compact";
+  /** §7's event type, or null/undefined to select on sector. */
+  eventType?: EventType | null;
+  /** The symbol's sector bucket — what a null eventType falls through to. */
+  sectorBucket: string | null;
+  /** Stable per-article key: a guid where there is one, else the link. */
+  key: string;
+  /** No-repeat state, keyed BY BUCKET. Mutated, so pass the same map per page. */
+  taken: Map<string, Set<number>>;
+  /**
+   * Whether the generated card has a ticker to put on it. False on a sector
+   * feed article that resolves to no constituent — and a ticker card with no
+   * ticker is worse than a blank slot.
+   */
+  canGenerate: boolean;
+}): CardArt {
+  const { variant, eventType, sectorBucket, key, taken, canGenerate } = input;
+
+  if (variant === "lead") {
+    const bucket = bucketForItem(eventType, sectorBucket);
+    if (bucket) {
+      let used = taken.get(bucket);
+      if (!used) {
+        used = new Set<number>();
+        taken.set(bucket, used);
+      }
+      const art = pickArt(bucket, key, used);
+      if (art) return { kind: "library", art };
+    }
+  }
+
+  return canGenerate ? { kind: "generated", variant } : { kind: "none" };
+}
+
+/**
  * A small stable hash.
  *
  * THE POINT IS STABILITY, not distribution quality: an article must get the same

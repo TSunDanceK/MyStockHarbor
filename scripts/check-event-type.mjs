@@ -354,16 +354,35 @@ check(
 
 console.log("\n=== 7. The call site: taken is PER BUCKET ===\n");
 const pageSrc = readCodeOnly("app/stock/[symbol]/news/page.tsx");
+// THE SELECTION RULE MOVED into planCardArt in step 6b, so that a shared
+// function and a shared component could be tested by RUNNING them — the source
+// greps that used to live here passed happily while a page rendered nothing.
+// scripts/check-news-art.mjs owns the per-bucket and per-item behaviour now;
+// what belongs HERE is only that the page feeds eventType into the plan at all.
 check(
-  "the page keys the no-repeat set by bucket",
-  /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc) &&
-    /takenByBucket\.get\(bucket\)/.test(pageSrc),
-  "index 2 of event-earnings and index 2 of sector-software are different images; one shared Set would block images it never used"
+  "the page passes each item's OWN eventType into the plan",
+  /planCardArt\(\{[\s\S]{0,200}?eventType: item\.eventType/.test(pageSrc),
+  "a section-wide eventType, or none, would send every card to one bucket"
 );
 check(
-  "the bucket is chosen per item, not once per section",
-  /detailedNews\.map\(\(item\) => \{[\s\S]{0,400}bucketForItem\(item\.eventType, artBucket\)/.test(pageSrc),
+  "the plan is built per item, not once per section",
+  /detailedNews\.map\(\(item\) =>[\s\S]{0,120}planCardArt\(/.test(pageSrc),
   "step 0 chose one bucket for the whole section; step 6 chooses per item"
+);
+check(
+  "EVERY plan on the page threads the same no-repeat map",
+  (() => {
+    // Not "it appears somewhere": the lead cards and the compact rows each
+    // build a plan, and one of them reverting to a fresh Map per card disables
+    // the rule for that half while the other keeps the check passing.
+    const uses = pageSrc.match(/taken: [^,\n]+/g) ?? [];
+    return (
+      uses.length >= 2 &&
+      uses.every((u) => u.trim() === "taken: takenByBucket") &&
+      /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc)
+    );
+  })(),
+  "a fresh map per card disables the rule; check-news-art proves what the rule then does with it"
 );
 check(
   "pickArt itself is unchanged — the selection rule was not rewritten",

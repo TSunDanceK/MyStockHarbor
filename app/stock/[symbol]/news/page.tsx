@@ -24,9 +24,9 @@ import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
-import GeneratedNewsArt from "@/app/components/GeneratedNewsArt";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
-import { bucketFor, bucketForItem, pickArt, type NewsArt } from "@/lib/server/news/art";
+import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import NewsCardArt from "@/app/components/NewsCardArt";
 import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
@@ -322,17 +322,16 @@ function DetailedNewsSection({
   // every selection after the first. Keyed by bucket, the rule means what it
   // says within each bucket and nothing across them.
   const takenByBucket = new Map<string, Set<number>>();
-  const leadArt: Array<NewsArt | null> = detailedNews.map((item) => {
-    // §6: eventType picks the bucket, and null falls through to sector.
-    const bucket = bucketForItem(item.eventType, artBucket);
-    if (!bucket) return null;
-    let taken = takenByBucket.get(bucket);
-    if (!taken) {
-      taken = new Set<number>();
-      takenByBucket.set(bucket, taken);
-    }
-    return pickArt(bucket, item.guid ?? item.link, taken);
-  });
+  const leadArt: CardArt[] = detailedNews.map((item) =>
+    planCardArt({
+      variant: "lead",
+      eventType: item.eventType,
+      sectorBucket: artBucket,
+      key: item.guid ?? item.link,
+      taken: takenByBucket,
+      canGenerate: true,
+    })
+  );
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
@@ -355,31 +354,14 @@ function DetailedNewsSection({
                 </div>
               ) : (
                 <div style={newsThumbWrapStyle}>
-                  {leadArt[index] ? (
-                    /* Plain <img srcset>, never next/image: these are fixed,
-                       pre-generated sizes, so the optimiser would bill a meter
-                       for work already done. width/height are set so the box is
-                       reserved before it loads. claude/image-policy-2026-09-13.md */
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={leadArt[index]!.src}
-                      srcSet={leadArt[index]!.srcSet}
-                      sizes="(max-width: 700px) 100vw, 700px"
-                      width={leadArt[index]!.width}
-                      height={leadArt[index]!.height}
-                      alt=""
-                      loading="lazy"
-                      style={newsThumbImgStyle}
-                    />
-                  ) : (
-                    <GeneratedNewsArt
-                      symbol={symbol}
-                      changePct={changePct}
-                      points={sparkPoints}
-                      variant="lead"
-                      style={newsThumbImgStyle}
-                    />
-                  )}
+                  <NewsCardArt
+                    plan={leadArt[index]}
+                    symbol={symbol}
+                    changePct={changePct}
+                    points={sparkPoints}
+                    sizes="(max-width: 700px) 100vw, 700px"
+                    style={newsThumbImgStyle}
+                  />
                 </div>
               )}
               <div style={newsMetaRowStyle}>
@@ -427,14 +409,22 @@ function DetailedNewsSection({
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
                 ) : (
-                  /* ALWAYS the generated card here, never library art: §6 is
-                     explicit that at 56px the ticker and move are legible and a
-                     shrunk illustration is not. */
-                  <GeneratedNewsArt
+                  /* planCardArt returns the generated card for every compact
+                     row: §6 is explicit that at 56px the ticker and move are
+                     legible and a shrunk illustration is not. The rule lives
+                     there, not here, so all three surfaces share it. */
+                  <NewsCardArt
+                    plan={planCardArt({
+                      variant: "compact",
+                      sectorBucket: artBucket,
+                      key: item.guid ?? item.link,
+                      taken: takenByBucket,
+                      canGenerate: true,
+                    })}
                     symbol={symbol}
                     changePct={changePct}
                     points={sparkPoints}
-                    variant="compact"
+                    sizes="56px"
                     style={compactThumbStyle}
                   />
                 )}

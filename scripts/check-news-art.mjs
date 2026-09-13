@@ -18,6 +18,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { readCodeOnly } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
@@ -90,14 +91,18 @@ check(
   !/next\/image/.test(artCode)
 );
 check(
-  "the news page serves art with a plain <img srcset> carrying width and height",
+  "the one component that serves art uses a plain <img srcset> with width and height",
   (() => {
-    const page = readCodeOnly("app/stock/[symbol]/news/page.tsx");
+    // THE SINGLE <img> FOR ALL THREE SURFACES now lives in NewsCardArt, so this
+    // is one assertion rather than three greps that could each go stale
+    // separately. Section 7 proves the attributes survive into real markup;
+    // this only proves the source has not reached for the optimiser.
+    const card = readCodeOnly("app/components/NewsCardArt.tsx");
     return (
-      !/from "next\/image"/.test(page) &&
-      /srcSet=\{leadArt\[index\]!\.srcSet\}/.test(page) &&
-      /width=\{leadArt\[index\]!\.width\}/.test(page) &&
-      /height=\{leadArt\[index\]!\.height\}/.test(page)
+      !/from "next\/image"/.test(card) &&
+      /srcSet=\{plan\.art\.srcSet\}/.test(card) &&
+      /width=\{plan\.art\.width\}/.test(card) &&
+      /height=\{plan\.art\.height\}/.test(card)
     );
   })(),
   "an <img> with no width/height shifts the page as it loads, during an SEO recovery"
@@ -193,7 +198,10 @@ console.log("\n=== 5. Selection: the real module, against a synthetic manifest =
 const artModuleSrc = read("lib/server/news/art.ts")
   .replace(
     /^import manifest from "@\/public\/news-art\/manifest.json";$/m,
-    () => 'const manifest = { "sector-banks": 4, "sector-semiconductors": 6 };'
+    // Event buckets included: §6's rule is that eventType selects one INSTEAD of
+    // the sector bucket, and a synthetic manifest without them can only ever
+    // show the fall-through.
+    () => 'const manifest = { "sector-banks": 4, "sector-semiconductors": 6, "event-earnings": 5 };'
   )
   // Step 6 added a type-only import for EventType. Erasing it keeps this
   // harness about art selection, which is what it is for.
@@ -321,6 +329,277 @@ check(
 check(
   "art dimensions are the policy's 1200x675",
   art.ART_WIDTH === 1200 && art.ART_HEIGHT === 675
+);
+
+// ─────────────────────────────────────── 6. THE SURFACES, TREATED THE SAME
+//
+// STEP 0 STOPPED THE HOTLINK ON FOUR RENDER SITES AND GAVE ART BACK TO ONE.
+// The other three went imageless on main and stayed that way for a whole step,
+// because a missing picture fails no build, no test and no type.
+//
+// THE FIRST VERSION OF THIS SECTION DID NOT CATCH THAT EITHER, and the record
+// is worth keeping: it grepped each file for `GeneratedNewsArt`, `pickArt` and
+// a `srcSet=` attribute. Wrapping a render in `{false ? ... : null}` leaves
+// every one of those identifiers in place, and six of twelve mutations walked
+// straight through — including "the sector page goes imageless", which is
+// literally the regression the section was written for.
+//
+// So the rule is now a function (planCardArt) and the markup a component
+// (NewsCardArt), and both are tested by RUNNING them. What is left to assert
+// about each surface is only that it delegates, which is a structural fact a
+// `false` guard cannot fake: the art render must be the else-branch of the
+// publisher-image ternary, with no extra condition of its own.
+console.log("\n=== 6. The rule, by calling it ===\n");
+
+const plan = (over = {}) =>
+  art.planCardArt({
+    variant: "lead",
+    eventType: null,
+    sectorBucket: "sector-banks",
+    key: "k1",
+    taken: new Map(),
+    canGenerate: true,
+    ...over,
+  });
+
+check(
+  "a lead card takes library art when its bucket has some",
+  plan().kind === "library" && plan().art.src.startsWith("/news-art/sector-banks-"),
+  JSON.stringify(plan())
+);
+check(
+  "a lead card falls back to the generated card when the bucket has none",
+  (() => {
+    const p = plan({ sectorBucket: "sector-nothing-here" });
+    return p.kind === "generated" && p.variant === "lead";
+  })()
+);
+check(
+  "a lead card with no bucket AND no ticker draws nothing at all",
+  plan({ sectorBucket: null, canGenerate: false }).kind === "none",
+  "a ticker card with no ticker is worse than a blank slot"
+);
+check(
+  "a COMPACT card is always the generated card, never library art",
+  (() => {
+    const p = plan({ variant: "compact" });
+    return p.kind === "generated" && p.variant === "compact";
+  })(),
+  "§6: at 56px a ticker and a move are legible where a shrunk illustration is not — and this holds even though sector-banks has 8 images sitting right there"
+);
+check(
+  "a compact card with no ticker draws nothing",
+  plan({ variant: "compact", canGenerate: false }).kind === "none"
+);
+check(
+  "eventType selects the event bucket; null falls through to sector",
+  plan({ eventType: "earnings" }).art.bucket === "event-earnings" &&
+    plan({ eventType: null }).art.bucket === "sector-banks" &&
+    plan({ eventType: undefined }).art.bucket === "sector-banks",
+  "the requirement the whole of step 6 is subordinate to"
+);
+check(
+  "the no-repeat set is shared across a page and keyed BY BUCKET",
+  (() => {
+    const pick = (taken, eventType, key) =>
+      art.planCardArt({ variant: "lead", eventType, sectorBucket: "sector-banks", key, taken, canGenerate: true });
+
+    // FOUR KEYS THAT ALL HASH TO THE SAME SLOT, so the four distinct images
+    // can only come from the re-hash walk. Four arbitrary keys prove nothing:
+    // the first version used "a".."d", which happen to land on four different
+    // indices anyway, and it passed with the no-repeat rule disabled outright.
+    // (Verified below that they really do collide, so this stays honest if the
+    // bucket count or the hash ever changes.)
+    const COLLIDING = ["art-key-0", "art-key-4", "art-key-8", "art-key-11"];
+    if (new Set(COLLIDING.map((k) => art.hashKey(k) % 4)).size !== 1) return false;
+
+    const taken = new Map();
+    const same = COLLIDING.map((k) => pick(taken, null, k));
+    if (new Set(same.map((p) => p.art.src)).size !== 4) return false;
+
+    // A card in a DIFFERENT bucket must be UNAFFECTED by them — and the test
+    // has to pin the exact image, not the bucket name. A shared Set still
+    // returns the right bucket; it just silently hands back a re-hashed index,
+    // which is how this mutation survived the first version of this check.
+    const unblocked = pick(new Map(), "earnings", "a");
+    const afterFour = pick(taken, "earnings", "a");
+    return afterFour.kind === "library" && afterFour.art.src === unblocked.art.src;
+  })(),
+  "one shared Set across buckets blocks images it has never used"
+);
+
+console.log("\n=== 7. The markup, by rendering it ===\n");
+const { renderToStaticMarkup } = await import("react-dom/server");
+// The component is TSX, so it goes through the same transpile the art module
+// does. GeneratedNewsArt is inlined rather than imported, for the same reason.
+const cardSrc = read("app/components/NewsCardArt.tsx")
+  .replace(/^import type \{ CSSProperties \} from "react";$/m, "")
+  .replace(/^import type \{ CardArt \} from "@\/lib\/server\/news\/art";$/m, "")
+  .replace(/^import GeneratedNewsArt from "@\/app\/components\/GeneratedNewsArt";$/m,
+    () => read("app/components/GeneratedNewsArt.tsx")
+      .replace(/^import type \{ CSSProperties \} from "react";$/m, "")
+      .replace("export type GeneratedArtProps = {", "type GeneratedArtProps = {")
+      .replace("export default function GeneratedNewsArt", "function GeneratedNewsArt"))
+  .replace(/export type NewsCardArtProps = \{[\s\S]*?^\};$/m, "")
+  .replace(/export default function NewsCardArt\(\{\n([\s\S]*?)\n\}: NewsCardArtProps\) \{/m,
+    "export default function NewsCardArt({\n$1\n}) {");
+if (/^import /m.test(cardSrc)) {
+  console.error("FAIL: an import survived inlining NewsCardArt:\n" +
+    cardSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
+  process.exit(1);
+}
+for (const [marker, why] of [
+  ["function GeneratedNewsArt", "GeneratedNewsArt was not inlined"],
+  ["export default function NewsCardArt({", "NewsCardArt was not de-typed"],
+]) {
+  if (!cardSrc.includes(marker)) { console.error(`FAIL: ${why} — a substitution stopped matching.`); process.exit(1); }
+}
+const cardJs = ts.transpileModule(cardSrc, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX },
+}).outputText;
+const cardFile = path.join(ROOT, ".check-newscard.mjs");
+fs.writeFileSync(cardFile, cardJs);
+let Card;
+try {
+  Card = (await import(`${pathToFileURL(cardFile).href}?t=${Date.now()}`)).default;
+} finally {
+  fs.unlinkSync(cardFile);
+}
+const { createElement } = await import("react");
+const renderCard = (plan) =>
+  renderToStaticMarkup(createElement(Card, {
+    plan, symbol: "MU", changePct: 3.2, points: [1, 2, 3], sizes: "100vw",
+  }));
+
+const libraryHtml = renderCard(plan());
+check("library art renders a real <img>", /<img[^>]*src="\/news-art\/sector-banks-\d\d\.webp"/.test(libraryHtml), libraryHtml.slice(0, 90));
+check("...with a srcset offering both widths", /srcSet="[^"]*320w[^"]*1200w"|srcset="[^"]*320w[^"]*1200w"/i.test(libraryHtml));
+check(
+  "...and with width AND height, so the box is reserved before it lands",
+  /width="1200"/.test(libraryHtml) && /height="675"/.test(libraryHtml),
+  "claude/image-policy-2026-09-13.md — the whole reason next/image is not used here"
+);
+check("...and alt is empty: it is decorative, the headline carries the meaning", /alt=""/.test(libraryHtml));
+check("...and it is lazy", /loading="lazy"/.test(libraryHtml));
+
+const generatedHtml = renderCard({ kind: "generated", variant: "compact" });
+check("the generated card renders a real <svg>", /^<svg/.test(generatedHtml), generatedHtml.slice(0, 80));
+check("...carrying the ticker", generatedHtml.includes(">MU<"));
+check("...at the compact size, with width and height set", /width="56"/.test(generatedHtml) && /height="56"/.test(generatedHtml));
+check(
+  "a 'none' plan renders NOTHING, rather than an empty box",
+  renderCard({ kind: "none" }) === "",
+  "the sector feed's no-constituent case"
+);
+check(
+  "nothing in the rendered markup is a next/image request",
+  !/\/_next\/image/.test(libraryHtml) && !/\/_next\/image/.test(generatedHtml)
+);
+
+console.log("\n=== 8. Every surface delegates to that pair ===\n");
+
+const SURFACES = [
+  { file: "app/stock/[symbol]/news/page.tsx", label: "stock news page", compact: true },
+  { file: "app/sector/[slug]/news/page.tsx", label: "sector news page", compact: true },
+  { file: "app/components/DashboardClient.tsx", label: "dashboard news strip", compact: false },
+];
+
+// DELIBERATELY IMAGELESS, with the reason attached: step 4's real poll resolved
+// 2 of 40 wire items to a universe symbol (5.0%), so /headlines has no per-item
+// symbol to reach a bucket with and no price data for a generated card.
+// Per-sector search is the option to revisit. If this list grows, it grows with
+// a reason.
+const IMAGELESS_BY_DESIGN = [
+  { file: "app/headlines/page.tsx", why: "5% wire-to-universe match — no per-item symbol to reach a bucket with" },
+];
+
+for (const surface of SURFACES) {
+  const code = readCodeOnly(surface.file);
+  // WHITESPACE-COLLAPSED before matching. readCodeOnly blanks comments in place
+  // rather than deleting lines, so a five-line comment inside the branch leaves
+  // ~400 characters of spaces — which is structure-free noise that a character
+  // budget would otherwise have to guess at.
+  // Whitespace collapsed, and the residue of stripped JSX comments removed:
+  // readCodeOnly blanks `{/* ... */}` in place, which collapses to `{ }` — an
+  // empty expression container that is never meaningful code, and would
+  // otherwise have to be tolerated by the structural pattern below (loosening
+  // it enough to let a real guard through).
+  const flat = code.replace(/\s+/g, " ").replace(/\{ \} ?/g, "");
+  // ONE TERNARY AT A TIME. A single regex over the whole file is not enough:
+  // with an unbounded lazy scan it can satisfy itself using a DIFFERENT
+  // ternary further down, which is exactly how "the sector page goes imageless"
+  // walked through the previous version — the lead card was broken and the
+  // compact row's ternary matched in its place. Splitting on the marker means
+  // every occurrence has to stand on its own.
+  const branches = flat.split("SHOW_PUBLISHER_IMAGES && item.image ?").slice(1);
+  check(
+    `${surface.label}: EVERY publisher ternary renders art in its else-branch`,
+    branches.length > 0 &&
+      branches.every((b) =>
+        // One optional wrapper div between the branch and the render, and
+        // nothing else — no guard, no `&&`, no second condition.
+        /^[\s\S]*?\) : \( ?(<div[^>]*> )?<NewsCardArt/.test(b.slice(0, b.indexOf("<NewsCardArt") + 12) || b)
+      ),
+    `${branches.length} ternar${branches.length === 1 ? "y" : "ies"} — a structural fact, not an identifier: \`{false && <NewsCardArt/>}\` fails this where a grep for the name passed`
+  );
+  check(
+    `${surface.label}: no plan of its own — planCardArt or a server-sent plan`,
+    /planCardArt\(/.test(code) || /plan=\{item\.art/.test(code)
+  );
+  check(
+    `${surface.label}: does not re-implement selection — nor even import it`,
+    !/pickArt|bucketForItem|hashKey/.test(code),
+    "one rule, in lib/server/news/art.ts. Importing without calling is caught too: `void pickArt` slipped past a check for the call form"
+  );
+  check(`${surface.label}: never next/image`, !/from "next\/image"/.test(code));
+  if (surface.compact) {
+    check(
+      `${surface.label}: its compact rows ask for variant "compact"`,
+      /variant: "compact"/.test(code),
+      "planCardArt turns that into the generated card; the surface does not decide it"
+    );
+  }
+}
+
+for (const { file, why } of IMAGELESS_BY_DESIGN) {
+  check(
+    `${file}: imageless ON PURPOSE`,
+    !/NewsCardArt|planCardArt|GeneratedNewsArt/.test(readCodeOnly(file)),
+    why
+  );
+}
+
+check(
+  "the dashboard decides its art SERVER-side",
+  /planCardArt\(/.test(readCodeOnly("lib/server/internalNews.ts")) &&
+    !/planCardArt\(/.test(readCodeOnly("app/components/DashboardClient.tsx")),
+  "the strip is a client component and cannot read cached fundamentals; sending a bucket name instead would put the manifest and the hash in the bundle"
+);
+check(
+  "...and every card's art comes from that call, not from a literal",
+  /art: \w+\(item\)/.test(readCodeOnly("lib/server/internalNews.ts")),
+  "defining planCardArt and then assigning `art: { kind: \"none\" }` leaves the call in the file and the strip blank"
+);
+check(
+  "the dashboard's fallback for a card with no art is the GENERATED card",
+  /plan=\{item\.art \?\? \{ kind: "generated", variant: "lead" \}\}/.test(
+    readCodeOnly("app/components/DashboardClient.tsx")
+  ),
+  "an older payload, or a failed read, must still draw something — `?? { kind: \"none\" }` renders a blank strip"
+);
+check(
+  "the sector page reaches its bucket from the SLUG, with no lookup at all",
+  /bucketFor\(data\.slug, null\)/.test(readCodeOnly("app/sector/[slug]/news/page.tsx")),
+  "the route already is the sector"
+);
+check(
+  "the sector page's symbol resolution survives the step-7 flip",
+  (() => {
+    const code = readCodeOnly("app/sector/[slug]/news/page.tsx");
+    const fn = code.slice(code.indexOf("function primarySymbol("));
+    return /item\.fmpSymbols/.test(fn) && /item\.tickers/.test(fn);
+  })(),
+  "free adapters put attribution in `tickers`, never `fmpSymbols`; reading only the latter returns null for every item the day the flag flips"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
