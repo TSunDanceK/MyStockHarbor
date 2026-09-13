@@ -111,14 +111,33 @@ check(
 
 console.log("\n=== 2. The GlobeNewswire feed, parsed ===\n");
 const gnw = wire.parseWireFeed(read("scripts/fixtures/wire-globenewswire.xml"), GNW, CAPTURED);
-check("every item parses", gnw.length === 5, `${gnw.length} of 5`);
-const mu = gnw.find((i) => i.tickers?.includes("MU"));
-const roche = gnw.find((i) => i.title.startsWith("Roche"));
-check("a US-listed release resolves to its ticker", mu !== undefined && mu.tickers.length === 1);
+check("every item parses", gnw.length === 2, `${gnw.length} of 2`);
+const agpu = gnw.find((i) => i.tickers?.includes("AGPU"));
+const panGlobal = gnw.find((i) => i.title.startsWith("Pan Global"));
+check(
+  "a US-listed release resolves to its ticker",
+  agpu !== undefined && agpu.tickers.length === 1,
+  "Nasdaq:AGPU"
+);
 check(
   "a release listed only abroad resolves to NO ticker",
-  roche !== undefined && roche.tickers.length === 0,
-  "SWX:RO and OTC Markets:RHHBY are both rejected — the item is kept for /headlines, it just matches no symbol"
+  panGlobal !== undefined && panGlobal.tickers.length === 0,
+  "TSX-V:PGZ, Frankfurt:2EU and OTC Markets:PGZFF are all rejected — the item is kept for /headlines, it just matches no symbol"
+);
+check(
+  "an ISIN category is never mistaken for a ticker",
+  gnw.every((i) => !(i.tickers ?? []).some((t) => /^US\d|^CA\d/.test(t))),
+  "the same items carry domain=.../rss/ISIN values (US74033P1003, CA69806A1084)"
+);
+check(
+  "a <category> split across lines is still read",
+  agpu !== undefined,
+  "the real feed writes `<category\\n        domain=...>`"
+);
+check(
+  "a pubDate with no seconds still parses",
+  gnw.every((i) => Number.isFinite(Date.parse(i.pubDate))),
+  "the real feed writes 'Fri, 11 Sep 2026 23:43 GMT'"
 );
 check(
   "the wire's real description is kept",
@@ -190,11 +209,12 @@ check(
 console.log("\n=== 5. Cross-source dedup: the release, and Google News surfacing it ===\n");
 // THE PATH THAT MATTERS. A GlobeNewswire URL and a news.google.com redirect are
 // never equal, so link dedup cannot collapse them; only title similarity can.
-const release = gnw.find((i) => i.title.startsWith("Cryoport, Inc. Announces Pricing"));
+const release = gnw.find((i) => i.tickers?.includes("AGPU"));
 const viaGoogle = {
-  title: "Cryoport Prices Public Offering",              // as the adapter stores it, suffix already stripped
+  // As the gnews adapter stores it: the " - Publisher" suffix is already gone.
+  title: "Axe Compute Announces Inducement Grant",
   link: "https://news.google.com/rss/articles/CBMiWIRE?oc=5",
-  pubDate: "2026-09-11T12:45:00Z",
+  pubDate: "2026-09-11T23:50:00Z",
   source: "Reuters",
   description: null,
 };
@@ -210,8 +230,8 @@ check(
   "the wire item has the issuer's own text; the Google copy has none"
 );
 check(
-  "two genuinely different releases from the same issuer are NOT collapsed",
-  dedupe.dedupeNews([release, gnw.find((i) => i.tickers?.includes("MU"))]).length === 2,
+  "two genuinely different releases are NOT collapsed",
+  dedupe.dedupeNews([release, panGlobal]).length === 2,
   "a dedup that eats distinct stories is worse than one that lets a duplicate through"
 );
 
@@ -252,7 +272,7 @@ check(
 );
 check(
   "...and the attribution is carried in `tickers` instead",
-  mu.tickers.includes("MU"),
+  agpu.tickers.includes("AGPU"),
   "structured, honest, and read by nothing that discards other items"
 );
 check(

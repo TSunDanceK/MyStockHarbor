@@ -75,6 +75,13 @@ const clean = (v: string | null) => (v == null ? "" : decodeHtml(stripHtmlTags(v
  * "SWX:RO" and "OTC Markets:RHHBY" are the spec's own examples; the prefix is
  * split on the FIRST colon only, because "NYSE American:XYZ" contains a space
  * but no second colon and splitting on all of them would lose the symbol.
+ *
+ * THE CAPTURED FEED SHOWS THE REAL DISCRIMINATOR IS THE `domain` ATTRIBUTE:
+ * a ticker category is domain=".../rss/stock" and the same item also carries
+ * domain=".../rss/ISIN" holding an ISIN. The caller passes only the stock-domain
+ * values; the colon rule below is kept as the second gate because an ISIN
+ * (US74033P1003) has no colon and would fall through it anyway, so the two
+ * disagree in no case and the redundancy costs nothing.
  */
 export function tickersFromCategories(categories: string[]): string[] {
   const out = new Set<string>();
@@ -153,8 +160,13 @@ export function parseWireFeed(xml: string, source: WireSource, nowMs = Date.now(
     // to the template builders in lib/stock-news-templates.ts.
     const description = cleanRssDescription(tag1(block, "description"));
 
+    // ONLY THE STOCK-DOMAIN CATEGORIES. GlobeNewswire tags each <category> with a
+    // `domain` saying what kind of identifier it holds; the ISIN ones are not
+    // tickers and must not be offered to the matcher.
+    const stockCategories = [...block.matchAll(/<category[^>]*domain="[^"]*\/rss\/stock"[^>]*>([\s\S]*?)<\/category>/g)]
+      .map((m) => m[1]);
     const categories = tagAll(block, "category");
-    const tickers = source.id === "globenewswire" ? tickersFromCategories(categories) : [];
+    const tickers = source.id === "globenewswire" ? tickersFromCategories(stockCategories) : [];
 
     // prn:industry -> sector label, prn:subject -> eventType. Both carry long
     // labels AND 3-letter codes in the same item, so the codes are filtered out

@@ -33,7 +33,13 @@ export function decodeHtml(value: string) {
 export function stripHtmlTags(value: string) {
   return decodeHtml(
     value
-      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
+      // [\s\S] NOT `.` — A MULTILINE CDATA LOSES ITS WHOLE CONTENT OTHERWISE.
+      // `.` does not match a newline, so an unwrap written with it fails on a
+      // CDATA that spans lines; the next replace then treats
+      // `<![CDATA[...\n...]]>` as a single tag (because [^>] DOES match a
+      // newline) and deletes the text with it. Found on a real GlobeNewswire
+      // item whose description wrapped across two lines and arrived empty.
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
