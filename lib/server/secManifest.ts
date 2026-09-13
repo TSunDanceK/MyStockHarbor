@@ -47,6 +47,15 @@ export type SecManifestEntry = {
    * indistinguishable from symbols genuinely not on an exchange.
    */
   exchange: string | null;
+  /**
+   * A ticker-map row WITH an exchange column was seen for this symbol.
+   *
+   * This is what separates "SEC records no venue for this filer" from "we have
+   * never had a map that could tell us". Both leave `exchange` null, and the
+   * histogram would otherwise file 216 real blank-venue rows under the same
+   * bucket as symbols nothing has ever looked up.
+   */
+  exchangeKnown?: boolean;
   /** Accession of the most recent PERIODIC filing seen for this symbol. */
   lastAccession: string | null;
   /** Filing date (YYYYMMDD) of that accession. */
@@ -284,6 +293,15 @@ export type CikChangeResult = {
  * So above the threshold NOTHING is applied, the old CIKs stand, and the run
  * says so loudly. A genuine mass reassignment -- which would be unprecedented --
  * needs a human to look, which is the correct cost for an irreversible sweep.
+ *
+ * THE ESCAPE HATCH IS `?applyMapChanges=1` ON THE JOB, and it is named here so
+ * this is not a mystery in six months. SEC can legitimately change more than
+ * the threshold in one week -- an index reconstitution, a wave of renames -- and
+ * without an override the guard would refuse every week forever while the map
+ * silently never updated. Each refusal is reported, so it would not be
+ * invisible; the override is how a human says "I have looked, apply it".
+ * It bypasses BOTH guards, deliberately: they fail together on a bad map and a
+ * human who has checked one has checked the other.
  */
 export function mapChangeThreshold(symbolCount: number): number {
   return Math.max(5, Math.ceil(symbolCount * 0.01));
@@ -308,8 +326,9 @@ export function mapChangeThreshold(symbolCount: number): number {
 export function reconcileCiks(
   manifest: SecManifest,
   cikByTicker: Map<string, TickerEntry>,
-  now = Date.now()
+  opts: { now?: number; override?: boolean } = {}
 ): CikChangeResult {
+  const now = opts.now ?? Date.now();
   const changes: CikChange[] = [];
   let filled = 0;
   let absentFromMap = 0;
@@ -333,7 +352,7 @@ export function reconcileCiks(
   }
 
   const threshold = mapChangeThreshold(Object.keys(manifest.symbols).length);
-  if (changes.length > threshold) {
+  if (changes.length > threshold && !opts.override) {
     return {
       changes,
       applied: false,
@@ -345,7 +364,7 @@ export function reconcileCiks(
         `${changes.length} CIK changes in one run, over the threshold of ${threshold}. NOTHING WAS APPLIED. ` +
         `Reassignment happens one symbol at a time, so a batch this size means the map source changed shape ` +
         `rather than the market doing something unusual -- and applying it would discard ${changes.length} fact sets. ` +
-        `The previous CIKs stand. Inspect the changes below, then re-run with force once the map is trusted.`,
+        `The previous CIKs stand. Inspect the changes below, then re-run with ?applyMapChanges=1 once the map is trusted.`,
     };
   }
 
@@ -439,8 +458,9 @@ export type DelistingResult = {
 export function reconcileDelistings(
   manifest: SecManifest,
   cikByTicker: Map<string, TickerEntry>,
-  now = Date.now()
+  opts: { now?: number; override?: boolean } = {}
 ): DelistingResult {
+  const now = opts.now ?? Date.now();
   const entries = Object.entries(manifest.symbols);
   const threshold = mapChangeThreshold(entries.length);
 
@@ -466,7 +486,7 @@ export function reconcileDelistings(
   // together. Guarding on newly absent rather than on the standing absent set
   // matters: a handful of genuinely delisted symbols stay absent forever, and a
   // guard that counted them would jam permanently after the first few.
-  if (newlyAbsent.length > threshold) {
+  if (newlyAbsent.length > threshold && !opts.override) {
     return {
       applied: false,
       newlyAbsent,
@@ -479,7 +499,7 @@ export function reconcileDelistings(
         `${newlyAbsent.length} symbols newly absent from the ticker map in one refresh, over the threshold of ${threshold}. ` +
         `NOTHING WAS APPLIED -- no absence recorded, no counter incremented, no symbol marked delisted. ` +
         `Delisting happens a few names at a time, so a batch this size means the map is partial rather than the market having emptied. ` +
-        `The map passed validation, which is exactly why this second guard exists.`,
+        `The map passed validation, which is exactly why this second guard exists. Re-run with ?applyMapChanges=1 once the map is trusted.`,
     };
   }
 
@@ -534,8 +554,9 @@ export type ExchangeResult = {
   updated: { symbol: string; previous: string | null; next: string }[];
   filled: number;
   unchanged: number;
-  /** Entries the map carried no exchange for. NOT cleared -- see below. */
-  noExchangeInMap: number;
+  /** Rows SEC lists with a BLANK exchange. A real answer, not missing data. */
+  noVenueRecorded: number;
+  sourceHasExchangeColumn: boolean;
   histogram: Record<string, number>;
 };
 
@@ -561,18 +582,49 @@ export type ExchangeResult = {
  */
 export function reconcileExchanges(
   manifest: SecManifest,
-  cikByTicker: Map<string, TickerEntry>
+  cikByTicker: Map<string, TickerEntry>,
+  opts: { sourceHasExchangeColumn: boolean }
 ): ExchangeResult {
   const updated: ExchangeResult["updated"] = [];
   let filled = 0;
   let unchanged = 0;
-  let noExchangeInMap = 0;
+  let noVenueRecorded = 0;
+
+  // A SOURCE WITH NO EXCHANGE COLUMN WRITES NOTHING AT ALL.
+  //
+  // The legacy company_tickers.json has no such column, so every entry parses
+  // with exchange null. Treating those nulls as observations would blank the
+  // venue for the entire universe the first time a run fell back to the
+  // committed file -- and would then claim, via exchangeKnown, that SEC records
+  // no venue for any of them.
+  if (!opts.sourceHasExchangeColumn) {
+    return {
+      updated: [],
+      filled: 0,
+      unchanged: 0,
+      noVenueRecorded: 0,
+      sourceHasExchangeColumn: false,
+      histogram: exchangeHistogram(manifest),
+    };
+  }
 
   for (const [symbol, entry] of Object.entries(manifest.symbols)) {
     const fresh = cikByTicker.get(symbol);
+    // ABSENT FROM THE MAP IS NOT THE SAME AS BLANK IN THE MAP. Absence is a gap
+    // (or a delisting, handled elsewhere); a blank cell is SEC saying it has no
+    // venue for a filer it does list. Only the second is an observation.
     if (!fresh) continue;
+
+    // The row exists and the file has the column, so whatever it says -- a
+    // venue or a blank -- is authoritative.
+    entry.exchangeKnown = true;
+
     if (!fresh.exchange) {
-      noExchangeInMap++;
+      // MEASURED 2026-09-13: 216 of 10,426 rows carry a blank exchange. That is
+      // a real row and a real answer, not missing data and not an error. It is
+      // recorded as such rather than being counted as a failure to resolve.
+      noVenueRecorded++;
+      entry.exchange = null;
       continue;
     }
     if (!entry.exchange) {
@@ -588,7 +640,14 @@ export function reconcileExchanges(
     unchanged++;
   }
 
-  return { updated, filled, unchanged, noExchangeInMap, histogram: exchangeHistogram(manifest) };
+  return {
+    updated,
+    filled,
+    unchanged,
+    noVenueRecorded,
+    sourceHasExchangeColumn: true,
+    histogram: exchangeHistogram(manifest),
+  };
 }
 
 /**
@@ -603,7 +662,11 @@ export function reconcileExchanges(
 export function exchangeHistogram(manifest: SecManifest): Record<string, number> {
   const out: Record<string, number> = {};
   for (const entry of Object.values(manifest.symbols)) {
-    const key = entry.exchange ?? "(unknown)";
+    // THREE OUTCOMES, NOT TWO. A venue; SEC listing the filer with no venue
+    // (216 rows, measured); and never having had a map that could say. The last
+    // two both leave `exchange` null and mean entirely different things -- one
+    // is an answer, the other is a gap in our own coverage.
+    const key = entry.exchange ?? (entry.exchangeKnown ? "(none recorded)" : "(unknown)");
     out[key] = (out[key] ?? 0) + 1;
   }
   return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));

@@ -26,7 +26,26 @@ symbols, a ten-digit CIK check, and no tolerance for junk before the first `{`.
 
 ### `exchange`, and why it is in the manifest from the first write
 
-Observed values: `Nasdaq`, `NYSE`, `OTC`. Nothing consumes it yet — step 3 and
+**Measured 2026-09-13 over all 10,426 rows — five values, not three:**
+
+| Venue | Rows |
+|---|---|
+| Nasdaq | 4,367 |
+| NYSE | 3,299 |
+| OTC | 2,500 |
+| *(blank)* | 216 |
+| CBOE | 44 |
+
+`CBOE` is a real venue and a **blank is a real row** — SEC simply has no venue
+recorded for that filer. Neither is missing data and neither is an error, and
+nothing treats a blank as suspicious: the row stays in the map (dropping it
+would make the filer look absent and start a delisting clock), validation
+ignores the column, and the histogram files it under `(none recorded)`.
+
+That is distinct from `(unknown)`, which means we have never had a map with an
+exchange column to ask. Both leave `exchange` null; `exchangeKnown` separates
+them. A source with no exchange column — the legacy file — writes **nothing**,
+rather than blanking the universe and claiming SEC records no venue for anybody. Nothing consumes it yet — step 3 and
 the page will. If the bars deal lands Nasdaq-only, NYSE symbols lose their price
 history and the Price Reaction card has to be dropped **for those symbols**: a
 per-symbol decision conditional on this field, not a global flag. Retrofitting

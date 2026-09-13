@@ -409,7 +409,7 @@ const movedVenue = new Map([
   ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
   ["JPM", { cik: "0000019617", exchange: "Nasdaq" }],
 ]);
-const xr = man.reconcileExchanges(xm, movedVenue);
+const xr = man.reconcileExchanges(xm, movedVenue, { sourceHasExchangeColumn: true });
 check("the venue move is recorded", xr.updated.length === 1 && xr.updated[0].symbol === "JPM", JSON.stringify(xr.updated));
 check("the field is updated", xm.symbols.JPM.exchange === "Nasdaq");
 check("NOTHING is invalidated — filings, accession and hash all survive",
@@ -424,10 +424,11 @@ const blanked = new Map([
   ["AAPL", { cik: "0000320193", exchange: null }],
   ["JPM", { cik: "0000019617", exchange: null }],
 ]);
-const br = man.reconcileExchanges(xm, blanked);
-check("a legacy/no-exchange map does NOT blank a known venue",
-  xm.symbols.AAPL.exchange === "Nasdaq" && xm.symbols.JPM.exchange === "Nasdaq" && br.noExchangeInMap === 2,
-  "absence in the source is not a move to 'no exchange'");
+const br = man.reconcileExchanges(xm, blanked, { sourceHasExchangeColumn: false });
+check("a source with NO exchange column writes nothing at all",
+  xm.symbols.AAPL.exchange === "Nasdaq" && xm.symbols.JPM.exchange === "Nasdaq" &&
+  br.sourceHasExchangeColumn === false && br.filled === 0 && br.updated.length === 0,
+  "the legacy file parses every exchange as null; treating those as observations would blank the whole universe");
 
 // The histogram the bars negotiation needs.
 const hm = man.emptyManifest();
@@ -445,6 +446,63 @@ check("...sorted with the largest venue first", Object.keys(hist)[0] === "Nasdaq
 check("...and unknown is a bucket, not a silent drop",
   Object.values(hist).reduce((a, b) => a + b, 0) === 5,
   "the NYSE slice is the population that loses price history if bars go Nasdaq-only");
+
+// ── 8d. Five exchange values, and a blank is one of them ───────────────────
+console.log("\n8d. Blank is an answer, not a gap");
+// MEASURED over the real file 2026-09-13:
+//   Nasdaq 4,367 · NYSE 3,299 · OTC 2,500 · (blank) 216 · CBOE 44  = 10,426
+const FIVE = JSON.stringify({
+  fields: ["cik", "name", "ticker", "exchange"],
+  data: [
+    [1, "A CORP", "AA", "Nasdaq"], [2, "B CORP", "BB", "NYSE"],
+    [3, "C CORP", "CC", "OTC"], [4, "D CORP", "DD", "CBOE"],
+    [5, "E CORP", "EE", ""],
+  ],
+});
+const five = tick.parseTickerFile(FIVE);
+check("CBOE parses as a venue like any other", five.map.get("DD").exchange === "CBOE");
+check("a blank cell parses to null", five.map.get("EE").exchange === null);
+check("a blank row is still IN the map — it is not dropped", five.map.has("EE"),
+  "dropping it would make the filer look absent, and absence starts a delisting clock");
+
+const fm = man.emptyManifest();
+man.seedManifest(fm, ["AA", "BB", "CC", "DD", "EE", "ZZ"], five.map, true);
+const fr = man.reconcileExchanges(fm, five.map, { sourceHasExchangeColumn: true });
+check("the blank row is counted as a recorded answer, not a failure",
+  fr.noVenueRecorded === 1 && fr.sourceHasExchangeColumn === true, JSON.stringify({ noVenueRecorded: fr.noVenueRecorded }));
+check("...and is marked exchangeKnown", fm.symbols.EE.exchangeKnown === true && fm.symbols.EE.exchange === null);
+check("a symbol the map never carried is NOT marked known", fm.symbols.ZZ.exchangeKnown !== true && fm.symbols.ZZ.exchange === null);
+const fh = man.exchangeHistogram(fm);
+check("the histogram separates (none recorded) from (unknown)",
+  fh["(none recorded)"] === 1 && fh["(unknown)"] === 1, JSON.stringify(fh));
+check("...and all five real venues appear",
+  fh.Nasdaq === 1 && fh.NYSE === 1 && fh.OTC === 1 && fh.CBOE === 1, JSON.stringify(fh));
+check("nothing treats a blank exchange as suspicious",
+  tick.validateTickerMap(new Map([...five.map, ...Array.from({ length: 6000 }, (_, i) => [`F${i}`, { cik: String(i).padStart(10, "0"), exchange: "" }]),
+    ["AAPL", { cik: "0000320193", exchange: null }], ["MU", { cik: "0000723125", exchange: null }], ["PLAB", { cik: "0000810136", exchange: null }]])).ok === true,
+  "validation looks at CIKs and counts; a venue-less filer is still a filer");
+
+// ── 8e. The refused-spike escape hatch ──────────────────────────────────────
+console.log("\n8e. Override");
+const ovSyms = Array.from({ length: 200 }, (_, i) => `O${i}`);
+const ovCik = new Map(ovSyms.map((x, i) => [x, { cik: String(i).padStart(10, "0"), exchange: "Nasdaq" }]));
+const ovMan = man.emptyManifest();
+man.seedManifest(ovMan, ovSyms, ovCik, true);
+for (const x of ovSyms) ovMan.symbols[x].contentHash = "filings";
+const ovShift = new Map(ovSyms.map((x, i) => [x, { cik: String(i + 700000).padStart(10, "0"), exchange: "Nasdaq" }]));
+check("without the override, a spike still refuses", man.reconcileCiks(ovMan, ovShift).applied === false);
+check("...and nothing was touched", ovMan.symbols.O0.contentHash === "filings");
+const ovRes = man.reconcileCiks(ovMan, ovShift, { override: true });
+check("WITH the override, the same spike applies", ovRes.applied === true && ovRes.changes.length === 200);
+check("...and the invalidation really happens", ovMan.symbols.O0.contentHash === null && ovMan.symbols.O0.cik === "0000700000");
+const dlMan = man.emptyManifest();
+man.seedManifest(dlMan, ovSyms, ovCik, true);
+check("the delisting guard has the same override",
+  man.reconcileDelistings(dlMan, new Map(), { override: true }).applied === true &&
+  man.reconcileDelistings(man.emptyManifest(), new Map()).applied === true);
+check("the override is NAMED at the guard so it is findable",
+  /\?applyMapChanges=1/.test(MANIFEST_SRC),
+  "an escape hatch nobody can find is the same as not having one");
 
 // ── 9. A CIK change is an invalidation, never a merge ───────────────────────
 console.log("\n9. CIK reassignment");
@@ -608,11 +666,19 @@ check("...and they do reach delisted", tm.symbols.R0.delisted === true, `R0 coun
 console.log("\n11. Job ordering");
 // Compared at the CALL SITES, not the import list -- both names appear in the
 // import block and its order says nothing about execution order.
+// Guard the anchors themselves: a stale anchor returns -1, and -1 is less than
+// every real index, so an ordering assertion built on one passes for the wrong
+// reason. Both sides are asserted present before they are compared.
+check("the ordering anchors still exist in the route",
+  routeCode.includes(": reconcileCiks(manifest, tickers.map, {") &&
+  routeCode.includes("= symbolsByCik(manifest)") &&
+  routeCode.includes("= await resolveTickerMap()"),
+  "a stale anchor makes the two ordering checks below vacuous");
 check("the ticker map is reconciled BEFORE the index is intersected",
-  routeCode.indexOf(": reconcileCiks(manifest, tickers.map)") < routeCode.indexOf("= symbolsByCik(manifest)"),
+  routeCode.indexOf(": reconcileCiks(manifest, tickers.map, {") < routeCode.indexOf("= symbolsByCik(manifest)"),
   "a symbol whose CIK moved must match on the new CIK the same run, not a day later");
 check("the ticker map is resolved before it is reconciled against",
-  routeCode.indexOf("= await resolveTickerMap()") < routeCode.indexOf(": reconcileCiks(manifest, tickers.map)"));
+  routeCode.indexOf("= await resolveTickerMap()") < routeCode.indexOf(": reconcileCiks(manifest, tickers.map, {"));
 check("fact sets are discarded only when the changes were APPLIED",
   /cikChanges\?\.applied && cikChanges\.changes\.length/.test(routeCode));
 check("a suspected map shape change makes the run NOT ok",
@@ -622,8 +688,20 @@ check("delisting is gated on a SUCCESSFUL REFRESH, not on every run",
   "counted per refresh; counting per run would delist after three days rather than three weeks");
 check("a suspected partial map also makes the run NOT ok",
   /suspectedPartialMap \?\? false\)/.test(routeCode));
+check("the job accepts ?key= as well as the Bearer header",
+  /guardDebugRequest\(req\)/.test(routeCode) && /Bearer \$\{secret\}/.test(routeCode),
+  "a header cannot be typed into an address bar; the cron path is unchanged");
+check("a valid Bearer never reaches the key guard",
+  routeCode.indexOf("if (!secret || auth === `Bearer ${secret}`) return null;") <
+    routeCode.indexOf("return guardDebugRequest(req);"),
+  "otherwise the scheduler records key failures against its own IP and locks itself out");
+check("the override reaches BOTH reconciliations",
+  /reconcileCiks\(manifest, tickers\.map, \{ override: applyMapChanges \}\)/.test(routeCode) &&
+  /override: applyMapChanges \}\)/.test(routeCode));
+check("the exchange column flag is passed from the resolved shape",
+  /sourceHasExchangeColumn: tickers\.shape === "fields\+data"/.test(routeCode));
 check("exchange is reconciled on every run with a map, not gated on a refresh",
-  /tickers\.source === "none" \? null : reconcileExchanges\(/.test(routeCode),
+  /tickers\.source === "none"\s*\?\s*null\s*:\s*reconcileExchanges\(/.test(routeCode),
   "a field copy with no destructive branch has nothing to guard");
 check("the exchange histogram reaches the job output",
   /exchangeHistogram: exchanges\?\.histogram/.test(routeCode));
