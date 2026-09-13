@@ -25,6 +25,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const INDEX_SRC = read("lib/server/secDailyIndex.ts");
 const MANIFEST_SRC = read("lib/server/secManifest.ts");
 const ROUTE_SRC = read("app/api/jobs/sec-daily-index/route.ts");
+const TICKER_SRC = read("lib/server/secTickerMap.ts");
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -51,9 +52,19 @@ const idx = await lift(
 
 const man = await lift(
   [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"),
-   grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik };",
+   grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
+   grabFunction(MANIFEST_SRC, "reassignmentThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks")].join("\n") +
+    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, reassignmentThreshold, reconcileCiks };",
   "const SEC_SCORE_VERSION = 1;"
+);
+
+const tick = await lift(
+  [grabFunction(TICKER_SRC, "padCik"), grabFunction(TICKER_SRC, "parseTickerFile"),
+   grabFunction(TICKER_SRC, "validateTickerMap"), grabFunction(TICKER_SRC, "hashTickerMap")].join("\n") +
+    "\nexport { padCik, parseTickerFile, validateTickerMap, hashTickerMap };",
+  `import crypto from "node:crypto";
+   const MIN_EXPECTED_TICKERS = 5000;
+   const SENTINEL_TICKERS = ["AAPL","MU","PLAB"];`
 );
 
 const route = await lift(
@@ -240,6 +251,124 @@ check("the job makes NO companyfacts call — step 2 is the detector alone",
 check("the manifest key is versioned", /msh:sec:manifest:v1/.test(MANIFEST_SRC));
 check("the manifest carries no TTL", !/\bex:\s*\d|expire\(/.test(MANIFEST_SRC),
   "a TTL means eviction means a cold key means a render that has to fetch");
+
+// ── 8. The ticker map is a seed and fallback, not the source of truth ───────
+console.log("\n8. Ticker map refresh");
+const bigMap = (extra = {}) => {
+  const m = new Map();
+  for (let i = 0; i < 6000; i++) m.set(`T${i}`, String(i).padStart(10, "0"));
+  for (const t of ["AAPL", "MU", "PLAB"]) m.set(t, "0000000001");
+  for (const [k, v] of Object.entries(extra)) m.set(k, v);
+  return m;
+};
+check("a full map validates", tick.validateTickerMap(bigMap()).ok);
+check("a SHORT payload is rejected, not adopted", tick.validateTickerMap(new Map([["AAPL", "1"]])).ok === false,
+  tick.validateTickerMap(new Map([["AAPL", "1"]])).reason);
+const noSentinel = bigMap();
+noSentinel.delete("AAPL");
+check("a map missing a sentinel ticker is rejected", tick.validateTickerMap(noSentinel).ok === false,
+  tick.validateTickerMap(noSentinel).reason);
+check("rejection happens BEFORE any invalidation could be computed from it",
+  /validateTickerMap/.test(TICKER_SRC) && TICKER_SRC.indexOf("const valid = validateTickerMap(map)") < TICKER_SRC.indexOf("lastChangedAt: base.contentChanged"),
+  "a truncated payload would otherwise read as thousands of symbols changing CIK");
+check("the same mapping hashes the same regardless of insertion order",
+  tick.hashTickerMap(new Map([["A", "1"], ["B", "2"]])) === tick.hashTickerMap(new Map([["B", "2"], ["A", "1"]])));
+check("a changed mapping hashes differently",
+  tick.hashTickerMap(new Map([["A", "1"]])) !== tick.hashTickerMap(new Map([["A", "2"]])));
+check("CIKs are padded to ten digits", tick.padCik(320193) === "0000320193" && tick.padCik("0000320193") === "0000320193");
+check("the refresh records which source answered", /source: "redis"/.test(TICKER_SRC) && /"committed-file"/.test(TICKER_SRC));
+check("Last-Modified is stored so the real change cadence is measurable",
+  /lastModified/.test(TICKER_SRC) && /lastChangedAt/.test(TICKER_SRC));
+check("a 304 is treated as unchanged rather than as a failure", /notModified/.test(TICKER_SRC));
+
+// ── 9. A CIK change is an invalidation, never a merge ───────────────────────
+console.log("\n9. CIK reassignment");
+const reMan = man.emptyManifest();
+man.seedManifest(reMan, ["AAPL", "ARM", "MU", "PLAB", "ASTS"], FIXTURE_CIK, true);
+// Give every symbol some stored history to lose.
+for (const sym of Object.keys(reMan.symbols)) {
+  Object.assign(reMan.symbols[sym], {
+    lastAccession: "0000000000-26-000001", lastFiled: "20260910",
+    contentHash: "deadbeef", verifiedAt: 1, needsReverify: false,
+  });
+}
+const moved = new Map(FIXTURE_CIK);
+moved.set("PLAB", "0009999999"); // reassigned
+const res = man.reconcileCiks(reMan, moved);
+check("one CIK change is detected", res.changes.length === 1 && res.changes[0].symbol === "PLAB", JSON.stringify(res.changes));
+check("...and it is applied", res.applied === true && res.suspectedMapShapeChange === false);
+check("...carrying BOTH CIKs for investigation",
+  res.changes[0].previousCik === "0000810136" && res.changes[0].newCik === "0009999999");
+check("the stored fact set is DISCARDED, not merged",
+  reMan.symbols.PLAB.contentHash === null && reMan.symbols.PLAB.lastAccession === null &&
+  reMan.symbols.PLAB.lastFiled === null && reMan.symbols.PLAB.verifiedAt === null,
+  JSON.stringify(reMan.symbols.PLAB));
+check("...and it is re-enqueued", reMan.symbols.PLAB.needsReverify === true);
+check("the new CIK is adopted", reMan.symbols.PLAB.cik === "0009999999");
+check("every OTHER symbol is untouched",
+  ["AAPL", "ARM", "MU", "ASTS"].every((s) => reMan.symbols[s].contentHash === "deadbeef"));
+
+// Absence is not reassignment.
+const gapMan = man.emptyManifest();
+man.seedManifest(gapMan, ["AAPL", "PLAB"], FIXTURE_CIK, true);
+gapMan.symbols.PLAB.contentHash = "keepme";
+const gapRes = man.reconcileCiks(gapMan, new Map([["AAPL", "0000320193"]]));
+check("a symbol ABSENT from the map is left alone, not wiped",
+  gapMan.symbols.PLAB.contentHash === "keepme" && gapRes.absentFromMap === 1,
+  "the fallback map is smaller than the live one; clearing on absence would wipe the store");
+
+// A null CIK being filled is not a reassignment.
+const fillMan = man.emptyManifest();
+man.seedManifest(fillMan, ["AAPL"], new Map(), false);
+const fillRes = man.reconcileCiks(fillMan, FIXTURE_CIK);
+check("filling a null CIK is a fill, not an invalidation",
+  fillRes.filled === 1 && fillRes.changes.length === 0 && fillMan.symbols.AAPL.cik === "0000320193");
+
+// ── 10. THE SPIKE GUARD — the destructive case ──────────────────────────────
+console.log("\n10. A spike refuses to apply");
+check("the threshold scales with the universe but never below 5",
+  man.reassignmentThreshold(5) === 5 && man.reassignmentThreshold(700) === 7 && man.reassignmentThreshold(10000) === 100);
+const spikeSyms = Array.from({ length: 200 }, (_, i) => `S${i}`);
+const spikeCik = new Map(spikeSyms.map((s, i) => [s, String(i).padStart(10, "0")]));
+const spikeMan = man.emptyManifest();
+man.seedManifest(spikeMan, spikeSyms, spikeCik, true);
+for (const s of spikeSyms) spikeMan.symbols[s].contentHash = "precious";
+// Every symbol's CIK moves at once -- the shape of a changed map source.
+const shifted = new Map(spikeSyms.map((s, i) => [s, String(i + 500000).padStart(10, "0")]));
+const spikeRes = man.reconcileCiks(spikeMan, shifted);
+check("200 changes are DETECTED", spikeRes.changes.length === 200);
+check("...and NONE are applied", spikeRes.applied === false && spikeRes.suspectedMapShapeChange === true);
+check("...no fact set was discarded", spikeSyms.every((s) => spikeMan.symbols[s].contentHash === "precious"));
+check("...the previous CIKs stand", spikeMan.symbols.S0.cik === "0000000000", spikeMan.symbols.S0.cik);
+check("...and the reason names the map source, not the market",
+  /map source changed shape/.test(spikeRes.note), spikeRes.note?.slice(0, 80));
+check("a run at exactly the threshold still applies",
+  (() => {
+    const syms = Array.from({ length: 700 }, (_, i) => `X${i}`);
+    const base = new Map(syms.map((s, i) => [s, String(i).padStart(10, "0")]));
+    const m2 = man.emptyManifest();
+    man.seedManifest(m2, syms, base, true);
+    const next = new Map(base);
+    for (let i = 0; i < 7; i++) next.set(`X${i}`, String(i + 900000).padStart(10, "0"));
+    return man.reconcileCiks(m2, next).applied === true;
+  })(),
+  "7 of 700 is the threshold; a real reassignment must not be blocked");
+
+// ── 11. The job wires it in the right order ─────────────────────────────────
+console.log("\n11. Job ordering");
+// Compared at the CALL SITES, not the import list -- both names appear in the
+// import block and its order says nothing about execution order.
+check("the ticker map is reconciled BEFORE the index is intersected",
+  routeCode.indexOf(": reconcileCiks(manifest, tickers.map)") < routeCode.indexOf("= symbolsByCik(manifest)"),
+  "a symbol whose CIK moved must match on the new CIK the same run, not a day later");
+check("the ticker map is resolved before it is reconciled against",
+  routeCode.indexOf("= await resolveTickerMap()") < routeCode.indexOf(": reconcileCiks(manifest, tickers.map)"));
+check("fact sets are discarded only when the changes were APPLIED",
+  /cikChanges\?\.applied && cikChanges\.changes\.length/.test(routeCode));
+check("a suspected map shape change makes the run NOT ok",
+  /suspectedMapShapeChange \?\? false\)/.test(routeCode));
+check("the Redis budget is stated as three, not still claiming two",
+  /redisCommands: dryRun \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
 
 console.log(
   failures === 0

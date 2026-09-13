@@ -193,3 +193,165 @@ export function symbolsByCik(manifest: SecManifest): Map<string, string> {
   }
   return out;
 }
+
+// ── CIK reassignment ────────────────────────────────────────────────────────
+
+/** Where step 3 will store the extracted fact set. Named here because this is
+ *  the module that has to discard one. */
+export const SEC_FACTS_PREFIX = "msh:sec:facts:v1";
+// Registered in symbolEviction.PER_SYMBOL_KEYS, so evicting a delisted symbol
+// deletes its fact set with everything else.
+//
+// A GAP THIS DOES NOT CLOSE, recorded rather than left to be discovered: the
+// manifest is ONE key, so the eviction sweep -- which works per-symbol prefix --
+// cannot remove an entry from it. seedManifest only adds, so a symbol that
+// leaves the universe keeps its manifest entry. That is bounded (an entry is
+// small) but it is not nothing: a stale entry is a symbol whose CIK is still
+// being reconciled, and therefore still a reassignment candidate. Pruning needs
+// the same spike guard as reconcileCiks -- a transiently short universe read
+// must not empty the manifest -- so it belongs with the eviction integration
+// rather than bolted on here.
+
+export type CikChange = {
+  symbol: string;
+  previousCik: string;
+  newCik: string;
+  at: number;
+};
+
+export type CikChangeResult = {
+  changes: CikChange[];
+  applied: boolean;
+  /** Symbols that had no CIK and just got one. Not a reassignment. */
+  filled: number;
+  /** Symbols the map does not carry. Not a reassignment either. */
+  absentFromMap: number;
+  suspectedMapShapeChange: boolean;
+  threshold: number;
+  note: string | null;
+};
+
+/**
+ * How many CIK changes in one run before the run refuses to apply any of them.
+ *
+ * A REASSIGNMENT IS ONE SYMBOL AT A TIME. A ticker being reused by a different
+ * company is rare and independent across symbols, so several dozen in one night
+ * is not the market doing something unusual -- it is the map source having
+ * changed shape, or a partial payload that got past validation. Applying them
+ * would discard that many fact sets on the strength of a bad file, and the
+ * discard is the expensive half: the data has to be re-fetched from SEC.
+ *
+ * So above the threshold NOTHING is applied, the old CIKs stand, and the run
+ * says so loudly. A genuine mass reassignment -- which would be unprecedented --
+ * needs a human to look, which is the correct cost for an irreversible sweep.
+ */
+export function reassignmentThreshold(symbolCount: number): number {
+  return Math.max(5, Math.ceil(symbolCount * 0.01));
+}
+
+/**
+ * Reconcile the manifest's CIKs against a freshly resolved ticker map.
+ *
+ * A CIK CHANGE UNDER AN EXISTING SYMBOL IS AN INVALIDATION, NOT AN UPDATE. The
+ * stored fact set under that symbol may belong to a different company entirely,
+ * so it is discarded rather than merged: contentHash, lastAccession, lastFiled
+ * and the amendment state are all cleared and the symbol is re-enqueued for a
+ * clean fetch. A genuine ticker move and a reassignment are indistinguishable
+ * here and both need exactly this treatment, so no attempt is made to tell them
+ * apart.
+ *
+ * A symbol ABSENT from the map is left alone. Absence is a gap in the map --
+ * the committed fallback is smaller than the live one, and a delisting removes
+ * a row -- and clearing state on absence would wipe the store every time the
+ * fallback was used.
+ */
+export function reconcileCiks(
+  manifest: SecManifest,
+  cikByTicker: Map<string, string>,
+  now = Date.now()
+): CikChangeResult {
+  const changes: CikChange[] = [];
+  let filled = 0;
+  let absentFromMap = 0;
+
+  for (const [symbol, entry] of Object.entries(manifest.symbols)) {
+    const fresh = cikByTicker.get(symbol);
+    if (!fresh) {
+      absentFromMap++;
+      continue;
+    }
+    if (!entry.cik) {
+      entry.cik = fresh;
+      filled++;
+      continue;
+    }
+    if (entry.cik !== fresh) {
+      changes.push({ symbol, previousCik: entry.cik, newCik: fresh, at: now });
+    }
+  }
+
+  const threshold = reassignmentThreshold(Object.keys(manifest.symbols).length);
+  if (changes.length > threshold) {
+    return {
+      changes,
+      applied: false,
+      filled,
+      absentFromMap,
+      suspectedMapShapeChange: true,
+      threshold,
+      note:
+        `${changes.length} CIK changes in one run, over the threshold of ${threshold}. NOTHING WAS APPLIED. ` +
+        `Reassignment happens one symbol at a time, so a batch this size means the map source changed shape ` +
+        `rather than the market doing something unusual -- and applying it would discard ${changes.length} fact sets. ` +
+        `The previous CIKs stand. Inspect the changes below, then re-run with force once the map is trusted.`,
+    };
+  }
+
+  for (const change of changes) {
+    const entry = manifest.symbols[change.symbol];
+    if (!entry) continue;
+    // LOUD, AND WITH BOTH CIKs. This is the only record that a symbol's history
+    // was discarded, and the pair is what makes it investigable afterwards.
+    console.warn(
+      `[sec-manifest] CIK CHANGE ${change.symbol}: ${change.previousCik} -> ${change.newCik}. ` +
+        `Discarding the stored fact set -- it may belong to a different company.`
+    );
+    entry.cik = change.newCik;
+    entry.contentHash = null;
+    entry.lastAccession = null;
+    entry.lastFiled = null;
+    entry.lastAmendment = null;
+    entry.ambiguousSameDayFilings = null;
+    entry.verifiedAt = null;
+    // Re-enqueued for a clean fetch.
+    entry.needsReverify = true;
+  }
+
+  return {
+    changes,
+    applied: changes.length > 0,
+    filled,
+    absentFromMap,
+    suspectedMapShapeChange: false,
+    threshold,
+    note: changes.length ? `${changes.length} symbol(s) invalidated and re-enqueued` : null,
+  };
+}
+
+/**
+ * Discard the stored fact sets for reassigned symbols.
+ *
+ * Bounded by the reassignment count, which the threshold above keeps small. A
+ * DEL on a key step 3 has not written yet is harmless, and doing it now means
+ * the invalidation is complete the day the fact sets start existing rather than
+ * depending on someone remembering to add it.
+ */
+export async function discardFactSets(symbols: string[]): Promise<number> {
+  if (!redis || symbols.length === 0) return 0;
+  try {
+    return await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
+  } catch (err) {
+    console.error("[sec-manifest] fact-set discard failed", err);
+    return 0;
+  }
+}
