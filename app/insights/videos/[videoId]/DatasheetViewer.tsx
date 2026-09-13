@@ -84,11 +84,18 @@ export default function DatasheetViewer({ src, alt }: Props) {
         </button>
       </div>
 
+      {/* width/height are the intrinsic RATIO, not a render size -- CSS width:100%
+          still governs layout. Without them the browser cannot reserve space and
+          every datasheet shifts the page as it loads, which is a CLS hit on pages
+          being actively worked for search. Every datasheet is 16:9. */}
       <img
         src={src}
         alt={alt}
+        width={1600}
+        height={900}
+        decoding="async"
         onClick={openViewer}
-        style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", cursor: "zoom-in", display: "block" }}
+        style={{ width: "100%", height: "auto", aspectRatio: "16 / 9", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", cursor: "zoom-in", display: "block" }}
       />
 
       {open && (
