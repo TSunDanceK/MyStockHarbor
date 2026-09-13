@@ -1,0 +1,77 @@
+<!-- GlobeNewswire — RECONSTRUCTED, and the only fixture in this repo that is.
+     Everything else under scripts/fixtures/ is a verbatim capture.
+
+     WHY: GlobeNewswire pretty-prints its XML, so one real item spans ~40 job-log
+     lines. Two relay runs (34764727586, 34764855472) both pushed the captured
+     items out of the readable tail. Rather than keep re-running, this is built
+     from the properties those runs DID establish. The honest split:
+
+     MEASURED from the real polls (20 items each):
+       - 19/20 items carry a ticker in <category>, exchange-prefixed
+       - prefix distribution: TSX=10, Nasdaq=10, Paris=4, SWX=2, OTC Markets=2,
+         Copenhagen/TSX-V/Frankfurt/NYSE/BMV/Shenzhen/Oslo=1 each — i.e. the feed
+         is MOSTLY NOT US-listed, which is why the allowlist exists
+       - 2/20 resolved to a frozen-universe symbol
+       - dc:subject carries free text ("Mergers and Acquisitions", "European
+         Regulatory News") and dc:keyword carries terms ("Cession", "Divestment")
+         — both seen verbatim in the run-34764855472 log
+       - items are pretty-printed across many lines
+
+     RECONSTRUCTED: the exact wording of titles, links, guids and descriptions.
+
+     The mix below deliberately mirrors the measured prefix distribution rather
+     than being all-US, so the allowlist is exercised on the proportions the feed
+     really has. -->
+<rss version="2.0"><channel><title>GlobeNewswire - Public Companies</title>
+  <item>
+    <title>Cryoport, Inc. Announces Pricing of Public Offering of Common Stock</title>
+    <link>https://www.globenewswire.com/news-release/2026/09/11/3010111/0/en/Cryoport-Announces-Pricing.html</link>
+    <guid isPermaLink="false">https://www.globenewswire.com/news-release/2026/09/11/3010111/0/en/Cryoport-Announces-Pricing.html</guid>
+    <pubDate>Fri, 11 Sep 2026 12:30:00 GMT</pubDate>
+    <description>NASHVILLE, Tenn., Sept. 11, 2026 (GLOBE NEWSWIRE) -- Cryoport, Inc. (Nasdaq: CYRX) today announced the pricing of its underwritten public offering of common stock. The offering is expected to close subject to customary conditions.</description>
+    <category>Nasdaq:CYRX</category>
+    <category>Calendar of Events</category>
+    <dc:subject>Offerings</dc:subject>
+    <dc:keyword>Public Offering</dc:keyword>
+  </item>
+  <item>
+    <title>Roche Holding AG announces divestment of its dermatology unit</title>
+    <link>https://www.globenewswire.com/news-release/2026/09/12/3010222/0/en/Roche-divestment.html</link>
+    <guid isPermaLink="false">https://www.globenewswire.com/news-release/2026/09/12/3010222/0/en/Roche-divestment.html</guid>
+    <pubDate>Sat, 12 Sep 2026 14:00:00 GMT</pubDate>
+    <description>BASEL, Switzerland, Sept. 12, 2026 (GLOBE NEWSWIRE) -- Roche today announced the divestment of its dermatology business unit.</description>
+    <category>SWX:RO</category>
+    <category>OTC Markets:RHHBY</category>
+    <dc:subject>Mergers and Acquisitions</dc:subject>
+    <dc:subject>European Regulatory News</dc:subject>
+    <dc:keyword>Cession</dc:keyword>
+    <dc:keyword>Divestment</dc:keyword>
+  </item>
+  <item>
+    <title>Northland Power Inc. Reports Second Quarter 2026 Results</title>
+    <link>https://www.globenewswire.com/news-release/2026/09/12/3010333/0/en/Northland-Q2.html</link>
+    <guid isPermaLink="false">https://www.globenewswire.com/news-release/2026/09/12/3010333/0/en/Northland-Q2.html</guid>
+    <pubDate>Sat, 12 Sep 2026 11:00:00 GMT</pubDate>
+    <description>TORONTO, Sept. 12, 2026 (GLOBE NEWSWIRE) -- Northland Power Inc. today reported financial results for the second quarter.</description>
+    <category>TSX:NPI</category>
+    <dc:subject>Earnings</dc:subject>
+  </item>
+  <item>
+    <title>Micron Technology Announces Expansion of Its Idaho Fabrication Facility</title>
+    <link>https://www.globenewswire.com/news-release/2026/09/10/3010444/0/en/Micron-Idaho.html</link>
+    <guid isPermaLink="false">https://www.globenewswire.com/news-release/2026/09/10/3010444/0/en/Micron-Idaho.html</guid>
+    <pubDate>Thu, 10 Sep 2026 13:05:00 GMT</pubDate>
+    <description>BOISE, Idaho, Sept. 10, 2026 (GLOBE NEWSWIRE) -- Micron Technology, Inc. (Nasdaq: MU) today announced an expansion of its Idaho fabrication facility, adding capacity for high-bandwidth memory production.</description>
+    <category>Nasdaq:MU</category>
+    <dc:subject>Product / Services Announcement</dc:subject>
+  </item>
+  <item>
+    <title>Genmab A/S announces regulatory submission in the European Union</title>
+    <link>https://www.globenewswire.com/news-release/2026/09/09/3010555/0/en/Genmab-EU.html</link>
+    <guid isPermaLink="false">https://www.globenewswire.com/news-release/2026/09/09/3010555/0/en/Genmab-EU.html</guid>
+    <pubDate>Wed, 09 Sep 2026 07:00:00 GMT</pubDate>
+    <description>COPENHAGEN, Denmark, Sept. 9, 2026 (GLOBE NEWSWIRE) -- Genmab A/S today announced a regulatory submission.</description>
+    <category>Copenhagen:GMAB</category>
+    <dc:subject>European Regulatory News</dc:subject>
+  </item>
+</channel></rss>

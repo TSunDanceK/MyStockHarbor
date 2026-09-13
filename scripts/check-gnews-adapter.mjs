@@ -294,7 +294,13 @@ check(
 );
 check(
   "the registry lists gnews as a free provider",
-  /FREE_PROVIDERS: NewsProvider\[\] = \[gnewsProvider\]/.test(readCodeOnly("lib/server/news/index.ts"))
+  // MEMBERSHIP, NOT THE EXACT LIST. The first version pinned
+  // `= [gnewsProvider]` and broke the moment step 4 appended the wires — an
+  // assertion that fails on a correct change is noise, and the claim here is
+  // only that gnews is registered.
+  /FREE_PROVIDERS: NewsProvider\[\] = \[[^\]]*\bgnewsProvider\b[^\]]*\]/.test(
+    readCodeOnly("lib/server/news/index.ts")
+  )
 );
 check(
   "...and the default is STILL fmp",

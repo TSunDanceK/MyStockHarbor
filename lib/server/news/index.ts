@@ -12,6 +12,7 @@
 // the site at an empty provider list.
 import { fmpNewsProvider } from "./fmpProvider";
 import { gnewsProvider } from "./gnewsProvider";
+import { wireProvider } from "./wireProvider";
 import type { NewsItem, NewsProvider } from "./types";
 
 export type NewsProviderMode = "free" | "fmp";
@@ -19,13 +20,19 @@ export type NewsProviderMode = "free" | "fmp";
 /**
  * The free adapters, in the order they should be consulted.
  *
- * Google News (§1) is the per-symbol primary and landed in step 3. The wires
- * (§2) and SEC (§3) append here in steps 4 and 5.
+ * Google News (§1) is the per-symbol primary and landed in step 3; the wires
+ * (§2) landed in step 4 and SEC (§3) appends in step 5.
+ *
+ * ORDER IS NOT PRIORITY. fetchSymbolNewsWindow concatenates every active
+ * provider and hands the lot to the store, which sorts by date and dedupes. The
+ * wires are a SUPPLEMENT, not a second primary: one real poll resolved 2 of 40
+ * wire items to a universe symbol, so on most symbols they contribute nothing
+ * and on a few they contribute the release itself.
  *
  * THE DEFAULT IS STILL "fmp", so this list is not reached on the live site yet.
  * Step 7 is what flips it.
  */
-const FREE_PROVIDERS: NewsProvider[] = [gnewsProvider];
+const FREE_PROVIDERS: NewsProvider[] = [gnewsProvider, wireProvider];
 
 /**
  * NEWS_PROVIDER = "fmp" (default in step 1) | "free"
