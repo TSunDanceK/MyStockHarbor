@@ -11,6 +11,7 @@
 // adapters it would select actually exist. Defaulting to free now would point
 // the site at an empty provider list.
 import { fmpNewsProvider } from "./fmpProvider";
+import { gnewsProvider } from "./gnewsProvider";
 import type { NewsItem, NewsProvider } from "./types";
 
 export type NewsProviderMode = "free" | "fmp";
@@ -18,10 +19,13 @@ export type NewsProviderMode = "free" | "fmp";
 /**
  * The free adapters, in the order they should be consulted.
  *
- * EMPTY UNTIL STEP 3. Google News (§1), the wires (§2) and SEC (§3) land one
- * step at a time, and each one appends here.
+ * Google News (§1) is the per-symbol primary and landed in step 3. The wires
+ * (§2) and SEC (§3) append here in steps 4 and 5.
+ *
+ * THE DEFAULT IS STILL "fmp", so this list is not reached on the live site yet.
+ * Step 7 is what flips it.
  */
-const FREE_PROVIDERS: NewsProvider[] = [];
+const FREE_PROVIDERS: NewsProvider[] = [gnewsProvider];
 
 /**
  * NEWS_PROVIDER = "fmp" (default in step 1) | "free"

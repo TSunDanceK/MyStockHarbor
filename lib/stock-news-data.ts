@@ -1,6 +1,6 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, newsProviderMode } from "@/lib/server/news";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -1165,6 +1165,20 @@ const NEWS_SCORE_WINDOW_DAYS = 14;
  * is the honest outcome.
  */
 const NEWS_FEED_MAX_AGE_DAYS = 90;
+/**
+ * The same window for the free stack, and it is shorter for a measured reason.
+ *
+ * Google News backfills thin-coverage names with whatever the index still holds
+ * -- CYRX returned 55 items spanning 3,453 days, one from 2017 -- so a 90-day
+ * feed window that is honest against FMP's latest-N window is not honest against
+ * a search index. 45 days at display; the store still holds 120 so the earnings
+ * pin can reach back.
+ *
+ * GATED ON THE ACTIVE PROVIDER rather than applied to everything, because
+ * shortening the window for FMP would change today's live page -- and step 3's
+ * requirement is that nothing moves until step 7 flips the flag.
+ */
+const FREE_FEED_MAX_AGE_DAYS = 45;
 /** Lighter feed size, below the large cards. */
 const MAX_COMPACT_NEWS_ITEMS = 10;
 /**
@@ -2240,7 +2254,9 @@ async function buildStockNewsBaseData(
   // not news, and a card claiming to be part of the current picture should not
   // be from another one. Running short is the correct outcome for a thin
   // ticker -- fewer cards is honest, padding with year-old stories is not.
-  const oldestAllowedMs = Date.now() - NEWS_FEED_MAX_AGE_DAYS * 86_400_000;
+  const feedMaxAgeDays =
+    newsProviderMode() === "free" ? FREE_FEED_MAX_AGE_DAYS : NEWS_FEED_MAX_AGE_DAYS;
+  const oldestAllowedMs = Date.now() - feedMaxAgeDays * 86_400_000;
   const withinFeedWindow = feedPool.filter((item) => {
     if (!item.pubDate) return false;
     const t = new Date(item.pubDate).getTime();
@@ -2257,7 +2273,7 @@ async function buildStockNewsBaseData(
   // the only way the feed can under-deliver -- there is no gate left to blame.
   console.log(
     `[news-feed] ${upper} pool=${displayNewsPool.length} afterFilters=${feedPool.length}` +
-      ` within${NEWS_FEED_MAX_AGE_DAYS}d=${withinFeedWindow.length}` +
+      ` within${feedMaxAgeDays}d=${withinFeedWindow.length}` +
       ` lead=${detailedNews.length}/${maxDetailedItems} compact=${compactNews.length}/${MAX_COMPACT_NEWS_ITEMS}`
   );
 

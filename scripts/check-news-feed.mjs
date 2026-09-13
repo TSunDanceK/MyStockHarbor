@@ -87,10 +87,18 @@ stubbed = sub(
 // ai-news-briefs pattern spans newlines from the earliest remaining `import {`,
 // and the text import below is multi-line, so leaving it unstubbed here would
 // have that pattern swallow everything in between.
+// MATCHED ON THE MODULE, NOT ON THE NAMES. The first version of this pinned the
+// exact import list, and step 3 added newsProviderMode beside
+// fetchSymbolNewsWindow -- at which point the pattern stopped matching, the
+// ai-news-briefs pattern below swallowed the line instead, and the module loaded
+// with newsProviderMode undefined. Nothing failed, because no assertion reaches
+// the feed builder. A stub keyed to a list of names is a stub that silently
+// stops being applied the day the list changes.
 stubbed = sub(
   stubbed,
-  /^import \{ fetchSymbolNewsWindow \} from "@\/lib\/server\/news";$/m,
-  'const fetchSymbolNewsWindow = () => { throw new Error("no network in this harness"); };'
+  /^import \{[^}]*\} from "@\/lib\/server\/news";$/m,
+  'const fetchSymbolNewsWindow = () => { throw new Error("no network in this harness"); };\n' +
+    'const newsProviderMode = () => "fmp";'
 );
 stubbed = sub(stubbed, /^import \{[\s\S]*?\} from "@\/lib\/server\/news\/text";$/m, textSrc);
 // Type-only, so it is erased at transpile anyway -- but the guard below reads
@@ -107,6 +115,26 @@ if (/^import /m.test(stubbed)) {
   const leftover = stubbed.split("\n").filter((l) => l.startsWith("import "));
   console.error(leftover.join("\n"));
   process.exit(1);
+}
+
+// AND THE OTHER DIRECTION, which the import guard above cannot see: a stub that
+// was never applied because a pattern stopped matching, and whose line was then
+// eaten by the multi-line ai-news-briefs pattern. No import survives, so the
+// guard above is happy, and the module loads with a binding missing. Each marker
+// below is text only the corresponding stub or inline introduces.
+for (const [marker, what] of [
+  ["function keywordHits", "keywordMatch inlined"],
+  ["function stripHtmlTags", "news/text inlined"],
+  ["const fetchSymbolNewsWindow", "provider seam stubbed"],
+  ["const newsProviderMode", "provider mode stubbed"],
+  ["const readOrRefreshSymbolNews", "newsStore stubbed"],
+  ["const getAiNewsBriefs", "ai-news-briefs stubbed"],
+]) {
+  if (!stubbed.includes(marker)) {
+    console.error(`FAIL: ${what} — expected "${marker}" in the stubbed source and it is not there.`);
+    console.error("A pattern stopped matching and the line was swallowed by another substitution.");
+    process.exit(1);
+  }
 }
 
 const js = ts.transpileModule(stubbed, {
