@@ -165,7 +165,10 @@ export function parseWireFeed(xml: string, source: WireSource, nowMs = Date.now(
     // tickers and must not be offered to the matcher.
     const stockCategories = [...block.matchAll(/<category[^>]*domain="[^"]*\/rss\/stock"[^>]*>([\s\S]*?)<\/category>/g)]
       .map((m) => m[1]);
-    const categories = tagAll(block, "category");
+    // NOTE: GlobeNewswire's free-text categories ("Mergers and Acquisitions",
+    // "Calendar of Events") are deliberately NOT collected here. They are a
+    // plausible eventType signal and step 6 may want them; nothing reads
+    // `categories` yet, so adding them now would be an unverifiable guess.
     const tickers = source.id === "globenewswire" ? tickersFromCategories(stockCategories) : [];
 
     // prn:industry -> sector label, prn:subject -> eventType. Both carry long

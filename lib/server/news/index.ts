@@ -13,6 +13,7 @@
 import { fmpNewsProvider } from "./fmpProvider";
 import { gnewsProvider } from "./gnewsProvider";
 import { wireProvider } from "./wireProvider";
+import { secProvider } from "./secProvider";
 import type { NewsItem, NewsProvider } from "./types";
 
 export type NewsProviderMode = "free" | "fmp";
@@ -32,7 +33,7 @@ export type NewsProviderMode = "free" | "fmp";
  * THE DEFAULT IS STILL "fmp", so this list is not reached on the live site yet.
  * Step 7 is what flips it.
  */
-const FREE_PROVIDERS: NewsProvider[] = [gnewsProvider, wireProvider];
+const FREE_PROVIDERS: NewsProvider[] = [gnewsProvider, wireProvider, secProvider];
 
 /**
  * NEWS_PROVIDER = "fmp" (default in step 1) | "free"
