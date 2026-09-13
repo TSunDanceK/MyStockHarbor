@@ -21,6 +21,8 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
+import { EARNINGS_PEAK_DAY_SHARE } from "./earningsPlan";
+import { ANALYSIS_UNIVERSE_CAP } from "./dynamicUniverseCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -816,30 +818,70 @@ export function exchangeHistogram(manifest: SecManifest): Record<string, number>
 // Bandwidth and rate limit are both non-issues.
 
 /**
+ * Background re-read inflow on an ORDINARY day, measured 2026-09-08..11.
+ *
+ * 127 of 281 touched symbols filed a financial form over four days, so ~32/day
+ * of 6-K, 8-K and the occasional off-season report. This is the floor the
+ * calendar never drops below, not the number to size against.
+ */
+export const SEC_REREAD_BACKGROUND_PER_DAY = 32;
+
+/**
+ * Re-reads arriving on the BUSIEST day of the year.
+ *
+ * SIZING ON THE QUIET MONTH INVERTS THE REQUIREMENT. The four-day window this
+ * pipeline was measured over contained six 10-K/10-Q filings across a
+ * 700-large-cap universe, because mid-September is the quietest part of the
+ * cycle. In peak weeks scores of companies report on one day. A drain set to the
+ * quiet rate lets the queue GROW through earnings season and clear it in the
+ * weeks after -- exactly backwards. A stale page in February is invisible; a
+ * stale page the morning after a result is the product failing, and that is when
+ * the page is busiest.
+ *
+ * THE PEAK IS NOT GUESSED AND NOT RE-DERIVED HERE. earningsPlan.ts already
+ * carries it, measured from January and February 2026 -- peak season -- with its
+ * own provenance, witnesses and a check that re-derives the figure from the
+ * share. Reusing it means this constant moves when the universe or the calendar
+ * shape moves, instead of going stale silently:
+ *
+ *   EARNINGS_PEAK_DAY_SHARE 0.0935 x ANALYSIS_UNIVERSE_CAP 700 = 66 reporters
+ *   + SEC_REREAD_BACKGROUND_PER_DAY 32                          = 98/day peak
+ *
+ * A symbol filing both a 10-Q and its Item 2.02 8-K enqueues ONCE -- the queue
+ * is per symbol -- so reporters and their earnings 8-Ks do not double-count.
+ */
+export const SEC_REREAD_PEAK_INFLOW =
+  Math.ceil(ANALYSIS_UNIVERSE_CAP * EARNINGS_PEAK_DAY_SHARE) + SEC_REREAD_BACKGROUND_PER_DAY;
+
+/**
  * How many re-reads one drain invocation may perform.
  *
- * SIZED AGAINST WORK PER DOCUMENT, AND THE MEASUREMENT MOVED THE ANSWER.
- * Parse time was expected to be the binding constraint; measured, it is not.
- * A synthetic companyfacts-shaped document of AAPL's decoded size:
+ * ABOVE PEAK INFLOW WITH MARGIN, so the queue drains on the worst day of the
+ * year rather than growing through it. At 1.5x the measured peak the backlog
+ * shrinks every single day of the cycle, which is the property that matters --
+ * a drain that merely matches inflow never recovers from a bad week.
+ *
+ * WHAT 150 COSTS. Sequential, ~0.4s per symbol dominated by the network
+ * round-trip: ~60s inside a 300s budget, and ~2.5 requests/second against SEC's
+ * 10/second with no daily cap. The concurrency ceiling found while sizing this
+ * -- ten parallel parses is ~57 MB of live heap -- is handled by draining one at
+ * a time rather than by lowering the count.
+ *
+ * SIZED AGAINST WORK PER DOCUMENT, AND THE MEASUREMENT MOVED THE ANSWER. Parse
+ * time was expected to be binding; measured on a companyfacts-shaped document of
+ * AAPL's decoded size it is not:
  *
  *   3.80 MB decoded · JSON.parse median 21 ms · ~182 MB/s
  *   heap delta 5.7 MB, about 1.5x the decoded size · 24,840 fact rows
  *
- * So a full day's ~30 re-reads is well under a second of parse. What the
- * numbers actually constrain is CONCURRENCY, not count: ten documents parsed in
- * parallel is ~57 MB of live heap on top of everything else the function holds,
- * and the decoded document must never be retained -- extract, keep the ~20 KB
- * fact set, discard (build brief §4: never store raw companyfacts).
+ * Even 150 documents is ~3s of parse. The cost is round-trips, and the decoded
+ * document must never be retained -- extract, keep the ~20 KB fact set, discard
+ * (build brief §4: never store raw companyfacts).
  *
- * 40 per invocation therefore clears a normal day many times over while leaving
- * the 300 s budget dominated by network round-trips, which at ~0.5-1 s each is
- * the real per-symbol cost. The backfill is what makes a backlog large, and it
- * drains over days by design rather than in one run.
- *
- * MEASURED IN THE AGENT SANDBOX, NOT IN A VERCEL FUNCTION. Treat as an order of
- * magnitude; re-measure in situ before raising it.
+ * MEASURED IN THE AGENT SANDBOX, NOT IN A VERCEL FUNCTION. Treat the parse
+ * figures as an order of magnitude and re-measure in situ before raising this.
  */
-export const SEC_REREAD_DRAIN_PER_RUN = 40;
+export const SEC_REREAD_DRAIN_PER_RUN = Math.max(150, Math.ceil(SEC_REREAD_PEAK_INFLOW * 1.5));
 
 /** Re-read one document at a time. See the heap figures above. */
 export const SEC_REREAD_CONCURRENCY = 1;
