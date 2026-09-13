@@ -78,3 +78,36 @@ for (const [sym, query, cik] of CASES) {
     );
   }
 }
+
+// ── THE SEC PAYLOAD: TRANSFER OR PARSE? ───────────────────────────────────
+// JPM's submissions JSON is 4.6 MB against MU's 165 KB -- 28x -- and the whole
+// thing is JSON.parse'd inside the render. A timeout does not help: the request
+// COMPLETES, it is just enormous. Before choosing a fix, establish which half
+// of the cost is which, because they have different answers:
+//   transfer-dominated -> a smaller request, if the endpoint allowed one
+//   parse-dominated    -> parse less, or parse it somewhere that is not a render
+console.log("\n===== SEC payload: transfer vs parse");
+for (const [sym, , cik] of CASES) {
+  const url = `https://data.sec.gov/submissions/CIK${cik}.json`;
+  const headers = { "user-agent": SEC_UA, accept: "application/json" };
+  for (let round = 1; round <= 3; round += 1) {
+    const t0 = Date.now();
+    const res = await fetch(url, { headers });
+    const text = await res.text();
+    const transferMs = Date.now() - t0;
+
+    const p0 = Date.now();
+    const body = JSON.parse(text);
+    const parseMs = Date.now() - p0;
+
+    // What the adapter actually READS out of all those bytes: recent filings.
+    const recent = body?.filings?.recent ?? {};
+    const forms = recent.form?.length ?? 0;
+    const olderFiles = body?.filings?.files?.length ?? 0;
+
+    console.log(
+      `  ${sym} round ${round}  bytes=${text.length}  transfer=${transferMs}ms  parse=${parseMs}ms  ` +
+        `recent.form=${forms}  older-file-refs=${olderFiles}`
+    );
+  }
+}
