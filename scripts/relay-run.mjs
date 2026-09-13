@@ -91,6 +91,13 @@ const TASKS = {
   // because "is it about MU" and "is it worth reading" are different questions
   // and only the first had ever been measured.
   "churn-sample": { script: "scripts/churn-sample.mjs", args: () => [] },
+  // Read-only: asks a deployment for pages so their renders emit [timing] lines
+  // into the Vercel runtime log. Prints no response body -- the measurement is
+  // in the log, not in the HTML, and the sandbox is refused *.vercel.app anyway.
+  "render": {
+    script: "scripts/render-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+  },
   // Read-only: how long each free news adapter actually takes, cold, against
   // the real hosts. Asked before choosing a per-adapter timeout budget, because
   // the sandbox cannot reach any of the three and a guessed budget is a guess.
