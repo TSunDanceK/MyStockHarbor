@@ -1579,11 +1579,552 @@ async function probeStooq(symbol: string, cutoffMs: number) {
 }
 
 // ---------------------------------------------------------------------------
+// 6. Refresh-pipeline shape (opt-in: sections=refresh)
+// ---------------------------------------------------------------------------
+//
+// Four measurements that decide the SEC -> Upstash pipeline's shape before any
+// of it is built. All read-only: no Redis, no writes, no FMP.
+//
+// NOTE ON THE SPEC. This section was briefed as answering
+// claude/sec-pipeline-spec-2026-09-13.md. That file is NOT in this repo -- not
+// on this branch and not on main -- so it was not read, and nothing here is
+// derived from it. Everything below implements the 6a-6d text of the brief
+// itself. See claude/traps/inference-about-a-source-you-cannot-open.md: the
+// unreachable source is where inference is least safe and most tempting.
+
+// --- 6a. Conditional requests ---------------------------------------------
+//
+// SEC's API documentation does not mention caching headers, so both answers are
+// live and the brief is explicit about not assuming either.
+//
+// THE CONTROLS ARE THE POINT, and without them a 304 proves nothing. A server
+// that echoes 304 at any conditional header would produce exactly the result
+// that looks like good news -- "nightly full-universe verify is nearly free" --
+// while actually serving stale data forever. So each conditional request is
+// paired with a negative control that MUST come back 200:
+//
+//   If-None-Match: <the real ETag>        -> 304 means supported
+//   If-None-Match: "definitely-not-it"    -> MUST be 200, or the 304 above is noise
+//   If-Modified-Since: <real Last-Modified> -> 304 means supported
+//   If-Modified-Since: 1990               -> MUST be 200, or the 304 above is noise
+//
+// Only when a control returns 200 does the matching 304 mean the header is
+// genuinely being evaluated.
+
+type CondStep = {
+  step: string;
+  requestHeader: string | null;
+  status: number;
+  ms: number;
+  bodyBytes: number;
+  bodyReturned: boolean;
+  contentLength: string | null;
+  note?: string;
+};
+
+// Body bytes are counted from the DECODED payload rather than trusted from
+// content-length: the wire transfer is gzipped and a 304 legitimately carries
+// no content-length at all, so the header cannot distinguish "no body" from
+// "header absent".
+async function measuredFetch(url: string, headers: Record<string, string>, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { signal: controller.signal, cache: "no-store", headers });
+    const body = await res.arrayBuffer();
+    return {
+      status: res.status,
+      ms: Date.now() - started,
+      bodyBytes: body.byteLength,
+      headers: res.headers,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probeConditional(symbol: string, cik: string) {
+  const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
+  const timeoutMs = 60000;
+  const steps: CondStep[] = [];
+
+  try {
+    const base = await measuredFetch(url, secHeaders(), timeoutMs);
+    const lastModified = base.headers.get("last-modified");
+    const etag = base.headers.get("etag");
+    steps.push({
+      step: "baseline GET",
+      requestHeader: null,
+      status: base.status,
+      ms: base.ms,
+      bodyBytes: base.bodyBytes,
+      bodyReturned: base.bodyBytes > 0,
+      contentLength: base.headers.get("content-length"),
+    });
+
+    if (base.status !== 200) {
+      return { symbol, cik, url, ok: false, reason: `baseline returned HTTP ${base.status}`, steps };
+    }
+
+    const run = async (step: string, header: Record<string, string>, note?: string) => {
+      const r = await measuredFetch(url, { ...secHeaders(), ...header }, timeoutMs);
+      steps.push({
+        step,
+        requestHeader: Object.entries(header).map(([k, v]) => `${k}: ${v}`)[0],
+        status: r.status,
+        ms: r.ms,
+        bodyBytes: r.bodyBytes,
+        bodyReturned: r.bodyBytes > 0,
+        contentLength: r.headers.get("content-length"),
+        note,
+      });
+      return r;
+    };
+
+    const imsReal = lastModified ? await run("If-Modified-Since = returned Last-Modified", { "if-modified-since": lastModified }) : null;
+    const imsControl = lastModified
+      ? await run("CONTROL If-Modified-Since = 1990", { "if-modified-since": "Mon, 01 Jan 1990 00:00:00 GMT" }, "must be 200, or the 304 above is meaningless")
+      : null;
+    const inmReal = etag ? await run("If-None-Match = returned ETag", { "if-none-match": etag }) : null;
+    const inmControl = etag
+      ? await run("CONTROL If-None-Match = bogus", { "if-none-match": '"definitely-not-the-etag"' }, "must be 200, or the 304 above is meaningless")
+      : null;
+
+    const imsWorks = imsReal?.status === 304 && imsControl?.status === 200;
+    const inmWorks = inmReal?.status === 304 && inmControl?.status === 200;
+    const controlFailed =
+      (imsReal?.status === 304 && imsControl?.status === 304) || (inmReal?.status === 304 && inmControl?.status === 304);
+
+    let verdict: string;
+    if (controlFailed) {
+      verdict =
+        "UNUSABLE -- a negative control also returned 304, so this endpoint answers 304 regardless of the validator. Treat every 304 here as meaningless; a verify loop built on it would never see a correction.";
+    } else if (imsWorks || inmWorks) {
+      verdict = `CONDITIONAL REQUESTS SUPPORTED via ${[imsWorks ? "If-Modified-Since" : null, inmWorks ? "If-None-Match" : null].filter(Boolean).join(" and ")} -- 304 with an empty body, controls returned 200. A nightly full-universe verify costs headers only.`;
+    } else if (!lastModified && !etag) {
+      verdict = "NO VALIDATOR OFFERED -- the response carries neither Last-Modified nor ETag, so there is nothing to send back. Verify on a rotation, not nightly.";
+    } else {
+      verdict = `NOT SUPPORTED -- a validator is offered but the conditional request still returned a full body (${imsReal?.status ?? "n/a"} / ${inmReal?.status ?? "n/a"}). Every verify costs a full payload; use a 30-day rotation.`;
+    }
+
+    return {
+      symbol,
+      cik,
+      url,
+      ok: true,
+      validatorsOffered: { lastModified, etag, hasLastModified: Boolean(lastModified), hasEtag: Boolean(etag) },
+      // Which intermediary answered matters: a CDN can synthesise validators its
+      // origin does not offer, and can also strip them. Populated from the
+      // baseline response -- an unpopulated field here would read as "no CDN"
+      // rather than "not measured".
+      responseOrigin: {
+        server: base.headers.get("server"),
+        via: base.headers.get("via"),
+        xCache: base.headers.get("x-cache"),
+        age: base.headers.get("age"),
+        cacheControl: base.headers.get("cache-control"),
+      },
+      steps,
+      imsSupported: imsWorks,
+      inmSupported: inmWorks,
+      verdict,
+    };
+  } catch (err) {
+    return { symbol, cik, url, ok: false, reason: describeError(err, timeoutMs), steps };
+  }
+}
+
+// --- 6b / 6c. The EDGAR daily index ---------------------------------------
+//
+// www.sec.gov IS A DIFFERENT HOST from data.sec.gov and reachability is the
+// question, not a formality -- the news probe measured Nasdaq answering
+// everywhere except iad1. A failure here is reported as a failure.
+//
+// AND THE CONVERSE, which is just as easy to get wrong: EDGAR publishes no
+// daily index on market holidays, so a 404 on Thanksgiving is the correct
+// answer rather than a broken fetch. Absent-by-design and failed-to-fetch are
+// separate outcomes with separate counts; collapsing them would either invent
+// an outage or hide one.
+
+function quarterOf(d: Date) {
+  return Math.floor(d.getUTCMonth() / 3) + 1;
+}
+
+function businessDaysBack(n: number, from: Date): Date[] {
+  const out: Date[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  while (out.length < n) {
+    const dow = cursor.getUTCDay();
+    if (dow !== 0 && dow !== 6) out.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return out;
+}
+
+function idxUrl(d: Date) {
+  const y = d.getUTCFullYear();
+  const stamp = `${y}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+  // The quarter is DERIVED, never hardcoded. The brief's example URL says QTR3,
+  // which is right only for Jul-Sep -- a 30-day window run in early October
+  // reaches back across the boundary and every pre-October day would 404 for a
+  // reason that has nothing to do with reachability.
+  return `https://www.sec.gov/Archives/edgar/daily-index/${y}/QTR${quarterOf(d)}/master.${stamp}.idx`;
+}
+
+type IdxDay = {
+  date: string;
+  url: string;
+  outcome: "parsed" | "absent" | "failed";
+  status?: number;
+  ms?: number;
+  bytes?: number;
+  lines?: number;
+  dataRows?: number;
+  headerRows?: string[];
+  columnLayout?: string | null;
+  columnCount?: number | null;
+  cikColumnAllNumeric?: boolean;
+  sampleRows?: string[];
+  formCounts?: Record<string, number>;
+  targetsFound?: { symbol: string; cik: string; form: string; company: string }[];
+  reason?: string;
+};
+
+async function fetchOneIdx(
+  d: Date,
+  targetCiks: Record<string, string>,
+  captureDetail: boolean
+): Promise<IdxDay> {
+  const url = idxUrl(d);
+  const date = url.slice(-12, -4);
+  const timeoutMs = 45000;
+  try {
+    const r = await timedFetch(url, timeoutMs, {
+      "user-agent": SEC_UA,
+      "accept-encoding": "gzip, deflate",
+      accept: "text/plain,*/*",
+    });
+    if (r.status === 404) {
+      // EXPECTED on a market holiday. Not a failure, and counted separately.
+      return { date, url, outcome: "absent", status: 404, ms: r.ms, bytes: r.bytes };
+    }
+    if (r.status !== 200) {
+      return { date, url, outcome: "failed", status: r.status, ms: r.ms, bytes: r.bytes, reason: `HTTP ${r.status}` };
+    }
+
+    const lines = r.body.split("\n");
+    // The header block ends at a rule of dashes; the line before it carries the
+    // column names. Found by scanning rather than by a fixed line number, since
+    // the preamble's length is not guaranteed.
+    const ruleAt = lines.findIndex((l) => /^-{5,}/.test(l.trim()));
+    // The column-name line is EXCLUDED from headerRows -- it is reported on its
+    // own as columnLayout. The brief asks for the header rows and the exact
+    // column layout as two separate things, and returning the column line in
+    // both makes "3 preamble rows" read as 4.
+    const headerRows = ruleAt > 1 ? lines.slice(0, ruleAt - 1).filter((l) => l.trim()) : [];
+    const columnLayout = ruleAt > 0 ? (lines[ruleAt - 1] ?? "").trim() : null;
+    const dataLines = lines.slice(ruleAt + 1).filter((l) => l.includes("|"));
+
+    const formCounts: Record<string, number> = {};
+    const targetsFound: { symbol: string; cik: string; form: string; company: string }[] = [];
+    const byCik: Record<string, string> = {};
+    for (const [sym, cik] of Object.entries(targetCiks)) byCik[String(Number(cik))] = sym;
+
+    let cikNumeric = 0;
+    for (const line of dataLines) {
+      const f = line.split("|");
+      if (f.length < 5) continue;
+      const cik = f[0].trim();
+      const company = f[1].trim();
+      const form = f[2].trim();
+      if (/^\d+$/.test(cik)) cikNumeric++;
+      // VERBATIM. The form string is counted exactly as it appears, with no
+      // normalising, uppercasing or suffix stripping -- 6c's whole question is
+      // whether "/A" survives as part of this string.
+      formCounts[form] = (formCounts[form] ?? 0) + 1;
+      if (byCik[cik]) targetsFound.push({ symbol: byCik[cik], cik, form, company });
+    }
+
+    return {
+      date,
+      url,
+      outcome: "parsed",
+      status: r.status,
+      ms: r.ms,
+      bytes: r.bytes,
+      lines: lines.length,
+      dataRows: dataLines.length,
+      headerRows: captureDetail ? headerRows : undefined,
+      columnLayout,
+      columnCount: columnLayout ? columnLayout.split("|").length : null,
+      cikColumnAllNumeric: dataLines.length > 0 && cikNumeric === dataLines.length,
+      sampleRows: captureDetail ? dataLines.slice(0, 3) : undefined,
+      formCounts,
+      targetsFound,
+    };
+  } catch (err) {
+    return { date, url, outcome: "failed", reason: describeError(err, timeoutMs) };
+  }
+}
+
+async function probeDailyIndex(
+  days: number,
+  detailDays: number,
+  targetCiks: Record<string, string>,
+  deadline: number
+) {
+  const dates = businessDaysBack(days, new Date());
+  const results: IdxDay[] = [];
+  let truncated: string | null = null;
+
+  // Concurrency 4: enough to fit a month inside the budget, low enough to stay
+  // well inside SEC's 10 requests/second fair-access limit.
+  const POOL = 4;
+  for (let i = 0; i < dates.length; i += POOL) {
+    if (Date.now() > deadline) {
+      truncated = `time budget exhausted after ${results.length} of ${dates.length} days`;
+      break;
+    }
+    const batch = dates.slice(i, i + POOL);
+    results.push(
+      ...(await Promise.all(batch.map((d, k) => fetchOneIdx(d, targetCiks, i + k < detailDays))))
+    );
+  }
+
+  const parsed = results.filter((r) => r.outcome === "parsed");
+  const absent = results.filter((r) => r.outcome === "absent");
+  const failed = results.filter((r) => r.outcome === "failed");
+
+  // --- 6c aggregate ---
+  const allForms: Record<string, number> = {};
+  for (const day of parsed) for (const [form, n] of Object.entries(day.formCounts ?? {})) allForms[form] = (allForms[form] ?? 0) + n;
+
+  const amended = Object.entries(allForms).filter(([f]) => f.endsWith("/A"));
+  const amendedTotal = amended.reduce((n, [, c]) => n + c, 0);
+  const tenKA = allForms["10-K/A"] ?? 0;
+  const tenQA = allForms["10-Q/A"] ?? 0;
+
+  const layouts = [...new Set(parsed.map((d) => d.columnLayout).filter(Boolean))];
+  const cikParseable = parsed.length > 0 && parsed.every((d) => d.cikColumnAllNumeric);
+
+  const targets: Record<string, { date: string; form: string }[]> = {};
+  for (const day of parsed) for (const t of day.targetsFound ?? []) (targets[t.symbol] ??= []).push({ date: day.date, form: t.form });
+
+  return {
+    // 6b
+    reachability:
+      parsed.length > 0
+        ? `www.sec.gov REACHABLE from this function -- ${parsed.length} daily index files parsed`
+        : failed.length > 0
+          ? `www.sec.gov NOT REACHABLE or refusing -- ${failed.length} failures, 0 parsed. This is a failure, not an absence.`
+          : "no files parsed and no failures -- every requested day was absent (404); widen the window",
+    daysRequested: days,
+    counts: { parsed: parsed.length, absentNoIndex: absent.length, failed: failed.length },
+    absentDates: absent.map((d) => d.date),
+    failures: failed.map((d) => ({ date: d.date, status: d.status, reason: d.reason })),
+    truncated,
+    columnLayout: {
+      distinctLayoutsSeen: layouts,
+      stable: layouts.length <= 1,
+      cikColumnAllNumericEveryDay: cikParseable,
+      note: "master.idx is a 5-column pipe-delimited file. There is no amendment flag column -- the layout itself is the evidence for 6c that '/A' can only live inside the Form Type string.",
+    },
+    recentDaysDetail: results.slice(0, detailDays),
+    targetSymbolsInWindow: targets,
+    targetSymbolsAbsent: Object.keys(targetCiks).filter((s) => !targets[s]),
+
+    // 6c
+    amendments: {
+      distinctFormTypes: Object.keys(allForms).length,
+      totalFilings: Object.values(allForms).reduce((a, b) => a + b, 0),
+      "10-K/A": tenKA,
+      "10-Q/A": tenQA,
+      allAmendedFormsVerbatim: Object.fromEntries(amended.sort((a, b) => b[1] - a[1])),
+      amendedTotal,
+      suffixIsVerbatim: amendedTotal > 0,
+      verdict:
+        parsed.length === 0
+          ? "NOT MEASURED -- no index files were parsed, so this says nothing about amendments."
+          : amendedTotal > 0
+            ? `'/A' APPEARS VERBATIM as a suffix on the Form Type string: ${amendedTotal} amended filings across ${parsed.length} days, including ${tenKA} 10-K/A and ${tenQA} 10-Q/A. A restatement detector can match on the suffix.`
+            : `NO '/A' SUFFIX in ${parsed.length} days of filings. Per the brief that means the PATTERN is wrong, not the market -- inspect topFormTypes below before building a detector on it.`,
+      topFormTypes: Object.fromEntries(Object.entries(allForms).sort((a, b) => b[1] - a[1]).slice(0, 25)),
+    },
+  };
+}
+
+// --- 6d. Bulk archives ------------------------------------------------------
+//
+// HEAD plus a range-read of the ZIP index only. NOT buffered: companyfacts.zip
+// and submissions.zip are gigabyte-scale, and the entry COUNT -- which is the
+// number that decides one-download-vs-700-requests -- lives in the 22-byte
+// end-of-central-directory record at the very end of the file.
+//
+// The central directory itself is deliberately NOT fetched whole. At roughly
+// one entry per filer it runs to tens of MB, and the question here does not
+// need it; a 64 KB sample gives real entry names to confirm the archive holds
+// what its name claims.
+//
+// URLS ARE PROBED, NOT ASSUMED. SEC has moved these paths before, and a 404 on
+// a guessed URL would read as "no bulk archive exists". Each candidate is
+// reported with its own status so a wrong guess is visible as a wrong guess.
+const BULK_CANDIDATES: { name: string; url: string }[] = [
+  { name: "companyfacts.zip", url: "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip" },
+  { name: "submissions.zip", url: "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip" },
+  { name: "submissions.zip (alt path)", url: "https://www.sec.gov/Archives/edgar/daily-index/xbrl/submissions.zip" },
+  { name: "companyfacts.zip (alt path)", url: "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/companyfacts.zip" },
+];
+
+async function probeBulkArchive(name: string, url: string) {
+  const timeoutMs = 45000;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    const started = Date.now();
+    const head = await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", headers: ZIP_UA });
+    clearTimeout(t);
+
+    const contentLength = head.headers.get("content-length");
+    const base = {
+      name,
+      url,
+      status: head.status,
+      ms: Date.now() - started,
+      contentLength,
+      sizeMB: contentLength ? +(Number(contentLength) / 1048576).toFixed(1) : null,
+      lastModified: head.headers.get("last-modified"),
+      acceptRanges: head.headers.get("accept-ranges"),
+    };
+    if (head.status !== 200 || !contentLength) {
+      return { ...base, ok: false, reason: head.status === 200 ? "200 but no content-length; cannot range-read" : `HTTP ${head.status}` };
+    }
+
+    // EOCD only.
+    const total = Number(contentLength);
+    const tailLen = Math.min(65557, total);
+    const tail = await rangeFetch(url, total - tailLen, total - 1, timeoutMs);
+    if (tail.status !== 206) {
+      return { ...base, ok: true, rangeSupported: false, note: `server answered ${tail.status} to a Range request; a cold start would have to download all ${base.sizeMB} MB` };
+    }
+
+    let eocd = -1;
+    for (let i = tail.buf.length - 22; i >= 0; i--) {
+      if (readU32(tail.buf, i) === 0x06054b50) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd === -1) return { ...base, ok: true, rangeSupported: true, note: "no EOCD signature in the tail -- not a plain ZIP, or a comment longer than 64 KB" };
+
+    let entryCount = readU16(tail.buf, eocd + 10);
+    let cdSize = readU32(tail.buf, eocd + 12);
+    let cdOffset = readU32(tail.buf, eocd + 16);
+    let zip64 = false;
+    if (entryCount === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+      zip64 = true;
+      let loc = -1;
+      for (let i = eocd - 20; i >= 0; i--) {
+        if (readU32(tail.buf, i) === 0x07064b50) {
+          loc = i;
+          break;
+        }
+      }
+      if (loc !== -1) {
+        const z64Offset = readU64(tail.buf, loc + 8);
+        const z64 = await rangeFetch(url, z64Offset, z64Offset + 55, timeoutMs);
+        if (readU32(z64.buf, 0) === 0x06064b50) {
+          entryCount = readU64(z64.buf, 32);
+          cdSize = readU64(z64.buf, 40);
+          cdOffset = readU64(z64.buf, 48);
+        }
+      }
+    }
+
+    // A 64 KB sample of the central directory, not the whole thing.
+    const sampleLen = Math.min(65536, cdSize);
+    const cdSample = await rangeFetch(url, cdOffset, cdOffset + sampleLen - 1, timeoutMs);
+    const sampleEntries = parseCentralDirectory(cdSample.buf);
+
+    return {
+      ...base,
+      ok: true,
+      rangeSupported: true,
+      zip64,
+      entryCount,
+      centralDirectoryBytes: cdSize,
+      centralDirectoryMB: +(cdSize / 1048576).toFixed(1),
+      sampleEntryNames: sampleEntries.slice(0, 8).map((e) => e.name),
+      bytesActuallyFetched: tailLen + cdSample.buf.length,
+      note: `entry count and sizes read from the archive index; ${base.sizeMB} MB was NOT downloaded`,
+    };
+  } catch (err) {
+    // `status` is carried even here, as undefined. Without it the caller's
+    // `b.status === 404` fails to typecheck against the union, and the
+    // reflex fix -- a fake 0 -- would put a transport failure in the same
+    // bucket as a real HTTP response.
+    return { name, url, ok: false, status: undefined as number | undefined, reason: describeError(err, timeoutMs) };
+  }
+}
+
+async function probeRefresh(
+  symbols: string[],
+  ciks: Record<string, { cik: string; title: string }>,
+  opts: { condSymbols: number; idxDays: number; detailDays: number },
+  deadline: number
+) {
+  const condTargets = symbols.filter((s) => ciks[s]).slice(0, opts.condSymbols);
+  const targetCiks = Object.fromEntries(symbols.filter((s) => ciks[s]).map((s) => [s, ciks[s].cik]));
+
+  // SEQUENTIAL, not Promise.all. Run together these three put roughly ten
+  // requests in flight at once, which is exactly SEC's fair-access ceiling of
+  // 10 requests/second. A self-inflicted 429 or 403 would surface here as
+  // "www.sec.gov is blocked from iad1" -- the precise false conclusion 6b was
+  // added to rule out, manufactured by the probe measuring itself. The whole
+  // section still fits the budget comfortably.
+  const conditional = [];
+  for (const s of condTargets) conditional.push(await probeConditional(s, ciks[s].cik));
+
+  const dailyIndex = await probeDailyIndex(
+    opts.idxDays,
+    opts.detailDays,
+    targetCiks,
+    Math.min(deadline, Date.now() + 150000)
+  );
+
+  const bulk = [];
+  for (const c of BULK_CANDIDATES) bulk.push(await probeBulkArchive(c.name, c.url));
+
+  const condOk = conditional.filter((c) => c.ok);
+  const agreement = [...new Set(condOk.map((c) => `${c.imsSupported}/${c.inmSupported}`))];
+
+  return {
+    "6a_conditionalRequests": {
+      symbolsProbed: condTargets,
+      // claude/traps/suspicious-uniformity.md in the other direction: here
+      // uniformity is what SHOULD happen, since caching is a property of the
+      // endpoint rather than the company. Disagreement between symbols means a
+      // CDN edge is answering inconsistently and no single result is safe to
+      // generalise from.
+      consistentAcrossSymbols: agreement.length <= 1,
+      results: conditional,
+    },
+    "6b_dailyIndex": dailyIndex,
+    "6d_bulkArchives": {
+      candidatesProbed: BULK_CANDIDATES.length,
+      reachable: bulk.filter((b) => b.ok && b.status === 200).map((b) => b.name),
+      notFound: bulk.filter((b) => b.status === 404).map((b) => b.name),
+      results: bulk,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
 const FREE_SECTIONS = ["sec-facts", "sec-submissions", "stooq"];
-const ALL_SECTIONS = [...FREE_SECTIONS, "datasets", "av"];
+const ALL_SECTIONS = [...FREE_SECTIONS, "datasets", "av", "refresh"];
 
 export async function GET(request: Request) {
   const denied = await guardDebugRequest(request);
@@ -1614,7 +2155,9 @@ export async function GET(request: Request) {
   const cutoffMs = startedAt - 820 * DAY;
 
   const out: Record<string, unknown> = {};
-  const cikNeeded = sections.some((s) => s === "sec-facts" || s === "sec-submissions" || s === "datasets");
+  const cikNeeded = sections.some(
+    (s) => s === "sec-facts" || s === "sec-submissions" || s === "datasets" || s === "refresh"
+  );
   const ciks = cikNeeded ? await resolveCiks(symbols) : { map: {}, diag: { skipped: true } };
   if (cikNeeded) out.cikResolution = ciks.diag;
 
@@ -1676,6 +2219,24 @@ export async function GET(request: Request) {
     }
   }
 
+  if (sections.includes("refresh")) {
+    out.refresh = await probeRefresh(
+      symbols,
+      ciks.map,
+      {
+        // Two symbols by default for 6a, not five. Each conditional test costs a
+        // baseline plus two negative controls that MUST return a full ~4 MB
+        // body, so five symbols is ~100 MB spent re-confirming a property of the
+        // endpoint. Two is enough to catch an inconsistent CDN edge, which is
+        // the only per-symbol variation there could be.
+        condSymbols: Math.max(1, Math.min(5, Number(params.get("condSymbols") ?? 2))),
+        idxDays: Math.max(1, Math.min(60, Number(params.get("idxDays") ?? 30))),
+        detailDays: Math.max(1, Math.min(10, Number(params.get("detailDays") ?? 5))),
+      },
+      overallDeadline
+    );
+  }
+
   if (sections.includes("av")) {
     out.alphaVantage = await probeAlphaVantage(
       symbols,
@@ -1717,6 +2278,8 @@ export async function GET(request: Request) {
           "A symbol with ok:false has concepts:null. It contributes NOTHING to any hide list -- a fetch failure is not evidence that a concept is missing.",
         timezone:
           "submissions[].acceptanceAnalysis.timezoneVerdict is FITTED: every candidate offset 0-23h is scored on how well it explains the observed filingDate rollovers against EDGAR's 17:30 ET cutoff. It does not read the trailing Z. Check offsetFit.best.agreement (want ~1.0), offsetFit.rolloverObservations (want well above 5) and offsetFit.tiedWith (want empty) before trusting the verdict.",
+        refresh:
+          "6a: a 304 means nothing unless its CONTROL row returned 200 -- check steps[] for the two rows labelled CONTROL before believing imsSupported/inmSupported. 6b: absentNoIndex (404 on a market holiday) is a normal outcome and is counted separately from failures; only `failures` means www.sec.gov refused. 6c: amendments.suffixIsVerbatim false means the '/A' pattern is wrong, not that the market filed no amendments -- read topFormTypes. 6d: entryCount and sizes come from the ZIP index; the archives themselves were never downloaded.",
         datasets:
           "dataSets.stages A and B answer the feasibility question on their own and cost about a second. Stage D is the one that can be truncated -- if stages.D_num.truncated is set, a null result in productSplits/geographySplits means NOT MEASURED, not absent.",
       },

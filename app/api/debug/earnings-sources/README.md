@@ -25,6 +25,8 @@ The agent sandbox cannot substitute for it either — `data.sec.gov`,
     /api/debug/earnings-sources?key=...&sections=sec-facts
     /api/debug/earnings-sources?key=...&sections=datasets
     /api/debug/earnings-sources?key=...&sections=datasets&month=2026_05
+    /api/debug/earnings-sources?key=...&sections=refresh
+    /api/debug/earnings-sources?key=...&sections=refresh&idxDays=5&condSymbols=1
     /api/debug/earnings-sources?key=...&sections=av&avBurn=1
 
     # override the symbol set
@@ -39,6 +41,7 @@ one recent IPO.
 |---|---|---|
 | `sec-facts`, `sec-submissions`, `stooq` | free, seconds, idempotent | **yes** (`free`) |
 | `datasets` | range-reads a multi-hundred-MB ZIP; can exhaust `maxDuration` | opt in |
+| `refresh` | ~40 MB of conditional-request controls + 30 daily-index files | opt in |
 | `av` | **spends most of one day's 25-request Alpha Vantage allowance, by design** | opt in |
 | `all` | everything | opt in |
 
@@ -164,6 +167,77 @@ when it only means the wrong month was opened. Override with `&month=YYYY_MM`.
 Column positions are read from each file's header row, never hardcoded — SEC has
 added columns between releases, and a fixed index silently reads the neighbouring
 column, which is a wrong number rather than an error.
+
+### `sections=refresh` — the pipeline-shape questions (6a–6d)
+
+Four measurements that decide the SEC → Upstash pipeline's shape. Read-only: no
+Redis, no writes, no FMP.
+
+> **The spec was not read.** This section was briefed as answering
+> `claude/sec-pipeline-spec-2026-09-13.md`, which is **not in this repo** — not
+> on this branch and not on `main`. Nothing here is derived from it; it
+> implements the 6a–6d brief text only. See
+> `claude/traps/inference-about-a-source-you-cannot-open.md`.
+
+**6a — conditional requests.** SEC's API docs don't mention caching headers, so
+both answers are live. **The controls are the point.** A server that echoes
+`304` at any validator would produce the result that looks like the best
+possible news — "a nightly full-universe verify is nearly free" — while a
+corrections failsafe built on it would never fire. So every conditional request
+is paired with a negative control that **must** return `200`:
+
+| Request | Meaning |
+|---|---|
+| `If-None-Match: <real ETag>` | `304` ⇒ supported |
+| `If-None-Match: "definitely-not-the-etag"` | **must be `200`**, or the row above is noise |
+| `If-Modified-Since: <real Last-Modified>` | `304` ⇒ supported |
+| `If-Modified-Since: 1990` | **must be `200`**, or the row above is noise |
+
+Read `steps[]` and check the two `CONTROL` rows before believing
+`imsSupported` / `inmSupported`. `verdict` says `UNUSABLE` if a control also
+returned `304`. Body bytes are counted from the **decoded** payload, not from
+`content-length` — a `304` legitimately carries no `content-length`, so the
+header cannot tell "no body" from "header absent". Defaults to 2 symbols
+(`&condSymbols=`): each one costs a baseline plus two controls that must return
+a full ~4 MB body, and the only per-symbol variation possible is an
+inconsistent CDN edge, which two symbols already catches.
+
+**6b — the daily index.** `www.sec.gov` is a **different host** from
+`data.sec.gov`; the news probe measured Nasdaq answering everywhere except
+`iad1`, so reachability is the question. Three outcomes, kept separate:
+
+- `parsed` — the file was read.
+- `absentNoIndex` — **`404`, which is correct on a market holiday.** Not a
+  failure. Collapsing this into failures would invent an outage.
+- `failed` — anything else. Only this means `www.sec.gov` refused.
+
+The quarter in the URL is **derived, not hardcoded**. The brief's example says
+`QTR3`, which is right only for Jul–Sep; a 30-day window run in early October
+reaches back across the boundary and every pre-October day would `404` for a
+reason that has nothing to do with reachability.
+
+**6c — amendment visibility.** Form types are counted **verbatim** — no
+normalising, uppercasing or suffix stripping, since the whole question is
+whether `/A` survives as part of the string. `master.idx` is a 5-column
+pipe-delimited file with **no amendment flag column**, so the layout itself is
+the evidence that `/A` can only live inside the Form Type. If
+`suffixIsVerbatim` is false, per the brief that means **the pattern is wrong,
+not the market** — read `topFormTypes` before building a detector.
+
+**6d — bulk vs per-symbol.** `HEAD` plus a range-read of the ZIP index only.
+The archives are gigabyte-scale and are **never downloaded**: `entryCount` — the
+number that decides one-download-vs-700-requests — lives in the 22-byte
+end-of-central-directory record at the very end of the file. The central
+directory itself is sampled at 64 KB rather than fetched whole (at ~one entry
+per filer it runs to tens of MB, and the question doesn't need it). **URLs are
+probed, not assumed**: SEC has moved these paths, and a `404` on a guessed URL
+would read as "no bulk archive exists", so each candidate reports its own
+status.
+
+The three sub-probes run **sequentially, not concurrently**. Together they would
+put ~10 requests in flight at once against SEC's 10/sec fair-access ceiling, and
+a self-inflicted `429` would surface as "www.sec.gov is blocked from iad1" — the
+exact false conclusion 6b exists to rule out.
 
 ### Alpha Vantage signals its limit with HTTP 200
 
