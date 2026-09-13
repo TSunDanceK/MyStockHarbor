@@ -627,6 +627,63 @@ check("absence must be CONSECUTIVE — a reappearance resets the clock",
   bm.symbols.PLAB.absentRefreshCount === 2 && bm.symbols.PLAB.delisted === false,
   "2 strikes after the reset, not 3");
 
+// ── 10b-ii. A reticker is a rename, not a delisting ────────────────────────
+console.log("\n10b-ii. Reticker vs delisting");
+// MEASURED 2026-09-13 in the committed ticker file: BK is absent and CIK
+// 1390777 is present as BNY; EQR is absent and CIK 906107 is present as VMRK.
+// EA and WBS have no row under any ticker.
+const rt = man.emptyManifest();
+const rtSeed = new Map([
+  ["BK", { cik: "0001390777", exchange: "NYSE" }],
+  ["EQR", { cik: "0000906107", exchange: "NYSE" }],
+  ["EA", { cik: "0000712515", exchange: "Nasdaq" }],
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+]);
+man.seedManifest(rt, ["BK", "EQR", "EA", "AAPL"], rtSeed, true);
+for (const x of ["BK", "EQR", "EA", "AAPL"]) rt.symbols[x].contentHash = "filings";
+// The map a week later: BK -> BNY, EQR -> VMRK, EA gone entirely.
+const later = new Map([
+  ["BNY", { cik: "0001390777", exchange: "NYSE" }],
+  ["BNY-PK", { cik: "0001390777", exchange: "NYSE" }],
+  ["VMRK", { cik: "0000906107", exchange: "NYSE" }],
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+]);
+const rtRes = man.reconcileDelistings(rt, later);
+check("BK is classified as a RETICKER, not an absence",
+  rtRes.retickered.some((r) => r.symbol === "BK" && r.nowTicker === "BNY"), JSON.stringify(rtRes.retickered));
+check("...preferring the ordinary share over the preferred (BNY, not BNY-PK)",
+  rtRes.retickered.find((r) => r.symbol === "BK")?.nowTicker === "BNY");
+check("EQR -> VMRK likewise", rtRes.retickered.some((r) => r.symbol === "EQR" && r.nowTicker === "VMRK"));
+check("neither starts a delisting clock",
+  rt.symbols.BK.notInTickerMapSince === null && rt.symbols.EQR.absentRefreshCount === 0 &&
+  rt.symbols.BK.delisted === false && rt.symbols.EQR.delisted === false);
+check("...and they can never reach newlyDelisted", rtRes.newlyDelisted.length === 0);
+check("the migration is recorded on the entry", rt.symbols.BK.retickeredTo === "BNY" && rt.symbols.EQR.retickeredTo === "VMRK");
+check("filings are retained through a rename", rt.symbols.BK.contentHash === "filings" && rt.symbols.EQR.contentHash === "filings");
+check("EA — CIK in the manifest, absent from the map entirely — DOES start the clock",
+  rtRes.newlyAbsent.includes("EA") && rt.symbols.EA.absentRefreshCount === 1,
+  "a CIK that appears nowhere is the delisting case");
+// READ THROUGH THE SHARED SCANNER. The comments in that module NAME these
+// tickers as the worked example, and a raw-source regex would match the prose
+// and report a hardcoded table that does not exist.
+check("no hardcoded successor table exists in the manifest CODE",
+  !/\bBNY\b|\bVMRK\b|\bWBS\b/.test(readCodeOnly("lib/server/secManifest.ts")),
+  "the successor is derived from the map's own CIK index, not from a September 2026 table");
+
+// A symbol that NEVER resolved has no identity to trace.
+const nc = man.emptyManifest();
+man.seedManifest(nc, ["WBS", "AAPL"], new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]), true);
+const ncRes = man.reconcileDelistings(nc, new Map([["AAPL", { cik: "0000320193", exchange: "Nasdaq" }]]));
+check("a no-CIK symbol is 'unresolvable', not 'newly absent'",
+  ncRes.unresolvable.includes("WBS") && !ncRes.newlyAbsent.includes("WBS"), JSON.stringify(ncRes.unresolvable));
+check("...and gets NO delisting clock",
+  nc.symbols.WBS.notInTickerMapSince === null && nc.symbols.WBS.absentRefreshCount === 0 && nc.symbols.WBS.delisted === false,
+  "absence from the ticker file is not proof of deregistration, and with no CIK there is even less evidence");
+
+// A reticker that reverts clears the marker.
+man.reconcileDelistings(rt, rtSeed);
+check("a symbol reappearing under its original ticker clears retickeredTo", rt.symbols.BK.retickeredTo === null);
+
 // ── 10c. The partial-map guard ──────────────────────────────────────────────
 console.log("\n10c. A valid-but-partial map marks nobody delisted");
 const partialSyms = Array.from({ length: 200 }, (_, i) => `P${i}`);

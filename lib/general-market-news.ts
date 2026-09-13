@@ -19,7 +19,7 @@ export type GeneralHeadline = {
 };
 
 // Mirrors the shape FMP's news endpoints share across their stock-news and
-// general-news variants (see FmpStockNewsItem in lib/stock-news-data.ts).
+// general-news variants (see FmpStockNewsItem in lib/server/news/types.ts).
 type FmpGeneralNewsItem = {
   title?: string;
   publishedDate?: string;
@@ -76,11 +76,16 @@ function truncateExcerpt(raw: string, maxLength = 400): string {
  * Fetches general, market-wide headlines from FMP -- not tied to any one
  * ticker. Tries the current `stable` endpoint first, falling back to the
  * legacy `v4` endpoint if that fails, mirroring the stable-then-legacy
- * pattern used by fetchFmpStockNews in lib/stock-news-data.ts. No AI
+ * pattern used by the FMP news adapter in lib/server/news/fmpProvider.ts. No AI
  * processing of any kind happens here -- this is a plain pass-through of
  * FMP's own fields.
+ *
+ * Exported only so lib/server/news/fmpProvider.ts can reuse it for the
+ * NewsProvider interface's fetchMarket() rather than restating this endpoint
+ * pair and its parsing. Nothing else about this module changed, and /headlines
+ * still reads getGeneralMarketHeadlines below.
  */
-async function fetchFmpGeneralNews(): Promise<GeneralHeadline[]> {
+export async function fetchFmpGeneralNews(): Promise<GeneralHeadline[]> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return [];
 

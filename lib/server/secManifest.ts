@@ -96,6 +96,14 @@ export type SecManifestEntry = {
    * Form 25 or 15) so the daily index keeps matching it.
    */
   delisted?: boolean;
+  /**
+   * This symbol's CIK now appears in the ticker map under a DIFFERENT ticker.
+   * A corporate reticker, not a delisting -- BK -> BNY, EQR -> VMRK, both
+   * observed 2026-09-13. Recorded so the migration is attributable; the
+   * universe rename itself is a separate decision (see the CIK-keying note in
+   * data/sec/README.md).
+   */
+  retickeredTo?: string | null;
 };
 
 export type SecManifest = {
@@ -437,6 +445,13 @@ export type DelistingResult = {
   stillAbsent: string[];
   reappeared: string[];
   newlyDelisted: string[];
+  /** Absent under this ticker, but the CIK is in the map under another. */
+  retickered: { symbol: string; cik: string; nowTicker: string }[];
+  /**
+   * Absent AND never had a CIK, so there is no identity to look up. Strictly
+   * less evidence than an absence with a CIK, so no delisting clock is started.
+   */
+  unresolvable: string[];
   threshold: number;
   suspectedPartialMap: boolean;
   note: string | null;
@@ -467,13 +482,49 @@ export function reconcileDelistings(
   const newlyAbsent: string[] = [];
   const stillAbsent: string[] = [];
   const reappeared: string[] = [];
+  const retickered: DelistingResult["retickered"] = [];
+  const unresolvable: string[] = [];
+
+  // CIK -> the ticker(s) it is listed under now. THE CIK IS THE STABLE IDENTITY
+  // and the ticker is a label, so a symbol that has vanished under its own name
+  // while its CIK is still in the file has been RENAMED, not delisted. Built
+  // from the map itself rather than from a hardcoded table: a table would encode
+  // one September 2026 snapshot and answer wrongly, silently, forever.
+  const tickersByCik = new Map<string, string[]>();
+  for (const [ticker, e] of cikByTicker) {
+    const list = tickersByCik.get(e.cik) ?? [];
+    list.push(ticker);
+    tickersByCik.set(e.cik, list);
+  }
 
   for (const [symbol, entry] of entries) {
     const present = cikByTicker.has(symbol);
     if (present) {
-      if (entry.notInTickerMapSince || entry.absentRefreshCount || entry.delisted) reappeared.push(symbol);
+      if (entry.notInTickerMapSince || entry.absentRefreshCount || entry.delisted || entry.retickeredTo) {
+        reappeared.push(symbol);
+      }
       continue;
     }
+
+    // A SYMBOL THAT NEVER RESOLVED HAS NO IDENTITY TO TRACE. Its CIK is null, so
+    // neither the reticker check nor a delisting inference has anything to work
+    // with -- and absence from the ticker file is not proof of deregistration.
+    // Reported, and deliberately given no clock: less evidence must not produce
+    // a more confident verdict.
+    if (!entry.cik) {
+      unresolvable.push(symbol);
+      continue;
+    }
+
+    // Prefer a successor whose spelling is not a class/preferred variant of
+    // itself; among BNY and BNY-PK, BNY is the ordinary-share successor.
+    const successors = (tickersByCik.get(entry.cik) ?? []).filter((t) => t !== symbol);
+    if (successors.length) {
+      const best = successors.slice().sort((a, b) => a.length - b.length)[0];
+      retickered.push({ symbol, cik: entry.cik, nowTicker: best });
+      continue;
+    }
+
     if (entry.notInTickerMapSince) stillAbsent.push(symbol);
     else newlyAbsent.push(symbol);
   }
@@ -493,6 +544,8 @@ export function reconcileDelistings(
       stillAbsent,
       reappeared,
       newlyDelisted: [],
+      retickered,
+      unresolvable,
       threshold,
       suspectedPartialMap: true,
       note:
@@ -505,8 +558,23 @@ export function reconcileDelistings(
 
   const newlyDelisted: string[] = [];
 
+  for (const change of retickered) {
+    const entry = manifest.symbols[change.symbol];
+    // A MIGRATION, NOT A DELISTING. The absence clock is cleared rather than
+    // advanced, so this can never contribute to newlyDelisted.
+    entry.retickeredTo = change.nowTicker;
+    entry.notInTickerMapSince = null;
+    entry.absentRefreshCount = 0;
+    entry.delisted = false;
+    console.warn(
+      `[sec-manifest] RETICKER ${change.symbol} -> ${change.nowTicker} (CIK ${change.cik} unchanged). ` +
+        `Filings and stored facts are retained; this is a rename, not a delisting.`
+    );
+  }
+
   for (const symbol of reappeared) {
     const entry = manifest.symbols[symbol];
+    entry.retickeredTo = null;
     // CLEARED THE MOMENT IT REAPPEARS. A symbol missing from one refresh and
     // back in the next was missed, not delisted, and must not carry a strike.
     entry.notInTickerMapSince = null;
@@ -539,11 +607,14 @@ export function reconcileDelistings(
     stillAbsent,
     reappeared,
     newlyDelisted,
+    retickered,
+    unresolvable,
     threshold,
     suspectedPartialMap: false,
     note:
-      newlyDelisted.length || newlyAbsent.length || reappeared.length
-        ? `${newlyAbsent.length} newly absent, ${stillAbsent.length} still absent, ${reappeared.length} reappeared, ${newlyDelisted.length} newly delisted`
+      newlyDelisted.length || newlyAbsent.length || reappeared.length || retickered.length || unresolvable.length
+        ? `${newlyAbsent.length} newly absent, ${stillAbsent.length} still absent, ${reappeared.length} reappeared, ` +
+          `${newlyDelisted.length} newly delisted, ${retickered.length} retickered, ${unresolvable.length} unresolvable (no CIK)`
         : null,
   };
 }

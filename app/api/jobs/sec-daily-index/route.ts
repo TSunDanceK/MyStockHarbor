@@ -353,6 +353,8 @@ export async function GET(req: NextRequest) {
     delistingChecked: delistings !== null,
     newlyAbsentFromTickerMap: delistings?.newlyAbsent.length ?? 0,
     newlyDelisted: delistings?.newlyDelisted.length ?? 0,
+    retickered: delistings?.retickered.length ?? 0,
+    unresolvableNoCik: delistings?.unresolvable.length ?? 0,
     reappeared: delistings?.reappeared.length ?? 0,
     suspectedPartialMap: delistings?.suspectedPartialMap ?? false,
     // Flattened to a string HERE because recordJobRun's summary is scalars
@@ -417,6 +419,12 @@ export async function GET(req: NextRequest) {
           stillAbsent: delistings.stillAbsent.slice(0, 25),
           reappeared: delistings.reappeared.slice(0, 25),
           refreshesRequired: 3,
+          // A rename and a deregistration are indistinguishable by ticker, so
+          // the CIK is what tells them apart. A symbol that never resolved has
+          // neither, and gets no verdict rather than a confident wrong one.
+          retickerNote:
+            "retickered = absent under this ticker but the CIK is still in the map under another; a rename, never a delisting. " +
+            "unresolvable = absent AND no CIK ever resolved, so there is nothing to trace and no delisting clock is started.",
           note:
             delistings.note ??
             "every symbol in the manifest is present in the ticker map; nothing absent, nothing delisted",

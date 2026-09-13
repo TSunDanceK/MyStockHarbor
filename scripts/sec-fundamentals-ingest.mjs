@@ -266,7 +266,13 @@ console.log(`CIK map: ${cikByTicker.size} tickers`);
 // the bad news here, and it is not: the file carries BRK-B, matching FMP's
 // screener rather than the repo's hardcoded BRK.B. So the normalisation the
 // fundamentals path already needs covers SEC as well, rather than needing its own.
-for (const probe of ["BRK-B", "BRK.B", "BF-B", "BF.B"]) {
+// DASHED SPELLINGS ONLY, and the reason is that check-symbol-spelling.mjs caught
+// the dotted ones -- correctly. That check exists to stop a dotted ticker entering
+// the source, and a probe literal is still a dotted ticker in the source: the rule
+// does not carve out "but I meant it". The probe's question was which convention
+// SEC uses, and a dashed hit answers it; the dotted variants were only there to
+// show absence, which the finding already records.
+for (const probe of ["BRK-B", "BF-B"]) {
   console.log(`  spelling probe ${probe.padEnd(6)} ${cikByTicker.has(probe) ? `CIK ${cikByTicker.get(probe)}` : "absent"}`);
 }
 

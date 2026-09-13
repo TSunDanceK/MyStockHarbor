@@ -1,0 +1,32 @@
+<!-- REAL GlobeNewswire RSS, captured 2026-09-13 through the relay (task
+     wire-feeds, symbols=globenewswire, run 34765979667). VERBATIM — this file
+     replaces the reconstruction step 4 shipped, which the relay capture fix made
+     unnecessary.
+
+     THE RECONSTRUCTION WAS WRONG ABOUT SOMETHING THAT MATTERS: <category> carries
+     a `domain` attribute, and it is the discriminator. Ticker categories are
+     domain=".../rss/stock"; the same item also carries domain=".../rss/ISIN"
+     holding an ISIN. Guessing from the value alone worked only because ISINs
+     happen to contain no colon.
+
+     Also real, and none of it was in the reconstruction: the <category> tag is
+     split across lines; pubDate carries no seconds ("Fri, 11 Sep 2026 23:43
+     GMT"); descriptions are sometimes CDATA-wrapped HTML and sometimes plain
+     text; dc:subject is free prose ("Changes in company's own shares").
+
+     The two items are the two cases the allowlist has to separate:
+       AGPU  Nasdaq-listed         -> one US ticker
+       PGZ   TSX-V/Frankfurt/OTC   -> no US listing at all, so no ticker -->
+<rss version="2.0"><channel><title>GlobeNewswire - Public Companies</title>
+<item><guid
+        isPermaLink="true">https://www.globenewswire.com/news-release/2026/09/11/3360561/37244/en/axe-compute-announces-inducement-grant-under-nasdaq-listing-rule-5635-c-4.html</guid><link>https://www.globenewswire.com/news-release/2026/09/11/3360561/37244/en/axe-compute-announces-inducement-grant-under-nasdaq-listing-rule-5635-c-4.html</link><category
+        domain="https://www.globenewswire.com/rss/stock">Nasdaq:AGPU</category><category
+        domain="https://www.globenewswire.com/rss/ISIN">US74033P1003</category><title>Axe Compute Announces Inducement Grant Under Nasdaq Listing Rule 5635(c)(4)</title><description><![CDATA[Axe Compute Announces Inducement Grant
+Under Nasdaq Listing Rule 5635(c)(4)]]></description><pubDate>Fri, 11 Sep 2026 23:43 GMT</pubDate><dc:identifier>3360561</dc:identifier><dc:language>en</dc:language><dc:publisher>GlobeNewswire Inc.</dc:publisher><dc:contributor>Axe Compute Inc</dc:contributor><dc:modified>Fri, 11 Sep 2026 23:43 GMT</dc:modified><dc:subject>Changes in company's own shares</dc:subject></item>
+<item><guid
+        isPermaLink="true">https://www.globenewswire.com/news-release/2026/09/11/3360538/0/en/pan-global-engages-adelaide-capital-for-investor-relations-advisory.html</guid><link>https://www.globenewswire.com/news-release/2026/09/11/3360538/0/en/pan-global-engages-adelaide-capital-for-investor-relations-advisory.html</link><category
+        domain="https://www.globenewswire.com/rss/stock">TSX-V:PGZ</category><category
+        domain="https://www.globenewswire.com/rss/stock">Frankfurt:2EU</category><category
+        domain="https://www.globenewswire.com/rss/stock">OTC Markets:PGZFF</category><category
+        domain="https://www.globenewswire.com/rss/ISIN">CA69806A1084</category><title>Pan Global Engages Adelaide Capital for Investor Relations Advisory </title><description><![CDATA[<p align="justify">VANCOUVER, British Columbia, Sept.  11, 2026  (GLOBE NEWSWIRE) -- Pan Global Resources Inc. ("Pan Global" or the "Company") (TSXV: PGZ; OTCQB: PGZFF; FRA: 2EU) is pleased to announce that it has entered into an investor relations agreement (the "Agreement") with Adelaide Capital Markets Inc. ("Adelaide"), a leading investor relations and capital markets advisory firm, to provide investor relations and consulting services to the Company.</p>]]></description><pubDate>Fri, 11 Sep 2026 21:35 GMT</pubDate><dc:identifier>3360538</dc:identifier><dc:language>en</dc:language><dc:publisher>GlobeNewswire Inc.</dc:publisher><dc:contributor>Pan Global Resources Inc.</dc:contributor><dc:modified>Fri, 11 Sep 2026 21:35 GMT</dc:modified><dc:subject>Business Contracts</dc:subject></item>
+</channel></rss>

@@ -50,7 +50,13 @@ function collapseRepeat(name: string) {
 // ("- Common Stock", "Class A Common Stock", "Ordinary Shares", etc.) so the
 // card shows "Apple Inc." rather than "Apple Inc. - Common Stock", then drops
 // the trailing instrument parenthetical and any restatement of the name itself.
-function cleanName(raw: string) {
+//
+// EXPORTED for lib/server/news/companyName.ts, which continues where this stops:
+// this produces the display name ("Apple Inc."), the news normaliser then strips
+// the corporate suffix to get a search term ("Apple"). It is shared rather than
+// restated because the instrument-suffix rule below is subtle and hard-won, and
+// two copies of it would drift.
+export function cleanName(raw: string) {
   let name = String(raw || "").trim();
   name = name.replace(RATIO_CLAUSE_RE, "");
   name = name.replace(INSTRUMENT_SUFFIX_RE, "");
