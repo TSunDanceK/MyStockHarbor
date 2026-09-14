@@ -119,6 +119,13 @@ called `applyFilings`, so **no runtime reading of the gate exists yet.**
 
 Order of operations, not negotiable:
 
+0. **NEW, 2026-09-14:** the manifest universe changed — it now seeds from
+   `PRESET_UNIVERSE ∪ readDynamicUniverse()`, uncapped
+   (`claude/sec-manifest-misses-preset-universe-2026-09-14.md`). The sweep's
+   `assert count === 7` was measured against the **pre-fix 696-symbol
+   manifest** and must be re-measured after the first post-fix run. New entries
+   arrive `needsReverify: false`, so the count is *expected* to hold — but that
+   is a prediction, and predictions in this work have been wrong. Measure it.
 1. Owner runs the inspection-only replay. Read `rereadQueued`.
 2. Gate confirmed → merge step 2.
 3. **Then** the sweep lands, as its own change, with the before/after count

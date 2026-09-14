@@ -1137,6 +1137,76 @@ console.log("\n17b. The real 20260908-11 window");
     "4/A, 144/A and SCHEDULE 13D/A are not financial statements");
 }
 
+// ── 17c. The 100 guaranteed slots are actually in the manifest ─────────────
+//
+// THIS ASSERTION IS AS MUCH THE FIX AS THE UNION IS.
+//
+// The defect it guards was silent by construction: the job seeded from
+// readDynamicUniverse() alone, so JPM and C had no manifest entry, and a symbol
+// with no entry can never be matched by intersect() against the daily index.
+// The cron ran green forever while /stock/JPM/earnings stayed empty. No
+// counter, no warning, nothing to notice -- which is exactly the shape that
+// needs a test rather than a comment.
+//
+// It is also NOT a two-symbol problem. readDynamicUniverse filters on a 14-day
+// ENTRY_MAX_AGE_MS over a rolling score-ranked pool, so which preset name is
+// missing changes week to week. Asserting the whole list is the only version of
+// this check that keeps working.
+console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
+{
+  // Read from the shipped list, never retyped: a name added to PRESET_UNIVERSE
+  // must be covered by this check the moment it lands.
+  const presetSrc = readCodeOnly("lib/server/presetUniverse.ts");
+  const preset = [...new Set([...presetSrc.matchAll(/"([A-Z][A-Z0-9.-]{0,6})"/g)].map((m) => m[1]))];
+  check("the preset list is read from source and is the ~100 it claims to be",
+    preset.length >= 90 && preset.length <= 110, `${preset.length} symbols`);
+  check("...and it still contains the two the live manifest was missing",
+    preset.includes("JPM") && preset.includes("C"),
+    "JPM and C — named so a regression says which guarantee broke");
+
+  // A dynamic pool that has aged BOTH of them out, which is the live condition
+  // that produced the defect.
+  const dynamic = ["AAPL", "MSFT", "NVDA", "GS", "BMO", "MER-PK"];
+  const universe = [...new Set([...preset, ...dynamic])];
+  const cikMap = new Map(universe.map((sym, i) => [sym, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, universe, cikMap, true);
+  const missing = preset.filter((sym) => !m.symbols[sym]);
+  check("every PRESET_UNIVERSE symbol has a manifest entry after seeding",
+    missing.length === 0, missing.join(" ") || `all ${preset.length} present`);
+  check("...including JPM and C when the dynamic pool has aged them out",
+    Boolean(m.symbols.JPM) && Boolean(m.symbols.C),
+    "the live pool had both absent; the union is what puts them back");
+
+  // AND THE ROUTE MUST ACTUALLY BUILD THAT UNION. The check above proves
+  // seedManifest keeps what it is handed; this proves the route hands it the
+  // right thing, which is the half that was broken.
+  const routeCode = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
+  check("the route seeds from PRESET_UNIVERSE ∪ the dynamic pool",
+    /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
+    "the union is the fix; seedManifest cannot add what it is never given");
+  check("...and does NOT slice it by ANALYSIS_UNIVERSE_CAP",
+    !/ANALYSIS_UNIVERSE_CAP/.test(routeCode),
+    "that cap bounds ANALYSIS — a history fetch and indicator pass per symbol. " +
+      "Detection is one daily-index request at any size, and the per-symbol cost " +
+      "that does scale is governed by SEC_REREAD_DRAIN_PER_RUN");
+  // THE RAW SOURCE, DELIBERATELY, because this assertion is ABOUT the comment.
+  // routeCode above is readCodeOnly()'d -- comments stripped -- which is right
+  // for every assertion about behaviour and exactly wrong for this one. Reading
+  // the stripped copy here failed, which is the trap working in reverse.
+  const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+  check("the reason is recorded at the seed call, not just in a findings doc",
+    /sec-pipeline-spec-2026-09-13\.md §7/.test(routeRaw) && /guaranteed a slot/.test(routeRaw),
+    "the cap shipped because nothing said why it was there");
+
+  // SIZE, because uncapping is only safe if the bound is asserted rather than
+  // asserted-once-and-forgotten. 100 presets on top of 696 is the worst case.
+  const grown = sizeAt(796, true);
+  check("the unioned manifest stays well inside Upstash's 10 MB ceiling",
+    grown < 1048576,
+    `${(grown / 1024).toFixed(0)} KB at 796 symbols (${((grown / 10485760) * 100).toFixed(1)}% of the ceiling)`);
+}
+
 // ── 18. The drain clears the busiest day of the year ───────────────────────
 console.log("\n18. Drain sized on peak, not on the quiet month");
 const PEAK_SHARE = 0.0935, CAP = 700, BG = 32;

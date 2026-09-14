@@ -1,7 +1,8 @@
 # The SEC manifest omits PRESET_UNIVERSE, so JPM and C are not covered
 
 **Date:** 2026-09-14
-**Status:** DIAGNOSED, NOT FIXED. The fix is not one line — see §4.
+**Status:** FIXED. The manifest is seeded from `PRESET_UNIVERSE ∪ readDynamicUniverse()`,
+**uncapped** — see §4 for the decision and why neither side yields.
 **Severity:** product. `/stock/JPM/earnings` can never be populated by the cron.
 **Origin:** mine, in `app/api/jobs/sec-daily-index/route.ts` as shipped in #454.
 
@@ -76,46 +77,75 @@ and C are not. **That is not a stable property** — which name is missing will
 change week to week, so this is not a two-symbol problem with a two-symbol fix.
 Any of the 100 preset names can be absent on any given day.
 
-## 4. Why this is not a one-line fix, and is not being made blind
+## 4. The decision: uncap the manifest. Neither side yields.
 
-The obvious change is to union the preset list in, as the other consumers do:
+The obvious change was to union the preset list in and keep the cap:
 
 ```ts
 [...PRESET_UNIVERSE, ...dynamic].slice(0, ANALYSIS_UNIVERSE_CAP)
 ```
 
-That is wrong as written, and the reason matters. The dynamic pool already
-returns 696 against a cap of 700. Unioning 100 preset names and then slicing to
-700 would **evict up to 96 dynamic symbols** to make room — trading a silent
-gap for a silent eviction, and one that moves every time the pool reorders.
-`sectorUniverse` gets away with the same expression because it does not slice at
-all; `pickersBuilder` has explicit slot logic (`fillSlots(PRESET_UNIVERSE,
-PRESET_UNIVERSE.length)`) precisely to reserve those seats.
+**That is wrong**, and the reason is why this was reported rather than fixed
+blind. The dynamic pool already returns 696 against a cap of 700, so unioning
+100 preset names and then slicing would evict up to 96 dynamic symbols — trading
+a silent gap for a silent eviction, and one that moves every time the pool
+reorders.
 
-So the real questions, none of which should be answered by guessing:
+The decision taken instead: **seed from the union with no slice at all.**
 
-1. **Is the cap the right bound here at all?** `ANALYSIS_UNIVERSE_CAP` bounds
-   what gets *analysed* — a history fetch plus a pass through the indicator
-   stack per symbol. The manifest is 417 KB at 696 symbols and costs three Redis
-   commands a run regardless of size, so the constraint that set 700 does not
-   obviously apply to it.
-2. **If the cap stays, which side yields?** Reserving 100 seats for the presets
-   means dropping the 100 lowest-scoring dynamic names, which is a deliberate
-   product decision about coverage, not a refactor.
-3. **Does `delisted` interact?** A preset name absent from the dynamic pool but
-   present in the manifest from an earlier run would currently be seen as
-   "absent from the ticker map"? No — `reconcileDelistings` reads the *ticker
-   map*, not the universe, so it does not. Recorded because it was checked, not
-   because it was obvious.
+### Two different costs, which the cap conflates
+
+`ANALYSIS_UNIVERSE_CAP` bounds what gets **analysed** — a history fetch and a
+pass through the indicator stack per symbol, real upstream spend that scales
+linearly. It is doing its job for the consumers that analyse and is **left
+alone**.
+
+The manifest bounds what gets **detected**, and detection is *one daily-index
+request* whether it covers 700 filers or 10,000. The per-symbol cost that does
+scale is the re-read, and that already has its own governor in
+`SEC_REREAD_DRAIN_PER_RUN` — 150 a run against a measured peak inflow of 98 a
+day. Applying the analysis cap here charged detection for a cost it does not
+incur, and double-governed the one it does.
+
+`claude/sec-pipeline-spec-2026-09-13.md` §7 already said so outright:
+
+> **§1 already survives this.** The daily index is one request whether you track
+> 700 filers or all ~10,000, so the correctness mechanism needs no change at all.
+
+**The cap contradicted the spec this build follows** — which is the mechanism by
+which it shipped. Nothing recorded a reason for it because there was no reason;
+it was reached for by habit. The citation now sits at the seed call, and §17c
+asserts it is still there.
+
+### Size, stated rather than assumed
+
+391 B/symbol, 266 KB at 696, ~305 KB with the presets unioned in, against
+Upstash's 10 MB per-request ceiling. §17c asserts the worst case at 796 symbols
+— measured at **461 KB, 4.5% of the ceiling** — so growth stays visible instead
+of being asserted once and forgotten.
+
+### What did not change
+
+`ANALYSIS_UNIVERSE_CAP` itself. Only the manifest was wrong to use it.
 
 ## 5. Bearing on the standing-66 sweep
 
 The sweep's predicate is `needsReverify && enqueuedAt == null`, with
-`assert count === 7` before clearing. **That count is measured against the
-current 696-symbol manifest.** If the universe is corrected before the sweep
-runs, entries appear or disappear and the assertion may legitimately read
-something other than 7 — which would look like the sweep finding a surprise when
-it is really the universe having changed underneath it.
+`assert count === 7` before clearing.
 
-Order accordingly: settle §4, then re-measure the count, then sweep. Do not
-carry the literal 7 across a universe change.
+**That 7 was measured against a 696-symbol manifest, before the universe fix.**
+It is now stale by construction: the next run seeds `PRESET_UNIVERSE ∪ dynamic`,
+so JPM, C and any other preset name the pool had aged out get entries for the
+first time. New entries arrive with `needsReverify: false` from `emptyEntry`, so
+they should not add to the count — but that is a prediction, not a measurement,
+and this is exactly the kind of prediction that has been wrong before in this
+work.
+
+**So: re-measure after the first post-fix run, and record the new figure here
+before the sweep is written.** A count that moved because the universe grew must
+not read as the sweep finding a surprise. Do not carry the literal 7 across the
+universe change.
+
+Unchanged and still verified: `reconcileDelistings` reads the **ticker map**,
+not the universe, so a preset name absent from the dynamic pool was never at
+risk of a false `delisted: true`.
