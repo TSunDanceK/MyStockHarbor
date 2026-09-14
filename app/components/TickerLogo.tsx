@@ -1,19 +1,39 @@
 "use client";
 
 import { useState } from "react";
+import logoManifest from "@/data/logo-manifest.json";
 
 // Small ticker/company logo with a graceful fallback chain, shared across
 // the site (search dropdowns, dashboard live feed + quote header, the
 // stock/news/earnings headers, and the insights + bottleneck lists).
 //
 // Source order -- first that loads wins:
-//   1. Clearbit domain logo   (when a `domain` is known -- e.g. bottleneck
+//   1. Harvested local file   (/logos/SYM.webp) -- served from our own domain,
+//      no third party in it, and the fastest of the four. Only offered when the
+//      symbol is in the manifest, so a symbol without a file never costs a 404.
+//   2. Clearbit domain logo   (when a `domain` is known -- e.g. bottleneck
 //      posts already carry one; same source CompanyLogo.tsx uses).
-//   2. FMP public symbol logo (images.financialmodelingprep.com/symbol/SYM.png)
-//      -- no API key and no quota, so it is free to use everywhere and adds
-//      no load to the FMP data plan the rest of the site is careful about.
-//   3. Monogram (first letter of name/symbol) -- so nothing ever renders as
+//   3. FMP public symbol logo (images.financialmodelingprep.com/symbol/SYM.png)
+//      -- no API key and no quota. Kept DELIBERATELY as a fallback rather than
+//      removed: it costs nothing while it works and it covers anything the
+//      harvest missed, including symbols that list after the last harvest.
+//   4. Monogram (first letter of name/symbol) -- so nothing ever renders as
 //      a broken image, matching the letter treatment used before logos.
+//
+// THE HARVEST IS A SNAPSHOT, not a live index -- see
+// claude/BRIEF-logo-harvest-2026-09-14.md. It is re-run quarterly, and between
+// runs a newly listed symbol simply falls through to source 3 and then 4. No
+// breakage either way, which is why the chain below is left intact.
+
+// ONE CONSTANT, so moving the assets off our own domain later (a separate repo
+// on GitHub Pages was the runner-up home) is a one-line change rather than a
+// hunt through call sites.
+const LOGO_BASE = "/logos";
+
+// A Set, not .includes() on the array: this runs for every logo on a page and
+// the manifest holds thousands of symbols.
+const LOCAL_LOGOS = new Set<string>(logoManifest as string[]);
+
 export default function TickerLogo({
   symbol,
   domain,
@@ -30,6 +50,9 @@ export default function TickerLogo({
   const sym = (symbol || "").toUpperCase().trim();
 
   const sources: string[] = [];
+  if (sym && LOCAL_LOGOS.has(sym)) {
+    sources.push(`${LOGO_BASE}/${encodeURIComponent(sym)}.webp`);
+  }
   if (domain) sources.push(`https://logo.clearbit.com/${domain}`);
   if (sym) {
     sources.push(
