@@ -83,9 +83,39 @@ const redis =
 const QUOTE_HOURLY_CAP = 50;
 const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
 const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
-const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v2";
+// ── v2 -> v3, AND THE BUMP IS THE MIGRATION ────────────────────────────────
+//
+// F2's read side now serves an empty stored blob when the date is marked
+// complete, on the basis that post-F1 a `complete` flag can only have been
+// written over a clean read. Flags written BEFORE F1 carry no such guarantee:
+// they were set by a code path that could not tell a failed quote from a
+// company with no exchange.
+//
+// THE DANGEROUS PRE-FIX STATE HAS NO RETROSPECTIVE SIGNATURE. A fully poisoned
+// date is visible (empty blob + flag + candidates) and production had none. A
+// PARTIALLY populated date -- some quotes returned, some failed, the day settled
+// short -- looks exactly like a correct day with fewer reporters. Nothing stored
+// distinguishes them, so there is no query that finds them and re-evaluation is
+// the only way to clear them.
+//
+// PRECEDENT, SAME FILE, SAME TWO KEYS: #378 (91f2cf1) bumped both from v1 to v2
+// when the rolling window changed what "complete" meant. A flag whose meaning
+// has changed is a new key, not an old key with new semantics.
+const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v3";
 const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
-const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v2";
+// ── v2 -> v3, AND THIS REPLACES THE MANUAL PRODUCTION DELETE ───────────────
+//
+// The live v2 pointer is stranded at 2027-01-01, past the window end, with 59
+// in-window dates still unfilled behind it. It carries no TTL and setFillFrontier
+// only moves forward, so it does not recover on its own.
+//
+// Bumping makes it unreachable: getFillFrontier finds no v3 key and falls back to
+// the window start, which is exactly the state a hand-deletion would produce --
+// without a production write, and without the risk of deleting the wrong key.
+// The v2 key is deliberately LEFT IN PLACE: it is ~20 bytes, it is now evidence
+// of what happened, and deleting it as well would be a second change doing the
+// same job.
+const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v3";
 
 // Rolling window bounds.
 const WINDOW_PAST_DAYS = 3; // today and the previous 3 days stay live
