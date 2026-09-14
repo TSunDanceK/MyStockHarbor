@@ -154,6 +154,12 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, NO credential and NO FMP: measures how well a filer's next
+  // results date can be predicted from its own filing history alone. Asked
+  // before deciding whether the earnings calendar's FORWARD half can come off
+  // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
+  // fallback and nothing had measured it.
+  "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
