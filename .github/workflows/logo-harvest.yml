@@ -1,0 +1,103 @@
+name: Logo harvest — fetch, transcode and commit ticker logos
+
+# PHASE 2 of claude/BRIEF-logo-harvest-2026-09-14.md.
+#
+# ── WHY THIS IS NOT THE RELAY, WHICH PHASE 0 USED ─────────────────────────
+# The relay cannot deliver this phase, for two independent reasons:
+#
+#   1. sharp needs node_modules, and relay.yml's read-only job deliberately runs
+#      no `npm ci`. scripts/check-relay-isolation.mjs ASSERTS that -- not
+#      installing @upstash/redis is the second layer of the credential split.
+#      Adding npm ci there would fail the guard and weaken a real security
+#      property for a reason that has nothing to do with credentials.
+#   2. relay.yml declares no `permissions:`, so it cannot push, and its artifact
+#      upload globs are a fixed list on main that public/logos/ does not match.
+#      This phase's output is ~2,600 files that must land IN the repo, and the
+#      agent sandbox cannot download Actions artifacts at all -- the blob host
+#      is refused by its egress policy, re-confirmed while running Phase 0.
+#
+# ── AND WHY A NEW WORKFLOW COSTS NO MERGE ─────────────────────────────────
+# The brief says "not a workflow edit", and the reason it gives is the
+# merge-to-main toll: workflow_dispatch only registers for files on the DEFAULT
+# branch. That toll applies to workflow_dispatch, NOT to push. A push-triggered
+# workflow runs from the pushed commit, so this file works from the feature
+# branch on its first push -- gen-learn-images.yml already relies on exactly
+# that behaviour for a non-default branch. The brief's requirement is met; only
+# its assumed mechanism changed.
+#
+# ── THE SELF-TRIGGER LOOP, CLOSED TWICE ───────────────────────────────────
+# This workflow commits and pushes to the branch that triggered it, which is the
+# classic way to build an infinite loop. Two independent guards:
+#   - `paths` limits the trigger to the harvest's OWN files. The bot's commit
+#     touches public/logos/ and data/logo-manifest.json, which are not in that
+#     list, so it cannot re-trigger this workflow.
+#   - the commit message carries [skip ci], which GitHub honours by skipping the
+#     run outright.
+# Either alone would do. Both, because a loop here burns runner minutes silently.
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - "scripts/logo-harvest.mjs"
+      - ".github/workflows/logo-harvest.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Full install: sharp is a devDependency and this is the one job that
+      # needs it. No credential is referenced anywhere in this workflow.
+      - run: npm ci
+
+      - name: Harvest and transcode
+        run: |
+          set -o pipefail
+          node scripts/logo-harvest.mjs 2>&1 | tee harvest.log
+
+      - name: Put the output in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Logo harvest"
+            echo
+            echo '```'
+            cat harvest.log 2>/dev/null || echo "(no harvest.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # THE LOG IS THE ARTIFACT the PR body is written from, and the sandbox
+      # cannot download artifacts -- so it also goes to the step summary above,
+      # which the API serves as text.
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logo-harvest-${{ github.run_id }}
+          path: harvest.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Commit the harvest
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/logos data/logo-manifest.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: harvest ticker logos to public/logos [skip ci]"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
