@@ -66,7 +66,15 @@ Consistent with `scripts/news-timing-probe.mjs`, where GlobeNewswire answers in
 12–330 ms **from a GitHub runner**. The host is up. The failure is specific to
 Vercel's egress.
 
-## 4. On stock pages the wire leg contributes nothing, and cannot
+## 4. On stock pages the wire leg contributes nothing — but NOT because it cannot
+
+> **CORRECTED 2026-09-14 07:47Z.** This section originally concluded that the
+> wire leg "contributes nothing, and cannot" on stock pages, and that the "cannot"
+> was structural. **The second half was wrong.** The egress probe found
+> GlobeNewswire reachable and fast from Vercel (28 ms warm, 9/9 HTTP 200). The
+> feed is healthy, so per-symbol wire attribution is RECOVERABLE — see §6.
+> What survives is the first half: it contributes nothing *today*, and the
+> 5,002 ms buys zero *today*.
 
 Two facts from `lib/server/news/wireProvider.ts`:
 
@@ -77,28 +85,27 @@ return (await pollAll()).filter((item) => item.tickers?.includes(wanted));
 ```
 
 PR Newswire items are built with `tickers: []`, and `fetchForSymbol` filters on
-exactly that field. **PR Newswire can never match any symbol.** This is measured,
-not inferred — `scripts/fixtures/wire-prnewswire.xml` records it: *"NONE of the
-20 items carried a ticker. There is no `<category>` element in this feed at all…
+exactly that field. **PR Newswire can never match any symbol.** Measured, not
+inferred — `scripts/fixtures/wire-prnewswire.xml` records it: *"NONE of the 20
+items carried a ticker. There is no `<category>` element in this feed at all…
 the measurement is 0/20, and that stands."*
 
-So on `/stock/[symbol]/news` the wire adapter can only ever contribute
-GlobeNewswire items, and GlobeNewswire does not answer. **The 5,002 ms is buying
-zero.**
+So GlobeNewswire is the **sole ticker-bearing feed**. That was true before the
+probe and is still true; what changed is what follows from it. Because the feed
+is healthy, this is now a reason to FIX the hang rather than to route around it.
 
-Three consequences worth stating plainly:
+Three consequences that survive the correction:
 
 - **The leg is not dead everywhere.** `fetchMarket()` is unfiltered, so PR
-  Newswire still feeds `/headlines` and sector seeding. The dead path is
+  Newswire still feeds `/headlines` and sector seeding. Any dead path is
   specifically per-symbol.
 - **There is a wasted fetch independent of the hang.** `fetchForSymbol` calls
   `pollAll()`, which polls both feeds and then discards 100% of the PR Newswire
   items at the filter. Even with both hosts healthy that request is pure waste on
-  a stock page.
-- **Dropping GlobeNewswire is not a small trim.** It is the sole ticker-bearing
-  feed, so removing it makes the wire adapter permanently incapable of
-  contributing anything to a stock page. Not cheaply reversible in judgement even
-  though it is in code.
+  a stock page. Worth fixing on its own merits, not as a workaround.
+- **Do not drop GlobeNewswire from `SOURCES`.** It is the sole ticker path, and
+  it is now known to be healthy. Removing it would forfeit the one recoverable
+  source of issuer-tagged per-symbol wire news.
 
 ## 5. Unlooked-for: `data/cik-map.json` is missing CIKs
 
@@ -115,17 +122,60 @@ aggregate.** Post-flip, `sec` is one of only two legs contributing on a stock
 page. The miss rate across the universe is the thing worth knowing; regenerating
 without measuring it just resets the clock on a problem nobody sized.
 
-## 6. Open: is GlobeNewswire blocked, or slow?
+## 6. GlobeNewswire is NOT blocked — the hang is ours
 
-Nobody has measured it, and every remaining option depends on the answer.
-`app/api/debug/wire-egress` exists to answer it, because only a Vercel function
-can: the sandbox cannot reach the host, and a runner reaches it fine.
+Probe run on `dpl_3H95tgd1hA3xWbhbtVTKAmvE5vPw` (`bf6e638`), 07:47Z:
 
-| result | reading | points to |
+| host | verdict | ms per round | status | bytes |
+|---|---|---|---|---|
+| globenewswire | `answers` | 157 / 38 / 28 | 200 ×3 | 31,368 ×3 |
+| prnewswire | `answers` | 22 / 12 / 14 | 200 ×3 | 40,881 ×3 |
+| gnews-control | `answers` | 326 / 10 / 7 | 200 ×3 | 123,354 ×3 |
+
+Nine attempts, nine 200s, zero aborts, zero causes. **The control answered**, so
+the function had real egress and the subject verdicts are meaningful.
+
+**GlobeNewswire is reachable from Vercel and fast — 28 ms warm.** The 5,002 ms
+hang is ours, not the network's. The same cause explains yesterday's 70,630 ms.
+
+This overturns everything built on the block theory: no dropping the feed, no
+stopping the per-symbol poll for structural reasons, no relay route. And a
+per-feed timeout is not the fix either — it bounds a symptom whose cause is not
+the network.
+
+### What the probe does NOT establish
+
+It changed **two** things at once versus `pollAll()`, so it proves reachability
+and nothing about the hang:
+
+| | render (`pollAll`) | probe |
 |---|---|---|
-| immediate refusal / 403 | IP-level block | structural |
-| hangs to timeout, no bytes | silent drop, likely deliberate | structural |
-| answers, slowly or intermittently | transient | a per-feed timeout suffices |
+| cache mode | `next: { revalidate: 3600 }` | `cache: "no-store"` |
+| User-Agent | none | `MyStockHarbor/1.0 (…)` |
 
-**This is a content-source decision and it is the owner's call, not an
-implementation detail.** The verdict belongs in this section once taken.
+### Next: a 2×2 on globenewswire only
+
+|  | no UA | UA set |
+|---|---|---|
+| `cache: "no-store"` | **A** | **B** — done: answers, 28 ms |
+| `next: { revalidate: 3600 }` | **C** ← the render's exact configuration | **D** |
+
+**C is the decisive cell.** C hangs + A answers ⇒ the Data Cache path. C hangs +
+A hangs ⇒ the User-Agent.
+
+**Leading hypothesis: the missing User-Agent.** WAFs that tarpit unidentified
+clients produce exactly this signature — no bytes, no error, never settles, so
+`endPoll()` never fires and no `wireFeed` line appears. Precedent is in this
+repo: `SEC_USER_AGENT` exists because `sec.gov` is *"PASS with UA set"* and fails
+without. It also explains the asymmetry without strain: prnewswire and gnews are
+equally UA-less and both answer, because their edge does not care.
+
+**A hypothesis to test, not a conclusion to implement.** The 2×2 runs before any
+fix is written.
+
+If it is the UA: fix it with a header on the wire fetches, reusing the
+`SEC_USER_AGENT` convention rather than inventing a second mechanism. Expect the
+cold stock render around 700 ms **with the ticker path intact** — better than any
+outcome previously on the table. Keep the per-feed timeout afterwards as a
+**backstop**, not as the fix: it is what stops the next silent host costing the
+full adapter budget. Insurance, not a performance change.

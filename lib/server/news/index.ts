@@ -7,9 +7,15 @@
 // ── ROLLBACK IS AN ENVIRONMENT VARIABLE, NOT A REVERT ──────────────────────
 // NEWS_PROVIDER="fmp" still selects the FMP adapter, and that is a hard
 // requirement rather than a courtesy: it is the flick-back. Re-adding the
-// variable in Vercel Production restores the old feed with no deploy, no revert
-// commit and no rebuild, which is why the FMP adapter stays in the tree,
-// compiling and exercised — §9's "do not delete or gut the FMP adapter".
+// variable in Vercel Production restores the old feed with no revert commit and
+// no code change, which is why the FMP adapter stays in the tree, compiling and
+// exercised — §9's "do not delete or gut the FMP adapter".
+//
+// BE PRECISE ABOUT WHAT THAT COSTS. This is an env read, so the new value does
+// not reach the running deployment until a PRODUCTION REDEPLOY (~2 min, same
+// commit). Earlier wording here, on /cache-health and in the spec claimed "no
+// deploy"; that was wrong, and wrong in the worst place — the sentence someone
+// reads while deciding whether the rollback is fast enough to reach for.
 //
 // THE SHIP SEQUENCE THIS DEFAULT ASSUMES, so the merge itself moves nothing:
 //   1. NEWS_PROVIDER=fmp set in Vercel Production BEFORE this merges.

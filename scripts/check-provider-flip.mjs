@@ -2,10 +2,11 @@
 //
 // WHAT IS AT RISK. Every one of these is silent:
 //   1. THE ROLLBACK STOPS WORKING. NEWS_PROVIDER=fmp is the owner's flick-back:
-//      re-adding one environment variable restores the old feed with no deploy
-//      and no revert commit. A typo in that one comparison, or an adapter
-//      quietly deleted, and the rollback is a revert instead — discovered at
-//      the moment it is needed.
+//      re-adding one environment variable restores the old feed with no revert
+//      commit and no code change (it does need a production redeploy for the
+//      env read to see it — ~2 min, same commit). A typo in that one
+//      comparison, or an adapter quietly deleted, and the rollback is a revert
+//      instead — discovered at the moment it is needed.
 //   2. THE FLIP NEVER HAPPENS. §8 names this outcome: something fails to
 //      register and the site keeps calling FMP, which is the single thing this
 //      migration exists to stop. Nothing throws. The page still renders.
@@ -126,7 +127,7 @@ console.log("\n=== 2. THE ROLLBACK, WHICH IS THE POINT OF KEEPING FMP ===\n");
 check(
   'NEWS_PROVIDER="fmp" selects the FMP adapter and nothing else',
   idsUnder("fmp") === "fmp",
-  "one environment variable, no deploy, no revert commit — the owner's hard requirement"
+  "one environment variable plus a redeploy, no revert commit — the owner's hard requirement"
 );
 check(
   "the FMP adapter is still in the tree and implements the interface",

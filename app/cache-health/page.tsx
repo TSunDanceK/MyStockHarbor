@@ -296,12 +296,13 @@ export default async function CacheHealthPage({
             <p style={{ color: "#eab308", fontSize: 12, marginTop: 10 }}>
               <strong>NEWS_PROVIDER=fmp is set in this environment.</strong> The free stack is built
               and registered but is not serving. This is the deliberate rollback state — if nobody
-              set it on purpose, the flip has been reverted without a commit.
+              set it on purpose, the flip has been rolled back by env var, with no code change.
             </p>
           ) : (
             <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
-              Default since step 7. Set <code>NEWS_PROVIDER=fmp</code> to roll back — no deploy,
-              no revert commit.
+              Default since step 7. Set <code>NEWS_PROVIDER=fmp</code> to roll back — no revert
+              commit, no code change. It is an env var, so it takes a production redeploy
+              (~2 min) to take effect; the build itself is unchanged.
             </p>
           )}
 

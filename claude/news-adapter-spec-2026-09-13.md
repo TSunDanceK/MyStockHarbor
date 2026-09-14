@@ -446,6 +446,15 @@ keyword match. Keep the keyword list small and in one place.
    rather than a revert: the variable was set in Production before the merge, so
    the merge itself moved nothing and Preview was where the free stack got
    exercised; removing it is the flip and re-adding it is the rollback.
+   **CORRECTED 2026-09-14 — what "an env var, not a revert" does and does not
+   buy.** It buys no revert commit and no code change. It does NOT buy an
+   instant rollback: `newsProviderMode()` reads `process.env.NEWS_PROVIDER`, and
+   an environment variable changed in the Vercel dashboard does not reach the
+   running deployment until a **production redeploy** (~2 min, no rebuild of
+   intent — same commit). The earlier wording here and on `/cache-health` said
+   "no deploy", which was wrong and would have cost minutes of confusion in the
+   exact moment a rollback is being reached for. The honest claim is: one env
+   var plus one redeploy, no code change.
    `FREE_FEED_MAX_AGE_DAYS` engages here and narrows the feed from 90 days to 45
    — the one visible content change, and deliberate (Google News backfills thin
    names: CYRX returned 56 items spread over 3,453 days). `data/static-profile.json`
@@ -465,8 +474,9 @@ visible. See `claude/silent-failure-traps.md`.
 **DONE at step 7.** `/cache-health` now leads with a "News provider — active now"
 panel: the mode, the adapter ids actually returned by `activeNewsProviders()`, the
 feed window in force, and the snapshot's size and capture date. `fmp` renders amber
-with an explicit "the flip has been reverted without a commit" note, so the rollback
-state cannot be mistaken for the normal one. Both reads are synchronous — an
+with an explicit "rolled back by env var, with no code change" note, so the rollback
+state cannot be mistaken for the normal one; the `free` branch states the redeploy
+requirement rather than the earlier, wrong "no deploy". Both reads are synchronous — an
 environment lookup and a module-level array — so the panel costs no request.
 
 ## 9. Do not
