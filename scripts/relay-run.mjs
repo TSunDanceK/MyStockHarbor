@@ -154,6 +154,11 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, no dump: it fetches public endpoints only. The runner is a
+  // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
+  // residential path NOR Vercel -- the script says so itself rather than
+  // leaving the reader to remember it.
+  "ipo-sources": { script: "scripts/ipo-source-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
