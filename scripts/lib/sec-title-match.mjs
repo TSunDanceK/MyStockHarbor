@@ -92,6 +92,29 @@ const STOPWORDS = new Set(["OF", "AND", "THE", "FOR", "A", "AN"]);
  * not a general rule. No other sector gets an alias list without its own
  * evidence.
  */
+/**
+ * ── THE INVERSE OF THE DROP RULE, AND IT COST TWO WRONG COMPANIES ─────────
+ *
+ *   A token you DROP is a distinction you can no longer make.
+ *   A token you FOLD becomes a token that matches EVERYTHING.
+ *
+ * The first half was learned by dropping HOLDINGS/GROUP/PARTNERS and collapsing
+ * "Brookfield Corporation" onto "Brookfield Partners". The second half was
+ * learned immediately afterwards by folding BANCORP onto BANK, which turned the
+ * most generic word in the sector into match evidence:
+ *
+ *   TOWN  "Towne Bank"     -> 0.50  TBBK  "Bancorp, Inc."   <- one shared token,
+ *   NBN   "Northeast Bank" -> 0.50  TBBK  "Bancorp, Inc."      and it is BANK
+ *
+ * TowneBank is not The Bancorp Inc. The fold is still right — "Northeast Bank"
+ * and "NORTHEAST BANCORP" must meet — but the folded token must NEVER be the
+ * thing that makes two names meet. BANK, BANCORP, BANCSHARES, FINANCIAL, INC
+ * and CORP are the shared vocabulary of every filer in the sector: use them to
+ * NORMALISE, never let them COUNT.
+ *
+ * So folding is paired with GENERIC_TOKENS below, and neither ships without the
+ * other.
+ */
 const BANK_FORM_ALIASES = new Map([
   ["BANCORP", "BANK"],
   ["BANCORPORATION", "BANK"],
@@ -140,7 +163,22 @@ export function nameTokens(name) {
     .map((t) => BANK_FORM_ALIASES.get(t) ?? t);
 }
 
+/**
+ * Tokens that every filer in the sector shares, so they can never be evidence.
+ *
+ * DELIBERATELY TINY. BANK is here because BANK_FORM_ALIASES folds four
+ * spellings onto it, which is exactly what makes it generic. FINANCIAL is here
+ * because it is the same kind of word and "Summit Financial" must not become
+ * "Summit Bank". INC, CORP and the rest never reach scoring — LEGAL_FORM_TOKENS
+ * removes them earlier.
+ *
+ * Nothing else goes in without its own evidence. Every list in this file that
+ * grew on plausibility rather than on a measured case has been wrong.
+ */
+const GENERIC_TOKENS = new Set(["BANK", "FINANCIAL"]);
+
 const setOf = (tokens) => new Set(tokens);
+const distinctive = (tokens) => [...tokens].filter((t) => !GENERIC_TOKENS.has(t));
 /**
  * Tokens joined with nothing, so a spacing difference stops being a difference.
  *
@@ -192,6 +230,36 @@ export function scoreNames(ours, theirs) {
   const a = setOf(nameTokens(ours));
   const b = setOf(nameTokens(theirs));
   if (!a.size || !b.size) return { tier: "none", score: 0, shared: 0 };
+
+  // ── A NAME MADE ONLY OF SECTOR BOILERPLATE IDENTIFIES NOBODY ────────────
+  // "Bancorp, Inc." reduces to {BANK} and nothing else. It was matching both
+  // TOWN and NBN at 0.50 on that single token. A side with no distinctive token
+  // cannot be a candidate for anything, because there is no name left in it.
+  const aDistinct = distinctive(a);
+  const bDistinct = distinctive(b);
+  if (!aDistinct.length || !bDistinct.length) return { tier: "none", score: 0, shared: 0 };
+
+  // ── AND THE MATCH MUST REST ON SOMETHING DISTINCTIVE ────────────────────
+  // Two names that agree only on generic words agree on nothing.
+  //
+  // UNREACHABLE AS THE CONSTANTS STAND, and the proof is worth writing down
+  // because it names the edit that makes it live. Given the rule above (both
+  // sides hold a distinctive token) this can only fire on a `partial`, which
+  // needs shared >= 2 and score >= 0.6. If every shared token is generic then
+  // shared <= |GENERIC_TOKENS| = 2, so shared is exactly 2, so both sides hold
+  // both generics PLUS a distinctive one, so |a|,|b| >= 3 and the union is >= 4
+  // — score <= 0.5, under the floor. `exact` and `subset` cannot reach it
+  // either: both imply the smaller side's tokens are all shared, and that side
+  // has a distinctive one.
+  //
+  // A THIRD GENERIC TOKEN BREAKS THAT. At |GENERIC_TOKENS| = 3 a pair like
+  // {D1,G1,G2,G3} / {D2,G1,G2,G3} shares 3 of a union of 5 = 0.60, which lands
+  // exactly ON the floor and would be admitted on generic agreement alone. So
+  // this guard is the thing that makes growing that list safe, and
+  // scripts/check-sec-title-match.mjs asserts the invariant rather than the
+  // line — because a line no input can reach is a line no mutation can kill.
+  const sharedDistinct = aDistinct.filter((t) => b.has(t)).length;
+  if (!sharedDistinct && squash(a) !== squash(b)) return { tier: "none", score: 0, shared: 0 };
 
   if (eqSet(a, b)) return { tier: "exact", score: 1, shared: a.size };
 

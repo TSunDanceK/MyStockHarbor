@@ -447,6 +447,120 @@ it does is for run 50 to say.
 to sector words like FINANCIAL, and swapping the rank of `exact` and
 `compound` — neither of which any existing fixture exercised.
 
+## 3h. Run 50 — the rename explanation confirmed in the raw bytes
+
+    AVB BK EA EQR FI K MMC WBS — ABSENT FROM BOTH RAW SOURCES
+    delimited=0 in nasdaqlisted, otherlisted AND company_tickers
+
+`K` is the case that shows why *delimited* was the right test: loose counts
+558 / 1639 / 1656, delimited **0**. The letter is everywhere, the symbol
+nowhere. **Nothing was dropped by our parser.** The eight are retired tickers in
+a frozen snapshot, exactly as `presetUniverse.ts` already said.
+
+## 3i. The company-name snapshot — committed, and the gap closed
+
+`data/company-names.json`, **2,592 rows, 128,918 bytes**, byte-verified against
+the emitter's declared count. Captured from the same two directory files
+`fetchCompanyName` reads, so the fallback and the live path cannot disagree
+about what a company is called. Raw `Security Name` values — `cleanName` is the
+normaliser and running it twice would make one pass invisible.
+
+**Wired in, not just committed.** `fetchCompanyName` returned `""` on a miss or
+a failure, and an empty name is not a cosmetic loss: `gnewsProvider` **skips the
+symbol entirely**, so the leg carrying the news page goes quiet. The snapshot is
+now the floor under both the catch and the not-found path, and `/cache-health`
+shows its size beside the profile and CIK lines.
+
+### The dot/dash split, for the third time and in a third direction
+
+18 of the snapshot's 28 misses were dashed dual-class and preferred names —
+`BF-B`, `BRK-A`, `BRK-B`, `CIG-C`, `CMS-PB`, `CTA-PA`, `CTA-PB`, `EP-PC`,
+`FITB-PA`, `FITB-PM`, `MER-PK`, `MKC-V`, `MOG-A`, `OAK-PA`, `OAK-PB`, `PBR-A`,
+`SEAL-PB`, `TRTN-PC` — the same 18 `claude/symbol-spelling-split-2026-09-12.md`
+enumerates. `BRK-B` is in the preset universe, so this was a guaranteed slot
+losing its news leg.
+
+**The two national sources disagree about the separator**, which is what makes a
+single canonical spelling impossible:
+
+| source | spelling |
+|---|---|
+| SEC `company_tickers.json` | `BRK-B` dashed |
+| Nasdaq Trader `ACT Symbol` | `BRK.B` dotted |
+
+and `otherlisted.txt`'s `NASDAQ Symbol` column — the dashed alternative — is
+**empty for NYSE-listed** dual-class and preferred names, because they have no
+Nasdaq symbol.
+
+So the name lookup normalises **dashed → dotted**, the *opposite* direction from
+`cikFor`. That is not an inconsistency: each lookup normalises toward **its own
+source's** convention, and one global canonical spelling would be wrong for one
+of the two no matter which it picked. Fixed on both sides — the read path now,
+and the generator so the next snapshot covers them.
+
+## 3j. The fold matched two wrong companies
+
+    TOWN "Towne Bank"     -> 0.50  TBBK  "Bancorp, Inc."
+    NBN  "Northeast Bank" -> 0.50  TBBK  "Bancorp, Inc."
+    NBN                   -> 0.67  NECB  "NorthEast Community Bancorp, Inc./MD/"
+
+TowneBank is not The Bancorp Inc, and that match rested on exactly one shared
+token: the folded `BANK`. **The inverse of the rule learned an hour earlier, and
+it now sits beside it in the file:**
+
+> **A token you DROP is a distinction you can no longer make.**
+> **A token you FOLD becomes a token that matches EVERYTHING.**
+
+`BANK`, `BANCORP`, `BANCSHARES`, `FINANCIAL`, `INC`, `CORP` are the shared
+vocabulary of every filer in the sector. **Use them to normalise; never let them
+count as evidence.**
+
+Two rules now, checked before any tier is awarded:
+
+1. **A name made only of boilerplate matches nobody.** `"Bancorp, Inc."` reduces
+   to `{BANK}` — there is no name left in it. This alone kills both TBBK hits.
+2. **A match must share a distinctive token.**
+
+`NBN → NECB` still surfaces on `NORTHEAST`, which is right: that pair is
+genuinely ambiguous and is what the flag and human confirmation are for. The fix
+had to reject boilerplate agreement without rejecting every hard case.
+
+**Rule 2 is provably unreachable at `|GENERIC_TOKENS| = 2`** — with both sides
+holding a distinctive token, generic-only agreement caps at 2 shared of a union
+of ≥ 4, i.e. 0.5, under the floor. **A third generic token breaks that:**
+`{D1,G1,G2,G3}` vs `{D2,G1,G2,G3}` shares 3 of 5 = **0.60**, exactly on the
+floor. So the guard is what makes growing that list safe, and the checker
+asserts the **invariant** by enumeration rather than the line — a line no input
+can reach is a line no mutation can kill, and asserting it would be theatre.
+
+## 3k. `carriesOurSymbol: false` means opposite things
+
+I wrote that `false` was expected and "the finding, not a failure". **True for a
+rename, false for everything else**, and one gloss for both would print a
+refutation as agreement:
+
+| raw verdict | `false` means |
+|---|---|
+| ABSENT FROM BOTH | **confirmation** — SEC carries the successor under its new ticker |
+| PRESENT IN DIRECTORY | **refutation** — our ticker is live and this filer does not claim it |
+
+NBN and TOWN are the second kind. The reading is now selected by the raw verdict,
+and the checker asserts the verdict map is populated *before* it is read —
+otherwise every case would silently take the rename branch.
+
+## 3l. NBN and TOWN: known-unresolvable, and stopping
+
+Both are **live Nasdaq listings** (the raw rows prove it) and both are **absent
+from SEC's `company_tickers.json`** — that file does not index every filer's
+ticker. No fix to the join reaches them, and name matching does not either:
+NBN is one token from a genuinely different company.
+
+**2 unresolved out of 2,620 is 99.92%.** Recorded in
+`lib/server/news/secProvider.ts` as `NO_CIK_BY_DESIGN` with the reason, so the
+warning stops telling the next reader to regenerate a map that cannot contain
+them — wrong advice that costs a dispatch to disprove. Not building a second
+lookup path for two banks.
+
 ## 4. One thing the run log corrected about the previous commit
 
     [sec] user-agent: "MyStockHarbor/1.0 (contact@mystockharbor.com)"

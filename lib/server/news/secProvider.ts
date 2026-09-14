@@ -284,6 +284,30 @@ export function cikFor(
   return ciks[upper] ?? (upper.includes(".") ? ciks[upper.replace(/\./g, "-")] : undefined);
 }
 
+/**
+ * Symbols that cannot be resolved by a ticker join AT ALL, and why.
+ *
+ * NOT A TODO LIST AND NOT A DENYLIST. It exists so the warning below stops
+ * telling the next reader to regenerate the CIK map, which for these two is
+ * wrong advice that costs a relay dispatch to disprove. Runs 47-50 spent four
+ * dispatches getting here; this is the receipt.
+ *
+ * BOTH ARE LIVE NASDAQ LISTINGS — the raw directory rows prove it — and both
+ * are ABSENT from SEC's company_tickers.json. That file does not index every
+ * filer's ticker, so no fix to the join reaches them. Name matching does not
+ * either: NBN's "Northeast Bank" is one token from NorthEast Community Bancorp,
+ * a genuinely different company, and TowneBank's only sub-floor candidate was
+ * The Bancorp Inc.
+ *
+ * 2 unresolved out of 2,620 is 99.92%. Building a second lookup path for two
+ * banks would cost more than it returns, and the SEC leg is a supplement to the
+ * feed rather than the feed itself. Recorded and stopped.
+ */
+const NO_CIK_BY_DESIGN = new Map([
+  ["NBN", "Northeast Bank — live on Nasdaq, absent from SEC's company_tickers.json"],
+  ["TOWN", "TowneBank — live on Nasdaq, absent from SEC's company_tickers.json"],
+]);
+
 async function fetchForSymbol(
   symbol: string,
   _companyName: string,
@@ -305,6 +329,13 @@ async function fetchForSymbol(
     // them. scripts/sec-probe.mjs now builds against the union with
     // data/static-profile.json's rows.
     // See claude/cik-map-coverage-2026-09-14.md.
+    const known = NO_CIK_BY_DESIGN.get(upper);
+    if (known) {
+      // Deliberately not silent — the leg really is empty — but it must not
+      // send anyone to regenerate a map that cannot contain this symbol.
+      console.warn(`[sec] ${upper}: no CIK, known-unresolvable — ${known}`);
+      return [];
+    }
     console.warn(`[sec] ${upper}: no CIK in data/cik-map.json — regenerate it (relay task "sec", symbols=cik-map)`);
     return [];
   }

@@ -17,6 +17,10 @@ import { readJobRuns } from "@/lib/server/jobRuns";
 import { newsProviderMode, activeNewsProviders, feedMaxAgeDays } from "@/lib/server/news";
 import { readNewsProviderStats } from "@/lib/server/newsStore";
 import {
+  COMPANY_NAME_SNAPSHOT_SIZE,
+  COMPANY_NAME_SNAPSHOT_AS_OF,
+} from "@/lib/server/companyNameSnapshot";
+import {
   SNAPSHOT_AS_OF,
   SNAPSHOT_SIZE,
   CIK_MAP_SIZE,
@@ -385,6 +389,15 @@ export default async function CacheHealthPage({
 
               FREE: both inputs are JSON imported at build time, so this is
               arithmetic over two module-level objects. No Redis, no fetch. */}
+          {/* The third committed identity dataset. An empty company name is not
+              cosmetic: gnewsProvider SKIPS the symbol, so the leg carrying the
+              news page goes quiet. This is the floor under that. */}
+          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
+            Company-name snapshot: {COMPANY_NAME_SNAPSHOT_SIZE.toLocaleString()} symbols, captured{" "}
+            {COMPANY_NAME_SNAPSHOT_AS_OF}. Used when the live Nasdaq Trader fetch misses or fails —
+            without it an empty name makes Google News skip the symbol entirely.
+          </p>
+
           <p style={{ color: CIK_MISSING ? "#eab308" : "#94a3b8", fontSize: 12, marginTop: 10 }}>
             CIK map: {CIK_MAP_SIZE.toLocaleString()} symbols — covers{" "}
             {CIK_COVERED.toLocaleString()} of the {SNAPSHOT_SIZE.toLocaleString()} profiled (

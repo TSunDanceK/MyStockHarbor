@@ -225,6 +225,112 @@ check(
   "two banks with different names must not meet just because both are banks"
 );
 
+console.log("\n=== 3c. A GENERIC TOKEN NORMALISES; IT NEVER COUNTS ===\n");
+
+// THE FOLD SHIPPED AND IMMEDIATELY MATCHED TWO WRONG COMPANIES. Run 50:
+//
+//   TOWN "Towne Bank"     -> 0.50  TBBK  "Bancorp, Inc."
+//   NBN  "Northeast Bank" -> 0.50  TBBK  "Bancorp, Inc."
+//
+// TowneBank is not The Bancorp Inc, and that match rested on exactly one shared
+// token: the folded BANK. The inverse of the rule learned an hour earlier —
+// a token you DROP is a distinction you can no longer make; a token you FOLD
+// becomes a token that matches EVERYTHING.
+check(
+  "a name that is nothing but sector boilerplate matches nobody",
+  scoreNames("Towne Bank", "Bancorp, Inc.").tier === "none" &&
+    scoreNames("Northeast Bank", "Bancorp, Inc.").tier === "none" &&
+    scoreNames("Anything At All", "Bancorp, Inc.").tier === "none",
+  '"Bancorp, Inc." reduces to {BANK} and nothing else — there is no name left in it'
+);
+check(
+  "two filers agreeing ONLY on a generic token do not meet",
+  scoreNames("Summit Bank", "Pinnacle Bank").tier === "none" &&
+    scoreNames("Summit Financial", "Pinnacle Financial").tier === "none",
+  "checked before any tier is awarded, including exact"
+);
+check(
+  "...but the fold still does its job where a distinctive token agrees",
+  scoreNames("Northeast Bank", "NORTHEAST BANCORP").tier === "exact",
+  "NORTHEAST is doing the work; BANK is only making the two spellings comparable"
+);
+check(
+  "a genuinely close pair still surfaces for a human — it is not over-filtered",
+  (() => {
+    // NBN vs NorthEast Community Bancorp IS ambiguous, and surfacing it is
+    // correct: that is what the ambiguous flag and human confirmation are for.
+    // Filtering it out would be the opposite error to the one just fixed.
+    const got = scoreNames("Northeast Bank", "NorthEast Community Bancorp, Inc./MD/");
+    return got.tier !== "none" && got.shared >= 1;
+  })(),
+  "the fix must reject boilerplate agreement, not reject every hard case"
+);
+check(
+  "the compound tier survives the distinctive rule",
+  scoreNames("Towne Bank", "TOWNEBANK").tier === "compound",
+  "TOWNEBANK shares no TOKEN with {TOWNE,BANK}; the squash equality is its evidence"
+);
+check(
+  "...and a compound match made only of generic words is still refused",
+  scoreNames("Bank", "BANK").tier === "none",
+  "otherwise the squash path becomes a way around the rule"
+);
+check(
+  "GENERIC_TOKENS stays tiny and is paired with the fold",
+  (() => {
+    const code = readCodeOnly("scripts/lib/sec-title-match.mjs");
+    const set = /const GENERIC_TOKENS = new Set\(\[([^\]]*)\]\)/.exec(code);
+    if (!set) return false;
+    const entries = set[1].split(",").map((t) => t.trim()).filter(Boolean);
+    // BANK is generic BECAUSE the alias map folds four spellings onto it. If
+    // the fold were ever removed, this entry would be doing nothing.
+    return entries.length <= 3 && /"BANK"/.test(set[1]) &&
+      /BANK_FORM_ALIASES/.test(code);
+  })(),
+  "every list in this file that grew on plausibility rather than a measured case has been wrong"
+);
+check(
+  "NO pair can score on generic agreement alone — the invariant, enumerated",
+  (() => {
+    // The guard that enforces this is UNREACHABLE at |GENERIC_TOKENS| = 2 (the
+    // proof is in the module), so no mutation can kill the line and asserting
+    // the line would be theatre. The PROPERTY is what matters, and it is
+    // checked by enumeration over names built from distinctive and generic
+    // words — including the shapes that would land exactly on the 0.6 floor if
+    // a third generic token were ever added.
+    const D = ["Alpha", "Beta", "Gamma"], G = ["Bank", "Financial"];
+    const names = [];
+    for (const d of D) {
+      names.push(d);
+      for (const g of G) names.push(`${d} ${g}`, `${d} ${g} Inc`);
+    }
+    for (const g of G) names.push(g, `${g} Inc`);
+    for (const a of D) for (const b of D) if (a !== b) names.push(`${a} ${b}`, `${a} ${b} Bank`);
+
+    const generic = new Set(["BANK", "FINANCIAL"]);
+    for (const x of names) {
+      for (const y of names) {
+        const got = scoreNames(x, y);
+        if (got.tier === "none" || got.tier === "compound") continue;
+        const xs = new Set(nameTokens(x)), ys = new Set(nameTokens(y));
+        const sharedDistinctive = [...xs].filter((t) => ys.has(t) && !generic.has(t));
+        if (!sharedDistinctive.length) return false;
+      }
+    }
+    return true;
+  })(),
+  "a tier awarded on BANK alone is what matched TowneBank to The Bancorp Inc"
+);
+check(
+  "the inverse rule is written down beside the one it mirrors",
+  (() => {
+    const raw = fs.readFileSync("scripts/lib/sec-title-match.mjs", "utf8");
+    return /A token you DROP is a distinction you can no longer make/.test(raw) &&
+      /A token you FOLD becomes a token that matches EVERYTHING/.test(raw);
+  })(),
+  "half a rule is what produced the second bug an hour after the first"
+);
+
 console.log("\n=== 4. AMBIGUITY IS REPORTED, NEVER RESOLVED ===\n");
 
 // THE REAL AMBIGUITY SHAPE IS TWO FILERS DIFFERING ONLY BY LEGAL FORM, which
@@ -547,6 +653,42 @@ check(
       /the successor is a separate question/.test(script);
   })(),
   "the fork is absent-vs-dropped; naming a successor is a further claim needing further evidence"
+);
+check(
+  "carriesOurSymbol is read THROUGH the raw verdict, not glossed once",
+  (() => {
+    // false means opposite things in the two cases: confirmation for a retired
+    // spelling, refutation for a live one. One gloss for both would print a
+    // refutation as agreement.
+    return /const raw = rawVerdict\.get\(entry\.symbol\)/.test(script) &&
+      /raw\?\.inDirectory/.test(script) &&
+      /REFUTED — our symbol is LIVE in the directory/.test(script) &&
+      /CONSISTENT WITH A RENAME/.test(script) &&
+      /CONFIRMED — the filer claims our exact symbol/.test(script);
+  })(),
+  "NBN and TOWN are the refutation case; the old single gloss would have read as agreement"
+);
+check(
+  "...and the verdict map is populated by the raw search that precedes it",
+  /rawVerdict\.set\(symbol, \{ inDirectory, inSec, verdict \}\)/.test(script) &&
+    script.indexOf("rawVerdict.set(") < script.indexOf("const raw = rawVerdict.get("),
+  "reading it before the raw search ran would silently take the rename branch every time"
+);
+check(
+  "the name snapshot tries the DOTTED spelling for a dashed universe symbol",
+  (() => {
+    // 17 of the first snapshot's 28 misses were dashed dual-class and preferred
+    // names. The directory lists those under the dotted ACT Symbol only,
+    // because their NASDAQ Symbol column is empty — they are NYSE-listed.
+    return /const findRow = \(sym\) =>/.test(script) &&
+      /findRow\(symbol\) \?\? \(symbol\.includes\("-"\) \? findRow\(symbol\.replace\(\/-\/g, "\."\)\) : undefined\)/.test(script);
+  })(),
+  "BRK-B is in the preset universe, so this is a guaranteed slot losing its news leg"
+);
+check(
+  "...and stores it under the UNIVERSE's spelling, which is what callers ask with",
+  /snapshot\[symbol\] = row\.rawName/.test(script),
+  "keying it by the directory's spelling would move the miss rather than fix it"
 );
 check(
   "the 'REAL negative' gloss is gone",

@@ -197,6 +197,7 @@ console.log(`[titles] control: FISERV present as ${control.map((c) => `${c.ticke
 // delimited one is in the file under some other column or inside another word,
 // which is a third answer neither of the first two would show.
 console.log("\n[raw] substring search of the DOWNLOADED BYTES, before any parsing\n");
+const rawVerdict = new Map();
 const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 for (const symbol of unresolved) {
   const esc = escapeRe(symbol);
@@ -242,6 +243,7 @@ for (const symbol of unresolved) {
     : "ABSENT FROM BOTH RAW SOURCES — not currently listed under this spelling " +
       "(a rename is the likely why; the successor is a separate question)";
 
+  rawVerdict.set(symbol, { inDirectory, inSec, verdict });
   console.log(`  ${symbol} — ${verdict}`);
   for (const line of report) console.log(`    ${line}`);
 }
@@ -285,19 +287,45 @@ for (const entry of report) {
     if (!r.ok) { console.log(`    ${entry.symbol}: HTTP ${r.status} for CIK ${top.cik}`); continue; }
     const body = await r.json();
     const tickers = body?.tickers ?? [];
+    const carriesOurSymbol = tickers.map((t) => String(t).toUpperCase()).includes(entry.symbol);
+
+    // ── carriesOurSymbol: false MEANS OPPOSITE THINGS IN THE TWO CASES ────
+    // I previously wrote that false was expected and "the finding, not a
+    // failure". That is true for a RENAME and false for everything else, and
+    // printing one gloss for both would make a refutation read as agreement.
+    //
+    //   our symbol ABSENT from both raw sources (retired spelling):
+    //       false = CONFIRMATION. SEC carries the successor under its new
+    //       ticker; that is exactly what a rename looks like.
+    //
+    //   our symbol PRESENT in the directory (live listing):
+    //       false = REFUTATION. Our ticker is live and this filer does not
+    //       claim it, so this candidate is the wrong company.
+    //
+    // NBN and TOWN are the second kind. The raw verdict is what decides which
+    // sentence is printed, so the two cannot be confused.
+    const raw = rawVerdict.get(entry.symbol);
+    const reading = carriesOurSymbol
+      ? "CONFIRMED — the filer claims our exact symbol"
+      : raw?.inDirectory
+        ? "REFUTED — our symbol is LIVE in the directory and this filer does not claim it, " +
+          "so this candidate is a different company"
+        : "CONSISTENT WITH A RENAME — our symbol is absent from both raw sources, and SEC " +
+          "carries this filer under a different ticker";
+
     entry.corroboration = {
       name: body?.name ?? null,
       tickers,
       exchanges: body?.exchanges ?? [],
-      // The tell that this whole exercise is about: SEC's own record does NOT
-      // carry our spelling, which is why the ticker join missed it.
-      carriesOurSymbol: tickers.map((t) => String(t).toUpperCase()).includes(entry.symbol),
+      carriesOurSymbol,
+      rawVerdict: raw?.verdict ?? null,
+      reading,
     };
     console.log(
       `    ${entry.symbol}: CIK ${top.cik} is "${body?.name}" — tickers ${JSON.stringify(tickers)} ` +
-        `exchanges ${JSON.stringify(body?.exchanges ?? [])} ` +
-        `(carries our "${entry.symbol}": ${entry.corroboration.carriesOurSymbol})`
+        `exchanges ${JSON.stringify(body?.exchanges ?? [])}`
     );
+    console.log(`        carriesOurSymbol=${carriesOurSymbol} -> ${reading}`);
   } catch (err) {
     console.log(`    ${entry.symbol}: submissions fetch failed — ${String(err)}`);
   }
@@ -332,10 +360,22 @@ emitPayload("cik-candidates", JSON.stringify({
 //
 // Scoped to the universe rather than all ~13,000 rows: the same denominator
 // argument as data/cik-map.json, whose header prices it.
+//
+// THE DASHED SPELLINGS NEED THE DOTTED LOOKUP, and the first snapshot missed 17
+// of them. otherlisted.txt's `NASDAQ Symbol` column — the dashed alternative —
+// is EMPTY for NYSE-listed dual-class and preferred names, because they have no
+// Nasdaq symbol. So the directory offers those under the DOTTED ACT Symbol only
+// (BRK.B), while this repo stores them DASHED (BRK-B), and the lookup found
+// nothing: BF-B, BRK-A, CIG-C, CMS-PB, CTA-PA, CTA-PB, EP-PC, FITB-PA, FITB-PM,
+// MER-PK, MKC-V, MOG-A, OAK-PA, OAK-PB, PBR-A, SEAL-PB, TRTN-PC.
+//
+// Stored under the UNIVERSE's spelling, which is what a caller will ask with.
 const snapshot = {};
+const findRow = (sym) =>
+  nasdaqRows.find((r) => r.symbol === sym || r.altSymbol === sym) ??
+  otherRows.find((r) => r.symbol === sym || r.altSymbol === sym);
 for (const symbol of universe) {
-  const row = nasdaqRows.find((r) => r.symbol === symbol || r.altSymbol === symbol) ??
-    otherRows.find((r) => r.symbol === symbol || r.altSymbol === symbol);
+  const row = findRow(symbol) ?? (symbol.includes("-") ? findRow(symbol.replace(/-/g, ".")) : undefined);
   if (row) snapshot[symbol] = row.rawName;
 }
 console.log(`[titles] company-name snapshot: ${Object.keys(snapshot).length}/${universe.length} universe symbols`);

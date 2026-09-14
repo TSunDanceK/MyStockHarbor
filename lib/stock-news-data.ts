@@ -2,6 +2,7 @@ import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
 import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders } from "@/lib/server/news";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -396,9 +397,14 @@ async function fetchCompanyName(symbol: string): Promise<string> {
       }
     }
 
-    return "";
+    // LIVE FETCH SUCCEEDED AND THE SYMBOL WAS NOT IN IT. Falling through to the
+    // snapshot rather than returning "" is the point: this is the miss the
+    // dashed dual-class names hit every time, because the directory lists them
+    // under the dotted spelling only. See the note in lib/server/companyNames.ts.
+
+    return snapshotCompanyName(symbol);
   } catch {
-    return "";
+    return snapshotCompanyName(symbol);
   }
 }
 
