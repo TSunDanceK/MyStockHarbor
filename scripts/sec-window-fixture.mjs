@@ -27,6 +27,7 @@
 // own index parser would produce a fixture that agrees with itself and with
 // nothing else.
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import fs from "node:fs";
 import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
@@ -262,3 +263,27 @@ console.log(
     `last rows still parses`
 );
 emitPayload("window-fixture", compact);
+
+// ── A COMPRESSED VARIANT, AND WHY IT EARNS ITS PLACE ─────────────────────────
+//
+// relay-capture.mjs emits verbatim text because its reader is a HUMAN copying
+// the payload into a fixture by hand, and its per-line census exists to localise
+// a bad copy. This payload is 2,008 lines; transcribing that by eye is the
+// error-prone step that module's header is about, at ten times the length it
+// was designed for.
+//
+// So the same bytes are also offered gzipped and base64-wrapped: ~135 lines
+// instead of 2,008, decoded by a shell command rather than retyped, and checked
+// end to end against the sha256 of the DECOMPRESSED text printed above -- not
+// of the base64, which would only prove the wrapper survived.
+//
+// Both are registered. emitPayload emits whichever the dispatch asked for, so
+// the verbatim route stays available for a human and nothing is taken away.
+const gz = zlib.gzipSync(Buffer.from(compact, "utf8"), { level: 9 });
+const wrapped = (gz.toString("base64").match(/.{1,120}/g) ?? []).join("\n");
+console.log(
+  `\n[capture] window-fixture-gz: ${gz.length} bytes gzipped from ${Buffer.byteLength(compact, "utf8")}, ` +
+    `${wrapped.split("\n").length} wrapped lines. Decode: base64 -d | gunzip. ` +
+    `Verify against the sha256 above, which is over the DECOMPRESSED text.`
+);
+emitPayload("window-fixture-gz", wrapped);
