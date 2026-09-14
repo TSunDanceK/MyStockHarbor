@@ -92,12 +92,14 @@ jobs:
       #
       # ONE EXCEPTION, INSTALLED BY THE ROUTER RATHER THAN HERE: a task that
       # LIFTS a shipped function out of a .ts module needs the TypeScript
-      # compiler to erase types. relay-run.mjs installs typescript alone, pinned
-      # to package.json's range, when such a task declares needsTypescript. That
-      # is deliberately not `npm ci` -- the whole tree in a credential-free job
-      # is a supply-chain surface, and one compiler is the smallest thing that
-      # works. The Upstash client is still absent, so the property this comment
-      # describes is unchanged.
+      # compiler to erase types. relay-run.mjs installs it when such a task
+      # declares needsTypescript.
+      #
+      # It installs into an EMPTY TEMP DIRECTORY and copies one package across,
+      # because `npm install typescript` in the repo root resolves the whole of
+      # package.json -- measured at 438 packages, @upstash/redis included. That
+      # would have voided the property this comment describes while looking like
+      # a one-package install. The isolated path keeps the client absent.
       - name: Download the frozen dump
         if: inputs.run_id != ''
         uses: actions/download-artifact@v4
