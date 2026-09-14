@@ -45,33 +45,42 @@ check("a plain baby-bond ticker is left alone",
 //
 // Every string below is captured. Add to this list only from the live file.
 const NASDAQ_NAMES = new Map([
+  // Common stock and share classes
   ["BAC", "Bank of America Corporation Common Stock"],
-  ["BAC$K", "Bank of America Corp. Depositary Shares, each representing a 1/1,000th interest in a share of 5.875% Non-Cumulative Preferred Stock, Series HH"],
-  ["MER$K", "Bank of America Corporation Income Capital Obligation Notes initially due December 15, 2066"],
-  ["EP$C", "El Paso Corporation Preferred Stock"],
-  ["T$A", "AT&T Inc. Depositary Shares, 5.000% Perpetual Preferred Stock, Series A"],
-  ["TBB", "AT&T Inc. 5.350% Global Notes due 2066"],
-  ["PFH", "Prudential Financial 4.125% Junior Subordinated Notes due 2060"],
-  ["UNMA", "Unum Group 6.250% Junior Subordinated Notes due 2058"],
-  ["EMBJ", "Embraer S.A. Common Stock"],
   ["MKC.V", "McCormick & Company, Incorporated Common Stock"],
+  ["EMBJ", "Embraer S.A. Common Stock"],
+  ["BCS", "Barclays PLC Common Stock"],
+  ["HSBC", "HSBC Holdings, plc. Common Stock"],
+  ["AZN", "AstraZeneca PLC Ordinary Shares"],
   ["GOOG", "Alphabet Inc. - Class C Capital Stock"],
+  ["BRK.B", "Berkshire Hathaway Inc. New Common Stock"],
+  // ADRs — 49 of the 55 periodic filers in the measured window were 6-K filers,
+  // i.e. foreign private issuers. This is the largest population, not a tail.
+  ["ARM", "Arm Holdings plc - American Depositary Shares"],
+  ["BIDU", "Baidu, Inc. - American Depositary Shares, each representing 8 ordinary share"],
+  ["GSK", "GSK plc American Depositary Shares (Each representing two Ordinary Shares)"],
+  ["ABEV", "Ambev S.A. American Depositary Shares (Each representing 1 Common Share)"],
+  ["VALE", "VALE S.A.  American Depositary Shares Each Representing one common share"],
+  ["ZTO", "ZTO Express (Cayman) Inc. American Depositary Shares, each representing one Class A ordinary share."],
+  ["LYG", "Lloyds Banking Group Plc American Depositary Shares"],
+  ["GMAB", "Genmab A/S - American Depositary Shares"],
+  ["EC", "Ecopetrol S.A. American Depositary Shares"],
+  ["SAN", "Banco Santander, S.A. Sponsored ADR (Spain)"],
+  // Preferreds, notes, warrants, units
+  ["EP$C", "El Paso Corporation Preferred Stock"],
+  ["MER$K", "Bank of America Corporation Income Capital Obligation Notes initially due December 15, 2066"],
+  ["TBB", "AT&T Inc. 5.350% Global Notes due 2066"],
+  ["PFH", "Prudential Financial, Inc. 4.125% Junior Subordinated Notes due 2060"],
+  ["UNMA", "Unum Group 6.250% Junior Subordinated Notes due 2058"],
+  // NOTE THE TYPO IN THE SOURCE: "Non- Cumulative", with a space after the
+  // hyphen. Harmless here because the reject fires on "Preferred", but these
+  // strings are hand-maintained by the exchange and a pattern keyed on exact
+  // phrasing will eventually meet one of these.
+  ["BAC$K", "Bank of America Corporation Depositary Shares, each representing a 1/1,000th interest in a share of 5.875% Non- Cumulative Preferred Stock, Series HH"],
+  ["T$A", "AT&T Inc. Depositary Shares, each representing a 1/1,000th interest in a share of 5.000% Perpetual Preferred Stock, Series A"],
   ["CCXIW", "Churchill Capital Corp XI - Warrants"],
   ["NOVTU", "Novanta Inc. - Tangible Equity Units"],
-  // ADRs. THE LARGEST POPULATION IN THE UNIVERSE: 49 of the 55 periodic filers
-  // in the measured window were 6-K filers, i.e. foreign private issuers. ARM
-  // is the symbol this project was audited against, and a single known-good
-  // ACCEPT list rejected it -- along with 8 of the other 24 ADRs tested live.
-  ["ARM", "Arm Holdings plc - American Depositary Shares"],
-  // TRUNCATED CAPTURES, and marked as such rather than completed by guesswork.
-  // The live values ran past the console width; what is stored is the exact
-  // captured prefix. That is sufficient for the marker under test -- the accept
-  // token appears inside it -- but these are NOT full names and must not be
-  // treated as such if anything later needs the whole string.
-  ["BIDU", "Baidu, Inc. - American Depositary Shares, each representing 8..."],
-  ["GSK", "...American Depositary Shares (Each representing two Ordinary..."],
 ]);
-const TRUNCATED = new Set(["BIDU", "GSK"]);
 
 // ASSERT ON THE SHAPES, NOT ON ONE SYMBOL. These five behave differently, and
 // one passing proves nothing about the others -- which is exactly what this
@@ -126,6 +135,17 @@ for (const [sym, wantClass, wantKind] of [
   ["ARM", "common", "adr"],
   ["BIDU", "common", "adr"],
   ["GSK", "common", "adr"],
+  ["ABEV", "common", "adr"],
+  ["VALE", "common", "adr"],
+  ["ZTO", "common", "adr"],
+  ["LYG", "common", "adr"],
+  ["GMAB", "common", "adr"],
+  ["EC", "common", "adr"],
+  ["SAN", "common", "adr"],
+  ["AZN", "common", "common"],
+  ["BCS", "common", "common"],
+  ["HSBC", "common", "common"],
+  ["BRK.B", "common", "common"],
 ]) {
   const name = NASDAQ_NAMES.get(sym);
   check(`${sym.padEnd(6)} ${wantClass}/${wantKind}`,
@@ -147,6 +167,35 @@ check("GSK must not be the only ADR that passes",
   ["ARM", "BIDU", "GSK"].every((s) => classifySecurityName(NASDAQ_NAMES.get(s)) === "common"),
   "GSK passed the single-inversion rule on a parenthetical ARM does not have — a coin flip, not a rule");
 
+// WHICH MARKER ACTUALLY CARRIES EACH ADR. Without this, the equity markers
+// could be doing nothing for the whole ADR population and every test would
+// still pass on the ADR marker alone -- which was true before the singular
+// widening: of these ten, only GSK matched a share marker.
+const SHARE_MARKER = /\bcommon (?:stock|shares?)\b|\bordinary (?:stock|shares?)\b/i;
+const ADR_MARKER = /\bamerican depositary (?:shares?|receipts?)\b|\bsponsored ADRs?\b|\bADRs?\b/i;
+check("the singular widening took effect — BIDU, VALE, ABEV and ZTO now match a SHARE marker",
+  ["BIDU", "VALE", "ABEV", "ZTO"].every((k) => SHARE_MARKER.test(NASDAQ_NAMES.get(k))),
+  "a plural-only pattern matched none of them: 'ordinary share', 'one common share', '1 Common Share'");
+check("...and the ADR marker is the ONLY thing carrying ARM, LYG, GMAB, EC and SAN",
+  ["ARM", "LYG", "GMAB", "EC", "SAN"].every(
+    (k) => !SHARE_MARKER.test(NASDAQ_NAMES.get(k)) && ADR_MARKER.test(NASDAQ_NAMES.get(k))
+  ),
+  "their names never say what the receipt represents — removing the ADR marker drops five of ten");
+check("'Sponsored ADR' is load-bearing, not redundant with 'American Depositary Shares'",
+  !/american depositary/i.test(NASDAQ_NAMES.get("SAN")) &&
+    classifySecurityName(NASDAQ_NAMES.get("SAN")) === "common",
+  "SAN is the only one of 25 using that wording");
+
+// THE EXCHANGE'S STRINGS ARE HAND-MAINTAINED. BAC$K carries a typo in the
+// source -- "Non- Cumulative", a space after the hyphen. Harmless because the
+// reject fires on "Preferred", but it is the standing reminder that a pattern
+// keyed on exact phrasing will eventually meet one of these.
+check("the source typo is preserved in the fixture, not silently corrected",
+  NASDAQ_NAMES.get("BAC$K").includes("Non- Cumulative"),
+  "captured as the exchange publishes it");
+check("...and it classifies correctly anyway, because the marker is a single word",
+  classifySecurityName(NASDAQ_NAMES.get("BAC$K")) === "not-common");
+
 // STAGE 3 IS COUNTED, NOT SILENT. An "unknown" is a name matching neither
 // stage: reported so an unenumerated shape is visible rather than absorbed.
 const unknowns = [...NASDAQ_NAMES.entries()].filter(([, n]) => classifySecurityName(n) === "unknown");
@@ -160,9 +209,6 @@ check("type markers are word-bounded",
     classifySecurityName("UnitedHealth Group Incorporated Common Stock") === "common",
   "'Wright' is not a right, 'United' is not a unit");
 
-check("truncated captures are marked as such",
-  [...TRUNCATED].every((s) => NASDAQ_NAMES.get(s).includes("...")),
-  "stored as captured prefixes; sufficient for the marker under test, not full names");
 
 // THE PROPERTY THAT MATTERS, stated as it actually behaves under three stages.
 //
