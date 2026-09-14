@@ -531,9 +531,113 @@ const entryCountOf = (value) => {
   return 1;
 };
 
+// ── 6a. THE DATE-KEYED EARNINGS KEYS ARE NOT SINGLETONS ──────────────────────
+//
+// THEY WERE DECLARED AS HASHES AND DUMPED NOTHING, SILENTLY, EVERY RUN.
+// earningsCalendar.ts writes `${DAY_ITEMS_PREFIX}:${date}` and
+// `${DAY_COMPLETE_PREFIX}:${date}` -- one string key PER DATE. No key of the bare
+// prefix name has ever existed, so TYPE returned "none", the declared "hash" hint
+// survived, HGETALL on a missing key returned {}, and the dataset was recorded
+// `entries: 0, present: false`. The artifacts are 174 and 168 bytes.
+//
+// That reads as "production holds no earnings day data", which is a claim about
+// the database. The truth was that the dump asked for the wrong key shape --
+// failure presenting as absence, the same confusion these files keep paying for.
+// TYPE cannot catch it: a prefix that is not itself a key is indistinguishable
+// from a key that does not exist yet.
+//
+// TTL IS CAPTURED PER KEY because it cannot be recovered later. These carry
+// absolute expiries set at write time (30d/32d/33d, earningsCalendar.ts:153/217/241)
+// and a dump taken without them cannot answer how long a bad entry has left.
+async function dumpDateKeyed(name, prefix) {
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  const ttlSeconds = {};
+
+  for (const group of chunk(keys, SMALL_MGET_CHUNK)) {
+    let got;
+    try {
+      got = await redis.mget(...group);
+    } catch (e) {
+      report.warnings.push(`${name} mget failed for ${group.length} keys: ${String(e?.message ?? e)}`);
+      continue;
+    }
+    for (let i = 0; i < group.length; i++) {
+      const v = got?.[i];
+      if (v == null) continue;
+      values[suffixOf(group[i], prefix)] = v;
+    }
+  }
+
+  // One TTL per key. The window is ~126 days wide, so this is bounded at roughly
+  // that many round trips, not a scan of the keyspace.
+  for (const k of keys) {
+    try {
+      ttlSeconds[suffixOf(k, prefix)] = await redis.ttl(k);
+    } catch (e) {
+      report.warnings.push(`${name} ttl failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+
+  const present = Object.keys(values).length;
+  report.datasets[name] = { key: `${prefix}:<DATE>`, keysScanned: keys.length, present };
+  report.files.push(
+    writeJson(`${name}.json`, {
+      dumpedAt: DUMPED_AT,
+      dataset: name,
+      key: `${prefix}:<DATE>`,
+      keysScanned: keys.length,
+      present,
+      values,
+      ttlSeconds,
+    })
+  );
+  console.log(`   ${name.padEnd(24)} ${String(present).padStart(6)} dates    (scanned ${keys.length})`);
+}
+
+await dumpDateKeyed("earnings-day-items", KEYS.earningsDayItems);
+await dumpDateKeyed("earnings-day-complete", KEYS.earningsDayComplete);
+
+// The month candidate feed. Needed to tell a legitimately empty date (nobody
+// reports) from a poisoned one (reporters exist and the stored blob is []).
+{
+  const prefix = "msh:reference:v1:earnings-calendar";
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  for (const k of keys) {
+    try {
+      const v = await redis.get(k);
+      if (v != null) values[suffixOf(k, prefix)] = v;
+    } catch (e) {
+      report.warnings.push(`earnings-month-feed read failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+  report.datasets["earnings-month-feed"] = { key: `${prefix}:<YYYY-MM>`, keysScanned: keys.length, present: Object.keys(values).length };
+  report.files.push(
+    writeJson("earnings-month-feed.json", { dumpedAt: DUMPED_AT, dataset: "earnings-month-feed", key: `${prefix}:<YYYY-MM>`, months: Object.keys(values), values })
+  );
+  console.log(`   ${"earnings-month-feed".padEnd(24)} ${String(Object.keys(values).length).padStart(6)} months`);
+}
+
+// The fill frontier. A plain string with NO TTL (earningsCalendar.ts:290), so a
+// value parked past the window end stays parked; the TTL is captured anyway so a
+// future change away from that is visible rather than assumed.
+{
+  const key = "msh:earnings-fill-frontier:v2";
+  let value = null;
+  let ttl = null;
+  try {
+    value = await redis.get(key);
+    ttl = await redis.ttl(key);
+  } catch (e) {
+    report.warnings.push(`fill-frontier read failed: ${String(e?.message ?? e)}`);
+  }
+  report.datasets["earnings-fill-frontier"] = { key, value, ttlSeconds: ttl, present: value != null };
+  report.files.push(writeJson("earnings-fill-frontier.json", { dumpedAt: DUMPED_AT, dataset: "earnings-fill-frontier", key, value, ttlSeconds: ttl }));
+  console.log(`   ${"earnings-fill-frontier".padEnd(24)} ${String(value ?? "(absent)").padStart(12)}  ttl=${ttl}`);
+}
+
 for (const [name, key, kind] of [
-  ["earnings-day-items", KEYS.earningsDayItems, "hash"],
-  ["earnings-day-complete", KEYS.earningsDayComplete, "hash"],
   // redis.set of a plain object (earningsSchedule.ts:146) -> a JSON string, not a hash.
   ["earnings-schedule", KEYS.earningsSchedule, "json"],
   ["history-newest-bar", KEYS.newestBar, "hash"],
