@@ -1080,8 +1080,30 @@ console.log("\n17b. The real 20260908-11 window");
   // { periodic-report: 77, unconfirmed: 50 } from a modulo-5 round robin. A real
   // week is nothing like that: 6-K and 8-K dominate and genuine period reports
   // are single digits, which is what "6-K is 89% of the periodic signal" means
-  // in practice. Asserted as a SHAPE, so it keeps failing for the right reason
-  // if the fixture is ever recaptured over a different window.
+  // in practice.
+  //
+  // ASSERTED EXACTLY, NOT AS A SHAPE. The fixture is frozen and its sha256 is
+  // checked above, so these counts are deterministic -- there is no reason to
+  // accept a band. A tolerance here would pass through a material drift in
+  // applyFilings, which is the one thing this section exists to catch. The
+  // shape assertions below are a SECOND layer, not a substitute.
+  check("the queue is exactly what the route makes of the real window",
+    queued === 123 && hist.unconfirmed === 113 && hist["periodic-report"] === 8 && hist.amendment === 2,
+    `${queued} queued ${JSON.stringify(hist)}`);
+  // The live run over the same four days, 2026-09-14, against the LIVE 696-symbol
+  // manifest universe rather than this frozen dump's 700:
+  //
+  //     live      281 matched symbols   1,441 rows   127 queued
+  //                 { unconfirmed: 119, periodic-report: 6, amendment: 2 }
+  //     fixture   291 matched symbols   2,008 rows   123 queued
+  //                 { unconfirmed: 113, periodic-report: 8, amendment: 2 }
+  //
+  // amendment agrees exactly and the shape agrees; the rest is a MEMBERSHIP
+  // difference, not drift -- the deltas run opposite ways (ten more symbols,
+  // four fewer queued), so neither set contains the other. It is decomposed by
+  // scripts/window-fixture-diff.mjs, which needs the live matched-symbol list.
+  // Recorded as a dated delta beside the exact counts, never as a reason to
+  // loosen them.
   check("unconfirmed DOMINATES the queue — a real week is 6-K, not 10-Q",
     hist.unconfirmed > 0.8 * queued,
     `${JSON.stringify(hist)} of ${queued} queued`);
@@ -1100,8 +1122,11 @@ console.log("\n17b. The real 20260908-11 window");
     if (idx.isPeriodicForm(f.form) || idx.isRereadOnlyForm(f.form) || f.amendment) pre.add(f.symbol);
   }
   const added = [...pre].filter((x) => !post.has(x)).sort();
-  check("the narrowed gate queues strictly fewer symbols than the pre-fix one",
-    post.size < pre.size, `${post.size} vs ${pre.size}`);
+  check("the narrowed gate queues exactly 123 where the pre-fix one queued 130",
+    post.size === 123 && pre.size === 130, `${post.size} vs ${pre.size}`);
+  check("...and the seven it drops are the seven the live run named",
+    added.join(" ") === "BEN CRL DOCU DT GS RSG VTRS",
+    added.join(" ") + " — reached from a different universe and a separate capture");
   check("...and every symbol it drops filed NOTHING that carries numbers",
     added.every((sym) =>
       fx.filings.filter((f) => f.symbol === sym)
