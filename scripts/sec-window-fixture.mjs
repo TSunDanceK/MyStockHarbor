@@ -51,6 +51,13 @@ const sec = await lift(
   [
     grabFunction(idxSrc, "accessionFrom"),
     grabFunction(idxSrc, "isAmendment"),
+    // TRANSITIVE CALLEES, AND THEY ARE NOT OPTIONAL. grabFunction lifts ONE
+    // function body; it does not follow calls. dailyIndexUrl calls quarterOf and
+    // addDays calls toYyyymmdd, and omitting either fails at RUN time with a
+    // ReferenceError -- after the fetches have started, on a runner, minutes
+    // later. The smoke test below exists because of exactly that.
+    grabFunction(idxSrc, "quarterOf"),
+    grabFunction(idxSrc, "toYyyymmdd"),
     grabFunction(idxSrc, "dailyIndexUrl"),
     grabFunction(idxSrc, "parseDailyIndex"),
     grabFunction(idxSrc, "intersect"),
@@ -60,9 +67,46 @@ const sec = await lift(
     grabFunction(tickSrc, "padCik"),
     grabFunction(tickSrc, "parseTickerFile"),
   ].join("\n") +
-    "\nexport { accessionFrom, isAmendment, dailyIndexUrl, parseDailyIndex, intersect, " +
-    "looksLikeMissingIndex, addDays, symbolsByCik, parseTickerFile };"
+    "\nexport { accessionFrom, isAmendment, quarterOf, toYyyymmdd, dailyIndexUrl, " +
+    "parseDailyIndex, intersect, looksLikeMissingIndex, addDays, symbolsByCik, parseTickerFile };"
 );
+
+// SMOKE-TEST THE LIFT BEFORE TOUCHING THE NETWORK.
+//
+// A lifted module can be missing a transitive callee and still import cleanly --
+// the ReferenceError only fires when that line executes. Without this, the first
+// dispatch spent a runner, a dump download and a compiler install to discover
+// that dailyIndexUrl could not build a URL. These calls are pure and cost
+// nothing, so the failure happens in the first second instead of the third
+// minute.
+{
+  const failures = [];
+  const expectUrl = `https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/master.20260908.idx`;
+  try {
+    const got = sec.dailyIndexUrl("20260908");
+    if (got !== expectUrl) failures.push(`dailyIndexUrl -> ${got}`);
+  } catch (e) {
+    failures.push(`dailyIndexUrl threw: ${String(e?.message ?? e)}`);
+  }
+  try {
+    if (sec.addDays("20260911", 1) !== "20260912") failures.push("addDays");
+  } catch (e) {
+    failures.push(`addDays threw: ${String(e?.message ?? e)}`);
+  }
+  try {
+    if (sec.isAmendment("4/A") !== true || sec.isAmendment("10-Q") !== false) failures.push("isAmendment");
+    if (sec.accessionFrom("edgar/data/1/0000320193-26-000001.txt") !== "0000320193-26-000001")
+      failures.push("accessionFrom");
+  } catch (e) {
+    failures.push(`form helpers threw: ${String(e?.message ?? e)}`);
+  }
+  if (failures.length) {
+    console.error(`FATAL: the lifted module is incomplete or wrong — ${failures.join("; ")}`);
+    console.error("A transitive callee is probably missing: grabFunction lifts one body and does not follow calls.");
+    process.exit(2);
+  }
+  console.log("lift smoke test: ok");
+}
 
 console.log(`SEC WINDOW FIXTURE — ${FROM}..${TO}`);
 

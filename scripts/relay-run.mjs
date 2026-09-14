@@ -23,6 +23,8 @@
 // one rule -- because a single `if:` expression is one typo from silently
 // inverting.
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 // task name -> script, plus the args it takes from the environment. Adding a
@@ -227,21 +229,27 @@ if (!fs.existsSync(spec.script)) {
   );
   process.exit(2);
 }
-// TYPESCRIPT, ON DEMAND, AND ONLY TYPESCRIPT.
+// TYPESCRIPT, ON DEMAND, AND GENUINELY ONLY TYPESCRIPT.
 //
-// The read-only job deliberately runs no `npm ci` -- not installing the Upstash
-// client is what keeps it unable to reach the database even if a future edit
-// tried to. A task that LIFTS a shipped function needs ts.transpileModule to
-// erase types first, so it needs that one package and nothing else.
+// The read-only job deliberately runs no `npm ci` -- relay.yml states the
+// property plainly: not installing the Upstash client is what keeps this job
+// unable to reach the database even if a future edit tried to. A task that LIFTS
+// a shipped function needs ts.transpileModule to erase types, so it needs the
+// compiler.
 //
-// `npm ci` would satisfy it and is the wrong tool: it would pull the entire
-// dependency tree into the job that holds no credentials, widening a
-// supply-chain surface to fix a compiler import. One pinned package is the
-// smallest thing that works.
+// THE OBVIOUS FIX DOES NOT WORK, AND IT FAILS SILENTLY. `npm install --no-save
+// typescript` run in the repo root resolves the WHOLE of package.json first:
+// measured on run 34830229705, "added 438 packages in 10s" -- @upstash/redis
+// among them. It looked like a one-package install and was a full tree, which
+// would have quietly voided the property the workflow comment describes.
+//
+// So the install happens in an EMPTY temporary directory, where typescript has
+// no dependencies of its own and npm adds exactly one package, and only that
+// package is copied into ./node_modules. Verified: `npm install --no-save
+// --no-package-lock typescript@^5` in an empty dir reports "added 1 package".
 //
 // AND IT LIVES HERE, NOT IN relay.yml, for the reason in this file's header: a
-// workflow edit costs a merge-and-wait before it can run once, and adding a
-// task must stay a branch-local change.
+// workflow edit costs a merge-and-wait before it can run once.
 if (spec.needsTypescript) {
   let present = false;
   try {
@@ -251,28 +259,38 @@ if (spec.needsTypescript) {
     present = false;
   }
   if (!present) {
-    // Pinned to the same major the repo builds with, so erase() behaves here
+    // Pinned to the same range the repo builds with, so erase() behaves here
     // exactly as it does in check-all. A floating install could change what a
     // lifted function's body looks like, which is the one thing this must not do.
-    const wanted = JSON.parse(fs.readFileSync("package.json", "utf8"));
-    const range = wanted.devDependencies?.typescript ?? wanted.dependencies?.typescript;
+    const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+    const range = pkg.devDependencies?.typescript ?? pkg.dependencies?.typescript;
     if (!range) {
       console.error("FATAL: package.json declares no typescript, but this task lifts TS source.");
       process.exit(2);
     }
-    console.log(`relay: installing typescript@${range} (lift requires the compiler; NOT npm ci)`);
-    const r = spawnSync("npm", ["install", "--no-save", "--no-audit", "--no-fund", `typescript@${range}`], {
-      stdio: "inherit",
-    });
-    if (r.status !== 0) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "relay-ts-"));
+    console.log(`relay: installing typescript@${range} in isolation (NOT npm ci, NOT the repo tree)`);
+    const r = spawnSync(
+      "npm",
+      ["install", "--no-save", "--no-package-lock", "--no-audit", "--no-fund", `typescript@${range}`],
+      { cwd: tmp, stdio: "inherit" }
+    );
+    const from = path.join(tmp, "node_modules", "typescript");
+    if (r.status !== 0 || !fs.existsSync(from)) {
       console.error(
-        `FATAL: could not install typescript (exit ${r.status}). The task lifts functions ` +
+        `FATAL: could not install typescript (exit ${r.status}). This task lifts functions ` +
           `from .ts sources and cannot erase types without it. Reimplementing the parsers ` +
-          `instead is not an option -- a capture that parses with its own code is not ` +
+          `instead is not the fallback -- a capture that parses with its own code is not ` +
           `evidence about the shipped parser.`
       );
       process.exit(2);
     }
+    // ONE DIRECTORY, COPIED BY NAME. Anything else npm happened to leave in the
+    // temp tree stays there.
+    fs.mkdirSync("node_modules", { recursive: true });
+    fs.cpSync(from, path.join("node_modules", "typescript"), { recursive: true });
+    const installed = fs.readdirSync(path.join(tmp, "node_modules")).filter((d) => !d.startsWith("."));
+    console.log(`relay: typescript in place (isolated install held ${installed.length}: ${installed.join(", ")})`);
   }
 }
 
