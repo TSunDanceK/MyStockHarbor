@@ -72,7 +72,81 @@ const fetchText = async (url, label) => {
 };
 
 console.log("LISTING VENUE DIFF — nasdaqtraded.txt (#448) vs SEC exchange column (manifest)");
-console.log(`dump: ${DIR}`);
+
+// ── DUMP PROVENANCE, PRINTED FIRST AND BEFORE ANY FINDING ────────────────────
+//
+// WHICH DUMP THIS RAN AGAINST IS PART OF THE ANSWER, NOT METADATA. A stale dump
+// does not fabricate a classification disagreement -- both reference files are
+// fetched LIVE here, so the venue comparison itself is live-vs-live -- but it
+// makes two other things stale, and both feed the headline:
+//
+//   * THE UNIVERSE. An old symbol list is an old denominator. Section 1's
+//     counts, and every percentage built on them, describe whatever set the
+//     dump froze.
+//   * THE DOLLAR-VOLUME WEIGHTS. Section 3 prices the swing from bars in the
+//     dump. Old bars price it wrongly, and that is the number the licensing
+//     case turns on.
+//
+// So provenance goes at the TOP, where it is read before the table rather than
+// looked up afterwards to explain a surprise.
+const provenance = (() => {
+  // The run id is authoritative when relay.yml forwards it. It is NOT relied
+  // on: the env var is a recent addition, and a diff that silently loses its
+  // provenance when dispatched from an older workflow ref would be worse than
+  // one that derives it. So the dump's own file times are read either way.
+  const runId = process.env.DUMP_RUN_ID || null;
+  const artifact = process.env.DUMP_ARTIFACT || null;
+  let newest = null;
+  let oldest = null;
+  try {
+    for (const name of fs.readdirSync(DIR)) {
+      const st = fs.statSync(path.join(DIR, name));
+      if (!st.isFile()) continue;
+      const t = st.mtimeMs;
+      if (newest === null || t > newest) newest = t;
+      if (oldest === null || t < oldest) oldest = t;
+    }
+  } catch {
+    // an unreadable dump dir fails loudly later, at the universe read
+  }
+  // A declared timestamp inside the payload beats a file mtime, which a zip
+  // round trip can flatten. Whichever exists is reported; both if both do.
+  let declared = null;
+  try {
+    const u = JSON.parse(fs.readFileSync(path.join(DIR, "universe.json"), "utf8"));
+    declared = u?.generatedAt ?? u?.capturedAt ?? u?._meta?.generatedAt ?? null;
+  } catch {
+    /* reported as absent below */
+  }
+  const basis = declared ? Date.parse(declared) : newest;
+  const ageDays = Number.isFinite(basis) && basis ? (Date.now() - basis) / 86_400_000 : null;
+  return { runId, artifact, declared, newestMtime: newest, oldestMtime: oldest, ageDays };
+})();
+
+const iso = (ms) => (Number.isFinite(ms) && ms ? new Date(ms).toISOString() : "unknown");
+console.log(`\n  DUMP PROVENANCE`);
+console.log(`    directory        ${DIR}`);
+console.log(`    run id           ${provenance.runId ?? "NOT FORWARDED (env DUMP_RUN_ID unset) — see file times below"}`);
+console.log(`    artifact         ${provenance.artifact ?? "(not forwarded)"}`);
+console.log(`    declared time    ${provenance.declared ?? "(none in universe.json)"}`);
+console.log(`    file times       ${iso(provenance.oldestMtime)} .. ${iso(provenance.newestMtime)}`);
+console.log(
+  `    age              ${provenance.ageDays === null ? "UNDETERMINED" : `${provenance.ageDays.toFixed(1)} days`}`
+);
+const STALE_DAYS = Number(process.env.STALE_DAYS ?? 14);
+if (provenance.ageDays === null) {
+  console.log(
+    `    ⚠ AGE UNDETERMINED. Neither a declared timestamp nor usable file times.\n` +
+      `      Treat sections 1 and 3 as describing an unknown vintage of the universe.`
+  );
+} else if (provenance.ageDays > STALE_DAYS) {
+  console.log(
+    `    ⚠⚠ THIS DUMP IS OLDER THAN ${STALE_DAYS} DAYS. The venue comparison below is\n` +
+      `        still live-vs-live and stands, but the UNIVERSE and the DOLLAR-VOLUME\n` +
+      `        WEIGHTS are of that vintage. Do not quote section 3's percentages from\n` +
+      `        a stale dump — re-freeze first.`
+  );
+}
 
 // ── The universe ─────────────────────────────────────────────────────────────
 //
@@ -358,6 +432,8 @@ fs.writeFileSync(
   JSON.stringify(
     {
       generatedAt: new Date().toISOString(),
+      // The report is unusable later without knowing which dump it described.
+      dumpProvenance: provenance,
       universeSource,
       universeSize: analysis.length,
       sessionsForDollarVolume: SESSIONS,
