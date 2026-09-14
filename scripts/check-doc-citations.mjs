@@ -49,14 +49,6 @@ const check = (label, ok, detail = "") => {
 // the next reader to convert a page that was converted long ago. A mirrored doc
 // is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
-  // ADDED 2026-09-14 with the IPO source probe results. The owner read
-  // nasdaq.com/legal from their own browser and recorded the PROHIBITED verdict
-  // there; the doc is Project-side and was not mirrored, same situation as the
-  // seven added with the SEC build brief above. It is cited because it is what
-  // closed Nasdaq permanently -- the probe could not read those clauses itself
-  // (the domain hangs from every egress it has), so the citation is the
-  // provenance for a verdict this repo now acts on.
-  "claude/nasdaq-licence-verdict-2026-09-14.md",
   // ADDED 2026-09-13 with the SEC build brief. The brief and the evidence docs
   // it supersedes landed in the repo together; these seven are cited by
   // earnings-page-free-sources and sec-pipeline-spec and were never mirrored --

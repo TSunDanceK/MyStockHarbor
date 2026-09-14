@@ -60,9 +60,14 @@ and has no idea where the split came from. That matters in §5.
 
 ## 2. P1 — Nasdaq, and the egress question
 
-### 2a. Residential (P1a) — NOT MEASURED HERE
+### 2a. Residential (P1a) — ANSWERED: IT WORKS
 
-Owner-side step, per §0.1.
+Owner-side step, per §0.1, and now run: `api.nasdaq.com/api/ipo/calendar?date=2026-09`
+returned `rCode: 200` and a full payload **immediately** from the owner's residential UK
+connection — no challenge, no hang (`nasdaq-licence-verdict-2026-09-14.md` §1).
+
+**So the datacentre block is IP reputation, not a dead endpoint** — the brief's predicted
+split is confirmed exactly. And under §3a it is a curiosity rather than an architecture.
 
 The repo already holds a residential measurement, and the revision note says it wins:
 `claude/news-adapter-spec-2026-09-13.md` — *"It answered fine from a residential network
@@ -127,11 +132,14 @@ standing instruction; the second nobody but the owner can.
 
 | P1a residential | P1b Vercel | meaning |
 |---|---|---|
-| **unmeasured** (prior: sibling host worked) | **blocked** (prior: sibling host; runner hang corroborates on the IPO host) | the brief's middle row, and it is where the evidence points |
+| **WORKS** (measured, §2a) | **blocked** (prior: sibling host; runner hang corroborates on the IPO host) | the brief's middle row, confirmed |
 
-If the owner's PC answers `api.nasdaq.com` — a one-minute check, §8 — then the brief's own
-conclusion follows and is worth quoting: *"'automated' and 'manual' are not opposites
-here. The gathering can be fully automated on the owner's PC; only the merge is manual."*
+**And the brief's conclusion from that row does not survive contact with §3a.** It reads:
+*"'automated' and 'manual' are not opposites here. The gathering can be fully automated on
+the owner's PC; only the merge is manual."* That is exactly the design `nasdaq.com/legal` §2
+forbids — it names *"automated or manual"* capture in the same breath — and §7 names
+*"placing … Nasdaq's content on a third party platform"*, which is the page. **The middle row
+turned out to be the trap, not the answer.** Reachability decided nothing.
 
 ---
 
@@ -172,24 +180,67 @@ Nobody should build on `api.nasdaq.com` until a human opens
 
 ### 3a. RESOLVED, same day — PROHIBITED
 
-The owner read `nasdaq.com/legal` from their own browser and reports **§2, §6, §7 and §11
-prohibit this use**. Recorded in `claude/nasdaq-licence-verdict-2026-09-14.md` (Project-side;
-not mirrored into the repo as of this writing).
+**Superseding the relayed version of this section.** `claude/nasdaq-licence-verdict-2026-09-14.md`
+is now mirrored and the clauses are quoted from it directly, not paraphrased from a search
+summary. The live agreement is at **`https://www.nasdaq.com/legal`** — note that
+`/terms-of-service` and `/terms-and-conditions` both **404**, which is why this probe's
+attempt to read the terms was aimed at a URL that does not exist (§2c). Read 2026-09-14.
 
-**Corroborated independently**, since the §-numbering could not be checked from here: a
-search against [nasdaq.com/legal](https://www.nasdaq.com/legal) returns terms prohibiting
-*"using, copying, or extracting any Content without express written permission, including
-scraping, data mining, and automated or manual processes to capture or compile content"*,
-and separately prohibiting *"accessing or using any process, whether automated or manual, to
-capture data or content from the Service."* Unauthorised use is stated to be a breach that
-*"may result in immediate termination of access … and may lead to legal action."* That is a
-prohibition on the exact activity, and the *"automated or manual"* wording forecloses the
-obvious workaround — **a human copying the calendar by hand is named in the same clause as
-the script.** Read 2026-09-14.
+> **§2, Your Responsibilities.** *"Not access or use the Service, or any process, whether
+> automated or manual, to capture data or content from the Service or circumvent any
+> mechanisms for preventing the unauthorized reproduction or distribution of the Service for
+> any reason"*
+
+> **§6, License.** *"Nasdaq grants you a personal, limited, revocable, non-exclusive,
+> non-assignable, non-sublicensable and non-transferable license to use the Services solely
+> for your personal, non-commercial use. Except as expressly authorized by Nasdaq, you agree
+> not to sell, copy, distribute, or create derivative works based on the Services, in whole
+> or in part."*
+
+> **§7, Restrictions.** *"you shall not market, sell or distribute the Services or otherwise
+> provide the Services to any third parties including, but not limited to, **placing or
+> distributing any Nasdaq's content on a third party platform** … without Nasdaq's prior
+> written consent."*
+
+> **§11, Ownership.** *"You may not copy, reproduce, transmit, display, perform, distribute,
+> rent, sublicense, alter, store for subsequent use, create any derivative works from, offer
+> products or services based on, or otherwise use in whole or in part in any manner the
+> Content without the prior written consent of Nasdaq."*
+
+**§6 is the one that matters most, and it is the FMP situation verbatim:** the licence
+granted is *"personal, non-commercial"* — the exact category this site was found to have
+outgrown when FMP came back asking $20,000. §2's *"automated or manual"* forecloses the
+workaround: **a human copying the calendar by hand is named in the same clause as the
+script.** §7 names the specific act — *"placing … Nasdaq's content on a third party
+platform"* — which is what the page would be.
+
+**And the escalation route is closed too.** The payload's own footer reads
+`"LAST UPDATED: 09/14/2026* - Source: EDGAR® Online"`. Nasdaq is **redisplaying a licensed
+commercial product** (EDGAR Online, a DFIN service) under its own contract. It is not in a
+position to grant rights it does not hold, so "email and ask" is not a pending option — it
+is a closed one.
 
 This is the answer the brief predicted it might be, and the reason it insisted the licence
 question was *"not an afterthought"*: **reachability without permission was never a route.**
 The residential path works and may not be used. Nothing further should be spent on it.
+
+### 3a-i. Two things the residential fetch recorded that change the picture anyway
+
+Worth keeping even though the source is closed, because both cut against the assumption that
+Nasdaq was the good option that got away:
+
+- **The feed is thin.** September's entire `upcoming` bucket was **3 rows**; `priced` was
+  **2**. The Upcoming table would have rendered three lines. A free automated Nasdaq feed
+  would **not** have reproduced what FMP shows.
+- **It is Nasdaq-only.** Every row is `NASDAQ Capital` / `Global` / `Global Select`. No NYSE
+  listings at all. Against measured demand this is a real gap, not a technicality:
+  **13 impressions explicitly ask for NYSE** (`nyse ipo calendar`, `upcoming ipo nyse`, and
+  five more — `ipo-query-intent-measured-2026-09-14.md` §4). Nasdaq's feed could never have
+  served them. **SEC covers both exchanges.** On this dimension the licence-clean source is
+  the *better* one, not the compromise.
+- **No market-cap field exists in any bucket** — confirming §7's table independently. That
+  column loses its source under *every* free route and gets hidden, per the standing
+  convention.
 
 ### 3b. Nasdaq is dead permanently — alongside Stooq
 
@@ -390,14 +441,12 @@ option is chosen, exactly as the brief argues.
 
 Every cell measured or explicitly marked unmeasured. **No cell inferred.**
 
-**UPDATED 2026-09-14, later the same day.** The two cells this probe left open were filled
-by the owner from their own machine and browser, recorded in
-`claude/nasdaq-licence-verdict-2026-09-14.md`. **That doc is not in the repo** — it exists
-Project-side and was not mirrored, the same gap §6 describes below and `CLAUDE.md` records
-twice. Its verdict is taken as given here; its §-numbering (`nasdaq.com/legal` §2/§6/§7/§11)
-is quoted from the owner's report, **not from clause text read by this probe** — the domain
-hangs from every egress available to it (§2c). The prohibition itself is corroborated
-independently (§3a).
+**UPDATED 2026-09-14, later the same day, and again once the source docs landed.** The two
+cells this probe left open were filled by the owner from their own machine and browser:
+`claude/nasdaq-licence-verdict-2026-09-14.md` (reachability + the licence) and
+`claude/ipo-query-intent-measured-2026-09-14.md` (the Search Console breakdown §8 asked for).
+Both are now **mirrored into the repo**, so the clauses in §3a are quoted from the agreement
+rather than relayed, and the coverage figures in §8 are measured rather than marked unknown.
 
 | | Nasdaq (residential) | Nasdaq (Vercel) | SEC EDGAR | FMP (reference) |
 |---|---|---|---|---|
@@ -460,6 +509,20 @@ issuer's own release or from EDGAR sidesteps Nasdaq's contract entirely. **That 
 mine, not legal advice, and the FMP episode is the argument for getting it confirmed in
 writing before building on it.**
 
+> **CORRECTION to my own costing above, from `nasdaq-licence-verdict-2026-09-14.md` §4.**
+> I costed Option 1 as *"keeps the forward calendar"* — the thing it is supposed to buy for
+> its weekly 15–30 minutes. That framing was too generous, and the verdict doc is right to
+> flag it. **Every convenient compiled calendar is somebody's licensed compilation** under
+> its own terms — that is the general form of the Nasdaq finding, not a quirk of Nasdaq. The
+> only clean sources left are *primary*: the issuer's own pricing press release and the
+> prospectus. **Both land at roughly 424B4 timing**, i.e. the same median **~2 days** EDGAR
+> already gives for free.
+>
+> So Option 1 may buy **no additional lead time at all** — just a tidier date on a deal that
+> is already listing this week, in exchange for a permanent weekly manual job and an
+> unresolved licence question. **That should be measured before Option 1 is costed as if it
+> delivers a week's notice.** It is not the option it looked like yesterday.
+
 ### Option 2 — retire the forward half, run recently-listed only
 
 | | |
@@ -498,49 +561,103 @@ the measurements rather than assumed:
 | JSON-LD | generic `ItemList`, gated on `upcomingFeed.ok` | survives; the `ok` gate moves to the single feed |
 | Traffic | **632 impressions / 90d**, described as the site's highest-impression page | the part driven by forward intent is at risk |
 
-**What I cannot tell you, and it is the number that decides this.** The 632 figure comes
-from the instructions brief. The underlying audit — `claude/seo-recovery-plan-2026-08-15.md`
-— is **Project-only and not mirrored** (it is entry #1 on `check-doc-citations.mjs`'s
-backlog, cited by 8 code files). I have no query-level breakdown and no way to reach Search
-Console. **So the honest statement of the SEO cost is: the full 632/90d is the exposure, and
-the share of it attributable to forward-intent queries is unmeasured.** I will not put a
-percentage on it. If most of those impressions are for *"upcoming IPO"*-shaped queries,
-Option 2 is expensive; if they are for *"IPO calendar"* or *"new IPOs"* generally, it is
-cheap. **That is a five-minute check in Search Console** (Performance → filter by page
-`/upcoming-ipos` → Queries) and it should happen before either option is chosen.
+**MEASURED — the number §8 originally left open.** `claude/ipo-query-intent-measured-2026-09-14.md`
+read it from Search Console (`sc-domain:mystockharbor.com`, page filter exact, 90d to
+2026-09-12). It supersedes the 632 figure and my refusal to put a share on it:
+
+| | |
+|---|---|
+| Impressions, 90d | **827** (up from the 632 in the 2026-08-15 audit) |
+| Clicks · CTR · position | **0 · 0% · 67** — page 7 |
+| Distinct queries | 239, carrying **494** impressions; the other **333 (40%) are Google's anonymised tail** and cannot be classified by anyone |
+
+**The exposure is real but theoretical.** At position 67 with zero clicks across 90 days,
+this page converts nothing today. That cuts both ways, and the doc says so: *"there is less
+to lose by changing it than the impression count suggests, and less to protect by leaving it
+alone."*
+
+**The classification, as shares of the 494 named:**
+
+| Bucket | Impressions | Share | Served by |
+|---|---|---|---|
+| **Forward-looking, no date needed** | **160** | **32.4%** | watchlist, or EDGAR+dates |
+| **Needs an actual date** | 155 | 31.4% | EDGAR+curated dates only |
+| Neutral — "who/what list" | 96 | 19.4% | any option |
+| Backward — recently listed | 50 | 10.1% | recently-listed, or EDGAR+dates |
+| Named company / historical | 27 | 5.5% | **none of them** |
+| Brand | 6 | 1.2% | — |
+
+**The finding is that forward-but-undated is the largest single bucket, and it beats the
+dated one — 32.4% against 31.4%.** `upcoming ipos` (29), `upcoming ipo` (21),
+`companies going public` (6), `future ipos` (4), `ipos to come` (3), `rumoured ipos` (3),
+`what ipos are coming up` (3). **None of those asks when. They ask who** — and *who* is
+exactly what an S-1/A watchlist knows, from a public-domain source, with no curation.
+
+I proposed 2(c) yesterday on structural grounds, without this number. The number supports it,
+and I should be clear that it did not have to: had the dated bucket dominated, 2(c) would
+have been the wrong recommendation and Option 1's blocked licence question would have become
+the critical path.
+
+**And 31.4% is an upper bound on what dropping dates costs, not the expected loss.**
+`ipos this week` (6), `ipo today` (6), `today ipo` (5), `new ipo today` (5) sit in the dated
+bucket — but **an IPO that listed this morning is "ipo today"**, and a recently-listed table
+serves it.
+
+**Coverage of the 494 named impressions:**
+
+| | Serves | Coverage | Weekly human time |
+|---|---|---|---|
+| 1 — EDGAR + curated dates | all but company/historical | **~93%** | 15–30 min, **and blocked on a date source** |
+| 2 — recently-listed only | backward + neutral | **~30%** | zero |
+| **2(c) — S-1/A watchlist, undated** | forward-undated + neutral | **~52%** | **zero** |
+| **2(c) + recently-listed, both tables** | forward-undated + neutral + backward | **~62%** | **zero** |
+
+**Three things the tail surfaced that none of my analysis had:**
+
+1. **NYSE is asked for and has never been covered** — 13 impressions across seven queries
+   (`nyse ipo calendar`, `upcoming ipo nyse`, …). Nasdaq's feed was Nasdaq-only and could
+   never have served them; **SEC covers both exchanges.** The licence-clean source is better
+   here, not a compromise.
+2. **Two pre-IPO SPACs are being searched by name and landing on this page** — `southern
+   cross acquisition i corp.` (3) and `east west ave acquisition corp.` (3), together more
+   than the brand query. They have **filed and not priced**, so the current priced-only page
+   shows them nothing. A watchlist would be the first version of this page that answers them.
+3. **The property is verified.** `seo-recovery-plan-2026-08-15.md` lists verification as an
+   open action; it is done. That item can be closed.
 
 **Three ways to handle the URL, if Option 2 is taken:**
 
 - **(a) Keep `/upcoming-ipos`, repurpose the content.** Keeps every inbound link and all
-  equity; costs nothing mechanically. But a page slugged and linked "upcoming" that serves
-  only past listings is an intent mismatch, and it stops answering the head query. Worst
-  case is leaving the word "upcoming" anywhere in the copy while the data is backward.
+  equity. But a page slugged and linked "upcoming" that serves only past listings is an
+  intent mismatch, and it walks away from the 32.4% bucket that is already the largest.
 - **(b) New `/recently-listed-ipos`, 301 from `/upcoming-ipos`.** `next.config.js` already
-  carries a documented 301 block with a duplicate-consolidation precedent, so this is cheap
-  to build. Cleanest intent signal, equity transfers — but it *explicitly* abandons the
-  forward query rather than losing it by neglect.
+  carries a documented 301 block with a duplicate-consolidation precedent, so it is cheap to
+  build. Cleanest intent signal — but it *explicitly* abandons the forward query.
 - **(c) Keep the URL and answer the query honestly.** The S-1/A watchlist is licence-clean,
-  forward-looking, and **~4.8 companies/week** — it simply has no date. A section reading
-  *"these companies have filed to list and set terms; underwriters do not publish the date
-  until pricing"* is a truthful answer to "upcoming IPOs", keeps the slug, title, H1 and all
-  5 internal links honest, and needs **no curation and no second source**. It is weaker than
-  a dated calendar and stronger than nothing.
+  forward-looking, **~4.8 companies/week**, and simply has no date. *"These companies have
+  filed to list and set terms; the listing date is not announced until pricing"* is a true
+  answer to "upcoming IPOs", keeps the slug, title, H1 and all 5 internal anchors truthful,
+  and needs **no curation and no second source**.
 
-**(c) is the option the measurements actually favour** and it was not in the brief's original
-two. It is Option 2's zero-maintenance cost with most of Option 1's SEO position, bought by
-giving up the one field that was never obtainable for free anyway.
+**(c), run alongside the recently-listed table, is the recommendation** — ~62% coverage at
+zero maintenance, entirely public domain. It is also **the smallest change to `page.tsx` of
+any option here**, because it is the page's existing two-table layout with both tables
+re-sourced.
 
 ### Side by side
 
-| | Option 1 — EDGAR + curated dates | Option 2 — recently-listed only |
-|---|---|---|
-| Forward calendar | yes, with dates | no (or dated-free, under 2c) |
-| Weekly human time | ~15–30 min, **if a legal date source exists** | **zero** |
-| Blocked on anything? | **yes** — no licence-clean date source identified | no |
-| Data correctness risk | range published, then priced outside it; parser 3/8 on price | low — prices are final |
-| Ticker coverage | stuck at 5/8 | high, via the existing CIK map |
-| SEO | preserved | **exposed: up to 632 impressions/90d, share unmeasured** |
-| Build size | adapter + curation + merge + switch | adapter + delete + URL decision |
+| | 1 — EDGAR + curated dates | 2 — recently-listed only | **2(c) + recent — recommended** |
+|---|---|---|---|
+| Intent coverage (of 494 named) | ~93% | ~30% | **~62%** |
+| Weekly human time | 15–30 min | zero | **zero** |
+| Blocked on anything? | **yes** — no licence-clean date source | no | **no** |
+| Actual lead time bought | **~2 days** — see the correction above | ~0 | ~7 days (terms set), undated |
+| Data correctness risk | range published, then priced outside it; parser 3/8 on price | low — prices final | low |
+| Ticker coverage | stuck 5/8 | high, via the existing CIK map | high below, 5/8 above |
+| NYSE covered | yes | yes | **yes** |
+| Answers the named-SPAC queries | yes | no | **yes** |
+| SEO posture | preserved | **abandons the largest bucket** | slug/title/H1 stay truthful |
+| Build size | adapter + curation + merge + switch | adapter + delete + URL decision | **adapter + re-source two tables** |
 
 **They are not exclusive, and the sequencing is free.** Option 2 is Option 1 minus the
 curation layer, over the same adapter. Shipping 2 first — ideally as 2(c) — gets the page
