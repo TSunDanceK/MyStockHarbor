@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import readline from "node:readline";
+import { symbolSpellings } from "./lib/symbol-spellings.mjs";
 
 const DIR = path.resolve(process.argv[2] ?? "step0-dump");
 const UA =
@@ -137,7 +138,10 @@ if (!nasdaqFileOk && !secFileOk) {
 // assuming, and the misses are reported so an unresolved symbol is visible rather
 // than silently filed as "other".
 const lookupVenue = (sym) => {
-  const alts = [sym, sym.replace(/\./g, "-"), sym.replace(/-/g, ".")];
+  // Spellings come from scripts/lib/symbol-spellings.mjs, which also knows the
+  // DOLLAR form Nasdaq Trader uses for suffixed preferreds. This was the first
+  // of three local copies that knew only dot/dash.
+  const alts = symbolSpellings(sym);
   for (const a of alts) {
     const v = venueBySymbol.get(a);
     if (v) return { code: v, via: "nasdaqtraded", matched: a };
