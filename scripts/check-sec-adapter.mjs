@@ -47,6 +47,12 @@ let src = read("lib/server/news/secProvider.ts")
     () => `const cikMap = ${read("data/cik-map.json")};`)
   .replace(/^import \{ stripHtmlTags \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
+  // The shared User-Agent, inlined rather than stubbed: sec.gov's fair-access
+  // policy asks for identification, and a stub would let an empty one through
+  // here. It has no imports of its own. scripts/check-news-user-agent.mjs owns
+  // the assertions about the value itself.
+  .replace(/^import \{ secUserAgent \} from ".\/userAgent";$/m,
+    () => read("lib/server/news/userAgent.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
   .replace("const CIK_BY_SYMBOL = cikMap as Record<string, string>;", "const CIK_BY_SYMBOL = cikMap;")
   .replace("export const secProvider: NewsProvider =", "export const secProvider =")
@@ -281,10 +287,21 @@ check(
     /data\.sec\.gov\/submissions\/CIK\$\{cik\}\.json/.test(secSrc)
 );
 check("revalidate 3600 is kept", /next: \{ revalidate: 3600 \}/.test(secSrc));
+// WIRING ONLY. This used to pin the literal `process.env.SEC_USER_AGENT || "..."`
+// shape inline, which broke the moment the default was moved into a shared
+// module -- and would have kept passing had the module returned "". The VALUE
+// assertions (non-empty under an unset, empty or whitespace variable; the env
+// var still winning where it is set) are behavioural and live in
+// scripts/check-news-user-agent.mjs, which can call the real function.
 check(
-  "a declared User-Agent is sent whether or not SEC_USER_AGENT is set",
-  /"user-agent": userAgent\(\)/.test(secSrc) && /process\.env\.SEC_USER_AGENT \|\| "/.test(secSrc),
+  "a declared User-Agent is sent, via the shared helper",
+  /"user-agent": secUserAgent\(\)/.test(secSrc),
   "fair access asks for identification; an anonymous request that works is still one that should not be made"
+);
+check(
+  "...and the adapter no longer carries its own copy of the default",
+  !/const userAgent = |function userAgent\(/.test(secSrc),
+  "two UA literals is two strings that drift, and only one of them gets kept truthful"
 );
 const vercel = JSON.parse(read("vercel.json"));
 check("still no news cron", (vercel.crons ?? []).filter((c) => /news/i.test(c.path)).length === 0);
@@ -398,6 +415,76 @@ check(
   "the default is free, and fmp is the explicit rollback",
   /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(index),
   "step 7 flipped it; an unrecognised value now falls back to free"
+);
+
+console.log("\n=== 11. THE DOT/DASH SPLIT, RE-LANDED ON THIS LOOKUP ===\n");
+
+// BRK.B was one of eleven misses in relay run 47 and the only one that was
+// OURS: BRK-B is in the map, BRK.B is not, and both spellings of one company
+// live in this repo's own data. Same bug #448 fixed for taxonomy
+// (claude/symbol-spelling-split-2026-09-12.md), different lookup.
+check(
+  "the dashed spelling is the one SEC and the map agree on",
+  typeof map["BRK-B"] === "string" && map["BRK-B"].length === 10,
+  "if this ever flips, the normalisation below is pointing the wrong way"
+);
+check(
+  "...and the dotted spelling is NOT a key — normalisation, not a second entry",
+  !("BRK.B" in map),
+  "duplicating the row would double every dual-class name and still miss the next one"
+);
+check(
+  "a dotted symbol resolves to the dashed CIK",
+  sec.cikFor("BRK.B") === map["BRK-B"],
+  "this is the whole fix; without it BRK.B has a permanently empty SEC leg"
+);
+check(
+  "...and so does a lowercase, padded one — the same entry point normalises both",
+  sec.cikFor("  brk.b ") === map["BRK-B"]
+);
+check(
+  "an exact match still wins over any rewriting",
+  (() => {
+    // AGAINST THE REAL MAP THIS IS UNTESTABLE, and asserting it there was
+    // decorative: no key both contains a dot and exists in its own right, so
+    // the branch separating "exact first" from "rewrite first" is never taken
+    // and a mutation swapping them survived. A crafted map is the only thing
+    // that discriminates -- which is why cikFor takes one.
+    const crafted = { "A.B": "0000000001", "A-B": "0000000002" };
+    return sec.cikFor("A.B", crafted) === "0000000001" &&
+      sec.cikFor("A-B", crafted) === "0000000002" &&
+      // and the live map still behaves
+      sec.cikFor("AOS") === map["AOS"] && sec.cikFor("MU") === map["MU"];
+  })(),
+  "a symbol that legitimately holds its own spelling must never be rewritten past itself"
+);
+check(
+  "fetchForSymbol goes THROUGH the helper, not around it to the raw map",
+  (() => {
+    // The helper can be perfect and unused. Structural, because the adapter's
+    // own fetch cannot be run here without the network.
+    const code = readCodeOnly("lib/server/news/secProvider.ts");
+    const at = code.slice(code.indexOf("async function fetchForSymbol"));
+    const body = at.slice(0, 400);
+    return /const cik = cikFor\(upper\)/.test(body) && !/CIK_BY_SYMBOL\[/.test(body);
+  })(),
+  "a normalisation the one caller bypasses is a normalisation that does nothing"
+);
+check(
+  "a symbol in neither spelling still returns undefined, not a wrong CIK",
+  sec.cikFor("ZZZZ.Z") === undefined && sec.cikFor("NOTATICKER") === undefined,
+  "a fallback that invents a hit is worse than the miss it replaces"
+);
+check(
+  "the rewrite is ONE-WAY: a dashed miss does not fall back to a dotted key",
+  (() => {
+    // The dashed spelling is canonical everywhere this repo stores data. A
+    // two-way normalisation would make the dotted form look equally valid,
+    // which is the habit that caused this in the first place.
+    const code = readCodeOnly("lib/server/news/secProvider.ts");
+    return /upper\.includes\("\."\)/.test(code) && !/replace\(\/-\/g, "\."\)/.test(code);
+  })(),
+  "one canonical spelling, one direction of tolerance"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

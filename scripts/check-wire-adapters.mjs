@@ -52,6 +52,13 @@ let src = read("lib/server/news/wireProvider.ts")
   // could not say which of the two feeds it was.
   .replace(/^import \{ beginTiming \} from "\.\.\/timing";$/m,
     () => read("lib/server/timing.ts").replace(/^export /gm, ""))
+  // The User-Agent, inlined rather than stubbed for the same reason as the
+  // timers: the REAL value is what the fetch would send, and a stub would let
+  // an empty one pass here. It has no imports of its own, so there is nothing
+  // to unwind. See scripts/check-news-user-agent.mjs for what it guards --
+  // without this header globenewswire returns zero bytes for 20 seconds.
+  .replace(/^import \{ newsUserAgent \} from "\.\/userAgent";$/m,
+    () => read("lib/server/news/userAgent.ts").replace(/^export /gm, ""))
   .replace("export const wireProvider: NewsProvider =", "export const wireProvider =")
   .replace(/export function imageVerdictFor\(imageUrl: string \| null, credit: string \| null\): NewsItem\["imageVerdict"\]/,
            "export function imageVerdictFor(imageUrl, credit)")

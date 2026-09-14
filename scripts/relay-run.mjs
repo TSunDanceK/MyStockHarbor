@@ -53,6 +53,19 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Name-matching, NOT ticker-matching -- the ticker key is what failed.
+  //
+  // needsDump WAS true AND IS NOW FALSE, because run 48 proved the dump has
+  // nothing this task wants: its FMP cache rows carry sector and industry and
+  // no company name at all, so the run came back void. Names now come from the
+  // Nasdaq Trader directory, fetched on the runner. The dump is still READ if
+  // one is attached -- it contributes the pickers half of the universe -- but
+  // requiring it would make the task wait on an artifact it does not need.
+  "sec-titles": {
+    script: "scripts/sec-title-candidates.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: false,
+  },
   "sec-fundamentals": {
     script: "scripts/sec-fundamentals-ingest.mjs",
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
