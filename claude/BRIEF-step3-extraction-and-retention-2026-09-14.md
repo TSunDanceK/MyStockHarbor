@@ -85,6 +85,65 @@ The asymmetry is therefore stark and one-sided:
 
 **Err wide.** Proposal: `claude/step3-stored-field-list-2026-09-14.md`.
 
+## PRECONDITION — extraction must not run on a shared CIK
+
+**Not a follow-up. Extraction cannot ship without this.**
+
+Preferreds and baby bonds resolve to the **parent's CIK**, so extraction keyed on
+ticker stores the parent's financials under the derivative's symbol.
+`/stock/MER-PK/earnings` renders Bank of America's revenue, EPS, margins and cash
+flow: a complete, plausible, entirely wrong page. `state-2026-09-13.md` documents
+this and specifies a **preferred/baby-bond filter at universe admission**, which
+removes the 424B2 filing-noise problem in the same rule — MER-PK alone filed 143
+rows in four days.
+
+### The detector is data-driven, and measured
+
+Not a pattern match on the ticker: **a symbol whose CIK is shared with another
+symbol in the manifest.** Measured over the frozen snapshot through the shipped
+`parseTickerFile`:
+
+```
+54 groups, 132 symbols of 2,619 (5.0% of the universe)
+```
+
+It catches all seven named symbols, the warrant and the unit rows, and 47 groups
+nobody had listed.
+
+### But it needs a DISPOSITION rule, which is not yet decided
+
+"Shared CIK" is the right **detector** and is not on its own a sufficient
+**exclusion**, because two different things share a CIK:
+
+| | Example | Is the page right? |
+|---|---|---|
+| **Share class** | `GOOGL`/`GOOG`, `BRK-A`/`BRK-B`, `FOXA`/`FOX`, `UAA`/`UA` | **Yes.** Both are equity in the same issuer; the parent's financials are the correct content for both. |
+| **Preferred / baby bond** | `BAC`/`MER-PK`, `T`/`TBB`, `PRU`/`PFH`, `UNM`/`UNMA` | **No.** A different security with different economics. Common-stock EPS is not a claim the holder has. |
+
+Applied literally, "exclude on shared CIK" drops `GOOG`, `BRK-A`, `FOX`, `NWS`,
+`UA`, `Z` — legitimate pages.
+
+**And ticker shape cannot tell the two apart.** Attempting exactly that
+misclassified `T TBB`, `PRU PFH PRH PRS`, `UNM UNMA` and `SO SOJC SOJD SOJE SOMN`
+as share classes on the first try, because baby bonds carry plain alphabetic
+tickers. That failure is the evidence for the instruction: **data-driven, not a
+pattern match.**
+
+**Candidate signal, not yet verified:** `nasdaqtraded.txt` carries a Security Name
+column that distinguishes "Class A Common Stock" from "% Notes due …" and
+"Preferred Stock". It is already fetched by `scripts/listing-split.mjs` and
+`scripts/listing-venue-diff.mjs`, so confirming it is a relay dispatch rather than
+new infrastructure. **Proposed, not built** — the disposition rule is a decision.
+
+### Six groups have no parent in the universe at all
+
+`OAK-PA OAK-PB` · `CTA-PB CTA-PA` · `BRK-B BRK-A` · `FCNCA FCNCN` ·
+`FWONA FWONK` · `BATRA BATRK`
+
+Two of these (`OAK-*`, `CTA-*`) are preferreds whose common is absent, so there is
+no correct page to render and no parent row to defer to. They want the
+unclassified-style explicit bucket rather than a silent drop.
+
 ## Validation
 
 Diff **every** extracted number against the frozen FMP ground-truth dump.

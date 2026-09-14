@@ -65,6 +65,35 @@ Carrying both labels with provenance avoids the choice entirely: the SIC label
 and the FMP label each say what they are, and `sectorSource`/`industrySource`
 records which one a page is showing.
 
+### SIC is a SECOND OPINION, not only a fallback
+
+Decision 2 lists SIC as the fourth leg of the resolution chain — used when the
+first three have nothing. **It should also run where they do have something.**
+
+`Media & Entertainment` (1 symbol, LION — Lionsgate) is filed under sector
+**Technology** while all 43 other media-adjacent symbols are under Communication
+Services. That is a **sector-column** error, and neither remedy on the table
+reaches it: an industry alias map operates on the wrong column, and a per-symbol
+override list is the hand-edit vector this brief already rules out.
+
+SIC classifies Lionsgate **independently of the snapshot**. So where the
+snapshot's sector and the SIC-derived sector **disagree**, that is a candidate
+error in one of them —
+
+- **countable** (a number, tracked over time, not an anecdote),
+- **auditable** (each disagreement names two sources and a symbol),
+- **generated rather than maintained** (no list for anyone to keep current).
+
+LION surfaces in that diff without anyone having to spot it. Which matters,
+because nobody did: it took enumerating the tail to find one wrong sector page,
+and the only reason it was findable at all is that its industry label was a
+singleton. A misfiled symbol inside a large label leaves no trace of that kind.
+
+**This does not change decision 1.** The 11 sectors are fixed; SIC produces a
+*disagreement report*, not an override. What is done about each disagreement is a
+separate decision, and defaulting to "SIC wins" would be the same unfalsifiable
+mapping the bare-label families argue against.
+
 ### Separators, and why exact match is scoped
 
 **87 of 144 labels (60%) carry `-`, `&` or `,`**, covering **1,601 of 2,619
@@ -120,5 +149,20 @@ alias map is not the whole remedy either.
 
 **Half of all symbols sit in the top 22 labels (15% of them); 68 of 144 labels
 hold ≤10 symbols and cover 14.5%.** The ≤3 band is 16 labels / 30 symbols /
-**1.1% of coverage** — a near-free size floor for anything with a per-industry
-cost, such as news art.
+**1.1% of coverage**.
+
+**But rank the tail by WEIGHT, not count.** `Home Improvement` holds three
+symbols — two of which are **Home Depot and Lowe's**. By symbol count it is in
+the smallest decile; by any measure a reader would recognise it is one of the
+largest categories on the site. A count-based floor would have folded it, and the
+only reason that did not happen is that the audit listed the symbols rather than
+trusting the number.
+
+The frozen dump carries `history-bars.ndjson.gz`, so **mean daily dollar volume is
+computable per label** — the same weighting `scripts/listing-split.mjs` already
+applies to the venue split, where it changed a 32.9%-by-count answer into a
+62.5%-by-dollar-volume one. Any size floor should be weighted the same way, and
+the machinery exists.
+
+`claude/taxonomy-tail-audit-2026-09-14.md` is the worked example: of 16 labels in
+the ≤3 band, four survived inspection as genuinely distinct.

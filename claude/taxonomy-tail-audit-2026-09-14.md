@@ -84,10 +84,38 @@ That strengthens the case rather than weakening it: SIC 6022 "State Commercial
 Banks" would have to target a label whose membership is partly not banks at all,
 with no way to detect the error downstream.
 
-Separately, these 13 rows bear on the **universe**, not just the taxonomy — a
-preferred share has no `companyfacts` of its own, so anything keyed per symbol
-will find nothing for them and report nothing about it. Worth its own look before
-step 3 stores per-symbol financials.
+> ### CORRECTION, 2026-09-14 — this was inverted, and the inversion mattered
+>
+> I wrote that "a preferred share has no `companyfacts` of its own, so anything
+> keyed per symbol will find nothing for them and report nothing about it."
+> **That is wrong, and wrong in the most consequential direction: I called a live
+> correctness bug a no-op.**
+>
+> Preferreds resolve to the **parent's CIK**. Verified against the committed
+> ticker map through the shipped parser:
+>
+> ```
+> MER-PK -> 0000070858  = BAC's CIK      MKC-V -> 0000063754  = MKC
+> EP-PC  -> 0001506307  = KMI            TBB   -> 0000732717  = T
+> PFH    -> 0001137774  = PRU            UNMA  -> 0000005513  = UNM
+> EMBJ   -> 0001355444  = EMBRAER
+> ```
+>
+> So step 3 does **not** find nothing. It finds the **parent's complete
+> financials** and stores them under the preferred's ticker.
+> `/stock/MER-PK/earnings` would render Bank of America's revenue, EPS, margins
+> and cash flow — a full page, plausible, entirely wrong. That is the worst
+> failure class in this project, and it is the same shape as every other one
+> found today: it renders as a number, not an error.
+>
+> Already documented in `state-2026-09-13.md` (not mirrored into this repo),
+> section "New, and it is a correctness bug rather than a cost one", naming the
+> same seven symbols. The specified fix is a **preferred/baby-bond filter at
+> universe admission**, which also removes the 424B2 filing-noise problem in one
+> rule — MER-PK alone filed 143 rows in four days.
+>
+> Carried into the step-3 brief as a **precondition**, not a follow-up:
+> `claude/BRIEF-step3-extraction-and-retention-2026-09-14.md`.
 
 (18 rows carry `.` or `-` overall — `BF-B BRK-A BRK-B CIG-C MKC-V MOG-A PBR-A`
 plus the 11 preferreds. The symbol-spelling hazard is already recorded in
