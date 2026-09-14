@@ -346,6 +346,96 @@ const dom = seg(preds.filter((p) => !p.isFpi));
 const fpi = seg(preds.filter((p) => p.isFpi));
 const all = seg(preds);
 
+// ── PER-FILER CADENCE BANDS ────────────────────────────────────────────────
+//
+// THE FILER-LEVEL DISTRIBUTION, NOT THE PREDICTION-LEVEL ONE. The aggregate says
+// 63% of predictions land within +/-3 days, which is a fact about predictions and
+// answers nothing about whether a forward date can be shown for a GIVEN company.
+// A page degrades per symbol or not at all: what matters is how many filers are
+// individually tight enough on their own history to carry a printed date.
+//
+// Each filer is scored on its OWN predictions only. p90 at small n is coarse by
+// construction -- at n=5 the 90th percentile IS the maximum -- so the count is
+// reported beside every figure rather than buried.
+const perFiler = new Map();
+for (const p of preds) {
+  if (!perFiler.has(p.symbol)) perFiler.set(p.symbol, { symbol: p.symbol, isFpi: p.isFpi, errs: [] });
+  perFiler.get(p.symbol).errs.push(Math.abs(p.error));
+}
+const p90of = (xs) => {
+  const s2 = [...xs].sort((a, b) => a - b);
+  return s2[Math.min(s2.length - 1, Math.ceil(0.9 * s2.length) - 1)];
+};
+const filers = [...perFiler.values()].map((f) => ({
+  symbol: f.symbol,
+  isFpi: f.isFpi,
+  n: f.errs.length,
+  med: median(f.errs),
+  p90: p90of(f.errs),
+  over14: f.errs.filter((e) => e > 14).length,
+}));
+const domFilers = filers.filter((f) => !f.isFpi).sort((a, b) => a.p90 - b.p90 || a.med - b.med);
+
+const band = (lo, hi) => domFilers.filter((f) => f.p90 >= lo && f.p90 <= hi).length;
+const within = (k) => domFilers.filter((f) => f.p90 <= k).length;
+
+console.log(`
+================================================================
+PER-FILER CADENCE BANDS — domestic, scored on each filer's own history
+================================================================
+
+  ${domFilers.length} domestic filers, ${preds.filter((p) => !p.isFpi).length} predictions.
+
+FILERS BY PERSONAL p90 ABSOLUTE ERROR (the histogram, not a mean)
+
+| personal p90 (days) | filers | share | bar |
+|---|---|---|---|`);
+const buckets = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 5], [6, 7], [8, 10], [11, 14], [15, 21], [22, 30], [31, 9999]];
+for (const [lo, hi] of buckets) {
+  const n = band(lo, hi);
+  const label = hi === 9999 ? `${lo}+` : lo === hi ? `${lo}` : `${lo}-${hi}`;
+  console.log(`| ${label} | ${n} | ${pct(n, domFilers.length)} | ${"#".repeat(n)} |`);
+}
+
+console.log(`
+CUMULATIVE
+  personal p90 within +/-1 day    ${within(1)} of ${domFilers.length}  (${pct(within(1), domFilers.length)})
+  personal p90 within +/-2 days   ${within(2)} of ${domFilers.length}  (${pct(within(2), domFilers.length)})
+  personal p90 within +/-3 days   ${within(3)} of ${domFilers.length}  (${pct(within(3), domFilers.length)})
+  personal p90 within +/-7 days   ${within(7)} of ${domFilers.length}  (${pct(within(7), domFilers.length)})
+  personal p90 beyond +/-14 days  ${domFilers.filter((f) => f.p90 > 14).length} of ${domFilers.length}  (${pct(domFilers.filter((f) => f.p90 > 14).length, domFilers.length)})
+
+EVERY DOMESTIC FILER (sorted by personal p90)
+
+| symbol | preds | personal median abs (d) | personal p90 abs (d) | own misses >14d |
+|---|---|---|---|---|`);
+for (const f of domFilers) {
+  console.log(`| ${f.symbol} | ${f.n} | ${f.med} | ${f.p90} | ${f.over14} |`);
+}
+
+// The tail carriers, named with their own figures rather than as a count.
+const tailCarriers = [...domFilers].sort((a, b) => b.over14 - a.over14).filter((f) => f.over14 > 0);
+console.log(`
+THE TAIL CARRIERS — filers by their own count of >14d misses
+
+| symbol | preds | own misses >14d | personal median abs (d) | personal p90 abs (d) |
+|---|---|---|---|---|`);
+for (const f of tailCarriers) {
+  console.log(`| ${f.symbol} | ${f.n} | ${f.over14} | ${f.med} | ${f.p90} |`);
+}
+const top7 = tailCarriers.slice(0, 7);
+console.log(`
+  Top 7 carry ${top7.reduce((s2, f) => s2 + f.over14, 0)} of ${tailCarriers.reduce((s2, f) => s2 + f.over14, 0)} domestic >14d misses.`);
+
+// FPI too, for completeness, flagged as thin.
+const fpiFilers = filers.filter((f) => f.isFpi).sort((a, b) => a.p90 - b.p90);
+console.log(`
+FPI FILERS (${fpiFilers.length} -- too few to band, listed raw)
+
+| symbol | preds | personal median abs (d) | personal p90 abs (d) | own misses >14d |
+|---|---|---|---|---|`);
+for (const f of fpiFilers) console.log(`| ${f.symbol} | ${f.n} | ${f.med} | ${f.p90} | ${f.over14} |`);
+
 // ── B4: statutory deadline ─────────────────────────────────────────────────
 // 40 days after period end for large accelerated filers, 45 otherwise.
 const deadlineDays = (category) => (/large accelerated/i.test(category ?? "") ? 40 : 45);
