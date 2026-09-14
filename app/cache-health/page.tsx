@@ -15,6 +15,7 @@ import { isActiveMarketWindow } from "@/lib/server/marketHours";
 import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/stalenessQueue";
 import { readJobRuns } from "@/lib/server/jobRuns";
 import { newsProviderMode, activeNewsProviders, feedMaxAgeDays } from "@/lib/server/news";
+import { readNewsProviderStats } from "@/lib/server/newsStore";
 import { SNAPSHOT_AS_OF, SNAPSHOT_SIZE } from "@/lib/server/staticProfile";
 
 // MANDATORY, NOT A PREFERENCE. lib/server/backfillAuth.ts:16 builds a bare
@@ -238,7 +239,7 @@ export default async function CacheHealthPage({
   // 0..0 per dataset, 30 day-hashes for bytes, one mget for job runs. If this
   // page ever needs a scan to answer something, that answer belongs in a
   // counter instead (spec, "The page must be cheap to load").
-  const [usage, minuteCalls, datasets, jobs, redisBandwidth] = await Promise.all([
+  const [usage, minuteCalls, datasets, jobs, redisBandwidth, providerStats] = await Promise.all([
     readFmpUsage(30),
     getFmpMinuteUsage(),
     readAllDatasetHealth(),
@@ -247,6 +248,11 @@ export default async function CacheHealthPage({
     // 23 days of zeroes rendered beside 7 of data. The window widens on its own
     // once there is a month to widen into.
     readRedisBandwidth(7),
+    // One HGETALL of today's stats hash — the same key readNewsStats already
+    // reads, so this adds one aggregate read and nothing that scales with the
+    // universe. Returns null when Redis is absent, which the panel renders as
+    // "unknown" rather than as zero.
+    readNewsProviderStats(),
   ]);
 
   // COMPUTED ONCE, PASSED IN. Pure arithmetic over Intl -- no Redis, no fetch,
@@ -291,6 +297,53 @@ export default async function CacheHealthPage({
               {newsAdapters.join(" + ")} · {feedMaxAgeDays()}-day feed window
             </span>
           </div>
+
+          {/* ── CONFIGURED vs CONTRIBUTED ─────────────────────────────────
+              THE LINE ABOVE READ "gnews + wire + sec" FOR TWO DAYS WHILE THE
+              WIRE LEG RETURNED NOTHING AT ALL. It was not wrong — those three
+              are registered — it was answering a question nobody was asking. A
+              registered adapter that is being tarpitted renders exactly like a
+              working one, and the failure that made this necessary produced no
+              error, no log line and no thrown promise
+              (claude/wire-egress-verdict-2026-09-14.md).
+
+              So: the row above is what is ASKED. The row below is what ANSWERED.
+              A zero here is the alarm the adapter itself cannot raise. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+            {newsAdapters.map((id) => {
+              // null stats and a zero count are DIFFERENT FACTS. Redis absent
+              // means this panel cannot know; zero means the adapter was asked
+              // today and brought back nothing. Rendering the first as "0"
+              // would report an outage that is really a missing credential.
+              const count = providerStats.status === "ok" ? providerStats.counts[id] ?? 0 : null;
+              const silent = count === 0;
+              return (
+                <span
+                  key={id}
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    border: `1px solid ${silent ? "rgba(234,179,8,0.45)" : "rgba(255,255,255,0.12)"}`,
+                    color: silent ? "#eab308" : "#cbd5e1",
+                  }}
+                >
+                  {id} — {count === null ? "unknown" : `${count.toLocaleString()} items today`}
+                </span>
+              );
+            })}
+          </div>
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 8 }}>
+            Items each adapter <em>returned</em> today, counted before dedup — the question is whether
+            it answered at all, not whether it was first to the story. Registered is the line above;
+            this line is what actually came back. An adapter sitting at zero while the others move is
+            the shape of the GlobeNewswire tarpit, which threw nothing and logged nothing.
+            {providerStats.status === "unavailable"
+              ? " Redis is unavailable, so nothing can be counted — that is 'unknown', not zero."
+              : providerStats.status === "idle"
+                ? " No refresh has run today yet, so there is nothing to count — 'unknown', not zero."
+                : ""}
+          </p>
 
           {newsMode === "fmp" ? (
             <p style={{ color: "#eab308", fontSize: 12, marginTop: 10 }}>

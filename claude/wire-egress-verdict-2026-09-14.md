@@ -53,89 +53,167 @@ Two variables changed, one result. That is unattributable, and treating it as
 attributable is exactly the error §4 of the other doc already had to be
 corrected for. Hence a 2×2.
 
-## 4. The 2×2, and the decision rule fixed in advance
+## 4. The 2×2 — RESULT: it is the User-Agent
 
-|  | no User-Agent | explicit User-Agent |
+Run on `dpl_9gPECxiytLhsXsvonaJNs5nPahPd` (0d85d5d), 09:33 UTC. Round 1:
+
+| cell | cache | UA | ms | status | bytes |
+|---|---|---|---|---|---|
+| control | `no-store` | yes | 365 | 200 | 123,354 |
+| **A** | `no-store` | no | **20,001** | aborted | 0 |
+| **C** | `revalidate:3600` | no | **20,003** | aborted | 0 |
+| **B** | `no-store` | yes | 207 | 200 | 33,016 |
+| **D** | `revalidate:3600` | yes | **183** | 200 | 33,031 |
+
+The decision rule, fixed before the numbers arrived, was: *C hangs + A hangs ⇒
+the User-Agent*. Both hung. **It is the User-Agent.**
+
+D closes it from the other side: `revalidate:3600` is the render's own cache
+mode, and with a UA attached it answers in 183ms. **The Data Cache was never
+implicated.** Round 2 reproduced everything including D at 1ms — the cache hit
+predicted in advance, and the reason reading round 1 only was the right call.
+
+### The mechanism: a tarpit, not a block
+
+`cause` was **empty on every abort**. No `ECONNREFUSED`, no `ENOTFOUND`, no
+`UND_ERR_CONNECT_TIMEOUT`. The connection opens and is simply never answered.
+
+That is also the explanation for the missing log line that made this so hard to
+attribute: the promise never settles, so the per-feed `finally` never runs,
+`endPoll()` never fires, nothing is caught and nothing is thrown. **The failure
+produced no output of any kind.** A page that renders, tests that pass, and one
+leg of the feed quietly contributing nothing.
+
+## 5. The fix
+
+One header on the wire fetches in `pollAll()`, using the exact string measured in
+cell D. `lib/server/news/userAgent.ts` owns it.
+
+### The four constraints, and what each became in code
+
+**1. An unset variable must not silently reintroduce the hang.** The wire UA
+reads **no environment variable at all** — it is an in-tree constant. An env
+read is exactly the mechanism that can go missing: blank in one environment and
+the request goes out bare, tarpits for the full adapter budget, logs nothing,
+throws nothing, and the two-day bug is back in the one place nobody would look
+because "the fix is already shipped". Asserted behaviourally, not textually:
+`newsUserAgent()` is called with the variables unset, empty **and whitespace**
+(the state a cleared dashboard field leaves behind), and must return non-empty
+each time. Structurally too — `newsUserAgent()`'s body must contain no
+`process.env`, so the guarantee does not rest on today's implementation.
+
+**2. `SEC_USER_AGENT` was the wrong home, and the split is deliberate.**
+
+| | mechanism | why |
 |---|---|---|
-| `no-store` | **A** | **B** — round one's configuration, answered |
-| `revalidate: 3600` | **C** — THE RENDER, decisive | **D** — cross-check |
+| wires | constant only, not overridable | emptiness is a silent outage |
+| sec | env var, constant as fallback | the address is a published contact the operator must change without a deploy |
 
-C is the render's fetch byte for byte, executed somewhere it can be timed.
+`secUserAgent()` now *derives* its fallback from the shared constant instead of
+carrying a second literal, so there is one string to keep truthful rather than
+two that drift. `SEC_USER_AGENT` still wins wherever it is set — nothing
+operational moves. And `.trim()` before the `||`, so a variable set to spaces
+falls through to the constant instead of being sent as the identification.
 
-| outcome | conclusion |
-|---|---|
-| C answers | the fetch config is not the cause; look above the fetch |
-| C hangs + A answers | the Data Cache path (`next: { revalidate }`) |
-| C hangs + A hangs (B answered) | the missing User-Agent |
-| control silent | no egress in that invocation; the run is void |
+**3. gnews untouched.** Asserted as a **negative**: the Google News adapter must
+contain no `user-agent`, with a guard that the comment-stripper did not eat the
+file first (a negative assertion against an empty string passes for the wrong
+reason). prnewswire does get the header, and the code says in as many words that
+**that half is untested** — nothing measured says what prnewswire does with a UA
+attached, only that it does not need one.
 
-D corroborates and never decides; a disagreement is reported rather than
-averaged away.
+**4. Content change, not a speed change.** See §7.
 
-### Two things the route does that are not incidental
+### The timeout is now insurance
 
-**Cell order is load-bearing.** C and D both use `revalidate`, so both read and
-write Next's Data Cache. On the same URL they share a key and D could be served
-C's cached body — a cache hit reported as a network measurement. So C runs
-**first**, on the bare URL, cold; A and B (which neither read nor write the Data
-Cache) run next and cannot contaminate anything; D runs last on a
-query-param-suffixed URL for its own key. That param is a **known deviation from
-the render's URL**, recorded rather than hidden — acceptable on the
-corroborating cell, and not acceptable on C, which is why C got the bare URL.
+Kept, and its job restated in the code: it is what bounds **the next** silent
+host, not this one. The rationale comment in `lib/server/news/index.ts` that read
+*"from Vercel they hang — the same shape as Stooq and Nasdaq refusing this site's
+IPs"* has been corrected; it named a cause nobody could act on, which made the
+timeout look like the end of the investigation instead of the start.
 
-**Round 1 is the measurement; round 2 is not a second sample.** For the
-`revalidate` cells round 2 is *expected* to be a hit (Data Cache or in-invocation
-memoisation) and to come back near-zero. A fast round 2 on C is not evidence of
-health. The verdict function reads round 1 only — otherwise "C was cached the
-second time" becomes evidence that C is fine.
+### Mutation coverage
 
-Kept from round one because both earned their place: the control host, and the
-AbortController with `cause` capture (a bare `Promise.race` reports "slow" for
-every failure mode and would make all three cases look identical).
+`scripts/check-news-user-agent.mjs`, **15/15 killed** — including the exact
+regression (`newsUserAgent()` becomes `process.env.X ?? ""`), the softer version
+of it (env read *with* a good fallback — still configurable, still blankable),
+an emptied constant, a dropped header, a misspelled header key, a tidied string,
+a second bare fetch added to the adapter, gnews acquiring a UA, and the wires
+being coupled back to `SEC_USER_AGENT`.
 
-## 5. Leading hypothesis — a hypothesis, not a plan
+## 6. §C — configured is not contributed
 
-The missing User-Agent. Node's default UA on a wire RSS endpoint is a plausible
-thing for a CDN to tarpit rather than refuse, and a tarpit is precisely what a
-never-settling fetch looks like. The probe tests the `SEC_USER_AGENT` string
-already in the tree rather than a probe-only invention, so that if the UA is the
-cause, what shipped is what was measured.
+Unblocked by this fix and shipped with it, because the panel's failure was the
+same failure: `/cache-health` read **"gnews + wire + sec"** for two days while
+GlobeNewswire returned nothing at all. The line was not wrong — those three are
+registered — it was answering a question nobody was asking.
 
-**Not implemented.** The 2×2 runs first and its result gets reported before any
-fix is written.
+So the panel now carries two rows: **registered** above, **what actually came
+back today** below, per adapter, counted from the window the adapters returned
+(before dedup: the question is whether it answered, not whether it was first to
+the story).
 
-If it is the UA: one header on the wire fetches, reusing the `SEC_USER_AGENT`
-convention rather than inventing a second mechanism. The per-feed timeout stays
-afterwards as a **backstop — insurance, not the fix, and not a performance
-change**.
+**The three zeroes, and why collapsing any two is a lie.** Redis absent, no
+refresh yet today, and an adapter that really did return nothing all render as
+`0` if they are merged — and only the third is an alarm. Two false alarms every
+morning and in every environment without credentials would retire the one true
+one. `classifyProviderStats` returns `unavailable | idle | ok` and the panel
+renders a count **only** in the `ok` state.
 
-`§C` (the cache-health panel line) is on hold until this lands. `§D` (cik-map
-miss rate) is separate and unstarted.
+Every active adapter is also **seeded to zero before counting**, because an
+adapter that returned nothing leaves no item to read an id off — without the
+seed, "contributed 0" and "not registered" are the same absent field, which is
+the precise ambiguity the panel exists to remove.
 
-## 6. How to run it
+**A note on how these assertions got written.** The first version of the
+three-state check grepped `newsStore.ts` for `status: "idle"` and friends. Those
+strings appear in the *type declaration*, so both collapse mutations sailed
+through — the assertion was checking spelling. `classifyProviderStats` was split
+into a module with no imports specifically so a harness can **call** it. After
+that: **10/10 killed**, including both collapses, an all-zeroes hash downgraded
+to `idle`, the prefix namespace ignored, and the panel rendering `unavailable`
+as `0`.
 
-    /api/debug/wire-egress?key=...
+## 7. What to watch on the first renders — this is a content change
 
-on **Preview** (where `MSH_TIMING=1` is already set). Worst case 200s against a
-300s `maxDuration`. Read `decision.cause` and `corroboration`; if
-`decision.cause` is `void`, the control did not answer and the run says nothing.
+Once the header lands GlobeNewswire actually returns items, so **per-symbol wire
+attribution appears for the first time**. Three things are now being exercised
+against a source that has never reached them:
 
-Delete the route once the verdict is recorded here. It is a probe, not a feature.
+- **The pool grows.** More items into merge, dedup and scoring.
+- **The churn cap and the 45-day window** are being applied to wire content for
+  the first time. Both were tuned on Google News and SEC output.
+- **`imageVerdict`'s `allow` path goes live** for wire-credited images. Harmless
+  while `SHOW_PUBLISHER_IMAGES` is false — but **that flag is now load-bearing
+  in a way it was not yesterday**. It is the master switch above the verdict and
+  both must be true to render; until today the verdict never said allow.
+
+**Expected**, and to be measured rather than reported as an estimate: sec ~57ms
++ gnews ~330ms + wire ~200ms concurrent ⇒ a cold stock render around **700ms**,
+with the ticker path intact. `MSH_TIMING=1` is already set on Preview; the
+per-feed line is `[timing] news wireFeed globenewswire`, and it will now
+actually fire, since a settled fetch reaches the `finally`.
+
+## 8. Housekeeping
+
+`app/api/debug/wire-egress` is **deleted** — the verdict is recorded here and the
+probe was never a feature. `app/api/debug/static-profile` still awaits its
+capture. §D (the `data/cik-map.json` miss rate) remains separate and unstarted.
 
 ---
 
-## Appendix — C1, corrected today, independent of the above
+## Appendix — C1, corrected, independent of the above
 
 "Rollback is an env var, not a revert" was being stated as **"no deploy"** in
-four places. That is wrong: `newsProviderMode()` reads `process.env`, and an env
-var changed in the Vercel dashboard does not reach the running deployment until a
-**production redeploy** (~2 min, same commit).
+**four** places, not three. That is wrong: `newsProviderMode()` reads
+`process.env`, and an env var changed in the Vercel dashboard does not reach the
+running deployment until a **production redeploy** (~2 min, same commit).
 
 The honest claim is: **one env var plus one redeploy; no revert commit, no code
 change.**
 
 Corrected in `app/cache-health/page.tsx` (the one that was wrong on a live page),
 `lib/server/news/index.ts`, `claude/news-adapter-spec-2026-09-13.md` §7, and
-`scripts/check-provider-flip.mjs`. It is wrong in the worst possible place —
-the sentence someone reads while deciding whether the rollback is fast enough to
-reach for.
+`scripts/check-provider-flip.mjs`, whose own rationale string repeated it. It is
+wrong in the worst possible place — the sentence someone reads while deciding
+whether the rollback is fast enough to reach for.

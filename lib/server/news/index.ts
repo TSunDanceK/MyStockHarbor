@@ -150,11 +150,31 @@ export function activeNewsProviders(): NewsProvider[] {
  * The page took SEVENTY-ONE SECONDS and the wire adapter was 99.3% of it. The
  * same 70s appears on /api/internal-news, so the dashboard strip pays it too.
  *
- * It is not the wires being slow. From a GitHub runner both feeds answer in
- * 12-330ms. From Vercel they hang — the same shape as Stooq and Nasdaq
- * refusing this site's IPs (claude/stooq-inaccessible-sec-viable-2026-09-12.md),
- * and the reason source viability here is measured from inside a function
- * rather than from a laptop.
+ * ── THE CAUSE, FOUND TWO DAYS LATER, AND IT WAS NOT AN IP BLOCK ───────────
+ * This comment originally read "from Vercel they hang — the same shape as
+ * Stooq and Nasdaq refusing this site's IPs". THAT WAS WRONG, and it was wrong
+ * in the way that costs time: it named a cause nobody could act on, so the
+ * timeout looked like the end of the investigation rather than the start.
+ *
+ * A 2x2 from inside a Vercel function (cache mode x User-Agent) settled it
+ * (claude/wire-egress-verdict-2026-09-14.md):
+ *
+ *   no User-Agent, either cache mode    20,00Xms, ABORTED, ZERO bytes
+ *   with a User-Agent, either cache mode   183-207ms, HTTP 200
+ *
+ * GlobeNewswire tarpits a request that arrives without a User-Agent. `cause`
+ * was EMPTY on both aborts — no ECONNREFUSED, no ENOTFOUND — which is a tarpit,
+ * not a refusal. The fix is one header (lib/server/news/userAgent.ts), and the
+ * host answers in 183ms with the render's own cache mode.
+ *
+ * ── SO WHAT IS THIS TIMEOUT FOR NOW? INSURANCE, NOT THE FIX ───────────────
+ * It is deliberately kept, and its job has changed: it is what stops THE NEXT
+ * silent host costing the full adapter budget. A source that never settles
+ * produces no error, no log line and no rejected promise — the per-feed
+ * `finally` does not even run — so nothing else in this stack can notice it.
+ * That is the failure mode this bounds. It is not a performance change and it
+ * never was one: the 71 seconds came back to 5, and the header brought the 5
+ * back to 0.2.
  *
  * 5 SECONDS, CHOSEN FROM THE NUMBERS RATHER THAN GUESSED. The slowest healthy
  * leg ever measured is Google News at 573ms in-render and 720ms cold from a

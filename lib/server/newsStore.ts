@@ -30,6 +30,11 @@
 // the caller here -- importing any of them back would be a cycle. Passing them
 // in also keeps the one implementation of dedup shared rather than copied.
 import { after } from "next/server";
+import {
+  classifyProviderStats,
+  PROVIDER_STAT_PREFIX,
+  type NewsProviderStats,
+} from "./news/providerStats";
 import { beginTiming, timingCache } from "./timing";
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -114,7 +119,32 @@ function statsKey(nowMs: number) {
  * evicted and every refresh is paying full price while the totals still look
  * unremarkable. That is the failure this instrumentation exists to make visible.
  */
-async function recordRefreshStats(mode: NewsRefreshMode, added: number, nowMs: number) {
+/**
+ * CONFIGURED IS NOT CONTRIBUTED, and for two days the difference was the whole
+ * story.
+ *
+ * /cache-health said "gnews + wire + sec" the entire time GlobeNewswire was
+ * being tarpitted and returning literally nothing. The panel was not lying —
+ * those three ARE registered — it was answering a question nobody was asking.
+ * A registered adapter that returns zero items looks exactly like a registered
+ * adapter that works, and the only thing that separates them is a count.
+ *
+ * So the fan-out's output is attributed per provider and counted here. `fetched`
+ * is the WINDOW the adapters returned, not what survived dedup and the cap:
+ * "did this adapter answer with anything" is the question, and attributing
+ * post-dedup survivors would mix it with "was this adapter first to the story",
+ * which is a different fact and would read as a failure when a wire release is
+ * correctly collapsed into the Google News copy of itself.
+ *
+ * Field names are prefixed so they cannot collide with the counters above if a
+ * provider is ever named `itemsAdded`.
+ */
+async function recordRefreshStats(
+  mode: NewsRefreshMode,
+  added: number,
+  nowMs: number,
+  byProvider: Map<string, number> = new Map()
+) {
   if (!redis || mode === "cached") return;
 
   try {
@@ -122,6 +152,13 @@ async function recordRefreshStats(mode: NewsRefreshMode, added: number, nowMs: n
     const p = redis.pipeline();
     p.hincrby(key, mode === "cold" ? "coldFetches" : "incrementalFetches", 1);
     p.hincrby(key, "itemsAdded", added);
+    // EVERY ACTIVE PROVIDER, INCLUDING THE ZEROES. A provider that returned
+    // nothing must still write its row, or "contributed 0" and "not registered"
+    // become the same absent key — which is precisely the ambiguity this exists
+    // to remove. hincrby by 0 creates the field.
+    for (const [providerId, count] of byProvider) {
+      p.hincrby(key, `${PROVIDER_STAT_PREFIX}${providerId}`, count);
+    }
     p.expire(key, STATS_TTL_SECONDS);
     await p.exec();
   } catch {
@@ -136,6 +173,17 @@ export async function readNewsStats(nowMs = Date.now()) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Today's per-provider item counts, as a three-state result.
+ *
+ * The Redis read is here; the classification is in
+ * lib/server/news/providerStats.ts because a harness cannot load this file —
+ * see that file's header for why that mattered.
+ */
+export async function readNewsProviderStats(nowMs = Date.now()): Promise<NewsProviderStats> {
+  return classifyProviderStats(await readNewsStats(nowMs));
 }
 
 async function readStored<T>(key: string): Promise<StoredNews<T> | null> {
@@ -167,6 +215,18 @@ type RefreshDeps<T extends NewsMergeItem> = {
   dedupe: (items: T[]) => T[];
   /** Whether an article qualifies for the earnings pin. Omitted for sector news, which has no pin. */
   isEarnings?: (item: T) => boolean;
+  /**
+   * Which adapter an item came from, and which adapters were asked.
+   *
+   * Optional because this store is generic over T and the sector/dashboard
+   * callers have no reason to care. Passed as a pair rather than derived from
+   * the items, because the adapters that returned NOTHING are the ones worth
+   * counting and they leave no item to read an id off.
+   */
+  attribution?: {
+    activeIds: () => string[];
+    providerOf: (item: T) => string | null;
+  };
 };
 
 async function readOrRefresh<T extends NewsMergeItem>(
@@ -217,9 +277,21 @@ async function readOrRefresh<T extends NewsMergeItem>(
   // OUT OF THE BLOCKING PATH. `kept` is already in hand; the reader needs
   // nothing these produce. Both swallow their own errors, so after() can never
   // surface a failure into the response either.
+  // Counted from `fetched` (what the adapters returned this pass), seeded with
+  // a zero for every active adapter so a silent one is visible as a zero rather
+  // than as an absent field.
+  const byProvider = new Map<string, number>();
+  if (deps.attribution) {
+    for (const id of deps.attribution.activeIds()) byProvider.set(id, 0);
+    for (const item of fetched) {
+      const id = deps.attribution.providerOf(item);
+      if (id) byProvider.set(id, (byProvider.get(id) ?? 0) + 1);
+    }
+  }
+
   after(async () => {
     await writeStored(key, kept, nowMs);
-    await recordRefreshStats(mode, added, nowMs);
+    await recordRefreshStats(mode, added, nowMs, byProvider);
   });
 
   // ENDS BEFORE THE WRITES, deliberately: they are after() now, so counting

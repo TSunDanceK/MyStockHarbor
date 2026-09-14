@@ -47,6 +47,12 @@ let src = read("lib/server/news/secProvider.ts")
     () => `const cikMap = ${read("data/cik-map.json")};`)
   .replace(/^import \{ stripHtmlTags \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
+  // The shared User-Agent, inlined rather than stubbed: sec.gov's fair-access
+  // policy asks for identification, and a stub would let an empty one through
+  // here. It has no imports of its own. scripts/check-news-user-agent.mjs owns
+  // the assertions about the value itself.
+  .replace(/^import \{ secUserAgent \} from ".\/userAgent";$/m,
+    () => read("lib/server/news/userAgent.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
   .replace("const CIK_BY_SYMBOL = cikMap as Record<string, string>;", "const CIK_BY_SYMBOL = cikMap;")
   .replace("export const secProvider: NewsProvider =", "export const secProvider =")
@@ -281,10 +287,21 @@ check(
     /data\.sec\.gov\/submissions\/CIK\$\{cik\}\.json/.test(secSrc)
 );
 check("revalidate 3600 is kept", /next: \{ revalidate: 3600 \}/.test(secSrc));
+// WIRING ONLY. This used to pin the literal `process.env.SEC_USER_AGENT || "..."`
+// shape inline, which broke the moment the default was moved into a shared
+// module -- and would have kept passing had the module returned "". The VALUE
+// assertions (non-empty under an unset, empty or whitespace variable; the env
+// var still winning where it is set) are behavioural and live in
+// scripts/check-news-user-agent.mjs, which can call the real function.
 check(
-  "a declared User-Agent is sent whether or not SEC_USER_AGENT is set",
-  /"user-agent": userAgent\(\)/.test(secSrc) && /process\.env\.SEC_USER_AGENT \|\| "/.test(secSrc),
+  "a declared User-Agent is sent, via the shared helper",
+  /"user-agent": secUserAgent\(\)/.test(secSrc),
   "fair access asks for identification; an anonymous request that works is still one that should not be made"
+);
+check(
+  "...and the adapter no longer carries its own copy of the default",
+  !/const userAgent = |function userAgent\(/.test(secSrc),
+  "two UA literals is two strings that drift, and only one of them gets kept truthful"
 );
 const vercel = JSON.parse(read("vercel.json"));
 check("still no news cron", (vercel.crons ?? []).filter((c) => /news/i.test(c.path)).length === 0);

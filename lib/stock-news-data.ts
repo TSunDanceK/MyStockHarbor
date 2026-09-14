@@ -1,6 +1,6 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow, feedMaxAgeDays } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders } from "@/lib/server/news";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
 import {
   cleanRssDescription,
@@ -441,6 +441,15 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     // only persistence makes possible. Today an earnings article vanishes the
     // moment it leaves FMP's latest-N window regardless of relevance.
     isEarnings: isEarningsNewsItem,
+    // WHAT ACTUALLY CONTRIBUTED, not what is registered. /cache-health said
+    // "gnews + wire + sec" for two days while GlobeNewswire was returning
+    // nothing at all, because a registered adapter and a working one render
+    // identically. activeNewsProviders() supplies the asked-for list so an
+    // adapter that answered with nothing still writes a zero.
+    attribution: {
+      activeIds: () => activeNewsProviders().map((provider) => provider.id),
+      providerOf: (item) => item.provider ?? null,
+    },
   });
 
   return items;

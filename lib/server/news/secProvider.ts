@@ -19,9 +19,18 @@
 // asks for identification and caps at 10 req/sec. SEC_USER_AGENT is sent when
 // set and a truthful default is sent when it is not — an anonymous request that
 // works is still a request that should not be made anonymously.
+//
+// The default now DERIVES from lib/server/news/userAgent.ts rather than being a
+// second literal here, so there is one string to keep truthful instead of two
+// that drift. SEC_USER_AGENT still wins wherever it is set, so nothing moves in
+// any environment that sets it. Unlike the wires, sec.gov keeps a variable at
+// all because the contact address it publishes is something the operator must
+// be able to change without a deploy — that asymmetry is deliberate and the
+// reasoning is written down in that file.
 import cikMap from "@/data/cik-map.json";
 import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
+import { secUserAgent } from "./userAgent";
 import type { NewsItem, NewsProvider } from "./types";
 
 const CIK_BY_SYMBOL = cikMap as Record<string, string>;
@@ -54,9 +63,6 @@ function isRoutineForm(form: string): boolean {
   return ROUTINE_FORMS.has(form.replace(/\/A$/, "").trim());
 }
 
-function userAgent(): string {
-  return process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (contact@mystockharbor.com)";
-}
 
 /**
  * Plain English for a filing.
@@ -251,7 +257,7 @@ async function fetchForSymbol(
 
   try {
     const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-      headers: { "user-agent": userAgent(), accept: "application/json" },
+      headers: { "user-agent": secUserAgent(), accept: "application/json" },
       next: { revalidate: 3600 },
     });
     if (!res.ok) return [];
