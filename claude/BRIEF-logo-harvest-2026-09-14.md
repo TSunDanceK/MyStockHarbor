@@ -5,6 +5,9 @@ Paste-ready for a fresh Claude Code session. Self-contained: assume no chat hist
 **Read first:** `CLAUDE.md` (repo root), `app/api/debug/static-profile/README.md`,
 `app/components/TickerLogo.tsx`.
 
+**Phase 0 is complete** — see `claude/logo-coverage-probe-results-2026-09-14.md`.
+Phases 1, 2 and 3 are the remaining work.
+
 ---
 
 ## Goal
@@ -48,8 +51,9 @@ FMP cannot license what it does not own. What it can do is stop serving them.
    that work locally; `next build` fails locally for unrelated reasons (Upstash)
    and is **not** evidence your change broke anything. Visual verification is an
    owner-side step.
-6. **The logo universe is ~2,653 symbols.** An earlier draft of this brief said
-   "~700" and that was wrong — corrected 2026-09-14 after the figure was traced.
+6. **The logo universe is 2,653 symbols.** An earlier draft of this brief said
+   "~700" and that was wrong — corrected 2026-09-14 after the figure was traced,
+   and the union has since been confirmed by the Phase 0 run.
    The numbers in the repo mean different things:
    - **~700** — `readPickersSymbolsIfCached()`, the pickers cache in Redis, sized
      for FMP call pacing. **Not the logo universe.** Unreadable from the sandbox
@@ -60,66 +64,35 @@ FMP cannot license what it does not own. What it can do is stop serving them.
      `lib/curatedSymbols.ts`, of which **33 appear in neither committed file**.
      Those 33 are nearly every major ETF the site links — SPY, QQQ, DIA, IWM,
      VTI, VOO, ARKK, the XL* family, GLD, TLT, SMH. They feed `app/sitemap.ts`
-     and "Explore More Stocks", so `TickerLogo` renders them today. **Scoping to
-     ~700 would miss all of them.**
+     and "Explore More Stocks", so `TickerLogo` renders them today. Phase 0
+     measured them at **33/33 coverage**; scoping to ~700 would have missed all
+     of them.
 
 ---
 
-## PHASE 0 — probe only. Report back and STOP.
+## PHASE 0 — COMPLETE
 
-**No product code, no PR, nothing merged to `main`.** An earlier draft said "no
-commits", which was self-contradictory: a runner cannot execute uncommitted code.
-Committing the probe script and its registry entry to a feature branch is
-expected and pre-approved.
+Run **34888872483**, commit `2282a8cf` on `claude/awesome-fermat-m7vy1w`.
+**2,644/2,653 hits — 99.7%**, 22s, no 429s, zero placeholders.
+Full figures, splits, the 9 named misses and the byte analysis are in
+`claude/logo-coverage-probe-results-2026-09-14.md`. Do not re-run it.
 
-**Mechanism — settled, do not re-derive.** Add a read-only, unprefixed task to
-`scripts/relay-run.mjs` and dispatch it with `ref` pointing at the feature
-branch. Do **not** add a job to `relay.yml` and do **not** add a scratch
-workflow: `workflow_dispatch` only registers for workflow files on the **default
-branch**, so either would cost a merge to `main` — the toll `relay.yml` exists
-to avoid, and which its own header records being paid twice in one day (#436,
-#444). The task stays in the job that references no secrets, so the
-no-FMP-key-in-Actions constraint is never in play.
+Mechanism, recorded because Phase 2 reuses it: a read-only, unprefixed task in
+`scripts/relay-run.mjs`, dispatched with `ref` pointing at the feature branch.
+**Not** a job in `relay.yml` and **not** a scratch workflow — `workflow_dispatch`
+only registers for workflow files on the **default branch**, so either would cost
+a merge to `main`, the toll `relay.yml` exists to avoid (its header records that
+being paid twice in one day, #436 and #444). The task stays in the job that
+references no secrets, so constraint 1 is never in play.
 
 **Artifact trap:** `relay.yml`'s artifact upload globs are a fixed list on
-`main`, and none match a new filename — a JSON output file is silently
-discarded (the same failure its comment records for company-tickers). Send full
-results to **stdout**, which `task.log` captures and uploads.
-
-On a runner with real internet:
-
-1. Build the candidate list per constraint 6 — the union of
-   `data/company-names.json`, `data/static-profile.json` and
-   `lib/curatedSymbols.ts`, ~2,653 symbols. State the figure you actually got.
-2. `HEAD` or ranged-`GET` each `https://images.financialmodelingprep.com/symbol/{SYM}.png`,
-   at most 8 concurrent, with a real User-Agent. Treat a 200 under ~200 bytes as
-   a miss (placeholder), not a hit. Settle the `BRK.B` / `BRK-B` spelling
-   question while you are in there.
-3. Report:
-   - total probed, hits, misses, hit rate
-   - hit rate split by exchange and by whether the symbol is an ETF/fund.
-     **Note `exchange` is in `static-profile.json`'s `absentFields.blocked`** —
-     it is one of the eight fields Phase 1 exists to capture, so this split
-     cannot come from committed data. The Nasdaq symdir files carry `Exchange`
-     and an ETF `Y/N` flag natively and are free to fetch with no credential;
-     `scripts/lib/nasdaq-directory.mjs` parses them but drops both columns, so
-     re-parse locally (header-driven) rather than widening a shared module
-     during a probe-only phase.
-   - byte-size distribution of hits: min / median / max
-   - **raw PNG byte total for all hits** — this sizes Phase 2 and decides where
-     the harvested files live (see Phase 2)
-   - wall-clock for the run, and whether any rate-limiting or 429s appeared
-   - **20 named misses**, so the owner can eyeball whether they are companies
-     that genuinely have no logo (muni closed-end funds, thin ETFs) or real
-     names that need a gap-filler
-
-Then stop and report. The hit rate decides whether Phase 2 is worth running at
-all, and the named misses decide whether a gap-filler is needed or whether the
-existing monogram is already the honest answer for that tail.
+`main`, and none match a new filename — a JSON output file is silently discarded
+(the same failure its comment records for company-tickers). Send full results to
+**stdout**, which `task.log` captures and uploads.
 
 ---
 
-## PHASE 1 — bank the domain map (only on approval; independently valuable)
+## PHASE 1 — bank the domain map (independently valuable; do this regardless)
 
 This is **already built and never run**. `app/api/debug/static-profile/README.md`
 documents a capture route that returns eight uncaptured fields including
@@ -150,32 +123,46 @@ committed — delete it in the same PR, as its README instructs.
 
 ---
 
-## PHASE 2 — harvest and transcode (only on approval, and only if Phase 0's hit rate justifies it)
+## PHASE 2 — harvest and transcode (settled by Phase 0)
 
-Same mechanism as Phase 0 — a relay task dispatched at the feature branch, not a
-workflow edit.
+Phase 0 measured **99.7% coverage**, so the harvest proceeds. Same mechanism as
+Phase 0 — a relay task dispatched at the feature branch, not a workflow edit.
 
-1. Fetch each hit from Phase 0.
+1. Fetch each of the 2,644 hits.
 2. Transcode with `sharp` (add as a **devDependency** — it must not enter the
-   runtime bundle): `{SYM}.webp` at 64px and `{SYM}@2x.webp` at 128px, contain-fit,
+   runtime bundle). **One size only: `{SYM}.webp` at 72px**, contain-fit,
    transparent background preserved.
-3. **Where these live is an open decision, settled by Phase 0's byte total — do
-   not assume `public/logos/`.** The earlier "~700 symbols, under ~6 MB" estimate
-   was built on the wrong universe figure; at ~2,653 symbols it is roughly 3.8×
-   out. The two candidate homes:
-   - **`public/logos/`** — served from our own domain via Vercel's CDN, no third
-     party, works in local dev. Right answer while the total is small.
-   - **A separate repo published via GitHub Pages** — free, GitHub's own CDN,
-     keeps this repo and every deploy lean. Right answer if the total is large,
-     since `public/` bloats every clone and every build permanently.
 
-   Rough threshold: under ~10 MB, `public/`; over ~25 MB, the separate repo;
-   in between, report and ask. **Never hotlink `raw.githubusercontent.com`** —
-   GitHub does not permit it as a CDN, it is rate-limited, and it would only
-   trade an FMP dependency for a GitHub one.
+   **Departure from the original two-size spec, taken deliberately.**
+   `TickerLogo` renders at 18 (dashboard feed), 24 (default) and 34
+   (stock/news/earnings H1s). The largest display size anywhere is 34px, so a
+   72px asset already exceeds 2× at every call site and the `@2x`/128px variant
+   would be dead weight. This roughly halves the payload.
+
+   Three source-shape rules, from the Phase 0 dimension data:
+   - **Source wider than 72px** — downscale to 72.
+   - **Source 24–72px wide** — keep at native size, do **not** upscale. 35
+     symbols are in this band (AFYA, ARR, FANG, FUN and others at 16/30/32/48px);
+     an upscaled 32px logo looks worse than the monogram it replaces.
+   - **Source narrower than 24px** — skip entirely. It falls through the chain
+     to the monogram, which is the better rendering.
+
+   **4 hits carry no PNG IHDR** — AEFC, APXT, JOYY, NIQ, each 2.6–3.3 KB served
+   under a `.png` name. Let `sharp` attempt them; on failure skip the symbol and
+   list it in the PR body. Do not special-case the format.
+
+3. **Home: `public/logos/`.** With the single-size decision the projection lands
+   around 5–7 MB, clear of the ~10 MB line, so no separate repo and no GitHub
+   Pages. Raw PNG total was 33.11 MB — do not commit the PNGs, only the WebPs.
 4. Emit `data/logo-manifest.json` — a plain array of symbols that have a local
-   file. `TickerLogo` reads this so it never requests a 404.
-5. Open a PR. Do not merge.
+   file. `TickerLogo` reads this so it never requests a 404. Skipped symbols
+   (sub-24px sources, `sharp` failures, the 9 misses) must be absent from it.
+5. Open a PR. Do not merge. Report in the body: file count, total committed
+   bytes, and every symbol skipped with its reason.
+
+**Refresh:** the harvest goes stale as new symbols list. Re-run quarterly. Until
+then new listings fall through to FMP's CDN while it works, and to the monogram
+after it stops — no breakage either way.
 
 ---
 
@@ -186,8 +173,8 @@ the fallback chain and the monogram are correct as they stand.
 
 New order:
 
-1. The harvested logo — when the symbol is in the manifest. Build the URL from a
-   single base constant so the Phase 2 storage decision is one line to change.
+1. `/logos/{SYM}.webp` — when the symbol is in the manifest. Build the URL from
+   a single base constant so the storage home is one line to change later.
 2. Clearbit `logo.clearbit.com/{domain}` — unchanged, when a `domain` is known
 3. FMP CDN — unchanged, now a fallback rather than the primary
 4. Monogram — unchanged
@@ -211,17 +198,24 @@ change to pages that already look right today.
 3. Spot-check ten committed WebPs actually decode and are not 0-byte or
    placeholder images.
 4. Report the PR's Vercel **branch alias** URL for owner-side visual checks —
-   you cannot load it yourself. Suggest MU, NVDA, MUJ and a Phase 0 miss as the
-   four to look at: the first two should be harvested files, MUJ should still be
-   a monogram, and the miss should show whichever fallback caught it.
+   you cannot load it yourself. Suggest four: **MU** and **NVDA** (ordinary
+   harvested files), **FANG** (a sub-72px source kept at native size, so the
+   no-upscale rule is visible), and **JMKE** (a Phase 0 miss — should show
+   whichever fallback caught it, most likely the monogram).
+   Note MUJ is *not* a useful check any more: it was assumed logo-less when the
+   brief was written, but Phase 0 measured it as a hit.
 
 ---
 
 ## Out of scope
 
 No paid logo vendor and no paid storage. No Vercel Blob, no R2, no logo API
-subscription — the owner has ruled out paying for logos. Both storage candidates
-in Phase 2 are free.
+subscription — the owner has ruled out paying for logos. `public/logos/` costs
+nothing.
+
+No gap-filler for the 9 misses. Phase 0 established they are recent listings plus
+two FITB preferred series — a drifting set FMP will likely backfill, not a
+structural tail worth engineering against.
 
 ---
 
