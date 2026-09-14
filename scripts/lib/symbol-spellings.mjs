@@ -70,59 +70,99 @@ export function lookupBySpelling(map, symbol) {
 }
 
 /**
- * KNOWN-GOOD MATCH, EVERYTHING ELSE NOT-COMMON. Inverted deliberately.
+ * TWO STAGES, REJECT FIRST. Neither direction works alone.
  *
- * The first version enumerated BAD words -- preferred, warrant, unit, notes.
- * Measured against the real file, "Preferred" appears in ONE of six
- * non-common securities:
+ * A positive list of BAD words catches one in six: "Preferred" appears only in
+ * EP$C, while MER$K is "Income Capital Obligation Notes" -- a name nobody
+ * enumerates.
  *
- *   EP$C   El Paso Corporation Preferred Stock                        <- the only one
- *   MER$K  Bank of America ... Income Capital Obligation Notes due 2066
- *   TBB    AT&T Inc. 5.350% Global Notes due 2066
- *   PFH    Prudential Financial 4.125% Junior Subordinated Notes due 2060
- *   UNMA   Unum Group 6.250% Junior Subordinated Notes due 2058
- *   EMBJ   Embraer S.A. Common Stock                                   <- actually common
+ * A single known-good ACCEPT list rejects ARM. Measured live against 25 ADRs in
+ * the universe, nine failed it:
  *
- * A positive list of bad words catches one in six and requires enumerating
- * every way a note can be named -- "Income Capital Obligation Notes" being the
- * one nobody would have guessed. Matching a known-good pattern instead needs no
- * such enumeration: the set of names a COMMON share carries is small and stable.
+ *   ARM   "Arm Holdings plc - American Depositary Shares"
+ *   BIDU  "Baidu, Inc. - American Depositary Shares, each representing 8..."
+ *   VALE  "VALE S.A.  American Depositary Shares Each Representing one co..."
+ *   ABEV, ZTO, LYG, GMAB, EC, SAN
  *
- * THREE STATES, NOT TWO. "unknown" (the join failed) is kept distinct from
- * "not-common" (the join succeeded and it is a note) because they mean different
- * things in a report, even though both exclude. Returning "common" for either is
- * the fail-open path that makes the whole exclusion test useless.
+ * and the ones that passed did so BY ACCIDENT -- GSK on a parenthetical
+ * ("(Each representing two Ordinary...)") that ARM's name simply does not have.
+ * Pass/fail depended on whether the exchange spelled out what the receipt
+ * represents, which is a coin flip rather than a rule.
+ *
+ * THIS IS NOT A TAIL CASE. 49 of the 55 periodic filers in the measured window
+ * were 6-K filers -- foreign private issuers, i.e. ADRs. They are the majority
+ * of the universe's earnings activity, and ARM is the symbol this project was
+ * audited against.
+ *
+ * WHY ONE INVERSION CANNOT WORK: "Depositary Shares" appears on BOTH sides.
+ *
+ *   ARM    "American Depositary Shares"                          -> ACCEPT
+ *          the tradeable common-equity proxy
+ *   BAC$K  "Depositary Shares, each representing a 1/1,000th
+ *           interest in a share of 5.875% Non-Cumulative
+ *           Preferred Stock, Series HH"                          -> REJECT
+ *
+ * So: reject on security-type markers FIRST, then accept on equity markers,
+ * then "unknown" -- which is reported and counted, never silently included.
+ * BAC$K matches both stages and the reject has to win.
  */
-const COMMON_EQUITY_NAME = [
+
+// Stage 1. A security TYPE marker -- these never appear in the name of ordinary
+// tradeable equity. Word-bounded: "Wright" does not contain a \bright\b, and
+// "United" does not contain a \bunit\b.
+const SECURITY_TYPE_MARKER =
+  /\b(?:preferred|notes?|debentures?|subordinated|warrants?|units?|rights?)\b/i;
+
+// Stage 2. An equity marker. The Class qualifier is KEPT even though stage 1
+// now catches "Class A Preferred Stock" -- the belt to that braces, and the
+// same failure one level down if it were removed.
+const EQUITY_MARKER = [
   /\bcommon stock\b/i,
   /\bcommon shares?\b/i,
   /\bordinary shares?\b/i,
-  // "Class C Capital Stock" (GOOG), "Class A Common Stock" (BRK.A). The
-  // qualifier is REQUIRED: a bare /Stock/ would accept "Preferred Stock", and
-  // a bare /Class .* Stock/ would accept a hypothetical "Class A Preferred
-  // Stock".
   /\bclass\s+[A-Z0-9]+\s+(?:common|capital|ordinary)\s+(?:stock|shares?)\b/i,
+  // The ADR forms. ARM's full name is exactly "Arm Holdings plc - American
+  // Depositary Shares" with nothing after it, so anything requiring the
+  // underlying to be spelled out excludes the largest population in the universe.
+  /\bamerican depositary shares?\b/i,
+  /\bamerican depositary receipts?\b/i,
+  /\bADRs?\b/,
 ];
 
+/**
+ * "common" | "not-common" | "unknown".
+ *
+ * THREE STATES, NOT TWO. "unknown" (no name, or a name matching neither stage)
+ * is kept distinct from "not-common" (matched a security-type marker) because
+ * they mean different things in a report, even though both exclude. Returning
+ * "common" for either is the fail-open path that makes the exclusion useless.
+ */
 export function classifySecurityName(securityName) {
   if (securityName == null || String(securityName).trim() === "") return "unknown";
   const name = String(securityName);
-  return COMMON_EQUITY_NAME.some((re) => re.test(name)) ? "common" : "not-common";
+  // ORDER IS LOAD-BEARING. BAC$K is "Depositary Shares ... Preferred Stock":
+  // it matches stage 2's ADR-adjacent wording and stage 1's "preferred", and
+  // the reject must win.
+  if (SECURITY_TYPE_MARKER.test(name)) return "not-common";
+  if (EQUITY_MARKER.some((re) => re.test(name))) return "common";
+  return "unknown";
 }
 
 /**
- * A finer label for REPORTING only -- never for the include/exclude decision,
- * which is classifySecurityName's. Anything it cannot name is "other", not
- * "common": the same inversion, so a security type nobody enumerated does not
- * silently become an included symbol.
+ * A finer label for REPORTING only -- never the include/exclude decision, which
+ * is classifySecurityName's. Its fallback is "other", not "common": the same
+ * inversion, so a security type nobody enumerated cannot become an included
+ * symbol by default.
  */
 export function describeSecurityName(securityName) {
-  if (classifySecurityName(securityName) === "unknown") return "unknown";
+  const verdict = classifySecurityName(securityName);
+  if (verdict === "unknown") return "unknown";
   const name = String(securityName);
-  if (classifySecurityName(name) === "common") return "common";
+  if (verdict === "common") return /\bamerican depositary|ADRs?\b/i.test(name) ? "adr" : "common";
   if (/\bwarrants?\b/i.test(name)) return "warrant";
   if (/\bunits?\b/i.test(name)) return "unit";
-  if (/\bnotes?\b|\bdebentures?\b/i.test(name)) return "note";
-  if (/\bpreferred\b|\bdepositary shares\b/i.test(name)) return "preferred";
+  if (/\bnotes?\b|\bdebentures?\b|\bsubordinated\b/i.test(name)) return "note";
+  if (/\bpreferred\b/i.test(name)) return "preferred";
+  if (/\brights?\b/i.test(name)) return "right";
   return "other";
 }

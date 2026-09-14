@@ -58,7 +58,20 @@ const NASDAQ_NAMES = new Map([
   ["GOOG", "Alphabet Inc. - Class C Capital Stock"],
   ["CCXIW", "Churchill Capital Corp XI - Warrants"],
   ["NOVTU", "Novanta Inc. - Tangible Equity Units"],
+  // ADRs. THE LARGEST POPULATION IN THE UNIVERSE: 49 of the 55 periodic filers
+  // in the measured window were 6-K filers, i.e. foreign private issuers. ARM
+  // is the symbol this project was audited against, and a single known-good
+  // ACCEPT list rejected it -- along with 8 of the other 24 ADRs tested live.
+  ["ARM", "Arm Holdings plc - American Depositary Shares"],
+  // TRUNCATED CAPTURES, and marked as such rather than completed by guesswork.
+  // The live values ran past the console width; what is stored is the exact
+  // captured prefix. That is sufficient for the marker under test -- the accept
+  // token appears inside it -- but these are NOT full names and must not be
+  // treated as such if anything later needs the whole string.
+  ["BIDU", "Baidu, Inc. - American Depositary Shares, each representing 8..."],
+  ["GSK", "...American Depositary Shares (Each representing two Ordinary..."],
 ]);
+const TRUNCATED = new Set(["BIDU", "GSK"]);
 
 // ASSERT ON THE SHAPES, NOT ON ONE SYMBOL. These five behave differently, and
 // one passing proves nothing about the others -- which is exactly what this
@@ -69,6 +82,11 @@ const SHAPES = [
   ["MKC-V", "MKC.V", "common", ". share class — SAME name as its parent"],
   ["TBB", "TBB", "not-common", "plain-ticker note"],
   ["EMBJ", "EMBJ", "common", "plain-ticker common stock"],
+  // THE SIXTH SHAPE, and five was not enough. An ADR whose name does NOT spell
+  // out the underlying is the case a single accept list silently rejects.
+  ["ARM", "ARM", "common", "ADR — name ends at 'American Depositary Shares'"],
+  ["BIDU", "BIDU", "common", "ADR — underlying not spelled out"],
+  ["GSK", "GSK", "common", "ADR — underlying IS spelled out; must not be the only passing route"],
 ];
 for (const [universeSym, expectSpelling, expectClass, shape] of SHAPES) {
   const hit = lookupBySpelling(NASDAQ_NAMES, universeSym);
@@ -105,18 +123,61 @@ for (const [sym, wantClass, wantKind] of [
   ["UNMA", "not-common", "note"],
   ["CCXIW", "not-common", "warrant"],
   ["NOVTU", "not-common", "unit"],
+  ["ARM", "common", "adr"],
+  ["BIDU", "common", "adr"],
+  ["GSK", "common", "adr"],
 ]) {
   const name = NASDAQ_NAMES.get(sym);
   check(`${sym.padEnd(6)} ${wantClass}/${wantKind}`,
     classifySecurityName(name) === wantClass && describeSecurityName(name) === wantKind,
     `${classifySecurityName(name)}/${describeSecurityName(name)} · "${name.slice(0, 44)}…"`);
 }
-// THE INVERSION, ASSERTED DIRECTLY. A name nobody enumerated must not become an
-// included symbol -- which is the property a bad-word list cannot have.
-check("an unenumerated security type is not-common, not common",
+// REJECT MUST RUN BEFORE ACCEPT. BAC$K matches BOTH stages -- "Depositary
+// Shares" is ADR-adjacent wording and "Preferred" is a type marker -- so the
+// order is the whole rule, not a detail.
+check("BAC$K matches an equity marker AND a type marker, and the reject wins",
+  /depositary shares/i.test(NASDAQ_NAMES.get("BAC$K")) &&
+    /preferred/i.test(NASDAQ_NAMES.get("BAC$K")) &&
+    classifySecurityName(NASDAQ_NAMES.get("BAC$K")) === "not-common",
+  "accept-first would have included a preferred");
+check("...while ARM's ADR wording carries no type marker at all",
+  classifySecurityName(NASDAQ_NAMES.get("ARM")) === "common" &&
+    describeSecurityName(NASDAQ_NAMES.get("ARM")) === "adr");
+check("GSK must not be the only ADR that passes",
+  ["ARM", "BIDU", "GSK"].every((s) => classifySecurityName(NASDAQ_NAMES.get(s)) === "common"),
+  "GSK passed the single-inversion rule on a parenthetical ARM does not have — a coin flip, not a rule");
+
+// STAGE 3 IS COUNTED, NOT SILENT. An "unknown" is a name matching neither
+// stage: reported so an unenumerated shape is visible rather than absorbed.
+const unknowns = [...NASDAQ_NAMES.entries()].filter(([, n]) => classifySecurityName(n) === "unknown");
+check("no captured name falls through to unknown",
+  unknowns.length === 0,
+  unknowns.map(([k]) => k).join(", ") || `all ${NASDAQ_NAMES.size} classify`);
+
+// Word boundaries, because the type markers are common English.
+check("type markers are word-bounded",
+  classifySecurityName("Wright Medical Group Common Stock") === "common" &&
+    classifySecurityName("UnitedHealth Group Incorporated Common Stock") === "common",
+  "'Wright' is not a right, 'United' is not a unit");
+
+check("truncated captures are marked as such",
+  [...TRUNCATED].every((s) => NASDAQ_NAMES.get(s).includes("...")),
+  "stored as captured prefixes; sufficient for the marker under test, not full names");
+
+// THE PROPERTY THAT MATTERS, stated as it actually behaves under three stages.
+//
+// This assertion previously used "Contingent Value Rights" and expected
+// not-common/other. Under the two-stage rule "Rights" IS a type marker, so it
+// now classifies not-common/right -- and the assertion failed, correctly. The
+// genuinely unenumerated case falls to UNKNOWN, which is the third stage:
+// excluded and COUNTED, never silently included.
+const novel = "Acme Inc. Tracking Series";
+check("a security type matching neither stage falls to UNKNOWN, never to common",
+  classifySecurityName(novel) === "unknown" && describeSecurityName(novel) === "unknown",
+  `${classifySecurityName(novel)} — excluded and counted, so an unenumerated shape is visible`);
+check("...and an enumerated type marker still rejects outright",
   classifySecurityName("Acme Inc. Contingent Value Rights") === "not-common" &&
-    describeSecurityName("Acme Inc. Contingent Value Rights") === "other",
-  "the known-good match needs no list of what a note can be called");
+    describeSecurityName("Acme Inc. Contingent Value Rights") === "right");
 // The review's figure was 1 of 6 over its own six-symbol list. Over this fuller
 // fixture it is 3 of 9 — the point is unchanged and the number is stated as
 // measured here rather than carried across from a different sample.
