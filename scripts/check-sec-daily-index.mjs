@@ -944,37 +944,91 @@ check("no isXBRL discriminator was built", !/isXBRL/.test(manifestCode) && !/isX
 // financial form, 154 whose only filings are noise -- and a quarter of those
 // noise filings AMENDED, which is the case the taxonomy had no word for.
 console.log("\n17. Only financial forms queue");
-const wSyms = [], wCik = new Map();
-for (let i = 0; i < 281; i++) { const x = "W" + i; wSyms.push(x); wCik.set(x, { cik: String(i).padStart(10, "0"), exchange: "NYSE" }); }
-const wm = man.emptyManifest();
-man.seedManifest(wm, wSyms, wCik, true);
-const wf = [];
-for (let i = 0; i < 127; i++) wf.push({ symbol: "W" + i, form: ["10-Q", "10-K", "6-K", "8-K", "20-F"][i % 5], filed: "20260911", accession: "a" + i, amendment: false });
-for (let i = 127; i < 281; i++) {
-  const noise = i % 4 === 0 ? "4/A" : ["4", "424B2", "144", "FWP"][i % 4];
-  wf.push({ symbol: "W" + i, form: noise, filed: "20260911", accession: "b" + i, amendment: noise.endsWith("/A") });
+//
+// THIS IS A UNIT TEST OF THE GATE. IT IS NOT A REPLAY OF ANY WINDOW.
+//
+// It used to claim to reproduce 20260908-11, and it did not. It built 281
+// synthetic symbols and dealt the first 127 forms from a modulo-5 round robin,
+// ["10-Q","10-K","6-K","8-K","20-F"][i % 5], which yields exactly 77
+// periodic-report and 50 unconfirmed -- not because EDGAR looks like that, but
+// because three of those five forms are periodic and two are not. The live route
+// over the real window returns { unconfirmed: 119, periodic-report: 6,
+// amendment: 2 }: 6-K dominates, exactly as this repo's own measurement says
+// ("6-K is 89% of the periodic signal"). The totals matched only because 281 and
+// 127 were typed in as loop bounds. A fixture reverse-engineered from the answer
+// cannot be evidence about what produced the answer.
+//
+// So the counts here are deliberately small and the forms deliberately chosen:
+// this section answers "does each form class queue, and with which reason", and
+// nothing about how often each form occurs. Section 17b replays the real window.
+const GATE_CASES = [
+  // form, queues?, reason
+  ["10-Q", true, "periodic-report"],
+  ["10-K", true, "periodic-report"],
+  ["20-F", true, "periodic-report"],
+  ["6-K", true, "unconfirmed"],   // periodic FORM, but usually not a report
+  ["8-K", true, "unconfirmed"],   // Item 4.02 lives here, so it must queue
+  ["10-Q/A", true, "amendment"],
+  ["10-K/A", true, "amendment"],
+  ["8-K/A", true, "amendment"],
+  ["6-K/A", true, "amendment"],
+  ["4", false, null],
+  ["4/A", false, null],           // THE DEFECT: an amended Form 4 carries no numbers
+  ["144", false, null],
+  ["144/A", false, null],
+  ["424B2", false, null],
+  ["FWP", false, null],
+  ["SCHEDULE 13D/A", false, null],
+  ["SCHEDULE 13G/A", false, null],
+];
+{
+  const syms = GATE_CASES.map((_, i) => "G" + i);
+  const cik = new Map(syms.map((x, i) => [x, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, syms, cik, true);
+  route.applyFilings(
+    m,
+    GATE_CASES.map((c, i) => ({
+      symbol: "G" + i,
+      form: c[0],
+      filed: "20260911",
+      accession: "g" + i,
+      amendment: c[0].toUpperCase().endsWith("/A"),
+    }))
+  );
+  const wrong = GATE_CASES.map((c, i) => ({ form: c[0], want: c, got: m.symbols["G" + i] }))
+    .filter((x) => x.got.needsReverify !== x.want[1] || (x.got.reverifyReason ?? null) !== x.want[2]);
+  check("every form class queues, or does not, with the reason the route assigns",
+    wrong.length === 0,
+    wrong.map((x) => `${x.form}: wanted ${x.want[1]}/${x.want[2]} got ${x.got.needsReverify}/${x.got.reverifyReason}`).join("; ") ||
+      `${GATE_CASES.length} form classes checked`);
+  check("an amended Form 4 does NOT queue a companyfacts read",
+    m.symbols.G10.needsReverify === false && m.symbols.G10.reverifyReason === null,
+    "the pre-fix gate matched any /A, so 4/A queued as 'amendment' — the highest rank");
+  check("...and neither does an amended 13D/13G",
+    m.symbols.G15.needsReverify === false && m.symbols.G16.needsReverify === false);
+  check("everything that queues carries a timestamp",
+    GATE_CASES.every((c, i) => !c[1] || typeof m.symbols["G" + i].enqueuedAt === "number"));
+  check("every queued reason is one the taxonomy names",
+    Object.values(m.symbols).filter((e) => e.needsReverify)
+      .every((e) => ["amendment", "periodic-report", "unconfirmed", "cik-change"].includes(e.reverifyReason)));
 }
-route.applyFilings(wm, wf);
-const wHist = {};
-for (const e of Object.values(wm.symbols)) if (e.needsReverify) wHist[e.reverifyReason ?? "(null)"] = (wHist[e.reverifyReason ?? "(null)"] ?? 0) + 1;
-const wQueued = Object.values(wm.symbols).filter((e) => e.needsReverify && e.cik).length;
-check("exactly the financial-form filers queue — 127, not 281 and not 166",
-  wQueued === 127, `${wQueued} queued · ${JSON.stringify(wHist)}`);
-check("an amended Form 4 does NOT queue a companyfacts read",
-  wm.symbols.W128.needsReverify === false && wm.symbols.W128.reverifyReason === null,
-  "39 noise-only symbols queued as 'amendment' before the gate was narrowed");
-check("a plain Form 4 / 424B2 / 144 / FWP still does not queue",
-  ["W129", "W130", "W131"].every((x) => wm.symbols[x].needsReverify === false));
-check("an amended 10-Q DOES still queue, as an amendment",
-  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
-    route.applyFilings(m, [{ symbol: "Z", form: "10-Q/A", filed: "20260911", accession: "z", amendment: true }]);
-    return m.symbols.Z.needsReverify === true && m.symbols.Z.reverifyReason === "amendment"; })());
-check("an amended 8-K also still queues",
-  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
-    route.applyFilings(m, [{ symbol: "Z", form: "8-K/A", filed: "20260911", accession: "z", amendment: true }]);
-    return m.symbols.Z.needsReverify === true; })());
-check("every queued reason is one the taxonomy names",
-  Object.keys(wHist).every((r) => ["amendment", "periodic-report", "unconfirmed"].includes(r)), JSON.stringify(wHist));
+
+// THE SYNTHETIC FORMS ABOVE ARE THE ONES THE GATE MUST SEPARATE, and that list
+// is derived from the shipped constants rather than retyped -- a form added to
+// PERIODIC_FORMS with no case here would otherwise go untested.
+{
+  const covered = new Set(GATE_CASES.map((c) => c[0].toUpperCase().replace(/\/A$/, "")));
+  const declared = [
+    ...(readCodeOnly("lib/server/secDailyIndex.ts").match(/PERIODIC_FORMS = \[([^\]]+)\]/)?.[1] ?? "")
+      .split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean),
+    ...(readCodeOnly("lib/server/secDailyIndex.ts").match(/REREAD_ONLY_FORMS = \[([^\]]+)\]/)?.[1] ?? "")
+      .split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean),
+  ];
+  check("every declared periodic / re-read form has a case above",
+    declared.length > 0 && declared.every((f) => covered.has(f.toUpperCase())),
+    `declared: ${declared.join(", ")}`);
+}
 
 // ── 18. The drain clears the busiest day of the year ───────────────────────
 console.log("\n18. Drain sized on peak, not on the quiet month");
@@ -1037,7 +1091,7 @@ check("the ADR overlap is recorded as UNRESOLVED, not assumed",
 
 console.log(
   failures === 0
-    ? "\nThe change detector reproduces the measured window.\n"
+    ? "\nGate behaviour verified against the route itself. Window composition is section 17b's.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);

@@ -123,6 +123,15 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Read-only: captures the REAL filing rows for a date window so a check can
+  // replay them through applyFilings. §17 previously built its own 281 synthetic
+  // symbols and handed them forms from a modulo-5 round robin, which cannot be
+  // evidence about what the route does with a real week of EDGAR.
+  "sec-window-fixture": {
+    script: "scripts/sec-window-fixture.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   // Read-only: the two venue reference files disagree about this universe, and
   // the totals alone cannot say which is wrong. Emits the per-symbol diff plus
   // what the 62.5%-by-dollar-volume figure becomes under each source. Needs the
