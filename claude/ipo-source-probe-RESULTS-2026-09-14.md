@@ -170,6 +170,49 @@ What I could establish, by search rather than by reading the clauses:
 Nobody should build on `api.nasdaq.com` until a human opens
 `https://www.nasdaq.com/terms-of-service` in a browser and reads it. That is §8, item 2.
 
+### 3a. RESOLVED, same day — PROHIBITED
+
+The owner read `nasdaq.com/legal` from their own browser and reports **§2, §6, §7 and §11
+prohibit this use**. Recorded in `claude/nasdaq-licence-verdict-2026-09-14.md` (Project-side;
+not mirrored into the repo as of this writing).
+
+**Corroborated independently**, since the §-numbering could not be checked from here: a
+search against [nasdaq.com/legal](https://www.nasdaq.com/legal) returns terms prohibiting
+*"using, copying, or extracting any Content without express written permission, including
+scraping, data mining, and automated or manual processes to capture or compile content"*,
+and separately prohibiting *"accessing or using any process, whether automated or manual, to
+capture data or content from the Service."* Unauthorised use is stated to be a breach that
+*"may result in immediate termination of access … and may lead to legal action."* That is a
+prohibition on the exact activity, and the *"automated or manual"* wording forecloses the
+obvious workaround — **a human copying the calendar by hand is named in the same clause as
+the script.** Read 2026-09-14.
+
+This is the answer the brief predicted it might be, and the reason it insisted the licence
+question was *"not an afterthought"*: **reachability without permission was never a route.**
+The residential path works and may not be used. Nothing further should be spent on it.
+
+### 3b. Nasdaq is dead permanently — alongside Stooq
+
+Filed here in the same terms `claude/stooq-inaccessible-sec-viable-2026-09-12.md` uses for
+Stooq, so the two read as one class of closed file rather than two separate disappointments.
+
+| Source | Reachable? | Why it is closed | Status |
+|---|---|---|---|
+| **Stooq** | **No** — JS challenge on 6/6 endpoints, `401` on the archive zip (runs `34697400978`, `34697879018`, `34698045649`) | Refuses automated access outright | **CLOSED — technical** |
+| **Nasdaq** | **Yes, residentially.** No from Vercel (prior) and no from a runner (30 s hang, 4/4, run `34883412035`) | **`nasdaq.com/legal` §2/§6/§7/§11 prohibit it, manually as well as automatically** | **CLOSED — legal, and therefore closed on every path including the one that works** |
+
+**The distinction matters for how permanent each is.** Stooq's block is a policy someone
+could change; a retest costs a second and is worth running if a bars question ever reopens.
+**Nasdaq's is not a block at all** — it is a licence term, it applies to the working path,
+and it does not expire. There is no retest. Do not re-probe it, do not "check whether it
+still hangs," and do not treat a future success from any IP as news. Add it to the same
+mental list as Finnhub's personal-use tier (§3): **ruled out in writing, not parked.**
+
+The practical corollary, worth saying because three separate probe runs were spent
+discovering it: **`api.nasdaq.com` should stop appearing in briefs as a candidate.** The
+repo's standing instruction at `earnings-page-free-sources-2026-09-13.md:304` (*"Do NOT probe
+Nasdaq"*) was right on the technical grounds it gave, and is now right on stronger grounds.
+
 ---
 
 ## 4. P3 — SEC EDGAR, the licence-clean floor
@@ -347,21 +390,169 @@ option is chosen, exactly as the brief argues.
 
 Every cell measured or explicitly marked unmeasured. **No cell inferred.**
 
+**UPDATED 2026-09-14, later the same day.** The two cells this probe left open were filled
+by the owner from their own machine and browser, recorded in
+`claude/nasdaq-licence-verdict-2026-09-14.md`. **That doc is not in the repo** — it exists
+Project-side and was not mirrored, the same gap §6 describes below and `CLAUDE.md` records
+twice. Its verdict is taken as given here; its §-numbering (`nasdaq.com/legal` §2/§6/§7/§11)
+is quoted from the owner's report, **not from clause text read by this probe** — the domain
+hangs from every egress available to it (§2c). The prohibition itself is corroborated
+independently (§3a).
+
 | | Nasdaq (residential) | Nasdaq (Vercel) | SEC EDGAR | FMP (reference) |
 |---|---|---|---|---|
-| **Reachable** | **NOT MEASURED** — owner-side step. Prior repo measurement says yes for the *sibling* host `rssoutbound` | **NO** (prior measurement, `rssoutbound`, 25 s timeout preview + production). `api.nasdaq.com` not measured from Vercel; a **runner** hung 30 s on 4/4 requests to it | **YES** — 200, 39.3 MB in 423 ms | yes |
-| **Rows usable, next 30d** | **NOT MEASURED** — no payload from any egress available to this probe | **NOT MEASURED** — same | **≈0 forward.** No listing date beyond ~2 days out. ≈19/30 days *backward* (Recent) | **NOT MEASURED** — no `FMP_API_KEY`, and **not in dump** (Step 0 artifact `34690240239` holds no IPO file) |
-| **Carries expected listing date** | **NOT MEASURED** | **NOT MEASURED** | **PARTIAL, and late** — 2/8 explicit date, 3/8 relative to prospectus date, 3/8 none; only at 424B, median 2 days before listing | **YES** — `date`, required, and the page's sort key |
-| **Carries price range** | **NOT MEASURED** | **NOT MEASURED** | **1/4** on S-1/A covers | yes (`priceRangeLow`/`High`, or a `"8.00-10.00"` string) |
-| **Carries shares offered** | **NOT MEASURED** | **NOT MEASURED** | 424B **4/8**, S-1/A **2/4** | yes |
-| **Carries market cap** | **NOT MEASURED** | **NOT MEASURED** | **NO** — not a filed field | **NOT MEASURED** — parser accepts `marketCap`; no key and no dump row to confirm FMP populates it |
-| **Cost** | $0 | $0 | $0 | $20,000/yr |
-| **Terms: permitted / silent / prohibited** | **UNREAD** — `/terms-of-service` hung from the runner, proxy-blocked from the sandbox; distributor terms restrict redistribution but are not confirmed to govern this endpoint | **UNREAD** — same | public domain | commercial licence required |
-| **Requests per day to run the page** | **NOT MEASURED** | **NOT MEASURED** | 1 index read + ~2 per new deal | **2** — *not the 1 the brief pre-filled*; see §0.3 |
+| **Reachable** | **YES** — owner-measured, residential UK | **NO** (prior measurement, `rssoutbound`, 25 s timeout preview + production). `api.nasdaq.com` not measured from Vercel; a **runner** hung 30 s on 4/4 requests to it | **YES** — 200, 39.3 MB in 423 ms | yes |
+| **Rows usable, next 30d** | **MOOT — prohibited** | **MOOT — prohibited** | **≈0 forward.** No listing date beyond ~2 days out. ≈19/30 days *backward* (Recent) | **NOT MEASURED** — no `FMP_API_KEY`, and **not in dump** (Step 0 artifact `34690240239` holds no IPO file) |
+| **Carries expected listing date** | **MOOT — prohibited** | **MOOT — prohibited** | **PARTIAL, and late** — 2/8 explicit date, 3/8 relative to prospectus date, 3/8 none; only at 424B, median 2 days before listing | **YES** — `date`, required, and the page's sort key |
+| **Carries price range** | **MOOT — prohibited** | **MOOT — prohibited** | **1/4** on S-1/A covers | yes (`priceRangeLow`/`High`, or a `"8.00-10.00"` string) |
+| **Carries shares offered** | **MOOT — prohibited** | **MOOT — prohibited** | 424B **4/8**, S-1/A **2/4** | yes |
+| **Carries market cap** | **MOOT — prohibited** | **MOOT — prohibited** | **NO** — not a filed field | **NOT MEASURED** — parser accepts `marketCap`; no key and no dump row to confirm FMP populates it |
+| **Cost** | $0 **and unusable** | $0 **and unusable** | $0 | $20,000/yr |
+| **Terms: permitted / silent / prohibited** | **PROHIBITED** — `nasdaq.com/legal` §2/§6/§7/§11 (owner-read 2026-09-14) | **PROHIBITED** — same terms, same domain | public domain | commercial licence required |
+| **Requests per day to run the page** | **MOOT — prohibited** | **MOOT — prohibited** | 1 index read + ~2 per new deal | **2** — *not the 1 the brief pre-filled*; see §0.3 |
+
+**Reachability stopped being the question.** The residential path works — and it is the one
+path whose terms explicitly forbid using it. A source that answers and may not be used is
+not a fallback; it is a closed file.
 
 ---
 
-## 8. Can this page stay automated on free data, and where does the fetch have to run?
+## 8. The two surviving options, costed
+
+**UPDATED after the licence verdict.** With Nasdaq closed on every path (§3b), the question
+in §9 below — *"where does the fetch have to run"* — is answered: **nowhere new.** EDGAR is
+the only licence-clean source left, and it does not carry a forward listing date. So the real
+choice is no longer about egress. It is about whether the page keeps promising a forward
+calendar it can no longer source automatically.
+
+### The volumes both options run on (measured, §4)
+
+- **~4.4 deals/week** price and list (38 final prospectuses in 60 days ≈ 19 per 30 days).
+- **~4.8 companies/week** enter the pipeline with terms set (41 cohort members filed an
+  S-1/F-1 in the window).
+- EDGAR gives, per deal: **exchange 8/8 · ticker 5/8 · shares 4/8 · offer price correct 3/8
+  · explicit listing date 2/8** (3/8 more derivable from the prospectus date).
+
+### Option 1 — EDGAR + curated dates
+
+| | |
+|---|---|
+| **Automated** | discovery (who is listing, and when they priced), exchange, and — after listing — ticker |
+| **Manual, every week** | the expected date for ~4.4 deals; the offer price for the ~5/8 the parser gets wrong; share count for ~4/8 |
+| **Build** | EDGAR adapter (**reuses the daily-index change detector already shipped in `e333dda`**), a committed curation/override file, a merge layer, the `IPO_PROVIDER` switch, and the `check-ipo-cadence.mjs` premise fix (§5.3) |
+| **Recurring human cost** | ~15–30 min/week **if** a licence-clean date source exists — see the blocker below |
+| **Cadence** | weekday evenings. Tue–Thu is the live pricing window; a Monday-only pass is useless (§9) |
+| **Keeps** | the forward calendar, the page's title, H1, slug, 5 internal links and the query it ranks for |
+
+**The unresolved blocker, and it is not small: where does the curated date come from?**
+Nasdaq's §7 covers *"automated or manual"* capture (§3a), so **a human reading the date off
+`nasdaq.com` by hand is named in the same clause as the script.** Option 1 is not viable
+until a licence-clean date source is identified. Candidates, none checked:
+
+- the issuer's **own IPO press release** (the company's own announcement of its own listing);
+- **NYSE's** calendar — different operator, different terms, **unread**;
+- the **424B4 itself** — licence-clean but T-0/T-1, which is too late to be "upcoming".
+
+A listing date is a *fact*, and facts are not copyrightable in the US — but a site's terms of
+use are a **contract** question, separate from copyright, which is exactly why Nasdaq's
+clause bites on a source that is otherwise just a date. Sourcing the same fact from the
+issuer's own release or from EDGAR sidesteps Nasdaq's contract entirely. **That reasoning is
+mine, not legal advice, and the FMP episode is the argument for getting it confirmed in
+writing before building on it.**
+
+### Option 2 — retire the forward half, run recently-listed only
+
+| | |
+|---|---|
+| **Automated** | everything. No curation, no override file, no merge layer |
+| **Manual, every week** | **none** |
+| **Build** | the same EDGAR adapter as Option 1, backward window only; delete the upcoming section; promote the existing `Recent IPOs` H2; decide the URL (below) |
+| **Recurring human cost** | **zero** |
+| **Reliability** | **materially better than Option 1**, and not only because there is less to do — see below |
+| **Costs** | the forward calendar, and the search query the page earns its impressions on |
+
+**Two reliability advantages that are specific to looking backwards**, both falling out of
+the measurements rather than assumed:
+
+1. **The price is final, not forecast.** A 424B4 is filed *after* pricing, so the number is
+   the number. Option 1's forward half has to publish a *range* that the deal then prices
+   outside — Apnimed's range was $14–16 and it priced at **$16.00**, above it (§4c).
+2. **The 5/8 ticker gap mostly closes.** Once a company has listed it appears in SEC's
+   `company_tickers.json` — the 798 KB CIK map this repo **already fetches and has working**
+   (`scripts/fetch-company-tickers.mjs`). A CIK join fills the ticker for listed companies.
+   A not-yet-listed company is not in that file, so **Option 1 cannot use this trick** and is
+   stuck at 5/8.
+
+### The SEO cost of Option 2 — what is actually exposed
+
+**The exposure, measured from code:**
+
+| Surface | Current state | Under Option 2 |
+|---|---|---|
+| URL | `/upcoming-ipos` — forward intent **in the slug** | mismatched, or 301'd away |
+| `<title>` | "Upcoming IPOs This Month \| Confirmed IPO Calendar \| MyStockHarbor" — forward intent **twice** | must change |
+| `<h1>` | "Upcoming IPOs" | must change |
+| `<h2>` | "Recent IPOs" — **already exists, with real content** | gets promoted to the page |
+| sitemap | priority `0.75`, `changeFrequency: "daily"` | daily still honest (~4.4 changes/week) |
+| Internal links | **5**, anchored "Upcoming IPOs" / "Upcoming IPOs →" — `earnings-calendar:831`, `SiteHeader:1199` (site nav), `bottlenecks/[ticker]:92`, `about:83` | all 5 anchors need rewriting |
+| JSON-LD | generic `ItemList`, gated on `upcomingFeed.ok` | survives; the `ok` gate moves to the single feed |
+| Traffic | **632 impressions / 90d**, described as the site's highest-impression page | the part driven by forward intent is at risk |
+
+**What I cannot tell you, and it is the number that decides this.** The 632 figure comes
+from the instructions brief. The underlying audit — `claude/seo-recovery-plan-2026-08-15.md`
+— is **Project-only and not mirrored** (it is entry #1 on `check-doc-citations.mjs`'s
+backlog, cited by 8 code files). I have no query-level breakdown and no way to reach Search
+Console. **So the honest statement of the SEO cost is: the full 632/90d is the exposure, and
+the share of it attributable to forward-intent queries is unmeasured.** I will not put a
+percentage on it. If most of those impressions are for *"upcoming IPO"*-shaped queries,
+Option 2 is expensive; if they are for *"IPO calendar"* or *"new IPOs"* generally, it is
+cheap. **That is a five-minute check in Search Console** (Performance → filter by page
+`/upcoming-ipos` → Queries) and it should happen before either option is chosen.
+
+**Three ways to handle the URL, if Option 2 is taken:**
+
+- **(a) Keep `/upcoming-ipos`, repurpose the content.** Keeps every inbound link and all
+  equity; costs nothing mechanically. But a page slugged and linked "upcoming" that serves
+  only past listings is an intent mismatch, and it stops answering the head query. Worst
+  case is leaving the word "upcoming" anywhere in the copy while the data is backward.
+- **(b) New `/recently-listed-ipos`, 301 from `/upcoming-ipos`.** `next.config.js` already
+  carries a documented 301 block with a duplicate-consolidation precedent, so this is cheap
+  to build. Cleanest intent signal, equity transfers — but it *explicitly* abandons the
+  forward query rather than losing it by neglect.
+- **(c) Keep the URL and answer the query honestly.** The S-1/A watchlist is licence-clean,
+  forward-looking, and **~4.8 companies/week** — it simply has no date. A section reading
+  *"these companies have filed to list and set terms; underwriters do not publish the date
+  until pricing"* is a truthful answer to "upcoming IPOs", keeps the slug, title, H1 and all
+  5 internal links honest, and needs **no curation and no second source**. It is weaker than
+  a dated calendar and stronger than nothing.
+
+**(c) is the option the measurements actually favour** and it was not in the brief's original
+two. It is Option 2's zero-maintenance cost with most of Option 1's SEO position, bought by
+giving up the one field that was never obtainable for free anyway.
+
+### Side by side
+
+| | Option 1 — EDGAR + curated dates | Option 2 — recently-listed only |
+|---|---|---|
+| Forward calendar | yes, with dates | no (or dated-free, under 2c) |
+| Weekly human time | ~15–30 min, **if a legal date source exists** | **zero** |
+| Blocked on anything? | **yes** — no licence-clean date source identified | no |
+| Data correctness risk | range published, then priced outside it; parser 3/8 on price | low — prices are final |
+| Ticker coverage | stuck at 5/8 | high, via the existing CIK map |
+| SEO | preserved | **exposed: up to 632 impressions/90d, share unmeasured** |
+| Build size | adapter + curation + merge + switch | adapter + delete + URL decision |
+
+**They are not exclusive, and the sequencing is free.** Option 2 is Option 1 minus the
+curation layer, over the same adapter. Shipping 2 first — ideally as 2(c) — gets the page
+licence-clean and zero-maintenance immediately, and leaves the curated forward half as an
+additive change *if* a legal date source is ever confirmed. Nothing about 2 forecloses 1.
+
+---
+
+## 9. Original verdict — can this page stay automated on free data, and where does the fetch have to run?
+
+*Written before the licence verdict; the reachability reasoning is superseded by §3a/§3b and
+kept because its EDGAR findings and its cadence conclusion still stand.*
 
 Not on SEC alone, and not from Vercel on Nasdaq. Those are the two things this probe
 actually settled, and together they say the page's two halves have different answers.
@@ -375,29 +566,40 @@ alone would have to stop promising a forward calendar and start being a "just li
 which is a different, smaller product than the one ranking today. The one remaining route to
 a genuine forward calendar on free data is Nasdaq's own, and the only question left on it is
 whether the owner's residential line gets an answer out of `api.nasdaq.com` when three
-datacentre networks do not. If it does, the architecture the brief anticipated is the one
-that works: the **fetch runs on the owner's PC**, the result is committed as a JSON file, and
-the page reads the file — gathering fully automated, only the merge manual. If it does not,
-Nasdaq is out entirely and the honest choice is EDGAR-plus-curation with the page's copy
-rewritten to match. On cadence, a Monday-only refresh is the one schedule that cannot work:
+datacentre networks do not. ~~If it does, the architecture the brief anticipated is the one
+that works: the fetch runs on the owner's PC, the result is committed as a JSON file, and the
+page reads the file.~~ **STRUCK — it does answer, and that design is prohibited: the
+committed-JSON architecture is exactly the "manual capture" `nasdaq.com/legal` §7 names
+(§3a). Do not build it.** Nasdaq is out entirely; the surviving options are costed in §8.
+On cadence, a Monday-only refresh is the one schedule that cannot work:
 deals launch early in the week, price Tuesday through Thursday evening and list the following
 morning, so a weekly Monday pass would miss the entire pricing window every single week and
 publish a calendar that is stale by Tuesday lunchtime. **Twice weekly is the floor — Tuesday
 and Thursday evening, US market close — and daily on weekday evenings is what the IPO week
 actually demands.**
 
-### What I need from the owner (in priority order)
+### ~~What I need from the owner~~ — items 1 and 2 are DONE
 
-1. **Run this from your PC, in a browser tab:** `https://api.nasdaq.com/api/ipo/calendar?date=2026-09`
-   — does JSON come back, or does it hang? That single answer decides the architecture, and
-   it is the one cell nobody else can fill. If JSON comes back, save it to
-   `…\WESBITE\Website Reverse FMP\ipo-probe\nasdaq-2026-09.json` and the content questions in
-   §2 become answerable in one pass.
-2. **Read `https://www.nasdaq.com/terms-of-service`** in that same browser, specifically for
-   scraping / automated access / redistribution / commercial use. Reachability without
-   permission is not a route — that is the lesson the $20K FMP quote already paid for.
-3. Tell me whether to write the build brief for (a) the committed-JSON design, (b)
-   EDGAR-plus-curation with rewritten copy, or (c) both, costed side by side.
+1. ~~Run `api.nasdaq.com/api/ipo/calendar?date=2026-09` from your PC.~~ **Done — it answers
+   residentially.** And it does not matter, because of item 2.
+2. ~~Read `nasdaq.com/terms-of-service`.~~ **Done — PROHIBITED, `nasdaq.com/legal`
+   §2/§6/§7/§11 (§3a).** The lesson the $20K FMP quote paid for held: reachability without
+   permission was never a route, and this time the check happened *before* anything was built
+   on it rather than after.
+3. Superseded by §8. The live question is now **Option 1 vs Option 2 (or 2c)**, and the one
+   measurement that would settle it is the Search Console query breakdown for
+   `/upcoming-ipos`.
+
+### What is still open
+
+1. **Search Console → Performance → filter by page `/upcoming-ipos` → Queries.** What share
+   of the 632 impressions/90d is forward-intent? Five minutes, and it is the number the
+   Option 1 / Option 2 decision turns on. Nothing here can reach it.
+2. **If Option 1 is wanted: name a licence-clean source for the expected date**, because
+   Nasdaq's §7 covers manual copying too (§8). Issuer press releases and NYSE's own calendar
+   are the candidates; neither has been read.
+3. **Then tell me which to brief:** Option 1, Option 2, or Option 2(c) — the dated-free
+   forward watchlist, which the measurements favour and which was not in the original two.
 
 **No build is proposed until you have read this.**
 
