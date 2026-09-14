@@ -159,6 +159,12 @@ const TASKS = {
   // residential path NOR Vercel -- the script says so itself rather than
   // leaving the reader to remember it.
   "ipo-sources": { script: "scripts/ipo-source-probe.mjs", args: () => [] },
+  // Run 2. Run 1's S-1/A sample turned out to be already-listed issuers filing
+  // resale registrations, so its "price range 0/5" measured the sampling frame
+  // rather than the filings. This one defines the cohort from 8-A12B -- the form
+  // that means a class is being registered on an exchange -- and reports the hit
+  // rate within it.
+  "ipo-sec-cohort": { script: "scripts/ipo-sec-cohort-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
