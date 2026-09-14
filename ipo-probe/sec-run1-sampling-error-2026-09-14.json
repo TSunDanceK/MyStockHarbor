@@ -1,0 +1,17 @@
+{
+  "_what": "SEC EDGAR, run 1. Relay run 34883412035, job 104108002717.",
+  "_status": "SUPERSEDED IN PART. The form counts are valid. The cover-page hit rate is NOT -- the five S-1/A filings sampled are already-listed issuers registering resale/follow-on shares, not IPOs, so 'price range 0/5' measured the sampling frame. Superseded by ipo-probe/sec-cohort-2026-09-14.json (run 34883903641).",
+  "reachable": true,
+  "formIndex": { "url": "https://www.sec.gov/Archives/edgar/full-index/2026/QTR3/form.idx", "status": 200, "ms": 423, "bytes": 39283913 },
+  "window": ["2026-07-16", "2026-09-14"],
+  "filingsParsedInWindow": 144834,
+  "formCounts": { "S-1": 167, "S-1/A": 177, "F-1": 56, "F-1/A": 81, "8-A12B": 276, "424B4": 73, "424B1": 4 },
+  "coversAssessed_INVALID_SAMPLE": [
+    { "company": "Youmi Inc.",     "cik": "2137360", "date": "2026-08-27", "accession": "0001520138-26-000375", "priceRange": null, "shares": "1,294,140", "ticker": null,  "exchange": "Nasdaq",                 "listingDatePhrases": [] },
+    { "company": "authID Inc.",    "cik": "1534154", "date": "2026-07-23", "accession": "0001213900-26-080882", "priceRange": null, "shares": "4,637,852", "ticker": null,  "exchange": "Nasdaq Capital Market", "listingDatePhrases": [] },
+    { "company": "iPower Inc.",    "cik": "1830072", "date": "2026-08-18", "accession": "0001683168-26-006558", "priceRange": null, "shares": "5,873,610", "ticker": "IPW", "exchange": "Nasdaq",                 "listingDatePhrases": [] },
+    { "company": "iPower Inc.",    "cik": "1830072", "date": "2026-09-09", "accession": "0001683168-26-007035", "priceRange": null, "shares": "9,636,864", "ticker": "IPW", "exchange": "Nasdaq",                 "listingDatePhrases": [] },
+    { "company": "iSpecimen Inc.", "cik": "1558569", "date": "2026-07-17", "accession": "0001213900-26-078869", "priceRange": null, "shares": "2,092,050", "ticker": null,  "exchange": "Nasdaq Capital Market", "listingDatePhrases": ["on or about July 31, 2026"] }
+  ],
+  "_whySampleInvalid": "iPower (IPW), authID and iSpecimen were already trading on Nasdaq before these filings. S-1/A is used far more often by listed small caps for resale and follow-on registrations than by IPO candidates, so taking the last five S-1/A in a window selects non-IPOs."
+}
