@@ -134,7 +134,13 @@ export default async function UpcomingIposPage() {
               itemListElement: ipos.map((ipo, index) => ({
                 "@type": "ListItem",
                 position: index + 1,
-                name: `${ipo.company} (${ipo.symbol})`,
+                // NEVER `${company} (${symbol})` UNGUARDED. A company that has
+                // filed but not priced has no ticker, and the template literal
+                // renders that as the string "(null)" -- straight into the
+                // structured data on a page whose entire ranking case IS this
+                // list. Same failure the hasItemList guard above exists to
+                // prevent in its other form.
+                name: ipo.symbol ? `${ipo.company} (${ipo.symbol})` : ipo.company,
               })),
             },
           ]

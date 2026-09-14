@@ -87,9 +87,20 @@ const FIELDS: FieldDef[] = [
   },
 ];
 
+// IDENTITY IS THE CIK, NOT THE SYMBOL. This was `${ipo.symbol}-${ipo.date}`, and
+// once the upper table began carrying companies that have filed but not priced --
+// which have no ticker yet -- that key collided: every such row became
+// "null-<date>", so two companies amending on the same day produced DUPLICATE
+// REACT KEYS. React then reuses one row's state for the other, and the wrong
+// panel opens. A CIK is always present and is unique per filer.
 function rowKey(ipo: ConfirmedIpo) {
-  return `${ipo.symbol}-${ipo.date}`;
+  return `${ipo.cik}-${ipo.date}`;
 }
+
+// What to show where a ticker has not been assigned yet. An em dash, not an empty
+// cell: a blank reads as a loading state, the same reasoning as the narrow view's
+// "only the terms this deal actually has".
+const SYMBOL_FALLBACK = "—";
 
 // Desktop keeps the nine-column table. Below 720px the same rows render
 // full-width instead: symbol, company and the date, with a chevron that opens
@@ -154,10 +165,16 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
                 className="ipoRowTop"
                 onClick={() => toggleRow(key)}
                 aria-expanded={open}
-                aria-label={open ? `Hide ${ipo.symbol} deal terms` : `Show ${ipo.symbol} deal terms`}
+                // ipo.company, not the symbol: a screen reader announcing "Show
+                // null deal terms" is worse than announcing a long name.
+                aria-label={
+                  open
+                    ? `Hide ${ipo.symbol ?? ipo.company} deal terms`
+                    : `Show ${ipo.symbol ?? ipo.company} deal terms`
+                }
               >
                 <span className="ipoRowId">
-                  <span className="ipoRowSym">{ipo.symbol}</span>
+                  <span className="ipoRowSym">{ipo.symbol ?? SYMBOL_FALLBACK}</span>
                   <span className="ipoRowName" title={ipo.company}>
                     {ipo.company}
                   </span>
@@ -184,7 +201,7 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
                     </div>
                   ) : (
                     <div className="ipoRowEmpty">
-                      No deal terms published for {ipo.symbol} yet.
+                      No deal terms published for {ipo.symbol ?? ipo.company} yet.
                     </div>
                   )}
                 </div>
@@ -285,7 +302,7 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
           {ipos.map((ipo: ConfirmedIpo) => (
             <tr key={rowKey(ipo)} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <td style={tdStyle}>{formatDate(ipo.date)}</td>
-              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol}</td>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol ?? SYMBOL_FALLBACK}</td>
               <td style={tdStyle}>{ipo.company}</td>
               <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>

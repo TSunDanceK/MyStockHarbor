@@ -43,8 +43,51 @@ import { fmpFetch } from "./fmpUsage";
 // what holds the literal to this value.
 export const IPO_REVALIDATE_SECONDS = 24 * 60 * 60;
 
+// How stale a "terms set, not yet priced" filing may be before the upper table
+// drops it. OWNER DECISION, 2026-09-14.
+//
+// WHY A CAP IS NEEDED AT ALL. A shelved deal has exactly the same shape as a live
+// one -- terms filed, no final prospectus -- so without this it sits under
+// "Upcoming IPOs" forever, and the page states something false about a company
+// for as long as the page exists. The formal withdrawal form (RW/AW) does NOT
+// solve it: measured over 2026-05-17..2026-09-14 it caught 3 of 56. Issuers that
+// lose their window overwhelmingly just stop filing. THE CAP IS THE PRIMARY
+// MECHANISM AND RW/AW IS THE EDGE CASE, not the other way round.
+//
+// WHY 45 AND NOT THE MEDIAN. Measured amendment -> final prospectus was a median
+// of 7 days and an upper bound of 14. This is keyed off the UPPER BOUND, not the
+// median: 45 is a bit over 3x the longest gap actually observed, so a live deal
+// is very unlikely to be cut. Keying off the median would have cut live deals.
+//
+// The population it was chosen against (53 companies, after removing 172
+// already-listed issuers filing resales and 3 withdrawals):
+//
+//     <=7d    1    2%        <=45d   +7   40%   <<< the cap
+//     <=14d   5   11%        <=60d  +10   58%
+//     <=21d   3   17%        <=90d  +11   79%
+//     <=30d   5   26%       <=120d  +11  100%
+//
+// THAT 100% AT 120 DAYS IS AN ARTEFACT. The measurement window was 120 days, so
+// nothing older was visible -- the real tail is longer. Do not read the table as
+// evidence that no deal goes quiet for more than four months.
+export const IPO_TERMS_MAX_AGE_DAYS = 45;
+
 export type ConfirmedIpo = {
-  symbol: string;
+  // ROW IDENTITY, AND IT IS NOT THE SYMBOL. A company that has filed to list but
+  // has not priced has no ticker yet -- the proposed symbol is a claim in a
+  // prospectus, present on roughly half of covers, while the CIK is the
+  // identifier the source is organised BY. It is the first column of every EDGAR
+  // index row and the join key into secTickerMap.
+  //
+  // THE ORDERING MATTERS AND IS DELIBERATE: `cik` became required BEFORE `symbol`
+  // became nullable. Relaxing the symbol first would have left rowKey() in
+  // IpoList.tsx keying on a value that is sometimes absent -- upper-table rows
+  // would collide as "null-<date>", and React would bleed expand/collapse state
+  // between two companies that amended on the same day.
+  cik: string;
+  // NULLABLE SINCE the page began showing companies that have filed but not
+  // priced. Every consumer must render a fallback; none may use it as identity.
+  symbol: string | null;
   company: string;
   date: string;
   exchange: string | null;
@@ -128,7 +171,19 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   const company = firstStr(row, ["company", "companyName", "name"]);
   const date = firstStr(row, ["date", "ipoDate", "expectedDate"]);
 
-  if (!symbol || !company || !date) return null;
+  // FMP'S ROWS ARE NOT KNOWN TO CARRY A CIK -- unverified, and unverifiable from
+  // a sandbox with no FMP_API_KEY. So identity on this branch is SYNTHESISED from
+  // the symbol, which FMP always supplies and which parseRow still requires
+  // below. The `fmp:` prefix is what stops a synthesised id being mistaken for a
+  // real CIK if the two ever meet in one list.
+  //
+  // This is the FMP branch only. The SEC branch has a real CIK and must use it.
+  const cik = firstStr(row, ["cik", "CIK"]) ?? (symbol ? `fmp:${symbol}` : null);
+
+  // Symbol stays REQUIRED here even though the type now allows null: an FMP
+  // "confirmed, priced" row without a ticker is a broken row, not an early-stage
+  // filing. The nullable case belongs to the SEC upper table alone.
+  if (!symbol || !company || !date || !cik) return null;
   if (isWithdrawnOrPostponed(row)) return null;
 
   const { low, high } = parsePriceRange(row);
@@ -144,6 +199,7 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   }
 
   return {
+    cik,
     symbol,
     company,
     date,
