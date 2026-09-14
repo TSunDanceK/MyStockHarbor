@@ -106,6 +106,15 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Read-only: the two venue reference files disagree about this universe, and
+  // the totals alone cannot say which is wrong. Emits the per-symbol diff plus
+  // what the 62.5%-by-dollar-volume figure becomes under each source. Needs the
+  // dump for the universe AND for the bars that weight the swing.
+  "listing-venue-diff": {
+    script: "scripts/listing-venue-diff.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   // Read-only: asks data.sec.gov/submissions whether a registrant is still
   // filing. Absence from the ticker file is not proof of deregistration, and
   // retiring a symbol on a lookup miss would discard its filing history.
