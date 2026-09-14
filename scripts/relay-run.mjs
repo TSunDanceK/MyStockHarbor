@@ -131,6 +131,10 @@ const TASKS = {
     script: "scripts/sec-window-fixture.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
+    // It LIFTS the shipped parsers, and type erasure needs the TypeScript
+    // compiler. See needsTypescript below for why that is one package and not
+    // `npm ci`.
+    needsTypescript: true,
   },
   // Read-only: the two venue reference files disagree about this universe, and
   // the totals alone cannot say which is wrong. Emits the per-symbol diff plus
@@ -223,6 +227,55 @@ if (!fs.existsSync(spec.script)) {
   );
   process.exit(2);
 }
+// TYPESCRIPT, ON DEMAND, AND ONLY TYPESCRIPT.
+//
+// The read-only job deliberately runs no `npm ci` -- not installing the Upstash
+// client is what keeps it unable to reach the database even if a future edit
+// tried to. A task that LIFTS a shipped function needs ts.transpileModule to
+// erase types first, so it needs that one package and nothing else.
+//
+// `npm ci` would satisfy it and is the wrong tool: it would pull the entire
+// dependency tree into the job that holds no credentials, widening a
+// supply-chain surface to fix a compiler import. One pinned package is the
+// smallest thing that works.
+//
+// AND IT LIVES HERE, NOT IN relay.yml, for the reason in this file's header: a
+// workflow edit costs a merge-and-wait before it can run once, and adding a
+// task must stay a branch-local change.
+if (spec.needsTypescript) {
+  let present = false;
+  try {
+    await import("typescript");
+    present = true;
+  } catch {
+    present = false;
+  }
+  if (!present) {
+    // Pinned to the same major the repo builds with, so erase() behaves here
+    // exactly as it does in check-all. A floating install could change what a
+    // lifted function's body looks like, which is the one thing this must not do.
+    const wanted = JSON.parse(fs.readFileSync("package.json", "utf8"));
+    const range = wanted.devDependencies?.typescript ?? wanted.dependencies?.typescript;
+    if (!range) {
+      console.error("FATAL: package.json declares no typescript, but this task lifts TS source.");
+      process.exit(2);
+    }
+    console.log(`relay: installing typescript@${range} (lift requires the compiler; NOT npm ci)`);
+    const r = spawnSync("npm", ["install", "--no-save", "--no-audit", "--no-fund", `typescript@${range}`], {
+      stdio: "inherit",
+    });
+    if (r.status !== 0) {
+      console.error(
+        `FATAL: could not install typescript (exit ${r.status}). The task lifts functions ` +
+          `from .ts sources and cannot erase types without it. Reimplementing the parsers ` +
+          `instead is not an option -- a capture that parses with its own code is not ` +
+          `evidence about the shipped parser.`
+      );
+      process.exit(2);
+    }
+  }
+}
+
 if (spec.needsDump && !process.env.DUMP_DIR) {
   console.error(
     `FATAL: "${task}" reads the frozen dump but DUMP_DIR is empty — the download ` +
