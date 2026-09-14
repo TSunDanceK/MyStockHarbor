@@ -264,9 +264,33 @@ check(
   sec.parseSubmissions(FIXTURE, "mu", NOW).every((i) => i.tickers[0] === "MU")
 );
 check(
-  "the hard preference this avoids is really in rankNews",
-  /symbolConfirmedNews\.length/.test(readCodeOnly("lib/stock-news-data.ts")),
-  "if this stops being a hard preference, the decision above is worth revisiting"
+  "the field is INERT in rankNews — the premise of the decision above, restated",
+  (() => {
+    // THIS ASSERTION FIRED WHEN THE HARD PREFERENCE WAS REMOVED, which is
+    // exactly what it was for: it read "the hard preference this avoids is
+    // really in rankNews", and that premise stopped being true on 2026-09-14.
+    // Deleting it would have left the decision above resting on a reason that
+    // no longer exists. Restated to the premise that holds now.
+    //
+    // WHAT CHANGED. The exclusive branch turned out to be the outage: after the
+    // provider flip only PRE-FLIP records could carry fmpSymbolMatched, so it
+    // selected exactly those and discarded the whole free-stack feed. It is
+    // gone, and the field orders nothing either — promoting on it today would
+    // promote staleness. claude/traps/a-preference-that-filters.md.
+    //
+    // WHAT THE DECISION ABOVE RESTS ON NOW. Not "stamping would discard the
+    // feed" — it would not, the branch is gone. It rests on the field being a
+    // FOSSIL: nothing live writes it, and stamping it here is the event that
+    // makes promotion safe to reconsider rather than something to do quietly.
+    // scripts/check-news-relevance-scope.mjs owns that tripwire and fails from
+    // both directions.
+    const code = readCodeOnly("lib/stock-news-data.ts");
+    const i = code.indexOf("function rankNews(");
+    const body = code.slice(i, code.indexOf("\n}", i));
+    return i >= 0 && body.length > 200 && !/articleMatchesRequestedSymbol|fmpSymbolMatched/.test(body);
+  })(),
+  "if rankNews starts reading the field again, the decision above is worth revisiting — " +
+    "and so is scripts/check-news-relevance-scope.mjs, which asserts the inertness"
 );
 
 console.log("\n=== 6. Lazy only — no universe sweep, no cron ===\n");

@@ -1153,21 +1153,73 @@ export function dedupeNews(items: NewsItem[]): NewsItem[] {
   return deduped;
 }
 
-function rankNews(news: NewsItem[], symbol = "", companyName = "") {
-  const symbolConfirmedNews = symbol
-    ? news.filter((item) => articleMatchesRequestedSymbol(item, symbol))
-    : [];
+/**
+ * What a ranking run is ABOUT. There is no default, and that is the fix.
+ *
+ * `rankNews(news, symbol = "", companyName = "")` let the stock page acquire
+ * MARKET scope by omitting two arguments, which is how the score panel and the
+ * card feed ended up computing over different sets in the same render while
+ * both looked correct at their call sites. A caller now has to say which it
+ * wants, so market scope is something you ask for rather than something you
+ * fall into.
+ *
+ * Both scopes are legitimate — lib/sector-news-data.ts has no symbol to be
+ * about — so the defect was never that the no-symbol path exists. It was that
+ * it was reachable by forgetting.
+ */
+type NewsScope =
+  | { kind: "symbol"; symbol: string; companyName: string }
+  | { kind: "market" };
 
-  const textRelevantNews =
-    symbol && companyName
-      ? news.filter((item) => isClearlyAboutRequestedCompany(item, symbol, companyName))
-      : news;
+export const MARKET_NEWS_SCOPE: NewsScope = { kind: "market" };
 
-  const relevantNews = symbolConfirmedNews.length
-    ? symbolConfirmedNews
-    : textRelevantNews.length
-      ? textRelevantNews
-      : news;
+function rankNews(news: NewsItem[], scope: NewsScope) {
+  // ── THE EXCLUSIVE SYMBOL-CONFIRMED BRANCH IS GONE ───────────────────────
+  // It read:
+  //
+  //   const relevantNews = symbolConfirmedNews.length ? symbolConfirmedNews : …
+  //
+  // — if ANY item was symbol-confirmed, only those survived. That is a
+  // PREFERENCE EXPRESSED AS A FILTER, and it deletes everything that cannot
+  // express the preference (claude/traps/a-preference-that-filters.md).
+  //
+  // articleMatchesRequestedSymbol reads fmpSymbolMatched / fmpSymbols, and only
+  // lib/server/news/fmpProvider.ts ever writes them. After the provider flip no
+  // live item can carry them, so the branch selected EXACTLY the pre-flip
+  // records still in the persistent store and discarded the whole free-stack
+  // feed: FAST rendered 2 cards from 86 fetched items, both five weeks old,
+  // while its own score panel counted 14 headlines from the last 14 days.
+  //
+  // NOTHING IS LOST BY REMOVING IT, because the confirmed set was never adding
+  // members: isClearlyAboutRequestedCompany returns true for a symbol-confirmed
+  // item on its first line, so confirmed ⊆ text-relevant, always. The branch
+  // only ever removed things.
+  //
+  // ── AND IT IS NOT REPLACED BY A SORT KEY, YET ───────────────────────────
+  // Promoting rather than excluding is the right shape and is what makes it
+  // safe for any adapter to stamp the field — which is exactly what
+  // secProvider.ts currently has to refuse. But promoting on fmpSymbolMatched
+  // TODAY would promote STALENESS: nothing live writes it, so every item
+  // carrying it predates the flip by construction, and a sort key that orders
+  // old before new while looking like it orders relevant before irrelevant is
+  // the same bug in a better hat.
+  //
+  // So it is INERT while no live adapter writes the field, and
+  // scripts/check-news-relevance-scope.mjs asserts both halves: that rankNews
+  // does not branch or sort on it, AND that no active adapter stamps it. The
+  // day one does, that assertion fails and says to reconsider promotion — the
+  // tripwire points both ways on purpose.
+  const relevantNews =
+    scope.kind === "market"
+      ? news
+      : (() => {
+          const textRelevant = news.filter((item) =>
+            isClearlyAboutRequestedCompany(item, scope.symbol, scope.companyName)
+          );
+          // The empty case is unchanged: a symbol whose feed matches nothing
+          // still gets its feed rather than a blank page.
+          return textRelevant.length ? textRelevant : news;
+        })();
 
   return dedupeNews(
     [...relevantNews].sort((a, b) => {
@@ -1246,7 +1298,17 @@ export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult
     };
   }
 
-  const ranked = rankNews(news);
+  // MARKET SCOPE, STATED. This is the second half of the divergence and it is
+  // DELIBERATELY UNCHANGED here: the score computes over every stored item,
+  // including ones no relevance rule would keep. Correcting it moves a
+  // user-visible number on 2,620 pages and deserves its own before/after rather
+  // than arriving inside an outage fix. Filed separately.
+  //
+  // What the fix above DOES guarantee is that the feed and the score now differ
+  // only in their WINDOW (14 days here, 45 on the feed), not in their relevance
+  // set — once this call is narrowed. Until then the explicit argument is what
+  // stops the difference being invisible.
+  const ranked = rankNews(news, MARKET_NEWS_SCOPE);
   // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
   // the two treatments differ for a reason rather than by oversight. "Chokshi &
   // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
@@ -2214,7 +2276,7 @@ async function buildStockNewsBaseData(
     ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
 
-  const rankedNews = rankNews(news, upper, companyName);
+  const rankedNews = rankNews(news, { kind: "symbol", symbol: upper, companyName });
   const rankedEarningsNews = rankEarningsNews(earningsNews);
 
   const keywordNewsScore = scoreNews(news);
