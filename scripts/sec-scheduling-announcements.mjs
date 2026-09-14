@@ -221,6 +221,11 @@ function extractDate(fragment, filedIso) {
 const sample = candidates.slice(0, SAMPLE_CAP);
 const hits = [];
 let opened = 0, noExhibit = 0, noLanguage = 0, languageNoDate = 0;
+// ATTRIBUTION FOR A ZERO. If the hit rate is 0, these say whether the documents
+// were even fetched and whether they contain the vocabulary at all. Without
+// them, "extractor broken" and "filers do not do this" are the same number.
+let docsFetched = 0, docBytes = 0, sawCall = 0, sawReport = 0, sawMonth = 0;
+const MONTH_WORD = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i;
 
 for (const c of sample) {
   const accnPlain = c.accnDashed.replace(/-/g, "");
@@ -228,19 +233,33 @@ for (const c of sample) {
   if (!idx.ok) continue;
   opened++;
   const items = idx.body?.directory?.item ?? [];
-  // EX-99.* is where a press release lives. The primary 8-K body is the
-  // fallback: some filers put the sentence in the 8-K itself.
+  // ── SELECT ON `type`, NOT ON THE FILENAME ────────────────────────────────
+  //
+  // The first cut sorted on /^ex-?99/ against `name`, and EDGAR filenames
+  // almost never start with "ex99" -- they look like `tm2512345d1_ex99-1.htm`
+  // or `a8-kex991.htm`. So the sort was inert, `.slice(0, 2)` took two
+  // arbitrary documents, and the press release was usually not among them.
+  // That produced 90 of 90 filings with "no scheduling language", which read
+  // as a finding about filers and was a fact about this selector.
+  //
+  // index.json carries a `type` field ("EX-99.1", "8-K", "GRAPHIC"). Use it,
+  // fall back to the name, and read MORE than two documents.
   const docs = items
     .filter((it) => /\.(htm|html|txt)$/i.test(it.name ?? ""))
-    .sort((a, b) => (/^ex-?99/i.test(a.name) ? -1 : 1) - (/^ex-?99/i.test(b.name) ? -1 : 1))
-    .slice(0, 2);
+    .map((it) => ({ ...it, rank: /^EX-99/i.test(it.type ?? "") ? 0 : /ex.?99/i.test(it.name ?? "") ? 1 : /^8-K$/i.test(it.type ?? "") ? 2 : 3 }))
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 6);
   if (!docs.length) { noExhibit++; continue; }
 
   let found = null;
   for (const d of docs) {
     const doc = await get(`https://www.sec.gov/Archives/edgar/data/${c.cik}/${accnPlain}/${d.name}`);
     if (!doc.ok) continue;
+    docsFetched++; docBytes += doc.text.length;
     const text = stripTags(doc.text);
+    if (/conference call|earnings call|webcast/i.test(text)) sawCall++;
+    if (/will (report|announce|release)|scheduled to (report|announce|release)/i.test(text)) sawReport++;
+    if (MONTH_WORD.test(text)) sawMonth++;
     const rm = RESULTS_RE.exec(text);
     const cm = CALL_RE.exec(text);
     const frag = rm?.[0] ?? cm?.[0] ?? null;
@@ -295,6 +314,11 @@ FAILURES  ${failures.length}${failures.length ? ` (first: ${failures[0].why} ${f
 2b — OF THOSE, HOW MANY ARE A SCHEDULING ANNOUNCEMENT
   sampled                          ${sample.length} of ${candidates.length}
   filing index opened              ${opened}
+  documents fetched                ${docsFetched} (${(docBytes / 1048576).toFixed(1)} MB)
+  ── attribution for the rate below, so a zero is not ambiguous ──
+  documents mentioning a call      ${sawCall} (${pct(sawCall, docsFetched || 1)})
+  documents with "will/scheduled to report|announce|release"  ${sawReport} (${pct(sawReport, docsFetched || 1)})
+  documents containing a month name ${sawMonth} (${pct(sawMonth, docsFetched || 1)})
   no readable document             ${noExhibit}
   no scheduling language           ${noLanguage}
   language but no parseable date   ${languageNoDate}
