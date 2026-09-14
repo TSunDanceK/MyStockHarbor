@@ -49,6 +49,20 @@ const check = (label, ok, detail = "") => {
 // the next reader to convert a page that was converted long ago. A mirrored doc
 // is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
+  // ADDED 2026-09-13 with the SEC build brief. The brief and the evidence docs
+  // it supersedes landed in the repo together; these seven are cited by
+  // earnings-page-free-sources and sec-pipeline-spec and were never mirrored --
+  // Project-only, same situation and same resolution as the image-policy
+  // citation struck above. Nothing here was broken by the build branch; the
+  // citations arrived with the docs.
+  "claude/NEXT-SESSION-2026-09-12.md",
+  "claude/data-vendor-enquiry-2026-09-12.md",
+  "claude/stooq-sec-probe-INSTRUCTIONS-2026-09-12.md",
+  "claude/earnings-probe-adjudication-2026-09-13.md",
+  "claude/tiering-freshness-follows-display-2026-09-01.md",
+  "claude/fmp-exit-options-pickers-2026-09-12.md",
+  "claude/firewall-asn-audit-2026-08-31.md",
+
   "claude/seo-recovery-plan-2026-08-15.md",
   "claude/list-link-prefetch-disable-2026-07-21.md",
   "claude/stock-daily-rate-limit-2026-07-21.md",

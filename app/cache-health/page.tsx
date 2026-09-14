@@ -609,7 +609,13 @@ export default async function CacheHealthPage({
                 const detail = !instrumented
                   ? "this job does not call recordJobRun — nothing is known about it, which is not the same as nothing happening"
                   : run
-                    ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
+                    ? Object.entries(run.summary)
+                        // `exchanges` is pulled out and given its own line below
+                        // rather than being buried in a 25-key join -- see
+                        // exchangeSplit.
+                        .filter(([k]) => k !== "exchanges")
+                        .map(([k, v]) => `${k} ${v}`)
+                        .join(" · ")
                     : `runs on \`${cron}\` (about every ${fmtDuration(intervalSeconds)}) — nothing recorded yet. ` +
                       (silenceIsExpected
                         ? "A daily job is silent for most of the day by design, so this means nothing until a full cycle has passed since the instrumentation shipped."
@@ -622,7 +628,26 @@ export default async function CacheHealthPage({
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
                       {outcome}
                     </td>
-                    <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>{detail}</td>
+                    <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>
+                      {detail}
+                      {/*
+                        THE EXCHANGE SPLIT, ON ITS OWN LINE.
+
+                        The NYSE slice is the population that loses its price
+                        history if the bars deal lands Nasdaq-only, so it is the
+                        size of that decision's cost. It was already in the run
+                        summary and therefore already on this page -- folded
+                        into a 25-key `·` join, which is present without being
+                        legible. A number nobody can find is a number nobody
+                        uses.
+                      */}
+                      {typeof run?.summary?.exchanges === "string" && run.summary.exchanges ? (
+                        <div style={{ marginTop: 4, color: "#cbd5e1" }}>
+                          <strong style={{ color: "#94a3b8", fontWeight: 500 }}>exchange mix</strong>{" "}
+                          {run.summary.exchanges}
+                        </div>
+                      ) : null}
+                    </td>
                   </tr>
                 );
               })}
