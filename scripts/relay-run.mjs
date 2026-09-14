@@ -125,6 +125,11 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
+  // fixture and a live symbol list and touches no network, so it runs locally.
+  // Adding it here would imply it needs a runner, which is the kind of drift
+  // this table exists to avoid.
+  //
   // Read-only: captures the REAL filing rows for a date window so a check can
   // replay them through applyFilings. §17 previously built its own 281 synthetic
   // symbols and handed them forms from a modulo-5 round robin, which cannot be

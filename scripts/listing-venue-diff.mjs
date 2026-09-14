@@ -4,8 +4,14 @@
 // THE FINDING THIS EXISTS TO SETTLE. Two counts of the same universe's listing
 // venue do not agree:
 //
-//     manifest (live, 2026-09-14)   NYSE 476   Nasdaq 216   (unknown) 4   [696]
-//     #448 / listing-split.mjs      NYSE 463   Nasdaq 230                 [693]
+//     manifest (live, 2026-09-14)   NYSE 476   Nasdaq 216   unknown 4      [696]
+//     #448 / listing-split.mjs      NYSE 466*  Nasdaq 230   UNRESOLVED 4   [700]
+//                                   * 463 + 3 counted "NYSE (SEC only)"
+//
+// (An earlier version of this header said #448's universe was 693. That was
+// wrong: it added only the NYSE and Nasdaq rows and dropped the UNRESOLVED and
+// SEC-only ones. #448's own headline is "The 700 is a third Nasdaq by count".
+// The live manifest is therefore SMALLER than the dump, not larger.)
 //
 // Nasdaq is 14 lower and NYSE 13 higher than the figure the 32.9%-by-count /
 // 62.5%-by-dollar-volume licensing case rests on. TOTALS THAT DISAGREE DO NOT
