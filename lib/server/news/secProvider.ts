@@ -19,9 +19,18 @@
 // asks for identification and caps at 10 req/sec. SEC_USER_AGENT is sent when
 // set and a truthful default is sent when it is not — an anonymous request that
 // works is still a request that should not be made anonymously.
+//
+// The default now DERIVES from lib/server/news/userAgent.ts rather than being a
+// second literal here, so there is one string to keep truthful instead of two
+// that drift. SEC_USER_AGENT still wins wherever it is set, so nothing moves in
+// any environment that sets it. Unlike the wires, sec.gov keeps a variable at
+// all because the contact address it publishes is something the operator must
+// be able to change without a deploy — that asymmetry is deliberate and the
+// reasoning is written down in that file.
 import cikMap from "@/data/cik-map.json";
 import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
+import { secUserAgent } from "./userAgent";
 import type { NewsItem, NewsProvider } from "./types";
 
 const CIK_BY_SYMBOL = cikMap as Record<string, string>;
@@ -54,9 +63,6 @@ function isRoutineForm(form: string): boolean {
   return ROUTINE_FORMS.has(form.replace(/\/A$/, "").trim());
 }
 
-function userAgent(): string {
-  return process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (contact@mystockharbor.com)";
-}
 
 /**
  * Plain English for a filing.
@@ -232,26 +238,111 @@ export function parseSubmissions(
  * that symbol — the strongest evidence producing the worst page. The attribution
  * goes in `tickers`, which nothing reads as a filter.
  */
+/**
+ * Symbol -> CIK, tolerating the dot/dash split.
+ *
+ * BRK.B WAS ONE OF ELEVEN MISSES IN RELAY RUN 47 AND THE ONLY ONE THAT WAS OURS.
+ * `BRK-B` is in the map (CIK 0001067983); `BRK.B` is not. SEC writes the dashed
+ * form, this repo's screener cache writes the dashed form, and the pickers
+ * universe carries the dotted one — so the two spellings of one company sit in
+ * our own data and nothing bridged them.
+ *
+ * This is the SAME BUG as the one #448 fixed for taxonomy, re-landing on a
+ * different lookup: claude/symbol-spelling-split-2026-09-12.md measured BRK.B as
+ * the only universe symbol missing both sector and industry, for exactly this
+ * reason. scripts/check-symbol-spelling.mjs exists because of it, and its own
+ * header names the vector — a person typing a ticker the way a human writes it
+ * into a hardcoded list, which is a standing practice here rather than a
+ * one-off. So this WILL happen again to the next dotted ticker that enters the
+ * universe, and normalising at the lookup is what makes that harmless.
+ *
+ * ONE DIRECTION ONLY, deliberately. The dashed spelling is canonical everywhere
+ * this repo stores data, so the fallback converts dots to dashes and never the
+ * reverse. A two-way normalisation would invite writing the dotted form as if it
+ * were equally valid, which is the habit that caused this.
+ *
+ * It cannot collide: a CIK map key contains at most one of the two separators,
+ * and the exact match is always tried first, so a symbol that legitimately holds
+ * a dot resolves to itself before any rewriting happens.
+ */
+/*
+ * `ciks` IS A PARAMETER SO THE PROPERTY CAN BE TESTED, not for flexibility --
+ * every caller uses the default. "Exact match wins over the rewrite" is
+ * indistinguishable from "the rewrite wins" against the real map, because no
+ * key in it both contains a dot and exists in its own right, so the branch that
+ * separates the two implementations is never taken. A mutation swapping their
+ * order survived every assertion written against the live data. Handing the
+ * function a crafted map -- {"A.B": x, "A-B": y} -- is the only thing that
+ * discriminates. Third time this pattern has come up today; see
+ * classifyProviderStats and cikCoverage.
+ */
+export function cikFor(
+  symbol: string,
+  ciks: Record<string, string> = CIK_BY_SYMBOL
+): string | undefined {
+  const upper = symbol.trim().toUpperCase();
+  return ciks[upper] ?? (upper.includes(".") ? ciks[upper.replace(/\./g, "-")] : undefined);
+}
+
+/**
+ * Symbols that cannot be resolved by a ticker join AT ALL, and why.
+ *
+ * NOT A TODO LIST AND NOT A DENYLIST. It exists so the warning below stops
+ * telling the next reader to regenerate the CIK map, which for these two is
+ * wrong advice that costs a relay dispatch to disprove. Runs 47-50 spent four
+ * dispatches getting here; this is the receipt.
+ *
+ * BOTH ARE LIVE NASDAQ LISTINGS — the raw directory rows prove it — and both
+ * are ABSENT from SEC's company_tickers.json. That file does not index every
+ * filer's ticker, so no fix to the join reaches them. Name matching does not
+ * either: NBN's "Northeast Bank" is one token from NorthEast Community Bancorp,
+ * a genuinely different company, and TowneBank's only sub-floor candidate was
+ * The Bancorp Inc.
+ *
+ * 2 unresolved out of 2,620 is 99.92%. Building a second lookup path for two
+ * banks would cost more than it returns, and the SEC leg is a supplement to the
+ * feed rather than the feed itself. Recorded and stopped.
+ */
+const NO_CIK_BY_DESIGN = new Map([
+  ["NBN", "Northeast Bank — live on Nasdaq, absent from SEC's company_tickers.json"],
+  ["TOWN", "TowneBank — live on Nasdaq, absent from SEC's company_tickers.json"],
+]);
+
 async function fetchForSymbol(
   symbol: string,
   _companyName: string,
   _sinceIso: string | null
 ): Promise<NewsItem[]> {
   const upper = symbol.trim().toUpperCase();
-  const cik = CIK_BY_SYMBOL[upper];
+  const cik = cikFor(upper);
 
   if (!cik) {
-    // THE REFRESH TRIGGER FOR data/cik-map.json, and the reason it is a log line
-    // rather than a calendar reminder: the map is trimmed to the universe, so a
-    // symbol entering the universe is exactly when it needs regenerating, and
-    // this is the event that says so.
+    // THE REFRESH TRIGGER FOR data/cik-map.json.
+    //
+    // CORRECTED 2026-09-14. This used to say the map is trimmed to the universe
+    // so "a symbol entering the universe is exactly when it needs
+    // regenerating". That described misses that are transient and self-
+    // announcing. The real ones were not: the map was built against the PICKERS
+    // universe while this function is called for any symbol with a stock page,
+    // so 1,924 of 2,619 profiled symbols -- 73.5%, AOS among them -- had no CIK
+    // permanently, and regenerating against the same denominator fixed none of
+    // them. scripts/sec-probe.mjs now builds against the union with
+    // data/static-profile.json's rows.
+    // See claude/cik-map-coverage-2026-09-14.md.
+    const known = NO_CIK_BY_DESIGN.get(upper);
+    if (known) {
+      // Deliberately not silent — the leg really is empty — but it must not
+      // send anyone to regenerate a map that cannot contain this symbol.
+      console.warn(`[sec] ${upper}: no CIK, known-unresolvable — ${known}`);
+      return [];
+    }
     console.warn(`[sec] ${upper}: no CIK in data/cik-map.json — regenerate it (relay task "sec", symbols=cik-map)`);
     return [];
   }
 
   try {
     const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-      headers: { "user-agent": userAgent(), accept: "application/json" },
+      headers: { "user-agent": secUserAgent(), accept: "application/json" },
       next: { revalidate: 3600 },
     });
     if (!res.ok) return [];

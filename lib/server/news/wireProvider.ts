@@ -21,6 +21,7 @@
 // asking the wire about a symbol.
 import { stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription } from "./text";
 import { deriveEventType } from "./eventType";
+import { newsUserAgent } from "./userAgent";
 import { beginTiming } from "../timing";
 import type { NewsItem, NewsProvider } from "./types";
 
@@ -211,7 +212,20 @@ async function pollAll(): Promise<NewsItem[]> {
       try {
         // Identical URL for every caller and every symbol — that is what makes
         // this one poll rather than one per symbol.
-        const res = await fetch(source.url, { next: { revalidate: 3600 } });
+        //
+        // THE USER-AGENT IS NOT POLITENESS, IT IS THE FIX. Without it
+        // globenewswire never answers: 20,003ms and zero bytes with `cause`
+        // empty — a tarpit, not a block. With it, 183ms and HTTP 200 on the
+        // same cache mode. See lib/server/news/userAgent.ts for the 2x2 and for
+        // why that value is a constant rather than an environment variable.
+        //
+        // prnewswire answers either way and gets the header for consistency;
+        // that half is UNTESTED — nothing measured says what prnewswire does
+        // with a UA attached, only that it does not need one.
+        const res = await fetch(source.url, {
+          headers: { "user-agent": newsUserAgent() },
+          next: { revalidate: 3600 },
+        });
         if (!res.ok) return [];
         return parseWireFeed(await res.text(), source);
       } catch {
