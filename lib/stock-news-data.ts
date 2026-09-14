@@ -657,6 +657,87 @@ function getCleanCompanyName(companyName: string) {
     .trim();
 }
 
+/**
+ * The spellings a headline might use for one company.
+ *
+ * ── MEASURED BEFORE IT WAS WRITTEN ────────────────────────────────────────
+ * getCleanCompanyName strips ALL punctuation, so the four names it was asked
+ * about reduce like this:
+ *
+ *   FAST  "Fastenal Company - Common Stock"        -> "fastenal"
+ *   SNA   "Snap-On Incorporated Common Stock"      -> "snap on incorporated"
+ *   AOS   "A.O. Smith Corporation Common Stock"    -> "a o smith"
+ *   SJM   "The J.M. Smucker Company Common Stock"  -> "the j m smucker"
+ *
+ * and the two content rules in isClearlyAboutRequestedCompany then both die on
+ * the dotted pair:
+ *
+ *   RULE 2 wants the whole cleaned string as a CONTIGUOUS substring of the
+ *   headline. The headline normaliser KEEPS dots (its class is [^\w\s:$.-]),
+ *   so the text says "a.o. smith" or "a. o. smith" and never "a o smith".
+ *   The two sides are normalised differently, so they can never meet.
+ *
+ *   RULE 3 wants two words of four or more characters. "a o smith" offers
+ *   exactly one — "smith" — so the rule is switched off entirely.
+ *
+ * Only an explicit ticker signal was left, which is why SJM's "JM Smucker
+ * (SJM) Stock" survived and "J.M. Smucker Co. cuts outlook" did not. 56 of
+ * AOS's 60 items died here, before the churn filter and before the window.
+ *
+ * ── SO THE FIX IS ON THE NAME SIDE, NOT THE THRESHOLD ─────────────────────
+ * Lowering the minimum token length would let "a" and "o" match half the
+ * market — the same failure one level down. Instead the NAME is offered in the
+ * forms a real headline actually uses, and the length guard is kept exactly
+ * where it was, now applied to whole variants rather than to fragments.
+ *
+ * Every variant is >= 4 characters. That is the guard, unchanged.
+ */
+export function companyNameVariants(companyName: string): string[] {
+  const base = String(companyName ?? "")
+    .toLowerCase()
+    // Same suffix vocabulary as getCleanCompanyName, and deliberately the same
+    // list rather than a second one that can drift.
+    // `incorporated` is added to the list getCleanCompanyName uses, and it is
+    // the one addition here. Evidence, not plausibility: `inc` is already in
+    // that list, `incorporated` is the same legal form spelled out, and leaving
+    // it in is what kept SNA's variants as "snap-on incorporated" so that a
+    // real headline — "Snap on Tools parent beats estimates" — did not match.
+    // Longest-first, though the \b anchors already stop `inc` matching inside
+    // `incorporated`, so the ordering is defence in depth rather than the thing
+    // that protects it.
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/g,
+      " "
+    )
+    // A leading "the" is never part of how a headline refers to the company,
+    // and leaving it in would break every substring match for "The J.M.
+    // Smucker Company". Substring matching handles its PRESENCE in the
+    // headline on its own.
+    .replace(/^\s*the\s+/, "")
+    // Keep dots and hyphens: they are the thing being varied.
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[\s.-]+$/, "")
+    .trim();
+
+  if (!base) return [];
+
+  const variants = new Set<string>([
+    base,                                   // a.o. smith      snap-on
+    base.replace(/\./g, ""),                // ao smith
+    base.replace(/\./g, " "),               // a o smith
+    base.replace(/\.\s*/g, ". "),            // a. o. smith
+    base.replace(/-/g, " "),                // snap on
+    base.replace(/-/g, ""),                 // snapon
+  ]);
+
+  return [...variants]
+    .map((v) => v.replace(/\s+/g, " ").trim())
+    // THE LENGTH GUARD, KEPT. A variant shorter than four characters is a
+    // fragment, and a fragment is what would match half the market.
+    .filter((v) => v.length >= 4);
+}
+
 function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
   if (articleMatchesRequestedSymbol(item, symbol)) {
     return true;
@@ -688,7 +769,11 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
     return true;
   }
 
-  if (cleanedCompany && cleanedCompany.length >= 4 && text.includes(cleanedCompany)) {
+  // ANY SPELLING THE HEADLINE MIGHT USE, not just the punctuation-stripped one.
+  // See companyNameVariants: the text normaliser keeps dots and the name
+  // normaliser removed them, so a dotted name could never match its own
+  // headline. The length guard is unchanged and now applies per variant.
+  if (companyNameVariants(companyName).some((variant) => text.includes(variant))) {
     return true;
   }
 
