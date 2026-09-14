@@ -54,10 +54,43 @@ between them is classification and nothing else, and reports:
 2. **Every symbol the two sources classify differently**, with both raw values,
    the source each came from, and the symbol's share of dollar volume.
 3. What the headline figure becomes **under each source** — Nasdaq count, % by
-   count, and % by dollar volume — plus the swing between them.
+   count, and % by dollar volume — plus the swing between them. Computed over
+   the **comparable set** (symbols both files have a row for), with the all-rows
+   figure printed beside it and the exclusion reported by count *and* by
+   dollar-volume share. See *The coverage trap* below.
 4. Coverage gaps (a symbol one file has no row for) reported separately from
    conflicts, and the membership component reported as **UNACCOUNTED** unless
    the live universe is supplied.
+
+### The coverage trap
+
+The Nasdaq test is `norm(venue) === "NASDAQ"`, and `norm(null)` is `null`. A
+symbol one file has **no row for** is therefore counted as *not Nasdaq* on that
+file's side — so a **coverage gap prints as a source disagreement**. If
+`nasdaqtraded.txt` lacks rows for symbols SEC calls Nasdaq, the #448 side
+undercounts Nasdaq by absence and the headline reports it as misclassification.
+That is a version of the exact error this script exists to stop, committed by the
+script itself, and it produces a plausible number rather than an error.
+
+Fixed by computing section 3 over the comparable set, with that set as the
+denominator for `pctCount` as well as `pctDv` — `rows.length` carries the same
+defect into the count column. **Both numbers are kept**: the all-rows line is
+printed beside it and labelled, so the divergence between the two lines is itself
+the signal, and the exclusion is reported by weight because "6 symbols excluded,
+0.02% of dollar volume" and "6 symbols excluded, 11% of dollar volume" call for
+completely different responses. `counts.excludedFromHeadline` and
+`counts.excludedDollarVolumeShare` travel in the JSON, which is what gets read
+later without the console output beside it.
+
+Section 1's closing claim was wrong for the same reason and is corrected: one
+symbol set rules out *membership*, not coverage — a difference between the two
+columns is classification **or** coverage, and section 4 says which.
+
+`node scripts/listing-venue-diff.mjs --selftest` proves it, with no network and
+no dump. The fixture is three covered symbols plus one that only SEC has a row
+for, carrying 70% of the dollar volume: the comparable headline reads 66.7%, the
+all-rows view 90.0%. Driven through the real `computeHeadline` — a
+reimplementation of the arithmetic could not be evidence about the arithmetic.
 
 Two design points worth keeping:
 

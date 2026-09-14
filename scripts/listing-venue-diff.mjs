@@ -47,6 +47,80 @@ const UA =
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; listing-venue reconciliation)";
 const SESSIONS = Number(process.env.DV_SESSIONS ?? 60);
 
+// ── SELF-TEST ────────────────────────────────────────────────────────────────
+// Runs with --selftest: no network, no dump. It exists because the defect this
+// guards against is SILENT -- a coverage gap counted as a classification
+// difference produces a plausible number, not an error, and the whole report is
+// an argument about a number. Driven through the real computeHeadline; a
+// reimplementation of the arithmetic could not be evidence about the arithmetic.
+if (process.argv.includes("--selftest")) {
+  const mk = (symbol, nas, sec, dv) => ({
+    symbol,
+    dollarVolume: dv,
+    nasdaqtraded: { code: null, venue: nas, matchedAs: null },
+    sec: { exchange: sec, matchedAs: null },
+    agreement: nas == null || sec == null ? "not-comparable" : norm(nas) === norm(sec) ? "agree" : "conflict",
+    nasdaqBoundary:
+      nas == null || sec == null
+        ? "not-comparable"
+        : (norm(nas) === "NASDAQ") === (norm(sec) === "NASDAQ")
+          ? "agree"
+          : "conflict",
+  });
+  // Three symbols both files cover, plus ONE that only SEC has a row for and
+  // which SEC calls Nasdaq. That last row is the defect's exact shape: without
+  // the comparable-set restriction it makes nasdaqtraded look like it
+  // classified a Nasdaq name as something else.
+  const fixture = [
+    mk("AAA", "Nasdaq", "Nasdaq", 100),
+    mk("BBB", "NYSE", "NYSE", 100),
+    mk("CCC", "NYSE", "Nasdaq", 100), // a genuine conflict
+    mk("DDD", null, "Nasdaq", 700), // coverage gap, and the heaviest row
+  ];
+  const cmp = fixture.filter((r) => r.nasdaqBoundary !== "not-comparable");
+  const h = computeHeadline(fixture, cmp);
+  let failed = 0;
+  const check = (name, ok, detail = "") => {
+    console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+    if (!ok) failed++;
+  };
+  console.log("listing-venue-diff self-test");
+  check("the comparable set excludes the coverage gap", h.comparableRows === 3 && h.excludedFromHeadline === 1);
+  check(
+    "...and the exclusion is reported BY WEIGHT, not just by count",
+    Math.abs(h.excludedDollarVolumeShare - 70) < 1e-9,
+    `${h.excludedDollarVolumeShare}% — one of four symbols, but 70% of the dollar volume`
+  );
+  check(
+    "the comparable headline sees ONLY the genuine conflict",
+    h.comparableSet.nasdaqtraded.count === 1 && h.comparableSet.sec.count === 2,
+    `nasdaqtraded ${h.comparableSet.nasdaqtraded.count}, sec ${h.comparableSet.sec.count}`
+  );
+  check(
+    "...with the comparable set as the denominator for pctCount too",
+    Math.abs(h.comparableSet.nasdaqtraded.pctCount - 100 / 3) < 1e-9,
+    "rows.length would have given 25%, which is the same defect in the count column"
+  );
+  check(
+    "...and for pctDv",
+    Math.abs(h.comparableSet.sec.pctDv - (200 / 300) * 100) < 1e-9,
+    `${h.comparableSet.sec.pctDv.toFixed(1)}% of the comparable set's dollar volume`
+  );
+  // The all-rows line is kept precisely so this divergence is visible.
+  check(
+    "the all-rows line still counts the missing row as not-Nasdaq",
+    h.allRowsSet.nasdaqtraded.count === 1 && h.allRowsSet.sec.count === 3,
+    "this is the misleading view, retained and labelled rather than deleted"
+  );
+  check(
+    "...so the two blocks DIVERGE, which is what makes the gap visible",
+    Math.abs(h.comparableSet.sec.pctDv - h.allRowsSet.sec.pctDv) > 0.1,
+    `${h.comparableSet.sec.pctDv.toFixed(1)}% comparable vs ${h.allRowsSet.sec.pctDv.toFixed(1)}% all-rows`
+  );
+  console.log(failed ? `\n${failed} FAILED` : "\nall passed");
+  process.exit(failed ? 1 : 0);
+}
+
 // Same codes, same tape assignment as listing-split.mjs. Duplicated rather than
 // imported because this script must reproduce #448's classification EXACTLY as
 // #448 made it; sharing a table would let a later edit silently change what the
@@ -298,7 +372,11 @@ const lookup = (m, sym) => {
 // reported as a disagreement about venue when they are a disagreement about
 // punctuation. The RAW pair is printed either way -- the normalisation decides
 // what gets called a finding, never what gets shown.
-const norm = (v) => (v == null ? null : String(v).toUpperCase().replace(/[^A-Z0-9]/g, ""));
+// A function declaration, not a const arrow: the self-test at the top of this
+// file uses it, and must run before any network call or dump read.
+function norm(v) {
+  return v == null ? null : String(v).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 const rows = [];
 for (const sym of analysis) {
@@ -350,8 +428,11 @@ for (const [v, c] of histogram((r) => r.nasdaqtraded.venue)) console.log(`    ${
 console.log("\n  SEC exchange column, verbatim (the manifest side):");
 for (const [v, c] of histogram((r) => r.sec.exchange)) console.log(`    ${String(c).padStart(4)}  ${v}`);
 console.log(
-  "\n  Both columns are over ONE symbol set, so any difference between them is\n" +
-    "  classification and nothing else. Membership is isolated in section 3."
+  "\n  Both columns are over ONE symbol set, so membership is NOT a factor in the\n" +
+    "  difference between them. It is classification OR COVERAGE -- a file with no\n" +
+    "  row for a symbol contributes nothing to its own column, which looks exactly\n" +
+    "  like classifying it as something else. Section 4 says which, per symbol, and\n" +
+    "  section 3 reports the headline both ways so the gap cannot hide inside it."
 );
 
 console.log(`\n── 2. EVERY SYMBOL THE TWO SOURCES CLASSIFY DIFFERENTLY (${conflicts.length}) ──`);
@@ -370,34 +451,121 @@ if (!conflicts.length) {
   }
 }
 
+// ── 3. What the headline figure becomes under each source ────────────────────
+//
+// COMPUTED OVER THE COMPARABLE SET, AND THAT IS THE WHOLE POINT.
+//
+// The Nasdaq test is `norm(venue) === "NASDAQ"`, and norm(null) is null. So a
+// symbol one file has NO ROW for is silently counted as NOT Nasdaq on that
+// file's side -- and a COVERAGE GAP then prints as a source disagreement. If
+// nasdaqtraded.txt lacks rows for symbols SEC calls Nasdaq, the #448 side
+// undercounts Nasdaq by absence and this section would report it as
+// misclassification. That is a version of exactly the error this script exists
+// to stop, committed by the script itself.
+//
+// So the headline is computed over rows where BOTH sources have an opinion, with
+// that set as the denominator for the count percentage too -- rows.length would
+// carry the same defect into pctCount.
+//
+// BOTH NUMBERS ARE KEPT, never one. The all-rows line is printed beside it,
+// labelled, so the DIFFERENCE BETWEEN THE TWO LINES is itself visible: if they
+// diverge, the coverage gap is material and the reader learns that before
+// quoting either. And the exclusion is reported by dollar-volume share as well
+// as by count, because "6 symbols excluded, 0.02% of dollar volume" and "6
+// symbols excluded, 11% of dollar volume" call for completely different
+// responses and the count alone cannot tell them apart.
+function computeHeadline(rows, comparable) {
+  const totalOf = (set) => set.reduce((a, r) => a + (r.dollarVolume ?? 0), 0);
+  const allDv = totalOf(rows);
+  const cmpDv = totalOf(comparable);
+  const side = (set, setDv, pick) => {
+    const isNas = (r) => norm(pick(r)) === "NASDAQ";
+    const hit = set.filter(isNas);
+    const dv = totalOf(hit);
+    return {
+      count: hit.length,
+      pctCount: set.length ? (hit.length / set.length) * 100 : 0,
+      pctDv: setDv ? (dv / setDv) * 100 : 0,
+    };
+  };
+  const excludedDv = allDv - cmpDv;
+  return {
+    comparableRows: comparable.length,
+    allRows: rows.length,
+    excludedFromHeadline: rows.length - comparable.length,
+    excludedDollarVolumeShare: allDv ? (excludedDv / allDv) * 100 : 0,
+    comparableSet: {
+      nasdaqtraded: side(comparable, cmpDv, (r) => r.nasdaqtraded.venue),
+      sec: side(comparable, cmpDv, (r) => r.sec.exchange),
+    },
+    allRowsSet: {
+      nasdaqtraded: side(rows, allDv, (r) => r.nasdaqtraded.venue),
+      sec: side(rows, allDv, (r) => r.sec.exchange),
+    },
+  };
+}
+
+
+const comparable = rows.filter((r) => r.nasdaqBoundary !== "not-comparable");
+const headline = computeHeadline(rows, comparable);
+
 console.log(`\n── 3. WHAT THE HEADLINE FIGURE BECOMES UNDER EACH SOURCE ──`);
 {
-  const totalDv = rows.reduce((a, r) => a + (r.dollarVolume ?? 0), 0);
-  const side = (pick) => {
-    const isNas = (r) => norm(pick(r)) === "NASDAQ";
-    const count = rows.filter(isNas).length;
-    const dv = rows.filter(isNas).reduce((a, r) => a + (r.dollarVolume ?? 0), 0);
-    return { count, pctCount: (count / rows.length) * 100, pctDv: totalDv ? (dv / totalDv) * 100 : 0 };
-  };
-  const a = side((r) => r.nasdaqtraded.venue);
-  const b = side((r) => r.sec.exchange);
+  const line = (label, v) =>
+    `    ${label.padEnd(34)}${String(v.count).padStart(12)}   ${v.pctCount.toFixed(1).padStart(7)}%   ${v.pctDv.toFixed(1).padStart(15)}%`;
+  const h = headline;
+
+  console.log(
+    `\n  COMPARABLE SET — ${h.comparableRows} symbols both files have a row for. ` +
+      `THIS IS THE FIGURE TO QUOTE.`
+  );
   console.log(`\n    source                          Nasdaq count   by count   BY DOLLAR VOLUME`);
+  console.log(line("nasdaqtraded.txt (#448)", h.comparableSet.nasdaqtraded));
+  console.log(line("SEC exchange (manifest)", h.comparableSet.sec));
+  {
+    const a = h.comparableSet.nasdaqtraded;
+    const b = h.comparableSet.sec;
+    console.log(
+      `\n    swing: ${(b.count - a.count >= 0 ? "+" : "") + (b.count - a.count)} symbols, ` +
+        `${(b.pctDv - a.pctDv >= 0 ? "+" : "") + (b.pctDv - a.pctDv).toFixed(1)} points of dollar volume.`
+    );
+    console.log(
+      a.pctDv.toFixed(1) === b.pctDv.toFixed(1)
+        ? "    >>> THE HEADLINE FIGURE IS UNCHANGED by the disagreement. The count\n" +
+          "        dispute is real but it does not reach the number the case rests on."
+        : "    >>> THE HEADLINE FIGURE MOVES. Neither number should be quoted until a\n" +
+          "        source of record is chosen, and the choice must be recorded."
+    );
+  }
+
   console.log(
-    `    nasdaqtraded.txt (#448)         ${String(a.count).padStart(12)}   ${a.pctCount.toFixed(1).padStart(7)}%   ${a.pctDv.toFixed(1).padStart(15)}%`
+    `\n  ALL ROWS — ${h.allRows} symbols, INCLUDING those one file has no row for.\n` +
+      `  A missing row counts as not-Nasdaq on that file's side, so this line mixes\n` +
+      `  coverage into classification. Shown for comparison, not for quoting.`
+  );
+  console.log(`\n    source                          Nasdaq count   by count   BY DOLLAR VOLUME`);
+  console.log(line("nasdaqtraded.txt (#448)", h.allRowsSet.nasdaqtraded));
+  console.log(line("SEC exchange (manifest)", h.allRowsSet.sec));
+
+  console.log(
+    `\n  EXCLUDED FROM THE HEADLINE: ${h.excludedFromHeadline} symbol(s), ` +
+      `${h.excludedDollarVolumeShare.toFixed(3)}% of dollar volume.`
+  );
+  const moved = Math.max(
+    Math.abs(h.comparableSet.nasdaqtraded.pctDv - h.allRowsSet.nasdaqtraded.pctDv),
+    Math.abs(h.comparableSet.sec.pctDv - h.allRowsSet.sec.pctDv)
   );
   console.log(
-    `    SEC exchange (manifest)         ${String(b.count).padStart(12)}   ${b.pctCount.toFixed(1).padStart(7)}%   ${b.pctDv.toFixed(1).padStart(15)}%`
-  );
-  console.log(
-    `\n    swing: ${(b.count - a.count >= 0 ? "+" : "") + (b.count - a.count)} symbols, ` +
-      `${((b.pctDv - a.pctDv) >= 0 ? "+" : "") + (b.pctDv - a.pctDv).toFixed(1)} points of dollar volume.`
-  );
-  console.log(
-    a.pctDv.toFixed(1) === b.pctDv.toFixed(1)
-      ? "    >>> THE HEADLINE FIGURE IS UNCHANGED by the disagreement. The count\n" +
-        "        dispute is real but it does not reach the number the case rests on."
-      : "    >>> THE HEADLINE FIGURE MOVES. Neither number should be quoted until a\n" +
-        "        source of record is chosen, and the choice must be recorded."
+    h.excludedFromHeadline === 0
+      ? "    >>> nothing excluded: both files cover every symbol, so the two blocks\n" +
+        "        above are identical by construction."
+      : moved >= 0.1
+        ? `    >>> MATERIAL. Restricting to the comparable set moves a dollar-volume\n` +
+          `        share by ${moved.toFixed(1)} points. The gap is not a rounding detail and the\n` +
+          `        two blocks above must not be used interchangeably.`
+        : `    >>> immaterial to the headline: the two blocks differ by under 0.1\n` +
+          `        points of dollar volume. The excluded symbols are still named in\n` +
+          `        section 4 -- immaterial to this figure is not the same as fine.`
   );
 }
 
@@ -442,7 +610,14 @@ fs.writeFileSync(
         conflicts: conflicts.length,
         nasdaqBoundaryConflicts: boundaryConflicts.length,
         notComparable: notComparable.length,
+        // The JSON is what gets read later, without the console output beside
+        // it. A headline restricted to the comparable set is misleading unless
+        // the size of what it excluded travels with it -- by weight as well as
+        // by count.
+        excludedFromHeadline: headline.excludedFromHeadline,
+        excludedDollarVolumeShare: headline.excludedDollarVolumeShare,
       },
+      headline,
       // EVERY symbol, not just the conflicts. The question "which source said
       // what about X" has to be answerable for any X afterwards, without a
       // second runner round trip.
