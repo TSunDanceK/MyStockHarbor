@@ -170,6 +170,10 @@ const TASKS = {
   // what made the earlier 1/4 meaningless), the price parser against a negative
   // control, and the age histogram the withdrawal cap needs.
   "ipo-phase0": { script: "scripts/ipo-phase0-probe.mjs", args: () => [] },
+  // §4.10's three exclusion classes, measured before any is built. Checks the
+  // ticker map for OTC coverage first, because if it carries OTC issuers then
+  // class (a) already catches uplistings and class (c) costs nothing.
+  "ipo-exclusions": { script: "scripts/ipo-exclusions-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
