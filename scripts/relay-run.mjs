@@ -154,6 +154,13 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
+  // image CDN whether it actually holds a logo for each symbol in the union
+  // universe. The CDN needs no API key, so this belongs in the uncredentialled
+  // job -- the FMP key stays out of Actions, per the static-profile README.
+  // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
+  // `exchange` is in static-profile.json's absentFields.blocked.
+  "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
