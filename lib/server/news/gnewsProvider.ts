@@ -1,8 +1,8 @@
 // The Google News adapter — the per-symbol primary for the free stack.
 //
-// Step 3 of claude/news-adapter-spec-2026-09-13.md. Ships behind NEWS_PROVIDER,
-// which still defaults to "fmp": nothing below runs on the live site until step 7
-// flips it.
+// Step 3 of claude/news-adapter-spec-2026-09-13.md, behind NEWS_PROVIDER — which
+// step 7 flipped to default "free", so this is now the per-symbol primary on the
+// live site rather than a path waiting to be switched on.
 //
 // ── THE QUERY IS THE ENTIRE RELEVANCE MECHANISM ────────────────────────────
 // Google News is a plain text search with no notion of a ticker, so what is

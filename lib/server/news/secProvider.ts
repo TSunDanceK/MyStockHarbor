@@ -1,7 +1,7 @@
 // The SEC filings adapter.
 //
-// Step 5 of claude/news-adapter-spec-2026-09-13.md. Behind NEWS_PROVIDER, which
-// still defaults to "fmp".
+// Step 5 of claude/news-adapter-spec-2026-09-13.md, behind NEWS_PROVIDER — which
+// step 7 flipped to default "free", so this is live.
 //
 // ── WHAT THIS IS FOR ───────────────────────────────────────────────────────
 // A filing is the only source in the free stack that is unambiguously about the

@@ -98,7 +98,26 @@ stubbed = sub(
   stubbed,
   /^import \{[^}]*\} from "@\/lib\/server\/news";$/m,
   'const fetchSymbolNewsWindow = () => { throw new Error("no network in this harness"); };\n' +
-    'const newsProviderMode = () => "fmp";'
+    // Step 7 replaced the newsProviderMode import here with feedMaxAgeDays.
+    // The stub returns the FMP window because every fixture below was written
+    // against it; the gating itself is checked in section 8 and in
+    // scripts/check-provider-flip.mjs, not here.
+    'const feedMaxAgeDays = () => 90;'
+);
+// INLINED, NOT STUBBED, for the same reason as news/text below: scoreNews now
+// asks isFilingChurn whether an item carries any tone at all, and a stub
+// returning false would make every churn assertion below pass by construction.
+//
+// AND IT RUNS BEFORE THE news/text SUBSTITUTION, which is not cosmetic
+// ordering. That pattern is multi-line (`[\s\S]*?`), so with this import left
+// in place it matched from THIS line's "import {" all the way to text.ts's
+// closing brace and swallowed the churn import whole. The marker guard below
+// caught it on the first run -- which is the failure that guard was added for,
+// firing on exactly the shape its comment predicts.
+stubbed = sub(
+  stubbed,
+  /^import \{ isFilingChurn \} from "@\/lib\/server\/news\/filingChurn";$/m,
+  read("lib/server/news/filingChurn.ts").replace(/^export /gm, "")
 );
 stubbed = sub(stubbed, /^import \{[\s\S]*?\} from "@\/lib\/server\/news\/text";$/m, textSrc);
 // Type-only, so it is erased at transpile anyway -- but the guard below reads
@@ -126,7 +145,8 @@ for (const [marker, what] of [
   ["function keywordHits", "keywordMatch inlined"],
   ["function stripHtmlTags", "news/text inlined"],
   ["const fetchSymbolNewsWindow", "provider seam stubbed"],
-  ["const newsProviderMode", "provider mode stubbed"],
+  ["const feedMaxAgeDays", "feed window stubbed"],
+  ["function isFilingChurn", "the churn grammar inlined"],
   ["const readOrRefreshSymbolNews", "newsStore stubbed"],
   ["const getAiNewsBriefs", "ai-news-briefs stubbed"],
 ]) {
@@ -192,6 +212,40 @@ const fresh = [
 ];
 const freshScore = m.scoreNews(fresh, NOW);
 check("three headlines from this week DO produce a score", freshScore.available === true);
+
+// ── Institutional-holding churn must not be read as a market opinion ────────
+// The reported page scored "59/100, slightly bullish" over a pool that was
+// mostly 13F notices. capNews bounds how many reach the score; this is the
+// other half — the survivors carry no tone and must not be counted as if they
+// did. Note the ASYMMETRY with the page, which keeps a couple of them on
+// display: worth a glance, not worth a sentiment reading.
+const CHURN_TITLES = [
+  "Chokshi & Queen Wealth Advisors Inc Takes Position in Micron Technology, Inc. $MU",
+  "OceanIQ Capital LLC Buys New Stake in Micron Technology, Inc. $MU",
+  "NBH Bank Invests $668,000 in Micron Technology, Inc. $MU",
+  "Nvest Financial LLC Reduces Stake in Micron Technology, Inc. $MU",
+  "Micron Technology, Inc. $MU Position Decreased by Riverview Capital Advisers LLC",
+];
+const churnOnly = CHURN_TITLES.map((t, i) => item(t, i + 1));
+check(
+  "a pool of nothing but holding notices produces NO score",
+  m.scoreNews(churnOnly, NOW).available === false,
+  m.scoreNews(churnOnly, NOW).reason?.slice(0, 90)
+);
+// AND THE SCORE IS UNMOVED BY THEM, which the check above cannot show on its
+// own: an empty pool falls back to `ranked`, so "no score" could come from the
+// fallback rather than from the exclusion.
+const withChurn = m.scoreNews([...fresh, ...churnOnly], NOW);
+check(
+  "...and adding five of them to three real headlines changes nothing",
+  withChurn.available === freshScore.available && withChurn.score === freshScore.score,
+  `${freshScore.score} -> ${withChurn.score}`
+);
+check(
+  "...while five ordinary headlines in their place DO move it",
+  m.scoreNews([...fresh, ...CHURN_TITLES.map((_, i) => item(`Micron cuts guidance on weak demand ${i}`, i + 1))], NOW).score !== freshScore.score,
+  "otherwise the assertion above would pass for a pool the score simply ignores"
+);
 check("...and it reads bullish", freshScore.score > 58, `score ${freshScore.score}`);
 
 // The boundary, both sides. A window nothing is ever outside is not a window.
@@ -321,7 +375,15 @@ check("the video/podcast filter survives", /isVideoOrLowQualitySource/.test(code
 check("the low-value SEO filter survives", /isLowValueNewsItem\(item\)/.test(code));
 
 console.log("\n=== 6. The feed fills its slots, with a floor ===\n");
-check("90-day floor on how far back the feed walks", /NEWS_FEED_MAX_AGE_DAYS = 90/.test(code));
+// Step 7 moved both window constants into lib/server/news/index.ts, beside the
+// flag that chooses between them. The floor is still asserted, and so is the
+// fact that this file no longer carries a second copy of the number.
+check(
+  "90-day floor on how far back the feed walks, on the fmp rollback",
+  /NEWS_FEED_MAX_AGE_DAYS = 90/.test(codeOf(read("lib/server/news/index.ts"), "lib/server/news/index.ts")) &&
+    /feedMaxAgeDays\(\)/.test(code) &&
+    !/MAX_AGE_DAYS = \d/.test(code)
+);
 check("5 large cards and 10 compact", /options\.maxDetailedItems \?\? 5, 5/.test(code) && /MAX_COMPACT_NEWS_ITEMS = 10/.test(code));
 check(
   "the news page asks for 5",
@@ -462,12 +524,12 @@ const registry = codeOf(read("lib/server/news/index.ts"), "lib/server/news/index
 const adapter = codeOf(read("lib/server/news/fmpProvider.ts"), "lib/server/news/fmpProvider.ts");
 
 check(
-  "NEWS_PROVIDER still defaults to FMP",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(registry),
-  'flipping the default is spec step 7, and doing it before the free adapters exist points the site at an empty provider list'
+  "NEWS_PROVIDER defaults to free, with fmp as the explicit rollback",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(registry),
+  'step 7 flipped it; the fmp spelling is the flick-back and has to keep working exactly'
 );
 check(
-  "an unbuilt \"free\" never resolves to an empty provider list",
+  "\"free\" never resolves to an empty provider list",
   /FREE_PROVIDERS\.length/.test(registry) && /return \[fmpNewsProvider\]/.test(registry),
   "an empty list would empty the news feed on every page with no error anywhere"
 );
@@ -490,6 +552,111 @@ check(
     codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts")
   ),
   "naming an adapter at the call site is how the flag stops deciding anything"
+);
+
+
+console.log("\n=== 9. ONE STORE READ PER RENDER ===\n");
+// THE REGRESSION THIS PINS, which ran in production for the whole migration:
+// fetchNews and fetchEarningsNews each called fetchStoredSymbolNews, and the
+// builder ran them in a Promise.all. Two concurrent readOrRefresh passes on one
+// Redis key -- two adapter fan-outs, and two writes racing where the later one
+// could drop the earlier one's merged articles. It was visible as a doubled
+// [gnews] line in the logs and nothing failed.
+const newsDataCode = codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
+// THE DECLARATION IS NOT A CALL SITE. The first version counted
+// `async function fetchStoredSymbolNews(` as one and reported 2 for correct
+// code -- an assertion that fails on the fixed state is as useless as one that
+// passes on the broken state.
+const storeCalls = [...newsDataCode.matchAll(/\bfetchStoredSymbolNews\s*\(/g)].filter(
+  (m) => !/function\s+$/.test(newsDataCode.slice(Math.max(0, m.index - 20), m.index))
+).length;
+check(
+  "fetchStoredSymbolNews is CALLED from exactly one place",
+  storeCalls === 1,
+  `${storeCalls} call site(s) — a second one is the doubled fan-out and the write race coming back`
+);
+// AND THE CONSUMERS CANNOT FETCH AT ALL. A call-site count alone would pass if
+// someone reintroduced the read under a different name; a selector declared
+// without `async` cannot await a store read whatever it is called.
+for (const fn of ["selectDisplayNews", "selectEarningsNews"]) {
+  check(
+    `${fn} is a pure selector, not an async fetch`,
+    new RegExp(`(?<!async )function ${fn}\\(`).test(newsDataCode) &&
+      !new RegExp(`async function ${fn}\\(`).test(newsDataCode),
+    "it takes the already-fetched store; a function that cannot await cannot double-fetch"
+  );
+}
+check(
+  "the builder reads the store once and hands it to both consumers",
+  /const storedNews = await fetchStoredSymbolNews\(/.test(newsDataCode) &&
+    /selectDisplayNews\(storedNews\)/.test(newsDataCode) &&
+    /selectEarningsNews\(storedNews[,)]/.test(newsDataCode)
+);
+// The empty-store fallback is still reachable, and still only then: it is a
+// network call and must not run when the store answered.
+check(
+  "the Google News fallback runs only when the store yielded nothing",
+  /displayNews\.length \? displayNews : await fetchNewsFallback\(/.test(newsDataCode),
+  "an unconditional fallback would add a request to every render"
+);
+
+console.log("\n=== 10. THE STORE WRITES DO NOT BLOCK THE READER ===\n");
+const storeCode = codeOf(read("lib/server/newsStore.ts"), "lib/server/newsStore.ts");
+check(
+  "after() comes from next/server, not a detached promise",
+  /import \{ after \} from "next\/server";/.test(storeCode),
+  "a floating promise in a serverless function can be killed the moment the response is sent"
+);
+// AWAITED INSIDE after() IS CORRECT — the deferred callback has to await its own
+// writes or they are dropped. The property is that none of them is awaited
+// OUTSIDE one, so the after() blocks are removed before looking. The first
+// version tested `!/await writeStored\(/` over the whole file and failed on the
+// correct code, which would have pushed the fix toward dropping the await.
+const outsideAfter = (() => {
+  let out = "";
+  let i = 0;
+  while (i < storeCode.length) {
+    // `after(` ALONE WOULD ALSO MATCH A DECLARATION of that identifier, which
+    // scripts/check-assertion-anchors.mjs flagged on the first version of this.
+    // Anchored on the two call shapes actually used instead.
+    const nextCall = /after\((?:async )?\(\) =>/g;
+    nextCall.lastIndex = i;
+    const hit = nextCall.exec(storeCode);
+    const at = hit ? hit.index : -1;
+    if (at < 0) { out += storeCode.slice(i); break; }
+    out += storeCode.slice(i, at);
+    // Walk to the matching close paren so nested parens do not end it early.
+    let depth = 0;
+    let j = at + "after".length;
+    for (; j < storeCode.length; j += 1) {
+      if (storeCode[j] === "(") depth += 1;
+      else if (storeCode[j] === ")") { depth -= 1; if (depth === 0) { j += 1; break; } }
+    }
+    i = j;
+  }
+  return out;
+})();
+check(
+  "the after() blocks were actually found and removed",
+  outsideAfter.length < storeCode.length && /writeStored/.test(storeCode),
+  "if the stripper matched nothing the checks below would pass over the whole file"
+);
+for (const [write, why] of [
+  ["writeStored", "the store itself"],
+  ["recordRefreshStats", "the refresh counters"],
+  ["markViewed", "the staleness mark"],
+]) {
+  check(
+    `${write} is not awaited outside after() (${why})`,
+    !new RegExp(`await ${write}\\(`).test(outsideAfter),
+    "the reader already holds the items; it consumes none of these"
+  );
+}
+check(
+  "...and all three are inside an after() callback",
+  /after\(async \(\) => \{[\s\S]*?writeStored\([\s\S]*?recordRefreshStats\([\s\S]*?\}\)/.test(storeCode) &&
+    /after\(\(\) => markViewed\(/.test(storeCode),
+  "not awaited AND not deferred would mean simply dropped"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

@@ -172,6 +172,13 @@ async function fetchForSymbol(
             // Stamped here, at the only point where the upstream ordering is
             // still intact.
             sourceIndex: index,
+            // STAMPED AT STEP 7's FOLLOW-UP, and it is not decoration. Step 1
+            // deliberately left this unset because nothing read it. The card
+            // footer now does — lib/news-attribution.ts says what a card's text
+            // actually is rather than claiming an FMP excerpt on every card —
+            // and an unstamped item cannot be told apart from one whose adapter
+            // forgot. Nothing filters on this field; it only labels.
+            provider: "fmp",
           };
         })
         .filter((item): item is NewsItem => Boolean(item));
@@ -211,6 +218,7 @@ async function fetchMarket(): Promise<NewsItem[]> {
     source: headline.source,
     description: headline.excerpt,
     image: headline.image,
+    provider: "fmp" as const,
   }));
 }
 

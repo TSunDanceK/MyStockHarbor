@@ -304,18 +304,23 @@ check(
   )
 );
 check(
-  "...and the default is STILL fmp",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(readCodeOnly("lib/server/news/index.ts")),
-  "step 3 ships behind the flag; the flip is step 7"
+  "...and it is now the DEFAULT, since step 7",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(readCodeOnly("lib/server/news/index.ts")),
+  "step 3 shipped behind the flag; step 7 flipped it, and fmp is the rollback"
 );
 check(
   "the 45-day display window applies only when the free stack is active",
   (() => {
-    const page = readCodeOnly("lib/stock-news-data.ts");
-    return /FREE_FEED_MAX_AGE_DAYS = 45/.test(page) &&
-      /newsProviderMode\(\) === "free" \? FREE_FEED_MAX_AGE_DAYS : NEWS_FEED_MAX_AGE_DAYS/.test(page);
+    // Step 7 moved both constants into the provider module, beside the flag
+    // that picks between them. The property is unchanged: the window is gated,
+    // not global, so the fmp rollback restores 90 days along with the feed.
+    const registry = readCodeOnly("lib/server/news/index.ts");
+    return /FREE_FEED_MAX_AGE_DAYS = 45/.test(registry) &&
+      /NEWS_FEED_MAX_AGE_DAYS = 90/.test(registry) &&
+      /newsProviderMode\(\) === "free" \? FREE_FEED_MAX_AGE_DAYS : NEWS_FEED_MAX_AGE_DAYS/.test(registry) &&
+      /feedMaxAgeDays\(\)/.test(readCodeOnly("lib/stock-news-data.ts"));
   })(),
-  "shortening it unconditionally would change today's FMP page, and nothing may move until step 7"
+  "shortening it unconditionally would also shorten the fmp rollback's feed"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
