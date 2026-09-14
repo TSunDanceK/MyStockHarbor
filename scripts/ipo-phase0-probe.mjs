@@ -181,17 +181,59 @@ const all = [...byCik.values()].map((c) => {
 
 // ══════════════════════════════════════════════════════════════════════════
 // 0.3 AGE HISTOGRAM — the upper table's population, and how it decays
+//
+// RUN 1 OF THIS PROBE GOT THIS WRONG, IN TWO WAYS, AND BOTH ARE FIXED HERE.
+//
+// (a) IT REPEATED THE SOURCE PROBE'S OWN SAMPLING BUG. "Has an amendment, has no
+//     424B" also describes an ALREADY-LISTED company registering resale shares --
+//     which is exactly what invalidated the first run's 0/5 price range. It
+//     reported 217 as "what the upper table would show". It is not: an issuer
+//     already trading is not an upcoming IPO. The ticker map is the discriminator
+//     and it is already in the repo, so the filter costs one request.
+//
+// (b) IT COUNTED WITHDRAWALS THAT PRE-DATE THE AMENDMENT. Four of the eleven RW/AW
+//     hits were dated BEFORE the amendment they were credited against (Kepler
+//     amended 2026-08-24 with an RW of 2026-05-19; Akari amended 2026-06-26 with
+//     an RW of 2026-05-21). Those withdraw an EARLIER registration; the live one
+//     stands. A withdrawal only withdraws what came before it.
 // ══════════════════════════════════════════════════════════════════════════
 console.log(`\n${"═".repeat(78)}\n0.3 AGE OF "TERMS SET, NO 424B" — the upper table's real population\n${"═".repeat(78)}`);
 
-const ageDays = (d) => Math.round((TODAY - new Date(d)) / 86400000);
-const upperCandidates = all.filter((c) => c.lastAmend && !c.hasFinal);
-const withdrawn = upperCandidates.filter((c) => c.hasWithdrawal);
-const live = upperCandidates.filter((c) => !c.hasWithdrawal);
+// The discriminator: a company already trading is in SEC's own ticker file.
+const tick = await get("https://www.sec.gov/files/company_tickers_exchange.json");
+const listedCiks = new Set();
+if (tick.ok) {
+  try {
+    const j = JSON.parse(tick.body);
+    const fields = j.fields ?? [];
+    const cikIdx = fields.indexOf("cik");
+    for (const row of j.data ?? []) listedCiks.add(String(row[cikIdx]));
+    console.log(`   ticker map: ${listedCiks.size} already-listed CIKs (the discriminator)`);
+  } catch (err) {
+    console.log(`   ticker map UNPARSEABLE (${err.message}) — the already-listed filter CANNOT be applied`);
+  }
+} else {
+  console.log(`   ticker map unreadable (HTTP ${tick.status}) — the already-listed filter CANNOT be applied`);
+}
+const haveMap = listedCiks.size > 0;
 
-console.log(`   companies with an S-1/A or F-1/A and NO 424B in window: ${upperCandidates.length}`);
-console.log(`   ...of which carry an RW/AW (explicitly withdrawn):      ${withdrawn.length}`);
-console.log(`   ...remaining, i.e. what the upper table would show:     ${live.length}`);
+const ageDays = (d) => Math.round((TODAY - new Date(d)) / 86400000);
+const rawCandidates = all.filter((c) => c.lastAmend && !c.hasFinal);
+const alreadyListed = rawCandidates.filter((c) => haveMap && listedCiks.has(String(Number(c.cik))));
+const notListed = rawCandidates.filter((c) => !(haveMap && listedCiks.has(String(Number(c.cik)))));
+// A withdrawal only withdraws what came before it.
+const withdrawn = notListed.filter((c) => c.withdrawal && c.withdrawal.date >= c.lastAmend.date);
+const staleWithdrawal = notListed.filter((c) => c.withdrawal && c.withdrawal.date < c.lastAmend.date);
+const live = notListed.filter((c) => !(c.withdrawal && c.withdrawal.date >= c.lastAmend.date));
+
+console.log(`\n   THE FUNNEL, because the raw number is not the answer:`);
+console.log(`   amendment in window, no 424B                       ${String(rawCandidates.length).padStart(4)}`);
+console.log(`   − already listed (resale/follow-on, NOT an IPO)    ${String(alreadyListed.length).padStart(4)}${haveMap ? "" : "   << FILTER UNAVAILABLE"}`);
+console.log(`   − withdrawn AFTER the amendment (RW/AW)            ${String(withdrawn.length).padStart(4)}`);
+console.log(`   = the upper table's real population                ${String(live.length).padStart(4)}`);
+console.log(`\n   (${staleWithdrawal.length} more carry an RW/AW dated BEFORE their amendment — those withdraw an`);
+console.log(`   earlier registration and are correctly NOT excluded.)`);
+const upperCandidates = rawCandidates;
 
 const BUCKETS = [7, 14, 21, 30, 45, 60, 90, 120, 9999];
 const hist = new Map(BUCKETS.map((b) => [b, 0]));
@@ -214,12 +256,18 @@ console.log(`   >>> is the owner's call. Note what an absent cap costs: every on
 console.log(`   >>> ${live.length} rows above would sit in "Upcoming IPOs" indefinitely.`);
 
 if (withdrawn.length) {
-  console.log(`\n   RW/AW sample — these are the ones mechanism 1 catches:`);
-  for (const c of withdrawn.slice(0, 8)) {
+  console.log(`\n   RW/AW dated ON OR AFTER the amendment — mechanism 1's real catch:`);
+  for (const c of withdrawn.slice(0, 10)) {
     console.log(`     ${c.company.slice(0, 44).padEnd(46)} amend ${c.lastAmend.date} · ${c.withdrawal.form} ${c.withdrawal.date}`);
   }
 }
-console.log(`\n   >>> RW/AW catches ${withdrawn.length} of ${upperCandidates.length}. The rest go stale silently,`);
+if (staleWithdrawal.length) {
+  console.log(`\n   RW/AW dated BEFORE the amendment — NOT a withdrawal of the live deal:`);
+  for (const c of staleWithdrawal.slice(0, 6)) {
+    console.log(`     ${c.company.slice(0, 44).padEnd(46)} amend ${c.lastAmend.date} · ${c.withdrawal.form} ${c.withdrawal.date}`);
+  }
+}
+console.log(`\n   >>> RW/AW catches ${withdrawn.length} of ${live.length + withdrawn.length}. The rest go stale SILENTLY,`);
 console.log(`   >>> which is exactly why §4.8 asks for BOTH mechanisms and not just the form.`);
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -322,7 +370,8 @@ console.log(`   0.3 age histogram                  : REPORTED (no gate; the cap 
 fs.mkdirSync("data/sec", { recursive: true });
 const payload = {
   window: [MINUS_120, TODAY_ISO],
-  ageHistogram: { upperCandidates: upperCandidates.length, withdrawn: withdrawn.length, live: live.length,
+  ageHistogram: { rawCandidates: rawCandidates.length, alreadyListed: alreadyListed.length,
+    withdrawnAfterAmend: withdrawn.length, staleWithdrawal: staleWithdrawal.length, live: live.length,
     buckets: Object.fromEntries(BUCKETS.map((b) => [b === 9999 ? ">120" : `<=${b}`, hist.get(b)])) },
   withdrawnSample: withdrawn.slice(0, 20).map((c) => ({ company: c.company, cik: c.cik, amend: c.lastAmend.date, withdrawal: c.withdrawal })),
   assessed: rows,
