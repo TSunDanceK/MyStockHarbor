@@ -1,7 +1,8 @@
 # /api/debug/static-profile
 
 One-off capture route. **Delete once the fields are committed** — same as the
-`news-sources` probe beside it.
+`news-sources` probe that used to sit beside it (deleted at step 7, once its
+verdicts were spent — this route goes the same way once the capture is in).
 
 ## Why it exists
 

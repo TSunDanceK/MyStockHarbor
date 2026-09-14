@@ -415,11 +415,11 @@ check(
   "event-earnings holds 5 images against 4 keys, so all four must differ"
 );
 
-console.log("\n=== 8. Still behind the flag ===\n");
+console.log("\n=== 8. The flag, after step 7 ===\n");
 const index = readCodeOnly("lib/server/news/index.ts");
 check(
-  "the default is still fmp",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(index)
+  "the default is free, and fmp is the explicit rollback",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(index)
 );
 check(
   "no FMP item gains an eventType",

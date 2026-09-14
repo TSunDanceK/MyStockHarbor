@@ -11,10 +11,26 @@
 // symbols of news hourly would dwarf every other consumer on the account, which
 // is the opposite of the problem this solves.
 //
+// THE WRITES DO NOT BLOCK THE READER. Three Redis writes hang off a refresh --
+// the store itself, the refresh counters and the staleness mark -- and a render
+// consumes none of them: it already holds `kept` in memory before any of them
+// runs. They used to be awaited in the render's critical path anyway, so every
+// cold view paid three sequential Redis round trips for data nobody was waiting
+// on. They now go through next/server's after().
+//
+// after() AND NOT A DETACHED PROMISE. A floating promise in a serverless
+// function is not "background work", it is work that may be killed the instant
+// the response is sent -- so the store would sometimes not be written and the
+// next view would refetch, which is the failure this dataset exists to avoid.
+// after() is the platform's contract for "run this, the response does not wait".
+// Next 16 exports it directly; no dependency was added for it.
+//
 // DEPENDENCIES ARE INJECTED, not imported. lib/stock-news-data.ts owns the FMP
 // request shape, the #343 similarity dedup and the earnings matcher, and it is
 // the caller here -- importing any of them back would be a cycle. Passing them
 // in also keeps the one implementation of dedup shared rather than copied.
+import { after } from "next/server";
+import { beginTiming, timingCache } from "./timing";
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { markRefreshed } from "./stalenessQueue";
@@ -158,12 +174,24 @@ async function readOrRefresh<T extends NewsMergeItem>(
   deps: RefreshDeps<T>,
   nowMs: number
 ): Promise<NewsRefreshResult<T>> {
+  // The whole store operation, and the Redis read on its own. The pair is what
+  // separates "Redis was slow" from "the adapters were slow" -- a single total
+  // cannot, and that ambiguity is the reason this instrumentation exists.
+  const endTotal = beginTiming("news", `store ${key}`);
+  const endRead = beginTiming("news", `redisRead ${key}`);
   const stored = await readStored<T>(key);
+  endRead();
   const storedItems = stored?.items ?? [];
 
   if (stored && nowMs - stored.fetchedAt < NEWS_REFRESH_SECONDS * 1000) {
+    // THE CHEAP PATH, and the one that should dominate. A render inside the
+    // refresh window makes no upstream call at all, so a measurement that does
+    // not separate these from cold ones is measuring the wrong population.
+    timingCache("news", `store ${key}`, "hit", `items=${storedItems.length}`);
+    endTotal();
     return { items: storedItems, mode: "cached", added: 0 };
   }
+  timingCache("news", `store ${key}`, "miss");
 
   // The anchor is the newest article HELD, not the last time we fetched. If
   // refreshes are missed for a day the window still starts from the last
@@ -177,6 +205,7 @@ async function readOrRefresh<T extends NewsMergeItem>(
     fetched = await deps.fetchWindow(from);
   } catch {
     // Serve what we have. An upstream failure must not empty a populated store.
+    endTotal();
     return { items: storedItems, mode: "cached", added: 0 };
   }
 
@@ -185,9 +214,17 @@ async function readOrRefresh<T extends NewsMergeItem>(
   const pin = deps.isEarnings ? selectEarningsPin(merged, deps.isEarnings, nowMs) : null;
   const kept = capNews(merged, pin);
 
-  await writeStored(key, kept, nowMs);
-  await recordRefreshStats(mode, added, nowMs);
+  // OUT OF THE BLOCKING PATH. `kept` is already in hand; the reader needs
+  // nothing these produce. Both swallow their own errors, so after() can never
+  // surface a failure into the response either.
+  after(async () => {
+    await writeStored(key, kept, nowMs);
+    await recordRefreshStats(mode, added, nowMs);
+  });
 
+  // ENDS BEFORE THE WRITES, deliberately: they are after() now, so counting
+  // them would report a blocking cost the reader no longer pays.
+  endTotal();
   return { items: kept, mode, added };
 }
 
@@ -221,7 +258,9 @@ export async function readOrRefreshSymbolNews<T extends NewsMergeItem>(
 
   // Only a real refresh marks. A cached read proves the store is warm, not that
   // it is fresh, and marking on it would keep the staleness set green forever.
-  if (result.mode !== "cached") await markViewed("news", upper, nowMs);
+  // Deferred like the other two writes: health reporting is not something a
+  // reader waits on.
+  if (result.mode !== "cached") after(() => markViewed("news", upper, nowMs));
 
   return result;
 }
@@ -237,7 +276,7 @@ export async function readOrRefreshSectorNews<T extends NewsMergeItem>(
   const lower = slug.toLowerCase();
   const result = await readOrRefresh(sectorKey(lower), deps, nowMs);
 
-  if (result.mode !== "cached") await markViewed("sectorNews", lower, nowMs);
+  if (result.mode !== "cached") after(() => markViewed("sectorNews", lower, nowMs));
 
   return result;
 }

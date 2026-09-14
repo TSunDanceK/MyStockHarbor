@@ -1,6 +1,7 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow, newsProviderMode } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, feedMaxAgeDays } from "@/lib/server/news";
+import { isFilingChurn } from "@/lib/server/news/filingChurn";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -504,16 +505,41 @@ async function fetchGoogleNewsFallback(
   }
 }
 
-async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
-  const filteredFmp = fmpNews.filter((item) => !isVideoOrLowQualitySource(item));
+/**
+ * The display feed, from an ALREADY-FETCHED store read.
+ *
+ * ── WHY THIS TAKES `stored` RATHER THAN FETCHING ───────────────────────────
+ * It used to call fetchStoredSymbolNews itself, and so did fetchEarningsNews,
+ * and buildStockNewsBaseData ran the two in a Promise.all. That is the same
+ * store read TWICE, CONCURRENTLY, per render. It was visible in production logs
+ * the whole time as a doubled line:
+ *
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *   [gnews] MU q="\"Micron Technology\" stock" items=100
+ *
+ * The cost was two full adapter passes on a cold page -- Google News, both
+ * wires and SEC, twice -- but the REAL problem was correctness: two concurrent
+ * readOrRefresh passes on one Redis key, each reading the same pre-merge state
+ * and each writing its own merge back. Last write wins, so one pass's articles
+ * could be dropped by the other's write. A lost-update race, not a slow page.
+ *
+ * One read, passed to both consumers, removes both at once.
+ */
+function selectDisplayNews(stored: NewsItem[]): NewsItem[] {
+  const filtered = stored.filter((item) => !isVideoOrLowQualitySource(item));
+  return filtered.length ? mergeNewsPools([filtered]).slice(0, 50) : [];
+}
 
-  if (filteredFmp.length) {
-    return mergeNewsPools([filteredFmp]).slice(0, 50);
-  }
-
-  // FMP returned nothing usable for this symbol — fall back to Google News
-  // RSS so the page still shows headlines. These items will have no image.
+/**
+ * The Google News fallback, kept as a SEPARATE step for the empty case only.
+ *
+ * It stays outside selectDisplayNews because it is a network call and that
+ * function is now pure -- the caller decides whether the fallback is worth a
+ * request, and on the free stack it almost never is: Google News is already the
+ * primary adapter, so an empty store means the search returned nothing and
+ * asking the same host a second question is unlikely to change that.
+ */
+async function fetchNewsFallback(symbol: string, companyName: string): Promise<NewsItem[]> {
   const googleNews = await fetchGoogleNewsFallback(symbol, companyName);
 
   return mergeNewsPools([
@@ -574,8 +600,9 @@ function logNewsDepth(label: string, symbol: string, fetched: number, kept: News
   );
 }
 
-async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchStoredSymbolNews(symbol, companyName);
+/** The earnings slice of the SAME store read — see selectDisplayNews. */
+function selectEarningsNews(stored: NewsItem[], symbol: string): NewsItem[] {
+  const fmpNews = stored;
 
   const kept = mergeNewsPools([
     fmpNews
@@ -1155,30 +1182,6 @@ function rankNews(news: NewsItem[], symbol = "", companyName = "") {
  * argue about.
  */
 const NEWS_SCORE_WINDOW_DAYS = 14;
-/**
- * How far back the FEED will walk to fill its slots. Separate from the SCORE's
- * window on purpose, and much longer: a headline from six weeks ago is still
- * worth reading and is not evidence of what the tone is right now.
- *
- * 90 days is a floor, not a target. Past a quarter a card claiming to be part of
- * the current picture is from a different one, and a short feed on a thin ticker
- * is the honest outcome.
- */
-const NEWS_FEED_MAX_AGE_DAYS = 90;
-/**
- * The same window for the free stack, and it is shorter for a measured reason.
- *
- * Google News backfills thin-coverage names with whatever the index still holds
- * -- CYRX returned 55 items spanning 3,453 days, one from 2017 -- so a 90-day
- * feed window that is honest against FMP's latest-N window is not honest against
- * a search index. 45 days at display; the store still holds 120 so the earnings
- * pin can reach back.
- *
- * GATED ON THE ACTIVE PROVIDER rather than applied to everything, because
- * shortening the window for FMP would change today's live page -- and step 3's
- * requirement is that nothing moves until step 7 flips the flag.
- */
-const FREE_FEED_MAX_AGE_DAYS = 45;
 /** Lighter feed size, below the large cards. */
 const MAX_COMPACT_NEWS_ITEMS = 10;
 /**
@@ -1229,8 +1232,25 @@ export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult
   }
 
   const ranked = rankNews(news);
-  const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
-  const pool = highValue.length ? highValue : ranked;
+  // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
+  // the two treatments differ for a reason rather than by oversight. "Chokshi &
+  // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
+  // reader's glance -- institutions are accumulating -- so a couple stay on the
+  // page. It carries no TONE: reading it as bullish is inventing sentiment out
+  // of a 13F filing, and the reported page scored "59/100, slightly bullish"
+  // over a pool that was mostly these. capNews already bounds how many reach
+  // here; this stops the survivors being read as a market opinion.
+  const highValue = ranked.filter(
+    (item) => !isLowValueNewsItem(item) && !isFilingChurn(item.title)
+  );
+  // THE FALLBACK EXCLUDES CHURN TOO, and that is the half a first pass missed.
+  // `highValue.length ? highValue : ranked` exists so a symbol covered only by
+  // low-value sources still gets a reading rather than a blank. Reaching past it
+  // to the RAW list means a pool of nothing but holding notices comes back
+  // "balanced, neutral" — a tone read off 13F paperwork, which is the reported
+  // bug in its purest form. A symbol with no scorable coverage should say so.
+  const scorable = ranked.filter((item) => !isFilingChurn(item.title));
+  const pool = highValue.length ? highValue : scorable;
 
   // THE WINDOW, applied before anything else. An item with no publish date is
   // excluded rather than assumed recent: it cannot be SHOWN to be inside the
@@ -2143,10 +2163,14 @@ async function buildStockNewsBaseData(
     fetchCompanyName(upper),
   ]);
 
-  const [news, earningsNews] = await Promise.all([
-    fetchNews(upper, companyName),
-    fetchEarningsNews(upper, companyName),
-  ]);
+  // ONE STORE READ, TWO CONSUMERS. This was `Promise.all([fetchNews(...),
+  // fetchEarningsNews(...)])` and each of those fetched the store itself, so
+  // every render ran the whole adapter fan-out twice and raced two writes on
+  // one Redis key. See the note on selectDisplayNews.
+  const storedNews = await fetchStoredSymbolNews(upper, companyName);
+  const displayNews = selectDisplayNews(storedNews);
+  const news = displayNews.length ? displayNews : await fetchNewsFallback(upper, companyName);
+  const earningsNews = selectEarningsNews(storedNews, upper);
 
   const closes = history.map((point) => point.close);
   const ma50 = movingAverage(closes, 50);
@@ -2250,13 +2274,15 @@ async function buildStockNewsBaseData(
   // Similarity dedup does that job properly, so the feed can simply walk back
   // until it is full.
   //
-  // The floor is 90 days rather than unbounded: past a quarter a headline is
+  // The floor is bounded rather than open-ended: past a quarter a headline is
   // not news, and a card claiming to be part of the current picture should not
   // be from another one. Running short is the correct outcome for a thin
   // ticker -- fewer cards is honest, padding with year-old stories is not.
-  const feedMaxAgeDays =
-    newsProviderMode() === "free" ? FREE_FEED_MAX_AGE_DAYS : NEWS_FEED_MAX_AGE_DAYS;
-  const oldestAllowedMs = Date.now() - feedMaxAgeDays * 86_400_000;
+  //
+  // THE WINDOW IS THE PROVIDER'S, so it lives beside the flag that picks it --
+  // see feedMaxAgeDays in lib/server/news/index.ts. 90 days on FMP, 45 on free.
+  const feedWindowDays = feedMaxAgeDays();
+  const oldestAllowedMs = Date.now() - feedWindowDays * 86_400_000;
   const withinFeedWindow = feedPool.filter((item) => {
     if (!item.pubDate) return false;
     const t = new Date(item.pubDate).getTime();
@@ -2273,7 +2299,7 @@ async function buildStockNewsBaseData(
   // the only way the feed can under-deliver -- there is no gate left to blame.
   console.log(
     `[news-feed] ${upper} pool=${displayNewsPool.length} afterFilters=${feedPool.length}` +
-      ` within${feedMaxAgeDays}d=${withinFeedWindow.length}` +
+      ` within${feedWindowDays}d=${withinFeedWindow.length}` +
       ` lead=${detailedNews.length}/${maxDetailedItems} compact=${compactNews.length}/${MAX_COMPACT_NEWS_ITEMS}`
   );
 

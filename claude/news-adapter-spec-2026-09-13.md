@@ -1,8 +1,10 @@
 # News adapter spec — build instructions (2026-09-13)
 
-Built on **measured verdicts**, not assumptions. Probe route:
-`app/api/debug/news-sources`. Three runs from `iad1` — two preview, one
-production. Delete the probe once this ships.
+Built on **measured verdicts**, not assumptions. The probe route that produced
+them (`app/api/debug/news-sources`) ran three times from `iad1` — two preview,
+one production — and was **deleted at step 7**, as this file said to do once the
+adapters shipped. Its verdicts are quoted throughout and are not re-derivable
+without rebuilding it.
 
 Context: `claude/news-as-stored-dataset-spec-2026-08-22.md` (the store, unchanged),
 `claude/image-policy-2026-09-13.md` (how images are served and why),
@@ -438,6 +440,21 @@ keyword match. Keep the keyword list small and in one place.
 5. SEC filings adapter + committed CIK map.
 6. `eventType` refinement of the art cascade — `event-*` buckets now that the adapters supply the classification.
 7. Flip the default to `free`.
+   **SHIPPED 2026-09-13.** `newsProviderMode()` defaults to `"free"`;
+   `NEWS_PROVIDER=fmp` still selects the FMP adapter, which stays in the tree
+   compiling and checked. Shipped so that rollback is an environment variable
+   rather than a revert: the variable was set in Production before the merge, so
+   the merge itself moved nothing and Preview was where the free stack got
+   exercised; removing it is the flip and re-adding it is the rollback.
+   `FREE_FEED_MAX_AGE_DAYS` engages here and narrows the feed from 90 days to 45
+   — the one visible content change, and deliberate (Google News backfills thin
+   names: CYRX returned 56 items spread over 3,453 days). `data/static-profile.json`
+   becomes load-bearing at this step and is now read by the stock news page, the
+   dashboard strip and the sector index; a symbol in neither the cache nor the
+   snapshot logs `[static-profile]` and degrades to the generated card. The
+   active provider is surfaced on `/cache-health`, per §8's own instruction
+   below. `app/api/debug/news-sources` deleted. Checked by
+   `scripts/check-provider-flip.mjs`.
 
 Each step ships on its own. Do not combine 1 and 3.
 
@@ -445,6 +462,12 @@ Each step ships on its own. Do not combine 1 and 3.
 is that something fails to register and the site silently keeps calling FMP — the one
 thing this work exists to stop. A log line nobody reads is not enough; make it
 visible. See `claude/silent-failure-traps.md`.
+**DONE at step 7.** `/cache-health` now leads with a "News provider — active now"
+panel: the mode, the adapter ids actually returned by `activeNewsProviders()`, the
+feed window in force, and the snapshot's size and capture date. `fmp` renders amber
+with an explicit "the flip has been reverted without a commit" note, so the rollback
+state cannot be mistaken for the normal one. Both reads are synchronous — an
+environment lookup and a module-level array — so the panel costs no request.
 
 ## 9. Do not
 
@@ -456,6 +479,14 @@ visible. See `claude/silent-failure-traps.md`.
 - Do not rehost or cache any publisher image.
 - Do not put library art on the compact rows.
 - Do not build an alias list for ambiguous company names — use the classification.
+- Do not add a publisher denylist for filing churn. The one already in
+  `lib/stock-news-data.ts` named the offending publisher and still let 13 of 15
+  cards through, because a list matches a spelling. Shape rule only —
+  `lib/server/news/filingChurn.ts`. See
+  `claude/traps/precision-is-not-worth-reading.md`.
+- Do not measure a new source on precision alone. Precision was 96-100% on the
+  feed that shipped a page of 13F notices; nothing measured whether an item was
+  worth reading. Measure composition too.
 - Do not remove the image column — **hide it** with a code comment explaining why,
   per the owner's standing convention, so it is not switched back on by accident.
 - Do not claim a bandwidth saving figure. Measure it after.

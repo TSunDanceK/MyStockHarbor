@@ -1,10 +1,17 @@
 // Pure helpers for the stored news dataset in newsStore.ts.
 //
 // SEPARATED FOR TESTABILITY, exactly as historyMerge.ts was split out of
-// historyCache.ts in #375. This file imports nothing, reads no env and takes
-// time only through arguments, so scripts/check-news-merge.mjs can exercise the
-// real module rather than a copy of its logic. newsStore.ts cannot be imported
-// without Redis and Next in scope; this can.
+// historyCache.ts in #375. This file reads no env and takes time only through
+// arguments, so scripts/check-news-merge.mjs can exercise the real module
+// rather than a copy of its logic.
+//
+// IT NOW HAS EXACTLY ONE IMPORT, where it used to have none, and the property
+// that mattered is intact: ./news/filingChurn imports nothing either, so this
+// module still loads with no Redis and no Next in scope. The alternative was to
+// restate the churn grammar here, and this file's own note below — on why it
+// does not reimplement dedup — is the argument against that: a second copy that
+// can disagree with the first is a worse failure than the testability it buys.
+// newsStore.ts cannot be imported without Redis and Next in scope; this can.
 //
 // It also deliberately does NOT dedup. The similarity dedup from #343
 // (dedupeNews in lib/stock-news-data.ts) is already the one implementation of
@@ -12,6 +19,8 @@
 // testable would create a second copy that can disagree with the first, which
 // is a worse failure than the one testability was buying. The caller applies it
 // between merge and cap.
+
+import { isFilingChurn, MAX_CHURN_STORED } from "./news/filingChurn";
 
 /** The fields the merge actually reasons about. Structurally satisfied by NewsItem. */
 export type NewsMergeItem = {
@@ -127,7 +136,8 @@ export function selectEarningsPin<T extends NewsMergeItem>(
 }
 
 /**
- * Keep the newest `cap` articles, except that the pin always survives.
+ * Keep the newest `cap` articles, with institutional-holding churn capped
+ * separately, except that the pin always survives.
  *
  * THE PIN IS WHY THIS IS NOT JUST A SLICE. Persistence is the entire point of
  * the pin -- today an earnings article vanishes the moment it leaves FMP's
@@ -135,22 +145,62 @@ export function selectEarningsPin<T extends NewsMergeItem>(
  * reintroduces exactly the bug the pin exists to fix. When the pin has aged out
  * of the newest `cap`, it displaces the oldest ordinary article rather than
  * extending the store past its cap.
+ *
+ * ── WHY THE CHURN CAP IS HERE AND NOT AT THE ADAPTER OR THE PAGE ───────────
+ * The store is the only place that bounds the ACCUMULATED state, and the
+ * accumulated state is what was flooding.
+ *
+ * Capping in the adapter caps one POLL. Four polls a day past a feed that is
+ * half filing churn still fills forty slots with it inside a week, and the real
+ * story it evicted is gone for good: Google News's window has moved on, so a
+ * refetch cannot bring it back. Eviction here is lossy and permanent, which is
+ * what makes flooding expensive rather than untidy.
+ *
+ * Filtering at the page leaves that flood in place. The page would look right
+ * while the store quietly held thirty-eight holding notices and two articles,
+ * and no amount of display-side tuning recovers what the cap already dropped.
+ *
+ * SO CHURN IS STORED, AND BOUNDED. Up to MAX_CHURN_STORED survives, which is
+ * what makes this a cap rather than an exclusion: a thin name whose only
+ * coverage is holding notices keeps a few rather than going empty, and the
+ * 45-day free-stack window already pushes such names toward empty.
+ *
+ * THE CHURN PASS RUNS EVEN WHEN NOTHING IS OVER THE CAP. The early return this
+ * replaced was `ordered.length <= cap`, and leaving it would have meant a store
+ * of twenty items, every one of them churn, sailing through untouched -- which
+ * is precisely the reported page.
  */
 export function capNews<T extends NewsMergeItem>(
   items: readonly T[],
   pin: T | null,
-  cap = NEWS_STORE_CAP
+  cap = NEWS_STORE_CAP,
+  churnCap = MAX_CHURN_STORED
 ): T[] {
   const ordered = sortNewestFirst(items);
-  if (ordered.length <= cap) return ordered;
 
-  const kept = ordered.slice(0, cap);
+  // Two passes over the same newest-first order: articles first, then holding
+  // notices up to their own cap. Identical in shape to the SEC adapter's
+  // routine-form selection, and for the identical reason.
+  const articles: T[] = [];
+  const churn: T[] = [];
+  for (const item of ordered) {
+    if (isFilingChurn(item.title)) {
+      if (churn.length < churnCap) churn.push(item);
+    } else {
+      articles.push(item);
+    }
+  }
+
+  const kept = sortNewestFirst([...articles, ...churn]).slice(0, cap);
   if (!pin) return kept;
 
   const pinLink = pin.link?.trim();
   if (!pinLink || kept.some((item) => item.link?.trim() === pinLink)) return kept;
 
-  kept[kept.length - 1] = pin;
+  // THE PIN DISPLACES, IT DOES NOT EXTEND. When the store is under its cap
+  // there is room to append; when it is full the oldest ordinary article goes.
+  if (kept.length < cap) kept.push(pin);
+  else kept[kept.length - 1] = pin;
   return sortNewestFirst(kept);
 }
 

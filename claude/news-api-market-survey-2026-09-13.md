@@ -1,7 +1,7 @@
 # News API survey — replacing the FMP news feed
 Date: 2026-09-13. Research only; nothing built or changed.
 
-Cited by `app/api/debug/news-sources/route.ts`. Companion to
+Companion to
 `claude/news-adapter-spec-2026-09-13.md`, which supersedes the recommendation
 below wherever the two differ — the spec is built on measured probe verdicts,
 this survey on vendor pricing pages.

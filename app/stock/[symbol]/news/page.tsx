@@ -30,6 +30,9 @@ import NewsCardArt from "@/app/components/NewsCardArt";
 import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { sectorSlugFromLabel } from "@/lib/sectors";
+import { resolveProfile } from "@/lib/server/staticProfile";
+import { beginTiming } from "@/lib/server/timing";
+import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
   getLatestEarningsData,
@@ -87,6 +90,13 @@ type NewsItem = {
   // every FMP item, which is why null falling through to sector is the common
   // path and not the exception.
   eventType?: StoredNewsItem["eventType"];
+  // WHICH ADAPTER PRODUCED THIS, and it is on the local type now because the
+  // footer needs it. That footer used to hardcode "Article excerpt provided by
+  // the FMP news feed" on every card; saying truthfully what a card's text is
+  // takes knowing where it came from, and this local view of the item had
+  // silently dropped the field the store already carries. Typed from the
+  // canonical NewsItem, like eventType above, so the union cannot drift.
+  provider?: StoredNewsItem["provider"];
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -204,7 +214,11 @@ function stripAnyHtml(value: string): string {
 
 function getArticleSnippet(item: NewsItem, symbol: string) {
   const text = stripAnyHtml(item.description ?? "").trim();
-  if (text && text.length >= 40) return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
+  // THE SAME PREDICATE THE FOOTER USES, imported rather than restated. The
+  // footer claims one of "excerpt" or "generated" and it has to be the one that
+  // actually happened here; two copies of a length test are two copies that can
+  // drift, and that drift is how the old hardcoded FMP line became false.
+  if (hasPublisherExcerpt(text)) return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
   return `${stripAnyHtml(item.title)} is one of the latest ${symbol} headlines from ${compactSource(item.source)}. Use the full article link for the complete source context.`;
 }
 
@@ -385,7 +399,12 @@ function DetailedNewsSection({
                 fallbackText={buildWhyItMatters(item, symbol, trend, newsScore)}
               />
               <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <span>Article excerpt provided by the FMP news feed. AI is used only for the optional "Why this matters" read.</span>
+                {/* PER ITEM, not one hardcoded sentence. See lib/news-attribution.ts:
+                    post-flip most cards carry no publisher excerpt at all and
+                    the summary above is built from the item's own data, so a
+                    blanket "article excerpt provided by" is a false provenance
+                    claim on the majority of the page. */}
+                <span>{newsAttribution({ provider: item.provider, source: item.source, description: item.description })}</span>
                 <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
               </div>
             </article>
@@ -449,10 +468,20 @@ export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
+  // ── TOTAL, so the news numbers have a denominator ─────────────────────────
+  // history, quote, earnings and benchmarks already report through
+  // lib/server/timing.ts; news did not, and neither did the page as a whole. A
+  // per-adapter duration with nothing to divide it by cannot answer "is news
+  // even the expensive part of this render", which is the question that decides
+  // whether optimising it is worth doing at all. Off unless MSH_TIMING=1.
+  const endPage = beginTiming("page", `stockNews ${upper}`);
+
   // 5 large cards, 10 compact. The feed walks back up to 90 days to fill them
   // now that similarity dedup has replaced the one-article-per-date rule, so the
   // old 3 was a limit set by how little the source gate cleared.
+  const endNews = beginTiming("page", `newsBaseData ${upper}`);
   const newsData = await getStockNewsBaseData(upper, { maxDetailedItems: 5 });
+  endNews();
 
   const {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
@@ -461,7 +490,9 @@ export default async function StockNewsPage({ params }: Props) {
     history,
   } = newsData;
 
+  const endEarnings = beginTiming("page", `latestEarnings ${upper}`);
   const latestEarnings = await getLatestEarningsData(upper, earningsScore.tone);
+  endEarnings();
 
   // ── News card art (step 0 of claude/news-adapter-spec-2026-09-13.md) ──────
   //
@@ -473,10 +504,19 @@ export default async function StockNewsPage({ params }: Props) {
   //
   // Sector comes back as FMP's own label ("Technology"), so it goes through
   // sectorSlugFromLabel to reach the slugs lib/server/news/art.ts maps.
+  //
+  // STEP 7 PUT THE SNAPSHOT UNDER THIS READ. Before the flip an empty cache row
+  // meant no sector and the generated card, and the cache always refilled itself
+  // from FMP within the day. There is no FMP call left to refill it, so
+  // resolveProfile falls through to data/static-profile.json — still no network
+  // request, still no throw, and it logs any symbol that neither leg answers for.
+  const endFundamentals = beginTiming("page", `fundamentals ${upper}`);
   const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
+  endFundamentals();
+  const profile = resolveProfile(upper, fundamentals);
   const artBucket = bucketFor(
-    sectorSlugFromLabel(fundamentals?.sector ?? null),
-    fundamentals?.industry ?? null
+    sectorSlugFromLabel(profile.sector),
+    profile.industry
   );
 
   // The sparkline window for the generated card. Last ~30 sessions: long enough
@@ -502,6 +542,10 @@ export default async function StockNewsPage({ params }: Props) {
   // Stocks" internal-linking module (see lib/curatedSymbols.ts and
   // app/components/RelatedStocks.tsx).
   const relatedSymbols = getRelatedSymbols(upper);
+
+  // EVERY await is behind us; what follows is JSX construction. This is the
+  // number the other [timing] lines are a share OF.
+  endPage();
 
   return (
     <WatermarkVisibilityProvider>

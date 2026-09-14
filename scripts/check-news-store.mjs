@@ -23,7 +23,8 @@ const store = readCodeOnly("lib/server/newsStore.ts");
 const merge = readCodeOnly("lib/server/newsMerge.ts");
 const newsData = readCodeOnly("lib/stock-news-data.ts");
 const staleness = readCodeOnly("lib/server/stalenessQueue.ts");
-const vercel = JSON.parse(fs.readFileSync(path.join(process.cwd(), "vercel.json"), "utf8"));
+const ROOT = process.cwd();
+const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
 const spec = fs.readFileSync(
   path.join(process.cwd(), "claude/news-as-stored-dataset-spec-2026-08-22.md"),
   "utf8"
@@ -46,10 +47,27 @@ check(
 
 console.log("\n=== 2. The pure half stays pure ===\n");
 
+// THE PROPERTY IS "LOADS WITHOUT REDIS AND WITHOUT NEXT", not "has no import
+// line". It was written as the latter because at the time the two coincided,
+// and then capNews needed the churn grammar and the choice was one import or a
+// second copy of a regex that can disagree with the first. Relaxed to an
+// allowlist rather than deleted: "no import at all" would have failed a correct
+// change, and "any import is fine" would not have noticed `import { Redis }`.
+const MERGE_ALLOWED_IMPORTS = ["./news/filingChurn"];
+const mergeImports = [...merge.matchAll(/^import [\s\S]*?from "([^"]+)";$/gm)].map((m) => m[1]);
 check(
-  "newsMerge imports nothing",
-  !/^import /m.test(merge),
-  "it is split out so the tests can run the real module; an import is what would stop them"
+  "newsMerge imports nothing outside its allowlist",
+  mergeImports.every((spec) => MERGE_ALLOWED_IMPORTS.includes(spec)),
+  `found ${mergeImports.filter((s) => !MERGE_ALLOWED_IMPORTS.includes(s)).join(", ") || "none"} — ` +
+    "it is split out so the tests can run the real module; a Redis or Next import is what would stop them"
+);
+check(
+  "...and every module on that allowlist imports nothing itself",
+  MERGE_ALLOWED_IMPORTS.every((spec) => {
+    const rel = spec.replace(/^\.\//, "lib/server/") + ".ts";
+    return !/^import /m.test(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+  }),
+  "one hop is the allowance; a transitive dependency on Redis is the same failure one file further away"
 );
 
 check(
