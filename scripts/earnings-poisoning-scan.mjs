@@ -149,7 +149,6 @@ const inWindowWithCandidatesNoBlob = [...candidatesByDate.entries()]
   .sort((a, b) => (a.date < b.date ? -1 : 1));
 
 // ── Report ──────────────────────────────────────────────────────────────────
-const pct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : "—");
 
 console.log(`
 ================================================================
