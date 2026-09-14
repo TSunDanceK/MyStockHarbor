@@ -84,10 +84,23 @@ error in one of them —
 - **auditable** (each disagreement names two sources and a symbol),
 - **generated rather than maintained** (no list for anyone to keep current).
 
-LION surfaces in that diff without anyone having to spot it. Which matters,
-because nobody did: it took enumerating the tail to find one wrong sector page,
-and the only reason it was findable at all is that its industry label was a
-singleton. A misfiled symbol inside a large label leaves no trace of that kind.
+LION surfaces in that diff without anyone having to spot it.
+
+**And this is the part that decides it is standing rather than a one-off audit:**
+
+> LION was findable **only because its industry label happened to be a
+> singleton.** A symbol misfiled inside `Software - Application` leaves no trace
+> of that kind.
+
+That is **not an argument for a better audit.** It is the argument that **no
+audit finds this class of error**, and only a standing generated diff does. The
+tail enumeration found LION by accident of label size — 121 symbols sit under
+`Software - Application` and a wrong sector on any one of them produces no
+singleton, no anomaly, and nothing for a reviewer to notice. The 43 correctly
+filed media symbols were only visible *as a comparison group* because the wrong
+one had been isolated first.
+
+A recurring diff needs no one to suspect anything. That is the whole difference.
 
 **This does not change decision 1.** The 11 sectors are fixed; SIC produces a
 *disagreement report*, not an override. What is done about each disagreement is a
