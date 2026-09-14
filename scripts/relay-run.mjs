@@ -160,6 +160,15 @@ const TASKS = {
   // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
   // fallback and nothing had measured it.
   "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
+  // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
+  // reports whether the empty-day poisoning has already fired in production.
+  // The live read happens in the Step 0 job under Upstash's read-only token;
+  // this half only does arithmetic on the result.
+  "earnings-poisoning": {
+    script: "scripts/earnings-poisoning-scan.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
