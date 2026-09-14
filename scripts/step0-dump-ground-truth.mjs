@@ -75,7 +75,14 @@ const KEYS = {
   earningsRow: "msh:pickers:earnings:v1:",
   // lib/server/earningsCalendar.ts / earningsStore.ts
   earningsDayItems: "msh:earnings-day-items:v1",
-  earningsDayComplete: "msh:earnings-day-complete:v2",
+  // BOTH VERSIONS. v3 is live; v2 is the pre-F1 generation the bump retired and
+  // is still dumped as evidence that it is now unreachable rather than gone.
+  earningsDayComplete: "msh:earnings-day-complete:v3",
+  earningsDayCompleteV2: "msh:earnings-day-complete:v2",
+  // The per-symbol quote markers. Not values -- only how many exist, because a
+  // symbol carrying one costs no hourly-cap slot and the re-evaluation budget
+  // after a completeness bump turns entirely on that count.
+  earningsQuotedSymbol: "msh:earnings-quoted-symbol:v1",
   earningsSchedule: "msh:earnings-schedule:v1",
   // lib/server/dynamicUniverseCache.ts  SCORE_KEY / SEEN_KEY
   universeScore: "msh:dynamic-universe:v2:score",
@@ -597,6 +604,51 @@ async function dumpDateKeyed(name, prefix) {
 
 await dumpDateKeyed("earnings-day-items", KEYS.earningsDayItems);
 await dumpDateKeyed("earnings-day-complete", KEYS.earningsDayComplete);
+await dumpDateKeyed("earnings-day-complete-v2", KEYS.earningsDayCompleteV2);
+
+// The quoted-symbol markers, counted rather than read. One per symbol quoted in
+// the last 30 days; each is a symbol that re-quotes for free after a bump.
+{
+  const keys = await scanPrefix(`${KEYS.earningsQuotedSymbol}:*`);
+  const symbols = keys.map((k) => suffixOf(k, KEYS.earningsQuotedSymbol)).sort();
+  report.datasets["earnings-quoted-symbols"] = { key: `${KEYS.earningsQuotedSymbol}:<SYM>`, keysScanned: keys.length };
+  report.files.push(
+    writeJson("earnings-quoted-symbols.json", {
+      dumpedAt: DUMPED_AT,
+      dataset: "earnings-quoted-symbols",
+      key: `${KEYS.earningsQuotedSymbol}:<SYM>`,
+      count: symbols.length,
+      symbols,
+    })
+  );
+  console.log(`   ${"earnings-quoted-symbols".padEnd(24)} ${String(symbols.length).padStart(6)} symbols`);
+}
+
+// ── THE earningsRow KEY FAMILIES, SPLIT ─────────────────────────────────────
+//
+// msh:pickers:earnings:v1: is THREE key families sharing one prefix:
+//   <SYM>        the earnings rows themselves
+//   due:<SYM>    a TTL'd timestamp string (pickersBuilder.ts:545, written :1400)
+//   queue        a SET (pickersBuilder.ts:544, written :1395)
+//
+// dumpPerSymbol scans `${prefix}*` and takes everything after the prefix as a
+// SYMBOL, so "due:AAPL" and "queue" are counted as tickers. The due stamps are
+// strings, so they survive the MGET and land in `values` looking like earnings
+// rows; they inflate `present` and the coverage percentage derived from it.
+// Split here so the size of that inflation is a measured number.
+{
+  const prefix = "msh:pickers:earnings:v1:";
+  const keys = await scanPrefix(`${prefix}*`);
+  const suffixes = keys.map((k) => k.slice(prefix.length));
+  const families = {
+    rows: suffixes.filter((x) => !x.startsWith("due:") && x !== "queue").length,
+    due: suffixes.filter((x) => x.startsWith("due:")).length,
+    queue: suffixes.filter((x) => x === "queue").length,
+  };
+  report.datasets["earnings-row-key-families"] = { key: `${prefix}*`, keysScanned: keys.length, ...families };
+  report.files.push(writeJson("earnings-row-key-families.json", { dumpedAt: DUMPED_AT, prefix, keysScanned: keys.length, ...families }));
+  console.log(`   ${"earnings-row-families".padEnd(24)} rows=${families.rows} due=${families.due} queue=${families.queue}`);
+}
 
 // The month candidate feed. Needed to tell a legitimately empty date (nobody
 // reports) from a poisoned one (reporters exist and the stored blob is []).

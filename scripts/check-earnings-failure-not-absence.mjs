@@ -140,9 +140,32 @@ const MONTH_ROWS = [
 ];
 const NAMES = { AAA: "Alpha Inc", BBB: "Beta Inc", CCC: "Gamma Inc" };
 
-const wroteItems = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith("msh:earnings-day-items:v1:"));
-const wroteComplete = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith("msh:earnings-day-complete:v2:"));
-const wroteFrontier = (h) => h.cmd.some(([c, k]) => c === "set" && k === "msh:earnings-fill-frontier:v2");
+// ── THE KEY NAMES ARE READ FROM THE MODULE, NOT TYPED HERE ─────────────────
+//
+// These were hardcoded, and the v2 -> v3 bump would have walked straight past
+// it: every assertion below would keep watching a key nothing writes any more,
+// find nothing, and PASS. A suite that silently stops testing on a rename is the
+// same failure as a dump that silently reads the wrong key shape -- which is the
+// defect this whole file exists for. Extracted, and the extraction is asserted.
+const constFromSource = (name) => {
+  const m = new RegExp(`const ${name} = "([^"]+)"`).exec(raw);
+  if (!m) {
+    console.error(
+      `FATAL: could not read ${name} from lib/server/earningsCalendar.ts. The suite ` +
+        `would otherwise watch a key that no longer exists and pass by testing nothing.`
+    );
+    process.exit(1);
+  }
+  return m[1];
+};
+const DAY_ITEMS_PREFIX = constFromSource("DAY_ITEMS_PREFIX");
+const DAY_COMPLETE_PREFIX = constFromSource("DAY_COMPLETE_PREFIX");
+const FILL_FRONTIER_KEY = constFromSource("FILL_FRONTIER_KEY");
+console.log(`\n0. Keys under test (read from the module)\n  items    ${DAY_ITEMS_PREFIX}\n  complete ${DAY_COMPLETE_PREFIX}\n  frontier ${FILL_FRONTIER_KEY}`);
+
+const wroteItems = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith(`${DAY_ITEMS_PREFIX}:`));
+const wroteComplete = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith(`${DAY_COMPLETE_PREFIX}:`));
+const wroteFrontier = (h) => h.cmd.some(([c, k]) => c === "set" && k === FILL_FRONTIER_KEY);
 
 // ── 1. The control: healthy provider ───────────────────────────────────────
 //
@@ -230,12 +253,12 @@ for (const [label, fail] of [
 // ── 3. F3 — a stored [] is not a cache hit while candidates exist ──────────
 console.log("\n3. F3 — an empty stored blob is rebuilt, not served");
 {
-  const store = new Map([[`msh:earnings-day-items:v1:${DATE}`, []]]);
+  const store = new Map([[`${DAY_ITEMS_PREFIX}:${DATE}`, []]]);
   harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { bypassCap: true });
   check("the poisoned [] is not served", r.items.length === 3, `got ${r.items.length} rows`);
-  check("and the rebuilt rows replace it", Array.isArray(store.get(`msh:earnings-day-items:v1:${DATE}`)) && store.get(`msh:earnings-day-items:v1:${DATE}`).length === 3);
+  check("and the rebuilt rows replace it", Array.isArray(store.get(`${DAY_ITEMS_PREFIX}:${DATE}`)) && store.get(`${DAY_ITEMS_PREFIX}:${DATE}`).length === 3);
 }
 
 // ── 4. F2 — an empty day we could not SEE is poison; one we could is not ───
@@ -312,7 +335,7 @@ console.log("\n6. F6 — an all-empty window is an outage, not a finished window
   const h = harness({ mode: "ok", monthRows: [], names: NAMES });
   const m = await loadModule();
   await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
-  check("the fill frontier is NOT advanced", !wroteFrontier(h), h.cmd.filter(([, k]) => k === "msh:earnings-fill-frontier:v2").map(([c]) => c).join(","));
+  check("the fill frontier is NOT advanced", !wroteFrontier(h), h.cmd.filter(([, k]) => k === FILL_FRONTIER_KEY).map(([c]) => c).join(","));
 }
 {
   // The other half: a window that genuinely has work still parks/advances
@@ -350,10 +373,10 @@ console.log("\n6b. F6 against the production case — near month readable, later
   const nearRows = [{ symbol: "AAA", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null }];
   const store = new Map([
     // Already complete, so the walk passes over it rather than returning it.
-    [`msh:earnings-day-complete:v2:${nearDate}`, 1],
-    [`msh:earnings-day-items:v1:${nearDate}`, [{ symbol: "AAA", company: "Alpha Inc", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
+    [`${DAY_COMPLETE_PREFIX}:${nearDate}`, 1],
+    [`${DAY_ITEMS_PREFIX}:${nearDate}`, [{ symbol: "AAA", company: "Alpha Inc", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
     // The frontier starts honestly at the window's front edge.
-    ["msh:earnings-fill-frontier:v2", windowStart],
+    [FILL_FRONTIER_KEY, windowStart],
   ]);
 
   const h = harness({ mode: "ok", monthRows: nearRows, names: NAMES, store });
@@ -383,8 +406,8 @@ console.log("\n6b. F6 against the production case — near month readable, later
   const m = await loadModule();
   await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
 
-  const parked = h.cmd.filter(([c, k]) => c === "set" && k === "msh:earnings-fill-frontier:v2");
-  const finalFrontier = store.get("msh:earnings-fill-frontier:v2");
+  const parked = h.cmd.filter(([c, k]) => c === "set" && k === FILL_FRONTIER_KEY);
+  const finalFrontier = store.get(FILL_FRONTIER_KEY);
   check(
     "the near month was readable, so `sawAnyCandidates` is satisfied",
     h.calls.some((u) => u.includes("earnings-calendar")),
