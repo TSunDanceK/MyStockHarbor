@@ -79,6 +79,43 @@ not: `screenerFields.ts` says industry is "the one people actually search for �
 surface all three bank labels. Full statement in
 `claude/taxonomy-enumeration-2026-09-14.md` §4.
 
+### The flat-filter problem is answered by the 1:1 verification
+
+The check measured that **no industry appears under more than one sector**. That
+makes the screener's industry filter **two-level — sector → industry, ~13 per
+sector — rather than a flat 144.**
+
+So "68 labels returning ≤10 symbols" stops being an affordance problem: nobody
+sees all 144 at once. The conclusion falls directly out of the check rather than
+being a design preference, and it is asserted, so if industry ever stops implying
+sector the two-level filter's precondition fails loudly instead of quietly
+rendering a symbol under two parents.
+
+### Folding: an alias map at resolution, never a hand-edit
+
+**Do not hand-edit `data/taxonomy.json` or the snapshot.** This repo already
+records hand-editing a data file as the vector — the committed ticker file
+carried a stray `#` at byte 0 and was unparseable until one byte was removed.
+`data/taxonomy.json` is generated; editing it is overwritten by the next
+`build-taxonomy-reference.mjs` run, and editing the snapshot destroys the record
+of what the provider actually said.
+
+The pattern already exists one layer up: **`lib/sectors.ts` carries an `aliases`
+table** so "Health Care" folds onto the `healthcare` slug without touching data.
+The industry equivalent is the same shape:
+
+- a **recorded, checked alias map**, applied at **resolution**;
+- the **raw value preserved** in the record, so provenance survives and the fold
+  is reversible;
+- covered by a check, so an alias whose target stops existing fails loudly.
+
+The tail is the evidence it is needed —
+`claude/taxonomy-tail-audit-2026-09-14.md`. **Not built yet**: the audit is
+report-only by instruction, and the map should be populated from a reviewed fold
+list rather than from my reading of it. Two of the sixteen labels are not fold
+candidates at all (a sector error and a universe-composition question), so the
+alias map is not the whole remedy either.
+
 ### Sizing, for the unclassified bucket and any per-industry asset
 
 **Half of all symbols sit in the top 22 labels (15% of them); 68 of 144 labels
