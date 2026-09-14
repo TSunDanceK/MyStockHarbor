@@ -206,7 +206,48 @@ passing proves nothing about the others:
 
 `scripts/check-security-spellings.mjs`.
 
-#### THE CLASSIFIER IS INVERTED — known-good match, everything else excluded
+#### THE CLASSIFIER IS TWO-STAGE, REJECT FIRST — neither direction works alone
+
+**A single inverted ACCEPT list rejects ARM**, and ARM is the symbol this page
+was audited against. Tested live against 25 ADRs in the universe, **nine failed**:
+
+```
+ARM   "Arm Holdings plc - American Depositary Shares"
+BIDU  "Baidu, Inc. - American Depositary Shares, each representing 8..."
+VALE  "VALE S.A.  American Depositary Shares Each Representing one co..."
+ABEV, ZTO, LYG, GMAB, EC, SAN
+```
+
+and the passes were accidents: **GSK passed on a parenthetical**
+("(Each representing two Ordinary…)") **that ARM's name does not have.** Pass/fail
+depended on whether the exchange spelled out what the receipt represents — a coin
+flip, not a rule.
+
+**This is the majority case, not a tail case.** 49 of the 55 periodic filers in
+the measured window were 6-K filers — foreign private issuers, i.e. ADRs.
+
+**Why one inversion cannot work:** `Depositary Shares` appears on *both* sides.
+
+| | |
+|---|---|
+| `ARM` | "American Depositary Shares" — the tradeable common-equity proxy → **accept** |
+| `BAC$K` | "Depositary Shares, each representing a 1/1,000th interest in a share of 5.875% Non-Cumulative Preferred Stock" → **reject** |
+
+**The rule:**
+
+1. **REJECT** on a security-type marker — `Preferred | Notes | Debenture | Subordinated | Warrant | Unit | Right`
+2. **ACCEPT** on an equity marker — `Common Stock | Common Shares | Ordinary Shares | Class <X> (Common|Capital|Ordinary) Stock | American Depositary Shares | ADR`
+3. Otherwise **unknown** — excluded, reported, counted, and the count asserted.
+
+**Order is the whole rule.** BAC$K matches both stages and the reject must win;
+accept-first would include a preferred. Asserted directly rather than implied.
+
+The `Class` qualifier stays even though stage 1 now catches "Class A Preferred
+Stock" — belt to that braces, and the same failure one level down if removed.
+Type markers are word-bounded, so *Wright* is not a right and *United* is not a
+unit; both asserted.
+
+#### Why not a bad-word list alone
 
 A positive list of bad words does not work. Measured against the real names,
 **"Preferred" appears in only one of the six** non-common securities the review
@@ -235,6 +276,27 @@ different things in a report. Returning `common` for either is the fail-open pat
 A separate `describeSecurityName` gives the fine label for reporting only, and
 **its fallback is `other`, not `common`** — the same inversion, so a security
 type nobody enumerated cannot become an included symbol.
+
+#### The shapes asserted — six, because five was not enough
+
+| universe | Nasdaq | shape | verdict |
+|---|---|---|---|
+| `EP-PC` | `EP$C` | `$` preferred | not-common |
+| `MER-PK` | `MER$K` | `$` note | not-common |
+| `MKC-V` | `MKC.V` | `.` share class | common |
+| `TBB` | `TBB` | plain-ticker note | not-common |
+| `EMBJ` | `EMBJ` | plain-ticker common | common |
+| **`ARM`** | `ARM` | **ADR, underlying not spelled out** | **common** |
+| `BIDU` | `BIDU` | ADR, underlying not spelled out | common |
+| `GSK` | `GSK` | ADR, underlying *is* spelled out | common |
+
+ARM and BIDU are there because a rule can pass GSK and still be wrong; GSK is
+there so a future simplification cannot pass on the parenthetical alone.
+
+**BIDU and GSK are stored as captured prefixes, marked `TRUNCATED`** — the live
+values ran past the console width, and the visible part carries the marker under
+test. They are not full names and the check says so rather than completing them
+by guesswork.
 
 #### THE COUNT IS 5 OF 7, NOT 7 OF 7
 
