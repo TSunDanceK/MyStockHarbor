@@ -274,11 +274,19 @@ check("still no news cron", (vercel.crons ?? []).filter((c) => /news/i.test(c.pa
 console.log("\n=== 7. The fmpSymbolMatched decision ===\n");
 // THE CALL: wire items do NOT stamp it. The reason is not about how strong the
 // evidence is — a <category> from the issuer is strong — it is about what the
-// field DOES. rankNews treats symbol-confirmed as a HARD PREFERENCE: if any item
-// is confirmed, the feed uses ONLY confirmed items and discards the rest. One
-// wire release would therefore throw away every Google News item for that
-// symbol, and Google News is the per-symbol primary. The field is a mode switch,
-// not a confidence score.
+// field DOES.
+//
+// IT USED TO BE A MODE SWITCH: rankNews treated symbol-confirmed as a HARD
+// PREFERENCE, so one wire release would have thrown away every Google News item
+// for that symbol. That branch was removed on 2026-09-14 after it caused
+// exactly that outage from the other direction — legacy FMP records selecting
+// themselves and discarding the entire free-stack feed.
+//
+// SO THE REASON HAS CHANGED, AND THE DECISION HAS NOT. The field is now a
+// FOSSIL: nothing live writes it, nothing reads it for ordering, and it stays
+// inert until a live writer exists. Stamping it here would be the event that
+// makes promotion safe to reconsider — which is a decision to take
+// deliberately, not a side effect of an adapter edit.
 check(
   "wire items do not set fmpSymbolMatched or fmpSymbols",
   gnw.every((i) => i.fmpSymbolMatched === undefined && i.fmpSymbols === undefined),
@@ -290,13 +298,33 @@ check(
   "structured, honest, and read by nothing that discards other items"
 );
 check(
-  "the hard preference this avoids is really in rankNews",
+  "the field is INERT in rankNews — the premise of the decision above, restated",
   (() => {
+    // THIS ASSERTION FIRED WHEN THE HARD PREFERENCE WAS REMOVED, which is
+    // exactly what it was for: it read "the hard preference this avoids is
+    // really in rankNews", and that premise stopped being true on 2026-09-14.
+    // Deleting it would have left the decision above resting on a reason that
+    // no longer exists. Restated to the premise that holds now.
+    //
+    // WHAT CHANGED. The exclusive branch turned out to be the outage: after the
+    // provider flip only PRE-FLIP records could carry fmpSymbolMatched, so it
+    // selected exactly those and discarded the whole free-stack feed. It is
+    // gone, and the field orders nothing either — promoting on it today would
+    // promote staleness. claude/traps/a-preference-that-filters.md.
+    //
+    // WHAT THE DECISION ABOVE RESTS ON NOW. Not "stamping would discard the
+    // feed" — it would not, the branch is gone. It rests on the field being a
+    // FOSSIL: nothing live writes it, and stamping it here is the event that
+    // makes promotion safe to reconsider rather than something to do quietly.
+    // scripts/check-news-relevance-scope.mjs owns that tripwire and fails from
+    // both directions.
     const code = readCodeOnly("lib/stock-news-data.ts");
-    return /symbolConfirmedNews\.length\s*\n?\s*\?\s*symbolConfirmedNews/.test(code.replace(/\s+/g, " ").replace(/ /g, " ")) ||
-      /symbolConfirmedNews\.length/.test(code);
+    const i = code.indexOf("function rankNews(");
+    const body = code.slice(i, code.indexOf("\n}", i));
+    return i >= 0 && body.length > 200 && !/articleMatchesRequestedSymbol|fmpSymbolMatched/.test(body);
   })(),
-  "if this stops being a hard preference, the decision above is worth revisiting"
+  "if rankNews starts reading the field again, the decision above is worth revisiting — " +
+    "and so is scripts/check-news-relevance-scope.mjs, which asserts the inertness"
 );
 
 console.log("\n=== PER-FEED TIMING ===\n");

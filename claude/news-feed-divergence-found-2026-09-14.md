@@ -126,7 +126,62 @@ flip, is all of them. The field did not change meaning; the population did.
 provider-specific field survives the provider that populates it, and then reads
 the absence of that field as a negative.
 
-## 6. Fix, proposed — by shape, and not applied
+## 6. Fix, applied — (a) only
+
+**SHIPPED.** The exclusive branch is gone; `rankNews` takes an explicit scope.
+Verified against the real old code on the same fixture:
+
+    BEFORE (HEAD):  1 item(s) -> seekingalpha.com
+    AFTER:          4 item(s) -> ad-hoc-news.de, gurufocus.com, seekingalpha.com, zacks.com
+
+Three of the three headlines the score panel names are recovered, and the legacy
+item is **kept too** — the bug was exclusivity, not the old article's presence.
+
+Three refinements the report asked for, each of which changed the design:
+
+**The field stays INERT; it is not promoted either.** Promotion is the right
+shape and is what makes it safe for any adapter to stamp the field — but
+promoting on `fmpSymbolMatched` *today* would promote **staleness**. Nothing
+live writes it, so every item carrying it predates the flip by construction, and
+a sort key ordering on it orders *old before new* while looking like it orders
+*relevant before irrelevant*. Same bug in a better hat.
+
+`scripts/check-news-relevance-scope.mjs` asserts both halves, and the tripwire is
+**two-sided on purpose**: it fails if the branch or a sort key returns, AND it
+fails if a live adapter starts stamping the field — because that is the
+condition under which promotion becomes safe again. The failure message says so
+rather than reading as a regression.
+
+**Nothing was lost by removing the branch.**
+`isClearlyAboutRequestedCompany` returns true for a symbol-confirmed item on its
+first line, so **confirmed ⊆ text-relevant, always**. The branch was never adding
+members; it could only remove them.
+
+**Scope is asked for, never fallen into.** `rankNews(news, scope)` has no
+default. The no-symbol path is legitimate — `lib/sector-news-data.ts` has no
+symbol to be about — so the defect was never that it exists, only that it was
+reachable by forgetting two arguments. Market scope is now something a caller
+names.
+
+That is the same failure shape as two others today: the User-Agent env read that
+could go blank, and the `fieldHits` ReferenceError that passed three gates.
+**Silent defaults are how all three shipped.**
+
+## 6a. HELD — the score half, filed separately
+
+The acceptance criterion in the report — "the two numbers must not be able to
+disagree" — was corrected by its own author and the narrower version is right:
+the score panel is a **14-day** window and the feed a **45-day** one, so they
+*should* differ. What must not differ is the **relevance set** they compute over.
+
+The score still computes at market scope, so it scores over headlines the feed
+correctly rejects. That is the same bug facing the other way. It is **not
+bundled here**: correcting it moves a user-visible number on every one of 2,620
+pages and deserves its own before/after rather than arriving inside an outage
+fix. Filed as its own task; the explicit `MARKET_NEWS_SCOPE` argument is what
+keeps it visible while it waits.
+
+## 7. Original proposal, for the record
 
 Keyed on a computed property, never on a ticker; no hand-maintained list; no
 widening of the window and no loosening of the filter.
@@ -151,7 +206,9 @@ was reported.
 relevance to apply — so whatever shape (b) takes must keep working when there is
 no symbol, which is the case `rankNews`'s defaults were written for.
 
-## 7. Not done
+## 8. Not done
 
 The funnel sample across ~200 random symbols, for the **rate**. Four of seven is
-seven data points and is not a percentage.
+seven data points and is not a percentage. **Worth running after (a) lands**,
+since the numbers have now changed and the pre-fix ones would only measure the
+bug.
