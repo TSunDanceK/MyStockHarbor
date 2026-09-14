@@ -4,6 +4,13 @@
 // stale taxonomy is worse than none: the SIC table, the news-art map and the
 // screener filter would each be keyed on labels the data no longer uses, and
 // every one of those failures renders as a missing category rather than an error.
+//
+// THIS CHECK ONCE PRODUCED ITS OWN EXPECTED VALUE. Importing the generator
+// re-ran its top-level write, so it regenerated data/taxonomy.json and then
+// compared the file to itself -- passing forever, detecting nothing. The write
+// is now behind an entry-point guard, and the fix was verified by corrupting
+// the file and watching this go red. See the rule in the header of
+// scripts/check-sec-daily-index.mjs.
 import fs from "node:fs";
 import { buildTaxonomy } from "./build-taxonomy-reference.mjs";
 

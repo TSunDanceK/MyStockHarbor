@@ -7,6 +7,28 @@
 // are shaped exactly as EDGAR serves them and carry the filings the probe
 // observed on those dates.
 //
+// A CHECK THAT CAN PRODUCE ITS OWN EXPECTED VALUE IS NOT A CHECK.
+//
+// Three instances in one day, all of which reported PASS while testing nothing:
+//
+//   1. §17's fixture was built from the same 281 and 127 it then asserted, with
+//      forms dealt by a modulo-5 round robin. It reproduced its own typed-in
+//      loop bounds and was reported as a replay of a real EDGAR window.
+//   2. scripts/listing-venue-diff.mjs would have agreed with itself had it
+//      reimplemented parseTickerFile instead of LIFTING it -- a capture that
+//      parses with its own code is not evidence about the shipped parser.
+//   3. scripts/check-taxonomy-reference.mjs imported its generator, whose
+//      top-level write re-ran at import: it regenerated data/taxonomy.json and
+//      then compared the file to itself. It passed forever and detected nothing.
+//
+// THE REMEDY, generally: the subject must be produced by something the check
+// cannot influence, and the check must be shown to FAIL. For (3) that was an
+// entry-point guard on the generator's write, verified by corrupting the file
+// and watching the assertion go red. An assertion never observed failing is an
+// assertion of unknown value.
+//
+// Ask of every new check: could this pass if the code under test were deleted?
+//
 // STRIPPED SOURCE vs RAW SOURCE, AND WHICH TO READ.
 //
 //   An assertion about BEHAVIOUR reads readCodeOnly() -- comments stripped --
