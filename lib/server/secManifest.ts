@@ -121,7 +121,18 @@ export type SecManifestEntry = {
    * to work. Instead the RE-READ is made conditional, and this field is what
    * tells step 3 which kind of re-read to do.
    */
-  reverifyReason?: "periodic-report" | "amendment" | "unconfirmed" | null;
+  reverifyReason?:
+    | "periodic-report"
+    | "amendment"
+    | "unconfirmed"
+    /**
+     * The symbol's CIK moved under it and the stored fact set was discarded
+     * (see reconcileCiks). This entry has NO contentHash, NO lastAccession and
+     * NO lastFiled -- it is the emptiest thing in the manifest, not the
+     * cheapest to skip, so it ranks ahead of everything else in the queue.
+     */
+    | "cik-change"
+    | null;
   /** When re-reading was first requested. The queue drains oldest-first. */
   enqueuedAt?: number | null;
 };
@@ -434,8 +445,15 @@ export function reconcileCiks(
     entry.lastAmendment = null;
     entry.ambiguousSameDayFilings = null;
     entry.verifiedAt = null;
-    // Re-enqueued for a clean fetch.
+    // Re-enqueued for a clean fetch. The reason is REPLACED, not preserved: a
+    // symbol that last filed a 10-Q would otherwise keep "periodic-report" and
+    // claim provenance for a fact set that was just thrown away.
     entry.needsReverify = true;
+    entry.reverifyReason = "cik-change";
+    // A plain assignment, deliberately NOT ??=. This is a fresh enqueue of an
+    // invalidated symbol; an older timestamp carried over from a previous
+    // filing event would sort it among entries that still have their data.
+    entry.enqueuedAt = Date.now();
   }
 
   return {
@@ -935,7 +953,8 @@ export const SEC_REREAD_CONCURRENCY = 1;
  * every run against a budget of three, and the flag already says who is waiting.
  * Ordered so the drain has nothing left to decide:
  *
- *   amendment        first -- a restatement changes charts already published
+ *   cik-change       first -- the fact set was DISCARDED; there is nothing to serve
+ *   amendment        next  -- a restatement changes charts already published
  *   periodic-report  next  -- the quarter actually landed
  *   unconfirmed      last  -- a 6-K or 8-K that probably carries nothing
  *
@@ -945,7 +964,12 @@ export function secRereadQueue(
   manifest: SecManifest,
   limit = SEC_REREAD_DRAIN_PER_RUN
 ): { symbol: string; reason: string; enqueuedAt: number | null }[] {
-  const rank = { amendment: 0, "periodic-report": 1, unconfirmed: 2 } as Record<string, number>;
+  const rank = {
+    "cik-change": 0,
+    amendment: 1,
+    "periodic-report": 2,
+    unconfirmed: 3,
+  } as Record<string, number>;
   return Object.entries(manifest.symbols)
     .filter(([, e]) => e.needsReverify && e.cik)
     .map(([symbol, e]) => ({
@@ -955,7 +979,7 @@ export function secRereadQueue(
     }))
     .sort(
       (a, b) =>
-        (rank[a.reason] ?? 3) - (rank[b.reason] ?? 3) ||
+        (rank[a.reason] ?? 4) - (rank[b.reason] ?? 4) ||
         (a.enqueuedAt ?? 0) - (b.enqueuedAt ?? 0) ||
         (a.symbol < b.symbol ? -1 : 1)
     )

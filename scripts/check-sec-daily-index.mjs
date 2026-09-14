@@ -531,6 +531,34 @@ check("...and it is re-enqueued", reMan.symbols.PLAB.needsReverify === true);
 check("the new CIK is adopted", reMan.symbols.PLAB.cik === "0009999999");
 check("every OTHER symbol is untouched",
   ["AAPL", "ARM", "MU", "ASTS"].every((s) => reMan.symbols[s].contentHash === "deadbeef"));
+// The enqueue must carry its own provenance. Leaving reverifyReason at whatever
+// the symbol last filed claims a source for a fact set that was just discarded,
+// and leaving enqueuedAt unset drops the entry to the BACK of the drain.
+check("...tagged as a CIK change, not as whatever it last filed",
+  reMan.symbols.PLAB.reverifyReason === "cik-change",
+  JSON.stringify(reMan.symbols.PLAB));
+check("...with a fresh enqueue timestamp",
+  typeof reMan.symbols.PLAB.enqueuedAt === "number" && reMan.symbols.PLAB.enqueuedAt > 0,
+  String(reMan.symbols.PLAB.enqueuedAt));
+// A symbol whose history was thrown away has NOTHING to serve, so it outranks a
+// symbol that still has last quarter's numbers on disk. Ordered against an
+// amendment enqueued long BEFORE it, so this can only pass on rank, not on age.
+const ckMan = man.emptyManifest();
+man.seedManifest(ckMan, ["AAPL", "PLAB"], FIXTURE_CIK, true);
+Object.assign(ckMan.symbols.AAPL, {
+  needsReverify: true, reverifyReason: "amendment", enqueuedAt: 1,
+  contentHash: "deadbeef", lastAccession: "0000320193-26-000001",
+});
+const ckMoved = new Map(FIXTURE_CIK);
+ckMoved.set("PLAB", { cik: "0009999999", exchange: "Nasdaq" });
+man.reconcileCiks(ckMan, ckMoved);
+const ckQueue = man.secRereadQueue(ckMan);
+check("an invalidated symbol drains BEFORE an older amendment",
+  ckQueue.length === 2 && ckQueue[0].symbol === "PLAB" && ckQueue[0].reason === "cik-change" &&
+  ckQueue[1].symbol === "AAPL" && ckQueue[1].reason === "amendment",
+  ckQueue.map((x) => `${x.symbol}:${x.reason}@${x.enqueuedAt}`).join(" "));
+check("...and it is queued with a real timestamp, not a null that sorts first by accident",
+  typeof ckQueue[0].enqueuedAt === "number" && ckQueue[0].enqueuedAt >= ckQueue[1].enqueuedAt);
 
 // Absence is not reassignment.
 const gapMan = man.emptyManifest();
