@@ -71,11 +71,34 @@ Two design points worth keeping:
 
 ### Dispatching it
 
+The dump is chosen, not left open: the **most recent successful** Step 0 freeze.
+
 ```
-task:   listing-venue-diff
-ref:    build/sec-fundamentals-2026-09-13
-run_id: <the run whose artifact holds step0-dump>
+task:          listing-venue-diff
+ref:           build/sec-fundamentals-2026-09-13
+run_id:        34776325456
+artifact_name: step0-dump
 ```
+
+That run is `step0-ground-truth.yml` run #2, `main` @ `8d01e93`, completed
+**2026-09-13T19:00:34Z**; the `step0-dump` artifact is 25.3 MB, created
+19:00:32Z, expires 2026-12-12. One day old at time of writing.
+
+**Provenance is printed at the top of the report, before any finding**, and
+carried into `LISTING-VENUE-DIFF.json` as `dumpProvenance`. `relay.yml` now
+forwards `DUMP_RUN_ID` and `DUMP_ARTIFACT` into the task environment, and the
+script *additionally* derives the dump's age from a declared timestamp in
+`universe.json` or from file mtimes — belt and braces, because a report that
+loses its provenance when dispatched from an older workflow ref is worse than one
+that infers it. Over `STALE_DAYS` (default 14) it prints a loud banner.
+
+**What staleness actually does here, stated precisely.** A stale dump does *not*
+fabricate a classification disagreement: both reference files are fetched **live**
+on the runner, so the venue comparison is live-vs-live regardless of the dump's
+age. What goes stale is the **universe** (section 1's denominator) and the
+**dollar-volume weights** (section 3's pricing) — and section 3 is the number the
+licensing case turns on. That is the reason to pin the dump, and it is the reason
+the banner does not suppress sections 1–2.
 
 Optional `SYMBOLS` = the live manifest universe (comma- or space-separated). With
 it, the membership component closes; without it the script says so rather than

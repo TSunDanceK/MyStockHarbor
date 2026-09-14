@@ -118,6 +118,11 @@ jobs:
       - name: Run the task
         env:
           DUMP_DIR: ${{ steps.locate.outputs.dir }}
+          # PROVENANCE REACHES THE TASK, not just the run summary. A report that
+          # cannot name the dump it described is not reproducible, and the
+          # summary is a different artifact from the JSON the task writes.
+          DUMP_RUN_ID: ${{ inputs.run_id }}
+          DUMP_ARTIFACT: ${{ inputs.artifact_name }}
           SYMBOLS: ${{ inputs.symbols }}
           PAYERS: ${{ inputs.payers }}
           NONPAYERS: ${{ inputs.nonpayers }}
