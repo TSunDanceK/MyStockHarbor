@@ -7,6 +7,21 @@
 // are shaped exactly as EDGAR serves them and carry the filings the probe
 // observed on those dates.
 //
+// STRIPPED SOURCE vs RAW SOURCE, AND WHICH TO READ.
+//
+//   An assertion about BEHAVIOUR reads readCodeOnly() -- comments stripped --
+//   so a rule named in a comment cannot satisfy a check about the code. That is
+//   the trap this repo has a doc for (grep-finds-the-comment-not-the-code).
+//
+//   An assertion about a COMMENT reads the raw file. Several checks here verify
+//   that a REASON WAS RECORDED -- a spec citation, a cost argument, a note of
+//   what was considered and rejected -- because the defects being guarded
+//   shipped precisely when nothing said why. Those must read raw.
+//
+// Reading the stripped copy for one of those failed exactly as it should have,
+// and it will again: when a check asserts a reason is present, reach for
+// fs.readFileSync, not readCodeOnly.
+//
 // WHAT THE FIXTURE DOES AND DOES NOT PROVE. It is SELF-CONSISTENT: the manifest
 // and the index rows use the same CIKs, so it proves the intersection, the form
 // classification, the 403 handling and the watermark arithmetic. It does NOT
@@ -1182,6 +1197,10 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
   // seedManifest keeps what it is handed; this proves the route hands it the
   // right thing, which is the half that was broken.
   const routeCode = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
+  // THE RAW SOURCE TOO, DELIBERATELY. routeCode is readCodeOnly()'d -- comments
+  // stripped -- which is right for every assertion about BEHAVIOUR and exactly
+  // wrong for the ones below about a COMMENT. See this file's header.
+  const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
   check("the route seeds from PRESET_UNIVERSE ∪ the dynamic pool",
     /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
     "the union is the fix; seedManifest cannot add what it is never given");
@@ -1190,14 +1209,30 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
     "that cap bounds ANALYSIS — a history fetch and indicator pass per symbol. " +
       "Detection is one daily-index request at any size, and the per-symbol cost " +
       "that does scale is governed by SEC_REREAD_DRAIN_PER_RUN");
-  // THE RAW SOURCE, DELIBERATELY, because this assertion is ABOUT the comment.
-  // routeCode above is readCodeOnly()'d -- comments stripped -- which is right
-  // for every assertion about behaviour and exactly wrong for this one. Reading
-  // the stripped copy here failed, which is the trap working in reverse.
-  const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
   check("the reason is recorded at the seed call, not just in a findings doc",
     /sec-pipeline-spec-2026-09-13\.md §7/.test(routeRaw) && /guaranteed a slot/.test(routeRaw),
     "the cap shipped because nothing said why it was there");
+
+  // THE THIRD INPUT. dynamicUniverseCache's header names three sources bounded
+  // by ANALYSIS_UNIVERSE_CAP; the seed unions two. Asserted, not trusted: the
+  // third is covered only because pickersBuilder writes promoted names INTO the
+  // pool. If that call is ever removed or its source changed, the seed silently
+  // loses an input again -- the same shape as the defect above.
+  const buildersCode = readCodeOnly("lib/server/pickersBuilder.ts");
+  check("popular-search promotions reach the pool, so the seed's two inputs cover three",
+    /addToDynamicUniverse\(\s*popularSearchSymbols,\s*"search"/.test(buildersCode),
+    "pickersBuilder persists them; readDynamicUniverse then returns them");
+  check("...and the seed records that it considered the third input",
+    /popular-search promotions/.test(routeRaw) && /addToDynamicUniverse/.test(routeRaw),
+    "this class of bug survives because nothing writes down what was considered");
+
+  // THE PRECEDENT. The same defect happened one layer up and is documented in
+  // pickersBuilder. Asserted so that warning cannot be deleted while the code it
+  // warns about still exists.
+  const buildersRaw = fs.readFileSync("lib/server/pickersBuilder.ts", "utf8");
+  check("pickersBuilder still carries the concat-then-slice warning this repeats",
+    /NOT concat-then-slice/.test(buildersRaw) && /sliced the mega-caps off/.test(buildersRaw),
+    "PRESET appended then cut to the cap dropped AAPL/NVDA from the screener — the same bug, one layer up");
 
   // SIZE, because uncapping is only safe if the bound is asserted rather than
   // asserted-once-and-forgotten. 100 presets on top of 696 is the worst case.
