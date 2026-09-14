@@ -58,24 +58,42 @@ were never in the pickers universe and never will be, and that have live stock
 pages today. Regenerating against the same denominator fixes none of them.
 Corrected in place.
 
-## 4. AOS
+## 4. AOS — WITHDRAWN. See §4a.
 
-`AOS` is the case that surfaced this: present in `static-profile.json`, absent
-from `cik-map.json`. Its SEC leg is therefore **structurally zero** — not slow,
-not flaky, zero on every render, and only ever visible as a per-request
-`console.warn` nobody reads.
+> **CORRECTED 2026-09-14, after relay run 47.** This section claimed AOS's empty
+> page was explained by its missing CIK, and floated the absent `companyName`
+> fallback as the other half. **Both were wrong as an explanation of AOS.** The
+> real cause is measured in §4a. The CIK gap and the companyName gap are both
+> real and both worth fixing — they are simply not what made AOS empty, and
+> regenerating the map does not fix that page.
 
-**What that does and does not explain.** It fully explains a missing SEC leg. It
-does not by itself explain a zero-item *page*: that additionally needs Google
-News to return nothing, which happens when `companyName` is empty
-(`gnewsProvider` skips with `no usable company name`), plus the wires
-contributing nothing for that symbol — which is the normal case, since one real
-poll resolved 2 of 40 wire items to a universe symbol.
+## 4a. AOS is a relevance-ranking outcome, not a sourcing one
 
-Worth noting for that chain: **`static-profile.json` carries `sector` and
-`industry` only.** There is no committed fallback for company name, so a symbol
-whose profile cache has expired can lose the Google News leg as well as the SEC
-one. That is a second, separate gap and is not fixed here.
+`displayNewsPool = rankedNews.length ? rankedNews : dedupeNews(news)` — the pool
+is the **ranked** set. From a real render:
+
+    [gnews] AOS q="\"A.O. Smith\" stock" items=61
+    [news-feed] AOS pool=4 afterFilters=4 within45d=0 lead=0/5 compact=0/10
+
+Google News **ran**, had a usable company name, and returned **61 items**. The
+relevance ranking cut the stored set to 4, and none of the 4 were inside the
+45-day window. ROL for contrast: 98 items → pool=35.
+
+So AOS is about how a name like "A.O. Smith" fares in relevance ranking. None of
+the three things this document is about — the CIK denominator, the map
+regeneration, the `companyName` fallback — touches it.
+
+**What was wrong with the original reasoning.** It reasoned from a *structural*
+fact (AOS has no CIK, so the SEC leg is empty) to a *page-level* conclusion,
+without measuring the leg that actually carries the page. The SEC leg being
+empty was true and irrelevant: gnews returned 61 items and the page was still
+empty. A chain of plausible causes is not a measurement, and the fix here — as
+everywhere else in this work — was one render's log lines.
+
+**The `companyName` gap remains open and is NOT explained by this.** The
+snapshot carries `sector` and `industry` only, so a symbol whose profile cache
+has expired can still lose the Google News leg. That is a real gap. It just was
+not AOS's.
 
 ## 5. What to regenerate against
 
@@ -109,9 +127,9 @@ universe symbol missing from the snapshot cannot be dropped by the widening.
   refresh trigger.
 - **Made visible** — `/cache-health` carries a CIK coverage line beside the
   static-profile one. Both are committed JSON, so it costs no request.
-- **NOT regenerated.** That needs `sec.gov`, which the agent sandbox cannot
-  reach (see below). It is one relay dispatch — task `sec`, `symbols=cik-map` —
-  and it is an owner-side step.
+- **REGENERATED.** Relay run 47, 2026-09-14. 695 → 2,609 entries; coverage
+  26.5% → 99.6%. Results, the eleven remaining misses and what they are not, in
+  `claude/cik-map-relay-run-47-2026-09-14.md`.
 
 ## How this was measured
 

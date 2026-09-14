@@ -238,13 +238,59 @@ export function parseSubmissions(
  * that symbol — the strongest evidence producing the worst page. The attribution
  * goes in `tickers`, which nothing reads as a filter.
  */
+/**
+ * Symbol -> CIK, tolerating the dot/dash split.
+ *
+ * BRK.B WAS ONE OF ELEVEN MISSES IN RELAY RUN 47 AND THE ONLY ONE THAT WAS OURS.
+ * `BRK-B` is in the map (CIK 0001067983); `BRK.B` is not. SEC writes the dashed
+ * form, this repo's screener cache writes the dashed form, and the pickers
+ * universe carries the dotted one — so the two spellings of one company sit in
+ * our own data and nothing bridged them.
+ *
+ * This is the SAME BUG as the one #448 fixed for taxonomy, re-landing on a
+ * different lookup: claude/symbol-spelling-split-2026-09-12.md measured BRK.B as
+ * the only universe symbol missing both sector and industry, for exactly this
+ * reason. scripts/check-symbol-spelling.mjs exists because of it, and its own
+ * header names the vector — a person typing a ticker the way a human writes it
+ * into a hardcoded list, which is a standing practice here rather than a
+ * one-off. So this WILL happen again to the next dotted ticker that enters the
+ * universe, and normalising at the lookup is what makes that harmless.
+ *
+ * ONE DIRECTION ONLY, deliberately. The dashed spelling is canonical everywhere
+ * this repo stores data, so the fallback converts dots to dashes and never the
+ * reverse. A two-way normalisation would invite writing the dotted form as if it
+ * were equally valid, which is the habit that caused this.
+ *
+ * It cannot collide: a CIK map key contains at most one of the two separators,
+ * and the exact match is always tried first, so a symbol that legitimately holds
+ * a dot resolves to itself before any rewriting happens.
+ */
+/*
+ * `ciks` IS A PARAMETER SO THE PROPERTY CAN BE TESTED, not for flexibility --
+ * every caller uses the default. "Exact match wins over the rewrite" is
+ * indistinguishable from "the rewrite wins" against the real map, because no
+ * key in it both contains a dot and exists in its own right, so the branch that
+ * separates the two implementations is never taken. A mutation swapping their
+ * order survived every assertion written against the live data. Handing the
+ * function a crafted map -- {"A.B": x, "A-B": y} -- is the only thing that
+ * discriminates. Third time this pattern has come up today; see
+ * classifyProviderStats and cikCoverage.
+ */
+export function cikFor(
+  symbol: string,
+  ciks: Record<string, string> = CIK_BY_SYMBOL
+): string | undefined {
+  const upper = symbol.trim().toUpperCase();
+  return ciks[upper] ?? (upper.includes(".") ? ciks[upper.replace(/\./g, "-")] : undefined);
+}
+
 async function fetchForSymbol(
   symbol: string,
   _companyName: string,
   _sinceIso: string | null
 ): Promise<NewsItem[]> {
   const upper = symbol.trim().toUpperCase();
-  const cik = CIK_BY_SYMBOL[upper];
+  const cik = cikFor(upper);
 
   if (!cik) {
     // THE REFRESH TRIGGER FOR data/cik-map.json.

@@ -97,6 +97,25 @@ if (misses.length) console.log(`[sec] no CIK for: ${misses.slice(0, 25).join(", 
 
 // THE TRIMMED MAP. Padded to the 10-digit form data.sec.gov wants, so the
 // adapter never has to remember to pad.
+//
+// ── WHY TRIMMED AT ALL, PRICED RATHER THAN ASSUMED ─────────────────────────
+// Measured in relay run 47 (2026-09-14), so nobody has to rediscover the gap
+// the way it was found the first time:
+//
+//   denominator                     entries   committed file
+//   pickers universe (the old bug)      695          14.8 KB
+//   pickers ∪ static-profile           2,609         50.8 KB   <- now
+//   SEC's whole company_tickers.json  10,426        ~779 KB
+//
+// 15x the bytes for the tail. That is the trade, and it is a DECISION: the file
+// is imported at build time into every bundle that touches the SEC adapter, and
+// the 7,817 symbols in the tail are ones this site holds no other data about --
+// no profile row, no sector, no art bucket.
+//
+// A symbol outside the trim is not broken, it is on the §8 LAZY PATH: the miss
+// logs and returns [], it does not fetch, so the cost of being outside is one
+// absent SEC leg rather than a request per render. Widen the denominator here
+// if that stops being true; do not widen it because 99.6% looks untidy.
 const trimmed = {};
 for (const symbol of hits) trimmed[symbol] = String(bySymbol.get(symbol).cik).padStart(10, "0");
 console.log(`[sec] trimmed map: ${Object.keys(trimmed).length} entries, ` +

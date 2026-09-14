@@ -80,3 +80,18 @@ export function newsUserAgent(): string {
 export function secUserAgent(): string {
   return process.env.SEC_USER_AGENT?.trim() || NEWS_USER_AGENT;
 }
+
+// ── ONE MORE COPY EXISTS, AND SAYING OTHERWISE WOULD BE THE DRIFT ─────────
+// "One string instead of two that drift" is true of the ADAPTERS. It is not
+// true of the repo: scripts/sec-probe.mjs and scripts/news-timing-probe.mjs
+// each carry their own `process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0
+// (contact@mystockharbor.com)"` literal, because a .mjs relay script cannot
+// import a .ts module without the transpile dance the check-*.mjs harnesses do,
+// and that is too much machinery for a script whose only requirement is that
+// sec.gov sees SOME identification.
+//
+// Relay run 47 printed that older literal, which is how this was noticed rather
+// than assumed. Bounded and harmless — those scripts talk only to sec.gov,
+// which accepts either, and SEC_USER_AGENT overrides all three — but recorded
+// here so the next reader does not believe this file is the only copy and go
+// looking for a bug when a probe log disagrees with it.
