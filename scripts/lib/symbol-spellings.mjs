@@ -21,7 +21,7 @@
 // The test then PASSES THROUGH the securities it exists to catch, fails open,
 // and is indistinguishable from a working test that found nothing. Callers must
 // treat an unresolved name as UNKNOWN, never as "common stock" -- see
-// `classifyUnresolvedIsNotCommon` below.
+// `classifySecurityName` below.
 //
 // AND THE TWO SHAPES DIFFER, so a spot check misleads: suffixed preferreds
 // (MER-PK, MKC-V, EP-PC) need the "$" form, while baby bonds carry plain
@@ -70,19 +70,59 @@ export function lookupBySpelling(map, symbol) {
 }
 
 /**
- * THE RULE A CALLER MUST NOT GET WRONG, stated as code so it can be cited.
+ * KNOWN-GOOD MATCH, EVERYTHING ELSE NOT-COMMON. Inverted deliberately.
  *
- * An unresolved Security Name means the join failed, NOT that the security is
- * common stock. Returning "common" here is the fail-open path that makes the
- * whole exclusion test useless while reporting success.
+ * The first version enumerated BAD words -- preferred, warrant, unit, notes.
+ * Measured against the real file, "Preferred" appears in ONE of six
+ * non-common securities:
+ *
+ *   EP$C   El Paso Corporation Preferred Stock                        <- the only one
+ *   MER$K  Bank of America ... Income Capital Obligation Notes due 2066
+ *   TBB    AT&T Inc. 5.350% Global Notes due 2066
+ *   PFH    Prudential Financial 4.125% Junior Subordinated Notes due 2060
+ *   UNMA   Unum Group 6.250% Junior Subordinated Notes due 2058
+ *   EMBJ   Embraer S.A. Common Stock                                   <- actually common
+ *
+ * A positive list of bad words catches one in six and requires enumerating
+ * every way a note can be named -- "Income Capital Obligation Notes" being the
+ * one nobody would have guessed. Matching a known-good pattern instead needs no
+ * such enumeration: the set of names a COMMON share carries is small and stable.
+ *
+ * THREE STATES, NOT TWO. "unknown" (the join failed) is kept distinct from
+ * "not-common" (the join succeeded and it is a note) because they mean different
+ * things in a report, even though both exclude. Returning "common" for either is
+ * the fail-open path that makes the whole exclusion test useless.
  */
-export function classifyUnresolvedIsNotCommon(securityName) {
+const COMMON_EQUITY_NAME = [
+  /\bcommon stock\b/i,
+  /\bcommon shares?\b/i,
+  /\bordinary shares?\b/i,
+  // "Class C Capital Stock" (GOOG), "Class A Common Stock" (BRK.A). The
+  // qualifier is REQUIRED: a bare /Stock/ would accept "Preferred Stock", and
+  // a bare /Class .* Stock/ would accept a hypothetical "Class A Preferred
+  // Stock".
+  /\bclass\s+[A-Z0-9]+\s+(?:common|capital|ordinary)\s+(?:stock|shares?)\b/i,
+];
+
+export function classifySecurityName(securityName) {
   if (securityName == null || String(securityName).trim() === "") return "unknown";
   const name = String(securityName);
-  if (/\bwarrant/i.test(name)) return "warrant";
-  if (/\bunits?\b|tangible equity unit/i.test(name)) return "unit";
-  if (/preferred|depositary shares/i.test(name)) return "preferred";
-  if (/\bnotes? due\b|\bdebenture/i.test(name)) return "baby-bond";
-  if (/common stock|capital stock|ordinary shares|common shares/i.test(name)) return "common";
-  return "unknown";
+  return COMMON_EQUITY_NAME.some((re) => re.test(name)) ? "common" : "not-common";
+}
+
+/**
+ * A finer label for REPORTING only -- never for the include/exclude decision,
+ * which is classifySecurityName's. Anything it cannot name is "other", not
+ * "common": the same inversion, so a security type nobody enumerated does not
+ * silently become an included symbol.
+ */
+export function describeSecurityName(securityName) {
+  if (classifySecurityName(securityName) === "unknown") return "unknown";
+  const name = String(securityName);
+  if (classifySecurityName(name) === "common") return "common";
+  if (/\bwarrants?\b/i.test(name)) return "warrant";
+  if (/\bunits?\b/i.test(name)) return "unit";
+  if (/\bnotes?\b|\bdebentures?\b/i.test(name)) return "note";
+  if (/\bpreferred\b|\bdepositary shares\b/i.test(name)) return "preferred";
+  return "other";
 }
