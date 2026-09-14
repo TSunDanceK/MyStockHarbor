@@ -172,7 +172,7 @@ for (const [symbol, tag] of SAMPLE) {
       : rs.filter((r) => r.form === "8-K" && String(r.items).includes("2.02")).length;
 
   for (const f of extraFiles) {
-    if (countResults(all) >= 12 || pagesRead >= 2) break;
+    if (countResults(all) >= 16 || pagesRead >= 5) break;
     const pres = await getJson(`https://data.sec.gov/submissions/${f.name}`);
     totalRequests++; totalBytes += pres.bytes; totalMs += pres.ms;
     pagesRead++;
@@ -203,23 +203,40 @@ for (const [symbol, tag] of SAMPLE) {
       .filter((r) => days(parse(r.filingDate), parse(r.reportDate)) >= 20);
     rawCount = sixK.length;
 
-    const byDay = new Map();
+    // GROUP BY PERIOD, NOT BY FILING DAY. An FPI files many 6-Ks against the
+    // same period; the results one is the FIRST to carry that period end.
+    // Grouping by filing day instead (the first cut of this) left one row per
+    // day and let a cluster of same-period 6-Ks each consume a slot.
+    const byPeriod = new Map();
     for (const r of sixK) {
-      const cur = byDay.get(r.filingDate);
-      // Later reportDate = the closest preceding period end = the results 6-K.
-      if (!cur || parse(r.reportDate) > parse(cur.reportDate)) byDay.set(r.filingDate, r);
+      const cur = byPeriod.get(r.reportDate);
+      if (!cur || parse(r.filingDate) < parse(cur.filingDate)) byPeriod.set(r.reportDate, r);
     }
 
     // NO CALENDAR QUARTERS ASSUMED (brief §3.4: measured fiscal year ends include
-    // 26 Sep and 3 Sep). A period end is accepted because it sits a QUARTER's
-    // distance from the last accepted one, not because it lands on 31 March.
-    const ordered = [...byDay.values()].sort((a, b) => parse(a.reportDate) - parse(b.reportDate));
+    // 26 Sep and 3 Sep). A period end is accepted because it sits a reporting
+    // period's distance from the last accepted one, not because it lands on a
+    // date shape.
+    //
+    // THE UPPER BOUND RE-ANCHORS, IT DOES NOT REJECT. The first cut treated a
+    // gap over the bound as a rejection, so one hole in a filer's history
+    // rejected everything after it: INFY went 121 raw -> 2 usable and every FPI
+    // fell under the bar, which read as "FPIs are unpredictable" when it was
+    // this filter. A gap too LARGE means the series restarted, not that the
+    // filing is bad.
+    //
+    // 55-200 days, because FPIs are not uniformly quarterly -- several report
+    // half-yearly, and a quarterly-only bound would silently drop them.
+    const MIN_GAP = 55;
+    const MAX_GAP = 200;
+    const ordered = [...byPeriod.values()].sort((a, b) => parse(a.reportDate) - parse(b.reportDate));
     let lastEnd = null;
     for (const r of ordered) {
       const p = parse(r.reportDate);
       if (lastEnd !== null) {
         const gap = days(p, lastEnd);
-        if (gap < 60 || gap > 120) { unpairable++; continue; }
+        if (gap < MIN_GAP) { unpairable++; continue; } // same period, already taken
+        if (gap > MAX_GAP) { lastEnd = p; unpairable++; continue; } // history gap: re-anchor
       }
       lastEnd = p;
       pairs.push({ periodEnd: r.reportDate, resultsDate: r.filingDate, lag: days(parse(r.filingDate), p) });
