@@ -219,7 +219,9 @@ if (poisoned.length === 0) {
       console.log(
         cov === 0
           ? "  ZERO COVERAGE. Every symbol in that slice rode the 120-day floor, and the\n  run still reported success. That is the inert-trigger state §5 describes."
-          : "  The remainder rode the 120-day floor for that run."
+          : cov === slice
+            ? "  FULL COVERAGE. No symbol in that slice fell back to the 120-day floor, so\n  the trigger is live for the symbols actually being warmed."
+            : `  The other ${slice - cov} rode the 120-day floor for that run.`
       );
     }
   }
