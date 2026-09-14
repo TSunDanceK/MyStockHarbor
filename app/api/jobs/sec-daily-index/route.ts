@@ -26,8 +26,8 @@ import {
   latestProcessableDate,
   type SymbolFiling,
 } from "@/lib/server/secDailyIndex";
+import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import {
-  ANALYSIS_UNIVERSE_CAP,
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
 
@@ -265,9 +265,46 @@ export async function GET(req: NextRequest) {
     tickers = await resolveTickerMap();
   }
 
-  const universe = (await readDynamicUniverse())
-    .slice(0, ANALYSIS_UNIVERSE_CAP)
-    .map((e) => e.symbol);
+  // THE MANIFEST IS NOT BOUNDED BY ANALYSIS_UNIVERSE_CAP, AND THAT IS THE POINT.
+  //
+  // It was, and the result was a silent product defect: JPM and C were absent
+  // from the manifest entirely, so /stock/JPM/earnings could never be populated
+  // by this cron. Nothing raised anything -- seedManifest adds exactly what it
+  // is given, and a symbol with no entry simply never matches the daily index.
+  // See claude/sec-manifest-misses-preset-universe-2026-09-14.md.
+  //
+  // TWO DIFFERENT COSTS, WHICH THE CAP CONFLATES.
+  //   ANALYSIS_UNIVERSE_CAP bounds what gets ANALYSED -- a history fetch and a
+  //   pass through the indicator stack per symbol, which is real upstream spend
+  //   that scales linearly. It is doing its job for the consumers that analyse
+  //   and is deliberately left alone.
+  //
+  //   The manifest bounds what gets DETECTED, and detection is ONE daily-index
+  //   request whether it covers 700 filers or 10,000. The per-symbol cost that
+  //   does scale is the re-read, and that already has its own governor in
+  //   SEC_REREAD_DRAIN_PER_RUN -- 150 a run against a measured peak inflow of
+  //   98 a day. Applying the analysis cap here charges detection for a cost it
+  //   does not incur, and double-governs the one it does.
+  //
+  // sec-pipeline-spec-2026-09-13.md §7 says so outright: "§1 already survives
+  // this. The daily index is one request whether you track 700 filers or all
+  // ~10,000, so the correctness mechanism needs no change at all." The cap
+  // contradicted the spec this build follows, which is why nothing ever
+  // recorded a reason for it being here.
+  //
+  // SIZE, STATED RATHER THAN ASSUMED: 391 B/symbol, 266 KB at 696, ~305 KB with
+  // the presets unioned in, against Upstash's 10 MB per-request ceiling. The
+  // bound is asserted in check-sec-daily-index.mjs so growth stays visible.
+  //
+  // PRESET_UNIVERSE FIRST, because those 100 mega-caps are "guaranteed a slot"
+  // everywhere else -- sectorUniverse and pickersBuilder both union them in --
+  // and the dynamic pool ages entries out after 14 days, so which preset name
+  // is missing changes week to week. Order is irrelevant to the manifest, which
+  // is a set; readDynamicUniverse's own ordering still governs every consumer
+  // that cares about rank.
+  const universe = [
+    ...new Set([...PRESET_UNIVERSE, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+  ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 
   // Reconcile BEFORE the index is read, so a symbol whose CIK moved is matched
