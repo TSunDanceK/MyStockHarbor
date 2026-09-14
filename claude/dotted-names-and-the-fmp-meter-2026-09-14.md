@@ -92,15 +92,26 @@ entry still yields `a.o. smith`, because the hyphen replacements are the
 identity for a name with no hyphen. Checked by running the mutated code —
 the variant set comes back identical.
 
-## Not verified here
+## Verified on the preview
 
-**The acceptance criterion needs a `cache=MISS` render on production**, which
-this sandbox cannot reach (`www.mystockharbor.com` is refused, 403 CONNECT).
-What is verified is the predicate, against real headline spellings. The funnel
-numbers — AOS and SJM reaching FAST and SNA's retention band, `within45d > 0`,
-a lead card inside a fortnight — are owner-side and still outstanding.
+**AOS 0 → 10 cards. SJM 3 → 13.** Both feeds carry multiple spellings of the
+name at once, which is the behaviour the variants exist to produce.
 
-**The 45-day window was not touched.**
+The 45-day window was not touched.
+
+## The asymmetry is spanned, not removed — and now says so at both ends
+
+The fix keeps the two normalisers different and bridges them, which is right:
+the headline side must keep `:$.-` for the ticker signals, and the name side
+must strip punctuation so spacing does not matter. Neither class is wrong.
+
+**The mismatch only exists between them, which is why it survived review of
+both.** So each site now carries a note naming the other function *and*
+`companyNameVariants`, and the coupling is pinned from **both ends** — a checker
+that looked at one side would have the same blind spot the code had. Three
+assertions: the name normaliser still strips, the headline normaliser still
+keeps, and both notes still cross-reference. **4/4 mutations killed**, including
+each class silently converging on the other and either note being deleted.
 
 ---
 
@@ -155,3 +166,16 @@ production is judged by.
 | meter lag / attribution delay | the counter froze for an hour earlier today while six sibling endpoints moved; re-read it against siblings again |
 
 **Nothing changed.** No caller was removed because none was found.
+
+## Resolved, owner-side
+
+The circular evidence was withdrawn and replaced with a test that does not
+depend on the window string: `[news-feed]` prints in **both** modes, so grouping
+runtime logs on it gives the deployments that actually rendered news. **Nine in
+13 hours — eight post-flip, and the ninth is `a17c1a6` itself with one render.**
+The debug route took **4 requests total**.
+
+**Renders account for at most 1 of the 198 calls.** The repo is exonerated: no
+scheduled caller exists, and the ones that exist did not run. What remains is
+off-Vercel or meter behaviour, and is being read against the sibling endpoints —
+the method that killed this morning's false alarm.

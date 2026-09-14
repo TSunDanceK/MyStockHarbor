@@ -648,6 +648,25 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
+/**
+ * ── THIS SIDE STRIPS PUNCTUATION. THE HEADLINE SIDE DOES NOT. ─────────────
+ * The `[^\w\s]` below removes dots and hyphens, so "A.O. Smith" reduces to
+ * "a o smith". The headline is normalised by a DIFFERENT class in
+ * isClearlyAboutRequestedCompany — `[^\w\s:$.-]`, which KEEPS dots and hyphens
+ * — so the text there still reads "a.o. smith".
+ *
+ * The two never meet, and that asymmetry was invisible from either function
+ * alone: each is defensible on its own and the mismatch only exists between
+ * them. It cost AOS and SJM 56 of 60 and 82 of 89 items respectively, because
+ * the substring rule could never fire on a dotted name.
+ *
+ * IT IS SPANNED, NOT REMOVED. companyNameVariants generates the spellings a
+ * headline actually uses and matches on any of them. Removing the asymmetry
+ * instead — stripping dots on both sides — would lose the distinction between
+ * "a o smith" and "ao smith" as separate evidence, and would still leave the
+ * hyphen case. If you change the class below, read companyNameVariants and the
+ * note at the headline normaliser before deciding the other two are redundant.
+ */
 function getCleanCompanyName(companyName: string) {
   return companyName
     .toLowerCase()
@@ -744,6 +763,15 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
   }
 
   const rawText = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`.toLowerCase();
+  // ── THIS SIDE KEEPS DOTS AND HYPHENS. getCleanCompanyName DOES NOT. ──────
+  // `:$.-` are preserved here so the explicit ticker signals below can match
+  // ("$aos", "nasdaq: aos"). getCleanCompanyName normalises the COMPANY NAME
+  // with `[^\w\s]`, which strips them — so a name reduced to "a o smith" was
+  // being looked for in text that reads "a.o. smith", and never found.
+  //
+  // Neither class is wrong; the mismatch only exists between them, which is why
+  // it survived review of both. companyNameVariants spans it. If you widen or
+  // narrow this class, that function is the thing that depends on it.
   const text = rawText.replace(/[^\w\s:$.-]/g, " ").replace(/\s+/g, " ");
 
   const ticker = symbol.toLowerCase();

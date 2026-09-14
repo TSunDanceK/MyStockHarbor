@@ -211,6 +211,42 @@ check(
   "the nearest miss matters more than an obvious one"
 );
 
+console.log("\n  -- the asymmetry, pinned at both ends --\n");
+
+// THE MISMATCH ONLY EXISTS BETWEEN THE TWO FUNCTIONS, which is why it survived
+// review of each. Neither class is wrong on its own: the headline keeps `:$.-`
+// so the ticker signals can match, and the name strips punctuation so spacing
+// does not matter. Read either one alone and nothing looks amiss.
+//
+// So the COUPLING is pinned rather than left to a comment, and pinned from both
+// ends — a checker that only looked at one side would have the same blind spot
+// the code had.
+{
+  const rawSrc = fs.readFileSync("lib/stock-news-data.ts", "utf8");
+  check(
+    "the NAME normaliser still strips punctuation",
+    /function getCleanCompanyName[\s\S]{0,600}?\.replace\(\/\[\^\\w\\s\]\/g, " "\)/.test(rawSrc),
+    "if this starts keeping dots, companyNameVariants' dotted forms become the only ones that can match"
+  );
+  check(
+    "...and the HEADLINE normaliser still keeps dots and hyphens",
+    /const text = rawText\.replace\(\/\[\^\\w\\s:\$\.-\]\/g, " "\)/.test(rawSrc),
+    "if this starts stripping them, the dotted variants stop matching and the ticker signals break too"
+  );
+  check(
+    "both sites say the other exists",
+    (() => {
+      // A comment at one end only is how the next person rediscovers this from
+      // one function, which is exactly what happened the first time.
+      const nameSite = rawSrc.slice(rawSrc.indexOf("THIS SIDE STRIPS PUNCTUATION"), rawSrc.indexOf("function getCleanCompanyName"));
+      const textSite = rawSrc.slice(rawSrc.indexOf("THIS SIDE KEEPS DOTS"), rawSrc.indexOf("const text = rawText"));
+      return /isClearlyAboutRequestedCompany/.test(nameSite) && /companyNameVariants/.test(nameSite) &&
+        /getCleanCompanyName/.test(textSite) && /companyNameVariants/.test(textSite);
+    })(),
+    "each note has to name the other function AND the thing that spans them"
+  );
+}
+
 console.log("\n  -- the guard that was NOT lowered --\n");
 
 check(
