@@ -153,22 +153,68 @@ The test sits at **universe admission AND the extraction boundary.**
 directly-requested preferred never passes through admission, and would hit the
 same parent-CIK problem by a different door.
 
-### The signal, and what is actually verified about it
+### The signal — CONFIRMED, with a trap that would have made the test useless
+
+`nasdaqtraded.txt` header, read live (13,221 rows, 38 currently flagged
+`Test Issue`):
+
+```
+Nasdaq Traded | Symbol | Security Name | Listing Exchange | Market Category |
+ETF | Round Lot Size | Test Issue | Financial Status | CQS Symbol |
+NASDAQ Symbol | NextShares
+```
+
+`Security Name` is index 2, `ETF` 5, `Test Issue` 7. **Read by name, not index**
+— the existing scripts already use `header.indexOf(...)`, and a positional read
+is one inserted column away from classifying every security by its listing venue.
+The indices are recorded as a cross-check, not as the access method.
+
+`Test Issue` is confirmed as a **free second exclusion**, already among the
+columns the existing scripts read.
+
+#### THE TRAP: Nasdaq spells suffixed preferreds with a DOLLAR sign
+
+```
+universe        MER-PK   EP-PC   MKC-V
+Nasdaq Trader   BAC$K    T$A     ...$<series>
+```
+
+A join on symbol returns **NULL for every suffixed preferred**, and a null
+Security Name reads as *"no name, so not a preferred"*. The test then **passes
+through exactly the securities it exists to catch** — fail-open, and
+**indistinguishable from a working test that found nothing.**
+
+**And the two shapes differ, so a spot check misleads.** Suffixed preferreds
+(MER-PK, MKC-V, EP-PC) need the `$` form; baby bonds carry plain alphabetic
+tickers (TBB, PFH, UNMA) and join correctly as-is. Checking TBB alone passes and
+says nothing about the suffixed half. **The assertion that matters is MER-PK
+resolving to a name containing "Preferred"** — that is the one in
+`scripts/check-symbol-spellings.mjs`.
+
+#### One helper, because there were seven copies
+
+The dot/dash dance existed in **seven** places. `scripts/lib/symbol-spellings.mjs`
+now generates every spelling — dot, dash and dollar — and `classifyUnresolvedIsNotCommon`
+states the rule in code: **an unresolved name is `"unknown"`, never `"common"`.**
+
+Five call sites converted; **two exempt with stated reasons** rather than the bar
+being lowered: `phase0-adjustment-probe.mjs` builds stooq *filenames*
+(`brk-b.us`), and `step0-analyse-dump.mjs` *studies* the two spellings, so
+routing it through the helper would make it study the helper.
+
+The rule is generative, not a lookup table — a table of known preferreds is a
+September 2026 snapshot that returns a wrong answer silently forever, which this
+repo has refused twice already.
+
+### What was previously unverified about the signal
 
 `Security Name` from `nasdaqtraded.txt` — it distinguishes "Class A Common Stock"
 from "% Notes due …" and "Preferred Stock".
 
-**Correction to an earlier claim of mine:** I wrote that this signal is "already
-fetched by two existing scripts". The **file** is fetched by
-`scripts/listing-split.mjs` and `scripts/listing-venue-diff.mjs`; the **column**
-is not. Those scripts read `Symbol`, `Listing Exchange`, `ETF` and `Test Issue`
-only. The presence and exact spelling of `Security Name` is **unverified from
-here** — the sandbox is refused `www.nasdaqtrader.com` with 403 CONNECT. It is
-one relay dispatch to confirm, and should be confirmed before anything is built
-on it.
-
-`Test Issue` is already read and is a second, independent exclusion worth
-carrying in the same rule.
+**Resolved.** I had written that the signal was "already fetched by two existing
+scripts" — the **file** was, the **column** was not, and its presence was
+unverified from the sandbox (`www.nasdaqtrader.com` returns 403 CONNECT). It has
+since been read live and is confirmed above, so no relay dispatch is needed.
 
 ### Exact match vs substring — the two rules land close together
 

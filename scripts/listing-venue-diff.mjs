@@ -46,6 +46,7 @@ import zlib from "node:zlib";
 import readline from "node:readline";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const DIR = path.resolve(process.argv[2] ?? "step0-dump");
 const UA =
@@ -366,14 +367,12 @@ console.log(`dollar volume: ${dollarVol.size} of ${analysis.length} symbols have
 
 // ── The per-symbol table ─────────────────────────────────────────────────────
 //
-// THE DOT/DASH PROBLEM, third convention in this repo. The universe stores
-// BRK.B; both reference files use the dashed form. Both sides try both
-// spellings, so a spelling miss cannot masquerade as a venue disagreement.
-const alts = (sym) => [sym, sym.replace(/\./g, "-"), sym.replace(/-/g, ".")];
-const lookup = (m, sym) => {
-  for (const a of alts(sym)) if (m.has(a)) return { value: m.get(a), matched: a };
-  return null;
-};
+// THE SPELLING PROBLEM, and it is now handled in ONE place. The universe stores
+// BRK.B, the reference files use the dashed form, and Nasdaq Trader writes
+// suffixed preferreds with a DOLLAR sign (BAC$K). This file previously carried
+// its own copy of a dot/dash `alts()` -- the second of three -- and none of them
+// knew about "$". See scripts/lib/symbol-spellings.mjs.
+const lookup = (m, sym) => lookupBySpelling(m, sym);
 // Compared on a normalised key so "NYSE American" and "NYSEAmerican" are not
 // reported as a disagreement about venue when they are a disagreement about
 // punctuation. The RAW pair is printed either way -- the normalisation decides

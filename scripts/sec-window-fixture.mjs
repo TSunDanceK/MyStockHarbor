@@ -33,6 +33,7 @@ import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 import { emitPayload } from "./lib/relay-capture.mjs";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const UA =
   process.env.PROBE_USER_AGENT ??
@@ -172,7 +173,8 @@ console.log(`ticker map: ${tickerMap.size} tickers, shape "${shape}"`);
 const pseudoManifest = { symbols: {} };
 let noCik = 0;
 for (const s of universe) {
-  const hit = tickerMap.get(s) ?? tickerMap.get(s.replace(/\./g, "-")) ?? tickerMap.get(s.replace(/-/g, "."));
+  // Third local copy of the dot/dash dance, now the shared helper.
+  const hit = lookupBySpelling(tickerMap, s)?.value ?? null;
   if (!hit) {
     noCik++;
     continue;
