@@ -541,6 +541,15 @@ export type CalendarRangeResult = {
   cappedDays: string[];
   /** Set when the fetch budget or the FMP minute budget ended the walk. */
   stoppedEarly: string | null;
+  /**
+   * Slices whose fetch did not come back -- a non-ok status or a thrown fetch.
+   *
+   * THE DIFFERENCE BETWEEN AN EMPTY MONTH AND AN UNREADABLE ONE, which nothing
+   * recorded before. Both produce `rows: []`, and a reader that cannot tell them
+   * apart treats "we could not see this month" as "nobody reports this month".
+   * That is what stranded the fill frontier in production.
+   */
+  sliceFailures: number;
 };
 
 /**
@@ -581,6 +590,7 @@ export async function fetchCalendarRange(
     bytes: 0,
     cappedDays: [],
     stoppedEarly: null,
+    sliceFailures: 0,
   };
   if (!apiKey) {
     result.stoppedEarly = "no-api-key";
@@ -625,7 +635,10 @@ export async function fetchCalendarRange(
       const json = JSON.parse(text);
       rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
     } catch {
-      // One bad slice must not lose the rest of the range.
+      // One bad slice must not lose the rest of the range -- but it must be
+      // COUNTED, or the caller cannot tell a month nobody reports in from a
+      // month that could not be read.
+      result.sliceFailures++;
       result.slices.push({ from: sliceFrom, to: sliceTo, rows: 0, capped: false });
       return;
     }
@@ -688,6 +701,31 @@ export type FetchMonthOptions = {
 
 export type MonthFetchResult = CalendarRangeResult & { month: string; fromCache: boolean };
 
+// ── PER-MONTH VISIBILITY ────────────────────────────────────────────────────
+//
+// "known"   the month's feed was actually read -- from the in-process cache, the
+//           shared reference copy, or a clean fetch. Its dates can be trusted,
+//           including when it lists nobody.
+// "unknown" the feed could not be read. Its dates say nothing at all.
+//
+// WHY THIS IS NOT THE SAME QUESTION AS "DID THIS MONTH HAVE CANDIDATES".
+// findNextIncompleteDate used to ask only whether it had seen candidates
+// ANYWHERE in the window, which the near month satisfies on its own. In
+// production the near month read fine and was already filled while the later
+// in-window months were cold, so every date in them looked like a day nobody
+// reports, the walk ran to the end, and the pointer parked past all of them at
+// 2027-01-01 with 59 dates still unfilled behind it. Reproduced in
+// scripts/check-earnings-failure-not-absence.mjs §6b.
+//
+// A month that could not be read is UNKNOWN, and a scan must not advance past
+// unknown. Per instance, like monthCache, because that is where the read
+// happened.
+const monthVisibility = new Map<string, "known" | "unknown">();
+
+export function getMonthVisibility(year: number, month: number): "known" | "unknown" | "unseen" {
+  return monthVisibility.get(monthKey(year, month)) ?? "unseen";
+}
+
 /** The detailed form, for the probes. fetchMonthRows is this minus the detail. */
 export async function fetchMonthRowsDetailed(
   year: number,
@@ -704,15 +742,22 @@ export async function fetchMonthRowsDetailed(
     bytes: 0,
     cappedDays: [],
     stoppedEarly: null,
+    sliceFailures: 0,
   });
 
   const cached = monthCache.get(key);
   if (!options.bypassCache && cached && Date.now() - cached.at < MONTH_CACHE_MS) {
+    monthVisibility.set(key, "known");
     return empty(cached.rows, true);
   }
 
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return empty(cached?.rows ?? [], Boolean(cached));
+  if (!apiKey) {
+    // No key means no way to read a month that is not already cached. A cached
+    // copy is still a real read; nothing else is.
+    monthVisibility.set(key, cached ? "known" : "unknown");
+    return empty(cached?.rows ?? [], Boolean(cached));
+  }
 
   // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
   // before this every cold lambda refetched the whole month.
@@ -724,6 +769,7 @@ export async function fetchMonthRowsDetailed(
     // be unreachable" is what the in-process candidate cache also assumed.
     if (Array.isArray(shared) && shared.length > 0) {
       monthCache.set(key, { at: Date.now(), rows: shared });
+      monthVisibility.set(key, "known");
       return empty(shared, true);
     }
   }
@@ -731,6 +777,11 @@ export async function fetchMonthRowsDetailed(
   const from = `${key}-01`;
   const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
   const result = await fetchCalendarRange(from, to, { pageCap: options.pageCap, apiKey });
+
+  // A month is only known if every slice of it came back. A partial read is not
+  // a smaller month -- it is a month with holes, and the holes look like dates
+  // nobody reports on.
+  monthVisibility.set(key, result.sliceFailures > 0 ? "unknown" : "known");
 
   if (result.rows.length) {
     monthCache.set(key, { at: Date.now(), rows: result.rows });
@@ -1095,11 +1146,19 @@ export async function getFullDayEarnings(
     // AN EMPTY BLOB IS ONLY A HIT WHERE EMPTY IS THE TRUE ANSWER. `[]` is
     // truthy, so this used to serve a stored empty day as a populated one --
     // which is what made the poisoned entry stick for its full 33 days rather
-    // than being rebuilt on the next render. The candidate count is the
-    // discriminator, exactly as in the write guard below: with no candidates an
-    // empty day is correct and serving it is right; with candidates it
-    // contradicts the feed and must be rebuilt instead of served.
-    if (cachedItems && (cachedItems.length > 0 || totalCandidates === 0)) {
+    // than being rebuilt on the next render.
+    //
+    // WHAT MAKES AN EMPTY DAY TRUE: either the feed lists nobody, or the day was
+    // fully quoted with nothing failing and nobody turned out to be US-listed.
+    // The second is what the completeness flag now means, and ONLY because F1
+    // and the write guard below stop that flag being set over a failure. The
+    // coupling is deliberate and load-bearing in both directions: if F1 ever
+    // regresses, a poisoned empty becomes servable again from here. §4 of the
+    // check pins the write half; this line is the read half of the same rule.
+    const emptyIsSettled =
+      cachedItems != null &&
+      (cachedItems.length > 0 || totalCandidates === 0 || (await isDateComplete(date)));
+    if (cachedItems && emptyIsSettled) {
       const cleaned = dedupeAndSortItems(cachedItems);
       // Persist the cleaned blob if the stored copy carried duplicate rows, so
       // the fix sticks and Show more paginates the deduped set -- no re-quoting.
@@ -1170,19 +1229,30 @@ export async function getFullDayEarnings(
   // so it is re-quoted on every render instead of settling. That costs repeated
   // work on a rare kind of date. It is the right side to err on -- the other side
   // publishes an empty day as fact -- but it IS a cost, not a free win.
-  const contradictsItsOwnCandidates = totalCandidates > 0 && items.length === 0;
+  // REFINED ONTO anyFailed once F1 existed. The candidate count was the
+  // discriminator only because, before F1, there was no way to tell a failed
+  // quote from a company with no exchange -- so "empty against a positive
+  // candidate count" was the best available proxy for "something went wrong".
+  //
+  // With F1 landed the real question is answerable directly, and the proxy is
+  // now too broad: a date whose candidates are genuinely all non-US-listed is a
+  // LEGITIMATE terminal state. Under the candidate-count form it could never
+  // settle and was re-quoted on every render, forever. Only an empty day we
+  // could not fully SEE is poison.
+  const emptyAndUnverifiable = items.length === 0 && totalCandidates > 0 && anyFailed;
 
-  if (!contradictsItsOwnCandidates) {
+  if (!emptyAndUnverifiable) {
     // Materialise what we have, so the next render -- and Show more -- read it
     // back instead of re-quoting.
     await writeDayItemsCache(date, items);
   }
 
   // Only "complete" once every candidate was quoted, nothing skipped by the cap,
-  // and NOTHING FAILED. A bounded seed render is never complete, and neither is
-  // a date whose rows contradict its own feed.
-  const complete =
-    quotedEveryCandidate && !anyCapped && !anyFailed && !contradictsItsOwnCandidates;
+  // and NOTHING FAILED. A bounded seed render is never complete. `!anyFailed`
+  // already implies `!emptyAndUnverifiable`, so the latter is not repeated here
+  // -- a second term that can never independently fire reads as a guard and is
+  // not one.
+  const complete = quotedEveryCandidate && !anyCapped && !anyFailed;
   if (complete) {
     await markDateComplete(date);
   }
@@ -1215,8 +1285,28 @@ async function findNextIncompleteDate(): Promise<string | null> {
   let sawAnyCandidates = false;
 
   while (cur <= endTime) {
-    const ds = toDateStr(new Date(cur));
+    const d = new Date(cur);
+    const ds = toDateStr(d);
+
+    // ── THE SCAN MAY NOT WALK PAST A MONTH IT COULD NOT READ ──────────────
+    //
+    // getDayCandidates resolves the whole month behind this date, so asking for
+    // any date in the month is what populates its visibility. An unreadable
+    // month yields [] for every one of its dates -- indistinguishable from a
+    // month nobody reports in, which is precisely how the pointer got past 59
+    // unfilled dates in production.
     const candidates = await getDayCandidates(ds);
+    const visibility = getMonthVisibility(d.getUTCFullYear(), d.getUTCMonth() + 1);
+    if (visibility === "unknown") {
+      console.error(
+        `[earnings-calendar] the feed for ${monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1)} ` +
+          `could not be read, so its dates are UNKNOWN rather than empty. Holding the fill ` +
+          `frontier at ${frontierStr} rather than scanning past it -- advancing here is what ` +
+          `stranded 59 in-window dates behind a pointer parked at the window end.`
+      );
+      return null;
+    }
+
     if (candidates.length > 0) sawAnyCandidates = true;
     if (candidates.length > 0 && !(await isDateComplete(ds))) {
       await setFillFrontier(ds);
@@ -1225,10 +1315,11 @@ async function findNextIncompleteDate(): Promise<string | null> {
     cur += 86_400_000;
   }
 
-  // ── THE OUTAGE CASE, WHICH DID NOT EXIST ───────────────────────────────
+  // ── THE OUTAGE CASES, WHICH DID NOT EXIST ──────────────────────────────
   //
-  // Reaching here means no date in the window has work outstanding. There are
-  // two ways that happens and they are opposites:
+  // Reaching here means no date in the window has work outstanding, and every
+  // month in it was readable. There are two ways that happens and they are
+  // opposites:
   //
   //   everything is genuinely filled   -> park the pointer, scans go free
   //   the feed is down, so every date  -> park the pointer and STRAND the
@@ -1243,6 +1334,11 @@ async function findNextIncompleteDate(): Promise<string | null> {
   //
   // The forward-only rule is right in normal operation and is left alone. What
   // was missing is the case where advancing is not progress.
+  // THE SECOND GUARD, AND IT IS NOT REDUNDANT. Per-month visibility catches a
+  // month that could not be READ. This catches a window that read cleanly and
+  // still contains not one reporting company on any of ~126 days, which is not a
+  // real market state either. They fail differently and are tested separately
+  // (§6 and §6b of the check).
   if (!sawAnyCandidates) {
     console.error(
       `[earnings-calendar] scanned ${frontierStr}..${endStr} and found NO candidates on ` +
