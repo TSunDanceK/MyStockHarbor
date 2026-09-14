@@ -53,6 +53,15 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Name-matching, NOT ticker-matching -- the ticker key is what failed. Needs
+  // the dump only for company names; it reads the committed CIK map and
+  // static-profile for the universe, so it degrades to "unresolved symbols with
+  // no name" rather than to silence if the dump is thin.
+  "sec-titles": {
+    script: "scripts/sec-title-candidates.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "sec-fundamentals": {
     script: "scripts/sec-fundamentals-ingest.mjs",
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],

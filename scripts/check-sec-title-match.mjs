@@ -1,0 +1,272 @@
+// Name matching against SEC's `title` — the fallback for when the ticker key
+// fails, and the guardrails that make it legitimate rather than guessing.
+//
+//   node scripts/check-sec-title-match.mjs
+//
+// ── WHAT IS AT RISK ────────────────────────────────────────────────────────
+//   1. A WRONG MATCH BEING APPLIED. The whole design rests on the output being
+//      a reviewable candidate list rather than something a pipeline commits. If
+//      that ever stops being true, this becomes the text guessing
+//      lib/server/news/wireProvider.ts is right to refuse, with a reader on the
+//      other end instead of a human reviewer.
+//   2. THE MATCHER GETTING LOOSER. Every loosening is invisible: it produces
+//      more candidates, which looks like more coverage.
+//   3. AMBIGUITY BEING RESOLVED SILENTLY. Two filers at the same top tier is
+//      the case where an automatic pick is confidently wrong.
+//   4. A FAIL-GREEN PASS. A run that fetched nothing produces "no candidates
+//      for anybody", which reads exactly like a real negative result.
+import assert from "node:assert";
+import { readCodeOnly } from "./lib/source-code.mjs";
+import { scoreNames, rankCandidates, nameTokens, PARTIAL_FLOOR } from "./lib/sec-title-match.mjs";
+
+let failures = 0;
+const check = (label, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+
+console.log("\n=== 1. THE THREE CASES THAT ARE KNOWN TRUE ===\n");
+
+// Resolved by hand against SEC's own file. These are the acceptance test: a
+// matcher that cannot bridge them is not worth running, and one that needs a
+// looser tier than `exact` to bridge them is tuned to its own examples.
+const KNOWN = [
+  ["MMC", "Marsh & McLennan Companies", "MARSH & MCLENNAN COMPANIES, INC.", "0000062709"],
+  ["FI", "Fiserv, Inc.", "FISERV INC", "0000798354"],
+  ["BK", "The Bank of New York Mellon Corporation", "Bank of New York Mellon Corp", "0001390777"],
+];
+for (const [symbol, ours, secTitle] of KNOWN) {
+  check(
+    `${symbol}: "${ours}" matches SEC's "${secTitle}" at the EXACT tier`,
+    scoreNames(ours, secTitle).tier === "exact",
+    "if this needs a looser tier, the tier thresholds are fitted to the examples"
+  );
+}
+check(
+  "'&' and the word 'and' reduce identically — neither is identifying",
+  (() => {
+    // NOT "the ampersand handling is what makes MMC work". It is not: a
+    // mutation replacing the &->AND expansion with a plain space survived every
+    // assertion, because the two are equivalent. The expansion is gone and the
+    // real property is asserted instead — both spellings reaching the same
+    // tokens, which IS what MMC depends on.
+    const amp = nameTokens("Marsh & McLennan Companies").join(",");
+    const word = nameTokens("Marsh and McLennan Companies").join(",");
+    return amp === "MARSH,MCLENNAN" && word === amp;
+  })(),
+  `got ${JSON.stringify(nameTokens("Marsh & McLennan Companies"))}`
+);
+
+console.log("\n=== 2. IT REJECTS THE THINGS IT MUST REJECT ===\n");
+
+// The floor is not decoration: one shared token between two multi-token names
+// is noise, and these are the shapes that produce it.
+const MUST_NOT_MATCH = [
+  ["American Airlines Group Inc.", "AMERICAN EXPRESS COMPANY", "one shared token — 'American' is not evidence"],
+  ["First Republic Bank", "First Solar, Inc.", "'First' is the single most common company-name token there is"],
+  ["Webster Financial Corporation", "Western Alliance Bancorporation", "similar-looking, entirely different filers"],
+  ["Kellanova", "Kellogg Co", "a rename is NOT a name match; only the filer's record settles it"],
+];
+for (const [ours, theirs, why] of MUST_NOT_MATCH) {
+  const got = scoreNames(ours, theirs);
+  check(`"${ours}" does NOT match "${theirs}"`, got.tier === "none", `${why} (got ${got.tier})`);
+}
+check(
+  "an empty or junk name scores nothing rather than matching everything",
+  scoreNames("", "FISERV INC").tier === "none" &&
+    scoreNames("Inc.", "FISERV INC").tier === "none" &&
+    scoreNames(null, "FISERV INC").tier === "none",
+  "a name that reduces to no tokens must not become a wildcard"
+);
+
+console.log("\n=== 3. THE TIERS MEAN DIFFERENT THINGS, AND STAY DIFFERENT ===\n");
+
+check(
+  "a containment is `subset`, not `exact`",
+  scoreNames("Fiserv", "Fiserv Solutions Inc").tier === "subset",
+  "a parent swallowing a subsidiary has exactly this shape, so it is a candidate and never a conclusion"
+);
+check(
+  "two filers differing ONLY by a structural word are not `exact`",
+  (() => {
+    // THE PAIR HAS TO DIFFER BY NOTHING ELSE, or the assertion passes for the
+    // wrong reason. The first version used "Brookfield Corporation" vs
+    // "Brookfield Infrastructure Partners", which also differ by
+    // INFRASTRUCTURE — so it would have held even with structural words dropped
+    // everywhere, and the mutation that does exactly that survived.
+    //
+    // "Brookfield Corporation" vs "Brookfield Partners" differ by PARTNERS and
+    // nothing else. Drop structural words on both sides and they collapse to
+    // {BROOKFIELD} = {BROOKFIELD}: two distinct filers reported as certain.
+    const got = scoreNames("Brookfield Corporation", "Brookfield Partners");
+    return got.tier !== "exact";
+  })(),
+  `got ${scoreNames("Brookfield Corporation", "Brookfield Partners").tier} — ` +
+    "dropping HOLDINGS/GROUP/PARTNERS on both sides would collapse distinct filers onto one another"
+);
+check(
+  "ONE shared token never reaches `partial`, at any name shape",
+  (() => {
+    // The `shared >= 2` guard in the matcher is unreachable at the current
+    // floor and no mutation can kill it, so the INVARIANT is asserted here
+    // instead of the guard. Enumerated rather than sampled: with one token in
+    // common and neither side a subset, the union is at least three, so the
+    // score cannot exceed 1/3.
+    const cases = [
+      ["Alpha Systems", "Alpha Networks"],
+      ["American Airlines Group", "American Express"],
+      ["Pacific Gas Electric", "Pacific Premier"],
+      ["Alpha Systems Global", "Alpha Networks Digital"],
+    ];
+    return cases.every(([a, b]) => {
+      const got = scoreNames(a, b);
+      return got.shared !== 1 || got.tier !== "partial";
+    });
+  })(),
+  "lowering PARTIAL_FLOOR is a one-character edit and this is what it would let through"
+);
+check(
+  "the partial floor is a real threshold, not 0",
+  PARTIAL_FLOOR > 0.5 && PARTIAL_FLOOR <= 1,
+  `${PARTIAL_FLOOR}`
+);
+
+console.log("\n=== 4. AMBIGUITY IS REPORTED, NEVER RESOLVED ===\n");
+
+// THE REAL AMBIGUITY SHAPE IS TWO FILERS DIFFERING ONLY BY LEGAL FORM, which
+// is common — a group files as both "X Corp" and "X Inc" under separate CIKs.
+// Both reduce to the same tokens, so both land on `exact` and neither is more
+// right than the other.
+//
+// The first fixture here used "Brookfield Renewable Partners" vs "... Corporation"
+// and stopped being a tie once structural words were no longer dropped: PARTNERS
+// survives, so one is exact and the other subset. The assertion then failed —
+// correctly. A fixture that no longer exhibits the property it was written for
+// is a passing test waiting to happen.
+const ROWS = [
+  { ticker: "AAA", cik: "0000000001", title: "Brookfield Renewable Corporation" },
+  { ticker: "BBB", cik: "0000000002", title: "Brookfield Renewable Inc" },
+  { ticker: "FISV", cik: "0000798354", title: "FISERV INC" },
+];
+check(
+  "two filers at the same top tier set `ambiguous`",
+  rankCandidates("Brookfield Renewable", ROWS).ambiguous === true,
+  "an automatic pick here would be confidently wrong, which is the failure mode name matching has"
+);
+check(
+  "...and an unambiguous leader does not",
+  rankCandidates("Fiserv, Inc.", ROWS).ambiguous === false
+);
+check(
+  "a name matching nothing returns no candidates and topTier 'none'",
+  (() => {
+    const r = rankCandidates("Nothing Like These", ROWS);
+    return r.candidates.length === 0 && r.topTier === "none" && r.ambiguous === false;
+  })(),
+  "an empty candidate list is a REAL negative — that is the whole point of matching the full file"
+);
+check(
+  "candidates come back ranked, best tier first",
+  (() => {
+    const r = rankCandidates("Fiserv", ROWS);
+    return r.candidates[0]?.cik === "0000798354";
+  })()
+);
+
+console.log("\n=== 5. THE OUTPUT CANNOT BE APPLIED BY ACCIDENT ===\n");
+
+// This is the assertion that keeps the wireProvider exception honest. The
+// argument for allowing name matching here is entirely that a human approves
+// before anything ships; if the script could write the map, that argument is
+// gone and so is the justification.
+const script = readCodeOnly("scripts/sec-title-candidates.mjs");
+check(
+  "the script never writes a file",
+  !/writeFileSync|createWriteStream|appendFileSync|fs\.write/.test(script),
+  "print-and-review is the entire basis for allowing a name match in this repo"
+);
+check(
+  "...and does not emit a payload named like the map it must not become",
+  /emitPayload\("cik-candidates"/.test(script) && !/emitPayload\("cik-map"/.test(script),
+  'a payload called "cik-map" is one copy-paste from being committed as one'
+);
+check(
+  "the emitted shape is a LIST of records, not a symbol -> CIK object",
+  /report,\s*\n\s*\}, null, 2\)\)/.test(script) && /const report = \[\]/.test(script),
+  "an object keyed by symbol is committable as data/cik-map.json in a single move"
+);
+check(
+  "the payload says in words that it is not a map",
+  /CANDIDATES, NOT A MAP/.test(script),
+  "the reader of the log is the safety mechanism, so tell them"
+);
+check(
+  "it is registered on the READ-ONLY relay job",
+  (() => {
+    const router = readCodeOnly("scripts/relay-run.mjs");
+    return /"sec-titles": \{/.test(router) && !/"write-sec-titles"/.test(router);
+  })(),
+  "the write- prefix routes to the credentialled job; this task has no business there"
+);
+
+console.log("\n=== 6. IT CANNOT PASS BY MEASURING NOTHING ===\n");
+
+check(
+  "the script refuses to continue if SEC's file does not return 200",
+  /FATAL: company_tickers\.json did not return 200/.test(script),
+  "a failed fetch would otherwise print 'no candidates' for every symbol"
+);
+check(
+  "...and if the parsed file has no rows or no control row",
+  /FATAL: the SEC file is not usable/.test(script) && /FISERV/.test(script),
+  "'no candidates for anybody' reads exactly like a real negative result"
+);
+check(
+  "symbols with NO NAME are reported separately from symbols with no match",
+  /NO NAME AVAILABLE, so not matchable/.test(script),
+  "collapsing them recreates the ambiguity this task exists to remove — " +
+    "an unmatchable symbol is not evidence of absence at SEC"
+);
+check(
+  "which name field was actually read is printed",
+  /name fields found/.test(script),
+  "the dump's field spelling is not verifiable from the sandbox, so the run has to say what it read"
+);
+check(
+  "the dot/dash fallback is applied before calling a symbol unresolved",
+  /s\.includes\("\."\) \? cikMap\[s\.replace\(\/\\\.\/g, "-"\)\]/.test(script),
+  "otherwise BRK.B is queued for human adjudication of a bug already fixed at the lookup"
+);
+
+console.log("\n=== 7. THE EXCEPTION TO wireProvider'S RULE IS WRITTEN DOWN ===\n");
+
+// wireProvider.ts refuses name matching in as many words. That refusal is
+// correct there. If this module does not say why it is different, the two read
+// as an inconsistency and the next person resolves it in whichever direction
+// they happen to prefer.
+const matcher = readCodeOnly("scripts/lib/sec-title-match.mjs");
+const matcherRaw = (await import("node:fs")).readFileSync("scripts/lib/sec-title-match.mjs", "utf8");
+check(
+  "the matcher quotes wireProvider's refusal, not merely the word",
+  (() => {
+    // A BARE /wireProvider/ GREP WAS NOT ENOUGH: the word also appears as a
+    // column heading in the comparison table, so a mutation deleting the
+    // sentence that states the refusal survived. The quoted refusal itself is
+    // the thing that must be present.
+    return /REFUSES name matching/.test(matcherRaw) &&
+      /reintroduce exactly the text guessing the structured field avoids/.test(matcherRaw);
+  })(),
+  "an unexplained exception to a stated rule is how the rule gets dropped"
+);
+check(
+  "...and gives the distinction rather than just asserting one",
+  /every render, per symbol/.test(matcherRaw) &&
+    /once, at build time/.test(matcherRaw) &&
+    /approves before commit/.test(matcherRaw) &&
+    /structured field IS the thing that failed/.test(matcherRaw),
+  "the difference is render-time-and-served vs build-time-and-reviewed, and it has to be legible"
+);
+assert(matcher.length > 500, "the matcher source was over-stripped; assertions above are not measuring it");
+
+console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
+process.exit(failures ? 1 : 0);

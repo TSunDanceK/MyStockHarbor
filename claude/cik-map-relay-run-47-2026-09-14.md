@@ -79,49 +79,113 @@ make the dotted form look equally valid, which is the habit that caused this.
 Exact match is always tried first, so a symbol legitimately holding its own
 spelling resolves to itself before any rewriting.
 
-### BK and FI — the counterpart CIK is already in the map
+### The other ten: the join key is wrong
 
-|  | in the new map |
-|---|---|
-| `BK` | absent | 
-| `BNY` | **`0001390777`** |
-| `FI` | absent |
-| `FISV` | **`0000798354`** |
+**The stale-ticker-on-our-side hypothesis is dead.** Three of the ten resolve at
+SEC, and every one under a **different ticker string than ours**:
 
-`BK` matches what is already known: CIK 1390777 now files as BNY. (That finding
-lives in a Claude-Project-side note, `four-missing-ciks-are-corporate-actions`,
-which is **not mirrored into this repo** — it is deliberately not cited as a
-repo path here, because a citation to a file that is not in the checkout is a
-dead reference, which is what `scripts/check-doc-citations.mjs` exists to catch.
-If that note should be readable from GitHub, mirroring it under `claude/` is the
-fix.)
+| ours | SEC's | CIK | title |
+|---|---|---|---|
+| MMC | `MRSH` | 62709 | MARSH & MCLENNAN COMPANIES, INC. |
+| FI | `FISV` | 798354 | FISERV INC |
+| BK | `BNY` | 1390777 | Bank of New York Mellon Corp |
 
-**`FI` inverts the stale-ticker hypothesis, and this is worth pausing on.** The
-expectation was a stale ticker on *our* side. But our universe carries **`FI`**,
-the current Fiserv ticker, and the entry that resolved is **`FISV`**, the old
-one. Both are in our universe; only the old one is in SEC's file. On this
-evidence it is **SEC's `company_tickers.json` that lags**, not us — which is the
-opposite diagnosis and implies the opposite fix. Normalising on our side would
-do nothing.
+Not one is a dead company, a delisting, or a gap in SEC's data. `data/cik-map.json`
+is built by intersecting our symbols with `company_tickers.json` **on the ticker
+string**, and a ticker is a mutable label that the two sides update on different
+clocks. The company **name** is the stable thing. **The lookup is keyed on the
+wrong field.**
 
-**Not settled.** That `FISV` is in the map proves it is in SEC's file and in our
-universe. It does not prove *why* `FI` is absent. `sec-symbol-status` answers it
-per symbol by asking `submissions/` by CIK.
+**The seven NOT FOUNDs are not reliable negatives.** That spot-check read a
+220 KB file through a summarising model, where truncation and genuine absence
+produce an identical answer. Nothing in it says EA, AVB, EQR, K, WBS, NBN or
+TOWN are missing from SEC's file, and they are **not recorded either way** here.
 
-### AVB, EA, EQR, K, MMC, NBN, TOWN, WBS — unresolved
+## 3a. One dispatch, not ten — `relay task "sec-titles"`
 
-No variant spelling in the map, no successor or predecessor ticker in the map.
-Nothing in our own data explains them.
+`sec-symbol-status` asks "is this company alive", per symbol. That was never the
+question: these are live mega-caps. The question is *what is this company called
+at SEC*, and answering it needs the whole file in hand, matched exactly — which
+is what a runner has and this sandbox does not.
 
-`AVB`, `EA`, `EQR`, `K` and `MMC` are large, current, unambiguous US filers, and
-SEC omitting them from a 10,426-entry file is implausible on its face. `NBN`,
-`TOWN` and `WBS` are small/mid-cap banks and a genuine tail is plausible there.
+`scripts/sec-title-candidates.mjs` + `scripts/lib/sec-title-match.mjs`: one
+read-only pass that matches every unresolved symbol's company name against every
+row of `company_tickers.json` and prints ranked candidates with CIKs.
 
-**Deliberately not written up as corporate actions.** A miss is either a stale
-ticker on our side or a real absence at SEC, and those need opposite responses —
-`FI` above is the proof that guessing gets it backwards. Ten symbols is one
-`sec-symbol-status` dispatch, and that should happen before any of them is
-recorded as settled.
+**It prints; it does not apply.** No fuzzy match is auto-applied, the script
+cannot write, and the payload is deliberately shaped as an **array of records**
+rather than a symbol → CIK object, so it is not one copy-paste from being
+committed as a map. Asserted, not merely intended.
+
+**Every candidate is corroborated.** For each symbol's leading candidate the
+script also fetches `data.sec.gov/submissions/CIK…json` and prints the filer's
+own `name`, `tickers` and `exchanges`, plus `carriesOurSymbol` — which will be
+`false`, and that *is* the finding. A name match alone is a guess; a name match
+the filer's own record agrees with is a corroborated claim.
+
+**It cannot pass by measuring nothing.** A non-200 from SEC is fatal; a parsed
+file with no rows, or no FISERV control row, is fatal; and **symbols with no
+available company name are reported separately from symbols with no match** —
+collapsing those two would recreate the exact ambiguity this task exists to
+remove.
+
+### Naming the exception to wireProvider's rule
+
+`lib/server/news/wireProvider.ts` refuses name matching in as many words: a name
+match "would reintroduce exactly the text guessing the structured field avoids".
+**That is correct there and is not being softened.** The header of
+`sec-title-match.mjs` states the difference rather than asserting one:
+
+| | wireProvider | this |
+|---|---|---|
+| when | every render, per symbol | once, at build time |
+| on a wrong match | a foreign company's release on a stock page, served to a reader | nothing — printed, and a human approves before commit |
+| checkable | no | yes, against `submissions/` |
+| alternative | a structured `<category>` that is always right | none; the structured field **is** what failed |
+
+Both halves are asserted — the quoted refusal must be present, and so must the
+contrast. An unexplained exception to a stated rule is how the rule gets dropped.
+
+## 3b. Three knobs I built; two were dead and one was harmful
+
+The matcher's first draft had three pieces of normalisation. The mutation suite
+and one sharpened assertion killed all three, and they are worth recording
+because each failed differently:
+
+**`&` → `" AND "`, then dropping AND.** A mutation replacing it with a plain
+space **survived every assertion**, because the two are identical in every case.
+Dead elaboration — and the comment above it claimed it "is what makes MMC work".
+`lib/server/news/companyName.ts` already records this exact species of mistake
+about its own suffix list: *"a comment claiming the ordering is what protects the
+name would have been credit in the wrong place."* Same error, one file over.
+Removed rather than kept with a corrected note.
+
+**`shared >= 2` as a floor on partial matches.** Unreachable at
+`PARTIAL_FLOOR = 0.6`: with one shared token and neither side a subset, the union
+is at least three, so the score cannot exceed 1/3. Proved by enumeration, not
+assumed. No mutation can kill it, so it stays as insurance against someone
+lowering the floor, and the **invariant** is asserted instead of the guard.
+
+**Dropping "structural" words (HOLDINGS, GROUP, TRUST, PARTNERS) for the exact
+tier — this one was actively wrong.** None of the three known cases needs it:
+MMC, FI and BK reduce identically without it, because COMPANIES, INC and
+CORPORATION are all *legal forms*. And **with** it, "Brookfield Corporation" and
+"Brookfield Partners" both collapse to `{BROOKFIELD}` and are reported as an
+**exact** match — two distinct filers at the one tier meant to be near-certain.
+
+It survived the first suite because my assertion used a pair that *also* differed
+by a non-structural word, so it would have held either way. Sharpening the
+fixture to a pair differing by nothing else turned the assertion red against my
+own code. The general rule now in the file: **a token you drop is a distinction
+you can no longer make.** Dropping INC is safe because no two companies differ
+only by it. PARTNERS is not that.
+
+One fixture also went stale as a result — the ambiguity case stopped being a tie
+once structural words survived — and the assertion failed, correctly. It now uses
+the real hazard: two filers differing only by legal form (`X Corporation` /
+`X Inc`), which is common and which nothing can adjudicate automatically.
+
+**14/14 mutations killed** after those repairs.
 
 ## 4. One thing the run log corrected about the previous commit
 
@@ -176,7 +240,11 @@ function can be probed.
 
 ## 7. Open
 
-- **One `sec-symbol-status` dispatch** for the ten non-BRK.B misses. Owner-side.
+- **Dispatch `sec-titles`** (read-only job, needs the dump for company names).
+  One pass, ten symbols, ranked candidates plus corroboration. Owner-side.
+  Then confirm by hand and add only confirmed entries to `data/cik-map.json`.
+- **Re-key the map build on the name once that pass validates the approach.**
+  The ticker join is what failed; this run only works around it.
 - **The `companyName` fallback gap** — the snapshot carries `sector` and
   `industry` only.
 - **Relevance ranking on names like "A.O. Smith"** — the real AOS item, unowned.
