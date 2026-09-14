@@ -273,6 +273,15 @@ export async function GET(req: NextRequest) {
   // is given, and a symbol with no entry simply never matches the daily index.
   // See claude/sec-manifest-misses-preset-universe-2026-09-14.md.
   //
+  // THIS REPO HAS HAD THIS EXACT BUG BEFORE, one layer up, and wrote it down:
+  // pickersBuilder.ts:3314 says "NOT concat-then-slice. That exact pattern is
+  // what sliced the mega-caps off (PRESET was appended after the big dynamic
+  // set, then the whole thing was cut to the cap, dropping AAPL/NVDA/... -- only
+  // active movers like MU survived, which is why the biggest companies were
+  // missing from the All Stocks screener)." That is this defect, in the screener
+  // instead of the manifest. It is why pickersBuilder fills explicit quotas and
+  // why union-then-slice was rejected here rather than merely not chosen.
+  //
   // TWO DIFFERENT COSTS, WHICH THE CAP CONFLATES.
   //   ANALYSIS_UNIVERSE_CAP bounds what gets ANALYSED -- a history fetch and a
   //   pass through the indicator stack per symbol, which is real upstream spend
@@ -295,6 +304,25 @@ export async function GET(req: NextRequest) {
   // SIZE, STATED RATHER THAN ASSUMED: 391 B/symbol, 266 KB at 696, ~305 KB with
   // the presets unioned in, against Upstash's 10 MB per-request ceiling. The
   // bound is asserted in check-sec-daily-index.mjs so growth stays visible.
+  //
+  // THE THIRD INPUT IS ACCOUNTED FOR, NOT OMITTED. dynamicUniverseCache's header
+  // says ANALYSIS_UNIVERSE_CAP bounds the union of THREE things: PRESET_UNIVERSE,
+  // the dynamic pool, and the popular-search promotions. This unions two,
+  // because the third already flows through the second: pickersBuilder persists
+  // promoted names into the shared pool with
+  // `addToDynamicUniverse(popularSearchSymbols, "search", 1)`
+  // (pickersBuilder.ts:3311), so readDynamicUniverse() returns them. There is no
+  // separate list to union here.
+  //
+  // ONE RESIDUAL, recorded because it is bounded rather than absent. A promoted
+  // name "enters at zero and still has to earn a place by score like anything
+  // else"; pruneUniverse trims the pool to MAX_DYNAMIC_UNIVERSE_SIZE by
+  // ZREMRANGEBYRANK on the lowest scores. So a freshly-searched symbol (quota 30
+  // a build, threshold 3 distinct callers) can be pruned before this job reads
+  // the pool. That is rank competition, not structural omission -- unlike the
+  // preset case, nothing promises it a slot -- but spec §7a's "attention, not
+  // market cap" argues those are exactly the symbols that deserve one. Left as
+  // an open question rather than fixed silently either way.
   //
   // PRESET_UNIVERSE FIRST, because those 100 mega-caps are "guaranteed a slot"
   // everywhere else -- sectorUniverse and pickersBuilder both union them in --

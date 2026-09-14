@@ -124,6 +124,57 @@ Upstash's 10 MB per-request ceiling. §17c asserts the worst case at 796 symbols
 — measured at **461 KB, 4.5% of the ceiling** — so growth stays visible instead
 of being asserted once and forgotten.
 
+### The third input, established rather than assumed
+
+`dynamicUniverseCache`'s header names **three** sources bounded by
+`ANALYSIS_UNIVERSE_CAP`: `PRESET_UNIVERSE`, the dynamic pool, and the
+popular-search promotions. The seed unions two — which is correct, because the
+third flows through the second:
+
+```ts
+// pickersBuilder.ts:3311
+await addToDynamicUniverse(popularSearchSymbols, "search", 1);
+```
+
+Promoted names are persisted into the shared pool, so `readDynamicUniverse()`
+returns them. There is no separate list to union. §17c asserts that call still
+exists, because the coverage depends on it.
+
+**One residual, bounded and recorded rather than fixed silently.** A promoted
+name "enters at zero and still has to earn a place by score like anything else",
+and `pruneUniverse` trims the pool to `MAX_DYNAMIC_UNIVERSE_SIZE` by
+`ZREMRANGEBYRANK` on the lowest scores. So a freshly-searched symbol (quota 30 a
+build, threshold 3 distinct callers) can be pruned before this job reads the
+pool. That is **rank competition, not structural omission** — unlike the preset
+case, nothing promises it a slot — but spec §7a's "attention, not market cap"
+argues those are exactly the symbols that deserve one. Open question, not a
+silent decision either way.
+
+### This repo already had this bug, one layer up
+
+`pickersBuilder.ts:3314`:
+
+> **NOT concat-then-slice.** That exact pattern is what sliced the mega-caps off
+> (PRESET was appended after the big dynamic set, then the whole thing was cut
+> to the cap, dropping AAPL/NVDA/… — only active movers like MU survived, which
+> is why the biggest companies were missing from the All Stocks screener).
+
+That is this defect, in the screener instead of the manifest. It is why
+`pickersBuilder` fills explicit quotas, and it is the strongest argument against
+the union-then-slice fix: not a hypothetical eviction, a repeat. §17c asserts
+that warning is still present so it cannot be deleted while the pattern it warns
+about is reachable.
+
+### Supporting precedent for an unsliced union
+
+`warm-earnings` already derives "the analysed cap UNIONED with this pool", and
+the live warm-target universe is **759 against a 700 analysis cap**. An unsliced
+union larger than the cap is established practice here, not a new idea.
+
+The union is also **bounded, not unbounded**: `readDynamicUniverse`'s own
+`ZRANGE` is `(0, MAX_DYNAMIC_UNIVERSE_SIZE - 1)`, so the pool read caps at 700
+whatever the caller does. 796 is a genuine ceiling, not a snapshot.
+
 ### What did not change
 
 `ANALYSIS_UNIVERSE_CAP` itself. Only the manifest was wrong to use it.
