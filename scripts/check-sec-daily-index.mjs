@@ -15,6 +15,7 @@
 // data/sec/README.md).
 //
 //   node scripts/check-sec-daily-index.mjs
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
@@ -39,11 +40,16 @@ const idx = await lift(
     grabFunction(INDEX_SRC, "toYyyymmdd"), grabFunction(INDEX_SRC, "addDays"),
     grabFunction(INDEX_SRC, "isWeekend"), grabFunction(INDEX_SRC, "latestProcessableDate"),
     grabFunction(INDEX_SRC, "isAmendment"), grabFunction(INDEX_SRC, "isPeriodicForm"),
+    // Lifted from source, not re-declared in a prelude. §17b re-derives the
+    // pre-fix gate from these two, so a hand-written copy would be testing the
+    // copy rather than the shipped predicate.
+    grabFunction(INDEX_SRC, "isRereadOnlyForm"),
     grabFunction(INDEX_SRC, "accessionFrom"), grabFunction(INDEX_SRC, "parseDailyIndex"),
     grabFunction(INDEX_SRC, "looksLikeMissingIndex"), grabFunction(INDEX_SRC, "intersect"),
   ].join("\n") +
-    "\nexport { quarterOf, dailyIndexUrl, addDays, isWeekend, latestProcessableDate, isAmendment, isPeriodicForm, accessionFrom, parseDailyIndex, looksLikeMissingIndex, intersect };",
+    "\nexport { quarterOf, dailyIndexUrl, addDays, isWeekend, latestProcessableDate, isAmendment, isPeriodicForm, isRereadOnlyForm, accessionFrom, parseDailyIndex, looksLikeMissingIndex, intersect };",
   `const PERIODIC_FORMS = ["10-Q","10-K","20-F","6-K"];
+   const REREAD_ONLY_FORMS = ["8-K"];
    const DISSEMINATION_CLOSE_MINUTES_ET = 22*60;
    let __ET = { minutesOfDay: 23*60 };
    const getEasternParts = () => __ET;
@@ -1028,6 +1034,82 @@ const GATE_CASES = [
   check("every declared periodic / re-read form has a case above",
     declared.length > 0 && declared.every((f) => covered.has(f.toUpperCase())),
     `declared: ${declared.join(", ")}`);
+}
+
+// ── 17b. The REAL window, replayed through the route ───────────────────────
+//
+// THIS IS THE SECTION §17 PRETENDED TO BE. The rows below are the actual
+// filings SEC published for 20260908-11, captured by scripts/sec-window-fixture.mjs
+// (relay run 34833712268) with every parser lifted from the shipped modules,
+// and carried back through the relay-capture payload route. They are replayed
+// through the route's own applyFilings, so the reverifyReason values here are
+// the ones step 3 will dispatch on.
+console.log("\n17b. The real 20260908-11 window");
+{
+  const fxPath = "data/sec/window-fixture-20260908-11.json";
+  const fx = JSON.parse(fs.readFileSync(fxPath, "utf8"));
+
+  // INTEGRITY FIRST. This fixture travelled through a job log as base64, and a
+  // single substituted character survived every structural check on the first
+  // attempt -- right line count, right byte count, right row shapes, wrong
+  // data. Only a hash caught it. So the hash is re-checked here, on every run,
+  // over the same canonical form the capture hashed.
+  const compact = fx.filings.map((f) => `${f.symbol}|${f.form}|${f.filed}|${f.accession}`).join("\n");
+  const digest = crypto.createHash("sha256").update(compact, "utf8").digest("hex");
+  check("the fixture still hashes to what the capture emitted",
+    digest === fx.provenance.payloadSha256,
+    `${digest.slice(0, 16)}… vs recorded ${String(fx.provenance.payloadSha256).slice(0, 16)}…`);
+  check("...and carries the row count it claims",
+    fx.filings.length === fx.provenance.rows && fx.filings.length === 2008, `${fx.filings.length} rows`);
+
+  const syms = [...new Set(fx.filings.map((f) => f.symbol))];
+  const cik = new Map(syms.map((x, i) => [x, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, syms, cik, true);
+  route.applyFilings(m, fx.filings);
+
+  const hist = {};
+  let queued = 0;
+  for (const e of Object.values(m.symbols)) {
+    if (!e.needsReverify) continue;
+    queued++;
+    hist[e.reverifyReason ?? "(null)"] = (hist[e.reverifyReason ?? "(null)"] ?? 0) + 1;
+  }
+
+  // THE FINDING THAT KILLED THE OLD §17. Its synthetic fixture produced
+  // { periodic-report: 77, unconfirmed: 50 } from a modulo-5 round robin. A real
+  // week is nothing like that: 6-K and 8-K dominate and genuine period reports
+  // are single digits, which is what "6-K is 89% of the periodic signal" means
+  // in practice. Asserted as a SHAPE, so it keeps failing for the right reason
+  // if the fixture is ever recaptured over a different window.
+  check("unconfirmed DOMINATES the queue — a real week is 6-K, not 10-Q",
+    hist.unconfirmed > 0.8 * queued,
+    `${JSON.stringify(hist)} of ${queued} queued`);
+  check("...and genuine period reports are single digits, not 77",
+    (hist["periodic-report"] ?? 0) < 10,
+    "the old synthetic fixture claimed 77; the window contains " + (hist["periodic-report"] ?? 0));
+  check("every queued reason is one the taxonomy names",
+    Object.keys(hist).every((r) => ["amendment", "periodic-report", "unconfirmed", "cik-change"].includes(r)),
+    JSON.stringify(hist));
+
+  // THE 4/A DEFECT, MEASURED ON REAL ROWS. The pre-fix gate matched any form
+  // ending /A. Re-derived here from the shipped predicates rather than restated.
+  const post = new Set(Object.entries(m.symbols).filter(([, e]) => e.needsReverify).map(([x]) => x));
+  const pre = new Set();
+  for (const f of fx.filings) {
+    if (idx.isPeriodicForm(f.form) || idx.isRereadOnlyForm(f.form) || f.amendment) pre.add(f.symbol);
+  }
+  const added = [...pre].filter((x) => !post.has(x)).sort();
+  check("the narrowed gate queues strictly fewer symbols than the pre-fix one",
+    post.size < pre.size, `${post.size} vs ${pre.size}`);
+  check("...and every symbol it drops filed NOTHING that carries numbers",
+    added.every((sym) =>
+      fx.filings.filter((f) => f.symbol === sym)
+        .every((f) => !idx.isPeriodicForm(f.form) && !idx.isRereadOnlyForm(f.form))),
+    added.join(" ") || "none");
+  check("no symbol queues on an amended Form 4 alone",
+    !added.some((sym) => post.has(sym)),
+    "4/A, 144/A and SCHEDULE 13D/A are not financial statements");
 }
 
 // ── 18. The drain clears the busiest day of the year ───────────────────────
