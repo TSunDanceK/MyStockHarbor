@@ -56,8 +56,9 @@ company/historical (5.5%).
   internal anchors (`earnings-calendar:831`, `SiteHeader:1199`, `bottlenecks/[ticker]:92`,
   `about:83`) — **all still truthful**, which is the whole point of 2(c).
 - `refuseToCacheDegradedRender()` and the `hasItemList` JSON-LD guard, untouched.
-- `IpoList.tsx` — **no change at all.** It takes `ipos`, `emptyMessage`, `dateColumnLabel`
-  and does not know where the rows came from.
+- `IpoList.tsx`'s **shape** — it still takes `ipos`, `emptyMessage`, `dateColumnLabel` and
+  still does not know where the rows came from. **CORRECTED: it is not unchanged.** The
+  original claim of *"no change at all"* was wrong; see §4.3.
 - The `ConfirmedIpo` type, `parsePriceRange()`, `num()`, `str()`, `firstStr()`, `firstNum()`.
 
 ### Gains
@@ -92,7 +93,7 @@ where it is a parser failure instead.
 
 ---
 
-## 3. PHASE 0 — measure two things, report back, and STOP
+## 3. PHASE 0 — measure three things, report back, and STOP
 
 **Do not build the upper table before this.** The probe's S-1/A numbers are **not adequate**
 to design against, and saying so is the difference between a brief and a guess.
@@ -139,6 +140,15 @@ making the Stooq failure visible at all.
 **Gate:** ≥90% correct on a 20-filing hand-checked sample, with nulls counted as correct only
 where the field is genuinely absent.
 
+### 0.3 The age cap's number (added by amendment 3, §4.8)
+
+§4.8 requires an age cap and gives no number, because none is measurable from the probe's
+n=8. **Measure the distribution**: for every cohort member with terms set and no `424B`, the
+age of its most recent `S-1/A`/`F-1/A`, plus how many carry an `RW`/`AW`. Report the
+histogram, not a recommendation — the cap is the owner's call once the shape is visible.
+
+**No gate.** This one informs a constant; it does not block the build.
+
 ---
 
 ## 4. Findings the build must not get wrong
@@ -177,8 +187,47 @@ The probe extracted ticker from prospectus covers at **5/8**. Do not build on th
   row. Do not let a missing ticker drop the row — `symbol` is currently **required** by
   `parseRow()`, and for the upper table it cannot be.
 
-**That last point is a real schema change** and the most likely place to introduce a silent
-bug: relaxing `symbol` for one table while keeping it required for the other.
+### 4.3a AMENDED — `cik` becomes row identity; `symbol` becomes nullable *after* that
+
+**Decision (owner, 2026-09-14): do NOT make `symbol` nullable on its own.**
+
+```ts
+export type ConfirmedIpo = {
+  cik: string;             // NEW, REQUIRED — row identity and the ticker-map join key
+  symbol: string | null;   // was: string
+  company: string;
+  ...
+};
+```
+
+**The principle, and it is the whole reason for the ordering: identity never depends on a
+field the upper table cannot supply.** SEC always has a CIK — it is the filer's own
+identifier, it is the first column of every index row, and it is what `secTickerMap` joins
+on. A proposed ticker is a *claim in a prospectus*; a CIK is the key the source is organised
+by. Making `symbol` nullable without first giving the row a real identity leaves every
+downstream consumer keying off a value that is sometimes absent.
+
+**Five sites depend on `symbol`, not the two the amendment lists.** All five must be fixed in
+the same pass, or the nullable change ships a silent bug:
+
+| # | Site | Today | Fix |
+|---|---|---|---|
+| 1 | `page.tsx:137` | JSON-LD `` name: `${ipo.company} (${ipo.symbol})` `` | **emits `"Acme Inc. (null)"` into structured data** on a page whose entire ranking case is the list. Guard it: name is the company, with ` (SYMBOL)` appended **only when present** |
+| 2 | `IpoList.tsx:288` | table Symbol cell `{ipo.symbol}` | `{ipo.symbol ?? "—"}` |
+| 3 | `IpoList.tsx:160` | narrow-view `{ipo.symbol}` | `{ipo.symbol ?? "—"}` |
+| 4 | `IpoList.tsx:91` | **`rowKey()` = `` `${ipo.symbol}-${ipo.date}` ``** | **`cik`-based.** Found while verifying this amendment and **not in the amendment list.** This is the React key: with a null symbol, upper-table rows collide as `null-<date>`, so two companies amending on the same day get duplicate keys — React then bleeds expand/collapse state between rows and opens the wrong panel. It is the amendment's own principle applied to the place it bites hardest |
+| 5 | `IpoList.tsx:157, 187` | `aria-label={...${ipo.symbol} deal terms}` and *"No deal terms published for {ipo.symbol} yet."* | fall back to `ipo.company` — a screen reader announcing *"Show null deal terms"* is worse than verbose |
+
+**Site 1 is the one that matters beyond cosmetics.** `"(null)"` in `ItemList` structured data
+is exactly the failure `hasItemList` already exists to prevent in its other form — the guard
+was written because *"emitting an ItemList with zero items"* is worse than none, and emitting
+one full of `(null)` is the same mistake wearing a different hat.
+
+**FMP path:** `parseRow()` must populate `cik` too, or the type is a lie on one branch. FMP's
+IPO rows are **not known to carry a CIK** — unverified, no key in the sandbox. If they do not,
+the FMP branch synthesises identity from `symbol` (which FMP always has, since it is required
+there today). **Phase 0 cannot answer this and should not pretend to**; it is a question for
+whoever still has FMP access, and until then the FMP branch keeps `symbol`-derived identity.
 
 ### 4.4 A declared User-Agent is not optional, and its failure looks like a rate limit
 
@@ -205,6 +254,52 @@ lower table, with presence in the ticker map. **Do not label the denominator "IP
 rounding error), `424B4` **and** `424B1`. `isAmendment()` in `secDailyIndex.ts` already
 handles the `/A` suffix. Dropping F-1 would silently lose every foreign IPO, which is the
 same class of mistake as §3.4 of the earnings brief.
+
+### 4.8 AMENDED — `RW` withdrawal, and an age cap, or the upper table never empties
+
+**`isWithdrawnOrPostponed()` exists for a reason and the brief omitted its SEC equivalent.**
+FMP flags these with an `actions` field; SEC's signal is the form type **`RW`** (registration
+withdrawal — and **`AW`**, application withdrawal, for the same reason).
+
+**Why this is not a nicety: a shelved deal has exactly the upper table's shape.** Terms filed,
+no 424B. The two are indistinguishable without the withdrawal signal, so a deal that was
+pulled in July would sit in "Upcoming IPOs" **forever**, and the page would state something
+false about a company for as long as the page exists. That is a correctness bug, not a
+polish item.
+
+Two mechanisms, because they catch different failures:
+
+1. **`RW`/`AW` in the window removes the company from the upper table.** Explicit withdrawal.
+2. **An age cap on the terms-set date**, because *deals are abandoned far more often than they
+   are formally withdrawn* — an issuer that loses its window usually just stops filing. No
+   `RW` is ever filed, and mechanism 1 never fires.
+
+**The cap needs a number and I do not have one.** Measured lead time is a median of 7 days
+(range 4–14) from amendment to final prospectus, so a cap anywhere from 45 to 90 days is
+defensible and I would be guessing between them. **Phase 0 measures the distribution** — ages
+of cohort members with terms set, no 424B, and no `RW` — and the cap is set from the
+histogram. Added to Phase 0 as §0.3, because the amendment asks for a parameter the brief
+otherwise had no basis to pick.
+
+### 4.9 AMENDED — sort order, per table
+
+`fetchIpoRows()` today sorts `a.date.localeCompare(b.date)` — **ascending**. That is right for
+a forward calendar, where the soonest listing is the most useful row.
+
+**It is wrong for the upper table now, and the reason is that the column changed meaning.**
+The upper table's date is the **amendment date** — when terms were set, i.e. a date in the
+*past*. Ascending therefore puts **the stalest filings first**: the reader opens "Upcoming
+IPOs" and sees the deal that filed terms two months ago at the top, and the one that filed
+yesterday — the one most likely to price this week — at the bottom.
+
+| Table | Sort | Because |
+|---|---|---|
+| **Upper** | **`date` descending** | most recently amended first = closest to pricing |
+| **Lower** | **`date` descending** | most recently listed first — unchanged from `getRecentIpos()` today |
+
+Both descending, but **not for the same reason**, and the comment should say so — otherwise
+the next reader collapses them into one shared sort and re-introduces the bug the first time
+the upper table's date means something else again.
 
 ---
 
@@ -295,15 +390,19 @@ for exactly this: pass **"Terms set"** above and **"Listed"** below.
 1. **Phase 0** (§3) — measure S-1/A extraction and build the price parser to its gate.
    **Report back and stop.**
 2. Seed the 90-day cohort from `form.idx` on the relay; store it.
-3. `fetchIpoRows()` SEC branch behind `IPO_PROVIDER`, reusing `secDailyIndex` and
-   `secTickerMap`. Default stays `fmp`.
-4. Collapse to one `ipo:all` feed; derive both tables; update `check-ipo-cadence.mjs` and
+3. **The schema first, and in this order** (§4.3a): add required `cik`, fix all five
+   `symbol` consumers *including* `rowKey()` and the JSON-LD, **then** make `symbol`
+   nullable. Reversing the order ships a window where identity is undefined.
+4. `fetchIpoRows()` SEC branch behind `IPO_PROVIDER`, reusing `secDailyIndex` and
+   `secTickerMap`, with `RW`/`AW` exclusion and the age cap (§4.8) and the per-table sort
+   (§4.9). Default stays `fmp`.
+5. Collapse to one `ipo:all` feed; derive both tables; update `check-ipo-cadence.mjs` and
    move `warnIfImplausiblyEmpty` **in the same commit**.
-5. Hide the Market Cap column behind the flag, with a comment naming source and date.
-6. Copy: footer, upper-table intro, `dateColumnLabel` values.
-7. Flip `IPO_PROVIDER=sec` **with a production redeploy**, and verify the live page.
+6. Hide the Market Cap column behind the flag, with a comment naming source and date.
+7. Copy: footer, upper-table intro, `dateColumnLabel` values.
+8. Flip `IPO_PROVIDER=sec` **with a production redeploy**, and verify the live page.
 
-Steps 3–6 are one PR. Step 7 is a separate, reversible action — which is the owner's standing
+Steps 3–7 are one PR. Step 8 is a separate, reversible action — which is the owner's standing
 rule: **reversible by a switch, not a rewrite.**
 
 ---

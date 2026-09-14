@@ -165,6 +165,11 @@ const TASKS = {
   // that means a class is being registered on an exchange -- and reports the hit
   // rate within it.
   "ipo-sec-cohort": { script: "scripts/ipo-sec-cohort-probe.mjs", args: () => [] },
+  // Phase 0 of the IPO build brief. Measure and stop: the S-1/A extraction rate
+  // with SPACs separated (a SPAC unit is fixed at $10 and has no range, which is
+  // what made the earlier 1/4 meaningless), the price parser against a negative
+  // control, and the age histogram the withdrawal cap needs.
+  "ipo-phase0": { script: "scripts/ipo-phase0-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
