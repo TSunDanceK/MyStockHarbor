@@ -287,3 +287,23 @@ console.log(
     `Verify against the sha256 above, which is over the DECOMPRESSED text.`
 );
 emitPayload("window-fixture-gz", wrapped);
+
+// ── A PER-LINE FINGERPRINT, BECAUSE THE TOTAL HASH SAYS "WRONG", NOT "WHERE" ──
+//
+// Measured, not hypothesised: a 115-line base64 payload was read back out of the
+// job log and ONE substituted character survived. Every structural check passed
+// -- 115 lines, 13,692 base64 characters, 10,268 gzipped bytes, ISIZE 77,951,
+// 2,008 rows, every row matching SYMBOL|FORM|DATE|ACCESSION -- and only the
+// gzip CRC32 and the sha256 disagreed. A length census cannot catch a
+// substitution, and the whole-payload hash localises nothing.
+//
+// So each wrapped line gets a short fingerprint. The payload is deterministic
+// for a given window and dump, so a reader who already has a transcription can
+// re-run this, compare fingerprints, and re-read ONLY the line that differs
+// instead of transcribing all 115 again.
+const fp = (line) => crypto.createHash("sha1").update(line, "utf8").digest("hex").slice(0, 8);
+const gzLines = wrapped.split("\n");
+console.log(
+  `[capture] window-fixture-gz line-fingerprints (sha1/8, 1-indexed):\n` +
+    gzLines.map((l, i) => `${String(i + 1).padStart(3, "0")}:${fp(l)}`).join(" ")
+);
