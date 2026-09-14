@@ -238,27 +238,56 @@ console.log("\n3. F3 — an empty stored blob is rebuilt, not served");
   check("and the rebuilt rows replace it", Array.isArray(store.get(`msh:earnings-day-items:v1:${DATE}`)) && store.get(`msh:earnings-day-items:v1:${DATE}`).length === 3);
 }
 
-// ── 4. F2 — the write guard, independent of F1 ─────────────────────────────
-console.log("\n4. F2 — an empty result that contradicts its own candidates is never written");
+// ── 4. F2 — an empty day we could not SEE is poison; one we could is not ───
+console.log("\n4. F2 — the guard is on unverifiability, not on the candidate count");
 {
-  // Quotes SUCCEED but every company is off-exchange, so items is empty for a
-  // reason that is not failure. The guard is on the contradiction itself, so this
-  // must still refuse to cache -- that is the property, and it is what makes the
-  // guard hold even if a future failure mode slips past `failed`.
+  // 4a. THE LEGITIMATE TERMINAL STATE. Every quote succeeds and every company is
+  // off-exchange, so the day is genuinely empty and we know it. Under the old
+  // candidate-count form this could never settle and was re-quoted on every
+  // render forever; that cost is what this refinement removes.
+  const store = new Map();
+  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
+  const offExchange = async (url) => {
+    h.calls.push(url);
+    if (url.includes("/stable/quote")) {
+      const sym = new URL(url).searchParams.get("symbol");
+      return jsonResponse([{ symbol: sym, price: 1, marketCap: 1, exchange: "LSE" }], 200);
+    }
+    if (url.includes("/stable/stock-list")) return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
+    return jsonResponse(MONTH_ROWS, 200);
+  };
+  h.fmpFetch = offExchange;
+  const m = await loadModule();
+
+  const r = await m.getFullDayEarnings(DATE, { bypassCap: true });
+  check("4a: zero US-listed rows against three candidates", r.items.length === 0 && r.totalCandidates === 3);
+  check("4a: nothing failed, so the day SETTLES", r.complete === true, `complete=${r.complete}`);
+  check("4a: the empty day IS cached", wroteItems(h));
+  check("4a: and IS marked complete", wroteComplete(h));
+
+  // The second render must serve it, not re-quote it. This is the cost the
+  // refinement exists to remove, so it is asserted rather than assumed.
+  const quotesBefore = h.calls.filter((u) => u.includes("/stable/quote")).length;
+  const r2 = await m.getFullDayEarnings(DATE, { bypassCap: true });
+  const quotesAfter = h.calls.filter((u) => u.includes("/stable/quote")).length;
+  check("4a: a second render spends no quote calls", quotesAfter === quotesBefore, `${quotesBefore} then ${quotesAfter}`);
+  check("4a: and still reports the settled empty day", r2.items.length === 0 && r2.complete === true);
+}
+{
+  // 4b. THE POISON. Same empty result, but reached through a failure. Must not
+  // be written and must not settle.
   const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
   h.fmpFetch = async (url) => {
     h.calls.push(url);
-    if (url.includes("/stable/quote")) {
-      return jsonResponse([{ symbol: "X", price: 1, marketCap: 1, exchange: "LSE" }], 200);
-    }
+    if (url.includes("/stable/quote")) return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
     if (url.includes("/stable/stock-list")) return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
     return jsonResponse(MONTH_ROWS, 200);
   };
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
-  check("zero rows against three candidates", r.items.length === 0 && r.totalCandidates === 3);
-  check("is not written", !wroteItems(h));
-  check("and is not marked complete", !wroteComplete(h) && r.complete === false);
+  check("4b: zero rows against three candidates", r.items.length === 0 && r.totalCandidates === 3);
+  check("4b: is NOT written", !wroteItems(h));
+  check("4b: and is NOT marked complete", !wroteComplete(h) && r.complete === false);
 }
 
 // ── 5. F5 — an empty month is not cached in process either ─────────────────
@@ -292,6 +321,80 @@ console.log("\n6. F6 — an all-empty window is an outage, not a finished window
   const m = await loadModule();
   await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
   check("but a window WITH candidates still advances it", wroteFrontier(h));
+}
+
+// ── 6b. F6 AGAINST THE CASE THAT ACTUALLY HAPPENED ────────────────────────
+//
+// The production stranding is NOT the all-empty window F6 was written for. FMP
+// was healthy, 59 in-window dates had candidates, and the frontier still sat at
+// 2027-01-01. The shape that produces that is PARTIAL visibility: the near month
+// reads fine and is already filled, the later in-window months are cold -- absent
+// from Redis and unfetchable -- so every date in them looks like a day nobody
+// reports, the walk runs to the end, and the pointer parks past everything.
+//
+// `sawAnyCandidates` is satisfied by the near month alone, so the guard does not
+// fire. A month that could not be READ is UNKNOWN, not empty, and the scan must
+// not advance past unknown.
+console.log("\n6b. F6 against the production case — near month readable, later months cold");
+{
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const toDateStr = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  const n = new Date();
+  const t = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+  const windowStart = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 3)));
+  const windowEnd = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 4, 0)));
+  const nearMonth = windowStart.slice(0, 7);
+  // A reporting date in the near month, inside the window, already filled.
+  const nearDate = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 2)));
+
+  const nearRows = [{ symbol: "AAA", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null }];
+  const store = new Map([
+    // Already complete, so the walk passes over it rather than returning it.
+    [`msh:earnings-day-complete:v2:${nearDate}`, 1],
+    [`msh:earnings-day-items:v1:${nearDate}`, [{ symbol: "AAA", company: "Alpha Inc", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
+    // The frontier starts honestly at the window's front edge.
+    ["msh:earnings-fill-frontier:v2", windowStart],
+  ]);
+
+  const h = harness({ mode: "ok", monthRows: nearRows, names: NAMES, store });
+  h.fmpFetch = async (url) => {
+    h.calls.push(url);
+    if (url.includes("/stable/stock-list")) {
+      return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
+    }
+    if (url.includes("/stable/earnings-calendar")) {
+      // MATCHED ON `to`, NOT `from`. fetchCalendarRange requests a SAFETY DAY
+      // before the range, so `from` for the near month lands in the PREVIOUS
+      // month -- matching on it starved the near month too and the scenario
+      // passed because nothing was readable anywhere, which is the all-empty
+      // case this scenario exists to be different from.
+      const to = new URL(url).searchParams.get("to") ?? "";
+      // The near month answers. Every later month is cold and unreadable.
+      if (to.slice(0, 7) === nearMonth) return jsonResponse(nearRows, 200);
+      return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
+    }
+    if (url.includes("/stable/quote")) {
+      const sym = new URL(url).searchParams.get("symbol");
+      return jsonResponse([{ symbol: sym, price: 10, marketCap: 1e9, exchange: "NASDAQ" }], 200);
+    }
+    return jsonResponse([], 200);
+  };
+
+  const m = await loadModule();
+  await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+
+  const parked = h.cmd.filter(([c, k]) => c === "set" && k === "msh:earnings-fill-frontier:v2");
+  const finalFrontier = store.get("msh:earnings-fill-frontier:v2");
+  check(
+    "the near month was readable, so `sawAnyCandidates` is satisfied",
+    h.calls.some((u) => u.includes("earnings-calendar")),
+    "this is what makes the all-empty guard inapplicable"
+  );
+  check(
+    "the frontier is NOT advanced past the cold months",
+    !(typeof finalFrontier === "string" && finalFrontier > windowEnd),
+    `frontier=${JSON.stringify(finalFrontier)} windowEnd=${windowEnd} writes=${parked.length}`
+  );
 }
 
 // ── 7. F7 — the TTL is established before the counter moves ────────────────
