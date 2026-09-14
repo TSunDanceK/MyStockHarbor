@@ -108,6 +108,11 @@ with no way to detect the error downstream.
 > failure class in this project, and it is the same shape as every other one
 > found today: it renders as a number, not an error.
 >
+> **Further correction, same day:** the count is **5 of 7, not 7 of 7.**
+> `MKC.V` is *"McCormick & Company, Incorporated Common Stock"* — the same name
+> as its parent — and `EMBJ` is *"Embraer S.A. Common Stock"*. Both are ordinary
+> equity and both stay. `state-2026-09-13.md`'s list needs the same correction.
+>
 > Already documented in `state-2026-09-13.md` (not mirrored into this repo),
 > section "New, and it is a correctness bug rather than a cost one", naming the
 > same seven symbols. The specified fix is a **preferred/baby-bond filter at

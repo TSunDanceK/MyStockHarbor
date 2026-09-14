@@ -174,10 +174,16 @@ columns the existing scripts read.
 
 #### THE TRAP: Nasdaq spells suffixed preferreds with a DOLLAR sign
 
+**Two conventions, not one**, and the universe writes both as `-`:
+
 ```
-universe        MER-PK   EP-PC   MKC-V
-Nasdaq Trader   BAC$K    T$A     ...$<series>
+$  = preferred / note series     MER$K  EP$C  T$A  BAC$K
+.  = share class                 BRK.A  BRK.B  MKC.V
 ```
+
+A `-` → `$` rule alone misses every share class. The helper already emitted the
+dot form (its dash→dot rule), which is why `MKC-V` resolved once the fixture held
+real data — verified, not assumed.
 
 A join on symbol returns **NULL for every suffixed preferred**, and a null
 Security Name reads as *"no name, so not a preferred"*. The test then **passes
@@ -187,9 +193,59 @@ through exactly the securities it exists to catch** — fail-open, and
 **And the two shapes differ, so a spot check misleads.** Suffixed preferreds
 (MER-PK, MKC-V, EP-PC) need the `$` form; baby bonds carry plain alphabetic
 tickers (TBB, PFH, UNMA) and join correctly as-is. Checking TBB alone passes and
-says nothing about the suffixed half. **The assertion that matters is MER-PK
-resolving to a name containing "Preferred"** — that is the one in
-`scripts/check-symbol-spellings.mjs`.
+says nothing about the suffixed half. **Assert on the SHAPES, not on one symbol** — five behave differently and one
+passing proves nothing about the others:
+
+| universe | Nasdaq | shape | verdict |
+|---|---|---|---|
+| `EP-PC` | `EP$C` | `$` preferred | not-common |
+| `MER-PK` | `MER$K` | `$` note | not-common |
+| `MKC-V` | `MKC.V` | `.` share class | **common** |
+| `TBB` | `TBB` | plain-ticker note | not-common |
+| `EMBJ` | `EMBJ` | plain-ticker common | **common** |
+
+`scripts/check-security-spellings.mjs`.
+
+#### THE CLASSIFIER IS INVERTED — known-good match, everything else excluded
+
+A positive list of bad words does not work. Measured against the real names,
+**"Preferred" appears in only one of the six** non-common securities the review
+listed:
+
+```
+EP$C   El Paso Corporation Preferred Stock                          <- the only one
+MER$K  Bank of America ... Income Capital Obligation Notes due 2066
+TBB    AT&T Inc. 5.350% Global Notes due 2066
+PFH    Prudential Financial 4.125% Junior Subordinated Notes due 2060
+UNMA   Unum Group 6.250% Junior Subordinated Notes due 2058
+EMBJ   Embraer S.A. Common Stock                                    <- actually COMMON
+```
+
+"Income Capital Obligation Notes" is the name nobody would have enumerated. So
+the rule matches **`Common Stock` | `Common Shares` | `Ordinary Shares` |
+`Class <X> (Common|Capital|Ordinary) Stock`** and treats everything else as
+not-common. The qualifier inside the `Class` pattern is required: a bare
+`/Stock/` accepts "Preferred Stock", and a bare `/Class .* Stock/` would accept a
+hypothetical "Class A Preferred Stock".
+
+**Three states, not two.** `unknown` (the join failed) stays distinct from
+`not-common` (the join succeeded and it is a note) — both exclude, but they mean
+different things in a report. Returning `common` for either is the fail-open path.
+
+A separate `describeSecurityName` gives the fine label for reporting only, and
+**its fallback is `other`, not `common`** — the same inversion, so a security
+type nobody enumerated cannot become an included symbol.
+
+#### THE COUNT IS 5 OF 7, NOT 7 OF 7
+
+`MKC.V` — *"McCormick & Company, Incorporated Common Stock"*, the same name as
+its parent — and `EMBJ` — *"Embraer S.A. Common Stock"* — are **branch 2, keep
+both.** `state-2026-09-13.md`'s seven-symbol list needs correcting.
+
+Worth recording: the ticker-shape heuristic I abandoned was **right about MKC-V**
+even while wrong about `T`/`TBB`. Being wrong on some cases is not the same as
+being wrong on all of them, and the reason to discard it was that it cannot be
+*relied* on, not that every one of its answers was incorrect.
 
 #### One helper, because there were seven copies
 

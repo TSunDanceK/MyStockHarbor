@@ -109,6 +109,13 @@ const walk = (dir) => {
     // reports 7 files where 6 hold the ticker. Excluding only this one path
     // rather than all of scripts/ keeps the other harnesses in scope.
     if (path.resolve(p) === SELF) continue;
+    // AND ONE MORE FILE, for the same reason and not as a loophole.
+    // check-security-spellings.mjs holds captured NASDAQ TRADER names, where a
+    // dotted ticker is that source's own spelling for a share class (MKC.V,
+    // BRK.A) -- it is the subject under test, not repo ticker usage. It does not
+    // belong in ALLOWED_DOTTED either: entries there mean "a live instance of
+    // the bug in this codebase", and that list is documented to only shrink.
+    if (path.basename(p) === "check-security-spellings.mjs") continue;
     filesScanned++;
     const text = fs.readFileSync(p, "utf8");
     const sf = ts.createSourceFile(
