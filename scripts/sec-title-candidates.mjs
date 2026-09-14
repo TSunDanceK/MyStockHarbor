@@ -38,6 +38,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { emitPayload } from "./lib/relay-capture.mjs";
 import { rankCandidates } from "./lib/sec-title-match.mjs";
+import {
+  NASDAQ_LISTED_URL,
+  OTHER_LISTED_URL,
+  parseDirectory,
+  nameMap,
+} from "./lib/nasdaq-directory.mjs";
 
 const DUMP_DIR = process.argv[2] || "";
 const ROOT = process.cwd();
@@ -53,6 +59,10 @@ const readJson = (p, fallback) => {
 const cikMap = readJson(path.join(ROOT, "data/cik-map.json"), {});
 const profile = readJson(path.join(ROOT, "data/static-profile.json"), { rows: {} });
 
+// THE DUMP IS OPTIONAL NOW. It contributed nothing this task needs -- run 48
+// established its rows carry no company name -- so it is no longer required.
+// Read when present because it adds the pickers half of the universe, which is
+// one symbol the committed snapshot lacks (the dotted BRK.B).
 let pickers = [];
 if (DUMP_DIR && fs.existsSync(path.join(DUMP_DIR, "universe.json"))) {
   pickers = (readJson(path.join(DUMP_DIR, "universe.json"), {})?.pickersSymbolsKey ?? [])
@@ -66,36 +76,64 @@ const universe = [...new Set([...pickers, ...Object.keys(profile.rows ?? {})])].
 const resolved = (s) => Boolean(cikMap[s] ?? (s.includes(".") ? cikMap[s.replace(/\./g, "-")] : undefined));
 const unresolved = universe.filter((s) => !resolved(s));
 
-// ── COMPANY NAMES, FROM WHEREVER THE DUMP ACTUALLY KEEPS THEM ─────────────
-// The field is not asserted in advance because this script cannot see a dump
-// from the sandbox it was written in. Several plausible spellings are tried and
-// the one that hit is REPORTED, so the log says what it read rather than
-// leaving a silent empty-name pass to look like "no candidates found".
-const NAME_FIELDS = ["companyName", "name", "longName", "securityName", "title"];
-const NAME_SOURCES = ["screener-fundamentals.json", "fundamentals.json", "profile.json"];
-const names = new Map();
-const fieldHits = {};
-for (const file of NAME_SOURCES) {
-  const full = DUMP_DIR ? path.join(DUMP_DIR, file) : "";
-  if (!full || !fs.existsSync(full)) continue;
-  const values = readJson(full, {})?.values ?? {};
-  for (const [key, value] of Object.entries(values)) {
-    if (!value || typeof value !== "object") continue;
-    const symbol = String(value.symbol ?? key.split(":").pop() ?? "").trim().toUpperCase();
-    if (!symbol || names.has(symbol)) continue;
-    for (const field of NAME_FIELDS) {
-      const v = value[field];
-      if (typeof v === "string" && v.trim()) {
-        names.set(symbol, v.trim());
-        fieldHits[`${file}:${field}`] = (fieldHits[`${file}:${field}`] ?? 0) + 1;
-        break;
-      }
-    }
-  }
+// ── COMPANY NAMES: THE NASDAQ TRADER DIRECTORY, NOT THE DUMP ──────────────
+// RUN 48 CAME BACK VOID — "name fields found: NONE" — and the guard is the only
+// reason we know. Without it, ten unmatchable symbols would have read as ten
+// real negatives and seven live mega-caps would have been recorded as absent
+// from SEC's file.
+//
+// The cause is established rather than guessed, and it is NOT a sixth field
+// spelling. scripts/static-profile-build.mjs runs the IDENTICAL traversal over
+// the SAME three dump files — `?.values`, `Object.entries`, `value.symbol ||
+// symbolFromKey(key)`, same typeof guard — and succeeds, yielding 2,609 / 760 /
+// 651 rows. The dump shape is right and the traversal was right. Those FMP
+// cache rows simply carry sector and industry and NO company-name field at all,
+// which is exactly why data/static-profile.json holds only those two fields.
+//
+// So the source moves to where the name actually lives: the Nasdaq Trader
+// symbol directory, which is where lib/stock-news-data.ts's fetchCompanyName
+// already reads at render time. The sandbox is refused www.nasdaqtrader.com by
+// policy; a runner is not.
+//
+// THIS ALSO CLOSES A SECOND, SEPARATE GAP. There is no committed, non-FMP
+// source of company identity — the taxonomy survived the FMP exit only because
+// it happened to be cached, and the names did not. The same fetch that supplies
+// names for matching also emits a committable snapshot below, so the two are
+// one piece of work rather than two.
+const [nasdaqRes, otherRes] = await Promise.all([
+  fetch(NASDAQ_LISTED_URL, { headers: { "user-agent": UA } }),
+  fetch(OTHER_LISTED_URL, { headers: { "user-agent": UA } }),
+]);
+console.log(`[titles] nasdaqlisted.txt: HTTP ${nasdaqRes.status}, otherlisted.txt: HTTP ${otherRes.status}`);
+const nasdaqRows = nasdaqRes.ok ? parseDirectory(await nasdaqRes.text()) : [];
+const otherRows = otherRes.ok ? parseDirectory(await otherRes.text()) : [];
+console.log(`[titles] directory rows: nasdaqlisted ${nasdaqRows.length}, otherlisted ${otherRows.length}`);
+
+// MEASURING-NOTHING GUARD, AND IT IS THE ONE THAT JUST EARNED ITS PLACE. A
+// directory that returned HTML, or whose header changed, parses to [] — and
+// every symbol would then be "not matchable" again, which is a void run
+// dressed as a result. Fail loudly instead.
+if (nasdaqRows.length + otherRows.length < 5000) {
+  console.error(
+    `FATAL: the symbol directory is not usable — ${nasdaqRows.length + otherRows.length} rows parsed ` +
+      "(expected >13,000). Every symbol would be reported unmatchable, which is indistinguishable " +
+      "from a real negative."
+  );
+  process.exit(1);
 }
 
+const names = nameMap(nasdaqRows, otherRows);
+console.log(`[titles] names available for ${names.size} symbols`);
+
 console.log(`[titles] universe ${universe.length}, unresolved ${unresolved.length}`);
-console.log(`[titles] name fields found: ${Object.entries(fieldHits).map(([k, n]) => `${k}=${n}`).join(", ") || "NONE"}`);
+// THE PROVENANCE LINE, kept but repointed. Run 48's "name fields found: NONE"
+// is the only reason that void run was legible instead of being read as ten
+// real negatives, so the replacement source states its coverage the same way:
+// where the names came from and how many of them there are.
+console.log(
+  `[titles] name source: Nasdaq Trader symdir — ` +
+    `${names.size} symbols, covering ${unresolved.filter((s) => names.has(s)).length}/${unresolved.length} unresolved`
+);
 console.log(`[titles] unresolved: ${unresolved.join(", ")}`);
 
 const withNames = unresolved.filter((s) => names.has(s));
@@ -193,6 +231,36 @@ emitPayload("cik-candidates", JSON.stringify({
   notMatchable: withoutNames,
   report,
 }, null, 2));
+
+// ── THE SECOND OUTPUT: a committable company-name snapshot ────────────────
+// A DIFFERENT KIND OF ARTIFACT FROM THE CANDIDATE LIST ABOVE, and the
+// difference is why one may be committed wholesale and the other may not.
+// A candidate is a FUZZY NAME MATCH and needs a human. This is a DIRECT
+// TRANSCRIPTION keyed on the exact symbol, from the same directory the render
+// path already reads — no guessing, nothing to adjudicate.
+//
+// RAW NAMES, NOT CLEANED ONES. The app has its own normaliser
+// (lib/server/companyNames.ts cleanName, via normaliseCompanyName) and it runs
+// over whatever fetchCompanyName returns. Storing this script's cleaned output
+// would bake one normaliser's judgement into the data and then run the app's
+// over it a second time -- two cleanings, one of them invisible. The snapshot
+// holds what the directory said.
+//
+// Scoped to the universe rather than all ~13,000 rows: the same denominator
+// argument as data/cik-map.json, whose header prices it.
+const snapshot = {};
+for (const symbol of universe) {
+  const row = nasdaqRows.find((r) => r.symbol === symbol || r.altSymbol === symbol) ??
+    otherRows.find((r) => r.symbol === symbol || r.altSymbol === symbol);
+  if (row) snapshot[symbol] = row.rawName;
+}
+console.log(`[titles] company-name snapshot: ${Object.keys(snapshot).length}/${universe.length} universe symbols`);
+emitPayload("company-names", JSON.stringify({
+  asOf: new Date().toISOString().slice(0, 10),
+  source: "Nasdaq Trader symdir (nasdaqlisted.txt + otherlisted.txt), Security Name verbatim",
+  note: "RAW directory names. lib/server/companyNames.ts cleanName is the normaliser; do not pre-clean here.",
+  rows: snapshot,
+}, null, 0));
 
 console.log(`\n[titles] done — ${report.filter((r) => r.topTier === "exact").length} exact, ` +
   `${report.filter((r) => r.topTier === "subset").length} subset, ` +

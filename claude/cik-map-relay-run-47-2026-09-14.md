@@ -187,6 +187,134 @@ the real hazard: two filers differing only by legal form (`X Corporation` /
 
 **14/14 mutations killed** after those repairs.
 
+## 3c. Run 48 was void, and the guard is why we know
+
+`sec-titles` dispatched at `94f6a12`. The SEC half worked perfectly — HTTP 200,
+10,426 rows, FISERV control found. And:
+
+    [titles] name fields found: NONE
+    [titles] NO NAME AVAILABLE, so not matchable (≠ absent at SEC):
+             AVB, BK, EA, EQR, FI, K, MMC, NBN, TOWN, WBS
+    [titles] done — 0 exact, 0 subset, 0 partial, 0 with nothing above the floor.
+
+**Void by the run's own criterion.** Without the no-name/no-match split this
+reads as ten real negatives, and seven live mega-caps get recorded as absent
+from SEC's file. The guard fired on its first outing.
+
+### The cause, established rather than guessed — and it is not a sixth spelling
+
+`scripts/static-profile-build.mjs` runs the **identical** traversal over the
+**same three dump files** — `?.values`, `Object.entries`,
+`value.symbol || symbolFromKey(key)`, same typeof guard — and it *succeeds*,
+yielding screener 2,609 / fundamentals 760 / profile 651 rows.
+
+So the dump shape is right and the traversal was right. Those FMP cache rows
+carry `sector` and `industry` and **no company-name field at all** — which is
+exactly why `data/static-profile.json` holds only those two fields. There was
+nothing to read.
+
+### The shape worth seeing
+
+**The missing-name problem and the missing-CIK problem have the same root:
+there is no committed, non-FMP source of company IDENTITY.** The taxonomy
+survived the FMP exit because it happened to be cached. The names did not.
+
+## 3d. Repointed at the Nasdaq Trader directory — and it closes the second gap
+
+Names now come from `nasdaqlisted.txt` + `otherlisted.txt`, which is where
+`lib/stock-news-data.ts`'s `fetchCompanyName` already reads at render time. The
+sandbox is refused `www.nasdaqtrader.com` by policy; a runner is not.
+
+- **All ten get a name**, so the re-run yields evidence instead of a void.
+- **`needsDump` is now `false`.** The dump is still read when present (it adds
+  the pickers half of the universe — one symbol, the dotted `BRK.B`), but
+  requiring an artifact the task does not need was making it wait for nothing.
+- **It emits a second payload, `company-names`** — a committable snapshot for
+  the universe, which is the other open gap. Same fetch, one piece of work.
+
+Two things about that second payload, because they are the parts that could go
+wrong quietly:
+
+**It is a different kind of artifact from the candidate list, and that is why
+one may be committed wholesale and the other may not.** A candidate is a fuzzy
+name match and needs a human. The snapshot is a direct transcription keyed on
+the exact symbol, from the directory the render path already trusts. Nothing to
+adjudicate.
+
+**It stores RAW directory names.** The app has its own normaliser
+(`companyNames.ts` `cleanName`) which runs over whatever `fetchCompanyName`
+returns. Baking this script's cleaning into the data would mean two cleanings,
+one of them invisible.
+
+### Parsing
+
+Header-driven, not positional. Three places in this repo already split these
+files and they disagree — two take `cols[0]`/`cols[1]`, `listing-split.mjs`
+reads the header. The header is right, and the difference bites the moment
+anyone points a positional parser at `nasdaqtraded.txt`, whose first column is
+a `Nasdaq Traded` Y/N flag with the symbol at index 1.
+
+`otherlisted.txt` carries `ACT Symbol` (dotted `BRK.B`) **and** `NASDAQ Symbol`
+(dashed `BRK-B`), so both spellings resolve to one name — the same dot/dash
+split that cost the CIK lookup a symbol, handled at the source for once.
+
+The instrument clause ("— Common Stock", "Class A Common Stock") is stripped,
+mirroring `companyNames.ts`'s `INSTRUMENT_SUFFIX_RE` and `RATIO_CLAUSE_RE`
+rather than re-deriving them. Measured on the committed 155-name fixture:
+**104 of 155 real names change.** Left in, `ELECTRONIC ARTS COMMON STOCK`
+scores against SEC's `ELECTRONIC ARTS INC.` as a *subset* rather than an
+*exact* — a certainty downgraded to a candidate for no reason.
+
+**It is a phrase rule, not a token rule, and that is why it lives in the parser
+rather than in the matcher's stopword list.** The clause "american depositary
+shares" is noise; the token `AMERICAN` is not. Dropping it would collapse
+American Airlines, American Express and American Tower toward each other.
+Asserted directly.
+
+## 3e. A checker that passed against code that would have crashed
+
+Repointing the name source deleted the block defining `fieldHits` and left a
+`console.log` still referencing it. **Line 129 was a `ReferenceError`.** It got
+past three gates:
+
+| gate | why it passed |
+|---|---|
+| `node --check` | it only parses |
+| `npx eslint` | this repo's config has `no-undef` off, as TS-centric configs do |
+| the checker's own assertions | they grep for the *string*, which was still in the file |
+
+That last one is `claude/traps/grep-finds-the-comment-not-the-code.md` arriving
+from the other direction: a grep agreeing with broken code rather than with
+absent code.
+
+A relay script gets one shot — it runs once, on a runner, three minutes into a
+dispatch — so the property is now checked with the only tool in the repo that
+catches it: the TypeScript compiler in `checkJs` mode, filtered to
+"Cannot find name" (TS2304/2552), over the script and both its modules. With a
+positive control, because a misconfigured program reports zero diagnostics for
+everything.
+
+**Mutation coverage after the repairs: 9/10** (the tenth is a guard deleted as
+provably redundant, below). The first pass was 3/10 — the parser had a
+well-argued header and **no behavioural test at all**, so dropping the
+test-issue filter, the header check and the instrument strip all survived. The
+fix was to run it against the committed real-name fixture rather than to
+describe it.
+
+### A fourth dead guard
+
+`parseDirectory` had a `looks like HTML` check copied from
+`company-name-sample.mjs`. A mutation deleting it survived, and correctly: the
+header check is **strictly stronger**, since an HTML page's first line does not
+split on `|` into fields named `Symbol` and `Security Name`. Removed — a test
+that can only fire on a subset of what another test already rejects is a line
+no assertion can defend.
+
+That is the fourth piece of unearned machinery in this work (`&` expansion,
+`shared >= 2`, structural-word dropping, and now this). Three were harmless and
+one was actively wrong. The common thread: each was added because it sounded
+prudent, and none was measured until a mutation asked.
+
 ## 4. One thing the run log corrected about the previous commit
 
     [sec] user-agent: "MyStockHarbor/1.0 (contact@mystockharbor.com)"
@@ -245,6 +373,8 @@ function can be probed.
   Then confirm by hand and add only confirmed entries to `data/cik-map.json`.
 - **Re-key the map build on the name once that pass validates the approach.**
   The ticker join is what failed; this run only works around it.
-- **The `companyName` fallback gap** — the snapshot carries `sector` and
-  `industry` only.
+- **Wire `data/company-names.json` into the render path** once the re-run's
+  `company-names` payload is committed. The data comes first; wiring a loader to
+  a file that does not exist yet is how a documented degradation becomes one the
+  code never actually performs.
 - **Relevance ranking on names like "A.O. Smith"** — the real AOS item, unowned.
