@@ -42,6 +42,11 @@ const MANIFEST = process.env.HARVEST_MANIFEST ?? "data/logo-manifest.json";
 const TARGET = 72;   // one size only: TickerLogo's largest render is 34px, so
                      // 72 already exceeds 2x everywhere and @2x would be dead weight
 const FLOOR = 24;    // narrower than this renders worse than the monogram
+// Below this standard deviation, once composited onto the chip's white, there is
+// nothing for a viewer to see. Measured: real logos sit far above it (MU 93,
+// NVDA 87, the plainest two-tone ETF marks ~72); the blanks sat at exactly 0,
+// with only AI at 0.34 and BWA at 0.06 anywhere near.
+const BLANK_STDEV = 2;
 
 const pad = (s, n) => String(s).padEnd(n);
 
@@ -128,6 +133,45 @@ async function harvest(symbol) {
       .webp({ quality: 90, effort: 6 })
       .toBuffer();
 
+    // ── BLANKNESS, MEASURED ON THE IMAGE ITSELF ─────────────────────────
+    // A spot-check of the first harvest found files that decode perfectly at
+    // 72x72 and carry no content at all -- KNX and NGVT among them. Neither
+    // earlier guard catches that shape: the width floor passes (they are full
+    // size) and a byte-size floor passes (Q's source is 43 KB at 1596px). A
+    // blank chip is worse than the monogram it replaces and worse than a 404,
+    // because nothing downstream can tell it failed -- <img> fires load, not
+    // error, so the fallback chain never advances.
+    //
+    // THE TEST IS BACKGROUND-INDEPENDENT, and that correction matters. An
+    // earlier version composited onto the chip's white and measured that, which
+    // flagged 166 files including IBM, DIS, NKE and V. Those are NOT blank:
+    // their marks are WHITE on transparency, so they vanish against white while
+    // being perfectly good images. Skipping them would have silently dropped
+    // a hundred major brands on a measurement error. Their invisibility against
+    // a white chip is a real and separate issue, it predates this change (the
+    // same PNG renders into the same white box today), and it is the owner's
+    // call -- not something a harvest should decide by deleting files.
+    //
+    // So "blank" means the IMAGE has no variation anywhere:
+    //   fully transparent            -> nothing to see on any background
+    //   flat colour AND flat alpha   -> one uniform square
+    // A mark of any single colour, white included, varies in alpha and is kept.
+    const st = await sharp(out).stats();
+    const rgbStdev = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
+    const alphaCh = st.channels[3];
+    const fullyTransparent = Boolean(alphaCh) && alphaCh.max === 0;
+    const flatEverywhere = rgbStdev < BLANK_STDEV && (!alphaCh || alphaCh.stdev < BLANK_STDEV);
+    if (fullyTransparent || flatEverywhere) {
+      return {
+        symbol,
+        ok: false,
+        reason:
+          `blank-image (${fullyTransparent ? "fully transparent" : "uniform colour"}; ` +
+          `rgbStdev=${rgbStdev.toFixed(2)} alphaStdev=${alphaCh ? alphaCh.stdev.toFixed(2) : "n/a"}; ` +
+          `source ${input.length}B ${width}px)`,
+      };
+    }
+
     fs.writeFileSync(path.join(OUT_DIR, `${symbol}.webp`), out);
     return { symbol, ok: true, bytes: out.length, sourceWidth: width, target };
   } catch (err) {
@@ -138,6 +182,21 @@ async function harvest(symbol) {
 // ── RUN ───────────────────────────────────────────────────────────────────
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.mkdirSync(path.dirname(MANIFEST), { recursive: true });
+
+// THE OUTPUT DIRECTORY IS CLEARED FIRST, so it always describes THIS run and
+// not the union of every run before it. Without this, a symbol that used to
+// harvest and is now skipped -- a logo pulled from the CDN, or one the blank
+// guard newly rejects -- keeps its stale file on disk while dropping out of the
+// manifest. That is the one state the component cannot cope with: the file is
+// live at its URL, but nothing points at it and nothing prunes it.
+let cleared = 0;
+for (const f of fs.readdirSync(OUT_DIR)) {
+  if (f.endsWith(".webp")) {
+    fs.unlinkSync(path.join(OUT_DIR, f));
+    cleared += 1;
+  }
+}
+if (cleared) console.log(`cleared ${cleared} file(s) from a previous run\n`);
 
 let symbols = universe();
 if (LIMIT > 0) symbols = symbols.slice(0, LIMIT);

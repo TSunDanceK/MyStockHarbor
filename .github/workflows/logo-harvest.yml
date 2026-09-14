@@ -94,7 +94,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/logos data/logo-manifest.json
+          # -A so a symbol that stopped harvesting has its stale file DELETED
+          # from the commit, not merely left out of the manifest.
+          git add -A public/logos data/logo-manifest.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
