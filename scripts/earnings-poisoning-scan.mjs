@@ -57,6 +57,7 @@ const items = readJson("earnings-day-items.json");
 const complete = readJson("earnings-day-complete.json");
 const feed = readJson("earnings-month-feed.json");
 const frontier = readJson("earnings-fill-frontier.json");
+const jobRuns = readJson("job-runs.json");
 
 const itemsByDate = items?.values ?? {};
 const itemTtls = items?.ttlSeconds ?? {};
@@ -188,6 +189,40 @@ if (poisoned.length === 0) {
   ${poisoned.length} date(s), ${totalLost} company rows suppressed in total.
   Each stays suppressed until its items TTL lapses, and stays unreachable to the
   auto-populate loop AND to Backfill until its complete TTL lapses.`);
+}
+
+// ── scheduleCovered, asked for alongside P0 ────────────────────────────────
+// Reported here rather than inferred: §5 of the findings doc says a failing month
+// read degrades a symbol to the 120-day floor, and scheduleCovered is the only
+// number that says whether that is happening to the slice actually being warmed.
+{
+  const warm = jobRuns?.values?.["warm-stock-data"] ?? null;
+  console.log("\nSCHEDULE COVERAGE (warm-stock-data, last recorded run)");
+  if (!warm) {
+    console.log("  NOT RECORDED — no msh:job-run:v1:warm-stock-data in the dump.");
+    console.log("  That is a failed read, not a zero: the job may not have run since the");
+    console.log("  record's TTL, or the dump predates the job-run capture.");
+  } else {
+    const parsed = typeof warm === "string" ? JSON.parse(warm) : warm;
+    const sm = parsed?.summary ?? {};
+    const cov = sm.scheduleCovered;
+    const slice = sm.sliceSize;
+    console.log(`  recorded at        ${parsed?.at ? new Date(parsed.at).toISOString() : "?"}  ok=${parsed?.ok}`);
+    console.log(`  scheduleCovered    ${cov ?? "(null)"}`);
+    console.log(`  sliceSize          ${slice ?? "(null)"}`);
+    console.log(`  scheduleSize       ${sm.scheduleSize ?? "(null)"}   (global index size)`);
+    console.log(`  quarterlyRefreshes ${sm.quarterlyRefreshes ?? "(null)"}`);
+    console.log(`  quarterlyStamped   ${sm.quarterlyStamped ?? "(null)"}`);
+    if (typeof cov === "number" && typeof slice === "number" && slice > 0) {
+      const p = ((cov / slice) * 100).toFixed(1);
+      console.log(`\n  ${cov} of ${slice} symbols in the slice (${p}%) had an earnings date the index knew.`);
+      console.log(
+        cov === 0
+          ? "  ZERO COVERAGE. Every symbol in that slice rode the 120-day floor, and the\n  run still reported success. That is the inert-trigger state §5 describes."
+          : "  The remainder rode the 120-day floor for that run."
+      );
+    }
+  }
 }
 
 console.log(`

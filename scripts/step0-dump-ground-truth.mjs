@@ -619,6 +619,29 @@ await dumpDateKeyed("earnings-day-complete", KEYS.earningsDayComplete);
   console.log(`   ${"earnings-month-feed".padEnd(24)} ${String(Object.keys(values).length).padStart(6)} months`);
 }
 
+// The job-run records. §5 of the earnings-calendar findings is inference until
+// scheduleCovered exists as a number: scheduleSize says the earnings index BUILT,
+// but it is global, and a healthy index can still cover none of a given slice --
+// in which case every symbol in it rides the 120-day floor silently. The counter
+// exists in the code (stockDataCache.ts:596) and is recorded per run; nothing has
+// ever read it back out.
+{
+  const prefix = "msh:job-run:v1";
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  for (const k of keys) {
+    try {
+      const v = await redis.get(k);
+      if (v != null) values[suffixOf(k, prefix)] = v;
+    } catch (e) {
+      report.warnings.push(`job-runs read failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+  report.datasets["job-runs"] = { key: `${prefix}:<JOB>`, keysScanned: keys.length, present: Object.keys(values).length };
+  report.files.push(writeJson("job-runs.json", { dumpedAt: DUMPED_AT, dataset: "job-runs", key: `${prefix}:<JOB>`, values }));
+  console.log(`   ${"job-runs".padEnd(24)} ${String(Object.keys(values).length).padStart(6)} jobs`);
+}
+
 // The fill frontier. A plain string with NO TTL (earningsCalendar.ts:290), so a
 // value parked past the window end stays parked; the TTL is captured anyway so a
 // future change away from that is visible rather than assumed.
