@@ -255,6 +255,27 @@ rounding error), `424B4` **and** `424B1`. `isAmendment()` in `secDailyIndex.ts` 
 handles the `/A` suffix. Dropping F-1 would silently lose every foreign IPO, which is the
 same class of mistake as §3.4 of the earnings brief.
 
+### 4.10 ADDED BY PHASE 0 — exclude ETFs, trusts and commodity pools
+
+**Measured, not anticipated.** Phase 0's sample surfaced `T. Rowe Price Active Crypto ETF`
+and `Morgan Stanley Solana Trust` inside the operating-company cohort. Both file `S-1` and
+`8-A12B` exactly like an issuer does. Both would render **inside "Upcoming IPOs"**.
+
+**The two filters already in the brief do not catch them:**
+
+- **§4.3a's already-listed filter misses them** — a *new* ETF is genuinely not yet listed and
+  is not in the ticker map. It is not an IPO for an entirely different reason.
+- **§4.6 only warns about them in prose.** Phase 0 turned that warning into two named rows in
+  a twelve-row sample. Prose is not a filter.
+
+**Needs its own rule.** Candidate signals, none measured yet: SIC code (`6221`, `6726` cover
+commodity pools and investment offices), the `N-1A`/`N-2` registration path, and name
+patterns (`ETF`, `Trust`, `Fund`). **Measure before choosing** — a name pattern alone would
+misfile an operating company called "... Trust".
+
+**Also inflates §4.8's population count.** The 53 in the Phase 0 histogram is an upper bound
+because this filter is not applied to it.
+
 ### 4.8 AMENDED — `RW` withdrawal, and an age cap, or the upper table never empties
 
 **`isWithdrawnOrPostponed()` exists for a reason and the brief omitted its SEC equivalent.**
@@ -274,12 +295,18 @@ Two mechanisms, because they catch different failures:
    are formally withdrawn* — an issuer that loses its window usually just stops filing. No
    `RW` is ever filed, and mechanism 1 never fires.
 
-**The cap needs a number and I do not have one.** Measured lead time is a median of 7 days
-(range 4–14) from amendment to final prospectus, so a cap anywhere from 45 to 90 days is
-defensible and I would be guessing between them. **Phase 0 measures the distribution** — ages
-of cohort members with terms set, no 424B, and no `RW` — and the cap is set from the
-histogram. Added to Phase 0 as §0.3, because the amendment asks for a parameter the brief
-otherwise had no basis to pick.
+**MEASURED IN PHASE 0, and it reverses the framing above.** `RW`/`AW` caught **3 of 56** —
+about **5%**. The other 95% of stale rows carry no signal at all. **The age cap is the primary
+mechanism and `RW`/`AW` is the edge case**, not the other way round. See
+`claude/ipo-phase0-RESULTS-2026-09-14.md` §3 for the histogram: 60 days retains 58% of the
+current population, 90 days retains 79%, and the distribution is **right-censored at the
+120-day window edge** so the true tail is longer than it looks. **No cap is recommended
+here** — the shape is measured, the constant is the owner's.
+
+One more thing Phase 0 established about this rule: **a withdrawal only withdraws what came
+before it.** Four `RW`/`AW` filings in the first run were dated *before* the amendment they
+were credited against, and withdraw an earlier registration while the live deal stands. The
+comparison is `withdrawal.date >= lastAmendment.date`, not "has a withdrawal anywhere".
 
 ### 4.9 AMENDED — sort order, per table
 
