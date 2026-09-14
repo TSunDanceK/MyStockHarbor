@@ -133,6 +133,21 @@ const windowEnd = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(
 const frontierValue = frontier?.value ?? null;
 const frontierParked = typeof frontierValue === "string" && frontierValue > windowEnd;
 
+// IS THE PARKING LEGITIMATE? Parked-past-the-end is the NORMAL steady state once
+// the window is genuinely full -- findNextIncompleteDate parks deliberately so
+// later scans short-circuit. So "parked" on its own proves nothing, and reporting
+// it as a defect would be the same absence-versus-failure confusion again.
+//
+// The discriminator is whether the window actually IS full. A date inside the
+// window that has candidates but no stored rows is work the background fill
+// should have picked up. If any exist while the pointer sits past the end, the
+// pointer is stranded: the scan starts beyond the window, the loop never runs,
+// and it re-parks itself every time.
+const inWindowWithCandidatesNoBlob = [...candidatesByDate.entries()]
+  .filter(([date, n]) => n > 0 && date >= windowStart && date <= windowEnd && itemsByDate[date] == null)
+  .map(([date, n]) => ({ date, candidates: n }))
+  .sort((a, b) => (a.date < b.date ? -1 : 1));
+
 // ── Report ──────────────────────────────────────────────────────────────────
 const pct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : "—");
 
@@ -187,10 +202,26 @@ FILL FRONTIER
   ttl                           = ${frontier?.ttlSeconds ?? "(not captured)"}  ${frontier?.ttlSeconds === -1 ? "(-1 = no expiry, as written)" : ""}
   window end at dump time       = ${windowEnd}
   parked past the window end?   = ${frontierParked ? "YES — the background fill is short-circuiting" : "no"}
-${frontierParked ? `
-  A parked frontier is the outage signature from F6: the scan walked the whole
-  window, found nothing to do, and pushed the pointer past the end. It only ever
-  moves forward, and the key carries no TTL, so it does not recover on its own.` : ""}
+  in-window dates with candidates but NO stored rows = ${inWindowWithCandidatesNoBlob.length}
+${inWindowWithCandidatesNoBlob.slice(0, 12).map((d) => `      ${d.date}  ${d.candidates} candidates`).join("\n")}${inWindowWithCandidatesNoBlob.length > 12 ? `\n      …+${inWindowWithCandidatesNoBlob.length - 12} more` : ""}
+
+  VERDICT ON THE FRONTIER
+${
+  !frontierParked
+    ? "    Not parked. Nothing to say."
+    : inWindowWithCandidatesNoBlob.length === 0
+      ? `    Parked and LEGITIMATE. The window is genuinely full, which is the state
+    findNextIncompleteDate parks for so later scans cost one read.`
+      : `    Parked and STRANDED. ${inWindowWithCandidatesNoBlob.length} date(s) inside the window still have
+    candidates and no stored rows, so there was work to do and the scan did not
+    find it. The pointer sits past the window end, so the walk starts beyond the
+    range, the loop body never executes, and it re-parks itself on every pass --
+    self-perpetuating. setFillFrontier only moves forward and the key carries no
+    TTL (-1 above), so this does not clear on its own.
+
+    This is F6's failure mode, already live. F6 stops it recurring; it does not
+    unstick the pointer that is stuck now. That needs the key deleted by hand.`
+}
 
 ================================================================
 `);
