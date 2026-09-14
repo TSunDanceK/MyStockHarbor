@@ -113,32 +113,46 @@ const sec = await lift(
 console.log(`SEC WINDOW FIXTURE — ${FROM}..${TO}`);
 
 // ── The universe ─────────────────────────────────────────────────────────────
-// SYMBOLS wins; otherwise the frozen dump. The LIVE run intersected against the
-// live manifest universe, so a dump-sourced universe can differ by a few
-// symbols. That difference is REPORTED, never smoothed over: if the capture's
-// matched-symbol count does not equal the live run's, the fixture describes a
-// slightly different set and the check must say so rather than assert a number
-// it did not produce.
-// THE UNIVERSE OVERRIDE RIDES ON `PAYERS`, NOT `SYMBOLS`.
 //
-// relay-capture.mjs claims `SYMBOLS` as the payload SELECTOR -- one payload per
-// dispatch, chosen by that input, so no workflow file has to change. Reusing it
-// for the universe too would mean asking for the payload silently replaced the
-// universe with the single word "window-fixture". PAYERS is already forwarded
-// and unused by this task.
-const supplied = (process.env.PAYERS ?? "").split(/[,\s]+/).filter(Boolean).map((s) => s.toUpperCase());
-let universe;
-if (supplied.length) {
-  universe = [...new Set(supplied)];
-  console.log(`universe: SYMBOLS env — ${universe.length} symbols (the live set)`);
-} else {
-  const p = path.join(DIR, "universe.json");
-  if (!fs.existsSync(p)) {
-    console.error(`FATAL: no universe.json in ${DIR} and no PAYERS override given.`);
-    process.exit(2);
-  }
-  universe = [...new Set((JSON.parse(fs.readFileSync(p, "utf8"))?.pickersSymbolsKey ?? []).map(String))];
-  console.log(`universe: ${DIR}/universe.json — ${universe.length} symbols (FROZEN dump)`);
+// THERE IS NO OVERRIDE INPUT, AND THAT IS A DELIBERATE REMOVAL.
+//
+// It was first on SYMBOLS, which relay-capture.mjs claims as the payload
+// SELECTOR -- so asking for the payload would have replaced the universe with
+// the string "window-fixture". Moving it to PAYERS looked safe and was worse:
+// relay.yml DEFAULTS that input to "KO,XOM,T". Run 34831201608 therefore
+// captured a universe of three symbols, matched two filings, wrote a
+// well-formed fixture and exited 0 -- exactly the silent substitution the move
+// was meant to prevent.
+//
+// EVERY input relay.yml forwards carries a default, so no forwarded input can
+// mean "the caller did not ask". The universe comes from the dump and nowhere
+// else. A live-universe run, if ever needed, needs its own unambiguous input.
+//
+// The live run intersected the LIVE manifest universe and this intersects the
+// frozen dump's, so the two differ by a few symbols. That is reported, never
+// smoothed: a check must not assert a count this capture did not produce.
+const uniPath = path.join(DIR, "universe.json");
+if (!fs.existsSync(uniPath)) {
+  console.error(`FATAL: no universe.json in ${DIR}.`);
+  process.exit(2);
+}
+const universe = [...new Set((JSON.parse(fs.readFileSync(uniPath, "utf8"))?.pickersSymbolsKey ?? []).map(String))];
+console.log(`universe: ${DIR}/universe.json — ${universe.length} symbols (FROZEN dump)`);
+
+// A FLOOR, BECAUSE THE FAILURE ABOVE EXITED 0.
+//
+// A capture over a handful of symbols produces a small, well-formed, useless
+// fixture that nothing downstream can distinguish from a quiet week. The dump's
+// analysis universe is ~700, so anything under 100 means it was substituted,
+// truncated, or read from the wrong key -- not that the market was quiet.
+const UNIVERSE_FLOOR = 100;
+if (universe.length < UNIVERSE_FLOOR) {
+  console.error(
+    `FATAL: universe is ${universe.length} symbols, under the floor of ${UNIVERSE_FLOOR}. ` +
+      `The dump's analysis universe is ~700, so this is a substituted or truncated universe, ` +
+      `not a small one. Refusing to write a fixture that would look valid.`
+  );
+  process.exit(2);
 }
 
 // ── ticker -> CIK, through the shipped parser ────────────────────────────────
@@ -215,7 +229,7 @@ fs.writeFileSync(
     {
       capturedAt: new Date().toISOString(),
       window: { from: FROM, to: TO },
-      universeSource: supplied.length ? "PAYERS env (live set)" : `${DIR}/universe.json (frozen dump)`,
+      universeSource: `${DIR}/universe.json (frozen dump)`,
       universeSize: universe.length,
       resolvedWithCik: Object.keys(pseudoManifest.symbols).length,
       days,
