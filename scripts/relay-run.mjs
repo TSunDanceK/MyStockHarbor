@@ -169,6 +169,17 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only, no credential: does a filer ANNOUNCE its next results date in an
+  // 8-K (item 7.01/8.01) ahead of time? The last input to the forward-calendar
+  // decision -- predicting the date from cadence was measured and is weak, so
+  // the question is whether it can be READ instead of predicted. Needs the dump
+  // for the universe and for market caps: "do companies do this" and "do the
+  // companies a calendar is searched for do this" are different questions.
+  "sec-scheduling": {
+    script: "scripts/sec-scheduling-announcements.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
