@@ -395,9 +395,9 @@ check(
   /FREE_PROVIDERS[^=]*=\s*\[[^\]]*secProvider/.test(index)
 );
 check(
-  "the default is still fmp",
-  /process\.env\.NEWS_PROVIDER === "free" \? "free" : "fmp"/.test(index),
-  "an unrecognised value falls back to fmp too"
+  "the default is free, and fmp is the explicit rollback",
+  /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(index),
+  "step 7 flipped it; an unrecognised value now falls back to free"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

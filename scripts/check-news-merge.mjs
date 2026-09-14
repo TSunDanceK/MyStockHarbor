@@ -26,7 +26,8 @@ import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 
-const SRC = path.join(process.cwd(), "lib/server/newsMerge.ts");
+const ROOT = process.cwd();
+const SRC = path.join(ROOT, "lib/server/newsMerge.ts");
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -34,10 +35,43 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-// newsMerge.ts imports nothing, so it needs no stubbing -- which is most of the
-// reason the logic lives there rather than inline in newsStore.ts, where Redis
-// is unavoidable.
-const js = ts.transpileModule(fs.readFileSync(SRC, "utf8"), {
+// newsMerge.ts has exactly one import and it needs no Redis and no Next -- which
+// is most of the reason the logic lives there rather than inline in
+// newsStore.ts, where Redis is unavoidable.
+//
+// THE ONE IMPORT IS INLINED, NOT STUBBED, and the difference matters here. This
+// module is loaded from a data: URL, which cannot resolve a relative specifier
+// at all, so something had to happen. A stub would have let capNews's churn cap
+// be tested against a fake classifier that agrees with the test by
+// construction; inlining the real lib/server/news/filingChurn.ts means the
+// assertions below run the grammar that actually ships.
+const churnSrc = fs
+  .readFileSync(path.join(ROOT, "lib/server/news/filingChurn.ts"), "utf8");
+// The `export` keywords are KEPT, so the inlined grammar is re-exported by the
+// merged module and the assertions below can call the shipped isFilingChurn
+// directly rather than inferring it from capNews's output.
+if (/^import /m.test(churnSrc)) {
+  console.error("FAIL: filingChurn.ts gained an import this harness does not inline.");
+  process.exit(1);
+}
+const mergeSrc = fs
+  .readFileSync(SRC, "utf8")
+  .replace(/^import \{ isFilingChurn, MAX_CHURN_STORED \} from "\.\/news\/filingChurn";$/m, churnSrc);
+for (const [marker, why] of [
+  ["export function isFilingChurn", "filingChurn was not inlined -- the import pattern stopped matching"],
+  ["export const MAX_CHURN_STORED", "MAX_CHURN_STORED was not inlined"],
+]) {
+  if (!mergeSrc.includes(marker)) {
+    console.error(`FAIL: ${why}.`);
+    process.exit(1);
+  }
+}
+if (/^import /m.test(mergeSrc)) {
+  console.error("FAIL: an import survived inlining into newsMerge.ts:");
+  console.error(mergeSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
+  process.exit(1);
+}
+const js = ts.transpileModule(mergeSrc, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
 }).outputText;
 
@@ -51,6 +85,8 @@ const {
   NEWS_OVERLAP_HOURS,
   NEWS_STORE_CAP,
   EARNINGS_PIN_MAX_AGE_MS,
+  MAX_CHURN_STORED,
+  isFilingChurn,
 } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 
 const art = (link, iso, title = `story ${link}`) => ({ title, link, pubDate: iso });
@@ -157,6 +193,96 @@ check("...and the result is still newest first",
 check(
   "a pin already inside the newest 40 is not double-counted",
   capNews(many, many[0]).filter((i) => i.link === "n0").length === 1
+);
+
+console.log("\ncapNews — the institutional-holding churn cap");
+
+// VERBATIM FROM scripts/fixtures/churn-sample.tsv and from the reported page.
+// Invented headlines would test the grammar against my own idea of it.
+const CHURN = [
+  "Performance Wealth Partners LLC Boosts Stock Position in JPMorgan Chase & Co. $JPM",
+  "JPMorgan Chase & Co. $JPM Shares Sold by BlackRock Inc.",
+  "Squarepoint Ops LLC Purchases 321,497 Shares of CryoPort, Inc. $CYRX",
+  "Chokshi & Queen Wealth Advisors Inc Takes Position in Micron Technology, Inc. $MU",
+  "NBH Bank Invests $668,000 in Micron Technology, Inc. $MU",
+  "Micron Technology, Inc. $MU Position Decreased by Riverview Capital Advisers LLC",
+  "Trust Co. of Vermont Buys New Position in JPMorgan Chase & Co. $JPM",
+  "Nvest Financial LLC Reduces Stake in Micron Technology, Inc. $MU",
+];
+const REAL = [
+  "Will Micron Technology Stock Soar to $1,500 After Sept. 30?",
+  "Have Insiders Sold Micron Technology Shares Recently?",
+  "Berkshire Hathaway's housing bet deepens as it boosts Lennar stake to $1.2B",
+  "Berkshire Hathaway Earnings: Cash Balances Retreat on Increased Investments and Share Buybacks in Q2",
+  "Micron Technology beats Q4 estimates as HBM revenue triples",
+];
+
+check(
+  "every churn headline is recognised",
+  CHURN.every((t) => isFilingChurn(t)),
+  CHURN.filter((t) => !isFilingChurn(t)).join(" | ") || "all 8"
+);
+check(
+  "no real headline is",
+  REAL.every((t) => !isFilingChurn(t)),
+  REAL.filter((t) => isFilingChurn(t)).join(" | ") || "all 5 clear"
+);
+// THE KNOWN FALSE POSITIVE, PINNED RATHER THAN HIDDEN. It is real news and it
+// matches, because structurally it IS a holding notice. Asserting it here means
+// a later "fix" that silently changes this behaviour has to say so.
+check(
+  "the irreducible false positive is still exactly that, and still only capped",
+  isFilingChurn("Warren Buffett's Berkshire Hathaway Inc. discloses new stake in Alphabet"),
+  "it survives as one of the kept MAX_CHURN_STORED — which is why this caps rather than excludes"
+);
+
+const churnItems = (n) =>
+  Array.from({ length: n }, (_, i) =>
+    art(`c${i}`, new Date(Date.UTC(2026, 0, 20, 12, 0, 0) - i * 60_000).toISOString(), CHURN[i % CHURN.length])
+  );
+
+check(
+  `a store of nothing but churn keeps ${MAX_CHURN_STORED}, not zero and not all of it`,
+  capNews(churnItems(20), null).length === MAX_CHURN_STORED,
+  `got ${capNews(churnItems(20), null).length} — a thin name whose only coverage is holding notices must not go empty`
+);
+// THE REGRESSION THAT WAS REPORTED, in one assertion. 30 churn + 5 articles is
+// the reported page's ratio; before this cap every article was outnumbered.
+const mixed = [
+  ...churnItems(30),
+  ...REAL.map((t, i) => art(`r${i}`, new Date(Date.UTC(2026, 0, 19, 12, 0, 0) - i * 60_000).toISOString(), t)),
+];
+const cappedMixed = capNews(mixed, null);
+check(
+  "30 churn + 5 articles keeps all 5 articles",
+  cappedMixed.filter((i) => i.link.startsWith("r")).length === 5,
+  `${cappedMixed.filter((i) => i.link.startsWith("r")).length} of 5`
+);
+check(
+  `...and at most ${MAX_CHURN_STORED} churn items`,
+  cappedMixed.filter((i) => i.link.startsWith("c")).length <= MAX_CHURN_STORED,
+  `${cappedMixed.filter((i) => i.link.startsWith("c")).length} churn`
+);
+check(
+  "...even though nothing was over NEWS_STORE_CAP",
+  mixed.length <= NEWS_STORE_CAP,
+  "the early return this replaced would have let all 30 through untouched"
+);
+check(
+  "churn is NEWER here, so a newest-first slice alone would have kept only churn",
+  Math.max(...mixed.filter((i) => i.link.startsWith("c")).map((i) => Date.parse(i.pubDate))) >
+    Math.max(...mixed.filter((i) => i.link.startsWith("r")).map((i) => Date.parse(i.pubDate))),
+  "otherwise the assertion above would pass for the wrong reason"
+);
+check(
+  "the result is still newest-first",
+  cappedMixed.every((item, i) => i === 0 || Date.parse(cappedMixed[i - 1].pubDate) >= Date.parse(item.pubDate))
+);
+// The pin outranks the churn cap, as it outranks everything else here.
+const churnyPin = art("pin", "2026-01-01T00:00:00.000Z", REAL[4]);
+check(
+  "the pin still survives a store full of churn",
+  capNews([...churnItems(30), churnyPin], churnyPin).some((i) => i.link === "pin")
 );
 
 console.log("\ncountAdded");

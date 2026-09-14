@@ -14,6 +14,8 @@ import { getFmpMinuteUsage } from "@/lib/server/historyCache";
 import { isActiveMarketWindow } from "@/lib/server/marketHours";
 import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/stalenessQueue";
 import { readJobRuns } from "@/lib/server/jobRuns";
+import { newsProviderMode, activeNewsProviders, feedMaxAgeDays } from "@/lib/server/news";
+import { SNAPSHOT_AS_OF, SNAPSHOT_SIZE } from "@/lib/server/staticProfile";
 
 // MANDATORY, NOT A PREFERENCE. lib/server/backfillAuth.ts:16 builds a bare
 // `Redis.fromEnv()` with no PAGE_READ_CACHE, so every call this page makes
@@ -257,6 +259,9 @@ export default async function CacheHealthPage({
   const pctCap = (usage.totalWireBytes / FMP_BANDWIDTH_CAP_BYTES) * 100;
   const pctRedisCap = (redisBandwidth.projectedMonthBytes / redisBandwidth.capBytes) * 100;
 
+  const newsMode = newsProviderMode();
+  const newsAdapters = activeNewsProviders().map((p) => p.id);
+
   const cell: React.CSSProperties = { padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.07)", fontSize: 13, verticalAlign: "top" };
   const th: React.CSSProperties = { ...cell, color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 };
 
@@ -267,6 +272,48 @@ export default async function CacheHealthPage({
         <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 6 }}>
           Read-only. Nothing on this page triggers a refresh.
         </p>
+
+        {/* ── Which news provider is actually serving ─────────────────────
+            §8 of claude/news-adapter-spec-2026-09-13.md asks for this BY NAME,
+            and names the failure it is for: at step 7 the thing that goes wrong
+            is that something fails to register and the site quietly keeps
+            calling FMP -- the one outcome this whole migration exists to stop.
+            A log line nobody reads is not enough. See claude/silent-failure-traps.md.
+
+            READ-ONLY AND FREE: newsProviderMode() is an env read and
+            activeNewsProviders() returns a module-level array. No Redis, no FMP,
+            nothing fetched. */}
+        <section style={{ marginTop: 22, border: `1px solid ${newsMode === "fmp" ? "rgba(234,179,8,0.45)" : "rgba(255,255,255,0.08)"}`, borderRadius: 14, padding: 18 }}>
+          <h2 style={{ fontSize: 14, margin: 0, color: "#e2e8f0" }}>News provider — active now</h2>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 10 }}>
+            <strong style={{ fontSize: 30, color: newsMode === "fmp" ? "#eab308" : "#22c55e" }}>{newsMode}</strong>
+            <span style={{ color: "#94a3b8", fontSize: 14 }}>
+              {newsAdapters.join(" + ")} · {feedMaxAgeDays()}-day feed window
+            </span>
+          </div>
+
+          {newsMode === "fmp" ? (
+            <p style={{ color: "#eab308", fontSize: 12, marginTop: 10 }}>
+              <strong>NEWS_PROVIDER=fmp is set in this environment.</strong> The free stack is built
+              and registered but is not serving. This is the deliberate rollback state — if nobody
+              set it on purpose, the flip has been reverted without a commit.
+            </p>
+          ) : (
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
+              Default since step 7. Set <code>NEWS_PROVIDER=fmp</code> to roll back — no deploy,
+              no revert commit.
+            </p>
+          )}
+
+          {/* The snapshot became load-bearing at the flip: there is no FMP call
+              left to refill an expired sector, so a symbol outside this file has
+              no sector, no art bucket and no sector page. */}
+          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
+            Static profile snapshot: {SNAPSHOT_SIZE.toLocaleString()} symbols, captured {SNAPSHOT_AS_OF}.
+            Sector and industry fall through to it when the cache has nothing; a symbol in neither
+            logs <code>[static-profile]</code> and draws the generated card.
+          </p>
+        </section>
 
         {/* ── Top line: the limit that actually binds ─────────────────── */}
         <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 18 }}>

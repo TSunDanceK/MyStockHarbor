@@ -1,7 +1,7 @@
 // The wire adapters — GlobeNewswire and PR Newswire.
 //
-// Step 4 of claude/news-adapter-spec-2026-09-13.md. Behind NEWS_PROVIDER, which
-// still defaults to "fmp".
+// Step 4 of claude/news-adapter-spec-2026-09-13.md, behind NEWS_PROVIDER — which
+// step 7 flipped to default "free", so this is live.
 //
 // ── WHY THE WIRES ARE THE ONE LEG THAT MAY KEEP ITS EXTRACTS AND IMAGES ─────
 // A press release is issued FOR republication. That is the whole distinction
@@ -21,6 +21,7 @@
 // asking the wire about a symbol.
 import { stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription } from "./text";
 import { deriveEventType } from "./eventType";
+import { beginTiming } from "../timing";
 import type { NewsItem, NewsProvider } from "./types";
 
 const GLOBENEWSWIRE_URL =
@@ -203,6 +204,10 @@ export function parseWireFeed(xml: string, source: WireSource, nowMs = Date.now(
 async function pollAll(): Promise<NewsItem[]> {
   const batches = await Promise.all(
     SOURCES.map(async (source) => {
+      // PER FEED, because the fan-out timer blamed "wire" for 70 seconds and
+      // this adapter polls TWO hosts. Which of them hangs is the next question,
+      // and a combined number cannot answer it.
+      const endPoll = beginTiming("news", `wireFeed ${source.id}`);
       try {
         // Identical URL for every caller and every symbol — that is what makes
         // this one poll rather than one per symbol.
@@ -211,6 +216,8 @@ async function pollAll(): Promise<NewsItem[]> {
         return parseWireFeed(await res.text(), source);
       } catch {
         return [];
+      } finally {
+        endPoll();
       }
     })
   );

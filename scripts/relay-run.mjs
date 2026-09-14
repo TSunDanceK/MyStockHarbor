@@ -85,6 +85,23 @@ const TASKS = {
   // inputs §7's cascade reads — no judgement made on the runner, so the
   // measurement describes the shipped derivation and not a copy of it.
   "eventtype-sample": { script: "scripts/eventtype-sample.mjs", args: () => [] },
+  // Read-only: the FULL Google News feed per symbol, digested to publisher,
+  // link host and title. Asked after the preview showed 13 of 15 MU cards were
+  // institutional-holding churn that every precision probe had scored 96-100%,
+  // because "is it about MU" and "is it worth reading" are different questions
+  // and only the first had ever been measured.
+  "churn-sample": { script: "scripts/churn-sample.mjs", args: () => [] },
+  // Read-only: asks a deployment for pages so their renders emit [timing] lines
+  // into the Vercel runtime log. Prints no response body -- the measurement is
+  // in the log, not in the HTML, and the sandbox is refused *.vercel.app anyway.
+  "render": {
+    script: "scripts/render-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+  },
+  // Read-only: how long each free news adapter actually takes, cold, against
+  // the real hosts. Asked before choosing a per-adapter timeout budget, because
+  // the sandbox cannot reach any of the three and a guessed budget is a guess.
+  "news-timing": { script: "scripts/news-timing-probe.mjs", args: () => [] },
   // Read-only, NO NETWORK AT ALL: inventories the frozen dump already on the
   // runner. Asked before building the static-profile snapshot, because if the
   // dump carries the taxonomy the snapshot costs no FMP calls whatsoever.

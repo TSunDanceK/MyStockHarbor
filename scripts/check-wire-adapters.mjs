@@ -45,6 +45,13 @@ let src = read("lib/server/news/wireProvider.ts")
   .replace(/^import \{ stripHtmlTags, containsHtmlMarkup, decodeHtml, cleanRssDescription \} from ".\/text";$/m,
     () => read("lib/server/news/text.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  // The timing helpers, inlined rather than stubbed: they are no-ops unless
+  // MSH_TIMING=1, so running the real ones proves the per-feed instrumentation
+  // cannot change what the adapter parses. Added when pollAll started timing
+  // each wire host separately -- the fan-out timer blamed "wire" for 70s and
+  // could not say which of the two feeds it was.
+  .replace(/^import \{ beginTiming \} from "\.\.\/timing";$/m,
+    () => read("lib/server/timing.ts").replace(/^export /gm, ""))
   .replace("export const wireProvider: NewsProvider =", "export const wireProvider =")
   .replace(/export function imageVerdictFor\(imageUrl: string \| null, credit: string \| null\): NewsItem\["imageVerdict"\]/,
            "export function imageVerdictFor(imageUrl, credit)")
@@ -283,6 +290,22 @@ check(
       /symbolConfirmedNews\.length/.test(code);
   })(),
   "if this stops being a hard preference, the decision above is worth revisiting"
+);
+
+console.log("\n=== PER-FEED TIMING ===\n");
+// THE FAN-OUT TIMER BLAMED "wire" FOR 70,630ms ON A REAL RENDER and could not
+// say which of the two hosts it was, because this adapter polls both. That is
+// the next diagnosis, so the instrumentation that answers it is pinned: a
+// mutation removing the line escaped every other assertion in this suite.
+check(
+  "each wire feed is timed separately",
+  /beginTiming\("news", `wireFeed \$\{source\.id\}`\)/.test(readCodeOnly("lib/server/news/wireProvider.ts")),
+  "a combined wire number cannot name the host that hangs"
+);
+check(
+  "...and the timer is ended in a finally, so a failing feed is still timed",
+  /finally \{\s*endPoll\(\);\s*\}/.test(readCodeOnly("lib/server/news/wireProvider.ts")),
+  "the hanging case is precisely the one worth measuring"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
