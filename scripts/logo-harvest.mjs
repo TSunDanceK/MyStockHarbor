@@ -70,12 +70,28 @@ async function runPool(items, worker, size) {
 
 async function harvest(symbol) {
   const url = `https://images.financialmodelingprep.com/symbol/${encodeURIComponent(symbol)}.png`;
-  let res;
-  try {
-    res = await fetch(url, { headers: { "User-Agent": UA }, redirect: "follow" });
-  } catch (err) {
-    return { symbol, ok: false, reason: `fetch-failed: ${String(err?.message ?? err)}` };
+
+  // ONE RETRY ON A TRANSPORT ERROR OR A 5xx, and none on a 404. A 404 is the
+  // CDN's real answer and retrying it just doubles the request count, but a
+  // dropped connection is not an answer at all -- and across 2,653 calls a
+  // single transient failure would otherwise write a WRONG MANIFEST: the symbol
+  // would be silently absent, so TickerLogo would never ask for a file that
+  // should exist. Phase 0 saw zero errors, so this should never fire; it is
+  // here because the failure it prevents is invisible rather than loud.
+  let res = null;
+  let transport = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      res = await fetch(url, { headers: { "User-Agent": UA }, redirect: "follow" });
+      transport = null;
+      if (res.status < 500) break;
+    } catch (err) {
+      res = null;
+      transport = String(err?.message ?? err);
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
   }
+  if (!res) return { symbol, ok: false, reason: `fetch-failed after retry: ${transport}` };
   if (!res.ok) return { symbol, ok: false, reason: `no-logo-on-cdn (HTTP ${res.status})` };
 
   const input = Buffer.from(await res.arrayBuffer());
