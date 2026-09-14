@@ -26,10 +26,12 @@
 // parseTickerFile. Nothing here reimplements a parser. A capture script with its
 // own index parser would produce a fixture that agrees with itself and with
 // nothing else.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { emitPayload } from "./lib/relay-capture.mjs";
 
 const UA =
   process.env.PROBE_USER_AGENT ??
@@ -117,7 +119,14 @@ console.log(`SEC WINDOW FIXTURE — ${FROM}..${TO}`);
 // matched-symbol count does not equal the live run's, the fixture describes a
 // slightly different set and the check must say so rather than assert a number
 // it did not produce.
-const supplied = (process.env.SYMBOLS ?? "").split(/[,\s]+/).filter(Boolean).map((s) => s.toUpperCase());
+// THE UNIVERSE OVERRIDE RIDES ON `PAYERS`, NOT `SYMBOLS`.
+//
+// relay-capture.mjs claims `SYMBOLS` as the payload SELECTOR -- one payload per
+// dispatch, chosen by that input, so no workflow file has to change. Reusing it
+// for the universe too would mean asking for the payload silently replaced the
+// universe with the single word "window-fixture". PAYERS is already forwarded
+// and unused by this task.
+const supplied = (process.env.PAYERS ?? "").split(/[,\s]+/).filter(Boolean).map((s) => s.toUpperCase());
 let universe;
 if (supplied.length) {
   universe = [...new Set(supplied)];
@@ -125,7 +134,7 @@ if (supplied.length) {
 } else {
   const p = path.join(DIR, "universe.json");
   if (!fs.existsSync(p)) {
-    console.error(`FATAL: no universe.json in ${DIR} and no SYMBOLS given.`);
+    console.error(`FATAL: no universe.json in ${DIR} and no PAYERS override given.`);
     process.exit(2);
   }
   universe = [...new Set((JSON.parse(fs.readFileSync(p, "utf8"))?.pickersSymbolsKey ?? []).map(String))];
@@ -206,7 +215,7 @@ fs.writeFileSync(
     {
       capturedAt: new Date().toISOString(),
       window: { from: FROM, to: TO },
-      universeSource: supplied.length ? "SYMBOLS env (live set)" : `${DIR}/universe.json (frozen dump)`,
+      universeSource: supplied.length ? "PAYERS env (live set)" : `${DIR}/universe.json (frozen dump)`,
       universeSize: universe.length,
       resolvedWithCik: Object.keys(pseudoManifest.symbols).length,
       days,
@@ -225,3 +234,17 @@ fs.writeFileSync(
   )
 );
 console.log(`\nwrote ${OUT} — ${filings.length} real filing rows, ready for applyFilings.`);
+
+// ── GET IT BACK INTO THE REPO ────────────────────────────────────────────────
+// The artifact this job uploads is for a human with a browser: the download API
+// redirects to *.blob.core.windows.net, which the agent sandbox refuses with
+// 403 CONNECT (re-confirmed today, after relay-capture.mjs had already recorded
+// it). stdout is the only route back, so the payload is emitted LAST, byte
+// accounted, in the compact one-line-per-filing form applyFilings needs.
+const compact = filings.map((f) => `${f.symbol}|${f.form}|${f.filed}|${f.accession}`).join("\n");
+console.log(
+  `\npayload sha256: ${crypto.createHash("sha256").update(compact, "utf8").digest("hex")}  ` +
+    `(${filings.length} lines) — verify after reassembly, because a payload short by its ` +
+    `last rows still parses`
+);
+emitPayload("window-fixture", compact);
