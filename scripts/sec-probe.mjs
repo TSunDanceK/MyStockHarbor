@@ -26,15 +26,41 @@ const HEADERS = { "user-agent": UA, accept: "application/json" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- universe
-let universe = [];
+//
+// ── THE DENOMINATOR IS SERVED SYMBOLS, NOT SCREENED ONES ───────────────────
+// This built the map from pickersSymbolsKey alone, which produced a map of 695
+// entries against 2,619 symbols the site actually has data for -- a 73.5% miss
+// rate, measured in claude/cik-map-coverage-2026-09-14.md. The misses were not
+// exotic: A, AAL, ADSK, ACGL, AOS. All SEC filers with real CIKs.
+//
+// The mistake was the denominator, not the data. secProvider.fetchForSymbol is
+// called for ANY symbol whose stock page is viewed, and stock pages are not
+// restricted to the pickers universe, so every symbol outside it got [] from
+// the SEC leg permanently -- by construction, on every render, visible only as
+// a console.warn nobody reads.
+//
+// So: the UNION of the pickers universe and data/static-profile.json's rows.
+// The union rather than the snapshot alone because a universe symbol missing
+// from the snapshot must not be dropped by the widening -- widening a
+// denominator should never lose a member of the old one.
+let pickers = [];
 if (DUMP_DIR) {
   const p = path.join(DUMP_DIR, "universe.json");
   if (fs.existsSync(p)) {
-    universe = [...new Set((JSON.parse(fs.readFileSync(p, "utf8"))?.pickersSymbolsKey ?? [])
-      .map((s) => String(s).toUpperCase()))].sort();
+    pickers = (JSON.parse(fs.readFileSync(p, "utf8"))?.pickersSymbolsKey ?? [])
+      .map((s) => String(s).toUpperCase());
   }
 }
-console.log(`[sec] universe symbols: ${universe.length}`);
+// Committed, so this half works with no dump dir and no credentials at all.
+const profileRows = Object.keys(
+  JSON.parse(fs.readFileSync(path.join(process.cwd(), "data/static-profile.json"), "utf8"))?.rows ?? {}
+).map((s) => s.toUpperCase());
+
+const universe = [...new Set([...pickers, ...profileRows])].sort();
+console.log(
+  `[sec] universe symbols: ${universe.length} ` +
+    `(pickers ${new Set(pickers).size} ∪ static-profile ${new Set(profileRows).size})`
+);
 console.log(`[sec] user-agent: ${JSON.stringify(UA)}`);
 
 // ------------------------------------------------- ticker -> CIK, from SEC
@@ -59,7 +85,14 @@ for (const row of rows) {
 
 const hits = universe.filter((s) => bySymbol.has(s));
 const misses = universe.filter((s) => !bySymbol.has(s));
-console.log(`[sec] universe symbols with a CIK: ${hits.length}/${universe.length}`);
+console.log(
+  `[sec] universe symbols with a CIK: ${hits.length}/${universe.length} ` +
+    `(${((100 * hits.length) / Math.max(1, universe.length)).toFixed(1)}%)`
+);
+// A miss HERE is a real one -- a symbol SEC's own file does not carry (an ADR,
+// a fund, a class share spelled differently). That is a different fact from the
+// misses this widening fixed, which were symbols nobody ever asked about, and
+// the two must not be read as the same number.
 if (misses.length) console.log(`[sec] no CIK for: ${misses.slice(0, 25).join(", ")}${misses.length > 25 ? ` …+${misses.length - 25}` : ""}`);
 
 // THE TRIMMED MAP. Padded to the 10-digit form data.sec.gov wants, so the

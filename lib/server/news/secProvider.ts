@@ -247,10 +247,18 @@ async function fetchForSymbol(
   const cik = CIK_BY_SYMBOL[upper];
 
   if (!cik) {
-    // THE REFRESH TRIGGER FOR data/cik-map.json, and the reason it is a log line
-    // rather than a calendar reminder: the map is trimmed to the universe, so a
-    // symbol entering the universe is exactly when it needs regenerating, and
-    // this is the event that says so.
+    // THE REFRESH TRIGGER FOR data/cik-map.json.
+    //
+    // CORRECTED 2026-09-14. This used to say the map is trimmed to the universe
+    // so "a symbol entering the universe is exactly when it needs
+    // regenerating". That described misses that are transient and self-
+    // announcing. The real ones were not: the map was built against the PICKERS
+    // universe while this function is called for any symbol with a stock page,
+    // so 1,924 of 2,619 profiled symbols -- 73.5%, AOS among them -- had no CIK
+    // permanently, and regenerating against the same denominator fixed none of
+    // them. scripts/sec-probe.mjs now builds against the union with
+    // data/static-profile.json's rows.
+    // See claude/cik-map-coverage-2026-09-14.md.
     console.warn(`[sec] ${upper}: no CIK in data/cik-map.json — regenerate it (relay task "sec", symbols=cik-map)`);
     return [];
   }

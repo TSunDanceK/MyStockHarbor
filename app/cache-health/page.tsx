@@ -16,7 +16,13 @@ import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/staleness
 import { readJobRuns } from "@/lib/server/jobRuns";
 import { newsProviderMode, activeNewsProviders, feedMaxAgeDays } from "@/lib/server/news";
 import { readNewsProviderStats } from "@/lib/server/newsStore";
-import { SNAPSHOT_AS_OF, SNAPSHOT_SIZE } from "@/lib/server/staticProfile";
+import {
+  SNAPSHOT_AS_OF,
+  SNAPSHOT_SIZE,
+  CIK_MAP_SIZE,
+  CIK_COVERED,
+  CIK_MISSING,
+} from "@/lib/server/staticProfile";
 
 // MANDATORY, NOT A PREFERENCE. lib/server/backfillAuth.ts:16 builds a bare
 // `Redis.fromEnv()` with no PAGE_READ_CACHE, so every call this page makes
@@ -366,6 +372,31 @@ export default async function CacheHealthPage({
             Static profile snapshot: {SNAPSHOT_SIZE.toLocaleString()} symbols, captured {SNAPSHOT_AS_OF}.
             Sector and industry fall through to it when the cache has nothing; a symbol in neither
             logs <code>[static-profile]</code> and draws the generated card.
+          </p>
+
+          {/* ── CIK COVERAGE ──────────────────────────────────────────────
+              A symbol with no CIK gets [] from the SEC adapter on EVERY render,
+              permanently, and says so only through a per-request console.warn.
+              That kept a 73.5% gap invisible for as long as it existed: the map
+              was built against the PICKERS universe while the adapter is called
+              for any symbol with a stock page, so 1,924 of 2,619 profiled
+              symbols — AOS among them — had a structurally empty SEC leg.
+              claude/cik-map-coverage-2026-09-14.md.
+
+              FREE: both inputs are JSON imported at build time, so this is
+              arithmetic over two module-level objects. No Redis, no fetch. */}
+          <p style={{ color: CIK_MISSING ? "#eab308" : "#94a3b8", fontSize: 12, marginTop: 10 }}>
+            CIK map: {CIK_MAP_SIZE.toLocaleString()} symbols — covers{" "}
+            {CIK_COVERED.toLocaleString()} of the {SNAPSHOT_SIZE.toLocaleString()} profiled (
+            {((100 * CIK_COVERED) / Math.max(1, SNAPSHOT_SIZE)).toFixed(1)}%).
+            {CIK_MISSING > 0 ? (
+              <>
+                {" "}
+                <strong>{CIK_MISSING.toLocaleString()} profiled symbols have no CIK</strong> and get an
+                empty SEC leg on every render. Regenerate with the relay task <code>sec</code>,{" "}
+                <code>symbols=cik-map</code>.
+              </>
+            ) : null}
           </p>
         </section>
 

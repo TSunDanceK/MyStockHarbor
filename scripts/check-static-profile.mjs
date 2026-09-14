@@ -34,9 +34,15 @@ const check = (label, ok, detail = "") => {
 const src = read("lib/server/staticProfile.ts")
   .replace(/^import snapshotFile from "@\/data\/static-profile.json";$/m,
     () => `const snapshotFile = ${read("data/static-profile.json")};`)
+  // The CIK map, inlined for the same reason as the snapshot: the coverage
+  // constants are computed from BOTH files, so a stub would make the coverage
+  // number describe the stub. Real data or no assertion.
+  .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
+    () => `const cikMap = ${read("data/cik-map.json")};`)
   .replace(/^export type StaticProfileRow = \{[\s\S]*?^\};$/m, "")
   .replace(/^type SnapshotFile = \{[\s\S]*?^\};$/m, "")
   .replace("const SNAPSHOT = snapshotFile as unknown as SnapshotFile;", "const SNAPSHOT = snapshotFile;")
+  .replace("const CIK_BY_SYMBOL = cikMap as unknown as Record<string, string>;", "const CIK_BY_SYMBOL = cikMap;")
   .replace("export const SNAPSHOT_AS_OF: string = SNAPSHOT.asOf;", "export const SNAPSHOT_AS_OF = SNAPSHOT.asOf;")
   .replace("export const SNAPSHOT_SIZE: number = Object.keys(SNAPSHOT.rows ?? {}).length;",
            "export const SNAPSHOT_SIZE = Object.keys(SNAPSHOT.rows ?? {}).length;")
@@ -135,6 +141,114 @@ check("spot checks against reality",
   snapshot.rows.XOM?.sector === "Energy" &&
   snapshot.rows.MU?.industry === "Semiconductors",
   "AAPL, JPM, XOM, MU");
+
+console.log("\n=== 2b. CIK COVERAGE — the gap that was invisible ===\n");
+
+// A symbol with no CIK gets [] from the SEC adapter on EVERY render, forever,
+// and says so only through a per-request console.warn. That is how a 73.5% gap
+// survived: the map was built against the PICKERS universe while the adapter is
+// called for any symbol with a stock page.
+// claude/cik-map-coverage-2026-09-14.md.
+const cikMap = JSON.parse(read("data/cik-map.json"));
+check(
+  "the coverage constants are computed from the real files, not from a stub",
+  sp.CIK_MAP_SIZE === Object.keys(cikMap).length && sp.CIK_MAP_SIZE > 0,
+  `${sp.CIK_MAP_SIZE} entries`
+);
+check(
+  "covered + missing accounts for every profiled symbol",
+  sp.CIK_COVERED + sp.CIK_MISSING === sp.SNAPSHOT_SIZE,
+  "a coverage figure that does not sum to the denominator is not a coverage figure"
+);
+check(
+  "coverage is counted by MEMBERSHIP, not by comparing two totals",
+  (() => {
+    // THIS ASSERTION USED TO BE WORTHLESS and the mutation suite said so:
+    // replacing the membership count with Math.min(mapSize, profiledSize)
+    // SURVIVED, because the CIK map is a strict subset of the snapshot today so
+    // both give 695. Against the live data the two implementations are
+    // indistinguishable, and no amount of care in phrasing the assertion changes
+    // that -- the data cannot tell them apart.
+    //
+    // So the function is handed a case where they DO differ: a map carrying a
+    // symbol the snapshot does not. Membership says 1 of 2 covered; the
+    // shortcut says min(3, 2) = 2, and missing would be 0 instead of 1.
+    const got = sp.cikCoverage(
+      { AAA: {}, BBB: {} },
+      { AAA: "1", ZZZ: "2", YYY: "3" }
+    );
+    return got.covered === 1 && got.missing === 1 && got.profiled === 2 && got.mapSize === 3;
+  })(),
+  "a difference of totals is right only while the map is a subset, and nothing enforces that"
+);
+check(
+  "...and the constants agree with that function on the live data",
+  sp.CIK_COVERED === sp.cikCoverage(snapshot.rows, cikMap).covered &&
+    sp.CIK_MISSING === sp.cikCoverage(snapshot.rows, cikMap).missing &&
+    sp.CIK_MAP_SIZE === Object.keys(cikMap).length,
+  "necessary but NOT sufficient — see the next assertion for why"
+);
+check(
+  "...and they are ASSIGNED from it, not recomputed beside it",
+  (() => {
+    // THE NUMERIC CHECK ABOVE CANNOT CATCH THIS, and pretending otherwise is how
+    // an assertion ends up decorative. A mutation setting
+    // CIK_COVERED = Math.min(mapSize, profiled) survived every numeric assertion
+    // here, because on today's data min(695, 2619) IS 695. The two agree until
+    // the map is widened, which is precisely when someone will be reading this
+    // number to decide whether the widening worked.
+    //
+    // Structure is the only discriminator left: the constants must be plain
+    // reads off the tested function's result.
+    const code = readCodeOnly("lib/server/staticProfile.ts");
+    return /export const CIK_MAP_SIZE: number = COVERAGE\.mapSize;/.test(code) &&
+      /export const CIK_COVERED: number = COVERAGE\.covered;/.test(code) &&
+      /export const CIK_MISSING: number = COVERAGE\.missing;/.test(code) &&
+      /const COVERAGE = cikCoverage\(SNAPSHOT\.rows \?\? \{\}, CIK_BY_SYMBOL\);/.test(code);
+  })(),
+  "a tested function beside an untested inline copy is an untested page"
+);
+check(
+  "AOS — the case this was found through — is profiled, and the count accounts for it",
+  (() => {
+    // DELIBERATELY NOT "AOS has no CIK". That would be a tripwire that fails the
+    // day the map is regenerated, i.e. the day the problem is FIXED, and an
+    // assertion you have to delete to ship the fix trains people to delete
+    // assertions. What is permanent is that AOS is profiled and served, so it
+    // must land on one side of the tally or the other -- never neither.
+    if (!("AOS" in snapshot.rows)) return false;
+    return "AOS" in cikMap ? sp.CIK_COVERED > 0 : sp.CIK_MISSING > 0;
+  })(),
+  "AOS" in cikMap
+    ? "covered — the map has been regenerated since this was written"
+    : "profiled, served, and structurally zero on the SEC leg until the map is regenerated"
+);
+check(
+  "the misses are ordinary US common stock, not exotica",
+  (() => {
+    // If the gap were ADRs, funds and class shares, widening the denominator
+    // would be the wrong fix and the right one would be accepting the misses.
+    // It is not: 1,893 of 1,924 are plain <=4-letter tickers.
+    const miss = Object.keys(snapshot.rows).filter((s) => !(s in cikMap));
+    const plain = miss.filter((s) => s.length <= 4 && !/[.-]/.test(s));
+    return miss.length > 0 && plain.length / miss.length > 0.9;
+  })(),
+  "a gap made of ADRs would be a data fact; a gap made of AAL and ADSK is a denominator mistake"
+);
+check(
+  "the generator builds against the union, not the pickers universe alone",
+  (() => {
+    const probe = readCodeOnly("scripts/sec-probe.mjs");
+    return /static-profile\.json/.test(probe) &&
+      /new Set\(\[\.\.\.pickers, \.\.\.profileRows\]\)/.test(probe);
+  })(),
+  "regenerating against the old denominator would fix none of the 1,924"
+);
+check(
+  "...and the union cannot LOSE a pickers symbol while widening",
+  /\[\.\.\.pickers, \.\.\.profileRows\]/.test(readCodeOnly("scripts/sec-probe.mjs")),
+  "swapping the snapshot in for the universe would drop any universe symbol the snapshot lacks"
+);
 
 console.log("\n=== 3. LOOKUP ORDER: cache, then snapshot, then null ===\n");
 check(

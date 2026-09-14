@@ -280,12 +280,22 @@ check(
 console.log("\n=== 6. THE SNAPSHOT IS READ BY RUNNING CODE, NOT JUST IMPORTED ===\n");
 
 // The lookup, loaded the same way check-static-profile.mjs loads it.
-const spSrc = read("lib/server/staticProfile.ts").replace(
-  /^import snapshotFile from "@\/data\/static-profile.json";$/m,
-  () => `const snapshotFile = ${read("data/static-profile.json")};`
-);
+const spSrc = read("lib/server/staticProfile.ts")
+  .replace(/^import snapshotFile from "@\/data\/static-profile.json";$/m,
+    () => `const snapshotFile = ${read("data/static-profile.json")};`)
+  // The CIK map, which staticProfile gained when the coverage figures moved
+  // there. Real data rather than a stub, for the same reason as the snapshot:
+  // a stubbed map makes a coverage number that describes the stub.
+  .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
+    () => `const cikMap = ${read("data/cik-map.json")};`);
 if (/^import /m.test(spSrc)) {
-  console.error("FAIL: the snapshot JSON was not inlined into staticProfile.ts.");
+  // NAME THE SURVIVOR. This used to say "the snapshot JSON was not inlined",
+  // which was a guess: the actual cause was a DIFFERENT import being added to
+  // the module, and the message sent the reader to the one thing that was fine.
+  console.error(
+    "FAIL: an import survived inlining into staticProfile.ts:\n" +
+      spSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n")
+  );
   process.exit(1);
 }
 const spFile = path.join(ROOT, ".check-providerflip-sp.mjs");
