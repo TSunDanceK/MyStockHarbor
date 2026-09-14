@@ -293,10 +293,43 @@ type nobody enumerated cannot become an included symbol.
 ARM and BIDU are there because a rule can pass GSK and still be wrong; GSK is
 there so a future simplification cannot pass on the parenthetical alone.
 
-**BIDU and GSK are stored as captured prefixes, marked `TRUNCATED`** — the live
-values ran past the console width, and the visible part carries the marker under
-test. They are not full names and the check says so rather than completing them
-by guesswork.
+**All 27 names are now complete captures** — the earlier truncation was a
+62-character slice in the capture probe, not the file. The fixture holds 10 ADRs,
+4 plain commons and share classes, 7 preferreds/notes/warrants/units.
+
+#### The equity markers were doing nothing for four of the ADRs
+
+The full text describes the underlying **in the singular and lower case**:
+
+```
+BIDU  "...each representing 8 ordinary share"
+VALE  "...Each Representing one common share"
+ABEV  "(Each representing 1 Common Share)"
+ZTO   "...one Class A ordinary share."
+```
+
+A plural-only pattern matched **none** of those four. They still passed — on the
+ADR marker alone — so every test was green while the equity markers contributed
+nothing, and a **non-ADR** filer using singular wording would have fallen to
+`unknown`. Widened to `common (stock|share|shares)` and
+`ordinary (stock|share|shares)`, and the check now asserts the widening took
+effect rather than trusting it.
+
+The complementary assertion matters as much: the **ADR marker is the only thing
+carrying ARM, LYG, GMAB, EC and SAN** — five of ten, whose names never say what
+the receipt represents. Remove it and half the ADR population falls through.
+
+`Sponsored ADR` is **not redundant** with `American Depositary Shares`: SAN is
+the only one of 25 using that wording, and the check asserts its name contains no
+"American Depositary" at all.
+
+#### The exchange's strings are hand-maintained
+
+`BAC$K` carries a typo in the source — **"Non- Cumulative"**, with a space after
+the hyphen. Harmless here, because the reject fires on the single word
+"Preferred", and the fixture preserves it rather than silently correcting it. It
+is the standing reminder that **a pattern keyed on exact phrasing will eventually
+meet one of these**, which is the argument for single-word markers over phrases.
 
 #### THE COUNT IS 5 OF 7, NOT 7 OF 7
 

@@ -117,15 +117,28 @@ const SECURITY_TYPE_MARKER =
 // now catches "Class A Preferred Stock" -- the belt to that braces, and the
 // same failure one level down if it were removed.
 const EQUITY_MARKER = [
-  /\bcommon stock\b/i,
-  /\bcommon shares?\b/i,
-  /\bordinary shares?\b/i,
+  // SINGULAR-TOLERANT, because the exchange describes the underlying in the
+  // singular and in lower case:
+  //   BIDU  "...each representing 8 ordinary share"
+  //   VALE  "...Each Representing one common share"
+  //   ABEV  "(Each representing 1 Common Share)"
+  //   ZTO   "...one Class A ordinary share."
+  // A plural-only pattern matches NONE of those four. They would still be
+  // accepted on the ADR marker alone -- the rule working as designed -- but the
+  // equity markers would be doing nothing, and a NON-ADR filer using singular
+  // wording would fall through to unknown.
+  /\bcommon (?:stock|shares?)\b/i,
+  /\bordinary (?:stock|shares?)\b/i,
   /\bclass\s+[A-Z0-9]+\s+(?:common|capital|ordinary)\s+(?:stock|shares?)\b/i,
-  // The ADR forms. ARM's full name is exactly "Arm Holdings plc - American
-  // Depositary Shares" with nothing after it, so anything requiring the
-  // underlying to be spelled out excludes the largest population in the universe.
-  /\bamerican depositary shares?\b/i,
-  /\bamerican depositary receipts?\b/i,
+  // The ADR forms, and BOTH spellings are load-bearing rather than redundant:
+  // SAN is "Banco Santander, S.A. Sponsored ADR (Spain)" and is the only one of
+  // 25 that does not say "American Depositary Shares".
+  //
+  // ARM's full name is exactly "Arm Holdings plc - American Depositary Shares"
+  // with nothing after it, so any rule requiring the underlying to be spelled
+  // out excludes the largest population in the universe.
+  /\bamerican depositary (?:shares?|receipts?)\b/i,
+  /\bsponsored ADRs?\b/i,
   /\bADRs?\b/,
 ];
 
