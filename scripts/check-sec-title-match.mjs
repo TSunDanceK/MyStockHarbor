@@ -140,6 +140,91 @@ check(
   `${PARTIAL_FLOOR}`
 );
 
+console.log("\n=== 3b. THE TWO SHAPES THAT DEFEATED A TOKEN FLOOR ===\n");
+
+// RUN 49'S ONLY TWO MATCHABLE SYMBOLS WERE BOTH BANKS, and both scored nothing
+// for reasons that were about our tokeniser rather than about SEC.
+//
+// THESE TITLES ARE HYPOTHESISED, NOT OBSERVED. We do not have SEC's actual
+// titles for NBN or TOWN — the whole point of the next run is to get them. So
+// what is asserted here is a CAPABILITY: if the title has this shape, the
+// matcher now surfaces it as a candidate. Whether it does is for the run to
+// say, and these assertions must not be read as a claim that it will.
+check(
+  "a compound-word spacing difference is caught — 'Towne Bank' vs 'TOWNEBANK'",
+  scoreNames("Towne Bank", "TOWNEBANK").tier === "compound",
+  "zero shared tokens and score 0 under the old rule: not a weak match, an invisible one"
+);
+check(
+  "...and word ORDER still matters — 'Bank Towne' is not 'TOWNEBANK'",
+  scoreNames("Bank Towne", "TOWNEBANK").tier === "none",
+  "the first squash sorted the tokens, which broke the very case it was for AND " +
+    "would have matched any anagram of the words"
+);
+check(
+  "bank legal forms are FOLDED onto one token — 'Northeast Bank' vs 'NORTHEAST BANCORP'",
+  scoreNames("Northeast Bank", "NORTHEAST BANCORP").tier === "exact",
+  "1 of 3 shared tokens = 0.33 under the old rule, below the floor"
+);
+check(
+  "folded, NOT dropped — the form token still carries information",
+  (() => {
+    // Dropping BANK/BANCORP would make bare "Northeast" match either, which
+    // throws away a real distinction. Folding keeps the token and only equates
+    // its spellings.
+    return scoreNames("Northeast", "NORTHEAST BANCORP").tier !== "exact";
+  })(),
+  "a dropped form word makes every 'X' match every 'X Bank'"
+);
+check(
+  "two filers differing only by bank form now TIE, which sets ambiguous",
+  rankCandidates("Summit Bank", [
+    { ticker: "AAA", cik: "0000000001", title: "Summit Bancorp" },
+    { ticker: "BBB", cik: "0000000002", title: "Summit Bankshares" },
+  ]).ambiguous === true,
+  "folding is safe precisely BECAUSE two real candidates tie and refuse to confirm"
+);
+check(
+  "the corroborated cases are unmoved by any of this",
+  scoreNames("Fiserv, Inc.", "FISERV INC").tier === "exact" &&
+    scoreNames("The Bank of New York Mellon Corporation", "Bank of New York Mellon Corp").tier === "exact",
+  "BK's name contains 'Bank', so the fold had to be checked against it specifically"
+);
+check(
+  "the fold is confined to BANK spellings — it does not swallow sector words",
+  (() => {
+    // A mutation widening the alias map to FINANCIAL -> BANK and ALLIANCE ->
+    // BANK survived, because the pair I was testing differed by a second token
+    // anyway. The property is that a financial-services company and a bank with
+    // the same first word must NOT become the same filer.
+    return scoreNames("Summit Financial", "Summit Bank").tier !== "exact" &&
+      scoreNames("Summit Financial", "Summit Bancorp").tier !== "exact" &&
+      scoreNames("Summit Alliance", "Summit Bank").tier !== "exact";
+  })(),
+  "BANCORP and BANKSHARES are spellings of one legal form; FINANCIAL is a different word"
+);
+check(
+  "an EXACT candidate outranks a COMPOUND one when both are present",
+  (() => {
+    // Nothing else here has both tiers in the same candidate list, so a
+    // mutation swapping their rank survived. Identical tokens is a stricter
+    // agreement than same-characters-different-boundary, and must lead.
+    const r = rankCandidates("Towne Bank", [
+      { ticker: "AAA", cik: "0000000001", title: "TOWNEBANK" },
+      { ticker: "BBB", cik: "0000000002", title: "Towne Bank Inc" },
+    ]);
+    return r.topTier === "exact" && r.candidates[0].cik === "0000000002" &&
+      r.candidates[1].tier === "compound";
+  })(),
+  "both are surfaced — the reviewer sees both — but the stricter one leads"
+);
+check(
+  "and the rejections still reject",
+  scoreNames("Webster Financial Corporation", "Western Alliance Bancorporation").tier === "none" &&
+    scoreNames("First Bank", "First Solar, Inc.").tier === "none",
+  "two banks with different names must not meet just because both are banks"
+);
+
 console.log("\n=== 4. AMBIGUITY IS REPORTED, NEVER RESOLVED ===\n");
 
 // THE REAL AMBIGUITY SHAPE IS TWO FILERS DIFFERING ONLY BY LEGAL FORM, which
@@ -428,6 +513,47 @@ const SCRIPTS_THAT_MUST_RUN = [
 
 console.log("\n=== 6. IT CANNOT PASS BY MEASURING NOTHING ===\n");
 
+check(
+  "the raw substring search runs on the DOWNLOADED BYTES, before any parsing",
+  (() => {
+    // THE ONLY FORK THAT MATTERS: absent from the file, or dropped by us. It is
+    // worthless if it reads the parsed rows, so the raw text must be captured
+    // before parseDirectory and JSON.parse and searched directly.
+    const rawKept = /const nasdaqText = nasdaqRes\.ok \? await nasdaqRes\.text\(\)/.test(script) &&
+      /const secText = await res\.text\(\)/.test(script) &&
+      /JSON\.parse\(secText\)/.test(script);
+    const searchesRaw = /\[\["nasdaqlisted", nasdaqText\], \["otherlisted", otherText\]\]/.test(script) &&
+      /secText\.match\(new RegExp\(`"\$\{esc\}"`/.test(script);
+    return rawKept && searchesRaw;
+  })(),
+  "searching the parsed rows would measure our own filters again, which is the thing in question"
+);
+check(
+  "...and reports delimited AND loose hits, which fail differently",
+  /delimited=\$\{delimited\.length\} loose=\$\{loose\}/.test(script) &&
+    /quoted=\$\{quoted\} loose=\$\{looseSec\}/.test(script),
+  "a loose hit with no delimited hit means the symbol is in the file under another " +
+    "column or inside another word — a third answer neither alone would show"
+);
+check(
+  "the raw search states a verdict per symbol, and a narrow one",
+  (() => {
+    // The three outcomes must be distinguishable in the output, or the reader
+    // is back to inferring from counts. And the absent case must NOT assert a
+    // rename: "not listed under this spelling" is what the bytes support.
+    return /PRESENT IN BOTH RAW SOURCES — if we reported it missing, the bug is ours/.test(script) &&
+      /PRESENT IN \$\{inDirectory \? "THE DIRECTORY" : "SEC"\} ONLY/.test(script) &&
+      /ABSENT FROM BOTH RAW SOURCES — not currently listed under this spelling/.test(script) &&
+      /the successor is a separate question/.test(script);
+  })(),
+  "the fork is absent-vs-dropped; naming a successor is a further claim needing further evidence"
+);
+check(
+  "the 'REAL negative' gloss is gone",
+  !/REAL negative/.test(script) &&
+    /statement about this matcher, NOT evidence the filer is absent/.test(script),
+  "the SEARCH was exhaustive; the MATCHER is not, and TOWN proved the difference"
+);
 check(
   "the script refuses to continue if SEC's file does not return 200",
   /FATAL: company_tickers\.json did not return 200/.test(script),

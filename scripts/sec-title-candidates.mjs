@@ -105,8 +105,12 @@ const [nasdaqRes, otherRes] = await Promise.all([
   fetch(OTHER_LISTED_URL, { headers: { "user-agent": UA } }),
 ]);
 console.log(`[titles] nasdaqlisted.txt: HTTP ${nasdaqRes.status}, otherlisted.txt: HTTP ${otherRes.status}`);
-const nasdaqRows = nasdaqRes.ok ? parseDirectory(await nasdaqRes.text()) : [];
-const otherRows = otherRes.ok ? parseDirectory(await otherRes.text()) : [];
+// RAW TEXT KEPT, deliberately, for the substring search below. It is the only
+// thing that separates "absent from the file" from "dropped by our own parser".
+const nasdaqText = nasdaqRes.ok ? await nasdaqRes.text() : "";
+const otherText = otherRes.ok ? await otherRes.text() : "";
+const nasdaqRows = parseDirectory(nasdaqText);
+const otherRows = parseDirectory(otherText);
 console.log(`[titles] directory rows: nasdaqlisted ${nasdaqRows.length}, otherlisted ${otherRows.length}`);
 
 // MEASURING-NOTHING GUARD, AND IT IS THE ONE THAT JUST EARNED ITS PLACE. A
@@ -152,7 +156,8 @@ if (!res.ok) {
   console.error("FATAL: company_tickers.json did not return 200 — nothing below is meaningful.");
   process.exit(1);
 }
-const rows = Object.values(await res.json()).map((r) => ({
+const secText = await res.text();
+const rows = Object.values(JSON.parse(secText)).map((r) => ({
   ticker: String(r?.ticker ?? "").toUpperCase(),
   cik: String(r?.cik_str ?? "").padStart(10, "0"),
   title: String(r?.title ?? ""),
@@ -170,6 +175,77 @@ if (!rows.length || !control.length) {
 }
 console.log(`[titles] control: FISERV present as ${control.map((c) => `${c.ticker}/${c.cik}`).join(", ")}`);
 
+// ── THE RAW SUBSTRING SEARCH: is it absent, or did WE drop it? ────────────
+// EIGHT SYMBOLS WERE MISSING FROM BOTH NATIONAL SOURCES — AVB, BK, EA, EQR, FI,
+// K, MMC, WBS — after run 49. Two independent national listings both missing
+// eight large, currently-traded US companies is not plausible as a fact about
+// the world; it points at a common cause on our side.
+//
+// THIS IS THE ONLY FORK THAT MATTERS AND NOTHING HAD TESTED IT. Every previous
+// run measured what survived OUR parsing. This searches the bytes as
+// downloaded, before any parse, filter or normalisation:
+//
+//   present in the raw bytes + reported missing  -> the bug is entirely ours,
+//                                                   and runs 47-49 have been
+//                                                   measuring our own filters
+//   absent from the raw bytes                    -> a fact about the source,
+//                                                   and the question moves
+//
+// Three forms per source, because they fail differently: a DELIMITED hit is the
+// symbol in its own field, a QUOTED hit is SEC's JSON key form, and a LOOSE
+// count is every occurrence anywhere. A symbol with a loose hit but no
+// delimited one is in the file under some other column or inside another word,
+// which is a third answer neither of the first two would show.
+console.log("\n[raw] substring search of the DOWNLOADED BYTES, before any parsing\n");
+const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+for (const symbol of unresolved) {
+  const esc = escapeRe(symbol);
+  const report = [];
+
+  for (const [label, text] of [["nasdaqlisted", nasdaqText], ["otherlisted", otherText]]) {
+    if (!text) { report.push(`${label}: (not downloaded)`); continue; }
+    const delimited = text.split("\n").filter((l) => new RegExp(`(^|\\|)${esc}\\|`).test(l));
+    const loose = (text.match(new RegExp(esc, "g")) ?? []).length;
+    report.push(`${label}: delimited=${delimited.length} loose=${loose}`);
+    for (const line of delimited.slice(0, 3)) report.push(`      ${line.slice(0, 160)}`);
+  }
+
+  const quoted = (secText.match(new RegExp(`"${esc}"`, "g")) ?? []).length;
+  const looseSec = (secText.match(new RegExp(esc, "g")) ?? []).length;
+  report.push(`company_tickers: quoted=${quoted} loose=${looseSec}`);
+  if (quoted) {
+    // The surrounding object, so the CIK and title travel with the hit.
+    for (const m of [...secText.matchAll(new RegExp(`.{0,120}"${esc}".{0,120}`, "g"))].slice(0, 2)) {
+      report.push(`      …${m[0]}…`);
+    }
+  }
+
+  // ── THE VERDICT THIS SUPPORTS, and it is a narrow one ────────────────
+  // A symbol absent from BOTH national sources, while present in our own
+  // snapshot, is by construction a symbol that is NOT CURRENTLY LISTED under
+  // that spelling. That is a definite statement and it does not require
+  // guessing why. The likely why is a RENAME: this repo already documents two
+  // (MMC -> MRSH 2026-01-14, FI -> FISV 2025-11-11, in
+  // lib/server/presetUniverse.ts), our snapshot is a frozen FMP capture that
+  // still carries the retired spelling, and in all three checked cases the
+  // SUCCESSOR is already in data/cik-map.json with a CIK.
+  //
+  // It is deliberately NOT asserted as a rename here. "Not listed under this
+  // spelling today" is what the bytes support; which symbol replaced it is a
+  // separate claim needing separate evidence.
+  const inDirectory = report.some((l) => /^(nasdaqlisted|otherlisted): delimited=[1-9]/.test(l));
+  const inSec = report.some((l) => /^company_tickers: quoted=[1-9]/.test(l));
+  const verdict = inDirectory || inSec
+    ? (inDirectory && inSec
+        ? "PRESENT IN BOTH RAW SOURCES — if we reported it missing, the bug is ours"
+        : `PRESENT IN ${inDirectory ? "THE DIRECTORY" : "SEC"} ONLY — our parsing or the other source`)
+    : "ABSENT FROM BOTH RAW SOURCES — not currently listed under this spelling " +
+      "(a rename is the likely why; the successor is a separate question)";
+
+  console.log(`  ${symbol} — ${verdict}`);
+  for (const line of report) console.log(`    ${line}`);
+}
+
 // ──────────────────────────────────────────────────────────────── the matching
 const report = [];
 for (const symbol of withNames) {
@@ -179,7 +255,15 @@ for (const symbol of withNames) {
 
   console.log(`\n[titles] ${symbol} — our name: ${JSON.stringify(ourName)}`);
   if (!candidates.length) {
-    console.log("    no candidate above the floor — a REAL negative, the file was searched in full");
+    // NOT "a REAL negative". The SEARCH was exhaustive; the MATCHER is not
+    // exhaustive, and conflating the two overstates what this line knows.
+    // Run 49 proved it: TOWN's "Towne Bank" against a TOWNEBANK-shaped title
+    // shares ZERO tokens and scores 0 — a spacing difference reported as an
+    // absence. The honest claim is about our matcher, not about SEC.
+    console.log(
+      "    no candidate above the floor — the whole file was searched, but that is a " +
+        "statement about this matcher, NOT evidence the filer is absent from SEC"
+    );
     continue;
   }
   if (ambiguous) console.log("    AMBIGUOUS: more than one filer at the top tier — do not confirm from this alone");

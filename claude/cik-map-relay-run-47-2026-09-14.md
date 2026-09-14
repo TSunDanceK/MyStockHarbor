@@ -81,14 +81,29 @@ spelling resolves to itself before any rewriting.
 
 ### The other ten: the join key is wrong
 
-**The stale-ticker-on-our-side hypothesis is dead.** Three of the ten resolve at
-SEC, and every one under a **different ticker string than ours**:
+**The stale-ticker-on-our-side hypothesis is dead.** The resolved cases are all
+present at SEC under a **different ticker string than ours**:
 
-| ours | SEC's | CIK | title |
+| ours | SEC's | CIK | status |
 |---|---|---|---|
-| MMC | `MRSH` | 62709 | MARSH & MCLENNAN COMPANIES, INC. |
-| FI | `FISV` | 798354 | FISERV INC |
-| BK | `BNY` | 1390777 | Bank of New York Mellon Corp |
+| FI | `FISV` | 0000798354 | **corroborated** — the run's own control line, twice |
+| BK | `BNY` | 0001390777 | **corroborated** — the four-missing-ciks note |
+| ~~MMC~~ | ~~`MRSH`~~ | ~~62709~~ | **WITHDRAWN 2026-09-14 — do not act on it** |
+
+> **Why MMC is withdrawn, and why it matters more than one symbol.** It came
+> only from reading SEC's 220 KB file through a summarising model. That same
+> channel later returned *"EQR → CIK 1650107 → COCA-COLA EUROPACIFIC PARTNERS
+> plc"* — **1650107 is CCEP**, so the channel had fabricated a field
+> association: a real CIK, a real company, bolted to the wrong symbol.
+>
+> A channel that mis-associates fields makes its POSITIVES worthless too, not
+> just its negatives. The earlier caveat here said only the negatives were
+> unreliable; that was too generous, and this corrects it. FI and BK survive
+> because each has independent corroboration — FI from the run's own control
+> line, BK from the prior note — not because they came from the same read.
+>
+> This is the same discipline the wire-egress probe needed: a measurement is
+> evidence for exactly what was measured, through a channel you can vouch for.
 
 Not one is a dead company, a delisting, or a gap in SEC's data. `data/cik-map.json`
 is built by intersecting our symbols with `company_tickers.json` **on the ticker
@@ -96,10 +111,9 @@ string**, and a ticker is a mutable label that the two sides update on different
 clocks. The company **name** is the stable thing. **The lookup is keyed on the
 wrong field.**
 
-**The seven NOT FOUNDs are not reliable negatives.** That spot-check read a
-220 KB file through a summarising model, where truncation and genuine absence
-produce an identical answer. Nothing in it says EA, AVB, EQR, K, WBS, NBN or
-TOWN are missing from SEC's file, and they are **not recorded either way** here.
+**Nothing from that channel is recorded either way** — neither the NOT FOUNDs
+(truncation and absence give an identical answer) nor the hits (see above).
+EA, AVB, EQR, K, WBS, NBN, TOWN and now MMC are open.
 
 ## 3a. One dispatch, not ten — `relay task "sec-titles"`
 
@@ -314,6 +328,124 @@ That is the fourth piece of unearned machinery in this work (`&` expansion,
 `shared >= 2`, structural-word dropping, and now this). Three were harmless and
 one was actively wrong. The common thread: each was added because it sounded
 prudent, and none was measured until a mutation asked.
+
+## 3f. Run 49, and the common cause — found in this repo, not on a runner
+
+    [titles] directory rows: nasdaqlisted 5596, otherlisted 7586
+    [titles] names available for 13700 symbols  →  covering 2/10 unresolved
+    [titles] NO NAME AVAILABLE …: AVB, BK, EA, EQR, FI, K, MMC, WBS
+    [titles] company-name snapshot: 2592/2620 universe symbols (128,918 bytes)
+
+Eight symbols absent from **both** national sources. Two independent national
+listings both missing eight large, currently-traded US companies is not
+plausible as a fact about the world — so the cause is ours.
+
+**It was already written down here, twice, and I had not read it.**
+`lib/server/presetUniverse.ts` and `scripts/check-symbol-eviction.mjs` both
+record:
+
+    MMC -> MRSH   2026-01-14, NYSE, with the rebrand to Marsh
+    FI  -> FISV   2025-11-11, NYSE -> Nasdaq, reinstating the original ticker
+
+Both are **ticker renames, not delistings**, raised by the hand-edit alarm
+(`presetNeedsHandEdit MMC, FI`) when FMP stopped serving bars weeks after each
+change. `presetUniverse.ts` was hand-edited to the new spellings.
+`data/static-profile.json` was **not** — it is a frozen FMP capture and still
+carries the retired ones.
+
+Measured across our own three datasets:
+
+| old | new | old in snapshot | new in snapshot | old has CIK | new has CIK |
+|---|---|---|---|---|---|
+| MMC | MRSH | ✓ | ✓ | ✗ | **0000062709** |
+| FI | FISV | ✓ | ✓ | ✗ | **0000798354** |
+| BK | BNY | ✓ | ✓ | ✗ | **0001390777** |
+
+The snapshot carries **both spellings**. The company is already in our data
+under its current symbol, with a CIK. The retired spelling is a stale duplicate
+that no national source can resolve because it is no longer listed.
+
+### I was wrong about FI, and the correction runs the other way
+
+I wrote that `FI` "inverts the stale-ticker hypothesis" — that our universe had
+the current ticker and SEC's file was the stale one. **That was backwards.** I
+read `FISV` as Fiserv's predecessor because that is the order it takes outside
+this repo; here the rename went `FI → FISV` on 2025-11-11 and the repo says so
+in two files I had not read.
+
+So the original hypothesis — a stale ticker on our side — was right, and the
+evidence for it was in the working tree the whole time. The lesson is narrower
+than "read more": **before reasoning about which of two tickers is newer, check
+whether this repo has already dated the change.** It had.
+
+### MMC/MRSH — withdrawn on one channel, re-established on another
+
+`MMC → MRSH → 62709` was withdrawn because it came from a model reading SEC's
+220 KB file, a channel that also produced `EQR → 1650107 → COCA-COLA
+EUROPACIFIC PARTNERS` — a fabricated field association. **That withdrawal
+stands, and the CIK is not being reinstated on that basis.**
+
+But `data/cik-map.json` — built by a runner from SEC's own file, byte-verified
+at 50,777 — carries `MRSH → 0000062709` independently. Same number, different
+and trustworthy provenance, and the rename half is documented in the repo.
+
+**Not acted on.** No alias map has been added and no CIK has been assigned to
+`MMC`. Whether the site should resolve a retired spelling at all — or simply
+stop carrying it — is a content decision, and the snapshot is the place it
+would be fixed. Flagged, not taken.
+
+### The remaining question, and what run 50 answers
+
+Five of the eight (AVB, EA, EQR, K, WBS) have no documented rename here, and
+NBN/TOWN have names but no SEC match. The raw substring search now prints a
+verdict per symbol:
+
+| verdict | reading |
+|---|---|
+| PRESENT IN BOTH RAW SOURCES | we reported it missing, so the bug is entirely ours |
+| PRESENT IN ONE ONLY | our parsing, or the other source |
+| ABSENT FROM BOTH | not currently listed under this spelling |
+
+The absent verdict deliberately does **not** assert a rename. "Not listed under
+this spelling" is what the bytes support; which symbol replaced it is a further
+claim needing further evidence.
+
+## 3g. The two "real negatives" overstated, and the fix
+
+`NBN` and `TOWN` were reported as "a REAL negative, the file was searched in
+full". The search was exhaustive; **the matcher is not**, and conflating them
+overstates what that line knows:
+
+| symbol | our name | likely title | old score |
+|---|---|---|---|
+| TOWN | Towne Bank | `TOWNEBANK` | `{TOWNE,BANK}` vs `{TOWNEBANK}` — **zero shared tokens, 0.00** |
+| NBN | Northeast Bank | `NORTHEAST BANCORP`-shaped | 1 of 3 = **0.33**, under the 0.6 floor |
+
+TOWN is not a weak match, it is an **invisible** one: tokenising put a boundary
+where the other side has none. Two fixes, both confined to the candidate tier
+where a human confirms every hit:
+
+**Compound spacing.** Tokens joined end to end, so `Towne Bank` meets
+`TOWNEBANK`. Its own tier, ranked just under `exact`, so a reviewer sees which
+rule fired. **Order is preserved** — the first version sorted, which broke the
+one case it existed for (`BANK`+`TOWNE` never meets `TOWNEBANK`) and would have
+matched any anagram.
+
+**Bank legal forms FOLDED, not dropped.** `BANCORP`/`BANCSHARES`/`BANKSHARES` →
+`BANK`. Dropping the token would make bare "Northeast" match either, throwing
+away a real distinction; folding keeps the token and only equates its spellings.
+It is safe precisely **because** two real candidates then tie and set
+`ambiguous`. Scoped to banks because that is where it was measured — run 49's
+only two matchable symbols were both banks — and no other sector gets an alias
+list without its own evidence.
+
+**These titles are hypothesised, not observed.** What is asserted is a
+capability: *if* the title has that shape, the matcher now surfaces it. Whether
+it does is for run 50 to say.
+
+**11/11 mutations killed**, after two survivors were closed: widening the fold
+to sector words like FINANCIAL, and swapping the rank of `exact` and
+`compound` — neither of which any existing fixture exercised.
 
 ## 4. One thing the run log corrected about the previous commit
 

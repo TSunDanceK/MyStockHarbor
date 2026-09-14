@@ -72,6 +72,37 @@ export const LEGAL_FORM_TOKENS = new Set([
 const STOPWORDS = new Set(["OF", "AND", "THE", "FOR", "A", "AN"]);
 
 /**
+ * Banking legal forms, folded onto one token.
+ *
+ * NOT DROPPED — FOLDED, and the difference is the whole design. "Northeast
+ * Bank" and "Northeast Bancorp" are the bank and its holding company, and SEC's
+ * filer is normally the holding company; those should meet. But DROPPING the
+ * form token would also make "Northeast" alone match either, which throws away
+ * a real distinction. Mapping every spelling onto BANK keeps the token present
+ * while making its spellings equivalent.
+ *
+ * IT DOES NOT DECIDE ANYTHING ON ITS OWN. If both "X Bank" and "X Bancorp"
+ * exist as separate filers they now tie at the same tier, which sets
+ * `ambiguous` and refuses to confirm — the correct outcome for two real
+ * candidates, and the reason folding is safe where dropping would not be.
+ *
+ * SCOPED TO BANKS BECAUSE THAT IS WHERE IT WAS MEASURED. Run 49's only two
+ * matchable symbols were both banks (NBN "Northeast Bank", TOWN "Towne Bank"),
+ * and Bank/Bancorp/Bancshares variation is a property of that sector's naming,
+ * not a general rule. No other sector gets an alias list without its own
+ * evidence.
+ */
+const BANK_FORM_ALIASES = new Map([
+  ["BANCORP", "BANK"],
+  ["BANCORPORATION", "BANK"],
+  ["BANCSHARES", "BANK"],
+  ["BANKSHARES", "BANK"],
+  ["BANCORPINC", "BANK"],
+  ["BANKING", "BANK"],
+  ["BANKS", "BANK"],
+]);
+
+/**
  * A name to its identifying tokens.
  *
  * WHAT ACTUALLY MAKES "Marsh & McLennan" WORK IS THE PUNCTUATION STRIP, not any
@@ -105,10 +136,22 @@ export function nameTokens(name) {
 
   return cleaned
     .split(/\s+/)
-    .filter((t) => t && !STOPWORDS.has(t) && !LEGAL_FORM_TOKENS.has(t));
+    .filter((t) => t && !STOPWORDS.has(t) && !LEGAL_FORM_TOKENS.has(t))
+    .map((t) => BANK_FORM_ALIASES.get(t) ?? t);
 }
 
 const setOf = (tokens) => new Set(tokens);
+/**
+ * Tokens joined with nothing, so a spacing difference stops being a difference.
+ *
+ * ORDER IS PRESERVED, and the first version sorted — which broke the one case
+ * this exists for. "Towne Bank" sorted to BANK+TOWNE = "BANKTOWNE" and never
+ * met "TOWNEBANK". A compound word is the SAME CHARACTERS IN THE SAME ORDER
+ * with a boundary removed; sorting throws away the half of that which does the
+ * work. It also makes the comparison far too generous: sorted, "Bank Towne"
+ * would match "TOWNEBANK" too, and word order is real information.
+ */
+const squash = (tokens) => [...tokens].join("");
 const eqSet = (a, b) => a.size === b.size && [...a].every((t) => b.has(t));
 const subset = (a, b) => [...a].every((t) => b.has(t));
 
@@ -116,8 +159,11 @@ const subset = (a, b) => [...a].every((t) => b.has(t));
  * How well two names agree, as a TIER plus a score.
  *
  *   exact    identical identifying tokens once legal-form words go.
- *            This is the tier that bridged all three known cases, and it is the
- *            only one that should ever be treated as near-certain.
+ *            This is the tier that bridged the corroborated cases, and it is
+ *            the only one that should ever be treated as near-certain.
+ *   compound the same characters with a different word boundary — "Towne Bank"
+ *            against "TOWNEBANK". Nearly as strong as exact, kept separate so a
+ *            reviewer can see which rule fired.
  *   subset   one side's tokens are wholly contained in the other's. Common and
  *            usually right ("Fiserv" vs "Fiserv Solutions"), but it is also how
  *            a parent swallows a subsidiary, so it is a candidate, not a match.
@@ -149,6 +195,14 @@ export function scoreNames(ours, theirs) {
 
   if (eqSet(a, b)) return { tier: "exact", score: 1, shared: a.size };
 
+  // COMPOUND SPACING. "Towne Bank" vs "TOWNEBANK" shares ZERO tokens and scores
+  // 0 — not a weak match, an invisible one, because tokenising put a boundary
+  // where the other side has none. Comparing the tokens joined end to end sees
+  // through it. Ranked just under `exact`: the evidence is nearly as strong
+  // (every character in the same order) but the boundary difference is real and
+  // a human should see which rule fired.
+  if (squash(a) === squash(b)) return { tier: "compound", score: 1, shared: 0 };
+
   const shared = [...a].filter((t) => b.has(t)).length;
   const union = new Set([...a, ...b]).size;
   const score = union ? shared / union : 0;
@@ -159,7 +213,7 @@ export function scoreNames(ours, theirs) {
   return { tier: "none", score, shared };
 }
 
-const TIER_RANK = { exact: 3, subset: 2, partial: 1, none: 0 };
+const TIER_RANK = { exact: 4, compound: 3, subset: 2, partial: 1, none: 0 };
 
 /**
  * Rank every SEC row against one of our names.
