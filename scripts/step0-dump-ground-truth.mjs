@@ -311,8 +311,21 @@ console.log("\n3. Per-symbol datasets");
  * members; scanning finds everything still there, including symbols no list
  * mentions any more. Both numbers go in the report.
  */
-async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analyse } = {}) {
-  const scanned = await scanPrefix(`${prefix}*`);
+async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analyse, isSymbol } = {}) {
+  const scannedAll = await scanPrefix(`${prefix}*`);
+  // ── A PREFIX IS NOT ALWAYS ONE KEY FAMILY ────────────────────────────────
+  //
+  // scanPrefix takes everything after the prefix as a SYMBOL. That is true for
+  // most of these datasets and false for msh:pickers:earnings:v1:, which is
+  // three families sharing a prefix (see the earningsRow call site). "due:AAPL"
+  // and "queue" were counted as tickers; the due stamps are strings, so they
+  // survived the MGET and landed in `values` looking like earnings rows.
+  //
+  // `isSymbol` lets a caller say which suffixes are actually symbols. The
+  // rejected ones are COUNTED, not silently dropped -- a filter that quietly
+  // removes rows is how a coverage figure becomes wrong in the other direction.
+  const scanned = isSymbol ? scannedAll.filter((k) => isSymbol(suffixOf(k, prefix))) : scannedAll;
+  const rejected = scannedAll.length - scanned.length;
   const symbols = [...new Set([...scanned.map((k) => suffixOf(k, prefix)), ...universe])].sort();
   const keys = symbols.map((s) => `${prefix}${s}`);
 
@@ -338,6 +351,7 @@ async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analy
   report.datasets[name] = {
     key: `${prefix}<SYM>`,
     keysScanned: scanned.length,
+    ...(isSymbol ? { keysScannedBeforeFilter: scannedAll.length, keysRejectedAsNotASymbol: rejected } : {}),
     present,
     coverageOfDumpUniversePct: pct,
     // KEY-EXISTS IS NOT VALUE-PRESENT, and conflating them is exactly the gap
@@ -405,7 +419,24 @@ await dumpPerSymbol("profile", KEYS.profile, { analyse: analyseProfile });
 // the gap is what separates "unavailable" from "never fetched".
 await dumpPerSymbol("profile-noindustry-tombstones", KEYS.profileEmpty);
 await dumpPerSymbol("screener-fundamentals", KEYS.screenerFundamentals);
-await dumpPerSymbol("earnings-rows", KEYS.earningsRow, { chunkSize: 50 });
+// ── THREE KEY FAMILIES SHARE THIS PREFIX, AND ONLY ONE IS A SYMBOL ────────
+//
+//   msh:pickers:earnings:v1:<SYM>       the earnings rows            (the dataset)
+//   msh:pickers:earnings:v1:due:<SYM>   a TTL'd timestamp string     (pickersBuilder.ts:545, written :1400)
+//   msh:pickers:earnings:v1:queue       a SET                        (pickersBuilder.ts:544, written :1395)
+//
+// Unfiltered, "due:AAPL" and "queue" were read as tickers. The queue is a SET so
+// MGET returned nil and it vanished; the due stamps are strings and did not --
+// they landed in `values` alongside real rows and inflated `present` and every
+// percentage derived from it. Measured on the 2026-09-14T20:06 dump:
+// rows=1235, due=13, queue=1.
+//
+// The due stamps are dumped SEPARATELY rather than discarded: they are the only
+// record of when a symbol's earnings row is next due, and losing them to a filter
+// would trade one measurement error for another.
+const isEarningsRowSymbol = (suffix) => !suffix.startsWith("due:") && suffix !== "queue";
+await dumpPerSymbol("earnings-rows", KEYS.earningsRow, { chunkSize: 50, isSymbol: isEarningsRowSymbol });
+await dumpPerSymbol("earnings-due-stamps", `${KEYS.earningsRow}due:`, { chunkSize: 100 });
 // stockdata carries rating / priceTarget / analystCount and is the biggest of the
 // small datasets, so it gets a narrower chunk.
 const stockData = await dumpPerSymbol("stockdata", KEYS.stockData, { chunkSize: 25 });
