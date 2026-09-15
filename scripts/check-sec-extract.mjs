@@ -281,11 +281,12 @@ check("the cover date does NOT create a period row",
 check("no instant row is a one-field row",
   out3.instants.every((p) => p.values.filter((v) => v !== null).length > 1),
   out3.instants.map((p) => `${p.end}:${p.values.filter((v) => v !== null).length}`).join(" "));
-check("and no row anywhere carries a cover-page reading",
-  [...out3.instants, ...out3.quarters, ...out3.years].every(
-    (p) => SEC_FIELD_INDEX.sharesOutstandingCover === undefined
-  ),
-  "the field is not in the positional list at all, so no row can hold it");
+// Not a loop over the rows: it cannot BE in a row, because it has no position in
+// the positional array. That is the structural form of the same claim, and the
+// loop version was testing nothing (its body ignored the row).
+check("and no row anywhere CAN carry a cover-page reading",
+  SEC_FIELD_INDEX.sharesOutstandingCover === undefined,
+  "the field has no index in the positional array, so no row has a slot for it");
 
 const oneClass = JSON.parse(JSON.stringify(facts));
 oneClass.facts.dei = { EntityCommonStockSharesOutstanding: { units: { shares: [
