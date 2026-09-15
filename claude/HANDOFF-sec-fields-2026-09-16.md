@@ -71,49 +71,140 @@ is never told apart from a chain gap by reading the list.
 
 ---
 
-## The next investigation — one class, three candidate causes
+## The next investigation — ANSWERED, and it overturned its own premise
 
-**GEV capex, KTOS capex and KTOS cash are all TAGGED and IN CHAIN, and all three
-render blank.** That is not a chain gap. Something between extraction and render
-is dropping a value it already has.
+**Resolved 2026-09-15.** The premise below was wrong, and the probe that
+supplied it had in fact already said so.
 
-Separate them in this order:
+> ~~GEV capex, KTOS capex and KTOS cash are all TAGGED and IN CHAIN, and all
+> three render blank. That is not a chain gap.~~
 
-1. **YTD differencing wants a prior frame that is not stored.** The extractor
-   steps one frame-length at a time (`byLen.get(f.n - 1)`), so a filer with H1
-   present and Q1 absent cannot yield Q2. **Check whether OCF and capex resolve
-   from different frame chains for GEV** — OCF derived fine on the same filing,
-   so whatever capex lacks, OCF has.
-2. **The balance-sheet instant is not the date cash was filed at.** KTOS tags
-   `CashAndCashEquivalentsAtCarryingValue = 1,437,600,000` at **2026-06-28**;
-   check what `set.instants[0]` actually is in the stored set.
-3. **The new "Not reported" path intercepting a present value.** Least likely —
-   `CellValue` only takes that branch on `cell.val == null` — but rule it out.
+It is a chain gap. `sec-missing-fields` prints a verdict line reading
+`=> IN CHAIN: no | CHAIN GAP` for capex on **both** filers; what got carried
+into this handoff was the `wide=TAGGED` column of the self-check flip table,
+which says the filer tagged *something matching the name pattern* — not that
+our chain lists it. Two different questions, one line apart in the same output.
 
-The KTOS fixture was captured (relay **35020873004**) and is **not decoded or
-committed**; decoding base64 out of CI logs is what ran the context down. Decode
-it and inspect locally — that answers (2) and (3) immediately.
+### What was actually measured
+
+`scripts/sec-blank-cell-probe.mjs`, relay task `sec-blank-cell`, runs
+**35024074183** (GEV/KTOS/AAPL) and **35024136855** (sec-missing-fields):
+
+```
+GEV   PaymentsToAcquirePropertyPlantAndEquipment   ABSENT FROM PAYLOAD
+KTOS  PaymentsToAcquirePropertyPlantAndEquipment   ABSENT FROM PAYLOAD
+AAPL  PaymentsToAcquirePropertyPlantAndEquipment   105 rows, ladders complete
+```
+
+The `capex` chain held **one** tag. Neither filer publishes it, so capex was
+null on every stored quarter and every stored year for both, and the Quality of
+Earnings card said "Can't calculate — capital expenditure not reported" beside
+an operating cash flow that had differenced perfectly. AAPL is the control that
+proves the instrument reports a working chain as working.
+
+**All three reported blanks reduce to that one defect. None of the three
+suspected causes survives:**
+
+1. **YTD differencing** — there was nothing to difference. OCF's frame ladders
+   are complete on both filers; capex's have no rungs at all, because it has no
+   rows at all.
+2. **The balance-sheet instant** — KTOS's `instants[0]` **is** 2026-06-28, with
+   13 of 46 fields filled and cash at 1,437,600,000 on it. A fresh extraction
+   renders KTOS cash. If the live page showed it blank, that is a **stale
+   stored set**, which is the refresh-on-view item below, not an extraction bug.
+3. **The "Not reported" path** — `CellValue` only takes that branch on
+   `cell.val == null`, and the view's own capex value is null. Exonerated.
+
+GEV cash is not a new find: GEV publishes no plain cash concept at all, only
+`CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` (13.12bn at
+2026-06-30). That is ruling (a), already applied.
+
+### The fix, and what it deliberately does not take
+
+`PaymentsToAcquireProductiveAssets` appended to the capex chain — GEV 783m,
+KTOS 37.1m, each on the 6M frame of the 2026Q2 10-Q. **Second, not first:**
+resolution is rank-first per period, so a filer publishing both keeps the
+narrower PP&E reading and AAPL does not move.
+
+Three near-misses were on the same printed list and are excluded, each named in
+`secFields.ts` with its value and guarded by name in check §14:
+
+| concept | why not |
+|---|---|
+| `PaymentsToAcquireBusinessesNetOfCashAcquired` | buying companies, not building assets — 6x overstatement on GEV |
+| `PaymentsToAcquireEquityMethodInvestments` / `...InterestInJointVenture` | investments |
+| `CapitalExpendituresIncurredButNotYetPaid` | **non-cash** accrual disclosure; wrong kind of thing for a cash line, and 9.1m against KTOS's real 37.1m |
+
+### Blast radius — measured, 119 SYMBOLS
+
+`sec-capex-blast`, relay **35025749420**, over the frozen dump's analysis
+universe (120 SYMBOLS, 1 with no CIK). Shipped extractor run twice over each
+payload — chain truncated to its first entry, then as it ships:
+
+```
+CHANGED (a figure moved or vanished)   0 SYMBOLS
+GAINED  (null -> a figure)            24 SYMBOLS
+same                                  85 SYMBOLS
+still empty both ways                 10 SYMBOLS
+```
+
+**Nothing moved.** Every filer that already resolved resolves to the same
+figure, which is what rank-first promises and is now measured rather than
+asserted.
+
+**This was never a two-filer edge case — 24 of 119 is one in five**, and the
+list is not obscure: NVDA, AMZN, V, HD, CVX, QCOM, ISRG, REGN, PANW, LRCX,
+HPE, HPQ, SOFI, KEY all went 0 → 18 of 18 periods. PEP 0→14, HIMS 0→14,
+NIO 0→8 of 8, COP 0→3 of 18.
+
+The PARTIAL gains are the interesting ones, because they are filers that
+switch tags across periods and so prove the per-period resolution is doing
+real work rather than picking one tag per symbol: GE 3→18, ANET 9→15,
+MELI 9→17, MRK 17→18, TT 16→17, MAR 16→17.
+
+### What it does NOT do
+
+**The fix is not retroactive.** `secChainsHash` moves on a chain edit, but
+`secColdFetch` only retries sets that are **empty**. GEV's and KTOS's stored
+sets have values, so they keep their null capex until something refreshes them
+— the refresh-on-view PR, not this one. Anyone eye-checking the live pages
+before that lands will still see the blank.
 
 ---
 
 ## Outstanding, in order
 
-1. **Decode and commit the GEV and KTOS fixtures** (relay 35020873004 for KTOS;
-   GEV from relay 35017270505). GEV is the spun-off filer with 4 fiscal years —
-   the real-world case for "a year with no prior year is a base, not a row",
-   currently asserted on AAPL stored at y=5.
-2. **Diagnose the three blank-but-tagged cells** above. Add KTOS as a fixture and
-   assert cash renders 1.44B. Mutation: whichever cause it was, reintroduce it →
-   fails.
-3. **Null rate per field across all stored SYMBOLS, before and after** the VRT
-   addition. **The VRT change is currently UNMEASURED** — it is in the branch and
-   nothing shows it does not disturb anything else. It should not merge on my
-   word alone.
+1. ~~Decode and commit the GEV and KTOS fixtures.~~ **Done** — captured at the
+   corrected chain (relay 35024551826), SHA-256 verified against the runner's
+   own hash of the plaintext: GEV `b21d9fb4…` 11,811 B, KTOS `71f3e83c…`
+   14,706 B. (KTOS decodes to 14,708 *bytes*; the runner printed a JS string
+   length and the entity name carries two U+00A0. The hash is over the same
+   bytes and matches.) GEV is still the spun-off filer with 4 fiscal years —
+   the real-world case for "a year with no prior year is a base, not a row".
+2. ~~Diagnose the three blank-but-tagged cells.~~ **Done, above.** §14 asserts
+   capex renders on both, read out of the markup; mutation (i) nulls every
+   capex cell of the real GEV fixture and the card comes back saying "Can't
+   calculate". Three structural assertions (chain order, near-miss guard) were
+   each run under the mutation that breaks them.
+3. **Null rate per field across all stored SYMBOLS.** The **VRT
+   short-term-investments addition is still UNMEASURED** and should not merge
+   on anyone's word. `scripts/sec-capex-blast-probe.mjs` (relay task
+   `sec-capex-blast`) is the instrument and takes `FIELD`, so pointing it at
+   `shortTermInvestments` needs no new script. It runs the shipped extractor
+   twice over one payload — chain truncated to its first entry, then as it
+   ships — and separates cells that gained a figure from cells whose figure
+   moved or vanished. **Run it for `capex` AND for `shortTermInvestments`
+   before merging.**
 4. **Canaries:** revenue 25/25, AAPL TTM. **Identities table re-run.**
 5. **Cowork eye-check** — GEV, KTOS, VRT, TSLA, KGC — then merge #467.
+   Note item 3's caveat: the live pages will still show the old capex until
+   refresh-on-view lands, so a blank there is expected and is not this PR
+   failing.
 6. **Next PR: refresh-on-view + CIK on cold writes (with backfill).** ONDS-type
-   symbols never refresh until this lands: ONDS's manifest entry has **no CIK**,
-   and `populationQueues` filters on `e.cik`, so it is in no cron queue at all.
+   symbols never refresh until this lands: ONDS's manifest entry has **no
+   CIK**, and `populationQueues` filters on `e.cik`, so it is in no cron queue
+   at all. This PR now has a second reason to want it: a chain edit reaches a
+   non-empty stored set only through a refresh.
 7. **Then PR B (presentation, B1–B7)** — stashed on branch
    `feat/earnings-presentation`. View groundwork already written there: tone
    thresholds as one exported constant, prior-year margin deltas in percentage
@@ -141,6 +232,26 @@ it and inspect locally — that answers (2) and (3) immediately.
 - **Diagnose before changing a chain.** A blank cell is either a chain gap or
   nothing filed, and the two need opposite responses. Guessing is how a
   near-miss tag ships a plausible wrong number.
+- **Quote a probe's VERDICT line, never a neighbouring column.** This handoff
+  spent its whole "next investigation" section ruling out three causes that
+  could not have been the cause, because `wide=TAGGED` from the self-check flip
+  table was carried over as "in chain". The probe's own
+  `=> IN CHAIN: no | CHAIN GAP` was one line away in the same output. The probe
+  was right; the summary of it was not.
+- **A probe that prints nothing has not reported nothing.** `sec-blank-cell`
+  first printed a bare heading for capex on both filers — no rows, no reason —
+  and an empty space reads the same whether the chain found no rows, the rows
+  had no start, or no span mapped to a quarter count. Every filter a probe
+  applies must print what it dropped and why, or the probe commits the exact
+  error it exists to prevent.
+- **Measure what a chain addition DISTURBS, not only what it fills.** Rank-first
+  resolution makes displacement look impossible, but `byLen` picks one frame per
+  length **by filing date**, so a later-filed same-length frame under a new
+  entry can delete a differenced quarter outright. `sec-capex-blast` runs the
+  shipped extractor twice over one payload to find it. And note how NOT to test
+  it: reversing the chain moves the "before" run too, so both readings shift
+  together and the probe correctly reports no change while appearing to prove
+  the detector is dead.
 - `automation/gcp-search-console-service-account.json` is a **live credential,
   deliberately kept out of GitHub**.
 
