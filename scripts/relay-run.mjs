@@ -240,6 +240,16 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Read-only: captures a REAL StoredFactSet for a symbol and prints it
+  // gzip+base64 with a SHA-256 of the plaintext, so a fixture can be committed
+  // and proven byte-identical to what the runner produced. Actions artifacts
+  // download via a blob host the sandbox cannot reach, which is why it goes
+  // through the log.
+  "sec-fixture": {
+    script: "scripts/sec-fixture-capture.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

@@ -30,6 +30,29 @@ import {
 } from "./secFields";
 
 /** One row as companyfacts publishes it, narrowed to what is read here. */
+/**
+ * ── THE STORED WINDOW IS WIDER THAN THE RENDERED ONE, DELIBERATELY ─────────
+ *
+ * THE DEFECT THIS FIXES, AND IT WAS ON EVERY SYMBOL. Eight quarters were
+ * stored and eight rendered, so the oldest four rows had no prior-year quarter
+ * INSIDE THE WINDOW and showed a permanent "not on file" — measured 4 of 8 on
+ * AAPL and on AZN alike (relay 35001474265). Nothing was missing from SEC: the
+ * window was too small to contain its own comparison.
+ *
+ * Twelve stored, eight rendered, so every rendered row can reach four back.
+ * companyfacts carries the full history in the payload already fetched, so
+ * this costs no extra request — only bytes: AAPL 15,509 -> 17,605 (+13.5%),
+ * AZN 10,759 -> 12,405 (+15.3%), KGC 6,411 -> 6,411 (annual-only, unchanged).
+ *
+ * A ROW WITH NO PRIOR YEAR STILL SAYS SO. Widening the window does not
+ * manufacture a comparator; priorYearOf still matches by fiscal label and
+ * still returns null. See secEarningsView.RENDERED_QUARTERS.
+ */
+export const SEC_QUARTER_WINDOW = 12;
+
+/** Balance-sheet dates retained. NOT tied to the quarter window; see above. */
+export const SEC_INSTANT_WINDOW = 8;
+
 export type FactRow = {
   start?: string;
   end?: string;

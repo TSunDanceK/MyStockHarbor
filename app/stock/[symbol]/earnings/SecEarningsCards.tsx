@@ -67,19 +67,29 @@ export function CellValue({ cell, compact = false, currency = true }: { cell: Vi
  * zero -- "EPS surprise: 0.00" reads as "came in exactly in line", which is a
  * claim, and a false one.
  */
-export function HiddenCard({ id, stacked = false }: { id: string; stacked?: boolean }) {
-  const r = retiredSource(id);
-  return (
-    <section
-      className="card"
-      style={stacked ? undefined : { borderStyle: "dashed", opacity: 0.85 }}
-      data-hidden-source={r.id}
-    >
-      <div className="eyebrow">Not shown</div>
-      <h3 style={{ marginTop: 4 }}>{r.label}</h3>
-      <p style={{ fontSize: 13.5, marginBottom: 0 }}>{r.reason}</p>
-    </section>
-  );
+/**
+ * ── A HIDDEN SOURCE RENDERS NOTHING. THE REGISTRY STAYS. ──────────────────
+ *
+ * This used to render a dashed "Not shown" card carrying the reason. The rule
+ * has been reversed deliberately by the owner: the five retired sources render
+ * NOTHING AT ALL, because a page carrying five apology cards about analyst
+ * estimates reads as a broken page rather than an honest one, and no free
+ * source for any of them exists to restore.
+ *
+ * WHAT IS NOT REVERSED: the registry. RETIRED_SOURCES still names every one,
+ * what supplied it, when it went and why, and `retiredSource()` still THROWS on
+ * an unknown id. That is the part that stops the next person re-adding a column
+ * and wiring it to whatever is nearest — the reason lives in the source, where
+ * someone about to restore the column will read it, instead of on the page,
+ * where a reader who never had the feature is told about its absence.
+ *
+ * `id` is still required and still validated, so hiding a card without
+ * registering it is still impossible.
+ */
+export function HiddenCard({ id }: { id: string; stacked?: boolean }) {
+  // Validated for its throw, then discarded. Calling it is the point.
+  retiredSource(id);
+  return null;
 }
 
 function Metric({ label, children, sub }: { label: string; children: React.ReactNode; sub?: React.ReactNode }) {
@@ -101,9 +111,22 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
       <p>
         Most recent quarter filed: <strong>{view.latestLabel}</strong> (period ending{" "}
         <strong>{view.latestEnd}</strong>)
-        {view.latestFiled ? <>, filed <strong>{view.latestFiled}</strong></> : null}
-        {view.latestAccession ? <> under accession <code>{view.latestAccession}</code></> : null}.
+        {view.latestFiled ? <>, filed <strong>{view.latestFiled}</strong></> : null}.
       </p>
+      {/* THE ACCESSION IS A DATABASE KEY, NOT A FACT ABOUT THE COMPANY. It read
+          as "under accession 0000320193-26-000081" in the middle of a sentence
+          a reader was meant to understand. It still identifies the filing, so
+          it carries the link rather than the prose. */}
+      {view.latestAccession ? (
+        <p style={{ marginTop: -4 }}>
+          <a
+            href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(view.symbol)}&type=10-&dateb=&owner=include&count=10`}
+            style={{ color: "#93c5fd", fontWeight: 800 }}
+          >
+            View this filing on SEC EDGAR
+          </a>
+        </p>
+      ) : null}
       <div className="metricGrid">
         <Metric label="Revenue"><CellValue cell={s.revenue} compact /></Metric>
         {/* NO COMPARATOR MEANS NO FIGURE, AND THE CARD SAYS WHY. It used to
@@ -159,6 +182,10 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         Margins are gross profit, operating income and net income as a share of that period&apos;s
         revenue. A row marked <strong>gap</strong> has no filing on file for the period immediately
         before it — these are the periods the company published, not a consecutive run of quarters.
+        {/* VISIBLE, not hover-only — the same lesson as the gap badge. */}{" "}
+        <strong>Q4 EPS is not filed separately:</strong> companies file nine-month and full-year
+        figures, and this page does not derive the difference, so those cells read
+        &ldquo;not filed&rdquo;.
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
@@ -188,7 +215,20 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     was visible in one place and silent in the other. */}
                 <td data-label="Compared with">{view.growth[i]?.comparedWith ?? "not on file"}</td>
                 <td data-label="Revenue YoY">{pct(view.growth[i]?.revenueYoY)}</td>
-                <td data-label="EPS YoY">{pct(view.growth[i]?.epsYoY)}</td>
+                {/* A BLANK Q4 EPS IS NOT A GAP IN THE DATA. Q4 is never filed
+                    as a standalone three-month frame, and this page refuses to
+                    invent one (no 4·FY − 3·9M, no ratio against another
+                    period's share count). A bare "—" reads as missing; the
+                    reason is one hover and one footnote away instead. */}
+                <td data-label="EPS YoY">
+                  {view.growth[i]?.epsYoY == null && /^Q4 /.test(m.label) ? (
+                    <abbr title="Q4 EPS is not filed separately — companies file nine-month and full-year figures, and this page does not derive the difference." style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
+                      not filed
+                    </abbr>
+                  ) : (
+                    pct(view.growth[i]?.epsYoY)
+                  )}
+                </td>
                 <td data-label="Gross margin">{pctLevel(m.gross)}</td>
                 <td data-label="Operating margin">{pctLevel(m.operating)}</td>
                 <td data-label="Net margin">{pctLevel(m.net)}</td>
@@ -198,6 +238,83 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         </table>
       </div>
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+    </section>
+  );
+}
+
+/**
+ * FIVE FISCAL YEARS — ONE COMPONENT, TWO PLACES.
+ *
+ * (i) every stock gets this card, quarterly filer or not, and (ii) for an
+ * annual-only filer like KGC it is the ONLY growth table, because that filer
+ * has no quarters to tabulate.
+ *
+ * ONE COMPONENT RATHER THAN TWO, deliberately. Two would be two places for the
+ * label, the comparator and the null handling to drift apart, and the whole
+ * point of `view.annual` is that both read the same rows built by the same
+ * builder from the same helpers.
+ *
+ * YoY IS FY AGAINST FY-1 BY LABEL — priorYearOf on the years array, which
+ * works unchanged because annual periods carry `fp: "FY"` and a real `fy`.
+ * Never an array offset, and "not on file" where the prior year is absent.
+ * No gap badge: a gap is a quarterly idea (see gapAfter in secEarningsView).
+ */
+export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; sole?: boolean }) {
+  if (!view.annual.length) return null;
+  return (
+    <section className="card">
+      <div className="eyebrow">Five-year history</div>
+      <h2>
+        {view.symbol} by fiscal year
+        {sole ? "" : " — the longer view"}
+      </h2>
+      <p>
+        Each fiscal year as filed, oldest first, with the year it is measured against named in the
+        row. Year-over-year compares a fiscal year with the one before it; where that year is not on
+        file the figure is blank rather than measured against something else. Margins are gross
+        profit, operating income and net income as a share of that year&apos;s revenue.
+        {sole ? (
+          <>
+            {" "}
+            <strong>{view.symbol} files annually</strong>, so these are the only periods it
+            publishes — there is no quarterly table below.
+          </>
+        ) : null}
+      </p>
+      <div style={{ overflowX: "auto" }}>
+        <table className="historyTable">
+          <thead>
+            <tr>
+              <th>Fiscal year</th><th>Compared with</th><th>Revenue</th><th>Revenue YoY</th>
+              <th>Diluted EPS</th><th>EPS YoY</th>
+              <th>Gross margin</th><th>Operating margin</th><th>Net margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.annual.map((r) => (
+              <tr key={r.label}>
+                <td data-label="Fiscal year">
+                  {r.label}
+                  {/* EVERY FIGURE NAMES ITS PERIOD END, not just its label —
+                      two filers' "FY2025" can be nine months apart. */}
+                  <span style={{ display: "block", fontSize: 11, color: "#94a3b8" }}>
+                    ended {r.end}
+                  </span>
+                </td>
+                <td data-label="Compared with">{r.comparedWith ?? "not on file"}</td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact /></td>
+                <td data-label="Revenue YoY">{pct(r.revenueYoY)}</td>
+                <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} /></td>
+                <td data-label="EPS YoY">{pct(r.epsYoY)}</td>
+                <td data-label="Gross margin">{pctLevel(r.gross)}</td>
+                <td data-label="Operating margin">{pctLevel(r.operating)}</td>
+                <td data-label="Net margin">{pctLevel(r.net)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }

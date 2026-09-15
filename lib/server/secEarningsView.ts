@@ -166,6 +166,29 @@ export type SecEarningsView = {
     operating: number | null;
     net: number | null;
   }[];
+  /**
+   * TRUE when the filer publishes no quarterly periods at all and this whole
+   * view is built on annual ones. Cards read it to hide quarterly-only ideas
+   * (the gap badge, the quarterly table heading) rather than compute them for
+   * a series that has no quarters.
+   */
+  annualOnly: boolean;
+  /**
+   * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
+   * card, and it is the only growth table an annual-only filer has.
+   */
+  annual: {
+    label: string;
+    end: string;
+    comparedWith: string | null;
+    revenue: ViewCell;
+    revenueYoY: number | null;
+    epsDiluted: ViewCell;
+    epsYoY: number | null;
+    gross: number | null;
+    operating: number | null;
+    net: number | null;
+  }[];
   growth: {
     label: string;
     /** The period the percentages are measured against, or null when none is on file. */
@@ -290,25 +313,64 @@ export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
 
+/**
+ * How many of the stored periods the tables render.
+ *
+ * The store keeps SEC_QUARTER_WINDOW (12); this renders the newest 8, so every
+ * rendered row has four older periods behind it to reach a prior year in. The
+ * two numbers are deliberately different — see SEC_QUARTER_WINDOW.
+ */
+export const RENDERED_QUARTERS = 8;
+
+/**
+ * ── ONE READER, TWO ANCHORS ───────────────────────────────────────────────
+ *
+ * This used to hardcode `set.quarters` and return null when a filer had none,
+ * which is how KGC — 5 annual periods, 8 balance-sheet dates, 24 populated
+ * fields in its best period — rendered nothing at all.
+ *
+ * The anchor list is a parameter of the data now: `quarters` for a normal
+ * filer, `years` for an annual-only one. EVERYTHING DOWNSTREAM WAS ALREADY
+ * PERIOD-GENERIC — view(), pctOf(), priorYearOf(), the P&L list, the
+ * balance-sheet block and cashFrom all take a period rather than a quarter —
+ * so there is no second annual-period reader anywhere, and there must never be
+ * one: two readers is two places for the label, the differencing and the
+ * comparator to drift apart.
+ *
+ * priorYearOf needs no annual variant either. Annual periods carry
+ * `fp: "FY"` and a real `fy`, so "same fiscal period, one year earlier" is
+ * FY vs FY-1 by label, with no new code and no array offset.
+ */
 export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null {
-  const q = set.quarters;
+  const annualOnly = set.quarters.length === 0;
+  const q = annualOnly ? set.years : set.quarters;
   if (!q.length) return null;
+  // THE FULL STORED LIST IS THE SEARCH SPACE; only the DISPLAY is trimmed.
+  // Searching the trimmed list is exactly the defect this change removes.
+  const shown = q.slice(0, RENDERED_QUARTERS);
   const latest = q[0];
   // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
   // old `q[4]` printed on AZN and why there is no nearest-row fallback.
   const yearAgo = priorYearOf(q, latest);
 
-  const margins = q.map((p, i) => ({
+  const margins = shown.map((p, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
-    // fiscal quarter. q is newest-first, so the older neighbour is q[i + 1].
-    gapAfter: q[i + 1] ? !isConsecutive(p, q[i + 1]) : false,
+    // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
+    //
+    // ANNUAL SERIES GET FALSE, NOT A COMPUTATION. isConsecutive reads the
+    // quarter number out of `fp`, and Number("FY".slice(1)) is NaN — so an
+    // annual view would mark every row as a gap. A gap is a quarterly idea and
+    // the badge is hidden on the annual card rather than computed wrong.
+    gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
     gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
     operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
     net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
   })).reverse();
 
-  const growth = q.map((p) => {
+  const growth = shown.map((p) => {
+    // SEARCHES `q` (all 12 stored), RENDERS FROM `shown` (the newest 8). That
+    // asymmetry is the entire point of storing more than is displayed.
     const prior = priorYearOf(q, p);
     return {
       label: periodLabel(p),
@@ -352,6 +414,31 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     ? latest
     : cashYear;
   const cashBasis: "quarter" | "year" = cashFrom === latest ? "quarter" : "year";
+
+  // ── THE FIVE-YEAR ANNUAL ROWS, BUILT ONCE FOR BOTH PLACES THEY APPEAR ────
+  //
+  // (i) the annual card that every stock gets, and (ii) the only growth table
+  // an annual-only filer has. One shape, one builder, so the two cannot drift.
+  //
+  // Same rules as the quarterly table and the same helpers: YoY is FY against
+  // FY-1 BY LABEL via priorYearOf, null when the prior year is not on file,
+  // and margins are levels rather than changes. Oldest first for display, as
+  // the quarterly table is.
+  const annualRows = set.years.slice(0, 5).map((p) => {
+    const prior = priorYearOf(set.years, p);
+    return {
+      label: periodLabel(p),
+      end: p.e,
+      comparedWith: prior ? periodLabel(prior) : null,
+      revenue: view(p, "revenue", "Revenue"),
+      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
+      epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
+      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
+      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+    };
+  }).reverse();
 
   const ocf = view(cashFrom, "operatingCashFlow", "Operating cash flow");
   const capex = view(cashFrom, "capex", "Capital expenditure");
@@ -412,6 +499,8 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
     },
+    annualOnly,
+    annual: annualRows,
     margins,
     growth,
     cashQuality: {
