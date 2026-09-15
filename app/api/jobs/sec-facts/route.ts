@@ -6,6 +6,8 @@ import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secM
 import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
+import { needsReread } from "@/lib/server/secStaleness";
+import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -148,30 +150,66 @@ async function authorize(req: NextRequest): Promise<Response | null> {
  * test.
  */
 /**
- * A set written under an older quarter window is eligible for a re-read.
+ * A set that is behind what the code would write today is eligible for a
+ * re-read. THE RULE ITSELF NOW LIVES IN lib/server/secStaleness.
  *
- * ABSENT MEANS THE WINDOW BEFORE THE FIELD EXISTED — 8 quarters, 5 years.
- * Every entry in a manifest written before each field existed has no value for
- * it, and those are precisely the ones that need re-reading, so a missing field
- * must SELECT, never skip. Reading absence as "current" is how a migration
- * silently completes without doing anything.
+ * ── WHY IT MOVED, AND WHY THIS RE-EXPORT STAYS ───────────────────────────
+ * Refresh-on-view asks the identical question from the READ path, and a lib
+ * module cannot import from a route without inverting the dependency. Two
+ * copies of a staleness rule is the shape where one gains a condition and the
+ * other does not — and the symptom is a migration that silently completes on
+ * one path while the other keeps serving stale sets. So there is one function,
+ * and the next PR imports it rather than agreeing with it.
  *
- * EITHER WINDOW BEING BEHIND IS ENOUGH, and both feed this ONE queue. A second
- * queue over the same symbols would be two allowances competing for the same
- * re-read: a set fetched to widen its years arrives with wider quarters too,
- * because one companyfacts payload produces both.
+ * ANY OF THE THREE BEING BEHIND IS ENOUGH — quarter window, year window, or
+ * the TAG CHAINS the set was read under — and all three feed this ONE queue.
+ * A second queue over the same symbols would be two allowances competing for
+ * the same re-read: one companyfacts payload produces every one of them, so a
+ * set fetched to widen its years arrives with today's chains too.
+ *
+ * THE QUEUE KEEPS THE NAME `rewindow`. The path, the allowance and the work
+ * are unchanged; only the reasons to enter it grew. Renaming it would churn
+ * the job's result JSON and the census that reads it for no behaviour.
  */
-export function needsRewindow(e: { w?: number; y?: number }): boolean {
-  return (e.w ?? 8) < SEC_QUARTER_WINDOW || (e.y ?? 5) < SEC_YEAR_WINDOW;
-}
+export { needsReread };
 
 /**
- * Periods present in BOTH sets whose stored values differ — i.e. answers that
- * changed, as opposed to answers that are newly present.
+ * CELLS whose existing answer moved — as opposed to cells that are newly
+ * present, and periods that are newly present.
+ *
+ * ── TWO LAYERS OF "NEW IS NOT CHANGED", AND THE SECOND WAS MISSING ───────
+ * The first layer was already here: a period present only in the NEW set is a
+ * wider window doing its job, not a restatement. Without it a rewindow re-read
+ * reported all 759 SYMBOLS as silent restatements and buried the real ones.
+ *
+ * A CHAIN EDIT PRODUCES THE SAME SHAPE ONE LEVEL DOWN. The period is in both
+ * sets; one CELL inside it goes from null to a number, because the chain gained
+ * a concept the filer had been publishing all along. That is not a changed
+ * answer either — nothing was restated, we simply could not read it before.
+ * Measured: 24 of 119 SYMBOLS gain a capex cell on a re-read, 14 of them across
+ * all 18 periods, so a whole-array comparison would put NVDA, AMZN, V, HD, CVX
+ * and QCOM into the restatement log the first time the queue reached them. Same
+ * failure as the window migration, same remedy, one level finer.
+ *
+ * SO THE COMPARISON IS PER CELL, AND IT IS ASYMMETRIC ON PURPOSE:
+ *   null   -> value    NOT logged. The chains gained it.
+ *   value  -> value'   LOGGED. The filer's own answer moved.
+ *   value  -> null     LOGGED. An answer we had is gone, which is a real
+ *                      disturbance and the exact shape sec-capex-blast reports
+ *                      as GONE when a same-length frame is displaced.
+ *
+ * Deliberately NOT `JSON.stringify(before.v) !== JSON.stringify(p.v)` — that is
+ * the whole-array test this replaces, and reverting to it re-introduces the
+ * noise one migration finer. Deliberately NOT `prior.contentHash !==
+ * set.contentHash` either, which is the layer above that and was replaced first.
  *
  * Quarters, years and instants alike: a restatement can land on any of them.
  * Exported and pure so a check can run it against a fixture pair without a
  * network or a store.
+ *
+ * NAMES THE FIELD, not just the period. "AAPL 2026-06-27 moved" sends the
+ * reader to a 46-column array to find out what; the field key is already in
+ * hand here and costs nothing to carry.
  */
 export function restatedPeriods(
   prior: StoredFactSet | null,
@@ -190,9 +228,15 @@ export function restatedPeriods(
       // ONLY WHERE BOTH SIDES HAVE THE PERIOD. `before` undefined means the
       // period is new to this set — which is what a wider window produces, and
       // is not a changed answer.
-      if (before && JSON.stringify(before.v) !== JSON.stringify(p.v)) {
-        out.push(`${p.e}(${p.a ?? "?"})`);
+      if (!before) continue;
+      const moved: string[] = [];
+      for (let i = 0; i < before.v.length; i++) {
+        // THE ASYMMETRY. A cell that held nothing cannot have been restated.
+        if (before.v[i] == null) continue;
+        if (p.v[i] === before.v[i]) continue;
+        moved.push(`${SEC_FIELD_KEYS[i] ?? `#${i}`}:${before.v[i]}->${p.v[i] ?? "null"}`);
       }
+      if (moved.length) out.push(`${p.e}(${p.a ?? "?"}) ${moved.join(" ")}`);
     }
   }
   return out;
@@ -232,7 +276,7 @@ export function populationQueues(
   // matters is earnings season. Its slice is its own and the other two queues
   // cannot consume it.
   const rewindow = entries
-    .filter(([, e]) => !e.needsReverify && e.contentHash !== null && needsRewindow(e))
+    .filter(([, e]) => !e.needsReverify && e.contentHash !== null && needsReread(e))
     .map(([s]) => s)
     .sort();
 
@@ -412,6 +456,14 @@ export async function GET(req: NextRequest) {
         // instead of 759 GETs, and cost nothing: the set is already in hand.
         entry.w = set.w ?? SEC_QUARTER_WINDOW;
         entry.y = set.y ?? SEC_YEAR_WINDOW;
+        // FROM THE SET, NOT FROM secChainsHash() — the manifest must record
+        // which chains ACTUALLY produced this set, not which chains were
+        // current when the manifest line was written. They are the same value
+        // on this path today, and calling the function here would silently stop
+        // being true the moment a set arrives from anywhere else (the cold
+        // path writes sets this job never sees). Copying the set's own stamp
+        // cannot drift from the set.
+        entry.c = set.c ?? null;
         entry.quarters = set.quarters.length;
         entry.years = set.years.length;
         entry.instants = set.instants.length;
