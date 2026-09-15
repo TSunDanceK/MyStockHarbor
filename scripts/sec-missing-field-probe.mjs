@@ -140,9 +140,18 @@ for (const { symbol, fields } of TARGETS) {
             if (!isInstant) {
               if (wantEnd && r.end !== wantEnd) continue;
             } else {
-              // Instants: within ten days of the balance-sheet date, because a
-              // filer's own period end and the date it tags can differ by a
-              // weekend or a 52/53-week calendar.
+              // ── A REAL INSTANT, NOT A DURATION THAT ENDS ON THE SAME DAY ──
+              //
+              // An instant fact has NO `start`. Without this test the widened
+              // /Cash/i pattern pulled NetCashProvidedByUsedInOperatingActivities
+              // and three other cash-FLOW totals into KTOS's balance-sheet
+              // listing — duration facts that merely end on the balance-sheet
+              // date. Noise in a diagnosis is not harmless: every extra line is
+              // a candidate someone has to rule out by hand.
+              if (r.start) continue;
+              // Within ten days of the balance-sheet date, because a filer's own
+              // period end and the date it tags can differ by a weekend or a
+              // 52/53-week calendar.
               if (!wantEnd) continue;
               const off = Math.abs(Date.parse(r.end) - Date.parse(wantEnd)) / 86400000;
               if (off > 10) continue;
@@ -176,7 +185,18 @@ for (const { symbol, fields } of TARGETS) {
       const frame = h.months === null ? `as at ${h.end}` : `${h.months}M frame`;
       console.log(`      ${inChain ? "in-chain " : "NOT IN CHAIN"} ${h.tax}:${h.concept} = ${h.val} ${h.unit} [${frame}] (${h.form ?? "?"} ${h.fy ?? ""}${h.fp ?? ""})`);
     }
-    console.log(`      => ${anyGap ? "CHAIN GAP (see NOT IN CHAIN above)" : "chain covers it; null has another cause"}`);
+    const anyInChain = [...seen.values()].some((h) => chain.includes(h.concept));
+    // THE VERDICT LINE CARRIES BOTH FACTS. "In chain AND still blank" is a
+    // different class of bug from a chain gap — the page is dropping a value it
+    // already has — and the two must not be told apart by reading the list.
+    console.log(
+      `      => IN CHAIN: ${anyInChain ? "YES" : "no"} | ` +
+      (anyInChain
+        ? "if the cell is still blank this is EXTRACTION/RENDER, not a chain gap"
+        : anyGap
+          ? "CHAIN GAP (see NOT IN CHAIN above)"
+          : "NOT TAGGED — nothing to add")
+    );
     if (!isInstant) {
       // THE PROBE'S OWN MUTATION, RUN EVERY TIME. What the 80-105 day rule —
       // the bug this probe shipped with — would have concluded from the same
