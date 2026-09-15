@@ -180,6 +180,15 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only, no credential, submissions ONLY (no document fetching): simulates
+  // a "due to report" list over the past 12 months across the FULL analysis
+  // universe and sweeps k. List size scales with the universe, so a sample
+  // cannot answer it. Needs the dump for the analysis universe.
+  "sec-due-sweep": {
+    script: "scripts/sec-due-to-report-sweep.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
