@@ -55,7 +55,11 @@ const BLANK_STDEV = 2;
 // them. A RATIO rather than a luminance threshold, because the thing being
 // decided is contrast against a known background, and a mark that is mostly
 // light with dark detail would be misjudged by mean luminance alone.
-const MIN_CONTRAST = 1.5;
+// Below this much variation, once composited onto the chip's white, there is
+// nothing for a viewer to see. Empirical: the 170 invisible marks measured 0-0.3,
+// while the least-varied genuinely visible logo sits at 13.6, so the threshold
+// falls in a wide gap rather than on a judgement call.
+const LEGIBLE_STDEV = 8;
 // The chip paints #ffffff behind the image (TickerLogo's box), so that is what
 // a mark has to be legible against.
 const CHIP_BG = { r: 255, g: 255, b: 255 };
@@ -101,19 +105,6 @@ async function runPool(items, worker, size) {
   return out;
 }
 
-// WCAG relative luminance on linearised sRGB, and the ratio against the chip.
-function luminance(r, g, b) {
-  const f = (c) => {
-    const v = c / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-}
-function contrastRatio(a, b) {
-  const [hi, lo] = a >= b ? [a, b] : [b, a];
-  return (hi + 0.05) / (lo + 0.05);
-}
-
 /**
  * Crop a uniform border, with the guards the brief requires.
  *
@@ -147,36 +138,52 @@ async function trimBorder(input, width, height) {
   }
 }
 
-/** Contrast of the mark's mean colour against the chip it will sit on. */
-async function markContrast(buf) {
-  const { data } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  let r = 0, g = 0, b = 0, n = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] > 16) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n += 1; }
-  }
-  const mean = n ? [r / n, g / n, b / n] : [255, 255, 255];
-  return contrastRatio(luminance(...mean), luminance(CHIP_BG.r, CHIP_BG.g, CHIP_BG.b));
-}
-
 /**
- * Does the image carry its own background? Asked of the ORIGINAL, never the
- * trimmed copy, and that is the whole point.
+ * Will anything of this mark be visible once the chip paints white behind it?
  *
- * Trim removes the transparent margin, so after it a mark that fills its own
- * bounding box has an OPAQUE corner and reads as "already has a background" --
- * which is exactly backwards for the white marks this pass exists to rescue.
- * A fixture of a solid white square on transparency caught it: the trimmed copy
- * reported an opaque corner and the backing was never applied, leaving it as
- * invisible as before. The untrimmed original still has its margin, so its
- * corner answers the question the condition is actually asking.
+ * ── WHY THIS REPLACED THE BRIEF'S TWO-PART CONDITION ──────────────────────
+ * The brief specified: mean colour of the opaque pixels, contrast below 1.5:1
+ * against white, AND a transparent corner. Implemented literally it left two
+ * marks invisible and mis-measured 202 more, because BOTH halves are proxies
+ * that break in opposite directions:
+ *
+ *   contrast of the MEAN is the same flaw the brief warns about in mean
+ *   luminance -- a mark that is mostly light with dark detail averages light.
+ *   202 of the files it flagged are plainly visible, at 13-100 variation.
+ *
+ *   a TRANSPARENT CORNER is meant to mean "not already carrying a background",
+ *   but any opaque corner passes, INCLUDING A WHITE ONE, which provides no
+ *   contrast whatever. AI and AVB are white marks on white backgrounds and were
+ *   skipped for "already having a background" that cannot be seen.
+ *   Asking the trimmed copy instead is worse, not better: trim removes the
+ *   transparent margin, so a mark filling its own bounding box then reports an
+ *   opaque corner and reads as already-backed -- exactly backwards.
+ *
+ * Compositing onto the chip's own colour and measuring what remains asks the
+ * real question directly, and it decides all four shapes correctly: a white
+ * mark on transparency disappears (back it); a white mark on its own dark
+ * background does not (leave it); a dark mark inside a baked white margin does
+ * not (leave it); a white mark on a white background disappears (back it).
+ *
+ * THIS IS NOT THE MEASUREMENT #458 REJECTED, though it looks like it. That one
+ * used composite-on-white to decide BLANKNESS and would have DELETED 166 real
+ * logos. The measurement is right for legibility and wrong for blankness: the
+ * question "is it visible on this background" is exactly what a backing
+ * decision turns on, and being wrong here adds a dark panel behind something
+ * that was already fine -- cosmetic, and recoverable. Blankness still uses the
+ * background-independent test further down, unchanged.
+ *
+ * Materialised to a buffer before stats(), because sharp's stats() reads the
+ * INPUT and silently ignores chained operations -- the trap recorded in
+ * claude/serving-assets-from-public-2026-09-15.md.
  */
-async function carriesOwnBackground(buf) {
-  const { data, info } = await sharp(buf)
-    .extract({ left: 0, top: 0, width: 1, height: 1 })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  return info.channels >= 4 ? data[3] > 200 : true;
+async function invisibleOnChip(buf) {
+  const flat = await sharp(buf)
+    .flatten({ background: { r: CHIP_BG.r, g: CHIP_BG.g, b: CHIP_BG.b } })
+    .toBuffer();
+  const st = await sharp(flat).stats();
+  const visible = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
+  return { invisible: visible < LEGIBLE_STDEV, visible };
 }
 
 async function harvest(symbol) {
@@ -248,12 +255,9 @@ async function harvest(symbol) {
     // TickerLogo cannot pick a chip colour per symbol: that needs a per-symbol
     // lookup, which is exactly what #458 removed for costing 6.4 KB gzipped on
     // every page. So the contrast has to live in the image.
-    // Contrast from the trimmed copy (trim only crops uniform border, so the
-    // opaque pixels -- and their mean -- are unchanged); the background question
-    // from the ORIGINAL, for the reason in carriesOwnBackground's header.
-    const contrast = await markContrast(trimmed.buf);
-    const ownBackground = await carriesOwnBackground(input);
-    const needsBacking = contrast < MIN_CONTRAST && !ownBackground;
+    // Asked of the TRIMMED copy, because that is what will be encoded and shown.
+    const chip = await invisibleOnChip(trimmed.buf);
+    const needsBacking = chip.invisible;
 
     let out;
     if (needsBacking) {
@@ -338,7 +342,7 @@ async function harvest(symbol) {
       target,
       trim: trimmed.note,
       backed: needsBacking,
-      contrast,
+      visible: chip.visible,
     };
   } catch (err) {
     return { symbol, ok: false, reason: `sharp-failed: ${String(err?.message ?? err).split("\n")[0]}` };
@@ -370,7 +374,7 @@ if (LIMIT > 0) symbols = symbols.slice(0, LIMIT);
 console.log("LOGO HARVEST — Phase 2 + legibility pass");
 console.log(`User-Agent: ${UA}`);
 console.log(`target ${TARGET}px · floor ${FLOOR}px (checked AFTER trim) · concurrency ${CONCURRENCY}`);
-console.log(`backing #${[BACKING.r, BACKING.g, BACKING.b].map((v) => v.toString(16).padStart(2, "0")).join("")} below ${MIN_CONTRAST}:1 vs the white chip · inset ${(INSET * 100).toFixed(0)}%`);
+console.log(`backing #${[BACKING.r, BACKING.g, BACKING.b].map((v) => v.toString(16).padStart(2, "0")).join("")} when invisible on the white chip (variation <${LEGIBLE_STDEV}) · inset ${(INSET * 100).toFixed(0)}%`);
 console.log(`universe: ${symbols.length} symbols${LIMIT ? ` (capped at ${LIMIT})` : ""}\n`);
 
 const t0 = Date.now();
@@ -433,7 +437,7 @@ console.log("LEGIBILITY PASS");
 console.log(`  trimmed (border removed) : ${trimmedCount}`);
 console.log(`  trim was a no-op         : ${noopCount}`);
 console.log(`  trim rejected by guard   : ${suspicious.length} suspicious + ${threw.length} empty/threw`);
-console.log(`  dark backing applied     : ${backed.length}  (contrast <${MIN_CONTRAST}:1 vs the white chip)`);
+console.log(`  dark backing applied     : ${backed.length}  (invisible on the white chip)`);
 if (suspicious.length) {
   console.log(`  SUSPICIOUS TRIMS, original kept: ${suspicious.map((r) => r.symbol).join(" ")}`);
 }

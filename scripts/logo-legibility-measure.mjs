@@ -67,12 +67,21 @@ async function measure(file) {
   const fill =
     maxX < 0 ? 0 : Math.max((maxX - minX + 1) / w, (maxY - minY + 1) / h);
   const mean = n ? [sr / n, sg / n, sb / n] : [255, 255, 255];
+  // What survives compositing onto the chip. Materialised before stats(),
+  // because sharp's stats() reads the INPUT and ignores chained operations.
+  const flat = await sharp(path.join(DIR, file))
+    .flatten({ background: "#ffffff" })
+    .toBuffer();
+  const fst = await sharp(flat).stats();
+  const visible = Math.max(...fst.channels.slice(0, 3).map((c) => c.stdev));
+
   return {
     file,
     symbol: file.replace(/\.webp$/, ""),
     w, h,
     opaqueBackground,
     fill,
+    visible,
     contrast: contrastVsWhite(mean[0], mean[1], mean[2]),
   };
 }
@@ -96,35 +105,36 @@ await Promise.all(
 const ok = out.filter((r) => !r.error);
 const lowFill = ok.filter((r) => r.fill < 0.75);
 const baked = ok.filter((r) => r.opaqueBackground);
-// INVISIBLE MEANS TRANSPARENT-CORNER AND LOW CONTRAST, not low contrast alone.
-// The mean colour of a dark mark sitting on a BAKED WHITE background is
-// dominated by that background, so it scores ~1.0 against the chip while being
-// perfectly legible -- the mark is dark, the white around it is the logo's own.
-// Counting those as invisible overstates the problem roughly threefold, and is
-// the same class of error as the alpha-only bounding box the brief warns about.
-// This matches fix 2's own condition: low contrast AND a transparent corner.
-const lowContrast = ok.filter((r) => r.contrast < 1.5 && !r.opaqueBackground);
+// INVISIBLE IS MEASURED BY COMPOSITING, not by the mean colour's contrast.
+// Contrast of the mean is a proxy that fails in a specific, common way: a mark
+// that is mostly light with dark detail averages light and scores under 1.5:1
+// while being perfectly legible. Measured against the committed harvest it
+// flagged 203 files of which 202 were plainly visible, at 13-100 variation --
+// the same class of error as the alpha-only bounding box the brief warns about,
+// one layer up. `visible` below composites onto the chip's own white and asks
+// what is left, which is the question a reader's eye actually answers.
+const lowContrast = ok.filter((r) => r.visible < 8);
 
 console.log(`DIR: ${DIR}`);
 console.log(`measured: ${ok.length}${out.length - ok.length ? ` (${out.length - ok.length} errored)` : ""}\n`);
 console.log(`mark fills <75% of frame : ${lowFill.length}  (${((lowFill.length / ok.length) * 100).toFixed(1)}%)`);
-console.log(`invisible on white chip  : ${lowContrast.length}  (${((lowContrast.length / ok.length) * 100).toFixed(1)}%)  [contrast <1.5:1 AND transparent corner]`);
+console.log(`invisible on white chip  : ${lowContrast.length}  (${((lowContrast.length / ok.length) * 100).toFixed(1)}%)  [variation <8 after compositing onto the chip]`);
 console.log(`opaque baked background  : ${baked.length}\n`);
 
 const show = (label, rows, k) => {
   console.log(`${label} (${rows.length}${rows.length > 25 ? ", first 25" : ""})`);
   for (const r of rows.sort((a, b) => a[k] - b[k]).slice(0, 25)) {
-    console.log(`  ${r.symbol.padEnd(9)} fill=${(r.fill * 100).toFixed(0).padStart(3)}%  contrast=${r.contrast.toFixed(2)}  bakedBg=${r.opaqueBackground}`);
+    console.log(`  ${r.symbol.padEnd(9)} fill=${(r.fill * 100).toFixed(0).padStart(3)}%  visible=${r.visible.toFixed(1)}  meanContrast=${r.contrast.toFixed(2)}  bakedBg=${r.opaqueBackground}`);
   }
   console.log();
 };
 show("WORST FILL", lowFill, "fill");
-show("WORST CONTRAST (transparent corner only)", lowContrast, "contrast");
+show("WORST — INVISIBLE ON THE CHIP", lowContrast, "visible");
 
 if (ONLY.length) {
   console.log("REQUESTED SYMBOLS");
   for (const r of out.sort((a, b) => a.symbol.localeCompare(b.symbol))) {
     if (r.error) { console.log(`  ${r.symbol.padEnd(9)} ERROR ${r.error}`); continue; }
-    console.log(`  ${r.symbol.padEnd(9)} ${r.w}x${r.h} fill=${(r.fill * 100).toFixed(0)}% contrast=${r.contrast.toFixed(2)} bakedBg=${r.opaqueBackground}`);
+    console.log(`  ${r.symbol.padEnd(9)} ${r.w}x${r.h} fill=${(r.fill * 100).toFixed(0)}% visible=${r.visible.toFixed(1)} meanContrast=${r.contrast.toFixed(2)} bakedBg=${r.opaqueBackground}`);
   }
 }
