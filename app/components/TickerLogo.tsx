@@ -65,7 +65,28 @@ export default function TickerLogo({
     );
   }
 
-  const [idx, setIdx] = useState(0);
+  // ── THE FALLBACK POSITION IS SCOPED TO THE SYMBOL IT WAS EARNED ON ───────
+  // A plain useState(0) survives a symbol change, because React reuses the
+  // instance when the element keeps its position and key. An instance that had
+  // walked to idx 2 for the previous symbol would therefore START at 2 for the
+  // next one -- skipping /logos/{SYM}.webp and serving FMP instead. It renders
+  // a correct-looking logo either way, which is exactly why a visual check
+  // cannot catch it.
+  //
+  // Pre-existing, but Phase 3 is what makes it matter: the chain got longer and
+  // the source being skipped is now the harvested one this whole change exists
+  // to serve. Most call sites are symbol-keyed and remount anyway
+  // (DashboardTicker's item.id is `mover-${symbol}` and friends, so its key
+  // changes with the symbol); the ones that change symbol IN PLACE are
+  // DashboardClient's quote header and CustomScreenerSymbolSearch's selected
+  // row. Rather than depend on every call site keying correctly forever, the
+  // reset lives here.
+  //
+  // Deriving idx rather than syncing it in an effect also discards a late
+  // onError from the PREVIOUS symbol's request for free: that handler writes
+  // its own sym, which no longer matches, so the derived value stays 0.
+  const [fallback, setFallback] = useState({ sym, idx: 0 });
+  const idx = fallback.sym === sym ? fallback.idx : 0;
   const initial = (name || sym || "?").trim().charAt(0).toUpperCase() || "?";
 
   const box: React.CSSProperties = {
@@ -113,7 +134,7 @@ export default function TickerLogo({
         src={sources[idx]}
         alt={sym ? `${sym} logo` : ""}
         loading="lazy"
-        onError={() => setIdx((i) => i + 1)}
+        onError={() => setFallback({ sym, idx: idx + 1 })}
         style={{
           maxWidth: "100%",
           maxHeight: "100%",
