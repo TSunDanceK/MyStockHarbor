@@ -270,14 +270,33 @@ const TASKS = {
     needsTypescript: true,
   },
   // Read-only: the blast radius of a chain ADDITION, measured by running the
-  // shipped extractor twice over one payload — once with the chain truncated
-  // to its first entry, once as it ships. Separates "cells that were null now
-  // carry a figure" (the intent) from "cells that had a figure now have a
-  // different one" (the risk). FIELD selects which chain; capex by default.
+  // shipped extractor twice over one payload — once with the chain minus the
+  // entries the edit added, once as it ships. Separates "cells that were null
+  // now carry a figure" (the intent) from "cells that had a figure now have a
+  // different one" (the risk).
   "sec-capex-blast": {
     script: "scripts/sec-capex-blast-probe.mjs",
     args: () => [],
     needsTypescript: true,
+  },
+  // THE SAME PROBE, AIMED AT THE OTHER UNMEASURED CHAIN EDIT — and it is a
+  // SEPARATE TASK rather than an input because relay.yml's inputs live on the
+  // DEFAULT BRANCH, so adding FIELD/DROP to the dispatch form would cost the
+  // merge-and-wait this whole relay exists to remove. The task name carries
+  // the parameters instead, which also makes "what was measured" answerable
+  // from the run's title rather than from its form values.
+  //
+  // DROP names the ONE concept the VRT ruling added. Not "everything after the
+  // first": this chain already had four entries, so the default would measure
+  // what the other three contribute — a real question, and not this one.
+  "sec-sti-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "shortTermInvestments",
+      DROP: "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+    },
   },
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
@@ -435,6 +454,19 @@ if (spec.needsDump && !process.env.DUMP_DIR) {
 }
 
 const args = spec.args(process.env).filter((a) => a !== "");
+// ── A TASK MAY PIN ITS OWN PARAMETERS, AND THEY WIN ──────────────────────
+// relay.yml's inputs are fixed on the default branch, so a task needing a knob
+// the form does not have would otherwise cost a merge. `env` puts the knob on
+// the TASK instead, and the task name becomes the record of what was measured.
+//
+// SPEC WINS OVER THE AMBIENT ENVIRONMENT, deliberately. If the surrounding env
+// could override it, a stray variable on a runner would silently change what a
+// named task measures while the run still reported the task's name — a report
+// that says one thing and did another.
+const env = { ...process.env, ...(spec.env ?? {}) };
+if (spec.env) {
+  console.log(`relay: ${task} pins ${Object.entries(spec.env).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+}
 console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
-const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit" });
+const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit", env });
 process.exit(res.status ?? 1);

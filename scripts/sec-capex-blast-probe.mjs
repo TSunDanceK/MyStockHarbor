@@ -15,11 +15,15 @@
 //
 // ── ONE CODE PATH, RUN TWICE ──────────────────────────────────────────────
 // BEFORE is not a remembered number and not a second implementation: the
-// shipped extractor is run against the same payload with the capex chain
-// TRUNCATED TO ITS FIRST ENTRY, then run again with the chain as it ships. Two
+// shipped extractor is run against the same payload with the chain MINUS THE
+// ENTRIES THE EDIT ADDED, then run again with the chain as it ships. Two
 // readings of one payload by one extractor, so any difference is the chain and
 // nothing else. A probe that compares today's output against a figure written
 // down last week is comparing two runs of different code.
+//
+// `DROP` names those entries. The default — everything after the first — is
+// right only for a chain that went from one entry to two, which is capex and
+// is NOT shortTermInvestments; see the DROP docblock below.
 //
 // Reports, per symbol:
 //   GAINED    capex was null everywhere, now has values      — the intent
@@ -48,6 +52,7 @@
 // Read-only: no credential, no store, no writes. Needs the network.
 //
 //   SYMBOLS="GEV,KTOS,AAPL" node scripts/sec-capex-blast-probe.mjs
+//   FIELD=shortTermInvestments DROP=<the concept the edit added> node ...
 //   (no SYMBOLS: the frozen dump's analysis universe, capped by LIMIT)
 import fs from "node:fs";
 import path from "node:path";
@@ -72,17 +77,43 @@ const tick = await lift(
   [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
     "\nexport { parseTickerFile, padCik };"
 );
-const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf } = sec;
+const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf, rowsForField, resolve } = sec;
 
 const field = SEC_FIELDS.find((f) => f.key === FIELD);
 if (!field) { console.error(`FATAL: no field "${FIELD}"`); process.exit(2); }
 const shippedChain = [...field.chain];
-if (shippedChain.length < 2) {
-  console.error(`FATAL: ${FIELD}'s chain has ${shippedChain.length} entry — nothing was added, so there is no before`);
+
+/**
+ * WHICH ENTRIES THE ADDITION INTRODUCED — named, not assumed to be "everything
+ * after the first".
+ *
+ * That default is right for `capex`, whose chain went from one entry to two.
+ * It is WRONG for `shortTermInvestments`, whose chain already had five when the
+ * VRT concept was appended: truncating to the first entry would measure "what
+ * do four other concepts contribute", which is a real question and not the one
+ * being asked. The BEFORE run has to be the chain minus exactly what the edit
+ * added, so the edit is what is named.
+ */
+const DROP = (process.env.DROP || "").split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+const unknown = DROP.filter((t) => !shippedChain.includes(t));
+if (unknown.length) {
+  console.error(`FATAL: DROP names ${unknown.join(", ")}, not in ${FIELD}'s chain [${shippedChain.join(", ")}]`);
   process.exit(2);
 }
-console.log(`${FIELD}: before = [${shippedChain[0]}]`);
+const beforeChain = DROP.length
+  ? shippedChain.filter((t) => !DROP.includes(t))
+  : shippedChain.slice(0, 1);
+if (beforeChain.length === shippedChain.length) {
+  console.error(`FATAL: before and after are the same chain — nothing was added, so there is no before`);
+  process.exit(2);
+}
+if (!beforeChain.length) {
+  console.error(`FATAL: DROP empties the chain; the BEFORE run would read nothing and every symbol would look like a gain`);
+  process.exit(2);
+}
+console.log(`${FIELD}: before = [${beforeChain.join(", ")}]`);
 console.log(`${FIELD}: after  = [${shippedChain.join(", ")}]`);
+console.log(`${FIELD}: the edit under measurement adds ${shippedChain.filter((t) => !beforeChain.includes(t)).join(", ")}`);
 
 // THE SWITCH IS THE ARRAY ITSELF, mutated in place between the two runs, so
 // both readings go through the identical resolve/difference code.
@@ -108,16 +139,65 @@ const { map: tickerMap } = tick.parseTickerFile(
   fs.readFileSync("data/sec/company-tickers.json", "utf8")
 );
 
-/** Every period's value for one field, keyed so the two runs line up exactly. */
+/**
+ * Every period's value for one field, keyed so the two runs line up exactly.
+ *
+ * INSTANTS INCLUDED, and leaving them out was a real bug in this probe rather
+ * than a tidy-up. It read quarters and years only, which is every
+ * duration-cumulative field and NO balance-sheet field — so pointing it at
+ * `shortTermInvestments` to measure the VRT addition would have compared two
+ * empty maps and reported "same" for every symbol. A measurement instrument
+ * that cannot see the thing it is aimed at is worse than none: it produces a
+ * clean bill of health.
+ */
 const readField = (set) => {
   const out = new Map();
-  for (const [bucket, periods] of [["q", set.quarters], ["y", set.years]]) {
-    for (const p of periods) out.set(`${bucket}:${p.e}`, valueOf(p, FIELD));
+  for (const [bucket, periods] of [["q", set.quarters], ["y", set.years], ["i", set.instants]]) {
+    for (const p of periods ?? []) out.set(`${bucket}:${p.e}`, valueOf(p, FIELD));
   }
   return out;
 };
 
-const tally = { gained: [], changed: [], same: 0, empty: 0, noCik: 0, failed: 0 };
+/**
+ * WHICH CONCEPT WON, PER PERIOD — because a column that means one thing on some
+ * of a filer's periods and another thing on the rest is its own defect.
+ *
+ * This is the VRT fair-value-twin concern, one level along. There the worry was
+ * two concepts for the SAME period, where taking whichever appeared first makes
+ * the column mean different things on different SYMBOLS. Here it is two
+ * concepts across ONE filer's periods, which makes a single column mean
+ * different things down its own length.
+ *
+ * IT IS NOT AUTOMATICALLY WRONG, and saying so would be the easy dishonest
+ * answer. Per-period resolution exists precisely so AAPL's revenue can be
+ * `Revenues` before 2018 and `RevenueFromContractWithCustomer...` after it —
+ * the filer changed its own presentation and the column follows. The question
+ * is whether the two concepts MEAN the same thing, which is a judgement made on
+ * a printed list, so this prints the list rather than returning a verdict.
+ *
+ * THE CONCRETE HARM IS SEPARATE AND IS COUNTED SEPARATELY: a tag change WITHIN
+ * one fiscal year's frame ladder blocks the differencing outright — the
+ * extractor refuses to subtract across it and records why. That is not a
+ * question of meaning, it is a cell that does not render, and it comes out of
+ * the extractor's own notes rather than from anything re-derived here.
+ */
+const conceptsPerPeriod = (facts) => {
+  const byPeriod = new Map();
+  for (const c of rowsForField(facts, field)) {
+    const k = `${c.row.start ?? ""}..${c.row.end}`;
+    const list = byPeriod.get(k);
+    if (list) list.push(c); else byPeriod.set(k, [c]);
+  }
+  const tags = new Map();
+  for (const [, cands] of byPeriod) {
+    const best = resolve(cands);
+    if (!best) continue;
+    tags.set(best.tag, (tags.get(best.tag) ?? 0) + 1);
+  }
+  return tags;
+};
+
+const tally = { gained: [], changed: [], same: 0, empty: 0, noCik: 0, failed: 0, mixed: [], blocked: [] };
 
 for (const symbol of targets) {
   const cik = tickerMap.get(symbol)?.cik;
@@ -139,10 +219,21 @@ for (const symbol of targets) {
     }
   } catch { tally.failed++; continue; }
 
-  setChain([shippedChain[0]]);
+  setChain(beforeChain);
   const before = readField(encodeFactSet(extractCompanyFacts(symbol, facts)));
   setChain(shippedChain);
   const after = readField(encodeFactSet(extractCompanyFacts(symbol, facts)));
+
+  const tags = conceptsPerPeriod(facts);
+  if (tags.size > 1) {
+    tally.mixed.push(`${symbol} ${[...tags].map(([t, n]) => `${t}x${n}`).join(" + ")}`);
+  }
+  // FROM THE EXTRACTOR'S OWN NOTES, not re-derived. A mid-year tag change is
+  // the case where the two concepts actually cost a rendered cell.
+  const afterSet = encodeFactSet(extractCompanyFacts(symbol, facts));
+  for (const n of afterSet.notes ?? []) {
+    if (n.startsWith(`${FIELD} `)) tally.blocked.push(`${symbol} ${n.slice(FIELD.length + 1)}`);
+  }
 
   const keys = [...new Set([...before.keys(), ...after.keys()])].sort().reverse();
   const filledBefore = keys.filter((k) => before.get(k) != null).length;
@@ -180,6 +271,15 @@ if (!tally.changed.length) console.log(`  (none — every filer that already res
 console.log(`\nGAINED — periods that were null now carry a figure: ${tally.gained.length} SYMBOLS`);
 for (const line of tally.gained.slice(0, 40)) console.log(`  ${line}`);
 if (tally.gained.length > 40) console.log(`  … and ${tally.gained.length - 40} more`);
+
+console.log(`\nMIXED CONCEPTS — one filer resolving ${FIELD} from more than one concept across its periods: ${tally.mixed.length} SYMBOLS`);
+for (const line of tally.mixed.slice(0, 30)) console.log(`  ${line}`);
+if (tally.mixed.length > 30) console.log(`  … and ${tally.mixed.length - 30} more`);
+if (!tally.mixed.length) console.log(`  (none — every filer resolves ${FIELD} from a single concept throughout)`);
+
+console.log(`\nBLOCKED BY A MID-YEAR TAG CHANGE — the case where two concepts cost a rendered cell: ${tally.blocked.length}`);
+for (const line of tally.blocked.slice(0, 20)) console.log(`  ${line}`);
+if (!tally.blocked.length) console.log(`  (none — no ${FIELD} differencing was refused for a tag change on this sample)`);
 
 console.log(`\nsame ${tally.same} SYMBOLS · still empty both ways ${tally.empty} SYMBOLS`);
 // THE HEADLINE IS THE RISK, NOT THE WIN. A run with gains and no changes is the
