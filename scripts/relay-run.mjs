@@ -199,6 +199,16 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // STAGE 0, BLOCKING. No network, no Redis: distils the analyst-consensus series
+  // out of the frozen Step 0 dump into a compact permanent archive. The estimates
+  // are the only thing on the earnings page that cannot be re-derived from public
+  // filings, and they sit on a 24-hour TTL, so they die within a day of the FMP
+  // key lapsing rather than decaying slowly.
+  "consensus-freeze": {
+    script: "scripts/consensus-freeze.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
