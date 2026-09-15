@@ -155,6 +155,11 @@ export type ExtractResult = {
    * the namespace when it is the first.
    */
   taxonomies: string[];
+  /**
+   * Units a tag this page maps was published in and refused — the currency
+   * evidence. Empty for a USD reporter. See rowsForField.
+   */
+  refusedUnits: string[];
   notes: string[];
 };
 
@@ -203,14 +208,21 @@ export function readableTaxonomies(): Set<string> {
  * the actual cause (units) went unmentioned. Measured, relay 34970388423.
  */
 export function unreadableReason(
-  taxonomies: string[]
+  taxonomies: string[],
+  refusedUnits: string[] = []
 ):
   | { kind: "unread-taxonomy"; taxonomies: string[] }
+  | { kind: "currency"; currencies: string[] }
   | { kind: "unread-detail" }
   | { kind: "none" } {
   const readable = readableTaxonomies();
   const financial = taxonomies.filter((t) => !NON_FINANCIAL_TAXONOMIES.has(t));
   if (!financial.length) return { kind: "none" };
+  // CURRENCY FIRST AMONG THE READABLE CASES, because it is the specific answer
+  // and "we could not read it" is the vague one. A filer whose mapped tags were
+  // all published in EUR is not a mapping gap.
+  const currencies = refusedUnits.filter((u) => /^[A-Z]{3}$/.test(u) && u !== "USD");
+  if (currencies.length) return { kind: "currency", currencies };
   // ORDER MATTERS: a readable namespace present means we looked in the right
   // place and came back empty, whatever else the payload also carries.
   if (financial.some((t) => readable.has(t))) return { kind: "unread-detail" };
@@ -258,7 +270,7 @@ function newer(a: FactRow, b: FactRow): FactRow {
  * Collapsing here is trap 2: AAPL's revenue is `RevenueFromContractWith...`
  * from 2018 and `Revenues` before it, and one tag for the symbol loses half.
  */
-function rowsForField(facts: CompanyFacts, field: FieldDef) {
+function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?: Set<string>) {
   const out: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[] = [];
 
   // TWO NAMESPACES, ONE RANKED LIST. The primary chain first, then the same
@@ -288,11 +300,25 @@ function rowsForField(facts: CompanyFacts, field: FieldDef) {
       // honest failure and it is structural, not a rule anyone has to remember.
       const keys =
         field.unit === "USD/shares" ? ["USD/shares", "USD/share"] : [field.unit];
+      let took = 0;
       for (const unit of keys) {
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
           out.push({ row, tag, ns, rank: thisRank, unit });
+          took++;
+        }
+      }
+      // A TAG WE MAP, PUBLISHED, IN A CURRENCY WE REFUSE. Recorded rather than
+      // silently dropped, because it is the difference between "we have no
+      // mapping for this filer" and "this filer reports in euros" -- and the
+      // page has to be able to say which. Measured: after the IFRS chains
+      // landed, five of the ten formerly-empty filers still came back with one
+      // or two populated fields, and every one of them reports in a home
+      // currency (AEG EUR, NWG GBP, MFC CAD, RYAAY EUR, VIV BRL).
+      if (!took && refusedUnits) {
+        for (const u of Object.keys(units)) {
+          if (!keys.includes(u) && (units[u]?.length ?? 0) > 0) refusedUnits.add(u);
         }
       }
     }
@@ -389,11 +415,14 @@ export function extractCompanyFacts(
   const keepYears = opts.years ?? 5;
   const notes: string[] = [];
 
+  // Units a mapped, published tag was refused in. See rowsForField.
+  const refusedUnits = new Set<string>();
+
   // One pass per field, bucketed by period key.
   const buckets = new Map<string, Bucket>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    for (const c of rowsForField(facts, field)) {
+    for (const c of rowsForField(facts, field, refusedUnits)) {
       const k = periodKey(c.row);
       const list = bucket.get(k);
       if (list) list.push(c);
@@ -626,6 +655,7 @@ export function extractCompanyFacts(
     // THE CENSUS, from the payload itself rather than from a list of filers we
     // think are IFRS. Sorted so a stored set's value is stable across fetches.
     taxonomies: Object.keys(facts.facts ?? {}).sort(),
+    refusedUnits: [...refusedUnits].sort(),
     notes,
   };
 }

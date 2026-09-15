@@ -178,15 +178,52 @@ export type ColdResult =
   | {
       status: "no-xbrl";
       reason: string;
-      why: "unread-taxonomy" | "none" | "unknown";
+      why: "unread-taxonomy" | "currency" | "unread-detail" | "none" | "unknown";
+      /** Named on "unread-taxonomy"; the currencies on "currency". */
       taxonomies: string[];
     }
   /** Timed out, refused by a guard, or failed. Queued where possible. */
   | { status: "pending"; reason: string };
 
-/** A fact set with no periods at all is a successful fetch of nothing usable. */
+/**
+ * The minimum populated fields in a SINGLE period for a page to be worth
+ * rendering. See hasUsableData for why "not empty" was the wrong bar.
+ */
+export const MIN_PERIOD_FIELDS = 6;
+
+/**
+ * Is there enough here to render, rather than merely something.
+ *
+ * ── "NOT EMPTY" WAS THE WRONG BAR, AND THE IFRS WORK IS WHAT SHOWED IT ─────
+ * This used to return true for any set with one period. After the ifrs-full
+ * chains landed, all ten formerly-empty filers passed that test -- and five of
+ * them did so on ONE OR TWO populated fields out of 46, which renders a table
+ * of dashes with a number in it. Measured (relay 34971118882), best populated
+ * period:
+ *
+ *   AZN 24   KGC 24   OTLY 23   MT 22   BEPH 16      <- a real page
+ *   MFC  2   NWG  2   RYAAY 2   VIV  2   AEG  1      <- a page of dashes
+ *
+ * The gap between 16 and 2 is what makes a threshold defensible rather than
+ * arbitrary: anything from 3 to 15 separates the two populations identically,
+ * and 6 sits inside it with room on both sides.
+ *
+ * AND THE THIN FIVE ARE NOT A TAGGING PROBLEM. Every one reports in a home
+ * currency -- AEG EUR, NWG GBP, MFC CAD, RYAAY EUR, VIV BRL -- and the unit
+ * guard in rowsForField refuses a non-USD figure deliberately, because a euro
+ * number under a dollar sign is the plausible-wrong-number failure. So they get
+ * a card that says the page reads USD only, which is true and specific, rather
+ * than a sparse table that looks like a bug.
+ */
 export function hasUsableData(set: StoredFactSet): boolean {
-  return set.quarters.length > 0 || set.instants.length > 0 || set.years.length > 0;
+  for (const list of [set.quarters, set.years, set.instants]) {
+    for (const p of list) {
+      let filled = 0;
+      for (const v of p.v) if (v !== null) filled++;
+      if (filled >= MIN_PERIOD_FIELDS) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -378,7 +415,11 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
  * have no `tx`, and reading its absence as "this filer published nothing" would
  * reintroduce the false claim in a place no one would look for it.
  */
-function emptyResult(symbol: string, tx: string[] | undefined): ColdResult {
+function emptyResult(
+  symbol: string,
+  tx: string[] | undefined,
+  cu: string[] | undefined
+): ColdResult {
   if (!tx) {
     return {
       status: "no-xbrl",
@@ -387,20 +428,37 @@ function emptyResult(symbol: string, tx: string[] | undefined): ColdResult {
       taxonomies: [],
     };
   }
-  const r = unreadableReason(tx);
-  return r.kind === "unread-taxonomy"
-    ? {
+  const r = unreadableReason(tx, cu ?? []);
+  switch (r.kind) {
+    case "unread-taxonomy":
+      return {
         status: "no-xbrl",
         reason: `filed under ${r.taxonomies.join(", ")}, which these fields do not read`,
         why: "unread-taxonomy",
         taxonomies: r.taxonomies,
-      }
-    : {
+      };
+    case "currency":
+      return {
+        status: "no-xbrl",
+        reason: `reports in ${r.currencies.join(", ")}; these fields read USD only`,
+        why: "currency",
+        taxonomies: r.currencies,
+      };
+    case "unread-detail":
+      return {
+        status: "no-xbrl",
+        reason: "a readable taxonomy is present but no field this page reads resolved",
+        why: "unread-detail",
+        taxonomies: [],
+      };
+    default:
+      return {
         status: "no-xbrl",
         reason: "no financial taxonomy in the payload",
         why: "none",
         taxonomies: [],
       };
+  }
 }
 
 /**
@@ -424,7 +482,7 @@ async function retryEmpty(symbol: string, cik: string): Promise<ColdResult | nul
       `[sec-cold] ${symbol}: empty set re-read under chains ${secChainsHash()} — ` +
         `${hasUsableData(set) ? "now has data" : "still empty"}`
     );
-    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(symbol, set.tx);
+    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(symbol, set.tx, set.cu);
   } catch (err) {
     rethrowIfDynamic(err);
     return null;
@@ -464,7 +522,7 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
       const retried = await retryEmpty(clean, cik);
       if (retried) return retried;
     }
-    return emptyResult(clean, stored.tx);
+    return emptyResult(clean, stored.tx, stored.cu);
   }
 
   if (!SEC_UA) {
@@ -488,7 +546,7 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
       SEC_COLD_TIMEOUT_MS,
       `[sec-cold] ${clean}`
     );
-    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(clean, set.tx);
+    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(clean, set.tx, set.cu);
   } catch (err) {
     rethrowIfDynamic(err);
     const reason = String((err as Error)?.message ?? err);

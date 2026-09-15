@@ -43,9 +43,16 @@ const NAMED_UNIVERSE = "HSBC,GSK,NVS,BIDU,SAN,LYG,VALE,ZTO,ABEV";
 // A us-gaap CONTROL, and it is not decoration. Every number below would look
 // the same if the extractor had silently broken for everyone, so one known-good
 // filer has to come back unchanged in the same run.
+// ── CONTROLS, PLURAL, AND THE SMALL CAPS ARE NOT DECORATION ────────────────
+// AAPL alone answers "did the extractor break". It does NOT answer "is the
+// density threshold safe", because AAPL fills 25 of 46 fields and any threshold
+// under 25 passes it. The bar has to be checked against the THINNEST us-gaap
+// filers the site actually serves — off-universe small caps and a pre-revenue
+// name — or it is tuned on IFRS filers and applied to everyone.
 const CONTROL = "AAPL";
+const US_CONTROLS = "AAPL,ARM,MU,PLAB,ASTS,CULP,IIIN,PLPC,FLXS";
 const SYMBOLS = (process.argv[2] || process.env.SYMBOLS ||
-  `${MEASURED_TEN},${NAMED_UNIVERSE},${CONTROL}`)
+  `${MEASURED_TEN},${NAMED_UNIVERSE},${US_CONTROLS}`)
   .split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
 
 const UA =
@@ -65,6 +72,12 @@ const tick = await lift(
 );
 const { SEC_FIELDS, extractCompanyFacts, checkIdentities, identityRates,
         unreadableReason, readableTaxonomies } = sec;
+// THE DENSITY BAR THE PAGE ACTUALLY APPLIES, read from the shipped source so
+// this probe cannot report a filer as renderable that the page then hides.
+const MIN_PERIOD_FIELDS = Number(
+  (fs.readFileSync("lib/server/secColdFetch.ts", "utf8")
+     .match(/MIN_PERIOD_FIELDS = (\d+)/) ?? [])[1] ?? 6
+);
 
 // PRE-NETWORK SMOKE, CALLING rather than typeof-ing: a lift that is missing a
 // transitive callee still exposes the symbol and throws only when the line
@@ -186,12 +199,15 @@ for (const symbol of SYMBOLS) {
     const why = empty ? unreadableReason(namespaces) : null;
     rows.push({ symbol, namespaces, q: ex.quarters.length, y: ex.years.length,
                 i: ex.instants.length, ifrsCells, usGaapCells, rates, empty, why,
-                bestPeriodCells, unmapped: unmapped.length });
+                bestPeriodCells, refusedUnits: ex.refusedUnits,
+                unmapped: unmapped.length });
     console.log(
       `  ${symbol.padEnd(6)} ns=[${namespaces.join(",")}]  ` +
       `q${ex.quarters.length} y${ex.years.length} i${ex.instants.length}  ` +
       `cells: ifrs ${ifrsCells} / us-gaap ${usGaapCells}  ` +
-      `best-period ${bestPeriodCells}/${SEC_FIELDS.length}  ` +
+      `best-period ${bestPeriodCells}/${SEC_FIELDS.length}` +
+      `${bestPeriodCells < MIN_PERIOD_FIELDS ? " HIDDEN" : ""}  ` +
+      `${ex.refusedUnits.length ? `refused-units [${ex.refusedUnits.join(",")}]  ` : ""}` +
       `unmapped-ifrs-tags ${unmapped.length}` +
       (empty ? `  EMPTY (${why.kind}${why.taxonomies ? `: ${why.taxonomies.join(",")}` : ""})` : "")
     );
@@ -248,8 +264,31 @@ for (const r of residue) {
   console.log(`   ${r.symbol.padEnd(6)} ${r.why.kind}  ns=[${r.namespaces.join(",")}]`);
 }
 
+console.log(`\n5. THE DENSITY BAR AGAINST us-gaap FILERS — is ${MIN_PERIOD_FIELDS} safe?`);
+const usRows = rows.filter((r) => US_CONTROLS.split(",").includes(r.symbol));
+const hiddenUs = usRows.filter((r) => r.bestPeriodCells < MIN_PERIOD_FIELDS);
+for (const r of usRows) {
+  console.log(
+    `   ${r.symbol.padEnd(6)} best-period ${String(r.bestPeriodCells).padStart(2)}/${SEC_FIELDS.length}` +
+    `  ${r.bestPeriodCells < MIN_PERIOD_FIELDS ? "HIDDEN — THE BAR IS TOO HIGH" : "renders"}`
+  );
+}
+console.log(`   ${hiddenUs.length} us-gaap filer(s) would be hidden by this threshold. ` +
+  `Anything above 0 means the bar was tuned on IFRS filers and applied to everyone.`);
+
+console.log(`\n6. WHY THE THIN ONES ARE THIN — currency, not tagging`);
+for (const r of rows.filter((x) => x.bestPeriodCells < MIN_PERIOD_FIELDS)) {
+  const why = unreadableReason(r.namespaces, r.refusedUnits);
+  console.log(
+    `   ${r.symbol.padEnd(6)} best-period ${r.bestPeriodCells}  ` +
+    `refused [${r.refusedUnits.join(",") || "—"}]  -> card: ${why.kind}` +
+    `${why.currencies ? ` (${why.currencies.join(",")})` : ""}` +
+    `${why.taxonomies ? ` (${why.taxonomies.join(",")})` : ""}`
+  );
+}
+
 const control = rows.find((r) => r.symbol === CONTROL);
-console.log(`\n5. THE us-gaap CONTROL`);
+console.log(`\n7. THE us-gaap EXTRACTOR CONTROL`);
 console.log(control
   ? `   ${CONTROL}: q${control.q} y${control.y} i${control.i}, ifrs-cells ${control.ifrsCells} ` +
     `(MUST be 0 — it has no ifrs-full namespace), identities ${JSON.stringify(control.rates)}`

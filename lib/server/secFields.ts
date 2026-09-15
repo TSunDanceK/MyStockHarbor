@@ -173,10 +173,13 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   costOfRevenue: ["CostOfSales"],
   grossProfit: ["GrossProfit"],
   researchAndDevelopment: ["ResearchAndDevelopmentExpense"],
-  // AdministrativeExpense and DistributionCosts are KEPT although neither won
-  // a cell in the 20-filer probe: both are present in real payloads and are
-  // simply outranked, which is not the same as absent. The entries deleted
-  // below are the ones no probed filer publishes AT ALL.
+  // AdministrativeExpense (published by 6 of 20) and DistributionCosts (4 of
+  // 20) are KEPT although neither won a cell: both are present in real payloads
+  // and simply outranked by SellingGeneralAndAdministrativeExpense (9 of 20).
+  // Published-but-outranked is not the same as absent, and only the second is a
+  // guess worth deleting. The probe reports both columns for exactly this
+  // distinction — the first version reported only "never won" and would have
+  // had these two deleted on no evidence.
   sellingGeneralAndAdministrative: [
     "SellingGeneralAndAdministrativeExpense",
     "AdministrativeExpense",
@@ -204,10 +207,10 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
 
   // Cash flow
   operatingCashFlow: ["CashFlowsFromUsedInOperatingActivities"],
-  capex: [
-    "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
-    "PaymentsToAcquirePropertyPlantAndEquipment",
-  ],
+  // PaymentsToAcquirePropertyPlantAndEquipment deleted: a us-gaap spelling
+  // copied into the IFRS column, published by 0 of 20 probed filers. The one
+  // that remains is published by 15 of them.
+  capex: ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"],
   // LOWERCASE `b`. The camel-case guess matched nothing; the spelling filers
   // actually use is AdjustmentsForSharebasedPayments, in 6 of the 20.
   shareBasedCompensation: ["AdjustmentsForSharebasedPayments"],
@@ -223,9 +226,10 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   ],
   dividendsPaid: ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
   buybacks: ["PaymentsToAcquireOrRedeemEntitysShares"],
-  // No probed filer publishes a per-share dividend under ifrs-full at all,
-  // under this or any spelling, so this stays a known gap rather than a guess.
-  dividendsDeclaredPerShare: ["DividendsPaidOrdinarySharePerShare"],
+  // dividendsDeclaredPerShare HAS NO IFRS ENTRY, and the empty line is the
+  // point: 0 of 20 probed filers publish a per-share dividend under ifrs-full
+  // under this or any spelling. Leaving a guess here would have read as a
+  // mapping that works. An IFRS filer's dividend-per-share renders null.
   fxEffectOnCash: ["EffectOfExchangeRateChangesOnCashAndCashEquivalents"],
 
   // Balance sheet
