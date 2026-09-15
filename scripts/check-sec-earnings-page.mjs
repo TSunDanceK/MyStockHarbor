@@ -695,6 +695,105 @@ console.log("\n7h. the band the number falls in, and the period it was built on"
     withNm.unavailable.join("; "));
 }
 
+console.log("\n7i. the meta description describes the page, not the price chart");
+
+// ── THE #465 EYE-CHECK READ THE RENDERED META ─────────────────────────────
+//   AAPL: "...cash flow and balance sheet, Uptrend, with year-over-year..."
+//   KGC:  "...balance sheet, Range / Mixed, with..."
+//
+// A price-chart reading dropped as a bare label into an EARNINGS description.
+// Two things wrong with it: this page is built on filed figures and says
+// nothing about moving averages, and the label moves with the price, so the
+// same page advertises itself differently on different crawls from data that
+// is not on it.
+//
+// RUN, NOT GREPPED. generateMetadata is lifted and executed with its network
+// reads stubbed, once per trend label the indicator can produce — so the
+// assertion is that the label is absent from what the function RETURNS, with
+// a trend deliberately available for it to use.
+{
+  // THE LABELS COME FROM THE INDICATOR, not from a list typed here: a fourth
+  // label added there must not slip past this check.
+  const indicators = readCodeOnly("lib/indicators.ts");
+  const labels = [...new Set(
+    [...indicators.matchAll(/"(Uptrend|Downtrend|Range \/ Mixed)"/g)].map((m) => m[1])
+  )];
+  check("the trend vocabulary is read from lib/indicators.ts",
+    labels.length === 3, labels.join(" / "));
+
+  const metaSrc = grabFunction(pageRaw, "generateMetadata");
+  const leaked = [];
+  for (const label of labels) {
+    for (const symbol of ["AAPL", "KGC"]) {
+      const mod = await lift(
+        [
+          "const cleanSymbol = (s) => String(s).toUpperCase();",
+          "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+          "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
+          // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
+          // still does not reach the description — a stub returning null would
+          // make this pass for the wrong reason.
+          `const computeIndicatorSeed = () => ({ lastClose: 200, trend: ${JSON.stringify(label)} });`,
+          metaSrc,
+        ].join("\n") + "\nexport { generateMetadata };"
+      );
+      const meta = await mod.generateMetadata({ params: Promise.resolve({ symbol }) });
+      for (const [where, text] of [
+        ["description", meta.description],
+        ["og:description", meta.openGraph?.description],
+        ["twitter:description", meta.twitter?.description],
+      ]) {
+        if (typeof text === "string" && text.includes(label)) leaked.push(`${symbol} ${where}: ${label}`);
+      }
+    }
+  }
+  check("no trend label reaches the description, og:description or twitter:description",
+    leaked.length === 0,
+    leaked.length ? leaked.join(" | ") : `${labels.length} labels x 2 symbols x 3 fields, all clean`);
+
+  // THE CONTROL. "No description anywhere mentions a trend" would also pass if
+  // the trend had been removed from the stock page, where it is the subject.
+  const seo = await lift(
+    [grabFunction(indicators, "buildSeoDescription")].join("\n") + "\nexport { buildSeoDescription };"
+  );
+  const stockDesc = seo.buildSeoDescription("AAPL", {
+    trend: "Uptrend", rsi: 55, ma50: 190, ma200: 180, lastClose: 200,
+    macdLabel: null, trendScore: { known: false, passed: 0, total: 0 },
+  });
+  check("...while /stock/[symbol], whose subject IS the trend, still states it",
+    /uptrend/i.test(stockDesc),
+    `"${stockDesc.slice(0, 90)}..." — that page uses buildSeoDescription, which writes it as a sentence`);
+
+  // AND THE LEAK IS GONE AT THE SOURCE, not just absent from one run.
+  check("the earnings description no longer interpolates the seed's trend",
+    !/trendStr/.test(pageRaw) && !/\$\{seed\.trend\}/.test(pageRaw),
+    "the bare-label interpolation is removed rather than conditioned");
+
+  // ── MUTATION: PUT THE INTERPOLATION BACK ────────────────────────────────
+  // An absence is only an assertion if something can make it present. This
+  // restores the exact expression that shipped and re-runs the same function.
+  const restoreLeak = (src) =>
+    src.replace(
+      "margins, cash flow and balance sheet, with year-over-year context",
+      "margins, cash flow and balance sheet${seed.trend ? `, ${seed.trend}` : \"\"}, with year-over-year context"
+    );
+  check("the trend-leak mutation actually applied", restoreLeak(metaSrc) !== metaSrc);
+  const leakMod = await lift(
+    [
+      "const cleanSymbol = (s) => String(s).toUpperCase();",
+      "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+      "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
+      "const computeIndicatorSeed = () => ({ lastClose: 200, trend: \"Uptrend\" });",
+      restoreLeak(metaSrc),
+    ].join("\n") + "\nexport { generateMetadata };"
+  );
+  const leakedMeta = await leakMod.generateMetadata({ params: Promise.resolve({ symbol: "AAPL" }) });
+  check("MUTATION: restoring it puts the bare label back in all three fields",
+    [leakedMeta.description, leakedMeta.openGraph?.description, leakedMeta.twitter?.description]
+      .every((t) => typeof t === "string" && t.includes("Uptrend")),
+    `"${String(leakedMeta.description).slice(50, 130)}" — one variable feeds all three`);
+}
+
 console.log("\n8. the population path");
 
 const jobRaw = fs.readFileSync("app/api/jobs/sec-facts/route.ts", "utf8");

@@ -30,6 +30,24 @@ const pct = (v: Pct | undefined, digits = 1) => {
   return v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
 };
 
+/**
+ * WHY A Q4 EPS CELL IS BLANK, in one sentence used by all three places.
+ *
+ * ── THE OLD WORDING WAS FALSE FOR HALF-YEARLY FILERS ──────────────────────
+ * It read "companies file nine-month and full-year figures, and this page does
+ * not derive the difference" — which describes a US 10-Q filer's calendar and
+ * nobody else's. AZN files half-yearly under 20-F/6-K: there is no nine-month
+ * figure to difference, so the sentence explained a mechanism that does not
+ * exist for the filer whose page it was on.
+ *
+ * The replacement states the FACT (Q4 is not filed as a period of its own) and
+ * this page's RULE (it does not derive one), neither of which depends on the
+ * filer's reporting frequency.
+ */
+const Q4_EPS_NOTE =
+  "Q4 EPS is not filed as a separate period, and this page does not derive it, " +
+  "so those cells read \u201cnot filed\u201d.";
+
 /** The legend for the marker, rendered wherever a table can produce one. */
 function NotMeaningfulNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
   // ONLY WHEN THE TABLE ACTUALLY HAS ONE. A standing legend for a marker that
@@ -209,9 +227,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         revenue. A row marked <strong>gap</strong> has no filing on file for the period immediately
         before it — these are the periods the company published, not a consecutive run of {w.many}.
         {/* VISIBLE, not hover-only — the same lesson as the gap badge. */}{" "}
-        <strong>Q4 EPS is not filed separately:</strong> companies file nine-month and full-year
-        figures, and this page does not derive the difference, so those cells read
-        &ldquo;not filed&rdquo;.
+        <strong>{Q4_EPS_NOTE}</strong>
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
@@ -248,7 +264,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     reason is one hover and one footnote away instead. */}
                 <td data-label="EPS YoY">
                   {view.growth[i]?.epsYoY == null && /^Q4 /.test(m.label) ? (
-                    <abbr title="Q4 EPS is not filed separately — companies file nine-month and full-year figures, and this page does not derive the difference." style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
+                    <abbr title={Q4_EPS_NOTE} style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
                       not filed
                     </abbr>
                   ) : (
@@ -551,8 +567,7 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
           count is not additive, so EPS cannot be derived for it either. One row
           in four shows a dash where the filer published nothing. */}
       <p className="earningsDataNote">
-        Companies do not file a standalone fourth quarter, so EPS is blank on that row rather than
-        estimated. Source: {SEC_ATTRIBUTION}.
+        {Q4_EPS_NOTE} Source: {SEC_ATTRIBUTION}.
       </p>
     </section>
   );

@@ -502,15 +502,68 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const annualOnly = basis === "year";
   const q = annualOnly ? set.years : set.quarters;
   if (!q.length) return null;
-  // THE FULL STORED LIST IS THE SEARCH SPACE; only the DISPLAY is trimmed.
-  // Searching the trimmed list is exactly the defect this change removes.
-  const shown = q.slice(0, RENDERED_QUARTERS);
   const latest = q[0];
   // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
   // old `q[4]` printed on AZN and why there is no nearest-row fallback.
   const yearAgo = priorYearOf(q, latest);
 
-  const margins = shown.map((p, i) => ({
+  // ── EVERY ROW THE TABLE COULD SHOW, MEASURED BEFORE ANY ARE CHOSEN ───────
+  //
+  // THE FULL STORED LIST IS THE SEARCH SPACE; only the DISPLAY is trimmed.
+  // Searching the trimmed list is exactly the defect the window change removed,
+  // so `prior` is still looked up across all of `q`.
+  //
+  // Both the margins row and the growth row are derived here, together, because
+  // the cards read them BY INDEX (`view.growth[i]` beside `view.margins[i]`).
+  // Two independently filtered lists would silently pair a margin with another
+  // period's growth — a wrong number that looks entirely plausible.
+  const measured = q.map((p) => {
+    const prior = priorYearOf(q, p);
+    return {
+      p,
+      prior,
+      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
+      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
+      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
+      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+    };
+  });
+
+  /**
+   * A ROW THIN ENOUGH TO BE NOISE DOES NOT RENDER, AND DOES NOT USE UP A SLOT.
+   *
+   * ── WHAT WAS MEASURED, AND HOW THE RULE MOVED ─────────────────────────────
+   * On the #465 preview /stock/AZN/earnings showed Q3 FY2020, Q4 FY2020 and
+   * Q1 FY2021 with four of five cells empty. The first rule written for this
+   * dropped only rows where ALL FIVE were null — and it did not reach those
+   * three, because AZN stores exactly ONE field for them (revenue; its full
+   * quarters store 15), so each still produced a revenue YoY: +6.3%, +12.2%,
+   * +15.0%. Three of the eight slots carried one number each.
+   *
+   * THE BAR IS AN EPS COMPARISON OR A MARGIN. Revenue alone cannot fill a row
+   * in a table headed "Growth & Margins": there are no margins to show, and no
+   * profit figure to compare. A period that thin is not a row, it is a gap with
+   * one number in it.
+   *
+   * WHAT IT COSTS, STATED BECAUSE IT IS A REAL COST: three filed revenue-growth
+   * figures stop rendering for AZN. The owner's call, taken against the
+   * measurement — 8 rows of which 3 were one-fifth full becomes 6 rows of which
+   * 5 are complete. Neither AAPL (8) nor KGC (5) changes.
+   *
+   * NULL IS EMPTY; "n/m" IS NOT. A cell reading n/m is a statement about the
+   * figures — the comparison crosses zero — so a row whose EPS YoY is n/m has
+   * told the reader something and stays.
+   */
+  const hasSomething = (r: typeof measured[number]) =>
+    r.epsYoY !== null ||
+    r.gross !== null || r.operating !== null || r.net !== null;
+
+  // NEWEST 8 THAT CLEAR THE BAR, not the newest 8 of which some are nearly bare.
+  const rows = measured.filter(hasSomething).slice(0, RENDERED_QUARTERS);
+  const shown = rows.map((r) => r.p);
+
+  const margins = rows.map(({ p, gross, operating, net }, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
     // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
@@ -519,26 +572,22 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     // quarter number out of `fp`, and Number("FY".slice(1)) is NaN — so an
     // annual view would mark every row as a gap. A gap is a quarterly idea and
     // the badge is hidden on the annual card rather than computed wrong.
+    // A GAP IS NOW ALSO A DROPPED EMPTY ROW, which is the honest reading: the
+    // row below is not the period immediately before this one, whether the
+    // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
-    gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
-    operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
-    net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+    gross, operating, net,
   })).reverse();
 
-  const growth = shown.map((p) => {
-    // SEARCHES `q` (all 12 stored), RENDERS FROM `shown` (the newest 8). That
-    // asymmetry is the entire point of storing more than is displayed.
-    const prior = priorYearOf(q, p);
-    return {
-      label: periodLabel(p),
-      // THE BASE IS CARRIED WITH THE FIGURE, not left implicit. The snapshot
-      // card disclosed its comparator and the table did not, which is why the
-      // same wrong base was visible in one place and silent in the other.
-      comparedWith: prior ? periodLabel(prior) : null,
-      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
-      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
-    };
-  }).reverse();
+  const growth = rows.map(({ p, prior, revenueYoY, epsYoY }) => ({
+    label: periodLabel(p),
+    // THE BASE IS CARRIED WITH THE FIGURE, not left implicit. The snapshot
+    // card disclosed its comparator and the table did not, which is why the
+    // same wrong base was visible in one place and silent in the other.
+    comparedWith: prior ? periodLabel(prior) : null,
+    revenueYoY,
+    epsYoY,
+  })).reverse();
 
   // ── WHICH PERIOD THE CASH CARD IS BUILT FROM, AND WHY IT IS ONE PERIOD ────
   //
