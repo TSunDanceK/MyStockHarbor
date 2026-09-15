@@ -32,6 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { readCodeOnly } from "./lib/source-code.mjs";
+import { anchoredNameSignalMirror } from "./lib/anchored-name-signal.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -344,6 +345,75 @@ check(
   mod.anchoredNameSignal("acme common stock") === null,
   "anchoring a lowercase word is the substring problem again with extra steps"
 );
+
+console.log("\n  -- the probe\'s mirror cannot drift from the real function --\n");
+
+// THE RELAY'S READ-ONLY JOB RUNS NO `npm ci` ON PURPOSE — "not installing the
+// Upstash client keeps the job unable to reach the database even if a future
+// edit tried to". That is an isolation guarantee, so the probe cannot load the
+// TypeScript function and carries a mirror instead. Adding `npm ci` to buy the
+// import would trade the guarantee for convenience.
+//
+// The duplication is therefore CHECKED rather than trusted: identical patterns
+// for every name the probe measures, plus the shapes that define the rule.
+{
+  const PROBE_NAMES = [
+    "Dow Inc.", "AT&T Inc.", "NOV Inc.", "Box, Inc.", "RH",
+    "CSX Corporation", "RTX Corporation",
+    // and the boundary shapes, so agreement is not only tested where it is easy
+    "V.F. Corporation Common Stock", "3M Company Common Stock",
+    "Fastenal Company - Common Stock", "A.O. Smith Corporation Common Stock",
+    "X Corporation Common Stock", "acme common stock",
+    // FIVE- AND SIX-CHARACTER FIRST TOKENS, which is where the upper bound
+    // lives. Without one of these a mutation moving the bound from 4 to 6
+    // changes no answer in this list and survives.
+    "Cisco Systems Inc.", "Chevron Corporation", "Pfizer Inc.",
+  ];
+  const disagreements = PROBE_NAMES.filter((name) => {
+    const real = mod.anchoredNameSignal(name);
+    const mirror = anchoredNameSignalMirror(name);
+    return String(real) !== String(mirror);
+  });
+  check(
+    "the probe's mirror matches anchoredNameSignal on every name it measures",
+    disagreements.length === 0,
+    disagreements.length
+      ? `${disagreements.join(", ")} — change scripts/lib/anchored-name-signal.mjs to match`
+      : `${PROBE_NAMES.length} names agree, including the null cases`
+  );
+  check(
+    "...and the comparison is not vacuous — some of those names DO yield a needle",
+    PROBE_NAMES.filter((n) => anchoredNameSignalMirror(n) !== null).length >= 5,
+    "if every name returned null the agreement above would be null === null"
+  );
+  check(
+    "the read-only relay job still installs nothing",
+    (() => {
+      // If this ever gains `npm ci`, the mirror's whole justification is gone —
+      // and so is the isolation property that justified it.
+      // SLICED ON THE JOB KEYS, not on the word "stateful". The first version
+      // cut at wf.indexOf("stateful"), which lands in the header comment on
+      // line ~31 — the read-only job body was never examined and an inserted
+      // `npm ci` survived the check.
+      const wf = fs.readFileSync(".github/workflows/relay.yml", "utf8");
+      const start = wf.indexOf("\n  read-only:");
+      const end = wf.indexOf("\n  stateful:");
+      if (start < 0 || end < 0 || end <= start) return false;
+      // MATCHED ON THE DIRECTIVE, NOT THE WORDS. A bare /npm ci/ over that
+      // slice is TRUE today, because the job carries a comment that says
+      // "# No `npm ci`." — the grep finds the comment explaining the
+      // construct's absence and concludes it is present.
+      // claude/traps/grep-finds-the-comment-not-the-code.md, landing on the
+      // assertion written to protect against exactly this kind of drift.
+      const body = wf.slice(start, end)
+        .split("\n")
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      return !/^\s*-\s*run:.*npm ci/m.test(body);
+    })(),
+    "the mirror exists because of this; if it changes, import the real function instead"
+  );
+}
 
 console.log("\n  -- the asymmetry, pinned at both ends --\n");
 

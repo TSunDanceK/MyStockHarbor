@@ -155,3 +155,94 @@ The acceptance criterion needs **`cache=MISS` renders** on the affected symbols,
 which this sandbox cannot reach. What is verified is the predicate against real
 headline spellings, the 55/55 coverage, and that the long names are unmoved.
 **The 45-day window was not touched.**
+
+---
+
+# Follow-up: five needles fire on generic finance copy
+
+## What I can measure here, and what I cannot
+
+The deciding number asked for — *of the items in that symbol's pool, how many
+does the anchor admit and how many are the company* — needs the real per-symbol
+pools. `news.google.com` is refused from the agent sandbox (403 CONNECT), so
+**that measurement is not available here and is not being estimated.**
+
+What is available: **219 real headlines** committed to this repo
+(`scripts/fixtures/churn-sample.tsv` + `eventtype-gnews.jsonl`). Those are
+*other symbols'* pools, so they measure exposure to **off-topic** text — which
+is precisely the DOW concern.
+
+| symbol | needle | admits / 219 | what they were |
+|---|---|---|---|
+| **DOW** | `\bDow\b` | **2** | **both index stories** — *"Is Humana Stock Outperforming the Dow?"* ×2 |
+| T | `\bAT\b` | 0 | — |
+| NOV | `\bNOV\b` | 0 | — |
+| BOX | `\bBox\b` | 0 | — |
+| RH | `\bRH\b` | 0 | — |
+
+**DOW is corroborated.** Every item it admits from off-topic financial text is
+an index story, none is Dow Inc. That matches the judgement that for this symbol
+the collision is the dominant case rather than the tail, and that trading a
+blank page for a page of index stories is the worse deal — a wrong page looks
+correct and an empty one does not.
+
+**The four zeroes do not clear anything.** A corpus of other symbols' news is
+weak evidence about a symbol's own pool, and absence there is not absence. They
+are carried into the real measurement rather than dismissed.
+
+## The instrument for the numbers I cannot get
+
+`scripts/anchor-collision-sample.mjs`, relay task **`anchor-collisions`**
+(read-only job). For each of the five plus two clean controls (CSX, RTX) it
+fetches the real Google News pool, applies the anchor, and prints **every
+admitted headline in full** plus the first five rejected, so a human classifies
+them. It deliberately does not guess which are on-topic: a heuristic grading its
+own anchor would only agree with itself.
+
+A measuring-nothing guard fails the run if the total pool across all seven
+queries is under 20 — every query returning empty reads exactly like "the anchor
+admits nothing", which is the opposite conclusion.
+
+### The constraint that shaped it
+
+The relay's **read-only job deliberately runs no `npm ci`** — *"not installing
+the Upstash client keeps the job unable to reach the database even if a future
+edit tried to"*. That is an isolation guarantee, so `typescript` is not on that
+runner and the probe cannot load the real `anchoredNameSignal`. Adding `npm ci`
+to buy the import would trade the guarantee for a probe's convenience.
+
+So the probe carries a **mirror**, and the duplication is *checked* rather than
+trusted: `scripts/lib/anchored-name-signal.mjs` must produce identical patterns
+to the TypeScript function for all 16 names the probe measures — including the
+null cases and the five/six-character first tokens where the upper bound lives.
+The checker also asserts the read-only job still installs nothing, because that
+is the entire justification for the mirror existing.
+
+**6/6 mutations killed**, in both directions: the mirror drifting, and the real
+function drifting with the mirror left alone.
+
+## Two of my own assertions were weak, and both are today's recurring shape
+
+- **The upper bound went untested.** Moving it from 4 to 6 changed no answer,
+  because every probe name had a first token of 2–4 or 8+ characters. Fixed by
+  adding Cisco, Chevron and Pfizer — 5 and 6.
+- **The `npm ci` check greped for the comment.** It sliced at
+  `indexOf("stateful")`, which lands in the file's header comment ~145 lines
+  above the job, and then matched `/npm ci/` against text containing the comment
+  ``# No `npm ci`.`` — so it was **true today** for the wrong reason and an
+  inserted `- run: npm ci` survived it. It now strips comment lines and matches
+  the directive shape. That is
+  `claude/traps/grep-finds-the-comment-not-the-code.md` landing on the
+  assertion written to protect against drift.
+
+## Held: the DOW/T/NOV fix
+
+**Not designed, per the instruction to measure first.** The suggested shapes —
+reject `Dow` before *Jones* or after *the*; require `&` adjacent for `AT`;
+reject `NOV` before a day number — are derived from the text around the match
+rather than from a curated word list, which is the same spirit as taking casing
+from the data, and they look right. But the per-symbol admit rates decide how
+much machinery is warranted, and one relay dispatch produces them.
+
+**Nothing regresses while this waits**: the anchored rule is additive and has
+not shipped, so the affected symbols are exactly as dark as they were.
