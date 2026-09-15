@@ -145,6 +145,12 @@ export function fpiPeriodFilings(rows: FilingRow[]): Array<{ periodEnd: string; 
   const byPeriod = new Map<string, FilingRow>();
   for (const r of rows) {
     if (r.form !== "6-K") continue;
+    // PROVABLY REDUNDANT, AND KEPT ANYWAY. Two rows sharing an accession share
+    // a reportDate and a filingDate, so the byPeriod map below collapses them
+    // identically whether or not this fires -- removing it was mutated and the
+    // suite did not notice, which is the correct result rather than a hole. It
+    // stays because it is the domestic path's dedupe too, and a reader who
+    // finds it on one path and not the other will conclude the other is buggy.
     if (seen.has(r.accn)) continue;
     seen.add(r.accn);
     if (!valid(r.reportDate) || !valid(r.filingDate)) continue;
