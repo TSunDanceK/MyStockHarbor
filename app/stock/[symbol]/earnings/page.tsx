@@ -11,11 +11,13 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { readFactSet } from "@/lib/server/secFactStore";
+import { resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { notFound } from "next/navigation";
 import { buildSecEarningsView, type SecEarningsView } from "@/lib/server/secEarningsView";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecCashQualityCard,
-  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard, SecNoDataCard,
+  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard,
+  SecPendingCard, SecNoXbrlCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -290,12 +292,12 @@ async function getEarningsData(symbol: string) {
   // market actually reacted in. getDailyHistory supplies the bars. Market cap,
   // P/E and the reaction card are still on FMP; the bars have not moved.
   // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
-  const [factSet, dailyHistory, earningsJson] = await Promise.all([
-    readFactSet(symbol),
+  const [cold, dailyHistory, earningsJson] = await Promise.all([
+    resolveFactSetForRender(symbol),
     getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
   ]);
-  const secView = factSet ? buildSecEarningsView(factSet) : null;
+  const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
 
   // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
   // off these rows any more, even though they are present: two sources for one
@@ -343,7 +345,7 @@ async function getEarningsData(symbol: string) {
 
   const score = scoreFromSec(secView);
 
-  return { earningsRows, completedRows, latest, next, priceReactionQuarters, score, secView };
+  return { earningsRows, completedRows, latest, next, priceReactionQuarters, score, secView, cold };
 }
 
 
@@ -520,6 +522,12 @@ export default async function StockEarningsPage({ params }: Props) {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
+
+  // THE CIK GATE, AS A 404. A symbol SEC has never heard of gets no page at
+  // all: nothing was fetched for it and nothing was queued. This is what bounds
+  // an endpoint anyone can hit -- the set of strings that can trigger work is
+  // the ~10,400 registrants in the committed ticker file, not any string.
+  if (data.cold.status === "no-cik") notFound();
 
   const nextReport = data.next;
   const score = data.score;
@@ -738,7 +746,13 @@ export default async function StockEarningsPage({ params }: Props) {
                 </section>
               ) : null}
 
-              {!secView ? <SecNoDataCard symbol={clean} /> : (
+              {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
+                  fetch of nothing usable -- an IFRS filer, or a company with no
+                  filed year yet -- and it must NEVER render as pending, because
+                  the cron would re-read it daily and get the same nothing.
+                  The 404 case never reaches here; see the guard above. */}
+              {data.cold.status === "no-xbrl" ? <SecNoXbrlCard symbol={clean} /> :
+               !secView ? <SecPendingCard symbol={clean} /> : (
                 <>
                   <SecSnapshotCard view={secView} />
                   {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
