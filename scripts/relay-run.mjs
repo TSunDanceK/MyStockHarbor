@@ -209,6 +209,15 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // Read-only, NO credential and NO network: ranks the analysis universe by the
+  // frozen pool's market cap and emits the due strip's static top-50 membership.
+  // The strip is a CUT, and this generates the cut. Membership only -- no cap
+  // figure is carried out of the run.
+  "due-strip-universe": {
+    script: "scripts/due-strip-universe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
