@@ -103,7 +103,16 @@ function parseTerms(text, sic) {
     if (m) {
       const lo = Number(m[1]);
       const hi = Number(m[2]);
-      if (plausible(lo) && plausible(hi) && lo <= hi) { low = lo; high = hi; }
+      // BOTH ENDS PLAUSIBLE IS NOT ENOUGH. The first seed run produced Aptevo
+      // at $11.70-$428.40 -- every value inside the $1-$500 bound, and a deal
+      // size of $1.42 BILLION for a microcap follow-on. A real IPO range is
+      // tight; underwriters do not market a 36x spread. Anything wider than 3x
+      // means the two numbers came from different sentences.
+      const RATIO_MAX = 3;
+      if (plausible(lo) && plausible(hi) && lo <= hi && hi <= lo * RATIO_MAX) {
+        low = lo;
+        high = hi;
+      }
       break;
     }
   }
@@ -218,14 +227,15 @@ console.log(`   ticker map: ${symbolKeyed.size} symbols -> ${listedByCik.size} d
 // A summarised read of CIK 1918102's submissions once invented accession numbers
 // and asserted an 8-A12B that was a predecessor shell's 10-Q.
 const all = [...byCik.values()];
-const needsSic = all.filter((r) => {
-  const hasFinal = r.filings.some((f) => /^424B[14]$/.test(f.form));
-  const hasAmend = r.filings.some((f) => /^(S-1\/A|F-1\/A)$/.test(f.form));
-  if (!hasFinal && !hasAmend) return false;
-  // Skip the already-listed ones: they are dropped before the entity filter
-  // ever runs, so their SIC is never read.
-  return hasFinal || !listedByCik.has(String(Number(r.cik)));
-});
+// STRUCTURAL PRE-FILTER ONLY. The first run also skipped already-listed filers
+// here, which meant buildSecIpoTables never saw them and its own
+// droppedAlreadyListed counter read 0 -- a filter reporting zero because
+// something upstream ate its input. The classifier owns every exclusion; this
+// only decides whose cover is worth fetching, and an unfetched cover is exactly
+// what "no terms" means.
+const needsSic = all.filter((r) =>
+  r.filings.some((f) => /^(424B[14]|S-1\/A|F-1\/A)$/.test(f.form))
+);
 console.log(`\n   fetching SIC for ${needsSic.length} filers (submissions.json, parsed)`);
 let sicOk = 0;
 for (const rec of needsSic) {
@@ -241,8 +251,17 @@ for (const rec of needsSic) {
 console.log(`   SIC resolved for ${sicOk}/${needsSic.length}`);
 
 // ── Cover terms, for the survivors only ───────────────────────────────────
-const needsTerms = needsSic.filter((r) => !isFundEntity(r.sic, r.company));
-console.log(`\n   fetching cover terms for ${needsTerms.length} filers (${needsSic.length - needsTerms.length} dropped by the entity filter first)`);
+// Two skips, both of which only avoid a wasted fetch: a fund, and an
+// already-listed issuer with no 8-A12B (a follow-on). Both are decided by the
+// SHARED functions, and both are re-applied by the classifier afterwards -- so
+// the funnel still counts them, rather than silently never seeing them.
+const needsTerms = needsSic.filter((r) => {
+  if (isFundEntity(r.sic, r.company)) return false;
+  const listed = listedByCik.has(String(Number(r.cik)));
+  const registered = r.filings.some((f) => f.form === "8-A12B");
+  return !(listed && !registered);
+});
+console.log(`\n   fetching cover terms for ${needsTerms.length} of ${needsSic.length} (skipping funds and already-listed-without-8-A12B, both re-checked by the classifier)`);
 let termsOk = 0;
 for (const rec of needsTerms) {
   const relevant = rec.filings
@@ -278,14 +297,17 @@ const { upcoming, recent, funnel } = buildSecIpoTables(all, listedByCik, WINDOW_
 
 console.log(`\n${"═".repeat(78)}\nTHE FUNNEL — buildSecIpoTables(), the same call the render makes\n${"═".repeat(78)}`);
 console.log(`   filer records in                    ${String(funnel.records).padStart(5)}`);
-console.log(`   upper candidates (amendment, no 424B)${String(funnel.upperCandidates).padStart(4)}`);
-console.log(`     − no terms on the cover           ${String(funnel.droppedNoTerms).padStart(5)}`);
-console.log(`     − already listed  [class a + c]   ${String(funnel.droppedAlreadyListed).padStart(5)}`);
-console.log(`     − ETF / trust     [class b]       ${String(funnel.droppedEntity).padStart(5)}`);
-console.log(`     − withdrawn RW/AW after amendment ${String(funnel.droppedWithdrawn).padStart(5)}`);
-console.log(`     − stale > ${IPO_TERMS_MAX_AGE_DAYS}d                     ${String(funnel.droppedStale).padStart(5)}`);
-console.log(`   = UPCOMING (upper table)            ${String(funnel.upcoming).padStart(5)}`);
-console.log(`   = RECENT   (lower table)            ${String(funnel.recent).padStart(5)}`);
+console.log(`\n   UPPER  candidates (amendment, no 424B) ${String(funnel.upperCandidates).padStart(4)}`);
+console.log(`     − already listed  [class a + c]     ${String(funnel.droppedAlreadyListed).padStart(4)}`);
+console.log(`     − ETF / trust     [class b]         ${String(funnel.droppedEntity).padStart(4)}`);
+console.log(`     − no terms on the cover             ${String(funnel.droppedNoTerms).padStart(4)}`);
+console.log(`     − withdrawn RW/AW after amendment   ${String(funnel.droppedWithdrawn).padStart(4)}`);
+console.log(`     − stale > ${IPO_TERMS_MAX_AGE_DAYS}d                       ${String(funnel.droppedStale).padStart(4)}`);
+console.log(`   = UPCOMING                            ${String(funnel.upcoming).padStart(4)}`);
+console.log(`\n   LOWER  candidates (424B in last 30d)  ${String(funnel.lowerCandidates).padStart(4)}`);
+console.log(`     − follow-on: no 8-A12B in window    ${String(funnel.droppedFollowOn).padStart(4)}`);
+console.log(`     − no terms on the cover             ${String(funnel.droppedNoTermsLower).padStart(4)}`);
+console.log(`   = RECENT                              ${String(funnel.recent).padStart(4)}`);
 
 console.log(`\n   >>> ENTITY FILTER MATCHED: ${funnel.droppedEntity}`);
 if (funnel.droppedEntity === 0) {

@@ -143,6 +143,9 @@ export type SecIpoTables = { upcoming: ConfirmedIpo[]; recent: ConfirmedIpo[] };
 export type SecIpoFunnel = {
   records: number;
   upperCandidates: number;
+  lowerCandidates: number;
+  droppedFollowOn: number;
+  droppedNoTermsLower: number;
   droppedNoTerms: number;
   droppedAlreadyListed: number;
   droppedEntity: number;
@@ -185,6 +188,9 @@ export function buildSecIpoTables(
   const funnel: SecIpoFunnel = {
     records: records.length,
     upperCandidates: 0,
+    lowerCandidates: 0,
+    droppedFollowOn: 0,
+    droppedNoTermsLower: 0,
     droppedNoTerms: 0,
     droppedAlreadyListed: 0,
     droppedEntity: 0,
@@ -202,7 +208,26 @@ export function buildSecIpoTables(
     if (final) {
       // ── LOWER TABLE. Priced and listed.
       if (final.date < recentCutoff) continue;
-      if (!hasTerms(record.terms)) continue;
+      funnel.lowerCandidates += 1;
+
+      // A 424B FROM AN ALREADY-LISTED COMPANY IS A FOLLOW-ON, NOT AN IPO, and
+      // the first seed run proved it: Aveanna Healthcare (AVAH, public since
+      // 2021), ABVC Biopharma, Laser Photonics (LASE, 2022), Aptevo (APVO, 2016)
+      // and Check-Cap all rendered under "Recent IPOs". Every one of them is a
+      // seasoned issuer raising more money.
+      //
+      // THE TEST IS THE PAIR, NOT EITHER HALF. An 8-A12B is what registers a
+      // class on an exchange for the first time, so it -- not the prospectus --
+      // is the listing event. Membership in the ticker map alone cannot do it
+      // (a company that IPO'd last week is in the map too, and belongs here);
+      // the 8-A12B alone cannot do it either (ETFs and note programmes file
+      // them). What identifies an IPO is the 8-A12B inside this window.
+      if (!lastOf(record, EXCHANGE_REGISTRATION)) {
+        funnel.droppedFollowOn += 1;
+        continue;
+      }
+
+      if (!hasTerms(record.terms)) { funnel.droppedNoTermsLower += 1; continue; }
       // TICKER AND EXCHANGE COME FROM THE MAP, NOT THE COVER. Cover extraction
       // managed 5/8 on ticker; a company that has listed is in
       // company_tickers_exchange.json, which carries the exchange too. This is
@@ -225,7 +250,17 @@ export function buildSecIpoTables(
     const amendment = lastOf(record, AMENDMENT);
     if (!amendment) continue;
     funnel.upperCandidates += 1;
-    if (!hasTerms(record.terms)) { funnel.droppedNoTerms += 1; continue; }
+
+    // ── ORDER MATTERS, AND THE FIRST SEED RUN PROVED IT ────────────────────
+    // These two ran AFTER the terms test and both reported 0 -- not because
+    // they were broken, but because anything they would have caught had already
+    // been dropped for having no parsed terms. A filter reporting zero because
+    // something upstream ate its input is indistinguishable from a filter that
+    // does not work, which is the trap this project has now hit four times
+    // (claude/traps/a-filter-that-matches-nothing-looks-correct.md).
+    //
+    // Cheap, decisive exclusions first. Now their counts mean what they say,
+    // and nothing pays to parse a cover for a row it is about to drop.
 
     // (a) + (c): already listed on a major exchange, OR quoted on OTC and
     // uplisting. One membership test does both -- the map carries 2,500 OTC rows.
@@ -239,6 +274,8 @@ export function buildSecIpoTables(
       funnel.droppedEntity += 1;
       continue;
     }
+
+    if (!hasTerms(record.terms)) { funnel.droppedNoTerms += 1; continue; }
 
     if (isWithdrawn(record, amendment.date)) { funnel.droppedWithdrawn += 1; continue; }
     if (isStale(amendment.date, now)) { funnel.droppedStale += 1; continue; }
