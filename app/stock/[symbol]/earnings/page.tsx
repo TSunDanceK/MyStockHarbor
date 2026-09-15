@@ -165,19 +165,74 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
-function scoreExplanation(tone: EarningsTone) {
-  // NO LONGER MENTIONS ESTIMATES. The score stopped reading them when FMP's
-  // analyst consensus left on 2026-09-15; describing it as measuring
-  // "stronger-than-expected" would keep the old claim on a number that can no
-  // longer support it.
-  if (tone === "good") return "The latest filed quarter reads constructive: revenue and profit are growing year over year, margins are holding, and reported profit is backed by cash.";
-  if (tone === "weak") return "The latest filed quarter reads weak: growth, margins or cash conversion are under pressure relative to the same quarter a year earlier.";
-  return "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
+/** The five things the score can read. Named so the card can say what it could not. */
+const SCORE_COMPONENTS = {
+  revenueGrowth: "revenue growth against the same quarter a year earlier",
+  epsGrowth: "EPS growth against the same quarter a year earlier",
+  profitability: "whether the quarter was profitable",
+  marginTrend: "the direction of operating margin",
+  cashConversion: "whether reported profit is turning into cash",
+} as const;
+type ScoreComponent = keyof typeof SCORE_COMPONENTS;
+
+/**
+ * THE NARRATIVE IS BUILT FROM WHAT ACTUALLY RAN, not from the tone alone.
+ *
+ * ── WHAT THE TONE-ONLY VERSION CLAIMED ────────────────────────────────────
+ * Measured on the #464 preview, /stock/AZN/earnings: every field of the
+ * Quality of Earnings card rendered "—" — operating cash flow, capital
+ * expenditure, free cash flow, cash-flow-less-net-income, share-based
+ * compensation — and the score directly above it read GOOD, 100/100, with
+ * "reported profit is backed by cash."
+ *
+ * The scorer had not awarded points for the missing chain; the sentence was
+ * canned per tone and asserted the claim regardless. That is the same failure
+ * shape as a check that supplies its own expected value: the component that
+ * could not be measured still spoke.
+ *
+ * So the clauses are assembled from the components that RAN, and a component
+ * that did not run contributes no clause and is listed as unavailable.
+ */
+function scoreExplanation(tone: EarningsTone, ran: Set<ScoreComponent>) {
+  const clauses: string[] = [];
+  const up = tone === "good";
+  if (ran.has("revenueGrowth") || ran.has("epsGrowth")) {
+    clauses.push(up ? "revenue and profit are growing year over year" : "growth is under pressure");
+  }
+  if (ran.has("marginTrend")) clauses.push(up ? "margins are holding" : "margins are slipping");
+  // THE CLAUSE THAT WAS WRONG. It appears only when the cash component ran.
+  if (ran.has("cashConversion")) {
+    clauses.push(up ? "reported profit is backed by cash" : "cash conversion is weak");
+  } else if (ran.has("profitability")) {
+    clauses.push(up ? "the quarter was profitable" : "the quarter was loss-making");
+  }
+  const body = clauses.length
+    ? clauses.join(", ").replace(/, ([^,]*)$/, " and $1")
+    : "the filing carries few of the figures this score reads";
+  if (tone === "good") return `The latest filed quarter reads constructive: ${body}.`;
+  if (tone === "weak") return `The latest filed quarter reads weak: ${body}.`;
+  return `The latest earnings read is mixed: ${body}. Investors should focus on whether future reports confirm improvement or reveal more pressure.`;
 }
 
-function buildScoreResult(score: number, tone: EarningsTone) {
+/** What the score could NOT read, in the page's own words. */
+function scoreGaps(ran: Set<ScoreComponent>): string[] {
+  return (Object.keys(SCORE_COMPONENTS) as ScoreComponent[])
+    .filter((k) => !ran.has(k))
+    .map((k) => SCORE_COMPONENTS[k]);
+}
+
+function buildScoreResult(score: number, tone: EarningsTone, ran: Set<ScoreComponent>) {
   return {
-    available: true as const, score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
+    available: true as const,
+    score,
+    tone,
+    label: toneLabel(tone),
+    explanation: scoreExplanation(tone, ran),
+    // NOT a count. A reader needs to know WHICH input was missing to judge the
+    // number; "4 of 5 signals" is the kind of summary that hides the one that
+    // mattered.
+    unavailable: scoreGaps(ran),
+  };
 }
 
 // Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
@@ -224,23 +279,27 @@ function scoreFromSec(view: SecEarningsView | null) {
       score: 50, available: false as const, tone: "neutral" as EarningsTone,
       label: "Unavailable",
       explanation: "This company's SEC filings have not been read into the site yet, so there is nothing to score.",
+      unavailable: Object.values(SCORE_COMPONENTS) as string[],
     };
   }
 
   let score = 50;
-  let signals = 0;
+  // WHICH COMPONENTS ACTUALLY RAN, not how many. An absent input contributes no
+  // points AND no clause; see scoreExplanation for the sentence that used to
+  // claim cash backing from an empty cash-flow chain.
+  const ran = new Set<ScoreComponent>();
   const s = view.snapshot;
 
-  if (s.revenueYoY != null) { score += clamp(s.revenueYoY * 0.55, -22, 22); signals++; }
-  if (s.epsYoY != null) { score += clamp(s.epsYoY * 0.30, -20, 20); signals++; }
-  if (s.netIncome.val != null) { score += s.netIncome.val > 0 ? 6 : -8; signals++; }
+  if (s.revenueYoY != null) { score += clamp(s.revenueYoY * 0.55, -22, 22); ran.add("revenueGrowth"); }
+  if (s.epsYoY != null) { score += clamp(s.epsYoY * 0.30, -20, 20); ran.add("epsGrowth"); }
+  if (s.netIncome.val != null) { score += s.netIncome.val > 0 ? 6 : -8; ran.add("profitability"); }
 
   // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
   // single-quarter reading: one quarter's margin move is as often mix as trend.
   const opMargins = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
   if (opMargins.length >= 2) {
     score += clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10);
-    signals++;
+    ran.add("marginTrend");
   }
 
   // CASH AGAINST PROFIT. Positive accruals mean cash is running ahead of
@@ -249,20 +308,21 @@ function scoreFromSec(view: SecEarningsView | null) {
   const ni = view.cashQuality.netIncome.val;
   if (acc != null && ni != null && ni !== 0) {
     score += clamp((acc / Math.abs(ni)) * 8, -10, 10);
-    signals++;
+    ran.add("cashConversion");
   }
 
-  if (signals === 0) {
+  if (ran.size === 0) {
     return {
       score: 50, available: false as const, tone: "neutral" as EarningsTone,
       label: "Unavailable",
       explanation: "This company's latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.",
+      unavailable: Object.values(SCORE_COMPONENTS) as string[],
     };
   }
 
   const rounded = Math.round(clamp(score, 0, 100));
   const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
-  return buildScoreResult(rounded, tone);
+  return buildScoreResult(rounded, tone, ran);
 }
 
 
@@ -726,6 +786,17 @@ export default async function StockEarningsPage({ params }: Props) {
                 </>
               ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>
+              {/* WHAT THE SCORE COULD NOT SEE, ON THE SCORE ITSELF.
+                  /stock/AZN/earnings rendered GOOD 100/100 above a Quality of
+                  Earnings card whose every field was "—". The number is only
+                  readable next to its own gaps, so they sit here rather than
+                  being inferable from a card further down the page. */}
+              {score.available && score.unavailable.length ? (
+                <p className="earningsDataNote" style={{ marginTop: 10 }}>
+                  Not measured, because {clean}&apos;s filings do not carry it:{" "}
+                  {score.unavailable.join("; ")}.
+                </p>
+              ) : null}
             </aside>
           </section>
 
@@ -826,10 +897,22 @@ export default async function StockEarningsPage({ params }: Props) {
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>
                 <p>{score.explanation}</p>
+                {/* The generic bullets describe what the score reads WHEN it
+                    can. A component that did not run must not be described
+                    here as if it had -- the cash bullet is the one that read
+                    as a claim on AZN, where the cash chain is empty. */}
                 <ul className="bulletList">
                   <li>Year-over-year growth separates one-quarter noise from a real earnings trend.</li>
                   <li>Margins show whether the company is keeping more of each pound of revenue.</li>
-                  <li>Cash flow against net income shows whether reported profit is turning into cash.</li>
+                  {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
+                    <li>
+                      Cash flow against net income would show whether reported profit is turning into
+                      cash — {clean}&apos;s filings do not carry a cash-flow statement this page can
+                      read, so it is not part of the score above.
+                    </li>
+                  ) : (
+                    <li>Cash flow against net income shows whether reported profit is turning into cash.</li>
+                  )}
                 </ul>
               </section>
 

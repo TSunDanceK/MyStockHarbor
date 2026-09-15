@@ -217,6 +217,18 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Read-only: runs the SHIPPED view builder and the SHIPPED scorer over real
+  // companyfacts and prints what a reader would see — the snapshot card's
+  // strings, the growth table row by row with its base disclosed, and the
+  // score with the components it could not read. Prints the OLD q[i+4] base
+  // beside the new one so "unchanged for a dense filer" is checked rather than
+  // asserted. Also diagnoses an empty cash-flow chain against the payload.
+  // No dump, no credential; needs the network and the TypeScript compiler.
+  "sec-period-match": {
+    script: "scripts/sec-period-match-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
