@@ -276,7 +276,7 @@ export function unreadableReason(
 
 const DAY = 86400000;
 
-function spanDays(start: string, end: string): number {
+export function spanDays(start: string, end: string): number {
   return (Date.parse(end) - Date.parse(start)) / DAY;
 }
 
@@ -313,7 +313,7 @@ function newer(a: FactRow, b: FactRow): FactRow {
  * Collapsing here is trap 2: AAPL's revenue is `RevenueFromContractWith...`
  * from 2018 and `Revenues` before it, and one tag for the symbol loses half.
  */
-function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?: Set<string>) {
+export function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?: Set<string>) {
   const out: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[] = [];
 
   // TWO NAMESPACES, ONE RANKED LIST. The primary chain first, then the same
@@ -377,7 +377,7 @@ function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?: Set<s
  * The other order would let a 10-K's legacy `Revenues` restatement beat the
  * current tag because it was filed later.
  */
-function resolve(
+export function resolve(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ) {
   let best: { row: FactRow; tag: string; ns: string; rank: number; unit: string } | null = null;
