@@ -229,6 +229,17 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Read-only: what twelve stored quarters COST, measured against real
+  // payloads before the window is changed. Reports the stored record size at
+  // four window variants, whether the reader's hash gate moves (it cannot),
+  // and how many of the eight RENDERED rows can reach a prior-year period at
+  // each. No dump, no credential; needs the network and the TypeScript
+  // compiler for the lift.
+  "sec-window-size": {
+    script: "scripts/sec-window-size-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
