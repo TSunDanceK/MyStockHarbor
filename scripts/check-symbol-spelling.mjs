@@ -56,6 +56,41 @@ const ALLOWED_DOTTED = new Map([
   ],
 ]);
 
+// ── TEST FIXTURES ARE A DIFFERENT CATEGORY, AND MIXING THEM WOULD ROT THE LIST ─
+// The allowlist above means "a live instance of the bug, still unfixed", and its
+// value comes from only ever shrinking. A dotted string that exists solely as an
+// argument to a unit test is not an instance of the bug: it never reaches the
+// fundamentals path, and it must not shrink out of the list when something is
+// fixed, so filing it above would make "this list only shrinks" false and quietly
+// retire the invariant.
+//
+// WHY THE FIXTURES NEED AN EXCEPTION AT ALL. cikFor() falls back from a dotted
+// spelling to the dashed one, and "exact match wins over the rewrite" is
+// indistinguishable from "the rewrite wins" against the real CIK map -- no key in
+// it both contains a dot and exists in its own right. Only a crafted map with
+// both spellings of one symbol discriminates them, and a mutation swapping the
+// two survived until that fixture existed.
+//
+// KEYED BY symbol@file, NOT BY SYMBOL. That is the whole point of a second map
+// rather than a looser first one: a fixture is permitted in the ONE harness that
+// declares it, so the same literal appearing in app code -- which is the
+// hand-edit vector this checker exists for -- still fails. The stale check below
+// covers these too, so a deleted fixture cannot leave standing permission.
+const ALLOWED_FIXTURES = new Map([
+  [
+    "A.B@scripts/check-sec-adapter.mjs",
+    "crafted CIK map proving exact-match-before-rewrite in cikFor(); not a ticker",
+  ],
+  [
+    "ZZZZ.Z@scripts/check-sec-adapter.mjs",
+    "the not-in-either-spelling case, proving cikFor returns undefined rather than inventing a CIK",
+  ],
+]);
+
+/** A dotted literal is excused only in the exact file its fixture entry names. */
+const fixtureExcused = (symbol, file) =>
+  ALLOWED_FIXTURES.has(`${symbol}@${path.relative(process.cwd(), file).split(path.sep).join("/")}`);
+
 console.log("1. The premise: the vendor's spelling is the DASH");
 
 // If buildFmpSymbol were deleted, or reversed to map dash->dot, the whole
@@ -157,7 +192,13 @@ for (const known of ALLOWED_DOTTED.keys()) {
   );
 }
 
-const unexpected = [...found.keys()].filter((s) => !ALLOWED_DOTTED.has(s)).sort();
+// A symbol is unexpected only if EVERY file holding it is unaccounted for: a
+// fixture entry excuses its own file, never the symbol everywhere.
+const unexpected = [...found.entries()]
+  .filter(([sym, files]) =>
+    !ALLOWED_DOTTED.has(sym) && [...files].some((f) => !fixtureExcused(sym, f)))
+  .map(([sym]) => sym)
+  .sort();
 check(
   "no dotted ticker outside the allowlist",
   unexpected.length === 0,
@@ -166,6 +207,39 @@ check(
       `sector, silently, because the fundamentals path does not map the dot. ` +
       `Use FMP's dashed spelling instead, or add an allowlist entry saying why not`
     : `${found.size} dotted ticker(s) in the tree, all known`
+);
+
+// THE SCOPING ITSELF, ASSERTED RATHER THAN ASSUMED. Widening the excuse from
+// symbol@file to bare symbol passes every other assertion here, because it only
+// does damage in the presence of a leak -- two mutations that are each harmless
+// alone. A single-mutation suite cannot catch that pairing, so the property is
+// checked directly: the same literal in a different file must NOT be excused.
+check(
+  "a fixture excuses its own file and nothing else",
+  (() => {
+    const [firstKey] = [...ALLOWED_FIXTURES.keys()];
+    if (!firstKey) return false;
+    const [sym, file] = firstKey.split("@");
+    return fixtureExcused(sym, path.join(process.cwd(), file)) &&
+      !fixtureExcused(sym, path.join(process.cwd(), "lib/server/news/secProvider.ts")) &&
+      !fixtureExcused("NOT.AFIXTURE", path.join(process.cwd(), file));
+  })(),
+  "otherwise a test fixture becomes standing permission for the same literal in app code, " +
+    "which is the hand-edit vector this whole file exists for"
+);
+
+const staleFixtures = [...ALLOWED_FIXTURES.keys()].filter((key) => {
+  const [sym, file] = key.split("@");
+  const files = found.get(sym);
+  return !files || ![...files].some((f) => path.relative(process.cwd(), f).split(path.sep).join("/") === file);
+});
+check(
+  "the fixture list has no stale entries",
+  staleFixtures.length === 0,
+  staleFixtures.length
+    ? `${staleFixtures.join(", ")} is excused but no longer there — delete the ` +
+      `entry, or it becomes standing permission for a real dotted ticker in that file`
+    : `${ALLOWED_FIXTURES.size} fixture(s), each still in the file that declares it`
 );
 
 const stale = [...ALLOWED_DOTTED.keys()].filter((s) => !found.has(s)).sort();
@@ -184,7 +258,9 @@ console.log("\n3. Where the known instances actually are");
 // of this said "five places" from memory and there are six -- so the number gets
 // measured on every run instead of remembered.
 for (const [sym, files] of [...found].sort()) {
-  const note = ALLOWED_DOTTED.get(sym);
+  const note = ALLOWED_DOTTED.get(sym) ??
+    [...files].map((f) => ALLOWED_FIXTURES.get(
+      `${sym}@${path.relative(process.cwd(), f).split(path.sep).join("/")}`)).find(Boolean);
   console.log(`  ${sym} — ${files.size} file(s)${note ? `: ${note}` : ""}`);
   for (const f of [...files].sort()) console.log(`      ${f}`);
 }

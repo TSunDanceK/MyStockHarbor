@@ -9,9 +9,22 @@
 // one-line mistake to make and it would not fail anything, so it is asserted.
 //
 //   node scripts/check-news-store.mjs
+import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { readCodeOnly } from "./lib/source-code.mjs";
+
+/** Transpile a TS module and import it, so an assertion can RUN the code. */
+const loadTs = async (source, tag) => {
+  if (/^import /m.test(source)) throw new Error(`${tag}: an import survived; this loader inlines nothing`);
+  const file = path.join(process.cwd(), `.check-${tag}.mjs`);
+  fs.writeFileSync(file, ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText);
+  try { return await import(`${pathToFileURL(file).href}?t=${Date.now()}`); }
+  finally { fs.unlinkSync(file); }
+};
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -147,6 +160,94 @@ check(
   "the spec names a probe verdict",
   /VERDICT: PASS/.test(spec),
   "the spec's own rule is that the design is not cleared to build until this table names a result"
+);
+
+console.log("\n=== 7. Configured is not contributed ===\n");
+
+// /cache-health read "gnews + wire + sec" for two days while GlobeNewswire was
+// being tarpitted and returning nothing at all. Nothing was wrong with that
+// line -- those three ARE registered -- it simply could not tell a working
+// adapter from a silent one, and the silent one threw nothing, logged nothing
+// and never settled. The counts below are the only thing that can.
+// claude/wire-egress-verdict-2026-09-14.md.
+
+check(
+  "every active adapter is seeded to zero before the items are counted",
+  /for \(const id of deps\.attribution\.activeIds\(\)\) byProvider\.set\(id, 0\)/.test(store),
+  "an adapter that returned NOTHING leaves no item to read an id off, so without the seed " +
+    "'contributed 0' and 'not registered' are the same absent field — the exact ambiguity this removes"
+);
+check(
+  "...and the count is taken from what the adapters RETURNED, not from what survived dedup",
+  /for \(const item of fetched\)/.test(store),
+  "post-dedup survivors would read as a failure when a wire release is correctly collapsed into " +
+    "the Google News copy of itself — a different fact, and not the one being asked"
+);
+check(
+  "the per-provider counts are actually written to the stats hash",
+  /hincrby\(key, `\$\{PROVIDER_STAT_PREFIX\}\$\{providerId\}`/.test(store),
+  "computed and dropped is the same as not computed"
+);
+check(
+  "the active list comes from activeNewsProviders(), not a literal at the call site",
+  /activeIds: \(\) => activeNewsProviders\(\)\.map\(/.test(newsData),
+  "a hardcoded list would keep reporting an adapter that had been removed, and miss one that was added"
+);
+
+// THE THREE ZEROES, RUN RATHER THAN GREPPED. Redis absent, nothing refreshed
+// yet, and an adapter that really did return nothing all render as a zero if
+// they are collapsed, and only the third is an alarm. Two false alarms would
+// retire the true one.
+//
+// THE FIRST VERSION OF THESE THREE ASSERTIONS WAS WORTHLESS and the mutation
+// suite said so: they grepped newsStore.ts for `status: "idle"` and friends,
+// which appear in the TYPE DECLARATION regardless of what the code does. Both
+// collapse mutations sailed through. That is why classifyProviderStats was
+// split into a module with no imports — so the real function can be called.
+const providerStats = await loadTs(
+  fs.readFileSync(path.join(ROOT, "lib/server/news/providerStats.ts"), "utf8"),
+  "provider-stats"
+);
+check(
+  "Redis absent reads as unavailable, not as zero",
+  providerStats.classifyProviderStats(null).status === "unavailable",
+  "a missing credential rendered as 0 reports an adapter outage that is not happening"
+);
+check(
+  "a day with no refresh yet reads as idle, not as zero",
+  providerStats.classifyProviderStats({ coldFetches: 0 }).status === "idle",
+  "every morning before the first refresh would otherwise cry wolf"
+);
+check(
+  "...and an adapter that really returned nothing reads as ok with a zero",
+  (() => {
+    const got = providerStats.classifyProviderStats({ "provider:gnews": 412, "provider:wire": 0 });
+    return got.status === "ok" && got.counts.wire === 0 && got.counts.gnews === 412;
+  })(),
+  "THE ONE TRUE ALARM: asked today, brought back nothing — the GlobeNewswire shape"
+);
+check(
+  "a hash of nothing but zeroes is still ok, not idle",
+  (() => {
+    const got = providerStats.classifyProviderStats({ "provider:wire": 0 });
+    return got.status === "ok" && got.counts.wire === 0;
+  })(),
+  "counting field PRESENCE rather than value is what keeps the alarm case visible"
+);
+check(
+  "non-provider fields are not mistaken for adapters",
+  (() => {
+    const got = providerStats.classifyProviderStats({ itemsAdded: 91, "provider:sec": 3 });
+    return got.status === "ok" && got.counts.itemsAdded === undefined && got.counts.sec === 3;
+  })(),
+  "the prefix is the namespace; without it a counter named after a provider would render as one"
+);
+check(
+  "the panel renders a count ONLY in the ok state, and null otherwise",
+  /providerStats\.status === "ok" \? providerStats\.counts\[id\] \?\? 0 : null/.test(
+    readCodeOnly("app/cache-health/page.tsx")
+  ),
+  "the tail of that ternary is the whole assertion — `: 0` would report every unknown as an outage"
 );
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\nFAILED (${failures})\n`);

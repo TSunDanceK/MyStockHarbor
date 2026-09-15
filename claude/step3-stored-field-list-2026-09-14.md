@@ -1,18 +1,42 @@
-# Step 3 — the stored field list, for approval before any extraction code
+# Step 3 — the stored field list
 
-**Date:** 2026-09-14, revised 2026-09-15
-**Status:** PROPOSAL. No extraction code written.
-**Derived from:** `claude/hide-list-verdict-2026-09-13.md` §7 (the card requirements),
-§1 (the tag chains), §2 (the cash-flow finding).
-**Brief:** `claude/BRIEF-step3-extraction-and-retention-2026-09-14.md`
+**Date:** 2026-09-14, revised 2026-09-15.
+**Status:** **BUILT.** This was a proposal; it is now what `lib/server/secFields.ts`
+holds. §0 records what changed between the approved proposal and the shipped
+list, and why — the sections after it are the proposal as approved, kept because
+the reasoning still stands.
+**Derived from:** `claude/hide-list-verdict-2026-09-13.md` §7 (the card
+requirements), §1 (the tag chains), §2 (the cash-flow finding).
 
-> **Revision note.** The first version of this list was derived from grep counts
-> of field names in the tree — which measures what the code happens to reference
-> today, not what the page needs. It is now derived from §7's cards. That moved
-> the count from 35 to 43 and added `interestExpense`,
-> `nonOperatingIncomeExpense`, `netIncomeToNoncontrollingInterest`,
-> `dividendsDeclaredPerShare`, `deferredRevenue*`, `otherOperatingExpense` and
-> `sharesOutstandingCover` — every one of which a card needs and a grep missed.
+> **A PARALLEL COPY OF THIS FILE REACHED `main` SEPARATELY** — a 35-field version
+> under the same name, written from the same brief. It is not wrong, it is
+> earlier: it predates the owner's "err wide" instruction and the four
+> resolutions that followed. This file supersedes it rather than discarding it
+> silently, and the merge that brought them together is the only place the two
+> ever existed at once.
+
+## 0. What the shipped list is, against the proposal below
+
+**46 fields: 17 income, 11 cash-flow, 18 balance-sheet.** The proposal said 43
+(16 / 10 / 17). Three additions and one removal, each forced by a measurement:
+
+| change | why |
+|---|---|
+| **`kind` has FOUR values, not two** | `duration-cumulative` · `duration-average` · `duration-ratio` · `instant`. The cumulative/instant split is the split between the income statement and the balance sheet, **not** between what adds and what does not. `sharesBasic`/`sharesDiluted` are weighted averages and `epsBasic`/`epsDiluted` are ratios; differencing them printed **−668,000 shares for PLAB** and **−44.4M for AAPL**. |
+| **`sharesOutstandingCover` LEFT the field list** | It is a filer-level `dei` fact with its own cover date, 2–4 weeks after period end. While it sat in the period grid those dates entered the instant series as periods carrying one field, and an 8-slice returned **four** balance sheets for AAPL, MU and PLAB. It is `ExtractResult.coverShares` now. |
+| **`+ fxEffectOnCash`** | The cash reconciliation's fourth leg. Without it the check reported exchange-rate movement as failure — most of the ARM/MU/PLAB breaks. |
+| **`+ totalEquity`** | `assets = liabilities + equity` only balances against TOTAL equity. PLAB failed 8 of 8 quarters by ~23% on the parent-only figure. A separate field, not a chain reorder: merging them would have fixed the identity by changing what the page calls equity. |
+| **`+ cashIncludingRestricted`** | `netChangeInCash` is filed against one of two cash concepts, and comparing the change on one against the balance on the other is a definition mismatch. It failed MU twice and ASTS three times, once by 27.5%. |
+| **`+ grossProfit`** | Was to be derived as `revenue − costOfRevenue`. An identity whose left side is its own right side cannot fail, so it is stored as the filer publishes it and the two are compared. |
+
+**The cost of the `duration-average` rule, measured:** Q4 is never filed as a
+three-month frame and nothing is derived to fill it, so **one quarter in four has
+no EPS and no share count** — exactly 25% across the five probe symbols. The row
+shows a dash.
+
+Evidence for every line above: `claude/step3-five-symbol-diff-2026-09-15.md`.
+
+---
 
 ## 1. The principle
 

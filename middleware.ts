@@ -243,6 +243,16 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|robots.txt|sitemap.xml).*)",
+    // `logos/` is excluded for the same reason as _next/static: it is a folder
+    // of static files, not a page. It matters more than the others because the
+    // FIRST thing this middleware does on a production request is isTrapBlocked,
+    // which is a Redis call (trapBlock.ts says so in its own header) and runs
+    // BEFORE the /api/ early-return below. TickerLogo now requests
+    // /logos/{SYM}.webp for every ticker it renders, so without this line a
+    // listing page showing 40 tickers would fire 40 extra edge invocations and
+    // 40 extra Upstash calls per view -- on a project that has already had one
+    // Upstash suspension and keeps a running budget for this
+    // (claude/redis-bandwidth-2026-09-04.md).
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|robots.txt|sitemap.xml|logos/).*)",
   ],
 };
