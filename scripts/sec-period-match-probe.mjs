@@ -174,15 +174,44 @@ for (const symbol of SYMBOLS) {
   console.log(`    ${sc.label}  ${sc.available ? `${sc.score}/100` : "(no number shown)"}`);
   console.log(`    "${sc.explanation}"`);
   console.log(`    Not measured: ${sc.unavailable.length ? sc.unavailable.join("; ") : "(nothing — every component ran)"}`);
+  // ── THE ARITHMETIC, COMPONENT BY COMPONENT ────────────────────────────────
+  // "80 is exactly four fifths, so one of five components is absent" is a
+  // plausible reading of a total and has to be answered with the addends, not
+  // with an explanation of them.
+  const KEYS = ["revenueGrowth", "epsGrowth", "profitability", "marginTrend", "cashConversion"];
+  const MAXES = { revenueGrowth: 22, epsGrowth: 20, profitability: 6, marginTrend: 10, cashConversion: 10 };
+  console.log(`    seed ${sc.seed}`);
+  let sum = sc.seed;
+  for (const k of KEYS) {
+    const pts = sc.contributions?.[k];
+    sum += pts ?? 0;
+    console.log(`      ${k.padEnd(16)} ${pts == null ? "ABSENT — contributes 0, neither awarded nor deducted"
+      : `${pts >= 0 ? "+" : ""}${pts.toFixed(2)}  (range ±${MAXES[k]})`}`);
+  }
+  console.log(`    sum ${sum.toFixed(2)} -> clamp(0,100) -> ${sc.score}`);
+  // THE DENOMINATOR QUESTION, ANSWERED BY CONSTRUCTION. If the scale were a
+  // percentage over a fixed five, the reachable maximum without one component
+  // would be below 100 and every filer missing it would be capped.
+  const maxWithout = (k) =>
+    sc.seed + KEYS.filter((x) => x !== k).reduce((a, x) => a + MAXES[x], 0);
+  console.log(`    reachable maximum with NO cash component: ${Math.min(100, maxWithout("cashConversion"))}` +
+    ` (raw ${maxWithout("cashConversion")}) — a cap below 100 here would mean the ` +
+    `denominator is fixed at five and absence is a penalty`);
+  console.log(`    cash card basis: ${v.cashQuality.basis} (${v.cashQuality.period}), ` +
+    `net income on that card: ${JSON.stringify(v.cashQuality.netIncome.val)}, ` +
+    `accruals: ${JSON.stringify(v.cashQuality.accruals)}`);
   // THE CLAIM THAT WAS FALSE. Asserted here as a property of the rendered
   // string against the rendered card, not as a fixture's expectation.
   const cashShown = v.cashQuality.operatingCashFlow.val !== null;
+  // The diagnosis below is about the QUARTER, so it must ask the quarter even
+  // when the card has fallen back to the year.
+  const quarterCashShown = v.cashQuality.basis === "quarter" && cashShown;
   const claimsCash = /backed by cash|cash conversion/.test(sc.explanation);
   console.log(`    cash-flow chain populated: ${cashShown} | narrative claims cash: ${claimsCash}` +
     `${!cashShown && claimsCash ? "   <-- STILL CLAIMING CASH IT CANNOT SEE" : ""}`);
 
   // ── 5. WHY the cash chain is empty — the two candidates, told apart ───────
-  if (!cashShown) {
+  if (!quarterCashShown) {
     console.log(`\n  CASH CHAIN DIAGNOSIS — mapped-but-absent, or unmapped?`);
     const ocf = SEC_FIELDS.find((f) => f.key === "operatingCashFlow");
     for (const ns of ["us-gaap", "ifrs-full"]) {

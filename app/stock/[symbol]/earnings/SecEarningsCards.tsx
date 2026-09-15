@@ -199,7 +199,21 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   return (
     <section className="card">
       <div className="eyebrow">Quality of earnings</div>
-      <h3>Is the profit turning into cash? — {view.latestLabel}</h3>
+      {/* THE HEADING NAMES THE CARD'S OWN PERIOD, not the page's latest
+          quarter. They differ whenever the filer publishes a cash-flow
+          statement only on 6- and 12-month frames: every figure below then
+          comes from the latest FULL YEAR, and a heading that still said
+          "Q2 FY2025" over annual numbers would be the mixed-period claim this
+          card is built to avoid. */}
+      <h3>Is the profit turning into cash? — {c.period}</h3>
+      {c.basis === "year" ? (
+        <p style={{ marginTop: 8, marginBottom: 0 }}>
+          <strong>{view.symbol} does not publish a quarterly cash-flow statement.</strong> Its
+          filings carry cash flow only over six- and twelve-month periods, so every figure on this
+          card — including the net income it is compared against — is the full year {c.period},
+          not {view.latestLabel}.
+        </p>
+      ) : null}
       <div style={{ marginTop: 12 }}>
         <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact /></Row>
         <Row label="Capital expenditure"><CellValue cell={c.capex} compact /></Row>
@@ -212,8 +226,17 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
             >derived</abbr>
           ) : null}
         </Row>
-        <Row label="Net income"><CellValue cell={c.netIncome} compact /></Row>
-        <Row label="Cash flow less net income" sub="Positive means cash is running ahead of reported profit.">
+        <Row label={c.basis === "year" ? "Net income (same period)" : "Net income"}>
+          <CellValue cell={c.netIncome} compact />
+        </Row>
+        {/* BOTH LEGS ARE THE SAME PERIOD. Annual operating cash flow against a
+            quarterly net income reads as roughly 4x cash conversion and would
+            score STRONG for an arithmetic reason alone. cashFrom in
+            secEarningsView selects one period for the whole card. */}
+        <Row
+          label="Cash flow less net income"
+          sub={`Positive means cash is running ahead of reported profit. Both figures are ${c.period}.`}
+        >
           {money(c.accruals, true)}
         </Row>
         <Row label="Share-based compensation"><CellValue cell={c.shareBasedCompensation} compact /></Row>
@@ -223,8 +246,17 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           six, Q3 nine, the 10-K twelve. Read straight, a Q3 figure is roughly
           three times too large and looks entirely plausible. */}
       <p className="earningsDataNote">
-        Cash-flow figures are filed year-to-date, so every quarter except the first is the difference
-        between two cumulative figures — those are marked <em>derived</em>. Source: {SEC_ATTRIBUTION}.
+        {c.basis === "year" ? (
+          <>
+            Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.
+          </>
+        ) : (
+          <>
+            Cash-flow figures are filed year-to-date, so every quarter except the first is the
+            difference between two cumulative figures — those are marked <em>derived</em>. Source:{" "}
+            {SEC_ATTRIBUTION}.
+          </>
+        )}
       </p>
     </section>
   );

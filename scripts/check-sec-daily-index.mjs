@@ -1272,15 +1272,30 @@ console.log("\n17b. The real 20260908-11 window");
     fx.filings.some((f) => f.symbol === sym && f.amendment && /^SCHEDULE 13[DG]\/A$/.test(f.form)));
   const byForm4 = added.filter((sym) =>
     fx.filings.some((f) => f.symbol === sym && f.amendment && /^4\/A$/.test(f.form)));
-  check("six of the seven are queued by an amended 13D/A or 13G/A, not a 4/A",
+  // ── TWO UNITS, AND THEY MUST NOT BE CONFLATED ─────────────────────────────
+  // 7 is a count of SYMBOLS; 8 is a count of FILINGS, because BEN filed two
+  // 13D/A. Both are right and the docblock implied one count. This is the same
+  // union-vs-sum distinction that produced an unpassable rereadQueued gate, so
+  // both are asserted separately and the detail line names the unit.
+  const amendingFilingCount = Object.values(amendingForms).reduce((a, b) => a + b, 0);
+  check("7 is a count of SYMBOLS", added.length === 7, added.join(","));
+  check("8 is a count of FILINGS across those symbols",
+    amendingFilingCount === 8,
+    `${amendingFilingCount} amending filings over ${added.length} symbols — ` +
+      `BEN filed two, which is the whole of the difference`);
+  check("six of the seven SYMBOLS are queued by an amended 13D/A or 13G/A, not a 4/A",
     byOwnership.length === 6 && byForm4.length === 1 &&
       byForm4[0] === "DOCU" && !byOwnership.includes("DOCU"),
     `ownership ${byOwnership.join(",")} | form4 ${byForm4.join(",")} | ` +
-      `forms ${JSON.stringify(amendingForms)}`);
-  check("...and applyFilings' docblock says so",
-    /SIX of the seven are amended beneficial-ownership statements/.test(
-      fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8")),
-    "the stale version named Form 4 and stood for as long as nothing checked it");
+      `filings ${JSON.stringify(amendingForms)}`);
+  check("...and applyFilings' docblock says so, with the unit on every figure",
+    (() => {
+      const doc = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+      return /SIX of the seven SYMBOLS/.test(doc) &&
+        /134 SYMBOLS queued, 7 SYMBOLS dropped/.test(doc) &&
+        /THE FORMS ARE COUNTED IN FILINGS, NOT SYMBOLS/.test(doc);
+    })(),
+    "the stale version named Form 4, and the first correction implied one count");
 }
 
 // ── 17c. The 100 guaranteed slots are actually in the manifest ─────────────

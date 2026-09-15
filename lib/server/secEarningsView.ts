@@ -181,6 +181,14 @@ export type SecEarningsView = {
     netIncome: ViewCell;
     shareBasedCompensation: ViewCell;
     accruals: number | null;
+    /**
+     * Whether every figure on the card is the latest QUARTER or the latest
+     * YEAR. One period for the whole card; see the comment at cashBasis for the
+     * mixed-period trap this exists to prevent.
+     */
+    basis: "quarter" | "year";
+    /** That period's own label, for the card heading and the score narrative. */
+    period: string;
   };
   balance: {
     asOf: string;
@@ -311,8 +319,40 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     };
   }).reverse();
 
-  const ocf = view(latest, "operatingCashFlow", "Operating cash flow");
-  const capex = view(latest, "capex", "Capital expenditure");
+  // ── WHICH PERIOD THE CASH CARD IS BUILT FROM, AND WHY IT IS ONE PERIOD ────
+  //
+  // Half-yearly filers publish a cash-flow statement only on 6- and 12-month
+  // frames. extractCompanyFacts steps one frame-length at a time, so n=2 needs
+  // an n=1 and n=4 needs an n=3, and AZN supplies neither: its quarterly cash
+  // cells are ALL null while its ANNUAL ones are populated. Measured, relay
+  // 34978655653 -- revenue publishes n=[1,2,4] and cash flow n=[2,4], which is
+  // why revenue resolves on the same 90-day row that cash flow does not.
+  //
+  // A permanently empty Quality of Earnings card is worse than the annual
+  // figures, so the card falls back to the year.
+  //
+  // ── AND THE WHOLE CARD MOVES TOGETHER, WHICH IS THE POINT ────────────────
+  // THE TRAP: that card's headline is "cash flow less net income". Annual
+  // operating cash flow against QUARTERLY net income reads as roughly 4x cash
+  // conversion, and the score would call it STRONG for a purely arithmetic
+  // reason -- a plausible wrong number produced by mixing periods on one
+  // comparison line.
+  //
+  // So `cashBasis` selects ONE period for every figure on the card: operating
+  // cash flow, capex, free cash flow, net income and share-based compensation
+  // all come from it, and `cashPeriod` names it on the card and in the score's
+  // narrative. There is no per-row fallback, deliberately: a card assembled
+  // row-by-row from whichever period happened to have a value is exactly the
+  // mixed comparison this guards against.
+  const cashYear = set.years[0] ?? null;
+  const quarterHasCash = valueOf(latest, "operatingCashFlow") !== null;
+  const cashFrom = quarterHasCash || !cashYear || valueOf(cashYear, "operatingCashFlow") === null
+    ? latest
+    : cashYear;
+  const cashBasis: "quarter" | "year" = cashFrom === latest ? "quarter" : "year";
+
+  const ocf = view(cashFrom, "operatingCashFlow", "Operating cash flow");
+  const capex = view(cashFrom, "capex", "Capital expenditure");
   const fcf = ocf.val === null || capex.val === null ? null : ocf.val - capex.val;
 
   const bsAt = set.instants[0] ?? null;
@@ -379,12 +419,17 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       // FCF inherits the derivation of its inputs: if either leg was
       // differenced, the difference is derived too and is labelled as such.
       freeCashFlowDerived: isDerived(ocf) || isDerived(capex),
-      netIncome: view(latest, "netIncome", "Net income"),
-      shareBasedCompensation: view(latest, "shareBasedCompensation", "Share-based compensation"),
+      // FROM cashFrom, NOT FROM latest. Net income is the other half of the
+      // "cash flow less net income" line, so it must be the same period or the
+      // line is a ratio between a year and a quarter.
+      netIncome: view(cashFrom, "netIncome", "Net income"),
+      shareBasedCompensation: view(cashFrom, "shareBasedCompensation", "Share-based compensation"),
       accruals:
-        ocf.val === null || valueOf(latest, "netIncome") === null
+        ocf.val === null || valueOf(cashFrom, "netIncome") === null
           ? null
-          : ocf.val - valueOf(latest, "netIncome")!,
+          : ocf.val - valueOf(cashFrom, "netIncome")!,
+      basis: cashBasis,
+      period: periodLabel(cashFrom),
     },
     balance: bsAt
       ? {

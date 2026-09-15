@@ -412,7 +412,17 @@ export function reconcileCiks(
   let absentFromMap = 0;
 
   for (const [symbol, entry] of Object.entries(manifest.symbols)) {
-    const fresh = cikByTicker.get(symbol);
+    // THROUGH THE SPELLING HELPER, for the same reason seedManifest is. The
+    // manifest is keyed by the UNIVERSE's spelling (dotted) and this map by
+    // SEC's (dashed), so a direct .get counted BRK.B as absentFromMap -- which
+    // is not a gap in the map, it is a gap in the lookup, and recording it as
+    // the first makes the second invisible.
+    //
+    // IT WIDENS THE LOOKUP, NOT THE RULE: lookupBySpelling only tries the
+    // dot/dash rewrite of the same symbol. A symbol genuinely absent under both
+    // spellings still reports absent, which is what keeps "never delete on
+    // absence" meaningful.
+    const fresh = lookupBySpelling(cikByTicker, symbol)?.value;
     if (!fresh) {
       absentFromMap++;
       continue;
@@ -757,7 +767,8 @@ export function reconcileExchanges(
   }
 
   for (const [symbol, entry] of Object.entries(manifest.symbols)) {
-    const fresh = cikByTicker.get(symbol);
+    // Through the spelling helper, as reconcileCiks and seedManifest are.
+    const fresh = lookupBySpelling(cikByTicker, symbol)?.value;
     // ABSENT FROM THE MAP IS NOT THE SAME AS BLANK IN THE MAP. Absence is a gap
     // (or a delisting, handled elsewhere); a blank cell is SEC saying it has no
     // venue for a filer it does list. Only the second is an observation.

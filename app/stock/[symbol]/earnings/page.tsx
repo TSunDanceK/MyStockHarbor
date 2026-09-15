@@ -171,6 +171,8 @@ const SCORE_COMPONENTS = {
   epsGrowth: "EPS growth against the same quarter a year earlier",
   profitability: "whether the quarter was profitable",
   marginTrend: "the direction of operating margin",
+  // The wording stays period-neutral because it also appears in the
+  // "Not measured" list, where no period applies.
   cashConversion: "whether reported profit is turning into cash",
 } as const;
 type ScoreComponent = keyof typeof SCORE_COMPONENTS;
@@ -193,16 +195,27 @@ type ScoreComponent = keyof typeof SCORE_COMPONENTS;
  * So the clauses are assembled from the components that RAN, and a component
  * that did not run contributes no clause and is listed as unavailable.
  */
-function scoreExplanation(tone: EarningsTone, ran: Set<ScoreComponent>) {
+function scoreExplanation(
+  tone: EarningsTone,
+  ran: Set<ScoreComponent>,
+  /** The period the cash component actually read. See SecCashQualityCard. */
+  cashBasis: "quarter" | "year",
+  cashPeriod: string
+) {
   const clauses: string[] = [];
   const up = tone === "good";
   if (ran.has("revenueGrowth") || ran.has("epsGrowth")) {
     clauses.push(up ? "revenue and profit are growing year over year" : "growth is under pressure");
   }
   if (ran.has("marginTrend")) clauses.push(up ? "margins are holding" : "margins are slipping");
-  // THE CLAUSE THAT WAS WRONG. It appears only when the cash component ran.
+  // THE CLAUSE THAT WAS WRONG. It appears only when the cash component ran —
+  // AND IT NAMES ITS PERIOD when that period is not the quarter the rest of the
+  // sentence is about. A half-yearly filer's cash component reads the full
+  // year, and a sentence that said "backed by cash" beside quarterly growth
+  // would be describing two different periods as one.
   if (ran.has("cashConversion")) {
-    clauses.push(up ? "reported profit is backed by cash" : "cash conversion is weak");
+    const over = cashBasis === "year" ? ` over ${cashPeriod}` : "";
+    clauses.push(up ? `reported profit is backed by cash${over}` : `cash conversion is weak${over}`);
   } else if (ran.has("profitability")) {
     clauses.push(up ? "the quarter was profitable" : "the quarter was loss-making");
   }
@@ -221,17 +234,56 @@ function scoreGaps(ran: Set<ScoreComponent>): string[] {
     .map((k) => SCORE_COMPONENTS[k]);
 }
 
-function buildScoreResult(score: number, tone: EarningsTone, ran: Set<ScoreComponent>) {
+/**
+ * THE SCALE, STATED ONCE SO IT CAN BE CHECKED.
+ *
+ * 50 is the neutral seed and each component adds a signed contribution. That is
+ * what makes an absent component NEUTRAL rather than a penalty: it contributes
+ * ZERO, and zero is the middle of its own range, not the bottom of it.
+ *
+ * THE MIRROR-IMAGE FAILURE THIS RULES OUT. Had the score been a percentage over
+ * a FIXED denominator of five, a filer whose cash chain cannot produce a
+ * quarterly figure would be capped at four fifths — 80 — and could never read
+ * STRONG however good its filings were. That would have replaced a score that
+ * claimed an input it could not see with one that punished the filer for the
+ * page's own limit. Measured against these bounds: the four non-cash components
+ * sum to +58 at their maxima, so 50 + 58 = 108 clamps to 100. A filer with no
+ * cash chain can still reach 100.
+ */
+const SCORE_SEED = 50;
+const SCORE_MAX_CONTRIBUTION: Record<ScoreComponent, number> = {
+  revenueGrowth: 22,
+  epsGrowth: 20,
+  profitability: 6,
+  marginTrend: 10,
+  cashConversion: 10,
+};
+
+function buildScoreResult(
+  score: number,
+  tone: EarningsTone,
+  ran: Set<ScoreComponent>,
+  contributions: Partial<Record<ScoreComponent, number>>,
+  cashBasis: "quarter" | "year",
+  cashPeriod: string
+) {
   return {
     available: true as const,
     score,
     tone,
     label: toneLabel(tone),
-    explanation: scoreExplanation(tone, ran),
+    explanation: scoreExplanation(tone, ran, cashBasis, cashPeriod),
     // NOT a count. A reader needs to know WHICH input was missing to judge the
     // number; "4 of 5 signals" is the kind of summary that hides the one that
     // mattered.
     unavailable: scoreGaps(ran),
+    // THE ARITHMETIC, NOT A DESCRIPTION OF IT. Carried so a probe and a check
+    // can read the points each component actually added, rather than inferring
+    // them from the total -- which is how "80 is four fifths of 100, so the
+    // denominator must be five" becomes plausible. It is not: 80 here is
+    // 50 + 6.4 + 8.0 + 6 + 10.
+    seed: SCORE_SEED,
+    contributions,
   };
 }
 
@@ -280,26 +332,36 @@ function scoreFromSec(view: SecEarningsView | null) {
       label: "Unavailable",
       explanation: "This company's SEC filings have not been read into the site yet, so there is nothing to score.",
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      seed: SCORE_SEED,
+      contributions: {} as Partial<Record<ScoreComponent, number>>,
     };
   }
 
-  let score = 50;
+  let score = SCORE_SEED;
   // WHICH COMPONENTS ACTUALLY RAN, not how many. An absent input contributes no
   // points AND no clause; see scoreExplanation for the sentence that used to
   // claim cash backing from an empty cash-flow chain.
   const ran = new Set<ScoreComponent>();
+  const contributions: Partial<Record<ScoreComponent, number>> = {};
+  // ONE PLACE WHERE A COMPONENT ENTERS THE SCALE. Adding points and recording
+  // both the membership and the amount in three separate statements is how the
+  // three drift apart; this makes them one act.
+  const contribute = (key: ScoreComponent, points: number) => {
+    score += points;
+    ran.add(key);
+    contributions[key] = points;
+  };
   const s = view.snapshot;
 
-  if (s.revenueYoY != null) { score += clamp(s.revenueYoY * 0.55, -22, 22); ran.add("revenueGrowth"); }
-  if (s.epsYoY != null) { score += clamp(s.epsYoY * 0.30, -20, 20); ran.add("epsGrowth"); }
-  if (s.netIncome.val != null) { score += s.netIncome.val > 0 ? 6 : -8; ran.add("profitability"); }
+  if (s.revenueYoY != null) contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
+  if (s.epsYoY != null) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
+  if (s.netIncome.val != null) contribute("profitability", s.netIncome.val > 0 ? 6 : -8);
 
   // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
   // single-quarter reading: one quarter's margin move is as often mix as trend.
   const opMargins = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
   if (opMargins.length >= 2) {
-    score += clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10);
-    ran.add("marginTrend");
+    contribute("marginTrend", clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10));
   }
 
   // CASH AGAINST PROFIT. Positive accruals mean cash is running ahead of
@@ -307,8 +369,7 @@ function scoreFromSec(view: SecEarningsView | null) {
   const acc = view.cashQuality.accruals;
   const ni = view.cashQuality.netIncome.val;
   if (acc != null && ni != null && ni !== 0) {
-    score += clamp((acc / Math.abs(ni)) * 8, -10, 10);
-    ran.add("cashConversion");
+    contribute("cashConversion", clamp((acc / Math.abs(ni)) * 8, -10, 10));
   }
 
   if (ran.size === 0) {
@@ -317,12 +378,14 @@ function scoreFromSec(view: SecEarningsView | null) {
       label: "Unavailable",
       explanation: "This company's latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.",
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      seed: SCORE_SEED,
+      contributions: {} as Partial<Record<ScoreComponent, number>>,
     };
   }
 
   const rounded = Math.round(clamp(score, 0, 100));
   const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
-  return buildScoreResult(rounded, tone, ran);
+  return buildScoreResult(rounded, tone, ran, contributions, view.cashQuality.basis, view.cashQuality.period);
 }
 
 
