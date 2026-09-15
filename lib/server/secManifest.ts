@@ -80,6 +80,16 @@ export type SecManifestEntry = {
    * holds the encoded set when it writes.
    */
   w?: number;
+  /**
+   * `y` is the YEAR retention window the set was written under. Absent means 5,
+   * and 5 is one short of what the five-year card needs to reach its own FY-1,
+   * so an entry without it is eligible for the same re-read `w` triggers.
+   *
+   * NOT `years`, which is two lines down and means something else entirely:
+   * `years` is HOW MANY the set actually holds (a filer three years old has
+   * 3), `y` is how many it was ALLOWED to hold. A young filer is not stale.
+   */
+  y?: number;
   quarters?: number;
   years?: number;
   instants?: number;

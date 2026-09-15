@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
-import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 
@@ -150,12 +150,20 @@ async function authorize(req: NextRequest): Promise<Response | null> {
 /**
  * A set written under an older quarter window is eligible for a re-read.
  *
- * ABSENT MEANS 8. Every entry in a manifest written before the window field
- * existed has no `w`, and those are precisely the ones that need re-reading —
- * so a missing field must select, never skip. Reading absence as "current" is
- * how a migration silently completes without doing anything.
+ * ABSENT MEANS THE WINDOW BEFORE THE FIELD EXISTED — 8 quarters, 5 years.
+ * Every entry in a manifest written before each field existed has no value for
+ * it, and those are precisely the ones that need re-reading, so a missing field
+ * must SELECT, never skip. Reading absence as "current" is how a migration
+ * silently completes without doing anything.
+ *
+ * EITHER WINDOW BEING BEHIND IS ENOUGH, and both feed this ONE queue. A second
+ * queue over the same symbols would be two allowances competing for the same
+ * re-read: a set fetched to widen its years arrives with wider quarters too,
+ * because one companyfacts payload produces both.
  */
-export const needsRewindow = (e: { w?: number }) => (e.w ?? 8) < SEC_QUARTER_WINDOW;
+export function needsRewindow(e: { w?: number; y?: number }): boolean {
+  return (e.w ?? 8) < SEC_QUARTER_WINDOW || (e.y ?? 5) < SEC_YEAR_WINDOW;
+}
 
 /**
  * Periods present in BOTH sets whose stored values differ — i.e. answers that
@@ -403,6 +411,7 @@ export async function GET(req: NextRequest) {
         // The three counts make the annual-filer census a single manifest read
         // instead of 759 GETs, and cost nothing: the set is already in hand.
         entry.w = set.w ?? SEC_QUARTER_WINDOW;
+        entry.y = set.y ?? SEC_YEAR_WINDOW;
         entry.quarters = set.quarters.length;
         entry.years = set.years.length;
         entry.instants = set.instants.length;

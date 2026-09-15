@@ -49,12 +49,21 @@ const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
 const WINDOW = Number(
   (readCodeOnly("lib/server/secExtract.ts").match(/SEC_QUARTER_WINDOW = (\d+)/) ?? [])[1]
 );
+const YEARS = Number(
+  (readCodeOnly("lib/server/secExtract.ts").match(/SEC_YEAR_WINDOW = (\d+)/) ?? [])[1]
+);
 const allowance = (name) =>
   Number((ROUTE.match(new RegExp(`${name} = (\\d+)`)) ?? [])[1]);
 
 const loadRewindow = async (mutate = (s) => s) => {
   const src = mutate(ROUTE);
-  const needs = (src.match(/export const needsRewindow = [^;]+;/) ?? [])[0];
+  // grabFunction, NOT A REGEX OVER THE ARROW FORM. This read
+  // /export const needsRewindow = [^;]+;/ and broke the moment the parameter
+  // gained a second field: `(e: { w?: number; y?: number })` puts a SEMICOLON
+  // inside the signature, so `[^;]+;` captured half a declaration and lifted
+  // `const needsRewindow = (e) => ;`. That is the same class of failure
+  // grabFunction's own docblock was written about, and the reason it exists.
+  const needs = grabFunction(src, "needsRewindow");
   const restated = grabFunction(src, "restatedPeriods");
   const queues = grabFunction(src, "populationQueues");
   if (!needs || !restated || !queues) {
@@ -63,10 +72,11 @@ const loadRewindow = async (mutate = (s) => s) => {
   return lift(
     [
       `const SEC_QUARTER_WINDOW = ${WINDOW};`,
+      `const SEC_YEAR_WINDOW = ${YEARS};`,
       `const SEC_REVERIFY_PER_RUN = ${allowance("SEC_REVERIFY_PER_RUN")};`,
       `const SEC_POPULATE_PER_RUN = ${allowance("SEC_POPULATE_PER_RUN")};`,
       `const SEC_REWINDOW_PER_RUN = ${allowance("SEC_REWINDOW_PER_RUN")};`,
-      needs.replace("export const", "const"),
+      needs.replace("export function", "function"),
       restated.replace("export function", "function"),
       queues.replace("export function", "function"),
       "export { needsRewindow, restatedPeriods, populationQueues };",
@@ -162,14 +172,21 @@ check(
 
 console.log("\n2. a legacy entry with no window field is eligible");
 
-/** A manifest with one entry of each shape. Nothing else differs between them. */
+/**
+ * A manifest with one entry of each shape. Nothing else differs between them.
+ *
+ * TWO WINDOWS NOW, so "current" means BOTH are current. An entry at w=12 with
+ * no `y` is a set written before the year window existed — five years stored,
+ * one short of what the five-year card needs — and it is eligible.
+ */
 const manifest = {
   symbols: {
-    LEGACY: { cik: "0000000001", contentHash: "h", needsReverify: false },              // no w at all
-    NARROW: { cik: "0000000002", contentHash: "h", needsReverify: false, w: 8 },
-    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW },
-    UNPOPULATED: { cik: "0000000004", contentHash: null, needsReverify: false },        // populate's, not rewindow's
-    STALE: { cik: "0000000005", contentHash: "h", needsReverify: true, enqueuedAt: 1 }, // reverify's, not rewindow's
+    LEGACY: { cik: "0000000001", contentHash: "h", needsReverify: false },                        // neither field
+    NARROW: { cik: "0000000002", contentHash: "h", needsReverify: false, w: 8, y: YEARS },        // quarters behind
+    NARROW_YEARS: { cik: "0000000006", contentHash: "h", needsReverify: false, w: WINDOW },       // years behind only
+    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS },  // both current
+    UNPOPULATED: { cik: "0000000004", contentHash: null, needsReverify: false },                  // populate's
+    STALE: { cik: "0000000005", contentHash: "h", needsReverify: true, enqueuedAt: 1 },           // reverify's
   },
 };
 
@@ -184,6 +201,15 @@ check(
   !q.rewindow.includes("CURRENT")
 );
 check("an explicit w=8 is selected", q.rewindow.includes("NARROW"));
+// ── THE YEAR WINDOW SELECTS THROUGH THE SAME QUEUE ──────────────────────────
+// A set can be current on quarters and behind on years: everything written
+// between the two changes is exactly that. One queue, either field.
+check("an entry current on quarters but with no year window IS selected",
+  q.rewindow.includes("NARROW_YEARS"),
+  `w=${WINDOW} y=absent -> eligible, because absent means ${5} and the card needs ${YEARS}`);
+check("...and there is only ONE queue, not a second one for years",
+  !/rewindowYears|yearQueue|REWINDOW_YEARS/.test(ROUTE),
+  "a second queue over the same symbols is two allowances competing for one re-read");
 check(
   "a never-populated entry goes to populate, not rewindow",
   q.populate.includes("UNPOPULATED") && !q.rewindow.includes("UNPOPULATED")
@@ -195,13 +221,15 @@ check(
 
 // THE MUTATION: read a missing field as "already current".
 const absentMeansCurrent = (src) =>
-  src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW");
+  src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW")
+     .replace("(e.y ?? 5) < SEC_YEAR_WINDOW", "(e.y ?? SEC_YEAR_WINDOW) < SEC_YEAR_WINDOW");
 const mutated2 = await loadRewindow(absentMeansCurrent);
 check("the absent-means-current mutation actually applied", absentMeansCurrent(ROUTE) !== ROUTE);
 const qm = mutated2.populationQueues(manifest);
 check(
-  "MUTATION: reading an absent window as current DROPS the legacy entry",
-  !qm.rewindow.includes("LEGACY") && qm.rewindow.includes("NARROW"),
+  "MUTATION: reading an absent window as current DROPS the legacy entries",
+  !qm.rewindow.includes("LEGACY") && !qm.rewindow.includes("NARROW_YEARS") &&
+    qm.rewindow.includes("NARROW"),
   `rewindow becomes [${qm.rewindow.join(" ")}] — the migration would skip every pre-window entry and look finished`
 );
 
