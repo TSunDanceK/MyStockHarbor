@@ -23,7 +23,7 @@
 // floor under it — the taxonomy survived the FMP exit because it happened to be
 // cached, and the names did not.
 //
-// data/company-names.json is that floor: 2,592 symbols captured from the SAME
+// data/company-names.json is that floor: 2,610 symbols captured from the SAME
 // two directory files fetchCompanyName reads, so the fallback and the live path
 // cannot disagree about what a company is called. Raw Security Name values,
 // uncleaned, because cleanName below is the normaliser and running it twice
