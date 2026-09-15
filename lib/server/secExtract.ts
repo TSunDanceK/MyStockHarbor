@@ -518,8 +518,10 @@ export type IdentityResult = {
 
 type IdentitySpec = {
   name: string;
-  /** Field keys read from the period itself. */
+  /** Field keys read from the period itself. ALL must be present or it skips. */
   needs: string[];
+  /** At least ONE of these must be present. Absent = skipped, never pass. */
+  optional?: string[];
   lhs: (v: (k: string) => number | null) => number;
   rhs: (v: (k: string) => number | null) => number;
 };
@@ -528,9 +530,14 @@ const PERIOD_IDENTITIES: Record<"duration" | "instant", IdentitySpec[]> = {
   instant: [
     {
       name: "assets = liabilities + equity",
-      needs: ["totalAssets", "totalLiabilities", "stockholdersEquity"],
+      // TOTAL equity, not the parent-only figure -- the identity does not hold
+      // against the latter for any filer with a noncontrolling interest. The
+      // fallback is for filers that publish no including-NCI tag because they
+      // have no NCI, where the two are the same number.
+      needs: ["totalAssets", "totalLiabilities"],
+      optional: ["totalEquity", "stockholdersEquity"],
       lhs: (v) => v("totalAssets")!,
-      rhs: (v) => v("totalLiabilities")! + v("stockholdersEquity")!,
+      rhs: (v) => v("totalLiabilities")! + (v("totalEquity") ?? v("stockholdersEquity"))!,
     },
   ],
   duration: [
@@ -574,6 +581,9 @@ function runIdentities(
   };
   return specs.map((spec) => {
     const missing = spec.needs.filter((k) => read(k) === null);
+    if (spec.optional && spec.optional.every((k) => read(k) === null)) {
+      missing.push(spec.optional.join(" or "));
+    }
     if (missing.length) {
       return { identity: spec.name, end: p.end, status: "skipped" as const, missing };
     }
@@ -605,13 +615,27 @@ export function checkIdentities(
   for (const p of result.instants) out.push(...runIdentities(PERIOD_IDENTITIES.instant, p, tolerance));
   for (const p of result.quarters) out.push(...runIdentities(PERIOD_IDENTITIES.duration, p, tolerance));
 
+  // LIKE FOR LIKE. netChangeInCash is filed against one of two cash concepts,
+  // and which one it is, is recorded on the cell: the first chain entry names
+  // restricted cash, the second does not. Comparing a change measured on one
+  // against a balance measured on the other is a definition mismatch that shows
+  // up as a plausible few percent -- and once, for ASTS, as 27.5%.
   const iCash = SEC_FIELD_INDEX.cash;
+  const iCashR = SEC_FIELD_INDEX.cashIncludingRestricted;
   const iNet = SEC_FIELD_INDEX.netChangeInCash;
-  const cashAt = new Map(result.instants.map((p) => [p.end, p.values[iCash]?.val ?? null]));
+  const balanceAt = (end: string, restricted: boolean) => {
+    const row = result.instants.find((p) => p.end === end);
+    if (!row) return null;
+    const first = restricted ? iCashR : iCash;
+    const second = restricted ? iCash : iCashR;
+    return row.values[first]?.val ?? row.values[second]?.val ?? null;
+  };
   for (const q of result.quarters) {
     const name = "cashEnd - cashStart = netChangeInCash";
-    const net = q.values[iNet]?.val ?? null;
-    const end = cashAt.get(q.end) ?? null;
+    const netCell = q.values[iNet];
+    const net = netCell?.val ?? null;
+    const restricted = /RestrictedCash/.test(netCell?.tag ?? "");
+    const end = balanceAt(q.end, restricted);
     // THE OPENING BALANCE IS DATED THE DAY BEFORE, NOT ON, THE PERIOD START.
     // A quarter running 2026-01-01..2026-03-31 opens with the balance sheet
     // dated 2025-12-31 -- filers date a balance sheet at a period END, and the
@@ -622,9 +646,8 @@ export function checkIdentities(
     const start =
       q.start === null
         ? null
-        : cashAt.get(q.start) ??
-          cashAt.get(new Date(Date.parse(q.start) - DAY).toISOString().slice(0, 10)) ??
-          null;
+        : balanceAt(q.start, restricted) ??
+          balanceAt(new Date(Date.parse(q.start) - DAY).toISOString().slice(0, 10), restricted);
     if (net === null || end === null || start === null) {
       out.push({
         identity: name, end: q.end, status: "skipped",

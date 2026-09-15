@@ -200,10 +200,15 @@ for (const symbol of SYMBOLS) {
   for (const key of NON_ADDITIVE) {
     const cells = out.quarters.map((q) => at(q, key));
     const byDeriv = cells.reduce((a, c) => ((a[c?.derived ?? "null"] = (a[c?.derived ?? "null"] ?? 0) + 1), a), {});
-    const negative = cells.filter((c) => c?.val !== null && c?.val !== undefined && c.val < 0).length;
+    const negative = cells.filter((c) => typeof c?.val === "number" && c.val < 0).length;
     console.log(`       ${key.padEnd(14)} ${JSON.stringify(byDeriv).padEnd(46)} negative: ${negative}`);
     assertions.push({ symbol, check: `${key} never differenced`, ok: !byDeriv.differenced, detail: byDeriv });
-    assertions.push({ symbol, check: `${key} never negative`, ok: negative === 0, detail: negative });
+    // A NEGATIVE SHARE COUNT IS THE BUG; A NEGATIVE EPS IS A LOSS-MAKER.
+    // The first version asserted non-negative on all four and failed ASTS six
+    // times for correctly reporting that it loses money. Scoped to the counts.
+    if (key.startsWith("shares")) {
+      assertions.push({ symbol, check: `${key} never negative`, ok: negative === 0, detail: negative });
+    }
     nullRate[key] ??= { null: 0, total: 0 };
     nullRate[key].null += byDeriv.null ?? 0;
     nullRate[key].total += cells.length;
@@ -220,7 +225,9 @@ for (const symbol of SYMBOLS) {
     for (const k of ["pass", "fail", "skipped"]) identityTotals[name][k] += r[k];
   }
   for (const f of ids.filter((r) => r.status === "fail")) {
-    console.log(`       FAIL ${f.identity} @ ${f.end}: ${fmt(f.lhs)} vs ${fmt(f.rhs)} (${(f.relative * 100).toFixed(1)}%)`);
+    // THE RESIDUAL, NOT JUST THE RATIO. "7.1%" does not say what is missing;
+    // "7.0M" is a number someone can look for in the filing.
+    console.log(`       FAIL ${f.identity} @ ${f.end}: ${fmt(f.lhs)} vs ${fmt(f.rhs)} — residual ${fmt(f.lhs - f.rhs)} (${(f.relative * 100).toFixed(1)}%)`);
   }
   const skipReasons = {};
   for (const r of ids.filter((r) => r.status === "skipped")) for (const mfield of r.missing ?? []) skipReasons[mfield] = (skipReasons[mfield] ?? 0) + 1;
@@ -245,6 +252,24 @@ for (const symbol of SYMBOLS) {
     for (const f of gaps) {
       const near = [...published].filter((t) => HINTS[f.key].test(t)).slice(0, 6);
       console.log(`       ${f.key.padEnd(26)} ${near.join(", ") || "(nothing related published)"}`);
+      // THE HARDER CASE, AND THE ONE THAT WAS A GUESS LAST RUN. ASTS came back
+      // empty for operatingIncome and fxEffectOnCash while publishing the exact
+      // tags those chains name. "Tag absent" and "tag present but no usable
+      // frame" are different problems and the first run could not tell them
+      // apart. This prints the frames the filer actually filed for that tag, so
+      // the next move is reading rather than guessing.
+      for (const tag of f.chain.filter((t) => published.has(t))) {
+        const units = facts.facts["us-gaap"][tag]?.units ?? {};
+        const lines = Object.entries(units).map(([u, rows]) => {
+          const spans = rows.slice(-4).map((r) =>
+            r.start
+              ? `${r.start}..${r.end}(${Math.round((Date.parse(r.end) - Date.parse(r.start)) / 86400000)}d)`
+              : `@${r.end}`
+          );
+          return `${u}[${rows.length}] ${spans.join(" ")}`;
+        });
+        console.log(`         !! ${tag} IS published — ${lines.join(" | ") || "(no units)"}`);
+      }
     }
   }
 
