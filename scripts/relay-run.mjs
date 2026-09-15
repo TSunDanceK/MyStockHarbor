@@ -23,6 +23,8 @@
 // one rule -- because a single `if:` expression is one typo from silently
 // inverting.
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 // task name -> script, plus the args it takes from the environment. Adding a
@@ -140,6 +142,24 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
+  // fixture and a live symbol list and touches no network, so it runs locally.
+  // Adding it here would imply it needs a runner, which is the kind of drift
+  // this table exists to avoid.
+  //
+  // Read-only: captures the REAL filing rows for a date window so a check can
+  // replay them through applyFilings. §17 previously built its own 281 synthetic
+  // symbols and handed them forms from a modulo-5 round robin, which cannot be
+  // evidence about what the route does with a real week of EDGAR.
+  "sec-window-fixture": {
+    script: "scripts/sec-window-fixture.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    // It LIFTS the shipped parsers, and type erasure needs the TypeScript
+    // compiler. See needsTypescript below for why that is one package and not
+    // `npm ci`.
+    needsTypescript: true,
+  },
   // Read-only: the two venue reference files disagree about this universe, and
   // the totals alone cannot say which is wrong. Emits the per-symbol diff plus
   // what the 62.5%-by-dollar-volume figure becomes under each source. Needs the
@@ -158,6 +178,13 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
+  // image CDN whether it actually holds a logo for each symbol in the union
+  // universe. The CDN needs no API key, so this belongs in the uncredentialled
+  // job -- the FMP key stays out of Actions, per the static-profile README.
+  // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
+  // `exchange` is in static-profile.json's absentFields.blocked.
+  "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
@@ -231,6 +258,71 @@ if (!fs.existsSync(spec.script)) {
   );
   process.exit(2);
 }
+// TYPESCRIPT, ON DEMAND, AND GENUINELY ONLY TYPESCRIPT.
+//
+// The read-only job deliberately runs no `npm ci` -- relay.yml states the
+// property plainly: not installing the Upstash client is what keeps this job
+// unable to reach the database even if a future edit tried to. A task that LIFTS
+// a shipped function needs ts.transpileModule to erase types, so it needs the
+// compiler.
+//
+// THE OBVIOUS FIX DOES NOT WORK, AND IT FAILS SILENTLY. `npm install --no-save
+// typescript` run in the repo root resolves the WHOLE of package.json first:
+// measured on run 34830229705, "added 438 packages in 10s" -- @upstash/redis
+// among them. It looked like a one-package install and was a full tree, which
+// would have quietly voided the property the workflow comment describes.
+//
+// So the install happens in an EMPTY temporary directory, where typescript has
+// no dependencies of its own and npm adds exactly one package, and only that
+// package is copied into ./node_modules. Verified: `npm install --no-save
+// --no-package-lock typescript@^5` in an empty dir reports "added 1 package".
+//
+// AND IT LIVES HERE, NOT IN relay.yml, for the reason in this file's header: a
+// workflow edit costs a merge-and-wait before it can run once.
+if (spec.needsTypescript) {
+  let present = false;
+  try {
+    await import("typescript");
+    present = true;
+  } catch {
+    present = false;
+  }
+  if (!present) {
+    // Pinned to the same range the repo builds with, so erase() behaves here
+    // exactly as it does in check-all. A floating install could change what a
+    // lifted function's body looks like, which is the one thing this must not do.
+    const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+    const range = pkg.devDependencies?.typescript ?? pkg.dependencies?.typescript;
+    if (!range) {
+      console.error("FATAL: package.json declares no typescript, but this task lifts TS source.");
+      process.exit(2);
+    }
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "relay-ts-"));
+    console.log(`relay: installing typescript@${range} in isolation (NOT npm ci, NOT the repo tree)`);
+    const r = spawnSync(
+      "npm",
+      ["install", "--no-save", "--no-package-lock", "--no-audit", "--no-fund", `typescript@${range}`],
+      { cwd: tmp, stdio: "inherit" }
+    );
+    const from = path.join(tmp, "node_modules", "typescript");
+    if (r.status !== 0 || !fs.existsSync(from)) {
+      console.error(
+        `FATAL: could not install typescript (exit ${r.status}). This task lifts functions ` +
+          `from .ts sources and cannot erase types without it. Reimplementing the parsers ` +
+          `instead is not the fallback -- a capture that parses with its own code is not ` +
+          `evidence about the shipped parser.`
+      );
+      process.exit(2);
+    }
+    // ONE DIRECTORY, COPIED BY NAME. Anything else npm happened to leave in the
+    // temp tree stays there.
+    fs.mkdirSync("node_modules", { recursive: true });
+    fs.cpSync(from, path.join("node_modules", "typescript"), { recursive: true });
+    const installed = fs.readdirSync(path.join(tmp, "node_modules")).filter((d) => !d.startsWith("."));
+    console.log(`relay: typescript in place (isolated install held ${installed.length}: ${installed.join(", ")})`);
+  }
+}
+
 if (spec.needsDump && !process.env.DUMP_DIR) {
   console.error(
     `FATAL: "${task}" reads the frozen dump but DUMP_DIR is empty — the download ` +

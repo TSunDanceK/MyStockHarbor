@@ -78,7 +78,11 @@ cold-start fill of the universe itself is step 3's own, and does not exist yet.)
 
 So the sweep is conditional on that path existing when it lands — step 4 below
 puts it after step 3 is designed and before its drain ships, which is exactly
-when that can be checked rather than hoped for. If step 3 arrives *without* such
+when that can be checked rather than hoped for. **That precondition now has its
+own document:** `claude/sec-cold-start-coverage-2026-09-14.md`, which also
+records why a one-off backfill cannot satisfy it — the dynamic pool admits
+symbols continuously, so a script run once leaves every later admission in the
+state it was written to fix. If step 3 arrives *without* such
 a path, the finding is that the design is wrong for 630 symbols, and the 66 are
 the least of it.
 
@@ -119,6 +123,22 @@ called `applyFilings`, so **no runtime reading of the gate exists yet.**
 
 Order of operations, not negotiable:
 
+00. **NEW, 2026-09-14 (evening):** the cron has NEVER FIRED. The
+   `sec-daily-index` entry was not in `vercel.json` at `a17c1a6`, the base of
+   #454 — verified, `grep -c` returns 0 — and arrived with that merge. Every
+   run to date was manual, from a browser against the preview, writing to
+   **production** Redis (Preview and Production share the Upstash credentials,
+   which is why the watermark carried and why `from`/`to` was made
+   inspection-only after one rewound production). The first automated write is
+   2026-09-15 04:00 UTC. **Measure the count off that run**, not off any
+   reading taken so far.
+0. **NEW, 2026-09-14:** the manifest universe changed — it now seeds from
+   `PRESET_UNIVERSE ∪ readDynamicUniverse()`, uncapped
+   (`claude/sec-manifest-misses-preset-universe-2026-09-14.md`). The sweep's
+   `assert count === 7` was measured against the **pre-fix 696-symbol
+   manifest** and must be re-measured after the first post-fix run. New entries
+   arrive `needsReverify: false`, so the count is *expected* to hold — but that
+   is a prediction, and predictions in this work have been wrong. Measure it.
 1. Owner runs the inspection-only replay. Read `rereadQueued`.
 2. Gate confirmed → merge step 2.
 3. **Then** the sweep lands, as its own change, with the before/after count
