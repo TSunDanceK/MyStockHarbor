@@ -273,11 +273,18 @@ export function buildSeoDescription(symbol: string, seed: IndicatorSeed): string
   // Omitted entirely when the trend is not determinable, rather than softened.
   // There is no honest short phrase for "this stock has not traded long enough
   // to have a 200-day moving average" in a meta description.
+  // "a" OR "an", FROM THE WORD RATHER THAN FROM A GUESS. This read
+  // `is in a ${trend.toLowerCase()}` and rendered "AAPL is in a uptrend" in the
+  // live meta description — on the one page where the trend IS the subject, so
+  // it is the sentence a searcher sees. Computed from the leading letter, so a
+  // future trend name gets the right article without anyone remembering to
+  // look; the two names that reach this branch today are Uptrend and Downtrend.
+  const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");
   const trendText = trend === null
     ? ""
     : trend === "Range / Mixed"
       ? `${symbol} is in a range/mixed trend`
-      : `${symbol} is in a ${trend.toLowerCase()}`;
+      : `${symbol} is in ${article(trend)} ${trend.toLowerCase()}`;
 
   const maLine = (() => {
     if (typeof lastClose !== "number" || typeof ma50 !== "number" || typeof ma200 !== "number")
