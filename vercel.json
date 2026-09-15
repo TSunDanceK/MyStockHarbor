@@ -51,6 +51,10 @@
     {
       "path": "/api/jobs/sec-daily-index",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/jobs/sec-facts",
+      "schedule": "20 4 * * *"
     }
   ]
 }
