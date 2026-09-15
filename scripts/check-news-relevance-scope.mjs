@@ -59,7 +59,7 @@ for (const m of importLines) {
   const stub = names.map((n) => `const ${n} = (() => {});`).join(" ");
   src = src.replace(m[0], stub || "");
 }
-src += "\nexport { rankNews, isClearlyAboutRequestedCompany, articleMatchesRequestedSymbol, companyNameVariants, getCleanCompanyName };\n";
+src += "\nexport { rankNews, isClearlyAboutRequestedCompany, articleMatchesRequestedSymbol, companyNameVariants, getCleanCompanyName, anchoredNameSignal };\n";
 if (/^import /m.test(src)) {
   console.error("FAIL: an import survived stubbing:\n" +
     src.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
@@ -211,6 +211,140 @@ check(
   "the nearest miss matters more than an obvious one"
 );
 
+console.log("\n  -- the anchored fallback for names too short to be a needle --\n");
+
+// 55 of the 2,592 committed names produce NO variant: every candidate is under
+// the guard, `.some()` on an empty array is false by construction, and only an
+// explicit ticker signal can match. 42 of them are names that ARE their ticker;
+// the rest are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC.
+//
+// MMM was the confirmed live case: 88 items fetched, 2 cards, both carrying a
+// literal "(MMM)".
+const SHORT = {
+  MMM: "3M Company Common Stock",
+  CSX: "CSX Corporation - Common Stock",
+  DOW: "Dow Inc. Common Stock",
+  BOX: "Box, Inc. Class A Common Stock",
+  RH: "RH Common Stock",
+  VFC: "V.F. Corporation Common Stock",
+  T: "AT&T Inc.",
+};
+const about = (sym, title) =>
+  mod.isClearlyAboutRequestedCompany({ title, description: "", source: "" }, sym, SHORT[sym]);
+
+check(
+  "MMM matches its own headlines — the live case",
+  about("MMM", "3M Company Reports Second Quarter 2026 Results") &&
+    about("MMM", "3M raises full-year guidance"),
+  "the company is spelled 3M and the ticker is MMM: they share no characters, " +
+    "so no ticker signal and no substring needle could reach it"
+);
+check(
+  "VFC matches 'V.F. Corporation' — the punctuated form is carried too",
+  about("VFC", "V.F. Corporation Reports Second Quarter Results"),
+  "its alphanumerics are VF, and \\bVF\\b does not match the text 'V.F.' — the " +
+    "letters are not adjacent there"
+);
+check(
+  "...and 'Roe v. Ford' still does not match VFC",
+  !about("VFC", "Roe v. Ford settled out of court"),
+  "this is the exact string the old four-character needle matched"
+);
+check(
+  "T matches AT&T and not ordinary English",
+  about("T", "AT&T adds 400,000 wireless subscribers") &&
+    !about("T", "what the market did today, flat tires and all"),
+  "the old needle was 'at t', which matches 'what the', 'that time', 'flat tire'"
+);
+
+// CASING IS THE DISCRIMINATOR, AND IT COMES FROM THE DATA. No list: the
+// company's own name says which shape to demand, so "CSX Corporation" requires
+// caps and "Dow Inc." requires a capitalised word.
+for (const [sym, title, want, why] of [
+  ["CSX", "CSX Corporation reports record intermodal volume", true, "all-caps name, all-caps in the headline"],
+  ["CSX", "the csx line was closed for maintenance", false, "lowercase prose must not trip an all-caps name"],
+  ["DOW", "Dow Inc. beats on packaging demand", true, "capitalised name, capitalised in the headline"],
+  ["DOW", "shares were flat as the market closed down", false, "no capitalised Dow anywhere"],
+  ["BOX", "Box, Inc. raises subscription outlook", true, "capitalised"],
+  ["BOX", "he opened the box and found nothing", false, "the common noun is lowercase"],
+  ["RH", "RH reports weaker demand for luxury furnishings", true, "two letters, but anchored and capitalised"],
+  ["RH", "growth slowed through the quarter", false, "'rh' inside 'growth' — the substring failure this avoids"],
+]) {
+  check(`${sym}: ${why}`, about(sym, title) === want, title.slice(0, 50));
+}
+
+check(
+  "the anchored rule is STRICTLY ADDITIVE — it cannot fire where variants exist",
+  (() => {
+    // Reached only when companyNameVariants returned nothing, so no symbol that
+    // matches today can change behaviour. Structural, because the guard is a
+    // control-flow fact rather than an output one.
+    const code = readCodeOnly("lib/stock-news-data.ts");
+    return /if \(!variants\.length\) \{[\s\S]{0,240}?anchoredNameSignal\(companyName\)/.test(code);
+  })(),
+  "a fallback that could override a working rule is not a fallback"
+);
+check(
+  "...and the long names are unmoved",
+  (() => {
+    const N = {
+      FAST: "Fastenal Company - Common Stock",
+      AOS: "A.O. Smith Corporation Common Stock",
+      SNA: "Snap-On Incorporated Common Stock",
+    };
+    return mod.isClearlyAboutRequestedCompany(
+        { title: "All You Need to Know About Fastenal (FAST) Rating Upgrade", description: "", source: "" }, "FAST", N.FAST) &&
+      mod.isClearlyAboutRequestedCompany(
+        { title: "A. O. Smith Reports Second Quarter 2026 Results", description: "", source: "" }, "AOS", N.AOS) &&
+      mod.isClearlyAboutRequestedCompany(
+        { title: "Snap on Tools parent beats estimates", description: "", source: "" }, "SNA", N.SNA);
+  })()
+);
+check(
+  "a long FIRST TOKEN yields no anchored needle",
+  (() => {
+    // THIS ASSERTION FIRST CLAIMED "a name long enough for a variant gets NO
+    // anchored needle" AND FAILED, correctly. "A.O. Smith" has usable variants
+    // yet its first token "A.O." is two alphanumerics, so the builder does
+    // return a needle for it.
+    //
+    // That is not a defect: the fallback-only property lives at the CALL SITE,
+    // which gates on `!variants.length` and is asserted separately above. The
+    // builder is a needle factory and knows nothing about variants. The
+    // assertion was claiming a guarantee the function does not make — the same
+    // error as the "no usable variant" one this pass is here to fix.
+    return mod.anchoredNameSignal("Fastenal Company - Common Stock") === null &&
+      mod.anchoredNameSignal("Microsoft Corporation Common Stock") === null;
+  })(),
+  "five or more alphanumerics means companyNameVariants already has a substring needle"
+);
+check(
+  "the needle is ANCHORED — an uppercase substring inside a longer word is not a match",
+  (() => {
+    // Removing the word boundaries survived every other probe, because the
+    // case-sensitivity alone rejects lowercase prose. The property only shows
+    // when the letters appear UPPERCASE inside a longer all-caps token, which
+    // is common in headlines.
+    //
+    //   NATO     contains AT   -> must not match T
+    //   OVERHAUL contains RH   -> must not match RH
+    return !about("T", "NATO SUMMIT OPENS IN BRUSSELS") &&
+      !about("RH", "AIRLINE ANNOUNCES FLEET OVERHAUL");
+  })(),
+  "an unanchored two-letter needle matches a large share of ordinary all-caps text"
+);
+check(
+  "a one-character name yields no needle",
+  mod.anchoredNameSignal("X Corporation Common Stock") === null &&
+    mod.anchoredNameSignal("Z Inc.") === null,
+  "a single letter is not a name, and \\bX\\b appears in ordinary text constantly"
+);
+check(
+  "a lowercase token yields no needle",
+  mod.anchoredNameSignal("acme common stock") === null,
+  "anchoring a lowercase word is the substring problem again with extra steps"
+);
+
 console.log("\n  -- the asymmetry, pinned at both ends --\n");
 
 // THE MISMATCH ONLY EXISTS BETWEEN THE TWO FUNCTIONS, which is why it survived
@@ -257,9 +391,51 @@ check(
     "the same failure one level down, which is why the NAME was varied instead"
 );
 check(
-  "a name that is nothing but initials yields no usable variant",
-  mod.companyNameVariants("A.B. Inc").every((v) => v.length >= 4),
-  "there is no name left to match on, and a 2-character substring would match everywhere"
+  "a name that is nothing but initials yields NO variant at all",
+  (() => {
+    // THIS ASSERTION USED TO CLAIM MORE THAN IT TESTED. Its name said "no
+    // usable variant"; its body only checked `.every(v => v.length >= 4)`,
+    // which an initials-only name can satisfy — so it passed against code with
+    // the property AND against code without it.
+    //
+    // A real committed row proves it: VFC's "V.F. Corporation Common Stock"
+    // produced ["v. f"]. Four characters, so the old guard passed it, and as a
+    // substring needle it matches any text where a word ending in v precedes a
+    // period and a word starting with f — "Roe v. Ford". The invented "A.B."
+    // never exercised that.
+    //
+    // Now it tests the property the name claims: the list is EMPTY.
+    const vfc = mod.companyNameVariants("V.F. Corporation Common Stock");
+    const att = mod.companyNameVariants("AT&T Inc.");
+    return vfc.length === 0 && att.length === 0;
+  })(),
+  `VFC -> ${JSON.stringify(mod.companyNameVariants("V.F. Corporation Common Stock"))}, ` +
+    `T -> ${JSON.stringify(mod.companyNameVariants("AT&T Inc."))} — both must be []`
+);
+check(
+  "the guard counts ALPHANUMERICS, not characters",
+  (() => {
+    // "at t" is four characters and three letters; "v. f" is four characters
+    // and two. Counting length let both through. assessCompanyName already
+    // counts letters on the QUERY side (`letters.length <= 2`), so the two
+    // sides now judge a name the same way.
+    const code = readCodeOnly("lib/stock-news-data.ts");
+    return /\.filter\(\(v\) => v\.replace\(\/\[\^a-z0-9\]\/gi, ""\)\.length >= 4\)/.test(code);
+  })(),
+  "a needle padded out by dots and spaces is not four characters of evidence"
+);
+check(
+  "...and it is a TIGHTENING — every real name still yields its variants",
+  (() => {
+    const unchanged = [
+      ["Fastenal Company - Common Stock", 1],
+      ["A.O. Smith Corporation Common Stock", 4],
+      ["Snap-On Incorporated Common Stock", 3],
+      ["The J.M. Smucker Company Common Stock", 4],
+    ];
+    return unchanged.every(([name, n]) => mod.companyNameVariants(name).length === n);
+  })(),
+  "the fix for the short names must not cost the long ones anything"
 );
 check(
   "the single-word case is unchanged — one variant, not a widened set",

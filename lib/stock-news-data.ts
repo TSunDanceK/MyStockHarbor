@@ -752,9 +752,114 @@ export function companyNameVariants(companyName: string): string[] {
 
   return [...variants]
     .map((v) => v.replace(/\s+/g, " ").trim())
-    // THE LENGTH GUARD, KEPT. A variant shorter than four characters is a
-    // fragment, and a fragment is what would match half the market.
-    .filter((v) => v.length >= 4);
+    // THE GUARD MEASURES DISTINCTIVENESS, NOT LENGTH — and it used to measure
+    // length, which let two bad needles through.
+    //
+    //   VFC  "V.F. Corporation Common Stock"  ->  "v. f"
+    //
+    // Four characters, so the old guard passed it, and as a substring it
+    // matches any text where a word ending in v precedes a period and a word
+    // starting with f — "Roe v. Ford". Two of those four characters are
+    // separators.
+    //
+    //   T    "AT&T Inc."  ->  "at t"
+    //
+    // which matches ordinary English: "what the", "that time", "flat tire".
+    //
+    // Counting ALPHANUMERICS rather than characters rejects both. This is the
+    // same measure lib/server/news/companyName.ts's assessCompanyName already
+    // uses for the QUERY side — `letters.length <= 2` — so the two sides now
+    // judge a name the same way instead of one counting letters and the other
+    // counting punctuation.
+    //
+    // IT IS A TIGHTENING, NOT A LOOSENING. Every variant that passed before on
+    // real alphanumerics still passes; only needles padded out by dots and
+    // spaces stop.
+    .filter((v) => v.replace(/[^a-z0-9]/gi, "").length >= 4);
+}
+
+/**
+ * The anchored fallback for a name too short to be a substring needle.
+ *
+ * ── THE POPULATION, MEASURED ──────────────────────────────────────────────
+ * 55 of the 2,592 committed names produce NO variant at all: every candidate is
+ * under the four-character guard, `.some()` on an empty array is false by
+ * construction, and only an explicit ticker signal can match. MMM is the
+ * clearest case — the company is spelled "3M", the ticker is "MMM", they share
+ * no characters, and 88 fetched items yielded 2 cards, both carrying a literal
+ * "(MMM)".
+ *
+ * 42 of the 55 are names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO,
+ * PVH …). The rest are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC,
+ * CGI/GIB, RPC/RES, V2X/VVX, AAR/AIR.
+ *
+ * ── WHY NOT JUST LOWER THE GUARD ─────────────────────────────────────────
+ * A two- or three-character SUBSTRING matches half the market: "rh" inside
+ * "growth", "box" inside "boxing". The guard is right. What these names need is
+ * a different KIND of evidence, so this returns an ANCHORED, CASE-SENSITIVE
+ * pattern instead — and it is tested against the headline's ORIGINAL case
+ * rather than the lowercased text every other rule uses.
+ *
+ * ── CASING IS THE DISCRIMINATOR, AND IT COMES FROM THE DATA ──────────────
+ * The company's own name says which shape to demand. "CSX Corporation" is
+ * all-caps, so `\bCSX\b` is required in caps and ordinary prose cannot trip it.
+ * "Dow Inc." is a capitalised word, so `\bDow\b` is required capitalised, which
+ * separates the company from "a cardboard box" and "the dow was flat".
+ *
+ * No list is involved: COMMON_WORDS in lib/server/news/companyName.ts is a
+ * QUERY-quality list of business words (american, capital, energy) and does not
+ * contain box, dow or fox, so it is the wrong instrument here.
+ *
+ * ── THE RESIDUAL, STATED RATHER THAN HIDDEN ──────────────────────────────
+ * Casing cannot separate "Dow Inc." from "Dow Jones", or "Box, Inc." from "Box
+ * Office". Those false positives remain. They are a smaller error than the
+ * current one — every item discarded and a blank page — and the ranking, the
+ * dedup and the churn filter all still apply downstream. Worth revisiting with
+ * a measurement, not worth blocking the 42 clean cases on.
+ *
+ * ── STRICTLY ADDITIVE ────────────────────────────────────────────────────
+ * The caller reaches this ONLY when companyNameVariants returned nothing, so no
+ * symbol that matches today can change behaviour. That is asserted.
+ */
+export function anchoredNameSignal(companyName: string): RegExp | null {
+  const base = String(companyName ?? "")
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/gi,
+      " "
+    )
+    .replace(/^\s*the\s+/i, "")
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const token = base.split(/\s+/)[0] ?? "";
+  const alnum = token.replace(/[^A-Za-z0-9]/g, "");
+
+  // TWO TO FOUR CHARACTERS. Below two there is no name left; at five or more
+  // companyNameVariants already has a usable substring needle and this never
+  // runs.
+  if (alnum.length < 2 || alnum.length > 4) return null;
+  // A proper noun or an acronym. A token with no capital is not a company name
+  // in a headline, and anchoring a lowercase word would be the substring
+  // problem again with extra steps.
+  if (!/[A-Z]/.test(token)) return null;
+
+  // TWO SPELLINGS, because the dots are load-bearing in one of them. VFC's name
+  // is "V.F.", whose alphanumerics are "VF" — and `\bVF\b` does not match the
+  // text "V.F. Corporation", since the letters are not adjacent there. Offering
+  // the punctuated token as well is what reaches it, and it is the same
+  // dotted/undotted pairing companyNameVariants already does one size up.
+  //
+  // The trailing boundary is only required when the token ends in a word
+  // character: `\bV\.F\.\b` can never match, because a boundary cannot follow a
+  // full stop that is already at the edge of a word.
+  const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const forms = new Set<string>([`\\b${esc(alnum)}\\b`]);
+  if (token !== alnum) {
+    forms.add(`\\b${esc(token)}${/\w$/.test(token) ? "\\b" : ""}`);
+  }
+
+  return new RegExp([...forms].join("|"));
 }
 
 function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
@@ -801,8 +906,19 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
   // See companyNameVariants: the text normaliser keeps dots and the name
   // normaliser removed them, so a dotted name could never match its own
   // headline. The length guard is unchanged and now applies per variant.
-  if (companyNameVariants(companyName).some((variant) => text.includes(variant))) {
+  const variants = companyNameVariants(companyName);
+  if (variants.some((variant) => text.includes(variant))) {
     return true;
+  }
+
+  // THE SHORT-NAME FALLBACK, reached only when there is no usable variant — so
+  // this cannot change the answer for any name that already matches. Tested
+  // against the ORIGINAL case, because casing is the whole discriminator.
+  if (!variants.length) {
+    const anchored = anchoredNameSignal(companyName);
+    if (anchored && anchored.test(`${item.title} ${item.description ?? ""}`)) {
+      return true;
+    }
   }
 
   if (companyWords.length >= 2 && companyWords.every((word) => text.includes(word))) {
