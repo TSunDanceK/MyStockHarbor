@@ -161,6 +161,17 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
+  // and diffs every extracted number against the frozen FMP ground truth in the
+  // dump. Needs the dump for the FMP side and the network for the SEC side, and
+  // the sandbox is refused data.sec.gov with 403 CONNECT. Lifts secFields.ts and
+  // secExtract.ts, so type erasure needs the TypeScript compiler.
+  "sec-extract": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
