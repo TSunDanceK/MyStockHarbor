@@ -395,6 +395,48 @@ check("...through the SAME queue, not a second one for chains",
   !/rewindowChains|chainQueue|REWINDOW_CHAINS/.test(ROUTE),
   "one companyfacts payload carries every one of the three, so one re-read serves all three");
 
+// ── CONDITION 5: every script that lifts these functions can still lift them ─
+//
+// THE REGRESSION THIS EXISTS FOR ALREADY HAPPENED, TWICE, AND THE SECOND TIME
+// NOBODY SAW IT. `needsRewindow` changed from an arrow const to a declaration.
+// This check hit it, failed loudly, and moved to grabFunction. The OTHER
+// lifter — scripts/annual-filer-census.mjs — kept
+// /export const needsRewindow = [^;]+;/, which then matched nothing, so
+// `(match ?? [])[0]` was undefined and `.replace` on it threw a TypeError. It
+// went unnoticed because the census is a CREDENTIALLED relay task and does not
+// run under check-all: the only way to find out was to run it, and running it
+// needs the database.
+//
+// So the lift targets are asserted here instead, where they are free. This does
+// not run the census — it asserts that the functions it names are findable by
+// the means it uses, which is the exact thing that broke.
+console.log("\n5. the other lifters of these functions still resolve");
+
+const CENSUS = readCodeOnly("scripts/annual-filer-census.mjs");
+check("the census no longer matches the arrow form that stopped existing",
+  !/export const needsRewindow = \[\^;\]/.test(CENSUS) && !CENSUS.includes("needsRewindow"),
+  "a regex that matches nothing returns undefined and throws on .replace");
+for (const [name, src, where] of [
+  ["needsReread", STALE, "lib/server/secStaleness.ts"],
+  ["staleReasons", STALE, "lib/server/secStaleness.ts"],
+  ["populationQueues", ROUTE, "the route"],
+  ["restatedPeriods", ROUTE, "the route"],
+]) {
+  check(`grabFunction finds ${name} in ${where}`, Boolean(grabFunction(src, name)));
+}
+// AND THE CENSUS ASKS FOR EXACTLY THOSE. A lifter naming a function that no
+// longer exists is the same failure one step removed.
+for (const name of ["needsReread", "staleReasons", "populationQueues"]) {
+  check(`the census lifts ${name} by name`, CENSUS.includes(`grabFunction(STALE, "${name}")`) ||
+    CENSUS.includes(`grabFunction(ROUTE, "${name}")`),
+    `so a rename moves this check with it`);
+}
+// A FAILED LIFT MUST EXIT, NOT THROW. The TypeError was unreadable; a named
+// FATAL says what could not be lifted.
+check("the census exits with a FATAL rather than throwing when a lift fails",
+  /if \(!needs \|\| !queues\)/.test(CENSUS) && /FATAL: could not lift/.test(CENSUS),
+  "an undefined match should report itself, not surface as .replace of undefined");
+
 console.log(
   failures
     ? `\n${failures} assertion(s) failed.\n`
