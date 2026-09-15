@@ -51,26 +51,66 @@ if (analysis.length < 100) {
   process.exit(1);
 }
 
-// ── EVERY ZERO-CAPABLE COUNTER GETS A DENOMINATOR ─────────────────────────
-// A top-50 list is a number that looks identical whether the pool answered for
-// 700 symbols or for 51. The counters below are what makes the difference
-// visible, and a thin denominator is a hard failure rather than a quiet list.
-const poolRaw = readJson("price-pool.json")?.value ?? {};
-let poolEntries = 0, unparseable = 0, noCap = 0;
+// ── ONE SOURCE WAS NOT ENOUGH, AND THE COUNTERS DID NOT SAY SO ────────────
+//
+// The first run read market caps from price-pool.json alone and reported 840
+// entries, 0 unparseable and 99.4% universe coverage. Every counter green, and
+// the resulting "top 50 by market cap" had NVDA nowhere in it: NVDA is in the
+// analysis universe and is one of the six pool entries carrying no usable cap.
+// Coverage of 99.4% and "the largest company in the list is missing" are the
+// same run.
+//
+// So caps are read from every dataset in the dump that carries one, WIDEST
+// FIRST, and a later source only fills a gap -- the same precedence rule
+// static-profile-build.mjs uses for sector and industry. Per-source counts are
+// reported because "the pool answered for it" and "something answered for it"
+// are different facts and only one of them was being measured.
+const CAP_SOURCES = ["price-pool.json", "screener-fundamentals.json", "fundamentals.json", "stockdata.json"];
+
+/** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
+function entriesOf(doc) {
+  const v = doc?.value ?? doc;
+  if (Array.isArray(v)) {
+    const out = [];
+    for (const e of v) { const sym = e?.symbol ?? e?.ticker; if (sym) out.push([String(sym), e]); }
+    return out;
+  }
+  if (v && typeof v === "object") return Object.entries(v);
+  return [];
+}
+
+const capOf = (e) => {
+  let x = e;
+  if (typeof x === "string") { try { x = JSON.parse(x); } catch { return null; } }
+  for (const k of ["marketCap", "mktCap", "marketCapitalization"]) {
+    const n = Number(x?.[k]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+};
+
 const marketCap = new Map();
-for (const [sym, v] of Object.entries(poolRaw)) {
-  poolEntries++;
-  let e = v;
-  if (typeof e === "string") { try { e = JSON.parse(e); } catch { e = null; } }
-  if (e == null) { unparseable++; continue; }
-  const mc = Number(e?.marketCap);
-  if (!Number.isFinite(mc) || mc <= 0) { noCap++; continue; }
-  marketCap.set(String(sym).toUpperCase(), mc);
+const capSource = new Map();
+for (const name of CAP_SOURCES) {
+  const doc = readJson(name);
+  if (doc == null) { console.log(`[due-universe] ${name}: ABSENT from this dump`); continue; }
+  const rows = entriesOf(doc);
+  let filled = 0, alreadyKnown = 0, noCap = 0;
+  for (const [sym, e] of rows) {
+    const S = String(sym).toUpperCase();
+    const mc = capOf(e);
+    if (mc == null) { noCap++; continue; }
+    if (marketCap.has(S)) { alreadyKnown++; continue; }
+    marketCap.set(S, mc);
+    capSource.set(S, name);
+    filled++;
+  }
+  console.log(`[due-universe] ${name}: ${rows.length} entries · ${filled} new caps · ${alreadyKnown} already known · ${noCap} carrying no usable cap`);
 }
 
 const withCap = analysis.filter((s) => marketCap.has(s));
-console.log(`[due-universe] price pool: ${poolEntries} entries · ${unparseable} unparseable · ${noCap} carrying no usable cap · ${marketCap.size} usable`);
-console.log(`[due-universe] analysis universe: ${analysis.length} symbols · ${withCap.length} with a pool cap (${((withCap.length / analysis.length) * 100).toFixed(1)}%)`);
+console.log(`[due-universe] caps assembled: ${marketCap.size} symbols from ${CAP_SOURCES.length} candidate sources`);
+console.log(`[due-universe] analysis universe: ${analysis.length} symbols · ${withCap.length} with a cap (${((withCap.length / analysis.length) * 100).toFixed(1)}%)`);
 
 if (withCap.length < CUT * 4) {
   console.error(
@@ -100,22 +140,23 @@ const top = ranked.slice(0, CUT);
 const CANARIES = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META"];
 const rankOf = (s) => { const i = ranked.indexOf(s); return i < 0 ? null : i + 1; };
 const missing = CANARIES.filter((c) => !top.includes(c));
-console.log(`[due-universe] canaries: ${CANARIES.map((c) => `${c}=${top.includes(c) ? `#${rankOf(c)}` : "MISSING"}`).join(" ")}`);
+console.log(`[due-universe] canaries: ${CANARIES.map((c) => `${c}=${top.includes(c) ? `#${rankOf(c)}(${capSource.get(c)})` : "MISSING"}`).join(" ")}`);
 if (missing.length) {
   console.error(`\nFATAL: ${missing.length} of ${CANARIES.length} canary symbols are not in the top ${CUT}. Attribution:`);
   for (const c of missing) {
     const inUniverse = analysis.includes(c);
     const hasCap = marketCap.has(c);
+    const src = capSource.get(c) ?? "none";
     const rank = rankOf(c);
     console.error(
-      `  ${c}: in analysis universe=${inUniverse} · has a pool cap=${hasCap} · ` +
+      `  ${c}: in analysis universe=${inUniverse} · has a cap=${hasCap} (source: ${src}) · ` +
         (rank == null ? "never ranked" : `ranked #${rank} of ${ranked.length}`)
     );
   }
   console.error(
     `\nAll three causes produce the same empty space in the list and mean different things:\n` +
       `  not in the universe  -> the analysis universe is the wrong input for a cap ranking\n` +
-      `  no pool cap          -> the pool did not answer for it; the cut is of what answered\n` +
+      `  no cap in any source -> nothing in the dump priced it; the cut is of what answered\n` +
       `  ranked below the cut -> the caps themselves are wrong or stale\n` +
       `Fix the input. Do not widen CUT to paper over it.`
   );
@@ -146,7 +187,7 @@ const doc = {
     "against a fresh step 0 dump; do not hand-edit. Stage 5 of the earnings-calendar build " +
     "replaces this file with a live ranking off the whole-market bars pipeline.",
   generatedAt: new Date().toISOString().slice(0, 10),
-  source: `step 0 dump ${path.basename(DUMP)} · price-pool marketCap · analysis universe ${analysis.length} symbols, ${withCap.length} with a cap`,
+  source: `step 0 dump ${path.basename(DUMP)} · marketCap from ${CAP_SOURCES.join(" -> ")} (widest first, later sources fill gaps only) · analysis universe ${analysis.length} symbols, ${withCap.length} with a cap`,
   cut: CUT,
   symbols: top,
 };
