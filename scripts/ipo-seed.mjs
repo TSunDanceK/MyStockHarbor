@@ -32,10 +32,31 @@ import {
   IPO_TERMS_MAX_AGE_DAYS,
 } from "../lib/server/ipoExclusions.ts";
 import { buildSecIpoTables } from "../lib/server/ipoSecSource.ts";
+// THE SAME MERGE THE DAILY INGEST USES. The seed must write the shape the ingest
+// writes -- two writers producing subtly different rows would both look
+// plausible and disagree only where nobody checks.
+import { mergeIpoRecords, validateStored, windowStartFor } from "../lib/server/ipoRecordMerge.ts";
 
 const SEC_UA = process.env.SEC_USER_AGENT || "MyStockHarbor sonnybrindle@mystockharbor.com";
 const WINDOW_DAYS = Number(process.env.IPO_SEED_WINDOW_DAYS || 90);
-const TODAY = new Date();
+
+// ── WINDOW-END OVERRIDE, for the seasonality comparison ────────────────────
+// The measured window is whatever 90 days end today, and "today" in mid-
+// September is the quietest stretch of the IPO year: issuers avoid August and
+// the autumn window opens after Labor Day. A lower-table count of 8 could be
+// August or could be structural, and those need different responses.
+//
+// So the end date is overridable and the SAME machinery answers both windows --
+// a second implementation measuring the comparison would tell us about the
+// second implementation.
+//
+// Passed through the relay's `symbols` input, because relay.yml already forwards
+// it and adding a dedicated input would need a merge to main first. A value
+// shaped like a date is read as the window end; anything else is ignored.
+const END_OVERRIDE = /^\d{4}-\d{2}-\d{2}$/.test(process.env.SYMBOLS ?? "")
+  ? process.env.SYMBOLS
+  : null;
+const TODAY = END_OVERRIDE ? new Date(`${END_OVERRIDE}T00:00:00Z`) : new Date();
 const iso = (d) => d.toISOString().slice(0, 10);
 const TODAY_ISO = iso(TODAY);
 const WINDOW_START = iso(new Date(TODAY.getTime() - WINDOW_DAYS * 86400000));
@@ -150,6 +171,10 @@ function parseTerms(text, sic) {
 
 console.log("=".repeat(78));
 console.log(`IPO SEED — ${WINDOW_DAYS}-day window ${WINDOW_START}..${TODAY_ISO}`);
+if (END_OVERRIDE) {
+  console.log(`WINDOW END OVERRIDDEN to ${END_OVERRIDE} — this is a comparison run,`);
+  console.log(`not today's window. The lower table covers the 30 days ending then.`);
+}
 console.log("=".repeat(78));
 
 // ── Which quarters does the window touch? Computed, never assumed. ─────────
@@ -449,15 +474,28 @@ for (const r of recent) {
   console.log(`   ${(r.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 40).padEnd(42)} listed ${r.date} · ${r.exchange ?? "—"}`);
 }
 
+// ── THE DOCUMENT, BUILT BY THE SHARED MERGE ───────────────────────────────
+// Not hand-assembled here. mergeIpoRecords is what the daily ingest calls, so
+// seeding and accumulating cannot drift apart in the record shape, the prune
+// boundary or the ordering.
+const doc = mergeIpoRecords([], all, windowStartFor(TODAY, WINDOW_DAYS), TODAY.getTime());
+const valid = validateStored(doc);
+console.log(`\n── STORE DOCUMENT (built by the shared merge, not by this script)`);
+console.log(`   records after merge+prune: ${doc.records.length} (from ${all.length} parsed)`);
+console.log(`   windowStart: ${doc.windowStart} · validates: ${valid.ok ? "yes" : `NO — ${valid.reason}`}`);
+console.log(`   bytes: ${JSON.stringify(doc).length}`);
+console.log(`   >>> The write itself is TWO Upstash commands (one GET, one SET) and is`);
+console.log(`   >>> NOT performed here: relay.yml's Upstash secret is the READ-ONLY`);
+console.log(`   >>> token by deliberate choice, and reversing that is the owner's call.`);
+
 fs.mkdirSync("data/sec", { recursive: true });
 const payload = {
-  fetchedAt: Date.now(),
-  windowDays: WINDOW_DAYS,
+  ...doc,
   window: [WINDOW_START, TODAY_ISO],
   quarters,
   dedupe: { rowsInWindow: rawRows, duplicatesRemoved: dupes, distinctFilers: byCik.size },
   funnel,
-  records: all,
+  storeValid: valid,
 };
 fs.writeFileSync("data/sec/ipo-seed.json", JSON.stringify(payload));
 console.log(`\nwrote data/sec/ipo-seed.json (${JSON.stringify(payload).length} bytes)`);

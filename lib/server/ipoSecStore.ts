@@ -16,19 +16,37 @@
 import { Redis } from "@upstash/redis";
 
 import type { IpoFilerRecord } from "./ipoSecSource";
+import {
+  mergeIpoRecords,
+  validateStored,
+  windowStartFor,
+  type StoredIpoFilings,
+} from "./ipoRecordMerge";
 
 // v1, and versioned from the start: the record shape carries parsed cover terms,
 // and the parser is a heuristic that has already been rebuilt once. A shape
 // change must not be read back through an old reader.
 export const IPO_FILINGS_REDIS_KEY = "msh:ipo:filings:v1";
 
-type StoredIpoFilings = {
-  /** When the refresh that wrote this ran. */
-  fetchedAt: number;
-  /** The window it covers, so a reader can tell a 90-day set from a 7-day one. */
-  windowDays: number;
-  records: IpoFilerRecord[];
-};
+// ── THE COMMAND BUDGET IS THE DESIGN CONSTRAINT ────────────────────────────
+// Upstash bills COMMANDS, and this project has already been taken down once by
+// cache usage (claude/outage-upstash-suspended-2026-08-28.md). So the whole
+// window lives under ONE key and a refresh is exactly:
+//
+//     1x GET   the current document
+//     1x SET   the merged-and-pruned document
+//
+// TWO COMMANDS A DAY. Not per-CIK keys, not per-row writes: ~700 filers written
+// individually would be ~700 commands daily against a $50 cap, which is the
+// shape of the outage rather than a smaller version of this design.
+//
+// The cost of one key is that a write is a read-modify-write and two concurrent
+// writers would clobber each other. That is acceptable HERE and would not be
+// elsewhere: there is exactly one writer, it runs once a day, and losing a day
+// of appends self-heals on the next run because the window is re-derived from
+// EDGAR rather than accumulated blindly.
+export const IPO_REFRESH_COMMANDS_PER_RUN = 2;
+
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -64,6 +82,67 @@ export async function readStoredIpoFilings(): Promise<IpoFilerRecord[] | null> {
     console.error(`[ipo:filings] redis read failed:`, err);
     return null;
   }
+}
+
+/**
+ * Merge a refresh into the stored window. TWO COMMANDS: one GET, one SET.
+ *
+ * Returns what happened, never throws on a refused write -- the caller decides
+ * whether a failure is fatal, and a read-only token refusing a SET is a correct
+ * refusal rather than a bug to retry around.
+ */
+export async function writeStoredIpoFilings(
+  incoming: IpoFilerRecord[],
+  now = new Date()
+): Promise<{
+  ok: boolean;
+  reason: string | null;
+  commands: number;
+  before: number;
+  after: number;
+  pruned: number;
+}> {
+  if (!redis) {
+    return { ok: false, reason: "no Upstash credentials in this environment", commands: 0, before: 0, after: 0, pruned: 0 };
+  }
+
+  let existing: IpoFilerRecord[] = [];
+  let commands = 0;
+  try {
+    const stored = await redis.get<StoredIpoFilings>(IPO_FILINGS_REDIS_KEY); // COMMAND 1
+    commands += 1;
+    if (stored && Array.isArray(stored.records)) existing = stored.records;
+  } catch (err) {
+    return { ok: false, reason: `read failed: ${String(err)}`, commands, before: 0, after: 0, pruned: 0 };
+  }
+
+  const doc = mergeIpoRecords(existing, incoming, windowStartFor(now), now.getTime());
+
+  // VALIDATE BEFORE WRITING. A document that has outgrown the ceiling cannot be
+  // fixed by writing it and noticing later -- at that point the stored value is
+  // already the problem.
+  const check = validateStored(doc);
+  if (!check.ok) {
+    return { ok: false, reason: check.reason, commands, before: existing.length, after: doc.records.length, pruned: 0 };
+  }
+
+  try {
+    await redis.set(IPO_FILINGS_REDIS_KEY, doc); // COMMAND 2
+    commands += 1;
+  } catch (err) {
+    // A READ-ONLY TOKEN REFUSING THIS IS CORRECT, not a credential to debug.
+    // relay.yml records that the repo's Actions secret is read-only by
+    // deliberate choice; changing that reverses a posture and is the owner's
+    // call, not something to route around here.
+    return { ok: false, reason: `write refused: ${String(err)}`, commands, before: existing.length, after: doc.records.length, pruned: 0 };
+  }
+
+  const incomingCiks = new Set(incoming.map((r) => r.cik));
+  const pruned = existing.filter(
+    (r) => !doc.records.some((d) => d.cik === r.cik) && !incomingCiks.has(r.cik)
+  ).length;
+
+  return { ok: true, reason: null, commands, before: existing.length, after: doc.records.length, pruned };
 }
 
 /** Metadata without the payload, for /cache-health and the debug route. */
