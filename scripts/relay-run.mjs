@@ -189,6 +189,16 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // NO NETWORK AT ALL. Re-slices the due-to-report simulation from the fact set
+  // the sweep persists (data/sec/due-sweep-facts.json), which the relay's own
+  // artifact carries. Dispatch it with run_id/artifact_name pointing at a
+  // sec-due-sweep run: that artifact holds both the fact set and the step 0
+  // dump's universe.json, so the locate step resolves.
+  "sec-due-reslice": {
+    script: "scripts/sec-due-reslice.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
