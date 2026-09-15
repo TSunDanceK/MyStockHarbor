@@ -53,6 +53,26 @@ export const SEC_QUARTER_WINDOW = 12;
 /** Balance-sheet dates retained. NOT tied to the quarter window; see above. */
 export const SEC_INSTANT_WINDOW = 8;
 
+/**
+ * Fiscal years retained — SIX, so the five-year card can reach its own FY-1.
+ *
+ * ── THE SAME DEFECT AS THE QUARTER WINDOW, ONE TABLE OVER ─────────────────
+ * The five-year card renders five rows and compares each with the year before
+ * it, and exactly five years were stored — so the OLDEST rendered row could
+ * never find its comparator and read "not on file" on every symbol, forever.
+ * Owner found it on TSLA: FY2021 blank on a filer with two decades of 10-Ks.
+ *
+ * Six stored, five rendered. Same shape as the quarter window, same reason,
+ * and the same non-promise: a filer that genuinely has not filed six years
+ * still shows "not on file" on its oldest row. Widening the window does not
+ * manufacture a comparator.
+ *
+ * ITS OWN CONSTANT, NOT keepQuarters. Slicing years by the quarter window is
+ * how `instants` doubled as a side effect of an unrelated change — the same
+ * coupling, caught once already. See SEC_INSTANT_WINDOW.
+ */
+export const SEC_YEAR_WINDOW = 6;
+
 export type FactRow = {
   start?: string;
   end?: string;
@@ -435,7 +455,7 @@ export function extractCompanyFacts(
   opts: { quarters?: number; years?: number; instants?: number } = {}
 ): ExtractResult {
   const keepQuarters = opts.quarters ?? SEC_QUARTER_WINDOW;
-  const keepYears = opts.years ?? 5;
+  const keepYears = opts.years ?? SEC_YEAR_WINDOW;
   // DECOUPLED FROM keepQuarters, and the decoupling is worth 12 percentage
   // points. `instants` used to be sliced by keepQuarters, so raising the
   // quarter window to 12 doubled the balance-sheet series as a side effect:

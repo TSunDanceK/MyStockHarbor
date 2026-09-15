@@ -9,12 +9,26 @@ import {
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 
-function money(v: number | null | undefined, compact = false): string {
+/**
+ * A DOLLAR FIGURE. `perShare` fixes it at two decimals.
+ *
+ * maximumFractionDigits alone DROPS A TRAILING ZERO, so a filed EPS of 4.30
+ * rendered "$4.3" and 4.50 rendered "$4.5" — TSLA FY2023 and AZN FY2024, both
+ * found on production. Money is written to the cent; "$4.3" reads as a
+ * different, sloppier number than the filing contains.
+ *
+ * Only per-share values are pinned. A revenue of $416,161,000,000 does not want
+ * ".00" on the end, and the compact forms (B/M) have their own precision.
+ */
+function money(v: number | null | undefined, compact = false, perShare = false): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
   if (compact && abs >= 1e9) return `${v < 0 ? "-" : ""}$${(abs / 1e9).toFixed(2)}B`;
   if (compact && abs >= 1e6) return `${v < 0 ? "-" : ""}$${(abs / 1e6).toFixed(1)}M`;
-  return `${v < 0 ? "-" : ""}$${abs.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  const digits = perShare
+    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    : { maximumFractionDigits: 2 };
+  return `${v < 0 ? "-" : ""}$${abs.toLocaleString("en-US", digits)}`;
 }
 /**
  * A CHANGE, signed. The "+" says "up on the base", so it belongs only on a
@@ -89,7 +103,12 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 export function CellValue({ cell, compact = false, currency = true }: { cell: ViewCell; compact?: boolean; currency?: boolean }) {
   return (
     <>
-      {currency ? money(cell.val, compact) : cell.val == null ? "—" : cell.val.toLocaleString("en-US")}
+      {/* PER-SHARE PRECISION TRAVELS WITH THE CELL, not with the call site —
+          EPS renders in four places and one of them is a loop over field keys
+          that no one writes out by hand. See ViewCell.perShare. */}
+      {currency
+        ? money(cell.val, compact && !cell.perShare, cell.perShare)
+        : cell.val == null ? "—" : cell.val.toLocaleString("en-US")}
       <DerivedMark cell={cell} />
     </>
   );

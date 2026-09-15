@@ -15,7 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
-import { SEC_QUARTER_WINDOW } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
@@ -82,6 +82,16 @@ export type StoredFactSet = {
    * from one key. Absent means 8, the window before this field existed.
    */
   w?: number;
+  /**
+   * The YEAR retention window this set was written under. Same job as `w`, same
+   * absence rule: missing means 5, the window before this field existed, and 5
+   * is one short of what the five-year card needs to reach its own FY-1.
+   *
+   * TWO FIELDS, ONE QUEUE. Both feed the same rewindow selection rather than a
+   * second one — a set is stale if EITHER window is behind, and two queues over
+   * the same symbols would be two allowances competing for the same re-read.
+   */
+  y?: number;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -141,6 +151,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     c: secChainsHash(),
     cu: result.refusedUnits,
     w: SEC_QUARTER_WINDOW,
+    y: SEC_YEAR_WINDOW,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };

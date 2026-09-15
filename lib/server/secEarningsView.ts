@@ -256,11 +256,38 @@ export const isPct = (v: Pct): v is number => typeof v === "number" && Number.is
 
 // ── the view ────────────────────────────────────────────────────────────────
 
-export type ViewCell = Cell & { label: string; derivedNote: string | null };
+export type ViewCell = Cell & {
+  label: string;
+  derivedNote: string | null;
+  /**
+   * A PER-SHARE FIGURE, which is formatted to two decimals wherever it renders.
+   *
+   * ── WHY THE CELL CARRIES THIS AND NOT THE CALL SITE ──────────────────────
+   * The money formatter used maximumFractionDigits: 2, which drops a trailing
+   * zero — so a filed EPS of 4.30 rendered "$4.3" and 4.50 rendered "$4.5".
+   * Owner found both: TSLA FY2023 and AZN FY2024. A price-like figure printed
+   * to one decimal reads as a different number, and "$4.3" is not how anyone
+   * writes money.
+   *
+   * EPS renders in four places — the snapshot tile, the five-year card, the
+   * earnings-history table and the full P&L — so a `perShare` prop at each
+   * call site is four chances to forget one, and the fourth is the P&L, where
+   * the cells are produced by a loop over field keys and no human writes them
+   * out at all. Marking the CELL means every renderer gets it right by
+   * construction, including one added later.
+   */
+  perShare: boolean;
+};
+
+/**
+ * PER-SHARE FIELDS, BY KEY. The keys are the extractor's own, so this cannot
+ * drift from a label someone rewords.
+ */
+const PER_SHARE_KEYS = new Set(["epsBasic", "epsDiluted"]);
 
 const view = (p: StoredPeriod | null | undefined, key: string, label: string): ViewCell => {
   const c = cell(p, key);
-  return { ...c, label, derivedNote: derivationNote(c.derived) };
+  return { ...c, label, derivedNote: derivationNote(c.derived), perShare: PER_SHARE_KEYS.has(key) };
 };
 
 export type SecEarningsView = {
@@ -478,6 +505,17 @@ const pctOf = (part: number | null, whole: number | null) =>
 export const RENDERED_QUARTERS = 8;
 
 /**
+ * How many fiscal years the five-year card renders.
+ *
+ * SIX ARE STORED (SEC_YEAR_WINDOW) and five are shown, for exactly the reason
+ * twelve quarters back eight: the oldest RENDERED row has to find its own
+ * FY-1 inside the stored set. With five stored and five shown, the oldest row
+ * read "not on file" on every symbol that had ever filed — a permanent blank
+ * produced by the window, not by the filings.
+ */
+export const RENDERED_YEARS = 5;
+
+/**
  * ── ONE READER, TWO ANCHORS ───────────────────────────────────────────────
  *
  * This used to hardcode `set.quarters` and return null when a filer had none,
@@ -636,7 +674,11 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // FY-1 BY LABEL via priorYearOf, null when the prior year is not on file,
   // and margins are levels rather than changes. Oldest first for display, as
   // the quarterly table is.
-  const annualRows = set.years.slice(0, 5).map((p) => {
+  // RENDERS FIVE, SEARCHES ALL SIX — the same asymmetry as the quarterly table
+  // and the entire point of storing more than is displayed. priorYearOf is
+  // given `set.years`, not the sliced list; searching the trimmed list is the
+  // defect itself.
+  const annualRows = set.years.slice(0, RENDERED_YEARS).map((p) => {
     const prior = priorYearOf(set.years, p);
     return {
       label: periodLabel(p),
