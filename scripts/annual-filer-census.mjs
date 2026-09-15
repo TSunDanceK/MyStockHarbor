@@ -94,10 +94,24 @@ if (WATCH.length) {
       console.log(`  ${sym.padEnd(6)} no stored set (manifest contentHash ${e?.contentHash ?? "absent"})`);
       return;
     }
+    // ── WHICH PATH WROTE IT, AND WHEN ────────────────────────────────────
+    //
+    // The manifest's contentHash is written ONLY by /api/jobs/sec-facts.
+    // secColdFetch calls writeFactSet directly for an on-demand page view and
+    // never touches the manifest, so a stored set whose manifest entry has no
+    // contentHash was written by the cold path. `at` is stamped by
+    // encodeFactSet at write time, which dates it.
+    //
+    // This is the difference between "the cold path ignores the window" and
+    // "this set predates the deploy", which look identical from w alone.
+    const wroteIt = e?.contentHash ? "cron job" : "cold path (page view)";
+    const when = set.at ? new Date(set.at).toISOString().replace("T", " ").slice(0, 19) + "Z" : "no timestamp";
     console.log(
       `  ${sym.padEnd(6)} w=${String(set.w ?? 8).padStart(2)} quarters=${String((set.quarters ?? []).length).padStart(2)} ` +
       `years=${String((set.years ?? []).length).padStart(2)} instants=${String((set.instants ?? []).length).padStart(2)} ` +
-      `| manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"}`
+      `| written ${when} by ${wroteIt}` +
+      `\n         manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"} cik=${e?.cik ?? "none"}` +
+      `\n         quarters carrying a prior-year match: see the growth table — a young filer has none to find`
     );
   });
   console.log("");
