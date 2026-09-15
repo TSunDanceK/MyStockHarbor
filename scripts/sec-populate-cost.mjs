@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const DIR = path.resolve(process.argv[2] ?? "step0-dump");
 const SAMPLE = Number(process.env.SAMPLE ?? 40);
@@ -66,13 +67,27 @@ const tick = await lift(
 // and a satellite company; their filings are not the universe's size
 // distribution, and the allowance has to survive the universe.
 const { map } = tick.parseTickerFile(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
+// `dumpUniverse` IS THE KEY, and the first run guessed `symbols` and got zero.
+// The FATAL floor below is what turned that into a two-minute failure instead
+// of a plausible-looking measurement over three symbols -- the same guard that
+// caught the PAYERS default on the window fixture.
 const universe = JSON.parse(fs.readFileSync(path.join(DIR, "universe.json"), "utf8"));
-const symbols = (Array.isArray(universe) ? universe : universe.symbols ?? []).map((s) =>
-  typeof s === "string" ? s : s.symbol
-);
-const withCik = symbols.filter((s) => map.has(s));
+const symbols = (universe.dumpUniverse ?? []).map(String);
+if (symbols.length < 100) {
+  console.error(
+    `FATAL: universe.json yielded ${symbols.length} symbols. Keys present: ` +
+      `${Object.keys(universe).join(", ")}`
+  );
+  process.exit(2);
+}
+// THROUGH THE SPELLING HELPER, because the universe writes BRK.B and the ticker
+// file writes BRK-B -- the exact defect this session fixed in seedManifest. A
+// probe that measured only the symbols a plain get() happens to resolve would
+// quietly exclude every dual-class name from the sample.
+const cikOf = (s) => lookupBySpelling(map, s)?.value?.cik ?? null;
+const withCik = symbols.filter((s) => cikOf(s));
 if (withCik.length < 100) {
-  console.error(`FATAL: only ${withCik.length} symbols resolved a CIK — the dump or the map is wrong.`);
+  console.error(`FATAL: only ${withCik.length} of ${symbols.length} symbols resolved a CIK — the map is wrong.`);
   process.exit(2);
 }
 // Evenly spaced through the sorted universe rather than the first N: the first
@@ -88,7 +103,7 @@ for (const symbol of picked) {
   const wait = Math.max(0, lastAt + MIN_GAP_MS - Date.now());
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastAt = Date.now();
-  const cik = map.get(symbol).cik;
+  const cik = cikOf(symbol);
   const t0 = Date.now();
   try {
     const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {

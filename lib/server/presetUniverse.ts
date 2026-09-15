@@ -48,4 +48,32 @@ export const PRESET_UNIVERSE: string[] = [
   "BKNG","AMGN","HON","ISRG","TJX","SYK","UNP","GILD","MDT","ADI",
   "CB","C","MO","GS","ETN","MRSH","TMUS","CI","SO","DUK",
   "ELV","SCHW","BLK","REGN","FISV","TT","PH","PYPL","CDNS","MAR",
+  // ── ARM, ADDED 2026-09-15, AND APPENDED RATHER THAN RANKED ────────────────
+  //
+  // WHY IT IS HERE. ARM was in NEITHER this list nor the dynamic pool, so it
+  // had no manifest entry, no CIK and no way to populate -- and its /earnings
+  // page would have read "not loaded yet" indefinitely. It is the symbol the
+  // whole earnings rebuild was audited against: every probe, every render
+  // check and the fiscal-label fix all used it. Leaving the reference symbol
+  // unreachable was an accident, not a decision.
+  //
+  // THE ALTERNATIVE WAS THE LAZY COLD PATH, and it is step 8 -- explicitly
+  // DECIDED BUT NOT SCHEDULED (claude/cold-path-and-coverage-decisions), sitting
+  // behind step 3, the population path, the verify sweep and the ticker gate.
+  // Making the audited symbol depend on unbuilt work is the worse of the two.
+  //
+  // APPENDED, WHICH BREAKS THIS LIST'S ORDERING INVARIANT ON PURPOSE. The
+  // header says "largest by market cap" and order is load-bearing: pickersBuilder
+  // fills slots from it and the three plays builders slice a priority list built
+  // from it. Inserting ARM at its real rank would shift ~40 names down one and
+  // could push the last out of a slice at exactly 100. Appending changes nothing
+  // for any existing name. So ARM's POSITION HERE IS NOT ITS MARKET-CAP RANK,
+  // and a future re-sort should place it properly rather than assume it is
+  // already right.
+  //
+  // COST: tier1CapFor() derives the fast price tier from this list's LENGTH, so
+  // the tier grows by exactly one slot. check-price-tiers asserts a 50-400 band
+  // rather than a pinned 100, and reads the length from the shipped list, so
+  // both stay correct. Reversible in one line.
+  "ARM",
 ];
