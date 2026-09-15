@@ -327,16 +327,16 @@ for (const symbol of SYMBOLS) {
     console.log(`    ttmRevenue ${m(v.ttmRevenue)}  ttmNetIncome ${m(v.ttmNetIncome)}  coverShares ${m(v.coverShares?.val)} asOf ${v.coverShares?.asOf ?? "—"}`);
     console.log("    recent quarters, as the table would show them:");
     console.log(`      ${"quarter".padEnd(12)}${"ending".padEnd(12)}${"revenue".padStart(11)}${"EPS".padStart(10)}${"net income".padStart(13)}`);
-    for (const r of v.recentQuarters) {
+    for (const r of v.recentPeriods) {
       console.log(`      ${r.label.padEnd(12)}${r.end.padEnd(12)}${(m(r.revenue.val) + d(r.revenue)).padStart(11)}${(m(r.epsDiluted.val) + d(r.epsDiluted)).padStart(10)}${(m(r.netIncome.val) + d(r.netIncome)).padStart(13)}`);
     }
 
     // THE ASSERTIONS THE OWNER NAMED, on what a reader would see.
-    const negShares = v.recentQuarters.length && SEC_FIELD_KEYS.includes("sharesDiluted")
+    const negShares = v.recentPeriods.length && SEC_FIELD_KEYS.includes("sharesDiluted")
       ? stored.quarters.filter((q) => (cell(q, "sharesDiluted").val ?? 0) < 0 || (cell(q, "sharesBasic").val ?? 0) < 0).length
       : 0;
     assertions.push({ symbol, check: "no negative share count on the rendered page", ok: negShares === 0, detail: negShares });
-    assertions.push({ symbol, check: "8 quarters in the recent table", ok: v.recentQuarters.length === 8, detail: v.recentQuarters.length });
+    assertions.push({ symbol, check: "8 quarters in the recent table", ok: v.recentPeriods.length === 8, detail: v.recentPeriods.length });
     assertions.push({ symbol, check: "balance sheet present", ok: v.balance !== null, detail: v.balance?.asOf ?? "null" });
     // A ROUND TRIP THAT CHANGED A NUMBER WOULD BE INVISIBLE ANY OTHER WAY.
     const direct = valOf(out.quarters[0], "revenue");

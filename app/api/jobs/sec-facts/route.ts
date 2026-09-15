@@ -3,8 +3,8 @@ import { revalidatePath } from "next/cache";
 import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
-import { extractCompanyFacts, checkIdentities, identityRates, type CompanyFacts } from "@/lib/server/secExtract";
-import { encodeFactSet, readFactSet, writeFactSet } from "@/lib/server/secFactStore";
+import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 
 export const runtime = "nodejs";
@@ -97,6 +97,37 @@ export const SEC_COLD_PER_RUN = 50;
 export const SEC_REVERIFY_PER_RUN = 150;
 export const SEC_POPULATE_PER_RUN = 300;
 
+/**
+ * Sets re-read per run because they were written under an older quarter window.
+ *
+ * SMALL AND GUARANTEED, which is the whole design. This is a migration with no
+ * deadline: nothing is wrong with an 8-quarter set, it simply shows four
+ * "not on file" rows the wider window would fill. So it takes a few slots a day
+ * and never competes with work a reader is waiting on.
+ *
+ * Its own slice, not the remainder. Ordering it last would have meant zero
+ * re-reads on any day the populate backlog was full — which is exactly the
+ * backlog earnings season produces, so the migration would stall precisely
+ * when the pages are being read.
+ *
+ * SIZED FROM THE DRAIN, not picked, and the drain is MEASURED rather than
+ * assumed. The census (relay 35004878304) found the store holds 19 sets, all at
+ * w=8, and the manifest records only 4 of them as job-written — the other 15
+ * are cold-path writes, which leave contentHash null and are therefore
+ * populate's, not this queue's. So the eligible backlog on first run is 4
+ * SYMBOLS, drained in one run, not 759.
+ *
+ * WHICH IS WHY THE NUMBER IS NOT 5. A backlog this small makes the allowance
+ * look academic today, and it is not: the 740 unpopulated SYMBOLS are written
+ * at the current window as populate reaches them, so this queue's real job is
+ * the NEXT window change, when the whole populated universe is eligible at
+ * once. At 759 SYMBOLS, 5 a run is 152 days — a permanent state rather than a
+ * migration. At 25 it is ~31 days, still small enough never to compete with
+ * work a reader is waiting on (reverify takes 150 and populate 300 in the same
+ * run), and short enough to actually finish.
+ */
+export const SEC_REWINDOW_PER_RUN = 25;
+
 /** SEC asks for at most 10 requests a second with a declared User-Agent. */
 const MIN_GAP_MS = 125;
 
@@ -116,9 +147,56 @@ async function authorize(req: NextRequest): Promise<Response | null> {
  * rule is the whole behaviour of this job and it should not need a network to
  * test.
  */
+/**
+ * A set written under an older quarter window is eligible for a re-read.
+ *
+ * ABSENT MEANS 8. Every entry in a manifest written before the window field
+ * existed has no `w`, and those are precisely the ones that need re-reading —
+ * so a missing field must select, never skip. Reading absence as "current" is
+ * how a migration silently completes without doing anything.
+ */
+export const needsRewindow = (e: { w?: number }) => (e.w ?? 8) < SEC_QUARTER_WINDOW;
+
+/**
+ * Periods present in BOTH sets whose stored values differ — i.e. answers that
+ * changed, as opposed to answers that are newly present.
+ *
+ * Quarters, years and instants alike: a restatement can land on any of them.
+ * Exported and pure so a check can run it against a fixture pair without a
+ * network or a store.
+ */
+export function restatedPeriods(
+  prior: StoredFactSet | null,
+  next: StoredFactSet
+): string[] {
+  if (!prior) return [];
+  const out: string[] = [];
+  const lists: [StoredPeriod[], StoredPeriod[]][] = [
+    [prior.quarters ?? [], next.quarters ?? []],
+    [prior.years ?? [], next.years ?? []],
+    [prior.instants ?? [], next.instants ?? []],
+  ];
+  for (const [was, now] of lists) {
+    for (const p of now) {
+      const before = was.find((x) => x.e === p.e);
+      // ONLY WHERE BOTH SIDES HAVE THE PERIOD. `before` undefined means the
+      // period is new to this set — which is what a wider window produces, and
+      // is not a changed answer.
+      if (before && JSON.stringify(before.v) !== JSON.stringify(p.v)) {
+        out.push(`${p.e}(${p.a ?? "?"})`);
+      }
+    }
+  }
+  return out;
+}
+
 export function populationQueues(
   manifest: SecManifest,
-  limits = { reverify: SEC_REVERIFY_PER_RUN, populate: SEC_POPULATE_PER_RUN }
+  limits = {
+    reverify: SEC_REVERIFY_PER_RUN,
+    populate: SEC_POPULATE_PER_RUN,
+    rewindow: SEC_REWINDOW_PER_RUN,
+  }
 ) {
   const entries = Object.entries(manifest.symbols).filter(([, e]) => e.cik);
 
@@ -134,14 +212,32 @@ export function populationQueues(
     .map(([s]) => s)
     .sort();
 
+  // ── REWINDOW: ALREADY POPULATED, UNDER THE OLD WINDOW ────────────────────
+  //
+  // `contentHash === null` is "never populated", so the populate queue cannot
+  // see these — a populated 8-quarter set would otherwise never be re-read and
+  // the wider window would never reach a single existing symbol.
+  //
+  // A GUARANTEED ALLOWANCE, NOT WHATEVER IS LEFT OVER. "Ordered last" reads as
+  // safe and is not: populate alone can carry a fortnight's backlog, so last
+  // place means zero rewindows a day for a fortnight — and the fortnight that
+  // matters is earnings season. Its slice is its own and the other two queues
+  // cannot consume it.
+  const rewindow = entries
+    .filter(([, e]) => !e.needsReverify && e.contentHash !== null && needsRewindow(e))
+    .map(([s]) => s)
+    .sort();
+
   return {
     reverify: reverify.slice(0, limits.reverify),
     populate: populate.slice(0, limits.populate),
+    rewindow: rewindow.slice(0, limits.rewindow),
     // The BACKLOG, not just what this run took. A drain that never shortens is
     // invisible from a per-run count alone, and this is the number that says
     // whether the standing path is keeping up.
     reverifyBacklog: reverify.length,
     populateBacklog: populate.length,
+    rewindowBacklog: rewindow.length,
   };
 }
 
@@ -201,6 +297,7 @@ export async function GET(req: NextRequest) {
         ...coldSymbols.map((symbol) => ({ symbol, reason: "cold" as const })),
         ...q.reverify.map((symbol) => ({ symbol, reason: "reverify" as const })),
         ...q.populate.map((symbol) => ({ symbol, reason: "populate" as const })),
+        ...q.rewindow.map((symbol) => ({ symbol, reason: "rewindow" as const })),
       ];
 
   const results: Record<string, unknown>[] = [];
@@ -226,19 +323,27 @@ export async function GET(req: NextRequest) {
       const rates = identityRates(checkIdentities(extracted));
 
       const prior = await readFactSet(symbol);
-      // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A content hash that moved
-      // with no filing event behind it is a SILENT RESTATEMENT -- the case the
-      // amended-form signal cannot see. The site is allowed to update; it is not
-      // allowed to update without a trace, so it is logged with the periods and
-      // the accession rather than quietly overwritten.
       const changed = prior ? prior.contentHash !== set.contentHash : true;
-      if (prior && changed && !entry.needsReverify) {
-        const movedPeriods = set.quarters
-          .filter((p) => {
-            const was = prior.quarters.find((x) => x.e === p.e);
-            return was && JSON.stringify(was.v) !== JSON.stringify(p.v);
-          })
-          .map((p) => `${p.e}(${p.a ?? "?"})`);
+      // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
+      // no filing event behind it is a SILENT RESTATEMENT -- the case the
+      // amended-form signal cannot see. The site is allowed to update; it is
+      // not allowed to update without a trace.
+      //
+      // ── THE OVERLAP, NOT THE HASH ────────────────────────────────────────
+      // A WINDOW CHANGE IS NOT A RESTATEMENT. A rewindow re-read adds four
+      // older quarters, which moves contentHash with no filing event behind it
+      // -- exactly the shape this logs -- and would have reported every one of
+      // 759 SYMBOLS as a silent restatement, burying the real ones in a
+      // migration's noise. That is a worse failure than no log at all: a
+      // tripwire nobody reads is a tripwire that is off.
+      //
+      // So the comparison is the OVERLAP: periods present in BOTH sets whose
+      // values differ. A period that exists only in the new set is new
+      // information, not a changed answer. Deliberately not `prior.contentHash
+      // !== set.contentHash` as the trigger -- that is the whole-hash test
+      // this replaces, and reverting to it re-introduces the migration noise.
+      const movedPeriods = restatedPeriods(prior, set);
+      if (prior && movedPeriods.length && !entry.needsReverify) {
         console.warn(
           "[sec-facts] SILENT RESTATEMENT",
           JSON.stringify({ symbol, from: prior.contentHash, to: set.contentHash, movedPeriods })
@@ -281,6 +386,26 @@ export async function GET(req: NextRequest) {
         entry.needsReverify = false;
         entry.reverifyReason = null;
         entry.verifiedAt = Date.now();
+        // ── WHAT WAS WRITTEN, RECORDED ON THE MANIFEST ────────────────────
+        //
+        // Written on EVERY pass, not only when `changed` — an unchanged set
+        // re-read under the wider window still needs its `w` updated or it
+        // stays in the rewindow queue forever, re-read daily, achieving
+        // nothing. That is the same "re-fetched every day for the same
+        // nothing" loop the cold queue's unconditional clear exists to avoid.
+        //
+        // The STORED set's own `w` may lag the manifest's when nothing changed
+        // — a filer with fewer than 8 quarters to give gains none from the
+        // wider window, so no write happens. That is correct and harmless: the
+        // manifest is what selects, and the set is already at everything it
+        // has.
+        //
+        // The three counts make the annual-filer census a single manifest read
+        // instead of 759 GETs, and cost nothing: the set is already in hand.
+        entry.w = set.w ?? SEC_QUARTER_WINDOW;
+        entry.quarters = set.quarters.length;
+        entry.years = set.years.length;
+        entry.instants = set.instants.length;
       }
 
       results.push({
@@ -315,8 +440,10 @@ export async function GET(req: NextRequest) {
     coldCleared,
     reverifyTaken: only ? 0 : q.reverify.length,
     populateTaken: only ? 0 : q.populate.length,
+    rewindowTaken: only ? 0 : q.rewindow.length,
     reverifyBacklog: q.reverifyBacklog,
     populateBacklog: q.populateBacklog,
+    rewindowBacklog: q.rewindowBacklog,
     manifestWritten: persisted,
   };
   await recordJobRun("sec-facts", summary.ok, summary);

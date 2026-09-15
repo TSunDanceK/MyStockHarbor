@@ -13,10 +13,13 @@ import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import { resolveFactSetForRender, type ColdResult } from "@/lib/server/secColdFetch";
 import { notFound } from "next/navigation";
-import { buildSecEarningsView, type SecEarningsView } from "@/lib/server/secEarningsView";
 import {
-  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecCashQualityCard,
-  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard,
+  buildSecEarningsView, isPct, periodWords,
+  type PeriodBasis, type SecEarningsView,
+} from "@/lib/server/secEarningsView";
+import {
+  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
+  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -147,10 +150,53 @@ function displayQuarterLabel(row?: FmpEarningsRow | null) {
   return row.fiscalLabel || quarterLabel(row.date);
 }
 
+/**
+ * THE BANDS, WITH THEIR THRESHOLDS, IN ONE TABLE — AND THE GAUGE READS IT.
+ *
+ * ── THE CONTRADICTION THIS REMOVES ────────────────────────────────────────
+ * Measured on the #465 preview, /stock/KGC/earnings: a pill reading "Good"
+ * sitting directly above a gauge whose axis was labelled Weak / Mixed /
+ * Strong, under the number 100/100. Two vocabularies for one scale, and the
+ * top of the axis named a band the pill could never produce — so a perfect
+ * score looked like it had fallen short of a "Strong" that does not exist.
+ *
+ * NOT A CLAMP BUG, which was the other candidate: `tone` is derived from
+ * `rounded`, the SAME clamped value the card prints, so the number and the
+ * band always agree with each other. The axis was the only thing disagreeing.
+ *
+ * The thresholds were also invisible. A reader could see 100/100 and "Good"
+ * and had no way to know what 100 had to clear, so the card states them.
+ */
+const SCORE_BANDS: { tone: EarningsTone; label: string; from: number }[] = [
+  { tone: "good", label: "Good", from: 66 },
+  { tone: "neutral", label: "Mixed", from: 40 },
+  { tone: "weak", label: "Weak", from: 0 },
+];
+
+/** The band a tone belongs to. The pill and the gauge axis both call this. */
 function toneLabel(tone: EarningsTone) {
-  if (tone === "good") return "Good";
-  if (tone === "weak") return "Weak";
-  return "Mixed";
+  return SCORE_BANDS.find((b) => b.tone === tone)!.label;
+}
+
+/**
+ * The thresholds as one sentence, so the number on the card can be read.
+ *
+ * A FUNCTION, NOT A CONST, because SCORE_SEED is declared further down this
+ * module and a top-level const reading it here throws in the temporal dead
+ * zone at import — a blank page, not a wrong word.
+ */
+function scoreBandNote() {
+  return (
+    `${SCORE_BANDS[0].label} is ${SCORE_BANDS[0].from} and above, ` +
+    `${SCORE_BANDS[1].label} is ${SCORE_BANDS[1].from} to ${SCORE_BANDS[0].from - 1}, ` +
+    `${SCORE_BANDS[2].label} is ${SCORE_BANDS[1].from - 1} and below. ` +
+    `${SCORE_SEED} is the neutral starting point, not a reading.`
+  );
+}
+
+/** The band for a score, read from the same table the axis is labelled from. */
+function bandFor(score: number): EarningsTone {
+  return SCORE_BANDS.find((b) => score >= b.from)!.tone;
 }
 
 function toneColor(tone: EarningsTone) {
@@ -165,17 +211,29 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
-/** The five things the score can read. Named so the card can say what it could not. */
-const SCORE_COMPONENTS = {
-  revenueGrowth: "revenue growth against the same quarter a year earlier",
-  epsGrowth: "EPS growth against the same quarter a year earlier",
-  profitability: "whether the quarter was profitable",
-  marginTrend: "the direction of operating margin",
-  // The wording stays period-neutral because it also appears in the
-  // "Not measured" list, where no period applies.
-  cashConversion: "whether reported profit is turning into cash",
-} as const;
-type ScoreComponent = keyof typeof SCORE_COMPONENTS;
+/**
+ * The five things the score can read, DESCRIBED IN THE PAGE'S OWN PERIOD.
+ *
+ * These strings said "the same quarter a year earlier" and "whether the
+ * quarter was profitable" for every filer, including one whose every figure is
+ * a fiscal year. They take the basis now, like every other period noun on the
+ * page — see PeriodBasis in secEarningsView.
+ */
+const scoreComponents = (basis: PeriodBasis) => {
+  const w = periodWords(basis);
+  return {
+    revenueGrowth: `revenue growth against ${w.yoyPhrase}`,
+    epsGrowth: `EPS growth against ${w.yoyPhrase}`,
+    profitability: `whether the ${w.one} was profitable`,
+    marginTrend: "the direction of operating margin",
+    // The wording stays period-neutral because it also appears in the
+    // "Not measured" list, where no period applies.
+    cashConversion: "whether reported profit is turning into cash",
+  } as const;
+};
+/** The quarterly wording, for the states where there is no view to take a basis from. */
+const SCORE_COMPONENTS = scoreComponents("quarter");
+type ScoreComponent = keyof ReturnType<typeof scoreComponents>;
 
 /**
  * THE NARRATIVE IS BUILT FROM WHAT ACTUALLY RAN, not from the tone alone.
@@ -200,8 +258,11 @@ function scoreExplanation(
   ran: Set<ScoreComponent>,
   /** The period the cash component actually read. See SecCashQualityCard. */
   cashBasis: "quarter" | "year",
-  cashPeriod: string
+  cashPeriod: string,
+  /** The page's own anchor. NOT cashBasis: those differ on a half-yearly filer. */
+  basis: PeriodBasis = "quarter"
 ) {
+  const w = periodWords(basis);
   const clauses: string[] = [];
   const up = tone === "good";
   if (ran.has("revenueGrowth") || ran.has("epsGrowth")) {
@@ -217,21 +278,22 @@ function scoreExplanation(
     const over = cashBasis === "year" ? ` over ${cashPeriod}` : "";
     clauses.push(up ? `reported profit is backed by cash${over}` : `cash conversion is weak${over}`);
   } else if (ran.has("profitability")) {
-    clauses.push(up ? "the quarter was profitable" : "the quarter was loss-making");
+    clauses.push(up ? `the ${w.one} was profitable` : `the ${w.one} was loss-making`);
   }
   const body = clauses.length
     ? clauses.join(", ").replace(/, ([^,]*)$/, " and $1")
     : "the filing carries few of the figures this score reads";
-  if (tone === "good") return `The latest filed quarter reads constructive: ${body}.`;
-  if (tone === "weak") return `The latest filed quarter reads weak: ${body}.`;
+  if (tone === "good") return `The latest filed ${w.one} reads constructive: ${body}.`;
+  if (tone === "weak") return `The latest filed ${w.one} reads weak: ${body}.`;
   return `The latest earnings read is mixed: ${body}. Investors should focus on whether future reports confirm improvement or reveal more pressure.`;
 }
 
-/** What the score could NOT read, in the page's own words. */
-function scoreGaps(ran: Set<ScoreComponent>): string[] {
-  return (Object.keys(SCORE_COMPONENTS) as ScoreComponent[])
+/** What the score could NOT read, in the page's own words and its own period. */
+function scoreGaps(ran: Set<ScoreComponent>, basis: PeriodBasis = "quarter"): string[] {
+  const names = scoreComponents(basis);
+  return (Object.keys(names) as ScoreComponent[])
     .filter((k) => !ran.has(k))
-    .map((k) => SCORE_COMPONENTS[k]);
+    .map((k) => names[k]);
 }
 
 /**
@@ -265,18 +327,23 @@ function buildScoreResult(
   ran: Set<ScoreComponent>,
   contributions: Partial<Record<ScoreComponent, number>>,
   cashBasis: "quarter" | "year",
-  cashPeriod: string
+  cashPeriod: string,
+  basis: PeriodBasis = "quarter"
 ) {
   return {
     available: true as const,
     score,
     tone,
     label: toneLabel(tone),
-    explanation: scoreExplanation(tone, ran, cashBasis, cashPeriod),
+    explanation: scoreExplanation(tone, ran, cashBasis, cashPeriod, basis),
+    // THE SCORE SAYS WHICH KIND OF PERIOD IT READ. Point 5 of the approved
+    // scope: an annual-only filer's score is built on fiscal years, and a
+    // reader comparing it with a 10-Q filer's score has to be told that.
+    basis,
     // NOT a count. A reader needs to know WHICH input was missing to judge the
     // number; "4 of 5 signals" is the kind of summary that hides the one that
     // mattered.
-    unavailable: scoreGaps(ran),
+    unavailable: scoreGaps(ran, basis),
     // THE ARITHMETIC, NOT A DESCRIPTION OF IT. Carried so a probe and a check
     // can read the points each component actually added, rather than inferring
     // them from the total -- which is how "80 is four fifths of 100, so the
@@ -383,6 +450,7 @@ function scoreFromSec(view: SecEarningsView | null, symbol: string, cold: ColdRe
       label: "Unavailable",
       explanation: noScoreReason(symbol, cold, cold.status === "ready"),
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      basis: "quarter" as PeriodBasis,
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
     };
@@ -404,8 +472,13 @@ function scoreFromSec(view: SecEarningsView | null, symbol: string, cold: ColdRe
   };
   const s = view.snapshot;
 
-  if (s.revenueYoY != null) contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
-  if (s.epsYoY != null) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
+  // isPct, NOT `!= null`. A "n/m" is a string, so `!= null` admitted it and
+  // TypeScript then multiplied it — KGC's FY2023 sign flip out of a loss was
+  // worth a full +20, the largest contribution any component can make, for an
+  // artefact of dividing by a negative. A figure that cannot be RENDERED must
+  // not be SCORED; see Pct in secEarningsView.
+  if (isPct(s.revenueYoY)) contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
+  if (isPct(s.epsYoY)) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
   if (s.netIncome.val != null) contribute("profitability", s.netIncome.val > 0 ? 6 : -8);
 
   // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
@@ -427,16 +500,19 @@ function scoreFromSec(view: SecEarningsView | null, symbol: string, cold: ColdRe
     return {
       score: 50, available: false as const, tone: "neutral" as EarningsTone,
       label: "Unavailable",
-      explanation: `${symbol}'s latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.`,
-      unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      explanation: `${symbol}'s latest filing carries no figures that can be scored yet — there is no prior-year ${periodWords(view.basis).one} to measure growth from.`,
+      unavailable: Object.values(scoreComponents(view.basis)) as string[],
+      basis: view.basis,
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
     };
   }
 
   const rounded = Math.round(clamp(score, 0, 100));
-  const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
-  return buildScoreResult(rounded, tone, ran, contributions, view.cashQuality.basis, view.cashQuality.period);
+  // FROM THE SAME TABLE THE AXIS IS LABELLED FROM, and from the CLAMPED value
+  // the card prints — so the number, the pill and the gauge cannot disagree.
+  const tone = bandFor(rounded);
+  return buildScoreResult(rounded, tone, ran, contributions, view.cashQuality.basis, view.cashQuality.period, view.basis);
 }
 
 
@@ -674,12 +750,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", price, date);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
-  const trendStr = seed.trend ? `, ${seed.trend}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
   // either when FMP's analyst consensus left on 2026-09-15, and a description
   // promising them in search results is a promise the page cannot keep.
-  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet${trendStr}, with year-over-year context and a simple earnings score.`;
+  //
+  // ── AND NO TREND LABEL ───────────────────────────────────────────────────
+  // It used to interpolate `seed.trend` as a BARE LABEL mid-sentence, so the
+  // description read "...cash flow and balance sheet, Uptrend, with
+  // year-over-year context..." on AAPL and "...balance sheet, Range / Mixed,
+  // with..." on KGC. Two problems, and the second is the reason it is removed
+  // rather than reworded:
+  //
+  //   1. It is a price-chart reading in an EARNINGS description — this page is
+  //      built on filed figures and says nothing about moving averages.
+  //   2. It changes with the price, so the same page advertises itself
+  //      differently on different crawls, from data that is not on it.
+  //
+  // The /stock/[symbol] page states the trend too, and that is NOT this bug:
+  // it uses buildSeoDescription, which writes it as a sentence ("AAPL is in an
+  // uptrend") on the page whose subject IS the trend.
+  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet, with year-over-year context and a simple earnings score.`;
   return {
     title, description,
     robots: {
@@ -874,7 +965,12 @@ export default async function StockEarningsPage({ params }: Props) {
                 <TickerLogo symbol={clean} size={34} radius={8} />
                 <h1 style={{ margin: 0 }}>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
               </div>
-              <p>Review {clean}&apos;s latest reported quarter as filed with the SEC — GAAP EPS, revenue, margins, cash flow and the balance sheet, with year-over-year context and a simple earnings score.</p>
+              {/* THE LEDE TAKES THE PERIOD FROM THE VIEW. It said "latest reported
+                  quarter" on KGC, whose latest reported period is a fiscal
+                  year. `secView` can be null (nothing read in yet), and the
+                  quarterly wording is right for that: the page is about a
+                  quarter until a filer's own filings say otherwise. */}
+              <p>Review {clean}&apos;s latest reported {periodWords(secView?.basis ?? "quarter").one} as filed with the SEC — GAAP EPS, revenue, margins, cash flow and the balance sheet, with year-over-year context and a simple earnings score.</p>
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <aside className="scoreCard">
@@ -896,10 +992,32 @@ export default async function StockEarningsPage({ params }: Props) {
                     <EarningsScoreWatermark />
                   </div>
                   <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
-                  <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+                  {/* THE AXIS IS LABELLED FROM THE BAND TABLE. It read
+                      Weak / Mixed / Strong beside a pill that can only ever say
+                      Weak / Mixed / Good, so KGC's 100/100 "Good" looked as
+                      though it had missed a higher band that does not exist. */}
+                  <div className="scoreLabels">
+                    {/* SCORE_BANDS is ordered high-to-low (the lookup wants that);
+                        the axis reads low-to-high left to right. */}
+                    {[...SCORE_BANDS].reverse().map((b) => <span key={b.tone}>{b.label}</span>)}
+                  </div>
+                  {/* AND THE THRESHOLDS ARE VISIBLE. 100/100 above an unlabelled
+                      gauge tells a reader nothing about what 100 had to clear. */}
+                  <p className="earningsDataNote" style={{ marginTop: 8 }}>{scoreBandNote()}</p>
                 </>
               ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>
+              {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
+                  Every term of this score is measured over the anchor period,
+                  and a reader comparing an annual filer's score with a 10-Q
+                  filer's has to be told they are not the same measurement. */}
+              {score.available && score.basis === "year" ? (
+                <p className="earningsDataNote" style={{ marginTop: 10 }}>
+                  <strong>{clean} files annually</strong>, so this score is built on its fiscal
+                  years — growth is year against prior year, and there are no quarterly figures
+                  behind it.
+                </p>
+              ) : null}
               {/* WHAT THE SCORE COULD NOT SEE, ON THE SCORE ITSELF.
                   /stock/AZN/earnings rendered GOOD 100/100 above a Quality of
                   Earnings card whose every field was "—". The number is only
@@ -943,10 +1061,10 @@ export default async function StockEarningsPage({ params }: Props) {
                   taxonomies={data.cold.taxonomies}
                 />
               ) :
-               /* READ IN, WITH DATA, BUT NO QUARTERS. This used to fall through
-                  to SecPendingCard, which promised a quarter that will never
-                  arrive — the same permanent-pending failure the no-xbrl card
-                  above exists to prevent, one condition further along. */
+               /* READ IN, WITH DATA, BUT NO QUARTERS *AND* NO YEARS — the
+                  only case left with nothing to render. An annual-only filer
+                  now builds a real view off its years (see
+                  buildSecEarningsView), so this no longer catches KGC. */
                !secView && data.cold.status === "ready" ? (
                 <SecNoQuartersCard
                   symbol={clean}
@@ -969,7 +1087,14 @@ export default async function StockEarningsPage({ params }: Props) {
                       lib/server/secEarningsView.ts RETIRED_SOURCES. */}
                   <HiddenCard id="eps-estimate" />
                   <HiddenCard id="revenue-estimate" />
-                  <SecGrowthMarginsCard view={secView} />
+                  {/* THE QUARTERLY TABLE IS QUARTERLY. An annual-only filer has
+                      no quarters to tabulate, so it gets the annual card as its
+                      SOLE growth table rather than an empty quarterly one. */}
+                  {secView.basis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
+                  {/* ON EVERY STOCK, not only annual filers: five fiscal years
+                      is the longer view a quarterly table cannot give. Same
+                      component, same rows, `sole` only changes the wording. */}
+                  <SecAnnualCard view={secView} sole={secView.basis === "year"} />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
@@ -978,8 +1103,8 @@ export default async function StockEarningsPage({ params }: Props) {
                       Segment revenue is filed on an XBRL segment axis and
                       companyfacts publishes the DEFAULT CONTEXT ONLY, so the
                       breakdown is not in it — this is not a chain gap that a
-                      better tag would close. Source unresolved;
-                      hide-list-verdict §6. */}
+                      better tag would close. The source is unresolved and the
+                      entry in RETIRED_SOURCES says so. */}
                   <HiddenCard id="revenue-by-segment" />
                 </>
               )}
@@ -1014,7 +1139,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
-              {secView ? <SecRecentQuartersCard view={secView} /> : null}
+              {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>
 
             <aside className="sideColumn">
@@ -1027,7 +1152,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     here as if it had -- the cash bullet is the one that read
                     as a claim on AZN, where the cash chain is empty. */}
                 <ul className="bulletList">
-                  <li>Year-over-year growth separates one-quarter noise from a real earnings trend.</li>
+                  <li>Year-over-year growth separates one-{periodWords(secView?.basis ?? "quarter").one} noise from a real earnings trend.</li>
                   <li>Margins show whether the company is keeping more of each pound of revenue.</li>
                   {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
                     <li>
