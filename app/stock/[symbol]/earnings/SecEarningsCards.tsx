@@ -15,8 +15,19 @@ function money(v: number | null | undefined, compact = false): string {
   if (compact && abs >= 1e6) return `${v < 0 ? "-" : ""}$${(abs / 1e6).toFixed(1)}M`;
   return `${v < 0 ? "-" : ""}$${abs.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
+/**
+ * A CHANGE, signed. The "+" says "up on the base", so it belongs only on a
+ * figure that HAS a base.
+ */
 const pct = (v: number | null | undefined, digits = 1) =>
   v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
+
+/**
+ * A LEVEL, unsigned. Margins are a share of revenue, not a change in one, and
+ * rendering a 82.9% gross margin as "+82.9%" reads as growth of 82.9%.
+ */
+const pctLevel = (v: number | null | undefined, digits = 1) =>
+  v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(digits)}%`;
 const ratio = (v: number | null | undefined) =>
   v == null || !Number.isFinite(v) ? "—" : v.toFixed(2);
 
@@ -95,11 +106,20 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
       </p>
       <div className="metricGrid">
         <Metric label="Revenue"><CellValue cell={s.revenue} compact /></Metric>
-        <Metric label="YoY revenue growth" sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}>
+        {/* NO COMPARATOR MEANS NO FIGURE, AND THE CARD SAYS WHY. It used to
+            take the fourth row back whatever that was, which on a half-yearly
+            filer was a four-year-old quarter labelled "year over year". */}
+        <Metric
+          label="YoY revenue growth"
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : "Prior-year quarter not on file"}
+        >
           {pct(s.revenueYoY)}
         </Metric>
         <Metric label="Diluted EPS (GAAP)"><CellValue cell={s.epsDiluted} /></Metric>
-        <Metric label="YoY EPS growth" sub={s.comparedWith ? `Compared with ${s.comparedWith}` : undefined}>
+        <Metric
+          label="YoY EPS growth"
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : "Prior-year quarter not on file"}
+        >
           {pct(s.epsYoY)}
         </Metric>
         <Metric label="Operating income"><CellValue cell={s.operatingIncome} compact /></Metric>
@@ -122,14 +142,20 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
       <h2>Is growth accelerating, and are margins holding up?</h2>
+      {/* "PERIODS ON FILE", NOT "QUARTERS". These are the periods the filer
+          published, in order — not a contiguous run. AZN's eight rows carry a
+          three-quarter hole and the table presented them as consecutive. */}
       <p>
-        Year-over-year growth compares each quarter with the same quarter a year earlier. Margins are
-        gross profit, operating income and net income as a share of that quarter&apos;s revenue.
+        The periods this company has filed, newest last. Year-over-year growth compares each period
+        with the <strong>same fiscal quarter one year earlier</strong>, named in the row; where that
+        period is not on file the figure is blank rather than measured against something else.
+        Margins are gross profit, operating income and net income as a share of that period&apos;s
+        revenue.
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
           <thead>
-            <tr><th>Quarter</th><th>Revenue YoY</th><th>EPS YoY</th><th>Gross margin</th><th>Operating margin</th><th>Net margin</th></tr>
+            <tr><th>Period</th><th>Compared with</th><th>Revenue YoY</th><th>EPS YoY</th><th>Gross margin</th><th>Operating margin</th><th>Net margin</th></tr>
           </thead>
           <tbody>
             {view.margins.map((m, i) => (
@@ -137,12 +163,27 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                 {/* data-label, not a position: the page's narrow-screen rule
                     reads attr(data-label), because two tables here have
                     different columns and an nth-child rule would relabel one. */}
-                <td data-label="Quarter">{m.label}</td>
+                <td data-label="Period">
+                  {m.label}
+                  {/* The gap is marked on the row ABOVE it in reading order,
+                      because `margins` is reversed to oldest-first for display
+                      while gapAfter was computed newest-first. */}
+                  {m.gapAfter ? (
+                    <abbr
+                      title="No filing on file for the period immediately before this one — these rows are the periods the company published, not a consecutive run."
+                      style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8", textDecoration: "none", cursor: "help" }}
+                    >gap</abbr>
+                  ) : null}
+                </td>
+                {/* THE BASE, DISCLOSED PER ROW. The snapshot card named its
+                    comparator and this table did not, so the same wrong base
+                    was visible in one place and silent in the other. */}
+                <td data-label="Compared with">{view.growth[i]?.comparedWith ?? "not on file"}</td>
                 <td data-label="Revenue YoY">{pct(view.growth[i]?.revenueYoY)}</td>
                 <td data-label="EPS YoY">{pct(view.growth[i]?.epsYoY)}</td>
-                <td data-label="Gross margin">{pct(m.gross)}</td>
-                <td data-label="Operating margin">{pct(m.operating)}</td>
-                <td data-label="Net margin">{pct(m.net)}</td>
+                <td data-label="Gross margin">{pctLevel(m.gross)}</td>
+                <td data-label="Operating margin">{pctLevel(m.operating)}</td>
+                <td data-label="Net margin">{pctLevel(m.net)}</td>
               </tr>
             ))}
           </tbody>

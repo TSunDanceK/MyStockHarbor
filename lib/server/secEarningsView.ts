@@ -158,8 +158,21 @@ export type SecEarningsView = {
     operatingIncome: ViewCell;
     comparedWith: string | null;
   };
-  margins: { label: string; gross: number | null; operating: number | null; net: number | null }[];
-  growth: { label: string; revenueYoY: number | null; epsYoY: number | null }[];
+  margins: {
+    label: string;
+    /** True when the NEXT row down (older) is not the immediately preceding fiscal quarter. */
+    gapAfter: boolean;
+    gross: number | null;
+    operating: number | null;
+    net: number | null;
+  }[];
+  growth: {
+    label: string;
+    /** The period the percentages are measured against, or null when none is on file. */
+    comparedWith: string | null;
+    revenueYoY: number | null;
+    epsYoY: number | null;
+  }[];
   cashQuality: {
     operatingCashFlow: ViewCell;
     capex: ViewCell;
@@ -204,6 +217,66 @@ export type SecEarningsView = {
 const yoy = (now: number | null, then: number | null) =>
   now === null || then === null || then === 0 ? null : ((now - then) / Math.abs(then)) * 100;
 
+/**
+ * THE PRIOR-YEAR QUARTER, MATCHED BY FISCAL LABEL — NOT BY ARRAY INDEX.
+ *
+ * ── WHAT THIS REPLACED, AND WHAT IT PRINTED ───────────────────────────────
+ * This was `q[i + 4]`: four rows back in the stored series. Four rows back is
+ * one year ONLY when the series is dense and gapless, which is true of a US
+ * domestic 10-Q filer and false of everyone else. AAPL and MU passed every
+ * earlier check for exactly that reason, and the defect was invisible until a
+ * foreign private issuer was rendered.
+ *
+ * Measured on the #464 preview, /stock/AZN/earnings. AZN's stored series is:
+ *
+ *   [0] Q3 FY2020  [1] Q4 FY2020  [2] Q1 FY2021  [3] Q2 FY2021
+ *   [4] Q2 FY2022  [5] Q2 FY2023  [6] Q2 FY2024  [7] Q2 FY2025
+ *
+ * — a half-yearly 20-F/6-K filer with a three-quarter hole. row[7] minus four
+ * rows is row[3], Q2 FY2021, so the card rendered:
+ *
+ *   YOY REVENUE GROWTH  +75.9%   Compared with Q2 FY2021
+ *   YOY EPS GROWTH     +273.8%   Compared with Q2 FY2021
+ *
+ * against a latest quarter of Q2 FY2025. A FOUR-YEAR comparison labelled
+ * "year over year", arithmetically confirmed: 14.46/8.22 = 1.759 and
+ * 1.57/0.42 = 3.738. The Growth & Margins table was worse, because it prints
+ * the percentage with no base disclosed at all.
+ *
+ * ── AND THERE IS NO FALLBACK ──────────────────────────────────────────────
+ * When no period carries the same fiscal quarter one year earlier this returns
+ * null and the figure renders blank. Falling back to the nearest available row
+ * is what produced the number above: a wrong base is worse than a blank,
+ * because a blank cannot be quoted.
+ */
+export function priorYearOf(
+  quarters: StoredPeriod[],
+  p: StoredPeriod | null
+): StoredPeriod | null {
+  // No fiscal label, no match. fp/fy are derived from the filer's own year-end
+  // by fiscalLabel(); a period the labeller could not place has no defensible
+  // comparator, and guessing one is the whole defect.
+  if (!p?.fp || p.fy == null) return null;
+  return quarters.find((c) => c.fp === p.fp && c.fy === p.fy! - 1) ?? null;
+}
+
+/**
+ * Is `older` the fiscal quarter immediately before `newer`?
+ *
+ * Used to MARK GAPS rather than to hide them: eight stored rows were presented
+ * as a contiguous run of quarters while AZN's carry a three-quarter hole, so
+ * the table implied a continuity the data does not have.
+ */
+export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean {
+  if (!newer.fp || !older.fp || newer.fy == null || older.fy == null) return false;
+  const n = Number(newer.fp.slice(1));
+  const o = Number(older.fp.slice(1));
+  if (!Number.isFinite(n) || !Number.isFinite(o)) return false;
+  return n === 1
+    ? o === 4 && older.fy === newer.fy - 1
+    : o === n - 1 && older.fy === newer.fy;
+}
+
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
 
@@ -211,24 +284,28 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const q = set.quarters;
   if (!q.length) return null;
   const latest = q[0];
-  // The year-ago comparator is the FOURTH quarter back, and it has to exist:
-  // YoY against whatever happens to be oldest in the list would compare a
-  // quarter with one three or five quarters earlier and label it "year over
-  // year". Retention is 8 quarters precisely so every row in the recent table
-  // has a real one.
-  const yearAgo = q[4] ?? null;
+  // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
+  // old `q[4]` printed on AZN and why there is no nearest-row fallback.
+  const yearAgo = priorYearOf(q, latest);
 
-  const margins = q.map((p) => ({
+  const margins = q.map((p, i) => ({
     label: periodLabel(p),
+    // TRUE when the row OLDER than this one is not the immediately preceding
+    // fiscal quarter. q is newest-first, so the older neighbour is q[i + 1].
+    gapAfter: q[i + 1] ? !isConsecutive(p, q[i + 1]) : false,
     gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
     operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
     net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
   })).reverse();
 
-  const growth = q.map((p, i) => {
-    const prior = q[i + 4] ?? null;
+  const growth = q.map((p) => {
+    const prior = priorYearOf(q, p);
     return {
       label: periodLabel(p),
+      // THE BASE IS CARRIED WITH THE FIGURE, not left implicit. The snapshot
+      // card disclosed its comparator and the table did not, which is why the
+      // same wrong base was visible in one place and silent in the other.
+      comparedWith: prior ? periodLabel(prior) : null,
       revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
     };
