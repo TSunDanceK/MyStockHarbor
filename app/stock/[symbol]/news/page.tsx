@@ -264,10 +264,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const seed = computeIndicatorSeed(points, "", price, date);
 
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
-  const trendStr = seed.trend ? `, ${seed.trend}` : "";
 
   const title = `${upper} Stock News${priceStr} | MyStockHarbor`;
-  const description = `Latest ${upper} stock news with beginner-friendly summaries${trendStr}. Headline sentiment score, earnings context and chart analysis on MyStockHarbor.`;
+  // NO TREND LABEL. This interpolated `seed.trend` as a BARE LABEL mid-sentence
+  // — "...beginner-friendly summaries, Uptrend. Headline sentiment score..." —
+  // the same leak found on the earnings page in the #465 eye-check, from the
+  // same expression. Removed for the same two reasons: it is a moving-average
+  // reading in a description of a NEWS page, and it moves with the price, so
+  // the same page advertises itself differently on different crawls from data
+  // that is not on it.
+  //
+  // /stock/[symbol] states the trend and is NOT this bug: buildSeoDescription
+  // writes it as a sentence on the page whose subject IS the trend.
+  const description = `Latest ${upper} stock news with beginner-friendly summaries. Headline sentiment score, earnings context and chart analysis on MyStockHarbor.`;
 
   return {
     title,
