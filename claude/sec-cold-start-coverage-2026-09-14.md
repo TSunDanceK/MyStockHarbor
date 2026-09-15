@@ -28,6 +28,35 @@ inspection-only after one of them rewound production.
 **Consequence for the sweep:** tomorrow's is the first automated write. The
 standing-66 count is measured off *that*, not off any reading taken so far.
 
+## 1a. It ran — and it inherited the universe defect
+
+**04:00:16 UTC 2026-09-15, HTTP 200, branch `main`,
+`dpl_B6UF7eCd8tcqMDefpVvQ997vnTQw`.** First automated run.
+
+**It logged nothing.** Every other warm job prints a summary — the same window
+carries `[warm-stock-data] {"ok":true,"universe":759,"refreshed":40,…}` — while
+`sec-daily-index` emitted zero lines. Its summary went to `recordJobRun` (behind
+`CACHE_HEALTH_KEY`) and to a response body the cron caller discards, so **there
+is no way to tell what the first real run did.**
+
+A daily job returning 200 while doing nothing is indistinguishable from one
+working. That is the failure this pipeline is built against, and it was
+unobservable on its own first run. Fixed: the summary now goes to the platform
+log in the house format, and the two refusal paths log as well — a silent 503
+looks like the job never fired. Asserted in §17d of
+`scripts/check-sec-daily-index.mjs`.
+
+Expected values for that run, from the watermark: `datesConsidered 1`,
+`parsed 1`, date `20260914` (a Monday), `redisCommands 3`, `watermarkMoved true`,
+watermark → `20260914`. **Unverified** — the run predates the logging.
+
+**And it ran with the pre-#455 universe.** `warm-stock-data` in the same window
+reads `universe 696`, so #455 was still unmerged and the run seeded from the
+dynamic pool alone. **JPM, C, AAPL, NVDA and the rest of the preset block still
+have no manifest entry.** Expected rather than new, but recorded here rather than
+assumed away: the first cron inherited the defect. **The first run to cover the
+presets is the one after #455 merges**, not this one.
+
 ## 2. The real gap: nothing fills `contentHash`
 
 `seedManifest` creates an entry with `needsReverify: false` and
