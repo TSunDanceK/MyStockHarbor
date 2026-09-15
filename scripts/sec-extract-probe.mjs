@@ -42,7 +42,20 @@ const fieldsSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
 const extractSrc = fs
   .readFileSync("lib/server/secExtract.ts", "utf8")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secFields";/, "");
-const sec = await lift(`${fieldsSrc}\n${extractSrc}`);
+// THE WHOLE RENDER PATH, NOT JUST THE EXTRACTION. secFactCodec and
+// secEarningsView are what the page actually reads through -- the positional
+// encode/decode and the view model -- and neither imports Redis, which is why
+// the codec was split out of secFactStore. Lifting all four means this probe
+// checks the numbers a reader would SEE, not an intermediate the page never
+// touches. The sandbox cannot fetch the preview (Vercel SSO protection is on
+// for every non-custom-domain host), so this is the strongest verification
+// available from here; layout stays an owner-side eye check.
+const strip = (f) =>
+  fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"\.\/[^"]+";$/gm, "")
+    .replace(/^export \* from "\.\/[^"]+";$/gm, "");
+const sec = await lift(
+  [fieldsSrc, extractSrc, strip("lib/server/secFactCodec.ts"), strip("lib/server/secEarningsView.ts")].join("\n")
+);
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
   [
@@ -56,7 +69,8 @@ const tick = await lift(
   ].join("\n") + "\nexport { parseTickerFile, padCik };"
 );
 const { SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, extractCompanyFacts, checkIdentities,
-        identityRates, secFieldsHash } = sec;
+        identityRates, secFieldsHash, encodeFactSet, cell, buildSecEarningsView,
+        RETIRED_SOURCES } = sec;
 
 // A PRE-NETWORK SMOKE TEST, AND IT CALLS THE FUNCTIONS RATHER THAN TYPEOF-ING
 // THEM. A missing transitive callee is present as a symbol and absent only when
@@ -287,6 +301,55 @@ for (const symbol of SYMBOLS) {
       return (v ? `${fmt(v.val)}${tags[v.derived] ?? "?"}` : "—").padStart(8);
     });
     console.log(`  ${f.key.padEnd(34)}${cells.join("")}`);
+  }
+
+  // ── THE PAGE'S OWN NUMBERS, through encode -> decode -> view ──────────────
+  //
+  // Not a second reading of `out`: the values go through the positional encoder
+  // and come back through cell(), which is the only way the page reads one. A
+  // field-order shift or a derivation code dropped in encoding would show here
+  // and nowhere else.
+  const stored = encodeFactSet(out);
+  const pageView = buildSecEarningsView(stored);
+  console.log(`\n  --- as the page renders it (fieldsHash ${stored.h}, contentHash ${stored.contentHash}) ---`);
+  if (!pageView) {
+    console.log("    buildSecEarningsView returned null");
+    assertions.push({ symbol, check: "view builds", ok: false, detail: "null" });
+  } else {
+    const v = pageView;
+    const m = (n) => (n === null || n === undefined ? "—" : Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : String(Number(n.toFixed(4))));
+    const d = (c) => (c?.derived && c.derived !== "as-filed" ? `[${c.derived}]` : "");
+    console.log(`    ${v.entityName} — ${v.latestLabel}, period ending ${v.latestEnd}, filed ${v.latestFiled} (${v.latestAccession})`);
+    console.log(`    snapshot   revenue ${m(v.snapshot.revenue.val)}${d(v.snapshot.revenue)}  YoY ${v.snapshot.revenueYoY?.toFixed(1) ?? "—"}%  |  EPS ${m(v.snapshot.epsDiluted.val)}${d(v.snapshot.epsDiluted)}  YoY ${v.snapshot.epsYoY?.toFixed(1) ?? "—"}%  vs ${v.snapshot.comparedWith}`);
+    console.log(`    cash       OCF ${m(v.cashQuality.operatingCashFlow.val)}${d(v.cashQuality.operatingCashFlow)}  capex ${m(v.cashQuality.capex.val)}${d(v.cashQuality.capex)}  FCF ${m(v.cashQuality.freeCashFlow)}${v.cashQuality.freeCashFlowDerived ? "[derived]" : ""}  accruals ${m(v.cashQuality.accruals)}`);
+    console.log(`    balance    asOf ${v.balance?.asOf}  cash ${m(v.balance?.cash.val)}  debt ${m(v.balance?.totalDebt)}  net ${m(v.balance?.netCash)}  current ${v.balance?.currentRatio?.toFixed(2) ?? "—"}  A ${m(v.balance?.totalAssets.val)}  L ${m(v.balance?.totalLiabilities.val)}  E ${m(v.balance?.stockholdersEquity.val)}`);
+    console.log(`    P&L waterfall complete: ${v.incomeStatementComplete}`);
+    console.log(`    ttmRevenue ${m(v.ttmRevenue)}  ttmNetIncome ${m(v.ttmNetIncome)}  coverShares ${m(v.coverShares?.val)} asOf ${v.coverShares?.asOf ?? "—"}`);
+    console.log("    recent quarters, as the table would show them:");
+    console.log(`      ${"quarter".padEnd(12)}${"ending".padEnd(12)}${"revenue".padStart(11)}${"EPS".padStart(10)}${"net income".padStart(13)}`);
+    for (const r of v.recentQuarters) {
+      console.log(`      ${r.label.padEnd(12)}${r.end.padEnd(12)}${(m(r.revenue.val) + d(r.revenue)).padStart(11)}${(m(r.epsDiluted.val) + d(r.epsDiluted)).padStart(10)}${(m(r.netIncome.val) + d(r.netIncome)).padStart(13)}`);
+    }
+
+    // THE ASSERTIONS THE OWNER NAMED, on what a reader would see.
+    const negShares = v.recentQuarters.length && SEC_FIELD_KEYS.includes("sharesDiluted")
+      ? stored.quarters.filter((q) => (cell(q, "sharesDiluted").val ?? 0) < 0 || (cell(q, "sharesBasic").val ?? 0) < 0).length
+      : 0;
+    assertions.push({ symbol, check: "no negative share count on the rendered page", ok: negShares === 0, detail: negShares });
+    assertions.push({ symbol, check: "8 quarters in the recent table", ok: v.recentQuarters.length === 8, detail: v.recentQuarters.length });
+    assertions.push({ symbol, check: "balance sheet present", ok: v.balance !== null, detail: v.balance?.asOf ?? "null" });
+    // A ROUND TRIP THAT CHANGED A NUMBER WOULD BE INVISIBLE ANY OTHER WAY.
+    const direct = valOf(out.quarters[0], "revenue");
+    assertions.push({
+      symbol, check: "encode/decode round trip preserves the newest revenue",
+      ok: direct === v.snapshot.revenue.val, detail: `${direct} vs ${v.snapshot.revenue.val}`,
+    });
+    // Every retired source must still be registered — a card cannot go blank.
+    assertions.push({
+      symbol: "-", check: "RETIRED_SOURCES is intact",
+      ok: RETIRED_SOURCES.length === 5 && RETIRED_SOURCES.every((r) => r.reason && r.retiredOn),
+      detail: RETIRED_SOURCES.map((r) => r.id).join(","),
+    });
   }
 
   // ── against FMP ───────────────────────────────────────────────────────────

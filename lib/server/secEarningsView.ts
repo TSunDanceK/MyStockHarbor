@@ -7,7 +7,7 @@
 import {
   cell, periodLabel, ttm, valueOf,
   type Cell, type StoredFactSet, type StoredPeriod,
-} from "./secFactStore";
+} from "./secFactCodec";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 

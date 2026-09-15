@@ -144,8 +144,9 @@ check("the cards render a derived mark from it",
 
 // FISCAL, NOT CALENDAR. Two companies' "2026" can be nine months apart -- the
 // probe set's year-ends are 31 Mar, 26 Sep, 3 Sep, 31 Oct, 31 Dec.
+const codecEarly = fs.readFileSync("lib/server/secFactCodec.ts", "utf8");
 check("period labels come from periodLabel, which is fiscal",
-  /periodLabel/.test(readCodeOnly(VIEW)) && /FY\$\{p\.fy\}/.test(fs.readFileSync("lib/server/secFactStore.ts", "utf8")));
+  /periodLabel/.test(readCodeOnly(VIEW)) && /FY\$\{p\.fy\}/.test(codecEarly));
 check("and the page says the labels are the company's own fiscal calendar",
   /own fiscal calendar/.test(cardsRaw));
 
@@ -161,6 +162,10 @@ check("a null value renders an em dash",
 console.log("\n7. the store's gate");
 
 const storeRaw = fs.readFileSync("lib/server/secFactStore.ts", "utf8");
+// The positional codec lives in its own file, with no Redis import, so a relay
+// probe can run the whole render path against real filings. The store is the
+// I/O half; the assertions below split accordingly.
+const codecRaw = fs.readFileSync("lib/server/secFactCodec.ts", "utf8");
 check("readFactSet refuses a set whose fieldsHash differs",
   /raw\.h !== secFieldsHash\(\)/.test(storeRaw) && /return null;/.test(storeRaw));
 // STRIPPED, NOT RAW. The first version of this matched the store's own comment
@@ -180,8 +185,8 @@ check("...and the mismatch branch returns null with no fallback decode",
   })(),
   "a positional array read against the wrong field order is 46 wrong numbers");
 check("ttm() refuses a partial year",
-  /if \(four\.length < 4\) return null;/.test(storeRaw) &&
-    /if \(vals\.some\(\(v\) => v === null\)\) return null;/.test(storeRaw),
+  /if \(four\.length < 4\) return null;/.test(codecRaw) &&
+    /if \(vals\.some\(\(v\) => v === null\)\) return null;/.test(codecRaw),
   "after D1b, Q4 EPS is legitimately null, so the three-quarter case is common");
 
 console.log("\n8. the population path");
