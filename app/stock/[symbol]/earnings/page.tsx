@@ -15,7 +15,7 @@ import { resolveFactSetForRender, type ColdResult } from "@/lib/server/secColdFe
 import { notFound } from "next/navigation";
 import { buildSecEarningsView, type SecEarningsView } from "@/lib/server/secEarningsView";
 import {
-  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecCashQualityCard,
+  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
 } from "./SecEarningsCards";
@@ -943,10 +943,10 @@ export default async function StockEarningsPage({ params }: Props) {
                   taxonomies={data.cold.taxonomies}
                 />
               ) :
-               /* READ IN, WITH DATA, BUT NO QUARTERS. This used to fall through
-                  to SecPendingCard, which promised a quarter that will never
-                  arrive — the same permanent-pending failure the no-xbrl card
-                  above exists to prevent, one condition further along. */
+               /* READ IN, WITH DATA, BUT NO QUARTERS *AND* NO YEARS — the
+                  only case left with nothing to render. An annual-only filer
+                  now builds a real view off its years (see
+                  buildSecEarningsView), so this no longer catches KGC. */
                !secView && data.cold.status === "ready" ? (
                 <SecNoQuartersCard
                   symbol={clean}
@@ -969,7 +969,14 @@ export default async function StockEarningsPage({ params }: Props) {
                       lib/server/secEarningsView.ts RETIRED_SOURCES. */}
                   <HiddenCard id="eps-estimate" />
                   <HiddenCard id="revenue-estimate" />
-                  <SecGrowthMarginsCard view={secView} />
+                  {/* THE QUARTERLY TABLE IS QUARTERLY. An annual-only filer has
+                      no quarters to tabulate, so it gets the annual card as its
+                      SOLE growth table rather than an empty quarterly one. */}
+                  {secView.annualOnly ? null : <SecGrowthMarginsCard view={secView} />}
+                  {/* ON EVERY STOCK, not only annual filers: five fiscal years
+                      is the longer view a quarterly table cannot give. Same
+                      component, same rows, `sole` only changes the wording. */}
+                  <SecAnnualCard view={secView} sole={secView.annualOnly} />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from

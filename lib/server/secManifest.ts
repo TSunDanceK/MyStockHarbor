@@ -65,6 +65,24 @@ export type SecManifestEntry = {
   lastFiled: string | null;
   /** Hash of the extracted fact set. Step 3 populates it; null until then. */
   contentHash: string | null;
+  /**
+   * ── WHAT THE STORED SET ACTUALLY HOLDS, RECORDED HERE SO THE CRON NEED NOT
+   *    READ 759 SETS TO FIND OUT ──────────────────────────────────────────
+   *
+   * `w` is the quarter retention window the set was written under. Absent
+   * means 8 — the window before the field existed — and a set at 8 is eligible
+   * for a re-read under the wider one. It is NOT a correctness gate: `h` is
+   * the gate and does not move for a window change, so an 8-quarter set stays
+   * readable and renders exactly as it does today until its turn comes.
+   *
+   * The three counts are the census input (annual-only filers are
+   * `quarters === 0 && years > 0`) and cost nothing to keep: the job already
+   * holds the encoded set when it writes.
+   */
+  w?: number;
+  quarters?: number;
+  years?: number;
+  instants?: number;
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
   verifiedAt: number | null;
