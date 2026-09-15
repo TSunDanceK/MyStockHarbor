@@ -4,8 +4,9 @@
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import {
-  GAAP_EPS_NOTE, SEC_ATTRIBUTION, retiredSource,
-  type SecEarningsView, type ViewCell,
+  GAAP_EPS_NOTE, NOT_MEANINGFUL, NOT_MEANINGFUL_NOTE, SEC_ATTRIBUTION,
+  periodWords, retiredSource,
+  type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 
 function money(v: number | null | undefined, compact = false): string {
@@ -18,9 +19,26 @@ function money(v: number | null | undefined, compact = false): string {
 /**
  * A CHANGE, signed. The "+" says "up on the base", so it belongs only on a
  * figure that HAS a base.
+ *
+ * THREE OUTCOMES, NOT TWO. "—" is "not on file"; `n/m` is "on file and the
+ * percentage would mislead" — see Pct in secEarningsView. They must not
+ * collapse into one marker: a reader who sees a dash goes looking for the
+ * missing filing, and the filing is there.
  */
-const pct = (v: number | null | undefined, digits = 1) =>
-  v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
+const pct = (v: Pct | undefined, digits = 1) => {
+  if (v === NOT_MEANINGFUL) return NOT_MEANINGFUL;
+  return v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
+};
+
+/** The legend for the marker, rendered wherever a table can produce one. */
+function NotMeaningfulNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
+  // ONLY WHEN THE TABLE ACTUALLY HAS ONE. A standing legend for a marker that
+  // never appears is noise on every other page; AAPL has no n/m cell in either
+  // table and should not carry the sentence.
+  const present = rows.some((r) => r.revenueYoY === NOT_MEANINGFUL || r.epsYoY === NOT_MEANINGFUL);
+  if (!present) return null;
+  return <p className="earningsDataNote"><strong>{NOT_MEANINGFUL_NOTE}</strong></p>;
+}
 
 /**
  * A LEVEL, unsigned. Margins are a share of revenue, not a change in one, and
@@ -104,12 +122,14 @@ function Metric({ label, children, sub }: { label: string; children: React.React
 
 export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
   const s = view.snapshot;
+  // EVERY PERIOD NOUN ON THIS CARD COMES FROM HERE. See SecEarningsView.basis.
+  const w = periodWords(view.basis);
   return (
     <section className="card">
-      <div className="eyebrow">Latest reported quarter</div>
+      <div className="eyebrow">{w.latest}</div>
       <h2>{view.symbol} latest earnings snapshot</h2>
       <p>
-        Most recent quarter filed: <strong>{view.latestLabel}</strong> (period ending{" "}
+        Most recent {w.one} filed: <strong>{view.latestLabel}</strong> (period ending{" "}
         <strong>{view.latestEnd}</strong>)
         {view.latestFiled ? <>, filed <strong>{view.latestFiled}</strong></> : null}.
       </p>
@@ -134,14 +154,14 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
             filer was a four-year-old quarter labelled "year over year". */}
         <Metric
           label="YoY revenue growth"
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : "Prior-year quarter not on file"}
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
         >
           {pct(s.revenueYoY)}
         </Metric>
         <Metric label="Diluted EPS (GAAP)"><CellValue cell={s.epsDiluted} /></Metric>
         <Metric
           label="YoY EPS growth"
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : "Prior-year quarter not on file"}
+          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
         >
           {pct(s.epsYoY)}
         </Metric>
@@ -152,15 +172,21 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
       {/* PERIOD LABELS ARE THE FILER'S OWN FISCAL PERIOD, NOT THE CALENDAR. The
           probe set's year-ends are 31 Mar, 26 Sep, 3 Sep, 31 Oct and 31 Dec, so
           two companies' "2026" can be nine months apart. */}
-      <p className="earningsDataNote">
-        Quarters are labelled by the company&apos;s own fiscal calendar, which often differs from the
-        calendar year.
-      </p>
+      <p className="earningsDataNote">{w.labelled}</p>
+      {/* THE SNAPSHOT TILES CARRY THE MARKER TOO, so they carry its legend. A
+          tile reading "n/m" with the explanation only in a table further down
+          is the same hover-only failure as the gap badge. */}
+      <NotMeaningfulNote rows={[{ revenueYoY: s.revenueYoY, epsYoY: s.epsYoY }]} />
     </section>
   );
 }
 
 export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
+  // THIS CARD ONLY RENDERS ON A QUARTERLY ANCHOR, and it still takes its nouns
+  // from the basis rather than writing them out. A literal that happens to be
+  // right today is the thing that went wrong on KGC; the rule is the same
+  // everywhere or it is not a rule.
+  const w = periodWords(view.basis);
   return (
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
@@ -177,11 +203,11 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           the reader can actually read. */}
       <p>
         The periods this company has filed, newest last. Year-over-year growth compares each period
-        with the <strong>same fiscal quarter one year earlier</strong>, named in the row; where that
+        with the <strong>same fiscal {w.one} one year earlier</strong>, named in the row; where that
         period is not on file the figure is blank rather than measured against something else.
         Margins are gross profit, operating income and net income as a share of that period&apos;s
         revenue. A row marked <strong>gap</strong> has no filing on file for the period immediately
-        before it — these are the periods the company published, not a consecutive run of quarters.
+        before it — these are the periods the company published, not a consecutive run of {w.many}.
         {/* VISIBLE, not hover-only — the same lesson as the gap badge. */}{" "}
         <strong>Q4 EPS is not filed separately:</strong> companies file nine-month and full-year
         figures, and this page does not derive the difference, so those cells read
@@ -237,6 +263,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           </tbody>
         </table>
       </div>
+      <NotMeaningfulNote rows={view.growth} />
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
@@ -314,6 +341,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </tbody>
         </table>
       </div>
+      <NotMeaningfulNote rows={view.annual} />
       <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
@@ -321,6 +349,17 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
 
 export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const c = view.cashQuality;
+  const w = periodWords(view.basis);
+  // ── THE FALLBACK PARAGRAPH IS ABOUT A MISMATCH, so it needs one to exist ──
+  //
+  // It says "{symbol} does not publish a quarterly cash-flow statement … every
+  // figure here is the full year {period}, not {latestLabel}". That is exactly
+  // right for AZN, whose anchor is a quarter and whose cash flow is only filed
+  // on 6- and 12-month frames. On KGC it rendered as "is the full year FY2025,
+  // not FY2025" — the two labels are the same period, because the anchor IS
+  // the year — and it implied the rest of the page was quarterly when nothing
+  // about KGC is. The condition is the MISMATCH, not the cash basis alone.
+  const cashIsOtherPeriod = view.basis === "quarter" && c.basis === "year";
   return (
     <section className="card">
       <div className="eyebrow">Quality of earnings</div>
@@ -331,7 +370,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           "Q2 FY2025" over annual numbers would be the mixed-period claim this
           card is built to avoid. */}
       <h3>Is the profit turning into cash? — {c.period}</h3>
-      {c.basis === "year" ? (
+      {cashIsOtherPeriod ? (
         <p style={{ marginTop: 8, marginBottom: 0 }}>
           <strong>{view.symbol} does not publish a quarterly cash-flow statement.</strong> Its
           filings carry cash flow only over six- and twelve-month periods, so every figure on this
@@ -346,7 +385,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           {money(c.freeCashFlow, true)}
           {c.freeCashFlowDerived ? (
             <abbr
-              title="Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this quarter is the difference between two cumulative figures."
+              title={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`}
               style={{ marginLeft: 5, fontSize: 11, fontWeight: 800, color: "#94a3b8", textDecoration: "none", cursor: "help" }}
             >derived</abbr>
           ) : null}
@@ -377,7 +416,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           </>
         ) : (
           <>
-            Cash-flow figures are filed year-to-date, so every quarter except the first is the
+            Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
             difference between two cumulative figures — those are marked <em>derived</em>. Source:{" "}
             {SEC_ATTRIBUTION}.
           </>
@@ -438,6 +477,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
 }
 
 export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
+  const w = periodWords(view.basis);
   return (
     <section className="card">
       <div className="eyebrow">Income statement</div>
@@ -456,7 +496,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           must not imply otherwise. */}
       {!view.incomeStatementComplete ? (
         <p className="earningsDataNote">
-          The expense lines above do not add up to operating income for this quarter: this company
+          The expense lines above do not add up to operating income for this {w.one}: this company
           reports costs that these categories do not cover. Operating income is as filed.
         </p>
       ) : null}
@@ -465,22 +505,39 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   );
 }
 
-export function SecRecentQuartersCard({ view }: { view: SecEarningsView }) {
+/**
+ * THE EARNINGS-HISTORY TABLE, AND IT DOES NOT RENDER ON AN ANNUAL ANCHOR.
+ *
+ * ── WHY A GUARD AND NOT JUST RENAMED HEADINGS ────────────────────────────
+ * On /stock/KGC/earnings this card rendered as "Recent reported quarters",
+ * with a QUARTER column and a footnote about the standalone fourth quarter,
+ * over five fiscal-year rows — directly below a five-year card whose own text
+ * said "there is no quarterly table below". The page contradicted itself about
+ * whether the table existed.
+ *
+ * Renaming the headings would have fixed the words and left the duplication:
+ * for an annual-only filer this table's rows ARE the five-year card's rows,
+ * same periods, same source, fewer columns. So on a year anchor it renders
+ * nothing and the five-year card is the history.
+ */
+export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
+  if (view.basis === "year") return null;
+  const w = periodWords(view.basis);
   return (
     <section className="card">
       <div className="eyebrow">Earnings history</div>
-      <h2>Recent reported quarters</h2>
+      <h2>Recent reported {w.many}</h2>
       <p>
         As filed with the SEC. Estimate and surprise columns are no longer shown —{" "}
         {retiredSource("quarter-estimate-columns").reason}
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
-          <thead><tr><th>Quarter</th><th>Period ending</th><th>Revenue</th><th>Diluted EPS (GAAP)</th><th>Net income</th></tr></thead>
+          <thead><tr><th>{w.One}</th><th>Period ending</th><th>Revenue</th><th>Diluted EPS (GAAP)</th><th>Net income</th></tr></thead>
           <tbody>
-            {view.recentQuarters.map((r) => (
+            {view.recentPeriods.map((r) => (
               <tr key={r.end}>
-                <td data-label="Quarter">{r.label}</td>
+                <td data-label={w.One}>{r.label}</td>
                 <td data-label="Period ending">{r.end}</td>
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact /></td>
                 <td data-label="Diluted EPS (GAAP)"><CellValue cell={r.epsDiluted} /></td>
