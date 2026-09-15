@@ -135,40 +135,177 @@ Three near-misses were on the same printed list and are excluded, each named in
 | `PaymentsToAcquireEquityMethodInvestments` / `...InterestInJointVenture` | investments |
 | `CapitalExpendituresIncurredButNotYetPaid` | **non-cash** accrual disclosure; wrong kind of thing for a cash line, and 9.1m against KTOS's real 37.1m |
 
-### Blast radius — measured, 119 SYMBOLS
+### Retroactivity — built, and it costs nothing today
 
-`sec-capex-blast`, relay **35025749420**, over the frozen dump's analysis
-universe (120 SYMBOLS, 1 with no CIK). Shipped extractor run twice over each
-payload — chain truncated to its first entry, then as it ships:
+`needsReread` (lib/server/secStaleness.ts) selects on **w, y OR c**, where `c`
+is `secChainsHash()` recorded on the manifest entry at write. One exported
+function, so refresh-on-view imports it rather than agreeing with it. The
+rewindow queue keeps its name, its allowance and its path — one companyfacts
+payload carries all three, so a second queue would be two allowances competing
+for one re-read.
+
+**Census, relay 35028639653, against the live manifest:**
 
 ```
-CHANGED (a figure moved or vanished)   0 SYMBOLS
-GAINED  (null -> a figure)            24 SYMBOLS
-same                                  85 SYMBOLS
-still empty both ways                 10 SYMBOLS
+reverify   103 of 103 SYMBOLS @ 150/run -> 1 day
+populate   300 of 647 SYMBOLS @ 300/run -> 3 days
+rewindow     4 of   4 SYMBOLS @  25/run -> 1 day
+rewindow queue: AAPL AZN MU RYAAY
+
+WHY THOSE 4 ARE ELIGIBLE (a symbol can be behind on more than one)
+  quarter window behind   4
+  year window behind      4
+  chains behind           4     (current chains 00e11f3c)
+  of which chains ONLY    0
 ```
 
-**Nothing moved.** Every filer that already resolved resolves to the same
-figure, which is what rank-first promises and is now measured rather than
-asserted.
+**The chain condition adds ZERO symbols today**, and that is worth stating
+rather than glossing: only 4 SYMBOLS are job-populated at all, and all four are
+already behind on both windows. 647 are still unpopulated, so the universe is
+populate's problem, not rewindow's. The chain condition earns its keep on the
+NEXT chain edit, once populate has drained — which is precisely the case
+`SEC_REWINDOW_PER_RUN = 25` was sized for.
 
-**This was never a two-filer edge case — 24 of 119 is one in five**, and the
-list is not obscure: NVDA, AMZN, V, HD, CVX, QCOM, ISRG, REGN, PANW, LRCX,
-HPE, HPQ, SOFI, KEY all went 0 → 18 of 18 periods. PEP 0→14, HIMS 0→14,
-NIO 0→8 of 8, COP 0→3 of 18.
+### Blast radius, both chain edits, 119 SYMBOLS each
 
-The PARTIAL gains are the interesting ones, because they are filers that
-switch tags across periods and so prove the per-period resolution is doing
-real work rather than picking one tag per symbol: GE 3→18, ANET 9→15,
-MELI 9→17, MRK 17→18, TT 16→17, MAR 16→17.
+`sec-capex-blast` (relay 35028632974) and `sec-sti-blast` (relay 35028627452).
+Shipped extractor run twice over one payload — chain minus the entries the edit
+added, then as it ships.
+
+| | CHANGED | GAINED | same | empty both ways |
+|---|---|---|---|---|
+| `capex` | **0** | **24** | 85 | 10 |
+| `shortTermInvestments` | **0** | 0 | 69 | 50 |
+
+**Nothing moved on either.** The VRT gate — merge only on 0 CHANGED — is met.
+
+shortTermInvestments gains nothing across those 119 because **VRT is not among
+them** (it is not in the first 120 of the analysis universe). Aimed at VRT
+directly (relay 35028964792): **VRT 0 → 6 of 26 periods, 0 CHANGED.** That is
+the ruling's own justification, measured rather than restated.
+
+capex's 24: NVDA, AMZN, V, HD, CVX, QCOM, ISRG, REGN, PANW, LRCX, HPE, HPQ,
+SOFI, KEY each 0 → 18 of 18 periods. PEP 0→14, HIMS 0→14, NIO 0→8 of 8,
+COP 0→3 of 18. Partial gains show per-period resolution working rather than one
+tag per symbol: GE 3→18, ANET 9→15, MELI 9→17, MRK 17→18, TT 16→17, MAR 16→17.
+
+### Two concepts down one column — I CANNOT give this a clean bill
+
+The question was whether a filer resolves a field from more than one concept
+across its periods. **It does, often, and that was true before this PR.**
+
+```
+MIXED CONCEPTS   capex                 23 of 119 SYMBOLS
+                 shortTermInvestments  20 of 119 SYMBOLS
+```
+
+shortTermInvestments' 20 are **entirely pre-existing** — provably, because that
+edit's GAINED and CHANGED are both 0, so the added concept won nothing anywhere
+and every mix comes from the three chain entries that were already there. AAPL,
+META, TSLA, MRK, CRM, IBM and 14 others already resolve it from two or three
+concepts across their history.
+
+This is not automatically wrong. Per-period resolution exists so AAPL's revenue
+can be `Revenues` before 2018 and `RevenueFromContractWithCustomer...` after —
+the filer changed its presentation and the column follows.
+
+**But there is a concrete harm, and for capex it is not small:**
+
+```
+BLOCKED BY A MID-YEAR TAG CHANGE   capex   46 year-spans
+```
+
+The extractor refuses to difference across a tag change — the ASC 606 guard —
+so a filer that switches concept mid-year loses that year's quarters. ANET does
+it in six consecutive years (2020–2025); AAPL, NVDA, MRK, CAT, GE, AMAT, PANW,
+MELI, AMGN and ISRG all appear.
+
+**It is not a regression: `CHANGED = 0` proves no cell that had a value lost
+one.** Those quarters were null before too, for the duller reason that the
+concept was not in the chain at all. What changed is that the null now has a
+name in the extractor's notes.
+
+**The follow-up this suggests, NOT taken here:** allow differencing across a tag
+change when both tags belong to the SAME field's chain. The guard exists to stop
+subtracting across an ASC 606 boundary, where the two concepts are different
+measures; two entries of one capex chain are not that. It relaxes a deliberate
+safety rule, so it is the owner's call and belongs in its own PR with its own
+measurement.
+
+`n/a`, not `0`, is printed for BLOCKED on an instant field: instants are never
+differenced, so the count cannot fire there however badly concepts are mixed,
+and a zero in a risk column reads as reassurance.
+
+### Canaries, null rate and identities — before against after
+
+Both from the SAME commit, `sec-extract-before` (relay 35029338511) against
+`sec-extract` (relay 35029344672). The only difference between the runs is this
+branch's two chain additions, reverted in the first.
+
+**Every line is identical.**
+
+```
+CANARY revenue quarters AGREE   25/25    (baseline 25/25)      unchanged
+CANARY AAPL TTM                 revenue / operatingIncome / netIncome /
+                                freeCashFlow all AGREE, epsTtm NO-GT,
+                                divPerShare CLOSE               unchanged
+D1 null rate, 8 quarters, all symbols
+  sharesBasic / sharesDiluted / epsBasic / epsDiluted
+                                10/40 null (25%) each           unchanged
+Identities
+  assets = liabilities + equity              40/0   100%        unchanged
+  grossProfit = revenue - costOfRevenue      32/0   100%  (8 skipped)
+  operatingIncome = gp - opex                27/5    84%  (8 skipped)
+  op + inv + fin + fx = netChangeInCash      39/1    98%
+  cashEnd - cashStart = netChangeInCash      32/3    91%  (5 skipped)
+STRUCTURAL ASSERTIONS            65/65 pass                     unchanged
+```
+
+**Read this for what it is.** It proves nothing regressed; it does NOT measure
+the change, because this probe's five fixed symbols (ARM, AAPL, MU, PLAB, ASTS)
+all publish the PP&E concept and none of them needs the fallback. The effect of
+the change is the 24 GAINED in the blast run, not here. The D1 null-rate table
+covers only the four shares/EPS fields, so it cannot show capex either.
+
+**And running it at all required a fix.** `sec-extract` had been dying on `main`
+since the crossing strings landed: `Pct` is `number | PctCrossing | null`, ASTS
+is loss-making, and the probe called `.toFixed(1)` on `"swung-to-loss"`. The
+optional chain is why it survived review — `?.` guards null, not the wrong kind
+of thing. **Neither canary had run since.**
+
+### The eye-check: which sets are actually re-read
+
+A page renders from the STORED set, so this is the difference between testing
+the fix and testing a stale set. From the same census:
+
+| symbol | state |
+|---|---|
+| GEV | **never populated** — `contentHash` null, so it is POPULATE's |
+| KTOS | **never populated** |
+| VRT | **never populated** |
+| NVDA | **never populated** |
+| AAPL | STALE (quarters, years, chains) — `w`/`y`/`c` all absent |
+
+None of the four eye-check symbols is in the rewindow queue at all. They reach
+today's chains through **populate** (300/run, ~3 days to drain 647) once this is
+deployed and the cron has run — not on the preview, which runs no cron. 39
+SYMBOLS have a cold-path set the manifest does not record, and those are
+populate's too.
+
+**So on the #467 preview, GEV/KTOS/VRT/NVDA will show the OLD capex.** That is
+expected and is not this PR failing. The fixtures are how the fix is checked
+before then: §14 renders GEV and KTOS through the shipped cards.
 
 ### What it does NOT do
 
-**The fix is not retroactive.** `secChainsHash` moves on a chain edit, but
-`secColdFetch` only retries sets that are **empty**. GEV's and KTOS's stored
-sets have values, so they keep their null capex until something refreshes them
-— the refresh-on-view PR, not this one. Anyone eye-checking the live pages
-before that lands will still see the blank.
+**The fix does not reach a stored set on the preview.** Retroactivity is built
+(above) but it runs on the CRON, and a preview deployment runs no cron. The
+eye-check symbols are POPULATE's, not rewindow's, and populate needs ~3 days to
+drain 647 SYMBOLS after this deploys.
+
+**And it does not un-block a mid-year tag change.** 46 capex year-spans stay
+null for that reason; see above for why that is not a regression and what the
+follow-up would be.
 
 ---
 
@@ -186,20 +323,23 @@ before that lands will still see the blank.
    capex cell of the real GEV fixture and the card comes back saying "Can't
    calculate". Three structural assertions (chain order, near-miss guard) were
    each run under the mutation that breaks them.
-3. **Null rate per field across all stored SYMBOLS.** The **VRT
-   short-term-investments addition is still UNMEASURED** and should not merge
-   on anyone's word. `scripts/sec-capex-blast-probe.mjs` (relay task
-   `sec-capex-blast`) is the instrument and takes `FIELD`, so pointing it at
-   `shortTermInvestments` needs no new script. It runs the shipped extractor
-   twice over one payload — chain truncated to its first entry, then as it
-   ships — and separates cells that gained a figure from cells whose figure
-   moved or vanished. **Run it for `capex` AND for `shortTermInvestments`
-   before merging.**
-4. **Canaries:** revenue 25/25, AAPL TTM. **Identities table re-run.**
+3. ~~Null rate per field, and the VRT addition measured.~~ **Done.**
+   `sec-sti-blast` (relay 35028627452): **0 CHANGED**, 0 GAINED over 119
+   SYMBOLS — the merge gate the handoff set is met. `sec-capex-blast` (relay
+   35028632974): 0 CHANGED, 24 GAINED. The null rate per field before/after
+   comes from `sec-extract` against `sec-extract-before`, which is the SAME
+   probe with this branch's chain additions reverted — one code path run twice,
+   not two refs. Dispatching at `ref=main` was tried first and is wrong twice
+   over: it compares different code, and the probe crashes on `main`.
+4. ~~Canaries and the identities table.~~ **Unblocked.** `sec-extract` had been
+   crashing on ASTS since the crossing strings landed — `epsYoY` can be
+   `"swung-to-loss"`, and the probe called `.toFixed` on it — so neither canary
+   had run since. Fixed; the run pair is the record.
 5. **Cowork eye-check** — GEV, KTOS, VRT, TSLA, KGC — then merge #467.
-   Note item 3's caveat: the live pages will still show the old capex until
-   refresh-on-view lands, so a blank there is expected and is not this PR
-   failing.
+   **On the preview, GEV/KTOS/VRT/NVDA render the OLD capex**: all four are
+   `contentHash: null`, so they are populate's, and a preview runs no cron.
+   That blank is expected and is not this PR failing. The fixtures are the
+   before-then check — §14 renders GEV and KTOS through the shipped cards.
 6. **Next PR: refresh-on-view + CIK on cold writes (with backfill).** ONDS-type
    symbols never refresh until this lands: ONDS's manifest entry has **no
    CIK**, and `populationQueues` filters on `e.cik`, so it is in no cron queue
