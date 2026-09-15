@@ -305,7 +305,42 @@ const INCOME: FieldDef[] = ([
 // a free arithmetic assertion on the differencing itself.
 const CASH_FLOW: FieldDef[] = ([
   { key: "operatingCashFlow", chain: ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"], unit: "USD" },
-  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment"], unit: "USD" },
+  /**
+   * ── A ONE-DEEP CHAIN, AND IT WAS EMPTY ON BOTH FILERS TESTED ────────────
+   *
+   * WHAT WAS MEASURED (relay 35024074183 and 35024136855, GEV / KTOS / AAPL):
+   * `PaymentsToAcquirePropertyPlantAndEquipment` is ABSENT FROM THE PAYLOAD on
+   * GEV and on KTOS — not thin, not mis-framed, absent — so capex was null on
+   * EVERY stored quarter and EVERY stored year for both, and free cash flow
+   * read "Can't calculate — capital expenditure not reported" beside an
+   * operating cash flow that resolved perfectly. AAPL is the control: it
+   * publishes that tag 105 times and its ladders are complete.
+   *
+   * Both filers publish `PaymentsToAcquireProductiveAssets` instead — GEV
+   * 783,000,000 and KTOS 37,100,000, each on the 6M frame of the 10-Q for
+   * 2026Q2. It is the same measure: cash paid for productive assets, the line
+   * a cash-flow statement calls capital expenditure.
+   *
+   * SECOND, NOT FIRST. Resolution is rank-first per period, so a filer that
+   * publishes both keeps the narrower PP&E reading and nothing about AAPL
+   * moves. The fallback only reaches filers that have no first entry at all.
+   *
+   * ── THE THREE NEAR-MISSES ON THE SAME PRINTED LIST, AND WHY EACH IS OUT ──
+   * The probe lists every concept whose name could plausibly be this figure,
+   * with its value, precisely so the ones that must NOT be taken are visible:
+   *   · PaymentsToAcquireBusinessesNetOfCashAcquired — GEV 4,885,000,000,
+   *     KTOS 346,800,000. Buying companies, not building assets. Taking it
+   *     would report an acquisition as capital expenditure and put a 6x
+   *     overstatement into free cash flow on GEV.
+   *   · PaymentsToAcquireEquityMethodInvestments / ...InterestInJointVenture —
+   *     investments, the same category error one level down.
+   *   · CapitalExpendituresIncurredButNotYetPaid — KTOS 9,100,000. It matches
+   *     the name pattern and is the most dangerous of the three: it is a
+   *     NON-CASH supplemental disclosure of capex NOT paid this period, so on
+   *     a cash-flow line it is both the wrong sign of thing and, at 9.1m
+   *     against a real 37.1m, wrong by four times.
+   */
+  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], unit: "USD" },
   { key: "shareBasedCompensation", chain: ["ShareBasedCompensation"], unit: "USD" },
   { key: "depreciationAndAmortization", chain: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization"], unit: "USD" },
   { key: "investingCashFlow", chain: ["NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"], unit: "USD" },
