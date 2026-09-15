@@ -11,7 +11,12 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCard, BalanceSheetCard, type IncomeDetail, type AnnualConsensus, type CashFlow, type BalanceHealth, type SegmentGroup } from "./EarningsDetail";
+import { readFactSet } from "@/lib/server/secFactStore";
+import { buildSecEarningsView, type SecEarningsView } from "@/lib/server/secEarningsView";
+import {
+  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecCashQualityCard,
+  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard, SecNoDataCard,
+} from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 
@@ -28,6 +33,23 @@ type Props = {
 
 type EarningsTone = "good" | "neutral" | "weak";
 
+type EarningsReactionPoint = {
+  label: string;
+  reactionPct: number | null;
+  volumeMultiple: number | null;
+  drift5Pct: number | null;
+  drift20Pct: number | null;
+};
+
+const FMP_BASE = "https://financialmodelingprep.com/stable";
+
+function cleanSymbol(value: string) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, "")
+    .trim();
+}
+
 type FmpEarningsRow = {
   symbol?: string;
   date?: string;
@@ -42,92 +64,6 @@ type FmpEarningsRow = {
   time?: string;
 };
 
-type FmpIncomeStatementRow = {
-  date?: string;
-  calendarYear?: string;
-  period?: string;
-  revenue?: number | null;
-  costOfRevenue?: number | null;
-  grossProfit?: number | null;
-  researchAndDevelopment?: number | null;
-  sga?: number | null;
-  operatingIncome?: number | null;
-  ebitda?: number | null;
-  interestExpense?: number | null;
-  incomeBeforeTax?: number | null;
-  incomeTaxExpense?: number | null;
-  netIncome?: number | null;
-  eps?: number | null;
-  epsDiluted?: number | null;
-  weightedAverageShsDil?: number | null;
-};
-
-type FmpHistoricalEarningCalendarRow = {
-  date?: string;
-  epsActual?: number | null;
-  epsEstimated?: number | null;
-};
-
-type FmpAnalystEstimateRow = {
-  date?: string;
-  revenueLow?: number | null;
-  revenueHigh?: number | null;
-  revenueAvg?: number | null;
-  epsLow?: number | null;
-  epsHigh?: number | null;
-  epsAvg?: number | null;
-  numAnalystsRevenue?: number | null;
-  numAnalystsEps?: number | null;
-};
-
-type EarningsTrendPoint = {
-  label: string;
-  tone: EarningsTone;
-  epsActual: number | null;
-  epsEstimated: number | null;
-  revenueActual: number | null;
-  revenueEstimated: number | null;
-};
-
-type EarningsGrowthMarginPoint = {
-  label: string;
-  yoyEpsGrowth: number | null;
-  yoyRevenueGrowth: number | null;
-  grossMarginPct: number | null;
-  operatingMarginPct: number | null;
-};
-
-type EarningsReactionPoint = {
-  label: string;
-  reactionPct: number | null;
-  volumeMultiple: number | null;
-  drift5Pct: number | null;
-  drift20Pct: number | null;
-};
-
-type YearlySummary = {
-  year: string;
-  tone: EarningsTone;
-  toneLabel: string;
-  positiveCount: number;
-  totalCount: number;
-};
-
-type SharedEarningsScore = {
-  score: number | null;
-  tone: "green" | "yellow" | "red";
-  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
-};
-
-const FMP_BASE = "https://financialmodelingprep.com/stable";
-
-function cleanSymbol(value: string) {
-  return String(value || "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, "")
-    .trim();
-}
-
 function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -137,60 +73,13 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "Unavailable";
-  const dt = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
 
-function formatMoney(value: number | null | undefined, compact = false) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  const abs = Math.abs(value);
-  if (compact) {
-    if (abs >= 1_000_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000_000).toFixed(2)}B`;
-    if (abs >= 1_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(1)}M`;
-    if (abs >= 1_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000).toFixed(1)}K`;
-  }
-  return `${value < 0 ? "-" : ""}$${abs.toFixed(2)}`;
-}
 
 function formatPercent(value: number | null | undefined, digits = 1) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-function calcDifference(actual: number | null, estimate: number | null) {
-  if (actual == null || estimate == null) return null;
-  return actual - estimate;
-}
-
-function calcPercentDifference(actual: number | null, estimate: number | null) {
-  if (actual == null || estimate == null || estimate === 0) return null;
-  return ((actual - estimate) / Math.abs(estimate)) * 100;
-}
-
-function calcGrowth(current: number | null, previous: number | null) {
-  if (current == null || previous == null || previous === 0) return null;
-  return ((current - previous) / Math.abs(previous)) * 100;
-}
-
-function findSameQuarterLastYear(row: FmpEarningsRow, rows: FmpEarningsRow[]): FmpEarningsRow | null {
-  const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
-  const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null;
-  if (!rowQuarter || rowYear == null) return null;
-  return rows.find((candidate) => {
-    if (!candidate.date || candidate.date === row.date) return false;
-    const candidateQuarter = candidate.fiscalLabel?.split(" ")[0] ?? null;
-    const candidateYear = candidate.fiscalYear && Number.isFinite(Number(candidate.fiscalYear)) ? Number(candidate.fiscalYear) : null;
-    return candidateQuarter === rowQuarter && candidateYear === rowYear - 1;
-  }) ?? null;
-}
-
-function marginPct(numerator: number | null | undefined, revenue: number | null | undefined) {
-  if (typeof numerator !== "number" || typeof revenue !== "number" || !Number.isFinite(numerator) || !Number.isFinite(revenue) || revenue === 0) return null;
-  return (numerator / Math.abs(revenue)) * 100;
-}
 
 function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
   const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
@@ -250,29 +139,10 @@ function quarterLabel(date?: string | null) {
   return `Q${quarter} ${year}`;
 }
 
-function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
-  if (!row) return null;
-  const period = String(row.period || "").toUpperCase();
-  const year = row.calendarYear || (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : "");
-  if (/^Q[1-4]$/.test(period) && year) return `${period} ${String(year).slice(-2)}`;
-  return row.date ? quarterLabel(row.date) : null;
-}
 
 function displayQuarterLabel(row?: FmpEarningsRow | null) {
   if (!row) return "—";
   return row.fiscalLabel || quarterLabel(row.date);
-}
-
-function classifyQuarter(row: FmpEarningsRow): EarningsTone {
-  const epsPct = calcPercentDifference(asNumber(row.epsActual), asNumber(row.epsEstimated));
-  const revenuePct = calcPercentDifference(asNumber(row.revenueActual), asNumber(row.revenueEstimated));
-  let score = 0;
-  if (epsPct != null) { if (epsPct > 2) score += 1; else if (epsPct < -2) score -= 1; }
-  if (revenuePct != null) { if (revenuePct > 1) score += 1; else if (revenuePct < -1) score -= 1; }
-  if (asNumber(row.epsActual) != null) score += Number(row.epsActual) > 0 ? 0.5 : -0.5;
-  if (score >= 1.25) return "good";
-  if (score <= -1.25) return "weak";
-  return "neutral";
 }
 
 function toneLabel(tone: EarningsTone) {
@@ -293,15 +163,13 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
-function sharedToneToEarningsTone(tone: SharedEarningsScore["tone"]): EarningsTone {
-  if (tone === "green") return "good";
-  if (tone === "red") return "weak";
-  return "neutral";
-}
-
 function scoreExplanation(tone: EarningsTone) {
-  if (tone === "good") return "The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.";
-  if (tone === "weak") return "The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.";
+  // NO LONGER MENTIONS ESTIMATES. The score stopped reading them when FMP's
+  // analyst consensus left on 2026-09-15; describing it as measuring
+  // "stronger-than-expected" would keep the old claim on a number that can no
+  // longer support it.
+  if (tone === "good") return "The latest filed quarter reads constructive: revenue and profit are growing year over year, margins are holding, and reported profit is backed by cash.";
+  if (tone === "weak") return "The latest filed quarter reads weak: growth, margins or cash conversion are under pressure relative to the same quarter a year earlier.";
   return "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
 }
 
@@ -323,101 +191,78 @@ function buildScoreResult(score: number, tone: EarningsTone) {
 // every load. Same self-block failure mode as
 // claude/pickers-firewall-selfblock-2026-07-17.md and
 // claude/stock-page-earnings-selfblock-2026-07-21.md.
-async function fetchSharedEarningsScore(symbol: string) {
-  try {
-    const data = await getLatestEarningsData(symbol, "yellow");
-    if (typeof data.score !== "number" || !Number.isFinite(data.score)) return null;
-    return buildScoreResult(data.score, sharedToneToEarningsTone(data.tone));
-  } catch { return null; }
-}
 
-function getMetricHelp(label: string) {
-  if (label === "FMP EPS") return "EPS means earnings per share. This value comes from FMP earnings data and may differ from GAAP EPS or adjusted EPS quoted in company headlines.";
-  if (label === "EPS surprise") return "EPS surprise compares FMP EPS with the FMP analyst estimate. A positive number means EPS came in better than FMP's estimate.";
-  if (label === "Revenue surprise") return "Revenue surprise compares actual revenue with the analyst estimate. A positive number means sales came in better than expected.";
-  if (label === "Revenue") return "Revenue is the company's sales for the quarter before expenses are removed.";
-  if (label === "YoY EPS growth") return "Year-over-year EPS growth compares this quarter's FMP EPS with the same quarter last year.";
-  if (label === "YoY revenue growth") return "Year-over-year revenue growth compares this quarter's revenue with the same quarter last year.";
-  return "This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.";
-}
 
-function MetricLabelWithHelp({ label }: { label: string }) {
-  return (
-    <div className="metricLabelWrap">
-      <span className="metricLabel">{label}</span>
-      <span className="metricHelp" tabIndex={0} aria-label={`${label} explanation`}>
-        ?
-        <span className="metricHelpBubble">{getMetricHelp(label)}</span>
-      </span>
-    </div>
-  );
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYear: FmpEarningsRow | null; completedRows: FmpEarningsRow[]; }) {
-  const { latest, sameQuarterLastYear, completedRows } = args;
-  // `available: false` is the point. This returns score 50 because the shape
-  // requires a number, but 50 is NOT a reading -- it is the neutral seed with
-  // nothing added to it, and the card must not render it as one. Callers key
-  // off this flag rather than sniffing label === "Unavailable".
-  if (!latest) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "Structured earnings data is not available for this symbol yet." };
-  const epsActual = asNumber(latest.epsActual);
-  const epsEstimated = asNumber(latest.epsEstimated);
-  const revenueActual = asNumber(latest.revenueActual);
-  const revenueEstimated = asNumber(latest.revenueEstimated);
-  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
-  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
-  const yoyEpsGrowth = calcGrowth(epsActual, asNumber(sameQuarterLastYear?.epsActual));
-  const yoyRevenueGrowth = calcGrowth(revenueActual, asNumber(sameQuarterLastYear?.revenueActual));
-  // #314 guarded !latest -- total absence. This is the partial case it missed:
-  // completedRows is filtered on epsActual OR revenueActual, so `latest` can be
-  // a row carrying only revenueActual with no estimate to compare it against.
-  // Every term below then skips and the score stays on its 50 seed, which
-  // rendered as a 50/100 "Mixed" gauge with the needle at dead centre.
+/**
+ * The earnings score, rebuilt on filed figures.
+ *
+ * TWO OF ITS THREE SIGNALS WERE ESTIMATES, AND THEY ARE GONE. The old version
+ * weighted EPS surprise at 1.35x and revenue surprise at 3.2x -- together the
+ * dominant term -- against FMP's analyst consensus, which left with the FMP
+ * licence. Those terms were not simply deleted: a score still described as
+ * measuring "estimate performance" while silently running on growth alone is
+ * worse than no score, because it keeps the authority of the old one.
+ *
+ * So it is scored on what the filings actually contain -- growth against the
+ * year-ago quarter, profitability, margin direction, and whether reported
+ * profit is turning into cash -- and the explanation says so.
+ *
+ * `available: false` is still the point. It returns 50 because the shape
+ * requires a number, but 50 is NOT a reading: it is the neutral seed with
+ * nothing added, and the card must not render it as one.
+ */
+function scoreFromSec(view: SecEarningsView | null) {
+  if (!view) {
+    return {
+      score: 50, available: false as const, tone: "neutral" as EarningsTone,
+      label: "Unavailable",
+      explanation: "This company's SEC filings have not been read into the site yet, so there is nothing to score.",
+    };
+  }
+
   let score = 50;
   let signals = 0;
-  if (epsSurprisePct != null) { score += clamp(epsSurprisePct * 1.35, -22, 22); signals++; }
-  if (revenueSurprisePct != null) { score += clamp(revenueSurprisePct * 3.2, -20, 20); signals++; }
-  if (epsActual != null) { score += epsActual > 0 ? 6 : -8; signals++; }
-  if (yoyEpsGrowth != null) { score += clamp(yoyEpsGrowth * 0.18, -10, 10); signals++; }
-  if (yoyRevenueGrowth != null) { score += clamp(yoyRevenueGrowth * 0.22, -10, 10); signals++; }
-  if (signals === 0) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "This report has no figures that can be scored yet -- there are no estimates to compare against and no prior-year quarter to measure growth from." };
-  const recent = completedRows.slice(0, 4);
-  for (const row of recent) { const tone = classifyQuarter(row); if (tone === "good") score += 2.5; if (tone === "weak") score -= 2.5; }
-  const recentTones = completedRows.slice(0, 6).map(classifyQuarter);
-  const weakRecentCount = recentTones.filter((item) => item === "weak").length;
-  const mixedRecentCount = recentTones.filter((item) => item === "neutral").length;
-  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
-  const rounded = Math.round(clamp(score, 0, maxScore));
+  const s = view.snapshot;
+
+  if (s.revenueYoY != null) { score += clamp(s.revenueYoY * 0.55, -22, 22); signals++; }
+  if (s.epsYoY != null) { score += clamp(s.epsYoY * 0.30, -20, 20); signals++; }
+  if (s.netIncome.val != null) { score += s.netIncome.val > 0 ? 6 : -8; signals++; }
+
+  // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
+  // single-quarter reading: one quarter's margin move is as often mix as trend.
+  const opMargins = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
+  if (opMargins.length >= 2) {
+    score += clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10);
+    signals++;
+  }
+
+  // CASH AGAINST PROFIT. Positive accruals mean cash is running ahead of
+  // reported profit, which is the quality signal the page's own card shows.
+  const acc = view.cashQuality.accruals;
+  const ni = view.cashQuality.netIncome.val;
+  if (acc != null && ni != null && ni !== 0) {
+    score += clamp((acc / Math.abs(ni)) * 8, -10, 10);
+    signals++;
+  }
+
+  if (signals === 0) {
+    return {
+      score: 50, available: false as const, tone: "neutral" as EarningsTone,
+      label: "Unavailable",
+      explanation: "This company's latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.",
+    };
+  }
+
+  const rounded = Math.round(clamp(score, 0, 100));
   const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
   return buildScoreResult(rounded, tone);
 }
 
-function makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {
-  const groups = new Map<string, FmpEarningsRow[]>();
-  for (const row of rows) {
-    if (!row.date) continue;
-    const year = row.fiscalYear || row.date.slice(0, 4);
-    if (!groups.has(year)) groups.set(year, []);
-    groups.get(year)?.push(row);
-  }
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => Number(b) - Number(a))
-    .slice(0, 5)
-    .map(([year, group]) => {
-      const tones = group.map(classifyQuarter);
-      const goodCount = tones.filter((x) => x === "good").length;
-      const weakCount = tones.filter((x) => x === "weak").length;
-      const totalCount = tones.length;
-      let tone: EarningsTone = "neutral";
-      if (goodCount > weakCount && goodCount >= Math.ceil(totalCount / 2)) tone = "good";
-      if (weakCount > goodCount && weakCount >= Math.ceil(totalCount / 2)) tone = "weak";
-      return { year, tone, toneLabel: toneLabel(tone), positiveCount: goodCount, totalCount };
-    });
-}
 
 async function fetchFmpJson<T>(path: string): Promise<T | null> {
   const apiKey = process.env.FMP_API_KEY;
@@ -430,198 +275,77 @@ async function fetchFmpJson<T>(path: string): Promise<T | null> {
   } catch { return null; }
 }
 
-async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return null;
-  const url = `https://financialmodelingprep.com/api/v3${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
-  try {
-    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 6 } });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch { return null; }
-}
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, annualEstimatesJson, cashFlowJson, balanceJson, productSegJson, geoSegJson, dailyHistory] = await Promise.all([
-    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
-    fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
-    fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
-    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=24`),
-    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=annual&limit=6`),
-    fetchFmpJson<unknown[]>(`/cash-flow-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=4`),
-    fetchFmpJson<unknown[]>(`/balance-sheet-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=1`),
-    fetchFmpJson<unknown[]>(`/revenue-product-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
-    fetchFmpJson<unknown[]>(`/revenue-geographic-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
+  // ── WHAT THIS PAGE READS, AND FROM WHERE ──────────────────────────────────
+  //
+  // EVERY FINANCIAL NUMBER COMES FROM THE STORED SEC FACT SET. One Redis GET,
+  // written by /api/jobs/sec-facts from data.sec.gov's companyfacts. Revenue,
+  // EPS, margins, cash flow, the balance sheet and the P&L all come from there.
+  //
+  // TWO FMP CALLS REMAIN, AND BOTH ARE PRICE-DERIVED, WHICH THIS PASS DOES NOT
+  // TOUCH. /earnings supplies the ANNOUNCEMENT date and its before-open /
+  // after-close timing, which SEC filings do not carry -- a filing date is not
+  // an announcement date, and the price-reaction card needs the session the
+  // market actually reacted in. getDailyHistory supplies the bars. Market cap,
+  // P/E and the reaction card are still on FMP; the bars have not moved.
+  // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
+  const [factSet, dailyHistory, earningsJson] = await Promise.all([
+    readFactSet(symbol),
     getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
   ]);
+  const secView = factSet ? buildSecEarningsView(factSet) : null;
 
+  // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
+  // off these rows any more, even though they are present: two sources for one
+  // number is the divergence this repo keeps finding
+  // (claude/traps/two-validators-for-one-value.md), and the SEC figure is the
+  // one the page states its source as.
   const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
-    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "", time: typeof row.time === "string" ? row.time.toLowerCase() : undefined }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    ? earningsJson
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          return {
+            symbol,
+            date: typeof row.date === "string" ? row.date : "",
+            epsActual: asNumber(row.epsActual),
+            revenueActual: asNumber(row.revenueActual),
+            time: typeof row.time === "string" ? row.time.toLowerCase() : undefined,
+          } as FmpEarningsRow;
+        })
+        .filter((row) => Boolean(row.date))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     : [];
 
-  const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
-    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", calendarYear: typeof row.calendarYear === "string" ? row.calendarYear : "", period: typeof row.period === "string" ? row.period : "", revenue: asNumber(row.revenue), costOfRevenue: asNumber(row.costOfRevenue), grossProfit: asNumber(row.grossProfit), researchAndDevelopment: asNumber(row.researchAndDevelopmentExpenses) ?? asNumber(row.researchAndDevelopment), sga: asNumber(row.sellingGeneralAndAdministrativeExpenses) ?? asNumber(row.generalAndAdministrativeExpenses) ?? asNumber(row.sellingAndMarketingExpenses), operatingIncome: asNumber(row.operatingIncome), ebitda: asNumber(row.ebitda), interestExpense: asNumber(row.interestExpense), incomeBeforeTax: asNumber(row.incomeBeforeTax), incomeTaxExpense: asNumber(row.incomeTaxExpense), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted), weightedAverageShsDil: asNumber(row.weightedAverageShsOutDil) ?? asNumber(row.weightedAverageShsOut) }; }).filter((row) => Boolean(row.date))
-    : [];
-
-  const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(historicalCalendarJson)
-    ? historicalCalendarJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.actualEarningResult) ?? asNumber(row.epsActual) ?? asNumber(row.actualEPS), epsEstimated: asNumber(row.estimatedEarning) ?? asNumber(row.epsEstimated) ?? asNumber(row.estimatedEPS) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : [];
-
-  const analystEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(analystEstimatesJson)
-    ? analystEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    : [];
-
-  const annualEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(annualEstimatesJson)
-    ? annualEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    : [];
-
-  const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));
-  const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
-
-  const completedRows = earningsRows
-    .filter((row) => row.epsActual != null || row.revenueActual != null)
-    .map((row, index) => {
-      const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
-      const matchingIncome = incomeRows[index] ?? null;
-      const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
-      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null, grossProfit: matchingIncome?.grossProfit ?? null, operatingIncome: matchingIncome?.operatingIncome ?? null };
-    });
-
+  const completedRows = earningsRows.filter(
+    (row) => row.epsActual != null || row.revenueActual != null
+  );
   const latest = completedRows[0] ?? null;
-  // Use start-of-day (UTC) rather than the current instant so a report
-  // scheduled for *today* still counts as the next expected date. With the old
-  // `> today.getTime()` comparison, on the earnings day itself the row's
-  // midnight-UTC timestamp was already in the past, so the day-of report was
-  // dropped from `next` while its actuals were still null — leaving the field
-  // blank ("Unavailable") until the numbers posted. Also pick the *soonest*
-  // upcoming row (earningsRows is sorted newest-first, so `.find` returned the
-  // farthest-out future row).
+
+  const todayIso = new Date().toISOString().slice(0, 10);
   const startOfTodayUtcMs = new Date(`${todayIso}T00:00:00Z`).getTime();
   const next = earningsRows
-    .filter((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() >= startOfTodayUtcMs && row.epsActual == null && row.revenueActual == null; })
-    .sort((a, b) => new Date(`${a.date}T00:00:00Z`).getTime() - new Date(`${b.date}T00:00:00Z`).getTime())[0] ?? null;
+    .filter((row) => {
+      if (!row.date) return false;
+      const dt = new Date(`${row.date}T00:00:00Z`);
+      return dt.getTime() >= startOfTodayUtcMs && row.epsActual == null && row.revenueActual == null;
+    })
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] ?? null;
 
-  const nextEstimate = analystEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
+  const priceReactionQuarters: EarningsReactionPoint[] = completedRows
+    .slice(0, 8)
+    .reverse()
+    .map((row) => {
+      const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
+      return { label: displayQuarterLabel(row), ...detail };
+    });
 
-  const latestFiscalQuarter = latest?.fiscalLabel?.split(" ")[0] ?? null;
-  const latestFiscalYear = latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear)) ? Number(latest.fiscalYear) : null;
-  const sameQuarterLastYear = latestFiscalQuarter && latestFiscalYear
-    ? completedRows.find((row) => { if (!row.date || row.date === latest?.date) return false; const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null; const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null; return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1; }) ?? null
-    : completedRows[4] ?? null;
+  const score = scoreFromSec(secView);
 
-  const matchingIncome = latest?.periodEndDate ? incomeRows.find((row) => row.date === latest.periodEndDate) ?? incomeRows[0] ?? null : incomeRows[0] ?? null;
-  const grossMargin = matchingIncome?.grossProfit != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.grossProfit / Math.abs(matchingIncome.revenue)) * 100 : null;
-  const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;
-  const netIncome = matchingIncome?.netIncome ?? null;
-  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
-  const chartQuarters: EarningsTrendPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
-  const growthMarginQuarters: EarningsGrowthMarginPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
-    const priorYearRow = findSameQuarterLastYear(row, completedRows);
-    return {
-      label: displayQuarterLabel(row),
-      yoyEpsGrowth: calcGrowth(asNumber(row.epsActual), asNumber(priorYearRow?.epsActual)),
-      yoyRevenueGrowth: calcGrowth(asNumber(row.revenueActual), asNumber(priorYearRow?.revenueActual)),
-      grossMarginPct: marginPct(row.grossProfit, row.revenueActual),
-      operatingMarginPct: marginPct(row.operatingIncome, row.revenueActual),
-    };
-  });
-  const yearlySummaries = makeYearlySummaries(completedRows);
-  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
-    const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
-    return { label: displayQuarterLabel(row), ...detail };
-  });
-  const epsBeatFlags = completedRows.slice(0, 8).map((row) => (row.epsActual != null && row.epsEstimated != null ? row.epsActual >= row.epsEstimated : null));
-  const epsBeatConsidered = epsBeatFlags.filter((v): v is boolean => v != null);
-  const epsBeatCount = epsBeatConsidered.filter(Boolean).length;
-  const epsBeatTotal = epsBeatConsidered.length;
-  let currentStreakCount = 0;
-  let currentStreakType: "beat" | "miss" | null = null;
-  for (const flag of epsBeatFlags) {
-    if (flag == null) break;
-    if (currentStreakType == null) { currentStreakType = flag ? "beat" : "miss"; currentStreakCount = 1; }
-    else if ((flag && currentStreakType === "beat") || (!flag && currentStreakType === "miss")) currentStreakCount += 1;
-    else break;
-  }
-  const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
-  const sharedScore = await fetchSharedEarningsScore(symbol);
-  const score = sharedScore ?? localScore;
-
-  // Forward full-year consensus, a trailing-12-month base for growth context, and the full latest P&L.
-  const annualEstimate = annualEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
-  const last4Income = incomeRows.slice(0, 4);
-  const ttmRevenue = last4Income.length === 4 && last4Income.every((r) => r.revenue != null) ? last4Income.reduce((sum, r) => sum + (r.revenue ?? 0), 0) : null;
-  const ttmEps = last4Income.length === 4 && last4Income.every((r) => (r.epsDiluted ?? r.eps) != null) ? last4Income.reduce((sum, r) => sum + ((r.epsDiluted ?? r.eps) ?? 0), 0) : null;
-  const li = matchingIncome;
-  const latestIncomeStatement = li ? {
-    periodEnd: li.date ?? null,
-    periodLabel: li.period ?? null,
-    revenue: li.revenue ?? null,
-    costOfRevenue: li.costOfRevenue ?? (li.revenue != null && li.grossProfit != null ? li.revenue - li.grossProfit : null),
-    grossProfit: li.grossProfit ?? null,
-    researchAndDevelopment: li.researchAndDevelopment ?? null,
-    sga: li.sga ?? null,
-    operatingIncome: li.operatingIncome ?? null,
-    ebitda: li.ebitda ?? null,
-    interestExpense: li.interestExpense ?? null,
-    incomeBeforeTax: li.incomeBeforeTax ?? null,
-    incomeTaxExpense: li.incomeTaxExpense ?? null,
-    netIncome: li.netIncome ?? null,
-    epsDiluted: li.epsDiluted ?? li.eps ?? null,
-    weightedAverageShsDil: li.weightedAverageShsDil ?? null,
-  } : null;
-
-  // Cash flow (quality of earnings + FCF), balance-sheet health, and revenue segmentation.
-  const cashRows = Array.isArray(cashFlowJson)
-    ? cashFlowJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", operatingCashFlow: asNumber(row.netCashProvidedByOperatingActivities) ?? asNumber(row.operatingCashFlow), capex: asNumber(row.capitalExpenditure) ?? asNumber(row.investmentsInPropertyPlantAndEquipment), freeCashFlow: asNumber(row.freeCashFlow), netIncome: asNumber(row.netIncome), stockBasedCompensation: asNumber(row.stockBasedCompensation) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : [];
-  const cashLatest = (latest?.periodEndDate ? cashRows.find((r) => r.date === latest.periodEndDate) : null) ?? cashRows[0] ?? null;
-  const cashflow = cashLatest ? {
-    periodEnd: cashLatest.date ?? null,
-    operatingCashFlow: cashLatest.operatingCashFlow ?? null,
-    capex: cashLatest.capex ?? null,
-    freeCashFlow: cashLatest.freeCashFlow ?? (cashLatest.operatingCashFlow != null && cashLatest.capex != null ? cashLatest.operatingCashFlow + cashLatest.capex : null),
-    netIncome: cashLatest.netIncome ?? null,
-    stockBasedCompensation: cashLatest.stockBasedCompensation ?? null,
-  } : null;
-
-  const balRow = Array.isArray(balanceJson) && balanceJson.length ? (balanceJson[0] as Record<string, unknown>) : null;
-  const balCash = balRow ? asNumber(balRow.cashAndShortTermInvestments) : null;
-  const balDebt = balRow ? asNumber(balRow.totalDebt) : null;
-  const balNetDebt = balRow ? asNumber(balRow.netDebt) : null;
-  const balCurAssets = balRow ? asNumber(balRow.totalCurrentAssets) : null;
-  const balCurLiab = balRow ? asNumber(balRow.totalCurrentLiabilities) : null;
-  const balance = balRow ? {
-    periodEnd: typeof balRow.date === "string" ? balRow.date : null,
-    cashAndStInvestments: balCash,
-    totalDebt: balDebt,
-    netCash: balCash != null && balDebt != null ? balCash - balDebt : (balNetDebt != null ? -balNetDebt : null),
-    currentRatio: balCurAssets != null && balCurLiab != null && balCurLiab !== 0 ? balCurAssets / balCurLiab : null,
-  } : null;
-
-  const latestSegment = (json: unknown) => {
-    if (!Array.isArray(json)) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
-    const rows = json.map((item) => item as Record<string, unknown>).filter((row) => row && typeof row.data === "object" && row.data != null).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    const top = rows[0];
-    if (!top) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
-    const data = top.data as Record<string, unknown>;
-    const items = Object.entries(data).map(([name, val]) => ({ name, value: asNumber(val) })).filter((s) => s.value != null && s.value !== 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    const fiscalYear = (typeof top.fiscalYear === "number" || typeof top.fiscalYear === "string") ? top.fiscalYear : (typeof top.date === "string" ? top.date.slice(0, 4) : null);
-    return { fiscalYear, items };
-  };
-  const productSeg = latestSegment(productSegJson);
-  const geoSeg = latestSegment(geoSegJson);
-
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, annualEstimate, ttmRevenue, ttmEps, latestIncomeStatement, cashflow, balance, productSeg, geoSeg, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
+  return { earningsRows, completedRows, latest, next, priceReactionQuarters, score, secView };
 }
 
-function metricCardStyle(tone: EarningsTone | "default" = "default") {
-  const border = tone === "good" ? "rgba(34,197,94,0.22)" : tone === "weak" ? "rgba(239,68,68,0.22)" : tone === "neutral" ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.08)";
-  const bg = tone === "good" ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.22))" : tone === "weak" ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(15,23,42,0.22))" : tone === "neutral" ? "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(15,23,42,0.22))" : "rgba(255,255,255,0.035)";
-  return { border: `1px solid ${border}`, borderRadius: 18, padding: 16, background: bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" };
-}
-
-type BarChartPoint = { label: string; actual: number | null; estimate: number | null };
 
 // Nominal width (in "user units") for the chart SVGs below. Choosing a
 // realistic pixel-scale number here -- rather than an abstract 0-100 -- and
@@ -660,71 +384,7 @@ function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children 
   );
 }
 
-function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartPoint[]; formatValue: (v: number) => string; height?: number; }) {
-  const values = data.flatMap((d) => [d.actual, d.estimate]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.0001) : 1;
-  const zeroY = height / 2;
-  const usable = zeroY - 10;
-  const groupW = CHART_VIEW_W / Math.max(data.length, 1);
 
-  return (
-    <ChartFrame
-      height={height}
-      labels={data.map((d) => d.label)}
-      scaleTop={values.length ? formatValue(maxAbs) : undefined}
-      scaleMid={values.length ? formatValue(0) : undefined}
-      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
-    >
-      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Actual versus estimate chart">
-        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-        {data.map((d, i) => {
-          const cx = i * groupW + groupW / 2;
-          const barW = Math.min(groupW * 0.30, 26);
-          const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
-          const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
-          const estUp = (d.estimate ?? 0) >= 0;
-          const actUp = (d.actual ?? 0) >= 0;
-          const beat = d.actual != null && d.estimate != null ? d.actual >= d.estimate : null;
-          const actualColor = beat == null ? "#60a5fa" : beat ? "#22c55e" : "#ef4444";
-          return (
-            <g key={`${d.label}-${i}`}>
-              {d.estimate != null && (
-                <rect
-                  x={cx - barW - 3}
-                  y={estUp ? zeroY - estH : zeroY}
-                  width={barW}
-                  height={Math.max(estH, 2)}
-                  fill="rgba(148,163,184,0.38)"
-                  rx="3"
-                />
-              )}
-              {d.actual != null && (
-                <rect
-                  x={cx + 3}
-                  y={actUp ? zeroY - actH : zeroY}
-                  width={barW}
-                  height={Math.max(actH, 2)}
-                  fill={actualColor}
-                  rx="3"
-                />
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </ChartFrame>
-  );
-}
-
-function ChartLegend({ actualLabel = "Actual" }: { actualLabel?: string }) {
-  return (
-    <div className="chartLegend">
-      <span><i style={{ background: "#22c55e" }} /> {actualLabel} (beat)</span>
-      <span><i style={{ background: "#ef4444" }} /> {actualLabel} (miss)</span>
-      <span><i style={{ background: "rgba(148,163,184,0.6)" }} /> Estimate</span>
-    </div>
-  );
-}
 
 type LineSeries = { name: string; color: string; values: (number | null)[] };
 
@@ -840,7 +500,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
   const trendStr = seed.trend ? `, ${seed.trend}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
-  const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
+  // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
+  // either when FMP's analyst consensus left on 2026-09-15, and a description
+  // promising them in search results is a promise the page cannot keep.
+  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet${trendStr}, with year-over-year context and a simple earnings score.`;
   return {
     title, description,
     robots: {
@@ -858,49 +521,10 @@ export default async function StockEarningsPage({ params }: Props) {
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
 
-  const latest = data.latest;
-  const next = data.next;
-  const nextEstimate = data.nextEstimate;
-  const incomeDetail: IncomeDetail | null = data.latestIncomeStatement;
-  const annualEstimateRow = data.annualEstimate;
-  const annualConsensus: AnnualConsensus | null = annualEstimateRow
-    ? {
-        date: annualEstimateRow.date ?? null,
-        revenueAvg: annualEstimateRow.revenueAvg ?? null,
-        revenueLow: annualEstimateRow.revenueLow ?? null,
-        revenueHigh: annualEstimateRow.revenueHigh ?? null,
-        epsAvg: annualEstimateRow.epsAvg ?? null,
-        epsLow: annualEstimateRow.epsLow ?? null,
-        epsHigh: annualEstimateRow.epsHigh ?? null,
-        numAnalystsRevenue: annualEstimateRow.numAnalystsRevenue ?? null,
-        numAnalystsEps: annualEstimateRow.numAnalystsEps ?? null,
-        ttmRevenue: data.ttmRevenue,
-        ttmEps: data.ttmEps,
-      }
-    : null;
-  const epsActual = latest?.epsActual ?? null;
-  const epsEstimated = latest?.epsEstimated ?? null;
-  const epsSurprise = calcDifference(epsActual, epsEstimated);
-  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
-  const revenueActual = latest?.revenueActual ?? null;
-  const revenueEstimated = latest?.revenueEstimated ?? null;
-  const revenueSurprise = calcDifference(revenueActual, revenueEstimated);
-  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
-  const yoyEpsGrowth = calcGrowth(epsActual, data.sameQuarterLastYear?.epsActual ?? null);
-  const yoyRevenueGrowth = calcGrowth(revenueActual, data.sameQuarterLastYear?.revenueActual ?? null);
+  const nextReport = data.next;
   const score = data.score;
+  const secView = data.secView;
 
-  const epsChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.epsActual, estimate: q.epsEstimated }));
-  const revenueChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.revenueActual, estimate: q.revenueEstimated }));
-  const growthLabels = data.growthMarginQuarters.map((q) => q.label);
-  const growthSeries: LineSeries[] = [
-    { name: "Revenue growth", color: "#60a5fa", values: data.growthMarginQuarters.map((q) => q.yoyRevenueGrowth) },
-    { name: "EPS growth", color: "#22c55e", values: data.growthMarginQuarters.map((q) => q.yoyEpsGrowth) },
-  ];
-  const marginSeries: LineSeries[] = [
-    { name: "Gross margin", color: "#38bdf8", values: data.growthMarginQuarters.map((q) => q.grossMarginPct) },
-    { name: "Operating margin", color: "#facc15", values: data.growthMarginQuarters.map((q) => q.operatingMarginPct) },
-  ];
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
   const hasAnyReaction = reactionData.some((d) => d.value != null);
   const driftLabels = data.priceReactionQuarters.map((q) => q.label);
@@ -911,7 +535,6 @@ export default async function StockEarningsPage({ params }: Props) {
   ];
   const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
   const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
-  const epsBeatPct = data.epsBeatTotal > 0 ? Math.round((data.epsBeatCount / data.epsBeatTotal) * 100) : null;
 
   // Curated, deterministic set of OTHER stock symbols for the "Explore More
   // Stocks" internal-linking module (see lib/curatedSymbols.ts and
@@ -922,7 +545,7 @@ export default async function StockEarningsPage({ params }: Props) {
     "@context": "https://schema.org", "@type": "WebPage",
     name: `${clean} Stock Earnings`,
     url: `https://www.mystockharbor.com/stock/${clean}/earnings`,
-    description: `${clean} stock earnings, EPS, revenue and earnings score.`,
+    description: `${clean} stock earnings from SEC filings: GAAP EPS, revenue, margins, cash flow and balance sheet.`,
     breadcrumb: { "@type": "BreadcrumbList", itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: "https://www.mystockharbor.com/" },
       { "@type": "ListItem", position: 2, name: clean, item: `https://www.mystockharbor.com/stock/${clean}` },
@@ -1043,13 +666,13 @@ export default async function StockEarningsPage({ params }: Props) {
           .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }
           .historyTable td:last-child { border-bottom: none; }
           .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
-          .historyTable td:nth-child(1)::before { content: "Quarter"; }
-          .historyTable td:nth-child(2)::before { content: "EPS"; }
-          .historyTable td:nth-child(3)::before { content: "EPS Est."; }
-          .historyTable td:nth-child(4)::before { content: "EPS Surprise"; }
-          .historyTable td:nth-child(5)::before { content: "Revenue"; }
-          .historyTable td:nth-child(6)::before { content: "Revenue Surprise"; }
-          .historyTable td:nth-child(7)::before { content: "Read"; }
+          /* READ FROM THE CELL, NOT FROM ITS POSITION. These used to be seven
+             nth-child rules naming the estimate columns that were retired on
+             2026-09-15. There are now two tables on this page with different
+             column sets, and a positional rule cannot serve both: it would
+             silently relabel one of them. Each <td> carries its own
+             data-label. */
+          .historyTable td::before { content: attr(data-label); }
         }
         @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
       `}</style>
@@ -1061,7 +684,7 @@ export default async function StockEarningsPage({ params }: Props) {
               <ShareButton
                 url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
                 title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
-                text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+                text={`${clean} earnings — GAAP EPS, revenue & earnings score 📊 MyStockHarbor`}
               />
             </div>
             <div>
@@ -1069,7 +692,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 <TickerLogo symbol={clean} size={34} radius={8} />
                 <h1 style={{ margin: 0 }}>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
               </div>
-              <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
+              <p>Review {clean}&apos;s latest reported quarter as filed with the SEC — GAAP EPS, revenue, margins, cash flow and the balance sheet, with year-over-year context and a simple earnings score.</p>
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <aside className="scoreCard">
@@ -1100,88 +723,50 @@ export default async function StockEarningsPage({ params }: Props) {
 
           <section className="contentGrid">
             <div style={{ display: "grid", gap: 18 }}>
-              <section className="card">
-                <div className="eyebrow">Latest report</div>
-                <h2>{clean} latest earnings snapshot</h2>
-                <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>
-                {!latest ? (
-                  <p>Structured earnings data is not available for this symbol yet.</p>
-                ) : (
-                  <>
-                    <div className="metricGrid">
-                      <div className="metricCard" style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
-                      <div className="metricCard" style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                    </div>
-                    <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
-                  </>
-                )}
-              </section>
+              {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
+                  symbol has none yet, one honest card says so rather than six
+                  cards of dashes. */}
+              {nextReport?.date ? (
+                <section className="card">
+                  <div className="eyebrow">Next report</div>
+                  <h3>Next expected earnings date</h3>
+                  <p style={{ marginBottom: 0 }}>
+                    <strong>{nextReport.date}</strong>{nextReport.time ? ` (${nextReport.time === "bmo" ? "before market open" : nextReport.time === "amc" ? "after market close" : nextReport.time})` : ""}.
+                    {" "}This is the announcement date, which is not in SEC filings — it still comes
+                    from the earnings calendar, as does the price-reaction card below.
+                  </p>
+                </section>
+              ) : null}
 
-              <section className="card">
-                <div className="eyebrow">Recent earnings trend</div>
-                <h2>How recent earnings have been landing</h2>
-                <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
-                {epsBeatPct != null ? (
-                  <p><strong>{clean}</strong> has beaten EPS estimates in <strong>{data.epsBeatCount} of the last {data.epsBeatTotal}</strong> quarters ({epsBeatPct}%){data.currentStreakType ? `, including a current streak of ${data.currentStreakCount} straight ${data.currentStreakType === "beat" ? "beats" : "misses"}` : ""}.</p>
-                ) : null}
-                {data.recentTrend.length ? (
-                  <div className="trendDots">
-                    {data.recentTrend.map((item) => (
-                      <div key={item.label} className="trendDot">
-                        <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />
-                        <strong>{item.label}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p>No recent completed earnings trend is available yet.</p>}
-
-                {data.chartQuarters.length ? (
-                  <>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">EPS: actual vs. estimate by quarter</div>
-                      <EarningsBarChart data={epsChartData} formatValue={(v) => formatMoney(v)} />
-                    </div>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">Revenue: actual vs. estimate by quarter</div>
-                      <EarningsBarChart data={revenueChartData} formatValue={(v) => formatMoney(v, true)} />
-                    </div>
-                    <ChartLegend />
-                  </>
-                ) : null}
-              </section>
-
-              <section className="card">
-                <div className="eyebrow">Growth &amp; margins</div>
-                <h2>Is growth accelerating, and are margins holding up?</h2>
-                <p>A single quarter&apos;s beat matters less than the trend behind it. These lines show whether year-over-year growth is speeding up or slowing down, and whether margins are expanding or getting squeezed.</p>
-                {growthLabels.length ? (
-                  <>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">YoY revenue &amp; EPS growth by quarter</div>
-                      <MultiLineChart labels={growthLabels} series={growthSeries} />
-                      <SeriesLegend items={[{ label: "Revenue growth", color: "#60a5fa" }, { label: "EPS growth", color: "#22c55e" }]} />
-                    </div>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">Gross &amp; operating margin by quarter</div>
-                      <MultiLineChart labels={growthLabels} series={marginSeries} />
-                      <SeriesLegend items={[{ label: "Gross margin", color: "#38bdf8" }, { label: "Operating margin", color: "#facc15" }]} />
-                    </div>
-                    <p className="earningsDataNote">Growth compares each quarter with the same quarter a year earlier. Margins are gross profit and operating income as a share of revenue for that quarter.</p>
-                  </>
-                ) : (
-                  <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
-                )}
-              </section>
-
-              <CashFlowCard cashflow={data.cashflow} />
-
-              <BalanceSheetCard balance={data.balance} />
-
-              <SegmentationCard product={data.productSeg} geographic={data.geoSeg} />
+              {!secView ? <SecNoDataCard symbol={clean} /> : (
+                <>
+                  <SecSnapshotCard view={secView} />
+                  {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
+                      were the FMP estimate cards: "EPS surprise" and "Revenue
+                      surprise", both against FMP's epsEstimated /
+                      revenueEstimated, which left the site on 2026-09-15 with
+                      the rest of the FMP licence. Analyst consensus is not in
+                      SEC filings and no free source covers it.
+                      Deleting these loses the record of why the layout has a
+                      gap, and the next person re-adds the column and wires it
+                      to whatever is nearest. The registry entry is in
+                      lib/server/secEarningsView.ts RETIRED_SOURCES. */}
+                  <HiddenCard id="eps-estimate" />
+                  <HiddenCard id="revenue-estimate" />
+                  <SecGrowthMarginsCard view={secView} />
+                  <SecCashQualityCard view={secView} />
+                  <SecBalanceSheetCard view={secView} />
+                  {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
+                      FMP /revenue-product-segmentation and
+                      /revenue-geographic-segmentation, retired 2026-09-15.
+                      Segment revenue is filed on an XBRL segment axis and
+                      companyfacts publishes the DEFAULT CONTEXT ONLY, so the
+                      breakdown is not in it — this is not a chain gap that a
+                      better tag would close. Source unresolved;
+                      hide-list-verdict §6. */}
+                  <HiddenCard id="revenue-by-segment" />
+                </>
+              )}
 
               <section className="card">
                 <div className="eyebrow">Price reaction</div>
@@ -1213,35 +798,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
-              <section className="card">
-                <div className="eyebrow">Earnings history</div>
-                <h2>Recent reported quarters</h2>
-                {data.completedRows.length ? (
-                  <table className="historyTable">
-                    <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>
-                    <tbody>
-                      {data.completedRows.slice(0, 8).map((row) => {
-                        const rowEpsActual = asNumber(row.epsActual);
-                        const rowEpsEstimated = asNumber(row.epsEstimated);
-                        const rowRevenueActual = asNumber(row.revenueActual);
-                        const rowRevenueEstimated = asNumber(row.revenueEstimated);
-                        const rowTone = classifyQuarter(row);
-                        return (
-                          <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
-                            <td>{displayQuarterLabel(row)}</td>
-                            <td>{formatMoney(rowEpsActual)}</td>
-                            <td>{formatMoney(rowEpsEstimated)}</td>
-                            <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
-                            <td>{formatMoney(rowRevenueActual, true)}</td>
-                            <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>
-                            <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : <p>No completed earnings history is available yet.</p>}
-              </section>
+              {secView ? <SecRecentQuartersCard view={secView} /> : null}
             </div>
 
             <aside className="sideColumn">
@@ -1250,61 +807,31 @@ export default async function StockEarningsPage({ params }: Props) {
                 <h3>Investor read</h3>
                 <p>{score.explanation}</p>
                 <ul className="bulletList">
-                  <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>
-                  <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>
-                  <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
+                  <li>Year-over-year growth separates one-quarter noise from a real earnings trend.</li>
+                  <li>Margins show whether the company is keeping more of each pound of revenue.</li>
+                  <li>Cash flow against net income shows whether reported profit is turning into cash.</li>
                 </ul>
               </section>
 
-              {nextEstimate ? (
-                <section className="card">
-                  <div className="eyebrow">Wall Street expectations</div>
-                  <h3>Analyst estimates for the next report</h3>
-                  <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
-                  <div className="estimateGrid estimateGridStacked">
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus EPS</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
-                    </div>
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus revenue</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
-                    </div>
-                  </div>
-                  <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
-                </section>
-              ) : null}
+              {/* HIDDEN, NOT REMOVED. This was "Analyst estimates for the next
+                  report" and the forward full-year consensus card, both from
+                  FMP /analyst-estimates, retired 2026-09-15. Forward consensus
+                  is not in SEC filings at all — company guidance appears in 8-K
+                  exhibits as prose, not as structured data. */}
+              <HiddenCard id="forward-consensus" stacked />
 
-              <AnnualConsensusCard estimate={annualConsensus} stacked />
-
-              <IncomeStatementCard income={incomeDetail} />
-
-              <section className="card">
-                <div className="eyebrow">Yearly earnings read</div>
-                <h3>Recent yearly pattern</h3>
-                {data.yearlySummaries.length ? (
-                  <div className="yearGrid">
-                    {data.yearlySummaries.map((item) => (
-                      <div key={item.year} className="yearBadge" style={{ color: "#f8fafc", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>
-                        <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p>No yearly earnings pattern is available yet.</p>}
-              </section>
+              {secView ? <SecIncomeStatementCard view={secView} /> : null}
 
               <section className="card">
                 <div className="eyebrow">Why it matters</div>
                 <h3>Earnings can reset the stock narrative</h3>
-                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
+                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and cash generation.</p>
               </section>
 
               <section className="card">
                 <div className="eyebrow">Learn</div>
                 <h3>New to reading earnings?</h3>
-                <p>Understand EPS, revenue surprise, margins and the three financial statements behind every earnings report — in plain English.</p>
+                <p>Understand EPS, margins, cash flow and the three financial statements behind every earnings report — in plain English.</p>
                 <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                   <Link className="actionLink green" href="/learn/how-to-read-financial-data">How to Read Financial Data &rarr;</Link>
                 </div>

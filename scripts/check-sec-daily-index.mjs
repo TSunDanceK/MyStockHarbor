@@ -1331,7 +1331,22 @@ const walk = (dir) => {
 walk("app"); walk("lib");
 check("only job routes touch the manifest", readers.every((r) => r.startsWith("app/api/jobs/")),
   readers.join(", ") || "none");
-check("...and it is exactly one file today", readers.length === 1, readers.join(", "));
+// NAMED, NOT COUNTED. "Exactly one file" was right while sec-daily-index was the
+// only job; step 3's population path is a second, and a bare count would have to
+// be bumped to 2 and would then wave through a third. The property is WHICH
+// files, so a new reader -- especially a render path -- still has to be added
+// here deliberately.
+const ALLOWED_MANIFEST_READERS = [
+  "app/api/jobs/sec-daily-index/route.ts",
+  // Step 3. It reads the manifest to build its two queues and writes it back
+  // once with the contentHash and verifiedAt it filled. Still a job, still once
+  // a day, still nowhere near a render.
+  "app/api/jobs/sec-facts/route.ts",
+];
+check("...and they are exactly the two job routes that are supposed to",
+  readers.length === ALLOWED_MANIFEST_READERS.length &&
+    readers.every((r) => ALLOWED_MANIFEST_READERS.includes(r)),
+  readers.join(", "));
 check("no .tsx file references it at all", !readers.some((r) => r.endsWith(".tsx")),
   "a page importing it would pull 417 KB into a render");
 check("the manifest module is not imported by any page or component",
