@@ -80,6 +80,20 @@ console.log("\n2. The fallback fires on zero and never on one");
     row({ accn: "only", form: "8-K", filingDate: "2026-04-20", items: "2.02" }),
   ]);
   check("strict resolving to zero falls back to loose", zeroStrict?.accn === "only" && zeroStrict?.rule === "loose", JSON.stringify(zeroStrict));
+
+  // ── THE SAME FILING LISTED TWICE COUNTS ONCE ─────────────────────────────
+  // submissions lists a filing under `recent` and again in the older files, so
+  // a flattened history can carry the same accession twice. Undeduplicated it
+  // does not change the PICK -- both copies are identical -- but it inflates
+  // `candidates`, which is the field the page would use to say how ambiguous
+  // an attribution was. A confidence number that counts one filing as two is
+  // worse than no confidence number.
+  const duped = m.attributeResults([
+    base[0],
+    row({ accn: "twice", form: "8-K", filingDate: "2026-04-28", items: "2.02,9.01" }),
+    row({ accn: "twice", form: "8-K", filingDate: "2026-04-28", items: "2.02,9.01" }),
+  ]);
+  check("a duplicated accession counts once, not twice", duped[0]?.candidates === 1, `candidates=${duped[0]?.candidates}`);
 }
 
 // ── 3. The attribution ceiling ─────────────────────────────────────────────
