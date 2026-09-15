@@ -259,6 +259,16 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // Read-only: the NEXT question after sec-missing-fields. That probe says
+  // whether the filer tagged the concept; this one says why a concept it DID
+  // tag, and our chain DOES list, still renders blank — extraction, period
+  // selection, or render. Prints the frame ladder, the stored periods and the
+  // view's own numbers together.
+  "sec-blank-cell": {
+    script: "scripts/sec-blank-cell-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
   // card and how many sets are still on the old quarter window.
