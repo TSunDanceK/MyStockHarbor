@@ -93,6 +93,45 @@ const { map: tickerMap } = tick.parseTickerFile(
 );
 
 /**
+ * WHAT THE PAYLOAD HOLDS UNDER THIS FIELD'S OWN CHAIN, tag by tag and unit by
+ * unit — BEFORE any frame logic runs.
+ *
+ * ── WHY THIS COMES FIRST ──────────────────────────────────────────────────
+ * "The differencing dropped it" and "the chain never found it" produce the
+ * SAME empty ladder, and they need opposite fixes. So the chain is read
+ * against the payload directly: a tag absent from the payload is a chain gap
+ * however good the frames would have been, and a tag present in a unit the
+ * field refuses is a currency refusal, which is a third thing again.
+ *
+ * `rowsForField` already records refused units into a set; this prints them
+ * per tag so the refusal is attributable rather than aggregate.
+ */
+function chainCensus(facts, field) {
+  const sources = [{ ns: field.taxonomy, chain: field.chain ?? [] }];
+  if (field.ifrsChain?.length) sources.push({ ns: "ifrs-full", chain: field.ifrsChain });
+  const lines = [];
+  let anyRow = false;
+  for (const { ns, chain } of sources) {
+    for (const tag of chain) {
+      const units = facts.facts?.[ns]?.[tag]?.units;
+      if (!units) { lines.push(`chain ${ns}:${tag} — ABSENT FROM PAYLOAD`); continue; }
+      const census = Object.entries(units)
+        .map(([u, rows]) => `${u}=${rows?.length ?? 0}`)
+        .sort().join(" ");
+      const wanted = field.unit === "USD/shares" ? ["USD/shares", "USD/share"] : [field.unit];
+      const took = wanted.reduce((a, u) => a + (units[u]?.length ?? 0), 0);
+      if (took) anyRow = true;
+      lines.push(
+        `chain ${ns}:${tag} — present, units { ${census} }; wants ${wanted.join("/")} -> ${took} rows` +
+        (took ? "" : "  << PUBLISHED IN A UNIT THIS FIELD REFUSES")
+      );
+    }
+  }
+  if (!anyRow) lines.push(`>> CHAIN GAP: not one row for this field from any chain entry`);
+  return lines;
+}
+
+/**
  * (1) EXTRACTION — every cumulative frame for one field, as the shipped
  * resolver reads it, grouped exactly as extractCompanyFacts groups them.
  *
@@ -105,6 +144,7 @@ const { map: tickerMap } = tick.parseTickerFile(
 function frameLadder(facts, key, limitYears = 3) {
   const field = defOf(key);
   if (!field) return [`      (no field definition for ${key})`];
+  const out = [`      ${chainCensus(facts, field).join("\n      ")}`];
   const byPeriod = new Map();
   for (const c of rowsForField(facts, field)) {
     const k = `${c.row.start ?? ""}..${c.row.end}`;
@@ -112,17 +152,29 @@ function frameLadder(facts, key, limitYears = 3) {
     if (list) list.push(c); else byPeriod.set(k, [c]);
   }
   const byStart = new Map();
+  // EVERY ROW THE SHIPPED READER TOOK IS ACCOUNTED FOR, not silently filtered.
+  // An empty ladder has three completely different causes — no rows, rows with
+  // no start, rows whose span maps to no quarter count — and a probe that
+  // prints nothing for all three has reported absence of evidence as evidence.
+  const dropped = { noStart: 0, spans: [] };
   for (const [, cands] of byPeriod) {
     const best = resolve(cands);
-    if (!best?.row.start || !best.row.end) continue;
-    const n = quartersCovered(spanDays(best.row.start, best.row.end));
-    if (n === null) continue;
+    if (!best?.row.end) continue;
+    if (!best.row.start) { dropped.noStart++; continue; }
+    const days = spanDays(best.row.start, best.row.end);
+    const n = quartersCovered(days);
+    if (n === null) { dropped.spans.push(`${best.row.start}..${best.row.end} ${days}d`); continue; }
     const list = byStart.get(best.row.start);
     const e = { end: best.row.end, n, tag: best.tag, ns: best.ns, val: best.row.val, filed: best.row.filed };
     if (list) list.push(e); else byStart.set(best.row.start, [e]);
   }
+  out.push(
+    `      periods read ${byPeriod.size}; dropped: ${dropped.noStart} with no start, ` +
+    `${dropped.spans.length} whose span maps to no quarter count` +
+    (dropped.spans.length ? ` (${dropped.spans.slice(0, 6).join(", ")}${dropped.spans.length > 6 ? ", …" : ""})` : "")
+  );
+  if (!byStart.size) out.push(`      >> NO USABLE FRAME AT ALL — nothing here can be differenced or filed`);
   const starts = [...byStart.keys()].sort().reverse().slice(0, limitYears);
-  const out = [];
   for (const start of starts) {
     // One frame per length, newest filing — the same de-duplication the
     // extractor does before it differences.
@@ -222,7 +274,8 @@ for (const { symbol, fields } of TARGETS) {
         .filter((c) => !c.row.start && c.row.end)
         .sort((a, b) => (a.row.end < b.row.end ? 1 : -1))
         .slice(0, 8);
-      console.log(`      chain: ${[...(field.chain ?? []), ...(field.ifrsChain ?? [])].join(" -> ")}`);
+      for (const line of chainCensus(facts, field)) console.log(`      ${line}`);
+      if (!rows.length) console.log(`      >> NO INSTANT ROW AT ALL for this field`);
       for (const c of rows) {
         console.log(`        ${c.row.end}  ${money(c.row.val)}  <${c.tag}> rank=${c.rank} filed=${c.row.filed}`);
       }
