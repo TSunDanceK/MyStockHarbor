@@ -291,6 +291,113 @@ console.log("\n7c. the score cannot claim an input it did not read");
     "it read as a claim on a page where the chain is empty");
 }
 
+console.log("\n7d. an absent component leaves the scale — it is not a penalty");
+
+// ── THE MIRROR-IMAGE FAILURE ──────────────────────────────────────────────
+// AZN scored 80, which is exactly four fifths, and a percentage over a FIXED
+// denominator of five would produce the same number. If that were the scale, a
+// filer whose cash chain cannot yield a quarterly figure would be capped at 80
+// forever — we would have replaced a score that claimed an input it could not
+// see with one that punished the filer for the page's own limit.
+//
+// It is not that scale, and this asserts the arithmetic rather than saying so.
+{
+  const seed = Number((pageRaw.match(/const SCORE_SEED = (\d+)/) ?? [])[1]);
+  const maxes = Object.fromEntries(
+    [...(pageRaw.match(/SCORE_MAX_CONTRIBUTION: Record<ScoreComponent, number> = \{([\s\S]*?)\};/) ?? ["", ""])[1]
+      .matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])])
+  );
+  check("the scale is a seed plus signed contributions, not a percentage",
+    seed === 50 && Object.keys(maxes).length === 5,
+    `seed ${seed}, ${Object.keys(maxes).length} components: ${JSON.stringify(maxes)}`);
+  // THE DECIDING SUM. Every component except cash, at its maximum, must still
+  // reach the top of the scale.
+  const withoutCash = seed + Object.entries(maxes)
+    .filter(([k]) => k !== "cashConversion").reduce((a, [, v]) => a + v, 0);
+  check("a filer with NO cash component can still reach 100",
+    withoutCash >= 100,
+    `${seed} + ${withoutCash - seed} = ${withoutCash} -> clamps to 100. ` +
+      "Anything below 100 here is a silent cap and a penalty for an absent input");
+  // ── AND FOR EVERY OTHER COMPONENT, THE HONEST PROPERTY IS NOT "REACHES 100"
+  // The first version of this asserted 100 for all five and FAILED on two:
+  // without revenueGrowth the reachable maximum is 96 and without epsGrowth 98,
+  // because those are the two dominant terms. That is not a deduction — an
+  // absent component still contributes exactly 0 — it is simply a lower ceiling
+  // when there are fewer signals to add.
+  //
+  // What must hold is that no component's absence can PREVENT A READING. The
+  // tone thresholds are the thing a reader acts on, so the assertion is that
+  // every reachable maximum clears STRONG with room, and the actual figures are
+  // printed so the 96 and the 98 are on the record rather than hidden by a
+  // loosened bound.
+  const strongAt = Number((pageRaw.match(/rounded >= (\d+) \? "good"/) ?? [])[1]);
+  const reachable = Object.fromEntries(Object.keys(maxes).map((k) => [
+    k,
+    Math.min(100, seed + Object.entries(maxes).filter(([x]) => x !== k)
+      .reduce((a, [, v]) => a + v, 0)),
+  ]));
+  check("no component's absence can prevent a STRONG reading",
+    Object.values(reachable).every((r) => r >= strongAt + 20),
+    `STRONG is >= ${strongAt}; reachable maxima without each component: ` +
+      JSON.stringify(reachable));
+  check("...and an absent component contributes exactly zero, not a default",
+    /const pts = sc/.test("") ||
+      /if \(s\.revenueYoY != null\) contribute\(/.test(pageRaw) &&
+      /if \(s\.epsYoY != null\) contribute\(/.test(pageRaw) &&
+      /if \(s\.netIncome\.val != null\) contribute\(/.test(pageRaw) &&
+      /if \(opMargins\.length >= 2\) \{\s*contribute\(/.test(pageRaw) &&
+      /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(pageRaw),
+    "every contribute() sits behind a guard on its own input, with no else");
+  check("points, membership and the recorded amount are ONE act",
+    /const contribute = \(key: ScoreComponent, points: number\) => \{[\s\S]{0,200}score \+= points;[\s\S]{0,120}ran\.add\(key\);[\s\S]{0,120}contributions\[key\] = points;/
+      .test(pageRaw),
+    "three separate statements are three chances for the total and the list to disagree");
+  check("no component adds points outside contribute()",
+    (pageRaw.match(/score \+=/g) ?? []).length === 1,
+    "the only `score +=` is inside contribute");
+}
+
+console.log("\n7e. the cash card is ONE period, and says which");
+
+// THE TRAP: annual operating cash flow against QUARTERLY net income reads as
+// roughly 4x cash conversion, and the score would call it STRONG for a purely
+// arithmetic reason. Every figure on the card must come from one period.
+{
+  const viewRaw = fs.readFileSync(VIEW, "utf8");
+  check("one period selects the WHOLE card, not a per-row fallback",
+    /const cashFrom = /.test(viewRaw) &&
+      (viewRaw.match(/view\(cashFrom, "/g) ?? []).length === 4 &&
+      /valueOf\(cashFrom, "netIncome"\)/.test(viewRaw),
+    "operating cash flow, capex, net income and share-based compensation all read cashFrom");
+  // SCOPED TO THE cashQuality BLOCK. The first version scanned the whole file
+  // and failed on the SNAPSHOT card's `view(latest, "netIncome", ...)`, which
+  // is correctly quarterly — the snapshot is about the quarter. A check that
+  // cannot tell the two cards apart would have to be loosened to pass, and a
+  // loosened version would stop seeing the real leftover too.
+  const cashBlock = viewRaw.slice(
+    viewRaw.indexOf("    cashQuality: {"),
+    viewRaw.indexOf("    balance: bsAt")
+  );
+  check("no cash-card figure reads the latest QUARTER directly",
+    cashBlock.length > 200 && !/view\(latest,|valueOf\(latest,/.test(cashBlock),
+    `cashQuality block ${cashBlock.length}b — non-empty, so a mis-sliced block ` +
+      `cannot pass this by being blank`);
+  check("the accruals line takes both legs from the same period",
+    /accruals:[\s\S]{0,200}valueOf\(cashFrom, "netIncome"\)[\s\S]{0,120}valueOf\(cashFrom, "netIncome"\)!/
+      .test(viewRaw),
+    "this is the line that would read as 4x");
+  check("the card names its own period rather than the page's latest quarter",
+    /<h3>Is the profit turning into cash\? — \{c\.period\}<\/h3>/.test(cardsRaw),
+    "it used to say view.latestLabel, which is the quarter the rest of the page is about");
+  check("...and says so explicitly when the basis is the year",
+    /c\.basis === "year" \?/.test(cardsRaw) &&
+      /does not publish a quarterly cash-flow statement/.test(cardsRaw),
+    "a reader must not have to infer that the numbers changed period");
+  check("the score's narrative names the period when the cash leg is annual",
+    /cashBasis === "year" \? ` over \$\{cashPeriod\}`/.test(pageRaw),
+    "otherwise quarterly growth and annual cash are described as one period");
+}
+
 console.log("\n8. the population path");
 
 const jobRaw = fs.readFileSync("app/api/jobs/sec-facts/route.ts", "utf8");

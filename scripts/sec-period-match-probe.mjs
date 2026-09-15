@@ -57,9 +57,15 @@ const sec = await lift([
 const pageSrc = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
 const scorer = await lift(
   [
-    "const SCORE_COMPONENTS = " +
-      (pageSrc.match(/const SCORE_COMPONENTS = \{[\s\S]*?\} as const;/) ?? [])[0]
-        .replace("const SCORE_COMPONENTS = ", "").replace(" as const;", ";"),
+    // EVERY top-level SCORE_* constant, matched as a GROUP rather than named
+    // one at a time. Naming them cost a runner round trip when SCORE_SEED and
+    // SCORE_MAX_CONTRIBUTION were added and the lift still listed only
+    // SCORE_COMPONENTS — "SCORE_SEED is not defined", thrown by the pre-network
+    // smoke before any fetch, which is exactly what that smoke is for. A rule
+    // that picks them up as they are added cannot go stale the same way.
+    [...pageSrc.matchAll(/^const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
+      .map((m) => `const ${m[1]} = ${m[2].replace(/ as const$/, "")};`)
+      .join("\n"),
     grabFunction(pageSrc, "clamp"),
     grabFunction(pageSrc, "toneLabel"),
     grabFunction(pageSrc, "scoreExplanation"),
@@ -92,7 +98,20 @@ try {
   if (priorYearOf(holed, holed[0]) === holed[4])
     throw new Error("priorYearOf fell back to row[i+4]");
   if (typeof scorer.scoreFromSec !== "function") throw new Error("no scoreFromSec");
-  if (scorer.scoreFromSec(null).available !== false) throw new Error("scorer smoke");
+  const unavail = scorer.scoreFromSec(null);
+  if (unavail.available !== false) throw new Error("scorer smoke");
+  // CALLS THE SCORER ON A REAL SHAPE, so a missing lifted constant throws here
+  // rather than on the first symbol after three fetches.
+  const probeView = {
+    snapshot: { revenueYoY: 10, epsYoY: 10, netIncome: { val: 1 } },
+    margins: [{ operating: 1 }, { operating: 2 }],
+    cashQuality: { accruals: null, netIncome: { val: 1 }, basis: "quarter", period: "Q1 FY2026" },
+  };
+  const smokeScore = scorer.scoreFromSec(probeView);
+  if (typeof smokeScore.seed !== "number" || !smokeScore.contributions)
+    throw new Error("the scorer did not report its seed and contributions");
+  if ("cashConversion" in smokeScore.contributions)
+    throw new Error("an absent cash chain contributed a value");
 } catch (err) {
   console.error(`FATAL: pre-network smoke failed — ${String(err?.message ?? err)}`);
   process.exit(2);
