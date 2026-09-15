@@ -12,10 +12,32 @@ const nextConfig: NextConfig = {
   // apart. Which pages are on the list, which 10 are deliberately NOT, and
   // why `follow` is mandatory, are all documented in that file.
   async headers() {
-    return NOINDEX_PICKER_PAGES.map((source) => ({
-      source,
-      headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
-    }));
+    return [
+      // ── HARVESTED TICKER LOGOS ──────────────────────────────────────
+      // Next serves public/ with `max-age=0, must-revalidate` by default, so
+      // without this every page view re-requests every logo it renders. A
+      // listing page with 40 tickers would make 40 conditional requests per
+      // view, which would leave self-hosting SLOWER than the FMP CDN it
+      // replaces for a repeat visitor -- the opposite of the point.
+      //
+      // Not `immutable`: these files are not content-hashed, and the harvest is
+      // re-run quarterly. A day of freshness lets a re-harvest reach visitors
+      // within a day, while stale-while-revalidate keeps the repeat view
+      // instant and refreshes in the background.
+      {
+        source: "/logos/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=2592000",
+          },
+        ],
+      },
+      ...NOINDEX_PICKER_PAGES.map((source) => ({
+        source,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
+      })),
+    ];
   },
   async redirects() {
     return [

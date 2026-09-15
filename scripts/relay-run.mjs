@@ -55,6 +55,19 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
     needsDump: true,
   },
+  // Name-matching, NOT ticker-matching -- the ticker key is what failed.
+  //
+  // needsDump WAS true AND IS NOW FALSE, because run 48 proved the dump has
+  // nothing this task wants: its FMP cache rows carry sector and industry and
+  // no company name at all, so the run came back void. Names now come from the
+  // Nasdaq Trader directory, fetched on the runner. The dump is still READ if
+  // one is attached -- it contributes the pickers half of the universe -- but
+  // requiring it would make the task wait on an artifact it does not need.
+  "sec-titles": {
+    script: "scripts/sec-title-candidates.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: false,
+  },
   "sec-fundamentals": {
     script: "scripts/sec-fundamentals-ingest.mjs",
     args: (env) => [env.DUMP_DIR ?? "", env.SYMBOLS ?? ""],
@@ -68,6 +81,10 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // How much of a symbol's real pool its anchored short-name needle admits, and
+  // how much of that is the company rather than the index, the month or the
+  // noun. news.google.com is refused from the sandbox; a runner reaches it.
+  "anchor-collisions": { script: "scripts/anchor-collision-sample.mjs", args: () => [] },
   // Read-only, but needs the frozen universe to compute the match ratio: the
   // question "how many wire items are about a stock we cover" cannot be answered
   // without the symbol set.
@@ -172,6 +189,13 @@ const TASKS = {
     needsDump: true,
     needsTypescript: true,
   },
+  // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
+  // image CDN whether it actually holds a logo for each symbol in the union
+  // universe. The CDN needs no API key, so this belongs in the uncredentialled
+  // job -- the FMP key stays out of Actions, per the static-profile README.
+  // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
+  // `exchange` is in static-profile.json's absentFields.blocked.
+  "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

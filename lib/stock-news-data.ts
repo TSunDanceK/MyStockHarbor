@@ -1,7 +1,8 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow, feedMaxAgeDays } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders } from "@/lib/server/news";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import {
   cleanRssDescription,
   containsHtmlMarkup,
@@ -396,9 +397,14 @@ async function fetchCompanyName(symbol: string): Promise<string> {
       }
     }
 
-    return "";
+    // LIVE FETCH SUCCEEDED AND THE SYMBOL WAS NOT IN IT. Falling through to the
+    // snapshot rather than returning "" is the point: this is the miss the
+    // dashed dual-class names hit every time, because the directory lists them
+    // under the dotted spelling only. See the note in lib/server/companyNames.ts.
+
+    return snapshotCompanyName(symbol);
   } catch {
-    return "";
+    return snapshotCompanyName(symbol);
   }
 }
 
@@ -441,6 +447,15 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     // only persistence makes possible. Today an earnings article vanishes the
     // moment it leaves FMP's latest-N window regardless of relevance.
     isEarnings: isEarningsNewsItem,
+    // WHAT ACTUALLY CONTRIBUTED, not what is registered. /cache-health said
+    // "gnews + wire + sec" for two days while GlobeNewswire was returning
+    // nothing at all, because a registered adapter and a working one render
+    // identically. activeNewsProviders() supplies the asked-for list so an
+    // adapter that answered with nothing still writes a zero.
+    attribution: {
+      activeIds: () => activeNewsProviders().map((provider) => provider.id),
+      providerOf: (item) => item.provider ?? null,
+    },
   });
 
   return items;
@@ -633,6 +648,25 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
+/**
+ * ── THIS SIDE STRIPS PUNCTUATION. THE HEADLINE SIDE DOES NOT. ─────────────
+ * The `[^\w\s]` below removes dots and hyphens, so "A.O. Smith" reduces to
+ * "a o smith". The headline is normalised by a DIFFERENT class in
+ * isClearlyAboutRequestedCompany — `[^\w\s:$.-]`, which KEEPS dots and hyphens
+ * — so the text there still reads "a.o. smith".
+ *
+ * The two never meet, and that asymmetry was invisible from either function
+ * alone: each is defensible on its own and the mismatch only exists between
+ * them. It cost AOS and SJM 56 of 60 and 82 of 89 items respectively, because
+ * the substring rule could never fire on a dotted name.
+ *
+ * IT IS SPANNED, NOT REMOVED. companyNameVariants generates the spellings a
+ * headline actually uses and matches on any of them. Removing the asymmetry
+ * instead — stripping dots on both sides — would lose the distinction between
+ * "a o smith" and "ao smith" as separate evidence, and would still leave the
+ * hyphen case. If you change the class below, read companyNameVariants and the
+ * note at the headline normaliser before deciding the other two are redundant.
+ */
 function getCleanCompanyName(companyName: string) {
   return companyName
     .toLowerCase()
@@ -642,12 +676,291 @@ function getCleanCompanyName(companyName: string) {
     .trim();
 }
 
+/**
+ * The spellings a headline might use for one company.
+ *
+ * ── MEASURED BEFORE IT WAS WRITTEN ────────────────────────────────────────
+ * getCleanCompanyName strips ALL punctuation, so the four names it was asked
+ * about reduce like this:
+ *
+ *   FAST  "Fastenal Company - Common Stock"        -> "fastenal"
+ *   SNA   "Snap-On Incorporated Common Stock"      -> "snap on incorporated"
+ *   AOS   "A.O. Smith Corporation Common Stock"    -> "a o smith"
+ *   SJM   "The J.M. Smucker Company Common Stock"  -> "the j m smucker"
+ *
+ * and the two content rules in isClearlyAboutRequestedCompany then both die on
+ * the dotted pair:
+ *
+ *   RULE 2 wants the whole cleaned string as a CONTIGUOUS substring of the
+ *   headline. The headline normaliser KEEPS dots (its class is [^\w\s:$.-]),
+ *   so the text says "a.o. smith" or "a. o. smith" and never "a o smith".
+ *   The two sides are normalised differently, so they can never meet.
+ *
+ *   RULE 3 wants two words of four or more characters. "a o smith" offers
+ *   exactly one — "smith" — so the rule is switched off entirely.
+ *
+ * Only an explicit ticker signal was left, which is why SJM's "JM Smucker
+ * (SJM) Stock" survived and "J.M. Smucker Co. cuts outlook" did not. 56 of
+ * AOS's 60 items died here, before the churn filter and before the window.
+ *
+ * ── SO THE FIX IS ON THE NAME SIDE, NOT THE THRESHOLD ─────────────────────
+ * Lowering the minimum token length would let "a" and "o" match half the
+ * market — the same failure one level down. Instead the NAME is offered in the
+ * forms a real headline actually uses, and the length guard is kept exactly
+ * where it was, now applied to whole variants rather than to fragments.
+ *
+ * Every variant is >= 4 characters. That is the guard, unchanged.
+ */
+export function companyNameVariants(companyName: string): string[] {
+  const base = String(companyName ?? "")
+    .toLowerCase()
+    // Same suffix vocabulary as getCleanCompanyName, and deliberately the same
+    // list rather than a second one that can drift.
+    // `incorporated` is added to the list getCleanCompanyName uses, and it is
+    // the one addition here. Evidence, not plausibility: `inc` is already in
+    // that list, `incorporated` is the same legal form spelled out, and leaving
+    // it in is what kept SNA's variants as "snap-on incorporated" so that a
+    // real headline — "Snap on Tools parent beats estimates" — did not match.
+    // Longest-first, though the \b anchors already stop `inc` matching inside
+    // `incorporated`, so the ordering is defence in depth rather than the thing
+    // that protects it.
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/g,
+      " "
+    )
+    // A leading "the" is never part of how a headline refers to the company,
+    // and leaving it in would break every substring match for "The J.M.
+    // Smucker Company". Substring matching handles its PRESENCE in the
+    // headline on its own.
+    .replace(/^\s*the\s+/, "")
+    // Keep dots and hyphens: they are the thing being varied.
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[\s.-]+$/, "")
+    .trim();
+
+  if (!base) return [];
+
+  const variants = new Set<string>([
+    base,                                   // a.o. smith      snap-on
+    base.replace(/\./g, ""),                // ao smith
+    base.replace(/\./g, " "),               // a o smith
+    base.replace(/\.\s*/g, ". "),            // a. o. smith
+    base.replace(/-/g, " "),                // snap on
+    base.replace(/-/g, ""),                 // snapon
+  ]);
+
+  return [...variants]
+    .map((v) => v.replace(/\s+/g, " ").trim())
+    // THE GUARD MEASURES DISTINCTIVENESS, NOT LENGTH — and it used to measure
+    // length, which let two bad needles through.
+    //
+    //   VFC  "V.F. Corporation Common Stock"  ->  "v. f"
+    //
+    // Four characters, so the old guard passed it, and as a substring it
+    // matches any text where a word ending in v precedes a period and a word
+    // starting with f — "Roe v. Ford". Two of those four characters are
+    // separators.
+    //
+    //   T    "AT&T Inc."  ->  "at t"
+    //
+    // which matches ordinary English: "what the", "that time", "flat tire".
+    //
+    // Counting ALPHANUMERICS rather than characters rejects both. This is the
+    // same measure lib/server/news/companyName.ts's assessCompanyName already
+    // uses for the QUERY side — `letters.length <= 2` — so the two sides now
+    // judge a name the same way instead of one counting letters and the other
+    // counting punctuation.
+    //
+    // IT IS A TIGHTENING, NOT A LOOSENING. Every variant that passed before on
+    // real alphanumerics still passes; only needles padded out by dots and
+    // spaces stop.
+    .filter((v) => v.replace(/[^a-z0-9]/gi, "").length >= 4);
+}
+
+/**
+ * The anchored fallback for a name too short to be a substring needle.
+ *
+ * ── THE POPULATION, MEASURED ──────────────────────────────────────────────
+ * 55 of the 2,592 committed names produce NO variant at all: every candidate is
+ * under the four-character guard, `.some()` on an empty array is false by
+ * construction, and only an explicit ticker signal can match. MMM is the
+ * clearest case — the company is spelled "3M", the ticker is "MMM", they share
+ * no characters, and 88 fetched items yielded 2 cards, both carrying a literal
+ * "(MMM)".
+ *
+ * 42 of the 55 are names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO,
+ * PVH …). The rest are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC,
+ * CGI/GIB, RPC/RES, V2X/VVX, AAR/AIR.
+ *
+ * ── WHY NOT JUST LOWER THE GUARD ─────────────────────────────────────────
+ * A two- or three-character SUBSTRING matches half the market: "rh" inside
+ * "growth", "box" inside "boxing". The guard is right. What these names need is
+ * a different KIND of evidence, so this returns an ANCHORED, CASE-SENSITIVE
+ * pattern instead — and it is tested against the headline's ORIGINAL case
+ * rather than the lowercased text every other rule uses.
+ *
+ * ── CASING IS THE DISCRIMINATOR, AND IT COMES FROM THE DATA ──────────────
+ * The company's own name says which shape to demand. "CSX Corporation" is
+ * all-caps, so `\bCSX\b` is required in caps and ordinary prose cannot trip it.
+ * "Dow Inc." is a capitalised word, so `\bDow\b` is required capitalised, which
+ * separates the company from "a cardboard box" and "the dow was flat".
+ *
+ * No list is involved: COMMON_WORDS in lib/server/news/companyName.ts is a
+ * QUERY-quality list of business words (american, capital, energy) and does not
+ * contain box, dow or fox, so it is the wrong instrument here.
+ *
+ * ── THE RESIDUAL, NOW MEASURED RATHER THAN ESTIMATED ─────────────────────
+ * This paragraph used to say casing "cannot separate Dow Inc. from Dow Jones"
+ * and leave it there. Relay runs 77 and 78 measured it: ten real Google News
+ * pools, ~100 items each, fetched with the SAME query gnewsProvider builds, the
+ * publisher suffix stripped exactly as the adapter strips it, and scored by
+ * loading the real isClearlyAboutRequestedCompany twice — once as shipped, once
+ * with the `!variants.length` guard rewritten to `false` — so the number below
+ * is the set this fallback ADDS, not the set the feed keeps.
+ *
+ * That distinction reversed the first reading. DOW's raw admit rate was 85/100,
+ * which looks like a broken symbol; 26 of those 85 matched "dow stock"/"(dow)"
+ * with the anchor switched off, so the anchor's real contribution was 6 genuine
+ * Dow Inc. items against 57 index stories.
+ *
+ *   needle          adds  off-topic                         marginal precision
+ *   \bDow\b   (Cap)   63       57   Dow Jones, "the Dow", DJIA members   10%
+ *   \bBox\b   (Cap)   56       18   Jack in the Box, box office, Big Box  68%
+ *   \bGap\b   (Cap)   43       13   "Shares Gap Down", "Value Gap"        70%
+ *   \bRTX\b  (CAPS)   47        4   Nvidia's GPU line                     91%
+ *   \bFox\b   (Cap)   61        5   Fox Factory (FOXF), Michael J. Fox    92%
+ *   \bNOV\b  (CAPS)   47        1   Novatti Group, ASX:NOV                98%
+ *   \bAon\b   (Cap)   35        0                                        100%
+ *   \bAT\b   (CAPS)   37        0                                        100%
+ *   \bRH\b   (CAPS)   52        0                                        100%
+ *   \bCSX\b  (CAPS)   50        0                                        100%
+ *
+ * TWO GENERALISATIONS DIED HERE, and both are recorded because each would have
+ * shipped a worse rule:
+ *
+ *   "a capitalised-word needle is the dirty shape"  — Aon is 100% and Fox 92%.
+ *   "the month/preposition collisions are real"     — the month is written Nov
+ *                                                     and the preposition at,
+ *                                                     so \bNOV\b and \bAT\b
+ *                                                     never see them. Casing
+ *                                                     was already doing that
+ *                                                     work.
+ *
+ * DOW is not on a continuum with the rest — it is 10% against a floor of 68% —
+ * and the reason is specific: "Dow" is the everyday name of a market INDEX, so
+ * it appears in market-wide copy that is about no company at all. That is what
+ * INDEX_TOKENS below rejects. Everything else on this table ships as measured:
+ * Box and Gap at ~70% are a real residual, stated here with its number, and the
+ * dedup, the ranking and the churn filter still apply downstream.
+ *
+ * ── THE ALTERNATIVES, MEASURED AND REJECTED ──────────────────────────────
+ * Three grammatical rules were scored on the same 491 marginal items before
+ * settling on the index-name one, so the next reader need not re-derive them:
+ *
+ *   require a company-reference position  220 kept, 96% precise, 182 real lost
+ *     (\bN's\b, "N Inc", "N (", "N stock") — and it takes AT&T to ZERO, since
+ *     \bAT\b only ever matches inside "AT&T", never before " stock".
+ *   reject a longer phrase around the token  199 kept, 95%, 203 real lost
+ *   either of the two                        337 kept, 95%,  74 real lost
+ *   INDEX_TOKENS (this one)                  428 kept, 90%,   6 real lost
+ *
+ * The three grammatical rules buy 5 points of precision for between 74 and 203
+ * genuine articles. The index rule removes 57 of the 98 off-topic items for 6.
+ *
+ * ── STRICTLY ADDITIVE ────────────────────────────────────────────────────
+ * The caller reaches this ONLY when companyNameVariants returned nothing, so no
+ * symbol that matches today can change behaviour. That is asserted.
+ */
+/**
+ * Market-index names, which are not company references however they are cased.
+ *
+ * Deliberately a SET OF INDEX NAMES rather than a set of "words to avoid": the
+ * membership test has a reason that survives re-reading, so a later editor can
+ * tell whether a new entry belongs. "Box" and "Gap" are common words too and
+ * are deliberately NOT here — they were measured at 68% and 70% and kept.
+ */
+const INDEX_TOKENS = new Set([
+  "DOW", "NASDAQ", "FTSE", "DAX", "CAC", "NIKKEI", "HANG", "SENSEX", "NIFTY",
+  "RUSSELL", "STOXX", "IBEX",
+]);
+
+export function anchoredNameSignal(companyName: string): RegExp | null {
+  const base = String(companyName ?? "")
+    .replace(
+      /\b(incorporated|inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/gi,
+      " "
+    )
+    .replace(/^\s*the\s+/i, "")
+    .replace(/[^\w\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const token = base.split(/\s+/)[0] ?? "";
+  const alnum = token.replace(/[^A-Za-z0-9]/g, "");
+
+  // AN INDEX NAME IS NOT A COMPANY REFERENCE. Measured: \bDow\b admitted 63
+  // items beyond the explicit ticker signals and 57 of them were about the Dow
+  // Jones Industrial Average, its members, or S&P Dow Jones Indices — 10%
+  // precision against a floor of 68% for every other name tested.
+  //
+  // WHY THIS IS NOT THE KIND OF LIST THIS REPO REFUSES. The objection recorded
+  // in symbol-spellings.mjs is to a SNAPSHOT — a September 2026 table of
+  // companies that returns a wrong answer silently forever as the market
+  // changes. Index names are a closed, stable vocabulary: they do not list,
+  // delist, rename or get acquired. And it is a property of the TOKEN, not of
+  // the ticker — if a company named "Nasdaq" ever reached this fallback it
+  // would be caught by the same line. (NDAQ does not: "Nasdaq" is six
+  // characters, so companyNameVariants gives it a substring needle and this
+  // function never runs.)
+  //
+  // It costs DOW the 6 genuine items the anchor was adding. DOW is NOT blanked
+  // by this: the explicit ticker signals above already matched 26 of its 89,
+  // and they are the ones a reader wants.
+  if (INDEX_TOKENS.has(alnum.toUpperCase())) return null;
+
+  // TWO TO FOUR CHARACTERS. Below two there is no name left; at five or more
+  // companyNameVariants already has a usable substring needle and this never
+  // runs.
+  if (alnum.length < 2 || alnum.length > 4) return null;
+  // A proper noun or an acronym. A token with no capital is not a company name
+  // in a headline, and anchoring a lowercase word would be the substring
+  // problem again with extra steps.
+  if (!/[A-Z]/.test(token)) return null;
+
+  // TWO SPELLINGS, because the dots are load-bearing in one of them. VFC's name
+  // is "V.F.", whose alphanumerics are "VF" — and `\bVF\b` does not match the
+  // text "V.F. Corporation", since the letters are not adjacent there. Offering
+  // the punctuated token as well is what reaches it, and it is the same
+  // dotted/undotted pairing companyNameVariants already does one size up.
+  //
+  // The trailing boundary is only required when the token ends in a word
+  // character: `\bV\.F\.\b` can never match, because a boundary cannot follow a
+  // full stop that is already at the edge of a word.
+  const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const forms = new Set<string>([`\\b${esc(alnum)}\\b`]);
+  if (token !== alnum) {
+    forms.add(`\\b${esc(token)}${/\w$/.test(token) ? "\\b" : ""}`);
+  }
+
+  return new RegExp([...forms].join("|"));
+}
+
 function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
   if (articleMatchesRequestedSymbol(item, symbol)) {
     return true;
   }
 
   const rawText = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`.toLowerCase();
+  // ── THIS SIDE KEEPS DOTS AND HYPHENS. getCleanCompanyName DOES NOT. ──────
+  // `:$.-` are preserved here so the explicit ticker signals below can match
+  // ("$aos", "nasdaq: aos"). getCleanCompanyName normalises the COMPANY NAME
+  // with `[^\w\s]`, which strips them — so a name reduced to "a o smith" was
+  // being looked for in text that reads "a.o. smith", and never found.
+  //
+  // Neither class is wrong; the mismatch only exists between them, which is why
+  // it survived review of both. companyNameVariants spans it. If you widen or
+  // narrow this class, that function is the thing that depends on it.
   const text = rawText.replace(/[^\w\s:$.-]/g, " ").replace(/\s+/g, " ");
 
   const ticker = symbol.toLowerCase();
@@ -673,8 +986,23 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
     return true;
   }
 
-  if (cleanedCompany && cleanedCompany.length >= 4 && text.includes(cleanedCompany)) {
+  // ANY SPELLING THE HEADLINE MIGHT USE, not just the punctuation-stripped one.
+  // See companyNameVariants: the text normaliser keeps dots and the name
+  // normaliser removed them, so a dotted name could never match its own
+  // headline. The length guard is unchanged and now applies per variant.
+  const variants = companyNameVariants(companyName);
+  if (variants.some((variant) => text.includes(variant))) {
     return true;
+  }
+
+  // THE SHORT-NAME FALLBACK, reached only when there is no usable variant — so
+  // this cannot change the answer for any name that already matches. Tested
+  // against the ORIGINAL case, because casing is the whole discriminator.
+  if (!variants.length) {
+    const anchored = anchoredNameSignal(companyName);
+    if (anchored && anchored.test(`${item.title} ${item.description ?? ""}`)) {
+      return true;
+    }
   }
 
   if (companyWords.length >= 2 && companyWords.every((word) => text.includes(word))) {
@@ -1138,21 +1466,73 @@ export function dedupeNews(items: NewsItem[]): NewsItem[] {
   return deduped;
 }
 
-function rankNews(news: NewsItem[], symbol = "", companyName = "") {
-  const symbolConfirmedNews = symbol
-    ? news.filter((item) => articleMatchesRequestedSymbol(item, symbol))
-    : [];
+/**
+ * What a ranking run is ABOUT. There is no default, and that is the fix.
+ *
+ * `rankNews(news, symbol = "", companyName = "")` let the stock page acquire
+ * MARKET scope by omitting two arguments, which is how the score panel and the
+ * card feed ended up computing over different sets in the same render while
+ * both looked correct at their call sites. A caller now has to say which it
+ * wants, so market scope is something you ask for rather than something you
+ * fall into.
+ *
+ * Both scopes are legitimate — lib/sector-news-data.ts has no symbol to be
+ * about — so the defect was never that the no-symbol path exists. It was that
+ * it was reachable by forgetting.
+ */
+type NewsScope =
+  | { kind: "symbol"; symbol: string; companyName: string }
+  | { kind: "market" };
 
-  const textRelevantNews =
-    symbol && companyName
-      ? news.filter((item) => isClearlyAboutRequestedCompany(item, symbol, companyName))
-      : news;
+export const MARKET_NEWS_SCOPE: NewsScope = { kind: "market" };
 
-  const relevantNews = symbolConfirmedNews.length
-    ? symbolConfirmedNews
-    : textRelevantNews.length
-      ? textRelevantNews
-      : news;
+function rankNews(news: NewsItem[], scope: NewsScope) {
+  // ── THE EXCLUSIVE SYMBOL-CONFIRMED BRANCH IS GONE ───────────────────────
+  // It read:
+  //
+  //   const relevantNews = symbolConfirmedNews.length ? symbolConfirmedNews : …
+  //
+  // — if ANY item was symbol-confirmed, only those survived. That is a
+  // PREFERENCE EXPRESSED AS A FILTER, and it deletes everything that cannot
+  // express the preference (claude/traps/a-preference-that-filters.md).
+  //
+  // articleMatchesRequestedSymbol reads fmpSymbolMatched / fmpSymbols, and only
+  // lib/server/news/fmpProvider.ts ever writes them. After the provider flip no
+  // live item can carry them, so the branch selected EXACTLY the pre-flip
+  // records still in the persistent store and discarded the whole free-stack
+  // feed: FAST rendered 2 cards from 86 fetched items, both five weeks old,
+  // while its own score panel counted 14 headlines from the last 14 days.
+  //
+  // NOTHING IS LOST BY REMOVING IT, because the confirmed set was never adding
+  // members: isClearlyAboutRequestedCompany returns true for a symbol-confirmed
+  // item on its first line, so confirmed ⊆ text-relevant, always. The branch
+  // only ever removed things.
+  //
+  // ── AND IT IS NOT REPLACED BY A SORT KEY, YET ───────────────────────────
+  // Promoting rather than excluding is the right shape and is what makes it
+  // safe for any adapter to stamp the field — which is exactly what
+  // secProvider.ts currently has to refuse. But promoting on fmpSymbolMatched
+  // TODAY would promote STALENESS: nothing live writes it, so every item
+  // carrying it predates the flip by construction, and a sort key that orders
+  // old before new while looking like it orders relevant before irrelevant is
+  // the same bug in a better hat.
+  //
+  // So it is INERT while no live adapter writes the field, and
+  // scripts/check-news-relevance-scope.mjs asserts both halves: that rankNews
+  // does not branch or sort on it, AND that no active adapter stamps it. The
+  // day one does, that assertion fails and says to reconsider promotion — the
+  // tripwire points both ways on purpose.
+  const relevantNews =
+    scope.kind === "market"
+      ? news
+      : (() => {
+          const textRelevant = news.filter((item) =>
+            isClearlyAboutRequestedCompany(item, scope.symbol, scope.companyName)
+          );
+          // The empty case is unchanged: a symbol whose feed matches nothing
+          // still gets its feed rather than a blank page.
+          return textRelevant.length ? textRelevant : news;
+        })();
 
   return dedupeNews(
     [...relevantNews].sort((a, b) => {
@@ -1231,7 +1611,17 @@ export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult
     };
   }
 
-  const ranked = rankNews(news);
+  // MARKET SCOPE, STATED. This is the second half of the divergence and it is
+  // DELIBERATELY UNCHANGED here: the score computes over every stored item,
+  // including ones no relevance rule would keep. Correcting it moves a
+  // user-visible number on 2,620 pages and deserves its own before/after rather
+  // than arriving inside an outage fix. Filed separately.
+  //
+  // What the fix above DOES guarantee is that the feed and the score now differ
+  // only in their WINDOW (14 days here, 45 on the feed), not in their relevance
+  // set — once this call is narrowed. Until then the explicit argument is what
+  // stops the difference being invisible.
+  const ranked = rankNews(news, MARKET_NEWS_SCOPE);
   // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
   // the two treatments differ for a reason rather than by oversight. "Chokshi &
   // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
@@ -2199,7 +2589,7 @@ async function buildStockNewsBaseData(
     ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
 
-  const rankedNews = rankNews(news, upper, companyName);
+  const rankedNews = rankNews(news, { kind: "symbol", symbol: upper, companyName });
   const rankedEarningsNews = rankEarningsNews(earningsNews);
 
   const keywordNewsScore = scoreNews(news);

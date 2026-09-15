@@ -31,6 +31,7 @@
 // adapter built in step 5, which already resolves a symbol to a CIK and lists
 // its filings. That is a separate piece of work and is not started here.
 import snapshotFile from "@/data/static-profile.json";
+import cikMap from "@/data/cik-map.json";
 
 export type StaticProfileRow = {
   sector: string | null;
@@ -176,3 +177,57 @@ export function resolveProfileBulk(
 
   return out;
 }
+
+/**
+ * CIK coverage: how many profiled symbols the SEC adapter can actually serve.
+ *
+ * WHY THIS IS A NUMBER ON A PAGE RATHER THAN A LOG LINE. A symbol with no CIK
+ * gets [] from the SEC leg on every render, forever, and says so only through a
+ * per-request console.warn. That made a 73.5% gap invisible for as long as it
+ * existed (claude/cik-map-coverage-2026-09-14.md): 1,924 of 2,619 profiled
+ * symbols had no entry, because the map was built against the PICKERS universe
+ * while the adapter is called for any symbol with a stock page.
+ *
+ * Both inputs are JSON imported at build time, so this is arithmetic over two
+ * module-level objects — no Redis, no fetch, and safe on a page that must stay
+ * cheap.
+ */
+const CIK_BY_SYMBOL = cikMap as unknown as Record<string, string>;
+
+/**
+ * Coverage as a FUNCTION over both maps, not as three constants.
+ *
+ * WHY IT IS A FUNCTION. The first version computed the constants inline, and a
+ * mutation replacing the membership count with `Math.min(mapSize, profileSize)`
+ * SURVIVED the checker — because the CIK map is a strict subset of the snapshot
+ * today, so the shortcut returns the same number. It stops being the same number
+ * the moment the map is widened past the snapshot, at which point the figure
+ * quietly goes wrong (and `missing` goes negative) with nothing to catch it.
+ *
+ * A constant can only be compared against the data that produced it. A function
+ * can be handed a case where the two implementations disagree — which is exactly
+ * what scripts/check-static-profile.mjs now does. Same lesson as
+ * classifyProviderStats in lib/server/news/providerStats.ts.
+ */
+export function cikCoverage(
+  rows: Record<string, unknown>,
+  ciks: Record<string, unknown>
+): { mapSize: number; profiled: number; covered: number; missing: number } {
+  const symbols = Object.keys(rows);
+  // MEMBERSHIP, symbol by symbol. Not a difference of totals: the two agree only
+  // while every CIK symbol is also a profiled one, and nothing enforces that.
+  const covered = symbols.filter((symbol) => symbol in ciks).length;
+  return {
+    mapSize: Object.keys(ciks).length,
+    profiled: symbols.length,
+    covered,
+    missing: symbols.length - covered,
+  };
+}
+
+const COVERAGE = cikCoverage(SNAPSHOT.rows ?? {}, CIK_BY_SYMBOL);
+
+export const CIK_MAP_SIZE: number = COVERAGE.mapSize;
+export const CIK_COVERED: number = COVERAGE.covered;
+/** Profiled symbols with no CIK — each one a permanently empty SEC leg. */
+export const CIK_MISSING: number = COVERAGE.missing;

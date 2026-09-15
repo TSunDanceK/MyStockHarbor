@@ -2,10 +2,11 @@
 //
 // WHAT IS AT RISK. Every one of these is silent:
 //   1. THE ROLLBACK STOPS WORKING. NEWS_PROVIDER=fmp is the owner's flick-back:
-//      re-adding one environment variable restores the old feed with no deploy
-//      and no revert commit. A typo in that one comparison, or an adapter
-//      quietly deleted, and the rollback is a revert instead — discovered at
-//      the moment it is needed.
+//      re-adding one environment variable restores the old feed with no revert
+//      commit and no code change (it does need a production redeploy for the
+//      env read to see it — ~2 min, same commit). A typo in that one
+//      comparison, or an adapter quietly deleted, and the rollback is a revert
+//      instead — discovered at the moment it is needed.
 //   2. THE FLIP NEVER HAPPENS. §8 names this outcome: something fails to
 //      register and the site keeps calling FMP, which is the single thing this
 //      migration exists to stop. Nothing throws. The page still renders.
@@ -126,7 +127,7 @@ console.log("\n=== 2. THE ROLLBACK, WHICH IS THE POINT OF KEEPING FMP ===\n");
 check(
   'NEWS_PROVIDER="fmp" selects the FMP adapter and nothing else',
   idsUnder("fmp") === "fmp",
-  "one environment variable, no deploy, no revert commit — the owner's hard requirement"
+  "one environment variable plus a redeploy, no revert commit — the owner's hard requirement"
 );
 check(
   "the FMP adapter is still in the tree and implements the interface",
@@ -279,12 +280,22 @@ check(
 console.log("\n=== 6. THE SNAPSHOT IS READ BY RUNNING CODE, NOT JUST IMPORTED ===\n");
 
 // The lookup, loaded the same way check-static-profile.mjs loads it.
-const spSrc = read("lib/server/staticProfile.ts").replace(
-  /^import snapshotFile from "@\/data\/static-profile.json";$/m,
-  () => `const snapshotFile = ${read("data/static-profile.json")};`
-);
+const spSrc = read("lib/server/staticProfile.ts")
+  .replace(/^import snapshotFile from "@\/data\/static-profile.json";$/m,
+    () => `const snapshotFile = ${read("data/static-profile.json")};`)
+  // The CIK map, which staticProfile gained when the coverage figures moved
+  // there. Real data rather than a stub, for the same reason as the snapshot:
+  // a stubbed map makes a coverage number that describes the stub.
+  .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
+    () => `const cikMap = ${read("data/cik-map.json")};`);
 if (/^import /m.test(spSrc)) {
-  console.error("FAIL: the snapshot JSON was not inlined into staticProfile.ts.");
+  // NAME THE SURVIVOR. This used to say "the snapshot JSON was not inlined",
+  // which was a guess: the actual cause was a DIFFERENT import being added to
+  // the module, and the message sent the reader to the one thing that was fine.
+  console.error(
+    "FAIL: an import survived inlining into staticProfile.ts:\n" +
+      spSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n")
+  );
   process.exit(1);
 }
 const spFile = path.join(ROOT, ".check-providerflip-sp.mjs");
