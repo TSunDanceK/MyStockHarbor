@@ -250,6 +250,15 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Read-only: WHY a field renders "—" on a given filer. Lists every concept
+  // the filer actually tagged in the period whose name could plausibly be the
+  // figure, with values, and says whether our chain lists it. Answers "chain
+  // gap or not tagged" with evidence instead of a guess.
+  "sec-missing-fields": {
+    script: "scripts/sec-missing-field-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
   // card and how many sets are still on the old quarter window.
