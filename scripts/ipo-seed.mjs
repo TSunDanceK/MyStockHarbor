@@ -222,7 +222,9 @@ for (const q of quarters) {
     seen.add(key);
     if (!byCik.has(cik)) byCik.set(cik, { cik, company: company.trim(), sic: null, filings: [], terms: null });
     const rec = byCik.get(cik);
-    rec.filings.push({ form, date, file });
+    // accession carried for 424B rows only: the EFFECT-notice question is about
+    // whether form.idx and a company's own index.json agree on what was filed.
+    rec.filings.push(/^424B/.test(form) ? { form, date, file, acc: accession } : { form, date, file });
     if (company.trim().length > rec.company.length) rec.company = company.trim();
     kept += 1;
   }
