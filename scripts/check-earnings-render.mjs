@@ -30,21 +30,46 @@ const fixture = (sym) =>
 const M = await loadCards();
 const AAPL = fixture("AAPL");
 const KGC = fixture("KGC");
+const AZN = fixture("AZN");
 const vAapl = M.buildSecEarningsView(AAPL);
 const vKgc = M.buildSecEarningsView(KGC);
+const vAzn = M.buildSecEarningsView(AZN);
 
-/** Every card the page can render, as markup, for one view. */
-const renderAll = (mod, view, symbol) =>
+/**
+ * The cards the PAGE ACTUALLY RENDERS for one view, gated exactly as
+ * page.tsx gates them.
+ *
+ * THE GATING IS PART OF THE SUBJECT, not harness convenience. This used to
+ * render SecNoQuartersCard for every view — a card the page shows only when
+ * there is NO view at all — so the "what does a reader see" text included a
+ * card no reader of that page sees. An assertion about KGC's visible words is
+ * worthless if the harness adds words the page does not.
+ *
+ * Mirrors page.tsx: growth table only on a quarter anchor, annual card always
+ * (`sole` on a year anchor), recent-periods card self-gates on the basis.
+ */
+const renderPage = (mod, view) =>
   [
-    mod.SecSnapshotCard && html(React.createElement(mod.SecSnapshotCard, { view })),
-    view.annualOnly ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
-    html(React.createElement(mod.SecAnnualCard, { view, sole: view.annualOnly })),
+    html(React.createElement(mod.SecSnapshotCard, { view })),
+    view.basis === "year" ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
+    html(React.createElement(mod.SecAnnualCard, { view, sole: view.basis === "year" })),
     html(React.createElement(mod.SecCashQualityCard, { view })),
     html(React.createElement(mod.SecBalanceSheetCard, { view })),
+    html(React.createElement(mod.SecIncomeStatementCard, { view })),
+    // SELF-GATING: returns null on a year anchor. Rendered unconditionally here
+    // BECAUSE that is how the page calls it — if the guard is ever removed this
+    // harness sees the table appear, which is the point.
+    html(React.createElement(mod.SecRecentPeriodsCard, { view })),
     // The five retired ids, each rendered through the real component.
     ...["eps-estimate", "revenue-estimate", "forward-consensus",
         "quarter-estimate-columns", "revenue-by-segment"]
       .map((id) => html(React.createElement(mod.HiddenCard, { id }))),
+  ].join("\n");
+
+/** The page's cards PLUS the no-view state cards, for the banned-term scan. */
+const renderAll = (mod, view, symbol) =>
+  [
+    renderPage(mod, view),
     html(React.createElement(mod.SecNoQuartersCard, { symbol, years: 0, instants: 0 })),
   ].join("\n");
 
@@ -54,6 +79,9 @@ check("both fixtures carry the current quarter window",
   AAPL.w === 12 && KGC.w === 12, `AAPL w=${AAPL.w} KGC w=${KGC.w}`);
 check("AAPL is the DENSE case", AAPL.quarters.length === 12,
   `${AAPL.quarters.length} quarters stored — 12 is what makes 8 rendered rows reachable`);
+check("AZN is the SPARSE QUARTERLY case — 12 stored, a three-quarter hole",
+  AZN.quarters.length === 12 && AZN.years.length === 5 && AZN.w === 12,
+  `q=${AZN.quarters.length} y=${AZN.years.length} w=${AZN.w}`);
 check("KGC is the ANNUAL-ONLY control",
   KGC.quarters.length === 0 && KGC.years.length === 5,
   `q=${KGC.quarters.length} y=${KGC.years.length} — unchanged by the window, which is the point`);
@@ -157,7 +185,7 @@ console.log("\n6. KGC renders a real page, and never a pending one");
   check("nothing on the page reads as waiting",
     !/check back|being fetched|not loaded yet|coming soon/i.test(t));
   check("the quarterly table is not rendered for an annual-only filer",
-    vKgc.annualOnly === true && !/Revenue YoY.*Gross margin.*gap/s.test(t),
+    vKgc.basis === "year" && !/Revenue YoY.*Gross margin.*gap/s.test(t),
     "a quarterly table with no quarters is an empty table");
   check("every annual row names its period end, not only its label",
     vKgc.annual.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.end)) &&
@@ -168,9 +196,169 @@ console.log("\n6. KGC renders a real page, and never a pending one");
     `${vKgc.cashQuality.basis} / ${vKgc.cashQuality.period}`);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+console.log("\n8. an annual-only filer is not described in quarters");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// THE #465 EYE-CHECK FOUND SIX QUARTERLY SENTENCES ON /stock/KGC/earnings, over
+// a page whose every figure is a fiscal year: the lede, the score narrative,
+// the "Latest reported quarter" eyebrow, "Most recent quarter filed: FY2025",
+// "Quarters are labelled by the company's own fiscal calendar", and a "Recent
+// reported quarters" table sitting under a card that said "there is no
+// quarterly table below".
+//
+// THE ASSERTION IS ON THE RENDERED TEXT, NOT ON THE SOURCE, because the defect
+// was never visible in any one file: each sentence was locally reasonable and
+// the page as a whole was not.
+
+/**
+ * The only sentences allowed to say "quarter" on an annual-only filer.
+ *
+ * WHITELISTED BY EXACT SENTENCE, not by a loosened pattern. These exist to tell
+ * the reader the company does NOT file quarterly — the one thing on an annual
+ * page that legitimately needs the word. A regex like /quarterly/ would have
+ * admitted every sentence this section is about.
+ */
+const QUARTER_WHITELIST = [
+  /files annually\s*,? so these are the only periods it publishes — there is no quarterly table below\./,
+  /does not publish a quarterly cash-flow statement\./,
+  /does not file quarterly results/,
+  /is built around the most recent reported/,
+];
+
+/** Sentences of `text` that say "quarter" and are not whitelisted. */
+const strayQuarters = (text) =>
+  text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sent) => /quarter/i.test(sent))
+    .filter((sent) => !QUARTER_WHITELIST.some((ok) => ok.test(sent)))
+    .map((sent) => sent.trim());
+
+{
+  const kgcText = visibleText(renderPage(M, vKgc));
+  const aaplText = visibleText(renderPage(M, vAapl));
+  const stray = strayQuarters(kgcText);
+
+  check("KGC's rendered page says 'quarter' only where it says it does not file them",
+    stray.length === 0,
+    stray.length ? stray.map((x) => `"${x}"`).join(" | ") : "0 stray quarterly sentences");
+
+  // THE CONTROL. "No page says quarter" would also pass if the noun had been
+  // deleted everywhere, which would be a different bug and an equally wrong page.
+  check("...and AAPL, whose anchor IS a quarter, still says so",
+    /quarter/i.test(aaplText) && vAapl.basis === "quarter",
+    `AAPL basis=${vAapl.basis}`);
+
+  check("the recent-periods table renders for AAPL and not for KGC",
+    /Recent reported quarters/.test(aaplText) && !/Recent reported/.test(kgcText),
+    "an annual filer's history IS the five-year card — a second table of the same rows is duplication");
+
+  check("KGC's eyebrow and lede name the year",
+    /Latest reported year/.test(kgcText) && /Most recent year filed: FY2025/.test(kgcText),
+    "the eyebrow read 'Latest reported quarter' over FY2025");
+
+  check("the vocabulary has one entry per basis and no third spelling",
+    Object.keys(M.PERIOD_WORDS).sort().join(",") === "quarter,year",
+    Object.keys(M.PERIOD_WORDS).join(","));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log("\n9. a percentage change across zero is not printed as a number");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// KGC's own filed EPS: FY2021 $0.17, FY2022 -$0.47, FY2023 $0.34. The page
+// rendered -376.5% and +172.3% — the same swing described once as a collapse
+// and once as a boom, both artefacts of a negative base.
+
+{
+  const kgcText = visibleText(renderPage(M, vKgc));
+  const rows = Object.fromEntries(vKgc.annual.map((r) => [r.label, r]));
+
+  check("the two crossing-zero rows are real, and their inputs are filed figures",
+    rows.FY2022?.epsDiluted.val === -0.47 && rows.FY2021?.epsDiluted.val === 0.17 &&
+      rows.FY2023?.epsDiluted.val === 0.34,
+    `FY2021 $${rows.FY2021?.epsDiluted.val} -> FY2022 $${rows.FY2022?.epsDiluted.val} -> FY2023 $${rows.FY2023?.epsDiluted.val}`);
+
+  check("a profit-to-loss year is n/m, not a percentage",
+    rows.FY2022?.epsYoY === "n/m", `FY2022 epsYoY = ${JSON.stringify(rows.FY2022?.epsYoY)}`);
+  check("a loss-to-profit year is n/m, not a percentage",
+    rows.FY2023?.epsYoY === "n/m", `FY2023 epsYoY = ${JSON.stringify(rows.FY2023?.epsYoY)}`);
+
+  // A NUMBER THAT WAS MEANINGFUL MUST STILL PRINT. A guard that suppressed
+  // every EPS comparison would pass the two assertions above and be useless.
+  check("...while a profit-to-profit year still prints its percentage",
+    typeof rows.FY2025?.epsYoY === "number" && /\+153\.2%/.test(kgcText),
+    `FY2025 epsYoY = ${rows.FY2025?.epsYoY}`);
+  check("and revenue, which never crosses zero here, is untouched",
+    vKgc.annual.filter((r) => typeof r.revenueYoY === "number").length === 4,
+    vKgc.annual.map((r) => `${r.label}:${typeof r.revenueYoY}`).join(" "));
+
+  check("the marker reaches the reader with its legend, in visible text",
+    /n\/m/.test(kgcText) && /not meaningful/i.test(kgcText) &&
+      !/-376\.5%/.test(kgcText) && !/\+172\.3%/.test(kgcText),
+    "the two numbers the eye-check found are gone and the marker explains itself");
+
+  // THE LEGEND IS CONDITIONAL, so a page with no n/m cell must not carry it.
+  check("...and a page with no n/m cell does not carry the legend",
+    !/not meaningful/i.test(visibleText(renderPage(M, vAapl))),
+    "a standing legend for a marker that never appears is noise on every other page");
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log("\n10. the THIRD shape — a quarterly anchor whose cash flow is annual");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// AZN is neither of the other two fixtures. It files 20-F/6-K half-yearly, so
+// its ANCHOR is a quarter while its cash-flow statement exists only on 6- and
+// 12-month frames — the cash card falls back to the year while the rest of the
+// page stays quarterly.
+//
+// IT IS THE CASE THE CASH CARD'S FALLBACK PARAGRAPH IS FOR, and it is also the
+// case that made that paragraph wrong on KGC: the paragraph was gated on the
+// CASH basis alone, so an annual-only filer got "every figure here is the full
+// year FY2025, not FY2025" — the same period named twice as if it were two.
+{
+  check("AZN's anchor is a quarter while its cash card is a year",
+    vAzn.basis === "quarter" && vAzn.cashQuality.basis === "year",
+    `anchor ${vAzn.basis} / cash ${vAzn.cashQuality.basis} ${vAzn.cashQuality.period} vs latest ${vAzn.latestLabel}`);
+
+  const aznCash = visibleText(html(React.createElement(M.SecCashQualityCard, { view: vAzn })));
+  const kgcCash = visibleText(html(React.createElement(M.SecCashQualityCard, { view: vKgc })));
+
+  check("the mismatch paragraph renders for AZN, where the two periods differ",
+    /does not publish a quarterly cash-flow statement/.test(aznCash) &&
+      new RegExp(`not ${vAzn.latestLabel}`).test(aznCash),
+    `cash ${vAzn.cashQuality.period} against anchor ${vAzn.latestLabel}`);
+
+  check("...and NOT for KGC, where they are the same period",
+    !/does not publish a quarterly cash-flow statement/.test(kgcCash) &&
+      vKgc.cashQuality.period === vKgc.latestLabel,
+    `KGC cash ${vKgc.cashQuality.period} IS its anchor ${vKgc.latestLabel} — "the full year FY2025, not FY2025"`);
+
+  // AND THE SPARSE QUARTERLY SHAPE STILL MATCHES BY LABEL, not by offset —
+  // this is the fixture the original YoY defect was measured on.
+  const byLabel = vAzn.growth.filter((g) => {
+    const m = /^Q(\d) FY(\d+)$/.exec(g.label);
+    const b = /^Q(\d) FY(\d+)$/.exec(g.comparedWith ?? "");
+    return m && b && m[1] === b[1] && Number(m[2]) - 1 === Number(b[2]);
+  }).length;
+  check("every AZN row with a comparator compares against its own fiscal quarter, one year back",
+    byLabel === vAzn.growth.filter((g) => g.comparedWith).length && byLabel === 8,
+    `${byLabel} of ${vAzn.growth.length} rows — this is the filer whose table read "+75.9% Compared with Q2 FY2021" against a latest of Q2 FY2025`);
+
+  check("AZN still reads as quarterly throughout, which is correct for it",
+    /quarter/i.test(visibleText(renderPage(M, vAzn))) && vAzn.basis === "quarter");
+}
+
 console.log("\n7. the three mutations, each re-rendered from broken source");
 
 {
+  // The exact text loadCards transpiles, so "did the mutation apply" is asked
+  // of the same string the mutation is handed — not of one file out of three.
+  const cardsSrc = [
+    fs.readFileSync("lib/server/secEarningsView.ts", "utf8"),
+    fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8"),
+  ].join("\n");
   const render = async (mutate) => {
     const mod = await loadCards(mutate);
     const v = mod.buildSecEarningsView(AAPL);
@@ -227,6 +415,62 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   check("(b) a null coalesced to 0 is caught",
     dashesMutated < dashesNow && /\+0\.0%/.test(b.text),
     `${dashesNow} dashes become ${dashesMutated}; "+0.0%" now appears where a figure was absent`);
+
+  // ── (d) THE BASIS IS FORCED BACK TO "quarter" ───────────────────────────
+  //
+  // The brief's mutation for defect 1. If every noun really does come from the
+  // anchor, pinning the anchor to "quarter" must put the quarterly sentences
+  // back on KGC — and if any noun is still a literal, this mutation cannot
+  // move it and the section-8 assertion was never testing anything.
+  //
+  // MUTATED WHERE THE VIEW PUBLISHES THE BASIS, not where it picks the anchor.
+  // Forcing the ANCHOR to quarters makes buildSecEarningsView return null for
+  // KGC (it has none) and the render throws — which tests that the anchor
+  // matters, not that the nouns follow it. Forcing the PUBLISHED field leaves
+  // the annual data in place and lies to the cards about what kind of period it
+  // is, which is precisely the state the page shipped in.
+  const forceQuarter = (src) =>
+    src.replace(
+      "  return {\n    symbol: set.symbol,",
+      '  const forcedBasis: PeriodBasis = "quarter";\n  return {\n    symbol: set.symbol,'
+    ).replace("\n    basis,\n", "\n    basis: forcedBasis,\n");
+  check("the force-quarter mutation actually applied", forceQuarter(cardsSrc) !== cardsSrc);
+  const dMod = await loadCards(forceQuarter);
+  const dView = dMod.buildSecEarningsView(KGC);
+  const dStray = strayQuarters(visibleText(renderPage(dMod, dView)));
+  check("(d) MUTATION: forcing the basis to 'quarter' puts the quarterly wording back on KGC",
+    dView.basis === "quarter" && dStray.length > 0,
+    `${dStray.length} stray quarterly sentences return — ` +
+      dStray.slice(0, 3).map((x) => `"${x}"`).join(" | "));
+  check("...including the table that should not exist for an annual filer",
+    /Recent reported quarters/.test(visibleText(renderPage(dMod, dView))),
+    "the guard is on the basis, so the mutation restores the table too");
+
+  // ── (e) THE n/m GUARD IS REMOVED ────────────────────────────────────────
+  //
+  // The brief's mutation for defect 2: with the guard gone, KGC's FY2022 and
+  // FY2023 cells must show a percentage again. The numbers asserted are the
+  // ones the eye-check read off the preview, and they are NOT supplied to the
+  // renderer — they are what the unguarded arithmetic produces from the filed
+  // EPS figures.
+  const dropNmGuard = (src) =>
+    src.replace(
+      "  if (then <= 0 || now < 0) return NOT_MEANINGFUL;\n",
+      ""
+    ).replace(
+      "  return ((now - then) / then) * 100;",
+      "  if (then === 0) return null;\n  return ((now - then) / Math.abs(then)) * 100;"
+    );
+  check("the n/m-guard mutation actually applied", dropNmGuard(cardsSrc) !== cardsSrc);
+  const eMod = await loadCards(dropNmGuard);
+  const eView = eMod.buildSecEarningsView(KGC);
+  const eText = visibleText(renderPage(eMod, eView));
+  check("(e) MUTATION: without the guard, the crossing-zero cells print percentages again",
+    /-376\.5%/.test(eText) && /\+172\.3%/.test(eText),
+    "the same swing rendered once as a collapse and once as a boom — both from a negative base");
+  check("...and the legend disappears with them, so it cannot be a standing decoration",
+    !/not meaningful/i.test(eText),
+    "the note is conditional on a marker actually being present");
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();

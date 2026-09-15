@@ -147,8 +147,13 @@ check("the cards render a derived mark from it",
 const codecEarly = fs.readFileSync("lib/server/secFactCodec.ts", "utf8");
 check("period labels come from periodLabel, which is fiscal",
   /periodLabel/.test(readCodeOnly(VIEW)) && /FY\$\{p\.fy\}/.test(codecEarly));
+// THE SENTENCE MOVED INTO THE VOCABULARY, so the assertion follows it. It is
+// now one entry per basis in PERIOD_WORDS — and BOTH must carry it, because the
+// annual filer is the one that had a quarterly sentence over annual figures.
 check("and the page says the labels are the company's own fiscal calendar",
-  /own fiscal calendar/.test(cardsRaw));
+  (readCodeOnly(VIEW).match(/labelled: "[^"]*own (fiscal calendar|year-end)[^"]*"/g) ?? []).length === 2 &&
+    /\{w\.labelled\}/.test(cardsRaw),
+  "one sentence per basis, rendered from the view rather than written in the card");
 
 console.log("\n6. no zeros standing in for missing data");
 
@@ -291,7 +296,7 @@ console.log("\n7c. the score cannot claim an input it did not read");
     `guarded block ${guardEnd - guardAt}b, ${outsideGuard.length}b outside it — ` +
       "both the good and the weak phrasing must be inside the one branch");
   check("the score reports WHICH components it could not read",
-    /unavailable: scoreGaps\(ran\)/.test(pageRaw) && /function scoreGaps/.test(pageRaw),
+    /unavailable: scoreGaps\(ran, basis\)/.test(pageRaw) && /function scoreGaps/.test(pageRaw),
     "a count would hide the one that mattered");
   check("...and the page renders that list on the score card itself",
     /score\.available && score\.unavailable\.length/.test(pageRaw),
@@ -307,6 +312,41 @@ console.log("\n7c. the score cannot claim an input it did not read");
   check("the side-column cash bullet is conditional too",
     /score\.unavailable\.includes\(SCORE_COMPONENTS\.cashConversion\)/.test(pageRaw),
     "it read as a claim on a page where the chain is empty");
+}
+
+/**
+ * THE SCORER, LIFTED AND RUNNABLE — built once, used by every section that
+ * needs to RUN it rather than read it.
+ *
+ * Two sections lift the same scorer (7e's period-mixing arithmetic and 7g's
+ * bands), and two copies of a 12-line lift is two chances to lift a different
+ * subset and assert against different code.
+ */
+async function liftScorer() {
+  const consts = [...pageRaw.matchAll(/^const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
+    .map((m) => `const ${m[1]} = ${m[2].replace(/ as const$/, "")};`).join("\n");
+  // NOTE: `consts` above already picks up SCORE_BANDS — it matches every
+  // top-level `const SCORE_*`. Lifting it a second time declares it twice and
+  // the module throws, so the type annotation is stripped in place instead.
+// THE PERIOD VOCABULARY COMES WITH IT. scoreExplanation and scoreGaps read
+// periodWords, and scoreFromSec narrows its inputs with isPct — lifting the
+// scorer without them throws at call time rather than asserting anything.
+const vocab = [
+  (readCodeOnly(VIEW).match(/export const PERIOD_WORDS[\s\S]*?\n\};/) ?? [""])[0]
+    .replace("export const", "const").replace(/: Record<[\s\S]*?\}> =/, " ="),
+  (readCodeOnly(VIEW).match(/export const periodWords = [^;]+;/) ?? [""])[0].replace("export const", "const"),
+  (readCodeOnly(VIEW).match(/export const NOT_MEANINGFUL = [^;]+;/) ?? [""])[0].replace("export const", "const"),
+  (readCodeOnly(VIEW).match(/export const isPct = [^;]+;/) ?? [""])[0].replace("export const", "const"),
+].join("\n");
+const scoreComponentsSrc = (pageRaw.match(/const scoreComponents = \(basis: PeriodBasis\)[\s\S]*?\n\};/) ?? [""])[0];
+return lift(
+    [vocab, scoreComponentsSrc, consts.replace(/: \{ tone: EarningsTone; label: string; from: number \}\[\]/, ""), grabFunction(pageRaw, "clamp"), grabFunction(pageRaw, "toneLabel"),
+   grabFunction(pageRaw, "bandFor"),
+   grabFunction(pageRaw, "scoreExplanation"), grabFunction(pageRaw, "scoreGaps"),
+   grabFunction(pageRaw, "buildScoreResult"), grabFunction(pageRaw, "scoreFromSec"),
+ grabFunction(pageRaw, "scoreBandNote")].join("\n") +
+    "\nexport { scoreFromSec, scoreComponents, toneLabel, bandFor, scoreBandNote };"
+);
 }
 
 console.log("\n7d. an absent component leaves the scale — it is not a penalty");
@@ -348,7 +388,16 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
   // every reachable maximum clears STRONG with room, and the actual figures are
   // printed so the 96 and the 98 are on the record rather than hidden by a
   // loosened bound.
-  const strongAt = Number((pageRaw.match(/rounded >= (\d+) \? "good"/) ?? [])[1]);
+  // FROM THE BAND TABLE, which is now the only place a threshold is written.
+  // The old regex read `rounded >= 66 ? "good"` out of an inline ternary; that
+  // ternary is gone and a regex that matches nothing returns NaN, which every
+  // comparison then fails — silently, in the direction that looks like a real
+  // finding. Reading the table is both correct and impossible to half-match.
+  const strongAt = Number(
+    (pageRaw.match(/\{ tone: "good", label: "[^"]*", from: (\d+) \}/) ?? [])[1]
+  );
+  check("the STRONG threshold is readable from the band table",
+    Number.isFinite(strongAt), `top band starts at ${strongAt}`);
   const reachable = Object.fromEntries(Object.keys(maxes).map((k) => [
     k,
     Math.min(100, seed + Object.entries(maxes).filter(([x]) => x !== k)
@@ -360,8 +409,8 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
       JSON.stringify(reachable));
   check("...and an absent component contributes exactly zero, not a default",
     /const pts = sc/.test("") ||
-      /if \(s\.revenueYoY != null\) contribute\(/.test(pageRaw) &&
-      /if \(s\.epsYoY != null\) contribute\(/.test(pageRaw) &&
+      /if \(isPct\(s\.revenueYoY\)\) contribute\(/.test(pageRaw) &&
+      /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(pageRaw) &&
       /if \(s\.netIncome\.val != null\) contribute\(/.test(pageRaw) &&
       /if \(opMargins\.length >= 2\) \{\s*contribute\(/.test(pageRaw) &&
       /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(pageRaw),
@@ -421,17 +470,10 @@ console.log("\n7e. the cash card is ONE period, and says which");
   // annual net income, then against the quarterly one — and the difference is
   // the inflation the period rule exists to prevent. No fixture supplies an
   // expected score; both numbers come out of the scorer.
-  const consts = [...pageRaw.matchAll(/^const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
-    .map((m) => `const ${m[1]} = ${m[2].replace(/ as const$/, "")};`).join("\n");
-  const scorer = await lift(
-    [consts, grabFunction(pageRaw, "clamp"), grabFunction(pageRaw, "toneLabel"),
-     grabFunction(pageRaw, "scoreExplanation"), grabFunction(pageRaw, "scoreGaps"),
-     grabFunction(pageRaw, "buildScoreResult"), grabFunction(pageRaw, "scoreFromSec")].join("\n") +
-      "\nexport { scoreFromSec };"
-  );
   // AZN's real shape: annual operating cash flow 14.575bn, annual net income
   // 10.225bn, quarterly net income 2.45bn. The accrual is the same either way;
   // only the denominator moves.
+  const scorer = await liftScorer();
   const shape = (basis, period, ni) => ({
     snapshot: { revenueYoY: 11.75, epsYoY: 26.6, netIncome: { val: 2.45e9 } },
     margins: [{ operating: 5.0 }, { operating: 21.5 }, { operating: 21.2 }, { operating: 24.3 }],
@@ -562,6 +604,95 @@ console.log("\n7g. explanations a phone can read, and three periods declared");
     `${days} days — below this the two dates coincide and the line would be noise`);
   check("the spread is computed in the view, where a check can read it",
     /balanceSheetSpreadDays:/.test(fs.readFileSync(VIEW, "utf8")));
+}
+
+console.log("\n7h. the band the number falls in, and the period it was built on");
+
+// ── THE #465 EYE-CHECK: KGC READ "100/100" UNDER A PILL SAYING "Good" ──────
+// ...above a gauge whose axis was labelled Weak / Mixed / STRONG. Two
+// vocabularies for one scale, and the axis named a top band the pill could
+// never produce, so a perfect score looked as though it had fallen short.
+//
+// NOT A CLAMP BUG. `tone` is derived from `rounded` — the same clamped value
+// the card prints — which the first assertion below pins by RUNNING the scorer
+// past the top of the scale rather than by reading the source.
+{
+  const scorer2 = await liftScorer();
+  const bands = [...pageRaw.matchAll(/\{ tone: "(\w+)", label: "([^"]+)", from: (\d+) \}/g)]
+    .map((m) => ({ tone: m[1], label: m[2], from: Number(m[3]) }));
+  check("there is ONE band table, with a threshold on every band",
+    bands.length === 3 && bands.every((b) => Number.isFinite(b.from)),
+    bands.map((b) => `${b.label}>=${b.from}`).join(" "));
+
+  // THE AXIS READS THE TABLE. A hardcoded axis is the defect itself, so the
+  // assertion is that no band label is written out in the JSX.
+  check("the gauge axis is rendered FROM the table, not written out",
+    /scoreLabels[\s\S]{0,200}SCORE_BANDS[\s\S]{0,120}map\(/.test(pageRaw) &&
+      !/<span>Weak<\/span>/.test(pageRaw),
+    "Weak/Mixed/Strong as literals is how the axis and the pill drifted apart");
+
+  // AND NO BAND NAME EXISTS THAT THE PILL CANNOT PRODUCE.
+  const pillLabels = bands.map((b) => scorer2.toneLabel(b.tone));
+  check("every label the axis can show is one the pill can show",
+    pillLabels.length === bands.length &&
+      bands.every((b, i) => pillLabels[i] === b.label),
+    `axis: ${bands.map((b) => b.label).join("/")} | pill: ${pillLabels.join("/")}`);
+
+  // ── CLAMPED, AND THE BAND FOLLOWS THE CLAMPED VALUE ─────────────────────
+  // KGC's real arithmetic overflows the scale: 50 + 22 + 20 + 6 + 10 + 4.59.
+  // The score prints 100 and the band must be the band for 100, not for 112.
+  const over = scorer2.scoreFromSec({
+    basis: "year",
+    snapshot: { revenueYoY: 36.95, epsYoY: 153.25, netIncome: { val: 2.3901e9 } },
+    margins: [{ operating: 2.77 }, { operating: 3.41 }, { operating: 18.9 }, { operating: 29.92 }, { operating: 46.48 }],
+    cashQuality: { accruals: 1.3704e9, netIncome: { val: 2.3901e9 }, basis: "year", period: "FY2025" },
+  });
+  const top = bands[0];
+  check("a score that overflows the scale prints 100 and lands in the top band",
+    over.score === 100 && over.label === top.label,
+    `${over.score}/100 -> "${over.label}"; raw sum was ${(over.seed + Object.values(over.contributions).reduce((a, b) => a + b, 0)).toFixed(2)}`);
+  check("...and the thresholds are stated on the card rather than left implicit",
+    new RegExp(`${top.label} is ${top.from} and above`).test(scorer2.scoreBandNote()) &&
+      /scoreBandNote\(\)/.test(pageRaw),
+    scorer2.scoreBandNote());
+
+  // ── POINT 5: THE SCORE SAYS WHICH KIND OF PERIOD IT READ ────────────────
+  check("an annual filer's score carries its basis, and the card renders it",
+    over.basis === "year" && /score\.basis === "year"/.test(pageRaw) &&
+      /files annually<\/strong>, so this score is built on its fiscal/.test(pageRaw),
+    "a reader comparing an annual score with a 10-Q filer's has to be told they differ");
+  check("...and the component names follow it too",
+    /the prior fiscal year/.test(scorer2.scoreComponents("year").revenueGrowth) &&
+      /same quarter a year earlier/.test(scorer2.scoreComponents("quarter").revenueGrowth),
+    `year: "${scorer2.scoreComponents("year").revenueGrowth}"`);
+
+  // ── AND AN n/m NEVER REACHES THE ARITHMETIC ─────────────────────────────
+  // KGC's FY2023 EPS swing out of a loss computed as +172.3%, which
+  // clamp(v * 0.30, -20, 20) turns into the FULL +20 — the largest single
+  // contribution the scale allows — for an artefact of a negative base.
+  const withNm = scorer2.scoreFromSec({
+    basis: "year",
+    snapshot: { revenueYoY: 22.71, epsYoY: "n/m", netIncome: { val: 3.0e8 } },
+    margins: [{ operating: 3.41 }, { operating: 18.9 }],
+    cashQuality: { accruals: null, netIncome: { val: null }, basis: "year", period: "FY2023" },
+  });
+  const withNumber = scorer2.scoreFromSec({
+    basis: "year",
+    snapshot: { revenueYoY: 22.71, epsYoY: 172.34, netIncome: { val: 3.0e8 } },
+    margins: [{ operating: 3.41 }, { operating: 18.9 }],
+    cashQuality: { accruals: null, netIncome: { val: null }, basis: "year", period: "FY2023" },
+  });
+  check("an n/m EPS change contributes NOTHING to the score",
+    withNm.contributions.epsGrowth === undefined,
+    `contributions: ${JSON.stringify(withNm.contributions)}`);
+  check("...and the identical shape with a real number DOES contribute, so the guard is not blanket",
+    withNumber.contributions.epsGrowth === 20 &&
+      withNumber.score - withNm.score === 20,
+    `+${withNumber.contributions.epsGrowth} points, ${withNumber.score} vs ${withNm.score} — ` +
+      "the exact points a sign flip out of a loss used to buy");
+  check("and the n/m component is listed as unmeasured rather than silently dropped",
+    withNm.unavailable.some((u) => /EPS growth/.test(u)),
+    withNm.unavailable.join("; "));
 }
 
 console.log("\n8. the population path");
