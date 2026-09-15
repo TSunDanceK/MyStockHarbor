@@ -37,6 +37,19 @@
 // that it worked: both are live S&P 500 mega-caps, and an eviction path that
 // treated "no new bars" as "delisted" would have silently removed two of them
 // from the guaranteed slots. The alarm raised them instead and a human checked.
+// ARM WAS ADDED HERE ON 2026-09-15 AND REMOVED THE SAME DAY. Worth one note,
+// because the reasoning changed rather than the facts.
+//
+// It was added because it had no manifest entry, no CIK and therefore no
+// earnings page at all, and the only alternative on the table -- the lazy cold
+// path -- was step 8 and unscheduled. The cold path then moved ahead of step 8
+// and shipped (lib/server/secColdFetch.ts), so an off-universe symbol now
+// fetches its own data on first render. ARM needs no entry here to have a page,
+// and it is not a top-100 US company by market cap, which is what this list is.
+//
+// The general point: a symbol does NOT need to be in this list to have a
+// working page any more. Add names here because they belong in the guaranteed
+// mega-cap slots, not to make a page work.
 export const PRESET_UNIVERSE: string[] = [
   "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY",
   "JPM","V","UNH","XOM","PG","MA","COST","HD","MRK","ABBV",

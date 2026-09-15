@@ -54,6 +54,13 @@ let src = read("lib/server/news/secProvider.ts")
   .replace(/^import \{ secUserAgent \} from ".\/userAgent";$/m,
     () => read("lib/server/news/userAgent.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  // The spelling helper, INLINED FROM ITS REAL SOURCE rather than stubbed. It
+  // is a .mjs in lib/ precisely so both the app and the scripts run one
+  // implementation; a stub here would be a second one, and this harness's
+  // whole subject is cikFor's spelling behaviour -- it would be testing the
+  // stub. `export` is stripped for the same reason as the modules above.
+  .replace(/^import \{[^}]*\} from "@\/lib\/symbolSpellings\.mjs";$/m,
+    () => read("lib/symbolSpellings.mjs").replace(/^export /gm, ""))
   .replace("const CIK_BY_SYMBOL = cikMap as Record<string, string>;", "const CIK_BY_SYMBOL = cikMap;")
   .replace("export const secProvider: NewsProvider =", "export const secProvider =")
   .replace(/export function parseSubmissions\(\n  body: SubmissionsShape,\n  symbol: string,\n  nowMs = Date.now\(\)\n\): NewsItem\[\] \{/,
@@ -505,8 +512,19 @@ check(
     // The dashed spelling is canonical everywhere this repo stores data. A
     // two-way normalisation would make the dotted form look equally valid,
     // which is the habit that caused this in the first place.
-    const code = readCodeOnly("lib/server/news/secProvider.ts");
-    return /upper\.includes\("\."\)/.test(code) && !/replace\(\/-\/g, "\."\)/.test(code);
+    //
+    // ASSERTED BY CALLING IT, NOT BY GREPPING IT. This used to match the
+    // literal `upper.includes(".")` and went red when the guard moved into
+    // lib/symbolSpellings.mjs -- while the behaviour was unchanged. It also
+    // would have passed a rewrite that kept the phrase and broke the rule.
+    // Both maps are crafted so ONLY the forbidden direction could produce a
+    // hit: DASHED_ONLY has no dotted key, DOTTED_ONLY has no dashed one.
+    const DASHED_ONLY = { "BRK-B": "0001067983" };
+    const DOTTED_ONLY = { "BRK.B": "0001067983" };
+    const dottedReachesDashed = sec.cikFor("BRK.B", DASHED_ONLY) === "0001067983";
+    const dashedReachesDotted = sec.cikFor("BRK-B", DOTTED_ONLY) !== undefined;
+    const exactStillWins = sec.cikFor("BRK-B", DASHED_ONLY) === "0001067983";
+    return dottedReachesDashed && !dashedReachesDotted && exactStillWins;
   })(),
   "one canonical spelling, one direction of tolerance"
 );

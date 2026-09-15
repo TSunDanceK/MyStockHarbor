@@ -1400,11 +1400,45 @@ for (const [dead, live] of [["MMC", "MRSH"], ["FI", "FISV"]]) {
       `because it died — both are live S&P 500 mega-caps`
   );
 }
+// THE PROPERTY IS "NOTHING WAS LOST", NOT "THE COUNT IS 100".
+//
+// This pinned 100 exactly, and the stated reason is about DROPS: "a rename that
+// dropped a name instead of replacing it would leave a guaranteed slot empty".
+// A pinned equality catches that, but it also blocks every legitimate ADDITION
+// -- and it went red on the one that added ARM, which had no manifest entry, no
+// CIK and therefore no earnings page at all.
+//
+// So it asserts the floor and the named members instead. A rename that drops a
+// name still fails (the count falls below 100, and the dropped symbol is gone
+// from the roll below); an addition does not.
+const presetSymbols = presets.match(/"[A-Z][A-Z0-9.]*"/g) ?? [];
 check(
-  "the preset list is still the size the header claims",
-  (presets.match(/"[A-Z][A-Z0-9.]*"/g) ?? []).length === 100,
-  "~100 largest US companies; a rename that dropped a name instead of " +
-    "replacing it would leave a guaranteed slot empty"
+  "the preset list has not lost names",
+  presetSymbols.length >= 100,
+  `${presetSymbols.length} names — the header claims ~100 largest US companies, ` +
+    `and a rename that dropped one instead of replacing it would leave a ` +
+    `guaranteed slot empty. Additions are fine; losses are not.`
+);
+// The count alone cannot tell a drop from a swap, so the mega-caps that would
+// be most visibly wrong are named. Not the whole list: a roll that has to be
+// edited for every legitimate change is a roll nobody keeps accurate.
+// ARM IS DELIBERATELY NOT HERE. It was added to the preset list on 2026-09-15
+// to give it a page at all, and removed the same day when the cold path shipped
+// and made that unnecessary. Listing it would re-assert a membership that was
+// withdrawn on purpose.
+const MUST_HOLD = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK.B", "JPM"];
+const lost = MUST_HOLD.filter((sym) => !presetSymbols.includes(`"${sym}"`));
+check(
+  "and still holds every name a drop would be most visible on",
+  lost.length === 0,
+  lost.join(", ") || `${MUST_HOLD.length} checked — the names whose absence would ` +
+    `be most visible, so a rename that drops one instead of replacing it fails here ` +
+    `even though the count-only assertion above would not`
+);
+check(
+  "no symbol appears twice",
+  new Set(presetSymbols).size === presetSymbols.length,
+  "a duplicate consumes two guaranteed slots for one company"
 );
 
 console.log(

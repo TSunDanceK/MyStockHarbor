@@ -38,6 +38,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { emitPayload } from "./lib/relay-capture.mjs";
 import { rankCandidates } from "./lib/sec-title-match.mjs";
+import { symbolSpellings, lookupSpellingIn } from "./lib/symbol-spellings.mjs";
 import {
   NASDAQ_LISTED_URL,
   OTHER_LISTED_URL,
@@ -73,7 +74,7 @@ const universe = [...new Set([...pickers, ...Object.keys(profile.rows ?? {})])].
 // The dot/dash fallback is applied HERE TOO, or BRK.B would be reported as
 // unresolved and a human would be asked to adjudicate a bug that is already
 // fixed at the lookup (lib/server/news/secProvider.ts cikFor).
-const resolved = (s) => Boolean(cikMap[s] ?? (s.includes(".") ? cikMap[s.replace(/\./g, "-")] : undefined));
+const resolved = (s) => Boolean(lookupSpellingIn(cikMap, s));
 const unresolved = universe.filter((s) => !resolved(s));
 
 // ── COMPANY NAMES: THE NASDAQ TRADER DIRECTORY, NOT THE DUMP ──────────────
@@ -375,7 +376,7 @@ const findRow = (sym) =>
   nasdaqRows.find((r) => r.symbol === sym || r.altSymbol === sym) ??
   otherRows.find((r) => r.symbol === sym || r.altSymbol === sym);
 for (const symbol of universe) {
-  const row = findRow(symbol) ?? (symbol.includes("-") ? findRow(symbol.replace(/-/g, ".")) : undefined);
+  const row = symbolSpellings(symbol).map(findRow).find(Boolean);
   if (row) snapshot[symbol] = row.rawName;
 }
 console.log(`[titles] company-name snapshot: ${Object.keys(snapshot).length}/${universe.length} universe symbols`);

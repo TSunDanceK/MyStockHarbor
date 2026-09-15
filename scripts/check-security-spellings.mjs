@@ -247,15 +247,44 @@ check("a bad-word list on 'Preferred' would catch only 3 of the 9 non-common nam
 //                                dump uses. Its subject IS the dot/dash pair;
 //                                routing it through the helper would make it
 //                                study the helper instead.
-const EXEMPT = new Set(["phase0-adjustment-probe.mjs", "step0-analyse-dump.mjs"]);
+const EXEMPT = new Set([
+  "phase0-adjustment-probe.mjs", "step0-analyse-dump.mjs",
+  // NOT A JOIN. buildFmpSymbol constructs an FMP *API symbol* (BRK.B -> BRK-B)
+  // for a URL, the same category as phase0's stooq filenames: it has one
+  // correct output rather than a list of candidates to try, and routing it
+  // through a widening helper would be meaningless at best. Exempt with the
+  // reason stated rather than the bar lowered.
+  "historyCache.ts",
+]);
 // BOTH DIRECTIONS. The first version of this regex matched only the dot->dash
 // form and reported "no script rolls its own" while four dash->dot sites
 // remained -- a check reporting success while testing less than it claimed,
 // which is the failure mode named in check-sec-daily-index.mjs's header.
 const ROLLED_OWN = /replace\(\/\\\.\/g,\s*"-"\)|replace\(\/-\/g,\s*"\."\)/;
-const copies = fs.readdirSync("scripts").filter((f) => f.endsWith(".mjs"))
-  .filter((f) => !EXEMPT.has(f) && f !== "check-security-spellings.mjs")
-  .filter((f) => ROLLED_OWN.test(fs.readFileSync(`scripts/${f}`, "utf8")));
+// SCANS lib/ TOO, NOT JUST scripts/. The helper moved to lib/symbolSpellings.mjs
+// so the application could import it -- seedManifest needed it and a helper the
+// app cannot reach is a helper the app reimplements. A scan that still looked
+// only at scripts/ would not notice the next copy appearing in app code, which
+// is now the likelier place for one.
+const CANONICAL = "lib/symbolSpellings.mjs";
+// RECURSIVE. The first version listed three directories by hand and missed
+// lib/server/news/secProvider.ts -- which sec-title-candidates.mjs's own
+// comment points at as the place the fallback already lives. A scan that
+// enumerates directories finds copies only in the directories someone thought
+// of, which is the wrong half of the problem.
+const walk = (dir, out = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`;
+    if (e.isDirectory()) walk(rel, out);
+    else if (/\.(mjs|ts|tsx)$/.test(e.name)) out.push(rel);
+  }
+  return out;
+};
+const scan = [...walk("scripts"), ...walk("lib"), ...walk("app")];
+const copies = scan
+  .filter((f) => !EXEMPT.has(f.split("/").pop()) && !f.endsWith("check-security-spellings.mjs"))
+  .filter((f) => f !== CANONICAL)
+  .filter((f) => ROLLED_OWN.test(fs.readFileSync(f, "utf8")));
 check("no script rolls its own security-join spelling any more",
   copies.length === 0,
   copies.join(", ") || `${EXEMPT.size} exempt with stated reasons; the rest use the helper`);

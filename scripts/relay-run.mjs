@@ -178,6 +178,17 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
+  // and diffs every extracted number against the frozen FMP ground truth in the
+  // dump. Needs the dump for the FMP side and the network for the SEC side, and
+  // the sandbox is refused data.sec.gov with 403 CONNECT. Lifts secFields.ts and
+  // secExtract.ts, so type erasure needs the TypeScript compiler.
+  "sec-extract": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
   // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
   // image CDN whether it actually holds a logo for each symbol in the union
   // universe. The CDN needs no API key, so this belongs in the uncredentialled
@@ -185,6 +196,39 @@ const TASKS = {
   // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
   // `exchange` is in static-profile.json's absentFields.blocked.
   "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
+  // Read-only: what one symbol COSTS to populate — fetch, parse, extract,
+  // encode — measured sequentially and paced exactly as the route paces it, so
+  // SEC_POPULATE_PER_RUN is sized against a number rather than an estimate.
+  // Needs the dump for the universe and the network for companyfacts.
+  "sec-populate-cost": {
+    script: "scripts/sec-populate-cost.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
+  // Read-only: does the page read IFRS filings now, and what is left when it
+  // does. Runs the SHIPPED extractor over the ten FPIs that measured as empty
+  // plus the universe FPIs the brief named plus a us-gaap control, and reports
+  // which mapped ifrs-full tags never hit and which published tags nothing
+  // maps. No dump, no credential; needs the network and the TypeScript
+  // compiler for the lift.
+  "sec-ifrs": {
+    script: "scripts/sec-ifrs-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
+  // Read-only: runs the SHIPPED view builder and the SHIPPED scorer over real
+  // companyfacts and prints what a reader would see — the snapshot card's
+  // strings, the growth table row by row with its base disclosed, and the
+  // score with the components it could not read. Prints the OLD q[i+4] base
+  // beside the new one so "unchanged for a dense filer" is checked rather than
+  // asserted. Also diagnoses an empty cash-flow chain against the payload.
+  // No dump, no credential; needs the network and the TypeScript compiler.
+  "sec-period-match": {
+    script: "scripts/sec-period-match-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
