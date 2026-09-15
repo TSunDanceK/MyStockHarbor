@@ -92,7 +92,12 @@ for (let round = 1; round <= ROUNDS; round += 1) {
       // card, so the body is inspected for the marker even though it is never
       // printed.
       const marker =
-        /does not file the financial data/.test(body) ? "no-xbrl"
+        // THE THREE no-data CARDS, TOLD APART. They were one card until the
+        // IFRS work, and lumping them again would let a measurement report
+        // "not renderable" for a page that is in fact saying the right thing.
+        /reports in [A-Z]{3}/.test(body) ? "currency"
+        : /has not filed XBRL financial statements/.test(body) ? "no-xbrl"
+        : /does not read .*filings yet/.test(body) ? "not-read-yet"
         : /financials are being fetched/.test(body) ? "PENDING"
         : /latest earnings snapshot/.test(body) ? "rendered"
         : res.status === 404 ? "404"
