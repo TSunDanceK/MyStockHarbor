@@ -725,3 +725,115 @@ the END of the array, where `q[i+4]` is out of bounds and both rules return
 null. Restoring the fallback left it **passing**. It now tests a series where
 FY2024 is absent and `q[i+4]` is a real period five years back — where the two
 rules give different answers — and it fails on the mutation.
+
+---
+
+## §19 The 80 was a sum, not a fifth — and annual cash needed a period lock
+
+### Q1 — AZN's points, measured
+
+"80 is exactly four fifths, so one of five components is absent" is a plausible
+reading of a total, and it had to be answered with the addends. The scorer now
+reports its own arithmetic (`seed` + `contributions`), so the probe reads the
+points rather than inferring them:
+
+```
+AZN      seed 50
+  revenueGrowth    +6.46  (range ±22)
+  epsGrowth        +7.98  (range ±20)
+  profitability    +6.00  (range ±6)
+  marginTrend     +10.00  (range ±10)
+  cashConversion   +3.40  (range ±10)     <- now runs, on annual figures
+sum 83.84 -> 84/100
+```
+
+**The scale is a seed plus signed contributions, not a percentage over a
+denominator.** The earlier 80 was `50 + 6.46 + 7.98 + 6.00 + 10.00 = 80.44`,
+four components summing to 80 — coincidence, not four fifths. Subtracting the
+new cash term from 84 returns exactly that.
+
+**And an absent component is neutral, not a penalty.** Reachable maxima with
+each component removed, derived by `check-sec-earnings-page` from the declared
+ranges:
+
+```
+revenueGrowth 96   epsGrowth 98   profitability 100   marginTrend 100   cashConversion 100
+```
+
+The four non-cash components sum to +58, so 50 + 58 = 108 clamps to 100: **a
+filer with no cash chain can still reach 100.** The two figures below 100 are
+the dominant growth terms, and they are a lower ceiling from having fewer
+signals, not a deduction — every reachable maximum clears STRONG (≥66) by more
+than 20 points, which is the property the check asserts. My first version of
+that check demanded 100 for all five and FAILED on those two; loosening the
+bound would have hidden them, so the actual figures are printed instead.
+
+Points, membership and the recorded amount are now one act (`contribute()`), and
+the check asserts there is exactly one `score +=` in the file.
+
+### Q2 — annual cash, with the period locked
+
+Taken. A permanently empty Quality of Earnings card is worse than the annual
+figures, and the data genuinely cannot yield a 90-day cell.
+
+**The trap was real and is now measured, not argued.** Running the shipped
+scorer over one shape twice — the same annual cash flow against the annual net
+income, then against the quarterly one:
+
+```
+periods matched   cashConversion +3.40 of a possible 10   ->  84/100
+periods mixed     cashConversion +10.00 (pinned at max)   ->  90/100
+```
+
+Six points bought by dividing an annual cash flow by a quarterly profit. A
+single `cashFrom` period selects **every** figure on the card — operating cash
+flow, capex, free cash flow, net income and share-based compensation — with no
+per-row fallback, because a card assembled row-by-row from whichever period
+happened to have a value is exactly that mixed comparison.
+
+It says so in three places:
+
+- the heading is the card's own period, `FY2025`, not `Q2 FY2025`;
+- a line above the rows: *"AZN does not publish a quarterly cash-flow statement
+  … every figure on this card — including the net income it is compared
+  against — is the full year FY2025, not Q2 FY2025"*;
+- the narrative: *"…margins are holding and reported profit is backed by cash
+  **over FY2025**."*
+
+With no cash chain at all the sentence still reads *"…and the quarter was
+profitable"* and claims nothing.
+
+### Q3 — 7 SYMBOLS, 8 FILINGS
+
+Both numbers were right and the docblock implied one count. Every figure now
+names its unit, and the check asserts each separately: 7 symbols
+(BEN CRL DOCU DT GS RSG VTRS), 8 amending filings across them — BEN filed two
+13D/A, which is the whole of the difference.
+
+### Q4 — reconcile lookups routed, and the venue split eliminated
+
+`reconcileCiks()` and `reconcileExchanges()` now go through `lookupBySpelling`,
+as `seedManifest` does. BRK.B was being counted as `absentFromMap`, which is not
+a gap in the map but a gap in the lookup.
+
+**It does not move the venue split, and here is why rather than an assurance.**
+Measured over 2,592 candidate universe keys (the preset plus every symbol in the
+committed company-name snapshot), **exactly one** symbol is newly resolvable —
+BRK.B, NYSE. So the change can add at most **+1 to NYSE** and cannot move any
+symbol between venues, because a lookup that finds a row cannot reclassify one.
+
+The gap runs the other way and is larger: manifest NYSE 476 / Nasdaq 216 against
+#448's 466 / 230 — ten **more** NYSE and fourteen **fewer** Nasdaq. Adding one
+NYSE makes the NYSE side worse. The totals differ too (692 against 696), so the
+two counts are over different populations. **This is not the cause; it is
+eliminated, not merely unconfirmed.**
+
+### Two of my own checks went stale on my own edit
+
+`no cash wording sits outside that guard` and `an absent input adds no points`
+were pinned to spellings I changed in this round — `score +=` became
+`contribute()`, and the clause became a template literal. Both now assert
+containment and behaviour instead. The first then failed a second time, on my
+own docblock, which *quotes* the sentence it documents; it reads the
+comment-stripped source now. Mutation-verified: moving the clause outside the
+guard fails it.
