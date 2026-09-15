@@ -15,6 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
+import { SEC_QUARTER_WINDOW } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
@@ -71,6 +72,16 @@ export type StoredFactSet = {
   c?: string;
   /** Currencies a mapped tag was published in and refused. See rowsForField. */
   cu?: string[];
+  /**
+   * The QUARTER RETENTION WINDOW this set was written under.
+   *
+   * NOT a gate — `h` is the gate, and it does not move for a window change, so
+   * a set written at 8 stays perfectly readable. This exists so the cron can
+   * SELECT sets written under an older window without reading every one of
+   * them: the manifest entry carries the same number, so the queue is picked
+   * from one key. Absent means 8, the window before this field existed.
+   */
+  w?: number;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -129,6 +140,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     tx: result.taxonomies,
     c: secChainsHash(),
     cu: result.refusedUnits,
+    w: SEC_QUARTER_WINDOW,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };
