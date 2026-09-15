@@ -7,14 +7,24 @@
 
 Two counts of the same universe's listing venue do not agree:
 
-|  | NYSE | Nasdaq | (unknown) | universe |
+|  | NYSE | Nasdaq | other / unresolved | universe |
 |---|---|---|---|---|
-| manifest exchange histogram (live, today) | 476 | 216 | 4 | 696 |
-| #448 / `listing-split.mjs` | 463 | 230 | — | 693 |
+| manifest exchange histogram (live, today) | 476 | 216 | 4 unknown | **696** |
+| #448 / `listing-split.mjs` | 463 + 3 SEC-only = 466 | 230 | 4 UNRESOLVED | **700** |
 
-Nasdaq is **14 lower** and NYSE **13 higher** than the figure the
-32.9%-by-count / **62.5%-by-dollar-volume** licensing case rests on. The split is
-that case's denominator.
+**Correction, 2026-09-14:** an earlier version of this file gave #448's universe
+as 693. That was wrong — it came from adding only the NYSE and Nasdaq rows of
+#448's table and dropping its `UNRESOLVED 4` and `NYSE (SEC only) 3`. #448's own
+headline is "*The 700* is a third Nasdaq by count", and its rows sum to 700. The
+frozen dump holds 700 symbols in both the 2026-09-12 and 2026-09-13 captures
+(the 2026-09-13 one resolves 696 of them to a CIK). So the universe gap is
+**700 dump vs 696 live manifest — the live set is SMALLER, not larger**, which
+is the opposite of what this file previously said.
+
+Nasdaq is **14 lower** and NYSE **10 higher** (476 against 466, once #448's
+SEC-only rows are counted) than the figure the 32.9%-by-count /
+**62.5%-by-dollar-volume** licensing case rests on. The split is that case's
+denominator.
 
 Nothing moved today — this run reported `exchangesChanged: 0`, `unchanged: 692`.
 **The two sources have never agreed.** The `(unknown) 4` are BK, EA, EQR and WBS
@@ -34,8 +44,9 @@ files, read by different rules:
   prefers another source. Its "Nasdaq" means *that cell says Nasdaq*.
 
 A symbol can be counted Nasdaq by one and NYSE by the other with neither file
-being corrupt. And the two runs cover **different symbol counts** (696 vs 693),
-so part of a 13/14 delta could be membership rather than classification.
+being corrupt. And the two runs cover **different symbol counts** (696 live vs
+700 in the dump), so part of the delta could be membership rather than
+classification.
 
 **Totals that disagree do not say which one is wrong, and do not even say what
 kind of disagreement it is.** Subtracting one histogram from the other and
