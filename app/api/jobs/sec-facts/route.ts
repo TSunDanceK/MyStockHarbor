@@ -110,10 +110,13 @@ export const SEC_POPULATE_PER_RUN = 300;
  * backlog earnings season produces, so the migration would stall precisely
  * when the pages are being read.
  *
- * 759 SYMBOLS at 5 a run is ~152 days. Slow on purpose; raise it once the
- * populate backlog is clear.
+ * SIZED FROM THE DRAIN, not picked. 759 SYMBOLS at 5 a run — the figure
+ * suggested in the brief — is 152 days, which is not a migration, it is a
+ * permanent state. At 25 it is ~31 days: still small enough that it never
+ * competes with work a reader is waiting on (reverify takes 150 and populate
+ * 300 in the same run), and short enough to actually finish.
  */
-export const SEC_REWINDOW_PER_RUN = 5;
+export const SEC_REWINDOW_PER_RUN = 25;
 
 /** SEC asks for at most 10 requests a second with a declared User-Agent. */
 const MIN_GAP_MS = 125;
