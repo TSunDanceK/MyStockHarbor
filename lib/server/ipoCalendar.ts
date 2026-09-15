@@ -21,6 +21,12 @@
 // separately below.
 
 import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
+import { buildSecIpoTables } from "./ipoSecSource";
+import { readStoredIpoFilings } from "./ipoSecStore";
+// Re-exported so the cadence/staleness constants stay discoverable from the
+// module that owns the page's data, even though the rule itself lives with the
+// other exclusions.
+export { IPO_TERMS_MAX_AGE_DAYS } from "./ipoExclusions";
 import { fmpFetch } from "./fmpUsage";
 
 // How often the IPO calendar is re-read from FMP.
@@ -43,34 +49,6 @@ import { fmpFetch } from "./fmpUsage";
 // what holds the literal to this value.
 export const IPO_REVALIDATE_SECONDS = 24 * 60 * 60;
 
-// How stale a "terms set, not yet priced" filing may be before the upper table
-// drops it. OWNER DECISION, 2026-09-14.
-//
-// WHY A CAP IS NEEDED AT ALL. A shelved deal has exactly the same shape as a live
-// one -- terms filed, no final prospectus -- so without this it sits under
-// "Upcoming IPOs" forever, and the page states something false about a company
-// for as long as the page exists. The formal withdrawal form (RW/AW) does NOT
-// solve it: measured over 2026-05-17..2026-09-14 it caught 3 of 56. Issuers that
-// lose their window overwhelmingly just stop filing. THE CAP IS THE PRIMARY
-// MECHANISM AND RW/AW IS THE EDGE CASE, not the other way round.
-//
-// WHY 45 AND NOT THE MEDIAN. Measured amendment -> final prospectus was a median
-// of 7 days and an upper bound of 14. This is keyed off the UPPER BOUND, not the
-// median: 45 is a bit over 3x the longest gap actually observed, so a live deal
-// is very unlikely to be cut. Keying off the median would have cut live deals.
-//
-// The population it was chosen against (53 companies, after removing 172
-// already-listed issuers filing resales and 3 withdrawals):
-//
-//     <=7d    1    2%        <=45d   +7   40%   <<< the cap
-//     <=14d   5   11%        <=60d  +10   58%
-//     <=21d   3   17%        <=90d  +11   79%
-//     <=30d   5   26%       <=120d  +11  100%
-//
-// THAT 100% AT 120 DAYS IS AN ARTEFACT. The measurement window was 120 days, so
-// nothing older was visible -- the real tail is longer. Do not read the table as
-// evidence that no deal goes quiet for more than four months.
-export const IPO_TERMS_MAX_AGE_DAYS = 45;
 
 export type ConfirmedIpo = {
   // ROW IDENTITY, AND IT IS NOT THE SYMBOL. A company that has filed to list but
@@ -221,7 +199,62 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   };
 }
 
+// ── The SEC branch ─────────────────────────────────────────────────────────
+//
+// SAME CONTRACT, SAME THROW-VS-EMPTY DISCIPLINE as the FMP branch below: a read
+// that could not answer THROWS, and a genuinely quiet window returns []. readFeed
+// treats the two completely differently -- a throw serves the last good copy, a []
+// is published as "nothing scheduled" -- so collapsing them is how a broken read
+// becomes a confident empty page.
+//
+// The store is populated out of band (the daily-index refresh path), never by a
+// render: form.idx is 39.3 MB a quarter and the page must not touch it. The
+// render reads what is stored, exactly as the news path does.
+async function fetchSecIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
+  const records = await readStoredIpoFilings();
+  if (records === null) {
+    // NOT []. A missing store is "could not answer", the same category as a
+    // missing FMP_API_KEY -- and the same bug if it is reported as "no IPOs".
+    throw new Error(
+      "IPO_PROVIDER=sec but no stored SEC filing records were found. The " +
+        "daily-index refresh has not run, or its key is wrong. This is a failed " +
+        "read, not a quiet market."
+    );
+  }
+
+  const windowDays = Math.max(
+    1,
+    Math.round(
+      (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
+    )
+  );
+  const { upcoming, recent } = await buildSecIpoTables(records, windowDays);
+
+  // BOTH TABLES FROM ONE READ. The caller still asks for a date range because
+  // the FMP branch needs one; on this branch the split is derived from each
+  // filer's own history (see ipoSecSource.ts) and the range only sizes the
+  // window. Which half to return is decided by the direction of the range --
+  // `from` in the future means the forward table.
+  const todayIso = toIsoDate(new Date());
+  return from >= todayIso ? upcoming : recent;
+}
+
+// WHICH SOURCE THE PAGE RUNS ON. Default "fmp" -- unchanged behaviour until the
+// env var is set, which is the owner's standing rule: reversible by a switch,
+// not a rewrite.
+//
+// AN ENV CHANGE NEEDS A PRODUCTION REDEPLOY TO BE SEEN. That is not a guess; it
+// is the correction #453 had to make after the NEWS_PROVIDER flip appeared not
+// to take effect. Setting this in the Vercel dashboard and waiting will not do
+// anything on its own.
+export type IpoProvider = "fmp" | "sec";
+
+export function ipoProvider(): IpoProvider {
+  return process.env.IPO_PROVIDER === "sec" ? "sec" : "fmp";
+}
+
 async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
+  if (ipoProvider() === "sec") return fetchSecIpoRows(from, to);
   const apiKey = process.env.FMP_API_KEY;
   // Throwing (rather than returning []) is deliberate: readFeed treats a throw
   // as "could not answer" and a [] as "genuinely none". A missing key is the
