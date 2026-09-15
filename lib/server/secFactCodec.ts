@@ -165,6 +165,8 @@ export function ttm(quarters: StoredPeriod[], key: string): number | null {
  */
 export function periodLabel(p: StoredPeriod | null | undefined): string {
   if (!p) return "—";
-  if (p.fp && p.fy) return `${p.fp === "FY" ? "FY" : p.fp} FY${p.fy}`;
+  // "FY2026" for an annual period, "Q3 FY2026" for a quarter. The first
+  // version produced "FY FY2026".
+  if (p.fp && p.fy) return p.fp === "FY" ? `FY${p.fy}` : `${p.fp} FY${p.fy}`;
   return p.e;
 }

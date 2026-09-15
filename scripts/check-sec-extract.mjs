@@ -356,6 +356,61 @@ check("a FILED per-period EPS still wins over the computed one",
   at(naQ1, "epsBasic")?.derived === "as-filed" && at(naQ1, "epsBasic")?.val === 2);
 
 // ── 7. the tag-change guard ─────────────────────────────────────────────────
+console.log("\n6c. fiscal period labels");
+
+// THE DEFECT THIS SECTION EXISTS FOR, found by rendering the page's own output
+// rather than by a check. companyfacts' `fy`/`fp` describe the FILING, not the
+// period: reading them put "Q1 FY2027" on ARM's June 2025 quarter and gave AAPL
+// TWO ROWS LABELLED "Q3 FY2026" -- 2026-06-27 and 2025-06-28 -- in one
+// eight-row table.
+//
+// REAL FISCAL CALENDARS, from the five probe symbols' own filings. Not invented
+// dates: the year-ends are 26 Sep, 31 Mar, 28 Aug, 2 Aug and 31 Dec, and three
+// of the five are 52/53-week filers whose year-end moves a few days annually.
+const CALENDARS = [
+  ["AAPL", "2026-09-26",
+    ["2026-06-27", "2026-03-28", "2025-12-27", "2025-09-27", "2025-06-28", "2025-03-29", "2024-12-28", "2024-09-28"],
+    "Q3 FY2026|Q2 FY2026|Q1 FY2026|Q4 FY2025|Q3 FY2025|Q2 FY2025|Q1 FY2025|Q4 FY2024"],
+  ["ARM", "2026-03-31",
+    ["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30", "2025-03-31"],
+    "Q1 FY2027|Q4 FY2026|Q3 FY2026|Q2 FY2026|Q1 FY2026|Q4 FY2025"],
+  ["MU", "2026-08-28",
+    ["2026-05-28", "2026-02-26", "2025-11-27", "2025-08-28", "2024-08-29"],
+    "Q3 FY2026|Q2 FY2026|Q1 FY2026|Q4 FY2025|Q4 FY2024"],
+  ["ASTS", "2025-12-31",
+    ["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"],
+    "Q2 FY2026|Q1 FY2026|Q4 FY2025|Q3 FY2025"],
+];
+for (const [sym, anchor, ends, want] of CALENDARS) {
+  const got = ends.map((e) => { const f = mod.fiscalLabel(e, anchor); return `${f.fp} FY${f.fy}`; }).join("|");
+  check(`${sym}: every quarter labelled by its own fiscal calendar`, got === want, got);
+}
+
+// THE PROPERTY THAT FAILED IN THE RENDER: no two rows in one table share a
+// label. Asserted directly, because "the labels look right" is how the last
+// version passed review.
+for (const [sym, anchor, ends] of CALENDARS) {
+  const labels = ends.map((e) => { const f = mod.fiscalLabel(e, anchor); return `${f.fp} FY${f.fy}`; });
+  check(`${sym}: no two quarters carry the same label`,
+    new Set(labels).size === labels.length, labels.join(" "));
+}
+
+// A 52/53-week filer's year-end moves a few days a year. An exact match would
+// push every year-end quarter into the NEXT fiscal year and label Q4 as Q1.
+check("a year-end four days off the anchor still reads Q4",
+  (() => { const f = mod.fiscalLabel("2025-09-27", "2026-09-26"); return f.fp === "Q4" && f.fy === 2025; })(),
+  JSON.stringify(mod.fiscalLabel("2025-09-27", "2026-09-26")));
+check("...and one a full quarter off does NOT",
+  mod.fiscalLabel("2025-06-28", "2026-09-26").fp === "Q3",
+  "the tolerance is wider than calendar drift and far narrower than a quarter");
+check("with no annual frame to anchor on, it labels nothing rather than guessing",
+  mod.fiscalLabel("2026-06-30", null).fp === null);
+
+// AND THE SOURCE SIDE: pack() must not read the row's own fy/fp again.
+check("pack() does not read fy or fp off the companyfacts row",
+  !/fp: row\?\.fp|fy: .*row\?\.fy/.test(extractCode),
+  "those describe the filing, not the period it covers");
+
 console.log("\n7. the ASC 606 boundary");
 
 // Differencing two frames that resolved to DIFFERENT tags subtracts one concept
