@@ -19,7 +19,7 @@
 // universe, and it is unreadable from here anyway (no Upstash credentials in
 // this job, by design). Per constraint 6 the candidate set is the union of:
 //
-//   data/company-names.json   2,592  Nasdaq symdir snapshot
+//   data/company-names.json   2,610  Nasdaq symdir snapshot
 //   data/static-profile.json  2,619  sector/industry only
 //   lib/curatedSymbols.ts       161  sitemap + "Explore More Stocks";
 //                                    33 of these are in NEITHER file, and are
