@@ -189,3 +189,101 @@ nothing now, but they are the ASC 606 mechanism working on real data.
 
 The multi-class `ambiguous` branch was **not exercised** — none of the five is a
 multi-class filer. It remains tested only against the check's own rows.
+
+---
+
+## 5. After the fixes — run [34945335355](https://github.com/TSunDanceK/MyStockHarbor/actions/runs/34945335355), head `bf82efc`
+
+### CORRECTION to §2 above
+
+I reported **"revenue: 33 of 33 mapped quarters AGREE"**. The quarter figure was
+**25/25**. The 33 was 25 quarter revenues plus 8 TTM aggregates, conflated by a
+tally that took one verdict per row — the same defect recorded as D6. Every
+revenue comparison did agree at 0.00%, which is what the conclusion rested on;
+the count attached to it was wrong.
+
+### D1 / D1b — fixed and measured
+
+```
+sharesBasic    {"as-filed":6,"null":2}   negative: 0     x5 symbols
+sharesDiluted  {"as-filed":6,"null":2}   negative: 0     x5 symbols
+epsBasic       {"as-filed":6,"null":2}   negative: 0     (ASTS: computed 6)
+epsDiluted     {"as-filed":6,"null":2}   negative: 0     (ASTS: computed 6)
+
+null rate: 10/40 (25%) on each of the four, identical for every symbol
+```
+
+**25% is exactly right, and it is the cost stated plainly:** eight quarters
+contain two Q4s, Q4 is never filed as a three-month frame, and nothing is
+derived to fill it. So **the recent-quarters table will show a blank EPS and a
+blank share count on one quarter in four.** No negative share counts anywhere.
+
+ASTS shows `computed: 6` because it publishes only `EarningsPerShareBasicAndDiluted`
+and that chain entry now exists — the value is `netIncome / sharesBasic` for the
+same quarter, and it is negative on all six because ASTS loses money. The probe's
+first version asserted "never negative" on all four fields and failed ASTS six
+times for being accurate; that assertion is now scoped to the share counts.
+
+### D2 — fixed, and the owner's assertion passes on all five
+
+```
+[D2] PASS instant series holds 8 balance-sheet dates (want 8)   x5
+[D2] PASS no period row carries only one field                  x5
+STRUCTURAL ASSERTIONS: 40/40 pass
+```
+
+Previously AAPL, MU and PLAB stored four. `coverShares` is now symbol-level with
+its own asOf: ARM 2026-03-31, AAPL 2026-07-17, MU 2026-06-17, PLAB 2026-09-03 —
+three of the five sit well after the period end, which is exactly why they were
+displacing balance sheets.
+
+### Section 2 — the five identities, pass rates over 5 symbols
+
+| identity | pass | fail | skipped | of checkable |
+|---|---|---|---|---|
+| `assets = liabilities + equity` | 40 | 0 | 0 | **100%** |
+| `grossProfit = revenue − costOfRevenue` | 32 | 0 | 8 | **100%** |
+| `operatingIncome = grossProfit − operatingExpenses` | 27 | 5 | 8 | 84% |
+| `operating + investing + financing + fx = netChangeInCash` | 39 | 1 | 0 | 98% |
+| `cashEnd − cashStart = netChangeInCash` | 32 | 3 | 5 | 91% |
+
+Two of these were at 80% and 86% before the run above, and **both failures named
+their own cause:**
+
+- **PLAB failed the balance sheet on 8 of 8 by ~23%.** It carries a large
+  noncontrolling interest; the identity balances only against TOTAL equity.
+  `totalEquity` is now a separate field — merging it into `stockholdersEquity`
+  would have fixed the identity by changing what the page calls equity.
+- **MU failed the cash identity twice and ASTS three times, once by 27.5%.**
+  `netChangeInCash` is filed against one of two cash concepts and the balance was
+  always read on the plain one. The winning tag is on the cell, so the identity
+  reads it and picks the matching balance; `cashIncludingRestricted` exists to
+  have one to pick.
+
+### What still fails, with its residual
+
+- **`operatingIncome`, 5 of 32** — ARM −7.0M and −6.0M, MU −39M, −112M, −33M.
+  Always negative, which means the stored opex breakdown does not capture
+  everything those filers expense (restructuring, impairments, amortisation of
+  intangibles). **It does not make `operatingIncome` wrong** — that is taken as
+  filed. It means the P&L's own lines will not sum to it for those quarters, and
+  the page must not present the breakdown as complete.
+- **`cashEnd − cashStart`, 3 of 35** — all ASTS, residuals 64M / 21M / 20M on
+  multi-billion balances.
+- **the cash-flow reconciliation, 1 of 40** — ASTS 2025-06-30, residual 1.2M.
+
+### The frame diagnostic answered the ASTS gaps — they are not chain gaps
+
+Last run left three "the chain names a tag the filer publishes, yet nothing came
+through" puzzles, and I was about to guess at new tags. Printing the frames each
+tag actually carries settled all three:
+
+```
+!! OperatingIncomeLoss IS published — USD[17] 2020-07-01..2020-09-30 ... 2021-01-01..2021-03-31
+!! EffectOfExchangeRateOnCashAndCashEquivalents IS published — USD[8] 2021-01-01..2021-06-30 ... 2022-01-01..2022-03-31
+!! RevenueFromContractWithCustomerExcludingAssessedTax IS published — USD[29] ... mostly annual, through 2024
+```
+
+**ASTS stopped tagging all three years ago.** The extraction is right to leave
+them null and the identities are right to report `skipped`. No chain change is
+warranted, and one would have been made without this.
