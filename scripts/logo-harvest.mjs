@@ -303,8 +303,28 @@ async function harvest(symbol) {
       };
     }
 
-    // Asked of the TRIMMED copy, because that is what will be encoded and shown.
-    const chip = await invisibleOnChip(trimmed.buf);
+    // ── THE BACKING DECISION IS MADE ON WHAT SHIPS, NOT ON THE SOURCE ───
+    // Render the plain version first and judge THAT. Deciding on the
+    // full-resolution trimmed source instead put four marks -- AN, AVT, IHS,
+    // CDNS -- on the wrong side of the line: downscaling to 72px averages
+    // neighbouring pixels and pulls variation down, so a mark that clears the
+    // threshold at 250px can land under it at 72px and ship as a faint smudge.
+    // The asset that ships is the one the reader sees, so it is the one the
+    // test has to be run against.
+    const plain = await sharp(trimmed.buf)
+      .resize({
+        width: target,
+        height: target,
+        fit: "contain",
+        // Transparent padding, and withoutEnlargement so the no-upscale rule
+        // holds even for a source that is narrow but tall.
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+        withoutEnlargement: true,
+      })
+      .png()
+      .toBuffer();
+
+    const chip = await invisibleOnChip(plain);
     const needsBacking = chip.invisible;
 
     let out;
@@ -327,18 +347,7 @@ async function harvest(symbol) {
         .webp({ quality: 90, effort: 6 })
         .toBuffer();
     } else {
-      out = await sharp(trimmed.buf)
-        .resize({
-          width: target,
-          height: target,
-          fit: "contain",
-          // Transparent padding, and withoutEnlargement so the no-upscale rule
-          // holds even for a source that is narrow but tall.
-          background: { r: 0, g: 0, b: 0, alpha: 0 },
-          withoutEnlargement: true,
-        })
-        .webp({ quality: 90, effort: 6 })
-        .toBuffer();
+      out = await sharp(plain).webp({ quality: 90, effort: 6 }).toBuffer();
     }
 
     // The same test again on the encoded result, which is where the brief asks
