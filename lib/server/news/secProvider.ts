@@ -32,7 +32,7 @@ import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
 import { secUserAgent } from "./userAgent";
 import type { NewsItem, NewsProvider } from "./types";
-import { lookupSpellingIn } from "@/lib/symbolSpellings.mjs";
+import { lookupOneWay, toDashed } from "@/lib/symbolSpellings.mjs";
 
 const CIK_BY_SYMBOL = cikMap as Record<string, string>;
 
@@ -281,11 +281,12 @@ export function cikFor(
   symbol: string,
   ciks: Record<string, string> = CIK_BY_SYMBOL
 ): string | undefined {
-  // Through the shared helper. This line was written out locally in five
-  // places, and the copy that was MISSING -- seedManifest's -- is what left
-  // BRK.B with no CIK at all and therefore no page. One generator, so a new
-  // spelling rule reaches every join instead of four of them.
-  return lookupSpellingIn(ciks, symbol.trim().toUpperCase())?.value;
+  // Through the shared helper, and ONE-WAY on purpose. The CIK map has a
+  // single canonical spelling -- the dash -- so a dotted symbol may reach a
+  // dashed key and a dashed miss must NOT reach a dotted one. Routing this
+  // through the full candidate list widened it in both directions, and
+  // check-sec-adapter.mjs caught it the same run.
+  return lookupOneWay(ciks, symbol, toDashed);
 }
 
 /**
