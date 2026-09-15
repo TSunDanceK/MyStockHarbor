@@ -7,6 +7,43 @@
 // are shaped exactly as EDGAR serves them and carry the filings the probe
 // observed on those dates.
 //
+// A CHECK THAT CAN PRODUCE ITS OWN EXPECTED VALUE IS NOT A CHECK.
+//
+// Three instances in one day, all of which reported PASS while testing nothing:
+//
+//   1. §17's fixture was built from the same 281 and 127 it then asserted, with
+//      forms dealt by a modulo-5 round robin. It reproduced its own typed-in
+//      loop bounds and was reported as a replay of a real EDGAR window.
+//   2. scripts/listing-venue-diff.mjs would have agreed with itself had it
+//      reimplemented parseTickerFile instead of LIFTING it -- a capture that
+//      parses with its own code is not evidence about the shipped parser.
+//   3. scripts/check-taxonomy-reference.mjs imported its generator, whose
+//      top-level write re-ran at import: it regenerated data/taxonomy.json and
+//      then compared the file to itself. It passed forever and detected nothing.
+//
+// THE REMEDY, generally: the subject must be produced by something the check
+// cannot influence, and the check must be shown to FAIL. For (3) that was an
+// entry-point guard on the generator's write, verified by corrupting the file
+// and watching the assertion go red. An assertion never observed failing is an
+// assertion of unknown value.
+//
+// Ask of every new check: could this pass if the code under test were deleted?
+//
+// STRIPPED SOURCE vs RAW SOURCE, AND WHICH TO READ.
+//
+//   An assertion about BEHAVIOUR reads readCodeOnly() -- comments stripped --
+//   so a rule named in a comment cannot satisfy a check about the code. That is
+//   the trap this repo has a doc for (grep-finds-the-comment-not-the-code).
+//
+//   An assertion about a COMMENT reads the raw file. Several checks here verify
+//   that a REASON WAS RECORDED -- a spec citation, a cost argument, a note of
+//   what was considered and rejected -- because the defects being guarded
+//   shipped precisely when nothing said why. Those must read raw.
+//
+// Reading the stripped copy for one of those failed exactly as it should have,
+// and it will again: when a check asserts a reason is present, reach for
+// fs.readFileSync, not readCodeOnly.
+//
 // WHAT THE FIXTURE DOES AND DOES NOT PROVE. It is SELF-CONSISTENT: the manifest
 // and the index rows use the same CIKs, so it proves the intersection, the form
 // classification, the 403 handling and the watermark arithmetic. It does NOT
@@ -15,6 +52,7 @@
 // data/sec/README.md).
 //
 //   node scripts/check-sec-daily-index.mjs
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
@@ -39,11 +77,16 @@ const idx = await lift(
     grabFunction(INDEX_SRC, "toYyyymmdd"), grabFunction(INDEX_SRC, "addDays"),
     grabFunction(INDEX_SRC, "isWeekend"), grabFunction(INDEX_SRC, "latestProcessableDate"),
     grabFunction(INDEX_SRC, "isAmendment"), grabFunction(INDEX_SRC, "isPeriodicForm"),
+    // Lifted from source, not re-declared in a prelude. §17b re-derives the
+    // pre-fix gate from these two, so a hand-written copy would be testing the
+    // copy rather than the shipped predicate.
+    grabFunction(INDEX_SRC, "isRereadOnlyForm"),
     grabFunction(INDEX_SRC, "accessionFrom"), grabFunction(INDEX_SRC, "parseDailyIndex"),
     grabFunction(INDEX_SRC, "looksLikeMissingIndex"), grabFunction(INDEX_SRC, "intersect"),
   ].join("\n") +
-    "\nexport { quarterOf, dailyIndexUrl, addDays, isWeekend, latestProcessableDate, isAmendment, isPeriodicForm, accessionFrom, parseDailyIndex, looksLikeMissingIndex, intersect };",
+    "\nexport { quarterOf, dailyIndexUrl, addDays, isWeekend, latestProcessableDate, isAmendment, isPeriodicForm, isRereadOnlyForm, accessionFrom, parseDailyIndex, looksLikeMissingIndex, intersect };",
   `const PERIODIC_FORMS = ["10-Q","10-K","20-F","6-K"];
+   const REREAD_ONLY_FORMS = ["8-K"];
    const DISSEMINATION_CLOSE_MINUTES_ET = 22*60;
    let __ET = { minutesOfDay: 23*60 };
    const getEasternParts = () => __ET;
@@ -944,37 +987,311 @@ check("no isXBRL discriminator was built", !/isXBRL/.test(manifestCode) && !/isX
 // financial form, 154 whose only filings are noise -- and a quarter of those
 // noise filings AMENDED, which is the case the taxonomy had no word for.
 console.log("\n17. Only financial forms queue");
-const wSyms = [], wCik = new Map();
-for (let i = 0; i < 281; i++) { const x = "W" + i; wSyms.push(x); wCik.set(x, { cik: String(i).padStart(10, "0"), exchange: "NYSE" }); }
-const wm = man.emptyManifest();
-man.seedManifest(wm, wSyms, wCik, true);
-const wf = [];
-for (let i = 0; i < 127; i++) wf.push({ symbol: "W" + i, form: ["10-Q", "10-K", "6-K", "8-K", "20-F"][i % 5], filed: "20260911", accession: "a" + i, amendment: false });
-for (let i = 127; i < 281; i++) {
-  const noise = i % 4 === 0 ? "4/A" : ["4", "424B2", "144", "FWP"][i % 4];
-  wf.push({ symbol: "W" + i, form: noise, filed: "20260911", accession: "b" + i, amendment: noise.endsWith("/A") });
+//
+// THIS IS A UNIT TEST OF THE GATE. IT IS NOT A REPLAY OF ANY WINDOW.
+//
+// It used to claim to reproduce 20260908-11, and it did not. It built 281
+// synthetic symbols and dealt the first 127 forms from a modulo-5 round robin,
+// ["10-Q","10-K","6-K","8-K","20-F"][i % 5], which yields exactly 77
+// periodic-report and 50 unconfirmed -- not because EDGAR looks like that, but
+// because three of those five forms are periodic and two are not. The live route
+// over the real window returns { unconfirmed: 119, periodic-report: 6,
+// amendment: 2 }: 6-K dominates, exactly as this repo's own measurement says
+// ("6-K is 89% of the periodic signal"). The totals matched only because 281 and
+// 127 were typed in as loop bounds. A fixture reverse-engineered from the answer
+// cannot be evidence about what produced the answer.
+//
+// So the counts here are deliberately small and the forms deliberately chosen:
+// this section answers "does each form class queue, and with which reason", and
+// nothing about how often each form occurs. Section 17b replays the real window.
+const GATE_CASES = [
+  // form, queues?, reason
+  ["10-Q", true, "periodic-report"],
+  ["10-K", true, "periodic-report"],
+  ["20-F", true, "periodic-report"],
+  ["6-K", true, "unconfirmed"],   // periodic FORM, but usually not a report
+  ["8-K", true, "unconfirmed"],   // Item 4.02 lives here, so it must queue
+  ["10-Q/A", true, "amendment"],
+  ["10-K/A", true, "amendment"],
+  ["8-K/A", true, "amendment"],
+  ["6-K/A", true, "amendment"],
+  ["4", false, null],
+  ["4/A", false, null],           // THE DEFECT: an amended Form 4 carries no numbers
+  ["144", false, null],
+  ["144/A", false, null],
+  ["424B2", false, null],
+  ["FWP", false, null],
+  ["SCHEDULE 13D/A", false, null],
+  ["SCHEDULE 13G/A", false, null],
+];
+{
+  const syms = GATE_CASES.map((_, i) => "G" + i);
+  const cik = new Map(syms.map((x, i) => [x, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, syms, cik, true);
+  route.applyFilings(
+    m,
+    GATE_CASES.map((c, i) => ({
+      symbol: "G" + i,
+      form: c[0],
+      filed: "20260911",
+      accession: "g" + i,
+      amendment: c[0].toUpperCase().endsWith("/A"),
+    }))
+  );
+  const wrong = GATE_CASES.map((c, i) => ({ form: c[0], want: c, got: m.symbols["G" + i] }))
+    .filter((x) => x.got.needsReverify !== x.want[1] || (x.got.reverifyReason ?? null) !== x.want[2]);
+  check("every form class queues, or does not, with the reason the route assigns",
+    wrong.length === 0,
+    wrong.map((x) => `${x.form}: wanted ${x.want[1]}/${x.want[2]} got ${x.got.needsReverify}/${x.got.reverifyReason}`).join("; ") ||
+      `${GATE_CASES.length} form classes checked`);
+  check("an amended Form 4 does NOT queue a companyfacts read",
+    m.symbols.G10.needsReverify === false && m.symbols.G10.reverifyReason === null,
+    "the pre-fix gate matched any /A, so 4/A queued as 'amendment' — the highest rank");
+  check("...and neither does an amended 13D/13G",
+    m.symbols.G15.needsReverify === false && m.symbols.G16.needsReverify === false);
+  check("everything that queues carries a timestamp",
+    GATE_CASES.every((c, i) => !c[1] || typeof m.symbols["G" + i].enqueuedAt === "number"));
+  check("every queued reason is one the taxonomy names",
+    Object.values(m.symbols).filter((e) => e.needsReverify)
+      .every((e) => ["amendment", "periodic-report", "unconfirmed", "cik-change"].includes(e.reverifyReason)));
 }
-route.applyFilings(wm, wf);
-const wHist = {};
-for (const e of Object.values(wm.symbols)) if (e.needsReverify) wHist[e.reverifyReason ?? "(null)"] = (wHist[e.reverifyReason ?? "(null)"] ?? 0) + 1;
-const wQueued = Object.values(wm.symbols).filter((e) => e.needsReverify && e.cik).length;
-check("exactly the financial-form filers queue — 127, not 281 and not 166",
-  wQueued === 127, `${wQueued} queued · ${JSON.stringify(wHist)}`);
-check("an amended Form 4 does NOT queue a companyfacts read",
-  wm.symbols.W128.needsReverify === false && wm.symbols.W128.reverifyReason === null,
-  "39 noise-only symbols queued as 'amendment' before the gate was narrowed");
-check("a plain Form 4 / 424B2 / 144 / FWP still does not queue",
-  ["W129", "W130", "W131"].every((x) => wm.symbols[x].needsReverify === false));
-check("an amended 10-Q DOES still queue, as an amendment",
-  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
-    route.applyFilings(m, [{ symbol: "Z", form: "10-Q/A", filed: "20260911", accession: "z", amendment: true }]);
-    return m.symbols.Z.needsReverify === true && m.symbols.Z.reverifyReason === "amendment"; })());
-check("an amended 8-K also still queues",
-  (() => { const m = man.emptyManifest(); man.seedManifest(m, ["Z"], new Map([["Z", { cik: "0000000001", exchange: "NYSE" }]]), true);
-    route.applyFilings(m, [{ symbol: "Z", form: "8-K/A", filed: "20260911", accession: "z", amendment: true }]);
-    return m.symbols.Z.needsReverify === true; })());
-check("every queued reason is one the taxonomy names",
-  Object.keys(wHist).every((r) => ["amendment", "periodic-report", "unconfirmed"].includes(r)), JSON.stringify(wHist));
+
+// THE SYNTHETIC FORMS ABOVE ARE THE ONES THE GATE MUST SEPARATE, and that list
+// is derived from the shipped constants rather than retyped -- a form added to
+// PERIODIC_FORMS with no case here would otherwise go untested.
+{
+  const covered = new Set(GATE_CASES.map((c) => c[0].toUpperCase().replace(/\/A$/, "")));
+  const declared = [
+    ...(readCodeOnly("lib/server/secDailyIndex.ts").match(/PERIODIC_FORMS = \[([^\]]+)\]/)?.[1] ?? "")
+      .split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean),
+    ...(readCodeOnly("lib/server/secDailyIndex.ts").match(/REREAD_ONLY_FORMS = \[([^\]]+)\]/)?.[1] ?? "")
+      .split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean),
+  ];
+  check("every declared periodic / re-read form has a case above",
+    declared.length > 0 && declared.every((f) => covered.has(f.toUpperCase())),
+    `declared: ${declared.join(", ")}`);
+}
+
+// ── 17b. The REAL window, replayed through the route ───────────────────────
+//
+// THIS IS THE SECTION §17 PRETENDED TO BE. The rows below are the actual
+// filings SEC published for 20260908-11, captured by scripts/sec-window-fixture.mjs
+// (relay run 34833712268) with every parser lifted from the shipped modules,
+// and carried back through the relay-capture payload route. They are replayed
+// through the route's own applyFilings, so the reverifyReason values here are
+// the ones step 3 will dispatch on.
+console.log("\n17b. The real 20260908-11 window");
+{
+  const fxPath = "data/sec/window-fixture-20260908-11.json";
+  const fx = JSON.parse(fs.readFileSync(fxPath, "utf8"));
+
+  // INTEGRITY FIRST. This fixture travelled through a job log as base64, and a
+  // single substituted character survived every structural check on the first
+  // attempt -- right line count, right byte count, right row shapes, wrong
+  // data. Only a hash caught it. So the hash is re-checked here, on every run,
+  // over the same canonical form the capture hashed.
+  const compact = fx.filings.map((f) => `${f.symbol}|${f.form}|${f.filed}|${f.accession}`).join("\n");
+  const digest = crypto.createHash("sha256").update(compact, "utf8").digest("hex");
+  check("the fixture still hashes to what the capture emitted",
+    digest === fx.provenance.payloadSha256,
+    `${digest.slice(0, 16)}… vs recorded ${String(fx.provenance.payloadSha256).slice(0, 16)}…`);
+  check("...and carries the row count it claims",
+    fx.filings.length === fx.provenance.rows && fx.filings.length === 2008, `${fx.filings.length} rows`);
+
+  const syms = [...new Set(fx.filings.map((f) => f.symbol))];
+  const cik = new Map(syms.map((x, i) => [x, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, syms, cik, true);
+  route.applyFilings(m, fx.filings);
+
+  const hist = {};
+  let queued = 0;
+  for (const e of Object.values(m.symbols)) {
+    if (!e.needsReverify) continue;
+    queued++;
+    hist[e.reverifyReason ?? "(null)"] = (hist[e.reverifyReason ?? "(null)"] ?? 0) + 1;
+  }
+
+  // THE FINDING THAT KILLED THE OLD §17. Its synthetic fixture produced
+  // { periodic-report: 77, unconfirmed: 50 } from a modulo-5 round robin. A real
+  // week is nothing like that: 6-K and 8-K dominate and genuine period reports
+  // are single digits, which is what "6-K is 89% of the periodic signal" means
+  // in practice.
+  //
+  // ASSERTED EXACTLY, NOT AS A SHAPE. The fixture is frozen and its sha256 is
+  // checked above, so these counts are deterministic -- there is no reason to
+  // accept a band. A tolerance here would pass through a material drift in
+  // applyFilings, which is the one thing this section exists to catch. The
+  // shape assertions below are a SECOND layer, not a substitute.
+  check("the queue is exactly what the route makes of the real window",
+    queued === 123 && hist.unconfirmed === 113 && hist["periodic-report"] === 8 && hist.amendment === 2,
+    `${queued} queued ${JSON.stringify(hist)}`);
+  // The live run over the same four days, 2026-09-14, against the LIVE 696-symbol
+  // manifest universe rather than this frozen dump's 700:
+  //
+  //     live      281 matched symbols   1,441 rows   127 queued
+  //                 { unconfirmed: 119, periodic-report: 6, amendment: 2 }
+  //     fixture   291 matched symbols   2,008 rows   123 queued
+  //                 { unconfirmed: 113, periodic-report: 8, amendment: 2 }
+  //
+  // amendment agrees exactly and the shape agrees; the rest is a MEMBERSHIP
+  // difference, not drift -- the deltas run opposite ways (ten more symbols,
+  // four fewer queued), so neither set contains the other. It is decomposed by
+  // scripts/window-fixture-diff.mjs, which needs the live matched-symbol list.
+  // Recorded as a dated delta beside the exact counts, never as a reason to
+  // loosen them.
+  check("unconfirmed DOMINATES the queue — a real week is 6-K, not 10-Q",
+    hist.unconfirmed > 0.8 * queued,
+    `${JSON.stringify(hist)} of ${queued} queued`);
+  check("...and genuine period reports are single digits, not 77",
+    (hist["periodic-report"] ?? 0) < 10,
+    "the old synthetic fixture claimed 77; the window contains " + (hist["periodic-report"] ?? 0));
+  check("every queued reason is one the taxonomy names",
+    Object.keys(hist).every((r) => ["amendment", "periodic-report", "unconfirmed", "cik-change"].includes(r)),
+    JSON.stringify(hist));
+
+  // THE 4/A DEFECT, MEASURED ON REAL ROWS. The pre-fix gate matched any form
+  // ending /A. Re-derived here from the shipped predicates rather than restated.
+  const post = new Set(Object.entries(m.symbols).filter(([, e]) => e.needsReverify).map(([x]) => x));
+  const pre = new Set();
+  for (const f of fx.filings) {
+    if (idx.isPeriodicForm(f.form) || idx.isRereadOnlyForm(f.form) || f.amendment) pre.add(f.symbol);
+  }
+  const added = [...pre].filter((x) => !post.has(x)).sort();
+  check("the narrowed gate queues exactly 123 where the pre-fix one queued 130",
+    post.size === 123 && pre.size === 130, `${post.size} vs ${pre.size}`);
+  check("...and the seven it drops are the seven the live run named",
+    added.join(" ") === "BEN CRL DOCU DT GS RSG VTRS",
+    added.join(" ") + " — reached from a different universe and a separate capture");
+  check("...and every symbol it drops filed NOTHING that carries numbers",
+    added.every((sym) =>
+      fx.filings.filter((f) => f.symbol === sym)
+        .every((f) => !idx.isPeriodicForm(f.form) && !idx.isRereadOnlyForm(f.form))),
+    added.join(" ") || "none");
+  check("no symbol queues on an amended Form 4 alone",
+    !added.some((sym) => post.has(sym)),
+    "4/A, 144/A and SCHEDULE 13D/A are not financial statements");
+}
+
+// ── 17c. The 100 guaranteed slots are actually in the manifest ─────────────
+//
+// THIS ASSERTION IS AS MUCH THE FIX AS THE UNION IS.
+//
+// The defect it guards was silent by construction: the job seeded from
+// readDynamicUniverse() alone, so JPM and C had no manifest entry, and a symbol
+// with no entry can never be matched by intersect() against the daily index.
+// The cron ran green forever while /stock/JPM/earnings stayed empty. No
+// counter, no warning, nothing to notice -- which is exactly the shape that
+// needs a test rather than a comment.
+//
+// It is also NOT a two-symbol problem. readDynamicUniverse filters on a 14-day
+// ENTRY_MAX_AGE_MS over a rolling score-ranked pool, so which preset name is
+// missing changes week to week. Asserting the whole list is the only version of
+// this check that keeps working.
+console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
+{
+  // Read from the shipped list, never retyped: a name added to PRESET_UNIVERSE
+  // must be covered by this check the moment it lands.
+  const presetSrc = readCodeOnly("lib/server/presetUniverse.ts");
+  const preset = [...new Set([...presetSrc.matchAll(/"([A-Z][A-Z0-9.-]{0,6})"/g)].map((m) => m[1]))];
+  check("the preset list is read from source and is the ~100 it claims to be",
+    preset.length >= 90 && preset.length <= 110, `${preset.length} symbols`);
+  check("...and it still contains the two the live manifest was missing",
+    preset.includes("JPM") && preset.includes("C"),
+    "JPM and C — named so a regression says which guarantee broke");
+
+  // A dynamic pool that has aged BOTH of them out, which is the live condition
+  // that produced the defect.
+  const dynamic = ["AAPL", "MSFT", "NVDA", "GS", "BMO", "MER-PK"];
+  const universe = [...new Set([...preset, ...dynamic])];
+  const cikMap = new Map(universe.map((sym, i) => [sym, { cik: String(i + 1).padStart(10, "0"), exchange: "NYSE" }]));
+  const m = man.emptyManifest();
+  man.seedManifest(m, universe, cikMap, true);
+  const missing = preset.filter((sym) => !m.symbols[sym]);
+  check("every PRESET_UNIVERSE symbol has a manifest entry after seeding",
+    missing.length === 0, missing.join(" ") || `all ${preset.length} present`);
+  check("...including JPM and C when the dynamic pool has aged them out",
+    Boolean(m.symbols.JPM) && Boolean(m.symbols.C),
+    "the live pool had both absent; the union is what puts them back");
+
+  // AND THE ROUTE MUST ACTUALLY BUILD THAT UNION. The check above proves
+  // seedManifest keeps what it is handed; this proves the route hands it the
+  // right thing, which is the half that was broken.
+  const routeCode = readCodeOnly("app/api/jobs/sec-daily-index/route.ts");
+  // THE RAW SOURCE TOO, DELIBERATELY. routeCode is readCodeOnly()'d -- comments
+  // stripped -- which is right for every assertion about BEHAVIOUR and exactly
+  // wrong for the ones below about a COMMENT. See this file's header.
+  const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+  check("the route seeds from PRESET_UNIVERSE ∪ the dynamic pool",
+    /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
+    "the union is the fix; seedManifest cannot add what it is never given");
+  check("...and does NOT slice it by ANALYSIS_UNIVERSE_CAP",
+    !/ANALYSIS_UNIVERSE_CAP/.test(routeCode),
+    "that cap bounds ANALYSIS — a history fetch and indicator pass per symbol. " +
+      "Detection is one daily-index request at any size, and the per-symbol cost " +
+      "that does scale is governed by SEC_REREAD_DRAIN_PER_RUN");
+  check("the reason is recorded at the seed call, not just in a findings doc",
+    /sec-pipeline-spec-2026-09-13\.md §7/.test(routeRaw) && /guaranteed a slot/.test(routeRaw),
+    "the cap shipped because nothing said why it was there");
+
+  // THE THIRD INPUT. dynamicUniverseCache's header names three sources bounded
+  // by ANALYSIS_UNIVERSE_CAP; the seed unions two. Asserted, not trusted: the
+  // third is covered only because pickersBuilder writes promoted names INTO the
+  // pool. If that call is ever removed or its source changed, the seed silently
+  // loses an input again -- the same shape as the defect above.
+  const buildersCode = readCodeOnly("lib/server/pickersBuilder.ts");
+  check("popular-search promotions reach the pool, so the seed's two inputs cover three",
+    /addToDynamicUniverse\(\s*popularSearchSymbols,\s*"search"/.test(buildersCode),
+    "pickersBuilder persists them; readDynamicUniverse then returns them");
+  check("...and the seed records that it considered the third input",
+    /popular-search promotions/.test(routeRaw) && /addToDynamicUniverse/.test(routeRaw),
+    "this class of bug survives because nothing writes down what was considered");
+
+  // THE PRECEDENT. The same defect happened one layer up and is documented in
+  // pickersBuilder. Asserted so that warning cannot be deleted while the code it
+  // warns about still exists.
+  const buildersRaw = fs.readFileSync("lib/server/pickersBuilder.ts", "utf8");
+  check("pickersBuilder still carries the concat-then-slice warning this repeats",
+    /NOT concat-then-slice/.test(buildersRaw) && /sliced the mega-caps off/.test(buildersRaw),
+    "PRESET appended then cut to the cap dropped AAPL/NVDA from the screener — the same bug, one layer up");
+
+  // SIZE, because uncapping is only safe if the bound is asserted rather than
+  // asserted-once-and-forgotten. 100 presets on top of 696 is the worst case.
+  const grown = sizeAt(796, true);
+  check("the unioned manifest stays well inside Upstash's 10 MB ceiling",
+    grown < 1048576,
+    `${(grown / 1024).toFixed(0)} KB at 796 symbols (${((grown / 10485760) * 100).toFixed(1)}% of the ceiling)`);
+}
+
+// ── 17d. The run is observable without a key ───────────────────────────────
+//
+// The FIRST automated run (04:00:16 UTC 2026-09-15, 200, dpl_B6UF7eCd8tcq)
+// printed nothing at all. recordJobRun writes behind CACHE_HEALTH_KEY and the
+// cron caller discards the response body, so there was no way to tell whether
+// it had walked a date, parsed an index or done nothing whatsoever.
+//
+// A daily job returning 200 while doing nothing is indistinguishable from one
+// working. That is the failure this whole pipeline is built against, and it was
+// unobservable on its own first run.
+console.log("\n17d. The summary reaches the platform log");
+{
+  const raw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+  check("the summary is console.logged, not only recorded behind a key",
+    /console\.log\("\[sec-daily-index\]", JSON\.stringify\(\{ ok, \.\.\.summary \}\)\)/.test(raw),
+    "warm-stock-data's pattern: console.log(\"[warm-stock-data]\", JSON.stringify(result))");
+  check("...and it is emitted AFTER recordJobRun, so both carry the same object",
+    raw.indexOf('recordJobRun("sec-daily-index", ok, summary)') <
+      raw.indexOf('console.log("[sec-daily-index]", JSON.stringify({ ok, ...summary }))'));
+  check("the refusal paths log too — a silent 503 looks like the job never fired",
+    (raw.match(/console\.log\("\[sec-daily-index\]", JSON\.stringify\(\{ ok: false/g) ?? []).length === 2,
+    "SEC_USER_AGENT missing, and manifest unreadable");
+  // THE PREFIX IS THE HOUSE CONVENTION, not a free choice: the platform log is
+  // grepped by it, and warm-stock-data, warm-earnings and the rest all use it.
+  check("the prefix matches the job name exactly",
+    !/console\.log\("\[sec[- ]daily[- ]?index/.test(raw.replace(/\[sec-daily-index\]/g, "")),
+    "one spelling, so a grep for the job name finds every line it emits");
+}
 
 // ── 18. The drain clears the busiest day of the year ───────────────────────
 console.log("\n18. Drain sized on peak, not on the quiet month");
@@ -1037,7 +1354,7 @@ check("the ADR overlap is recorded as UNRESOLVED, not assumed",
 
 console.log(
   failures === 0
-    ? "\nThe change detector reproduces the measured window.\n"
+    ? "\nGate behaviour verified against the route itself. Window composition is section 17b's.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);
