@@ -27,13 +27,11 @@
 // data did not refresh.
 import {
   IPO_TERMS_MAX_AGE_DAYS,
-  indexByCik,
   isAlreadyListed,
   isFundEntity,
   normaliseCik,
   warnIfEntityFilterMatchedNothing,
 } from "./ipoExclusions";
-import { resolveTickerMap } from "./secTickerMap";
 // TYPE-ONLY, and that matters: ipoCalendar imports buildSecIpoTables from this
 // file, so a value import here would close a runtime require cycle. A type import
 // is erased at compile time and cannot.
@@ -141,27 +139,60 @@ function toConfirmedIpo(
 
 export type SecIpoTables = { upcoming: ConfirmedIpo[]; recent: ConfirmedIpo[] };
 
+/** Row counts at every stage. The seed prints this; nothing else reads it. */
+export type SecIpoFunnel = {
+  records: number;
+  upperCandidates: number;
+  droppedNoTerms: number;
+  droppedAlreadyListed: number;
+  droppedEntity: number;
+  droppedWithdrawn: number;
+  droppedStale: number;
+  upcoming: number;
+  recent: number;
+};
+
+/** CIK -> the listed symbol and exchange. Built by indexByCik(). */
+export type ListedByCik = Map<string, { symbol: string; exchange: string | null }>;
+
 /**
  * Split one window of filer records into the page's two tables.
  *
- * Pure, and deliberately so: every exclusion above is a rule that has already
- * been wrong once, and a pure function is one a test can hold to a fixture.
+ * PURE AND SYNCHRONOUS, AND THAT IS LOAD-BEARING, NOT STYLE. This function is
+ * the single classification path: the render calls it, and so does the seeding
+ * script on a runner. If it resolved the ticker map itself it would drag in
+ * @upstash/redis, and the relay's read-only job deliberately runs NO `npm ci` --
+ * so the seed would have had to re-implement these rules, and seeded rows would
+ * disagree with accumulated rows about what counts as an IPO. Both sets would
+ * look plausible.
+ *
+ * So the caller resolves the map and passes the index in. Node's native type
+ * stripping is what lets a plain .mjs on the runner import this file directly.
  */
-export async function buildSecIpoTables(
+export function buildSecIpoTables(
   records: IpoFilerRecord[],
+  listedByCik: ListedByCik,
   windowDays: number,
   now = new Date()
-): Promise<SecIpoTables> {
-  const { map: tickerMap } = await resolveTickerMap();
-  // Inverted once here, because the file is symbol-keyed and every lookup below
-  // is by CIK. See indexByCik's header for why a direct map.has(cik) compiles
-  // and silently matches nothing.
-  const listedByCik = indexByCik(tickerMap);
+): SecIpoTables & { funnel: SecIpoFunnel } {
 
   const upcoming: ConfirmedIpo[] = [];
   const recent: ConfirmedIpo[] = [];
   let entityMatches = 0;
   let entityCandidates = 0;
+  // EVERY STAGE COUNTED, because "53 rows" on its own cannot be argued with and
+  // the stages are where the rules that have been wrong twice actually live.
+  const funnel: SecIpoFunnel = {
+    records: records.length,
+    upperCandidates: 0,
+    droppedNoTerms: 0,
+    droppedAlreadyListed: 0,
+    droppedEntity: 0,
+    droppedWithdrawn: 0,
+    droppedStale: 0,
+    upcoming: 0,
+    recent: 0,
+  };
 
   const recentCutoff = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
 
@@ -193,22 +224,24 @@ export async function buildSecIpoTables(
     // ── UPPER TABLE. Filed, terms set, not yet priced.
     const amendment = lastOf(record, AMENDMENT);
     if (!amendment) continue;
-    if (!hasTerms(record.terms)) continue;
+    funnel.upperCandidates += 1;
+    if (!hasTerms(record.terms)) { funnel.droppedNoTerms += 1; continue; }
 
     // (a) + (c): already listed on a major exchange, OR quoted on OTC and
     // uplisting. One membership test does both -- the map carries 2,500 OTC rows.
-    if (isAlreadyListed(record.cik, listedByCik)) continue;
+    if (isAlreadyListed(record.cik, listedByCik)) { funnel.droppedAlreadyListed += 1; continue; }
 
     // (b) ETF / commodity trust. Counted whether or not it matches, because the
     // count is what the zero-match warning below is computed from.
     entityCandidates += 1;
     if (isFundEntity(record.sic, record.company)) {
       entityMatches += 1;
+      funnel.droppedEntity += 1;
       continue;
     }
 
-    if (isWithdrawn(record, amendment.date)) continue;
-    if (isStale(amendment.date, now)) continue;
+    if (isWithdrawn(record, amendment.date)) { funnel.droppedWithdrawn += 1; continue; }
+    if (isStale(amendment.date, now)) { funnel.droppedStale += 1; continue; }
 
     upcoming.push(
       toConfirmedIpo(
@@ -239,7 +272,9 @@ export async function buildSecIpoTables(
   // from getRecentIpos()'s existing behaviour.
   recent.sort((a, b) => b.date.localeCompare(a.date));
 
-  return { upcoming, recent };
+  funnel.upcoming = upcoming.length;
+  funnel.recent = recent.length;
+  return { upcoming, recent, funnel };
 }
 
 /** Exported for the seeding step and for tests; not used by the render path. */

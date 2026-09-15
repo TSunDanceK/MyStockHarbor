@@ -174,6 +174,11 @@ const TASKS = {
   // ticker map for OTC coverage first, because if it carries OTC issuers then
   // class (a) already catches uplistings and class (c) costs nothing.
   "ipo-exclusions": { script: "scripts/ipo-exclusions-probe.mjs", args: () => [] },
+  // Build order step 2: seed the 90-day window. Imports the SAME TypeScript
+  // classifier the render calls -- Node 24 strips the types, so no build step
+  // and no npm ci. If this re-implemented the rules, seeded and daily rows would
+  // disagree about what an IPO is and both would look plausible.
+  "ipo-seed": { script: "scripts/ipo-seed.mjs", args: () => [] },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

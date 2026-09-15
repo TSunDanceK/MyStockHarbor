@@ -22,6 +22,8 @@
 
 import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
 import { buildSecIpoTables } from "./ipoSecSource";
+import { indexByCik } from "./ipoExclusions";
+import { resolveTickerMap } from "./secTickerMap";
 import { readStoredIpoFilings } from "./ipoSecStore";
 // Re-exported so the cadence/staleness constants stay discoverable from the
 // module that owns the page's data, even though the rule itself lives with the
@@ -228,7 +230,11 @@ async function fetchSecIpoRows(from: string, to: string): Promise<ConfirmedIpo[]
       (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
     )
   );
-  const { upcoming, recent } = await buildSecIpoTables(records, windowDays);
+  // The map is resolved HERE, not inside buildSecIpoTables: keeping that
+  // function free of @upstash/redis is what lets the seeding script on the relay
+  // import and call the very same classifier. One path, not two that agree.
+  const { map: tickerMap } = await resolveTickerMap();
+  const { upcoming, recent } = buildSecIpoTables(records, indexByCik(tickerMap), windowDays);
 
   // BOTH TABLES FROM ONE READ. The caller still asks for a date range because
   // the FMP branch needs one; on this branch the split is derived from each
