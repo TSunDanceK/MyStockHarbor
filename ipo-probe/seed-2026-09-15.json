@@ -1,5 +1,5 @@
 {
-  "fetchedAt": 1789447086644,
+  "fetchedAt": 1789448103843,
   "windowDays": 90,
   "window": [
     "2026-06-17",
@@ -20,12 +20,12 @@
     "lowerCandidates": 24,
     "droppedFollowOn": 15,
     "droppedNoTermsLower": 0,
-    "droppedNoTerms": 10,
+    "droppedNoTerms": 11,
     "droppedAlreadyListed": 141,
     "droppedEntity": 2,
     "droppedWithdrawn": 0,
     "droppedStale": 14,
-    "upcoming": 20,
+    "upcoming": 19,
     "recent": 9
   },
   "upcoming": [
@@ -122,18 +122,6 @@
       "priceRangeLow": null,
       "priceRangeHigh": null,
       "sharesOffered": 1294140,
-      "dealSize": null,
-      "marketCap": null
-    },
-    {
-      "cik": "2130959",
-      "symbol": null,
-      "company": "RZ Wellness Ltd",
-      "date": "2026-08-26",
-      "exchange": null,
-      "priceRangeLow": null,
-      "priceRangeHigh": null,
-      "sharesOffered": 5500000,
       "dealSize": null,
       "marketCap": null
     },
