@@ -584,5 +584,90 @@ check("identityRates counts every state and invents none",
   Object.values(rates(span)).every((r) =>
     r.pass + r.fail + r.skipped > 0 && Object.keys(r).join() === "pass,fail,skipped"));
 
+console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
+
+{
+  const fieldsSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
+  const withIfrs = SEC_FIELDS.filter((f) => f.ifrsChain?.length);
+  check("most fields carry an ifrs-full chain",
+    withIfrs.length >= 40,
+    `${withIfrs.length} of ${SEC_FIELDS.length} — the gap covered a quarter of stock pages`);
+  // THE TWO DELIBERATE GAPS. Named, so that "this field has no IFRS entry" is a
+  // decision on the record rather than something nobody noticed.
+  const without = SEC_FIELDS.filter((f) => !f.ifrsChain?.length).map((f) => f.key).sort();
+  check("...and the fields WITHOUT one are the three documented gaps",
+    JSON.stringify(without) ===
+      JSON.stringify(["cashIncludingRestricted", "dividendsDeclaredPerShare", "nonOperatingIncomeExpense"]),
+    `${without.join(", ") || "none"} — restricted cash and a non-operating total have no ` +
+      `IFRS equivalent, and 0 of 20 probed filers publish a per-share dividend under ifrs-full`);
+  // ── A SHARED SPELLING IS TWO SOURCES, NOT A DUPLICATE ─────────────────────
+  //
+  // The first version of this assertion required the two chains to be disjoint,
+  // on the reasoning that a repeated tag "adds a rank without adding a source".
+  // That is wrong, and it is wrong in the same way the first IFRS probe was:
+  // IFRS and us-gaap SHARE SPELLINGS, and `facts["us-gaap"].GrossProfit` and
+  // `facts["ifrs-full"].GrossProfit` are different data under one name. The
+  // probe confirmed all eight are real ifrs-full tags that real filers publish
+  // and that win cells (Goodwill in 13 of 20, Assets and Liabilities in 17).
+  //
+  // So the overlap is ENUMERATED rather than forbidden — a new one should be a
+  // deliberate act — and the property that matters, that the namespace decides
+  // which one wins, is proven by running the extractor below.
+  const shared = withIfrs
+    .filter((f) => f.ifrsChain.some((t) => f.chain.includes(t)))
+    .map((f) => f.key).sort();
+  check("the tags spelled the same in both taxonomies are the known eight",
+    JSON.stringify(shared) === JSON.stringify([
+      "goodwill", "grossProfit", "interestExpense", "netIncome",
+      "researchAndDevelopment", "sellingGeneralAndAdministrative",
+      "totalAssets", "totalLiabilities",
+    ]),
+    `${shared.join(", ")} — a shared spelling is fine because the NAMESPACE ` +
+      `disambiguates; assuming the tag name could was what made a us-gaap-only ` +
+      `filer report 71 "ifrs cells"`);
+  // ── PRECEDENCE, RUN RATHER THAN READ ──────────────────────────────────────
+  // A filer that tags BOTH must keep its us-gaap reading. Asserted by feeding
+  // the extractor a payload with the same field under both namespaces and
+  // different values, because "appended after" is a claim about rowsForField
+  // that a comment cannot check.
+  const both = extractCompanyFacts("BOTH", {
+    cik: 1,
+    facts: {
+      "us-gaap": { Assets: { units: { USD: [{ end: "2026-06-30", val: 111, accn: "a", filed: "2026-07-01" }] } } },
+      "ifrs-full": { Assets: { units: { USD: [{ end: "2026-06-30", val: 222, accn: "b", filed: "2026-08-01" }] } } },
+    },
+  });
+  const idx = SEC_FIELDS.findIndex((f) => f.key === "totalAssets");
+  const cellBoth = both.instants[0]?.values[idx];
+  check("a dual-tagging filer keeps its us-gaap value, not the ifrs one",
+    cellBoth?.val === 111 && cellBoth?.ns === "us-gaap",
+    `got ${JSON.stringify({ val: cellBoth?.val, ns: cellBoth?.ns })} — and note the ifrs row ` +
+      `was filed LATER, so this also proves rank beats recency across namespaces`);
+  const ifrsOnly = extractCompanyFacts("IFRS", {
+    cik: 1,
+    facts: { "ifrs-full": { Assets: { units: { USD: [{ end: "2026-06-30", val: 222, accn: "b", filed: "2026-07-01" }] } } } },
+  });
+  check("...and an ifrs-only filer falls through to it",
+    ifrsOnly.instants[0]?.values[idx]?.val === 222 &&
+      ifrsOnly.instants[0]?.values[idx]?.ns === "ifrs-full");
+  // THE CURRENCY GUARD. A EUR figure must not reach a USD field, and the
+  // refusal must be RECORDED so the page can name the currency rather than
+  // implying the filing is unreadable.
+  const eur = extractCompanyFacts("EUR", {
+    cik: 1,
+    facts: { "ifrs-full": { Assets: { units: { EUR: [{ end: "2026-06-30", val: 999, accn: "b", filed: "2026-07-01" }] } } } },
+  });
+  check("a EUR figure never reaches a USD field", eur.instants.length === 0,
+    "a euro number under a dollar sign is the plausible wrong number");
+  check("...and the refusal is recorded as currency evidence",
+    eur.refusedUnits.includes("EUR"),
+    "without it the page cannot tell 'we have no mapping' from 'this filer reports in euros'");
+  check("a USD reporter records no refused currency",
+    ifrsOnly.refusedUnits.length === 0);
+  check("the ifrs table cites the run that corrected it",
+    /relay 34970388423|34971118882|34971551511/.test(fieldsSrc),
+    "four entries were deleted and two added on this evidence");
+}
+
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nExtraction structure is sound.\n");
 process.exit(failures ? 1 : 0);
