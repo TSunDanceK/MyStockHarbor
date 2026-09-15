@@ -129,3 +129,59 @@ went and when (read from **raw** source: `readCodeOnly` strips comments, so
 asserting on stripped text would pass whatever was written), that no retired
 endpoint is still called, that `/earnings` still is, that no user-visible string
 says FMP, and that no rendered value coalesces null to zero.
+
+## 9. What the render check caught that no unit check would have
+
+The preview cannot be fetched from this sandbox — Vercel SSO protection is on
+for every non-custom-domain host — so the verification was built the other way:
+`scripts/sec-extract-probe.mjs` now runs the whole path on a runner, against real
+companyfacts, and prints each symbol **as the page would render it**. Extract →
+`encodeFactSet` → `cell()` → `buildSecEarningsView`, which is exactly what a
+reader sees, not an intermediate.
+
+The first run of that printed AAPL's recent-quarters table like this:
+
+```
+Q3 FY2026   2026-06-27    109417.0M      2.02
+Q2 FY2026   2026-03-28    111184.0M      2.01
+Q1 FY2026   2025-12-27    143756.0M      2.84
+FY FY2025   2025-09-27  102466.0M[differenced]     —
+Q3 FY2026   2025-06-28     94036.0M      1.57      <- SAME LABEL as row 1
+```
+
+and ARM's June 2025 quarter as **"Q1 FY2027"**, nine months out.
+
+**Cause:** companyfacts' `fy` and `fp` describe the FILING, not the period the
+row covers — a 10-K carries `fy 2026` on every comparative it restates. The
+extractor was reading them.
+
+**This is the labelling hazard the rule exists for, arriving from inside one
+company rather than between two.** Every unit assertion about the label passed,
+because they all read the same wrong field.
+
+Fixed in `fiscalLabel()`, computed from the filer's own fiscal year-end. Two
+details carry the correctness:
+
+- the quarter step is **rounded** against a real quarter (365.25/4), not floored
+  against 91 — a quarter runs 90–92 days and `floor(90/91)` is 0, which labelled
+  AAPL's June 2025 quarter Q4 on the first attempt;
+- the year-end match carries a **ten-day tolerance**, because 52/53-week filers
+  move their year-end annually (AAPL's ran 2025-09-27 against a 2026-09-26
+  anchor). An exact match pushes every year-end quarter into the next fiscal year
+  and labels Q4 as Q1.
+
+Now verified across all five calendars — year-ends 26 Sep, 31 Mar, 28 Aug, 2 Aug,
+31 Dec, three of them 52/53-week — with the check asserting the labels *and* that
+no two quarters in one table share one.
+
+## 10. Two smaller things the render surfaced, recorded not fixed
+
+- **ARM shows "Total debt —" and "Net cash —".** ARM tags no debt concepts at
+  all, and `totalDebt` stays null rather than becoming 0: absence of a tag is not
+  proof of no debt, and this repo's standing rule is never to treat it as such.
+  The cost is that a genuinely debt-free balance sheet reads as unknown. A
+  filer-level "no debt tagged in any period" test could distinguish the two;
+  it is not built.
+- **PLAB's `longTermDebt` reads $4,000** on one date and $3.9M on another — the
+  chain is picking something small and probably wrong for that filer. Flagged in
+  the five-symbol diff (D5) and unresolved.
