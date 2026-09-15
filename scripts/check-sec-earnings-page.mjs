@@ -10,7 +10,7 @@
 // a future deploy would break them.
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
-import { lift } from "./lib/earnings-plan.mjs";
+import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -269,23 +269,41 @@ console.log("\n7c. the score cannot claim an input it did not read");
 // anyway.
 {
   const cashClause = /backed by cash|cash conversion/;
-  const expl = (pageRaw.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
+  // FROM THE COMMENT-STRIPPED SOURCE. The docblock above this function QUOTES
+  // the sentence it is documenting ("reported profit is backed by cash."), and
+  // an inline comment names it again — so a containment check run over the raw
+  // text finds the phrase outside the guard and fails on prose. The property is
+  // about code.
+  const expl = (pageCode.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
   check("the cash clause is guarded by the cash component having run",
     /if \(ran\.has\("cashConversion"\)\) \{[\s\S]{0,160}backed by cash/.test(expl),
     "it used to be emitted from the tone alone");
+  // ── SLICED ON THE GUARD, NOT COUNTED ──────────────────────────────────────
+  // The first version counted occurrences against a hand-built expectation and
+  // broke the moment the clause became a template literal — it was pinned to a
+  // spelling, which is the failure this file keeps re-learning. What matters is
+  // CONTAINMENT: no cash wording anywhere outside the guarded block.
+  const guardAt = expl.indexOf('if (ran.has("cashConversion"))');
+  const guardEnd = expl.indexOf("} else if", guardAt);
+  const outsideGuard = guardAt === -1 ? expl : expl.slice(0, guardAt) + expl.slice(guardEnd);
   check("no cash wording sits outside that guard",
-    (expl.match(new RegExp(cashClause, "g")) ?? []).length ===
-      (expl.match(/ran\.has\("cashConversion"\)[\s\S]{0,200}?backed by cash[\s\S]{0,80}?cash conversion is weak/) ? 2 : -1),
-    "both the good and the weak phrasing must be inside the one branch");
+    guardAt > -1 && guardEnd > guardAt && !cashClause.test(outsideGuard),
+    `guarded block ${guardEnd - guardAt}b, ${outsideGuard.length}b outside it — ` +
+      "both the good and the weak phrasing must be inside the one branch");
   check("the score reports WHICH components it could not read",
     /unavailable: scoreGaps\(ran\)/.test(pageRaw) && /function scoreGaps/.test(pageRaw),
     "a count would hide the one that mattered");
   check("...and the page renders that list on the score card itself",
     /score\.available && score\.unavailable\.length/.test(pageRaw),
     "the number is only readable next to its own gaps");
+  // RUN, not read. The source-level version of this pinned `ran.add(...)` inside
+  // the accruals branch and broke when that line became contribute(); the
+  // property it was after is that a null chain produces NO entry at all.
   check("an absent input adds no points and no signal",
-    /if \(acc != null && ni != null && ni !== 0\) \{[\s\S]{0,160}ran\.add\("cashConversion"\)/.test(pageRaw),
+    /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\("cashConversion"/.test(pageRaw),
     "the guard is on the value, so a null chain cannot contribute a default");
+  // The behavioural half is section 7e's `absent` case, which scores a shape
+  // with accruals: null and asserts the key is missing from contributions.
   check("the side-column cash bullet is conditional too",
     /score\.unavailable\.includes\(SCORE_COMPONENTS\.cashConversion\)/.test(pageRaw),
     "it read as a claim on a page where the chain is empty");
@@ -396,6 +414,49 @@ console.log("\n7e. the cash card is ONE period, and says which");
   check("the score's narrative names the period when the cash leg is annual",
     /cashBasis === "year" \? ` over \$\{cashPeriod\}`/.test(pageRaw),
     "otherwise quarterly growth and annual cash are described as one period");
+
+  // ── THE 4x TRAP, RUN RATHER THAN DESCRIBED ────────────────────────────────
+  // The mixed comparison is not a style problem, it is a number. The SHIPPED
+  // scorer is run over one shape twice — the same annual cash flow against the
+  // annual net income, then against the quarterly one — and the difference is
+  // the inflation the period rule exists to prevent. No fixture supplies an
+  // expected score; both numbers come out of the scorer.
+  const consts = [...pageRaw.matchAll(/^const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
+    .map((m) => `const ${m[1]} = ${m[2].replace(/ as const$/, "")};`).join("\n");
+  const scorer = await lift(
+    [consts, grabFunction(pageRaw, "clamp"), grabFunction(pageRaw, "toneLabel"),
+     grabFunction(pageRaw, "scoreExplanation"), grabFunction(pageRaw, "scoreGaps"),
+     grabFunction(pageRaw, "buildScoreResult"), grabFunction(pageRaw, "scoreFromSec")].join("\n") +
+      "\nexport { scoreFromSec };"
+  );
+  // AZN's real shape: annual operating cash flow 14.575bn, annual net income
+  // 10.225bn, quarterly net income 2.45bn. The accrual is the same either way;
+  // only the denominator moves.
+  const shape = (basis, period, ni) => ({
+    snapshot: { revenueYoY: 11.75, epsYoY: 26.6, netIncome: { val: 2.45e9 } },
+    margins: [{ operating: 5.0 }, { operating: 21.5 }, { operating: 21.2 }, { operating: 24.3 }],
+    cashQuality: { accruals: 4.35e9, netIncome: { val: ni }, basis, period },
+  });
+  const matched = scorer.scoreFromSec(shape("year", "FY2025", 1.0225e10));
+  const mixed = scorer.scoreFromSec(shape("quarter", "Q2 FY2025", 2.45e9));
+  const absent = scorer.scoreFromSec({
+    ...shape("year", "FY2025", 1.0225e10),
+    cashQuality: { accruals: null, netIncome: { val: null }, basis: "year", period: "FY2025" },
+  });
+  check("matching the periods keeps the cash term inside its range",
+    matched.contributions.cashConversion > 0 &&
+      matched.contributions.cashConversion < 10,
+    `+${matched.contributions.cashConversion.toFixed(2)} of a possible 10 -> ${matched.score}/100`);
+  check("...where mixing them PINS it at the maximum",
+    mixed.contributions.cashConversion === 10 && mixed.score > matched.score,
+    `mixed would score ${mixed.score}/100 against ${matched.score}/100 — ` +
+      `+${mixed.score - matched.score} points bought by dividing an annual cash flow ` +
+      `by a quarterly profit`);
+  check("and the annual narrative names its period while the absent one claims nothing",
+    / over FY2025\./.test(matched.explanation) &&
+      !/backed by cash/.test(absent.explanation) &&
+      /the quarter was profitable/.test(absent.explanation),
+    `"${matched.explanation.slice(-60)}" | "${absent.explanation.slice(-60)}"`);
 }
 
 console.log("\n8. the population path");
