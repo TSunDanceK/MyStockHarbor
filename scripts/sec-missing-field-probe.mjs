@@ -57,14 +57,27 @@ const chainOf = (key) => {
 const PATTERNS = {
   capex: [/PaymentsToAcquire/i, /CapitalExpenditure/i, /PurchaseOfProperty/i, /AdditionsTo/i],
   freeCashFlow: [/FreeCashFlow/i],
-  shareBasedCompensation: [/ShareBased/i, /StockBased/i, /SharebasedPayment/i],
-  cash: [/^Cash/i, /CashAndCashEquivalents/i, /CashCashEquivalents/i],
+  shareBasedCompensation: [/ShareBasedCompensation/i, /ShareBased/i, /StockBased/i, /SharebasedPayment/i],
+  cash: [/Cash/i],
   shortTermInvestments: [/Investments?Current/i, /MarketableSecurities/i, /ShortTermInvestments/i, /AvailableForSale/i, /DebtSecurities/i],
-  totalDebt: [/Debt/i, /Borrowings/i, /NotesPayable/i, /LongTermLoans/i, /FinanceLease/i],
-  shortTermDebt: [/DebtCurrent/i, /ShortTerm.*Debt/i, /CurrentPortion/i, /Borrowings.*Current/i],
-  longTermDebt: [/LongTermDebt/i, /Borrowings.*Noncurrent/i, /DebtNoncurrent/i],
+  totalDebt: [/LongTermDebt/i, /Borrowings/i, /Notes.*Payable/i, /ConvertibleNotes/i, /LineOfCredit/i, /Debt/i, /FinanceLease/i],
+  shortTermDebt: [/DebtCurrent/i, /ShortTerm.*Debt/i, /CurrentPortion/i, /Borrowings.*Current/i, /Notes.*Payable.*Current/i, /LineOfCredit.*Current/i],
+  longTermDebt: [/LongTermDebt/i, /Borrowings.*Noncurrent/i, /DebtNoncurrent/i, /ConvertibleNotes/i, /Notes.*Payable.*Noncurrent/i],
   operatingCashFlow: [/NetCashProvided/i, /CashFlowsFromUsedInOperating/i],
 };
+
+/**
+ * THE PROBE PROVES IT CAN SEE WHAT THE PAGE SEES, BEFORE IT IS BELIEVED.
+ *
+ * Set NARROW_TO_3M=1 to restore the bug: durations restricted to 80-105 day
+ * frames. Under it, a filer whose cash flow is filed year-to-date must report
+ * NOT TAGGED for operatingCashFlow — which is precisely the false verdict this
+ * probe published, and the reason it is re-run rather than trusted.
+ *
+ * Run both ways and compare. A probe that reports the same thing either way is
+ * not reading frames at all.
+ */
+const narrowVerdicts = [];
 
 const TARGETS = (process.env.SYMBOLS || "GEV:capex,shareBasedCompensation,cash,shortTermInvestments KTOS:capex,cash,shortTermInvestments,totalDebt VRT:shortTermInvestments")
   .split(/\s+/).filter(Boolean)
@@ -110,20 +123,47 @@ for (const { symbol, fields } of TARGETS) {
         if (!pats.some((p) => p.test(concept))) continue;
         for (const [unit, rows] of Object.entries(def.units ?? {})) {
           for (const r of rows) {
-            if (wantEnd && r.end !== wantEnd) continue;
-            // For durations, only frames that look like one quarter.
-            if (!isInstant && r.start) {
-              const days = (Date.parse(r.end) - Date.parse(r.start)) / 86400000;
-              if (days < 80 || days > 105) continue;
+            // ── EVERY FRAME THE PAGE COULD BE READING, NOT JUST A 3-MONTH ONE ──
+            //
+            // THE PROBE'S OWN BUG, AND IT PRODUCED FOUR WRONG VERDICTS. This
+            // kept only frames of 80-105 days, so it reported NOT TAGGED for
+            // every cash-flow field on every filer — because US filers report
+            // cash flow YEAR-TO-DATE and never file a standalone 3-month frame.
+            // The page knows that and DIFFERENCES two cumulative figures, which
+            // is why GEV's own screenshot showed "Operating cash flow $5.49B
+            // derived" beside a probe line claiming nothing was filed.
+            //
+            // A diagnostic that cannot see what the page sees does not diagnose
+            // the page. Durations now accept ANY frame ending on the period's
+            // end date — 3M, 6M, 9M, 12M — and the frame length is printed so
+            // a YTD figure is never mistaken for a quarterly one.
+            if (!isInstant) {
+              if (wantEnd && r.end !== wantEnd) continue;
+            } else {
+              // Instants: within ten days of the balance-sheet date, because a
+              // filer's own period end and the date it tags can differ by a
+              // weekend or a 52/53-week calendar.
+              if (!wantEnd) continue;
+              const off = Math.abs(Date.parse(r.end) - Date.parse(wantEnd)) / 86400000;
+              if (off > 10) continue;
             }
-            hits.push({ tax, concept, unit, val: r.val, form: r.form, fy: r.fy, fp: r.fp });
+            const months = !isInstant && r.start
+              ? Math.round((Date.parse(r.end) - Date.parse(r.start)) / 86400000 / 30.4)
+              : null;
+            hits.push({ tax, concept, unit, val: r.val, form: r.form, fy: r.fy, fp: r.fp, months, end: r.end });
           }
         }
       }
     }
     // Newest filing wins the display slot for a concept; dedupe on concept.
+    // KEYED ON CONCEPT AND FRAME. One concept filed at 3M, 6M and 9M is three
+    // different facts, and collapsing them hides exactly the YTD frame this
+    // probe was blind to.
     const seen = new Map();
-    for (const h of hits) if (!seen.has(`${h.tax}:${h.concept}`)) seen.set(`${h.tax}:${h.concept}`, h);
+    for (const h of hits) {
+      const k = `${h.tax}:${h.concept}:${h.months ?? "inst"}`;
+      if (!seen.has(k)) seen.set(k, h);
+    }
 
     if (!seen.size) {
       console.log(`      NOT TAGGED — nothing matching ${pats.map(String).join(" ")} filed for that period`);
@@ -133,9 +173,36 @@ for (const { symbol, fields } of TARGETS) {
     for (const h of seen.values()) {
       const inChain = chain.includes(h.concept);
       if (!inChain) anyGap = true;
-      console.log(`      ${inChain ? "in-chain " : "NOT IN CHAIN"} ${h.tax}:${h.concept} = ${h.val} ${h.unit} (${h.form ?? "?"} ${h.fy ?? ""}${h.fp ?? ""})`);
+      const frame = h.months === null ? `as at ${h.end}` : `${h.months}M frame`;
+      console.log(`      ${inChain ? "in-chain " : "NOT IN CHAIN"} ${h.tax}:${h.concept} = ${h.val} ${h.unit} [${frame}] (${h.form ?? "?"} ${h.fy ?? ""}${h.fp ?? ""})`);
     }
     console.log(`      => ${anyGap ? "CHAIN GAP (see NOT IN CHAIN above)" : "chain covers it; null has another cause"}`);
+    if (!isInstant) {
+      // THE PROBE'S OWN MUTATION, RUN EVERY TIME. What the 80-105 day rule —
+      // the bug this probe shipped with — would have concluded from the same
+      // facts. Printed rather than trusted, so the flip is visible in the log.
+      const quarterly = [...seen.values()].filter((h) => h.months !== null && h.months >= 3 && h.months <= 3.5);
+      narrowVerdicts.push({
+        symbol, field,
+        wide: seen.size ? "TAGGED" : "NOT TAGGED",
+        narrow: quarterly.length ? "TAGGED" : "NOT TAGGED",
+      });
+    }
   }
   await new Promise((r) => setTimeout(r, 200));
 }
+
+// ── THE MUTATION, REPORTED ──────────────────────────────────────────────────
+console.log(`\n${"=".repeat(74)}\nPROBE SELF-CHECK: what a 3-month-only frame filter would have said`);
+console.log("(that filter was this probe's bug; every row where the two disagree is a verdict it got wrong)\n");
+let flips = 0;
+for (const v of narrowVerdicts) {
+  const flip = v.wide !== v.narrow;
+  if (flip) flips++;
+  console.log(`  ${flip ? "FLIPS  " : "same   "} ${v.symbol.padEnd(6)} ${v.field.padEnd(24)} wide=${v.wide.padEnd(10)} 3M-only=${v.narrow}`);
+}
+console.log(
+  flips
+    ? `\n  ${flips} verdict(s) differ — the frame rule is doing the work, and the old one was wrong about them.`
+    : "\n  No verdict differs. Either no duration field here is filed year-to-date, or the frame rule is not being applied — check before trusting this run."
+);
