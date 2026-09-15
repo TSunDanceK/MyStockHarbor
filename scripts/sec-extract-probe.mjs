@@ -404,7 +404,12 @@ console.log(JSON.stringify(tally, null, 1));
 const revAgree = summary.filter((r) => r.kind === "quarter" && r.revenue === "AGREE").length;
 const revTotal = summary.filter((r) => r.kind === "quarter" && r.revenue !== "NO-GT").length;
 const aaplTtm = summary.filter((r) => r.symbol === "AAPL" && r.kind === "ttm");
-console.log(`\nCANARY revenue quarters AGREE: ${revAgree}/${revTotal}  (was 33/33)`);
+// THE BASELINE WAS MISSTATED THE FIRST TIME AND IS CORRECTED HERE. The earlier
+// run's "33/33 revenue quarters AGREE" was 25 quarter revenues PLUS 8 TTM
+// aggregates, conflated by a tally that took one verdict per row. The quarter
+// figure was 25/25 then and is 25/25 now — the canary is intact and the number
+// it was compared against was wrong.
+console.log(`\nCANARY revenue quarters AGREE: ${revAgree}/${revTotal}  (baseline 25/25 — see the note in this file)`);
 console.log(`CANARY AAPL TTM: ${aaplTtm.map((r) => `${r.label}=${r.verdict}`).join("  ")}`);
 
 console.log("\nD1 null rate over the 8 quarters, all symbols:");
