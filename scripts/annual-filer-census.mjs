@@ -77,6 +77,32 @@ for (let i = 0; i < symbols.length; i += 50) {
   });
 }
 
+// ── PER-SYMBOL DETAIL, for watching a migration move ────────────────────────
+//
+// The census answers "how many"; a migration needs "which, and what changed".
+// SYMBOLS=AAPL,AZN,MU,RYAAY prints the stored window and period counts for
+// those symbols alone, so the same command run before and after a rewindow
+// pass is a before/after on the same instrument.
+const WATCH = (process.env.SYMBOLS ?? "").split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+if (WATCH.length) {
+  console.log(`WATCHED SYMBOLS, as stored right now:`);
+  const got = await redis.mget(...WATCH.map((x) => `${SEC_FACTS_PREFIX}:${x}`));
+  WATCH.forEach((sym, i) => {
+    const set = got[i];
+    const e = manifest.symbols[sym];
+    if (!set || typeof set !== "object") {
+      console.log(`  ${sym.padEnd(6)} no stored set (manifest contentHash ${e?.contentHash ?? "absent"})`);
+      return;
+    }
+    console.log(
+      `  ${sym.padEnd(6)} w=${String(set.w ?? 8).padStart(2)} quarters=${String((set.quarters ?? []).length).padStart(2)} ` +
+      `years=${String((set.years ?? []).length).padStart(2)} instants=${String((set.instants ?? []).length).padStart(2)} ` +
+      `| manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"}`
+    );
+  });
+  console.log("");
+}
+
 console.log("BY SHAPE, counted in SYMBOLS:");
 for (const [k, v] of Object.entries(bucket)) {
   console.log(`  ${k.padEnd(13)} ${String(v.length).padStart(4)} SYMBOLS`);
