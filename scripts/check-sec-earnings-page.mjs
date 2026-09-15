@@ -721,35 +721,58 @@ console.log("\n7i. the meta description describes the page, not the price chart"
   check("the trend vocabulary is read from lib/indicators.ts",
     labels.length === 3, labels.join(" / "));
 
+  // BOTH PAGES BUILT FROM THE SAME TEMPLATE. The earnings page's leak was found
+  // by eye-check; /stock/[symbol]/news carried the identical `trendStr`
+  // expression in the identical position. One of them being fixed is not the
+  // property — neither carrying it is.
+  const NEWS = "app/stock/[symbol]/news/page.tsx";
+  const PAGES = [
+    { name: "earnings", src: pageRaw },
+    { name: "news", src: fs.readFileSync(NEWS, "utf8") },
+  ];
+
+  /** Run one page's generateMetadata with its network reads stubbed. */
+  const runMeta = async (src, label, symbol) => {
+    const mod = await lift(
+      [
+        "const cleanSymbol = (s) => String(s).toUpperCase();",
+        "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
+        "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
+        // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
+        // still does not reach the description — a stub returning null would
+        // make this pass for the wrong reason.
+        `const computeIndicatorSeed = () => ({ lastClose: 200, trend: ${JSON.stringify(label)} });`,
+        grabFunction(src, "generateMetadata"),
+      ].join("\n") + "\nexport { generateMetadata };"
+    );
+    return mod.generateMetadata({ params: Promise.resolve({ symbol }) });
+  };
+
   const metaSrc = grabFunction(pageRaw, "generateMetadata");
   const leaked = [];
-  for (const label of labels) {
-    for (const symbol of ["AAPL", "KGC"]) {
-      const mod = await lift(
-        [
-          "const cleanSymbol = (s) => String(s).toUpperCase();",
-          "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
-          "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
-          // A SEED WITH A TREND IN IT. The point is that one is AVAILABLE and
-          // still does not reach the description — a stub returning null would
-          // make this pass for the wrong reason.
-          `const computeIndicatorSeed = () => ({ lastClose: 200, trend: ${JSON.stringify(label)} });`,
-          metaSrc,
-        ].join("\n") + "\nexport { generateMetadata };"
-      );
-      const meta = await mod.generateMetadata({ params: Promise.resolve({ symbol }) });
-      for (const [where, text] of [
-        ["description", meta.description],
-        ["og:description", meta.openGraph?.description],
-        ["twitter:description", meta.twitter?.description],
-      ]) {
-        if (typeof text === "string" && text.includes(label)) leaked.push(`${symbol} ${where}: ${label}`);
+  for (const { name, src } of PAGES) {
+    for (const label of labels) {
+      for (const symbol of ["AAPL", "KGC"]) {
+        const meta = await runMeta(src, label, symbol);
+        for (const [where, text] of [
+          ["description", meta.description],
+          ["og:description", meta.openGraph?.description],
+          ["twitter:description", meta.twitter?.description],
+        ]) {
+          if (typeof text === "string" && text.includes(label)) {
+            leaked.push(`${name} ${symbol} ${where}: ${label}`);
+          }
+        }
       }
     }
   }
-  check("no trend label reaches the description, og:description or twitter:description",
+  check("no trend label reaches description, og:description or twitter:description on EITHER page",
     leaked.length === 0,
-    leaked.length ? leaked.join(" | ") : `${labels.length} labels x 2 symbols x 3 fields, all clean`);
+    leaked.length ? leaked.join(" | ")
+      : `${PAGES.length} pages x ${labels.length} labels x 2 symbols x 3 fields, all clean`);
+  check("...and neither page's source still carries the interpolation",
+    PAGES.every(({ src }) => !/trendStr/.test(src) && !/\$\{seed\.trend\}/.test(src)),
+    PAGES.map(({ name }) => name).join(", "));
 
   // THE CONTROL. "No description anywhere mentions a trend" would also pass if
   // the trend had been removed from the stock page, where it is the subject.
@@ -764,10 +787,37 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     /uptrend/i.test(stockDesc),
     `"${stockDesc.slice(0, 90)}..." — that page uses buildSeoDescription, which writes it as a sentence`);
 
-  // AND THE LEAK IS GONE AT THE SOURCE, not just absent from one run.
-  check("the earnings description no longer interpolates the seed's trend",
-    !/trendStr/.test(pageRaw) && !/\$\{seed\.trend\}/.test(pageRaw),
-    "the bare-label interpolation is removed rather than conditioned");
+  // ── AND IT READS AS ENGLISH ───────────────────────────────────────────────
+  // It rendered "AAPL is in a uptrend" in the live meta description — on the
+  // one page where the trend IS the subject, so it is the sentence a searcher
+  // sees. Asserted on the RENDERED STRING for every trend the builder can
+  // reach, not on the article helper in isolation.
+  const seedFor = (trend) => ({
+    trend, rsi: 55, ma50: 190, ma200: 180, lastClose: 200,
+    macdLabel: null, trendScore: { known: false, passed: 0, total: 0 },
+  });
+  const articleBad = labels
+    .map((t) => seo.buildSeoDescription("AAPL", seedFor(t)))
+    .filter((d) => /\bis in a [aeiou]/i.test(d));
+  check("no trend sentence reads \"a\" before a vowel",
+    articleBad.length === 0,
+    articleBad.length ? articleBad.map((d) => `"${d.slice(0, 50)}"`).join(" | ")
+      : labels.map((t) => `"${seo.buildSeoDescription("AAPL", seedFor(t)).slice(0, 34)}"`).join(" "));
+
+  // MUTATION: put the fixed article back and the vowel case must fail again.
+  const badArticle = (src) =>
+    src.replace(
+      "`${symbol} is in ${article(trend)} ${trend.toLowerCase()}`",
+      "`${symbol} is in a ${trend.toLowerCase()}`"
+    );
+  check("the article mutation actually applied", badArticle(indicators) !== indicators);
+  const seoBad = await lift(
+    [grabFunction(badArticle(indicators), "buildSeoDescription")].join("\n") +
+      "\nexport { buildSeoDescription };"
+  );
+  check("MUTATION: hardcoding \"a\" brings \"a uptrend\" back",
+    /\bis in a uptrend\b/i.test(seoBad.buildSeoDescription("AAPL", seedFor("Uptrend"))),
+    "and leaves \"a downtrend\" correct, which is why the bug survived a read-through");
 
   // ── MUTATION: PUT THE INTERPOLATION BACK ────────────────────────────────
   // An absence is only an assertion if something can make it present. This
