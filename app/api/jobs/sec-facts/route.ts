@@ -34,21 +34,52 @@ export const maxDuration = 300;
 // fetch into it would spend that property. Two crons, twenty minutes apart.
 
 /**
- * Per-run allowances.
+ * Per-run allowances — MEASURED, not estimated.
  *
- * SIZED FROM THE WIRE COST, WHICH IS THE BINDING CONSTRAINT. There is no
- * conditional check on companyfacts -- Last-Modified and ETag are both absent,
- * measured 23 of 23 (`claude/sec-reread-no-cheap-check-2026-09-13.md`) -- so
- * every fetch is a full body. Measured ~150 KB typical, and AAPL's is ~10 MB.
- * 60 + 40 is ~15 MB of wire in the worst realistic mix, comfortably inside a
- * 300s function, and drains a 700-symbol universe in about a fortnight.
+ * THE FIRST VALUES WERE 60/40 AND CAME FROM THE BRIEF'S WIRE ESTIMATE, "~150 KB
+ * typical, AAPL's is ~10 MB". That estimate was wrong by an order of magnitude
+ * in one direction and the allowance wrong by another in the other, and 40/day
+ * against ~875 CIK-bearing symbols is TWENTY-TWO DAYS of "not loaded yet"
+ * across the site.
  *
- * SEPARATE, NOT SHARED. One pool would let a large backlog of never-populated
- * symbols starve the reverify queue for days -- the same priority inversion
+ * scripts/sec-populate-cost.mjs, relay run 34959833821, 40 symbols sampled
+ * evenly through the dump universe, 0 failures:
+ *
+ *   wire    p50 3.0 MB   p90 5.3 MB   max 6.4 MB   (the brief said ~150 KB)
+ *   time    p50 153ms    p90 327ms    max 549ms    mean 165ms
+ *   stored  p50 11.2 KB  p90 13.2 KB  max 14.3 KB
+ *
+ * THREE CEILINGS, SMALLEST WINS:
+ *   wall time     1450/run at a 20% margin on the 300s budget (165ms each)
+ *   SEC's rate    1920/run at the route's own 8 req/s
+ *   Redis writes  one SET per CHANGED symbol -- but only the FIRST pass writes
+ *                 every symbol; after that a set is rewritten only when its
+ *                 contentHash moves, which is a filing event. So this is a
+ *                 one-off ~875 SETs spread over the drain, then roughly the
+ *                 daily filing count. Not a recurring bill.
+ *
+ * SET AT 300, WHICH IS THE 1450 CEILING DIVIDED BY FIVE, and the divisor is the
+ * honest part: THE MEASUREMENT WAS TAKEN ON A GITHUB RUNNER, NOT ON A VERCEL
+ * LAMBDA. The two do not have the same network. The spec's own iad1 figure is
+ * encouraging (~90ms for JPM's 4.6 MB submissions), but "encouraging" is not
+ * "measured on the thing that will run it", and the first real cron run is the
+ * measurement that settles it -- the summary log reports attempted, written and
+ * both backlogs, so it will say plainly whether 300 fits.
+ *
+ * At 300: ~2.9 days to drain, ~810 MB of wire per run, ~50s of the 300s budget
+ * at the measured mean.
+ *
+ * REVERIFY RAISED TO 150 for a different reason: it is driven by what actually
+ * filed, and the measured window's busiest day queued ~130. At 60 a peak day
+ * took three runs to clear, which means a stale number stayed on a live page
+ * for two extra days. 150 clears a peak day in one.
+ *
+ * SEPARATE, NOT SHARED. One pool would let the populate backlog starve the
+ * reverify queue for days -- the same priority inversion
  * SEC_COLD_FETCH_DRAIN_PER_RUN was given its own allowance to avoid.
  */
-export const SEC_REVERIFY_PER_RUN = 60;
-export const SEC_POPULATE_PER_RUN = 40;
+export const SEC_REVERIFY_PER_RUN = 150;
+export const SEC_POPULATE_PER_RUN = 300;
 
 /** SEC asks for at most 10 requests a second with a declared User-Agent. */
 const MIN_GAP_MS = 125;

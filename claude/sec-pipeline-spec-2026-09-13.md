@@ -453,6 +453,45 @@ second mechanism, no separate rate control, no parallel code path to keep in ste
 It also means one dial governs every upstream call the site makes to SEC: the drain rate.
 That is the number to set conservatively and raise once it has been watched.
 
+## 7h. SEEDING ONLY HAPPENS INSIDE THE DAILY-INDEX JOB — added 2026-09-15
+
+**A merge that changes what the universe seeds does not take effect until the
+next run of that job.** `seedManifest` is called from
+`/api/jobs/sec-daily-index`, once a day at 04:00, and nowhere else.
+
+Observed: #455 uncapped the seed to `PRESET_UNIVERSE ∪ readDynamicUniverse()`
+and merged at ~04:20 on 2026-09-15 — twenty minutes after that morning's cron
+had run at 04:00:16. The manifest therefore sat at the OLD 696 symbols all day,
+and nothing anywhere said so: the job had succeeded, the code was correct, and
+the only symptom was a universe count that did not match the code. It needed a
+manual dispatch to reseed (696 → 759, `seededThisRun: true`,
+`datesConsidered: 0`, watermark untouched, 3 commands).
+
+**The consequence to remember:** a change to the seed and a change to what reads
+the manifest can land in the same merge and take effect a day apart. Anything
+verified against the manifest in the window between is verified against the
+previous day's universe.
+
+A manual `GET /api/jobs/sec-daily-index?key=…` reseeds without walking any dates
+— it is idempotent, adds only, and leaves the watermark alone.
+
+### And a stale ticker the reseed surfaced
+
+`symbolsWithoutCik` after the reseed was `BRK.B, BK, EA, EQR, WBS`.
+
+- **BRK.B** was the spelling defect, fixed 2026-09-15 (the universe writes a
+  dot, SEC's exchange file a dash, and `seedManifest` bridged neither).
+- **BK is a RENAME, not a delisting.** Bank of New York Mellon trades as **BNY**
+  now; SEC's file lists CIK 1390777 under `BNY` and `BNY-PK`, and carries no
+  `BK` at all. This is the `reconcileDelistings` "retickered" case — the CIK is
+  live under another ticker — and it is the same shape as the MMC→MRSH and
+  FI→FISV hand-edits already recorded in `presetUniverse.ts`.
+- **EA, EQR and WBS** are absent from SEC's `company_tickers_exchange.json`
+  under any spelling. Unexplained; not investigated. They came from the dynamic
+  pool rather than the preset list, so nothing guarantees them a page.
+
+---
+
 ## 8. Build order, once the probe answers
 
 1. **Manifest first, empty.** One key, the shape in §2. Everything else reads and writes it.

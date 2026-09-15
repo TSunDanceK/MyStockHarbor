@@ -185,3 +185,72 @@ no two quarters in one table share one.
 - **PLAB's `longTermDebt` reads $4,000** on one date and $3.9M on another — the
   chain is picking something small and probably wrong for that filer. Flagged in
   the five-symbol diff (D5) and unresolved.
+
+---
+
+## 11. The populate allowance, measured — and a 25% coverage gap it exposed
+
+`scripts/sec-populate-cost.mjs`, relay run
+[34959833821](https://github.com/TSunDanceK/MyStockHarbor/actions/runs/34959833821).
+40 symbols sampled evenly through the dump universe (899 symbols, 875 with a
+CIK), 0 failures.
+
+```
+wire    p50 3.0MB   p90 5.3MB   max 6.4MB   total 107MB for 40
+time    p50 153ms   p90 327ms   max 549ms   mean 165ms
+stored  p50 11.2KB  p90 13.2KB  max 14.3KB
+```
+
+**The brief's "~150 KB typical" was wrong by a factor of twenty.** The median
+companyfacts document is 3 MB. It did not matter, because the binding constraint
+turned out to be neither wire nor rate.
+
+| ceiling | at a 20% margin on the 300s budget |
+|---|---|
+| wall time | **1450/run** |
+| SEC's rate | 1920/run |
+| Redis writes | one SET per *changed* symbol — see below |
+
+Raised **40 → 300** and **60 → 150**. The 300 is the 1450 ceiling divided by
+five, and the divisor is the honest part: **the measurement was taken on a
+GitHub runner, not a Vercel lambda.** The first real cron run settles it, and the
+summary log reports `attempted`, `written` and both backlogs, so it will say
+plainly whether 300 fits. Drain goes from ~22 days to ~2.9.
+
+Redis is not a recurring cost here: only the first pass writes every symbol;
+after that a set is rewritten only when its `contentHash` moves, which is a
+filing event.
+
+### THE REAL FINDING — 10 of 40 sampled symbols extract to NOTHING
+
+```
+AEG   AZN   BEPH  KGC   MFC   MT   NWG   OTLY  RYAAY  VIV
+                       0 quarters, 0 instants, 0.2–0.3 KB stored
+```
+
+Every one is a **foreign private issuer**: Aegon, AstraZeneca, Brookfield,
+Kinross, Manulife, ArcelorMittal, NatWest, Oatly, Ryanair, Vivo. They file
+**IFRS**, and all 46 fields in `secFields.ts` declare `taxonomy: "us-gaap"`.
+companyfacts carries their data under `ifrs-full`, which nothing reads.
+
+**25% of the sample, and the brief predicted the population without predicting
+the consequence:** "49 of the 55 periodic filers in the measured window were 6-K
+filers — foreign private issuers." Those are the same companies. ARM is an ADR
+too and extracts fine, because it files in us-gaap — which is exactly why
+auditing the page on ARM could not have caught this.
+
+**After a full drain, roughly a quarter of stock pages would still read "not
+loaded yet".** That is a bigger gap than the allowance this probe was written to
+size, and it is not fixed here: mapping IFRS concepts onto these 46 fields is a
+taxonomy decision with its own per-field judgements — `ifrs-full:Revenue` is not
+`us-gaap:Revenues`, and the cash-flow statement differs in structure, not just
+in naming. It needs the same treatment the us-gaap chains got, against real
+filings.
+
+Two smaller observations from the same run:
+
+- **PSKY** returned 6 quarters against 8 instants — partial, cause not
+  investigated.
+- `data/sec/company-tickers.json` carries **10,426** rows and the dump universe
+  resolved **875 of 899**; the 24 that did not are a separate question from the
+  four the reseed surfaced.
