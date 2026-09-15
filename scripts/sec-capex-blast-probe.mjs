@@ -277,9 +277,21 @@ for (const line of tally.mixed.slice(0, 30)) console.log(`  ${line}`);
 if (tally.mixed.length > 30) console.log(`  … and ${tally.mixed.length - 30} more`);
 if (!tally.mixed.length) console.log(`  (none — every filer resolves ${FIELD} from a single concept throughout)`);
 
-console.log(`\nBLOCKED BY A MID-YEAR TAG CHANGE — the case where two concepts cost a rendered cell: ${tally.blocked.length}`);
-for (const line of tally.blocked.slice(0, 20)) console.log(`  ${line}`);
-if (!tally.blocked.length) console.log(`  (none — no ${FIELD} differencing was refused for a tag change on this sample)`);
+// ── AND A ZERO HERE MEANS NOTHING ON AN INSTANT FIELD ────────────────────
+// Instants are NEVER differenced — that is structural, not incidental — so
+// this count is necessarily 0 for a balance-sheet field however badly its
+// concepts are mixed. Printed as "not applicable" rather than as 0, because a
+// zero in a risk column reads as reassurance, and a metric that cannot fire is
+// the same decorative failure as an assertion nothing can break.
+const DIFFERENCED = field.kind === "duration-cumulative";
+console.log(`\nBLOCKED BY A MID-YEAR TAG CHANGE — the case where two concepts cost a rendered cell: ${DIFFERENCED ? tally.blocked.length : "n/a"}`);
+if (!DIFFERENCED) {
+  console.log(`  (not applicable — ${FIELD} is ${field.kind}, and an instant is never differenced, so this can never fire)`);
+} else {
+  for (const line of tally.blocked.slice(0, 20)) console.log(`  ${line}`);
+  if (tally.blocked.length > 20) console.log(`  … and ${tally.blocked.length - 20} more`);
+  if (!tally.blocked.length) console.log(`  (none — no ${FIELD} differencing was refused for a tag change on this sample)`);
+}
 
 console.log(`\nsame ${tally.same} SYMBOLS · still empty both ways ${tally.empty} SYMBOLS`);
 // THE HEADLINE IS THE RISK, NOT THE WIN. A run with gains and no changes is the
