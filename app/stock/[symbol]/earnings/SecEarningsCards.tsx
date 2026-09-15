@@ -558,10 +558,26 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
         </p>
       ) : null}
       <div style={{ marginTop: 12 }}>
-        <Row label="Cash &amp; equivalents"><CellValue cell={b.cash} compact /></Row>
+        {/* THE LABEL FOLLOWS THE FIGURE. When the filer published only the
+            restricted-inclusive total, this row IS that total, and calling it
+            "Cash & equivalents" would overstate what the company can spend. */}
+        <Row
+          label={b.cashIncludesRestricted ? "Cash & equivalents (incl. restricted)" : "Cash & equivalents"}
+          sub={b.cashIncludesRestricted
+            ? "This filer reports cash only including restricted cash, which it cannot freely spend."
+            : undefined}
+        >
+          <CellValue cell={b.cash} compact />
+        </Row>
         <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
         <Row label="Total debt"><DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} /></Row>
-        <Row label="Net cash" strong sub="Cash and short-term investments less total debt.">
+        <Row
+          label="Net cash"
+          strong
+          sub={`Cash and short-term investments less total debt.${
+            b.cashIncludesRestricted ? " The cash leg includes restricted cash — see above." : ""
+          }`}
+        >
           <DerivedValue value={b.netCash} missing={b.netCashMissing} />
         </Row>
         <Row label="Current ratio">

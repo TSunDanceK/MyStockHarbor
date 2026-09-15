@@ -352,7 +352,25 @@ const BALANCE_SHEET: FieldDef[] = ([
       "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
       "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
     ], unit: "USD", taxonomy: "us-gaap" },
-  { key: "shortTermInvestments", chain: ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
+  // DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent
+  // is the CARRYING VALUE of current held-to-maturity securities — the figure
+  // that sits on the balance sheet. Added on evidence: VRT files it at
+  // 300,000,000 for 2026-06-30 and files none of the three above, so the line
+  // rendered blank on a filer that plainly holds short-term investments
+  // (probe, relay 35017263145).
+  //
+  // ITS FAIR-VALUE TWIN IS NOT ADDED. DebtSecuritiesHeldToMaturityFairValueCurrent
+  // carries the same 300,000,000 here and will not on a filer whose holdings
+  // have moved; amortized cost is what the balance sheet reports, and taking
+  // whichever appeared first would make the column mean different things on
+  // different symbols. Nor is ProceedsFromSaleOfShortTermInvestments, which
+  // matched the name pattern and is a CASH-FLOW item, not a balance.
+  { key: "shortTermInvestments", chain: [
+      "ShortTermInvestments",
+      "MarketableSecuritiesCurrent",
+      "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
+      "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+    ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalCurrentAssets", chain: ["AssetsCurrent"], unit: "USD", taxonomy: "us-gaap" },
