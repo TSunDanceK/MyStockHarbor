@@ -782,16 +782,24 @@ export function companyNameVariants(companyName: string): string[] {
  * The anchored fallback for a name too short to be a substring needle.
  *
  * ── THE POPULATION, MEASURED ──────────────────────────────────────────────
- * 55 of the 2,592 committed names produce NO variant at all: every candidate is
- * under the four-character guard, `.some()` on an empty array is false by
- * construction, and only an explicit ticker signal can match. MMM is the
- * clearest case — the company is spelled "3M", the ticker is "MMM", they share
- * no characters, and 88 fetched items yielded 2 cards, both carrying a literal
- * "(MMM)".
+ * 66 of the 2,610 committed names produce NO variant at all once cleanName has
+ * run over them: every candidate is under the four-character guard, `.some()`
+ * on an empty array is false by construction, and only an explicit ticker
+ * signal can match. MMM is the clearest case — the company is spelled "3M", the
+ * ticker is "MMM", they share no characters, and 88 fetched items yielded 2
+ * cards, both carrying a literal "(MMM)".
  *
- * 42 of the 55 are names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO,
- * PVH …). The rest are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC,
- * CGI/GIB, RPC/RES, V2X/VVX, AAR/AIR.
+ * 60 of the 66 are names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO,
+ * PVH …), and produce an ALL-CAPS needle. The rest are short but different —
+ * 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC, CGI/GIB, RPC/RES, V2X/VVX, AAR/AIR.
+ *
+ * THIS PARAGRAPH SAID 55 OF 2,592, and both halves moved for reasons worth
+ * separating. 2,592 -> 2,610 is real growth: the directory join was fixed to try
+ * every spelling and recovered 18 suffixed symbols it had been losing. 55 -> 66
+ * is not growth at all — it is the normaliser. 55 counted the RAW directory
+ * names ("Dow Inc. Common Stock"), 66 counts them after cleanName strips the
+ * instrument suffix, which is the form the live path hands the matcher. None of
+ * the 18 recovered rows is fallback-only.
  *
  * ── WHY NOT JUST LOWER THE GUARD ─────────────────────────────────────────
  * A two- or three-character SUBSTRING matches half the market: "rh" inside

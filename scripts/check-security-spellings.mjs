@@ -9,6 +9,7 @@
 //
 // Everything below is a pure function over strings: no network, no dump.
 import fs from "node:fs";
+import { readCodeOnly } from "./lib/source-code.mjs";
 import { symbolSpellings, lookupBySpelling, classifySecurityName, describeSecurityName } from "./lib/symbol-spellings.mjs";
 
 let failures = 0;
@@ -253,12 +254,32 @@ const EXEMPT = new Set(["phase0-adjustment-probe.mjs", "step0-analyse-dump.mjs"]
 // remained -- a check reporting success while testing less than it claimed,
 // which is the failure mode named in check-sec-daily-index.mjs's header.
 const ROLLED_OWN = /replace\(\/\\\.\/g,\s*"-"\)|replace\(\/-\/g,\s*"\."\)/;
+// CODE ONLY, BECAUSE THIS CHECK JUST CAUGHT A COMMENT. logo-coverage-probe.mjs
+// was fixed to call symbolSpellings and the comment explaining the fix quotes
+// the pattern it replaced — so the raw-text match flagged the file for saying
+// what it had stopped doing. That is the repo's own grep-finds-the-comment trap
+// (claude/traps/), landing on the guard rather than on the code it guards, and
+// it is the second time a checker here has matched prose describing an absence.
+//
+// Rewording the comment would have worked once and broken on the next file that
+// discusses the pattern honestly. Stripping is the fix that stays fixed, and
+// readCodeOnly's own assertStripKeptTheCode refuses a strip that eats the file.
 const copies = fs.readdirSync("scripts").filter((f) => f.endsWith(".mjs"))
   .filter((f) => !EXEMPT.has(f) && f !== "check-security-spellings.mjs")
-  .filter((f) => ROLLED_OWN.test(fs.readFileSync(`scripts/${f}`, "utf8")));
+  .filter((f) => ROLLED_OWN.test(readCodeOnly(`scripts/${f}`)));
 check("no script rolls its own security-join spelling any more",
   copies.length === 0,
   copies.join(", ") || `${EXEMPT.size} exempt with stated reasons; the rest use the helper`);
+// TWO CONTROLS, because "no file matched" is also what a broken strip returns.
+check("...and the pattern is still matchable in code — the strip did not eat everything",
+  ROLLED_OWN.test(readCodeOnly("scripts/step0-analyse-dump.mjs")),
+  "step0-analyse-dump.mjs is exempt BECAUSE it carries the pattern; if it stops " +
+    "matching, the assertion above is passing on an empty haystack");
+check("...and the pattern is NOT matched when it appears only in prose",
+  !ROLLED_OWN.test(readCodeOnly("scripts/logo-coverage-probe.mjs")) &&
+    ROLLED_OWN.test(fs.readFileSync("scripts/logo-coverage-probe.mjs", "utf8")),
+  "this file mentions the old pattern in a comment and calls symbolSpellings in " +
+    "code — it must fail the raw match and pass the stripped one, or the strip is a no-op");
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nSpelling helper is sound.\n");
 process.exit(failures ? 1 : 0);

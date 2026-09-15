@@ -19,7 +19,7 @@
 // universe, and it is unreadable from here anyway (no Upstash credentials in
 // this job, by design). Per constraint 6 the candidate set is the union of:
 //
-//   data/company-names.json   2,592  Nasdaq symdir snapshot
+//   data/company-names.json   2,610  Nasdaq symdir snapshot
 //   data/static-profile.json  2,619  sector/industry only
 //   lib/curatedSymbols.ts       161  sitemap + "Explore More Stocks";
 //                                    33 of these are in NEITHER file, and are
@@ -32,6 +32,7 @@
 // absentFields.blocked, so the brief's requested splits cannot come from
 // committed data.
 import fs from "node:fs";
+import { symbolSpellings } from "./lib/symbol-spellings.mjs";
 
 const UA =
   process.env.PROBE_USER_AGENT ??
@@ -341,18 +342,36 @@ for (const r of namedMisses) {
 }
 console.log();
 
-// ── DOT/DASH SPELLING ─────────────────────────────────────────────────────
+// ── WHICH SPELLING DOES THE CDN KEY ON? ───────────────────────────────────
 // BRK.B vs BRK-B has already cost this repo a CIK lookup. If the CDN keys on one
 // spelling only, a harvest built from the other silently loses those names, so
 // the question is settled here rather than discovered in Phase 2.
-const dotted = symbols.filter((s) => s.includes("."));
-console.log(`DOT vs DASH SPELLING (${dotted.length} dotted symbols in the union)`);
-if (dotted.length) {
-  const alt = await runPool(dotted, (s) => probe(s.replace(/\./g, "-")), CONCURRENCY);
-  const dottedRes = new Map(results.map((r) => [r.symbol, r]));
-  for (let i = 0; i < alt.length; i += 1) {
-    const d = dotted[i];
-    console.log(`  ${d.padEnd(8)} dotted=${String(dottedRes.get(d)?.verdict ?? "?").padEnd(12)} dashed=${alt[i].verdict}`);
+//
+// EVERY SPELLING, not the dot/dash pair alone. This block used to probe one
+// hand-rolled `.replace(/\./g, "-")` and report the answer as "dotted vs
+// dashed", which asks two thirds of the question: scripts/lib/symbol-spellings.mjs
+// records a THIRD form — the dollar (MER-PK -> MER$K, MKC-V -> MKC$V) — that
+// Nasdaq Trader uses for suffixed securities and that neither of the other two
+// reaches. A CDN keying on that form would read here as "no spelling works".
+//
+// The cost is honest and bounded: unlike a map lookup, each extra candidate is
+// an HTTP request, so a dotted symbol now costs two probes instead of one. The
+// suffixed set is tiny (18 in the committed universe) and the alternative is a
+// probe that cannot see the spelling most likely to be missing.
+const suffixed = symbols.filter((s) => symbolSpellings(s).length > 1);
+console.log(`SPELLING COVERAGE (${suffixed.length} symbols with more than one spelling)`);
+if (suffixed.length) {
+  const primary = new Map(results.map((r) => [r.symbol, r]));
+  // Flattened into ONE pool rather than a pool per spelling, so CONCURRENCY
+  // still means what it says against the CDN.
+  const jobs = suffixed.flatMap((s) => symbolSpellings(s).slice(1).map((alt) => [s, alt]));
+  const probed = await runPool(jobs, ([, alt]) => probe(alt), CONCURRENCY);
+  const byBase = new Map(suffixed.map((s) => [s, []]));
+  for (let i = 0; i < jobs.length; i += 1) {
+    byBase.get(jobs[i][0]).push(`${jobs[i][1]}=${probed[i].verdict}`);
+  }
+  for (const s of suffixed) {
+    console.log(`  ${s.padEnd(8)} ${s}=${String(primary.get(s)?.verdict ?? "?").padEnd(12)} ${byBase.get(s).join("  ")}`);
   }
 } else {
   console.log("  none");
