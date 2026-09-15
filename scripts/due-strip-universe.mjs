@@ -84,6 +84,48 @@ if (withCap.length < CUT * 4) {
 const ranked = withCap.slice().sort((a, b) => marketCap.get(b) - marketCap.get(a));
 const top = ranked.slice(0, CUT);
 
+// ── THE CANARY, BECAUSE HEALTHY COUNTERS DO NOT MEAN A HEALTHY LIST ───────
+//
+// The first run of this script reported 840 pool entries, 0 unparseable and
+// 99.4% universe coverage -- every counter green -- and produced a "top 50 by
+// market cap" with NVDA nowhere in it. Coverage counts answer "did the input
+// arrive"; they cannot answer "is the ranking the thing it claims to be", and
+// the second question is the one a default-sorted page depends on.
+//
+// So a handful of names that cannot plausibly sit outside a top 50 of US-listed
+// companies are checked by NAME, and a miss is attributed to one of exactly
+// three causes rather than left as a shrug. It is a hard failure: a list that
+// omits one of these is wrong whichever cause it is, and the right response is
+// to fix the input, not to ship the list and reason about it later.
+const CANARIES = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META"];
+const rankOf = (s) => { const i = ranked.indexOf(s); return i < 0 ? null : i + 1; };
+const missing = CANARIES.filter((c) => !top.includes(c));
+console.log(`[due-universe] canaries: ${CANARIES.map((c) => `${c}=${top.includes(c) ? `#${rankOf(c)}` : "MISSING"}`).join(" ")}`);
+if (missing.length) {
+  console.error(`\nFATAL: ${missing.length} of ${CANARIES.length} canary symbols are not in the top ${CUT}. Attribution:`);
+  for (const c of missing) {
+    const inUniverse = analysis.includes(c);
+    const hasCap = marketCap.has(c);
+    const rank = rankOf(c);
+    console.error(
+      `  ${c}: in analysis universe=${inUniverse} · has a pool cap=${hasCap} · ` +
+        (rank == null ? "never ranked" : `ranked #${rank} of ${ranked.length}`)
+    );
+  }
+  console.error(
+    `\nAll three causes produce the same empty space in the list and mean different things:\n` +
+      `  not in the universe  -> the analysis universe is the wrong input for a cap ranking\n` +
+      `  no pool cap          -> the pool did not answer for it; the cut is of what answered\n` +
+      `  ranked below the cut -> the caps themselves are wrong or stale\n` +
+      `Fix the input. Do not widen CUT to paper over it.`
+  );
+  process.exit(1);
+}
+
+// The ranks either side of the cut, so a suspicious ordering is visible rather
+// than inferred from the membership list.
+console.log(`[due-universe] ranks 45-55: ${ranked.slice(44, 55).map((s, i) => `${i + 45}.${s}`).join(" ")}`);
+
 // ── HOW STABLE IS THE BOUNDARY? ───────────────────────────────────────────
 // The only thing that can go stale here is the edge of the cut, so the ratio
 // between the last name in and the first name out is the staleness signal. A
