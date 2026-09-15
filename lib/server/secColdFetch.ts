@@ -248,7 +248,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
  * Redis billed by command count. Not taken unilaterally; recorded in
  * claude/earnings-page-on-sec-2026-09-15.md as the owner's call.
  */
-async function claimColdFetch(): Promise<boolean> {
+async function claimColdFetch(symbol: string): Promise<boolean> {
   if (!redis) return true;
   try {
     // Minute-resolution bucket: slice(0, 16) is YYYY-MM-DDTHH:MM.
@@ -257,7 +257,25 @@ async function claimColdFetch(): Promise<boolean> {
     // 120s, not 60: a bucket created at :59 would otherwise expire a second
     // later and hand the next second a fresh allowance.
     if (n === 1) await redis.expire(key, 120);
-    return n <= SEC_COLD_FETCHES_PER_MINUTE;
+    if (n > SEC_COLD_FETCHES_PER_MINUTE) {
+      // THE EVIDENCE THAT WOULD JUSTIFY THE MIDDLEWARE VERSION, and the reason
+      // it is not built today. Per-IP isolation costs a Redis EXISTS on every
+      // earnings request forever, on a meter already under cost pressure, to
+      // defend against an actor who can at worst spend one minute's budget and
+      // is self-healed 60 seconds later. That trade is bad against a
+      // hypothetical and might be good against a pattern.
+      //
+      // So this line IS the decision procedure: if it appears regularly in
+      // production, there is a pattern and the middleware version has a case.
+      // If it never appears, the isolation was never needed. One log line
+      // beats an argument either way.
+      console.warn(
+        `[sec-cold] rate budget exhausted: ${n} cold fetches this minute ` +
+          `(cap ${SEC_COLD_FETCHES_PER_MINUTE}) — ${symbol} queued instead`
+      );
+      return false;
+    }
+    return true;
   } catch {
     return true;
   }
@@ -366,7 +384,7 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   }
 
   // 3. THE RATE BUDGET.
-  if (!(await claimColdFetch())) {
+  if (!(await claimColdFetch(clean))) {
     await enqueue(clean);
     return { status: "pending", reason: "the cold-fetch budget for this minute is spent" };
   }

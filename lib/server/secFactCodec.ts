@@ -51,6 +51,15 @@ export type StoredFactSet = {
   years: StoredPeriod[];
   instants: StoredPeriod[];
   cover: CoverShares | null;
+  /**
+   * Taxonomy namespaces the payload carried. OPTIONAL, because sets written
+   * before this existed do not have it -- absent is "unknown", not "none", and
+   * every reader must treat it that way.
+   *
+   * NOT in contentHashOf: it describes the SOURCE, not a value, and a payload
+   * that gains a namespace without changing a number is not a restatement.
+   */
+  tx?: string[];
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -106,6 +115,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     years: result.years.map(encodePeriod),
     instants: result.instants.map(encodePeriod),
     cover: result.coverShares,
+    tx: result.taxonomies,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };

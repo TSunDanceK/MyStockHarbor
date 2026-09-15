@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
@@ -247,6 +248,26 @@ export async function GET(req: NextRequest) {
       if (changed) {
         if (await writeFactSet(set)) written++;
         else throw new Error("fact-set write failed");
+        // ── FLUSH THE PAGE THAT IS SHOWING THE OLD ANSWER ────────────────
+        //
+        // The earnings route inherits `revalidate = 3600`, so whatever it
+        // rendered LAST is served for up to an hour -- including a pending
+        // card. A cold symbol that timed out or lost the rate budget renders
+        // "being fetched", that HTML is cached, and this run is the moment the
+        // data actually lands. Without this the visitor who triggered the
+        // fetch keeps being told to check back for an hour after it arrived.
+        //
+        // Cheap and exact: one path, invalidated, re-rendered on the next
+        // request from the set just written. Not revalidateTag, which would
+        // need a tag on a render this job does not perform; not a shorter
+        // `revalidate`, which would make every stock page re-render for the
+        // sake of the few that are stale.
+        //
+        // Inside the `changed` branch deliberately. An unchanged set means the
+        // cached HTML is already right, and flushing it would throw away a
+        // valid render -- and with it the FMP calls and Redis reads that
+        // produced it -- to rebuild the identical page.
+        revalidatePath(`/stock/${symbol}/earnings`);
       } else {
         unchanged++;
       }

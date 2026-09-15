@@ -29,7 +29,7 @@ const body = code.slice(code.indexOf("export async function resolveFactSetForRen
 const at = (needle) => body.indexOf(needle);
 const iCik = at("cikForSymbol(clean)");
 const iStore = at("readFactSet(clean)");
-const iBudget = at("claimColdFetch()");
+const iBudget = at("claimColdFetch(clean)");
 const iFetch = at("fetchAndStore(clean, cik)");
 check("all four gates are present", [iCik, iStore, iBudget, iFetch].every((i) => i > -1),
   `cik@${iCik} store@${iStore} budget@${iBudget} fetch@${iFetch}`);
@@ -121,7 +121,7 @@ check("the bucket outlives its window so a burst cannot roll into a fresh one",
 // caught twice, in section 2 and again in section 4. Both ends carry the
 // `await` a CALL site has and a declaration does not — check-assertion-anchors
 // rejected the bare spellings, and it was right to.
-const overBudget = body.slice(body.indexOf("await claimColdFetch()"), body.indexOf("await withTimeout("));
+const overBudget = body.slice(body.indexOf("await claimColdFetch(clean)"), body.indexOf("await withTimeout("));
 check("over budget degrades to queued-and-pending, never to a refusal",
   /enqueue\(clean\)/.test(overBudget) && /status: "pending"/.test(overBudget) &&
     !/40[13]|notFound|throw/.test(overBudget),
