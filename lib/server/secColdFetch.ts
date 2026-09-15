@@ -6,9 +6,9 @@
 // here, never the primary: it catches the timeout case and nothing else.
 //
 // WHY THIS IS AFFORDABLE, AND IT IS NOT OBVIOUS. The earnings page inherits
-// `revalidate = 900` from app/stock/[symbol]/layout.tsx, so the fetch below is
+// `revalidate = 3600` from app/stock/[symbol]/layout.tsx, so the fetch below is
 // paid ONCE PER SYMBOL PER REVALIDATION WINDOW -- not once per visitor. A
-// thousand people opening /stock/XYZ/earnings in the same fifteen minutes cost
+// thousand people opening /stock/XYZ/earnings in the same hour cost
 // one companyfacts request between them. Remove the ISR config and this becomes
 // one external fetch per request, which is a different and much worse thing.
 //
@@ -19,32 +19,59 @@
 //      endpoint anyone can hit safe: the set of symbols that can trigger work
 //      is the ~10,400 real registrants SEC publishes, not any string.
 //   2. THE STORE. A symbol already populated never fetches.
-//   3. THE PER-IP CAP, on COLD FETCHES rather than on requests. A request cap
-//      403'd a real user on /insights/videos and that is on record
-//      (claude/traps/a-visible-failure-is-not-a-harmless-one.md). Everything
-//      served from cache stays free; only the act of triggering an external
-//      fetch is counted.
+//   3. THE RATE BUDGET, on COLD FETCHES rather than on requests, and it never
+//      403s anyone. A request cap 403'd a real user on /insights/videos and
+//      that is on record (claude/traps/a-visible-failure-is-not-a-harmless-one
+//      .md). Everything served from cache stays free; only the act of
+//      triggering an external fetch is counted, and being over budget degrades
+//      to queued-and-pending rather than to an error. It is site-wide rather
+//      than per-IP, which was not the intent -- see the caveat below.
 //   4. THE TIMEOUT. On expiry: enqueue, render the pending state, return.
 //      NEVER hang the render. The 71-second news render is the precedent.
-// ── A CAVEAT THAT MUST BE MEASURED, NOT ASSUMED ─────────────────────────────
+// ── THE CAVEAT WAS MEASURED, AND IT WAS REAL (2026-09-15) ───────────────────
 //
-// `headers()` marks a render DYNAMIC. It is called only on the cold path, after
-// the store check, so a warm render never reaches it -- which should mean the
-// route keeps its ISR behaviour for every symbol that already has data, and
-// only the one-off cold render is uncached.
+// The first version of this file called `headers()` for a per-IP budget and
+// passed `cache: "no-store"` to the companyfacts fetch, on the reasoning that
+// both were confined to the cold path so a warm render never reached them.
+// That reasoning was wrong, and the measurement said so in one request:
 //
-// SHOULD. That is a claim about how Next treats a conditionally-dynamic ISR
-// route, and this project's own history says a route silently going dynamic is
-// invisible (claude/picker-pages-isr-2026-08-20.md: 32 screener pages stayed
-// dynamic after force-dynamic was removed, because one no-store hint remained,
-// and nothing in the build said so).
+//   /stock/ALSN/earnings   HTTP 500  348ms     (off-universe, cold)
+//   /stock/RYAAY/earnings  HTTP 500  254ms     (off-universe, cold)
+//   /stock/AAPL/earnings   HTTP 200  418ms     (warm, unaffected)
+//   /stock/ZZQQXX/earnings HTTP 404  474ms     (CIK gate, unaffected)
 //
-// SO IT IS VERIFIED FROM THE BUILD'S ROUTE TABLE rather than reasoned about: if
-// /stock/[symbol]/earnings shows as `f` rather than a revalidating entry, this
-// approach is wrong and the per-IP cap has to move to middleware. That check is
-// recorded in claude/earnings-page-on-sec-2026-09-15.md alongside the measured
-// cold-render time.
-import { headers } from "next/headers";
+// with Vercel runtime logs naming it exactly:
+//
+//   Error: Page changed from static to dynamic at runtime
+//     /stock/ALSN/earnings, reason: no-store fetch
+//     https://data.sec.gov/api/xbrl/companyfacts/CIK0001411207.json
+//   ⨯ Error: Failed to load static file for page: /500 ENOENT
+//
+// A dynamic API inside an ISR render does not make THAT RENDER dynamic -- it
+// makes the route's own static/dynamic contract inconsistent, which Next 16
+// treats as fatal, and this deployment has no /500 artefact to fall back to.
+// So the cold render did not degrade; it 500'd, and it 500'd for every visitor
+// to every off-universe symbol. There is no conditional dynamism to have here.
+//
+// WHAT THAT FORCED, BOTH OF IT:
+//
+//   a. The fetch carries `next: { revalidate }` instead of `cache: "no-store"`.
+//      Dropping the no-store hint is the same mechanism redisCacheMode.ts
+//      already documents and proved on the 32 screener pages. See fetchAndStore
+//      for why the data cache is immaterial either way.
+//   b. THE BUDGET IS NO LONGER PER-IP, and that is a real loss, stated plainly
+//      rather than quietly swapped. `headers()` is the only way to learn a
+//      client's address inside a render and it is unconditionally a dynamic
+//      API, so per-IP capping and ISR are mutually exclusive on this route.
+//      Guard 3 is now a SITE-WIDE rate bucket; see claimColdFetch for what it
+//      does and does not buy, and for the middleware alternative that would
+//      restore per-IP at the cost of a Redis command on every earnings request.
+//
+// The old catch-and-continue is why this was invisible in the code: the
+// DynamicServerError from `headers()` landed in claimColdFetch's fail-open
+// `catch`, the one from the fetch landed in the outer catch and logged
+// "-- queued", and both read as a handled timeout while Next failed the route
+// underneath. A swallowed DynamicServerError is not a handled error.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
@@ -85,8 +112,17 @@ const redis =
  */
 export const SEC_COLD_TIMEOUT_MS = 5_000;
 
-/** Cold FETCHES per IP per hour. Cache hits are not counted; see guard 3. */
-export const SEC_COLD_FETCHES_PER_IP_HOUR = 12;
+/**
+ * Cold FETCHES site-wide per minute. Cache hits are not counted; see guard 3.
+ *
+ * 20/min against a measured mean of 165ms and a p90 of 327ms is ~6 seconds of
+ * work per minute, and it is an order of magnitude under SEC's own published
+ * fair-access ceiling of 10 requests/second. It is a RATE bound, not a volume
+ * bound: guards 1 and 2 already cap the total at ~10,400 fetches ever, because
+ * a fetched symbol is written to Redis and never fetched again. What this stops
+ * is one actor walking that list in a burst.
+ */
+export const SEC_COLD_FETCHES_PER_MINUTE = 20;
 
 /**
  * The pending queue, drained by /api/jobs/sec-facts.
@@ -100,7 +136,7 @@ export const SEC_COLD_FETCHES_PER_IP_HOUR = 12;
 export const SEC_COLD_QUEUE_KEY = "msh:sec:cold-queue:v1";
 export const SEC_COLD_QUEUE_MAX = 500;
 
-const IP_PREFIX = "msh:sec:cold-ip:v1";
+const RATE_PREFIX = "msh:sec:cold-rate:v1";
 
 /**
  * What the page got, and what it should therefore say.
@@ -147,6 +183,22 @@ export function cikForSymbol(symbol: string): string | null {
   return lookupBySpelling(map, symbol)?.value?.cik ?? null;
 }
 
+/**
+ * A DynamicServerError is NOT a handled error, and swallowing one is exactly how
+ * the 500 above stayed invisible: it read as a timeout in the logs
+ * ("-- queued") while Next failed the route underneath.
+ *
+ * So it is rethrown rather than turned into a pending page. That still fails the
+ * request, but it fails it LOUDLY and with the offending API named, which is the
+ * difference between one measurement finding it and nobody finding it. Matched
+ * on the message rather than by importing Next's internal error class, which is
+ * not part of its public surface.
+ */
+function rethrowIfDynamic(err: unknown): void {
+  const msg = String((err as Error)?.message ?? "");
+  if (/Dynamic server usage|couldn't be rendered statically/.test(msg)) throw err;
+}
+
 function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     // unref() so a pending timer cannot hold a serverless invocation open past
@@ -161,26 +213,45 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
 }
 
 /**
- * Per-IP cold-FETCH budget. Fails OPEN, like every other Redis guard here.
+ * The cold-FETCH budget. Fails OPEN, like every other Redis guard here.
  *
- * COUNTS FETCHES, NOT REQUESTS. The distinction is the whole point: a visitor
- * reading twenty cached pages spends nothing, and only the act of triggering an
- * external fetch is budgeted. Returns true when the fetch may proceed.
+ * COUNTS FETCHES, NOT REQUESTS, and that distinction survives the change below:
+ * a visitor reading twenty cached pages spends nothing, and only the act of
+ * triggering an external fetch is budgeted. Over budget is not an error either
+ * -- the symbol is queued and the page renders pending, which is the same
+ * degradation a timeout gets.
+ *
+ * ── SITE-WIDE, NOT PER-IP, AND THAT IS A LOSS ──────────────────────────────
+ *
+ * The brief asked for per-IP. Per-IP needs the client's address, the only way
+ * to learn it inside a render is `headers()`, and `headers()` is
+ * unconditionally a dynamic API -- which on this ISR route is not a degradation
+ * but a 500, measured (see the caveat at the top of this file). Per-IP capping
+ * and ISR cannot both hold here.
+ *
+ * WHAT IS LOST: a single actor can spend the whole site's minute. The bucket
+ * bounds total external work, which is the cost that matters, but it does not
+ * isolate one client from another, so a burst from one address can push a real
+ * visitor's cold symbol onto the queue-and-pending path.
+ *
+ * WHAT WOULD RESTORE IT: middleware. middleware.ts already runs on every
+ * /stock/* request with Redis in hand (dailyPageLimit), and headers are
+ * ordinary there. It would have to tell a cold request from a warm one before
+ * counting -- otherwise it is the request cap that is ruled out -- which costs
+ * one EXISTS on the fact-set key per earnings REQUEST, not per render, on a
+ * Redis billed by command count. Not taken unilaterally; recorded in
+ * claude/earnings-page-on-sec-2026-09-15.md as the owner's call.
  */
 async function claimColdFetch(): Promise<boolean> {
   if (!redis) return true;
   try {
-    const h = await headers();
-    const ip =
-      (h.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
-      h.get("x-real-ip") ||
-      "unknown";
-    const key = `${IP_PREFIX}:${new Date().toISOString().slice(0, 13)}:${ip}`;
+    // Minute-resolution bucket: slice(0, 16) is YYYY-MM-DDTHH:MM.
+    const key = `${RATE_PREFIX}:${new Date().toISOString().slice(0, 16)}`;
     const n = await redis.incr(key);
-    // 2h, not 1h: a bucket created at :59 would otherwise expire a minute later
-    // and hand the same IP a fresh allowance immediately.
-    if (n === 1) await redis.expire(key, 7200);
-    return n <= SEC_COLD_FETCHES_PER_IP_HOUR;
+    // 120s, not 60: a bucket created at :59 would otherwise expire a second
+    // later and hand the next second a fresh allowance.
+    if (n === 1) await redis.expire(key, 120);
+    return n <= SEC_COLD_FETCHES_PER_MINUTE;
   } catch {
     return true;
   }
@@ -221,13 +292,27 @@ export async function clearColdQueue(symbols: string[]): Promise<number> {
 
 const SEC_UA = process.env.SEC_USER_AGENT || "";
 
+/** Matches `revalidate` in app/stock/[symbol]/layout.tsx. See fetchAndStore. */
+export const SEC_COLD_FETCH_REVALIDATE = 3600;
+
 async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet> {
   const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
-    // NO Next CACHE ON THE FETCH ITSELF. The page's own ISR window is the cache;
-    // layering a second one would hold a multi-megabyte body in the data cache
-    // per symbol for a different lifetime than the HTML it produced.
-    cache: "no-store",
+    // NOT `cache: "no-store"`. That hint opts the whole route out of static
+    // rendering, and on this route that is a 500 rather than a slow page --
+    // measured, see the caveat at the top of this file.
+    //
+    // AND THE DATA CACHE IS IMMATERIAL EITHER WAY, which is why matching the
+    // route's own window is enough rather than a value that needs tuning:
+    //   - a symbol reached here is written to Redis by the line below, so guard
+    //     2 means the NEXT render never reaches this fetch at all. The real
+    //     cache is the store, and it has no expiry.
+    //   - the measured body is 3.0MB p50 / 6.4MB max, over Vercel's 2MB Data
+    //     Cache entry limit, so it is offered and declined rather than stored.
+    // A value BELOW the route's 3600 would be the harmful choice: Next takes
+    // the minimum of a segment's revalidate and its fetches', so it would
+    // shorten every stock page's window, not just this one's.
+    next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get("content-type") ?? "";
@@ -270,10 +355,10 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
     return { status: "pending", reason: "SEC_USER_AGENT is not configured" };
   }
 
-  // 3. THE PER-IP CAP.
+  // 3. THE RATE BUDGET.
   if (!(await claimColdFetch())) {
     await enqueue(clean);
-    return { status: "pending", reason: "cold-fetch budget for this client is spent" };
+    return { status: "pending", reason: "the cold-fetch budget for this minute is spent" };
   }
 
   // 4. THE TIMEOUT.
@@ -287,6 +372,7 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
       ? { status: "ready", set, cold: true }
       : { status: "no-xbrl", reason: "the filer publishes no XBRL these fields read" };
   } catch (err) {
+    rethrowIfDynamic(err);
     const reason = String((err as Error)?.message ?? err);
     const queued = await enqueue(clean);
     console.warn(`[sec-cold] ${clean}: ${reason}${queued ? " — queued" : " — queue full"}`);

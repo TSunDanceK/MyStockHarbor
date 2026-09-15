@@ -254,3 +254,96 @@ Two smaller observations from the same run:
 - `data/sec/company-tickers.json` carries **10,426** rows and the dump universe
   resolved **875 of 899**; the 24 that did not are a separate question from the
   four the reseed surfaced.
+
+---
+
+## §13 The cold path 500'd, and the reason kills the per-IP cap
+
+**Measured, not reasoned about.** One render probe against the preview
+(relay 34963369512) settled a question §12 had left open as a caveat:
+
+```
+/stock/ALSN/earnings    HTTP 500  348ms   6590B    outcome: unrecognised
+/stock/RYAAY/earnings   HTTP 500  254ms   6590B    outcome: unrecognised
+/stock/AAPL/earnings     HTTP 200  418ms 218075B   cache=MISS   outcome: rendered
+/stock/ZZQQXX/earnings   HTTP 404  474ms            outcome: 404
+round 2: AAPL 200 112ms cache=HIT · ZZQQXX 404 103ms cache=HIT
+```
+
+So three of the four guards were already right — the **CIK gate 404s**, the
+**warm render works** (418ms cold cache, 112ms on the ISR hit) — and the one
+thing the change existed to deliver, the synchronous cold fetch, returned 500.
+
+Vercel runtime logs named it exactly:
+
+```
+Error: Page changed from static to dynamic at runtime /stock/ALSN/earnings,
+  reason: no-store fetch
+  https://data.sec.gov/api/xbrl/companyfacts/CIK0001411207.json
+⨯ Error: Failed to load static file for page: /500 ENOENT
+```
+
+**The claim that was wrong.** §12 reasoned that `headers()` and a `no-store`
+fetch were safe because they sat behind the store check, so a warm render never
+reached them — conditional dynamism. There is no such thing on this route. A
+dynamic API inside an ISR render does not make *that render* dynamic; it makes
+the route's static/dynamic contract inconsistent, which Next 16 treats as fatal,
+and this deployment has no `/500` artefact to fall back to. Every visitor to
+every off-universe symbol would have got a 500.
+
+It was invisible in the code because **both DynamicServerErrors were caught**:
+one by `claimColdFetch`'s fail-open `catch`, one by the outer catch that logged
+`[sec-cold] ALSN: … — queued`. Both read as handled timeouts while Next failed
+the route underneath. A swallowed DynamicServerError is not a handled error, and
+it is now rethrown.
+
+### What changed
+
+| | before | after |
+|---|---|---|
+| companyfacts fetch | `cache: "no-store"` | `next: { revalidate: 3600 }` |
+| guard 3 | per-IP, via `headers()` | site-wide rate bucket, 20 cold fetches/min |
+| DynamicServerError | swallowed, rendered pending | rethrown |
+
+The fetch's revalidate **matches the segment's** deliberately: Next takes the
+minimum of a segment's revalidate and its fetches', so anything shorter would
+have shortened every `/stock/*` page's window. The Data Cache is immaterial
+either way — the measured body is 3.0MB p50 / 6.4MB max against Vercel's 2MB
+entry limit, so it is offered and declined, and guard 2 means a second render
+never reaches the fetch regardless. Redis is the real cache and it has no
+expiry.
+
+### The per-IP cap is lost, and that is the owner's call to make
+
+The brief said *"PER-IP CAP ON COLD FETCHES, not on requests."* That is not what
+shipped, and the reason is structural rather than a preference: the only way to
+learn a client's address inside a render is `headers()`, `headers()` is
+unconditionally a dynamic API, and the measurement above is what a dynamic API
+does to this route. **Per-IP capping and ISR are mutually exclusive here.**
+
+What the site-wide bucket keeps: fetches are counted, not requests, so a reader
+of cached pages still spends nothing; and over budget degrades to
+queued-and-pending rather than to the 403 that hit a real user on
+`/insights/videos`.
+
+What it loses: one actor can spend the whole site's minute, pushing a real
+visitor's cold symbol onto the queue. Total external work is still bounded —
+guards 1 and 2 cap it at ~10,400 fetches *ever*, because a fetched symbol is
+written to Redis and never fetched again — but clients are no longer isolated
+from each other.
+
+**The alternative, priced, not taken unilaterally:** `middleware.ts` already
+runs on every `/stock/*` request with Redis in hand (`dailyPageLimit`), and
+headers are ordinary there. To stay a *cold-fetch* cap rather than the request
+cap that is ruled out, it would have to tell cold from warm before counting —
+one `EXISTS` on the fact-set key per earnings **request** (not per render), on a
+Redis billed by command count.
+
+### A property of the pending state worth stating
+
+`revalidate = 3600` caches whatever the render produced, **including a pending
+card**. A cold symbol that times out or loses the budget race renders pending,
+and that HTML is served for up to an hour even after the cron populates it. The
+5s timeout is ~15x the measured p90 (327ms) so this should be rare, but rare is
+not never, and it is a real consequence of the synchronous design rather than a
+bug in it.
