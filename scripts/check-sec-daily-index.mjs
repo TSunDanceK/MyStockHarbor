@@ -212,6 +212,46 @@ check("the manifest is keyed by the universe's spelling, not the ticker file's",
 check("a symbol absent under EVERY spelling still reports no CIK",
   man.seedManifest(man.emptyManifest(), ["NOSUCH"], DOTTED, true).withoutCik.join() === "NOSUCH");
 
+// ── THE REAL PRESET AGAINST THE REAL TICKER FILE ──────────────────────────
+//
+// Everything above runs on a four-row map chosen to contain the defect, which
+// is fine for the RULE and useless for the QUESTION the review actually asked:
+// how many preset symbols were silently missing a CIK, measured, rather than an
+// assertion that BRK.B was the only one. A crafted map cannot answer that — it
+// can only confirm what its author already put in it.
+//
+// So this seeds the SHIPPED PRESET_UNIVERSE from the SHIPPED ticker file and
+// counts. It also recomputes what a plain Map.get would have produced, so the
+// count is a difference between two rules rather than a number to be believed.
+{
+  const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
+  const tickMod = await lift(
+    [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
+      "\nexport { parseTickerFile, padCik };"
+  );
+  const { map: realMap } = tickMod.parseTickerFile(
+    fs.readFileSync("data/sec/company-tickers.json", "utf8")
+  );
+  const presetMod = await lift(readCodeOnly("lib/server/presetUniverse.ts"));
+  const preset = presetMod.PRESET_UNIVERSE;
+
+  const viaSeed = man.seedManifest(man.emptyManifest(), preset, realMap, true);
+  const viaPlainGet = preset.filter((sym) => !realMap.get(sym));
+
+  check("every preset symbol resolves to a CIK through the shipped seed path",
+    viaSeed.withoutCik.length === 0,
+    viaSeed.withoutCik.length
+      ? `${viaSeed.withoutCik.join(", ")} — each of these is invisible to the daily index forever`
+      : `all ${preset.length} of PRESET_UNIVERSE`);
+  // THE MEASURED COUNT, not the claim. If a second dotted preset symbol is
+  // added later this number moves and the detail line says which.
+  check("...and the plain Map.get the seed used to do misses exactly the dotted ones",
+    viaPlainGet.length === 1 && viaPlainGet[0] === "BRK.B",
+    `${viaPlainGet.length} of ${preset.length} missed by Map.get: ` +
+      `${viaPlainGet.join(", ") || "none"} — the spelling helper recovers ` +
+      `${viaPlainGet.length - viaSeed.withoutCik.length} of them`);
+}
+
 const byCik = man.symbolsByCik(manifest);
 check("the CIK index registers BOTH padded and unpadded spellings",
   byCik.get("0000320193") === "AAPL" && byCik.get("320193") === "AAPL",
