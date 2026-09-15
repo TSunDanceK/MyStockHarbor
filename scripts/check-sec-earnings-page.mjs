@@ -459,6 +459,111 @@ console.log("\n7e. the cash card is ONE period, and says which");
     `"${matched.explanation.slice(-60)}" | "${absent.explanation.slice(-60)}"`);
 }
 
+console.log("\n7f. one message per situation, and none of them contradicts a card");
+
+// ── THE DEFECT: ONE SENTENCE SERVING SIX SITUATIONS ───────────────────────
+// The unavailable score read "This company's SEC filings have not been read
+// into the site yet" whenever the view was null. On /stock/RYAAY/earnings that
+// sat at the top of a page whose own card said "Its filings are available now
+// on SEC EDGAR" — two statements about the same company contradicting each
+// other, three inches apart. RYAAY has been read in; it reports in euros.
+{
+  const reason = (pageCode.match(/function noScoreReason[\s\S]*?\n\}/) ?? [""])[0];
+  check("the no-score reason branches on the cold status, not on view === null",
+    /cold\.status === "no-xbrl"/.test(reason) && /switch \(cold\.why\)/.test(reason),
+    "one message for six situations is how a page contradicts itself");
+  // EVERY why THE COLD PATH CAN PRODUCE MUST BE ANSWERED, derived from the
+  // union in secColdFetch rather than from a list kept here — a new why added
+  // there would otherwise fall silently into the default.
+  const coldRaw = fs.readFileSync("lib/server/secColdFetch.ts", "utf8");
+  const whys = [...(coldRaw.match(/why: "[^"]+"/g) ?? [])]
+    .map((m) => m.slice(6, -1)).filter((w, i, a) => a.indexOf(w) === i).sort();
+  const answered = whys.filter((w) => new RegExp(`case "${w}":`).test(reason));
+  const viaDefault = whys.filter((w) => !answered.includes(w));
+  check("every cold `why` is either named or deliberately in the default",
+    whys.length >= 4 && /default:/.test(reason),
+    `named: ${answered.join(", ") || "none"} | via default: ${viaDefault.join(", ") || "none"} ` +
+      `(of ${whys.length} the cold path can produce)`);
+  // ── RUN, NOT POSITIONED ───────────────────────────────────────────────────
+  // The first version of the two assertions below compared lastIndexOf() of
+  // two substrings and called that "the last branch". A mutation that inserted
+  // an early `return` at the TOP of the function left both positions unchanged
+  // and the check PASSED. That is the third time on this work that a check has
+  // measured a position in a file and called it an order of execution.
+  //
+  // So the function is lifted and called once per state, and the assertion is
+  // on the sentence it returns.
+  const reasonFn = (await lift(`export ${grabFunction(pageRaw, "noScoreReason")}`)).noScoreReason;
+  const say = (cold, hasSet) => reasonFn("RYAAY", cold, hasSet);
+  const cases = {
+    currency: say({ status: "no-xbrl", why: "currency", taxonomies: ["EUR"] }, true),
+    unreadTaxonomy: say({ status: "no-xbrl", why: "unread-taxonomy", taxonomies: ["ffd"] }, true),
+    none: say({ status: "no-xbrl", why: "none", taxonomies: [] }, true),
+    unknown: say({ status: "no-xbrl", why: "unknown", taxonomies: [] }, true),
+    noQuarters: say({ status: "ready" }, true),
+    pending: say({ status: "pending", reason: "x" }, false),
+  };
+  const NOT_READ = "have not been read into the site yet";
+  check("'not read in yet' is said for the pending state and NO other",
+    cases.pending.includes(NOT_READ) &&
+      Object.entries(cases).filter(([k]) => k !== "pending")
+        .every(([, v]) => !v.includes(NOT_READ)),
+    Object.entries(cases).map(([k, v]) => `${k}: ${v.includes(NOT_READ) ? "SAYS IT" : "ok"}`).join(" | "));
+  check("...and RYAAY's own state names the currency instead",
+    /reports in EUR/.test(cases.currency) && /have been read/.test(cases.currency),
+    `"${cases.currency}"`);
+  check("a read-in filer with data but no quarters gets its own sentence",
+    /has filed no quarterly periods/.test(cases.noQuarters) &&
+      !cases.noQuarters.includes(NOT_READ),
+    `"${cases.noQuarters}"`);
+  check("every state returns a distinct sentence",
+    new Set(Object.values(cases)).size >= 5,
+    `${new Set(Object.values(cases)).size} distinct of ${Object.keys(cases).length} states`);
+  // AND THE CARD STACK HAS THE SAME BRANCH. The score card was the half the
+  // review saw; the cards below fell through to SecPendingCard, which promises
+  // a quarter that will never arrive.
+  check("...and the card stack no longer renders PENDING for that filer",
+    /!secView && data\.cold\.status === "ready" \? \(\s*<SecNoQuartersCard/.test(pageCode),
+    "KGC stores 5 years, 8 instants and 24 populated fields, and zero quarters");
+  const noQ = (() => {
+    const start = cardsRaw.indexOf("export function SecNoQuartersCard(");
+    const rest = cardsRaw.slice(start);
+    return rest.slice(0, rest.indexOf("\nexport ", 1));
+  })();
+  check("that card does not read as temporary either",
+    noQ.length > 200 && !/check back|being fetched|not loaded yet|coming soon/i.test(noQ),
+    `${noQ.length}b — it will never stop being true, so it must not sound like waiting`);
+}
+
+console.log("\n7g. explanations a phone can read, and three periods declared");
+
+{
+  // HOVER-ONLY IS INVISIBLE ON TOUCH. The gap badge explained itself in an
+  // <abbr title>, which most of this audience cannot trigger at all.
+  const growthCard = (() => {
+    const start = cardsRaw.indexOf("export function SecGrowthMarginsCard(");
+    const rest = cardsRaw.slice(start);
+    return rest.slice(0, rest.indexOf("\nexport ", 1));
+  })();
+  const intro = growthCard.slice(growthCard.indexOf("<p>"), growthCard.indexOf("</p>"));
+  check("the gap marker is explained in visible text, not only in a title",
+    intro.length > 200 && /marked <strong>gap<\/strong>/.test(intro) &&
+      /not a consecutive run/.test(intro),
+    `intro ${intro.length}b — a title attribute cannot be reached on a touch screen`);
+  // THE THREE PERIODS. Said only when they are genuinely far apart, so a
+  // normal 10-Q filer does not carry a standing disclaimer.
+  check("the balance-sheet card declares its distance from the income statement",
+    /BALANCE_SHEET_SPREAD_DAYS = \d+/.test(cardsRaw) &&
+      /different date<\/strong> from the income statement above/.test(cardsRaw),
+    "income statement, cash flow and balance sheet can be three periods under one lede");
+  const days = Number((cardsRaw.match(/BALANCE_SHEET_SPREAD_DAYS = (\d+)/) ?? [])[1]);
+  check("...and the threshold is about a quarter, so a 10-Q filer says nothing",
+    days >= 80 && days <= 130,
+    `${days} days — below this the two dates coincide and the line would be noise`);
+  check("the spread is computed in the view, where a check can read it",
+    /balanceSheetSpreadDays:/.test(fs.readFileSync(VIEW, "utf8")));
+}
+
 console.log("\n8. the population path");
 
 const jobRaw = fs.readFileSync("app/api/jobs/sec-facts/route.ts", "utf8");

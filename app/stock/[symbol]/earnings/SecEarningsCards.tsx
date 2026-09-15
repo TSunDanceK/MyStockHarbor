@@ -145,12 +145,20 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
       {/* "PERIODS ON FILE", NOT "QUARTERS". These are the periods the filer
           published, in order — not a contiguous run. AZN's eight rows carry a
           three-quarter hole and the table presented them as consecutive. */}
+      {/* ── THE GAP EXPLANATION IS VISIBLE TEXT, NOT AN abbr TITLE ────────────
+          It lived only in the badge's `title`, which is hover-only: on a phone
+          there is nothing to hover, so most of the audience saw an unexplained
+          "gap" and no way to find out what it meant. This paragraph already
+          carries two other clarifications, so it is where the third belongs.
+          The badge stays as a per-row marker — it now points at an explanation
+          the reader can actually read. */}
       <p>
         The periods this company has filed, newest last. Year-over-year growth compares each period
         with the <strong>same fiscal quarter one year earlier</strong>, named in the row; where that
         period is not on file the figure is blank rather than measured against something else.
         Margins are gross profit, operating income and net income as a share of that period&apos;s
-        revenue.
+        revenue. A row marked <strong>gap</strong> has no filing on file for the period immediately
+        before it — these are the periods the company published, not a consecutive run of quarters.
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
@@ -262,13 +270,36 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   );
 }
 
+/**
+ * A QUARTER. Past this the balance-sheet date is far enough from the income
+ * statement's period end that presenting them together without a word is
+ * misleading, so the card says one.
+ */
+const BALANCE_SHEET_SPREAD_DAYS = 95;
+
 export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   const b = view.balance;
   if (!b) return null;
+  const spread = view.balanceSheetSpreadDays;
+  const apart = spread !== null && Math.abs(spread) > BALANCE_SHEET_SPREAD_DAYS;
   return (
     <section className="card">
       <div className="eyebrow">Balance sheet</div>
       <h3>Financial position as at {b.asOf}</h3>
+      {/* THREE PERIODS, ONE LEDE. The page's opening line says "latest reported
+          quarter" while the income statement, the cash-flow statement and this
+          balance sheet can each be a different period — every one correctly
+          labelled, which is not the same as clear. Said only when the dates are
+          genuinely far apart; on a normal 10-Q filer they coincide and a
+          standing disclaimer would be noise. */}
+      {apart ? (
+        <p style={{ marginTop: 8, marginBottom: 0 }}>
+          This is a <strong>different date</strong> from the income statement above, which covers{" "}
+          {view.latestLabel} ending {view.latestEnd}. A balance sheet is a position on one day and a
+          filer&apos;s most recent one is not always the end of its most recent reported period —
+          these are {Math.abs(spread!)} days apart.
+        </p>
+      ) : null}
       <div style={{ marginTop: 12 }}>
         <Row label="Cash &amp; equivalents"><CellValue cell={b.cash} compact /></Row>
         <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
@@ -415,6 +446,53 @@ export function SecPendingCard({ symbol }: { symbol: string }) {
  * site-limit wording, because claiming a company files nothing on the strength
  * of a field that is absent is the same error in a new place.
  */
+/**
+ * READ IN, WITH DATA, AND NO QUARTERS — the second permanent-pending case.
+ *
+ * `buildSecEarningsView` returns null when the stored set has no quarterly
+ * periods, and the page's fallback for a null view was SecPendingCard. So a
+ * filer whose set is populated and passes every usability bar still got
+ * "financials are being fetched — check back shortly", forever, because the
+ * cron would re-read it daily and find the same absence of quarters.
+ *
+ * It is the same defect the no-xbrl card was created to fix, in the branch
+ * nobody looked at: the review found the score card's version of it on RYAAY
+ * and this one sits one condition further along. KGC is the measured example —
+ * 5 years and 8 instants stored, 24 populated fields in its best period, zero
+ * quarters — and it is a whole class, not one filer: an annual-only foreign
+ * private issuer files 20-F and nothing quarterly.
+ */
+export function SecNoQuartersCard({
+  symbol,
+  years,
+  instants,
+}: {
+  symbol: string;
+  years: number;
+  instants: number;
+}) {
+  return (
+    <section className="card">
+      <div className="eyebrow">Annual filer</div>
+      <h2>{symbol} does not file quarterly results</h2>
+      <p>
+        This page is built around the most recent reported <strong>quarter</strong>, and{" "}
+        {symbol} files annually — {years === 1 ? "one annual period" : `${years} annual periods`}
+        {instants ? ` and ${instants} balance-sheet dates` : ""} are on file, with no quarterly
+        period among them. Its figures have been read from {SEC_ATTRIBUTION}; there is simply no
+        quarter to show.
+      </p>
+      <p style={{ marginBottom: 0 }}>
+        Its annual filings are available on{" "}
+        <a href="https://www.sec.gov/edgar/search/" style={{ color: "#93c5fd", fontWeight: 800 }}>
+          SEC EDGAR
+        </a>
+        .
+      </p>
+    </section>
+  );
+}
+
 export function SecNoXbrlCard({
   symbol,
   reason,

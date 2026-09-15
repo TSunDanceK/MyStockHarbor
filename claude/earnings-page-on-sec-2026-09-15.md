@@ -837,3 +837,83 @@ containment and behaviour instead. The first then failed a second time, on my
 own docblock, which *quotes* the sentence it documents; it reads the
 comment-stripped source now. Mutation-verified: moving the clause outside the
 guard fails it.
+
+---
+
+## §20 One sentence was serving six situations, and the page contradicted itself
+
+### 1. RYAAY's score card said the opposite of RYAAY's own card
+
+The unavailable score read *"This company's SEC filings have not been read into
+the site yet"* whenever the view was null — true of exactly one of the states it
+covered. On `/stock/RYAAY/earnings` it sat above a card that said *"Its filings
+are available now on SEC EDGAR"*: two statements about the same company,
+contradicting each other, three inches apart. RYAAY **has** been read in — 5
+instants, 5 years stored. It reports in euros.
+
+**The states that exist, and which sentence each gets now:**
+
+| state | what is true | sentence |
+|---|---|---|
+| `no-cik` | not a registrant | 404s before the score runs |
+| `pending` | genuinely not read in | *"…have not been read into the site yet"* |
+| `no-xbrl` / `currency` | read in, reports in EUR/GBP/… | *"…reports in EUR and this page reads US-dollar figures only"* ← **RYAAY** |
+| `no-xbrl` / `unread-taxonomy` | read in, filed under a taxonomy we don't read | names the taxonomy |
+| `no-xbrl` / `unread-detail` | read in, nothing resolved | *"none of the figures this score reads resolved"* |
+| `no-xbrl` / `none` | no XBRL financial statements at all | *"has not filed XBRL financial statements"* |
+| `no-xbrl` / `unknown` | stored before the census | same as `unread-detail` |
+| `ready`, no quarters | read in, with data, no quarterly periods | *"has filed no quarterly periods"* |
+
+Six distinct sentences over six states, asserted by **running** the function
+once per state.
+
+### And the same contradiction sat one condition further along
+
+`buildSecEarningsView` returns null when the stored set has **no quarterly
+periods**, and the page's fallback for a null view was `SecPendingCard`. So a
+filer that is fully populated and passes every usability bar was told
+*"financials are being fetched — check back shortly"*, forever: the cron
+re-reads it daily and finds the same absence of quarters.
+
+**KGC is the measured example — 5 years, 8 instants, 24 populated fields in its
+best period, zero quarters** — and it is a class, not a filer: an annual-only
+foreign private issuer files 20-F and nothing quarterly. This is the same
+permanent-pending failure the no-xbrl card was created to prevent, in the branch
+nobody looked at. It now gets `SecNoQuartersCard`, which does not read as
+waiting.
+
+The review found the score card's half of this; the card stack's half came out
+of enumerating the states rather than from the eye-check, which could not have
+reached it without an annual-only symbol on screen.
+
+### 2. The gap badge was hover-only
+
+Its explanation lived in an `<abbr title>`, which a touch screen cannot trigger
+at all — so most of the audience saw an unexplained **gap** and no way to find
+out what it meant. The explanation is now visible text in the table's intro
+paragraph, which already carried two other clarifications. The badge stays as
+the per-row marker.
+
+### 3. Three periods under one lede
+
+Income statement Q2 FY2025, cash flow FY2025, balance sheet as at 2025-12-31 —
+each correctly labelled, all three under *"latest reported quarter"*.
+Individually honest, collectively confusing.
+
+The balance-sheet card now says one line when its instant is more than a quarter
+(`BALANCE_SHEET_SPREAD_DAYS = 95`) from the income statement's period end,
+naming both dates and the distance. **Only when they are genuinely far apart**:
+on a normal 10-Q filer the two coincide and a standing disclaimer would be noise.
+
+### A check measured position and called it order — the third time
+
+The first version of "the 'not read in yet' wording is reachable ONLY when
+nothing is stored" compared `lastIndexOf()` of two substrings. A mutation
+inserting an early `return` at the **top** of the function left both positions
+unchanged and the check **passed**. The function is pure, so it is now lifted
+and called once per state; the mutation fails four assertions.
+
+This is the third time on this work that a check has measured a position in a
+file and called it an order of execution — after `check-assertion-anchors`
+caught it on `headers()` and the null-vs-nearest-row check caught it on array
+bounds. The pattern: **when the thing under test can be run, run it.**

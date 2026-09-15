@@ -201,6 +201,8 @@ export type SecEarningsView = {
     totalLiabilities: ViewCell;
     stockholdersEquity: ViewCell;
   } | null;
+  /** Days between the balance-sheet instant and the income-statement period end. */
+  balanceSheetSpreadDays: number | null;
   incomeStatement: ViewCell[];
   /**
    * Whether the stored expense lines actually sum to the filed operating income.
@@ -431,6 +433,22 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       basis: cashBasis,
       period: periodLabel(cashFrom),
     },
+    /**
+     * HOW FAR APART THE THREE PERIODS ON THIS PAGE ARE, in days.
+     *
+     * The page shows an income statement for one period, a cash-flow statement
+     * for another and a balance sheet as at a third instant — each correctly
+     * labelled, all three under a lede that says "latest reported quarter".
+     * Measured on AZN: income statement Q2 FY2025, cash flow FY2025, balance
+     * sheet as at 2025-12-31. Individually honest, collectively confusing.
+     *
+     * Null when there is no balance sheet. The card says one line when this
+     * exceeds a quarter; see BALANCE_SHEET_SPREAD_DAYS.
+     */
+    balanceSheetSpreadDays:
+      bsAt && latest.e
+        ? Math.round((Date.parse(bsAt.e) - Date.parse(latest.e)) / 86400000)
+        : null,
     balance: bsAt
       ? {
           asOf: bsAt.e,

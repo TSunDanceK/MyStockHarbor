@@ -11,13 +11,13 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { resolveFactSetForRender, type ColdResult } from "@/lib/server/secColdFetch";
 import { notFound } from "next/navigation";
 import { buildSecEarningsView, type SecEarningsView } from "@/lib/server/secEarningsView";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentQuartersCard,
-  SecPendingCard, SecNoXbrlCard,
+  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -325,12 +325,63 @@ function clamp(value: number, min: number, max: number) {
  * requires a number, but 50 is NOT a reading: it is the neutral seed with
  * nothing added, and the card must not render it as one.
  */
-function scoreFromSec(view: SecEarningsView | null) {
+/**
+ * WHY THERE IS NO SCORE, in the same words the cards below use.
+ *
+ * ── ONE MESSAGE WAS SERVING SIX SITUATIONS ────────────────────────────────
+ * The unavailable branch said "This company's SEC filings have not been read
+ * into the site yet" whenever `view` was null, and that is true of exactly one
+ * of them. On /stock/RYAAY/earnings it put that sentence at the top of a page
+ * whose own card two sections down said "Its filings are available now on SEC
+ * EDGAR" — two statements contradicting each other about the same company,
+ * three inches apart. Ryanair HAS been read in: 5 instants and 5 years are
+ * stored. What it does not have is figures this page can print, because it
+ * reports in euros.
+ *
+ * The states, and which sentence each gets:
+ *
+ *   no-cik                     404s before this runs.
+ *   pending                    genuinely not read in yet — the original text.
+ *   no-xbrl / currency         read in; reports in a currency this page does
+ *                              not print. RYAAY lands here.
+ *   no-xbrl / unread-taxonomy  read in; filed under a taxonomy not read yet.
+ *   no-xbrl / unread-detail    read in; nothing resolved from what we do read.
+ *   no-xbrl / none             filed no XBRL financial statements at all.
+ *   no-xbrl / unknown          stored before the taxonomy census existed.
+ *   ready, no quarters         read in, with data — but no QUARTERLY periods,
+ *                              and every term of this score is a quarter.
+ *
+ * The last one is not hypothetical either: KGC stores 5 years and 8 instants
+ * with 24 populated fields in its best period and not one quarter.
+ */
+function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): string {
+  if (cold.status === "no-xbrl") {
+    const named = cold.taxonomies.join(", ");
+    switch (cold.why) {
+      case "currency":
+        return `${symbol}'s filings have been read, but it reports in ${named} and this page reads US-dollar figures only — so there is nothing here to score.`;
+      case "unread-taxonomy":
+        return `${symbol}'s filings have been read, but they are filed under the ${named} taxonomy, which this page does not read yet.`;
+      case "none":
+        return `${symbol} has not filed XBRL financial statements, so there is nothing to score.`;
+      default:
+        return `${symbol}'s filings have been read, but none of the figures this score reads resolved from them.`;
+    }
+  }
+  if (hasSet) {
+    // READ IN, WITH DATA, AND STILL NOT SCORABLE. Every term here is a quarter,
+    // and some filers publish only annual periods.
+    return `${symbol} has filed no quarterly periods — this score is built on quarters, and its annual figures cannot stand in for one.`;
+  }
+  return `${symbol}'s SEC filings have not been read into the site yet, so there is nothing to score.`;
+}
+
+function scoreFromSec(view: SecEarningsView | null, symbol: string, cold: ColdResult) {
   if (!view) {
     return {
       score: 50, available: false as const, tone: "neutral" as EarningsTone,
       label: "Unavailable",
-      explanation: "This company's SEC filings have not been read into the site yet, so there is nothing to score.",
+      explanation: noScoreReason(symbol, cold, cold.status === "ready"),
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
@@ -376,7 +427,7 @@ function scoreFromSec(view: SecEarningsView | null) {
     return {
       score: 50, available: false as const, tone: "neutral" as EarningsTone,
       label: "Unavailable",
-      explanation: "This company's latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.",
+      explanation: `${symbol}'s latest filing carries no figures that can be scored yet — there is no prior-year quarter to measure growth from.`,
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
@@ -466,7 +517,7 @@ async function getEarningsData(symbol: string) {
       return { label: displayQuarterLabel(row), ...detail };
     });
 
-  const score = scoreFromSec(secView);
+  const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
   return { earningsRows, completedRows, latest, next, priceReactionQuarters, score, secView, cold };
 }
@@ -890,6 +941,17 @@ export default async function StockEarningsPage({ params }: Props) {
                   symbol={clean}
                   reason={data.cold.why}
                   taxonomies={data.cold.taxonomies}
+                />
+              ) :
+               /* READ IN, WITH DATA, BUT NO QUARTERS. This used to fall through
+                  to SecPendingCard, which promised a quarter that will never
+                  arrive — the same permanent-pending failure the no-xbrl card
+                  above exists to prevent, one condition further along. */
+               !secView && data.cold.status === "ready" ? (
+                <SecNoQuartersCard
+                  symbol={clean}
+                  years={data.cold.set.years.length}
+                  instants={data.cold.set.instants.length}
                 />
               ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
