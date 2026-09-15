@@ -189,6 +189,22 @@ const TASKS = {
     needsDump: true,
     needsTypescript: true,
   },
+  // THE SAME PROBE AS ITS OWN "BEFORE". Removes the concepts this branch added
+  // to the field chains, then reports exactly as sec-extract does — so the null
+  // rate per field, both canaries and the identities table are comparable
+  // line for line against the sec-extract run from the SAME commit.
+  //
+  // NOT `ref=main`, which was the first attempt and is the wrong instrument
+  // twice over: it compares two runs of DIFFERENT CODE, so a difference is the
+  // chains plus whatever else moved between the refs — and the probe crashes
+  // on main anyway, on a loss-making filer's crossing string.
+  "sec-extract-before": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+    env: { REVERT_CHAINS: "1" },
+  },
   // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
   // image CDN whether it actually holds a logo for each symbol in the union
   // universe. The CDN needs no API key, so this belongs in the uncredentialled
