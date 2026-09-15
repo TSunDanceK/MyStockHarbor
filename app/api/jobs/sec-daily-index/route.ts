@@ -135,12 +135,41 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
     // so a Form 4/A -- an amended insider transaction, common and entirely
     // routine -- set needsReverify and queued a multi-MB companyfacts read.
     //
-    // MEASURED against the reported window shape (281 symbols touched, 127 with
-    // a financial form, 154 noise-only): 166 queued, of which 39 were noise-only
-    // symbols that had filed an amended Form 4. The taxonomy was right and the
-    // gate was wrong -- "amendment" is only meaningful for a form that carries
-    // numbers. isPeriodicForm and isRereadOnlyForm both strip the suffix, so
-    // 10-Q/A and 8-K/A still qualify and 4/A, 144/A and 424B2/A do not.
+    // ── THE FIGURES HERE WERE STALE, AND SO WAS THE FORM NAMED ────────────
+    // This described an earlier window (166 queued / 39 dropped) and was left
+    // in place when the live ones came back different. A measurement quoted in
+    // a comment is a claim like any other.
+    //
+    // EVERY FIGURE BELOW NAMES ITS UNIT, because two of them are counted in
+    // different things and the first version of this correction implied one
+    // count. That union-vs-sum confusion has now cost this file twice -- it is
+    // what produced an unpassable rereadQueued gate.
+    //
+    //   LIVE:   134 SYMBOLS queued, 7 SYMBOLS dropped by the narrowed gate.
+    //   FIXTURE (data/sec/window-fixture-20260908-11.json, its own capture):
+    //           123 SYMBOLS queued against 130 pre-fix -- the same 7 SYMBOLS,
+    //           named: BEN CRL DOCU DT GS RSG VTRS.
+    //
+    // THE FORMS ARE COUNTED IN FILINGS, NOT SYMBOLS, and there are 8 of them
+    // across those 7 symbols because BEN filed two. Derived from the fixture
+    // rather than asserted:
+    //
+    //   FILINGS (8)                    SYMBOLS (7)
+    //   SCHEDULE 13D/A   x4            BEN (x2), DT, RSG      -> 3 symbols
+    //   SCHEDULE 13G/A   x3            CRL, GS, VTRS          -> 3 symbols
+    //   4/A              x1            DOCU                   -> 1 symbol
+    //
+    // so SIX of the seven SYMBOLS are dropped on an amended beneficial-
+    // ownership statement and exactly ONE on an amended Form 4. Same shape of
+    // defect, different form: an ownership amendment carries no financial
+    // statements, so "amendment" is no more meaningful on a 13D/A than on a
+    // 4/A. The gate is unchanged; only its description was wrong.
+    // scripts/check-sec-daily-index.mjs pins both counts and both units.
+    //
+    // The taxonomy was right and the gate was wrong -- "amendment" is only
+    // meaningful for a form that carries numbers. isPeriodicForm and
+    // isRereadOnlyForm both strip the suffix, so 10-Q/A and 8-K/A still qualify
+    // and 4/A, 13D/A, 13G/A, 144/A and 424B2/A do not.
     if (f.amendment && (isPeriodicForm(f.form) || isRereadOnlyForm(f.form))) {
       // A restatement is recorded as its own event. Folding it into
       // lastAccession would lose the fact that an already-published period

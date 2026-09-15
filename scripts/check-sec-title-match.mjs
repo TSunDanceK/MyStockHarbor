@@ -680,8 +680,14 @@ check(
     // 17 of the first snapshot's 28 misses were dashed dual-class and preferred
     // names. The directory lists those under the dotted ACT Symbol only,
     // because their NASDAQ Symbol column is empty — they are NYSE-listed.
+    // ASSERTS THE BEHAVIOUR, NOT THE SPELLING OF IT. This used to match the
+    // inline dash-to-dot replace and went red the moment that line was
+    // centralised into lib/symbolSpellings.mjs -- reporting a regression where
+    // the fallback had in fact been WIDENED. A check pinned to one phrasing of
+    // a rule fails on every correct refactor of it.
     return /const findRow = \(sym\) =>/.test(script) &&
-      /findRow\(symbol\) \?\? \(symbol\.includes\("-"\) \? findRow\(symbol\.replace\(\/-\/g, "\."\)\) : undefined\)/.test(script);
+      /symbolSpellings\(symbol\)\.map\(findRow\)/.test(script) &&
+      /from "\.\/lib\/symbol-spellings\.mjs"/.test(script);
   })(),
   "BRK-B is in the preset universe, so this is a guaranteed slot losing its news leg"
 );
@@ -757,7 +763,8 @@ check(
 );
 check(
   "the dot/dash fallback is applied before calling a symbol unresolved",
-  /s\.includes\("\."\) \? cikMap\[s\.replace\(\/\\\.\/g, "-"\)\]/.test(script),
+  // Same correction as above: the helper subsumes the inline dot/dash line.
+  /lookupSpellingIn\(cikMap, s\)/.test(script),
   "otherwise BRK.B is queued for human adjudication of a bug already fixed at the lookup"
 );
 
