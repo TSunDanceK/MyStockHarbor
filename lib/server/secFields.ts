@@ -185,7 +185,17 @@ const CASH_FLOW: FieldDef[] = ([
 // differenced -- doing so yields a change-in-balance where a balance was asked
 // for. Asserted in the check rather than trusted to this comment.
 const BALANCE_SHEET: FieldDef[] = ([
-  { key: "cash", chain: ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"], unit: "USD", taxonomy: "us-gaap" },
+  { key: "cash", chain: ["CashAndCashEquivalentsAtCarryingValue"], unit: "USD", taxonomy: "us-gaap" },
+  // THE SAME BALANCE, ON THE OTHER DEFINITION. `netChangeInCash` is filed
+  // against one of two cash concepts -- with restricted cash or without -- and
+  // comparing the change on one against the balance on the other is a
+  // definition mismatch, not a discrepancy. It failed MU on 2 quarters and ASTS
+  // on 3, once by 27.5%. Stored separately so the identity can pick the
+  // matching one by reading which tag won; see checkIdentities.
+  { key: "cashIncludingRestricted", chain: [
+      "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+      "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
+    ], unit: "USD", taxonomy: "us-gaap" },
   { key: "shortTermInvestments", chain: ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
@@ -200,7 +210,19 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"], unit: "USD", taxonomy: "us-gaap" },
   { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalLiabilities", chain: ["Liabilities"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "stockholdersEquity", chain: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], unit: "USD", taxonomy: "us-gaap" },
+  // PARENT-ONLY, deliberately: this is the figure a reader means by
+  // "shareholders' equity", and it is what the per-share book value must use.
+  { key: "stockholdersEquity", chain: ["StockholdersEquity"], unit: "USD", taxonomy: "us-gaap" },
+  // TOTAL equity, and it is a SEPARATE FIELD rather than a second chain entry
+  // because the two answer different questions. assets = liabilities + equity
+  // only balances against TOTAL equity, and PLAB -- which carries a large
+  // noncontrolling interest -- failed that identity on 8 of 8 quarters by
+  // roughly 23% while the chain preferred the parent-only tag. Merging them
+  // would have fixed the identity by changing what the page calls equity.
+  { key: "totalEquity", chain: [
+      "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+      "StockholdersEquity",
+    ], unit: "USD", taxonomy: "us-gaap" },
   { key: "goodwill", chain: ["Goodwill"], unit: "USD", taxonomy: "us-gaap" },
   { key: "intangibleAssets", chain: ["IntangibleAssetsNetExcludingGoodwill", "FiniteLivedIntangibleAssetsNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "deferredRevenueCurrent", chain: ["ContractWithCustomerLiabilityCurrent", "DeferredRevenueCurrent"], unit: "USD", taxonomy: "us-gaap" },

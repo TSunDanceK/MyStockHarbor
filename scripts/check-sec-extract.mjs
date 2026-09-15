@@ -49,15 +49,15 @@ const {
 // ── 1. the list itself ──────────────────────────────────────────────────────
 console.log("\n1. the field list");
 
-check("43 fields", SEC_FIELDS.length === 43, `${SEC_FIELDS.length}`);
+check("45 fields", SEC_FIELDS.length === 45, `${SEC_FIELDS.length}`);
 check("keys are unique", new Set(SEC_FIELD_KEYS).size === SEC_FIELD_KEYS.length);
 check("SEC_FIELD_INDEX agrees with the array order",
   SEC_FIELD_KEYS.every((k, i) => SEC_FIELD_INDEX[k] === i));
 
 const byStatement = (s) => SEC_FIELDS.filter((f) => f.statement === s);
-check("16 income, 11 cash-flow, 16 balance-sheet",
+check("16 income, 11 cash-flow, 18 balance-sheet",
   byStatement("income").length === 16 && byStatement("cash-flow").length === 11 &&
-    byStatement("balance-sheet").length === 16,
+    byStatement("balance-sheet").length === 18,
   `${byStatement("income").length}/${byStatement("cash-flow").length}/${byStatement("balance-sheet").length}`);
 
 check("every chain is non-empty", SEC_FIELDS.every((f) => f.chain.length > 0));
@@ -70,7 +70,7 @@ check("every unit is one of the three companyfacts keys",
 // and an 8-slice returned four balance sheets for AAPL, MU and PLAB.
 check("NO field in the period list is dei — the cover page left it",
   SEC_FIELDS.every((f) => f.taxonomy === "us-gaap"),
-  SEC_FIELDS.filter((f) => f.taxonomy !== "us-gaap").map((f) => f.key).join(", ") || "43/43 us-gaap");
+  SEC_FIELDS.filter((f) => f.taxonomy !== "us-gaap").map((f) => f.key).join(", ") || "45/45 us-gaap");
 check("COVER_SHARES_FIELD exists, is dei, and is NOT in SEC_FIELDS",
   COVER_SHARES_FIELD.taxonomy === "dei" &&
     COVER_SHARES_FIELD.key === "sharesOutstandingCover" &&
@@ -88,9 +88,9 @@ check("`Revenues` ranks below the ASC 606 tag in the revenue chain",
 // ── 2. THE PROPERTY THE OWNER ASKED FOR ─────────────────────────────────────
 console.log("\n2. the four kinds, and what may be differenced");
 
-check("ALL 16 balance-sheet fields are instant",
+check("ALL 18 balance-sheet fields are instant",
   byStatement("balance-sheet").every((f) => f.kind === "instant"),
-  byStatement("balance-sheet").filter((f) => f.kind !== "instant").map((f) => f.key).join(", ") || "16/16");
+  byStatement("balance-sheet").filter((f) => f.kind !== "instant").map((f) => f.key).join(", ") || "18/18");
 
 // THE DEFECT THAT GOT PAST THE FIRST VERSION OF THIS CHECK. These four sit on
 // the income statement and ARE durations, so a cumulative/instant split put them
@@ -164,7 +164,7 @@ console.log("\n4. singleValued");
 
 check("NO field in the period list is multi-valued any more",
   SEC_FIELDS.every((f) => f.singleValued === true),
-  SEC_FIELDS.filter((f) => !f.singleValued).map((f) => f.key).join(", ") || "43/43 single-valued");
+  SEC_FIELDS.filter((f) => !f.singleValued).map((f) => f.key).join(", ") || "45/45 single-valued");
 check("the cover field is the one that is not",
   COVER_SHARES_FIELD.singleValued === false,
   "several classes, one period key, and no axis in companyfacts to tell them apart");
@@ -436,6 +436,30 @@ check("the balance sheet identity passes when it balances",
 check("and fails when it does not",
   rates(checkIdentities(extractCompanyFacts("B", bs(1000, 600, 900))))[BS_ID]?.fail === 1);
 
+// THE PLAB CASE. A filer with a noncontrolling interest balances only against
+// TOTAL equity; against the parent-only figure PLAB failed 8 of 8 quarters by
+// ~23%. The two are separate fields because they mean different things -- the
+// page's "shareholders' equity" is the parent-only one.
+const withNci = bs(1000, 600, 300);
+withNci.facts["us-gaap"].StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest =
+  { units: { USD: [{ end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" }] } };
+const nci = extractCompanyFacts("NCI", withNci);
+check("a filer with an NCI balances against totalEquity, not parent-only equity",
+  rates(checkIdentities(nci))[BS_ID]?.pass === 1,
+  JSON.stringify(rates(checkIdentities(nci))[BS_ID]));
+check("and the parent-only figure is still stored, unchanged, under its own key",
+  nci.instants[0].values[SEC_FIELD_INDEX.stockholdersEquity]?.val === 300 &&
+    nci.instants[0].values[SEC_FIELD_INDEX.totalEquity]?.val === 400,
+  "merging them would have fixed the identity by changing what the page calls equity");
+check("with no NCI tag at all it falls back to parent-only rather than skipping",
+  rates(checkIdentities(extractCompanyFacts("B", bs(1000, 600, 400))))[BS_ID]?.pass === 1);
+// ...but absent BOTH, it must skip, never pass.
+const noEquity = bs(1000, 600, 400);
+delete noEquity.facts["us-gaap"].StockholdersEquity;
+check("absent both equity tags it SKIPS, it does not pass on two nulls",
+  rates(checkIdentities(extractCompanyFacts("B", noEquity)))[BS_ID]?.skipped === 1,
+  JSON.stringify(rates(checkIdentities(extractCompanyFacts("B", noEquity)))[BS_ID]));
+
 // cashEnd - cashStart = netChangeInCash, which spans two instants AND a quarter.
 const spanning = idFacts({});
 spanning.facts["us-gaap"].CashAndCashEquivalentsAtCarryingValue = { units: { USD: [
@@ -455,6 +479,28 @@ check("a quarter with no cash balance at either date reports SKIPPED",
 // early belongs to a different period and must not be pressed into service.
 const twoDaysEarly = JSON.parse(JSON.stringify(spanning));
 twoDaysEarly.facts["us-gaap"].CashAndCashEquivalentsAtCarryingValue.units.USD[0].end = "2025-12-30";
+// THE MU/ASTS CASE. netChangeInCash filed on the restricted-inclusive concept
+// must be compared against the restricted-inclusive BALANCE. Mixing them showed
+// as a plausible few percent, and once as 27.5%.
+const restricted = idFacts({});
+delete restricted.facts["us-gaap"].CashAndCashEquivalentsPeriodIncreaseDecrease;
+restricted.facts["us-gaap"].CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect =
+  { units: { USD: [{ start: "2026-01-01", end: "2026-03-31", val: 35, accn: "a", filed: "2026-04-20" }] } };
+// Two balances at each date: the plain one drifts, the restricted-inclusive one
+// moves by exactly the stated change.
+restricted.facts["us-gaap"].CashAndCashEquivalentsAtCarryingValue = { units: { USD: [
+  { end: "2025-12-31", val: 500, accn: "z", filed: "2026-01-20" },
+  { end: "2026-03-31", val: 900, accn: "a", filed: "2026-04-20" },
+] } };
+restricted.facts["us-gaap"].CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents = { units: { USD: [
+  { end: "2025-12-31", val: 600, accn: "z", filed: "2026-01-20" },
+  { end: "2026-03-31", val: 635, accn: "a", filed: "2026-04-20" },
+] } };
+const restr = checkIdentities(extractCompanyFacts("R", restricted));
+check("a restricted-inclusive change is compared against the restricted-inclusive balance",
+  rates(restr)[CASH_SPAN]?.pass === 1,
+  `plain cash moved 400 and would FAIL; restricted moved 35 and passes — ${JSON.stringify(rates(restr)[CASH_SPAN])}`);
+
 check("a balance sheet TWO days before the start is not accepted as the opener",
   rates(checkIdentities(extractCompanyFacts("SP3", twoDaysEarly)))[CASH_SPAN]?.skipped === 1,
   "a wider window would pair a cash flow with the wrong opening balance and report pass");
