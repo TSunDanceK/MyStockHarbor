@@ -210,6 +210,34 @@ for (const symbol of SYMBOLS) {
           `differenced out of those)`);
       }
     }
+    // ── THE DECIDING COMPARISON ────────────────────────────────────────────
+    // Revenue resolves on the same row that cash flow does not, so the cause
+    // is not "this filer publishes nothing quarterly". It is which FRAME
+    // LENGTHS each field publishes: extractCompanyFacts creates a quarter cell
+    // from an n=1 frame as filed, or by differencing n against n-1 within one
+    // fiscal year. A field that publishes only n=2 and n=4 has neither
+    // neighbour and yields no quarter at all.
+    const q0 = set.quarters[0];
+    console.log(`    stored latest quarter frame: start=${q0.s} end=${q0.e} ` +
+      `span=${Math.round((Date.parse(q0.e) - Date.parse(q0.s)) / 86400000)}d`);
+    for (const key of ["revenue", "operatingCashFlow"]) {
+      const f = SEC_FIELDS.find((x) => x.key === key);
+      const lens = new Set();
+      for (const ns of ["us-gaap", "ifrs-full"]) {
+        const chain = ns === "ifrs-full" ? (f.ifrsChain ?? []) : f.chain;
+        for (const tag of chain) {
+          for (const r of facts.facts?.[ns]?.[tag]?.units?.USD ?? []) {
+            if (!r.start || !r.end) continue;
+            const d = Math.round((Date.parse(r.end) - Date.parse(r.start)) / 86400000);
+            const n = d >= 80 && d <= 105 ? 1 : d >= 170 && d <= 200 ? 2
+              : d >= 260 && d <= 290 ? 3 : d >= 350 && d <= 380 ? 4 : null;
+            if (n) lens.add(n);
+          }
+        }
+      }
+      console.log(`    ${key.padEnd(20)} publishes frame lengths n=[${[...lens].sort().join(",")}]` +
+        ` -> quarter cell possible: ${lens.has(1) || [...lens].some((n) => lens.has(n - 1))}`);
+    }
     console.log(`    latest quarter (${v.latestLabel}) cash cells:`);
     for (const k of CASH_KEYS) {
       const c = set.quarters[0];

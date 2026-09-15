@@ -135,12 +135,33 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
     // so a Form 4/A -- an amended insider transaction, common and entirely
     // routine -- set needsReverify and queued a multi-MB companyfacts read.
     //
-    // MEASURED against the reported window shape (281 symbols touched, 127 with
-    // a financial form, 154 noise-only): 166 queued, of which 39 were noise-only
-    // symbols that had filed an amended Form 4. The taxonomy was right and the
-    // gate was wrong -- "amendment" is only meaningful for a form that carries
-    // numbers. isPeriodicForm and isRereadOnlyForm both strip the suffix, so
-    // 10-Q/A and 8-K/A still qualify and 4/A, 144/A and 424B2/A do not.
+    // ── THE FIGURES HERE WERE STALE, AND SO WAS THE FORM NAMED ────────────
+    // This described an earlier window (166 queued / 39 dropped) and was left
+    // in place when the live ones came back different. A measurement quoted in
+    // a comment is a claim like any other.
+    //
+    // LIVE: 134 queued, 7 dropped. The committed window fixture
+    // (data/sec/window-fixture-20260908-11.json) agrees on the 7 from its own
+    // capture -- 123 queued against 130 pre-fix -- and names them: BEN CRL
+    // DOCU DT GS RSG VTRS.
+    //
+    // AND ONLY ONE OF THE SEVEN IS AN AMENDED FORM 4. Derived from the fixture
+    // rather than asserted, the amending forms that tripped the pre-fix gate:
+    //
+    //   SCHEDULE 13D/A   BEN (x2), DT, RSG
+    //   SCHEDULE 13G/A   CRL, GS, VTRS
+    //   4/A              DOCU
+    //
+    // so SIX of the seven are amended beneficial-ownership statements, not
+    // insider transactions. Same shape of defect, different form: an ownership
+    // amendment carries no financial statements, so "amendment" is no more
+    // meaningful on a 13D/A than on a 4/A. The gate is unchanged; only its
+    // description was wrong. scripts/check-sec-daily-index.mjs pins the split.
+    //
+    // The taxonomy was right and the gate was wrong -- "amendment" is only
+    // meaningful for a form that carries numbers. isPeriodicForm and
+    // isRereadOnlyForm both strip the suffix, so 10-Q/A and 8-K/A still qualify
+    // and 4/A, 13D/A, 13G/A, 144/A and 424B2/A do not.
     if (f.amendment && (isPeriodicForm(f.form) || isRereadOnlyForm(f.form))) {
       // A restatement is recorded as its own event. Folding it into
       // lastAccession would lose the fact that an already-published period
