@@ -216,7 +216,11 @@ for (const symbol of SYMBOLS) {
     let best = null;
     for (const q of out.quarters) {
       const gap = (Date.parse(r.date) - Date.parse(q.end)) / 86400000;
-      if (gap < 0 || gap > 120) continue;
+      // 75 DAYS, NOT 120. At 120 this mapped MU's SCHEDULED 2026-09-22 report
+      // back onto the 2026-05-28 quarter (+117d) and printed a spurious row. The
+      // real offsets measured here run +20d (MU) to +42d (ASTS), so 75 clears
+      // every genuine pairing with room and excludes the next quarter's report.
+      if (gap < 0 || gap > 75) continue;
       if (!best || gap < best.gap) best = { q, gap };
     }
     if (!best) continue;
@@ -284,10 +288,22 @@ for (const symbol of SYMBOLS) {
 
 console.log("=".repeat(78));
 console.log("SUMMARY");
+// EVERY VERDICT, NOT ONE PER ROW. The first version reduced each quarter row to
+// its `revenue` verdict and printed {"AGREE":33,"CLOSE":4,"NO-GT":8} — with no
+// DIFFER at all — while 20 EPS rows above it read DIFFER. A reader who trusted
+// the tally would have read that run as clean. Tallied per FIELD, and the fields
+// are named so a missing one is visible.
 const tally = {};
 for (const s of summary) {
-  const v = s.verdict ?? s.revenue ?? s.error ?? "?";
-  tally[v] = (tally[v] ?? 0) + 1;
+  const cells = s.error
+    ? [["error", s.error]]
+    : s.kind === "quarter"
+      ? [["revenue", s.revenue], ["epsDiluted", s.epsDiluted]]
+      : [[s.label, s.verdict]];
+  for (const [field, v] of cells) {
+    tally[field] ??= {};
+    tally[field][v] = (tally[field][v] ?? 0) + 1;
+  }
 }
-console.log(JSON.stringify(tally));
+console.log(JSON.stringify(tally, null, 1));
 console.log(JSON.stringify(summary, null, 1));
