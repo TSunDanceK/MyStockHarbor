@@ -178,7 +178,15 @@ const TASKS = {
   // classifier the render calls -- Node 24 strips the types, so no build step
   // and no npm ci. If this re-implemented the rules, seeded and daily rows would
   // disagree about what an IPO is and both would look plausible.
-  "ipo-seed": { script: "scripts/ipo-seed.mjs", args: () => [] },
+  "ipo-seed": {
+    script: "scripts/ipo-seed.mjs",
+    args: () => [],
+    // Imports the app's TypeScript classifier directly. Node's ESM loader needs
+    // explicit extensions and lib/server/*.ts does not carry them, so a resolve
+    // hook bridges the gap WITHOUT editing any app file or tsconfig. Node 24 on
+    // the runner strips the types itself.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
@@ -262,5 +270,9 @@ if (spec.needsDump && !process.env.DUMP_DIR) {
 
 const args = spec.args(process.env).filter((a) => a !== "");
 console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
-const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit" });
+// nodeArgs are flags for the node PROCESS, not arguments to the task. Only a
+// task that declares them gets them, so nothing else changes behaviour.
+const nodeArgs = spec.nodeArgs ?? [];
+if (nodeArgs.length) console.log(`relay: node flags ${nodeArgs.join(" ")}`);
+const res = spawnSync("node", [...nodeArgs, spec.script, ...args], { stdio: "inherit" });
 process.exit(res.status ?? 1);
