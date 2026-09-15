@@ -49,27 +49,57 @@ const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
 const WINDOW = Number(
   (readCodeOnly("lib/server/secExtract.ts").match(/SEC_QUARTER_WINDOW = (\d+)/) ?? [])[1]
 );
+const YEARS = Number(
+  (readCodeOnly("lib/server/secExtract.ts").match(/SEC_YEAR_WINDOW = (\d+)/) ?? [])[1]
+);
 const allowance = (name) =>
   Number((ROUTE.match(new RegExp(`${name} = (\\d+)`)) ?? [])[1]);
 
-const loadRewindow = async (mutate = (s) => s) => {
+const STALE = readCodeOnly("lib/server/secStaleness.ts");
+
+/**
+ * Lift the three functions the migration rests on, optionally mutated first.
+ *
+ * ── THE STALENESS RULE IS NO LONGER IN THE ROUTE, AND THAT IS THE POINT ───
+ * `needsReread` moved to lib/server/secStaleness so refresh-on-view can import
+ * the SAME function instead of a second one that agrees today. This check
+ * follows it there rather than keeping a copy, for exactly that reason.
+ *
+ * secFields.ts is inlined WHOLE because `needsReread` now closes over
+ * secChainsHash() and `restatedPeriods` over SEC_FIELD_KEYS. Pinning either to
+ * a literal here would let this check keep passing against a chain list that
+ * had moved underneath it — a check agreeing with itself.
+ *
+ * The constants are read from the source too, so a change to
+ * SEC_QUARTER_WINDOW or to an allowance moves this with it rather than leaving
+ * a stale literal behind.
+ */
+const loadRewindow = async (mutate = (s) => s, mutateStale = (s) => s) => {
   const src = mutate(ROUTE);
-  const needs = (src.match(/export const needsRewindow = [^;]+;/) ?? [])[0];
+  // grabFunction, NOT A REGEX OVER THE ARROW FORM. This read
+  // /export const needsRewindow = [^;]+;/ and broke the moment the parameter
+  // gained a second field: `(e: { w?: number; y?: number })` puts a SEMICOLON
+  // inside the signature, so `[^;]+;` captured half a declaration and lifted
+  // `const needsRewindow = (e) => ;`. That is the same class of failure
+  // grabFunction's own docblock was written about, and the reason it exists.
+  const needs = grabFunction(mutateStale(STALE), "needsReread");
   const restated = grabFunction(src, "restatedPeriods");
   const queues = grabFunction(src, "populationQueues");
   if (!needs || !restated || !queues) {
-    throw new Error("could not lift needsRewindow / restatedPeriods / populationQueues");
+    throw new Error("could not lift needsReread / restatedPeriods / populationQueues");
   }
   return lift(
     [
+      readCodeOnly("lib/server/secFields.ts"),
       `const SEC_QUARTER_WINDOW = ${WINDOW};`,
+      `const SEC_YEAR_WINDOW = ${YEARS};`,
       `const SEC_REVERIFY_PER_RUN = ${allowance("SEC_REVERIFY_PER_RUN")};`,
       `const SEC_POPULATE_PER_RUN = ${allowance("SEC_POPULATE_PER_RUN")};`,
       `const SEC_REWINDOW_PER_RUN = ${allowance("SEC_REWINDOW_PER_RUN")};`,
-      needs.replace("export const", "const"),
+      needs.replace("export function", "function"),
       restated.replace("export function", "function"),
       queues.replace("export function", "function"),
-      "export { needsRewindow, restatedPeriods, populationQueues };",
+      "export { needsReread, restatedPeriods, populationQueues, secChainsHash, SEC_FIELD_KEYS };",
     ].join("\n")
   );
 };
@@ -77,6 +107,7 @@ const loadRewindow = async (mutate = (s) => s) => {
 console.log("\n0. the subject lifts and the constants are real");
 
 const M = await loadRewindow();
+const CHAINS = M.secChainsHash();
 check("SEC_QUARTER_WINDOW read from secExtract", WINDOW === 12, `window is ${WINDOW}`);
 check(
   "all three per-run allowances read from the route",
@@ -136,11 +167,12 @@ check(
   `${hit.e} is in the narrow set too`
 );
 
-// THE MUTATION: compare the sets whole, the way a hash would.
+// THE MUTATION: treat a period the prior set does not hold as a change, which
+// is what comparing the sets whole amounts to.
 const toWholeHash = (src) =>
   src.replace(
-    /if \(before && JSON\.stringify\(before\.v\) !== JSON\.stringify\(p\.v\)\) \{/,
-    "if (JSON.stringify(was) !== JSON.stringify(now)) {"
+    "      if (!before) continue;",
+    '      if (!before) { out.push(`${p.e}(new)`); continue; }'
   );
 const mutated1 = await loadRewindow(toWholeHash);
 check(
@@ -162,14 +194,22 @@ check(
 
 console.log("\n2. a legacy entry with no window field is eligible");
 
-/** A manifest with one entry of each shape. Nothing else differs between them. */
+/**
+ * A manifest with one entry of each shape. Nothing else differs between them.
+ *
+ * TWO WINDOWS NOW, so "current" means BOTH are current. An entry at w=12 with
+ * no `y` is a set written before the year window existed — five years stored,
+ * one short of what the five-year card needs — and it is eligible.
+ */
 const manifest = {
   symbols: {
-    LEGACY: { cik: "0000000001", contentHash: "h", needsReverify: false },              // no w at all
-    NARROW: { cik: "0000000002", contentHash: "h", needsReverify: false, w: 8 },
-    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW },
-    UNPOPULATED: { cik: "0000000004", contentHash: null, needsReverify: false },        // populate's, not rewindow's
-    STALE: { cik: "0000000005", contentHash: "h", needsReverify: true, enqueuedAt: 1 }, // reverify's, not rewindow's
+    LEGACY: { cik: "0000000001", contentHash: "h", needsReverify: false },                        // neither field
+    NARROW: { cik: "0000000002", contentHash: "h", needsReverify: false, w: 8, y: YEARS },        // quarters behind
+    NARROW_YEARS: { cik: "0000000006", contentHash: "h", needsReverify: false, w: WINDOW },       // years behind only
+    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: CHAINS }, // current on all three
+    OLD_CHAINS: { cik: "0000000007", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: "deadbeef" }, // windows current, chains behind
+    UNPOPULATED: { cik: "0000000004", contentHash: null, needsReverify: false },                  // populate's
+    STALE: { cik: "0000000005", contentHash: "h", needsReverify: true, enqueuedAt: 1 },           // reverify's
   },
 };
 
@@ -180,10 +220,20 @@ check(
   `rewindow = [${q.rewindow.join(" ")}]`
 );
 check(
-  `an entry already at w=${WINDOW} is NOT selected`,
-  !q.rewindow.includes("CURRENT")
+  `an entry current on all three — w=${WINDOW}, y=${YEARS}, chains ${CHAINS} — is NOT selected`,
+  !q.rewindow.includes("CURRENT"),
+  `rewindow = [${q.rewindow.join(" ")}]`
 );
 check("an explicit w=8 is selected", q.rewindow.includes("NARROW"));
+// ── THE YEAR WINDOW SELECTS THROUGH THE SAME QUEUE ──────────────────────────
+// A set can be current on quarters and behind on years: everything written
+// between the two changes is exactly that. One queue, either field.
+check("an entry current on quarters but with no year window IS selected",
+  q.rewindow.includes("NARROW_YEARS"),
+  `w=${WINDOW} y=absent -> eligible, because absent means ${5} and the card needs ${YEARS}`);
+check("...and there is only ONE queue, not a second one for years",
+  !/rewindowYears|yearQueue|REWINDOW_YEARS/.test(ROUTE),
+  "a second queue over the same symbols is two allowances competing for one re-read");
 check(
   "a never-populated entry goes to populate, not rewindow",
   q.populate.includes("UNPOPULATED") && !q.rewindow.includes("UNPOPULATED")
@@ -195,13 +245,16 @@ check(
 
 // THE MUTATION: read a missing field as "already current".
 const absentMeansCurrent = (src) =>
-  src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW");
-const mutated2 = await loadRewindow(absentMeansCurrent);
-check("the absent-means-current mutation actually applied", absentMeansCurrent(ROUTE) !== ROUTE);
+  src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW")
+     .replace("(e.y ?? 5) < SEC_YEAR_WINDOW", "(e.y ?? SEC_YEAR_WINDOW) < SEC_YEAR_WINDOW")
+     .replace("(e.c ?? null) !== secChainsHash()", "(e.c ?? secChainsHash()) !== secChainsHash()");
+const mutated2 = await loadRewindow((x) => x, absentMeansCurrent);
+check("the absent-means-current mutation actually applied", absentMeansCurrent(STALE) !== STALE);
 const qm = mutated2.populationQueues(manifest);
 check(
-  "MUTATION: reading an absent window as current DROPS the legacy entry",
-  !qm.rewindow.includes("LEGACY") && qm.rewindow.includes("NARROW"),
+  "MUTATION: reading an absent window as current DROPS the legacy entries",
+  !qm.rewindow.includes("LEGACY") && !qm.rewindow.includes("NARROW_YEARS") &&
+    qm.rewindow.includes("NARROW"),
   `rewindow becomes [${qm.rewindow.join(" ")}] — the migration would skip every pre-window entry and look finished`
 );
 
@@ -240,6 +293,149 @@ check(
   mutated3.populationQueues(flooded).rewindow.length === 0,
   "which is every day of earnings season, when the migration most needs to run"
 );
+
+// ── CONDITION 4: a CHAIN edit is not a restatement either ──────────────────
+//
+// THE SAME DEFECT AS CONDITION 1, ONE LEVEL FINER, and it was found by
+// measuring rather than by reasoning. Condition 1 stopped a new PERIOD being
+// logged as a change. A chain edit produces the same shape inside a period that
+// both sets hold: one CELL goes from null to a number, because the chain gained
+// a concept the filer had been publishing all along.
+//
+// It is not a rare shape. sec-capex-blast over 119 SYMBOLS (relay 35025749420)
+// found 24 that gain a capex cell on a re-read and 14 that gain it on all 18
+// periods — NVDA, AMZN, V, HD, CVX, QCOM among them — so a whole-array
+// comparison would put every one of them in the restatement log the first time
+// the rewindow queue reached them. Same noise, same buried real restatements.
+//
+// THE FIXTURE PAIR IS THE REAL ONE, MINUS THE CELLS THE CHAIN NOW READS. AAPL's
+// captured set with every `capex` cell nulled IS what a set written under the
+// one-deep chain looked like; nothing here supplies an expected value.
+
+console.log("\n4. a chain edit is not a restatement (per cell, not per period)");
+
+const CAPEX = M.SEC_FIELD_KEYS.indexOf("capex");
+const REVENUE = M.SEC_FIELD_KEYS.indexOf("revenue");
+check("the two field indices resolved out of the shipped key list",
+  CAPEX >= 0 && REVENUE >= 0 && CAPEX !== REVENUE,
+  `capex #${CAPEX}, revenue #${REVENUE} of ${M.SEC_FIELD_KEYS.length}`);
+
+/** What the set looked like before the chain gained its second capex concept. */
+const blankCapex = (p) => ({
+  ...p,
+  v: p.v.map((val, i) => (i === CAPEX ? null : val)),
+  d: p.d.slice(0, CAPEX) + "-" + p.d.slice(CAPEX + 1),
+});
+const oldChains = clone(AAPL);
+oldChains.quarters = oldChains.quarters.map(blankCapex);
+oldChains.years = oldChains.years.map(blankCapex);
+oldChains.c = "deadbeef";
+
+const gainedCapex = clone(AAPL);
+
+const capexCells = gainedCapex.quarters.filter((p) => p.v[CAPEX] !== null).length;
+check("the pair differs ONLY by capex cells going null -> value",
+  capexCells > 0 &&
+    oldChains.quarters.every((p) => p.v[CAPEX] === null) &&
+    oldChains.quarters.every((p, i) =>
+      p.v.every((val, j) => j === CAPEX || val === gainedCapex.quarters[i].v[j])),
+  `${capexCells} quarters gain a capex figure, every other cell identical`);
+
+const cMoved = M.restatedPeriods(oldChains, gainedCapex);
+check("(c) cells that go null -> value log NOTHING — the chain gained them",
+  cMoved.length === 0,
+  cMoved.length ? `logged ${cMoved.slice(0, 3).join(" ")}` : "0 periods logged");
+
+/** The same pair with ONE EXISTING revenue changed — a real restatement. */
+const chainPlusRestatement = clone(gainedCapex);
+const rHit = chainPlusRestatement.quarters.find((p) => typeof p.v[REVENUE] === "number");
+if (!rHit) { console.error("FATAL: no numeric revenue to perturb"); process.exit(2); }
+const rWas = rHit.v[REVENUE];
+rHit.v[REVENUE] = rWas + 1;
+
+const dMoved = M.restatedPeriods(oldChains, chainPlusRestatement);
+check("(d) a value -> different value in the SAME pair IS logged",
+  dMoved.length === 1 && dMoved[0].startsWith(rHit.e) && dMoved[0].includes("revenue:"),
+  dMoved.length ? `logged ${dMoved.join(" ")}` : "logged nothing");
+
+// AND IT NAMES THE FIELD. A period identifier alone sends the reader to a
+// 46-column array to find out what moved; the key is in hand and costs nothing.
+check("...and it names the field that moved, not just the period",
+  dMoved[0]?.includes(`revenue:${rWas}->${rWas + 1}`),
+  dMoved[0] ?? "(nothing logged)");
+
+// A VALUE THAT DISAPPEARS IS ALSO A CHANGE. This is the shape sec-capex-blast
+// reports as GONE — a same-length frame displaced by one filed later under a
+// newly added concept. Not hypothetical, and not the null -> value case.
+const lostCell = clone(gainedCapex);
+const lHit = lostCell.quarters.find((p) => typeof p.v[REVENUE] === "number");
+lHit.v[REVENUE] = null;
+const lMoved = M.restatedPeriods(oldChains, lostCell);
+check("...and a value -> null IS logged too, which is the GONE case",
+  lMoved.length === 1 && lMoved[0].includes("->null"),
+  lMoved[0] ?? "(nothing logged)");
+
+// THE MUTATION: compare every cell, the way "any difference" would.
+const toAnyDifference = (src) =>
+  src.replace("        if (before.v[i] == null) continue;\n", "");
+check("the any-difference mutation actually applied", toAnyDifference(ROUTE) !== ROUTE);
+const mutated4 = await loadRewindow(toAnyDifference);
+const cUnderMutation = mutated4.restatedPeriods(oldChains, gainedCapex);
+check("MUTATION: under any-difference, (c) FAILS — every gained cell reports as a restatement",
+  cUnderMutation.length > 0,
+  `${cUnderMutation.length} periods logged for this ONE symbol; the measured universe is 24 SYMBOLS, 14 of them on all 18 periods`);
+check("...and (d) still logs, so the mutation is not simply blind",
+  mutated4.restatedPeriods(oldChains, chainPlusRestatement).length > 0);
+
+// ── AND THE ENTRY WITH OLDER CHAINS IS SELECTED FOR THE RE-READ ────────────
+check("an entry current on BOTH windows but read under older chains IS selected",
+  q.rewindow.includes("OLD_CHAINS"),
+  `w=${WINDOW} y=${YEARS} c=deadbeef vs ${CHAINS} -> eligible`);
+check("...through the SAME queue, not a second one for chains",
+  !/rewindowChains|chainQueue|REWINDOW_CHAINS/.test(ROUTE),
+  "one companyfacts payload carries every one of the three, so one re-read serves all three");
+
+// ── CONDITION 5: every script that lifts these functions can still lift them ─
+//
+// THE REGRESSION THIS EXISTS FOR ALREADY HAPPENED, TWICE, AND THE SECOND TIME
+// NOBODY SAW IT. `needsRewindow` changed from an arrow const to a declaration.
+// This check hit it, failed loudly, and moved to grabFunction. The OTHER
+// lifter — scripts/annual-filer-census.mjs — kept
+// /export const needsRewindow = [^;]+;/, which then matched nothing, so
+// `(match ?? [])[0]` was undefined and `.replace` on it threw a TypeError. It
+// went unnoticed because the census is a CREDENTIALLED relay task and does not
+// run under check-all: the only way to find out was to run it, and running it
+// needs the database.
+//
+// So the lift targets are asserted here instead, where they are free. This does
+// not run the census — it asserts that the functions it names are findable by
+// the means it uses, which is the exact thing that broke.
+console.log("\n5. the other lifters of these functions still resolve");
+
+const CENSUS = readCodeOnly("scripts/annual-filer-census.mjs");
+check("the census no longer matches the arrow form that stopped existing",
+  !/export const needsRewindow = \[\^;\]/.test(CENSUS) && !CENSUS.includes("needsRewindow"),
+  "a regex that matches nothing returns undefined and throws on .replace");
+for (const [name, src, where] of [
+  ["needsReread", STALE, "lib/server/secStaleness.ts"],
+  ["staleReasons", STALE, "lib/server/secStaleness.ts"],
+  ["populationQueues", ROUTE, "the route"],
+  ["restatedPeriods", ROUTE, "the route"],
+]) {
+  check(`grabFunction finds ${name} in ${where}`, Boolean(grabFunction(src, name)));
+}
+// AND THE CENSUS ASKS FOR EXACTLY THOSE. A lifter naming a function that no
+// longer exists is the same failure one step removed.
+for (const name of ["needsReread", "staleReasons", "populationQueues"]) {
+  check(`the census lifts ${name} by name`, CENSUS.includes(`grabFunction(STALE, "${name}")`) ||
+    CENSUS.includes(`grabFunction(ROUTE, "${name}")`),
+    `so a rename moves this check with it`);
+}
+// A FAILED LIFT MUST EXIT, NOT THROW. The TypeError was unreadable; a named
+// FATAL says what could not be lifted.
+check("the census exits with a FATAL rather than throwing when a lift fails",
+  /if \(!needs \|\| !queues\)/.test(CENSUS) && /FATAL: could not lift/.test(CENSUS),
+  "an undefined match should report itself, not surface as .replace of undefined");
 
 console.log(
   failures

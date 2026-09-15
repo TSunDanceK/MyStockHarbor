@@ -94,10 +94,24 @@ if (WATCH.length) {
       console.log(`  ${sym.padEnd(6)} no stored set (manifest contentHash ${e?.contentHash ?? "absent"})`);
       return;
     }
+    // ── WHICH PATH WROTE IT, AND WHEN ────────────────────────────────────
+    //
+    // The manifest's contentHash is written ONLY by /api/jobs/sec-facts.
+    // secColdFetch calls writeFactSet directly for an on-demand page view and
+    // never touches the manifest, so a stored set whose manifest entry has no
+    // contentHash was written by the cold path. `at` is stamped by
+    // encodeFactSet at write time, which dates it.
+    //
+    // This is the difference between "the cold path ignores the window" and
+    // "this set predates the deploy", which look identical from w alone.
+    const wroteIt = e?.contentHash ? "cron job" : "cold path (page view)";
+    const when = set.at ? new Date(set.at).toISOString().replace("T", " ").slice(0, 19) + "Z" : "no timestamp";
     console.log(
       `  ${sym.padEnd(6)} w=${String(set.w ?? 8).padStart(2)} quarters=${String((set.quarters ?? []).length).padStart(2)} ` +
       `years=${String((set.years ?? []).length).padStart(2)} instants=${String((set.instants ?? []).length).padStart(2)} ` +
-      `| manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"}`
+      `| written ${when} by ${wroteIt}` +
+      `\n         manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"} cik=${e?.cik ?? "none"}` +
+      `\n         quarters carrying a prior-year match: see the growth table — a young filer has none to find`
     );
   });
   console.log("");
@@ -163,16 +177,39 @@ if (read > claimsPopulated) {
 // drain is computed from. A census that re-derives the predicate is a second
 // opinion about the code rather than a measurement of it.
 const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+const STALE = readCodeOnly("lib/server/secStaleness.ts");
 const num = (n) => Number((ROUTE.match(new RegExp(`${n} = (\\d+)`)) ?? [])[1]);
+
+// ── THIS LIFT WAS BROKEN AND WOULD HAVE CRASHED THE CENSUS ────────────────
+// It read /export const needsRewindow = [^;]+;/ — the arrow form — which
+// stopped matching when the function became a declaration, so the match was
+// undefined and `.replace` on it threw. Nothing caught it because this task is
+// credentialled and does not run under check-all. The check that lifts the same
+// function had already hit this and had already moved to grabFunction; this
+// copy did not follow. Two lifters of one function, one updated.
+//
+// grabFunction here too, and from secStaleness where the rule now lives.
+// secFields is inlined WHOLE because needsReread closes over secChainsHash():
+// pinning it to a literal would make the census agree with a chain list that
+// had moved underneath it, and report a drained queue that is not drained.
+const needs = grabFunction(STALE, "needsReread");
+const queues = grabFunction(ROUTE, "populationQueues");
+if (!needs || !queues) {
+  console.error("FATAL: could not lift needsReread / populationQueues — the census cannot measure what it cannot run.");
+  process.exit(2);
+}
 const job = await lift(
   [
+    readCodeOnly("lib/server/secFields.ts"),
     `const SEC_QUARTER_WINDOW = ${sec.SEC_QUARTER_WINDOW};`,
+    `const SEC_YEAR_WINDOW = ${sec.SEC_YEAR_WINDOW};`,
     `const SEC_REVERIFY_PER_RUN = ${num("SEC_REVERIFY_PER_RUN")};`,
     `const SEC_POPULATE_PER_RUN = ${num("SEC_POPULATE_PER_RUN")};`,
     `const SEC_REWINDOW_PER_RUN = ${num("SEC_REWINDOW_PER_RUN")};`,
-    (ROUTE.match(/export const needsRewindow = [^;]+;/) ?? [])[0].replace("export const", "const"),
-    grabFunction(ROUTE, "populationQueues").replace("export function", "function"),
-    "export { populationQueues };",
+    needs.replace("export function", "function"),
+    grabFunction(STALE, "staleReasons").replace("export function", "function"),
+    queues.replace("export function", "function"),
+    "export { populationQueues, needsReread, staleReasons, secChainsHash };",
   ].join("\n")
 );
 const q = job.populationQueues(manifest);
@@ -186,3 +223,47 @@ for (const [name, taken, backlog, perRun] of [
   console.log(`  ${name.padEnd(9)} ${String(taken).padStart(4)} of ${String(backlog).padStart(4)} SYMBOLS @ ${String(perRun).padStart(3)}/run -> ${days(backlog, perRun)}`);
 }
 console.log(`  rewindow queue on first run: ${q.rewindow.join(" ") || "(none)"}`);
+
+// ── WHY THE REWINDOW BACKLOG IS THE SIZE IT IS ────────────────────────────
+//
+// A backlog of 4 and a backlog of 759 are the same number to a reader who
+// cannot see WHICH staleness selected them. One chain edit makes the whole
+// populated universe eligible at once — that is the case SEC_REWINDOW_PER_RUN
+// was sized for — and it reads identically to a genuine window migration
+// unless the reasons are counted separately.
+const CHAINS = job.secChainsHash();
+const reasons = { quarters: 0, years: 0, chains: 0 };
+const eligible = Object.entries(manifest.symbols)
+  .filter(([, e]) => e.cik && !e.needsReverify && e.contentHash !== null && job.needsReread(e));
+for (const [, e] of eligible) for (const r of job.staleReasons(e)) reasons[r]++;
+console.log(`\nWHY THE ${eligible.length} ELIGIBLE SYMBOLS ARE ELIGIBLE (a symbol can be behind on more than one):`);
+console.log(`  quarter window behind   ${String(reasons.quarters).padStart(4)} SYMBOLS`);
+console.log(`  year window behind      ${String(reasons.years).padStart(4)} SYMBOLS`);
+console.log(`  chains behind           ${String(reasons.chains).padStart(4)} SYMBOLS   (current chains ${CHAINS})`);
+const chainsOnly = eligible.filter(([, e]) => {
+  const r = job.staleReasons(e);
+  return r.length === 1 && r[0] === "chains";
+}).length;
+console.log(`  of which chains ONLY    ${String(chainsOnly).padStart(4)} SYMBOLS   — sets that would NEVER have been re-read before this change`);
+
+// ── WHICH SETS HAVE ALREADY BEEN RE-READ, BY NAME ────────────────────────
+//
+// FOR THE EYE-CHECK, and it is the difference between testing a fix and
+// testing a stale set. A page renders from the STORED set, so a symbol whose
+// entry is still eligible is showing the OLD chains however correct the code
+// is. Naming them stops a reviewer concluding from a blank cell that the fix
+// does not work.
+// The same list SYMBOLS already named above, so one input drives both sections
+// rather than two that can disagree about which symbols are being watched.
+const EYE = WATCH.length ? WATCH : ["GEV", "KTOS", "VRT", "NVDA", "AAPL"];
+console.log(`\nRE-READ STATUS OF THE EYE-CHECK SYMBOLS (stored set, not the code):`);
+for (const symbol of EYE) {
+  const e = manifest.symbols[symbol];
+  if (!e) { console.log(`  ${symbol.padEnd(6)} not in the manifest — cold-path only, so only a visit re-reads it`); continue; }
+  if (e.contentHash === null) { console.log(`  ${symbol.padEnd(6)} never populated — populate's, not rewindow's`); continue; }
+  const why = job.staleReasons(e);
+  console.log(
+    `  ${symbol.padEnd(6)} ${why.length ? `STALE (${why.join(",")})` : "RE-READ — renders today's chains"}` +
+    `   w=${e.w ?? "absent"} y=${e.y ?? "absent"} c=${e.c ?? "absent"}`
+  );
+}
