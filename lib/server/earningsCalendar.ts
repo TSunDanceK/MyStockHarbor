@@ -16,16 +16,36 @@
 // single-symbol /stable/quote works, and that's the one part of this file
 // that spends a real API call per symbol.
 //
-// --- Rolling window (added 2026-07-18) ---
+// --- Rolling window (added 2026-07-18; INVERTED 2026-09-15) ---
 //
 // The calendar only ever deals with a bounded, rolling window of dates:
-//   start = today - WINDOW_PAST_DAYS (the last few days stay live so recent
-//           reporters are still visible)
-//   end   = last day of (this month + WINDOW_FUTURE_MONTHS)
+//   start = today - WINDOW_PAST_DAYS
+//   end   = today
 // Anything outside that window is greyed out in the UI and never populated.
-// The window's future edge only advances on the 1st of a month; its past
-// edge advances daily. See getWindowStartDate / getWindowEndDate /
-// isDateInWindow (exported for the page to clamp navigation and grey cells).
+// Both edges advance daily, exactly one day at a time. See getWindowStartDate /
+// getWindowEndDate / isDateInWindow (exported for the page to clamp navigation
+// and grey cells).
+//
+// ── WHY IT POINTS BACKWARD NOW ─────────────────────────────────────────────
+// The window used to run three days back and three months forward, on the
+// assumption that a reliable forward calendar existed. It does not. Both routes
+// to one were measured and both failed:
+//
+//   cadence prediction from filing history   2 of 48 filers landed inside
+//                                            their OWN p90 band +/-2 days
+//   8-K scheduling announcements             0 of 276 fell in the 14-28 day
+//                                            band a calendar would need
+//
+// So the forward half of the window was never showing confirmed dates; it was
+// showing a vendor's guesses, and it emptied within 24 hours of the vendor
+// going away. What IS free, exact and permanent is the past: a results filing
+// is a dated public document.
+//
+// PAST DATES SETTLE. That is the property the rest of this file now leans on.
+// A date more than a day or two old will not gain new reporters, so "complete"
+// means complete forever, and the machinery that existed to re-walk a moving
+// future -- a frontier pointer, a park-past-the-end short circuit -- is gone
+// rather than reversed. See findNextIncompleteDate.
 //
 // --- Rate-limiting + auto-populate system ---
 //
@@ -103,23 +123,13 @@ const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
 // has changed is a new key, not an old key with new semantics.
 const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v3";
 const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
-// ── v2 -> v3, AND THIS REPLACES THE MANUAL PRODUCTION DELETE ───────────────
-//
-// The live v2 pointer is stranded at 2027-01-01, past the window end, with 59
-// in-window dates still unfilled behind it. It carries no TTL and setFillFrontier
-// only moves forward, so it does not recover on its own.
-//
-// Bumping makes it unreachable: getFillFrontier finds no v3 key and falls back to
-// the window start, which is exactly the state a hand-deletion would produce --
-// without a production write, and without the risk of deleting the wrong key.
-// The v2 key is deliberately LEFT IN PLACE: it is ~20 bytes, it is now evidence
-// of what happened, and deleting it as well would be a second change doing the
-// same job.
-const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v3";
 
-// Rolling window bounds.
-const WINDOW_PAST_DAYS = 3; // today and the previous 3 days stay live
-const WINDOW_FUTURE_MONTHS = 3; // through the end of (this month + 3)
+// Rolling window bounds. There is no future bound: the window ENDS today.
+//
+// 90 days is a full reporting quarter plus a few days' slack, so every company
+// that has reported since its last quarter end appears exactly once. Longer
+// buys repetition; shorter cuts the tail of a reporting season off the page.
+const WINDOW_PAST_DAYS = 90;
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -145,18 +155,17 @@ function toDateStr(d: Date): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 
-// First date shown/populatable: today minus WINDOW_PAST_DAYS (so with
-// WINDOW_PAST_DAYS=3, today plus the previous 3 days are live).
+// Oldest date shown/populatable: today minus WINDOW_PAST_DAYS.
 export function getWindowStartDate(): string {
   const t = utcMidnightToday();
   return toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - WINDOW_PAST_DAYS)));
 }
 
-// Last date shown/populatable: the final day of the month WINDOW_FUTURE_MONTHS
-// ahead. Day 0 of (month + N + 1) is the last day of (month + N).
+// Newest date shown/populatable: TODAY. Not the end of the month, not a
+// configurable number of days ahead -- a date that has not happened yet cannot
+// have a results filing, and every attempt to show one was a vendor estimate.
 export function getWindowEndDate(): string {
-  const t = utcMidnightToday();
-  return toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + WINDOW_FUTURE_MONTHS + 1, 0)));
+  return toDateStr(utcMidnightToday());
 }
 
 export function isDateInWindow(date: string): boolean {
@@ -311,26 +320,29 @@ export async function getCachedDayItems(date: string): Promise<EarningsListItem[
   return dedupeAndSortItems((await readDayItemsCache(date)) ?? []);
 }
 
-// --- Fill frontier (so a full window costs nothing to rescan) ------------
+// --- Window completeness (read in ONE command, not one per date) ----------
 
-async function getFillFrontier(): Promise<string> {
-  const start = getWindowStartDate();
-  if (!redis) return start;
+/**
+ * Which dates in the window are already marked complete.
+ *
+ * Returns null when the answer is UNKNOWN -- no Redis, or the read failed.
+ * That distinction is the whole point of the return type. An empty Set says
+ * "nothing in this window is done, go and fill all 91 dates"; a failed read
+ * says nothing at all, and serving it AS an empty Set is the same defect this
+ * file spent a release fixing on the day side.
+ */
+async function readWindowCompleteness(dates: string[]): Promise<Set<string> | null> {
+  if (!redis || dates.length === 0) return null;
   try {
-    const v = await redis.get<string>(FILL_FRONTIER_KEY);
-    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && v > start) return v;
+    const keys = dates.map((d) => `${DAY_COMPLETE_PREFIX}:${d}`);
+    const vals = await redis.mget<unknown[]>(...keys);
+    const done = new Set<string>();
+    dates.forEach((d, i) => {
+      if (vals?.[i] != null) done.add(d);
+    });
+    return done;
   } catch {
-    // fall through to window start
-  }
-  return start;
-}
-
-async function setFillFrontier(date: string) {
-  if (!redis) return;
-  try {
-    await redis.set(FILL_FRONTIER_KEY, date);
-  } catch {
-    // best-effort -- worst case the next scan re-checks a few completed dates
+    return null;
   }
 }
 
@@ -1299,89 +1311,108 @@ export async function getDayEarningsForRender(date: string): Promise<FullDayEarn
   return getFullDayEarnings(date, { maxQuote: RENDER_SEED_LIMIT });
 }
 
-// Walks the window front-to-back from the fill frontier and returns the first
-// date that still has candidates left to quote. Dates with no reporters at all
-// (weekends/holidays) count as "done" and are skipped. Advances the frontier
-// so completed leading dates aren't re-scanned; parks it past the window end
-// when everything is filled, so a full window costs one Redis read to confirm.
+// Returns the newest date in the window that still has candidates left to
+// quote, or null when there is nothing to do. Dates with no reporters at all
+// (weekends, holidays) are skipped.
+//
+// ── NEWEST FIRST, AND NO POINTER ───────────────────────────────────────────
+// The old walk ran front-to-back from a stored "fill frontier", because the
+// front edge of the window was the near future and that is where new dates
+// appeared. Inverting the window inverts both halves of that:
+//
+//   PRIORITY. New dates now appear at the BACK edge (today), and that is also
+//   the end a visitor lands on. A front-to-back walk over a backward window
+//   spends the hourly quote budget on dates three months old while today sits
+//   empty. So the walk runs newest first.
+//
+//   THE POINTER IS GONE, NOT REVERSED. It existed so a finished window cost one
+//   Redis read instead of ~126, and it is what produced the production incident
+//   this file's last release was about: a single dead-FMP render parked it at
+//   2027-01-01, past the window end, with 59 in-window dates unfilled behind
+//   it; forward-only movement and no TTL meant it never recovered on its own.
+//   A batched MGET over the window's completeness keys buys the same saving --
+//   ONE command for the whole window, same as the pointer -- and there is no
+//   state left to strand. Deleting the failure mode beats guarding it.
+//
+// Past dates settle, so a date marked complete stays complete and this walk is
+// monotone: it shortens every day by one and grows by one.
 async function findNextIncompleteDate(): Promise<string | null> {
+  const startStr = getWindowStartDate();
   const endStr = getWindowEndDate();
-  const endTime = new Date(`${endStr}T00:00:00Z`).getTime();
+  const startTime = new Date(`${startStr}T00:00:00Z`).getTime();
 
-  const frontierStr = await getFillFrontier();
-  let cur = new Date(`${frontierStr}T00:00:00Z`).getTime();
-
-  // WHETHER THE SCAN SAW ANY CANDIDATES AT ALL, anywhere in the window.
-  let sawAnyCandidates = false;
-
-  while (cur <= endTime) {
-    const d = new Date(cur);
-    const ds = toDateStr(d);
-
-    // ── THE SCAN MAY NOT WALK PAST A MONTH IT COULD NOT READ ──────────────
-    //
-    // getDayCandidates resolves the whole month behind this date, so asking for
-    // any date in the month is what populates its visibility. An unreadable
-    // month yields [] for every one of its dates -- indistinguishable from a
-    // month nobody reports in, which is precisely how the pointer got past 59
-    // unfilled dates in production.
-    const candidates = await getDayCandidates(ds);
-    const visibility = getMonthVisibility(d.getUTCFullYear(), d.getUTCMonth() + 1);
-    if (visibility === "unknown") {
-      console.error(
-        `[earnings-calendar] the feed for ${monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1)} ` +
-          `could not be read, so its dates are UNKNOWN rather than empty. Holding the fill ` +
-          `frontier at ${frontierStr} rather than scanning past it -- advancing here is what ` +
-          `stranded 59 in-window dates behind a pointer parked at the window end.`
-      );
-      return null;
-    }
-
-    if (candidates.length > 0) sawAnyCandidates = true;
-    if (candidates.length > 0 && !(await isDateComplete(ds))) {
-      await setFillFrontier(ds);
-      return ds;
-    }
-    cur += 86_400_000;
+  const dates: string[] = [];
+  for (let t = new Date(`${endStr}T00:00:00Z`).getTime(); t >= startTime; t -= 86_400_000) {
+    dates.push(toDateStr(new Date(t)));
   }
 
-  // ── THE OUTAGE CASES, WHICH DID NOT EXIST ──────────────────────────────
-  //
-  // Reaching here means no date in the window has work outstanding, and every
-  // month in it was readable. There are two ways that happens and they are
-  // opposites:
-  //
-  //   everything is genuinely filled   -> park the pointer, scans go free
-  //   the feed is down, so every date  -> park the pointer and STRAND the
-  //   looks like it has no reporters      entire window, permanently
-  //
-  // A whole window with not one reporting company on any of ~126 days is not a
-  // real market state; it is the provider being gone. Parking on it was
-  // measured: one dead-FMP render left the frontier at 2027-01-01, and because
-  // setFillFrontier only moves forward and the key carries NO TTL, the
-  // background fill never comes back on its own. When the window finally
-  // catches up, it resumes PAST every date the outage skipped.
-  //
-  // The forward-only rule is right in normal operation and is left alone. What
-  // was missing is the case where advancing is not progress.
-  // THE SECOND GUARD, AND IT IS NOT REDUNDANT. Per-month visibility catches a
-  // month that could not be READ. This catches a window that read cleanly and
-  // still contains not one reporting company on any of ~126 days, which is not a
-  // real market state either. They fail differently and are tested separately
-  // (§6 and §6b of the check).
-  if (!sawAnyCandidates) {
+  // ── AN UNREADABLE COMPLETENESS MAP IS NOT AN EMPTY ONE ────────────────────
+  // Treating a failed read as "nothing is complete" would send the scan to
+  // re-quote all 91 dates on a Redis blip. Doing nothing this round costs one
+  // five-minute scan slot and is recoverable; the other is not.
+  const completed = await readWindowCompleteness(dates);
+  if (!completed) {
     console.error(
-      `[earnings-calendar] scanned ${frontierStr}..${endStr} and found NO candidates on ` +
-        `any date. That is a dead upstream feed, not an empty market. Leaving the fill ` +
-        `frontier at ${frontierStr} rather than parking it past the window end -- parking ` +
-        `here strands every date in the window until the key is deleted by hand.`
+      `[earnings-calendar] could not read which of ${startStr}..${endStr} are complete, so ` +
+        `which dates have work outstanding is UNKNOWN rather than "all of them". Skipping this ` +
+        `scan rather than re-quoting the whole window.`
     );
     return null;
   }
 
-  // Everything in the window is complete -- park the frontier just past the
-  // end so subsequent scans short-circuit until the window rolls forward.
-  await setFillFrontier(toDateStr(new Date(endTime + 86_400_000)));
+  // WHETHER THE SCAN SAW ANY CANDIDATES AT ALL, anywhere in the window.
+  let sawAnyCandidates = false;
+  const unreadableMonths = new Set<string>();
+
+  for (const ds of dates) {
+    const d = new Date(`${ds}T00:00:00Z`);
+
+    // getDayCandidates resolves the whole month behind this date, so asking for
+    // any date in the month is what populates its visibility.
+    const candidates = await getDayCandidates(ds);
+    if (getMonthVisibility(d.getUTCFullYear(), d.getUTCMonth() + 1) === "unknown") {
+      // ── DIAGNOSTIC, NOT LOAD-BEARING, AND SAY SO ────────────────────────
+      // Under the pointer this branch was the guard: it stopped the scan dead,
+      // because advancing past an unreadable month parked the pointer past 59
+      // real dates. Deleting the pointer took the danger with it, and this
+      // branch with it -- an unreadable month yields [] for every one of its
+      // dates, so the emptiness check below skips them anyway.
+      //
+      // What is left is the distinction itself. "We could not read August" and
+      // "nobody reported in August" produce identical data and mean opposite
+      // things, and this is the only place that difference is recorded. Safety
+      // now comes from the STRUCTURE: the walk only ever returns a date with
+      // candidates, so a month with none is never quoted, never marked, and
+      // arrives whole when the feed does. Do not re-add a stop here on the
+      // belief that this is still a guard.
+      unreadableMonths.add(monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1));
+      continue;
+    }
+
+    if (candidates.length === 0) continue;
+    sawAnyCandidates = true;
+    if (!completed.has(ds)) return ds;
+  }
+
+  if (unreadableMonths.size > 0) {
+    console.error(
+      `[earnings-calendar] ${[...unreadableMonths].sort().join(", ")} could not be read. Their ` +
+        `dates are UNKNOWN, not empty, and were skipped rather than counted as having no ` +
+        `reporters. Nothing marks them done; they fill when the feed recovers.`
+    );
+  }
+
+  // A whole window with not one reporting company on any of ~91 readable days
+  // is not a real market state; it is the provider being gone. There is no
+  // longer any state to corrupt by getting this wrong -- the scan simply found
+  // nothing -- but it is still the difference between "quiet" and "dead", and
+  // it is the only place that difference is visible.
+  if (!sawAnyCandidates) {
+    console.error(
+      `[earnings-calendar] scanned ${endStr}..${startStr} and found NO candidates on any ` +
+        `readable date. That is a dead upstream feed, not an empty market.`
+    );
+  }
   return null;
 }
 

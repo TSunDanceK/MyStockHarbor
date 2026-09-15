@@ -127,8 +127,24 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const toDateStr = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 const at = new Date(DUMPED_AT);
 const t = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+// ── PINNED TO THE PRE-INVERSION WINDOW, DELIBERATELY ───────────────────────
+// On 2026-09-15 the live window was inverted to the last 90 days and the fill
+// frontier was deleted outright. This scan is forensic: it reads dumps taken
+// under the OLD shape (3 days back, 3 months forward, a frontier pointer), and
+// re-pointing it at the new window would measure those dumps against bounds
+// they were never taken under. So the constants stay, and a dump from after the
+// inversion is called out rather than silently mismeasured.
 const WINDOW_PAST_DAYS = 3;
 const WINDOW_FUTURE_MONTHS = 3;
+const INVERTED_ON = "2026-09-15";
+if (DUMPED_AT.slice(0, 10) >= INVERTED_ON) {
+  console.error(
+    `\nWARNING: this dump is from ${DUMPED_AT.slice(0, 10)}, on or after the window inversion ` +
+      `(${INVERTED_ON}). The window bounds and the fill-frontier findings below are computed ` +
+      `against the PRE-inversion shape and do not describe the running system. Read them as ` +
+      `history, not as a production scan.\n`
+  );
+}
 const windowStart = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - WINDOW_PAST_DAYS)));
 const windowEnd = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + WINDOW_FUTURE_MONTHS + 1, 0)));
 const frontierValue = frontier?.value ?? null;

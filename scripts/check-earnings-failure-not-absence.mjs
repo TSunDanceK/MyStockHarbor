@@ -69,6 +69,14 @@ class Redis {
     __h.store.set(k, v);
     return "OK";
   }
+  async mget(...ks) {
+    __h.cmd.push(["mget", ks]);
+    // The window-completeness read is the one place a FAILED read and an EMPTY
+    // result mean opposite things, so the harness has to be able to produce
+    // both. mgetThrows is the failure; an absent key is the empty.
+    if (__h.mgetThrows) throw new Error("upstash unreachable");
+    return ks.map((k) => { const v = __h.store.get(k); return v === undefined ? null : v; });
+  }
   async incr(k) { __h.cmd.push(["incr", k]); const n = Number(__h.store.get(k) ?? 0) + 1; __h.store.set(k, n); return n; }
   async expire(k, s) { __h.cmd.push(["expire", k, s]); return 1; }
 }
@@ -105,6 +113,7 @@ function harness({ mode, monthRows = [], names = {}, store = new Map() }) {
     store,
     cmd: [],
     calls: [],
+    mgetThrows: false,
     fmpFetch: async (url) => {
       h.calls.push(url);
       if (mode === "licence-401") {
@@ -132,7 +141,21 @@ process.env.FMP_API_KEY = "test-key";
 process.env.UPSTASH_REDIS_REST_URL = "http://harness.invalid";
 process.env.UPSTASH_REDIS_REST_TOKEN = "harness";
 
-const DATE = "2026-11-17";
+// ── THE FIXTURE DATE IS RELATIVE, BECAUSE THE WINDOW IS ─────────────────────
+// It was hardcoded to a date three months ahead, which was inside the old
+// forward window and is outside the new backward one by construction. Anchored
+// to today instead: two days back is inside a 90-day window on every day this
+// suite will ever run, and an out-of-window fixture makes the fill scenarios
+// pass by finding nothing rather than by finding the right thing.
+const pad2 = (n) => String(n).padStart(2, "0");
+const toDateStr = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+const TODAY = (() => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())); })();
+const daysAgo = (n) => toDateStr(new Date(TODAY.getTime() - n * 86_400_000));
+const DATE = daysAgo(2);
+// DATE's own month, for the calls that warm the month feed. Hardcoding it was
+// only ever right because DATE was hardcoded too.
+const DATE_YEAR = Number(DATE.slice(0, 4));
+const DATE_MONTH = Number(DATE.slice(5, 7));
 const MONTH_ROWS = [
   { symbol: "AAA", date: DATE, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null },
   { symbol: "BBB", date: DATE, epsEstimated: 2, epsActual: null, revenueEstimated: 2e9, revenueActual: null },
@@ -160,12 +183,10 @@ const constFromSource = (name) => {
 };
 const DAY_ITEMS_PREFIX = constFromSource("DAY_ITEMS_PREFIX");
 const DAY_COMPLETE_PREFIX = constFromSource("DAY_COMPLETE_PREFIX");
-const FILL_FRONTIER_KEY = constFromSource("FILL_FRONTIER_KEY");
-console.log(`\n0. Keys under test (read from the module)\n  items    ${DAY_ITEMS_PREFIX}\n  complete ${DAY_COMPLETE_PREFIX}\n  frontier ${FILL_FRONTIER_KEY}`);
+console.log(`\n0. Keys under test (read from the module)\n  items    ${DAY_ITEMS_PREFIX}\n  complete ${DAY_COMPLETE_PREFIX}`);
 
 const wroteItems = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith(`${DAY_ITEMS_PREFIX}:`));
 const wroteComplete = (h) => h.cmd.some(([c, k]) => c === "set" && String(k).startsWith(`${DAY_COMPLETE_PREFIX}:`));
-const wroteFrontier = (h) => h.cmd.some(([c, k]) => c === "set" && k === FILL_FRONTIER_KEY);
 
 // ── 1. The control: healthy provider ───────────────────────────────────────
 //
@@ -191,7 +212,7 @@ for (const [label, mode] of [["401 + JSON body", "licence-401"], ["402 + JSON bo
   const m = await loadModule();
   // Warm the month feed while the provider is alive, then kill it. This is the
   // real sequence: the calendar has candidates cached and the quotes stop.
-  await m.getMonthDaysWithEarnings(2026, 11);
+  await m.getMonthDaysWithEarnings(DATE_YEAR, DATE_MONTH);
   h.fmpFetch = harness({ mode, monthRows: MONTH_ROWS, names: NAMES, store: h.store }).fmpFetch;
   globalThis.__EARNINGS_HARNESS__ = h;
   h.cmd.length = 0;
@@ -319,9 +340,9 @@ console.log("\n5. F5 — the in-process candidate cache refuses empty, as Redis 
   harness({ mode: "ok", monthRows: [], names: NAMES });
   const h = globalThis.__EARNINGS_HARNESS__;
   const m = await loadModule();
-  await m.getMonthDaysWithEarnings(2026, 11);
+  await m.getMonthDaysWithEarnings(DATE_YEAR, DATE_MONTH);
   const after1 = h.calls.length;
-  await m.getMonthDaysWithEarnings(2026, 11);
+  await m.getMonthDaysWithEarnings(DATE_YEAR, DATE_MONTH);
   check(
     "a second call re-reads rather than serving a cached empty month",
     h.calls.length > after1,
@@ -329,71 +350,82 @@ console.log("\n5. F5 — the in-process candidate cache refuses empty, as Redis 
   );
 }
 
-// ── 6. F6 — a window with no candidates anywhere must not park the frontier ─
+// ── 6. F6 — an all-empty window is an outage, not a finished window ────────
+//
+// REWRITTEN FOR A WINDOW WITH NO POINTER. F6 used to assert "the fill frontier
+// is NOT advanced", because parking it past the window end stranded everything
+// behind it permanently. There is no frontier now, so that assertion has no
+// subject -- and deleting it without replacement would quietly drop the only
+// coverage of the outage case.
+//
+// What survives the pointer is the thing that always mattered: an outage must
+// not be recorded as a finished window. So the assertion moves onto the RECORD.
+// Nothing is marked complete, nothing is written, and nothing is reported as
+// populated -- and the paired control proves the machinery reaches all three
+// when there IS work, so "never writes anything" cannot pass this.
 console.log("\n6. F6 — an all-empty window is an outage, not a finished window");
 {
   const h = harness({ mode: "ok", monthRows: [], names: NAMES });
   const m = await loadModule();
-  await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
-  check("the fill frontier is NOT advanced", !wroteFrontier(h), h.cmd.filter(([, k]) => k === FILL_FRONTIER_KEY).map(([c]) => c).join(","));
+  const { populated } = await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  check("nothing is reported as populated", populated.length === 0, JSON.stringify(populated));
+  check("no date is marked complete", !wroteComplete(h));
+  check("and no items blob is written", !wroteItems(h));
 }
 {
-  // The other half: a window that genuinely has work still parks/advances
-  // normally. Without this, F6 could be "never write the frontier" and pass.
+  // The other half. Without this, F6 could be satisfied by a scan that never
+  // does anything at all.
   const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
   const m = await loadModule();
-  await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
-  check("but a window WITH candidates still advances it", wroteFrontier(h));
+  const { populated } = await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  check("but a window WITH candidates is populated normally", populated.includes(DATE), JSON.stringify(populated));
+  check("and that date IS marked complete", wroteComplete(h));
 }
 
-// ── 6b. F6 AGAINST THE CASE THAT ACTUALLY HAPPENED ────────────────────────
+// ── 6b. THE PRODUCTION CASE — partial visibility ──────────────────────────
 //
-// The production stranding is NOT the all-empty window F6 was written for. FMP
-// was healthy, 59 in-window dates had candidates, and the frontier still sat at
-// 2027-01-01. The shape that produces that is PARTIAL visibility: the near month
-// reads fine and is already filled, the later in-window months are cold -- absent
-// from Redis and unfetchable -- so every date in them looks like a day nobody
-// reports, the walk runs to the end, and the pointer parks past everything.
+// The production stranding was NOT the all-empty window F6 was written for. FMP
+// was healthy, 59 in-window dates had candidates, and the pointer still sat at
+// 2027-01-01. The shape that produces it is PARTIAL visibility: one month reads
+// fine and is already filled, other in-window months are cold -- absent from
+// Redis and unfetchable -- so every date in them looks like a day nobody
+// reports, and `sawAnyCandidates` is satisfied by the readable month alone.
 //
-// `sawAnyCandidates` is satisfied by the near month alone, so the guard does not
-// fire. A month that could not be READ is UNKNOWN, not empty, and the scan must
-// not advance past unknown.
-console.log("\n6b. F6 against the production case — near month readable, later months cold");
+// Under the inverted window the cold months are OLDER ones, and the damage is
+// no longer permanent, because there is no pointer to park. So the assertion is
+// now the thing that makes it recoverable: an unreadable month leaves NO
+// record, and the dates in it are filled in full once the feed comes back. That
+// is asserted in two phases -- cold, then recovered -- because the first phase
+// alone is indistinguishable from a scan that is simply broken.
+console.log("\n6b. The production case — a cold month leaves no record and recovers whole");
 {
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const toDateStr = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
-  const n = new Date();
-  const t = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
-  const windowStart = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 3)));
-  const windowEnd = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 4, 0)));
-  const nearMonth = windowStart.slice(0, 7);
-  // A reporting date in the near month, inside the window, already filled.
-  const nearDate = toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 2)));
+  const readableMonth = DATE.slice(0, 7);
+  // A reporting date in a month far enough back to be a DIFFERENT month from
+  // DATE's, and still inside a 90-day window.
+  const coldDate = daysAgo(70);
+  const coldMonth = coldDate.slice(0, 7);
+  const readableRows = [{ symbol: "AAA", date: DATE, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null }];
+  const coldRows = [{ symbol: "BBB", date: coldDate, epsEstimated: 2, epsActual: null, revenueEstimated: 2e9, revenueActual: null }];
 
-  const nearRows = [{ symbol: "AAA", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null }];
-  const store = new Map([
-    // Already complete, so the walk passes over it rather than returning it.
-    [`${DAY_COMPLETE_PREFIX}:${nearDate}`, 1],
-    [`${DAY_ITEMS_PREFIX}:${nearDate}`, [{ symbol: "AAA", company: "Alpha Inc", date: nearDate, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
-    // The frontier starts honestly at the window's front edge.
-    [FILL_FRONTIER_KEY, windowStart],
+  const makeStore = () => new Map([
+    // The readable month's date is already complete, so the walk passes over it
+    // rather than returning it and stopping there.
+    [`${DAY_COMPLETE_PREFIX}:${DATE}`, 1],
+    [`${DAY_ITEMS_PREFIX}:${DATE}`, [{ symbol: "AAA", company: "Alpha Inc", date: DATE, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
   ]);
 
-  const h = harness({ mode: "ok", monthRows: nearRows, names: NAMES, store });
-  h.fmpFetch = async (url) => {
-    h.calls.push(url);
+  // MATCHED ON `to`, NOT `from`. fetchCalendarRange requests a SAFETY DAY before
+  // the range, so `from` for a month lands in the PREVIOUS month -- matching on
+  // it starves the month this scenario needs readable, which turns it into the
+  // all-empty case §6 already covers and it passes for the wrong reason.
+  const feed = (warmMonths) => async (url) => {
     if (url.includes("/stable/stock-list")) {
       return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
     }
     if (url.includes("/stable/earnings-calendar")) {
-      // MATCHED ON `to`, NOT `from`. fetchCalendarRange requests a SAFETY DAY
-      // before the range, so `from` for the near month lands in the PREVIOUS
-      // month -- matching on it starved the near month too and the scenario
-      // passed because nothing was readable anywhere, which is the all-empty
-      // case this scenario exists to be different from.
-      const to = new URL(url).searchParams.get("to") ?? "";
-      // The near month answers. Every later month is cold and unreadable.
-      if (to.slice(0, 7) === nearMonth) return jsonResponse(nearRows, 200);
+      const to = (new URL(url).searchParams.get("to") ?? "").slice(0, 7);
+      if (to === readableMonth) return jsonResponse(readableRows, 200);
+      if (warmMonths.includes(to)) return jsonResponse(coldRows, 200);
       return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
     }
     if (url.includes("/stable/quote")) {
@@ -403,21 +435,76 @@ console.log("\n6b. F6 against the production case — near month readable, later
     return jsonResponse([], 200);
   };
 
-  const m = await loadModule();
-  await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  // Phase 1: the older month is cold.
+  const coldStore = makeStore();
+  const h1 = harness({ mode: "ok", monthRows: readableRows, names: NAMES, store: coldStore });
+  h1.fmpFetch = async (url) => { h1.calls.push(url); return feed([])(url); };
+  const m1 = await loadModule();
+  const r1 = await m1.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
 
-  const parked = h.cmd.filter(([c, k]) => c === "set" && k === FILL_FRONTIER_KEY);
-  const finalFrontier = store.get(FILL_FRONTIER_KEY);
   check(
-    "the near month was readable, so `sawAnyCandidates` is satisfied",
-    h.calls.some((u) => u.includes("earnings-calendar")),
-    "this is what makes the all-empty guard inapplicable"
+    "the readable month answered, so the all-empty guard is inapplicable",
+    h1.calls.some((u) => u.includes("earnings-calendar")),
+    "this is what makes 6b a different scenario from 6"
   );
+  check("the cold month's date is NOT populated", !r1.populated.includes(coldDate), JSON.stringify(r1.populated));
   check(
-    "the frontier is NOT advanced past the cold months",
-    !(typeof finalFrontier === "string" && finalFrontier > windowEnd),
-    `frontier=${JSON.stringify(finalFrontier)} windowEnd=${windowEnd} writes=${parked.length}`
+    "and nothing records it as done, so it is not lost",
+    coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`) == null,
+    `complete=${JSON.stringify(coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`))}`
   );
+
+  // Phase 2: the feed recovers. The SAME store carries forward, so this is the
+  // real question -- did phase 1 leave anything behind that skips this date?
+  const h2 = harness({ mode: "ok", monthRows: readableRows, names: NAMES, store: coldStore });
+  h2.fmpFetch = async (url) => { h2.calls.push(url); return feed([coldMonth])(url); };
+  const m2 = await loadModule();
+  const r2 = await m2.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  check("once the feed recovers the cold date IS filled", r2.populated.includes(coldDate), JSON.stringify(r2.populated));
+  check("and only then is it marked complete", coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`) != null);
+}
+
+// ── 6c. THE WALK RUNS NEWEST FIRST ────────────────────────────────────────
+//
+// Inverting the window inverts the priority with it, and this is the half that
+// a flip of two constants leaves behind. A front-to-back walk over a backward
+// window is not broken -- every date still fills eventually -- it just spends
+// the hourly quote budget on a date three months old while TODAY sits empty,
+// which is invisible in every assertion about correctness.
+console.log("\n6c. The walk spends the budget on the newest outstanding date");
+{
+  const recent = daysAgo(1);
+  const old = daysAgo(80);
+  const rows = [
+    { symbol: "AAA", date: old, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null },
+    { symbol: "BBB", date: recent, epsEstimated: 2, epsActual: null, revenueEstimated: 2e9, revenueActual: null },
+  ];
+  harness({ mode: "ok", monthRows: rows, names: NAMES });
+  const m = await loadModule();
+  const { populated } = await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  check(
+    "the newer of two outstanding dates is filled first",
+    populated[0] === recent,
+    `filled ${JSON.stringify(populated)}; newer=${recent} older=${old}`
+  );
+}
+
+// ── 6d. AN UNREADABLE COMPLETENESS MAP IS NOT AN EMPTY ONE ────────────────
+//
+// The pointer's replacement is one MGET over the window's completeness keys,
+// which introduces the same trap one level up: a failed read that is treated as
+// "nothing is complete" sends the scan to re-quote all 91 dates on a Redis blip.
+// Same defect class as the one this whole file exists for, in the code written
+// to remove it.
+console.log("\n6d. A failed completeness read does not mean an empty window");
+{
+  const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
+  h.mgetThrows = true;
+  const m = await loadModule();
+  const { populated } = await m.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
+  check("nothing is populated when completeness cannot be read", populated.length === 0, JSON.stringify(populated));
+  check("and no quote call is spent", !h.calls.some((u) => u.includes("/stable/quote")), h.calls.filter((u) => u.includes("/stable/quote")).length + " quote calls");
+  check("the read was actually attempted", h.cmd.some(([c]) => c === "mget"));
 }
 
 // ── 7. F7 — the TTL is established before the counter moves ────────────────
