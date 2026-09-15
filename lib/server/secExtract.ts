@@ -210,6 +210,55 @@ function resolve(
   return best;
 }
 
+
+/**
+ * THE FISCAL PERIOD, DERIVED FROM THE DATES — NOT READ OFF THE ROW.
+ *
+ * companyfacts' `fy` and `fp` describe the FILING, not the period the row
+ * covers: a 10-K carries fy 2026 on every comparative it restates. Reading them
+ * put "Q1 FY2027" on ARM's June 2025 quarter (nine months out) and gave AAPL
+ * TWO ROWS LABELLED "Q3 FY2026" — 2026-06-27 and 2025-06-28 — in the same
+ * eight-row table. Caught by rendering the page's own output, not by a check.
+ *
+ * So the label is computed from one anchor: the filer's fiscal year-end date.
+ * For a period ending E, the fiscal year is the one whose end falls on or after
+ * E, and the quarter is how many ~91-day steps E sits before that end.
+ *
+ * THE TOLERANCE IS NOT SLOPPINESS. 52/53-week filers move their year-end by a
+ * few days annually — AAPL's ran 2025-09-27 against a 2026-09-26 anchor — so an
+ * exact match would push every year-end quarter into the NEXT fiscal year and
+ * label Q4 as Q1. Ten days is wider than any calendar drift and far narrower
+ * than a quarter.
+ */
+export function fiscalLabel(
+  end: string,
+  yearEndAnchor: string | null
+): { fp: string | null; fy: number | null } {
+  if (!yearEndAnchor) return { fp: null, fy: null };
+  const e = Date.parse(end);
+  const anchor = new Date(yearEndAnchor);
+  if (!Number.isFinite(e)) return { fp: null, fy: null };
+
+  const endYear = new Date(end).getUTCFullYear();
+  let best: { at: number; year: number } | null = null;
+  // The candidate year-ends either side, so a December filer's January quarter
+  // and a March filer's April quarter both resolve.
+  for (const y of [endYear - 1, endYear, endYear + 1]) {
+    const cand = Date.UTC(y, anchor.getUTCMonth(), anchor.getUTCDate());
+    const gap = (cand - e) / DAY;
+    if (gap >= -10 && (best === null || cand < best.at)) best = { at: cand, year: y };
+  }
+  if (!best) return { fp: null, fy: null };
+
+  const daysBefore = Math.max(0, (best.at - e) / DAY);
+  // ROUNDED, NOT FLOORED, and the divisor is a real quarter (365.25/4). A
+  // quarter runs 90-92 days, so floor(90/91) is 0 and labelled AAPL's June 2025
+  // quarter Q4 and ARM's December 2025 quarter Q4. Rounding puts a 90-, 91- or
+  // 92-day gap at exactly one step, which is what it is.
+  const q = 4 - Math.round(daysBefore / 91.3125);
+  return { fp: `Q${Math.min(4, Math.max(1, q))}`, fy: best.year };
+}
+
 // ── extraction ──────────────────────────────────────────────────────────────
 
 type Bucket = Map<string, { row: FactRow; tag: string; rank: number; unit: string }[]>;
@@ -407,18 +456,28 @@ export function extractCompanyFacts(
   // ── the cover page, read ONCE for the symbol ────────────────────────────────
   const coverShares = readCoverShares(facts);
 
+  // THE ANCHOR: the newest twelve-month frame's end is the filer's fiscal
+  // year-end. Falling back to the newest quarter end is wrong by up to three
+  // quarters, so it is only used when the filer has published no annual frame
+  // at all — and then everything it labels is equally uncertain.
+  const yearEnds = [...yearCells.keys()].sort();
+  const yearEndAnchor = yearEnds[yearEnds.length - 1] ?? null;
+
   const pack = (
     cells: Map<string, Map<string, FieldValue>>,
-    meta: (end: string) => { start: string | null; row: FactRow | undefined }
+    meta: (end: string) => { start: string | null; row: FactRow | undefined },
+    annual = false
   ): PeriodRecord[] =>
     [...cells.entries()]
       .map(([end, m]) => {
         const { start, row } = meta(end);
+        const fiscal = fiscalLabel(end, yearEndAnchor);
         return {
           end,
           start,
-          fp: row?.fp ?? null,
-          fy: typeof row?.fy === "number" ? row.fy : null,
+          // NOT row.fp / row.fy — those describe the FILING. See fiscalLabel.
+          fp: annual ? "FY" : fiscal.fp,
+          fy: fiscal.fy,
           accession: row?.accn ?? null,
           filed: row?.filed ?? null,
           values: SEC_FIELD_KEYS.map((k) => m.get(k) ?? null),
@@ -434,7 +493,7 @@ export function extractCompanyFacts(
   const years = pack(yearCells, (e) => ({
     start: yearMeta.get(e)?.start ?? null,
     row: yearMeta.get(e)?.row,
-  })).slice(0, keepYears);
+  }), true).slice(0, keepYears);
 
   const instants = pack(instantCells, (e) => ({ start: null, row: instantMeta.get(e) })).slice(
     0,
