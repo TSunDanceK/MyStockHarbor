@@ -45,16 +45,37 @@ const UA =
   process.env.PROBE_USER_AGENT ??
   "MyStockHarbor/1.0 (+https://www.mystockharbor.com; anchor collision measurement)";
 
-// THE FIVE THAT FIRE, plus two controls. CSX and RTX are clean acronym cases
-// with no plausible English collision — if the anchor admits most of their pool
-// and almost none of DOW's is on-topic, the shape of the answer is not "the
-// anchored rule is wrong" but "these five need more than the anchor".
+// ── ROUND 2: THE SIX CAPITALISED-WORD NEEDLES, plus two all-caps controls ──
+// Round 1 (relay run 77, 700 items) measured DOW/T/NOV/BOX/RH + CSX/RTX and the
+// answer split cleanly on the SHAPE OF THE NEEDLE rather than on the symbol:
+//
+//   needle         marginal admits   of which off-topic
+//   \bDow\b   (Cap)       59                55   93% wrong
+//   \bBox\b   (Cap)       56                17   30% wrong
+//   \bAT\b    (CAPS)      38                 0
+//   \bNOV\b   (CAPS)      47                 1   (Novatti, ASX:NOV)
+//   \bRH\b    (CAPS)      52                 0
+//   \bCSX\b   (CAPS)      50                 0
+//   \bRTX\b   (CAPS)      46                 4   (Nvidia's GPU line)
+//
+// "Marginal" is the load-bearing word: those are the items the anchor adds ON
+// TOP of the explicit ticker signals that already shipped, measured by running
+// the real isClearlyAboutRequestedCompany twice with the anchor guard switched
+// off in one copy. DOW's raw 85 admits looked bad; its marginal 59 is the number
+// that matters, because 26 of the 85 matched "dow stock"/"(dow)" regardless.
+//
+// Against the committed snapshot, exactly SIX of the 66 fallback-only names
+// produce a capitalised-word needle. That is the whole risk set, and it is what
+// round 2 measures, because a rule that drops the anchor for all six has to be
+// priced against all six rather than against DOW alone:
 const SUBJECTS = [
-  ["DOW", "Dow Inc.", '"Dow" stock'],
-  ["T", "AT&T Inc.", '"AT&T" stock'],
-  ["NOV", "NOV Inc.", '"NOV" stock'],
+  ["AON", "Aon plc", '"Aon" stock'],
   ["BOX", "Box, Inc.", '"Box" stock'],
-  ["RH", "RH", '"RH" stock'],
+  ["DOW", "Dow Inc.", '"Dow" stock'],
+  ["FOX", "Fox Corporation", '"Fox" stock'],
+  ["GAP", "Gap, Inc.", '"Gap" stock'],
+  // Two ALL-CAPS controls carried over from round 1. If the capitalised six are
+  // dirty and these two stay clean, the cut is the needle's case, not the name.
   ["CSX", "CSX Corporation", '"CSX" stock'],
   ["RTX", "RTX Corporation", '"RTX" stock'],
 ];
