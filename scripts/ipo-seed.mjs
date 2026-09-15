@@ -393,6 +393,8 @@ for (const r of lowerCands) {
   console.log(`   ${(listed?.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 38).padEnd(40)} ${f424.form} ${f424.date} · SIC ${r.sic ?? "?"}`);
   console.log(`          ${verdict}`);
   console.log(`          forms: ${r.filings.map((x) => `${x.form}@${x.date}`).join(" ")}`);
+  const _b4 = r.filings.filter((x) => /^424B/.test(x.form));
+  console.log(`          424B accessions: ${_b4.map((x) => x.acc ?? "(none carried)").join(", ")}`);
 }
 const droppedList = lowerCands.filter((r) => !r.filings.some((x) => x.form === "8-A12B"));
 const earliest8A = lowerCands
