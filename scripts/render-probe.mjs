@@ -91,7 +91,20 @@ for (let round = 1; round <= ROUNDS; round += 1) {
       // cold-render measurement is lost if the number is a 404 or a pending
       // card, so the body is inspected for the marker even though it is never
       // printed.
+      // ── LANDED ON /verify, WHICH IS NOT A MEASUREMENT ────────────────────
+      // middleware.ts caps /stock/* at STOCK_DAILY_LIMIT (40) per IP per UTC
+      // day and 307s past it to /verify. This probe is what SPENDS that
+      // allowance -- 20 paths x 2 rounds is exactly 40 -- so a long session of
+      // probing silently starts measuring the verify page instead of the
+      // earnings page. It shows up as every path returning 200 with an
+      // identical body size and two redirects, INCLUDING a path that must 404,
+      // which is the tell. Named here so the next run says so in one line
+      // instead of reporting six "unrecognised" outcomes.
       const marker =
+        /\/verify|Verify you|verification/i.test(res.url ?? "") ||
+        res.redirects >= 2
+          ? "RATE-LIMITED (/verify) — not a render; the /stock/* daily IP cap is spent"
+          :
         // THE THREE no-data CARDS, TOLD APART. They were one card until the
         // IFRS work, and lumping them again would let a measurement report
         // "not renderable" for a page that is in fact saying the right thing.
