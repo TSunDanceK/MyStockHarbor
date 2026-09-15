@@ -75,9 +75,13 @@ export const RETIRED_SOURCES: RetiredSource[] = [
     source: "FMP /revenue-product-segmentation + /revenue-geographic-segmentation",
     retiredOn: "2026-09-15",
     reason:
-      "Segment revenue is filed on an XBRL segment axis, and companyfacts publishes " +
-      "the default context only — the breakdown is not in it. Source unresolved; see " +
-      "hide-list-verdict §6.",
+      // READER-SAFE EVEN THOUGH NOTHING RENDERS IT. These strings were written
+      // for a card that no longer exists, and "see hide-list-verdict §6" was
+      // live on the page for two weeks. If A5 is ever reversed the text ships
+      // again, so the internal citation comes out now rather than being left
+      // as a trap for whoever reverses it.
+      "Segment revenue is filed against a breakdown the SEC's own bulk data does not " +
+      "publish — only the company-wide totals are in it. No free source covers the split.",
   },
 ];
 
@@ -132,6 +136,124 @@ export function derivationNote(derived: Cell["derived"]): string | null {
 
 export const isDerived = (c: Cell) => c.derived === "differenced" || c.derived === "computed";
 
+// ── the period basis, and the words that follow from it ─────────────────────
+
+/**
+ * WHICH KIND OF PERIOD THIS WHOLE VIEW IS ANCHORED ON.
+ *
+ * A normal filer's anchor is a QUARTER; an annual-only filer's is a fiscal
+ * YEAR. Everything the reader is told about "the period" — the eyebrow, the
+ * lede, the score narrative, the table intros, the P&L heading — has to follow
+ * from this one field.
+ *
+ * WHY A FIELD AND NOT A BOOLEAN PER SENTENCE. The first version of the annual
+ * fallback shipped with `annualOnly` used only for STRUCTURE (which card
+ * renders) and the NOUNS left as literals. The result was measured on the
+ * preview: /stock/KGC/earnings said "Latest reported quarter", "Most recent
+ * quarter filed: FY2025", "The latest filed quarter reads constructive",
+ * "Quarters are labelled by the company's own fiscal calendar" and carried a
+ * "Recent reported quarters" table — on a page whose own five-year card said
+ * "there is no quarterly table below". Six sentences, six places to forget.
+ * There is one place now.
+ */
+export type PeriodBasis = "quarter" | "year";
+
+/**
+ * The noun set for a basis. Every period word on the page comes from here.
+ *
+ * NOT a general pluraliser: this is the page's whole vocabulary for its own
+ * anchor, written out so a reader of this file can see exactly which words
+ * change with the basis and a check can assert on them.
+ */
+export const PERIOD_WORDS: Record<PeriodBasis, {
+  /** "quarter" / "year" */
+  one: string;
+  /** "quarters" / "years" */
+  many: string;
+  /** "Quarter" / "Fiscal year" — a table heading. */
+  One: string;
+  /** "quarterly" / "annual" */
+  adj: string;
+  /** "Latest reported quarter" / "Latest reported year" — the card eyebrow. */
+  latest: string;
+  /** How the filer's own fiscal labelling is described. */
+  labelled: string;
+  /**
+   * What a year-over-year figure is measured against, as a phrase.
+   *
+   * NOT built by substitution. "against the same ${one} a year earlier" reads
+   * correctly for a quarter and comes out as "the same year a year earlier"
+   * for a year — grammatical, and nonsense. A basis that changes the SHAPE of
+   * a sentence needs its own sentence, not a slot in someone else's.
+   */
+  yoyPhrase: string;
+}> = {
+  quarter: {
+    one: "quarter",
+    many: "quarters",
+    One: "Quarter",
+    adj: "quarterly",
+    latest: "Latest reported quarter",
+    labelled: "Quarters are labelled by the company's own fiscal calendar, which often differs from the calendar year.",
+    yoyPhrase: "the same quarter a year earlier",
+  },
+  year: {
+    one: "year",
+    many: "years",
+    One: "Fiscal year",
+    adj: "annual",
+    latest: "Latest reported year",
+    labelled: "Fiscal years are labelled by the company's own year-end, which often differs from the calendar year.",
+    yoyPhrase: "the prior fiscal year",
+  },
+};
+
+/** The words for a view's own basis. One call site per card. */
+export const periodWords = (basis: PeriodBasis) => PERIOD_WORDS[basis];
+
+// ── percentage change, and when it has no meaning ───────────────────────────
+
+/**
+ * A PERCENTAGE CHANGE THAT MAY HAVE NO MEANING, and says so rather than
+ * printing a number.
+ *
+ * `null`  — one of the two figures is not on file. Renders "—".
+ * `"n/m"` — both are on file and the arithmetic still says nothing.
+ *
+ * ── WHAT THIS PRINTED BEFORE ──────────────────────────────────────────────
+ * Measured on the #465 preview, /stock/KGC/earnings, five-year card:
+ *
+ *   FY2022  EPS $0.17 -> -$0.47   rendered  -376.5%
+ *   FY2023  EPS -$0.47 -> $0.34   rendered  +172.3%
+ *
+ * Both are arithmetically correct and both are meaningless. A percentage
+ * change measures a proportion of the base, and a base of -$0.47 has no
+ * proportion to be a share of: the second number says a company swinging from
+ * a loss to a profit "grew 172%", which is not a growth rate at all — it is an
+ * artefact of dividing by a negative. Worse, -376.5% and +172.3% are the SAME
+ * event described twice, once as a collapse and once as a boom.
+ *
+ * ── AND IT REACHED THE SCORE ──────────────────────────────────────────────
+ * scoreFromSec feeds epsYoY into clamp(v * 0.30, -20, 20), so a sign flip out
+ * of a loss was worth the full +20 — the maximum any component can contribute
+ * — for an arithmetic artefact. A value that cannot be rendered must not be
+ * scored either, which is why this is a type the score has to narrow rather
+ * than a formatting decision in the card.
+ */
+export type Pct = number | "n/m" | null;
+
+/** The marker, named once so the cards, the legend and the checks share it. */
+export const NOT_MEANINGFUL = "n/m" as const;
+
+/** The one sentence that explains the marker, wherever it can appear. */
+export const NOT_MEANINGFUL_NOTE =
+  "n/m means not meaningful: one of the two figures is a loss, so a percentage " +
+  "change between them would describe an artefact of dividing by a negative " +
+  "rather than a rate of growth.";
+
+/** Is this a figure, as opposed to absent or not meaningful? */
+export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
+
 // ── the view ────────────────────────────────────────────────────────────────
 
 export type ViewCell = Cell & { label: string; derivedNote: string | null };
@@ -151,9 +273,9 @@ export type SecEarningsView = {
   latestFiled: string | null;
   snapshot: {
     revenue: ViewCell;
-    revenueYoY: number | null;
+    revenueYoY: Pct;
     epsDiluted: ViewCell;
-    epsYoY: number | null;
+    epsYoY: Pct;
     netIncome: ViewCell;
     operatingIncome: ViewCell;
     comparedWith: string | null;
@@ -166,12 +288,45 @@ export type SecEarningsView = {
     operating: number | null;
     net: number | null;
   }[];
+  /**
+   * THE ANCHOR'S OWN KIND: "quarter" normally, "year" for a filer that
+   * publishes no quarterly periods at all.
+   *
+   * ONE FIELD, TWO JOBS, AND BOTH MATTER. Structure reads it to hide
+   * quarterly-only ideas (the gap badge, the recent-periods table) rather than
+   * compute them for a series that has no quarters; PROSE reads it through
+   * periodWords() so no card writes the noun "quarter" as a literal. It
+   * replaced a boolean `annualOnly` that only ever did the first job, which is
+   * how KGC shipped with six quarterly sentences over annual figures.
+   *
+   * NOT the same field as cashQuality.basis. That one is the period the CASH
+   * card reads, which can be a year on a filer whose anchor is a quarter (AZN
+   * publishes cash flow only on 6- and 12-month frames). This one is what the
+   * page as a whole is about.
+   */
+  basis: PeriodBasis;
+  /**
+   * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
+   * card, and it is the only growth table an annual-only filer has.
+   */
+  annual: {
+    label: string;
+    end: string;
+    comparedWith: string | null;
+    revenue: ViewCell;
+    revenueYoY: Pct;
+    epsDiluted: ViewCell;
+    epsYoY: Pct;
+    gross: number | null;
+    operating: number | null;
+    net: number | null;
+  }[];
   growth: {
     label: string;
     /** The period the percentages are measured against, or null when none is on file. */
     comparedWith: string | null;
-    revenueYoY: number | null;
-    epsYoY: number | null;
+    revenueYoY: Pct;
+    epsYoY: Pct;
   }[];
   cashQuality: {
     operatingCashFlow: ViewCell;
@@ -211,7 +366,14 @@ export type SecEarningsView = {
    * must not imply the waterfall is complete when it is not.
    */
   incomeStatementComplete: boolean;
-  recentQuarters: {
+  /**
+   * The filed periods, newest first, for the earnings-history table.
+   *
+   * RENAMED FROM recentQuarters. The rows are whatever the anchor list holds,
+   * which for an annual-only filer is fiscal years — the old name was the
+   * reason a "Recent reported quarters" heading sat over five FY rows.
+   */
+  recentPeriods: {
     label: string;
     end: string;
     revenue: ViewCell;
@@ -224,8 +386,24 @@ export type SecEarningsView = {
   asOf: number;
 };
 
-const yoy = (now: number | null, then: number | null) =>
-  now === null || then === null || then === 0 ? null : ((now - then) / Math.abs(then)) * 100;
+/**
+ * Year-over-year change, or the reason there isn't one. See `Pct`.
+ *
+ * TWO GUARDS, NOT ONE. A zero base was already excluded because it divides;
+ * these two exclude bases that divide perfectly well and produce a number that
+ * means nothing:
+ *
+ *   base <= 0   the earlier period was a loss (or nil), so there is no
+ *               magnitude for the change to be a proportion OF.
+ *   now  <  0   the later period is a loss while the base was a profit, so the
+ *               "change" crosses zero and the percentage understates a sign
+ *               flip as if it were a large decline.
+ */
+const yoy = (now: number | null, then: number | null): Pct => {
+  if (now === null || then === null) return null;
+  if (then <= 0 || now < 0) return NOT_MEANINGFUL;
+  return ((now - then) / then) * 100;
+};
 
 /**
  * THE PRIOR-YEAR QUARTER, MATCHED BY FISCAL LABEL — NOT BY ARRAY INDEX.
@@ -290,36 +468,126 @@ export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
 
+/**
+ * How many of the stored periods the tables render.
+ *
+ * The store keeps SEC_QUARTER_WINDOW (12); this renders the newest 8, so every
+ * rendered row has four older periods behind it to reach a prior year in. The
+ * two numbers are deliberately different — see SEC_QUARTER_WINDOW.
+ */
+export const RENDERED_QUARTERS = 8;
+
+/**
+ * ── ONE READER, TWO ANCHORS ───────────────────────────────────────────────
+ *
+ * This used to hardcode `set.quarters` and return null when a filer had none,
+ * which is how KGC — 5 annual periods, 8 balance-sheet dates, 24 populated
+ * fields in its best period — rendered nothing at all.
+ *
+ * The anchor list is a parameter of the data now: `quarters` for a normal
+ * filer, `years` for an annual-only one. EVERYTHING DOWNSTREAM WAS ALREADY
+ * PERIOD-GENERIC — view(), pctOf(), priorYearOf(), the P&L list, the
+ * balance-sheet block and cashFrom all take a period rather than a quarter —
+ * so there is no second annual-period reader anywhere, and there must never be
+ * one: two readers is two places for the label, the differencing and the
+ * comparator to drift apart.
+ *
+ * priorYearOf needs no annual variant either. Annual periods carry
+ * `fp: "FY"` and a real `fy`, so "same fiscal period, one year earlier" is
+ * FY vs FY-1 by label, with no new code and no array offset.
+ */
 export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null {
-  const q = set.quarters;
+  // THE ANCHOR DECIDES BOTH THE DATA AND THE WORDS. See SecEarningsView.basis.
+  const basis: PeriodBasis = set.quarters.length === 0 ? "year" : "quarter";
+  const annualOnly = basis === "year";
+  const q = annualOnly ? set.years : set.quarters;
   if (!q.length) return null;
   const latest = q[0];
   // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
   // old `q[4]` printed on AZN and why there is no nearest-row fallback.
   const yearAgo = priorYearOf(q, latest);
 
-  const margins = q.map((p, i) => ({
-    label: periodLabel(p),
-    // TRUE when the row OLDER than this one is not the immediately preceding
-    // fiscal quarter. q is newest-first, so the older neighbour is q[i + 1].
-    gapAfter: q[i + 1] ? !isConsecutive(p, q[i + 1]) : false,
-    gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
-    operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
-    net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
-  })).reverse();
-
-  const growth = q.map((p) => {
+  // ── EVERY ROW THE TABLE COULD SHOW, MEASURED BEFORE ANY ARE CHOSEN ───────
+  //
+  // THE FULL STORED LIST IS THE SEARCH SPACE; only the DISPLAY is trimmed.
+  // Searching the trimmed list is exactly the defect the window change removed,
+  // so `prior` is still looked up across all of `q`.
+  //
+  // Both the margins row and the growth row are derived here, together, because
+  // the cards read them BY INDEX (`view.growth[i]` beside `view.margins[i]`).
+  // Two independently filtered lists would silently pair a margin with another
+  // period's growth — a wrong number that looks entirely plausible.
+  const measured = q.map((p) => {
     const prior = priorYearOf(q, p);
     return {
-      label: periodLabel(p),
-      // THE BASE IS CARRIED WITH THE FIGURE, not left implicit. The snapshot
-      // card disclosed its comparator and the table did not, which is why the
-      // same wrong base was visible in one place and silent in the other.
-      comparedWith: prior ? periodLabel(prior) : null,
+      p,
+      prior,
       revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
+      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
+      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
     };
-  }).reverse();
+  });
+
+  /**
+   * A ROW THIN ENOUGH TO BE NOISE DOES NOT RENDER, AND DOES NOT USE UP A SLOT.
+   *
+   * ── WHAT WAS MEASURED, AND HOW THE RULE MOVED ─────────────────────────────
+   * On the #465 preview /stock/AZN/earnings showed Q3 FY2020, Q4 FY2020 and
+   * Q1 FY2021 with four of five cells empty. The first rule written for this
+   * dropped only rows where ALL FIVE were null — and it did not reach those
+   * three, because AZN stores exactly ONE field for them (revenue; its full
+   * quarters store 15), so each still produced a revenue YoY: +6.3%, +12.2%,
+   * +15.0%. Three of the eight slots carried one number each.
+   *
+   * THE BAR IS AN EPS COMPARISON OR A MARGIN. Revenue alone cannot fill a row
+   * in a table headed "Growth & Margins": there are no margins to show, and no
+   * profit figure to compare. A period that thin is not a row, it is a gap with
+   * one number in it.
+   *
+   * WHAT IT COSTS, STATED BECAUSE IT IS A REAL COST: three filed revenue-growth
+   * figures stop rendering for AZN. The owner's call, taken against the
+   * measurement — 8 rows of which 3 were one-fifth full becomes 6 rows of which
+   * 5 are complete. Neither AAPL (8) nor KGC (5) changes.
+   *
+   * NULL IS EMPTY; "n/m" IS NOT. A cell reading n/m is a statement about the
+   * figures — the comparison crosses zero — so a row whose EPS YoY is n/m has
+   * told the reader something and stays.
+   */
+  const hasSomething = (r: typeof measured[number]) =>
+    r.epsYoY !== null ||
+    r.gross !== null || r.operating !== null || r.net !== null;
+
+  // NEWEST 8 THAT CLEAR THE BAR, not the newest 8 of which some are nearly bare.
+  const rows = measured.filter(hasSomething).slice(0, RENDERED_QUARTERS);
+  const shown = rows.map((r) => r.p);
+
+  const margins = rows.map(({ p, gross, operating, net }, i) => ({
+    label: periodLabel(p),
+    // TRUE when the row OLDER than this one is not the immediately preceding
+    // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
+    //
+    // ANNUAL SERIES GET FALSE, NOT A COMPUTATION. isConsecutive reads the
+    // quarter number out of `fp`, and Number("FY".slice(1)) is NaN — so an
+    // annual view would mark every row as a gap. A gap is a quarterly idea and
+    // the badge is hidden on the annual card rather than computed wrong.
+    // A GAP IS NOW ALSO A DROPPED EMPTY ROW, which is the honest reading: the
+    // row below is not the period immediately before this one, whether the
+    // filing is absent from the store or present with nothing in it.
+    gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
+    gross, operating, net,
+  })).reverse();
+
+  const growth = rows.map(({ p, prior, revenueYoY, epsYoY }) => ({
+    label: periodLabel(p),
+    // THE BASE IS CARRIED WITH THE FIGURE, not left implicit. The snapshot
+    // card disclosed its comparator and the table did not, which is why the
+    // same wrong base was visible in one place and silent in the other.
+    comparedWith: prior ? periodLabel(prior) : null,
+    revenueYoY,
+    epsYoY,
+  })).reverse();
 
   // ── WHICH PERIOD THE CASH CARD IS BUILT FROM, AND WHY IT IS ONE PERIOD ────
   //
@@ -351,7 +619,38 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const cashFrom = quarterHasCash || !cashYear || valueOf(cashYear, "operatingCashFlow") === null
     ? latest
     : cashYear;
-  const cashBasis: "quarter" | "year" = cashFrom === latest ? "quarter" : "year";
+  // ANNUAL-ONLY FILERS ARE ALWAYS "year", even though cashFrom === latest.
+  // The anchor IS a fiscal year for them, so the old `cashFrom === latest`
+  // test reported basis "quarter" beside a period labelled FY2025 — the exact
+  // period mislabel the basis field exists to prevent, arriving through the
+  // one branch that had never had a non-quarter anchor.
+  const cashBasis: "quarter" | "year" =
+    annualOnly || cashFrom !== latest ? "year" : "quarter";
+
+  // ── THE FIVE-YEAR ANNUAL ROWS, BUILT ONCE FOR BOTH PLACES THEY APPEAR ────
+  //
+  // (i) the annual card that every stock gets, and (ii) the only growth table
+  // an annual-only filer has. One shape, one builder, so the two cannot drift.
+  //
+  // Same rules as the quarterly table and the same helpers: YoY is FY against
+  // FY-1 BY LABEL via priorYearOf, null when the prior year is not on file,
+  // and margins are levels rather than changes. Oldest first for display, as
+  // the quarterly table is.
+  const annualRows = set.years.slice(0, 5).map((p) => {
+    const prior = priorYearOf(set.years, p);
+    return {
+      label: periodLabel(p),
+      end: p.e,
+      comparedWith: prior ? periodLabel(prior) : null,
+      revenue: view(p, "revenue", "Revenue"),
+      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
+      epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
+      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
+      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+    };
+  }).reverse();
 
   const ocf = view(cashFrom, "operatingCashFlow", "Operating cash flow");
   const capex = view(cashFrom, "capex", "Capital expenditure");
@@ -412,6 +711,8 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
     },
+    basis,
+    annual: annualRows,
     margins,
     growth,
     cashQuality: {
@@ -468,7 +769,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       : null,
     incomeStatement: PL.map(([k, label]) => view(latest, k, label)),
     incomeStatementComplete,
-    recentQuarters: q.map((p) => ({
+    recentPeriods: q.map((p) => ({
       label: periodLabel(p),
       end: p.e,
       revenue: view(p, "revenue", "Revenue"),
