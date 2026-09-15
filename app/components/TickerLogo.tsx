@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import logoManifest from "@/data/logo-manifest.json";
 
 // Small ticker/company logo with a graceful fallback chain, shared across
 // the site (search dropdowns, dashboard live feed + quote header, the
@@ -9,8 +8,8 @@ import logoManifest from "@/data/logo-manifest.json";
 //
 // Source order -- first that loads wins:
 //   1. Harvested local file   (/logos/SYM.webp) -- served from our own domain,
-//      no third party in it, and the fastest of the four. Only offered when the
-//      symbol is in the manifest, so a symbol without a file never costs a 404.
+//      no third party in it, and the fastest of the four. Tried UNCONDITIONALLY:
+//      see the note on the manifest below.
 //   2. Clearbit domain logo   (when a `domain` is known -- e.g. bottleneck
 //      posts already carry one; same source CompanyLogo.tsx uses).
 //   3. FMP public symbol logo (images.financialmodelingprep.com/symbol/SYM.png)
@@ -30,9 +29,17 @@ import logoManifest from "@/data/logo-manifest.json";
 // hunt through call sites.
 const LOGO_BASE = "/logos";
 
-// A Set, not .includes() on the array: this runs for every logo on a page and
-// the manifest holds thousands of symbols.
-const LOCAL_LOGOS = new Set<string>(logoManifest as string[]);
+// ── NO MANIFEST AT RUNTIME, DELIBERATELY ──────────────────────────────────
+// data/logo-manifest.json is still emitted by the harvest, and is still the
+// record used to diff one re-harvest against the next. It is NOT imported here.
+//
+// This is a client component, so importing it would ship all 2,622 symbols to
+// every visitor on every page -- measured at 16.7 KB raw, 6.4 KB gzipped, plus
+// parse -- to buy one thing: skipping a 404 for the 31 symbols (1.2%) that have
+// no harvested file. onError already handles exactly that, by advancing to the
+// next source, which is the same path a symbol takes when its Clearbit or FMP
+// logo is missing. Paying a whole-universe download on every page to avoid a
+// rare, already-handled 404 is the wrong trade.
 
 export default function TickerLogo({
   symbol,
@@ -50,9 +57,7 @@ export default function TickerLogo({
   const sym = (symbol || "").toUpperCase().trim();
 
   const sources: string[] = [];
-  if (sym && LOCAL_LOGOS.has(sym)) {
-    sources.push(`${LOGO_BASE}/${encodeURIComponent(sym)}.webp`);
-  }
+  if (sym) sources.push(`${LOGO_BASE}/${encodeURIComponent(sym)}.webp`);
   if (domain) sources.push(`https://logo.clearbit.com/${domain}`);
   if (sym) {
     sources.push(
