@@ -65,6 +65,20 @@ if (analysis.length < 100) {
 // static-profile-build.mjs uses for sector and industry. Per-source counts are
 // reported because "the pool answered for it" and "something answered for it"
 // are different facts and only one of them was being measured.
+// ── MEASURED 2026-09-15, AND IT DID NOT WORK: 834 -> 834 ──────────────────
+// Adding the other three sources contributed ZERO new caps. price-pool alone
+// gives 834 symbols; all four together give 834. stockdata.json holds 5 entries
+// and prices none of them; screener-fundamentals and fundamentals carry no
+// marketCap field at all, which is consistent with data/static-profile.json's
+// own note that marketCap is a READING and was deliberately left out of the
+// frozen taxonomy.
+//
+// So the conclusion is about the dump, not about this script: NOTHING IN THE
+// STEP 0 DUMP PRICES NVDA. The fallback chain is kept because it costs nothing
+// and states the search that was actually made -- but a top-50 by market cap
+// cannot be generated from this input, and widening the chain further is not
+// the fix. The fix is a cap source that covers the whole market, which is the
+// stage 4 bars migration. See the canary block below.
 const CAP_SOURCES = ["price-pool.json", "screener-fundamentals.json", "fundamentals.json", "stockdata.json"];
 
 /** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
