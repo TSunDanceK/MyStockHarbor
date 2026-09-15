@@ -1217,6 +1217,30 @@ console.log("\n17b. The real 20260908-11 window");
   check("no symbol queues on an amended Form 4 alone",
     !added.some((sym) => post.has(sym)),
     "4/A, 144/A and SCHEDULE 13D/A are not financial statements");
+  // ── WHICH AMENDING FORM ACTUALLY DID IT ───────────────────────────────────
+  // applyFilings' docblock said the dropped symbols "had filed an amended Form
+  // 4". Derived here instead of believed: only ONE of the seven did. Six were
+  // amended beneficial-ownership statements. The docblock is corrected and this
+  // is what stops it drifting back.
+  const amendingForms = {};
+  for (const sym of added) {
+    for (const f of fx.filings.filter((x) => x.symbol === sym && x.amendment)) {
+      amendingForms[f.form] = (amendingForms[f.form] ?? 0) + 1;
+    }
+  }
+  const byOwnership = added.filter((sym) =>
+    fx.filings.some((f) => f.symbol === sym && f.amendment && /^SCHEDULE 13[DG]\/A$/.test(f.form)));
+  const byForm4 = added.filter((sym) =>
+    fx.filings.some((f) => f.symbol === sym && f.amendment && /^4\/A$/.test(f.form)));
+  check("six of the seven are queued by an amended 13D/A or 13G/A, not a 4/A",
+    byOwnership.length === 6 && byForm4.length === 1 &&
+      byForm4[0] === "DOCU" && !byOwnership.includes("DOCU"),
+    `ownership ${byOwnership.join(",")} | form4 ${byForm4.join(",")} | ` +
+      `forms ${JSON.stringify(amendingForms)}`);
+  check("...and applyFilings' docblock says so",
+    /SIX of the seven are amended beneficial-ownership statements/.test(
+      fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8")),
+    "the stale version named Form 4 and stood for as long as nothing checked it");
 }
 
 // ── 17c. The 100 guaranteed slots are actually in the manifest ─────────────
