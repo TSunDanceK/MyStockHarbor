@@ -4,8 +4,14 @@
 // THE FINDING THIS EXISTS TO SETTLE. Two counts of the same universe's listing
 // venue do not agree:
 //
-//     manifest (live, 2026-09-14)   NYSE 476   Nasdaq 216   (unknown) 4   [696]
-//     #448 / listing-split.mjs      NYSE 463   Nasdaq 230                 [693]
+//     manifest (live, 2026-09-14)   NYSE 476   Nasdaq 216   unknown 4      [696]
+//     #448 / listing-split.mjs      NYSE 466*  Nasdaq 230   UNRESOLVED 4   [700]
+//                                   * 463 + 3 counted "NYSE (SEC only)"
+//
+// (An earlier version of this header said #448's universe was 693. That was
+// wrong: it added only the NYSE and Nasdaq rows and dropped the UNRESOLVED and
+// SEC-only ones. #448's own headline is "The 700 is a third Nasdaq by count".
+// The live manifest is therefore SMALLER than the dump, not larger.)
 //
 // Nasdaq is 14 lower and NYSE 13 higher than the figure the 32.9%-by-count /
 // 62.5%-by-dollar-volume licensing case rests on. TOTALS THAT DISAGREE DO NOT
@@ -40,6 +46,7 @@ import zlib from "node:zlib";
 import readline from "node:readline";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const DIR = path.resolve(process.argv[2] ?? "step0-dump");
 const UA =
@@ -360,14 +367,12 @@ console.log(`dollar volume: ${dollarVol.size} of ${analysis.length} symbols have
 
 // ── The per-symbol table ─────────────────────────────────────────────────────
 //
-// THE DOT/DASH PROBLEM, third convention in this repo. The universe stores
-// BRK.B; both reference files use the dashed form. Both sides try both
-// spellings, so a spelling miss cannot masquerade as a venue disagreement.
-const alts = (sym) => [sym, sym.replace(/\./g, "-"), sym.replace(/-/g, ".")];
-const lookup = (m, sym) => {
-  for (const a of alts(sym)) if (m.has(a)) return { value: m.get(a), matched: a };
-  return null;
-};
+// THE SPELLING PROBLEM, and it is now handled in ONE place. The universe stores
+// BRK.B, the reference files use the dashed form, and Nasdaq Trader writes
+// suffixed preferreds with a DOLLAR sign (BAC$K). This file previously carried
+// its own copy of a dot/dash `alts()` -- the second of three -- and none of them
+// knew about "$". See scripts/lib/symbol-spellings.mjs.
+const lookup = (m, sym) => lookupBySpelling(m, sym);
 // Compared on a normalised key so "NYSE American" and "NYSEAmerican" are not
 // reported as a disagreement about venue when they are a disagreement about
 // punctuation. The RAW pair is printed either way -- the normalisation decides

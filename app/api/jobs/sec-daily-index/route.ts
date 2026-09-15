@@ -26,8 +26,8 @@ import {
   latestProcessableDate,
   type SymbolFiling,
 } from "@/lib/server/secDailyIndex";
+import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import {
-  ANALYSIS_UNIVERSE_CAP,
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
 
@@ -233,6 +233,9 @@ export async function GET(req: NextRequest) {
     // "Request Rate Threshold Exceeded", which reads as a rate limit and is
     // not one -- and would be counted as a missing index by any looser rule.
     await recordJobRun("sec-daily-index", false, { error: "SEC_USER_AGENT is not set" });
+    // The refusal paths log too. A 503 that prints nothing is the same blind
+    // spot as a silent 200, and worse: it looks like the job never fired.
+    console.log("[sec-daily-index]", JSON.stringify({ ok: false, error: "SEC_USER_AGENT is not set" }));
     return NextResponse.json(
       { ok: false, error: "SEC_USER_AGENT is not set; every request would be blocked as an undeclared agent" },
       { status: 503 }
@@ -243,6 +246,7 @@ export async function GET(req: NextRequest) {
   const manifest = await readManifest();
   if (!manifest) {
     await recordJobRun("sec-daily-index", false, { error: "manifest unreadable" });
+    console.log("[sec-daily-index]", JSON.stringify({ ok: false, error: "manifest unreadable" }));
     return NextResponse.json({ ok: false, error: "manifest unreadable (Redis unconfigured or read failed)" }, { status: 503 });
   }
 
@@ -265,9 +269,74 @@ export async function GET(req: NextRequest) {
     tickers = await resolveTickerMap();
   }
 
-  const universe = (await readDynamicUniverse())
-    .slice(0, ANALYSIS_UNIVERSE_CAP)
-    .map((e) => e.symbol);
+  // THE MANIFEST IS NOT BOUNDED BY ANALYSIS_UNIVERSE_CAP, AND THAT IS THE POINT.
+  //
+  // It was, and the result was a silent product defect: JPM and C were absent
+  // from the manifest entirely, so /stock/JPM/earnings could never be populated
+  // by this cron. Nothing raised anything -- seedManifest adds exactly what it
+  // is given, and a symbol with no entry simply never matches the daily index.
+  // See claude/sec-manifest-misses-preset-universe-2026-09-14.md.
+  //
+  // THIS REPO HAS HAD THIS EXACT BUG BEFORE, one layer up, and wrote it down:
+  // pickersBuilder.ts:3314 says "NOT concat-then-slice. That exact pattern is
+  // what sliced the mega-caps off (PRESET was appended after the big dynamic
+  // set, then the whole thing was cut to the cap, dropping AAPL/NVDA/... -- only
+  // active movers like MU survived, which is why the biggest companies were
+  // missing from the All Stocks screener)." That is this defect, in the screener
+  // instead of the manifest. It is why pickersBuilder fills explicit quotas and
+  // why union-then-slice was rejected here rather than merely not chosen.
+  //
+  // TWO DIFFERENT COSTS, WHICH THE CAP CONFLATES.
+  //   ANALYSIS_UNIVERSE_CAP bounds what gets ANALYSED -- a history fetch and a
+  //   pass through the indicator stack per symbol, which is real upstream spend
+  //   that scales linearly. It is doing its job for the consumers that analyse
+  //   and is deliberately left alone.
+  //
+  //   The manifest bounds what gets DETECTED, and detection is ONE daily-index
+  //   request whether it covers 700 filers or 10,000. The per-symbol cost that
+  //   does scale is the re-read, and that already has its own governor in
+  //   SEC_REREAD_DRAIN_PER_RUN -- 150 a run against a measured peak inflow of
+  //   98 a day. Applying the analysis cap here charges detection for a cost it
+  //   does not incur, and double-governs the one it does.
+  //
+  // sec-pipeline-spec-2026-09-13.md §7 says so outright: "§1 already survives
+  // this. The daily index is one request whether you track 700 filers or all
+  // ~10,000, so the correctness mechanism needs no change at all." The cap
+  // contradicted the spec this build follows, which is why nothing ever
+  // recorded a reason for it being here.
+  //
+  // SIZE, STATED RATHER THAN ASSUMED: 391 B/symbol, 266 KB at 696, ~305 KB with
+  // the presets unioned in, against Upstash's 10 MB per-request ceiling. The
+  // bound is asserted in check-sec-daily-index.mjs so growth stays visible.
+  //
+  // THE THIRD INPUT IS ACCOUNTED FOR, NOT OMITTED. dynamicUniverseCache's header
+  // says ANALYSIS_UNIVERSE_CAP bounds the union of THREE things: PRESET_UNIVERSE,
+  // the dynamic pool, and the popular-search promotions. This unions two,
+  // because the third already flows through the second: pickersBuilder persists
+  // promoted names into the shared pool with
+  // `addToDynamicUniverse(popularSearchSymbols, "search", 1)`
+  // (pickersBuilder.ts:3311), so readDynamicUniverse() returns them. There is no
+  // separate list to union here.
+  //
+  // ONE RESIDUAL, recorded because it is bounded rather than absent. A promoted
+  // name "enters at zero and still has to earn a place by score like anything
+  // else"; pruneUniverse trims the pool to MAX_DYNAMIC_UNIVERSE_SIZE by
+  // ZREMRANGEBYRANK on the lowest scores. So a freshly-searched symbol (quota 30
+  // a build, threshold 3 distinct callers) can be pruned before this job reads
+  // the pool. That is rank competition, not structural omission -- unlike the
+  // preset case, nothing promises it a slot -- but spec §7a's "attention, not
+  // market cap" argues those are exactly the symbols that deserve one. Left as
+  // an open question rather than fixed silently either way.
+  //
+  // PRESET_UNIVERSE FIRST, because those 100 mega-caps are "guaranteed a slot"
+  // everywhere else -- sectorUniverse and pickersBuilder both union them in --
+  // and the dynamic pool ages entries out after 14 days, so which preset name
+  // is missing changes week to week. Order is irrelevant to the manifest, which
+  // is a set; readDynamicUniverse's own ordering still governs every consumer
+  // that cares about rank.
+  const universe = [
+    ...new Set([...PRESET_UNIVERSE, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+  ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 
   // Reconcile BEFORE the index is read, so a symbol whose CIK moved is matched
@@ -455,6 +524,18 @@ export async function GET(req: NextRequest) {
   };
 
   await recordJobRun("sec-daily-index", ok, summary);
+
+  // THE SUMMARY GOES TO THE PLATFORM LOG, matching warm-stock-data's
+  // `console.log("[warm-stock-data]", JSON.stringify(result))`.
+  //
+  // The first automated run -- 04:00:16 UTC 2026-09-15, 200, dpl_B6UF7eCd8tcq --
+  // printed NOTHING. recordJobRun writes behind CACHE_HEALTH_KEY and the
+  // response body is discarded by the cron caller, so there was no way to tell
+  // what it had done without a key. A daily job returning 200 while doing
+  // nothing is indistinguishable from one working, which is the precise failure
+  // this pipeline was designed against -- and it went unobservable on its own
+  // first run.
+  console.log("[sec-daily-index]", JSON.stringify({ ok, ...summary }));
 
   return NextResponse.json({
     ok,
