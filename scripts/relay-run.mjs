@@ -269,6 +269,16 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // Read-only: the blast radius of a chain ADDITION, measured by running the
+  // shipped extractor twice over one payload — once with the chain truncated
+  // to its first entry, once as it ships. Separates "cells that were null now
+  // carry a figure" (the intent) from "cells that had a figure now have a
+  // different one" (the risk). FIELD selects which chain; capex by default.
+  "sec-capex-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
   // card and how many sets are still on the old quarter window.
