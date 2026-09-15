@@ -309,6 +309,68 @@ console.log(`     − follow-on: no 8-A12B in window    ${String(funnel.droppedF
 console.log(`     − no terms on the cover             ${String(funnel.droppedNoTermsLower).padStart(4)}`);
 console.log(`   = RECENT                              ${String(funnel.recent).padStart(4)}`);
 
+// ══════════════════════════════════════════════════════════════════════════
+// DIAGNOSTIC A — NAME THE FOLLOW-ONS.
+//
+// 15 of 24 lower candidates being follow-ons is the number to interrogate, not
+// the 9 that survived: ~28 US IPOs price monthly, and 24 candidates matches that
+// rate almost exactly. If these 15 are seasoned issuers, the test is right. If
+// genuine IPOs are in here, the 8-A12B-in-window test is over-filtering and the
+// fix is to require the 8-A12B WITHIN ~10 DAYS OF THE 424B instead.
+// ══════════════════════════════════════════════════════════════════════════
+const recentCut = iso(new Date(TODAY.getTime() - 30 * 86400000));
+const lowerCands = all.filter((r) => {
+  const f = r.filings.filter((x) => /^424B[14]$/.test(x.form)).sort((a, b) => a.date.localeCompare(b.date)).pop();
+  return f && f.date >= recentCut;
+});
+console.log(`\n${"═".repeat(78)}\nDIAGNOSTIC A — the ${lowerCands.length} lower candidates, and why each was kept or dropped\n${"═".repeat(78)}`);
+for (const r of lowerCands) {
+  const f424 = r.filings.filter((x) => /^424B[14]$/.test(x.form)).sort((a, b) => a.date.localeCompare(b.date)).pop();
+  const a8 = r.filings.filter((x) => x.form === "8-A12B").sort((a, b) => a.date.localeCompare(b.date)).pop();
+  const listed = listedByCik.get(String(Number(r.cik)));
+  const gap = a8 ? Math.round((new Date(f424.date) - new Date(a8.date)) / 86400000) : null;
+  const verdict = a8 ? `KEPT (8-A12B ${a8.date}, ${gap}d before the 424B)` : "DROPPED as follow-on — no 8-A12B in the 90d window";
+  console.log(`   ${(listed?.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 38).padEnd(40)} ${f424.form} ${f424.date} · SIC ${r.sic ?? "?"}`);
+  console.log(`          ${verdict}`);
+  console.log(`          forms: ${r.filings.map((x) => `${x.form}@${x.date}`).join(" ")}`);
+}
+const droppedList = lowerCands.filter((r) => !r.filings.some((x) => x.form === "8-A12B"));
+const earliest8A = lowerCands
+  .filter((r) => r.filings.some((x) => x.form === "8-A12B"))
+  .map((r) => {
+    const f424 = r.filings.filter((x) => /^424B[14]$/.test(x.form)).sort((a, b) => a.date.localeCompare(b.date)).pop();
+    const a8 = r.filings.filter((x) => x.form === "8-A12B").sort((a, b) => a.date.localeCompare(b.date)).pop();
+    return Math.round((new Date(f424.date) - new Date(a8.date)) / 86400000);
+  })
+  .sort((a, b) => a - b);
+console.log(`\n   dropped as follow-on: ${droppedList.length} of ${lowerCands.length}`);
+console.log(`   8-A12B -> 424B gap, days, for those KEPT: [${earliest8A.join(", ")}]`);
+console.log(`   >>> If that gap is always small, a +/-10d proximity test costs nothing`);
+console.log(`   >>> and removes the 'listed day -29, 8-A12B at day -31' failure mode.`);
+
+// ══════════════════════════════════════════════════════════════════════════
+// DIAGNOSTIC B — SPAC vs OPERATING COMPANY in the upper table.
+// Not a bug either way; a COPY decision. If the table is mostly blank-check
+// shells then "Upcoming IPOs" reads as a SPAC list, and §7's wording should say
+// so knowingly rather than by accident.
+// ══════════════════════════════════════════════════════════════════════════
+const sicOf = new Map(all.map((r) => [String(Number(r.cik)), r.sic]));
+const SPAC_NAME_RE = /\b(acquisition|merger)\b/i;
+let spacBySic = 0, spacByNameOnly = 0, opco = 0;
+console.log(`\n${"═".repeat(78)}\nDIAGNOSTIC B — upper table composition (SIC 6770 is authoritative)\n${"═".repeat(78)}`);
+for (const row of upcoming) {
+  const sic = sicOf.get(row.cik) ?? null;
+  const isSpacSic = sic === "6770";
+  const isSpacName = SPAC_NAME_RE.test(row.company);
+  if (isSpacSic) spacBySic += 1;
+  else if (isSpacName) spacByNameOnly += 1;
+  else opco += 1;
+  console.log(`   ${isSpacSic ? "[SPAC]" : isSpacName ? "[spac?]" : "[OPCO]"} ${row.company.slice(0, 44).padEnd(46)} SIC ${sic ?? "?"}`);
+}
+console.log(`\n   SPAC by SIC 6770        ${spacBySic}/${upcoming.length}`);
+console.log(`   SPAC by name only       ${spacByNameOnly}/${upcoming.length}  (SIC disagrees — trust the SIC)`);
+console.log(`   operating companies     ${opco}/${upcoming.length}`);
+
 console.log(`\n   >>> ENTITY FILTER MATCHED: ${funnel.droppedEntity}`);
 if (funnel.droppedEntity === 0) {
   console.log(`   >>> ZERO. Crypto ETF/trust S-1 filings are near-continuous, so this`);

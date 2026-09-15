@@ -181,13 +181,20 @@ export function isFundEntity(sic: string | null, company: string): boolean {
 // a naming convention shifted, or the field stopped being populated -- not that
 // the market went quiet. Same reasoning and same shape as
 // warnIfImplausiblyEmpty() in feedCache.ts.
+// Below this many candidates, zero matches says nothing. Live windows carry
+// 34-187; the behavioural fixtures carry one or three. Warning on those made the
+// fixture run emit fourteen identical alarms, and AN ALARM THAT CRIES WOLF IS
+// WORSE THAN NO ALARM -- the next reader learns to scroll past the one that
+// matters. `candidatesConsidered > 0` was too weak a floor.
+const MIN_CANDIDATES_FOR_ZERO_TO_MEAN_ANYTHING = 20;
+
 export function warnIfEntityFilterMatchedNothing(
   matched: number,
   candidatesConsidered: number,
   windowDays: number
 ): void {
   if (windowDays < 90) return; // a short window legitimately sees none
-  if (candidatesConsidered === 0) return; // nothing to filter; not a signal
+  if (candidatesConsidered < MIN_CANDIDATES_FOR_ZERO_TO_MEAN_ANYTHING) return;
   if (matched > 0) return;
 
   console.warn(
