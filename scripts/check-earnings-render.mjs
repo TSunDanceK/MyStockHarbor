@@ -36,10 +36,17 @@ const AAPL = fixture("AAPL");
 const KGC = fixture("KGC");
 const AZN = fixture("AZN");
 const TSLA = fixture("TSLA");
+// THE TWO FILERS THAT PUBLISH NO PaymentsToAcquirePropertyPlantAndEquipment.
+// Every fixture above does, so none of them could ever have caught the capex
+// chain gap — see §14. GEV is also the spun-off filer with four fiscal years.
+const GEV = fixture("GEV");
+const KTOS = fixture("KTOS");
 const vAapl = M.buildSecEarningsView(AAPL);
 const vKgc = M.buildSecEarningsView(KGC);
 const vAzn = M.buildSecEarningsView(AZN);
 const vTsla = M.buildSecEarningsView(TSLA);
+const vGev = M.buildSecEarningsView(GEV);
+const vKtos = M.buildSecEarningsView(KTOS);
 
 /**
  * The cards the PAGE ACTUALLY RENDERS for one view, gated exactly as
@@ -522,6 +529,70 @@ console.log("\n13. the five-year card can reach its own FY-1");
     `${vTsla.annual[0].label} <- ${vTsla.annual[0].comparedWith}`);
 }
 
+console.log("\n14. capex reaches a filer that does not publish the PP&E concept");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// THE DEFECT: the capex chain held ONE tag. GEV and KTOS do not publish it at
+// all — measured against the payloads, relay 35024074183 — so capex was null on
+// every stored quarter and every stored year for both, and the Quality of
+// Earnings card said "Can't calculate — capital expenditure not reported"
+// beside an operating cash flow that had resolved perfectly.
+//
+// GEV AND KTOS ARE THE FIXTURES FOR IT, and they are the reason the fixtures
+// exist: AAPL, TSLA, AZN and KGC all publish the first chain entry, so not one
+// of them could ever have failed this, and an assertion over the four already
+// committed would have passed throughout the defect.
+{
+  const chainSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
+  const capexChain = (chainSrc.match(/key: "capex", chain: \[([^\]]*)\]/) ?? [])[1] ?? "";
+  const entries = [...capexChain.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+  // ORDER IS THE GUARANTEE, not membership. Resolution is rank-first per
+  // period, so the broad concept sitting SECOND is what keeps a filer that
+  // publishes both on the narrower PP&E reading. Reversed, this check still
+  // finds two entries and AAPL quietly changes meaning.
+  check("the PP&E concept is first and the productive-assets fallback second",
+    entries[0] === "PaymentsToAcquirePropertyPlantAndEquipment" &&
+      entries[1] === "PaymentsToAcquireProductiveAssets",
+    entries.join(" -> "));
+
+  // THE NEAR-MISSES ARE NAMED SO THEY CANNOT BE ADDED BACK QUIETLY. Each was on
+  // the same printed list as the concept that was taken, each matches the same
+  // name patterns, and each would put a plausible wrong number on the card:
+  // business acquisitions overstate GEV's capex ~6x, and the accrual line is
+  // not a cash flow at all and reads 9.1m against KTOS's real 37.1m.
+  const banned = [
+    "PaymentsToAcquireBusinessesNetOfCashAcquired",
+    "PaymentsToAcquireEquityMethodInvestments",
+    "PaymentsToAcquireInterestInJointVenture",
+    "CapitalExpendituresIncurredButNotYetPaid",
+  ];
+  const taken = banned.filter((t) => entries.includes(t));
+  check("no near-miss concept was taken alongside it", taken.length === 0,
+    taken.length ? `in the chain: ${taken.join(", ")}` : `none of ${banned.length} candidates`);
+
+  for (const [sym, view] of [["GEV", vGev], ["KTOS", vKtos]]) {
+    const q = view.cashQuality;
+    check(`${sym}: capital expenditure has a figure, and free cash flow computes`,
+      q.capex.val !== null && q.freeCashFlow !== null && q.freeCashFlowMissing === null,
+      `ocf=${q.operatingCashFlow.val} capex=${q.capex.val} (${q.capex.derived}) fcf=${q.freeCashFlow}`);
+
+    // READ OUT OF THE MARKUP, not off the view. The view holding a number and
+    // the reader seeing one are different claims, and this file exists for the
+    // second of them.
+    const text = visibleText(renderPage(M, view));
+    check(`${sym}: and the card no longer says the figure is not reported`,
+      !/capital expenditure not reported/i.test(text),
+      `"Can't calculate" absent from ${text.length} chars of rendered text`);
+  }
+
+  // THE CONTROL, and it is the whole risk of this change: a filer that already
+  // resolved must resolve to the SAME number. AAPL publishes both concepts.
+  check("AAPL is unmoved — a filer publishing both keeps the narrower reading",
+    vAapl.cashQuality.capex.val === 2455000000,
+    `Q3 FY2026 capex ${vAapl.cashQuality.capex.val} (${vAapl.cashQuality.capex.derived})`);
+}
+
 console.log("\n7. the three mutations, each re-rendered from broken source");
 
 {
@@ -741,6 +812,50 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
         comparedCells[i] === r.comparedWith &&
         Number(String(r.label).slice(2)) - 1 === Number(String(r.comparedWith).slice(2))),
     `compared-with column: ${comparedCells.join(" | ")} — a wrong base is worse than a blank, because a blank cannot be quoted`);
+
+  // ── (i) THE CAPEX CHAIN GAP, REPRODUCED IN THE DATA ─────────────────────
+  //
+  // MUTATING THE DATA, NOT THE SOURCE, and for the same reason as (h): the
+  // chain runs in the EXTRACTOR, and a fixture is already extracted, so there
+  // is no source edit that can un-resolve a value already stored. What a set
+  // written before the chain gained its second entry actually looks like is
+  // this — every capex cell null, everything else untouched — so that is what
+  // is built, from the real GEV fixture rather than a hand-made one.
+  //
+  // WITHOUT THIS, §14 IS DECORATIVE. It asserts the card does NOT say
+  // "capital expenditure not reported"; that is only a claim if the card is
+  // known to say it when capex is absent.
+  const CAPEX_INDEX = M.SEC_FIELD_KEYS.indexOf("capex");
+  check("the capex field index was found, so the mutation can reach the cell",
+    CAPEX_INDEX >= 0, `capex is field ${CAPEX_INDEX} of ${M.SEC_FIELD_KEYS.length}`);
+  const blankCapex = (p) => ({
+    ...p,
+    v: p.v.map((val, i) => (i === CAPEX_INDEX ? null : val)),
+    d: p.d.slice(0, CAPEX_INDEX) + "-" + p.d.slice(CAPEX_INDEX + 1),
+  });
+  const iSet = {
+    ...GEV,
+    quarters: GEV.quarters.map(blankCapex),
+    years: GEV.years.map(blankCapex),
+  };
+  check("the capex mutation actually applied",
+    vGev.cashQuality.capex.val !== null &&
+      M.buildSecEarningsView(iSet).cashQuality.capex.val === null,
+    `GEV capex ${vGev.cashQuality.capex.val} -> null`);
+  const iView = M.buildSecEarningsView(iSet);
+  const iText = visibleText(renderPage(M, iView));
+  check("(i) MUTATION: with capex gone, the card names it as the input that stopped FCF",
+    iView.cashQuality.freeCashFlow === null &&
+      iView.cashQuality.freeCashFlowMissing === "capital expenditure" &&
+      /capital expenditure not reported/i.test(iText),
+    `freeCashFlowMissing=${iView.cashQuality.freeCashFlowMissing} — the exact state GEV was in`);
+
+  // AND IT DOES NOT SILENTLY SUBSTITUTE. The risk in a fallback chain is that
+  // a missing figure reaches for the nearest available one; operating cash
+  // flow is untouched by the mutation and free cash flow still refuses.
+  check("...and operating cash flow is unaffected, so FCF refused rather than guessed",
+    iView.cashQuality.operatingCashFlow.val === vGev.cashQuality.operatingCashFlow.val,
+    `ocf ${iView.cashQuality.operatingCashFlow.val} on both sides of the mutation`);
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();
