@@ -292,15 +292,57 @@ function Row({ label, children, sub, strong }: { label: string; children: React.
   );
 }
 
-/** Shown in place of everything when the symbol has no stored fact set yet. */
-export function SecNoDataCard({ symbol }: { symbol: string }) {
+/**
+ * PENDING — and it must be genuinely temporary.
+ *
+ * Reached only when a cold fetch timed out, was refused by the per-IP budget, or
+ * failed. The symbol IS queued, so this state ends. It is NOT the state for a
+ * filer whose data cannot be read at all — see SecNoXbrlCard, and the comment
+ * there for why conflating them puts a permanent "coming soon" on a page.
+ */
+export function SecPendingCard({ symbol }: { symbol: string }) {
   return (
     <section className="card">
-      <div className="eyebrow">No filings data yet</div>
-      <h2>{symbol} financials are not loaded yet</h2>
+      <div className="eyebrow">Loading financials</div>
+      <h2>{symbol} financials are being fetched</h2>
       <p style={{ marginBottom: 0 }}>
-        This page is built from {SEC_ATTRIBUTION}. {symbol}&apos;s filings have not been read into the
-        site yet — they are fetched on a daily schedule, so this usually resolves within a day.
+        This page is built from {SEC_ATTRIBUTION}. {symbol}&apos;s filings are being read now —
+        refresh in a moment, or check back shortly.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * NO READABLE XBRL — a successful fetch of nothing usable.
+ *
+ * THE THIRD OUTCOME, AND THE ONE THAT WOULD OTHERWISE BE WRONG FOREVER. A
+ * company can be a real registrant, have a CIK, answer cleanly, and still
+ * publish nothing these fields read: IFRS filers publish under `ifrs-full`
+ * (measured at 10 of 40 sampled symbols), and recent IPOs and some 20-F filers
+ * have no XBRL history yet.
+ *
+ * Rendering that as "being fetched" promises something that will never arrive —
+ * the cron would re-read it every day and get the same nothing. So it says what
+ * is actually true, and says it about the FILING rather than about the site.
+ */
+export function SecNoXbrlCard({ symbol }: { symbol: string }) {
+  return (
+    <section className="card">
+      <div className="eyebrow">Not available for this company</div>
+      <h2>{symbol} does not file the financial data this page is built from</h2>
+      <p>
+        This page reads structured XBRL financial statements from {SEC_ATTRIBUTION}.{" "}
+        {symbol} does not publish them in a form this page can read — most often because it
+        reports under IFRS as a foreign private issuer, or because it has not filed a full
+        financial year yet.
+      </p>
+      <p style={{ marginBottom: 0 }}>
+        Its filings are still public on{" "}
+        <a href="https://www.sec.gov/edgar/search/" style={{ color: "#93c5fd", fontWeight: 800 }}>
+          SEC EDGAR
+        </a>
+        .
       </p>
     </section>
   );

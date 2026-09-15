@@ -4,6 +4,7 @@ import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
 import { extractCompanyFacts, checkIdentities, identityRates, type CompanyFacts } from "@/lib/server/secExtract";
 import { encodeFactSet, readFactSet, writeFactSet } from "@/lib/server/secFactStore";
+import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,13 +21,19 @@ export const maxDuration = 300;
 //
 // TWO QUEUES, IN ORDER, WITH SEPARATE ALLOWANCES:
 //
+//   0. COLD QUEUE -- a visitor asked for this symbol and the synchronous fetch
+//      on their render timed out or was refused. SOMEBODY IS LOOKING AT THIS
+//      PAGE RIGHT NOW and it is showing them a pending state, so it goes before
+//      everything: it is the only one of the three with a person attached.
+//      Bounded by SEC_COLD_QUEUE_MAX, because an endpoint anyone can hit must
+//      not be able to make this job do their work forever.
 //   1. REVERIFY -- a filing event says this symbol's numbers may have moved.
 //      Time-sensitive: the page is showing last quarter's figures right now.
 //   2. POPULATE -- contentHash is null; the page has nothing at all.
 //
-// Reverify goes first because a stale number on a live page is worse than an
-// absent one, and it is given the smaller allowance because it is driven by
-// what actually filed rather than by a backlog.
+// Reverify goes before populate because a stale number on a live page is worse
+// than an absent one, and it is given the smaller allowance because it is
+// driven by what actually filed rather than by a backlog.
 //
 // WHY A SEPARATE JOB FROM sec-daily-index. That job's stated property is ZERO
 // companyfacts calls -- the change detector proved in isolation, so a wrong
@@ -78,6 +85,14 @@ export const maxDuration = 300;
  * reverify queue for days -- the same priority inversion
  * SEC_COLD_FETCH_DRAIN_PER_RUN was given its own allowance to avoid.
  */
+/**
+ * The cold queue's own allowance, and it is small on purpose.
+ *
+ * This queue is fed by an endpoint anyone can hit. It goes FIRST because every
+ * entry has a person looking at a pending page, but it is capped well below the
+ * other two so that filling it cannot displace the universe's own drain.
+ */
+export const SEC_COLD_PER_RUN = 50;
 export const SEC_REVERIFY_PER_RUN = 150;
 export const SEC_POPULATE_PER_RUN = 300;
 
@@ -175,9 +190,14 @@ export async function GET(req: NextRequest) {
   // One symbol, on demand — for checking a single page after a deploy without
   // waiting a day for the cron. Still goes through the same code path.
   const only = (url.searchParams.get("symbol") || "").toUpperCase();
+  // THE COLD QUEUE IS NOT IN populationQueues() because it is not in the
+  // manifest: a render path may not read the manifest (417 KB per visitor), so
+  // the cold path enqueues into its own small ZSET and this reads that.
+  const coldSymbols = only ? [] : await readColdQueue(SEC_COLD_PER_RUN);
   const work = only
     ? [{ symbol: only, reason: "manual" as const }]
     : [
+        ...coldSymbols.map((symbol) => ({ symbol, reason: "cold" as const })),
         ...q.reverify.map((symbol) => ({ symbol, reason: "reverify" as const })),
         ...q.populate.map((symbol) => ({ symbol, reason: "populate" as const })),
       ];
@@ -189,13 +209,17 @@ export async function GET(req: NextRequest) {
 
   for (const { symbol, reason } of work) {
     const entry = manifest.symbols[symbol];
-    if (!entry?.cik) {
-      results.push({ symbol, reason, error: "no CIK in the manifest" });
+    // A COLD SYMBOL IS OFF-UNIVERSE BY DEFINITION and has no manifest entry, so
+    // its CIK comes from the ticker file instead. Looking only in the manifest
+    // would fail every symbol this queue exists to serve.
+    const cik = entry?.cik ?? cikForSymbol(symbol);
+    if (!cik) {
+      results.push({ symbol, reason, error: "no CIK in the manifest or the ticker file" });
       failed++;
       continue;
     }
     try {
-      const facts = await fetchCompanyFacts(entry.cik);
+      const facts = await fetchCompanyFacts(cik);
       const extracted = extractCompanyFacts(symbol, facts);
       const set = encodeFactSet(extracted);
       const rates = identityRates(checkIdentities(extracted));
@@ -227,10 +251,16 @@ export async function GET(req: NextRequest) {
         unchanged++;
       }
 
-      entry.contentHash = set.contentHash;
-      entry.needsReverify = false;
-      entry.reverifyReason = null;
-      entry.verifiedAt = Date.now();
+      // Only a manifest symbol has state to update. A cold symbol's fact set is
+      // written and that is the whole of its record -- it is deliberately NOT
+      // added to the manifest, which tracks the universe rather than everything
+      // anyone has ever looked at.
+      if (entry) {
+        entry.contentHash = set.contentHash;
+        entry.needsReverify = false;
+        entry.reverifyReason = null;
+        entry.verifiedAt = Date.now();
+      }
 
       results.push({
         symbol, reason, changed,
@@ -248,6 +278,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // CLEARED WHETHER OR NOT IT POPULATED. A symbol that fetched to nothing --
+  // an IFRS filer -- would otherwise sit in the queue being re-read every day
+  // forever, which is the same mistake as rendering it as pending.
+  const coldCleared = coldSymbols.length ? await clearColdQueue(coldSymbols) : 0;
+
   // ONE SET, whatever happened — the manifest is a single key.
   const persisted = await writeManifest(manifest);
 
@@ -255,6 +290,8 @@ export async function GET(req: NextRequest) {
     ok: failed === 0 || failed < work.length,
     attempted: work.length,
     written, unchanged, failed,
+    coldTaken: coldSymbols.length,
+    coldCleared,
     reverifyTaken: only ? 0 : q.reverify.length,
     populateTaken: only ? 0 : q.populate.length,
     reverifyBacklog: q.reverifyBacklog,

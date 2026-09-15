@@ -1422,13 +1422,18 @@ check(
 // The count alone cannot tell a drop from a swap, so the mega-caps that would
 // be most visibly wrong are named. Not the whole list: a roll that has to be
 // edited for every legitimate change is a roll nobody keeps accurate.
-const MUST_HOLD = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK.B", "JPM", "ARM"];
+// ARM IS DELIBERATELY NOT HERE. It was added to the preset list on 2026-09-15
+// to give it a page at all, and removed the same day when the cold path shipped
+// and made that unnecessary. Listing it would re-assert a membership that was
+// withdrawn on purpose.
+const MUST_HOLD = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK.B", "JPM"];
 const lost = MUST_HOLD.filter((sym) => !presetSymbols.includes(`"${sym}"`));
 check(
   "and still holds every name a drop would be most visible on",
   lost.length === 0,
-  lost.join(", ") || `${MUST_HOLD.length} checked, including ARM — the symbol the ` +
-    `earnings rebuild was audited against, which had no page at all until it was added`
+  lost.join(", ") || `${MUST_HOLD.length} checked — the names whose absence would ` +
+    `be most visible, so a rename that drops one instead of replacing it fails here ` +
+    `even though the count-only assertion above would not`
 );
 check(
   "no symbol appears twice",
