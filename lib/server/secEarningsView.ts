@@ -597,8 +597,15 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     r.epsYoY !== null ||
     r.gross !== null || r.operating !== null || r.net !== null;
 
-  // NEWEST 8 THAT CLEAR THE BAR, not the newest 8 of which some are nearly bare.
-  const rows = measured.filter(hasSomething).slice(0, RENDERED_QUARTERS);
+  // HOW MANY ROWS THIS BASIS RENDERS. Eight for quarters, five for years — the
+  // same number the five-year card shows, because on an annual-only filer that
+  // card IS this table. Slicing a year anchor to RENDERED_QUARTERS gave the
+  // growth rows six entries against the annual card's five: invisible today
+  // (the growth card does not render on a year anchor) and a trap for whoever
+  // renders it next.
+  const renderLimit = annualOnly ? RENDERED_YEARS : RENDERED_QUARTERS;
+  // NEWEST N THAT CLEAR THE BAR, not the newest N of which some are nearly bare.
+  const rows = measured.filter(hasSomething).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
   const margins = rows.map(({ p, gross, operating, net }, i) => ({
