@@ -189,6 +189,108 @@ check("ttm() refuses a partial year",
     /if \(vals\.some\(\(v\) => v === null\)\) return null;/.test(codecRaw),
   "after D1b, Q4 EPS is legitimately null, so the three-quarter case is common");
 
+console.log("\n7b. the YoY base is a FISCAL MATCH, run rather than read");
+
+// ── WHY THIS RUNS THE REAL FUNCTIONS ON A SHAPE, NOT ON A FIXTURE ─────────
+// The defect was `q[i + 4]`: four ROWS back, which is one YEAR back only for a
+// dense filer. It passed every earlier check because every earlier check used
+// AAPL and MU, which are dense. Measured on the preview, AZN rendered
+// "+75.9% Compared with Q2 FY2021" against a latest quarter of Q2 FY2025.
+//
+// So what is asserted is the RULE, exercised against period SHAPES — a series
+// with a hole, a series without one — and never against a number anyone chose.
+// The rendered figures themselves are measured against real filings by
+// scripts/sec-period-match-probe.mjs, which cannot supply its own answer
+// because it fetches companyfacts.
+{
+  const viewMod = await lift(
+    fs.readFileSync(VIEW, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+  );
+  const P = (fp, fy) => ({ e: `${fy}-06-30`, s: `${fy}-04-01`, fp, fy, v: [], d: "" });
+  const dense = [];
+  for (let fy = 2026; fy >= 2024; fy--) for (const fp of ["Q4", "Q3", "Q2", "Q1"]) dense.push(P(fp, fy));
+
+  check("a dense series finds the same fiscal quarter one year back",
+    dense.slice(0, 4).every((p) => {
+      const m = viewMod.priorYearOf(dense, p);
+      return m && m.fp === p.fp && m.fy === p.fy - 1;
+    }),
+    "the regression case: AAPL and MU must not move");
+  // AND IT AGREES WITH THE OLD RULE THERE. If it did not, the fix would have
+  // changed a number it had no business changing.
+  check("...and on a dense series that is exactly what q[i+4] was",
+    dense.every((p, i) => {
+      const oldBase = dense[i + 4] ?? null;
+      const newBase = viewMod.priorYearOf(dense, p);
+      return (oldBase?.e ?? null) === (newBase?.e ?? null);
+    }),
+    "so the dense filers are unaffected BY CONSTRUCTION, not by luck");
+
+  // AZN's actual shape: half-yearly with a three-quarter hole.
+  const holed = [P("Q2", 2025), P("Q2", 2024), P("Q2", 2023), P("Q2", 2022),
+                 P("Q2", 2021), P("Q1", 2021), P("Q4", 2020), P("Q3", 2020)];
+  check("a sparse series matches by label, NOT by four rows back",
+    viewMod.priorYearOf(holed, holed[0])?.fy === 2024 &&
+      (holed[0 + 4]?.fy) === 2021,
+    "q[i+4] here is Q2 FY2021 — four years back, which is what rendered as +75.9%");
+  // ── THE CASE THAT DISTINGUISHES THE TWO RULES, AND THE FIRST VERSION OF
+  // THIS ASSERTION DID NOT ──────────────────────────────────────────────────
+  // It asserted null for holed[5] and holed[6] — rows near the END of the
+  // array, where q[i+4] is out of bounds and returns null too. Both rules give
+  // the same answer there, so it could not fail. Caught by mutation: restoring
+  // the nearest-row fallback left it PASSING.
+  //
+  // The distinguishing shape is a row where q[i+4] EXISTS and is the wrong
+  // year. FY2024 is missing below, so the correct answer is null while q[i+4]
+  // is a real period five years back.
+  const missingYear = [P("Q2", 2025), P("Q2", 2023), P("Q2", 2022), P("Q2", 2021),
+                       P("Q2", 2020), P("Q1", 2020), P("Q4", 2019), P("Q3", 2019)];
+  check("...and returns null rather than the nearest row when the year is absent",
+    viewMod.priorYearOf(missingYear, missingYear[0]) === null,
+    `q[i+4] here is a real period (${missingYear[4].fp} FY${missingYear[4].fy}) and must NOT be used — ` +
+      "a wrong base is worse than a blank, because a blank cannot be quoted");
+  check("an unlabelled period has no comparator at all",
+    viewMod.priorYearOf(holed, { e: "2025-06-30", fp: null, fy: null, v: [], d: "" }) === null,
+    "fiscalLabel could not place it, so nothing here can either");
+  // Q1 wraps to Q4 of the previous fiscal year, which is the one case an
+  // arithmetic-on-fp implementation gets wrong.
+  check("consecutiveness wraps Q1 to the prior year's Q4",
+    viewMod.isConsecutive(P("Q1", 2026), P("Q4", 2025)) === true &&
+      viewMod.isConsecutive(P("Q1", 2026), P("Q4", 2024)) === false &&
+      viewMod.isConsecutive(P("Q2", 2025), P("Q2", 2022)) === false);
+}
+
+console.log("\n7c. the score cannot claim an input it did not read");
+
+// THE FAILURE SHAPE: a component supplying its own favourable answer. AZN
+// rendered GOOD 100/100 with "reported profit is backed by cash" above a
+// Quality of Earnings card whose every field was "—". The scorer awarded no
+// points for the missing chain; the SENTENCE was canned per tone and said it
+// anyway.
+{
+  const cashClause = /backed by cash|cash conversion/;
+  const expl = (pageRaw.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
+  check("the cash clause is guarded by the cash component having run",
+    /if \(ran\.has\("cashConversion"\)\) \{[\s\S]{0,160}backed by cash/.test(expl),
+    "it used to be emitted from the tone alone");
+  check("no cash wording sits outside that guard",
+    (expl.match(new RegExp(cashClause, "g")) ?? []).length ===
+      (expl.match(/ran\.has\("cashConversion"\)[\s\S]{0,200}?backed by cash[\s\S]{0,80}?cash conversion is weak/) ? 2 : -1),
+    "both the good and the weak phrasing must be inside the one branch");
+  check("the score reports WHICH components it could not read",
+    /unavailable: scoreGaps\(ran\)/.test(pageRaw) && /function scoreGaps/.test(pageRaw),
+    "a count would hide the one that mattered");
+  check("...and the page renders that list on the score card itself",
+    /score\.available && score\.unavailable\.length/.test(pageRaw),
+    "the number is only readable next to its own gaps");
+  check("an absent input adds no points and no signal",
+    /if \(acc != null && ni != null && ni !== 0\) \{[\s\S]{0,160}ran\.add\("cashConversion"\)/.test(pageRaw),
+    "the guard is on the value, so a null chain cannot contribute a default");
+  check("the side-column cash bullet is conditional too",
+    /score\.unavailable\.includes\(SCORE_COMPONENTS\.cashConversion\)/.test(pageRaw),
+    "it read as a claim on a page where the chain is empty");
+}
+
 console.log("\n8. the population path");
 
 const jobRaw = fs.readFileSync("app/api/jobs/sec-facts/route.ts", "utf8");

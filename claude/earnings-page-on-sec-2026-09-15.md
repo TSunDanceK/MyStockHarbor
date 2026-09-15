@@ -582,3 +582,146 @@ the next person reads the cause in one line instead of debugging the page.
 **What is not**: how the three cards look. That is the owner-side eye check the
 sandbox has never been able to do, and it is now also gated behind a rate limit
 that resets at UTC midnight.
+
+---
+
+## §18 "YoY" was four rows back, and the score claimed cash it could not see
+
+Both found by eye on the #464 preview, both invisible to every check that
+existed, and both for the same reason: every earlier check used AAPL and MU.
+
+### P0-A — the comparison period was an array index
+
+`q[i + 4]`. Four ROWS back is one YEAR back only when the series is dense and
+gapless — a US domestic 10-Q filer. AZN is a half-yearly 20-F/6-K filer with a
+three-quarter hole:
+
+```
+[0] Q3 FY2020  [1] Q4 FY2020  [2] Q1 FY2021  [3] Q2 FY2021
+[4] Q2 FY2022  [5] Q2 FY2023  [6] Q2 FY2024  [7] Q2 FY2025
+```
+
+so the card rendered **`+75.9% Compared with Q2 FY2021`** against a latest
+quarter of **Q2 FY2025** — a four-year comparison labelled "year over year".
+The Growth & Margins table was worse: it printed the same wrong base with no
+base disclosed at all.
+
+**The comparison is now matched by fiscal label** — same fiscal quarter number,
+fiscal year minus one — in the snapshot card, the growth table and the score's
+inputs, which all read the one helper. **There is no nearest-row fallback.**
+When the prior-year period is not stored the figure is blank and the card says
+"Prior-year quarter not on file": a wrong base is worse than a blank, because a
+blank cannot be quoted.
+
+Measured, relay 34978394034, running the shipped view builder over real
+companyfacts — **AZN, as rendered:**
+
+```
+YOY REVENUE GROWTH  +11.7%   Compared with Q2 FY2024     (was +75.9%, Q2 FY2021)
+YOY EPS GROWTH      +26.6%   Compared with Q2 FY2024     (was +273.8%)
+
+Period       Compared with    Rev YoY   EPS YoY    Gross    Oper     Net  gap
+Q3 FY2020    not on file            —         —        —       —       —
+Q4 FY2020    not on file            —         —        —       —       —
+Q1 FY2021    not on file            —         —        —       —       —
+Q2 FY2021    not on file            —         —    73.3%   13.7%    6.7%
+Q2 FY2022    Q2 FY2021         +31.0%    -45.2%    72.2%    5.0%    3.3%  gap
+Q2 FY2023    Q2 FY2022          +6.0%   +408.7%    82.8%   21.5%   15.9%  gap
+Q2 FY2024    Q2 FY2023         +13.3%     +6.0%    83.1%   21.2%   14.9%  gap
+Q2 FY2025    Q2 FY2024         +11.7%    +26.6%    82.9%   24.3%   16.9%  gap
+```
+
+4 of 8 rows changed base. The base is now **disclosed per row**, the gaps are
+**marked**, the table is titled "the periods this company has filed" rather than
+implying consecutive quarters, and the three margin columns render **unsigned**
+(`82.9%`, not `+82.9%`) because they are levels, not changes.
+
+**And the dense filers did not move**, which is the load-bearing half:
+
+```
+AAPL   0 of 8 rows changed base      +16.4%  Compared with Q3 FY2025
+MU     0 of 8 rows changed base     +345.7%  Compared with Q3 FY2025
+```
+
+### P0-B — the narrative was canned per tone
+
+AZN's Quality of Earnings card rendered **every** field "—" while the score
+above it read **GOOD, 100/100**, with *"reported profit is backed by cash."*
+
+The scorer was not awarding points for the missing chain — the guard was already
+on the value. The **sentence** was selected by tone and asserted the claim
+regardless. Same failure shape as a check that supplies its own expected value:
+the component that could not be measured still spoke.
+
+The narrative is now assembled from the components that **ran**, the score card
+lists **which** inputs were unavailable (not a count — a count hides the one
+that mattered), and the side-column cash bullet is conditional. AZN, as rendered:
+
+```
+Good  80/100
+"The latest filed quarter reads constructive: revenue and profit are growing
+ year over year, margins are holding and the quarter was profitable."
+Not measured: whether reported profit is turning into cash
+```
+
+80 rather than 100 because the growth terms are no longer inflated by the
+four-year base. AAPL 76/100 and MU 100/100 keep every component and keep the
+cash clause.
+
+### Why AZN's cash chain is empty — neither candidate
+
+```
+ifrs-full:CashFlowsFromUsedInOperatingActivities  PRESENT  45 USD rows
+  span-days=[180,181,364,365]   11 year-starts, 10 with >1 cumulative end
+stored latest quarter frame: start=2025-04-01 end=2025-06-30 span=90d
+revenue            frame lengths n=[1,2,4]  -> quarter cell possible: true
+operatingCashFlow  frame lengths n=[2,4]    -> quarter cell possible: false
+```
+
+**Not unmapped** — the tag is in `IFRS_CHAIN` and present with 45 rows.
+**Not "a half-yearly filer never supplies two cumulative periods"** — AZN
+supplies two on 10 of 11 year-starts.
+
+The cause is that `extractCompanyFacts` steps **one frame-length at a time**
+(`byLen.get(f.n - 1)`): n=2 needs an n=1 and n=4 needs an n=3, and AZN's
+cash-flow statement publishes neither. Its income statement publishes n=1, which
+is exactly why revenue resolves on the same 90-day row that cash flow does not.
+
+**The annual figure does resolve** — `set.years` carries it. Showing the annual
+cash figures on a quarterly card, clearly labelled, is an available improvement
+and a design decision, so it is recorded here rather than taken.
+
+### P1 — BRK.B, and the measured count
+
+`seedManifest` already routes through the spelling helper on this branch. What
+was outstanding was the count, and it is now derived by
+`check-sec-daily-index` from the shipped `PRESET_UNIVERSE` against the committed
+ticker file rather than asserted: **1 of 100** missed by a plain `Map.get`
+(BRK.B), **0 of 100** missed through the seed path. `reconcileCiks` and
+`reconcileExchanges` still use a direct `.get` — left alone, because they fill
+and reconcile rather than seed, and widening them was not asked for.
+
+### P2 — the applyFilings docblock
+
+`166 / 39` was stale; live is `134 / 7`, and the committed window fixture agrees
+on the 7 from its own capture (123 queued against 130 pre-fix). The attribution
+was also wrong, and the correction is derived from the fixture rather than
+restated:
+
+```
+SCHEDULE 13D/A   BEN (x2), DT, RSG
+SCHEDULE 13G/A   CRL, GS, VTRS
+4/A              DOCU
+```
+
+**Six of the seven** are amended beneficial-ownership statements, not insider
+transactions. `check-sec-daily-index` now pins that split and asserts the
+docblock says so, which is what stops it drifting again.
+
+### One of my own checks did not bite, and mutation caught it
+
+The first version of "returns null rather than the nearest row" tested rows near
+the END of the array, where `q[i+4]` is out of bounds and both rules return
+null. Restoring the fallback left it **passing**. It now tests a series where
+FY2024 is absent and `q[i+4]` is a real period five years back — where the two
+rules give different answers — and it fails on the mutation.

@@ -584,6 +584,64 @@ check("identityRates counts every state and invents none",
   Object.values(rates(span)).every((r) =>
     r.pass + r.fail + r.skipped > 0 && Object.keys(r).join() === "pass,fail,skipped"));
 
+console.log("\n FRAME LENGTHS: a field with no adjacent frame yields no quarter");
+
+// ── WHY AZN's CASH-FLOW CHAIN IS EMPTY, PINNED AS A MECHANISM ─────────────
+//
+// The review offered two candidates: the ifrs-full cash tags are unmapped, or
+// the differencing needs two consecutive cumulative periods a half-yearly filer
+// never supplies. MEASURED (relay 34978655653) it is NEITHER.
+//
+//   ifrs-full:CashFlowsFromUsedInOperatingActivities  PRESENT, 45 USD rows
+//   span-days=[180,181,364,365]   11 year-starts, 10 with >1 cumulative end
+//   stored latest quarter frame:  start=2025-04-01 end=2025-06-30 span=90d
+//   revenue            frame lengths n=[1,2,4]  -> quarter possible
+//   operatingCashFlow  frame lengths n=[2,4]    -> quarter NOT possible
+//
+// The tag is mapped and present, and AZN does supply two cumulative frames per
+// year. The cause is that extractCompanyFacts steps ONE frame-length at a time
+// (`byLen.get(f.n - 1)`): n=2 needs an n=1 and n=4 needs an n=3, and AZN's cash
+// -flow statement publishes neither. Its income statement publishes n=1, which
+// is why revenue resolves on the very same row that cash flow does not.
+//
+// Asserted against a crafted payload because it is a property of the MECHANISM,
+// not a business figure — the values below are 1 and 2 and carry no meaning.
+{
+  const row = (start, end, val) => ({ start, end, val, accn: `a${val}`, filed: "2026-01-01" });
+  const facts = (tag, rows) => ({
+    cik: 1, facts: { "us-gaap": { [tag]: { units: { USD: rows } } } },
+  });
+  const idxOf = (k) => SEC_FIELDS.findIndex((f) => f.key === k);
+
+  // n=[2,4] only — AZN's cash-flow shape.
+  const halfOnly = extractCompanyFacts("HALF", facts("NetCashProvidedByUsedInOperatingActivities", [
+    row("2025-01-01", "2025-06-30", 100),   // n=2
+    row("2025-01-01", "2025-12-31", 250),   // n=4
+  ]));
+  check("a field publishing only n=2 and n=4 yields NO quarter",
+    halfOnly.quarters.every((p) => p.values[idxOf("operatingCashFlow")]?.val == null),
+    "n=2 needs an n=1 to difference against and n=4 needs an n=3; neither exists");
+  check("...but it DOES yield the annual figure",
+    halfOnly.years.some((p) => p.values[idxOf("operatingCashFlow")]?.val === 250),
+    "the cash numbers are not missing from the filing, only from the quarter");
+
+  // n=[1,2,4] — AZN's revenue shape, same filer, same year.
+  const withQ1 = extractCompanyFacts("FULL", facts("Revenues", [
+    row("2025-01-01", "2025-03-31", 40),    // n=1
+    row("2025-01-01", "2025-06-30", 100),   // n=2
+    row("2025-01-01", "2025-12-31", 250),   // n=4
+  ]));
+  const q1 = withQ1.quarters.find((p) => p.end === "2025-03-31");
+  const q2 = withQ1.quarters.find((p) => p.end === "2025-06-30");
+  check("adding an n=1 frame makes BOTH the first and second quarter resolvable",
+    q1?.values[idxOf("revenue")]?.val === 40 &&
+      q2?.values[idxOf("revenue")]?.val === 60,
+    `q1=${q1?.values[idxOf("revenue")]?.val} q2=${q2?.values[idxOf("revenue")]?.val} ` +
+      "— 100 - 40 = 60, which is the difference the cash chain cannot take");
+  check("...and the differenced one is labelled as differenced, not as filed",
+    q2?.values[idxOf("revenue")]?.derived === "differenced");
+}
+
 console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
 
 {
