@@ -90,6 +90,28 @@ export type SecManifestEntry = {
    * 3), `y` is how many it was ALLOWED to hold. A young filer is not stale.
    */
   y?: number;
+  /**
+   * `c` is `secChainsHash()` at the time the set was written — WHICH TAG
+   * CHAINS produced it, as opposed to `w`/`y` which say how much of the result
+   * was kept.
+   *
+   * ── WHY A THIRD STALENESS FIELD, WHEN A CHAIN EDIT CANNOT MAKE A STORED
+   *    VALUE WRONG ──────────────────────────────────────────────────────
+   * It cannot, and that was measured rather than assumed: 0 of 119 SYMBOLS had
+   * a capex figure move when the productive-assets fallback landed. But it can
+   * make a stored set INCOMPLETE, and 24 of those same 119 gained a capital
+   * expenditure line they did not have — NVDA, AMZN, V, HD, CVX and QCOM going
+   * from nothing at all to 18 of 18 periods. Without this field those sets keep
+   * their blank line until something unrelated happens to re-read them.
+   *
+   * ABSENT MEANS OLDER THAN THE FIELD, therefore older than every chain edit
+   * since, therefore stale. It must SELECT, never skip — see secStaleness.
+   *
+   * NOT a correctness gate. `h` is, and it does not move for a chain edit, so a
+   * set written under older chains stays readable and renders exactly as it
+   * does today until the queue reaches it.
+   */
+  c?: string | null;
   quarters?: number;
   years?: number;
   instants?: number;
