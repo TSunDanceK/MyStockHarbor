@@ -314,31 +314,82 @@ export function SecPendingCard({ symbol }: { symbol: string }) {
 }
 
 /**
- * NO READABLE XBRL — a successful fetch of nothing usable.
+ * NO READABLE DATA — and the card must say WHOSE limit it is.
  *
- * THE THIRD OUTCOME, AND THE ONE THAT WOULD OTHERWISE BE WRONG FOREVER. A
- * company can be a real registrant, have a CIK, answer cleanly, and still
- * publish nothing these fields read: IFRS filers publish under `ifrs-full`
- * (measured at 10 of 40 sampled symbols), and recent IPOs and some 20-F filers
- * have no XBRL history yet.
+ * ── THE COPY THAT SHIPPED WAS A FALSE STATEMENT ABOUT REAL COMPANIES ───────
+ * It read "{symbol} does not file the financial data this page is built from".
+ * For a foreign private issuer that is simply untrue. companyfacts namespaces
+ * facts BY TAXONOMY, so Ryanair's complete IFRS statements were in the payload
+ * the whole time, under `ifrs-full`, which these field definitions did not
+ * read. The page was describing its own gap as a fact about Ryanair -- on a
+ * quarter of stock pages, since 49 of the 55 periodic filers in the measured
+ * window were 6-K filers and HSBC, AZN, GSK, NVS, BIDU, SAN, LYG, VALE, ZTO and
+ * ABEV are all in the universe.
  *
- * Rendering that as "being fetched" promises something that will never arrive —
- * the cron would re-read it every day and get the same nothing. So it says what
- * is actually true, and says it about the FILING rather than about the site.
+ * ── SO THERE ARE TWO CARDS' WORTH OF TRUTH HERE, AND ONE PROP DECIDES ──────
+ *   "unread-taxonomy"  the payload HAS financial facts, in a namespace this
+ *                      page does not read yet. A gap in the SITE. Named, so a
+ *                      reader can see it is a coverage limit and not a verdict
+ *                      on the company.
+ *   "none"             no financial namespace at all -- a dei-only payload.
+ *                      THE ONLY case that may be worded as a fact about the
+ *                      filer, and it is the wording the original card used for
+ *                      everyone.
+ *
+ * `unreadableReason()` in secExtract decides from the stored taxonomy census
+ * rather than from a list of filers anyone maintains. A set stored before that
+ * census existed has no `tx`, which reads as UNKNOWN -- and unknown takes the
+ * site-limit wording, because claiming a company files nothing on the strength
+ * of a field that is absent is the same error in a new place.
  */
-export function SecNoXbrlCard({ symbol }: { symbol: string }) {
+export function SecNoXbrlCard({
+  symbol,
+  reason,
+  taxonomies = [],
+}: {
+  symbol: string;
+  reason: "unread-taxonomy" | "none" | "unknown";
+  taxonomies?: string[];
+}) {
+  const named = taxonomies.length ? taxonomies.join(", ") : "a taxonomy";
+  if (reason === "none") {
+    return (
+      <section className="card">
+        <div className="eyebrow">Not available for this company</div>
+        <h2>{symbol} has not filed XBRL financial statements</h2>
+        <p>
+          This page reads structured XBRL financial statements from {SEC_ATTRIBUTION}.{" "}
+          {symbol}&apos;s filings carry cover-page data only — no tagged income statement,
+          cash-flow statement or balance sheet — most often because it has not filed a full
+          financial year yet.
+        </p>
+        <p style={{ marginBottom: 0 }}>
+          Its filings are still public on{" "}
+          <a href="https://www.sec.gov/edgar/search/" style={{ color: "#93c5fd", fontWeight: 800 }}>
+            SEC EDGAR
+          </a>
+          .
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="card">
-      <div className="eyebrow">Not available for this company</div>
-      <h2>{symbol} does not file the financial data this page is built from</h2>
+      <div className="eyebrow">Not supported yet</div>
+      <h2>This page does not read {symbol}&apos;s filings yet</h2>
       <p>
-        This page reads structured XBRL financial statements from {SEC_ATTRIBUTION}.{" "}
-        {symbol} does not publish them in a form this page can read — most often because it
-        reports under IFRS as a foreign private issuer, or because it has not filed a full
-        financial year yet.
+        {symbol} files its financial statements with {SEC_ATTRIBUTION}
+        {reason === "unread-taxonomy" ? (
+          <>
+            {" "}
+            under the <strong>{named}</strong> taxonomy
+          </>
+        ) : null}
+        , which this page does not read yet. The data exists — the gap is here, not in{" "}
+        {symbol}&apos;s reporting.
       </p>
       <p style={{ marginBottom: 0 }}>
-        Its filings are still public on{" "}
+        Its filings are available now on{" "}
         <a href="https://www.sec.gov/edgar/search/" style={{ color: "#93c5fd", fontWeight: 800 }}>
           SEC EDGAR
         </a>
@@ -347,3 +398,4 @@ export function SecNoXbrlCard({ symbol }: { symbol: string }) {
     </section>
   );
 }
+

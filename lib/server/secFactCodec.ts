@@ -14,7 +14,7 @@
 // silently, and plausibly. So the writer stores secFieldsHash() and a reader
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
-import { SEC_FIELD_KEYS, secFieldsHash } from "./secFields";
+import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
@@ -60,6 +60,15 @@ export type StoredFactSet = {
    * that gains a namespace without changing a number is not a restatement.
    */
   tx?: string[];
+  /**
+   * Content hash of the TAG CHAINS that produced this set. Optional for the
+   * same reason `tx` is: sets predate it, and absent means "older than the
+   * chains", which is precisely when a retry is warranted.
+   *
+   * Read ONLY to decide whether an EMPTY set is worth re-reading; a set with
+   * values is never invalidated by it. See secFields.secChainsHash.
+   */
+  c?: string;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -116,6 +125,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     instants: result.instants.map(encodePeriod),
     cover: result.coverShares,
     tx: result.taxonomies,
+    c: secChainsHash(),
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };

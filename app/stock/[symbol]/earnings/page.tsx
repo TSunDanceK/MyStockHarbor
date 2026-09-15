@@ -751,7 +751,13 @@ export default async function StockEarningsPage({ params }: Props) {
                   filed year yet -- and it must NEVER render as pending, because
                   the cron would re-read it daily and get the same nothing.
                   The 404 case never reaches here; see the guard above. */}
-              {data.cold.status === "no-xbrl" ? <SecNoXbrlCard symbol={clean} /> :
+              {data.cold.status === "no-xbrl" ? (
+                <SecNoXbrlCard
+                  symbol={clean}
+                  reason={data.cold.why}
+                  taxonomies={data.cold.taxonomies}
+                />
+              ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
                 <>
                   <SecSnapshotCard view={secView} />

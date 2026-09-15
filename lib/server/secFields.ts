@@ -157,6 +157,12 @@ const RATIO_SOURCE: Record<string, { numerator: string; denominator: string } | 
 // `nonOperatingIncomeExpense` has no single tag that means the same thing.
 // Inventing a near-match for either is how a plausible wrong number gets in.
 //
+// CORRECTED AGAINST 20 REAL FILERS (relay 34970388423), not written from
+// memory of the taxonomy and left there. Four entries matched nothing in any
+// payload and are deleted; `WeightedAverageShares` and the lowercase
+// `AdjustmentsForSharebasedPayments` were added because the filers publish
+// those and not the spellings the taxonomy documents.
+//
 // EVERY TAG BELOW WAS CONFIRMED PRESENT IN REAL companyfacts PAYLOADS by
 // scripts/sec-ifrs-probe.mjs, which also reports the ifrs-full tags a filer
 // publishes that this table does NOT map. Chains are ordered by how many of the
@@ -164,15 +170,21 @@ const RATIO_SOURCE: Record<string, { numerator: string; denominator: string } | 
 const IFRS_CHAIN: Record<string, string[] | undefined> = {
   // Income statement
   revenue: ["Revenue", "RevenueFromContractsWithCustomers", "RevenueFromSaleOfGoods"],
-  costOfRevenue: ["CostOfSales", "CostOfMerchandiseSold"],
+  costOfRevenue: ["CostOfSales"],
   grossProfit: ["GrossProfit"],
   researchAndDevelopment: ["ResearchAndDevelopmentExpense"],
+  // AdministrativeExpense and DistributionCosts are KEPT although neither won
+  // a cell in the 20-filer probe: both are present in real payloads and are
+  // simply outranked, which is not the same as absent. The entries deleted
+  // below are the ones no probed filer publishes AT ALL.
   sellingGeneralAndAdministrative: [
     "SellingGeneralAndAdministrativeExpense",
     "AdministrativeExpense",
     "DistributionCosts",
   ],
-  otherOperatingExpense: ["OtherExpenseByFunction", "OtherOperatingIncomeExpenseNet"],
+  // OtherOperatingIncomeExpenseNet deleted: it is a us-gaap spelling that was
+  // copied into the IFRS column and exists in no probed ifrs-full payload.
+  otherOperatingExpense: ["OtherExpenseByFunction"],
   operatingIncome: ["ProfitLossFromOperatingActivities"],
   interestExpense: ["FinanceCosts", "InterestExpense"],
   preTaxIncome: ["ProfitLossBeforeTax"],
@@ -183,8 +195,12 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   netIncomeToNoncontrollingInterest: ["ProfitLossAttributableToNoncontrollingInterests"],
   epsBasic: ["BasicEarningsLossPerShare"],
   epsDiluted: ["DilutedEarningsLossPerShare"],
-  sharesBasic: ["WeightedAverageNumberOfOrdinarySharesOutstanding", "NumberOfSharesOutstanding"],
-  sharesDiluted: ["WeightedAverageNumberOfDilutedOrdinarySharesOutstanding", "AdjustedWeightedAverageShares"],
+  // MEASURED CORRECTION. Both original guesses matched nothing in 20 filers,
+  // while `WeightedAverageShares` — which was not in the table — is the most
+  // published unmapped tag of all, in 16 of them. The taxonomy has the long
+  // spellings; filers use the short one.
+  sharesBasic: ["WeightedAverageShares"],
+  sharesDiluted: ["AdjustedWeightedAverageShares"],
 
   // Cash flow
   operatingCashFlow: ["CashFlowsFromUsedInOperatingActivities"],
@@ -192,7 +208,9 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
     "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
     "PaymentsToAcquirePropertyPlantAndEquipment",
   ],
-  shareBasedCompensation: ["AdjustmentsForShareBasedPayments"],
+  // LOWERCASE `b`. The camel-case guess matched nothing; the spelling filers
+  // actually use is AdjustmentsForSharebasedPayments, in 6 of the 20.
+  shareBasedCompensation: ["AdjustmentsForSharebasedPayments"],
   depreciationAndAmortization: [
     "DepreciationAndAmortisationExpense",
     "AdjustmentsForDepreciationAndAmortisationExpense",
@@ -205,6 +223,8 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   ],
   dividendsPaid: ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
   buybacks: ["PaymentsToAcquireOrRedeemEntitysShares"],
+  // No probed filer publishes a per-share dividend under ifrs-full at all,
+  // under this or any spelling, so this stays a known gap rather than a guess.
   dividendsDeclaredPerShare: ["DividendsPaidOrdinarySharePerShare"],
   fxEffectOnCash: ["EffectOfExchangeRateChangesOnCashAndCashEquivalents"],
 
@@ -215,10 +235,14 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   inventory: ["Inventories"],
   totalCurrentAssets: ["CurrentAssets"],
   totalAssets: ["Assets"],
-  payables: ["TradeAndOtherCurrentPayables", "CurrentTradePayables"],
+  payables: ["TradeAndOtherCurrentPayables"],
   totalCurrentLiabilities: ["CurrentLiabilities"],
   shortTermDebt: ["ShorttermBorrowings", "CurrentPortionOfLongtermBorrowings"],
-  longTermDebt: ["LongtermBorrowings", "NoncurrentPortionOfNoncurrentBorrowings"],
+  // `Borrowings` (published by 7 of the 20) is deliberately NOT added: it is
+  // TOTAL borrowings, current and non-current together, and putting it in a
+  // long-term field would overstate long-term debt by the current portion —
+  // a plausible wrong number, which is the one thing this file refuses.
+  longTermDebt: ["LongtermBorrowings"],
   totalLiabilities: ["Liabilities"],
   stockholdersEquity: ["EquityAttributableToOwnersOfParent"],
   totalEquity: ["Equity"],
@@ -427,6 +451,38 @@ export function secFieldsHash(keys: string[] = SEC_FIELD_KEYS): string {
   for (const ch of keys.join("|")) {
     h ^= ch.charCodeAt(0);
     h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * A CONTENT HASH OF THE CHAINS — the retry key for an EMPTY stored set.
+ *
+ * secFieldsHash deliberately ignores chain edits: values already stored stay
+ * valid when a tag chain is corrected, and re-reading 759 symbols because one
+ * chain gained an entry would be a self-inflicted outage.
+ *
+ * But an EMPTY set is not a value, it is the absence of one, and a chain edit
+ * is exactly the thing that can turn it into data. Every IFRS filer holds an
+ * empty set written before ifrs-full was read; without a key that moves when
+ * the chains move, they stay empty forever while the chains that can read them
+ * sit in this file.
+ *
+ * So: this hash moves on ANY chain change, and secColdFetch retries a stored
+ * EMPTY set whose hash differs — once, budgeted and timed out like a cold
+ * fetch. A set with values is untouched, and a retry that comes back empty
+ * again stores the current hash and stops.
+ */
+export function secChainsHash(): string {
+  let h = 0x811c9dc5;
+  const feed = (str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+  };
+  for (const f of [...SEC_FIELDS, COVER_SHARES_FIELD]) {
+    feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`);
   }
   return h.toString(16).padStart(8, "0");
 }
