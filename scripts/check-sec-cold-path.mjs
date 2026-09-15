@@ -56,12 +56,12 @@ for (const status of ["no-cik", "ready", "no-xbrl", "pending"]) {
 // must not render as pending: the cron would re-read it daily and get the same
 // nothing, so the page would promise data that never arrives.
 check("an empty-but-successful fetch returns no-xbrl, NOT pending",
-  /hasUsableData\(set\)\s*\?[\s\S]{0,120}"ready"[\s\S]{0,200}"no-xbrl"/.test(code),
+  /hasUsableData\(set\)\s*\?[\s\S]{0,80}"ready"[\s\S]{0,80}emptyResult\(/.test(code),
   "an IFRS filer would otherwise be permanently 'coming soon'");
 check("a stored-but-empty set also returns no-xbrl",
-  /hasUsableData\(stored\)\s*\?[\s\S]{0,140}"no-xbrl"/.test(code));
+  /if \(hasUsableData\(stored\)\) return \{ status: "ready"[\s\S]{0,1400}return emptyResult\(/.test(code));
 check("the page renders a DISTINCT card for no-xbrl",
-  /status === "no-xbrl" \?\s*<SecNoXbrlCard/.test(pageCode),
+  /status === "no-xbrl" \? \(\s*<SecNoXbrlCard/.test(pageCode),
   "not the pending card with different words");
 // SLICED ON THE DECLARATIONS, NOT THE FIRST MENTION. The first version sliced
 // from indexOf("SecNoXbrlCard"), which lands inside the OTHER card's doc
@@ -75,10 +75,40 @@ const cardBody = (name) => {
 };
 const noXbrlBody = cardBody("SecNoXbrlCard");
 const pendingBody = cardBody("SecPendingCard");
-check("the no-xbrl copy is about the FILING, not about the site",
-  /does not file the financial data this page is built from/.test(noXbrlBody) &&
-    !/not loaded yet|coming soon|check back|refresh in a moment/i.test(noXbrlBody),
-  "it will never stop being true, so it must not read as temporary");
+// ── THIS ASSERTION USED TO ENFORCE A FALSE STATEMENT ──────────────────────
+//
+// It required the copy to read "does not file the financial data this page is
+// built from" — a claim about the COMPANY — and passed for two weeks while the
+// page said exactly that about Ryanair, AstraZeneca, HSBC and every other
+// foreign private issuer, whose complete statements were in the payload the
+// whole time under `ifrs-full`. The check was pinned to a phrasing and the
+// phrasing was wrong, so the check defended the bug.
+//
+// What is asserted now is the DISTINCTION: the card must be able to say both
+// things, and the fact-about-the-filer wording must be reachable ONLY on the
+// one reason that justifies it.
+const noneBranch = noXbrlBody.slice(
+  noXbrlBody.indexOf('reason === "none"'),
+  noXbrlBody.indexOf("return (", noXbrlBody.indexOf("}\n  return ("))
+);
+check("the card branches on WHOSE limit it is",
+  /reason === "none"/.test(noXbrlBody) &&
+    noneBranch.length > 200,
+  `none-branch ${noneBranch.length}b — non-empty, so a mis-sliced body cannot ` +
+    `pass this by being blank`);
+check("...and only the 'none' branch makes a claim about the FILER",
+  /has not filed XBRL financial statements/.test(noneBranch) &&
+    !/does not file the financial data|does not publish them/.test(
+      noXbrlBody.slice(noXbrlBody.indexOf("}\n  return ("))
+    ),
+  "a payload with a financial taxonomy we simply do not read is the PAGE's gap");
+check("the site-limit branch says so plainly and names the taxonomy",
+  /does not read .*filings yet|gap is here, not in/.test(noXbrlBody) &&
+    /\{named\}/.test(noXbrlBody),
+  "naming it is what stops a reader taking it as a verdict on the company");
+check("neither branch reads as temporary",
+  !/not loaded yet|coming soon|check back|refresh in a moment/i.test(noXbrlBody),
+  "no wording here will stop being true on its own");
 check("the pending copy IS temporary, and only that card says so",
   /check back shortly|refresh in a moment/i.test(pendingBody) &&
     pendingBody.length > 100 && noXbrlBody.length > 100,

@@ -80,11 +80,18 @@ try {
   if (e.instants.length !== 1) throw new Error("the ifrs-full path produced no instant");
   const v = e.instants[0].values[SEC_FIELDS.findIndex((f) => f.key === "totalAssets")];
   if (v?.val !== 7) throw new Error(`ifrs-full Assets read back as ${JSON.stringify(v)}`);
-  if (unreadableReason(["dei"]).kind !== "none") throw new Error("dei-only should be 'none'");
-  if (unreadableReason(["dei", "ifrs-full"]).kind !== "none")
-    throw new Error("ifrs-full is readable now and must not report as unread");
+  // THE THREE BRANCHES, AND THE MIDDLE ONE IS THE ONE AEG EXPOSED. An earlier
+  // version of this smoke asserted that a dei+ifrs-full payload returns "none",
+  // which was wrong in the same way the two-branch function was: a namespace we
+  // CAN read, present and empty, is our gap, not the filer's.
+  if (unreadableReason(["dei"]).kind !== "none")
+    throw new Error("a cover-page-only payload is the one fact-about-the-filer case");
+  if (unreadableReason(["dei", "ifrs-full"]).kind !== "unread-detail")
+    throw new Error("ifrs-full is readable, so an empty result there is the page's gap");
   if (unreadableReason(["dei", "jpfr-t-cte"]).kind !== "unread-taxonomy")
-    throw new Error("an unknown financial namespace must report as unread");
+    throw new Error("a financial namespace we do not read must be named");
+  if (unreadableReason(["ffd", "ifrs-full", "us-gaap"]).kind !== "unread-detail")
+    throw new Error("AEG's shape must not be reported as 'filed under ffd'");
 } catch (err) {
   console.error(`FATAL: pre-network smoke failed — ${String(err?.message ?? err)}`);
   process.exit(2);
