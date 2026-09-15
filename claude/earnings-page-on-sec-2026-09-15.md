@@ -413,3 +413,137 @@ site, because guard 2 means a second render never reaches the fetch.
 window.** The three outcomes all landed: `rendered` for a us-gaap filer,
 `no-xbrl` for Ryanair (IFRS — permanent, and correctly not pending), `404` for
 a string with no CIK.
+
+---
+
+## §14 The IFRS card was a false statement, and the gap splits in two
+
+**The claim that shipped was untrue about real companies.** Whenever the
+extraction came back empty the page said *"{symbol} does not file the financial
+data this page is built from"*. companyfacts namespaces facts **by taxonomy**,
+so a foreign private issuer's complete statements were in the payload the whole
+time under `ifrs-full` — a namespace none of the 46 field definitions read. The
+page was describing its own gap as a fact about Ryanair. 49 of the 55 periodic
+filers in the measured window were 6-K filers, and HSBC, AZN, GSK, NVS, BIDU,
+SAN, LYG, VALE, ZTO and ABEV are all in the universe.
+
+**And `check-sec-cold-path` was pinned to that exact phrasing**, so the check
+defended the bug for as long as it existed. That assertion now pins the
+*distinction* instead of a sentence.
+
+### What was built
+
+A second chain set under `ifrs-full` on 43 of the 46 fields, appended **below**
+the primary chain in the same ranked list — so the existing per-period resolver
+needs no new rule, a dual-tagging filer keeps its us-gaap reading, and an IFRS
+filer falls through. Same differencing, same identities, no key added or
+removed, so `secFieldsHash` does not move and **not one stored fact set is
+invalidated**.
+
+Stored empty sets *are* retried, once, via a new `secChainsHash`: a corrected
+chain never invalidates stored **values**, but it is exactly what can turn
+stored **nothing** into data. Without it every IFRS filer would have stayed
+empty forever with the chains that read them sitting in the file.
+
+### The measurement corrected the table twice, and the control corrected the probe
+
+Three relay runs (34970388423, 34971118882, 34971551511) over 20 real filers.
+Four mapped tags were published by **nobody** and were deleted as guesses;
+`WeightedAverageShares` (published by 16 of 20) and the lowercase
+`AdjustmentsForSharebasedPayments` (9 of 20) were added because filers publish
+those and not the spellings the taxonomy documents.
+
+**The us-gaap control is what made this trustworthy, and it failed first.** Run
+1 reported AAPL with 71 "ifrs cells" — for a filer whose payload has no
+`ifrs-full` namespace at all. IFRS and us-gaap **share spellings** (`GrossProfit`,
+`Goodwill`, `Assets`, `Liabilities`, `ProfitLoss`, `InterestExpense`,
+`ResearchAndDevelopmentExpense`), so attributing a hit by tag name cannot work.
+The extractor now records the winning **namespace**; AAPL reads 0, with
+identities unchanged at 8/8, 8/8, 8/8, 8/8, 7/8.
+
+### The result: half the gap was taxonomy, half was never taxonomy at all
+
+Of the ten symbols that measured as empty, **all ten now extract something — but
+"not empty" is a bad bar.** Best populated period, out of 46 fields:
+
+```
+AZN 24   KGC 24   OTLY 23   MT 22   BEPH 16        a real page
+AEG  1   MFC  2   NWG  2   RYAAY 2   VIV  2        a page of dashes
+```
+
+**The thin five are not a tagging gap. Every one reports in a home currency** —
+AEG EUR, NWG GBP/EUR, MFC CAD, RYAAY EUR, VIV BRL — and `rowsForField` refuses a
+non-USD figure deliberately, because a euro number under a dollar sign is the
+plausible-wrong-number failure this pipeline exists to prevent. GSK, SAN, LYG and
+ABEV are the same. So:
+
+| | before | after |
+|---|---|---|
+| IFRS filer reporting in USD | "does not file the financial data" | renders |
+| IFRS filer reporting in EUR/GBP/CAD/BRL | "does not file the financial data" | "{symbol} reports in EUR" |
+| cover-page-only payload | "does not file the financial data" | "has not filed XBRL financial statements" |
+
+Only the third is a claim about the filer, and it is the only one that was ever
+true. The card now branches on `unreadableReason()`, which reads the stored
+taxonomy census and the refused-currency evidence rather than a list anyone
+maintains. A set stored before that census exists has no `tx` — read as
+**unknown**, taking the site-limit wording, because asserting a company files
+nothing on the strength of an absent field is the same error in a new place.
+
+### The density bar, and it was checked against us-gaap before being applied
+
+`hasUsableData` used to return true for any set with one period. That is what
+let a 2-of-46 page through. It now requires **6 populated fields in a single
+period** (`MIN_PERIOD_FIELDS`), and the number was checked against the thinnest
+us-gaap filers the site serves rather than tuned on IFRS ones:
+
+```
+AAPL 25  ARM 21  MU 27  PLAB 23  ASTS 22  CULP 21  IIIN 21  PLPC 28  FLXS 21
+0 us-gaap filers hidden by the threshold
+```
+
+21 against 2 is the gap; anything from 3 to 15 separates the populations
+identically and 6 sits inside it with room either side.
+
+### Still open
+
+`nonOperatingIncomeExpense`, `cashIncludingRestricted` and
+`dividendsDeclaredPerShare` have **no** IFRS entry, deliberately — the first two
+have no IFRS equivalent, and 0 of 20 filers publish a per-share dividend under
+`ifrs-full`. Those render null. **Non-USD reporters remain unrendered**; making
+them work needs an FX decision (which rate, as of when, labelled how) that is a
+separate piece of work, not a chain edit.
+
+---
+
+## §15 The per-IP cap stays site-wide, by decision, and now logs its own case
+
+The owner ruled on §13's open item: **keep the site-wide bucket, do not build
+the middleware version.** The reasoning, recorded because it is the kind that
+gets re-litigated:
+
+> The protection is the TOTAL, not the rate — every symbol is fetched once and
+> written, so external work is bounded at ~10,400 fetches for the life of the
+> site by guards 1 and 2. The bucket only shapes *when*. Worst case for an actor
+> is spending one minute's budget, degrading others to pending, self-healing in
+> 60s. The middleware alternative buys isolation against that for a Redis
+> `EXISTS` on **every** earnings request forever, on the meter already under
+> cost pressure. Bad trade.
+
+What was added instead: `claimColdFetch` **logs when the bucket is exhausted**,
+naming the count, the cap and the symbol that got queued. That line is the
+decision procedure — if it appears regularly in production there is a pattern
+and the middleware version has a case; if it never appears, the isolation was
+never needed. Today it would be built against a hypothetical.
+
+## §16 The cached pending page, fixed in four lines
+
+§13 recorded a wart: `revalidate = 3600` caches whatever the render produced,
+**including a pending card**, so a symbol that timed out kept telling visitors to
+check back for up to an hour after the cron populated it.
+
+`/api/jobs/sec-facts` now calls `revalidatePath("/stock/{symbol}/earnings")` on
+every write. Inside the `changed` branch deliberately: an unchanged set means the
+cached HTML is already right, and flushing it would throw away a valid render —
+and with it the FMP calls and Redis reads that produced it — to rebuild the
+identical page.
