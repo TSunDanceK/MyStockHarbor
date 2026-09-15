@@ -81,6 +81,10 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // How much of a symbol's real pool its anchored short-name needle admits, and
+  // how much of that is the company rather than the index, the month or the
+  // noun. news.google.com is refused from the sandbox; a runner reaches it.
+  "anchor-collisions": { script: "scripts/anchor-collision-sample.mjs", args: () => [] },
   // Read-only, but needs the frozen universe to compute the match ratio: the
   // question "how many wire items are about a stock we cover" cannot be answered
   // without the symbol set.
