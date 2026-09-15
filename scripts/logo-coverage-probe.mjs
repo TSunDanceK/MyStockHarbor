@@ -32,6 +32,7 @@
 // absentFields.blocked, so the brief's requested splits cannot come from
 // committed data.
 import fs from "node:fs";
+import { symbolSpellings } from "./lib/symbol-spellings.mjs";
 
 const UA =
   process.env.PROBE_USER_AGENT ??
@@ -348,7 +349,9 @@ console.log();
 const dotted = symbols.filter((s) => s.includes("."));
 console.log(`DOT vs DASH SPELLING (${dotted.length} dotted symbols in the union)`);
 if (dotted.length) {
-  const alt = await runPool(dotted, (s) => probe(s.replace(/\./g, "-")), CONCURRENCY);
+  // symbolSpellings' first alternate is the dash form. Through the helper so a
+  // new spelling rule reaches this probe too.
+  const alt = await runPool(dotted, (s) => probe(symbolSpellings(s)[1] ?? s), CONCURRENCY);
   const dottedRes = new Map(results.map((r) => [r.symbol, r]));
   for (let i = 0; i < alt.length; i += 1) {
     const d = dotted[i];

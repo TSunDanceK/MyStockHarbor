@@ -28,46 +28,11 @@
 // alphabetic tickers (TBB, PFH, UNMA) and join correctly as-is. Checking TBB
 // alone passes and says nothing about the suffixed half.
 
-/**
- * Candidate spellings for one ticker, most-likely first, de-duplicated.
- *
- * Deliberately GENERATIVE rather than a lookup table: a table of known
- * preferreds is a September 2026 snapshot that returns a wrong answer silently
- * forever, which this repo has already refused twice.
- */
-export function symbolSpellings(symbol) {
-  const raw = String(symbol ?? "").trim().toUpperCase();
-  if (!raw) return [];
-  const out = [raw];
-  const push = (s) => {
-    if (s && s !== raw && !out.includes(s)) out.push(s);
-  };
-
-  // 1. Dot/dash, the pair the existing copies handled.
-  push(raw.replace(/\./g, "-"));
-  push(raw.replace(/-/g, "."));
-
-  // 2. The DOLLAR forms. "-P<series>" is the universe's spelling for a preferred
-  //    series (MER-PK = series K); Nasdaq Trader writes "$<series>". Emitted
-  //    before the looser rule below so the more specific pattern is tried first.
-  push(raw.replace(/-P([A-Z])$/, "$$$1"));
-
-  // 3. The looser suffix rule, for share classes and non-P series that Nasdaq
-  //    may also write with "$": MKC-V -> MKC$V, PBR-A -> PBR$A. Generated
-  //    rather than assumed correct -- an extra candidate that matches nothing
-  //    costs one map lookup, while a missing one fails open.
-  push(raw.replace(/[.-]([A-Z])$/, "$$$1"));
-
-  return out;
-}
-
-/** First hit across every spelling. Returns the value AND which spelling won. */
-export function lookupBySpelling(map, symbol) {
-  for (const spelling of symbolSpellings(symbol)) {
-    if (map.has(spelling)) return { value: map.get(spelling), matched: spelling };
-  }
-  return null;
-}
+// symbolSpellings and lookupBySpelling MOVED to lib/symbolSpellings.mjs so the
+// application can import them too -- seedManifest needs them, and a helper the
+// app cannot reach is a helper the app reimplements. Re-exported here so every
+// existing probe import keeps working against one implementation.
+export { symbolSpellings, lookupBySpelling, lookupSpellingIn } from "../../lib/symbolSpellings.mjs";
 
 /**
  * TWO STAGES, REJECT FIRST. Neither direction works alone.

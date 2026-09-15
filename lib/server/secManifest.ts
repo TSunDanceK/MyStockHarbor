@@ -19,6 +19,7 @@
 // `needsReverify` flag, never as an expiry.
 
 import { Redis } from "@upstash/redis";
+import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
 import { EARNINGS_PEAK_DAY_SHARE } from "./earningsPlan";
@@ -252,6 +253,22 @@ export type SeedResult = {
  * Dropping it would make the universe silently smaller than it is; a null CIK
  * simply never matches the daily index, and the count says so out loud.
  */
+/**
+ * THE CIK LOOKUP GOES THROUGH THE SPELLING HELPER, and this was a real miss.
+ *
+ * `cikByTicker.get(symbol)` alone gave BRK.B no CIK: the universe spells it
+ * with a DOT and SEC's exchange file with a DASH, and nothing bridged them.
+ * A symbol with no CIK is invisible to the daily index, never enters the
+ * re-read queue, and can never be populated -- so the page reads "not loaded
+ * yet" forever, with no error anywhere to say why.
+ *
+ * It surfaced only when PRESET_UNIVERSE joined the seed: the dynamic pool
+ * happened to carry no dotted ticker, so `withoutCik` was four unrelated
+ * symbols and looked settled.
+ *
+ * Verified against the committed ticker file: BRK.B -> BRK-B, BF.B -> BF-B,
+ * MKC.V -> MKC-V, all three absent on a direct read.
+ */
 export function seedManifest(
   manifest: SecManifest,
   universe: string[],
@@ -262,7 +279,7 @@ export function seedManifest(
   let added = 0;
 
   for (const symbol of universe) {
-    const found = cikByTicker.get(symbol) ?? null;
+    const found = lookupBySpelling(cikByTicker, symbol)?.value ?? null;
     const cik = found?.cik ?? null;
     if (!cik) withoutCik.push(symbol);
     const existing = manifest.symbols[symbol];
