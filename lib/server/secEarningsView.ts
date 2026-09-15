@@ -408,6 +408,12 @@ export type SecEarningsView = {
   balance: {
     asOf: string;
     cash: ViewCell;
+    /**
+     * TRUE when `cash` is the RESTRICTED-INCLUSIVE figure because the filer
+     * published no plain one. Restricted cash cannot be freely spent, so every
+     * card showing this must say so — including net cash, which is built on it.
+     */
+    cashIncludesRestricted: boolean;
     shortTermInvestments: ViewCell;
     totalDebt: number | null;
     totalDebtMissing: string | null;
@@ -790,7 +796,28 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const std = valueOf(bsAt, "shortTermDebt");
   const ltd = valueOf(bsAt, "longTermDebt");
   const totalDebt = std === null && ltd === null ? null : (std ?? 0) + (ltd ?? 0);
-  const cashVal = valueOf(bsAt, "cash");
+  /**
+   * ── CASH, AND THE ONE SUBSTITUTE THAT IS ALLOWED FOR IT ──────────────────
+   *
+   * Some filers tag only CashCashEquivalentsRestrictedCashAndRestrictedCash-
+   * Equivalents — the combined figure — and nothing under the plain concept.
+   * GEV files 13.12bn that way and rendered a blank cash line as a result.
+   *
+   * THE SUBSTITUTE IS NOT SILENT. It is a DIFFERENT measure: restricted cash is
+   * money the company cannot freely spend, so presenting it under the same
+   * label as "Cash & equivalents" would overstate what is available. It is used
+   * only when the plain figure is absent, and it is LABELLED when it is — here,
+   * once, so the card and net cash cannot disagree about which they showed.
+   *
+   * The chains stay separate: `cash` is not taught to accept the combined
+   * concept, because then no card could tell the two apart.
+   */
+  const plainCash = view(bsAt, "cash", "Cash & equivalents");
+  const inclRestricted = view(bsAt, "cashIncludingRestricted", "Cash & equivalents (incl. restricted)");
+  const usingRestricted = plainCash.val === null && inclRestricted.val !== null;
+  const cashCell = usingRestricted ? inclRestricted : plainCash;
+
+  const cashVal = cashCell.val;
   const sti = valueOf(bsAt, "shortTermInvestments");
   const liquid = cashVal === null && sti === null ? null : (cashVal ?? 0) + (sti ?? 0);
 
@@ -888,7 +915,9 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     balance: bsAt
       ? {
           asOf: bsAt.e,
-          cash: view(bsAt, "cash", "Cash & equivalents"),
+          cash: cashCell,
+          /** True when the cash line is the combined figure, so cards can qualify it. */
+          cashIncludesRestricted: usingRestricted,
           shortTermInvestments: view(bsAt, "shortTermInvestments", "Short-term investments"),
           totalDebt,
           totalDebtMissing: missingOf([["short-term debt", std], ["long-term debt", ltd]]),
