@@ -348,10 +348,40 @@ export function SecNoXbrlCard({
   taxonomies = [],
 }: {
   symbol: string;
-  reason: "unread-taxonomy" | "none" | "unknown";
+  reason: "unread-taxonomy" | "currency" | "unread-detail" | "none" | "unknown";
+  /** The namespaces on "unread-taxonomy"; the currency codes on "currency". */
   taxonomies?: string[];
 }) {
   const named = taxonomies.length ? taxonomies.join(", ") : "a taxonomy";
+  // ── THE CURRENCY CASE, AND IT IS THE COMMON ONE ────────────────────────────
+  // Measured after the ifrs-full chains landed: the filers that still do not
+  // render are not a tagging gap, they are AEG in EUR, NWG in GBP, MFC in CAD,
+  // RYAAY in EUR, VIV in BRL. rowsForField refuses a non-USD figure on purpose
+  // -- a euro number under a dollar sign is the plausible wrong number this
+  // whole pipeline is built against -- so the honest card names the currency
+  // rather than implying the filing is unreadable.
+  if (reason === "currency") {
+    return (
+      <section className="card">
+        <div className="eyebrow">Not supported yet</div>
+        <h2>
+          {symbol} reports in {named}
+        </h2>
+        <p>
+          {symbol} files complete financial statements with {SEC_ATTRIBUTION}, denominated
+          in {named}. This page reads US-dollar figures only, and shows nothing rather than
+          printing a {named} figure with a dollar sign on it.
+        </p>
+        <p style={{ marginBottom: 0 }}>
+          Its filings are available now on{" "}
+          <a href="https://www.sec.gov/edgar/search/" style={{ color: "#93c5fd", fontWeight: 800 }}>
+            SEC EDGAR
+          </a>
+          .
+        </p>
+      </section>
+    );
+  }
   if (reason === "none") {
     return (
       <section className="card">

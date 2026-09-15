@@ -69,6 +69,8 @@ export type StoredFactSet = {
    * values is never invalidated by it. See secFields.secChainsHash.
    */
   c?: string;
+  /** Currencies a mapped tag was published in and refused. See rowsForField. */
+  cu?: string[];
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -126,6 +128,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     cover: result.coverShares,
     tx: result.taxonomies,
     c: secChainsHash(),
+    cu: result.refusedUnits,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };

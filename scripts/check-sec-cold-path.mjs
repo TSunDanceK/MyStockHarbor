@@ -241,21 +241,54 @@ check("and the measured 500 that forced all of this is recorded with it",
   /Page changed from static to dynamic at runtime/.test(raw),
   "the next person to reach for headers() here should meet the measurement");
 
-console.log("\n7. hasUsableData");
+console.log("\n7. hasUsableData — the bar is DENSITY, not existence");
 
-const mod = await lift(
-  fs.readFileSync("lib/server/secFields.ts", "utf8") + "\n" +
-  raw.replace(/^import[\s\S]*?;$/gm, "")
-     .replace(/^export async function resolveFactSetForRender[\s\S]*$/m, "")
-     .replace(/^async function [\s\S]*?\n\}$/gm, "")
-     .replace(/^function withTimeout[\s\S]*?\n\}$/m, "")
-);
-const empty = { quarters: [], instants: [], years: [] };
-check("an empty set is not usable", mod.hasUsableData(empty) === false);
-check("one quarter alone is usable", mod.hasUsableData({ ...empty, quarters: [{}] }) === true);
-check("instants alone are usable — a filer with only a balance sheet still renders",
-  mod.hasUsableData({ ...empty, instants: [{}] }) === true);
-check("years alone are usable", mod.hasUsableData({ ...empty, years: [{}] }) === true);
+// GRABBED BY NAME, NOT STRIPPED BY REGEX. The previous version lifted this file
+// by deleting whole functions with `^async function ...` patterns, and broke
+// the moment a non-async helper was added between them: it left a dangling
+// fragment and the module failed to parse. Naming what it wants cannot do that.
+const usable = (await lift(
+  `export const MIN_PERIOD_FIELDS = ${
+    (raw.match(/MIN_PERIOD_FIELDS = (\d+)/) ?? [])[1] ?? "0"
+  };\n` +
+  // NO `export` PREFIX: grabFunction keeps the one already on the declaration,
+  // and prepending a second is a syntax error. rethrowIfDynamic in section 8
+  // needs the prefix precisely because it is NOT exported.
+  grabFunction(raw, "hasUsableData")
+));
+const MIN = usable.MIN_PERIOD_FIELDS;
+// Bounded both ways, and the bounds come from the measurement: the filers worth
+// rendering had 16-24 populated fields in their best period, the ones that
+// would render a table of dashes had 1-2. Anything in 3..15 separates them; a
+// threshold outside that is either letting dashes through or hiding real pages.
+check("the threshold is a named constant inside the measured gap", MIN >= 3 && MIN <= 15,
+  `MIN_PERIOD_FIELDS = ${MIN} — measured best-period fill was 16-24 (renderable) ` +
+    `against 1-2 (a page of dashes), relay 34971118882`);
+
+const period = (filled, width = 46) =>
+  ({ e: "2026-06-30", v: Array.from({ length: width }, (_, i) => (i < filled ? 1 : null)) });
+const set = (key, ...periods) =>
+  ({ quarters: [], years: [], instants: [], [key]: periods });
+
+check("an empty set is not usable", usable.hasUsableData(set("quarters")) === false);
+for (const key of ["quarters", "years", "instants"]) {
+  check(`${key} alone, at the threshold, is usable`,
+    usable.hasUsableData(set(key, period(MIN))) === true);
+}
+// THE ONE THE OLD VERSION GOT WRONG. It asserted "one quarter alone is usable"
+// against a period with NO values at all, which passed because the bar was
+// "does a period exist". That bar is what let five filers through on one or two
+// populated fields out of 46 — RYAAY, AEG, MFC, NWG, VIV, every one of them a
+// non-USD reporter rendering a table of dashes.
+check("a period one field BELOW the threshold is not usable",
+  usable.hasUsableData(set("quarters", period(MIN - 1))) === false,
+  "'a period exists' is not the same as 'there is a page here'");
+check("a sparse period does not become usable by being repeated",
+  usable.hasUsableData(set("years", period(1), period(1), period(1), period(1), period(1))) === false,
+  "five years of one field each is AEG, and it is still a page of dashes");
+check("one dense period among sparse ones IS usable",
+  usable.hasUsableData(set("years", period(1), period(MIN + 4), period(1))) === true,
+  "a filer with one fully-tagged year has a page worth rendering");
 
 console.log("\n8. rethrowIfDynamic, run rather than read");
 
