@@ -140,23 +140,31 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
     // in place when the live ones came back different. A measurement quoted in
     // a comment is a claim like any other.
     //
-    // LIVE: 134 queued, 7 dropped. The committed window fixture
-    // (data/sec/window-fixture-20260908-11.json) agrees on the 7 from its own
-    // capture -- 123 queued against 130 pre-fix -- and names them: BEN CRL
-    // DOCU DT GS RSG VTRS.
+    // EVERY FIGURE BELOW NAMES ITS UNIT, because two of them are counted in
+    // different things and the first version of this correction implied one
+    // count. That union-vs-sum confusion has now cost this file twice -- it is
+    // what produced an unpassable rereadQueued gate.
     //
-    // AND ONLY ONE OF THE SEVEN IS AN AMENDED FORM 4. Derived from the fixture
-    // rather than asserted, the amending forms that tripped the pre-fix gate:
+    //   LIVE:   134 SYMBOLS queued, 7 SYMBOLS dropped by the narrowed gate.
+    //   FIXTURE (data/sec/window-fixture-20260908-11.json, its own capture):
+    //           123 SYMBOLS queued against 130 pre-fix -- the same 7 SYMBOLS,
+    //           named: BEN CRL DOCU DT GS RSG VTRS.
     //
-    //   SCHEDULE 13D/A   BEN (x2), DT, RSG
-    //   SCHEDULE 13G/A   CRL, GS, VTRS
-    //   4/A              DOCU
+    // THE FORMS ARE COUNTED IN FILINGS, NOT SYMBOLS, and there are 8 of them
+    // across those 7 symbols because BEN filed two. Derived from the fixture
+    // rather than asserted:
     //
-    // so SIX of the seven are amended beneficial-ownership statements, not
-    // insider transactions. Same shape of defect, different form: an ownership
-    // amendment carries no financial statements, so "amendment" is no more
-    // meaningful on a 13D/A than on a 4/A. The gate is unchanged; only its
-    // description was wrong. scripts/check-sec-daily-index.mjs pins the split.
+    //   FILINGS (8)                    SYMBOLS (7)
+    //   SCHEDULE 13D/A   x4            BEN (x2), DT, RSG      -> 3 symbols
+    //   SCHEDULE 13G/A   x3            CRL, GS, VTRS          -> 3 symbols
+    //   4/A              x1            DOCU                   -> 1 symbol
+    //
+    // so SIX of the seven SYMBOLS are dropped on an amended beneficial-
+    // ownership statement and exactly ONE on an amended Form 4. Same shape of
+    // defect, different form: an ownership amendment carries no financial
+    // statements, so "amendment" is no more meaningful on a 13D/A than on a
+    // 4/A. The gate is unchanged; only its description was wrong.
+    // scripts/check-sec-daily-index.mjs pins both counts and both units.
     //
     // The taxonomy was right and the gate was wrong -- "amendment" is only
     // meaningful for a form that carries numbers. isPeriodicForm and
