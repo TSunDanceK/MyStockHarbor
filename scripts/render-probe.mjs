@@ -37,18 +37,67 @@ const UA =
   process.env.PROBE_USER_AGENT ??
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
+/**
+ * Fetch, following redirects by hand so cookies survive them.
+ *
+ * Node's fetch follows redirects but does NOT carry Set-Cookie across them, and
+ * Vercel's SSO bounce is exactly that: 302 to vercel.com/sso-api, which sets a
+ * cookie and redirects back. Without the jar the probe lands on the redirect
+ * and reports a few milliseconds, which looks like a very fast page.
+ */
+async function fetchFollowingSso(startUrl, max = 6) {
+  const jar = new Map();
+  let url = startUrl;
+  for (let i = 0; i <= max; i += 1) {
+    const cookie = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+    const res = await fetch(url, {
+      redirect: "manual",
+      headers: { "user-agent": UA, accept: "text/html", ...(cookie ? { cookie } : {}) },
+    });
+    for (const raw of res.headers.getSetCookie?.() ?? []) {
+      const [pair] = raw.split(";");
+      const eq = pair.indexOf("=");
+      if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+    }
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      url = new URL(location, url).toString();
+      continue;
+    }
+    return Object.assign(res, { redirects: i });
+  }
+  throw new Error(`more than ${max} redirects`);
+}
+
 for (let round = 1; round <= ROUNDS; round += 1) {
   console.log(`\n===== round ${round}`);
   for (const path of PATHS) {
     const url = `${BASE}${path}`;
     const t0 = Date.now();
     try {
-      const res = await fetch(url, { headers: { "user-agent": UA, accept: "text/html" } });
+      // FOLLOWS VERCEL'S SSO REDIRECT WITH A COOKIE JAR, because previews are
+      // protected (ssoProtection: all_except_custom_domains) and a plain fetch
+      // gets the 302 rather than the page -- which would report a 5ms "render"
+      // and measure the redirect. The jar is per-process and in memory; the
+      // share token rides in the URL the caller passes.
+      const res = await fetchFollowingSso(url);
       const body = await res.text();
       console.log(
         `  ${path}  HTTP ${res.status}  ${Date.now() - t0}ms  ${body.length}B  ` +
-          `age=${res.headers.get("age") ?? "-"} cache=${res.headers.get("x-vercel-cache") ?? "-"}`
+          `age=${res.headers.get("age") ?? "-"} cache=${res.headers.get("x-vercel-cache") ?? "-"}` +
+          `${res.redirects ? `  (${res.redirects} redirect${res.redirects > 1 ? "s" : ""})` : ""}`
       );
+      // WHICH OF THE THREE OUTCOMES THE PAGE RENDERED. The whole point of a
+      // cold-render measurement is lost if the number is a 404 or a pending
+      // card, so the body is inspected for the marker even though it is never
+      // printed.
+      const marker =
+        /does not file the financial data/.test(body) ? "no-xbrl"
+        : /financials are being fetched/.test(body) ? "PENDING"
+        : /latest earnings snapshot/.test(body) ? "rendered"
+        : res.status === 404 ? "404"
+        : "unrecognised";
+      console.log(`      outcome: ${marker}`);
     } catch (err) {
       console.log(`  ${path}  FAILED after ${Date.now() - t0}ms — ${err.message}`);
     }
