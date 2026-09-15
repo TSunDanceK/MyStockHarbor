@@ -240,19 +240,49 @@ export const periodWords = (basis: PeriodBasis) => PERIOD_WORDS[basis];
  * scored either, which is why this is a type the score has to narrow rather
  * than a formatting decision in the card.
  */
-export type Pct = number | "n/m" | null;
+/**
+ * ── THE THREE CROSSINGS, NAMED IN PLAIN WORDS ─────────────────────────────
+ *
+ * This was one marker, "n/m", and the owner did not know what it meant — which
+ * is the whole verdict on it. An abbreviation from a financial-analysis
+ * textbook is not a word; it tells a reader that something is being withheld
+ * without saying what, and the reader has to take it on trust.
+ *
+ * The three cases are genuinely different events and each has an ordinary
+ * English name, so the cell says which one happened:
+ *
+ *   earlier < 0, later >= 0   "Turned profitable"
+ *   earlier >= 0, later < 0   "Swung to loss"
+ *   both < 0                  "Loss both periods"
+ *
+ * None of them is a percentage, for the same reason as before: a change
+ * measured against a negative base is an artefact of the division, not a rate
+ * of growth. What changed is that the page now says what DID happen instead of
+ * only refusing to say a number.
+ */
+export type PctCrossing = "turned-profitable" | "swung-to-loss" | "loss-both";
 
-/** The marker, named once so the cards, the legend and the checks share it. */
-export const NOT_MEANINGFUL = "n/m" as const;
+export type Pct = number | PctCrossing | null;
 
-/** The one sentence that explains the marker, wherever it can appear. */
-export const NOT_MEANINGFUL_NOTE =
-  "n/m means not meaningful: one of the two figures is a loss, so a percentage " +
-  "change between them would describe an artefact of dividing by a negative " +
-  "rather than a rate of growth.";
+/** The reader-facing words for each crossing. One place; cards and checks share it. */
+export const CROSSING_WORDS: Record<PctCrossing, string> = {
+  "turned-profitable": "Turned profitable",
+  "swung-to-loss": "Swung to loss",
+  "loss-both": "Loss both periods",
+};
 
-/** Is this a figure, as opposed to absent or not meaningful? */
+/** The legend, rendered wherever a table can produce one of these. */
+export const CROSSING_NOTE =
+  "Where a period crosses between profit and loss, this shows what happened " +
+  "rather than a percentage: a change measured against a loss is an artefact " +
+  "of the arithmetic, not a rate of growth.";
+
+/** Is this a figure, as opposed to absent or a crossing? */
 export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** Is this one of the three crossings? */
+export const isCrossing = (v: Pct): v is PctCrossing =>
+  typeof v === "string" && v in CROSSING_WORDS;
 
 // ── the view ────────────────────────────────────────────────────────────────
 
@@ -360,6 +390,9 @@ export type SecEarningsView = {
     capex: ViewCell;
     freeCashFlow: number | null;
     freeCashFlowDerived: boolean;
+    /** Which input is absent, for the card to name. Null when nothing is. */
+    freeCashFlowMissing: string | null;
+    accrualsMissing: string | null;
     netIncome: ViewCell;
     shareBasedCompensation: ViewCell;
     accruals: number | null;
@@ -377,8 +410,11 @@ export type SecEarningsView = {
     cash: ViewCell;
     shortTermInvestments: ViewCell;
     totalDebt: number | null;
+    totalDebtMissing: string | null;
     netCash: number | null;
+    netCashMissing: string | null;
     currentRatio: number | null;
+    currentRatioMissing: string | null;
     totalAssets: ViewCell;
     totalLiabilities: ViewCell;
     stockholdersEquity: ViewCell;
@@ -428,7 +464,15 @@ export type SecEarningsView = {
  */
 const yoy = (now: number | null, then: number | null): Pct => {
   if (now === null || then === null) return null;
-  if (then <= 0 || now < 0) return NOT_MEANINGFUL;
+  // THE CROSSING CASES, NAMED. A base of zero divides to infinity and belongs
+  // with them: there is no proportion of nothing.
+  if (then < 0 && now >= 0) return "turned-profitable";
+  if (then >= 0 && now < 0) return "swung-to-loss";
+  if (then < 0 && now < 0) return "loss-both";
+  // A BASE OF EXACTLY ZERO divides to infinity, so there is no percentage
+  // either. Going from nil to a profit is the same event as coming out of a
+  // loss, so it gets the same words; nil to nil says nothing and stays blank.
+  if (then === 0) return now > 0 ? "turned-profitable" : null;
   return ((now - then) / then) * 100;
 };
 
@@ -597,6 +641,23 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     r.epsYoY !== null ||
     r.gross !== null || r.operating !== null || r.net !== null;
 
+  /**
+   * A ROW WITHOUT A COMPARATOR DOES NOT RENDER — AND STILL SERVES AS ONE.
+   *
+   * ── WHAT THE OWNER SAW ───────────────────────────────────────────────────
+   * GEV was spun off in 2024 and has four fiscal years on file. Its oldest,
+   * FY2022, has nothing behind it, so the row rendered "not on file" beside a
+   * dash — a row whose entire content is the admission that it has no content.
+   * That is worse than absent: it invites the reader to look for a filing that
+   * does not exist.
+   *
+   * THE PERIOD IS STILL READ. Dropping the ROW is not dropping the DATA:
+   * FY2022 remains in `measured` and in `q`, so FY2023 still finds it and still
+   * names it as its base. The oldest period a filer has is a comparator, not a
+   * row.
+   */
+  const hasComparator = (r: typeof measured[number]) => r.prior !== null;
+
   // HOW MANY ROWS THIS BASIS RENDERS. Eight for quarters, five for years — the
   // same number the five-year card shows, because on an annual-only filer that
   // card IS this table. Slicing a year anchor to RENDERED_QUARTERS gave the
@@ -605,7 +666,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // renders it next.
   const renderLimit = annualOnly ? RENDERED_YEARS : RENDERED_QUARTERS;
   // NEWEST N THAT CLEAR THE BAR, not the newest N of which some are nearly bare.
-  const rows = measured.filter(hasSomething).slice(0, renderLimit);
+  const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
   const margins = rows.map(({ p, gross, operating, net }, i) => ({
@@ -685,7 +746,12 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // and the entire point of storing more than is displayed. priorYearOf is
   // given `set.years`, not the sliced list; searching the trimmed list is the
   // defect itself.
-  const annualRows = set.years.slice(0, RENDERED_YEARS).map((p) => {
+  // SAME RULE, SAME REASON. Filter BEFORE the slice, so dropping a row that
+  // cannot be compared does not cost the card a row that can.
+  const annualRows = set.years
+    .filter((p) => priorYearOf(set.years, p) !== null)
+    .slice(0, RENDERED_YEARS)
+    .map((p) => {
     const prior = priorYearOf(set.years, p);
     return {
       label: periodLabel(p),
@@ -704,6 +770,21 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const ocf = view(cashFrom, "operatingCashFlow", "Operating cash flow");
   const capex = view(cashFrom, "capex", "Capital expenditure");
   const fcf = ocf.val === null || capex.val === null ? null : ocf.val - capex.val;
+  /**
+   * WHICH INPUT STOPPED A DERIVED FIGURE, so the card can name it.
+   *
+   * "Can't calculate" on its own is the same shrug as "—" with more syllables.
+   * The reader's next question is always "why", and the view is the only place
+   * that knows — by the time the card has a null it has lost the reason.
+   */
+  const missingOf = (parts: [string, number | null][]) => {
+    const gone = parts.filter(([, v]) => v === null).map(([name]) => name);
+    return gone.length ? gone.join(" and ") : null;
+  };
+  const fcfMissing = missingOf([
+    ["operating cash flow", ocf.val],
+    ["capital expenditure", capex.val],
+  ]);
 
   const bsAt = set.instants[0] ?? null;
   const std = valueOf(bsAt, "shortTermDebt");
@@ -780,6 +861,11 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
         ocf.val === null || valueOf(cashFrom, "netIncome") === null
           ? null
           : ocf.val - valueOf(cashFrom, "netIncome")!,
+      freeCashFlowMissing: fcfMissing,
+      accrualsMissing: missingOf([
+        ["operating cash flow", ocf.val],
+        ["net income", valueOf(cashFrom, "netIncome")],
+      ]),
       basis: cashBasis,
       period: periodLabel(cashFrom),
     },
@@ -805,12 +891,21 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
           cash: view(bsAt, "cash", "Cash & equivalents"),
           shortTermInvestments: view(bsAt, "shortTermInvestments", "Short-term investments"),
           totalDebt,
+          totalDebtMissing: missingOf([["short-term debt", std], ["long-term debt", ltd]]),
           netCash: liquid === null || totalDebt === null ? null : liquid - totalDebt,
+          netCashMissing: missingOf([
+            ["cash and short-term investments", liquid],
+            ["total debt", totalDebt],
+          ]),
           currentRatio: (() => {
             const ca = valueOf(bsAt, "totalCurrentAssets");
             const cl = valueOf(bsAt, "totalCurrentLiabilities");
             return ca === null || cl === null || cl === 0 ? null : ca / cl;
           })(),
+          currentRatioMissing: missingOf([
+            ["current assets", valueOf(bsAt, "totalCurrentAssets")],
+            ["current liabilities", valueOf(bsAt, "totalCurrentLiabilities")],
+          ]),
           totalAssets: view(bsAt, "totalAssets", "Total assets"),
           totalLiabilities: view(bsAt, "totalLiabilities", "Total liabilities"),
           stockholdersEquity: view(bsAt, "stockholdersEquity", "Shareholders' equity"),

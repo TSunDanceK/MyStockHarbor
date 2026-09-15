@@ -4,10 +4,36 @@
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import {
-  GAAP_EPS_NOTE, NOT_MEANINGFUL, NOT_MEANINGFUL_NOTE, SEC_ATTRIBUTION,
-  periodWords, retiredSource,
+  CROSSING_NOTE, CROSSING_WORDS, GAAP_EPS_NOTE, SEC_ATTRIBUTION,
+  isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
+
+/**
+ * ── WHAT AN EMPTY CELL MEANS, IN WORDS ────────────────────────────────────
+ *
+ * A bare "—" is the page shrugging. It carries three completely different
+ * meanings on the same card — the company filed nothing, we could not compute
+ * something from what it filed, or the figure is genuinely zero — and a reader
+ * cannot tell which, so every blank looks like a fault in the site.
+ *
+ *   NOT_REPORTED     the filer published no figure for this line. Not zero.
+ *   cantCalculate()  a DERIVED figure whose input is missing, and it says
+ *                    WHICH input, because "can't calculate" alone is the same
+ *                    shrug with more words.
+ *
+ * A FILED ZERO IS STILL A ZERO and renders as $0 — "No debt" is a claim, and
+ * it is only true when the filing actually says nil.
+ */
+const NOT_REPORTED = "Not reported";
+
+/** The footnote that explains it, carried by every card that can show one. */
+const NOT_REPORTED_NOTE =
+  "\u201cNot reported\u201d means the company\u2019s SEC filing has no figure for that line. " +
+  "It may be zero, or included under another heading.";
+
+/** A derived figure that cannot be computed, naming the input that is missing. */
+const cantCalculate = (missing: string) => `Can't calculate — ${missing} not reported`;
 
 /**
  * A DOLLAR FIGURE. `perShare` fixes it at two decimals.
@@ -40,7 +66,9 @@ function money(v: number | null | undefined, compact = false, perShare = false):
  * missing filing, and the filing is there.
  */
 const pct = (v: Pct | undefined, digits = 1) => {
-  if (v === NOT_MEANINGFUL) return NOT_MEANINGFUL;
+  // A CROSSING IS A SENTENCE, NOT A NUMBER. "Turned profitable" is what
+  // happened; a percentage against a negative base is not.
+  if (v != null && isCrossing(v)) return CROSSING_WORDS[v];
   return v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
 };
 
@@ -62,14 +90,14 @@ const Q4_EPS_NOTE =
   "Q4 EPS is not filed as a separate period, and this page does not derive it, " +
   "so those cells read \u201cnot filed\u201d.";
 
-/** The legend for the marker, rendered wherever a table can produce one. */
-function NotMeaningfulNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
-  // ONLY WHEN THE TABLE ACTUALLY HAS ONE. A standing legend for a marker that
-  // never appears is noise on every other page; AAPL has no n/m cell in either
+/** The legend for the crossing wording, rendered wherever a table produces one. */
+function CrossingNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
+  // ONLY WHEN THE TABLE ACTUALLY HAS ONE. A standing legend for wording that
+  // never appears is noise on every other page; AAPL crosses zero in neither
   // table and should not carry the sentence.
-  const present = rows.some((r) => r.revenueYoY === NOT_MEANINGFUL || r.epsYoY === NOT_MEANINGFUL);
+  const present = rows.some((r) => isCrossing(r.revenueYoY) || isCrossing(r.epsYoY));
   if (!present) return null;
-  return <p className="earningsDataNote"><strong>{NOT_MEANINGFUL_NOTE}</strong></p>;
+  return <p className="earningsDataNote">{CROSSING_NOTE}</p>;
 }
 
 /**
@@ -101,6 +129,12 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
 export function CellValue({ cell, compact = false, currency = true }: { cell: ViewCell; compact?: boolean; currency?: boolean }) {
+  // NOT A DASH. A null here means the filer published no figure for this line,
+  // and that is a fact about the filing worth stating. A filed ZERO still
+  // renders as $0 — money() is only reached when there is a value.
+  if (cell.val == null) {
+    return <span style={{ color: "#94a3b8", fontWeight: 600 }}>{NOT_REPORTED}</span>;
+  }
   return (
     <>
       {/* PER-SHARE PRECISION TRAVELS WITH THE CELL, not with the call site —
@@ -108,9 +142,21 @@ export function CellValue({ cell, compact = false, currency = true }: { cell: Vi
           that no one writes out by hand. See ViewCell.perShare. */}
       {currency
         ? money(cell.val, compact && !cell.perShare, cell.perShare)
-        : cell.val == null ? "—" : cell.val.toLocaleString("en-US")}
+        : cell.val.toLocaleString("en-US")}
       <DerivedMark cell={cell} />
     </>
+  );
+}
+
+/** A derived dollar figure: the value, or which input stopped it. */
+export function DerivedValue(
+  { value, missing, compact = true }: { value: number | null; missing: string | null; compact?: boolean }
+) {
+  if (value !== null) return <>{money(value, compact)}</>;
+  return (
+    <span style={{ color: "#94a3b8", fontWeight: 600 }}>
+      {missing ? cantCalculate(missing) : NOT_REPORTED}
+    </span>
   );
 }
 
@@ -213,7 +259,7 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
       {/* THE SNAPSHOT TILES CARRY THE MARKER TOO, so they carry its legend. A
           tile reading "n/m" with the explanation only in a table further down
           is the same hover-only failure as the gap badge. */}
-      <NotMeaningfulNote rows={[{ revenueYoY: s.revenueYoY, epsYoY: s.epsYoY }]} />
+      <CrossingNote rows={[{ revenueYoY: s.revenueYoY, epsYoY: s.epsYoY }]} />
     </section>
   );
 }
@@ -298,7 +344,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           </tbody>
         </table>
       </div>
-      <NotMeaningfulNote rows={view.growth} />
+      <CrossingNote rows={view.growth} />
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
@@ -322,7 +368,26 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
  * No gap badge: a gap is a quarterly idea (see gapAfter in secEarningsView).
  */
 export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; sole?: boolean }) {
-  if (!view.annual.length) return null;
+  // ── NOTHING LEFT TO COMPARE, SAID IN ONE LINE ─────────────────────────────
+  //
+  // A row renders only if its prior year is on file, so a filer with a single
+  // stored year — a recent spin-off or IPO — has no rows at all. An empty table
+  // with headers is worse than a sentence: it reads as a fault in the site
+  // rather than as a fact about the company.
+  if (!view.annual.length) {
+    return (
+      <section className="card">
+        <div className="eyebrow">Five-year history</div>
+        <h2>{view.symbol} by fiscal year</h2>
+        <p style={{ marginBottom: 0 }}>
+          Not enough filed years to compare. Year-over-year needs two fiscal years on file, and{" "}
+          <strong>{view.symbol}</strong> has fewer — a recent listing or spin-off has no earlier
+          year to measure against yet.
+        </p>
+        <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
+      </section>
+    );
+  }
   return (
     <section className="card">
       <div className="eyebrow">Five-year history</div>
@@ -376,7 +441,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </tbody>
         </table>
       </div>
-      <NotMeaningfulNote rows={view.annual} />
+      <CrossingNote rows={view.annual} />
       <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
@@ -417,7 +482,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
         <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact /></Row>
         <Row label="Capital expenditure"><CellValue cell={c.capex} compact /></Row>
         <Row label="Free cash flow" strong>
-          {money(c.freeCashFlow, true)}
+          <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
           {c.freeCashFlowDerived ? (
             <abbr
               title={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`}
@@ -436,7 +501,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           label="Cash flow less net income"
           sub={`Positive means cash is running ahead of reported profit. Both figures are ${c.period}.`}
         >
-          {money(c.accruals, true)}
+          <DerivedValue value={c.accruals} missing={c.accrualsMissing} />
         </Row>
         <Row label="Share-based compensation"><CellValue cell={c.shareBasedCompensation} compact /></Row>
       </div>
@@ -447,13 +512,14 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
       <p className="earningsDataNote">
         {c.basis === "year" ? (
           <>
-            Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.
+            Annual cash-flow figures as filed, for {c.period}. {NOT_REPORTED_NOTE} Source:{" "}
+            {SEC_ATTRIBUTION}.
           </>
         ) : (
           <>
             Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
-            difference between two cumulative figures — those are marked <em>derived</em>. Source:{" "}
-            {SEC_ATTRIBUTION}.
+            difference between two cumulative figures — those are marked <em>derived</em>.{" "}
+            {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
           </>
         )}
       </p>
@@ -494,18 +560,24 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
       <div style={{ marginTop: 12 }}>
         <Row label="Cash &amp; equivalents"><CellValue cell={b.cash} compact /></Row>
         <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
-        <Row label="Total debt">{money(b.totalDebt, true)}</Row>
+        <Row label="Total debt"><DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} /></Row>
         <Row label="Net cash" strong sub="Cash and short-term investments less total debt.">
-          {money(b.netCash, true)}
+          <DerivedValue value={b.netCash} missing={b.netCashMissing} />
         </Row>
-        <Row label="Current ratio">{ratio(b.currentRatio)}</Row>
+        <Row label="Current ratio">
+          {b.currentRatio !== null ? ratio(b.currentRatio) : (
+            <span style={{ color: "#94a3b8", fontWeight: 600 }}>
+              {b.currentRatioMissing ? cantCalculate(b.currentRatioMissing) : NOT_REPORTED}
+            </span>
+          )}
+        </Row>
         <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
         <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact /></Row>
         <Row label="Shareholders&apos; equity" strong><CellValue cell={b.stockholdersEquity} compact /></Row>
       </div>
       <p className="earningsDataNote">
         Balance-sheet figures are a position at a date, not a period total, so none of them are
-        derived. Source: {SEC_ATTRIBUTION}.
+        derived. {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
       </p>
     </section>
   );
@@ -529,6 +601,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           impairments, amortisation of intangibles. Operating income is taken as
           filed and is right; it is the BREAKDOWN that is partial, and the card
           must not imply otherwise. */}
+      <p className="earningsDataNote">{NOT_REPORTED_NOTE}</p>
       {!view.incomeStatementComplete ? (
         <p className="earningsDataNote">
           The expense lines above do not add up to operating income for this {w.one}: this company
