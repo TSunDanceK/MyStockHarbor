@@ -329,7 +329,20 @@ async function harvest(symbol) {
 
     let out;
     if (needsBacking) {
-      const inner = Math.max(1, Math.round(target * (1 - 2 * INSET)));
+      // ── THE BACKING CANVAS IS ALWAYS A FULL-SIZE SQUARE ─────────────
+      // TARGET, not `target`. `target` is capped by the trimmed width so a
+      // small mark is never upscaled, which is right for a bare mark -- but a
+      // backing is GENERATED, not scaled source, so making it smaller buys
+      // nothing and costs uniformity. Trim turns a wordmark into a wide short
+      // image, and a backing sized to those bounds would render as a dark
+      // stripe in a white chip instead of a filled square.
+      //
+      // Every one of the 168 backed files already came out 72x72 square,
+      // because a mark that needs backing has so far always trimmed wider than
+      // the target. This closes the path rather than fixing a live defect: a
+      // future small invisible mark would otherwise get a small canvas.
+      const canvas = TARGET;
+      const inner = Math.max(1, Math.round(canvas * (1 - 2 * INSET)));
       const mark = await sharp(trimmed.buf)
         .resize({
           width: inner,
@@ -341,7 +354,7 @@ async function harvest(symbol) {
         .png()
         .toBuffer();
       out = await sharp({
-        create: { width: target, height: target, channels: 4, background: BACKING },
+        create: { width: canvas, height: canvas, channels: 4, background: BACKING },
       })
         .composite([{ input: mark, gravity: "centre" }])
         .webp({ quality: 90, effort: 6 })
