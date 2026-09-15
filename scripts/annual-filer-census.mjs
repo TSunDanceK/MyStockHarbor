@@ -20,7 +20,7 @@
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly } from "./lib/source-code.mjs";
-import { lift } from "./lib/earnings-plan.mjs";
+import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 
 const redis = Redis.fromEnv();
 
@@ -83,25 +83,80 @@ for (const [k, v] of Object.entries(bucket)) {
 }
 console.log(`\nANNUAL-FILER CARD renders for ${bucket["annual-only"].length} SYMBOLS:`);
 console.log("  " + (bucket["annual-only"].join(" ") || "(none)"));
+// NAMED, not just counted. "2 unusable" is a number nobody can act on; two
+// tickers can be opened and looked at.
+console.log(`\nBELOW THE DENSITY BAR, ${bucket.unusable.length} SYMBOLS:`);
+console.log("  " + (bucket.unusable.join(" ") || "(none)"));
+console.log(`\nQUARTERLY, ${bucket.quarterly.length} SYMBOLS:`);
+console.log("  " + (bucket.quarterly.join(" ") || "(none)"));
 console.log(`\nSTORED QUARTER WINDOW, counted in SYMBOLS: ${JSON.stringify(windows)}`);
 console.log("  (anything below 12 is eligible for the rewindow queue)");
 
 // ── THE CENSUS CHECKS ITSELF AGAINST THE MANIFEST ───────────────────────────
 //
-// The manifest already knows which SYMBOLS have been populated: contentHash is
-// null until a set is written. So "how many sets did I read" has an independent
-// second source, and the two must agree. They did not on the first run -- the
-// key was wrong -- and nothing in the output said so, because "no set stored"
-// is exactly what a wrong key looks like. This is the assertion that would have
-// caught it, so it ships with the script rather than being remembered.
+// The manifest already knows which SYMBOLS the population job has written:
+// contentHash is null until it writes one. So "how many sets did I read" has an
+// independent second source. The first run of this census read ZERO against a
+// manifest claiming four, and nothing in the output said so, because "no set
+// stored" is exactly what a wrong key looks like.
+//
+// THE TWO DIRECTIONS ARE NOT THE SAME FAULT, so they are not treated the same:
+//
+//   fewer read than the manifest claims  -> FATAL. The manifest recorded a
+//        write the store cannot produce. Either the key is wrong (it was) or
+//        sets are being lost, and the census is measuring itself.
+//   more read than the manifest claims   -> reported, not fatal, and EXPECTED.
+//        The cold path (secColdFetch, line ~407) calls writeFactSet directly
+//        for an on-demand page view and never touches the manifest, so a
+//        cold-fetched symbol has a stored set and a null contentHash. Those
+//        SYMBOLS are selected by the POPULATE queue, not rewindow, and are
+//        re-read at the current window that way.
 const claimsPopulated = Object.values(manifest.symbols)
   .filter((e) => e.contentHash !== null && e.contentHash !== undefined).length;
 const read = symbols.length - bucket.unpopulated.length;
-console.log(`\nCROSS-CHECK: manifest says ${claimsPopulated} SYMBOLS populated; ${read} sets read back.`);
-if (claimsPopulated !== read) {
+console.log(`\nCROSS-CHECK: manifest records ${claimsPopulated} SYMBOLS written by the job; ${read} sets read back.`);
+if (read < claimsPopulated) {
   console.error(
-    `FATAL: the manifest and the store disagree by ${Math.abs(claimsPopulated - read)} SYMBOLS. ` +
-      `A census that cannot read the sets the manifest says exist is measuring its own key, not the universe.`
+    `FATAL: ${claimsPopulated - read} SYMBOLS the manifest says were written could not be read back. ` +
+      `A census that cannot read the sets the manifest records is measuring its own key, not the universe.`
   );
   process.exit(2);
 }
+if (read > claimsPopulated) {
+  console.log(
+    `  ${read - claimsPopulated} SYMBOLS have a stored set the manifest does not record — cold-path writes. ` +
+      `They are populate's, not rewindow's.`
+  );
+}
+
+// ── THE QUEUE BACKLOGS, FROM THE SHIPPED SELECTOR ───────────────────────────
+//
+// Not re-implemented here. populationQueues() is lifted out of the job route
+// and run against the real manifest, so these are the SYMBOLS the next run will
+// actually take -- including rewindow's, which is the number the migration's
+// drain is computed from. A census that re-derives the predicate is a second
+// opinion about the code rather than a measurement of it.
+const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+const num = (n) => Number((ROUTE.match(new RegExp(`${n} = (\\d+)`)) ?? [])[1]);
+const job = await lift(
+  [
+    `const SEC_QUARTER_WINDOW = ${sec.SEC_QUARTER_WINDOW};`,
+    `const SEC_REVERIFY_PER_RUN = ${num("SEC_REVERIFY_PER_RUN")};`,
+    `const SEC_POPULATE_PER_RUN = ${num("SEC_POPULATE_PER_RUN")};`,
+    `const SEC_REWINDOW_PER_RUN = ${num("SEC_REWINDOW_PER_RUN")};`,
+    (ROUTE.match(/export const needsRewindow = [^;]+;/) ?? [])[0].replace("export const", "const"),
+    grabFunction(ROUTE, "populationQueues").replace("export function", "function"),
+    "export { populationQueues };",
+  ].join("\n")
+);
+const q = job.populationQueues(manifest);
+const days = (backlog, perRun) => (backlog === 0 ? "drained" : `${Math.ceil(backlog / perRun)} days`);
+console.log("\nNEXT RUN TAKES, and the backlog behind it, in SYMBOLS:");
+for (const [name, taken, backlog, perRun] of [
+  ["reverify", q.reverify.length, q.reverifyBacklog, num("SEC_REVERIFY_PER_RUN")],
+  ["populate", q.populate.length, q.populateBacklog, num("SEC_POPULATE_PER_RUN")],
+  ["rewindow", q.rewindow.length, q.rewindowBacklog, num("SEC_REWINDOW_PER_RUN")],
+]) {
+  console.log(`  ${name.padEnd(9)} ${String(taken).padStart(4)} of ${String(backlog).padStart(4)} SYMBOLS @ ${String(perRun).padStart(3)}/run -> ${days(backlog, perRun)}`);
+}
+console.log(`  rewindow queue on first run: ${q.rewindow.join(" ") || "(none)"}`);

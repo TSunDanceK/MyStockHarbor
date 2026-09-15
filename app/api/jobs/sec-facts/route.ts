@@ -110,11 +110,21 @@ export const SEC_POPULATE_PER_RUN = 300;
  * backlog earnings season produces, so the migration would stall precisely
  * when the pages are being read.
  *
- * SIZED FROM THE DRAIN, not picked. 759 SYMBOLS at 5 a run — the figure
- * suggested in the brief — is 152 days, which is not a migration, it is a
- * permanent state. At 25 it is ~31 days: still small enough that it never
- * competes with work a reader is waiting on (reverify takes 150 and populate
- * 300 in the same run), and short enough to actually finish.
+ * SIZED FROM THE DRAIN, not picked, and the drain is MEASURED rather than
+ * assumed. The census (relay 35004878304) found the store holds 19 sets, all at
+ * w=8, and the manifest records only 4 of them as job-written — the other 15
+ * are cold-path writes, which leave contentHash null and are therefore
+ * populate's, not this queue's. So the eligible backlog on first run is 4
+ * SYMBOLS, drained in one run, not 759.
+ *
+ * WHICH IS WHY THE NUMBER IS NOT 5. A backlog this small makes the allowance
+ * look academic today, and it is not: the 740 unpopulated SYMBOLS are written
+ * at the current window as populate reaches them, so this queue's real job is
+ * the NEXT window change, when the whole populated universe is eligible at
+ * once. At 759 SYMBOLS, 5 a run is 152 days — a permanent state rather than a
+ * migration. At 25 it is ~31 days, still small enough never to compete with
+ * work a reader is waiting on (reverify takes 150 and populate 300 in the same
+ * run), and short enough to actually finish.
  */
 export const SEC_REWINDOW_PER_RUN = 25;
 
