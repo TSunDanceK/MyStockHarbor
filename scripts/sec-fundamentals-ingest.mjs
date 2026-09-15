@@ -32,6 +32,7 @@
 // and the working thing coincide.
 import fs from "node:fs";
 import path from "node:path";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const OUT_DIR = process.argv[2] || ".";
 const SYMBOL_ARG = process.argv[3] ?? process.env.SYMBOLS ?? "";
@@ -351,9 +352,9 @@ const rejected = [];
 const started = Date.now();
 
 for (const symbol of symbols) {
-  // The dot/dash normalisation, applied here rather than assumed: try the symbol
-  // as given, then its dashed form, since the repo's lists carry dots.
-  const cik = cikByTicker.get(symbol) ?? cikByTicker.get(symbol.replace(/\./g, "-"));
+  // Spellings from scripts/lib/symbol-spellings.mjs, which also knows the DOLLAR
+  // form Nasdaq Trader uses -- this was one of seven local copies that did not.
+  const cik = lookupBySpelling(cikByTicker, symbol)?.value ?? undefined;
   if (!cik) {
     failures.push({ symbol, reason: "no CIK in SEC's ticker map" });
     console.log(`  ${symbol.padEnd(7)} SKIP — no CIK`);
@@ -409,8 +410,8 @@ for (const symbol of symbols) {
 
     // The magnitude cross-check. Only possible where both a frozen marketCap and a
     // frozen last close exist; where they do not, that is SAID rather than passed.
-    const close = lastClose.get(symbol) ?? lastClose.get(symbol.replace(/\./g, "-"));
-    const fmpCap = frozen.marketCap.get(symbol) ?? frozen.marketCap.get(symbol.replace(/\./g, "-"));
+    const close = lookupBySpelling(lastClose, symbol)?.value;
+    const fmpCap = lookupBySpelling(frozen.marketCap, symbol)?.value;
     let xcheck = { ran: false, note: "no frozen marketCap or close for this symbol" };
     if (typeof close === "number" && typeof fmpCap === "number" && shares.shares) {
       const implied = shares.shares * close;

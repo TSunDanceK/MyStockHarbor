@@ -177,7 +177,7 @@ console.log("\nbuildSecIpoTables — behavioural fixtures\n");
   const { recent, funnel } = run([followOn]);
   check(
     "a 424B with NO 8-A12B is excluded from the LOWER table",
-    recent.length === 0 && funnel.droppedFollowOn === 1,
+    recent.length === 0 && funnel.droppedFollowOn === 1 && funnel.followOnNoExchangeOnly === 1,
     "Aveanna, ABVC, Laser Photonics and Aptevo all rendered as 'Recent IPOs' before this"
   );
 }
@@ -205,6 +205,89 @@ console.log("\nbuildSecIpoTables — behavioural fixtures\n");
     terms: { ...TERMS },
   };
   check("a 424B older than 30 days is outside the recent window", run([old]).recent.length === 0);
+}
+
+// ── The periodic-report cross-check ───────────────────────────────────────
+{
+  // Alliance Laundry's shape: IPO'd Oct 2025, so by Aug 2026 it has a 10-K and
+  // 10-Qs. Its 8-A12B sits 10 months back and is INVISIBLE to a 90-day window --
+  // which is exactly why the 8-A12B test alone could not catch it.
+  const seasoned = {
+    cik: "9000009",
+    company: "Alliance Laundry Shape Inc.",
+    sic: "3580",
+    filings: [
+      { form: "10-K", date: d(-70) },
+      { form: "10-Q", date: d(-40) },
+      { form: "S-1", date: d(-12) },
+      { form: "424B4", date: d(-10) },
+    ],
+    terms: { ...TERMS },
+  };
+  const { recent, funnel } = run([seasoned]);
+  check(
+    "prior 10-K/10-Q marks the offering a follow-on, and BOTH tests agree",
+    recent.length === 0 && funnel.followOnBothAgree === 1,
+    "Alliance Laundry: its 8-A12B is 10 months before the window, so the 8-A test " +
+      "fires too — the periodic report is what makes the verdict independent of it"
+  );
+}
+{
+  // Wellchange's shape: a foreign private issuer. The 6-K is conclusive on its
+  // own -- only an issuer already registered under the Exchange Act files one.
+  const fpi = {
+    cik: "9000010",
+    company: "Wellchange Shape Ltd",
+    sic: "7372",
+    filings: [
+      { form: "20-F", date: d(-60) },
+      { form: "6-K", date: d(-25) },
+      { form: "F-1", date: d(-20) },
+      { form: "424B4", date: d(-10) },
+    ],
+    terms: { ...TERMS },
+  };
+  check("a prior 6-K marks a foreign issuer's offering a follow-on", run([fpi]).recent.length === 0);
+}
+{
+  // A periodic report AFTER the 424B does not make it a follow-on -- a brand-new
+  // issuer files its first 10-Q soon after listing.
+  const newIssuer = {
+    cik: "9000011",
+    company: "Just Listed Corp",
+    sic: "2836",
+    filings: [
+      { form: "8-A12B", date: d(-12) },
+      { form: "424B4", date: d(-10) },
+      { form: "10-Q", date: d(-2) },
+    ],
+    terms: { ...TERMS },
+  };
+  check(
+    "a periodic report AFTER the 424B does NOT mark it a follow-on",
+    run([newIssuer]).recent.length === 1,
+    "the comparison is strictly before the prospectus date"
+  );
+}
+{
+  // The disagreement case, surfaced rather than resolved away.
+  const disagrees = {
+    cik: "9000012",
+    company: "Both Signals Corp",
+    sic: "2836",
+    filings: [
+      { form: "8-A12B", date: d(-50) },
+      { form: "10-Q", date: d(-20) },
+      { form: "424B4", date: d(-10) },
+    ],
+    terms: { ...TERMS },
+  };
+  const { recent, funnel } = run([disagrees]);
+  check(
+    "8-A12B in window BUT prior periodic reports is flagged separately",
+    funnel.followOnPriorReportingOnly === 1 && recent.length === 0,
+    "a reporting company registering a class — surfaced, not averaged away"
+  );
 }
 
 // ── Sort order: both descending, for different reasons ────────────────────

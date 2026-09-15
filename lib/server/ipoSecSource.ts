@@ -37,6 +37,32 @@ import {
 // is erased at compile time and cannot.
 import type { ConfirmedIpo } from "./ipoCalendar";
 
+/**
+ * Was this filer ALREADY a reporting company when it priced?
+ *
+ * A SECOND, INDEPENDENT DISCRIMINATOR, and deliberately a cross-check rather than
+ * a replacement for the 8-A12B test. It is free -- the periodic forms are in the
+ * same index already being parsed -- and it needs no judgement about form
+ * spellings or date proximity, both of which were proposed as fixes and both of
+ * which were wrong.
+ *
+ * Verified against the two cases that motivated it:
+ *   Alliance Laundry  IPO'd 2025-10, 10-K + three 10-Qs before the 2026-08 424B4
+ *   Wellchange        IPO'd 2024,    20-F + many 6-Ks before its 2026 offering
+ * Both are caught here WITHOUT reference to their 8-A12Bs, which sit 10 and 23
+ * months before the window and are invisible to a 90-day view.
+ *
+ * WHERE THE TWO TESTS DISAGREE, THAT IS THE INTERESTING ROW, not a nuisance to
+ * be resolved away: Advance JV Group has no 8-A12B and no periodic reports, and
+ * is a genuine first-time offering quoting on OTCQB. OTCQB is not a national
+ * securities exchange, so Section 12(b) registration -- and Form 8-A12B -- do not
+ * apply to it. It is a true positive for "first-time offering" and a true
+ * negative for "exchange listing", and this page is about the second.
+ */
+function wasReportingCompanyBefore(record: IpoFilerRecord, beforeDate: string): boolean {
+  return record.filings.some((f) => PERIODIC_REPORT.test(f.form) && f.date < beforeDate);
+}
+
 /** One filer's filings inside the window, as the seeding step stores them. */
 export type IpoFilerRecord = {
   cik: string;
@@ -58,6 +84,11 @@ const AMENDMENT = /^(S-1\/A|F-1\/A)$/;
 const FINAL_PROSPECTUS = /^424B[14]$/;
 const WITHDRAWAL = /^(RW|AW)$/;
 const EXCHANGE_REGISTRATION = /^8-A12B$/;
+// A company that already files periodic reports was already a reporting company
+// before this offering, so the offering is a FOLLOW-ON. 6-K is the foreign
+// private issuer's tell -- only an issuer already registered under the Exchange
+// Act files one.
+const PERIODIC_REPORT = /^(10-K|10-Q|20-F|40-F|6-K)(\/A)?$/;
 
 const lastOf = (r: IpoFilerRecord, re: RegExp) =>
   [...r.filings].filter((f) => re.test(f.form)).sort((a, b) => a.date.localeCompare(b.date)).pop() ?? null;
@@ -145,6 +176,14 @@ export type SecIpoFunnel = {
   upperCandidates: number;
   lowerCandidates: number;
   droppedFollowOn: number;
+  /** Both tests fired: no 8-A12B AND prior periodic reports. The strongest signal. */
+  followOnBothAgree: number;
+  /** Only the 8-A12B test fired. Advance JV's shape: a real first-time offering
+   *  that is not an EXCHANGE listing (OTCQB). Worth a human look. */
+  followOnNoExchangeOnly: number;
+  /** Only the periodic test fired: an 8-A12B in window AND prior reports --
+   *  a reporting company registering a class. Also worth a human look. */
+  followOnPriorReportingOnly: number;
   droppedNoTermsLower: number;
   droppedNoTerms: number;
   droppedAlreadyListed: number;
@@ -190,6 +229,9 @@ export function buildSecIpoTables(
     upperCandidates: 0,
     lowerCandidates: 0,
     droppedFollowOn: 0,
+    followOnBothAgree: 0,
+    followOnNoExchangeOnly: 0,
+    followOnPriorReportingOnly: 0,
     droppedNoTermsLower: 0,
     droppedNoTerms: 0,
     droppedAlreadyListed: 0,
@@ -222,7 +264,27 @@ export function buildSecIpoTables(
       // (a company that IPO'd last week is in the map too, and belongs here);
       // the 8-A12B alone cannot do it either (ETFs and note programmes file
       // them). What identifies an IPO is the 8-A12B inside this window.
-      if (!lastOf(record, EXCHANGE_REGISTRATION)) {
+      // TWO INDEPENDENT TESTS, each recorded separately. They are ANDed for the
+      // verdict, but WHICH of them fired is the interesting part and must not be
+      // averaged away.
+      //
+      //   A  no 8-A12B in window   -> "not a first-time EXCHANGE listing"
+      //   B  periodic report before -> "already a reporting company"
+      //
+      // A alone excludes Advance JV Group, which IS a genuine first-time offering
+      // -- quoting on OTCQB, which is not a national securities exchange, so
+      // Section 12(b) and Form 8-A12B do not apply to it. Correctly absent from a
+      // page about Nasdaq and NYSE, and B rightly does not corroborate: it is not
+      // a follow-on, it is simply not an exchange IPO. That disagreement is
+      // information, not noise.
+      const noExchangeRegistration = !lastOf(record, EXCHANGE_REGISTRATION);
+      const wasReporting = wasReportingCompanyBefore(record, final.date);
+
+      if (noExchangeRegistration && wasReporting) funnel.followOnBothAgree += 1;
+      else if (noExchangeRegistration) funnel.followOnNoExchangeOnly += 1;
+      else if (wasReporting) funnel.followOnPriorReportingOnly += 1;
+
+      if (noExchangeRegistration || wasReporting) {
         funnel.droppedFollowOn += 1;
         continue;
       }

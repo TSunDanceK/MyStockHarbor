@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import readline from "node:readline";
+import { lookupBySpelling, symbolSpellings } from "./lib/symbol-spellings.mjs";
 
 const DIR = path.resolve(process.argv[2] ?? "step0-dump");
 const UA =
@@ -61,12 +62,9 @@ const etfFlag = new Map();
     etfFlag.set(s, f[iF]?.trim() === "Y");
   }
 }
-// The dot/dash convention, fourth appearance. Tried rather than assumed.
-const venueOf = (sym) =>
-  venueBySymbol.get(sym) ??
-  venueBySymbol.get(sym.replace(/\./g, "-")) ??
-  venueBySymbol.get(sym.replace(/-/g, ".")) ??
-  null;
+// Spellings from scripts/lib/symbol-spellings.mjs. This comment used to say
+// "fourth appearance" -- there were seven, and none knew the DOLLAR form.
+const venueOf = (sym) => lookupBySpelling(venueBySymbol, sym)?.value ?? null;
 const isNasdaq = (sym) => venueOf(sym) === "Q";
 console.log(`venue map: ${venueBySymbol.size} symbols · Nasdaq-listed in the file: ${[...venueBySymbol.values()].filter((v) => v === "Q").length}`);
 
@@ -76,7 +74,7 @@ const fundVals = readJson("fundamentals.json")?.values ?? {};
 const screenerVals = readJson("screener-fundamentals.json")?.values ?? {};
 const profileVals = readJson("profile.json")?.values ?? {};
 const pick = (sym, field) => {
-  const alt = sym.replace(/\./g, "-");
+  const alt = symbolSpellings(sym)[1] ?? sym;
   for (const src of [fundVals, profileVals, screenerVals]) {
     const v = src[sym]?.[field] ?? src[alt]?.[field];
     if (v != null && v !== "") return v;
@@ -107,7 +105,7 @@ const barSymbols = new Set();
     } catch { /* truncated final line */ }
   }
 }
-const dv = (s) => dollarVol.get(s) ?? dollarVol.get(s.replace(/\./g, "-")) ?? 0;
+const dv = (s) => lookupBySpelling(dollarVol, s)?.value ?? 0;
 
 const nyse = analysis.filter((s) => !isNasdaq(s) && venueOf(s));
 const nasdaq = analysis.filter((s) => isNasdaq(s));
@@ -131,7 +129,7 @@ console.log(`  and the top 50 carry ${((top50Dv / nyseDvTotal) * 100).toFixed(1)
 // ── 2. THE REFILLED 700 — and the part that is not measurable ────────────────
 console.log(`\n══ 2. A REFILLED 700 ══`);
 const nasdaqInFile = [...venueBySymbol.entries()].filter(([, v]) => v === "Q").map(([s]) => s);
-const nasdaqWithBars = nasdaqInFile.filter((s) => barSymbols.has(s) || barSymbols.has(s.replace(/-/g, ".")));
+const nasdaqWithBars = nasdaqInFile.filter((s) => symbolSpellings(s).some((x) => barSymbols.has(x)));
 const entrantsNeeded = Math.max(0, 700 - nasdaq.length);
 console.log(`  Nasdaq-listed pool (nasdaqtraded.txt):        ${nasdaqInFile.length}`);
 console.log(`  already in the 700:                           ${nasdaq.length}`);
@@ -164,7 +162,7 @@ console.log(`    amount, and measuring it needs one bulk quote pull from a provi
 // ── 3. DIVIDENDS AND SECTORS ─────────────────────────────────────────────────
 console.log(`\n══ 3. DIVIDEND AND SECTOR COVERAGE ══`);
 const payer = (s) => {
-  const alt = s.replace(/\./g, "-");
+  const alt = symbolSpellings(s)[1] ?? s;
   const d = screenerVals[s]?.lastAnnualDividend ?? screenerVals[alt]?.lastAnnualDividend;
   return typeof d === "number" && d > 0;
 };
