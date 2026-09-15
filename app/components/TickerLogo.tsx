@@ -82,9 +82,19 @@ export default function TickerLogo({
   // row. Rather than depend on every call site keying correctly forever, the
   // reset lives here.
   //
-  // Deriving idx rather than syncing it in an effect also discards a late
-  // onError from the PREVIOUS symbol's request for free: that handler writes
-  // its own sym, which no longer matches, so the derived value stays 0.
+  // WHAT THIS DOES NOT DO is make a late onError from the previous symbol's
+  // request safe. React replaces the onError closure on re-render, so an error
+  // dispatched after the symbol changed would run the NEW closure and capture
+  // the NEW sym -- advancing the new symbol past its harvested file. The old
+  // closure does not survive to be harmlessly discarded, and an earlier version
+  // of this comment claimed it did.
+  //
+  // The case is fine for a different reason: assigning a new src ABORTS the
+  // in-flight load, and an aborted image request does not fire error. So the
+  // late error should never be dispatched in the first place. If a browser is
+  // ever seen firing error on an abort, key={sym} on the <img> below makes the
+  // whole class structurally impossible -- a fresh element per symbol. Not done
+  // pre-emptively. See claude/serving-assets-from-public-2026-09-15.md.
   const [fallback, setFallback] = useState({ sym, idx: 0 });
   const idx = fallback.sym === sym ? fallback.idx : 0;
   const initial = (name || sym || "?").trim().charAt(0).toUpperCase() || "?";
