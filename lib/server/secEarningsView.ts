@@ -413,7 +413,13 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const cashFrom = quarterHasCash || !cashYear || valueOf(cashYear, "operatingCashFlow") === null
     ? latest
     : cashYear;
-  const cashBasis: "quarter" | "year" = cashFrom === latest ? "quarter" : "year";
+  // ANNUAL-ONLY FILERS ARE ALWAYS "year", even though cashFrom === latest.
+  // The anchor IS a fiscal year for them, so the old `cashFrom === latest`
+  // test reported basis "quarter" beside a period labelled FY2025 — the exact
+  // period mislabel the basis field exists to prevent, arriving through the
+  // one branch that had never had a non-quarter anchor.
+  const cashBasis: "quarter" | "year" =
+    annualOnly || cashFrom !== latest ? "year" : "quarter";
 
   // ── THE FIVE-YEAR ANNUAL ROWS, BUILT ONCE FOR BOTH PLACES THEY APPEAR ────
   //

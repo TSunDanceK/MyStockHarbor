@@ -432,10 +432,16 @@ const periodKey = (r: FactRow) => `${r.start ?? ""}..${r.end}`;
 export function extractCompanyFacts(
   symbol: string,
   facts: CompanyFacts,
-  opts: { quarters?: number; years?: number } = {}
+  opts: { quarters?: number; years?: number; instants?: number } = {}
 ): ExtractResult {
-  const keepQuarters = opts.quarters ?? 8;
+  const keepQuarters = opts.quarters ?? SEC_QUARTER_WINDOW;
   const keepYears = opts.years ?? 5;
+  // DECOUPLED FROM keepQuarters, and the decoupling is worth 12 percentage
+  // points. `instants` used to be sliced by keepQuarters, so raising the
+  // quarter window to 12 doubled the balance-sheet series as a side effect:
+  // AAPL 15,509 B -> 19,556 B coupled against 17,605 B decoupled
+  // (relay 35001474265). The balance sheet needs no more dates than it had.
+  const keepInstants = opts.instants ?? SEC_INSTANT_WINDOW;
   const notes: string[] = [];
 
   // Units a mapped, published tag was refused in. See rowsForField.
@@ -663,7 +669,7 @@ export function extractCompanyFacts(
 
   const instants = pack(instantCells, (e) => ({ start: null, row: instantMeta.get(e) })).slice(
     0,
-    keepQuarters
+    keepInstants
   );
 
   return {
