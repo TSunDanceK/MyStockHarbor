@@ -810,17 +810,81 @@ export function companyNameVariants(companyName: string): string[] {
  * QUERY-quality list of business words (american, capital, energy) and does not
  * contain box, dow or fox, so it is the wrong instrument here.
  *
- * ── THE RESIDUAL, STATED RATHER THAN HIDDEN ──────────────────────────────
- * Casing cannot separate "Dow Inc." from "Dow Jones", or "Box, Inc." from "Box
- * Office". Those false positives remain. They are a smaller error than the
- * current one — every item discarded and a blank page — and the ranking, the
- * dedup and the churn filter all still apply downstream. Worth revisiting with
- * a measurement, not worth blocking the 42 clean cases on.
+ * ── THE RESIDUAL, NOW MEASURED RATHER THAN ESTIMATED ─────────────────────
+ * This paragraph used to say casing "cannot separate Dow Inc. from Dow Jones"
+ * and leave it there. Relay runs 77 and 78 measured it: ten real Google News
+ * pools, ~100 items each, fetched with the SAME query gnewsProvider builds, the
+ * publisher suffix stripped exactly as the adapter strips it, and scored by
+ * loading the real isClearlyAboutRequestedCompany twice — once as shipped, once
+ * with the `!variants.length` guard rewritten to `false` — so the number below
+ * is the set this fallback ADDS, not the set the feed keeps.
+ *
+ * That distinction reversed the first reading. DOW's raw admit rate was 85/100,
+ * which looks like a broken symbol; 26 of those 85 matched "dow stock"/"(dow)"
+ * with the anchor switched off, so the anchor's real contribution was 6 genuine
+ * Dow Inc. items against 57 index stories.
+ *
+ *   needle          adds  off-topic                         marginal precision
+ *   \bDow\b   (Cap)   63       57   Dow Jones, "the Dow", DJIA members   10%
+ *   \bBox\b   (Cap)   56       18   Jack in the Box, box office, Big Box  68%
+ *   \bGap\b   (Cap)   43       13   "Shares Gap Down", "Value Gap"        70%
+ *   \bRTX\b  (CAPS)   47        4   Nvidia's GPU line                     91%
+ *   \bFox\b   (Cap)   61        5   Fox Factory (FOXF), Michael J. Fox    92%
+ *   \bNOV\b  (CAPS)   47        1   Novatti Group, ASX:NOV                98%
+ *   \bAon\b   (Cap)   35        0                                        100%
+ *   \bAT\b   (CAPS)   37        0                                        100%
+ *   \bRH\b   (CAPS)   52        0                                        100%
+ *   \bCSX\b  (CAPS)   50        0                                        100%
+ *
+ * TWO GENERALISATIONS DIED HERE, and both are recorded because each would have
+ * shipped a worse rule:
+ *
+ *   "a capitalised-word needle is the dirty shape"  — Aon is 100% and Fox 92%.
+ *   "the month/preposition collisions are real"     — the month is written Nov
+ *                                                     and the preposition at,
+ *                                                     so \bNOV\b and \bAT\b
+ *                                                     never see them. Casing
+ *                                                     was already doing that
+ *                                                     work.
+ *
+ * DOW is not on a continuum with the rest — it is 10% against a floor of 68% —
+ * and the reason is specific: "Dow" is the everyday name of a market INDEX, so
+ * it appears in market-wide copy that is about no company at all. That is what
+ * INDEX_TOKENS below rejects. Everything else on this table ships as measured:
+ * Box and Gap at ~70% are a real residual, stated here with its number, and the
+ * dedup, the ranking and the churn filter still apply downstream.
+ *
+ * ── THE ALTERNATIVES, MEASURED AND REJECTED ──────────────────────────────
+ * Three grammatical rules were scored on the same 491 marginal items before
+ * settling on the index-name one, so the next reader need not re-derive them:
+ *
+ *   require a company-reference position  220 kept, 96% precise, 182 real lost
+ *     (\bN's\b, "N Inc", "N (", "N stock") — and it takes AT&T to ZERO, since
+ *     \bAT\b only ever matches inside "AT&T", never before " stock".
+ *   reject a longer phrase around the token  199 kept, 95%, 203 real lost
+ *   either of the two                        337 kept, 95%,  74 real lost
+ *   INDEX_TOKENS (this one)                  428 kept, 90%,   6 real lost
+ *
+ * The three grammatical rules buy 5 points of precision for between 74 and 203
+ * genuine articles. The index rule removes 57 of the 98 off-topic items for 6.
  *
  * ── STRICTLY ADDITIVE ────────────────────────────────────────────────────
  * The caller reaches this ONLY when companyNameVariants returned nothing, so no
  * symbol that matches today can change behaviour. That is asserted.
  */
+/**
+ * Market-index names, which are not company references however they are cased.
+ *
+ * Deliberately a SET OF INDEX NAMES rather than a set of "words to avoid": the
+ * membership test has a reason that survives re-reading, so a later editor can
+ * tell whether a new entry belongs. "Box" and "Gap" are common words too and
+ * are deliberately NOT here — they were measured at 68% and 70% and kept.
+ */
+const INDEX_TOKENS = new Set([
+  "DOW", "NASDAQ", "FTSE", "DAX", "CAC", "NIKKEI", "HANG", "SENSEX", "NIFTY",
+  "RUSSELL", "STOXX", "IBEX",
+]);
+
 export function anchoredNameSignal(companyName: string): RegExp | null {
   const base = String(companyName ?? "")
     .replace(
@@ -834,6 +898,26 @@ export function anchoredNameSignal(companyName: string): RegExp | null {
 
   const token = base.split(/\s+/)[0] ?? "";
   const alnum = token.replace(/[^A-Za-z0-9]/g, "");
+
+  // AN INDEX NAME IS NOT A COMPANY REFERENCE. Measured: \bDow\b admitted 63
+  // items beyond the explicit ticker signals and 57 of them were about the Dow
+  // Jones Industrial Average, its members, or S&P Dow Jones Indices — 10%
+  // precision against a floor of 68% for every other name tested.
+  //
+  // WHY THIS IS NOT THE KIND OF LIST THIS REPO REFUSES. The objection recorded
+  // in symbol-spellings.mjs is to a SNAPSHOT — a September 2026 table of
+  // companies that returns a wrong answer silently forever as the market
+  // changes. Index names are a closed, stable vocabulary: they do not list,
+  // delist, rename or get acquired. And it is a property of the TOKEN, not of
+  // the ticker — if a company named "Nasdaq" ever reached this fallback it
+  // would be caught by the same line. (NDAQ does not: "Nasdaq" is six
+  // characters, so companyNameVariants gives it a substring needle and this
+  // function never runs.)
+  //
+  // It costs DOW the 6 genuine items the anchor was adding. DOW is NOT blanked
+  // by this: the explicit ticker signals above already matched 26 of its 89,
+  // and they are the ones a reader wants.
+  if (INDEX_TOKENS.has(alnum.toUpperCase())) return null;
 
   // TWO TO FOUR CHARACTERS. Below two there is no name left; at five or more
   // companyNameVariants already has a usable substring needle and this never

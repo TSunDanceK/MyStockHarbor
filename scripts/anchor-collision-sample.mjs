@@ -65,9 +65,29 @@ const UA =
 // that matters, because 26 of the 85 matched "dow stock"/"(dow)" regardless.
 //
 // Against the committed snapshot, exactly SIX of the 66 fallback-only names
-// produce a capitalised-word needle. That is the whole risk set, and it is what
-// round 2 measures, because a rule that drops the anchor for all six has to be
-// priced against all six rather than against DOW alone:
+// produce a capitalised-word needle, so round 2 measured all of them.
+//
+// ── WHAT ROUND 2 RETURNED (relay run 78), AND WHAT IT KILLED ─────────────
+// Marginal precision, publisher suffix stripped first as the adapter strips it:
+//
+//   \bAon\b 100%   \bFox\b 92%   \bGap\b 70%   \bBox\b 68%   \bDow\b 10%
+//
+// The "a capitalised-word needle is the dirty shape" hypothesis round 1
+// suggested is FALSE: Aon is perfect and Fox beats RTX. DOW is not on a
+// continuum with the rest, and the reason is specific rather than orthographic
+// — "Dow" is the everyday name of a market INDEX, so it appears in copy about
+// no company at all. INDEX_TOKENS in lib/stock-news-data.ts is that finding;
+// Box and Gap ship as measured, with their numbers recorded there.
+//
+// A DEFECT THIS PROBE HAS, found while reading round 2's output: it does not
+// call stripPublisherSuffix, which gnewsProvider applies before an item is ever
+// stored. Nine of FOX's apparent collisions were the string " - Fox Business"
+// appended to headlines about other companies — items production never sees in
+// that form. Printing raw titles is deliberate, so the classifier sees what the
+// feed actually returned; but anything COUNTED off this output must strip first
+// or it will invent collisions for any company sharing a name with a publisher.
+//
+// The subjects, unchanged so a re-run is comparable:
 const SUBJECTS = [
   ["AON", "Aon plc", '"Aon" stock'],
   ["BOX", "Box, Inc.", '"Box" stock'],

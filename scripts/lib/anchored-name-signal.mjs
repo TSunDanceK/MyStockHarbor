@@ -21,6 +21,14 @@
 //
 // If you change one, the checker will tell you to change the other.
 
+// Keep in step with INDEX_TOKENS in lib/stock-news-data.ts. The checker
+// asserts both halves — membership and the resulting pattern — so a token added
+// on one side and not the other fails rather than drifts.
+const INDEX_TOKENS = new Set([
+  "DOW", "NASDAQ", "FTSE", "DAX", "CAC", "NIKKEI", "HANG", "SENSEX", "NIFTY",
+  "RUSSELL", "STOXX", "IBEX",
+]);
+
 /** Keep in step with anchoredNameSignal in lib/stock-news-data.ts. */
 export function anchoredNameSignalMirror(companyName) {
   const base = String(companyName ?? "")
@@ -36,6 +44,7 @@ export function anchoredNameSignalMirror(companyName) {
   const token = base.split(/\s+/)[0] ?? "";
   const alnum = token.replace(/[^A-Za-z0-9]/g, "");
 
+  if (INDEX_TOKENS.has(alnum.toUpperCase())) return null;
   if (alnum.length < 2 || alnum.length > 4) return null;
   if (!/[A-Z]/.test(token)) return null;
 

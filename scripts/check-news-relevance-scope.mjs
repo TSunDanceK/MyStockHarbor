@@ -214,10 +214,17 @@ check(
 
 console.log("\n  -- the anchored fallback for names too short to be a needle --\n");
 
-// 55 of the 2,592 committed names produce NO variant: every candidate is under
-// the guard, `.some()` on an empty array is false by construction, and only an
-// explicit ticker signal can match. 42 of them are names that ARE their ticker;
-// the rest are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC.
+// 66 of the 2,592 committed names produce NO variant once cleanName has run
+// over them: every candidate is under the guard, `.some()` on an empty array is
+// false by construction, and only an explicit ticker signal can match. Most are
+// names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO, PVH …); the rest
+// are short but different — 3M/MMM, HP/HPQ, F5/FFIV, KLA/KLAC.
+//
+// THE COUNT WAS 55 IN AN EARLIER PASS, and the difference is the normaliser,
+// not the population: 55 counted the RAW directory names in
+// data/company-names.json ("Dow Inc. Common Stock"), 66 counts them after
+// cleanName strips the instrument suffix, which is the form the live path
+// actually hands to the matcher. 66 is the number that describes production.
 //
 // MMM was the confirmed live case: 88 items fetched, 2 cards, both carrying a
 // literal "(MMM)".
@@ -229,6 +236,7 @@ const SHORT = {
   RH: "RH Common Stock",
   VFC: "V.F. Corporation Common Stock",
   T: "AT&T Inc.",
+  GAP: "Gap, Inc. Common Stock",
 };
 const about = (sym, title) =>
   mod.isClearlyAboutRequestedCompany({ title, description: "", source: "" }, sym, SHORT[sym]);
@@ -264,7 +272,15 @@ check(
 for (const [sym, title, want, why] of [
   ["CSX", "CSX Corporation reports record intermodal volume", true, "all-caps name, all-caps in the headline"],
   ["CSX", "the csx line was closed for maintenance", false, "lowercase prose must not trip an all-caps name"],
-  ["DOW", "Dow Inc. beats on packaging demand", true, "capitalised name, capitalised in the headline"],
+  // DOW WAS HERE, EXPECTING true, AND THE MEASUREMENT RETIRED IT. The row read
+  // ["DOW", "Dow Inc. beats on packaging demand", true, ...] and it was a fair
+  // test of the rule as designed — a capitalised name, capitalised in the
+  // headline. It is now the COST of INDEX_TOKENS, restated rather than deleted:
+  // a real Dow Inc. headline with no ticker in it is one of the 6 genuine items
+  // the index rejection gives up to remove 57 index stories. GAP keeps the shape
+  // the row was testing, so the property has not quietly stopped being tested.
+  ["DOW", "Dow Inc. beats on packaging demand", false, "the cost of the index rule: 6 real items, priced against 57"],
+  ["GAP", "Gap, Inc. raises its full-year outlook", true, "capitalised name, capitalised in the headline — the shape DOW used to carry"],
   ["DOW", "shares were flat as the market closed down", false, "no capitalised Dow anywhere"],
   ["BOX", "Box, Inc. raises subscription outlook", true, "capitalised"],
   ["BOX", "he opened the box and found nothing", false, "the common noun is lowercase"],
@@ -352,6 +368,70 @@ console.log("\n  -- the probe\'s mirror cannot drift from the real function --\n
 // Upstash client keeps the job unable to reach the database even if a future
 // edit tried to". That is an isolation guarantee, so the probe cannot load the
 // TypeScript function and carries a mirror instead. Adding `npm ci` to buy the
+// ── THE INDEX-NAME REJECTION, AND WHAT IT MUST NOT ALSO REJECT ───────────
+// Relay runs 77 and 78 measured the anchored fallback's MARGINAL set -- the
+// items it adds on top of the explicit ticker signals -- across ten real pools.
+// \bDow\b scored 10% (57 of 63 added items were index copy) against a floor of
+// 68% for every other name. That is the gap INDEX_TOKENS closes.
+//
+// THE DANGER IN THIS FIX IS OVER-REACH, not under-reach: a rule that also swept
+// up Box, Gap, Aon or Fox would delete 195 measured-good items to remove 57 bad
+// ones. Three of these assertions exist to fail if it starts doing that.
+console.log("\n  -- the index-name rejection --\n");
+{
+  check(
+    "a market-index name yields NO anchored needle",
+    mod.anchoredNameSignal("Dow Inc.") === null,
+    "measured: 57 of the 63 items \\bDow\\b added were the DJIA, its members or S&P Dow Jones Indices"
+  );
+  // THE OTHER HALF, and it is the one that matters. Rejecting DOW is easy;
+  // rejecting DOW WITHOUT rejecting the names that measured clean is the fix.
+  const stillAnchored = ["Box, Inc.", "Gap, Inc.", "Aon plc", "Fox Corporation",
+                         "CSX Corporation", "RTX Corporation", "NOV Inc.", "AT&T Inc.", "RH"];
+  const lost = stillAnchored.filter((n) => mod.anchoredNameSignal(n) === null);
+  check(
+    "...and every OTHER measured name keeps its needle",
+    lost.length === 0,
+    lost.length
+      ? `${lost.join(", ")} lost theirs — Box measured 68%, Gap 70%, Fox 92%, Aon 100%`
+      : `${stillAnchored.length} names unaffected, including the two common words kept on purpose`
+  );
+  // DOW IS NOT BLANKED. The explicit ticker signals matched 26 of its 89 items
+  // with the anchor switched off; this is one of them, verbatim from the pool.
+  check(
+    "DOW still matches its own news through the explicit ticker signals",
+    mod.isClearlyAboutRequestedCompany(
+      { title: "Dow Inc. (DOW) Stock Sinks As Market Gains: Here's Why", description: "" },
+      "DOW", "Dow Inc."
+    ),
+    "removing the needle must not take the company's real coverage with it"
+  );
+  // ...and the item the fix exists to drop, also verbatim from the pool.
+  check(
+    "...while the index copy the needle was admitting is now refused",
+    !mod.isClearlyAboutRequestedCompany(
+      { title: "Dow Jones Industrial Average loses another round to rising bond yields", description: "" },
+      "DOW", "Dow Inc."
+    ),
+    "this headline is about no company at all"
+  );
+  // A MUTATION GUARD. Emptying INDEX_TOKENS, or misspelling the membership
+  // test, restores the old behaviour silently -- the checker above would still
+  // pass on the "other names keep their needle" half. This one would not.
+  check(
+    "the rejection is keyed on the TOKEN, not on the symbol",
+    mod.anchoredNameSignal("Dow Chemical") === null &&
+      mod.anchoredNameSignal("Nasdaq Co.") === null,
+    "no ticker is in scope here — anchoredNameSignal never sees one"
+  );
+  check(
+    "...and a name that merely CONTAINS an index word keeps its needle",
+    mod.anchoredNameSignal("Fox Corporation") !== null &&
+      mod.anchoredNameSignal("SPY Inc.") !== null,
+    "the test is on the first token, not a substring sweep"
+  );
+}
+
 // import would trade the guarantee for convenience.
 //
 // The duplication is therefore CHECKED rather than trusted: identical patterns
@@ -360,6 +440,10 @@ console.log("\n  -- the probe\'s mirror cannot drift from the real function --\n
   const PROBE_NAMES = [
     "Dow Inc.", "AT&T Inc.", "NOV Inc.", "Box, Inc.", "RH",
     "CSX Corporation", "RTX Corporation",
+    // Round 2's names. "Aon plc" and "Fox Corporation" are the two that killed
+    // the "a capitalised-word needle is the dirty shape" generalisation, and
+    // "Gap, Inc." is the one it would have swept up wrongly.
+    "Aon plc", "Fox Corporation", "Gap, Inc.",
     // and the boundary shapes, so agreement is not only tested where it is easy
     "V.F. Corporation Common Stock", "3M Company Common Stock",
     "Fastenal Company - Common Stock", "A.O. Smith Corporation Common Stock",
