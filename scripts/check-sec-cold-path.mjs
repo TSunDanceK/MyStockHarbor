@@ -5,7 +5,7 @@
 // plus the pure behaviour that can be run.
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
-import { lift } from "./lib/earnings-plan.mjs";
+import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -29,16 +29,16 @@ const body = code.slice(code.indexOf("export async function resolveFactSetForRen
 const at = (needle) => body.indexOf(needle);
 const iCik = at("cikForSymbol(clean)");
 const iStore = at("readFactSet(clean)");
-const iIp = at("claimColdFetch()");
+const iBudget = at("claimColdFetch()");
 const iFetch = at("fetchAndStore(clean, cik)");
-check("all four gates are present", [iCik, iStore, iIp, iFetch].every((i) => i > -1),
-  `cik@${iCik} store@${iStore} ip@${iIp} fetch@${iFetch}`);
+check("all four gates are present", [iCik, iStore, iBudget, iFetch].every((i) => i > -1),
+  `cik@${iCik} store@${iStore} budget@${iBudget} fetch@${iFetch}`);
 check("CIK gate runs FIRST — before the store, the budget and the network",
-  iCik < iStore && iCik < iIp && iCik < iFetch,
+  iCik < iStore && iCik < iBudget && iCik < iFetch,
   "a gate that runs after the fetch is not a gate");
-check("the store is consulted before the per-IP budget is spent",
-  iStore < iIp, "a cached symbol must cost nothing, not a budget slot");
-check("the budget is claimed before the fetch", iIp < iFetch);
+check("the store is consulted before the budget is spent",
+  iStore < iBudget, "a cached symbol must cost nothing, not a budget slot");
+check("the budget is claimed before the fetch", iBudget < iFetch);
 
 // NOTHING happens for an unknown symbol. Asserted as ABSENCE inside the branch,
 // because "returns no-cik" is true of a version that enqueued first.
@@ -101,7 +101,7 @@ check("the timer is unref'd so it cannot hold the invocation open",
 check("a timeout enqueues and returns pending — it never rethrows",
   /catch \(err\)[\s\S]{0,400}enqueue\(clean\)[\s\S]{0,300}status: "pending"/.test(code));
 
-console.log("\n4. the per-IP cap counts FETCHES, not requests");
+console.log("\n4. the budget counts FETCHES, not requests");
 
 check("the counter is incremented inside claimColdFetch only",
   (code.match(/redis\.incr\(/g) ?? []).length === 1 &&
@@ -110,8 +110,28 @@ check("the counter is incremented inside claimColdFetch only",
     "which happened on /insights/videos and is on record");
 check("it fails OPEN", /catch \{\s*return true;\s*\}/.test(code),
   "a Redis outage must not take the page down");
-check("the bucket outlives its window so an IP cannot roll into a fresh one",
-  /expire\(key, 7200\)/.test(code));
+check("the bucket outlives its window so a burst cannot roll into a fresh one",
+  /expire\(key, 120\)/.test(code));
+// OVER BUDGET IS NOT AN ERROR. The whole reason a cap lives here rather than in
+// middleware is that it degrades instead of refusing; asserting the return
+// shape is what keeps a future edit from turning it back into a 403.
+// Anchored on a CODE landmark, not a comment: `body` has been through
+// readCodeOnly, so an indexOf("4. THE TIMEOUT") returns -1 and slice(x, -1)
+// silently reads the wrong span. That is the same mis-slice this file already
+// caught twice, in section 2 and again in section 4. Both ends carry the
+// `await` a CALL site has and a declaration does not — check-assertion-anchors
+// rejected the bare spellings, and it was right to.
+const overBudget = body.slice(body.indexOf("await claimColdFetch()"), body.indexOf("await withTimeout("));
+check("over budget degrades to queued-and-pending, never to a refusal",
+  /enqueue\(clean\)/.test(overBudget) && /status: "pending"/.test(overBudget) &&
+    !/40[13]|notFound|throw/.test(overBudget),
+  `branch ${overBudget.length}b`);
+// THE LOSS IS RECORDED, NOT SILENT. The brief asked for per-IP; this is not it,
+// and a swap with no trace in the source is how a requirement disappears.
+check("the source says the budget is site-wide rather than per-IP, and why",
+  /SITE-WIDE, NOT PER-IP/.test(raw) && /headers\(\)/.test(raw) &&
+    /middleware/.test(raw),
+  "a dropped requirement must leave a mark where the code is read");
 
 console.log("\n5. the queue is bounded, and drained whatever the outcome");
 
@@ -139,42 +159,57 @@ check("and a cold symbol is NOT added to the manifest",
 
 console.log("\n6. the ISR property the affordability rests on");
 
+// ── THIS SECTION USED TO ASSERT THE OPPOSITE, AND IT WAS WRONG ─────────────
+//
+// It pinned `cache: "no-store"` on the fetch and one `await headers()` call
+// site, both with reasoning about why confining them to the cold path made them
+// safe. A single render measurement falsified both: /stock/ALSN/earnings
+// returned HTTP 500, with Next naming the no-store fetch as the reason the page
+// changed from static to dynamic at runtime.
+//
+// So what is asserted now is ABSENCE, and absence of a CLASS rather than of the
+// two spellings that happened to break: any dynamic API, any explicit no-store,
+// anywhere this module can reach from a render. A check that had named only
+// `headers()` would have passed a version that called `cookies()`.
+const DYNAMIC_APIS = ["headers(", "cookies(", "draftMode(", "connection("];
+for (const api of DYNAMIC_APIS) {
+  check(`the render path never calls ${api})`, !code.includes(api),
+    "a dynamic API inside this ISR route is a 500, not a slower page");
+}
+check('no import from "next/headers"', !/from "next\/headers"/.test(code));
+check("the fetch does not carry an explicit no-store hint",
+  !/cache: "no-store"/.test(code),
+  "one such hint opts the whole route out of static rendering");
 check("the Redis client is PAGE_READ_CACHE-guarded",
   /Redis\.fromEnv\(\{ \.\.\.PAGE_READ_CACHE/.test(code),
-  "one no-store hint opts the whole route out of static rendering, which would " +
-    "make the fetch cost once per VISITOR rather than once per window");
-check("the fetch itself is no-store, deliberately",
-  /cache: "no-store"/.test(code),
-  "a second Next cache layer would hold a multi-megabyte body per symbol on a " +
-    "different lifetime than the HTML it produced");
+  "@upstash/redis sends no-store by default, which is the same defect wearing " +
+    "a different hat");
+// A FETCH REVALIDATE BELOW THE SEGMENT'S SHORTENS THE SEGMENT'S. Next takes the
+// minimum, so a 60 here would quietly re-render every stock page every minute.
+check("the fetch's revalidate is a named constant, not a literal",
+  /next: \{ revalidate: SEC_COLD_FETCH_REVALIDATE \}/.test(code));
+const layout = fs.readFileSync("app/stock/[symbol]/layout.tsx", "utf8");
+const segRevalidate = Number((layout.match(/^export const revalidate = (\d+)/m) ?? [])[1]);
+const fetchRevalidate = Number((code.match(/SEC_COLD_FETCH_REVALIDATE = (\d+)/) ?? [])[1]);
+check("...and it is not shorter than the segment's own revalidate",
+  Number.isFinite(segRevalidate) && fetchRevalidate >= segRevalidate,
+  `fetch ${fetchRevalidate}s vs segment ${segRevalidate}s — Next takes the minimum, ` +
+    "so a shorter one here would shorten every /stock/* page's window");
+// THE SWALLOW IS WHAT MADE THE 500 INVISIBLE. Both catches read as handled
+// timeouts while Next failed the route underneath. FIRST STATEMENT IN THE
+// CATCH, not merely present: a rethrow after `await enqueue(clean)` would have
+// already lengthened the cron's queue with a symbol that never had a problem.
+check("the catch rethrows a DynamicServerError before doing anything else",
+  /\} catch \(err\) \{\s*rethrowIfDynamic\(err\);/.test(body),
+  "a swallowed DynamicServerError is not a handled error");
 // READ FROM RAW: readCodeOnly strips comments, so asserting the reasoning is
 // written down has to look at the source a human reads.
 check("the once-per-window property is stated in the code",
   /paid ONCE PER SYMBOL PER REVALIDATION WINDOW/.test(raw),
   "it is the reason this is affordable and it is not obvious");
-// TWO ATTEMPTS AT THIS WERE WRONG BEFORE IT WAS RIGHT, and both failed the
-// same way: they measured a POSITION IN THE FILE and called it an order of
-// execution. `headers()` sits inside claimColdFetch, which is DECLARED above
-// resolveFactSetForRender and CALLED from inside it -- so "headers() appears
-// after readFactSet in the source" is simply false, while the property it was
-// trying to express is true.
-//
-// The property is containment, not position: exactly one call site, and it is
-// inside claimColdFetch -- which section 1 has already shown runs after the
-// store check. That chain is what keeps a warm render from touching it.
-const claimBody = (() => {
-  const start = code.indexOf("async function claimColdFetch");
-  const rest = code.slice(start);
-  return rest.slice(0, rest.indexOf("\n}") + 2);
-})();
-check("headers() has exactly ONE call site in this module",
-  (code.match(/await headers\(\)/g) ?? []).length === 1,
-  "headers() on a warm render forces the route dynamic and the fetch is then " +
-    "paid per visitor — the whole affordability argument");
-check("...and it is inside claimColdFetch, which section 1 showed runs after the store",
-  /await headers\(\)/.test(claimBody),
-  `claimColdFetch body ${claimBody.length}b — non-empty, so a mis-sliced body ` +
-    `cannot pass this by being blank`);
+check("and the measured 500 that forced all of this is recorded with it",
+  /Page changed from static to dynamic at runtime/.test(raw),
+  "the next person to reach for headers() here should meet the measurement");
 
 console.log("\n7. hasUsableData");
 
@@ -191,6 +226,30 @@ check("one quarter alone is usable", mod.hasUsableData({ ...empty, quarters: [{}
 check("instants alone are usable — a filer with only a balance sheet still renders",
   mod.hasUsableData({ ...empty, instants: [{}] }) === true);
 check("years alone are usable", mod.hasUsableData({ ...empty, years: [{}] }) === true);
+
+console.log("\n8. rethrowIfDynamic, run rather than read");
+
+// RUN, because section 6 can only see that the call is there. What it must do
+// is let an ordinary failure through and refuse a dynamic-usage one, and the
+// two messages below are the real ones Next emits -- the second is verbatim
+// from the /stock/ALSN/earnings runtime log.
+// GRABBED BY NAME AND EXPORTED FOR THE LIFT: it is deliberately not exported
+// from the module -- nothing outside the cold path should be able to call it --
+// so the section-7 lift does not carry it.
+const guard = (await lift(`export ${grabFunction(raw, "rethrowIfDynamic")}`)).rethrowIfDynamic;
+const passesThrough = (err) => {
+  try { guard(err); return true; } catch { return false; }
+};
+check("an ordinary failure passes through to the pending path",
+  passesThrough(new Error("HTTP 503")) &&
+    passesThrough(new Error("[sec-cold] ALSN exceeded 5000ms")));
+check("a DynamicServerError does not",
+  !passesThrough(new Error("Dynamic server usage: Route /stock/[symbol]/earnings " +
+    "couldn't be rendered statically because it used no-store fetch " +
+    "https://data.sec.gov/api/xbrl/companyfacts/CIK0001411207.json")));
+check("...and neither does the shorter Next phrasing",
+  !passesThrough(new Error("Route /x couldn't be rendered statically because it used headers")));
+check("a non-Error rejection does not crash the guard", passesThrough(undefined));
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nCold-path guards hold.\n");
 process.exit(failures ? 1 : 0);
