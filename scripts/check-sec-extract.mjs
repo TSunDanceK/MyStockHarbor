@@ -40,9 +40,10 @@ const extractSrc = extractSrcRaw.replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/se
 const mod = await lift(`${fieldsSrc}\n${extractSrc}`);
 
 const {
-  SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, secFieldsHash,
-  cumulativeFields, instantFields, extractCompanyFacts, quartersCovered,
-  cashFlowReconciliation,
+  SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, secFieldsHash, COVER_SHARES_FIELD,
+  cumulativeFields, instantFields, asFiledOnlyFields, fieldPartition,
+  extractCompanyFacts, readCoverShares, quartersCovered,
+  checkIdentities, identityRates,
 } = mod;
 
 // ── 1. the list itself ──────────────────────────────────────────────────────
@@ -54,9 +55,9 @@ check("SEC_FIELD_INDEX agrees with the array order",
   SEC_FIELD_KEYS.every((k, i) => SEC_FIELD_INDEX[k] === i));
 
 const byStatement = (s) => SEC_FIELDS.filter((f) => f.statement === s);
-check("16 income, 10 cash-flow, 17 balance-sheet",
-  byStatement("income").length === 16 && byStatement("cash-flow").length === 10 &&
-    byStatement("balance-sheet").length === 17,
+check("16 income, 11 cash-flow, 16 balance-sheet",
+  byStatement("income").length === 16 && byStatement("cash-flow").length === 11 &&
+    byStatement("balance-sheet").length === 16,
   `${byStatement("income").length}/${byStatement("cash-flow").length}/${byStatement("balance-sheet").length}`);
 
 check("every chain is non-empty", SEC_FIELDS.every((f) => f.chain.length > 0));
@@ -64,8 +65,16 @@ check("no chain repeats a tag",
   SEC_FIELDS.every((f) => new Set(f.chain).size === f.chain.length));
 check("every unit is one of the three companyfacts keys",
   SEC_FIELDS.every((f) => ["USD", "shares", "USD/shares"].includes(f.unit)));
-check("only sharesOutstandingCover is dei",
-  SEC_FIELDS.filter((f) => f.taxonomy === "dei").map((f) => f.key).join() === "sharesOutstandingCover");
+// THE COVER PAGE IS NOT IN THE PERIOD LIST ANY MORE. While it was, its cover
+// date entered the instant series as a period of its own carrying one field,
+// and an 8-slice returned four balance sheets for AAPL, MU and PLAB.
+check("NO field in the period list is dei — the cover page left it",
+  SEC_FIELDS.every((f) => f.taxonomy === "us-gaap"),
+  SEC_FIELDS.filter((f) => f.taxonomy !== "us-gaap").map((f) => f.key).join(", ") || "43/43 us-gaap");
+check("COVER_SHARES_FIELD exists, is dei, and is NOT in SEC_FIELDS",
+  COVER_SHARES_FIELD.taxonomy === "dei" &&
+    COVER_SHARES_FIELD.key === "sharesOutstandingCover" &&
+    !SEC_FIELD_KEYS.includes("sharesOutstandingCover"));
 
 // ASC 606. `Revenues` is legacy -- AAPL's last is 2018-09-29 -- so it must sit
 // BELOW RevenueFromContractWithCustomer..., never above, or every large filer
@@ -77,39 +86,60 @@ check("`Revenues` ranks below the ASC 606 tag in the revenue chain",
   revenue.chain.join(" > "));
 
 // ── 2. THE PROPERTY THE OWNER ASKED FOR ─────────────────────────────────────
-console.log("\n2. instant vs duration-cumulative");
+console.log("\n2. the four kinds, and what may be differenced");
 
-check("ALL 17 balance-sheet fields are instant",
+check("ALL 16 balance-sheet fields are instant",
   byStatement("balance-sheet").every((f) => f.kind === "instant"),
-  byStatement("balance-sheet").filter((f) => f.kind !== "instant").map((f) => f.key).join(", ") || "17/17");
-check("no income or cash-flow field is instant",
-  [...byStatement("income"), ...byStatement("cash-flow")].every((f) => f.kind === "duration-cumulative"));
-check("cumulativeFields() and instantFields() partition the list",
-  cumulativeFields().length + instantFields().length === SEC_FIELDS.length &&
-    cumulativeFields().every((f) => f.kind === "duration-cumulative") &&
-    instantFields().every((f) => f.kind === "instant"),
-  `${cumulativeFields().length} + ${instantFields().length}`);
+  byStatement("balance-sheet").filter((f) => f.kind !== "instant").map((f) => f.key).join(", ") || "16/16");
+
+// THE DEFECT THAT GOT PAST THE FIRST VERSION OF THIS CHECK. These four sit on
+// the income statement and ARE durations, so a cumulative/instant split put them
+// on the differencing path -- and it printed -668,000 shares for PLAB.
+const NON_ADDITIVE = ["sharesBasic", "sharesDiluted", "epsBasic", "epsDiluted"];
+check("the two share counts are duration-average",
+  ["sharesBasic", "sharesDiluted"].every((k) => SEC_FIELDS.find((f) => f.key === k).kind === "duration-average"));
+check("the two EPS figures are duration-ratio",
+  ["epsBasic", "epsDiluted"].every((k) => SEC_FIELDS.find((f) => f.key === k).kind === "duration-ratio"));
+check("and NONE of the four is on the cumulative list",
+  cumulativeFields().every((f) => !NON_ADDITIVE.includes(f.key)),
+  cumulativeFields().filter((f) => NON_ADDITIVE.includes(f.key)).map((f) => f.key).join(", ") || "clear");
+check("both EPS fields name a ratioSource whose operands are real field keys",
+  ["epsBasic", "epsDiluted"].every((k) => {
+    const r = SEC_FIELDS.find((f) => f.key === k).ratioSource;
+    return r && SEC_FIELD_KEYS.includes(r.numerator) && SEC_FIELD_KEYS.includes(r.denominator);
+  }));
+
+const part = fieldPartition();
+check("the three sets partition the list exactly once",
+  part.cumulative.length + part.asFiledOnly.length + part.instant.length === SEC_FIELDS.length &&
+    new Set([...part.cumulative, ...part.asFiledOnly, ...part.instant].map((f) => f.key)).size === SEC_FIELDS.length,
+  `${part.cumulative.length} + ${part.asFiledOnly.length} + ${part.instant.length} = ${SEC_FIELDS.length}`);
 check("cumulativeFields() contains no balance-sheet field",
-  cumulativeFields().every((f) => f.statement !== "balance-sheet"));
+  part.cumulative.every((f) => f.statement !== "balance-sheet"));
+check("the FX leg is present and cumulative",
+  SEC_FIELDS.find((f) => f.key === "fxEffectOnCash")?.kind === "duration-cumulative",
+  "without it the cash reconciliation reports FX movement as failure");
 
 // THE STRUCTURAL HALF, read from the shipped source rather than inferred.
 //
-// The property is "the differencing CANNOT reach an instant field". A value
-// assertion cannot show that -- it shows only that it did not this time. So the
-// source is read: every site that emits `derived: "differenced"` must sit inside
-// the loop over cumulativeFields(), and instantFields() must never be near one.
+// The property is "the differencing CANNOT reach a non-additive field". A value
+// assertion shows only that it did not this time. So the source is read: every
+// site that emits `derived: "differenced"` must sit inside the loop over
+// cumulativeFields(), and the other two loops must come after it.
 const extractCode = readCodeOnly("lib/server/secExtract.ts");
 const diffSites = [...extractCode.matchAll(/derived:\s*"differenced"/g)].map((m) => m.index);
 const cumLoopAt = extractCode.indexOf("for (const field of cumulativeFields())");
+const asFiledAt = extractCode.indexOf("for (const field of asFiledOnlyFields())");
 const instLoopAt = extractCode.indexOf("for (const field of instantFields())");
 check("the extractor emits `differenced` in exactly one place", diffSites.length === 1,
   `${diffSites.length} site(s)`);
-check("that site is inside the cumulativeFields() loop and before the instantFields() loop",
-  cumLoopAt !== -1 && instLoopAt !== -1 && diffSites.every((i) => i > cumLoopAt && i < instLoopAt),
-  `differenced@${diffSites[0]} cumulative@${cumLoopAt} instant@${instLoopAt}`);
-check("no subtraction appears anywhere in the instantFields() loop",
-  !/\.val!?\s*-\s*/.test(extractCode.slice(instLoopAt, extractCode.indexOf("const pack", instLoopAt))),
-  "the instant branch reads values, it does not combine them");
+check("that site is inside the cumulativeFields() loop, before both other loops",
+  cumLoopAt !== -1 && asFiledAt !== -1 && instLoopAt !== -1 &&
+    diffSites.every((i) => i > cumLoopAt && i < asFiledAt) && asFiledAt < instLoopAt,
+  `differenced@${diffSites[0]} cumulative@${cumLoopAt} asFiledOnly@${asFiledAt} instant@${instLoopAt}`);
+check("no subtraction of two field values appears after the cumulative loop ends",
+  !/\.val!?\s*-\s*\w+\.(?:best\.)?row\.val/.test(extractCode.slice(asFiledAt)),
+  "the as-filed and instant branches read values, they do not combine them");
 
 // ── 3. the positional fail-safe ─────────────────────────────────────────────
 console.log("\n3. secFieldsHash");
@@ -132,12 +162,12 @@ check("a CHAIN correction does NOT move the hash",
 // ── 4. singleValued ─────────────────────────────────────────────────────────
 console.log("\n4. singleValued");
 
-const multi = SEC_FIELDS.filter((f) => f.singleValued === false).map((f) => f.key);
-check("exactly one field is not single-valued", multi.length === 1, multi.join(", "));
-check("and it is sharesOutstandingCover", multi[0] === "sharesOutstandingCover");
-check("every other field defaults to singleValued: true",
-  SEC_FIELDS.filter((f) => f.key !== "sharesOutstandingCover").every((f) => f.singleValued === true),
-  "the spread default survived, checked at runtime rather than read off the type");
+check("NO field in the period list is multi-valued any more",
+  SEC_FIELDS.every((f) => f.singleValued === true),
+  SEC_FIELDS.filter((f) => !f.singleValued).map((f) => f.key).join(", ") || "43/43 single-valued");
+check("the cover field is the one that is not",
+  COVER_SHARES_FIELD.singleValued === false,
+  "several classes, one period key, and no axis in companyfacts to tell them apart");
 
 // ── 5. quartersCovered ──────────────────────────────────────────────────────
 console.log("\n5. period length bands");
@@ -170,6 +200,12 @@ const facts = {
       Assets: { units: { USD: [
         { end: "2026-03-31", val: 5000, accn: "a", filed: "2026-04-20", fy: 2026, fp: "Q1" },
         { end: "2026-06-30", val: 6000, accn: "b", filed: "2026-07-20", fy: 2026, fp: "Q2" },
+      ] } },
+      // A SECOND BALANCE-SHEET LINE, so "no instant row is a one-field row"
+      // tests the code rather than the thinness of this fixture.
+      Liabilities: { units: { USD: [
+        { end: "2026-03-31", val: 2000, accn: "a", filed: "2026-04-20", fy: 2026, fp: "Q1" },
+        { end: "2026-06-30", val: 2400, accn: "b", filed: "2026-07-20", fy: 2026, fp: "Q2" },
       ] } },
     },
   },
@@ -215,31 +251,108 @@ check("a restatement wins on `filed`, and the record carries its accession",
   at(i2b, "totalAssets")?.val === 6500 && i2b.accession === "c",
   `${at(i2b, "totalAssets")?.val} accn=${i2b.accession}`);
 
-// The multi-class cover page. Two values, one period, one filing, no class
-// label in companyfacts -- picking one IS the BRK.B bug, so it refuses.
+// The multi-class cover page. Two values, one date, one filing, no class label
+// in companyfacts -- picking one IS the BRK.B bug, so it refuses.
 const multiClass = JSON.parse(JSON.stringify(facts));
 multiClass.facts.dei = { EntityCommonStockSharesOutstanding: { units: { shares: [
-  { end: "2026-06-30", val: 300, accn: "b", filed: "2026-07-20" },
-  { end: "2026-06-30", val: 700, accn: "b", filed: "2026-07-20" },
+  { end: "2026-07-18", val: 300, accn: "b", filed: "2026-07-20" },
+  { end: "2026-07-18", val: 700, accn: "b", filed: "2026-07-20" },
 ] } } };
 const out3 = extractCompanyFacts("CHK", multiClass);
-const i3 = out3.instants.find((p) => p.end === "2026-06-30");
 check("two share classes in one filing are reported AMBIGUOUS, not reduced to one",
-  at(i3, "sharesOutstandingCover")?.derived === "ambiguous" &&
-    at(i3, "sharesOutstandingCover")?.val === null,
-  JSON.stringify(at(i3, "sharesOutstandingCover")));
-check("and the ambiguous cell keeps both candidates",
-  at(i3, "sharesOutstandingCover")?.candidates?.join() === "700,300");
+  out3.coverShares?.derived === "ambiguous" && out3.coverShares?.val === null,
+  JSON.stringify(out3.coverShares));
+check("and it keeps both candidates", out3.coverShares?.candidates?.join() === "700,300");
 
-// A single-class filer must NOT be dragged into the ambiguous branch.
+// THE DEFECT D2 EXISTED TO FIX. The cover date is 2026-07-18 and no balance
+// sheet was filed at it; while this field lived in the instant grid that date
+// became a period row carrying one field and displaced a real one.
+check("the cover date does NOT create a period row",
+  out3.instants.every((p) => p.end !== "2026-07-18"),
+  out3.instants.map((p) => p.end).join(", "));
+// THE OWNER'S ASSERTION, SCOPED TO WHERE IT MEANS SOMETHING HERE. "No period row
+// carries only one field" is a statement about REAL filings and is asserted as
+// such in scripts/sec-extract-probe.mjs, over all five symbols. Against a
+// fixture it would only measure how many fields the fixture supplies -- the
+// quarter rows below carry one field because this fixture has one duration
+// field, which says nothing about the code. What the fixture CAN show is the
+// specific pollution D2 was: an instant row created by a cover date, carrying
+// the cover field and nothing else.
+check("no instant row is a one-field row",
+  out3.instants.every((p) => p.values.filter((v) => v !== null).length > 1),
+  out3.instants.map((p) => `${p.end}:${p.values.filter((v) => v !== null).length}`).join(" "));
+check("and no row anywhere carries a cover-page reading",
+  [...out3.instants, ...out3.quarters, ...out3.years].every(
+    (p) => SEC_FIELD_INDEX.sharesOutstandingCover === undefined
+  ),
+  "the field is not in the positional list at all, so no row can hold it");
+
 const oneClass = JSON.parse(JSON.stringify(facts));
 oneClass.facts.dei = { EntityCommonStockSharesOutstanding: { units: { shares: [
-  { end: "2026-06-30", val: 700, accn: "b", filed: "2026-07-20" },
+  { end: "2026-07-18", val: 700, accn: "b", filed: "2026-07-20" },
 ] } } };
-const i4 = extractCompanyFacts("CHK", oneClass).instants.find((p) => p.end === "2026-06-30");
-check("a single-class filer still resolves normally",
-  at(i4, "sharesOutstandingCover")?.derived === "as-filed" &&
-    at(i4, "sharesOutstandingCover")?.val === 700);
+const single = extractCompanyFacts("CHK", oneClass).coverShares;
+check("a single-class filer resolves normally, with its own asOf",
+  single?.derived === "as-filed" && single?.val === 700 && single?.asOf === "2026-07-18",
+  JSON.stringify(single));
+check("a filer with no cover page at all gets null, not a guess",
+  extractCompanyFacts("CHK", facts).coverShares === null);
+
+// ── 6b. D1 and D1b: the non-additive durations ──────────────────────────────
+console.log("\n6b. the non-additive durations");
+
+// Q1 and Q2 3-month frames filed, plus 6M cumulative netIncome. Values are
+// arbitrary; what is asserted is WHICH cells exist and how they were derived.
+const nonAdd = { cik: 1, facts: { "us-gaap": {
+  NetIncomeLoss: { units: { USD: [
+    { start: "2026-01-01", end: "2026-03-31", val: 100, accn: "a", filed: "2026-04-20" },
+    { start: "2026-01-01", end: "2026-06-30", val: 300, accn: "b", filed: "2026-07-20" },
+  ] } },
+  WeightedAverageNumberOfSharesOutstandingBasic: { units: { shares: [
+    { start: "2026-01-01", end: "2026-03-31", val: 50, accn: "a", filed: "2026-04-20" },
+    { start: "2026-01-01", end: "2026-06-30", val: 52, accn: "b", filed: "2026-07-20" },
+  ] } },
+  EarningsPerShareBasic: { units: { "USD/shares": [
+    { start: "2026-01-01", end: "2026-03-31", val: 2, accn: "a", filed: "2026-04-20" },
+    { start: "2026-01-01", end: "2026-06-30", val: 5.77, accn: "b", filed: "2026-07-20" },
+  ] } },
+} } };
+const na = extractCompanyFacts("NA", nonAdd);
+const naQ1 = na.quarters.find((q) => q.end === "2026-03-31");
+const naQ2 = na.quarters.find((q) => q.end === "2026-06-30");
+
+check("netIncome IS differenced (the control — the cumulative path still works)",
+  at(naQ2, "netIncome")?.derived === "differenced" && at(naQ2, "netIncome")?.val === 200);
+// THE BUG: 52 - 50 = 2 was being stored as Q2's share count.
+check("sharesBasic is NOT differenced — the 6M average produces no Q2 cell",
+  at(naQ2, "sharesBasic") === null,
+  JSON.stringify(at(naQ2, "sharesBasic")));
+check("and the filed 3-month average IS kept",
+  at(naQ1, "sharesBasic")?.derived === "as-filed" && at(naQ1, "sharesBasic")?.val === 50);
+// 5.77 - 2 = 3.77 was being stored; the truth for Q2 is 200/52 = 3.846...
+check("epsBasic is NOT differenced",
+  at(naQ2, "epsBasic")?.derived !== "differenced",
+  at(naQ2, "epsBasic")?.derived);
+check("and with no filed frame and no denominator it stays NULL rather than guessing",
+  at(naQ2, "epsBasic") === null,
+  "the 6M denominator is not this quarter's, so there is nothing to divide by");
+
+// The computed path: give Q2 its own filed 3-month share count and EPS follows.
+const withQ2Shares = JSON.parse(JSON.stringify(nonAdd));
+withQ2Shares.facts["us-gaap"].WeightedAverageNumberOfSharesOutstandingBasic.units.shares.push(
+  { start: "2026-04-01", end: "2026-06-30", val: 54, accn: "b", filed: "2026-07-20" });
+const na2 = extractCompanyFacts("NA", withQ2Shares);
+const na2Q2 = na2.quarters.find((q) => q.end === "2026-06-30");
+check("a filed 3-month average for Q2 is picked up",
+  at(na2Q2, "sharesBasic")?.val === 54 && at(na2Q2, "sharesBasic")?.derived === "as-filed");
+check("and EPS is then COMPUTED as netIncome / shares for that same quarter",
+  at(na2Q2, "epsBasic")?.derived === "computed" &&
+    Math.abs(at(na2Q2, "epsBasic").val - 200 / 54) < 1e-9,
+  JSON.stringify(at(na2Q2, "epsBasic")));
+check("the computed cell names both operands",
+  at(na2Q2, "epsBasic")?.computedFrom?.join() === "netIncome,sharesBasic");
+check("a FILED per-period EPS still wins over the computed one",
+  at(naQ1, "epsBasic")?.derived === "as-filed" && at(naQ1, "epsBasic")?.val === 2);
 
 // ── 7. the tag-change guard ─────────────────────────────────────────────────
 console.log("\n7. the ASC 606 boundary");
@@ -262,28 +375,92 @@ check("and the refusal is recorded as a note rather than swallowed",
   out4.notes.some((n) => n.includes("tag changed mid-year")), out4.notes[0] ?? "(none)");
 
 // ── 8. the free arithmetic assertion ────────────────────────────────────────
-console.log("\n8. cash-flow reconciliation");
+console.log("\n8. internal identities");
 
-const cf = (op, inv, fin, net) => ({ cik: 1, facts: { "us-gaap": Object.fromEntries([
-  ["NetCashProvidedByUsedInOperatingActivities", op],
-  ["NetCashProvidedByUsedInInvestingActivities", inv],
-  ["NetCashProvidedByUsedInFinancingActivities", fin],
-  ["CashAndCashEquivalentsPeriodIncreaseDecrease", net],
-].map(([k, v]) => [k, { units: { USD: [
-  { start: "2026-01-01", end: "2026-03-31", val: v, accn: "a", filed: "2026-04-20" },
-] } }])) } });
+// Values are arbitrary and NOTHING here asserts what a number should be. What is
+// asserted is that an identity that HOLDS reports pass, one that does not reports
+// fail, and one whose operands are absent reports SKIPPED rather than a vacuous
+// pass. That third state is the whole point: an identity over two nulls is true
+// and would score a filer with no balance sheet as perfectly consistent.
+const idFacts = (over) => ({ cik: 1, facts: { "us-gaap": Object.fromEntries(
+  Object.entries({
+    NetCashProvidedByUsedInOperatingActivities: 100,
+    NetCashProvidedByUsedInInvestingActivities: -40,
+    NetCashProvidedByUsedInFinancingActivities: -30,
+    EffectOfExchangeRateOnCashAndCashEquivalents: 5,
+    CashAndCashEquivalentsPeriodIncreaseDecrease: 35,
+    ...over,
+  }).map(([k, v]) => [k, { units: { USD: [
+    { start: "2026-01-01", end: "2026-03-31", val: v, accn: "a", filed: "2026-04-20" },
+  ] } }])
+) } });
 
-const good = extractCompanyFacts("OK", cf(100, -40, -30, 30));
-check("a reconciling quarter reports no break",
-  cashFlowReconciliation(good.quarters).length === 0);
-const bad = extractCompanyFacts("NO", cf(100, -40, -30, 999));
-check("a non-reconciling quarter is caught",
-  cashFlowReconciliation(bad.quarters).length === 1,
-  JSON.stringify(cashFlowReconciliation(bad.quarters)[0] ?? {}));
-// Filers round to thousands; an exact equality would flag every one of them.
-const rounded = extractCompanyFacts("RD", cf(100_000, -40_000, -30_000, 30_001));
-check("rounding at the filers' own scale does not trip it",
-  cashFlowReconciliation(rounded.quarters).length === 0);
+const rates = (r) => identityRates(r);
+const CASH_ID = "operating + investing + financing + fx = netChangeInCash";
+
+const okCash = checkIdentities(extractCompanyFacts("OK", idFacts({})));
+check("a reconciling quarter passes", rates(okCash)[CASH_ID]?.pass === 1,
+  JSON.stringify(rates(okCash)[CASH_ID]));
+// THE FX LEG. Without it 100 - 40 - 30 = 30 against a stated 35 is a 14% "break",
+// and that is most of what the ARM/MU/PLAB runs reported as failures.
+check("the FX leg is what makes it reconcile — it is read, not ignored",
+  rates(checkIdentities(extractCompanyFacts("FX", idFacts({
+    EffectOfExchangeRateOnCashAndCashEquivalents: 0,
+  }))))[CASH_ID]?.fail === 1,
+  "with fx zeroed and netChange still 35, the same rows must now FAIL");
+check("a genuine break is still caught",
+  rates(checkIdentities(extractCompanyFacts("NO", idFacts({
+    CashAndCashEquivalentsPeriodIncreaseDecrease: 999,
+  }))))[CASH_ID]?.fail === 1);
+
+// A MISSING OPERAND IS SKIPPED, NEVER PASS.
+const noFin = idFacts({});
+delete noFin.facts["us-gaap"].NetCashProvidedByUsedInFinancingActivities;
+const skipped = checkIdentities(extractCompanyFacts("SK", noFin));
+check("a missing operand reports SKIPPED, not a vacuous pass",
+  rates(skipped)[CASH_ID]?.skipped === 1 && rates(skipped)[CASH_ID]?.pass === 0,
+  JSON.stringify(rates(skipped)[CASH_ID]));
+check("and the skipped result names which field was null",
+  skipped.find((r) => r.identity === CASH_ID)?.missing?.join() === "financingCashFlow");
+
+// assets = liabilities + equity, on instants.
+const bs = (a, l, e) => ({ cik: 1, facts: { "us-gaap": Object.fromEntries(
+  [["Assets", a], ["Liabilities", l], ["StockholdersEquity", e]].map(([k, v]) => [k, { units: { USD: [
+    { end: "2026-03-31", val: v, accn: "a", filed: "2026-04-20" },
+  ] } }])
+) } });
+const BS_ID = "assets = liabilities + equity";
+check("the balance sheet identity passes when it balances",
+  rates(checkIdentities(extractCompanyFacts("B", bs(1000, 600, 400))))[BS_ID]?.pass === 1);
+check("and fails when it does not",
+  rates(checkIdentities(extractCompanyFacts("B", bs(1000, 600, 900))))[BS_ID]?.fail === 1);
+
+// cashEnd - cashStart = netChangeInCash, which spans two instants AND a quarter.
+const spanning = idFacts({});
+spanning.facts["us-gaap"].CashAndCashEquivalentsAtCarryingValue = { units: { USD: [
+  { end: "2025-12-31", val: 500, accn: "z", filed: "2026-01-20" },
+  { end: "2026-03-31", val: 535, accn: "a", filed: "2026-04-20" },
+] } };
+const CASH_SPAN = "cashEnd - cashStart = netChangeInCash";
+const span = checkIdentities(extractCompanyFacts("SP", spanning));
+check("the two-period cash identity passes when the balances move by the stated amount",
+  rates(span)[CASH_SPAN]?.pass === 1, JSON.stringify(rates(span)[CASH_SPAN]));
+// The quarter's start is 2026-01-01 but the prior balance sheet is dated
+// 2025-12-31, one day earlier. Matching on the exact date is DELIBERATE: a
+// fuzzy match would silently pair a quarter with the wrong balance sheet.
+check("a quarter with no cash balance at either date reports SKIPPED",
+  rates(checkIdentities(extractCompanyFacts("SP2", idFacts({}))))[CASH_SPAN]?.skipped === 1);
+// The one-day predecessor is EXACT, not a window. A balance sheet two days
+// early belongs to a different period and must not be pressed into service.
+const twoDaysEarly = JSON.parse(JSON.stringify(spanning));
+twoDaysEarly.facts["us-gaap"].CashAndCashEquivalentsAtCarryingValue.units.USD[0].end = "2025-12-30";
+check("a balance sheet TWO days before the start is not accepted as the opener",
+  rates(checkIdentities(extractCompanyFacts("SP3", twoDaysEarly)))[CASH_SPAN]?.skipped === 1,
+  "a wider window would pair a cash flow with the wrong opening balance and report pass");
+
+check("identityRates counts every state and invents none",
+  Object.values(rates(span)).every((r) =>
+    r.pass + r.fail + r.skipped > 0 && Object.keys(r).join() === "pass,fail,skipped"));
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nExtraction structure is sound.\n");
 process.exit(failures ? 1 : 0);

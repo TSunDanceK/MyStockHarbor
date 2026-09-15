@@ -18,8 +18,11 @@
 // walks `cumulativeFields()` and there is no code path from it to an instant
 // field. See secFields.ts for why the flag lives on the definition.
 import {
+  COVER_SHARES_FIELD,
   SEC_FIELDS,
   SEC_FIELD_KEYS,
+  SEC_FIELD_INDEX,
+  asFiledOnlyFields,
   cumulativeFields,
   instantFields,
   secFieldsHash,
@@ -51,6 +54,8 @@ export type Derivation =
   | "as-filed"
   /** Cumulative-minus-cumulative within one fiscal year. */
   | "differenced"
+  /** Computed from two other fields of the SAME period. See FieldDef.ratioSource. */
+  | "computed"
   /** Several values for one period and no way to choose. Value is null. */
   | "ambiguous";
 
@@ -64,6 +69,23 @@ export type FieldValue = {
   /** Only on "differenced": the two cumulative ends that produced it. */
   from?: [string, string];
   /** Only on "ambiguous": the distinct values that could not be separated. */
+  candidates?: number[];
+  /** Only on "computed": the two field keys it was computed from. */
+  computedFrom?: [string, string];
+};
+
+/**
+ * The cover-page share count: ONE reading per symbol, not a period row.
+ * See secFields.COVER_SHARES_FIELD for why it is not in the period grid.
+ */
+export type CoverShares = {
+  /** The cover date the filer stated it as of. */
+  asOf: string;
+  accession: string | null;
+  filed: string | null;
+  val: number | null;
+  derived: Derivation;
+  /** Present when the filer is multi-class and companyfacts cannot name them. */
   candidates?: number[];
 };
 
@@ -94,8 +116,13 @@ export type ExtractResult = {
   fieldsHash: string;
   quarters: PeriodRecord[];
   years: PeriodRecord[];
-  /** Instant fields hang off the period end they were measured at. */
+  /**
+   * BALANCE-SHEET DATES ONLY. The cover-page date used to land here and made
+   * every other row near-empty; it is `coverShares` now.
+   */
   instants: PeriodRecord[];
+  /** Filer-level, with its own asOf. Null when the filer published none. */
+  coverShares: CoverShares | null;
   notes: string[];
 };
 
@@ -304,6 +331,58 @@ export function extractCompanyFacts(
     }
   }
 
+  // ── durations that do NOT add: as filed, or not at all ─────────────────────
+  //
+  // A SEPARATE LOOP, NOT A BRANCH INSIDE THE ONE ABOVE. The differencing loop
+  // cannot see these fields at all, which is the same structural guarantee the
+  // balance sheet gets. A frame the filer did not publish produces NOTHING here;
+  // there is no assembly step to get it wrong.
+  for (const field of asFiledOnlyFields()) {
+    const bucket = buckets.get(field.key)!;
+    for (const [, cands] of bucket) {
+      const best = resolve(cands);
+      if (!best?.row.start || !best.row.end) continue;
+      const n = quartersCovered(spanDays(best.row.start, best.row.end));
+      if (n !== 1 && n !== 4) continue; // a 6M or 9M average belongs to no quarter
+
+      const target = n === 1 ? quarterCells : yearCells;
+      const meta = n === 1 ? quarterMeta : yearMeta;
+      let m = target.get(best.row.end);
+      if (!m) { m = new Map(); target.set(best.row.end, m); }
+      if (!meta.has(best.row.end)) meta.set(best.row.end, { start: best.row.start, row: best.row });
+      m.set(field.key, {
+        val: best.row.val!, tag: best.tag, unit: best.unit, derived: "as-filed",
+      });
+    }
+  }
+
+  // The ratio fallback, AFTER both loops because it reads their output.
+  //
+  // BOTH OPERANDS OR NEITHER. A quarter's earnings over a year's share count is
+  // a wrong number that looks like a right one, so a missing denominator leaves
+  // the cell null rather than reaching for the nearest available one. Q4 has no
+  // filed three-month average, so Q4 EPS comes out null -- that is the cost of
+  // refusing to derive the average, stated rather than hidden.
+  for (const field of asFiledOnlyFields()) {
+    if (!field.ratioSource) continue;
+    const { numerator, denominator } = field.ratioSource;
+    for (const cells of [quarterCells, yearCells]) {
+      for (const [, m] of cells) {
+        if (m.get(field.key)) continue; // filed; nothing to compute
+        const num = m.get(numerator)?.val ?? null;
+        const den = m.get(denominator)?.val ?? null;
+        if (num === null || den === null || den === 0) continue;
+        m.set(field.key, {
+          val: num / den,
+          tag: null,
+          unit: field.unit,
+          derived: "computed",
+          computedFrom: [numerator, denominator],
+        });
+      }
+    }
+  }
+
   // ── instants: NEVER differenced, and there is no code above that could ─────
   const instantCells = new Map<string, Map<string, FieldValue>>();
   const instantMeta = new Map<string, FactRow>();
@@ -311,36 +390,22 @@ export function extractCompanyFacts(
   for (const field of instantFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const end = cands[0]?.row.end;
-      if (!end) continue;
-
-      let value: FieldValue;
-      if (!field.singleValued) {
-        // The multi-class cover page. Distinct values for one period key are
-        // classes companyfacts cannot name, and picking one IS the BRK.B bug.
-        const newestFiled = cands.reduce((a, b) => (newer(a.row, b.row) === a.row ? a : b));
-        const sameFiling = cands.filter(
-          (c) => String(c.row.accn ?? "") === String(newestFiled.row.accn ?? "")
-        );
-        const distinct = [...new Set(sameFiling.map((c) => c.row.val!))];
-        value =
-          distinct.length > 1
-            ? { val: null, tag: newestFiled.tag, unit: newestFiled.unit, derived: "ambiguous", candidates: distinct.sort((a, b) => b - a) }
-            : { val: distinct[0]!, tag: newestFiled.tag, unit: newestFiled.unit, derived: "as-filed" };
-      } else {
-        const best = resolve(cands);
-        if (!best) continue;
-        value = { val: best.row.val!, tag: best.tag, unit: best.unit, derived: "as-filed" };
-      }
+      const best = resolve(cands);
+      if (!best?.row.end || best.row.start) continue; // a duration is not an instant
+      const end = best.row.end;
 
       let m = instantCells.get(end);
       if (!m) { m = new Map(); instantCells.set(end, m); }
       const prior = instantMeta.get(end);
-      const rep = cands.reduce((a, b) => (newer(a.row, b.row) === a.row ? a : b)).row;
-      if (!prior || newer(rep, prior) === rep) instantMeta.set(end, rep);
-      m.set(field.key, value);
+      if (!prior || newer(best.row, prior) === best.row) instantMeta.set(end, best.row);
+      m.set(field.key, {
+        val: best.row.val!, tag: best.tag, unit: best.unit, derived: "as-filed",
+      });
     }
   }
+
+  // ── the cover page, read ONCE for the symbol ────────────────────────────────
+  const coverShares = readCoverShares(facts);
 
   const pack = (
     cells: Map<string, Map<string, FieldValue>>,
@@ -384,38 +449,211 @@ export function extractCompanyFacts(
     quarters,
     years,
     instants,
+    coverShares,
     notes,
   };
 }
 
 /**
- * The arithmetic assertion the brief names: operating + investing + financing
- * must reconcile to the net change in cash. It is free, it is per period, and it
- * tests the DIFFERENCING rather than the tags -- a quarter assembled from the
- * wrong pair of cumulative frames fails it.
+ * The newest cover-page share count, or null.
  *
- * Returns the periods that do NOT reconcile. `tolerance` is relative: filers
- * round to thousands and an exact equality would flag every one of them.
+ * REFUSES TO CHOOSE between classes. A multi-class filer reports this once per
+ * class and companyfacts strips the axis that names them, so several values
+ * arrive under the same end and the same accession. Returning one of them is
+ * the BRK.B bug; this returns `ambiguous` with the candidates and lets the
+ * caller decide what to render.
  */
-export function cashFlowReconciliation(
-  periods: PeriodRecord[],
-  tolerance = 0.01
-): { end: string; sum: number; stated: number; relative: number }[] {
-  const idx = (k: string) => SEC_FIELD_KEYS.indexOf(k);
-  const iOp = idx("operatingCashFlow");
-  const iIn = idx("investingCashFlow");
-  const iFi = idx("financingCashFlow");
-  const iNet = idx("netChangeInCash");
-  const bad: { end: string; sum: number; stated: number; relative: number }[] = [];
+export function readCoverShares(facts: CompanyFacts): CoverShares | null {
+  const rows = (facts.facts?.dei?.[COVER_SHARES_FIELD.chain[0]]?.units?.shares ?? []).filter(
+    (r) => typeof r?.val === "number" && Number.isFinite(r.val) && r.end
+  );
+  if (!rows.length) return null;
 
-  for (const p of periods) {
-    const parts = [iOp, iIn, iFi].map((i) => p.values[i]?.val ?? null);
-    const stated = p.values[iNet]?.val ?? null;
-    if (stated === null || parts.some((v) => v === null)) continue;
-    const sum = (parts as number[]).reduce((a, b) => a + b, 0);
-    const scale = Math.max(Math.abs(stated), Math.abs(sum), 1);
-    const relative = Math.abs(sum - stated) / scale;
-    if (relative > tolerance) bad.push({ end: p.end, sum, stated, relative });
+  const newestRow = rows.reduce((a, b) => (newer(a, b) === a ? a : b));
+  const asOf = newestRow.end!;
+  // Same filing AND same date: two readings a month apart are a re-statement,
+  // two in one filing at one date are two classes.
+  const sameReading = rows.filter(
+    (r) => r.end === asOf && String(r.accn ?? "") === String(newestRow.accn ?? "")
+  );
+  const distinct = [...new Set(sameReading.map((r) => r.val!))].sort((a, b) => b - a);
+
+  return {
+    asOf,
+    accession: newestRow.accn ?? null,
+    filed: newestRow.filed ?? null,
+    val: distinct.length > 1 ? null : distinct[0]!,
+    derived: distinct.length > 1 ? "ambiguous" : "as-filed",
+    ...(distinct.length > 1 ? { candidates: distinct } : {}),
+  };
+}
+
+/**
+ * INTERNAL IDENTITIES — the only check 35 of the 43 fields will ever get.
+ *
+ * The frozen FMP dump holds four numbers per report and six TTM aggregates; it
+ * never held a balance sheet. So most of this list has NO external ground truth
+ * and never will. What it has instead is that the fields constrain each other,
+ * and a constraint the data must satisfy is a real test even with nothing to
+ * compare against.
+ *
+ * THREE STATES, NOT TWO. A missing operand is `skipped`, never `pass` -- an
+ * identity over two nulls is vacuously true and would report a filer with no
+ * balance sheet as fully consistent. Pass RATES are reported, not just failures.
+ *
+ * `tolerance` is relative: filers round to thousands and exact equality would
+ * flag every one of them.
+ */
+export type IdentityResult = {
+  identity: string;
+  end: string;
+  status: "pass" | "fail" | "skipped";
+  /** Present on pass and fail. */
+  lhs?: number;
+  rhs?: number;
+  relative?: number;
+  /** Present on skipped: the field keys that were null. */
+  missing?: string[];
+};
+
+type IdentitySpec = {
+  name: string;
+  /** Field keys read from the period itself. */
+  needs: string[];
+  lhs: (v: (k: string) => number | null) => number;
+  rhs: (v: (k: string) => number | null) => number;
+};
+
+const PERIOD_IDENTITIES: Record<"duration" | "instant", IdentitySpec[]> = {
+  instant: [
+    {
+      name: "assets = liabilities + equity",
+      needs: ["totalAssets", "totalLiabilities", "stockholdersEquity"],
+      lhs: (v) => v("totalAssets")!,
+      rhs: (v) => v("totalLiabilities")! + v("stockholdersEquity")!,
+    },
+  ],
+  duration: [
+    {
+      // grossProfit is DERIVED, not stored: it is revenue - costOfRevenue by
+      // definition, and storing it would give the identity two sources to
+      // disagree about.
+      name: "operatingIncome = grossProfit - operatingExpenses",
+      needs: [
+        "revenue", "costOfRevenue", "researchAndDevelopment",
+        "sellingGeneralAndAdministrative", "operatingIncome",
+      ],
+      lhs: (v) => v("operatingIncome")!,
+      rhs: (v) =>
+        v("revenue")! - v("costOfRevenue")! - v("researchAndDevelopment")! -
+        v("sellingGeneralAndAdministrative")! - (v("otherOperatingExpense") ?? 0),
+    },
+    {
+      // THE FOURTH LEG IS NOT OPTIONAL. Without fxEffectOnCash this reported
+      // breaks on ARM, MU and PLAB that were entirely exchange-rate movement.
+      name: "operating + investing + financing + fx = netChangeInCash",
+      needs: [
+        "operatingCashFlow", "investingCashFlow", "financingCashFlow", "netChangeInCash",
+      ],
+      lhs: (v) =>
+        v("operatingCashFlow")! + v("investingCashFlow")! + v("financingCashFlow")! +
+        (v("fxEffectOnCash") ?? 0),
+      rhs: (v) => v("netChangeInCash")!,
+    },
+  ],
+};
+
+function runIdentities(
+  specs: IdentitySpec[],
+  p: PeriodRecord,
+  tolerance: number
+): IdentityResult[] {
+  const read = (k: string) => {
+    const i = SEC_FIELD_INDEX[k];
+    return i === undefined ? null : p.values[i]?.val ?? null;
+  };
+  return specs.map((spec) => {
+    const missing = spec.needs.filter((k) => read(k) === null);
+    if (missing.length) {
+      return { identity: spec.name, end: p.end, status: "skipped" as const, missing };
+    }
+    const lhs = spec.lhs(read);
+    const rhs = spec.rhs(read);
+    const scale = Math.max(Math.abs(lhs), Math.abs(rhs), 1);
+    const relative = Math.abs(lhs - rhs) / scale;
+    return {
+      identity: spec.name,
+      end: p.end,
+      status: relative <= tolerance ? ("pass" as const) : ("fail" as const),
+      lhs, rhs, relative,
+    };
+  });
+}
+
+/**
+ * Every identity over every period, plus the one that spans two periods.
+ *
+ * `cashEnd - cashStart = netChangeInCash` needs consecutive instants AND the
+ * quarter between them, so it cannot be expressed as a per-period spec and is
+ * run separately.
+ */
+export function checkIdentities(
+  result: ExtractResult,
+  tolerance = 0.01
+): IdentityResult[] {
+  const out: IdentityResult[] = [];
+  for (const p of result.instants) out.push(...runIdentities(PERIOD_IDENTITIES.instant, p, tolerance));
+  for (const p of result.quarters) out.push(...runIdentities(PERIOD_IDENTITIES.duration, p, tolerance));
+
+  const iCash = SEC_FIELD_INDEX.cash;
+  const iNet = SEC_FIELD_INDEX.netChangeInCash;
+  const cashAt = new Map(result.instants.map((p) => [p.end, p.values[iCash]?.val ?? null]));
+  for (const q of result.quarters) {
+    const name = "cashEnd - cashStart = netChangeInCash";
+    const net = q.values[iNet]?.val ?? null;
+    const end = cashAt.get(q.end) ?? null;
+    // THE OPENING BALANCE IS DATED THE DAY BEFORE, NOT ON, THE PERIOD START.
+    // A quarter running 2026-01-01..2026-03-31 opens with the balance sheet
+    // dated 2025-12-31 -- filers date a balance sheet at a period END, and the
+    // period that ends is the one before this one. Matching on q.start alone
+    // skipped every real filer. This is the ONE-DAY predecessor, not a fuzzy
+    // window: a tolerance wide enough to reach a different quarter would pair a
+    // cash flow with the wrong opening balance and still report `pass`.
+    const start =
+      q.start === null
+        ? null
+        : cashAt.get(q.start) ??
+          cashAt.get(new Date(Date.parse(q.start) - DAY).toISOString().slice(0, 10)) ??
+          null;
+    if (net === null || end === null || start === null) {
+      out.push({
+        identity: name, end: q.end, status: "skipped",
+        missing: [
+          ...(net === null ? ["netChangeInCash"] : []),
+          ...(end === null ? [`cash@${q.end}`] : []),
+          ...(start === null ? [`cash@${q.start ?? "?"} (or the day before)`] : []),
+        ],
+      });
+      continue;
+    }
+    const lhs = end - start;
+    const scale = Math.max(Math.abs(lhs), Math.abs(net), 1);
+    const relative = Math.abs(lhs - net) / scale;
+    out.push({
+      identity: name, end: q.end,
+      status: relative <= tolerance ? "pass" : "fail",
+      lhs, rhs: net, relative,
+    });
   }
-  return bad;
+  return out;
+}
+
+/** Pass rates per identity: {identity: {pass, fail, skipped}}. */
+export function identityRates(results: IdentityResult[]) {
+  const out: Record<string, { pass: number; fail: number; skipped: number }> = {};
+  for (const r of results) {
+    out[r.identity] ??= { pass: 0, fail: 0, skipped: 0 };
+    out[r.identity][r.status]++;
+  }
+  return out;
 }
