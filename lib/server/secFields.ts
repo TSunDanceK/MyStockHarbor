@@ -118,6 +118,11 @@ const RATIO_SOURCE: Record<string, { numerator: string; denominator: string } | 
 const INCOME: FieldDef[] = ([
   { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"], unit: "USD" },
   { key: "costOfRevenue", chain: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"], unit: "USD" },
+  // THE FILER'S OWN GROSS PROFIT, not revenue - costOfRevenue. Stored precisely
+  // so the identity has something to check: a derived figure cannot disagree
+  // with its own derivation, so checking it against itself would be one of the
+  // vacuous passes this whole section exists to avoid.
+  { key: "grossProfit", chain: ["GrossProfit"], unit: "USD" },
   { key: "researchAndDevelopment", chain: ["ResearchAndDevelopmentExpense"], unit: "USD" },
   { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense"], unit: "USD" },
   { key: "otherOperatingExpense", chain: ["OtherOperatingIncomeExpenseNet"], unit: "USD" },

@@ -542,9 +542,15 @@ const PERIOD_IDENTITIES: Record<"duration" | "instant", IdentitySpec[]> = {
   ],
   duration: [
     {
-      // grossProfit is DERIVED, not stored: it is revenue - costOfRevenue by
-      // definition, and storing it would give the identity two sources to
-      // disagree about.
+      // THE FILER'S GrossProfit AGAINST THE SUBTRACTION. Both sides are filed
+      // numbers, so a disagreement is a real one -- most often a filer whose
+      // cost of revenue tag covers something the gross-profit line does not.
+      name: "grossProfit = revenue - costOfRevenue",
+      needs: ["grossProfit", "revenue", "costOfRevenue"],
+      lhs: (v) => v("grossProfit")!,
+      rhs: (v) => v("revenue")! - v("costOfRevenue")!,
+    },
+    {
       name: "operatingIncome = grossProfit - operatingExpenses",
       needs: [
         "revenue", "costOfRevenue", "researchAndDevelopment",
@@ -552,8 +558,9 @@ const PERIOD_IDENTITIES: Record<"duration" | "instant", IdentitySpec[]> = {
       ],
       lhs: (v) => v("operatingIncome")!,
       rhs: (v) =>
-        v("revenue")! - v("costOfRevenue")! - v("researchAndDevelopment")! -
-        v("sellingGeneralAndAdministrative")! - (v("otherOperatingExpense") ?? 0),
+        (v("grossProfit") ?? v("revenue")! - v("costOfRevenue")!) -
+        v("researchAndDevelopment")! - v("sellingGeneralAndAdministrative")! -
+        (v("otherOperatingExpense") ?? 0),
     },
     {
       // THE FOURTH LEG IS NOT OPTIONAL. Without fxEffectOnCash this reported

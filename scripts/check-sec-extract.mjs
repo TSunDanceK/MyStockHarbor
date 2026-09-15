@@ -49,14 +49,14 @@ const {
 // ── 1. the list itself ──────────────────────────────────────────────────────
 console.log("\n1. the field list");
 
-check("45 fields", SEC_FIELDS.length === 45, `${SEC_FIELDS.length}`);
+check("46 fields", SEC_FIELDS.length === 46, `${SEC_FIELDS.length}`);
 check("keys are unique", new Set(SEC_FIELD_KEYS).size === SEC_FIELD_KEYS.length);
 check("SEC_FIELD_INDEX agrees with the array order",
   SEC_FIELD_KEYS.every((k, i) => SEC_FIELD_INDEX[k] === i));
 
 const byStatement = (s) => SEC_FIELDS.filter((f) => f.statement === s);
-check("16 income, 11 cash-flow, 18 balance-sheet",
-  byStatement("income").length === 16 && byStatement("cash-flow").length === 11 &&
+check("17 income, 11 cash-flow, 18 balance-sheet",
+  byStatement("income").length === 17 && byStatement("cash-flow").length === 11 &&
     byStatement("balance-sheet").length === 18,
   `${byStatement("income").length}/${byStatement("cash-flow").length}/${byStatement("balance-sheet").length}`);
 
@@ -70,7 +70,7 @@ check("every unit is one of the three companyfacts keys",
 // and an 8-slice returned four balance sheets for AAPL, MU and PLAB.
 check("NO field in the period list is dei — the cover page left it",
   SEC_FIELDS.every((f) => f.taxonomy === "us-gaap"),
-  SEC_FIELDS.filter((f) => f.taxonomy !== "us-gaap").map((f) => f.key).join(", ") || "45/45 us-gaap");
+  SEC_FIELDS.filter((f) => f.taxonomy !== "us-gaap").map((f) => f.key).join(", ") || "46/46 us-gaap");
 check("COVER_SHARES_FIELD exists, is dei, and is NOT in SEC_FIELDS",
   COVER_SHARES_FIELD.taxonomy === "dei" &&
     COVER_SHARES_FIELD.key === "sharesOutstandingCover" &&
@@ -164,7 +164,7 @@ console.log("\n4. singleValued");
 
 check("NO field in the period list is multi-valued any more",
   SEC_FIELDS.every((f) => f.singleValued === true),
-  SEC_FIELDS.filter((f) => !f.singleValued).map((f) => f.key).join(", ") || "45/45 single-valued");
+  SEC_FIELDS.filter((f) => !f.singleValued).map((f) => f.key).join(", ") || "46/46 single-valued");
 check("the cover field is the one that is not",
   COVER_SHARES_FIELD.singleValued === false,
   "several classes, one period key, and no axis in companyfacts to tell them apart");
@@ -504,6 +504,26 @@ check("a restricted-inclusive change is compared against the restricted-inclusiv
 check("a balance sheet TWO days before the start is not accepted as the opener",
   rates(checkIdentities(extractCompanyFacts("SP3", twoDaysEarly)))[CASH_SPAN]?.skipped === 1,
   "a wider window would pair a cash flow with the wrong opening balance and report pass");
+
+// grossProfit is STORED, not derived, so the identity has two independent
+// numbers to compare. Asserted to fail when they disagree — a derived left-hand
+// side would make this identity unfailable, which is the vacuous pass the whole
+// three-state design exists to avoid.
+const gp = (rev, cogs, gross) => ({ cik: 1, facts: { "us-gaap": Object.fromEntries(
+  [["Revenues", rev], ["CostOfRevenue", cogs], ["GrossProfit", gross]].map(([k, v]) => [k, { units: { USD: [
+    { start: "2026-01-01", end: "2026-03-31", val: v, accn: "a", filed: "2026-04-20" },
+  ] } }])
+) } });
+const GP_ID = "grossProfit = revenue - costOfRevenue";
+check("the gross-profit identity passes when the filed figures agree",
+  rates(checkIdentities(extractCompanyFacts("G", gp(1000, 400, 600))))[GP_ID]?.pass === 1);
+check("and FAILS when they do not — it is two filed numbers, not one derived twice",
+  rates(checkIdentities(extractCompanyFacts("G", gp(1000, 400, 550))))[GP_ID]?.fail === 1,
+  JSON.stringify(rates(checkIdentities(extractCompanyFacts("G", gp(1000, 400, 550))))[GP_ID]));
+const noGp = gp(1000, 400, 600);
+delete noGp.facts["us-gaap"].GrossProfit;
+check("a filer that publishes no GrossProfit SKIPS it rather than checking a derivation against itself",
+  rates(checkIdentities(extractCompanyFacts("G", noGp)))[GP_ID]?.skipped === 1);
 
 check("identityRates counts every state and invents none",
   Object.values(rates(span)).every((r) =>
