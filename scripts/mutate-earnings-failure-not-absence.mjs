@@ -88,22 +88,34 @@ const MUTANTS = [
     to: `      (cachedItems.length > 0 || totalCandidates === 0);`,
   },
   {
-    id: "F6b  the per-month visibility guard removed",
-    file: CAL,
-    from: `    if (visibility === "unknown") {`,
-    to: `    if (false) {`,
-  },
-  {
     id: "F5   the empty-month cache refusal removed",
     file: CAL,
     from: `  if (byDate.size > 0) {\n    candidatesCache.set(key, { at: Date.now(), byDate });\n  }`,
     to: `  candidatesCache.set(key, { at: Date.now(), byDate });`,
   },
+  // ── F6/F6b RETIRED, AND THE REPLACEMENTS ARE NOT THE SAME MUTANTS ────────
+  // Both mutated the fill frontier: "do not park on an all-empty window" and
+  // "do not advance past a month that could not be read". There is no frontier
+  // any more, so neither anchor exists and neither failure mode does. What
+  // replaced the pointer -- a newest-first walk over a batched completeness
+  // read -- has its own two ways to be quietly wrong, and these are those.
   {
-    id: "F6   the zero-candidate frontier guard removed",
+    id: "W1   the walk reverted to oldest-first over a backward window",
     file: CAL,
-    from: `  if (!sawAnyCandidates) {`,
-    to: `  if (false) {`,
+    from: `  for (let t = new Date(\`\${endStr}T00:00:00Z\`).getTime(); t >= startTime; t -= 86_400_000) {\n    dates.push(toDateStr(new Date(t)));\n  }`,
+    to: `  for (let t = startTime; t <= new Date(\`\${endStr}T00:00:00Z\`).getTime(); t += 86_400_000) {\n    dates.push(toDateStr(new Date(t)));\n  }`,
+  },
+  {
+    id: "W2   a failed completeness read served as an EMPTY one",
+    file: CAL,
+    from: `  } catch {\n    return null;\n  }\n}\n\nexport type EarningsCandidate`,
+    to: `  } catch {\n    return new Set<string>();\n  }\n}\n\nexport type EarningsCandidate`,
+  },
+  {
+    id: "W2b  the null coalesced away at the call site",
+    file: CAL,
+    from: `  const completed = await readWindowCompleteness(dates);\n  if (!completed) {`,
+    to: `  const completed = (await readWindowCompleteness(dates)) ?? new Set<string>();\n  if (false) {`,
   },
   {
     id: "F7   the TTL re-ordered after the counter (the original two-step)",
