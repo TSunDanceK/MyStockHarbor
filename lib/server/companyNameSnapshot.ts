@@ -52,6 +52,7 @@
 // toward ITS OWN source's convention. One global canonical spelling would be
 // wrong for one of the two sources no matter which it picked.
 import companyNameSnapshot from "@/data/company-names.json";
+import { lookupSpellingIn } from "@/lib/symbolSpellings.mjs";
 
 const SNAPSHOT_NAMES = (companyNameSnapshot as { rows?: Record<string, string> }).rows ?? {};
 
@@ -67,5 +68,7 @@ export const COMPANY_NAME_SNAPSHOT_AS_OF: string =
 export function snapshotCompanyName(symbol: string): string {
   const upper = String(symbol ?? "").trim().toUpperCase();
   if (!upper) return "";
-  return SNAPSHOT_NAMES[upper] ?? (upper.includes("-") ? SNAPSHOT_NAMES[upper.replace(/-/g, ".")] ?? "" : "");
+  // Through the shared helper — see secProvider.cikFor for why all five of
+  // these are now one generator.
+  return lookupSpellingIn(SNAPSHOT_NAMES, upper)?.value ?? "";
 }

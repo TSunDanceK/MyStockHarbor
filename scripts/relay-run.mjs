@@ -196,6 +196,16 @@ const TASKS = {
   // Fetches the Nasdaq symdir live for the Exchange and ETF columns, because
   // `exchange` is in static-profile.json's absentFields.blocked.
   "logo-coverage": { script: "scripts/logo-coverage-probe.mjs", args: () => [] },
+  // Read-only: what one symbol COSTS to populate — fetch, parse, extract,
+  // encode — measured sequentially and paced exactly as the route paces it, so
+  // SEC_POPULATE_PER_RUN is sized against a number rather than an estimate.
+  // Needs the dump for the universe and the network for companyfacts.
+  "sec-populate-cost": {
+    script: "scripts/sec-populate-cost.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

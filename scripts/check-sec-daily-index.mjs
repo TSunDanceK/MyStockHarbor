@@ -100,7 +100,15 @@ const man = await lift(
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
    grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue")].join("\n") +
     "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
-  "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
+  // THE TRANSITIVE CALLEE, AND IT FAILED AT RUN TIME FIRST. grabFunction lifts
+  // ONE body and does not follow imports, so seedManifest's lookupBySpelling
+  // threw ReferenceError the moment it was called. The helper's REAL source is
+  // injected rather than a stand-in: a hand-written stub here would be a second
+  // implementation of the exact thing the helper exists to keep single, and the
+  // check would then pass against a spelling rule the app does not use.
+  fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8")
+    .replace(/^export /gm, "") +
+    "\nconst SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
 );
 
 const tick = await lift(
@@ -167,6 +175,43 @@ console.log("\n3. Seeding");
 check("seeds the universe once", seed.seeded && seed.symbols === 5, `${seed.symbols} symbols`);
 check("every symbol has a CIK", seed.withCik === 5 && seed.withoutCik.length === 0);
 check("reseeding is idempotent and adds nothing", man.seedManifest(manifest, [...FIXTURE_CIK.keys()], FIXTURE_CIK, true).seeded === false);
+// ── THE DOTTED TICKER, WHICH HAD NO CIK AND THEREFORE NO PAGE ──────────────
+//
+// `cikByTicker.get(symbol)` alone gave BRK.B nothing: the universe spells it
+// with a DOT and SEC's exchange file with a DASH. A symbol with no CIK is
+// invisible to the daily index, never enters the re-read queue, and can never
+// be populated -- so its page reads "not loaded yet" forever with no error
+// anywhere to say why.
+//
+// REAL SPELLINGS FROM THE COMMITTED TICKER FILE, not invented ones: BRK-B,
+// BF-B and MKC-V are how data/sec/company-tickers.json actually writes them,
+// and all three are absent under the dotted form the universe uses.
+const DOTTED = new Map([
+  ["BRK-B", { cik: "0001067983", exchange: "NYSE" }],
+  ["BF-B", { cik: "0000014693", exchange: "NYSE" }],
+  ["MKC-V", { cik: "0000063754", exchange: "NYSE" }],
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+]);
+const dotManifest = man.emptyManifest();
+const dotSeed = man.seedManifest(dotManifest, ["BRK.B", "BF.B", "MKC.V", "AAPL"], DOTTED, true);
+check("a DOTTED universe ticker resolves to the DASHED map entry's CIK",
+  dotManifest.symbols["BRK.B"]?.cik === "0001067983",
+  dotManifest.symbols["BRK.B"]?.cik ?? "no CIK — the defect this asserts against");
+check("...and so do the other two dotted forms in the universe",
+  dotManifest.symbols["BF.B"]?.cik === "0000014693" &&
+    dotManifest.symbols["MKC.V"]?.cik === "0000063754");
+check("none of the four lands in withoutCik", dotSeed.withoutCik.length === 0,
+  dotSeed.withoutCik.join(", "));
+// The manifest keeps the UNIVERSE's spelling as its key, not the map's -- the
+// rest of the pipeline joins on that, and rewriting it here would move the
+// problem rather than fix it.
+check("the manifest is keyed by the universe's spelling, not the ticker file's",
+  "BRK.B" in dotManifest.symbols && !("BRK-B" in dotManifest.symbols));
+// An undotted symbol genuinely absent from the map must still report absent:
+// the helper widens the search, it does not invent a hit.
+check("a symbol absent under EVERY spelling still reports no CIK",
+  man.seedManifest(man.emptyManifest(), ["NOSUCH"], DOTTED, true).withoutCik.join() === "NOSUCH");
+
 const byCik = man.symbolsByCik(manifest);
 check("the CIK index registers BOTH padded and unpadded spellings",
   byCik.get("0000320193") === "AAPL" && byCik.get("320193") === "AAPL",
