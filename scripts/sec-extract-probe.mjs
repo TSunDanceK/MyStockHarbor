@@ -55,7 +55,8 @@ const tick = await lift(
     grabFunction(tickSrc, "parseTickerFile"),
   ].join("\n") + "\nexport { parseTickerFile, padCik };"
 );
-const { SEC_FIELDS, SEC_FIELD_INDEX, extractCompanyFacts, cashFlowReconciliation, secFieldsHash } = sec;
+const { SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, extractCompanyFacts, checkIdentities,
+        identityRates, secFieldsHash } = sec;
 
 // A PRE-NETWORK SMOKE TEST, AND IT CALLS THE FUNCTIONS RATHER THAN TYPEOF-ING
 // THEM. A missing transitive callee is present as a symbol and absent only when
@@ -144,6 +145,9 @@ function ttm(quarters, key) {
 }
 
 const summary = [];
+const assertions = [];
+const nullRate = {};
+const identityTotals = {};
 
 for (const symbol of SYMBOLS) {
   console.log("=".repeat(78));
@@ -165,8 +169,7 @@ for (const symbol of SYMBOLS) {
   console.log(`  ${out.entityName} — ${out.quarters.length} quarters, ${out.years.length} fiscal years, ${out.instants.length} instants`);
 
   // COVERAGE FIRST. How many of the 43 the extraction actually populated, which
-  // is a different question from whether they are right and is the one nothing
-  // else in this repo can answer yet.
+  // is a different question from whether they are right.
   const newest = out.quarters[0];
   const newestInstant = out.instants[0];
   const filled = SEC_FIELDS.filter((f) =>
@@ -175,14 +178,74 @@ for (const symbol of SYMBOLS) {
   const missing = SEC_FIELDS.filter((f) => !filled.includes(f));
   console.log(`  newest quarter ${newest?.start ?? "?"}..${newest?.end ?? "?"} (${newest?.fp ?? "?"} FY${newest?.fy ?? "?"}, accn ${newest?.accession ?? "?"}, filed ${newest?.filed ?? "?"})`);
   console.log(`  newest instant ${newestInstant?.end ?? "?"}`);
+  console.log(`  coverShares ${out.coverShares ? `${fmt(out.coverShares.val)} asOf ${out.coverShares.asOf} [${out.coverShares.derived}]${out.coverShares.candidates ? ` candidates ${out.coverShares.candidates.map(fmt).join(", ")}` : ""}` : "ABSENT"}`);
   console.log(`  COVERAGE ${filled.length}/43 on the newest period; missing: ${missing.map((f) => f.key).join(", ") || "none"}`);
 
-  const breaks = cashFlowReconciliation(out.quarters);
-  console.log(`  cash-flow reconciliation: ${breaks.length ? `${breaks.length} break(s) — ${breaks.map((b) => `${b.end} ${(b.relative * 100).toFixed(1)}%`).join(", ")}` : "all quarters reconcile (or lack a leg)"}`);
-  if (out.notes.length) {
-    console.log(`  notes (${out.notes.length}):`);
-    for (const n of out.notes.slice(0, 8)) console.log(`    - ${n}`);
-    if (out.notes.length > 8) console.log(`    ... ${out.notes.length - 8} more`);
+  // ── D2's assertion, on real filings ──────────────────────────────────────
+  const bsFields = SEC_FIELDS.filter((f) => f.statement === "balance-sheet").map((f) => f.key);
+  const bsDates = out.instants.filter((p) => bsFields.some((k) => valOf(p, k) !== null));
+  const oneFieldRows = [...out.instants, ...out.quarters, ...out.years].filter(
+    (p) => p.values.filter((v) => v !== null).length === 1
+  );
+  const a1 = bsDates.length === 8;
+  const a2 = oneFieldRows.length === 0;
+  console.log(`  [D2] ${a1 ? "PASS" : "FAIL"} instant series holds ${bsDates.length} balance-sheet dates (want 8)`);
+  console.log(`  [D2] ${a2 ? "PASS" : "FAIL"} no period row carries only one field${a2 ? "" : ` — ${oneFieldRows.map((p) => `${p.end}:${SEC_FIELD_KEYS[p.values.findIndex((v) => v !== null)]}`).join(", ")}`}`);
+  assertions.push({ symbol, check: "8 balance-sheet dates", ok: a1, detail: bsDates.length });
+  assertions.push({ symbol, check: "no one-field row", ok: a2, detail: oneFieldRows.length });
+
+  // ── D1 / D1b: the null rate the owner asked to be reported ───────────────
+  const NON_ADDITIVE = ["sharesBasic", "sharesDiluted", "epsBasic", "epsDiluted"];
+  console.log("  [D1] non-additive fields over the 8 quarters:");
+  for (const key of NON_ADDITIVE) {
+    const cells = out.quarters.map((q) => at(q, key));
+    const byDeriv = cells.reduce((a, c) => ((a[c?.derived ?? "null"] = (a[c?.derived ?? "null"] ?? 0) + 1), a), {});
+    const negative = cells.filter((c) => c?.val !== null && c?.val !== undefined && c.val < 0).length;
+    console.log(`       ${key.padEnd(14)} ${JSON.stringify(byDeriv).padEnd(46)} negative: ${negative}`);
+    assertions.push({ symbol, check: `${key} never differenced`, ok: !byDeriv.differenced, detail: byDeriv });
+    assertions.push({ symbol, check: `${key} never negative`, ok: negative === 0, detail: negative });
+    nullRate[key] ??= { null: 0, total: 0 };
+    nullRate[key].null += byDeriv.null ?? 0;
+    nullRate[key].total += cells.length;
+  }
+
+  // ── section 2: the internal identities ───────────────────────────────────
+  const ids = checkIdentities(out);
+  const rates = identityRates(ids);
+  console.log("  [IDENTITIES] pass / fail / skipped per identity:");
+  for (const [name, r] of Object.entries(rates)) {
+    const pct = r.pass + r.fail ? ((r.pass / (r.pass + r.fail)) * 100).toFixed(0) : "n/a";
+    console.log(`       ${name.padEnd(52)} pass ${String(r.pass).padStart(2)}  fail ${String(r.fail).padStart(2)}  skipped ${String(r.skipped).padStart(2)}   (${pct}% of checkable)`);
+    identityTotals[name] ??= { pass: 0, fail: 0, skipped: 0 };
+    for (const k of ["pass", "fail", "skipped"]) identityTotals[name][k] += r[k];
+  }
+  for (const f of ids.filter((r) => r.status === "fail")) {
+    console.log(`       FAIL ${f.identity} @ ${f.end}: ${fmt(f.lhs)} vs ${fmt(f.rhs)} (${(f.relative * 100).toFixed(1)}%)`);
+  }
+  const skipReasons = {};
+  for (const r of ids.filter((r) => r.status === "skipped")) for (const mfield of r.missing ?? []) skipReasons[mfield] = (skipReasons[mfield] ?? 0) + 1;
+  if (Object.keys(skipReasons).length) console.log(`       skipped because absent: ${JSON.stringify(skipReasons)}`);
+
+  // ── which tags the filer DOES publish for a field that came back empty ───
+  //
+  // A GAP IS A LOOKUP, NOT A GUESS. ASTS came back with no operatingIncome and
+  // no revenue and the obvious next move was to invent a tag for the chain.
+  // This prints what that filer actually publishes near the concept, so the fix
+  // is read off the data.
+  const published = new Set(Object.keys(facts.facts?.["us-gaap"] ?? {}));
+  const HINTS = {
+    revenue: /revenue|sales/i, operatingIncome: /operatingincome|operatingexpense|costsandexpenses/i,
+    payables: /accountspayable/i, epsBasic: /earningspershare/i, epsDiluted: /earningspershare/i,
+    interestExpense: /interest(expense|income)/i, nonOperatingIncomeExpense: /nonoperating|otherincome/i,
+    fxEffectOnCash: /effectofexchangerate/i, otherOperatingExpense: /otheroperating/i,
+  };
+  const gaps = missing.filter((f) => HINTS[f.key]);
+  if (gaps.length) {
+    console.log("  [GAPS] tags this filer publishes near each empty field:");
+    for (const f of gaps) {
+      const near = [...published].filter((t) => HINTS[f.key].test(t)).slice(0, 6);
+      console.log(`       ${f.key.padEnd(26)} ${near.join(", ") || "(nothing related published)"}`);
+    }
   }
 
   // Every quarter, every field, printed. The owner asked for the diff INCLUDING
@@ -266,9 +329,9 @@ for (const symbol of SYMBOLS) {
   }
 
   if (fmpFund) {
-    const sh = at(newestInstant, "sharesOutstandingCover");
+    const sh = out.coverShares;
     console.log(`\n    shares / market cap (no price here, so this is reported not diffed)`);
-    console.log(`      sharesOutstandingCover   ${sh ? `${fmt(sh.val)} [${sh.derived}]${sh.candidates ? ` candidates ${sh.candidates.map(fmt).join(", ")}` : ""}` : "—"}`);
+    console.log(`      coverShares              ${sh ? `${fmt(sh.val)} asOf ${sh.asOf} [${sh.derived}]` : "—"}`);
     console.log(`      FMP marketCap            ${fmt(fmpFund.marketCap ?? null)}   implied price = marketCap / shares = ${sh?.val ? fmt((fmpFund.marketCap ?? 0) / sh.val) : "—"}`);
     console.log(`      FMP peRatio              ${fmt(fmpFund.peRatio ?? null)}`);
   }
@@ -288,6 +351,8 @@ for (const symbol of SYMBOLS) {
 
 console.log("=".repeat(78));
 console.log("SUMMARY");
+console.log("=".repeat(78));
+
 // EVERY VERDICT, NOT ONE PER ROW. The first version reduced each quarter row to
 // its `revenue` verdict and printed {"AGREE":33,"CLOSE":4,"NO-GT":8} — with no
 // DIFFER at all — while 20 EPS rows above it read DIFFER. A reader who trusted
@@ -305,5 +370,30 @@ for (const s of summary) {
     tally[field][v] = (tally[field][v] ?? 0) + 1;
   }
 }
+console.log("\nFMP diff, per field:");
 console.log(JSON.stringify(tally, null, 1));
-console.log(JSON.stringify(summary, null, 1));
+
+// THE REGRESSION CANARIES the owner named. Revenue was 33/33 AGREE and AAPL's
+// TTM tied to the dollar before this change; if either moved, the fix for D1/D2
+// broke something the previous run had proved right.
+const revAgree = summary.filter((r) => r.kind === "quarter" && r.revenue === "AGREE").length;
+const revTotal = summary.filter((r) => r.kind === "quarter" && r.revenue !== "NO-GT").length;
+const aaplTtm = summary.filter((r) => r.symbol === "AAPL" && r.kind === "ttm");
+console.log(`\nCANARY revenue quarters AGREE: ${revAgree}/${revTotal}  (was 33/33)`);
+console.log(`CANARY AAPL TTM: ${aaplTtm.map((r) => `${r.label}=${r.verdict}`).join("  ")}`);
+
+console.log("\nD1 null rate over the 8 quarters, all symbols:");
+for (const [k, r] of Object.entries(nullRate)) {
+  console.log(`  ${k.padEnd(14)} ${r.null}/${r.total} null (${((r.null / r.total) * 100).toFixed(0)}%)`);
+}
+
+console.log("\nIdentity totals, all symbols:");
+for (const [name, r] of Object.entries(identityTotals)) {
+  const pct = r.pass + r.fail ? ((r.pass / (r.pass + r.fail)) * 100).toFixed(0) : "n/a";
+  console.log(`  ${name.padEnd(52)} pass ${String(r.pass).padStart(3)}  fail ${String(r.fail).padStart(3)}  skipped ${String(r.skipped).padStart(3)}   (${pct}%)`);
+}
+
+const failed = assertions.filter((a) => !a.ok);
+console.log(`\nSTRUCTURAL ASSERTIONS: ${assertions.length - failed.length}/${assertions.length} pass`);
+for (const f of failed) console.log(`  FAIL ${f.symbol} — ${f.check} (${JSON.stringify(f.detail)})`);
+process.exitCode = failed.length ? 1 : 0;

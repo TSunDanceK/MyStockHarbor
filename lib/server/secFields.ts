@@ -22,10 +22,32 @@
 // See scripts/check-sec-extract.mjs, which asserts that every balance-sheet
 // field is instant and that no instant field is ever differenced.
 
-/** How a period's value relates to the period itself. */
+/**
+ * How a period's value relates to the period itself.
+ *
+ * THREE OF THE FOUR MUST NEVER BE DIFFERENCED, and the reasons differ. The first
+ * version of this file had only the cumulative/instant split, which is the split
+ * between the income statement and the balance sheet -- and it silently
+ * differenced the two share counts and the two EPS figures, because they sit on
+ * the income statement and are durations. They are durations that do not ADD.
+ */
 export type FieldKind =
-  /** Filed year-to-date. Q1 is as filed; Q2..Q4 are derived by differencing. */
+  /** Filed year-to-date, and additive. Q1 as filed; Q2..Q4 by differencing. */
   | "duration-cumulative"
+  /**
+   * A WEIGHTED AVERAGE over the period. Never differenced: a nine-month average
+   * minus a six-month average is not the third quarter's average, it is noise.
+   * Measured, not argued -- differencing these printed a share count of
+   * -668,000 for PLAB and -44.4M for AAPL (relay run 34931769452).
+   */
+  | "duration-average"
+  /**
+   * A RATIO. Never differenced: a ratio of sums is not the sum of ratios, and
+   * the error is proportional to how much the denominator moved within the year.
+   * AAPL's differenced Q4 EPS came out 1.84 against a filed 1.85, which is close
+   * enough to look right and is luck rather than correctness.
+   */
+  | "duration-ratio"
   /** A position at an instant. NEVER differenced. */
   | "instant";
 
@@ -54,6 +76,14 @@ export type FieldDef = {
    * as ambiguous rather than reduced to one. Default true; see that field.
    */
   singleValued: boolean;
+  /**
+   * For a `duration-ratio` only: how to COMPUTE the period when the filer did
+   * not publish that exact frame. Both operands must be present for the same
+   * period or the value stays null -- there is no partial fallback, because a
+   * quarter's earnings over a year's share count is a wrong number that looks
+   * like a right one.
+   */
+  ratioSource?: { numerator: string; denominator: string };
 };
 
 // The per-block literals below carry only what VARIES. `satisfies` on each
@@ -61,6 +91,27 @@ export type FieldDef = {
 // rather than widening to `string` before the `.map()` re-adds the rest.
 type Seed = Pick<FieldDef, "key" | "chain" | "unit">;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
+
+// THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
+// table beside the list rather than typed onto each line, so the exception is
+// visible in one place instead of being four easily-missed words in a long array.
+const NON_ADDITIVE_INCOME: Record<string, FieldKind | undefined> = {
+  epsBasic: "duration-ratio",
+  epsDiluted: "duration-ratio",
+  sharesBasic: "duration-average",
+  sharesDiluted: "duration-average",
+};
+
+// The fallback for a ratio the filer did not publish for that exact frame.
+// NOTE the consequence, which is measured and not hypothetical: the denominator
+// is a `duration-average`, so it is NULL for Q4 (never filed as a 3-month
+// frame), and Q4 EPS therefore comes out null too. That is the honest answer
+// under "do not derive the average"; see claude/step3-five-symbol-diff for the
+// measured null rate.
+const RATIO_SOURCE: Record<string, { numerator: string; denominator: string } | undefined> = {
+  epsBasic: { numerator: "netIncome", denominator: "sharesBasic" },
+  epsDiluted: { numerator: "netIncome", denominator: "sharesDiluted" },
+};
 
 // ── Income statement ────────────────────────────────────────────────────────
 // Every line is a DURATION and every one is filed cumulatively within the year.
@@ -83,11 +134,21 @@ const INCOME: FieldDef[] = ([
   { key: "incomeTaxExpense", chain: ["IncomeTaxExpenseBenefit"], unit: "USD" },
   { key: "netIncome", chain: ["NetIncomeLoss", "ProfitLoss"], unit: "USD" },
   { key: "netIncomeToNoncontrollingInterest", chain: ["NetIncomeLossAttributableToNoncontrollingInterest"], unit: "USD" },
-  { key: "epsBasic", chain: ["EarningsPerShareBasic"], unit: "USD/shares" },
-  { key: "epsDiluted", chain: ["EarningsPerShareDiluted"], unit: "USD/shares" },
+  // EarningsPerShareBasicAndDiluted IS NOT A TIDY-UP. ASTS publishes only the
+  // combined tag and came back with EPS empty on all 8 quarters, which is how it
+  // got into both chains.
+  { key: "epsBasic", chain: ["EarningsPerShareBasic", "EarningsPerShareBasicAndDiluted"], unit: "USD/shares" },
+  { key: "epsDiluted", chain: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted"], unit: "USD/shares" },
   { key: "sharesBasic", chain: ["WeightedAverageNumberOfSharesOutstandingBasic"], unit: "shares" },
   { key: "sharesDiluted", chain: ["WeightedAverageNumberOfDilutedSharesOutstanding"], unit: "shares" },
-] satisfies Seed[]).map((f) => ({ ...f, singleValued: true as const, kind: "duration-cumulative" as const, statement: "income" as const, taxonomy: "us-gaap" as const }));
+] satisfies Seed[]).map((f) => ({
+  ...f,
+  singleValued: true as const,
+  statement: "income" as const,
+  taxonomy: "us-gaap" as const,
+  kind: NON_ADDITIVE_INCOME[f.key] ?? ("duration-cumulative" as const),
+  ...(RATIO_SOURCE[f.key] ? { ratioSource: RATIO_SOURCE[f.key] } : {}),
+}));
 
 // ── Cash flow ───────────────────────────────────────────────────────────────
 // The three activity totals are here because they make the statement CHECKABLE:
@@ -107,6 +168,16 @@ const CASH_FLOW: FieldDef[] = ([
   { key: "dividendsPaid", chain: ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"], unit: "USD" },
   { key: "buybacks", chain: ["PaymentsForRepurchaseOfCommonStock"], unit: "USD" },
   { key: "dividendsDeclaredPerShare", chain: ["CommonStockDividendsPerShareDeclared"], unit: "USD/shares" },
+  // THE FOURTH LEG, AND THE RECONCILIATION IS NOT A CHECK WITHOUT IT. The three
+  // activity totals exclude the exchange-rate effect while netChangeInCash's
+  // first chain entry (...IncludingExchangeRateEffect) includes it, so the
+  // assertion reported breaks on ARM, MU and PLAB that were just FX. Reporting
+  // noise as failure is how a check stops being read.
+  { key: "fxEffectOnCash", chain: [
+      "EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+      "EffectOfExchangeRateOnCashAndCashEquivalents",
+      "EffectOfExchangeRateOnCash",
+    ], unit: "USD" },
 ] satisfies Seed[]).map((f) => ({ ...f, singleValued: true as const, kind: "duration-cumulative" as const, statement: "cash-flow" as const, taxonomy: "us-gaap" as const }));
 
 // ── Balance sheet ───────────────────────────────────────────────────────────
@@ -120,7 +191,11 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalCurrentAssets", chain: ["AssetsCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalAssets", chain: ["Assets"], unit: "USD", taxonomy: "us-gaap" },
-  { key: "payables", chain: ["AccountsPayableCurrent"], unit: "USD", taxonomy: "us-gaap" },
+  // AccountsPayableAndAccruedLiabilitiesCurrent IS NOT A SYNONYM -- it bundles
+  // accruals in with payables -- but MU publishes only that one and came back
+  // empty on all 8 quarters without it. Ranked BELOW the clean tag so a filer
+  // that publishes both is unaffected.
+  { key: "payables", chain: ["AccountsPayableCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalCurrentLiabilities", chain: ["LiabilitiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "shortTermDebt", chain: ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"], unit: "USD", taxonomy: "us-gaap" },
   { key: "longTermDebt", chain: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt"], unit: "USD", taxonomy: "us-gaap" },
@@ -130,23 +205,39 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "intangibleAssets", chain: ["IntangibleAssetsNetExcludingGoodwill", "FiniteLivedIntangibleAssetsNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "deferredRevenueCurrent", chain: ["ContractWithCustomerLiabilityCurrent", "DeferredRevenueCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "deferredRevenueNoncurrent", chain: ["ContractWithCustomerLiabilityNoncurrent", "DeferredRevenueNoncurrent"], unit: "USD", taxonomy: "us-gaap" },
-  // THE COVER PAGE, AND THE KNOWN HAZARD. dei:EntityCommonStockSharesOutstanding
-  // is FILER-level: a multi-class filer reports it once PER CLASS, and a stored
-  // number that does not say WHICH CLASS renders GOOG and GOOGL with the same
-  // market cap. This is where the BRK.B share-count error lives.
-  //
-  // AND companyfacts CANNOT NAME THE CLASS. The cover page carries the class on
-  // an XBRL segment axis (dei:LegalEntityAxis / us-gaap:StatementClassOfStock-
-  // Axis); companyfacts publishes the DEFAULT-context series only, so a
-  // multi-class filer's several rows arrive with the same `end`, the same
-  // `accn`, and nothing distinguishing them. There is no class label to read.
-  //
-  // So `singleValued: false` marks this as a field where several rows may
-  // legitimately share one period key, and the extractor refuses to pick:
-  // ambiguous periods are recorded as ambiguous, never resolved by taking the
-  // first, the largest, or the last. Picking silently IS the BRK.B bug.
-  { key: "sharesOutstandingCover", chain: ["EntityCommonStockSharesOutstanding"], unit: "shares", taxonomy: "dei", singleValued: false },
 ] satisfies BalanceSeed[]).map((f) => ({ singleValued: true as const, ...f, kind: "instant" as const, statement: "balance-sheet" as const }));
+
+/**
+ * THE COVER PAGE, LIFTED OUT OF THE PERIOD GRID ENTIRELY.
+ *
+ * `dei:EntityCommonStockSharesOutstanding` is a FILER-LEVEL fact with its own
+ * asOf date -- the cover date, which sits two to four weeks after the period
+ * end. While it lived in the instant list those cover dates entered the series
+ * as periods of their own carrying nothing but this one field, and an 8-period
+ * slice then returned FOUR balance sheets and four near-empty rows for AAPL, MU
+ * and PLAB. ARM and ASTS were unaffected only because their cover dates happen
+ * to land on the period end, so the damage was per-filer and invisible in any
+ * total.
+ *
+ * Lifting it to a symbol-level field fixes that structurally: the instant series
+ * now holds balance-sheet dates and nothing else.
+ *
+ * AND companyfacts CANNOT NAME THE CLASS. The cover page carries the class on an
+ * XBRL segment axis; companyfacts publishes the default-context series only, so
+ * a multi-class filer's several rows arrive with the same end, the same accn and
+ * nothing to tell them apart. There is no class label to read, so the extractor
+ * refuses to pick: such a reading is recorded as ambiguous with both candidates.
+ * Picking silently IS the BRK.B share-count bug.
+ */
+export const COVER_SHARES_FIELD: FieldDef = {
+  key: "sharesOutstandingCover",
+  kind: "instant",
+  statement: "balance-sheet",
+  taxonomy: "dei",
+  chain: ["EntityCommonStockSharesOutstanding"],
+  unit: "shares",
+  singleValued: false,
+};
 
 /** The ordered field list. ORDER IS LOAD-BEARING: values are stored positionally. */
 export const SEC_FIELDS: FieldDef[] = [...INCOME, ...CASH_FLOW, ...BALANCE_SHEET];
@@ -192,4 +283,30 @@ export function cumulativeFields(): FieldDef[] {
 /** Fields the differencing must never touch. */
 export function instantFields(): FieldDef[] {
   return SEC_FIELDS.filter((f) => f.kind === "instant");
+}
+
+/**
+ * Durations that do NOT add: read only where the filer published that exact
+ * frame, never assembled from two others.
+ *
+ * The consequence is real and is the point: Q4 is never filed as a three-month
+ * frame, so a `duration-average` is null for Q4 and so is any ratio that
+ * depends on it. A null says "not filed"; -668,000 shares said nothing true.
+ */
+export function asFiledOnlyFields(): FieldDef[] {
+  return SEC_FIELDS.filter(
+    (f) => f.kind === "duration-average" || f.kind === "duration-ratio"
+  );
+}
+
+/**
+ * Every field, partitioned exactly once. Exported so a check can assert the
+ * partition rather than recomputing it from the same filter it is testing.
+ */
+export function fieldPartition() {
+  return {
+    cumulative: cumulativeFields(),
+    asFiledOnly: asFiledOnlyFields(),
+    instant: instantFields(),
+  };
 }
