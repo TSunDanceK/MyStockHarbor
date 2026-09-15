@@ -115,6 +115,8 @@ for (const f of SEC_FIELDS) {
 console.log(`mapped ifrs-full tags: ${IFRS_TAGS.size} across ${MAPPED_BY_FIELD.size} of ${SEC_FIELDS.length} fields\n`);
 
 const tagsThatHit = new Set();
+/** For every MAPPED ifrs tag: which filers publish it at all, won or not. */
+const publishedBy = new Map();
 const unmappedByFiler = new Map();   // ifrs-full tag -> filers publishing it
 const rows = [];
 
@@ -127,17 +129,32 @@ for (const symbol of SYMBOLS) {
     const ex = extractCompanyFacts(symbol, facts);
     const rates = identityRates(checkIdentities(ex));
 
-    // WHICH TAGS ACTUALLY WON, read off the extraction rather than off the
-    // payload: a tag present but never selected is not a tag this page uses.
+    // ── ATTRIBUTED BY NAMESPACE, NOT BY TAG NAME ─────────────────────────
+    // The first version of this counted a cell as IFRS when its tag appeared in
+    // IFRS_CHAIN, and reported 71 ifrs-cells for AAPL — whose payload has no
+    // ifrs-full namespace at all. IFRS and us-gaap SHARE SPELLINGS
+    // (GrossProfit, Goodwill, Assets, Liabilities, ProfitLoss, InterestExpense,
+    // ResearchAndDevelopmentExpense), so the name cannot carry the answer. The
+    // extractor now records the winning namespace; this reads that.
+    //
+    // The control is what caught it, which is the entire reason a us-gaap filer
+    // is in an IFRS probe.
     let ifrsCells = 0;
     let usGaapCells = 0;
+    // DENSITY, NOT JUST A TOTAL. "Not empty" is a bad bar: a filer with one
+    // populated field across five years extracts something and still renders a
+    // near-blank table. The best period's fill is what a reader actually sees.
+    let bestPeriodCells = 0;
     for (const list of [ex.quarters, ex.years, ex.instants]) {
       for (const p of list) {
+        let filled = 0;
         for (const c of p.values) {
-          if (!c?.tag) continue;
-          if (IFRS_TAGS.has(c.tag)) { ifrsCells++; tagsThatHit.add(c.tag); }
-          else usGaapCells++;
+          if (!c || c.val === null) continue;
+          filled++;
+          if (c.ns === "ifrs-full") { ifrsCells++; if (c.tag) tagsThatHit.add(c.tag); }
+          else if (c.ns) usGaapCells++;
         }
+        if (filled > bestPeriodCells) bestPeriodCells = filled;
       }
     }
 
@@ -146,7 +163,11 @@ for (const symbol of SYMBOLS) {
     const published = facts.facts?.["ifrs-full"] ?? {};
     const unmapped = [];
     for (const [tag, node] of Object.entries(published)) {
-      if (IFRS_TAGS.has(tag)) continue;
+      if (IFRS_TAGS.has(tag)) {
+        if (!publishedBy.has(tag)) publishedBy.set(tag, new Set());
+        publishedBy.get(tag).add(symbol);
+        continue;
+      }
       const units = Object.keys(node?.units ?? {});
       if (!units.some((u) => u === "USD" || u === "shares" || u.startsWith("USD/"))) continue;
       unmapped.push(tag);
@@ -158,11 +179,12 @@ for (const symbol of SYMBOLS) {
     const why = empty ? unreadableReason(namespaces) : null;
     rows.push({ symbol, namespaces, q: ex.quarters.length, y: ex.years.length,
                 i: ex.instants.length, ifrsCells, usGaapCells, rates, empty, why,
-                unmapped: unmapped.length });
+                bestPeriodCells, unmapped: unmapped.length });
     console.log(
       `  ${symbol.padEnd(6)} ns=[${namespaces.join(",")}]  ` +
       `q${ex.quarters.length} y${ex.years.length} i${ex.instants.length}  ` +
       `cells: ifrs ${ifrsCells} / us-gaap ${usGaapCells}  ` +
+      `best-period ${bestPeriodCells}/${SEC_FIELDS.length}  ` +
       `unmapped-ifrs-tags ${unmapped.length}` +
       (empty ? `  EMPTY (${why.kind}${why.taxonomies ? `: ${why.taxonomies.join(",")}` : ""})` : "")
     );
@@ -178,22 +200,33 @@ const tenRows = rows.filter((r) => ten.has(r.symbol));
 const tenResolved = tenRows.filter((r) => !r.empty);
 
 console.log(`\n1. THE MEASURED TEN`);
-console.log(`   ${tenResolved.length} of ${tenRows.length} now extract something.`);
+const tenReal = tenRows.filter((r) => !r.empty && r.bestPeriodCells >= 6);
+console.log(`   ${tenResolved.length} of ${tenRows.length} extract SOMETHING.`);
+console.log(`   ${tenReal.length} of ${tenRows.length} reach a period with 6+ populated fields — ` +
+  `"not empty" and "renders a usable page" are not the same bar.`);
 for (const r of tenRows) {
   console.log(
-    `   ${r.symbol.padEnd(6)} ${r.empty ? "STILL EMPTY" : "resolves"}  ` +
-    `q${r.q} y${r.y} i${r.i}  ifrs-cells ${r.ifrsCells}` +
+    `   ${r.symbol.padEnd(6)} ${r.empty ? "STILL EMPTY" : r.bestPeriodCells < 6 ? "THIN" : "resolves"}  ` +
+    `q${r.q} y${r.y} i${r.i}  ifrs-cells ${r.ifrsCells}  best-period ${r.bestPeriodCells}` +
     (r.empty ? `  — ${r.why.kind}${r.why.taxonomies ? ` (${r.why.taxonomies.join(",")})` : ""}` : "")
   );
 }
 
-console.log(`\n2. MAPPED TAGS THAT NEVER HIT — guesses reading as knowledge`);
-const never = [...IFRS_TAGS].filter((t) => !tagsThatHit.has(t)).sort();
-console.log(`   ${never.length} of ${IFRS_TAGS.size}:`);
-for (const t of never) {
+// PRESENT AND WON ARE DIFFERENT QUESTIONS, and the first version conflated
+// them. A tag that is published but ranked below a sibling never wins a cell
+// and is still a correct entry; a tag no filer publishes is a guess. Only the
+// second should be deleted, so both are counted.
+console.log(`\n2. MAPPED TAGS: published by how many filers / won a cell`);
+const dead = [];
+for (const t of [...IFRS_TAGS].sort()) {
   const owner = [...MAPPED_BY_FIELD].find(([, c]) => c.includes(t))?.[0];
-  console.log(`   ${t}  (${owner})`);
+  const pub = publishedBy.get(t)?.size ?? 0;
+  const won = tagsThatHit.has(t);
+  if (!pub) dead.push(`${t} (${owner})`);
+  console.log(`   pub ${String(pub).padStart(2)}  ${won ? "WON " : "    "}  ${t}  (${owner})`);
 }
+console.log(`\n   PUBLISHED BY NOBODY — delete these, they are guesses: ${dead.length}`);
+for (const d of dead) console.log(`   ${d}`);
 
 console.log(`\n3. UNMAPPED ifrs-full TAGS, by how many filers publish them`);
 const ranked = [...unmappedByFiler].sort((a, b) => b[1].size - a[1].size).slice(0, 40);
@@ -212,5 +245,5 @@ const control = rows.find((r) => r.symbol === CONTROL);
 console.log(`\n5. THE us-gaap CONTROL`);
 console.log(control
   ? `   ${CONTROL}: q${control.q} y${control.y} i${control.i}, ifrs-cells ${control.ifrsCells} ` +
-    `(MUST be 0), identities ${JSON.stringify(control.rates)}`
+    `(MUST be 0 — it has no ifrs-full namespace), identities ${JSON.stringify(control.rates)}`
   : `   ${CONTROL} did not return — this run cannot tell a broken extractor from a real gap.`);

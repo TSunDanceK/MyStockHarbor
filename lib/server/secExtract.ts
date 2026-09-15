@@ -63,6 +63,22 @@ export type FieldValue = {
   val: number | null;
   /** The tag that won the chain FOR THIS PERIOD. */
   tag: string | null;
+  /**
+   * The TAXONOMY NAMESPACE that tag came from — and it is not redundant with
+   * `tag`, which is what the first IFRS probe assumed and was wrong about.
+   *
+   * IFRS and us-gaap SHARE SPELLINGS. `GrossProfit`, `Goodwill`, `Assets`,
+   * `Liabilities`, `ResearchAndDevelopmentExpense`, `InterestExpense` and
+   * `ProfitLoss` all exist in both. A probe attributing a hit by tag name alone
+   * reported 71 "ifrs cells" for AAPL — a us-gaap-only filer whose payload has
+   * no ifrs-full namespace at all — and the same artefact showed for BIDU and
+   * ZTO. The extraction was right; the instrument measuring it was not, and the
+   * control is what caught it.
+   *
+   * In memory only: StoredPeriod holds values and derivations, so this costs
+   * nothing stored.
+   */
+  ns: string | null;
   /** companyfacts units key the value was read from. Stored per period. */
   unit: string | null;
   derived: Derivation;
@@ -166,21 +182,39 @@ export function readableTaxonomies(): Set<string> {
 /**
  * Why an extraction came back with nothing — the PAGE's limit or the FILER's.
  *
- * Returns null when there is data. Otherwise:
- *   "unread-taxonomy" — the payload has financial facts, under a namespace
- *                       these field definitions do not read. `taxonomies` names
- *                       them. This is a gap in the page.
- *   "none"            — no financial namespace at all. This is a fact about the
- *                       filer, and the only case that may be worded as one.
+ * Returns one of three, and only the last may ever be worded to a reader as a
+ * fact about the company:
+ *
+ *   "unread-taxonomy"  financial facts exist, ALL under namespaces these field
+ *                      definitions do not read. `taxonomies` names them.
+ *   "unread-detail"    a namespace we DO read is present and we still got
+ *                      nothing — the filer reports in a non-USD currency (the
+ *                      unit guard refuses those deliberately) or tags lines
+ *                      nothing maps. Still the page's gap, so it must not be
+ *                      named after a taxonomy we can in fact read.
+ *   "none"             no financial namespace at all — a cover-page-only
+ *                      payload. THE ONLY fact-about-the-filer case.
+ *
+ * ── THE MIDDLE CASE IS NOT HYPOTHETICAL ─────────────────────────────────────
+ * The first version had two branches, and AEG fell through the crack: its
+ * payload carries `ffd`, `ifrs-full` AND `us-gaap`, so two readable namespaces
+ * are present, yet nothing extracts. The two-branch version reported
+ * "filed under ffd" — naming the one namespace that is NOT the reason, while
+ * the actual cause (units) went unmentioned. Measured, relay 34970388423.
  */
 export function unreadableReason(
   taxonomies: string[]
-): { kind: "unread-taxonomy"; taxonomies: string[] } | { kind: "none" } {
+):
+  | { kind: "unread-taxonomy"; taxonomies: string[] }
+  | { kind: "unread-detail" }
+  | { kind: "none" } {
   const readable = readableTaxonomies();
-  const unread = taxonomies.filter(
-    (t) => !NON_FINANCIAL_TAXONOMIES.has(t) && !readable.has(t)
-  );
-  return unread.length ? { kind: "unread-taxonomy", taxonomies: unread } : { kind: "none" };
+  const financial = taxonomies.filter((t) => !NON_FINANCIAL_TAXONOMIES.has(t));
+  if (!financial.length) return { kind: "none" };
+  // ORDER MATTERS: a readable namespace present means we looked in the right
+  // place and came back empty, whatever else the payload also carries.
+  if (financial.some((t) => readable.has(t))) return { kind: "unread-detail" };
+  return { kind: "unread-taxonomy", taxonomies: financial };
 }
 
 // ── period arithmetic ───────────────────────────────────────────────────────
@@ -225,7 +259,7 @@ function newer(a: FactRow, b: FactRow): FactRow {
  * from 2018 and `Revenues` before it, and one tag for the symbol loses half.
  */
 function rowsForField(facts: CompanyFacts, field: FieldDef) {
-  const out: { row: FactRow; tag: string; rank: number; unit: string }[] = [];
+  const out: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[] = [];
 
   // TWO NAMESPACES, ONE RANKED LIST. The primary chain first, then the same
   // line under `ifrs-full` at ranks continuing from where it left off -- so a
@@ -258,7 +292,7 @@ function rowsForField(facts: CompanyFacts, field: FieldDef) {
         for (const row of units[unit] ?? []) {
           if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
           if (!row.end) continue;
-          out.push({ row, tag, rank: thisRank, unit });
+          out.push({ row, tag, ns, rank: thisRank, unit });
         }
       }
     }
@@ -275,9 +309,9 @@ function rowsForField(facts: CompanyFacts, field: FieldDef) {
  * current tag because it was filed later.
  */
 function resolve(
-  candidates: { row: FactRow; tag: string; rank: number; unit: string }[]
+  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ) {
-  let best: { row: FactRow; tag: string; rank: number; unit: string } | null = null;
+  let best: { row: FactRow; tag: string; ns: string; rank: number; unit: string } | null = null;
   for (const c of candidates) {
     if (!best || c.rank < best.rank) { best = c; continue; }
     if (c.rank === best.rank && newer(c.row, best.row) === c.row) best = c;
@@ -336,7 +370,7 @@ export function fiscalLabel(
 
 // ── extraction ──────────────────────────────────────────────────────────────
 
-type Bucket = Map<string, { row: FactRow; tag: string; rank: number; unit: string }[]>;
+type Bucket = Map<string, { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]>;
 
 const periodKey = (r: FactRow) => `${r.start ?? ""}..${r.end}`;
 
@@ -417,14 +451,14 @@ export function extractCompanyFacts(
 
         if (f.n === 4) {
           cell(yearCells, yearMeta).set(field.key, {
-            val: f.best.row.val!, tag: f.best.tag, unit: f.best.unit, derived: "as-filed",
+            val: f.best.row.val!, tag: f.best.tag, ns: f.best.ns, unit: f.best.unit, derived: "as-filed",
           });
         }
 
         if (f.n === 1) {
           // Q1, as filed. The only quarter that needs no differencing.
           cell(quarterCells, quarterMeta).set(field.key, {
-            val: f.best.row.val!, tag: f.best.tag, unit: f.best.unit, derived: "as-filed",
+            val: f.best.row.val!, tag: f.best.tag, ns: f.best.ns, unit: f.best.unit, derived: "as-filed",
           });
           continue;
         }
@@ -447,6 +481,7 @@ export function extractCompanyFacts(
         m.set(field.key, {
           val: f.best.row.val! - prior.best.row.val!,
           tag: f.best.tag,
+          ns: f.best.ns,
           unit: f.best.unit,
           derived: "differenced",
           from: [prior.end, f.end],
@@ -475,7 +510,7 @@ export function extractCompanyFacts(
       if (!m) { m = new Map(); target.set(best.row.end, m); }
       if (!meta.has(best.row.end)) meta.set(best.row.end, { start: best.row.start, row: best.row });
       m.set(field.key, {
-        val: best.row.val!, tag: best.tag, unit: best.unit, derived: "as-filed",
+        val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
       });
     }
   }
@@ -499,6 +534,10 @@ export function extractCompanyFacts(
         m.set(field.key, {
           val: num / den,
           tag: null,
+          // A computed ratio comes from two OTHER fields, not from a tag, so it
+          // has no namespace of its own. Null rather than inherited: inheriting
+          // one would attribute a derivation to a filing that never made it.
+          ns: null,
           unit: field.unit,
           derived: "computed",
           computedFrom: [numerator, denominator],
@@ -523,7 +562,7 @@ export function extractCompanyFacts(
       const prior = instantMeta.get(end);
       if (!prior || newer(best.row, prior) === best.row) instantMeta.set(end, best.row);
       m.set(field.key, {
-        val: best.row.val!, tag: best.tag, unit: best.unit, derived: "as-filed",
+        val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
       });
     }
   }

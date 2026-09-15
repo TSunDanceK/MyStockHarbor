@@ -76,8 +76,9 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
-import { extractCompanyFacts, type CompanyFacts } from "./secExtract";
+import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
 import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
+import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
@@ -162,8 +163,24 @@ export type ColdResult =
   | { status: "no-cik" }
   /** Usable data, from the store or from this render's own fetch. */
   | { status: "ready"; set: StoredFactSet; cold: boolean }
-  /** Fetched successfully; the filer publishes no XBRL this page can read. */
-  | { status: "no-xbrl"; reason: string }
+  /**
+   * Fetched successfully, nothing this page can read — and WHOSE limit that is.
+   *
+   * `why` is the distinction the first version of this card got wrong: it told
+   * every such reader that the COMPANY does not file the data, which is false
+   * for a foreign private issuer whose statements are in the payload under a
+   * namespace these fields do not read. See SecNoXbrlCard.
+   *
+   * "unknown" is for a set stored before the taxonomy census existed. It takes
+   * the site-limit wording, because asserting a filer publishes nothing on the
+   * strength of an absent field is the same error wearing a different hat.
+   */
+  | {
+      status: "no-xbrl";
+      reason: string;
+      why: "unread-taxonomy" | "none" | "unknown";
+      taxonomies: string[];
+    }
   /** Timed out, refused by a guard, or failed. Queued where possible. */
   | { status: "pending"; reason: string };
 
@@ -355,6 +372,66 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
 }
 
 /**
+ * What an empty extraction MEANS, from the stored taxonomy census.
+ *
+ * `tx` absent is UNKNOWN, not "none". Sets written before the census existed
+ * have no `tx`, and reading its absence as "this filer published nothing" would
+ * reintroduce the false claim in a place no one would look for it.
+ */
+function emptyResult(symbol: string, tx: string[] | undefined): ColdResult {
+  if (!tx) {
+    return {
+      status: "no-xbrl",
+      reason: "stored before the taxonomy census existed",
+      why: "unknown",
+      taxonomies: [],
+    };
+  }
+  const r = unreadableReason(tx);
+  return r.kind === "unread-taxonomy"
+    ? {
+        status: "no-xbrl",
+        reason: `filed under ${r.taxonomies.join(", ")}, which these fields do not read`,
+        why: "unread-taxonomy",
+        taxonomies: r.taxonomies,
+      }
+    : {
+        status: "no-xbrl",
+        reason: "no financial taxonomy in the payload",
+        why: "none",
+        taxonomies: [],
+      };
+}
+
+/**
+ * One re-fetch of a symbol whose stored set is empty under an older chain set.
+ *
+ * Returns null on ANY failure, so the caller falls back to the stored answer
+ * rather than to a pending page: the symbol already has a real, if empty,
+ * reading, and downgrading it to "being fetched" on a slow network would be the
+ * permanent-pending failure again. Budgeted and timed out exactly like a cold
+ * fetch, because that is what it is.
+ */
+async function retryEmpty(symbol: string, cik: string): Promise<ColdResult | null> {
+  if (!(await claimColdFetch(symbol))) return null;
+  try {
+    const set = await withTimeout(
+      fetchAndStore(symbol, cik),
+      SEC_COLD_TIMEOUT_MS,
+      `[sec-cold] ${symbol} empty-set retry`
+    );
+    console.warn(
+      `[sec-cold] ${symbol}: empty set re-read under chains ${secChainsHash()} — ` +
+        `${hasUsableData(set) ? "now has data" : "still empty"}`
+    );
+    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(symbol, set.tx);
+  } catch (err) {
+    rethrowIfDynamic(err);
+    return null;
+  }
+}
+
+/**
  * Resolve one symbol's fact set for a render, fetching it if this is the first
  * time anyone has asked.
  *
@@ -370,9 +447,24 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   // 2. THE STORE.
   const stored = await readFactSet(clean);
   if (stored) {
-    return hasUsableData(stored)
-      ? { status: "ready", set: stored, cold: false }
-      : { status: "no-xbrl", reason: "stored fact set is empty" };
+    if (hasUsableData(stored)) return { status: "ready", set: stored, cold: false };
+    // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
+    //
+    // secFieldsHash gates on field ORDER and MEMBERSHIP, deliberately: a
+    // corrected tag chain does not invalidate stored VALUES. But it does
+    // invalidate stored NOTHING. Every IFRS filer has an empty set written
+    // before ifrs-full was read, and without this they stay empty forever --
+    // the page would keep saying it cannot read them while the chains that can
+    // sit right there.
+    //
+    // Scoped to EMPTY sets only, so it is not a mass re-populate: a set with
+    // values is never re-fetched by this, and a set that re-fetches to nothing
+    // again stores the current hash and stops retrying.
+    if (SEC_UA && stored.c !== secChainsHash()) {
+      const retried = await retryEmpty(clean, cik);
+      if (retried) return retried;
+    }
+    return emptyResult(clean, stored.tx);
   }
 
   if (!SEC_UA) {
@@ -396,9 +488,7 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
       SEC_COLD_TIMEOUT_MS,
       `[sec-cold] ${clean}`
     );
-    return hasUsableData(set)
-      ? { status: "ready", set, cold: true }
-      : { status: "no-xbrl", reason: "the filer publishes no XBRL these fields read" };
+    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(clean, set.tx);
   } catch (err) {
     rethrowIfDynamic(err);
     const reason = String((err as Error)?.message ?? err);
