@@ -28,6 +28,10 @@ const fixture = (sym) =>
   JSON.parse(fs.readFileSync(`data/sec/factset-fixture-${sym}.json`, "utf8"));
 
 const M = await loadCards();
+const RENDERED_QUARTERS_RENDERED = Number(
+  (fs.readFileSync("lib/server/secEarningsView.ts", "utf8")
+    .match(/RENDERED_QUARTERS = (\d+)/) ?? [])[1]
+);
 const AAPL = fixture("AAPL");
 const KGC = fixture("KGC");
 const AZN = fixture("AZN");
@@ -171,8 +175,16 @@ console.log("\n5. A3 — a blank Q4 EPS says why");
     q4.every((g) => g.epsYoY === null) ? /not filed/.test(t) : true,
     "Q4 is never filed as a standalone quarter and nothing is derived to fill it");
   check("...and the reason is in visible text, not only a title attribute",
-    /Q4 EPS is not filed separately/.test(t),
+    /Q4 EPS is not filed as a separate period/.test(t),
     "hover-only is invisible on a touch screen");
+  // THE REASON MUST NOT DESCRIBE A CALENDAR THE FILER DOES NOT KEEP. The old
+  // wording said "companies file nine-month and full-year figures", which is a
+  // US 10-Q filer's year and not AZN's — it files half-yearly, so there is no
+  // nine-month figure to difference and the sentence explained a mechanism
+  // that does not exist for it.
+  check("...and it does not assume a nine-month filing exists",
+    !/nine-month/.test(t) && !/standalone fourth quarter/.test(t),
+    "AZN files half-yearly under 20-F/6-K");
 }
 
 console.log("\n6. KGC renders a real page, and never a pending one");
@@ -342,12 +354,72 @@ console.log("\n10. the THIRD shape — a quarterly anchor whose cash flow is ann
     const b = /^Q(\d) FY(\d+)$/.exec(g.comparedWith ?? "");
     return m && b && m[1] === b[1] && Number(m[2]) - 1 === Number(b[2]);
   }).length;
+  // NOT A HARDCODED COUNT. This read `byLabel === 8` and went stale the moment
+  // the thin-row filter changed how many rows AZN renders — a literal that
+  // measures the fixture rather than the property. The property is that every
+  // row carrying a comparator matches by fiscal label, and that the only row
+  // without one is the oldest, whose prior year is not in the stored window.
+  const withBase = vAzn.growth.filter((g) => g.comparedWith).length;
   check("every AZN row with a comparator compares against its own fiscal quarter, one year back",
-    byLabel === vAzn.growth.filter((g) => g.comparedWith).length && byLabel === 8,
-    `${byLabel} of ${vAzn.growth.length} rows — this is the filer whose table read "+75.9% Compared with Q2 FY2021" against a latest of Q2 FY2025`);
+    byLabel === withBase && withBase === vAzn.growth.length - 1,
+    `${byLabel} of ${vAzn.growth.length} rows match by label; only the oldest (${vAzn.growth[0].label}) has no prior year stored — ` +
+      `this is the filer whose table read "+75.9% Compared with Q2 FY2021" against a latest of Q2 FY2025`);
 
   check("AZN still reads as quarterly throughout, which is correct for it",
     /quarter/i.test(visibleText(renderPage(M, vAzn))) && vAzn.basis === "quarter");
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log("\n11. a row too thin to carry the table does not take a slot");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Measured on the #465 preview, /stock/AZN/earnings: Q3 FY2020, Q4 FY2020 and
+// Q1 FY2021 rendered with four of five cells empty. AZN stores exactly ONE
+// field for those periods (revenue) against 15 for its full quarters, so each
+// produced a revenue YoY and nothing else — three of the eight slots carrying
+// one number apiece.
+//
+// The bar is an EPS comparison or a margin. The assertion is on the RENDERED
+// ROWS, and the fixture cannot supply it: which periods survive is decided by
+// what AZN filed.
+{
+  /** Filled cells per rendered row, read back off the view the cards receive. */
+  const filled = (v) =>
+    v.margins.map((m, i) => {
+      const g = v.growth[i];
+      return {
+        label: m.label,
+        n: [g.revenueYoY, g.epsYoY, m.gross, m.operating, m.net]
+          .filter((x) => x !== null).length,
+      };
+    });
+
+  const aznRows = filled(vAzn);
+  check("no AZN row is down to a bare revenue comparison",
+    aznRows.every((r) => r.n >= 3),
+    aznRows.map((r) => `${r.label}(${r.n}/5)`).join(" "));
+
+  check("...and the three the eye-check named are the ones that went",
+    !aznRows.some((r) => ["Q3 FY2020", "Q4 FY2020", "Q1 FY2021"].includes(r.label)),
+    "each stored one field — revenue — against 15 on AZN's full quarters");
+
+  // THE FILTER MUST NOT SILENTLY SHORTEN A DENSE FILER'S TABLE. AAPL and KGC
+  // are the controls: a rule that trimmed them too would pass the assertion
+  // above and be a different bug.
+  check("a dense filer still renders its full eight rows",
+    filled(vAapl).length === RENDERED_QUARTERS_RENDERED,
+    filled(vAapl).map((r) => `${r.label}(${r.n}/5)`).join(" "));
+  check("and the annual filer still renders all five fiscal years",
+    filled(vKgc).length === 5,
+    filled(vKgc).map((r) => `${r.label}(${r.n}/5)`).join(" "));
+
+  // AND THE ROWS ARE STILL PAIRED. margins[i] and growth[i] are read together
+  // by the card, so a filter applied to one list and not the other would put a
+  // margin beside another period's growth — plausible, and wrong.
+  check("every margins row is paired with the growth row for the SAME period",
+    vAzn.margins.length === vAzn.growth.length &&
+      vAzn.margins.every((m, i) => m.label === vAzn.growth[i].label),
+    `${vAzn.margins.length} rows, labels aligned`);
 }
 
 console.log("\n7. the three mutations, each re-rendered from broken source");
@@ -374,10 +446,13 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // the entire reason the defect survived every check for as long as it did,
   // reproduced here. A dense filer cannot catch it, so the assertion is made
   // where the two rules disagree.
+  // FOUR ROWS BACK IN THE STORED LIST — the shape of the original defect,
+  // expressed against `q` because the comparison is now derived in `measured`,
+  // which runs over the whole stored list before any rows are chosen.
   const offsetMutation = (src) =>
     src.replace(
       "const prior = priorYearOf(q, p);",
-      "const prior = q[shown.indexOf(p) + 4] ?? null;"
+      "const prior = q[q.indexOf(p) + 4] ?? null;"
     );
   const wrongRows = (view) =>
     view.growth.filter((g) => {
@@ -471,6 +546,28 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   check("...and the legend disappears with them, so it cannot be a standing decoration",
     !/not meaningful/i.test(eText),
     "the note is conditional on a marker actually being present");
+
+  // ── (f) THE THIN-ROW FILTER IS REMOVED ──────────────────────────────────
+  //
+  // With every period eligible again, AZN's three revenue-only rows come back
+  // and push out three that carry margins — which is the state the eye-check
+  // found.
+  const dropRowFilter = (src) =>
+    src.replace(
+      "const rows = measured.filter(hasSomething).slice(0, RENDERED_QUARTERS);",
+      "const rows = measured.slice(0, RENDERED_QUARTERS);"
+    );
+  check("the thin-row mutation actually applied", dropRowFilter(cardsSrc) !== cardsSrc);
+  const fMod = await loadCards(dropRowFilter);
+  const fView = fMod.buildSecEarningsView(AZN);
+  const fThin = fView.margins.filter((m, i) => {
+    const g = fView.growth[i];
+    return [g.revenueYoY, g.epsYoY, m.gross, m.operating, m.net].filter((x) => x !== null).length <= 1;
+  });
+  check("(f) MUTATION: without the filter, AZN's one-cell rows take three slots again",
+    fThin.length === 3 &&
+      fThin.map((m) => m.label).sort().join(" ") === "Q1 FY2021 Q3 FY2020 Q4 FY2020",
+    `${fThin.length} rows return with one filled cell — ${fThin.map((m) => m.label).join(" ")}`);
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();

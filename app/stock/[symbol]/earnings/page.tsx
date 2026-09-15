@@ -750,12 +750,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", price, date);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
-  const trendStr = seed.trend ? `, ${seed.trend}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
   // either when FMP's analyst consensus left on 2026-09-15, and a description
   // promising them in search results is a promise the page cannot keep.
-  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet${trendStr}, with year-over-year context and a simple earnings score.`;
+  //
+  // ── AND NO TREND LABEL ───────────────────────────────────────────────────
+  // It used to interpolate `seed.trend` as a BARE LABEL mid-sentence, so the
+  // description read "...cash flow and balance sheet, Uptrend, with
+  // year-over-year context..." on AAPL and "...balance sheet, Range / Mixed,
+  // with..." on KGC. Two problems, and the second is the reason it is removed
+  // rather than reworded:
+  //
+  //   1. It is a price-chart reading in an EARNINGS description — this page is
+  //      built on filed figures and says nothing about moving averages.
+  //   2. It changes with the price, so the same page advertises itself
+  //      differently on different crawls, from data that is not on it.
+  //
+  // The /stock/[symbol] page states the trend too, and that is NOT this bug:
+  // it uses buildSeoDescription, which writes it as a sentence ("AAPL is in an
+  // uptrend") on the page whose subject IS the trend.
+  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet, with year-over-year context and a simple earnings score.`;
   return {
     title, description,
     robots: {
