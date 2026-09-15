@@ -106,6 +106,33 @@ async function runPool(items, worker, size) {
 }
 
 /**
+ * Is there nothing in this image on ANY background?
+ *
+ * Background-independent on purpose, and that is the distinction that matters
+ * next to invisibleOnChip above. "Invisible" is a fact about a mark against a
+ * particular background and is fixed by changing the background. "Blank" is a
+ * fact about the image and cannot be fixed at all.
+ *
+ * Kept exactly as #458 settled it: an earlier version composited onto white and
+ * flagged 166 real logos, because a white mark on transparency vanishes against
+ * white while being a perfectly good image. A mark of any single colour, white
+ * included, varies in ALPHA and is kept.
+ */
+async function isBlank(buf) {
+  const st = await sharp(buf).stats();
+  const rgbStdev = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
+  const alphaCh = st.channels[3];
+  const fullyTransparent = Boolean(alphaCh) && alphaCh.max === 0;
+  const flatEverywhere = rgbStdev < BLANK_STDEV && (!alphaCh || alphaCh.stdev < BLANK_STDEV);
+  return {
+    blank: fullyTransparent || flatEverywhere,
+    why: fullyTransparent ? "fully transparent" : "uniform colour",
+    rgbStdev,
+    alphaStdev: alphaCh ? alphaCh.stdev : null,
+  };
+}
+
+/**
  * Crop a uniform border, with the guards the brief requires.
  *
  * WHY THIS FIXES THE SIZING PROBLEM. A handful of sources carry an OPAQUE baked
@@ -255,6 +282,27 @@ async function harvest(symbol) {
     // TickerLogo cannot pick a chip colour per symbol: that needs a per-symbol
     // lookup, which is exactly what #458 removed for costing 6.4 KB gzipped on
     // every page. So the contrast has to live in the image.
+    // ── BLANK IS DECIDED BEFORE BACKING, and the order is the bug fix ───
+    // A uniform square composites to a uniform result, so invisibleOnChip
+    // cannot tell it apart from a white mark on transparency -- both vanish.
+    // With the blank test left until after the composite, KNX and NGVT were
+    // handed a dark panel, gained variation from it, sailed through the guard
+    // that had rejected them in #458, and came back as files. Two logos the
+    // harvest had deliberately dropped reappeared looking deliberate.
+    // Blankness is a property of the image, so it is judged on the image,
+    // before anything is painted behind it.
+    const pre = await isBlank(trimmed.buf);
+    if (pre.blank) {
+      return {
+        symbol,
+        ok: false,
+        reason:
+          `blank-image (${pre.why}; rgbStdev=${pre.rgbStdev.toFixed(2)} ` +
+          `alphaStdev=${pre.alphaStdev === null ? "n/a" : pre.alphaStdev.toFixed(2)}; ` +
+          `source ${input.length}B ${srcWidth}px)`,
+      };
+    }
+
     // Asked of the TRIMMED copy, because that is what will be encoded and shown.
     const chip = await invisibleOnChip(trimmed.buf);
     const needsBacking = chip.invisible;
@@ -293,41 +341,17 @@ async function harvest(symbol) {
         .toBuffer();
     }
 
-    // ── BLANKNESS, MEASURED ON THE IMAGE ITSELF ─────────────────────────
-    // A spot-check of the first harvest found files that decode perfectly at
-    // 72x72 and carry no content at all -- KNX and NGVT among them. Neither
-    // earlier guard catches that shape: the width floor passes (they are full
-    // size) and a byte-size floor passes (Q's source is 43 KB at 1596px). A
-    // blank chip is worse than the monogram it replaces and worse than a 404,
-    // because nothing downstream can tell it failed -- <img> fires load, not
-    // error, so the fallback chain never advances.
-    //
-    // THE TEST IS BACKGROUND-INDEPENDENT, and that correction matters. An
-    // earlier version composited onto the chip's white and measured that, which
-    // flagged 166 files including IBM, DIS, NKE and V. Those are NOT blank:
-    // their marks are WHITE on transparency, so they vanish against white while
-    // being perfectly good images. Skipping them would have silently dropped
-    // a hundred major brands on a measurement error. Their invisibility against
-    // a white chip is a real and separate issue, it predates this change (the
-    // same PNG renders into the same white box today), and it is the owner's
-    // call -- not something a harvest should decide by deleting files.
-    //
-    // So "blank" means the IMAGE has no variation anywhere:
-    //   fully transparent            -> nothing to see on any background
-    //   flat colour AND flat alpha   -> one uniform square
-    // A mark of any single colour, white included, varies in alpha and is kept.
-    const st = await sharp(out).stats();
-    const rgbStdev = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
-    const alphaCh = st.channels[3];
-    const fullyTransparent = Boolean(alphaCh) && alphaCh.max === 0;
-    const flatEverywhere = rgbStdev < BLANK_STDEV && (!alphaCh || alphaCh.stdev < BLANK_STDEV);
-    if (fullyTransparent || flatEverywhere) {
+    // The same test again on the encoded result, which is where the brief asks
+    // for it. It should never fire now that the pre-check above exists -- a
+    // backed image always varies -- but an assertion that costs one stats() call
+    // and guards against a future pipeline change is worth keeping.
+    const post = await isBlank(out);
+    if (post.blank) {
       return {
         symbol,
         ok: false,
         reason:
-          `blank-image (${fullyTransparent ? "fully transparent" : "uniform colour"}; ` +
-          `rgbStdev=${rgbStdev.toFixed(2)} alphaStdev=${alphaCh ? alphaCh.stdev.toFixed(2) : "n/a"}; ` +
+          `blank-image after encode (${post.why}; rgbStdev=${post.rgbStdev.toFixed(2)}; ` +
           `source ${input.length}B ${srcWidth}px)`,
       };
     }
