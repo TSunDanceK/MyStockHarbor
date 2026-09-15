@@ -547,3 +547,38 @@ every write. Inside the `changed` branch deliberately: an unchanged set means th
 cached HTML is already right, and flushing it would throw away a valid render —
 and with it the FMP calls and Redis reads that produced it — to rebuild the
 identical page.
+
+## §17 The render check ran out of allowance, and the probe was lying about it
+
+The IFRS cards are **not** eye-verified on a deployment today. The attempt
+returned this for every path:
+
+```
+/stock/AZN/earnings     HTTP 200  339853B  age=9800  cache=HIT  (2 redirects)
+/stock/RYAAY/earnings   HTTP 200  339858B  age=9800  cache=HIT  (2 redirects)
+/stock/ZZQQXX/earnings  HTTP 200  339876B  age=9802  cache=HIT  (2 redirects)
+```
+
+Identical body sizes, two redirects instead of one, and a **200 on the symbol
+that must 404** — every request had landed on `/verify`. `middleware.ts` caps
+`/stock/*` at `STOCK_DAILY_LIMIT = 40` per IP per UTC day and 307s past it, and
+**this probe is what spent the allowance**: 20 paths × 2 rounds is exactly 40.
+
+The probe reported all six as `outcome: unrecognised`, which is not wrong but is
+useless — it looks like a rendering problem. It now detects the landing and says
+`RATE-LIMITED (/verify) — not a render; the /stock/* daily IP cap is spent`, so
+the next person reads the cause in one line instead of debugging the page.
+
+**What IS verified**, without a rendered page:
+- `unreadableReason()` run against each filer's **real** namespace and refused-
+  currency evidence from live payloads — AEG→EUR, MFC→CAD, NWG→EUR/GBP,
+  RYAAY→EUR, VIV→BRL, GSK/LYG→GBP, SAN→EUR, ABEV→BRL (probe §6).
+- The extractor run against crafted dual-namespace payloads: us-gaap wins over a
+  LATER-filed ifrs-full row, an ifrs-only filer falls through, a EUR figure never
+  reaches a USD field and the refusal is recorded (`check-sec-extract`).
+- The card's branching, from the shipped source, including that the
+  fact-about-the-filer wording is reachable only on `reason === "none"`.
+
+**What is not**: how the three cards look. That is the owner-side eye check the
+sandbox has never been able to do, and it is now also gated behind a rate limit
+that resets at UTC midnight.
