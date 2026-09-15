@@ -105,10 +105,16 @@ const redis =
  * reason: it is many times the measured cost, so a legitimately slow response
  * still lands, and anything past it is not slow but absent.
  *
- * MEASURED: fetch + parse + extract + encode ran p50 153ms, p90 327ms, max
- * 549ms over 40 symbols (relay run 34959833821). 5s is ~15x p90. The tail that
- * can genuinely exceed it is the 6.4MB end of the wire distribution on a bad
- * connection, and that case is exactly what the queue fallback is for.
+ * MEASURED TWICE, and the second number is the honest one. On a runner, fetch +
+ * parse + extract + encode ran p50 153ms, p90 327ms, max 549ms over 40 symbols
+ * (relay 34959833821). In a real cold render on a lambda the whole page took
+ * 817ms-2.0s (relay 34965223921), the 2.0s being a cold start -- so the headroom
+ * here is ~2.5x the worst observed, NOT the ~15x the p90 alone suggested.
+ *
+ * Still the right side of the line, because expiry is a queued pending page
+ * rather than an error, and the tail that can genuinely exceed 5s is the 6.4MB
+ * end of the wire distribution on a bad connection -- exactly what the queue
+ * fallback is for. But 15x was the wrong number to have quoted.
  */
 export const SEC_COLD_TIMEOUT_MS = 5_000;
 
@@ -309,6 +315,10 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
     //     cache is the store, and it has no expiry.
     //   - the measured body is 3.0MB p50 / 6.4MB max, over Vercel's 2MB Data
     //     Cache entry limit, so it is offered and declined rather than stored.
+    //     CONFIRMED IN PRODUCTION LOGS, not predicted: "Failed to set Next.js
+    //     data cache for .../CIK0000723603.json, items over 2MB can not be
+    //     cached (4345527 bytes)". One such line per symbol for the life of the
+    //     site -- a warning about a response that was used anyway, not an error.
     // A value BELOW the route's 3600 would be the harmful choice: Next takes
     // the minimum of a segment's revalidate and its fetches', so it would
     // shorten every stock page's window, not just this one's.

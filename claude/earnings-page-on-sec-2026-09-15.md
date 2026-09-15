@@ -347,3 +347,69 @@ and that HTML is served for up to an hour even after the cron populates it. The
 5s timeout is ~15x the measured p90 (327ms) so this should be rare, but rare is
 not never, and it is a real consequence of the synchronous design rather than a
 bug in it.
+
+### The re-measurement: it works, and here are the numbers
+
+Relay 34965223921 against the same preview, four **genuinely off-universe**
+symbols (CULP, IIIN, PLPC, FLXS — small-caps, no stored fact set, no cached
+price history either) plus the three canaries:
+
+```
+===== round 1  (cold)
+  /stock/CULP/earnings    HTTP 200  1983ms  215357B  cache=MISS   rendered
+  /stock/IIIN/earnings    HTTP 200  1003ms  217332B  cache=MISS   rendered
+  /stock/PLPC/earnings    HTTP 200  1020ms  217942B  cache=MISS   rendered
+  /stock/FLXS/earnings    HTTP 200   817ms  223298B  cache=MISS   rendered
+  /stock/RYAAY/earnings   HTTP 200   751ms  164552B  cache=MISS   no-xbrl
+  /stock/AAPL/earnings    HTTP 200   485ms  218118B  cache=MISS   rendered
+  /stock/ZZQQXX/earnings  HTTP 404   338ms           cache=MISS   404
+===== round 2  (the same URLs, seconds later)
+  CULP 103ms HIT · IIIN 139ms HIT · PLPC 180ms HIT · FLXS 106ms HIT
+  RYAAY 100ms HIT · AAPL 125ms HIT · ZZQQXX 106ms HIT
+```
+
+**`cache=HIT` on round 2 is the load-bearing line, not the times.** A dynamic
+route can never report HIT. The cold render's HTML was cached by ISR and served
+from it, so the route kept its static contract *through* a render that fetched
+3–5MB from SEC — which is the property the whole affordability argument rests on
+and the thing the 500 proved was broken.
+
+**Cold-render cost, isolated.** Each figure includes one Vercel SSO redirect, so
+the comparison matters more than the absolute:
+
+| | total | of which `getDailyHistory` | note |
+|---|---|---|---|
+| AAPL (warm, uncached HTML) | 485ms | 12ms (Redis hit) | the baseline |
+| IIIN (cold) | 1003ms | 208ms (FMP, cold) | |
+| PLPC (cold) | 1020ms | 208ms | |
+| FLXS (cold) | 817ms | 409ms | |
+| CULP (cold) | 1983ms | 411ms | first request — lambda cold start |
+
+An off-universe symbol pays **two** cold legs, not one: its price history is not
+in Redis either. Netting the extra history cost out of IIIN against AAPL leaves
+**~320ms for the SEC leg** — fetch, parse, extract, encode, write — which sits
+between the p50 (153ms) and p90 (327ms) measured on a runner in §10. The
+per-symbol measurement transferred to a lambda.
+
+**On the 5s timeout.** The worst observed cold render was 2.0s *including* a
+lambda cold start, so the real headroom is ~2.5x, not the ~15x the p90 suggested.
+That is still the right side of the line — the fallback on expiry is a queued
+pending page, not an error — but 15x was the wrong number to have quoted.
+
+**Next confirmed the Data Cache prediction verbatim**, once per cold symbol:
+
+```
+Failed to set Next.js data cache for
+  https://data.sec.gov/api/xbrl/companyfacts/CIK0000723603.json,
+  items over 2MB can not be cached (4345527 bytes)
+```
+
+3.5MB / 3.9MB / 4.3MB / 4.8MB across the four. This is the predicted behaviour
+reported as a warning, not a failure — the response is used, it is simply not
+stored twice — and it is bounded at one line per symbol for the life of the
+site, because guard 2 means a second render never reaches the fetch.
+
+**And no `Page changed from static to dynamic at runtime` anywhere in the
+window.** The three outcomes all landed: `rendered` for a us-gaap filer,
+`no-xbrl` for Ryanair (IFRS — permanent, and correctly not pending), `404` for
+a string with no CIK.
