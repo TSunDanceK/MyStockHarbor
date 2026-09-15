@@ -75,9 +75,13 @@ export const RETIRED_SOURCES: RetiredSource[] = [
     source: "FMP /revenue-product-segmentation + /revenue-geographic-segmentation",
     retiredOn: "2026-09-15",
     reason:
-      "Segment revenue is filed on an XBRL segment axis, and companyfacts publishes " +
-      "the default context only — the breakdown is not in it. Source unresolved; see " +
-      "hide-list-verdict §6.",
+      // READER-SAFE EVEN THOUGH NOTHING RENDERS IT. These strings were written
+      // for a card that no longer exists, and "see hide-list-verdict §6" was
+      // live on the page for two weeks. If A5 is ever reversed the text ships
+      // again, so the internal citation comes out now rather than being left
+      // as a trap for whoever reverses it.
+      "Segment revenue is filed against a breakdown the SEC's own bulk data does not " +
+      "publish — only the company-wide totals are in it. No free source covers the split.",
   },
 ];
 

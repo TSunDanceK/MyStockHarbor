@@ -250,6 +250,15 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
+  // card and how many sets are still on the old quarter window.
+  "write-annual-filer-census": {
+    script: "scripts/annual-filer-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
