@@ -1264,6 +1264,35 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
     `${(grown / 1024).toFixed(0)} KB at 796 symbols (${((grown / 10485760) * 100).toFixed(1)}% of the ceiling)`);
 }
 
+// ── 17d. The run is observable without a key ───────────────────────────────
+//
+// The FIRST automated run (04:00:16 UTC 2026-09-15, 200, dpl_B6UF7eCd8tcq)
+// printed nothing at all. recordJobRun writes behind CACHE_HEALTH_KEY and the
+// cron caller discards the response body, so there was no way to tell whether
+// it had walked a date, parsed an index or done nothing whatsoever.
+//
+// A daily job returning 200 while doing nothing is indistinguishable from one
+// working. That is the failure this whole pipeline is built against, and it was
+// unobservable on its own first run.
+console.log("\n17d. The summary reaches the platform log");
+{
+  const raw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+  check("the summary is console.logged, not only recorded behind a key",
+    /console\.log\("\[sec-daily-index\]", JSON\.stringify\(\{ ok, \.\.\.summary \}\)\)/.test(raw),
+    "warm-stock-data's pattern: console.log(\"[warm-stock-data]\", JSON.stringify(result))");
+  check("...and it is emitted AFTER recordJobRun, so both carry the same object",
+    raw.indexOf('recordJobRun("sec-daily-index", ok, summary)') <
+      raw.indexOf('console.log("[sec-daily-index]", JSON.stringify({ ok, ...summary }))'));
+  check("the refusal paths log too — a silent 503 looks like the job never fired",
+    (raw.match(/console\.log\("\[sec-daily-index\]", JSON\.stringify\(\{ ok: false/g) ?? []).length === 2,
+    "SEC_USER_AGENT missing, and manifest unreadable");
+  // THE PREFIX IS THE HOUSE CONVENTION, not a free choice: the platform log is
+  // grepped by it, and warm-stock-data, warm-earnings and the rest all use it.
+  check("the prefix matches the job name exactly",
+    !/console\.log\("\[sec[- ]daily[- ]?index/.test(raw.replace(/\[sec-daily-index\]/g, "")),
+    "one spelling, so a grep for the job name finds every line it emits");
+}
+
 // ── 18. The drain clears the busiest day of the year ───────────────────────
 console.log("\n18. Drain sized on peak, not on the quiet month");
 const PEAK_SHARE = 0.0935, CAP = 700, BG = 32;

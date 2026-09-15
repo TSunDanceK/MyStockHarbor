@@ -233,6 +233,9 @@ export async function GET(req: NextRequest) {
     // "Request Rate Threshold Exceeded", which reads as a rate limit and is
     // not one -- and would be counted as a missing index by any looser rule.
     await recordJobRun("sec-daily-index", false, { error: "SEC_USER_AGENT is not set" });
+    // The refusal paths log too. A 503 that prints nothing is the same blind
+    // spot as a silent 200, and worse: it looks like the job never fired.
+    console.log("[sec-daily-index]", JSON.stringify({ ok: false, error: "SEC_USER_AGENT is not set" }));
     return NextResponse.json(
       { ok: false, error: "SEC_USER_AGENT is not set; every request would be blocked as an undeclared agent" },
       { status: 503 }
@@ -243,6 +246,7 @@ export async function GET(req: NextRequest) {
   const manifest = await readManifest();
   if (!manifest) {
     await recordJobRun("sec-daily-index", false, { error: "manifest unreadable" });
+    console.log("[sec-daily-index]", JSON.stringify({ ok: false, error: "manifest unreadable" }));
     return NextResponse.json({ ok: false, error: "manifest unreadable (Redis unconfigured or read failed)" }, { status: 503 });
   }
 
@@ -520,6 +524,18 @@ export async function GET(req: NextRequest) {
   };
 
   await recordJobRun("sec-daily-index", ok, summary);
+
+  // THE SUMMARY GOES TO THE PLATFORM LOG, matching warm-stock-data's
+  // `console.log("[warm-stock-data]", JSON.stringify(result))`.
+  //
+  // The first automated run -- 04:00:16 UTC 2026-09-15, 200, dpl_B6UF7eCd8tcq --
+  // printed NOTHING. recordJobRun writes behind CACHE_HEALTH_KEY and the
+  // response body is discarded by the cron caller, so there was no way to tell
+  // what it had done without a key. A daily job returning 200 while doing
+  // nothing is indistinguishable from one working, which is the precise failure
+  // this pipeline was designed against -- and it went unobservable on its own
+  // first run.
+  console.log("[sec-daily-index]", JSON.stringify({ ok, ...summary }));
 
   return NextResponse.json({
     ok,
