@@ -83,9 +83,39 @@ const redis =
 const QUOTE_HOURLY_CAP = 50;
 const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
 const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
-const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v2";
+// ── v2 -> v3, AND THE BUMP IS THE MIGRATION ────────────────────────────────
+//
+// F2's read side now serves an empty stored blob when the date is marked
+// complete, on the basis that post-F1 a `complete` flag can only have been
+// written over a clean read. Flags written BEFORE F1 carry no such guarantee:
+// they were set by a code path that could not tell a failed quote from a
+// company with no exchange.
+//
+// THE DANGEROUS PRE-FIX STATE HAS NO RETROSPECTIVE SIGNATURE. A fully poisoned
+// date is visible (empty blob + flag + candidates) and production had none. A
+// PARTIALLY populated date -- some quotes returned, some failed, the day settled
+// short -- looks exactly like a correct day with fewer reporters. Nothing stored
+// distinguishes them, so there is no query that finds them and re-evaluation is
+// the only way to clear them.
+//
+// PRECEDENT, SAME FILE, SAME TWO KEYS: #378 (91f2cf1) bumped both from v1 to v2
+// when the rolling window changed what "complete" meant. A flag whose meaning
+// has changed is a new key, not an old key with new semantics.
+const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v3";
 const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
-const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v2";
+// ── v2 -> v3, AND THIS REPLACES THE MANUAL PRODUCTION DELETE ───────────────
+//
+// The live v2 pointer is stranded at 2027-01-01, past the window end, with 59
+// in-window dates still unfilled behind it. It carries no TTL and setFillFrontier
+// only moves forward, so it does not recover on its own.
+//
+// Bumping makes it unreachable: getFillFrontier finds no v3 key and falls back to
+// the window start, which is exactly the state a hand-deletion would produce --
+// without a production write, and without the risk of deleting the wrong key.
+// The v2 key is deliberately LEFT IN PLACE: it is ~20 bytes, it is now evidence
+// of what happened, and deleting it as well would be a second change doing the
+// same job.
+const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v3";
 
 // Rolling window bounds.
 const WINDOW_PAST_DAYS = 3; // today and the previous 3 days stay live
@@ -168,10 +198,21 @@ async function reserveQuoteSlot(): Promise<boolean> {
   const key = `${QUOTE_COUNTER_PREFIX}:${getHourBucket()}`;
 
   try {
+    // THE TTL IS ESTABLISHED BEFORE THE COUNTER MOVES, not after.
+    //
+    // This was incr-then-expire, and the two are not atomic: if the incr landed
+    // and the expire did not, the key had no expiry and nothing would ever set
+    // one (the expire only ran when incr returned exactly 1, which had already
+    // happened). The bucket name carries the hour, so the result is that one
+    // hour-of-history stays permanently at or above the cap -- a slot that can
+    // never be reclaimed, for a counter whose whole purpose is to reset hourly.
+    //
+    // SET NX gives the key its TTL at creation. If the key already exists the
+    // SET is a no-op and the TTL is already there; if this SET lands and the
+    // INCR then fails, what is left is a zeroed counter that expires on time.
+    // Neither order of failure can now produce an immortal key.
+    await redis.set(key, 0, { ex: 70 * 60, nx: true }); // just over an hour, covers clock skew
     const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, 70 * 60); // just over an hour, covers clock skew
-    }
     return current <= QUOTE_HOURLY_CAP;
   } catch {
     return true;
@@ -530,6 +571,15 @@ export type CalendarRangeResult = {
   cappedDays: string[];
   /** Set when the fetch budget or the FMP minute budget ended the walk. */
   stoppedEarly: string | null;
+  /**
+   * Slices whose fetch did not come back -- a non-ok status or a thrown fetch.
+   *
+   * THE DIFFERENCE BETWEEN AN EMPTY MONTH AND AN UNREADABLE ONE, which nothing
+   * recorded before. Both produce `rows: []`, and a reader that cannot tell them
+   * apart treats "we could not see this month" as "nobody reports this month".
+   * That is what stranded the fill frontier in production.
+   */
+  sliceFailures: number;
 };
 
 /**
@@ -570,6 +620,7 @@ export async function fetchCalendarRange(
     bytes: 0,
     cappedDays: [],
     stoppedEarly: null,
+    sliceFailures: 0,
   };
   if (!apiKey) {
     result.stoppedEarly = "no-api-key";
@@ -614,7 +665,10 @@ export async function fetchCalendarRange(
       const json = JSON.parse(text);
       rows = Array.isArray(json) ? (json as RawEarningsRow[]) : [];
     } catch {
-      // One bad slice must not lose the rest of the range.
+      // One bad slice must not lose the rest of the range -- but it must be
+      // COUNTED, or the caller cannot tell a month nobody reports in from a
+      // month that could not be read.
+      result.sliceFailures++;
       result.slices.push({ from: sliceFrom, to: sliceTo, rows: 0, capped: false });
       return;
     }
@@ -677,6 +731,31 @@ export type FetchMonthOptions = {
 
 export type MonthFetchResult = CalendarRangeResult & { month: string; fromCache: boolean };
 
+// ── PER-MONTH VISIBILITY ────────────────────────────────────────────────────
+//
+// "known"   the month's feed was actually read -- from the in-process cache, the
+//           shared reference copy, or a clean fetch. Its dates can be trusted,
+//           including when it lists nobody.
+// "unknown" the feed could not be read. Its dates say nothing at all.
+//
+// WHY THIS IS NOT THE SAME QUESTION AS "DID THIS MONTH HAVE CANDIDATES".
+// findNextIncompleteDate used to ask only whether it had seen candidates
+// ANYWHERE in the window, which the near month satisfies on its own. In
+// production the near month read fine and was already filled while the later
+// in-window months were cold, so every date in them looked like a day nobody
+// reports, the walk ran to the end, and the pointer parked past all of them at
+// 2027-01-01 with 59 dates still unfilled behind it. Reproduced in
+// scripts/check-earnings-failure-not-absence.mjs §6b.
+//
+// A month that could not be read is UNKNOWN, and a scan must not advance past
+// unknown. Per instance, like monthCache, because that is where the read
+// happened.
+const monthVisibility = new Map<string, "known" | "unknown">();
+
+export function getMonthVisibility(year: number, month: number): "known" | "unknown" | "unseen" {
+  return monthVisibility.get(monthKey(year, month)) ?? "unseen";
+}
+
 /** The detailed form, for the probes. fetchMonthRows is this minus the detail. */
 export async function fetchMonthRowsDetailed(
   year: number,
@@ -693,22 +772,34 @@ export async function fetchMonthRowsDetailed(
     bytes: 0,
     cappedDays: [],
     stoppedEarly: null,
+    sliceFailures: 0,
   });
 
   const cached = monthCache.get(key);
   if (!options.bypassCache && cached && Date.now() - cached.at < MONTH_CACHE_MS) {
+    monthVisibility.set(key, "known");
     return empty(cached.rows, true);
   }
 
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return empty(cached?.rows ?? [], Boolean(cached));
+  if (!apiKey) {
+    // No key means no way to read a month that is not already cached. A cached
+    // copy is still a real read; nothing else is.
+    monthVisibility.set(key, cached ? "known" : "unknown");
+    return empty(cached?.rows ?? [], Boolean(cached));
+  }
 
   // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
   // before this every cold lambda refetched the whole month.
   if (!options.bypassCache) {
     const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
-    if (Array.isArray(shared)) {
+    // Same refusal as the write side below and as getMonthCandidates: an empty
+    // array read back is not an answer to hold for six hours. Writing empty is
+    // already refused, so this should be unreachable -- it is here because "should
+    // be unreachable" is what the in-process candidate cache also assumed.
+    if (Array.isArray(shared) && shared.length > 0) {
       monthCache.set(key, { at: Date.now(), rows: shared });
+      monthVisibility.set(key, "known");
       return empty(shared, true);
     }
   }
@@ -716,6 +807,11 @@ export async function fetchMonthRowsDetailed(
   const from = `${key}-01`;
   const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
   const result = await fetchCalendarRange(from, to, { pageCap: options.pageCap, apiKey });
+
+  // A month is only known if every slice of it came back. A partial read is not
+  // a smaller month -- it is a month with holes, and the holes look like dates
+  // nobody reports on.
+  monthVisibility.set(key, result.sliceFailures > 0 ? "unknown" : "known");
 
   if (result.rows.length) {
     monthCache.set(key, { at: Date.now(), rows: result.rows });
@@ -867,7 +963,24 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
     list.sort((a, b) => popularRank(a.symbol) - popularRank(b.symbol));
   }
 
-  candidatesCache.set(key, { at: Date.now(), byDate });
+  // EMPTY IS NOT CACHED HERE EITHER, and that is the whole point of this line.
+  // fetchMonthRowsDetailed already refuses to store an empty month in Redis, with
+  // a comment saying why: "A failed or restricted response parses to [] here, and
+  // storing that for a day would blank every calendar consumer until it expired --
+  // an absence held as though it were an answer."
+  //
+  // This cache then did exactly that one layer up, in process, for MONTH_CACHE_MS
+  // -- six hours. The Redis refusal was defeated by the layer in front of it, and
+  // because the poisoning was per-instance it did not even show up in a dump.
+  // Found by accident: a seeded test read as empty because an earlier request in
+  // the same process had cached the empty month.
+  //
+  // A month with no reporting companies anywhere is not a real state, so refusing
+  // to cache it costs nothing in normal operation and only re-reads during the
+  // outage that produced it.
+  if (byDate.size > 0) {
+    candidatesCache.set(key, { at: Date.now(), byDate });
+  }
   return byDate;
 }
 
@@ -908,6 +1021,21 @@ type QuoteResult = {
   // spent (and bypassCap wasn't set). Used only to decide whether a date can
   // be marked "complete"; never shown in the UI.
   capped: boolean;
+  // True when the quote was ATTEMPTED and did not come back — a non-ok status
+  // (401/402/403/5xx) or a thrown fetch.
+  //
+  // THE ROOT CAUSE THIS EXISTS TO FIX. Every one of those used to return the
+  // same shape as a successful quote for a company with no exchange: nulls and
+  // capped:false. `capped` was the only signal the completeness test read, so
+  // "every quote failed" and "every quote succeeded, none were US-listed" were
+  // indistinguishable — and the second is a legitimate empty that gets cached
+  // and marked complete. A dead provider therefore wrote an empty day and
+  // flagged it done for 32 days. Reproduced 2026-09-14.
+  //
+  // A missing quote is NOT the same fact as an absent company, and the two must
+  // never again share a representation. This survives the FMP removal: the
+  // SEC-fed calendar has the same shape and the same trap.
+  failed: boolean;
   // True when price/marketCap came free from the shared site-wide price pool
   // (a universe symbol). The pool carries no exchange, but every universe
   // symbol is US-listed by construction, so this stands in for the exchange
@@ -917,7 +1045,10 @@ type QuoteResult = {
 
 async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult> {
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return { price: null, marketCap: null, exchange: null, capped: false };
+  // NO KEY IS A FAILURE TO QUOTE, not a company without an exchange. Without it
+  // nothing can be known about this symbol's listing, so the date must not be
+  // allowed to settle as "complete and empty".
+  if (!apiKey) return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
 
   // Symbols already quoted within the fetch-cache window don't spend an
   // hourly slot -- only genuinely new symbols compete for the cap.
@@ -925,7 +1056,8 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
   if (!alreadyQuoted) {
     const allowed = await reserveQuoteSlot();
     if (!allowed && !bypassCap) {
-      return { price: null, marketCap: null, exchange: null, capped: true };
+      // Capped, not failed: a deliberate decision not to call, already handled.
+      return { price: null, marketCap: null, exchange: null, capped: true, failed: false };
     }
 
     // Site-wide FMP account budget (~300 calls/minute across every FMP-calling
@@ -936,7 +1068,8 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
     try {
       await reserveFmpCallSlot();
     } catch {
-      return { price: null, marketCap: null, exchange: null, capped: true };
+      // Also a throttle rather than an upstream failure — the call was never made.
+      return { price: null, marketCap: null, exchange: null, capped: true, failed: false };
     }
   }
 
@@ -945,7 +1078,10 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
       `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`,
       { next: { revalidate: QUOTE_REVALIDATE_SECONDS } }
     );
-    if (!res.ok) return { price: null, marketCap: null, exchange: null, capped: false };
+    // THE LAPSED-LICENCE SHAPE. A dead or downgraded key answers 401/402/403
+    // with a JSON body, which is a perfectly well-formed HTTP response — there
+    // is no exception to catch, which is exactly why this read as success.
+    if (!res.ok) return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;
 
@@ -956,9 +1092,10 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
       marketCap: num(row?.marketCap),
       exchange: str(row?.exchange),
       capped: false,
+      failed: false,
     };
   } catch {
-    return { price: null, marketCap: null, exchange: null, capped: false };
+    return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
   }
 }
 
@@ -987,6 +1124,7 @@ async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record
           exchange: null,
           usOk: true, // universe symbols are US-listed by construction
           capped: false,
+          failed: false,
         };
         poolHits.add(symbol);
       }
@@ -1035,7 +1173,22 @@ export async function getFullDayEarnings(
   // the render never re-quotes a date it has already touched.
   if (!forceRefresh) {
     const cachedItems = await readDayItemsCache(date);
-    if (cachedItems) {
+    // AN EMPTY BLOB IS ONLY A HIT WHERE EMPTY IS THE TRUE ANSWER. `[]` is
+    // truthy, so this used to serve a stored empty day as a populated one --
+    // which is what made the poisoned entry stick for its full 33 days rather
+    // than being rebuilt on the next render.
+    //
+    // WHAT MAKES AN EMPTY DAY TRUE: either the feed lists nobody, or the day was
+    // fully quoted with nothing failing and nobody turned out to be US-listed.
+    // The second is what the completeness flag now means, and ONLY because F1
+    // and the write guard below stop that flag being set over a failure. The
+    // coupling is deliberate and load-bearing in both directions: if F1 ever
+    // regresses, a poisoned empty becomes servable again from here. §4 of the
+    // check pins the write half; this line is the read half of the same rule.
+    const emptyIsSettled =
+      cachedItems != null &&
+      (cachedItems.length > 0 || totalCandidates === 0 || (await isDateComplete(date)));
+    if (cachedItems && emptyIsSettled) {
       const cleaned = dedupeAndSortItems(cachedItems);
       // Persist the cleaned blob if the stored copy carried duplicate rows, so
       // the fix sticks and Show more paginates the deduped set -- no re-quoting.
@@ -1063,10 +1216,14 @@ export async function getFullDayEarnings(
   const quotes = await quoteBatch(candidates.map((c) => c.symbol), bypassCap);
 
   let anyCapped = false;
+  let anyFailed = false;
   const rawItems: EarningsListItem[] = candidates
     .map((candidate): EarningsListItem | null => {
       const quote = quotes[candidate.symbol];
       if (quote?.capped) anyCapped = true;
+      // A candidate whose quote never came back cannot be judged US-listed or
+      // not, so the date it belongs to is not finished being built.
+      if (quote?.failed) anyFailed = true;
       // Only US-listed common stock survives -- the pre-sort filter is
       // symbol-shape only; the exchange isn't known until the quote comes back.
       const exchangeOk =
@@ -1082,13 +1239,50 @@ export async function getFullDayEarnings(
     .filter((item): item is EarningsListItem => item !== null);
   const items = dedupeAndSortItems(rawItems);
 
-  // Always materialise what we have, so the next render -- and Show more --
-  // read it back instead of re-quoting.
-  await writeDayItemsCache(date, items);
+  // ── THE WRITE GUARD ────────────────────────────────────────────────────
+  //
+  // THE SAME FAILURE, IN THE SAME REPO, SOLVED ONCE ALREADY. benchmarksBuilder.ts
+  // carries hasRealData() for precisely this: "A payload whose every row is null
+  // is what a total FMP failure produces. It must never be cached: before this
+  // module had a shared cache it poisoned one instance for 5 minutes, but writing
+  // it to Redis would poison EVERY instance, and for as long as the entry lives."
+  // This module had a shared cache and no such check, so it did exactly that --
+  // for 33 days rather than 5 minutes.
+  //
+  // THE CANDIDATE COUNT IS THE DISCRIMINATOR, NOT THE ITEM COUNT. A date with no
+  // candidates at all is a legitimate empty: a weekend, a holiday, a day nobody
+  // reports. It should be cached, and it is. A date whose own month feed lists
+  // companies, which resolves to zero rows, is contradicting itself.
+  //
+  // TRADE-OFF, ACCEPTED DELIBERATELY: a date whose candidates are genuinely all
+  // non-US-listed also resolves to zero rows against a positive candidate count,
+  // so it is re-quoted on every render instead of settling. That costs repeated
+  // work on a rare kind of date. It is the right side to err on -- the other side
+  // publishes an empty day as fact -- but it IS a cost, not a free win.
+  // REFINED ONTO anyFailed once F1 existed. The candidate count was the
+  // discriminator only because, before F1, there was no way to tell a failed
+  // quote from a company with no exchange -- so "empty against a positive
+  // candidate count" was the best available proxy for "something went wrong".
+  //
+  // With F1 landed the real question is answerable directly, and the proxy is
+  // now too broad: a date whose candidates are genuinely all non-US-listed is a
+  // LEGITIMATE terminal state. Under the candidate-count form it could never
+  // settle and was re-quoted on every render, forever. Only an empty day we
+  // could not fully SEE is poison.
+  const emptyAndUnverifiable = items.length === 0 && totalCandidates > 0 && anyFailed;
 
-  // Only "complete" once every candidate was quoted with nothing skipped by the
-  // cap. A bounded seed render is never complete.
-  const complete = quotedEveryCandidate && !anyCapped;
+  if (!emptyAndUnverifiable) {
+    // Materialise what we have, so the next render -- and Show more -- read it
+    // back instead of re-quoting.
+    await writeDayItemsCache(date, items);
+  }
+
+  // Only "complete" once every candidate was quoted, nothing skipped by the cap,
+  // and NOTHING FAILED. A bounded seed render is never complete. `!anyFailed`
+  // already implies `!emptyAndUnverifiable`, so the latter is not repeated here
+  // -- a second term that can never independently fire reads as a guard and is
+  // not one.
+  const complete = quotedEveryCandidate && !anyCapped && !anyFailed;
   if (complete) {
     await markDateComplete(date);
   }
@@ -1117,14 +1311,72 @@ async function findNextIncompleteDate(): Promise<string | null> {
   const frontierStr = await getFillFrontier();
   let cur = new Date(`${frontierStr}T00:00:00Z`).getTime();
 
+  // WHETHER THE SCAN SAW ANY CANDIDATES AT ALL, anywhere in the window.
+  let sawAnyCandidates = false;
+
   while (cur <= endTime) {
-    const ds = toDateStr(new Date(cur));
+    const d = new Date(cur);
+    const ds = toDateStr(d);
+
+    // ── THE SCAN MAY NOT WALK PAST A MONTH IT COULD NOT READ ──────────────
+    //
+    // getDayCandidates resolves the whole month behind this date, so asking for
+    // any date in the month is what populates its visibility. An unreadable
+    // month yields [] for every one of its dates -- indistinguishable from a
+    // month nobody reports in, which is precisely how the pointer got past 59
+    // unfilled dates in production.
     const candidates = await getDayCandidates(ds);
+    const visibility = getMonthVisibility(d.getUTCFullYear(), d.getUTCMonth() + 1);
+    if (visibility === "unknown") {
+      console.error(
+        `[earnings-calendar] the feed for ${monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1)} ` +
+          `could not be read, so its dates are UNKNOWN rather than empty. Holding the fill ` +
+          `frontier at ${frontierStr} rather than scanning past it -- advancing here is what ` +
+          `stranded 59 in-window dates behind a pointer parked at the window end.`
+      );
+      return null;
+    }
+
+    if (candidates.length > 0) sawAnyCandidates = true;
     if (candidates.length > 0 && !(await isDateComplete(ds))) {
       await setFillFrontier(ds);
       return ds;
     }
     cur += 86_400_000;
+  }
+
+  // ── THE OUTAGE CASES, WHICH DID NOT EXIST ──────────────────────────────
+  //
+  // Reaching here means no date in the window has work outstanding, and every
+  // month in it was readable. There are two ways that happens and they are
+  // opposites:
+  //
+  //   everything is genuinely filled   -> park the pointer, scans go free
+  //   the feed is down, so every date  -> park the pointer and STRAND the
+  //   looks like it has no reporters      entire window, permanently
+  //
+  // A whole window with not one reporting company on any of ~126 days is not a
+  // real market state; it is the provider being gone. Parking on it was
+  // measured: one dead-FMP render left the frontier at 2027-01-01, and because
+  // setFillFrontier only moves forward and the key carries NO TTL, the
+  // background fill never comes back on its own. When the window finally
+  // catches up, it resumes PAST every date the outage skipped.
+  //
+  // The forward-only rule is right in normal operation and is left alone. What
+  // was missing is the case where advancing is not progress.
+  // THE SECOND GUARD, AND IT IS NOT REDUNDANT. Per-month visibility catches a
+  // month that could not be READ. This catches a window that read cleanly and
+  // still contains not one reporting company on any of ~126 days, which is not a
+  // real market state either. They fail differently and are tested separately
+  // (§6 and §6b of the check).
+  if (!sawAnyCandidates) {
+    console.error(
+      `[earnings-calendar] scanned ${frontierStr}..${endStr} and found NO candidates on ` +
+        `any date. That is a dead upstream feed, not an empty market. Leaving the fill ` +
+        `frontier at ${frontierStr} rather than parking it past the window end -- parking ` +
+        `here strands every date in the window until the key is deleted by hand.`
+    );
+    return null;
   }
 
   // Everything in the window is complete -- park the frontier just past the

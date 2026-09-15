@@ -174,6 +174,41 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, NO credential and NO FMP: measures how well a filer's next
+  // results date can be predicted from its own filing history alone. Asked
+  // before deciding whether the earnings calendar's FORWARD half can come off
+  // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
+  // fallback and nothing had measured it.
+  "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
+  // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
+  // reports whether the empty-day poisoning has already fired in production.
+  // The live read happens in the Step 0 job under Upstash's read-only token;
+  // this half only does arithmetic on the result.
+  "earnings-poisoning": {
+    script: "scripts/earnings-poisoning-scan.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, no credential: does a filer ANNOUNCE its next results date in an
+  // 8-K (item 7.01/8.01) ahead of time? The last input to the forward-calendar
+  // decision -- predicting the date from cadence was measured and is weak, so
+  // the question is whether it can be READ instead of predicted. Needs the dump
+  // for the universe and for market caps: "do companies do this" and "do the
+  // companies a calendar is searched for do this" are different questions.
+  "sec-scheduling": {
+    script: "scripts/sec-scheduling-announcements.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, no credential, submissions ONLY (no document fetching): simulates
+  // a "due to report" list over the past 12 months across the FULL analysis
+  // universe and sweeps k. List size scales with the universe, so a sample
+  // cannot answer it. Needs the dump for the analysis universe.
+  "sec-due-sweep": {
+    script: "scripts/sec-due-to-report-sweep.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
