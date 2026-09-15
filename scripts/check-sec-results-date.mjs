@@ -120,6 +120,32 @@ console.log("\n4. FPIs — 6-K, deduped on accn, same-day pairs resolved");
     "a filer with a 10-Q is domestic even carrying a 20-F",
     m.isForeignPrivateIssuer([...rows, row({ form: "10-Q", reportDate: "2026-03-31", filingDate: "2026-05-01" })]) === false
   );
+  // ── A HOLE IN THE HISTORY RE-ANCHORS; IT DOES NOT REJECT THE REST ────────
+  // This is the INFY failure, reproduced small. Treating an over-large gap as a
+  // rejection leaves `last` pinned before the hole, so every later period is
+  // measured against a stale anchor and fails too: INFY went from 121 raw 6-Ks
+  // to 2 usable, and the whole FPI cohort read as "unpredictable" when it was
+  // this filter. The distinguishing number is 4 versus 2.
+  const withHole = m.attributeResults([
+    row({ form: "20-F", reportDate: "2024-03-31", filingDate: "2024-06-01" }),
+    row({ accn: "q1", form: "6-K", reportDate: "2024-03-31", filingDate: "2024-05-10" }),
+    row({ accn: "q2", form: "6-K", reportDate: "2024-06-30", filingDate: "2024-08-10" }),
+    // ── the hole: no 6-K carries a period end for a full year ──
+    row({ accn: "q3", form: "6-K", reportDate: "2025-06-30", filingDate: "2025-08-10" }),
+    row({ accn: "q4", form: "6-K", reportDate: "2025-09-30", filingDate: "2025-11-10" }),
+    row({ accn: "q5", form: "6-K", reportDate: "2025-12-31", filingDate: "2026-02-10" }),
+  ]);
+  check(
+    "periods after a year-long hole are still attributed",
+    withHole.length === 4,
+    `${withHole.length} of 4 — rejection instead of re-anchor yields 2: ${JSON.stringify(withHole.map((r) => r.periodEnd))}`
+  );
+  check(
+    "specifically the two quarters that FOLLOW the hole",
+    withHole.some((r) => r.periodEnd === "2025-09-30") && withHole.some((r) => r.periodEnd === "2025-12-31"),
+    JSON.stringify(withHole.map((r) => r.periodEnd))
+  );
+
   // An event 6-K filed the same day as its own reportDate is not a period report.
   const eventOnly = m.attributeResults([
     row({ form: "20-F", reportDate: "2026-03-31", filingDate: "2026-06-01" }),
@@ -136,6 +162,16 @@ console.log("\n5. Nothing attributable reports nothing, not a guess");
     "period ends but no 2.02 anywhere -> null",
     m.latestResults([row({ form: "10-Q", reportDate: "2026-03-31", filingDate: "2026-05-05" })]) === null
   );
+  // latestResults is the LAST of the series, not the first. With one period
+  // attributed the two are indistinguishable, so this asserts over two.
+  const twoPeriods = [
+    row({ form: "10-Q", reportDate: "2026-03-31", filingDate: "2026-05-05" }),
+    row({ form: "10-Q", reportDate: "2026-06-30", filingDate: "2026-08-05" }),
+    row({ accn: "older", form: "8-K", filingDate: "2026-04-28", items: "2.02,9.01" }),
+    row({ accn: "newer", form: "8-K", filingDate: "2026-07-29", items: "2.02,9.01" }),
+  ];
+  check("the whole series is returned, ascending", m.attributeResults(twoPeriods).map((r) => r.periodEnd).join(" ") === "2026-03-31 2026-06-30", JSON.stringify(m.attributeResults(twoPeriods).map((r) => r.periodEnd)));
+  check("and latestResults takes the LAST of it, not the first", m.latestResults(twoPeriods)?.accn === "newer", JSON.stringify(m.latestResults(twoPeriods)));
   check(
     "an 8-K with items but no 2.02 -> null",
     m.latestResults([
