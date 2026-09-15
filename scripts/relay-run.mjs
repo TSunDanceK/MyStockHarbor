@@ -206,6 +206,17 @@ const TASKS = {
     needsDump: true,
     needsTypescript: true,
   },
+  // Read-only: does the page read IFRS filings now, and what is left when it
+  // does. Runs the SHIPPED extractor over the ten FPIs that measured as empty
+  // plus the universe FPIs the brief named plus a us-gaap control, and reports
+  // which mapped ifrs-full tags never hit and which published tags nothing
+  // maps. No dump, no credential; needs the network and the TypeScript
+  // compiler for the lift.
+  "sec-ifrs": {
+    script: "scripts/sec-ifrs-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "write-stooq-ingest": {
     script: "scripts/stooq-ingest.mjs",
     args: (env) => [env.SYMBOLS ?? ""],

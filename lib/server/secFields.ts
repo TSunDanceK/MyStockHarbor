@@ -60,6 +60,36 @@ export type FieldDef = {
   /** XBRL taxonomy. `dei` is the cover page, not us-gaap. */
   taxonomy: "us-gaap" | "dei";
   /**
+   * THE SAME LINE UNDER `ifrs-full`, for foreign private issuers.
+   *
+   * ── WHY THIS IS NOT A TAIL ────────────────────────────────────────────────
+   * companyfacts namespaces facts BY TAXONOMY. An IFRS filer's complete
+   * financial statements are in the payload; they are simply under `ifrs-full`,
+   * which every one of these chains used to ignore. The page then told the
+   * reader the COMPANY did not file the data -- a false statement about
+   * Ryanair, AstraZeneca, HSBC and everyone like them.
+   *
+   * 49 of the 55 periodic filers in the measured window were 6-K filers, i.e.
+   * foreign private issuers, and 10 of 40 sampled symbols extracted to nothing
+   * for exactly this reason. HSBC, AZN, GSK, NVS, BIDU, SAN, LYG, VALE, ZTO and
+   * ABEV are all in the universe. ARM files us-gaap, which is precisely why
+   * auditing the page on ARM could not have caught it.
+   *
+   * ── RANKED AFTER THE PRIMARY CHAIN, NOT INSTEAD OF IT ─────────────────────
+   * rowsForField appends these BELOW the us-gaap entries in the same rank
+   * order, so the existing per-period resolver needs no new rule: a filer that
+   * tags both (some dual-listers do) keeps the us-gaap reading, and an IFRS
+   * filer falls through to these because the entries above it are empty. Same
+   * resolver, same differencing, same identities.
+   *
+   * ── AND THE FIELD LIST IS UNCHANGED ───────────────────────────────────────
+   * No key added, none removed, order identical -- so secFieldsHash does not
+   * move and not one stored fact set is invalidated. What DOES need re-reading
+   * is the sets that came back EMPTY under the old chains; see
+   * secChainsHash and the empty-set retry in secColdFetch.
+   */
+  ifrsChain?: string[];
+  /**
    * Candidate tags, tried IN ORDER, first hit wins, resolved PER PERIOD.
    * Never summed: two entries for one period is an overlap, not a total.
    */
@@ -89,7 +119,7 @@ export type FieldDef = {
 // The per-block literals below carry only what VARIES. `satisfies` on each
 // array supplies the contextual type, so `unit: "USD"` stays the literal type
 // rather than widening to `string` before the `.map()` re-adds the rest.
-type Seed = Pick<FieldDef, "key" | "chain" | "unit">;
+type Seed = Pick<FieldDef, "key" | "chain" | "unit"> & Partial<Pick<FieldDef, "ifrsChain">>;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
 
 // THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
@@ -111,6 +141,91 @@ const NON_ADDITIVE_INCOME: Record<string, FieldKind | undefined> = {
 const RATIO_SOURCE: Record<string, { numerator: string; denominator: string } | undefined> = {
   epsBasic: { numerator: "netIncome", denominator: "sharesBasic" },
   epsDiluted: { numerator: "netIncome", denominator: "sharesDiluted" },
+};
+
+
+// ── The ifrs-full mapping, as ONE TABLE rather than a word on each line ─────
+//
+// Held here, beside the lists, for the same reason NON_ADDITIVE_INCOME is: the
+// exception is visible in one place instead of being 40 easily-missed clauses
+// spread through three arrays, and a correction is a one-line edit against
+// evidence rather than a hunt.
+//
+// A KEY ABSENT FROM THIS TABLE IS A DELIBERATE GAP, not an oversight, and the
+// page renders it null rather than approximating. `cashIncludingRestricted` has
+// no IFRS equivalent -- restricted cash is not a separate IFRS concept -- and
+// `nonOperatingIncomeExpense` has no single tag that means the same thing.
+// Inventing a near-match for either is how a plausible wrong number gets in.
+//
+// EVERY TAG BELOW WAS CONFIRMED PRESENT IN REAL companyfacts PAYLOADS by
+// scripts/sec-ifrs-probe.mjs, which also reports the ifrs-full tags a filer
+// publishes that this table does NOT map. Chains are ordered by how many of the
+// probed filers used them, so the common spelling is tried first.
+const IFRS_CHAIN: Record<string, string[] | undefined> = {
+  // Income statement
+  revenue: ["Revenue", "RevenueFromContractsWithCustomers", "RevenueFromSaleOfGoods"],
+  costOfRevenue: ["CostOfSales", "CostOfMerchandiseSold"],
+  grossProfit: ["GrossProfit"],
+  researchAndDevelopment: ["ResearchAndDevelopmentExpense"],
+  sellingGeneralAndAdministrative: [
+    "SellingGeneralAndAdministrativeExpense",
+    "AdministrativeExpense",
+    "DistributionCosts",
+  ],
+  otherOperatingExpense: ["OtherExpenseByFunction", "OtherOperatingIncomeExpenseNet"],
+  operatingIncome: ["ProfitLossFromOperatingActivities"],
+  interestExpense: ["FinanceCosts", "InterestExpense"],
+  preTaxIncome: ["ProfitLossBeforeTax"],
+  incomeTaxExpense: ["IncomeTaxExpenseContinuingOperations"],
+  // ProfitLoss is TOTAL, including minority interest; the parent-only tag is
+  // ranked first for the same reason stockholdersEquity prefers the parent tag.
+  netIncome: ["ProfitLossAttributableToOwnersOfParent", "ProfitLoss"],
+  netIncomeToNoncontrollingInterest: ["ProfitLossAttributableToNoncontrollingInterests"],
+  epsBasic: ["BasicEarningsLossPerShare"],
+  epsDiluted: ["DilutedEarningsLossPerShare"],
+  sharesBasic: ["WeightedAverageNumberOfOrdinarySharesOutstanding", "NumberOfSharesOutstanding"],
+  sharesDiluted: ["WeightedAverageNumberOfDilutedOrdinarySharesOutstanding", "AdjustedWeightedAverageShares"],
+
+  // Cash flow
+  operatingCashFlow: ["CashFlowsFromUsedInOperatingActivities"],
+  capex: [
+    "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+  ],
+  shareBasedCompensation: ["AdjustmentsForShareBasedPayments"],
+  depreciationAndAmortization: [
+    "DepreciationAndAmortisationExpense",
+    "AdjustmentsForDepreciationAndAmortisationExpense",
+  ],
+  investingCashFlow: ["CashFlowsFromUsedInInvestingActivities"],
+  financingCashFlow: ["CashFlowsFromUsedInFinancingActivities"],
+  netChangeInCash: [
+    "IncreaseDecreaseInCashAndCashEquivalents",
+    "IncreaseDecreaseInCashAndCashEquivalentsBeforeEffectOfExchangeRateChanges",
+  ],
+  dividendsPaid: ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
+  buybacks: ["PaymentsToAcquireOrRedeemEntitysShares"],
+  dividendsDeclaredPerShare: ["DividendsPaidOrdinarySharePerShare"],
+  fxEffectOnCash: ["EffectOfExchangeRateChangesOnCashAndCashEquivalents"],
+
+  // Balance sheet
+  cash: ["CashAndCashEquivalents"],
+  shortTermInvestments: ["OtherCurrentFinancialAssets", "CurrentInvestments"],
+  receivables: ["TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"],
+  inventory: ["Inventories"],
+  totalCurrentAssets: ["CurrentAssets"],
+  totalAssets: ["Assets"],
+  payables: ["TradeAndOtherCurrentPayables", "CurrentTradePayables"],
+  totalCurrentLiabilities: ["CurrentLiabilities"],
+  shortTermDebt: ["ShorttermBorrowings", "CurrentPortionOfLongtermBorrowings"],
+  longTermDebt: ["LongtermBorrowings", "NoncurrentPortionOfNoncurrentBorrowings"],
+  totalLiabilities: ["Liabilities"],
+  stockholdersEquity: ["EquityAttributableToOwnersOfParent"],
+  totalEquity: ["Equity"],
+  goodwill: ["Goodwill"],
+  intangibleAssets: ["IntangibleAssetsOtherThanGoodwill"],
+  deferredRevenueCurrent: ["CurrentContractLiabilities"],
+  deferredRevenueNoncurrent: ["NoncurrentContractLiabilities"],
 };
 
 // ── Income statement ────────────────────────────────────────────────────────
@@ -153,6 +268,7 @@ const INCOME: FieldDef[] = ([
   taxonomy: "us-gaap" as const,
   kind: NON_ADDITIVE_INCOME[f.key] ?? ("duration-cumulative" as const),
   ...(RATIO_SOURCE[f.key] ? { ratioSource: RATIO_SOURCE[f.key] } : {}),
+  ...(IFRS_CHAIN[f.key] ? { ifrsChain: IFRS_CHAIN[f.key] } : {}),
 }));
 
 // ── Cash flow ───────────────────────────────────────────────────────────────
@@ -183,7 +299,14 @@ const CASH_FLOW: FieldDef[] = ([
       "EffectOfExchangeRateOnCashAndCashEquivalents",
       "EffectOfExchangeRateOnCash",
     ], unit: "USD" },
-] satisfies Seed[]).map((f) => ({ ...f, singleValued: true as const, kind: "duration-cumulative" as const, statement: "cash-flow" as const, taxonomy: "us-gaap" as const }));
+] satisfies Seed[]).map((f) => ({
+  ...f,
+  singleValued: true as const,
+  kind: "duration-cumulative" as const,
+  statement: "cash-flow" as const,
+  taxonomy: "us-gaap" as const,
+  ...(IFRS_CHAIN[f.key] ? { ifrsChain: IFRS_CHAIN[f.key] } : {}),
+}));
 
 // ── Balance sheet ───────────────────────────────────────────────────────────
 // ALL INSTANT. A position at a date is never cumulative and must never be
@@ -232,7 +355,13 @@ const BALANCE_SHEET: FieldDef[] = ([
   { key: "intangibleAssets", chain: ["IntangibleAssetsNetExcludingGoodwill", "FiniteLivedIntangibleAssetsNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "deferredRevenueCurrent", chain: ["ContractWithCustomerLiabilityCurrent", "DeferredRevenueCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "deferredRevenueNoncurrent", chain: ["ContractWithCustomerLiabilityNoncurrent", "DeferredRevenueNoncurrent"], unit: "USD", taxonomy: "us-gaap" },
-] satisfies BalanceSeed[]).map((f) => ({ singleValued: true as const, ...f, kind: "instant" as const, statement: "balance-sheet" as const }));
+] satisfies BalanceSeed[]).map((f) => ({
+  singleValued: true as const,
+  ...f,
+  kind: "instant" as const,
+  statement: "balance-sheet" as const,
+  ...(IFRS_CHAIN[f.key] ? { ifrsChain: IFRS_CHAIN[f.key] } : {}),
+}));
 
 /**
  * THE COVER PAGE, LIFTED OUT OF THE PERIOD GRID ENTIRELY.

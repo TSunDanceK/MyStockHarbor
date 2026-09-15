@@ -123,8 +123,65 @@ export type ExtractResult = {
   instants: PeriodRecord[];
   /** Filer-level, with its own asOf. Null when the filer published none. */
   coverShares: CoverShares | null;
+  /**
+   * EVERY TAXONOMY NAMESPACE THE PAYLOAD CARRIED, read rather than assumed.
+   *
+   * WHY THIS EXISTS: without it an empty extraction is indistinguishable from a
+   * filer who published nothing, and the page said the second about companies
+   * for whom the first was true. companyfacts namespaces facts by taxonomy --
+   * `dei`, `us-gaap`, `ifrs-full`, and others -- so a foreign private issuer's
+   * complete financial statements sit in the payload under a namespace the
+   * field definitions did not read. Telling a reader that Ryanair "does not
+   * file the financial data this page is built from" is a false claim about
+   * Ryanair; the true one is about this page.
+   *
+   * With the census stored, the page can say which of the two it is, and name
+   * the namespace when it is the first.
+   */
+  taxonomies: string[];
   notes: string[];
 };
+
+/**
+ * Namespaces that are not financial statements, so their presence alone never
+ * means a filer has data this page could read.
+ *
+ * `dei` is the cover page -- entity name, share count, document type. A payload
+ * carrying ONLY dei is a filer with no financial XBRL at all, which is the
+ * genuinely-untagged case the "does not file" wording was written for.
+ * `srt` is the SEC's reporting taxonomy: axes and members, not facts.
+ */
+export const NON_FINANCIAL_TAXONOMIES = new Set(["dei", "srt", "invest"]);
+
+/** Financial namespaces SEC_FIELDS actually reads. Derived, not listed. */
+export function readableTaxonomies(): Set<string> {
+  const out = new Set<string>();
+  for (const f of SEC_FIELDS) {
+    if (!NON_FINANCIAL_TAXONOMIES.has(f.taxonomy)) out.add(f.taxonomy);
+    if (f.ifrsChain?.length) out.add("ifrs-full");
+  }
+  return out;
+}
+
+/**
+ * Why an extraction came back with nothing — the PAGE's limit or the FILER's.
+ *
+ * Returns null when there is data. Otherwise:
+ *   "unread-taxonomy" — the payload has financial facts, under a namespace
+ *                       these field definitions do not read. `taxonomies` names
+ *                       them. This is a gap in the page.
+ *   "none"            — no financial namespace at all. This is a fact about the
+ *                       filer, and the only case that may be worded as one.
+ */
+export function unreadableReason(
+  taxonomies: string[]
+): { kind: "unread-taxonomy"; taxonomies: string[] } | { kind: "none" } {
+  const readable = readableTaxonomies();
+  const unread = taxonomies.filter(
+    (t) => !NON_FINANCIAL_TAXONOMIES.has(t) && !readable.has(t)
+  );
+  return unread.length ? { kind: "unread-taxonomy", taxonomies: unread } : { kind: "none" };
+}
 
 // ── period arithmetic ───────────────────────────────────────────────────────
 
@@ -169,25 +226,43 @@ function newer(a: FactRow, b: FactRow): FactRow {
  */
 function rowsForField(facts: CompanyFacts, field: FieldDef) {
   const out: { row: FactRow; tag: string; rank: number; unit: string }[] = [];
-  const taxonomy = facts.facts?.[field.taxonomy];
-  if (!taxonomy) return out;
 
-  field.chain.forEach((tag, rank) => {
-    const units = taxonomy[tag]?.units;
-    if (!units) return;
-    // The declared unit, plus the singular spelling SEC also publishes. Not a
-    // scan of every unit key: reading a JPY series into a USD field is exactly
-    // the plausible-wrong-number failure this file is built against.
-    const keys =
-      field.unit === "USD/shares" ? ["USD/shares", "USD/share"] : [field.unit];
-    for (const unit of keys) {
-      for (const row of units[unit] ?? []) {
-        if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
-        if (!row.end) continue;
-        out.push({ row, tag, rank, unit });
+  // TWO NAMESPACES, ONE RANKED LIST. The primary chain first, then the same
+  // line under `ifrs-full` at ranks continuing from where it left off -- so a
+  // dual-tagging filer keeps its us-gaap reading and an IFRS filer falls
+  // through, with no new rule in resolve(). See FieldDef.ifrsChain.
+  const sources: { ns: string; chain: string[] }[] = [
+    { ns: field.taxonomy, chain: field.chain },
+  ];
+  if (field.ifrsChain?.length) sources.push({ ns: "ifrs-full", chain: field.ifrsChain });
+
+  let rank = 0;
+  for (const { ns, chain } of sources) {
+    const taxonomy = facts.facts?.[ns];
+    for (const tag of chain) {
+      const thisRank = rank++;
+      const units = taxonomy?.[tag]?.units;
+      if (!units) continue;
+      // The declared unit, plus the singular spelling SEC also publishes. Not a
+      // scan of every unit key: reading a JPY series into a USD field is exactly
+      // the plausible-wrong-number failure this file is built against.
+      //
+      // AND IT IS WHY IFRS SUPPORT DOES NOT BRING CURRENCY RISK WITH IT. An
+      // IFRS filer reporting in EUR or GBP publishes those units under the same
+      // tag; this reads only the declared one, so a non-USD reporter yields
+      // NULL rather than a euro figure rendered with a dollar sign. That is the
+      // honest failure and it is structural, not a rule anyone has to remember.
+      const keys =
+        field.unit === "USD/shares" ? ["USD/shares", "USD/share"] : [field.unit];
+      for (const unit of keys) {
+        for (const row of units[unit] ?? []) {
+          if (typeof row?.val !== "number" || !Number.isFinite(row.val)) continue;
+          if (!row.end) continue;
+          out.push({ row, tag, rank: thisRank, unit });
+        }
       }
     }
-  });
+  }
   return out;
 }
 
@@ -509,6 +584,9 @@ export function extractCompanyFacts(
     years,
     instants,
     coverShares,
+    // THE CENSUS, from the payload itself rather than from a list of filers we
+    // think are IFRS. Sorted so a stored set's value is stable across fetches.
+    taxonomies: Object.keys(facts.facts ?? {}).sort(),
     notes,
   };
 }
