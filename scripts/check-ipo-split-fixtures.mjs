@@ -305,6 +305,30 @@ console.log("\nbuildSecIpoTables — behavioural fixtures\n");
   );
 }
 
+// ── The table tag ─────────────────────────────────────────────────────────
+{
+  const upper = base();
+  const lower = {
+    cik: "9000020",
+    company: "Listed Last Week Corp",
+    sic: "2836",
+    filings: [{ form: "8-A12B", date: d(-11) }, { form: "424B4", date: d(-10) }],
+    terms: { ...TERMS },
+  };
+  const { upcoming, recent } = run([upper, lower]);
+  check(
+    "rows carry their table on themselves",
+    upcoming[0]?.table === "upcoming" && recent[0]?.table === "recent",
+    `got upper=${upcoming[0]?.table} lower=${recent[0]?.table}`
+  );
+  check(
+    "the UPPER row's tag disagrees with what a clock would say",
+    upcoming[0]?.table === "upcoming" && upcoming[0]?.date < d(0),
+    "its date is the AMENDMENT date, always in the past — re-deriving the split " +
+      "from `date < today` at render would file every upcoming row under 'recent'"
+  );
+}
+
 // ── Identity ──────────────────────────────────────────────────────────────
 {
   const noTicker = base({ terms: { ...TERMS, proposedSymbol: null } });

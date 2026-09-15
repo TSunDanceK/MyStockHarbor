@@ -1,9 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  getUpcomingConfirmedIpos,
-  getRecentIpos,
-} from "@/lib/server/ipoCalendar";
+import { getIpoTables } from "@/lib/server/ipoCalendar";
 import IpoList from "./IpoList";
 import { refuseToCacheDegradedRender } from "@/lib/server/degradedRender";
 
@@ -72,30 +69,30 @@ export const metadata: Metadata = {
 export const revalidate = 86400;
 
 export default async function UpcomingIposPage() {
-  const [upcomingFeed, recentFeed] = await Promise.all([
-    getUpcomingConfirmedIpos(),
-    getRecentIpos(),
-  ]);
+  // ONE READ, BOTH TABLES. Was a Promise.all of two feeds with two upstream
+  // calls; membership now travels on each row, so one cache entry answers both
+  // halves and they can never disagree about which table a company is in.
+  const feed = await getIpoTables();
 
-  // EITHER feed being degraded is enough to refuse the artefact: this page
-  // renders both lists, so a failed read on one would bake "we couldn't load
-  // it" into a cached page and serve that claim to every visitor and every
-  // crawler for the whole revalidate window. Safe here because /upcoming-ipos
+  // A degraded read refuses the artefact: this page renders both lists from one
+  // feed, so a failed read would bake "we couldn't load it" into a cached page
+  // and serve that claim to every visitor and every crawler for the whole
+  // revalidate window. (Was "EITHER feed" when there were two.) Safe here because /upcoming-ipos
   // is a PARAMLESS STATIC route -- on a generateStaticParams route the same
   // call returns a 500. See lib/server/degradedRender.ts.
-  if (!upcomingFeed.ok || !recentFeed.ok) {
+  if (!feed.ok) {
     await refuseToCacheDegradedRender("/upcoming-ipos");
   }
 
-  const ipos = upcomingFeed.items;
-  const recentIpos = recentFeed.items;
+  const ipos = feed.upcoming;
+  const recentIpos = feed.recent;
 
   // Only claim an ItemList when the read actually succeeded. On a failed read
   // `ipos` is [] and means nothing, and emitting an ItemList with zero items
   // asserts to Google that this page's entire subject does not exist -- a
   // stronger negative signal than the visible copy, on a page whose ranking
   // case IS the list. Asserting nothing is the correct degradation.
-  const hasItemList = upcomingFeed.ok;
+  const hasItemList = feed.ok;
 
   const ipoJsonLd = {
     "@context": "https://schema.org",
@@ -245,7 +242,7 @@ export default async function UpcomingIposPage() {
               ipos={ipos}
               dateColumnLabel="IPO Date"
               emptyMessage={
-                upcomingFeed.ok
+                feed.ok
                   ? "No confirmed IPOs are currently scheduled in the next 30 days. Check back soon — this list updates as new deals are priced."
                   : "We couldn't load the IPO calendar just now. This is a temporary problem on our side, not an empty calendar — please refresh in a moment."
               }
@@ -294,7 +291,7 @@ export default async function UpcomingIposPage() {
               ipos={recentIpos}
               dateColumnLabel="Listing Date"
               emptyMessage={
-                recentFeed.ok
+                feed.ok
                   ? "No confirmed IPOs listed in the last 30 days."
                   : "We couldn't load recent IPO listings just now. This is a temporary problem on our side — please refresh in a moment."
               }

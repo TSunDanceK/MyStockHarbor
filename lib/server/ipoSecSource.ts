@@ -138,6 +138,7 @@ function hasTerms(t: IpoFilerRecord["terms"]): boolean {
 
 function toConfirmedIpo(
   record: IpoFilerRecord,
+  table: ConfirmedIpo["table"],
   date: string,
   symbol: string | null,
   exchange: string | null
@@ -147,6 +148,11 @@ function toConfirmedIpo(
   const high = t?.priceRangeHigh ?? null;
   const sharesOffered = t?.sharesOffered ?? null;
   return {
+    // WHICH TABLE, decided by the caller from the filer's own filing history and
+    // then carried on the row. Never re-derived from `date`: the upper table's
+    // date is the AMENDMENT date and is always in the past, so a clock rule
+    // would file every upcoming row under "recent".
+    table,
     // Identity is the CIK. The upper table's rows have no ticker.
     cik: normaliseCik(record.cik),
     symbol,
@@ -300,6 +306,7 @@ export function buildSecIpoTables(
       recent.push(
         toConfirmedIpo(
           record,
+          "recent",
           final.date,
           listed?.symbol ?? record.terms?.proposedSymbol ?? null,
           listed?.exchange ?? record.terms?.exchange ?? null
@@ -345,6 +352,7 @@ export function buildSecIpoTables(
     upcoming.push(
       toConfirmedIpo(
         record,
+        "upcoming",
         amendment.date,
         record.terms?.proposedSymbol ?? null,
         record.terms?.exchange ?? null
