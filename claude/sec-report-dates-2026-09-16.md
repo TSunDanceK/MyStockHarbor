@@ -282,3 +282,100 @@ data gets, so a reader could not tell "its history is too irregular to promise
 a date" from "we never looked". The `nothing` outcome now renders its own line.
 And the reaction card's explanation said "released before market open", which
 asserts a press-release time nothing here observes; it describes the filing.
+
+---
+
+## 10. Second eye-check round
+
+### 10a. A twelve-month comparative took every quarter's label
+
+AMZN's reaction card read:
+
+```
+Q3 FY2024 · Q4 FY2024 · FY2025 (05/01) · FY2025 (07/31) · FY2025 (10/30)
+· FY2025 (02/05) · FY2026 (04/29) · FY2026 (07/30)
+```
+
+The bars were looked up in a map built by merging the fact set's `quarters` and
+`years` **with years last**. A 10-Q carries twelve-month comparatives — measured
+on AMZN's own companyfacts:
+
+```
+us-gaap:CashCashEquivalents…IncludingExchangeRateEffect
+  2025-07-01..2026-06-30  (364d, 10-Q Q2)
+```
+
+Those land in `years` with ends on **quarter** ends, so the annual entry
+overwrote the quarter's at every end the two lists shared, and the
+collision-breaker then stamped a date on each to tell the duplicates apart.
+**The "(MM/DD)" suffix was the tell** — matched correctly, nothing collides.
+
+The same trap as the year-end anchor, one layer down: a twelve-month duration
+is not a fiscal year, and nothing about treating one as a fiscal year fails.
+
+**Why the "latest bar equals the snapshot" assertion passed on it.** It was
+handed a written-out `Map` of one label per period end — a model of the map, not
+the code that builds it. The defect was entirely in the building, so the fixture
+had already assumed away the thing that was broken. The map is now built by a
+shipped function (`reactionPeriodLabels`) and the check drives it with a set
+shaped like the filer that broke it; the mutation restores the merge and
+reproduces the rendered string exactly, and AMZN's bars are asserted to carry
+**no collision suffix at all**.
+
+An annual period is also labelled **Q4** on the reaction card where the filer
+reports quarters — a bar reading "FY2025" beside "Q3 FY2025" implies a different
+KIND of event, and it is the same event. A filer that publishes no quarters
+keeps "FY2025". `periodLabel` is untouched: the snapshot and five-year card name
+a PERIOD, only the reaction card names an ANNOUNCEMENT.
+
+### 10b. ABT — the source is behind, not the pipeline
+
+```
+ABT    stored newest 2026-03-31 (169d old, written 2026-09-16 17:34)
+         newest periodic filing 10-Q filed 2026-07-28 for period 2026-06-30
+         newest item 2.02 8-K   filed 2026-07-16, event 2026-07-16
+         report-date record     15 events, newest period 2026-03-31
+         companyfacts newest duration ends: 2026-03-31 · 2025-12-31 · …
+         companyfacts frames ENDING 2026-06-30: 0
+```
+
+ABT filed its June-quarter 10-Q on **28 July**, seven weeks ago, and its
+companyfacts payload carries **no duration frame ending 2026-06-30 at all**.
+The set was re-extracted from live companyfacts at 17:34 today, so this is not
+a stale cache, not the matcher and not the seed — **the source has not published
+the period**.
+
+The July Item 2.02 8-K is correctly discarded, and that is worth stating because
+it looks like a second bug: with no 2026-06-30 period to match, the announcement
+of 2026-07-16 falls back to the newest stored end, 2026-03-31 — where the real
+Q1 announcement of 2026-04-16 already sits, and the dedupe keeps the **earliest**
+per period. So the page stops at Q1 for exactly the reason its financials do.
+
+### 10c. The population — 58 of 786 SYMBOLS
+
+Relay run 35135811904.
+
+| | symbols |
+|---|---|
+| stored newest period >100 days old **and** a newer periodic filing exists | **58** |
+| skipped as current (newest stored period within 100 days) | 336 |
+| no stored fact set at all (populate backlog — a different problem) | 290 |
+
+Foreign private issuers dominate the long tail (SONY 534d, TAK 534d, SQM 624d,
+VIST 624d — all 20-F filers whose annual payload lands once a year), but ABT,
+SOJE and VRA are ordinary domestic quarterly filers a quarter behind.
+
+**Not proposed here, for the owner to rule on:** the page could say "SEC has not
+yet published this quarter's figures; results were announced on <date>" where
+the report-date record holds an announcement newer than the newest stored
+period. It is the one case where the two sources disagree in a way a reader
+would want to know about, and it needs a decision rather than a guess.
+
+### 10d. Still open, found while measuring 10a
+
+AMZN's `years` list holds **six** twelve-month comparatives at quarter ends, so
+the five-year card shows them as fiscal years. The reaction card no longer reads
+them; the five-year card still does. Out of scope for this PR by the review's own
+instruction ("snapshot/five-year card wording unchanged"), and recorded here
+rather than fixed, because the fix — admitting an annual period only where it
+ends on the filer's fiscal year end — changes what that card shows.
