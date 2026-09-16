@@ -328,6 +328,16 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // WHERE THE CASH CARD'S NET INCOME COMES FROM. sec-frame-lengths cleared the
+  // AS-FILED half of the NVDA Q2 FY2027 report (0 offenders); this prints the
+  // DIFFERENCED half — each cell's own span and operands — beside the filer's
+  // raw ladder, which is the only way to check the arithmetic against what was
+  // actually filed.
+  "sec-cash-card": {
+    script: "scripts/sec-cash-card-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   "sec-sticky-concepts": {
     script: "scripts/sec-sticky-concept-probe.mjs",
     args: () => [],
