@@ -6,11 +6,57 @@ forgotten, which is why it is written down here.
 
 ## 1. Per IP — the Vercel Firewall, not code
 
+Two rules, and **the order between them is part of the rule**. The bypass is
+evaluated FIRST; a bypass sitting below a challenge does nothing.
+
+    VERCEL FIREWALL BYPASS: Google & Bing crawlers — AS 15169,8075 AND user-agent matches /[Gg]ooglebot|[Bb]ingbot|Mediapartners-Google|AdsBot-Google|Google-InspectionTool/ — Bypass, ABOVE the rate limit
     VERCEL FIREWALL: /stock — 25 requests / 600s per IP — Challenge
 
-Configured in the Vercel dashboard (Project → Firewall), **not** in this
-repository. It runs at the edge, before any lambda, and costs zero Redis
+Both configured in the Vercel dashboard (Project → Firewall), **not** in this
+repository. They run at the edge, before any lambda, and cost zero Redis
 commands.
+
+### Why the crawler bypass exists
+
+`/stock/*` is 483 of the ~765 URLs in the sitemap. A crawler challenged at 25
+requests per ten minutes would have most of the indexable site fall out of
+Google with **no visible symptom on the live domain** — the pages keep serving
+to humans while the index quietly empties. That is the same reasoning
+`middleware.ts` already carries for its own `isKnownGoodBot` allowlist on
+`/stock/*`, and the middleware version cannot help here: the firewall runs
+BEFORE the lambda, so by the time middleware could allow a crawler through, the
+challenge has already been served.
+
+### Why ASN alone was rejected
+
+AS 15169 is Google and AS 8075 is Microsoft — **the whole of GCP and the whole
+of Azure**. A bypass on ASN alone would exempt every VM, function and scraper
+anyone runs on either cloud, which is most of the traffic the rate limit exists
+to bound. The user-agent condition is what narrows it to the crawlers.
+
+Conversely the user-agent alone would be worthless: a header is a claim anyone
+can make, and `curl -A Googlebot` would walk straight past the limit. **Neither
+condition is sufficient and the rule needs both** — the ASN makes the claim
+checkable, the user-agent makes the ASN specific. That is verified-crawler
+identification in the same sense Google's own reverse-DNS check is: traffic
+claiming to be Googlebot *from Google's own network*.
+
+### Why those ASNs are NOT on the datacenter block list
+
+The obvious-looking alternative — block AS 15169 and AS 8075 outright and skip
+the bypass — would break things that are wanted:
+
+- **Link previews.** Slack, Discord, WhatsApp, iMessage and X fetch Open Graph
+  tags from cloud IPs; a blocked preview is a shared link that renders as a bare
+  URL.
+- **Ads crawlers.** `Mediapartners-Google` and `AdsBot-Google` are in the
+  bypass list precisely because they are wanted, and both originate in AS 15169.
+- **AI assistants.** A large share of assistant and answer-engine fetchers run
+  on Azure (AS 8075). Blocking that ASN removes the site from them entirely.
+
+So the ASNs stay unblocked and the bypass is narrowed by user-agent instead.
+
+### Keeping the record honest
 
 **This is the per-IP bound, and there is deliberately no per-IP logic in the
 code.** The middleware alternative — one Redis `EXISTS` on the fact-set key per
@@ -24,10 +70,15 @@ minute site budget below at all, so the case the site-wide bucket cannot defend
 against is closed at the layer above it.
 
 **A rule that lives outside the repo is a rule that silently stops being true.**
-So the same line is written into `lib/server/secColdFetch.ts`'s `claimColdFetch`
-docblock, and `scripts/check-sec-rate-limits.mjs` asserts the two copies agree.
-If the dashboard rule is ever changed, change both copies — the check cannot see
-the dashboard, only whether the repo still agrees with itself.
+So both lines are written into `lib/server/secColdFetch.ts`'s `claimColdFetch`
+docblock as well, and `scripts/check-sec-rate-limits.mjs` asserts the two copies
+agree field for field. If a dashboard rule is ever changed, change both copies —
+the check cannot see the dashboard, only whether the repo still agrees with
+itself.
+
+The bypass line records its ORDER (`ABOVE the rate limit`) because order is the
+one property of it that can be wrong while every field is right, and the failure
+is silent: the crawler is challenged and the index drains anyway.
 
 ## 2. Site-wide external fetches — `SEC_COLD_FETCHES_PER_MINUTE`
 
