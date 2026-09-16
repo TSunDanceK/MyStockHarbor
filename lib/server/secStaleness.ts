@@ -20,7 +20,7 @@
 // entries that most need re-reading are precisely the ones with no value for
 // it. Reading absence as "current" is how a migration finishes without doing
 // anything. Each default below is the state BEFORE that field existed.
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
 import { secChainsHash } from "./secFields";
 
 /**
@@ -39,6 +39,16 @@ export type StaleInput = {
    * field, therefore older than any chain edit since, therefore stale.
    */
   c?: string | null;
+  /**
+   * SEC_LABEL_VERSION the set's fiscal labels were written under. Absent = 1.
+   *
+   * ITS OWN REASON, because neither of the other two can see it: `c` moves for
+   * a TAG CHAIN and a labelling change touches no tag, `h` moves for FIELD
+   * ORDER and labels are not fields. A set written before fiscal-year
+   * calibration would otherwise keep naming AAP's quarters FY2027 forever with
+   * nothing selecting it.
+   */
+  lv?: number;
 };
 
 /**
@@ -72,6 +82,7 @@ export function needsReread(e: StaleInput): boolean {
   return (
     (e.w ?? 8) < SEC_QUARTER_WINDOW ||
     (e.y ?? 5) < SEC_YEAR_WINDOW ||
+    (e.lv ?? 1) < SEC_LABEL_VERSION ||
     (e.c ?? null) !== secChainsHash()
   );
 }
@@ -83,10 +94,11 @@ export function needsReread(e: StaleInput): boolean {
  * it is one chain edit or a genuine window migration, and a boolean cannot say
  * which. Returns an empty array when the entry is current.
  */
-export function staleReasons(e: StaleInput): ("quarters" | "years" | "chains")[] {
-  const out: ("quarters" | "years" | "chains")[] = [];
+export function staleReasons(e: StaleInput): ("quarters" | "years" | "chains" | "labels")[] {
+  const out: ("quarters" | "years" | "chains" | "labels")[] = [];
   if ((e.w ?? 8) < SEC_QUARTER_WINDOW) out.push("quarters");
   if ((e.y ?? 5) < SEC_YEAR_WINDOW) out.push("years");
+  if ((e.lv ?? 1) < SEC_LABEL_VERSION) out.push("labels");
   if ((e.c ?? null) !== secChainsHash()) out.push("chains");
   return out;
 }

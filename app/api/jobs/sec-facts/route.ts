@@ -594,6 +594,10 @@ export async function GET(req: NextRequest) {
         // instead of 759 GETs, and cost nothing: the set is already in hand.
         entry.w = set.w ?? SEC_QUARTER_WINDOW;
         entry.y = set.y ?? SEC_YEAR_WINDOW;
+        // FROM THE SET for the same reason `c` is, below: the manifest records
+        // what actually produced this set, not what was current when the line
+        // was written. A set written by the cold path never passes through here.
+        entry.lv = set.lv ?? 1;
         // FROM THE SET, NOT FROM secChainsHash() — the manifest must record
         // which chains ACTUALLY produced this set, not which chains were
         // current when the manifest line was written. They are the same value

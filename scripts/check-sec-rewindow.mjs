@@ -52,6 +52,12 @@ const WINDOW = Number(
 const YEARS = Number(
   (readCodeOnly("lib/server/secExtract.ts").match(/SEC_YEAR_WINDOW = (\d+)/) ?? [])[1]
 );
+// READ FROM THE SOURCE like the two above, for the reason the docblock gives:
+// `needsReread` closes over it, and a literal pinned here would let this check
+// keep passing against a labelling version that had moved underneath it.
+const LABEL_VERSION = Number(
+  (readCodeOnly("lib/server/secExtract.ts").match(/SEC_LABEL_VERSION = (\d+)/) ?? [])[1]
+);
 const allowance = (name) =>
   Number((ROUTE.match(new RegExp(`${name} = (\\d+)`)) ?? [])[1]);
 
@@ -93,6 +99,7 @@ const loadRewindow = async (mutate = (s) => s, mutateStale = (s) => s) => {
       readCodeOnly("lib/server/secFields.ts"),
       `const SEC_QUARTER_WINDOW = ${WINDOW};`,
       `const SEC_YEAR_WINDOW = ${YEARS};`,
+      `const SEC_LABEL_VERSION = ${LABEL_VERSION};`,
       `const SEC_REVERIFY_PER_RUN = ${allowance("SEC_REVERIFY_PER_RUN")};`,
       `const SEC_POPULATE_PER_RUN = ${allowance("SEC_POPULATE_PER_RUN")};`,
       `const SEC_REWINDOW_PER_RUN = ${allowance("SEC_REWINDOW_PER_RUN")};`,
@@ -211,8 +218,12 @@ const manifest = {
     LEGACY: { cik: "0000000001", contentHash: "h", needsReverify: false },                        // neither field
     NARROW: { cik: "0000000002", contentHash: "h", needsReverify: false, w: 8, y: YEARS },        // quarters behind
     NARROW_YEARS: { cik: "0000000006", contentHash: "h", needsReverify: false, w: WINDOW },       // years behind only
-    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: CHAINS }, // current on all three
-    OLD_CHAINS: { cik: "0000000007", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: "deadbeef" }, // windows current, chains behind
+    CURRENT: { cik: "0000000003", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: CHAINS, lv: LABEL_VERSION }, // current on all four
+    OLD_CHAINS: { cik: "0000000007", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: "deadbeef", lv: LABEL_VERSION }, // windows current, chains behind
+    // LABELS BEHIND ONLY. Its own entry, because neither `c` nor the windows
+    // can see a labelling change: without this reason a set written before the
+    // fiscal-year calibration keeps naming AAP's quarters FY2027 forever.
+    OLD_LABELS: { cik: "0000000008", contentHash: "h", needsReverify: false, w: WINDOW, y: YEARS, c: CHAINS, lv: 1 },
     UNPOPULATED: { cik: "0000000004", contentHash: null, needsReverify: false },                  // populate's
     STALE: { cik: "0000000005", contentHash: "h", needsReverify: true, enqueuedAt: 1 },           // reverify's
   },
@@ -230,6 +241,9 @@ check(
   `rewindow = [${q.rewindow.join(" ")}]`
 );
 check("an explicit w=8 is selected", q.rewindow.includes("NARROW"));
+check("a set written under an older LABELLING is selected",
+  q.rewindow.includes("OLD_LABELS"),
+  "a fiscal-year relabel moves neither the windows nor the chain hash");
 // ── THE YEAR WINDOW SELECTS THROUGH THE SAME QUEUE ──────────────────────────
 // A set can be current on quarters and behind on years: everything written
 // between the two changes is exactly that. One queue, either field.
@@ -372,6 +386,7 @@ check("the allowances and the slack ceiling are read from the route, not retyped
 const absentMeansCurrent = (src) =>
   src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW")
      .replace("(e.y ?? 5) < SEC_YEAR_WINDOW", "(e.y ?? SEC_YEAR_WINDOW) < SEC_YEAR_WINDOW")
+     .replace("(e.lv ?? 1) < SEC_LABEL_VERSION", "(e.lv ?? SEC_LABEL_VERSION) < SEC_LABEL_VERSION")
      .replace("(e.c ?? null) !== secChainsHash()", "(e.c ?? secChainsHash()) !== secChainsHash()");
 const mutated2 = await loadRewindow((x) => x, absentMeansCurrent);
 check("the absent-means-current mutation actually applied", absentMeansCurrent(STALE) !== STALE);
@@ -379,7 +394,7 @@ const qm = mutated2.populationQueues(manifest);
 check(
   "MUTATION: reading an absent window as current DROPS the legacy entries",
   !qm.rewindow.includes("LEGACY") && !qm.rewindow.includes("NARROW_YEARS") &&
-    qm.rewindow.includes("NARROW"),
+    qm.rewindow.includes("NARROW") && qm.rewindow.includes("OLD_LABELS"),
   `rewindow becomes [${qm.rewindow.join(" ")}] — the migration would skip every pre-window entry and look finished`
 );
 

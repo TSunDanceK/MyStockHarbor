@@ -401,6 +401,15 @@ const TASKS = {
   // SEEDS THE REPORT-DATES STORE for a preview, using the shipped functions.
   // A real write, to a key nothing on main reads; the cron overwrites it once
   // the branch merges.
+  // HOW MANY SYMBOLS THE FISCAL-YEAR CALIBRATION RELABELS, and which.
+  // Credentialled to read the store; fetches companyfacts only for the filers
+  // a relabel is arithmetically possible for. No writes.
+  "write-fy-naming-census": {
+    script: "scripts/fiscal-year-naming-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-report-dates-seed": {
     script: "scripts/sec-report-dates-seed.mjs",
     args: () => [],

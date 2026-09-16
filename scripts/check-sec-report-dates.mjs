@@ -19,7 +19,7 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary };" +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -345,6 +345,69 @@ console.log("\n4b. \"next expected\" is never a date that has already passed");
     ));
 }
 
+console.log("\n4c. every reaction bar carries the PAGE'S OWN label, and they are distinct");
+
+// ── THREE DEFECTS, ALL VISIBLE ON ONE PREVIEW, ALL ONE CAUSE ─────────────
+// The bars were labelled by the CALENDAR quarter of an announcement date:
+//   AAPL's latest bar read "Q2 26" under a snapshot calling it Q3 FY2026
+//   AAP carried "Q4 23" twice
+//   AAP and ABEV showed "Q3 26" for a quarter that had not ended
+// An announcement names the quarter it FALLS IN, not the one it reports on,
+// and two announcements can fall in one.
+{
+  // The stored fact set's own labels — the vocabulary the rest of the page uses.
+  const STORED = new Map([
+    ["2026-06-27", "Q3 FY2026"], ["2026-03-28", "Q2 FY2026"],
+    ["2025-12-27", "Q1 FY2026"], ["2025-09-27", "Q4 FY2025"],
+  ]);
+  const at = (end, on) => ({ periodEnd: end, announcedOn: on });
+  const rows = [
+    at("2025-09-27", "2025-10-30"), at("2025-12-27", "2026-01-29"),
+    at("2026-03-28", "2026-04-30"), at("2026-06-27", "2026-07-30"),
+  ];
+  const labels = m.reactionBarLabels(rows, (e) => STORED.get(e));
+  check("every bar takes the STORED period's label, not a calendar quarter",
+    labels.join("|") === "Q4 FY2025|Q1 FY2026|Q2 FY2026|Q3 FY2026", labels.join("|"));
+  check("the LATEST bar matches what the snapshot calls the same filing",
+    labels[labels.length - 1] === STORED.get("2026-06-27"),
+    `${labels[labels.length - 1]} — "Q2 26" under a Q3 FY2026 snapshot is what shipped`);
+  check("no two bars share a label",
+    new Set(labels).size === labels.length, labels.join(" "));
+  // AND THE CALENDAR READING WOULD HAVE DISAGREED on every one of them, so
+  // these are not passing on a coincidence.
+  const calendarish = rows.map((r) => {
+    const d = new Date(`${r.announcedOn}T00:00:00Z`);
+    return `Q${Math.floor(d.getUTCMonth() / 3) + 1} ${String(d.getUTCFullYear()).slice(-2)}`;
+  });
+  check("...and the calendar-of-the-announcement reading differs on every bar",
+    calendarish.every((c, i) => c !== labels[i]), calendarish.join("|"));
+
+  // A BAR WITH NO MATCHED PERIOD MAKES NO FISCAL CLAIM.
+  const fallback = m.reactionBarLabels(
+    [at(null, "2026-08-20"), at(null, "2026-05-21")], () => undefined
+  );
+  check("an unmatched bar says when it was reported, not which quarter",
+    fallback.join("|") === "Reported Aug 2026|Reported May 2026", fallback.join("|"));
+  check("...and never names a quarter at all",
+    !fallback.some((l) => /^Q[1-4]\b/.test(l)));
+
+  // TWO ANNOUNCEMENTS IN ONE MONTH would collide, and a chart with two bars
+  // named the same thing cannot be read.
+  const collide = m.reactionBarLabels(
+    [at(null, "2026-08-04"), at(null, "2026-08-27")], () => undefined
+  );
+  check("a collision on the fallback path is broken by the day",
+    new Set(collide).size === 2, collide.join(" | "));
+
+  // NO LABEL FOR A PERIOD THE FACT SET DOES NOT HOLD. A period is only stored
+  // once it is FILED, so "never label a quarter that has not ended" follows
+  // from never inventing a label for an unknown period.
+  const future = m.reactionBarLabels([at("2026-09-30", "2026-08-20")], (e) => STORED.get(e));
+  check("a period the fact set does not hold gets NO quarter label",
+    future[0] === "Reported Aug 2026",
+    `${future[0]} — 2026-09-30 has not been filed, so there is nothing to name it`);
+}
+
 console.log("\n5. the page is wired to the filings, not to the calendar");
 
 // SOURCE-LEVEL, because the page is a server component that reads Redis and
@@ -365,9 +428,6 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   // labelled from the announcement, so it read "Q3" — the quarter AFTER the one
   // the bar measures. Every bar on the chart named the wrong quarter, and
   // nothing about that fails.
-  check("the reaction bars are labelled from the matched period end",
-    /label:\s*quarterLabel\(e\.periodEnd\)/.test(page),
-    "quarterLabel(e.announcedOn) would name the quarter after the one measured");
   check("...and the session comes from the filing timing",
     /e\.timing === "after-close" \? "amc" : "bmo"/.test(page),
     "after-close is the only timing that advances the session");
@@ -380,6 +440,40 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   // A MONTH IS RENDERED AS A MONTH. "Expected in 2026-11" is a machine talking.
   check("a month-only estimate renders a month name, not YYYY-MM",
     /monthName\(nextReport\.month\)/.test(page) && /names\[idx\]/.test(page));
+
+  // ── ONE VOCABULARY FOR THE WHOLE PAGE ──────────────────────────────────
+  // The bars were labelled by the CALENDAR quarter of a date while every other
+  // card used the filer's own fiscal label: AAPL's latest bar read "Q2 26"
+  // under a snapshot calling the same filing Q3 FY2026, AAP showed "Q4 23"
+  // twice, and both showed a quarter that had not ended.
+  check("a bar's label is the STORED period's label, looked up by matched period end",
+    /reactionBarLabels\(barRows, \(end\) => storedLabels\.get\(end\)\)/.test(page) &&
+      /periodLabel\(p\)/.test(page),
+    "a calendar quarter of the announcement is what shipped");
+  check("...built from the same fact set the rest of the page renders",
+    /cold\.status === "ready" \? cold\.set\.quarters : \[\]/.test(page));
+  check("BOTH paths go through the one labeller, so neither can drift",
+    (page.match(/reactionBarLabels\(/g) ?? []).length === 1 &&
+      /periodEnd: null, announcedOn: row\.date, row/.test(page),
+    "the FMP path had its own labeller, which is what put Q4 23 on two bars");
+  check("the page defines no quarter-from-a-date labeller at all any more",
+    !/function quarterLabel/.test(page) && !/function displayQuarterLabel/.test(page),
+    "leaving it in leaves the defect one call site away");
+
+  // ── THE GATE'S REFUSAL IS RENDERED, NOT LEFT BLANK ─────────────────────
+  // On AAP the card did not render at all — indistinguishable from a symbol
+  // with no SEC data.
+  check("a filer too irregular for a date still gets the card, with the reason",
+    /Not enough regular reporting history to estimate the next report date\./.test(page),
+    "a blank cannot be told from 'we never looked'");
+  check("...and the refusal only shows where filings were actually read",
+    /: secEvents\.length\s*\n?\s*\? \{ source: "sec", kind: "none" \}/.test(page));
+
+  // ── THE TIMING WORDING RULE REACHES THE EXPLANATORY COPY TOO ───────────
+  check("the reaction explanation describes the FILING, not a release",
+    /results filed with the SEC before market open/.test(page) &&
+      !/reports released before market open/.test(page),
+    "'released before market open' asserts a press-release time nothing here observes");
 
   // ── THE CRON WRITES IT, AND MATCHES RATHER THAN READS ──────────────────
   const job = readCodeOnly("app/api/jobs/sec-facts/route.ts");

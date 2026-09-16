@@ -79,6 +79,12 @@ export type SecManifestEntry = {
    * `quarters === 0 && years > 0`) and cost nothing to keep: the job already
    * holds the encoded set when it writes.
    */
+  /**
+   * The PERIOD LABELLING version this symbol's set was written under.
+   * Absent = 1. Selects for re-read exactly like `w`/`y`/`c`, and is needed
+   * because neither of those can see a labelling change — see SEC_LABEL_VERSION.
+   */
+  lv?: number;
   w?: number;
   /**
    * `y` is the YEAR retention window the set was written under. Absent means 5,

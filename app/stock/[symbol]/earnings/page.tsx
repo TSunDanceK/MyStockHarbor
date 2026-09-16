@@ -25,7 +25,8 @@ import {
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDates } from "@/lib/server/secReportDatesStore";
-import { TIMING_WORDING, type ReportTiming } from "@/lib/server/secReportDates";
+import { periodLabel } from "@/lib/server/secFactStore";
+import { TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -57,6 +58,13 @@ type EarningsTone = "good" | "neutral" | "weak";
 type NextReportView =
   | { source: "sec"; kind: "date"; date: string; timing: ReportTiming | null; clamped: boolean; fromEvents: number }
   | { source: "sec"; kind: "month"; month: string; fromEvents: number }
+  // ── "NOTHING" IS AN OUTCOME, NOT AN ABSENCE ─────────────────────────────
+  // The gate refuses a specific date for half the filers it sees, and on AAP
+  // the card simply did not render — the same blank a symbol with no SEC data
+  // at all gets. A reader cannot tell "we looked, and its history is too
+  // irregular to promise a date" from "we never looked", so the refusal is
+  // rendered rather than left as a gap.
+  | { source: "sec"; kind: "none" }
   | { source: "fmp"; date: string; time: string | null }
   | null;
 
@@ -156,16 +164,6 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
 }
 
-function quarterLabel(date?: string | null) {
-  if (!date) return "—";
-  const dt = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) return date;
-  const month = dt.getUTCMonth();
-  const quarter = Math.floor(month / 3) + 1;
-  const year = String(dt.getUTCFullYear()).slice(-2);
-  return `Q${quarter} ${year}`;
-}
-
 
 /** "2026-11" -> "November 2026". Rendered, so it must not say "2026-11". */
 function monthName(ym: string) {
@@ -174,11 +172,6 @@ function monthName(ym: string) {
   const names = ["January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"];
   return names[idx] ? `${names[idx]} ${y}` : ym;
-}
-
-function displayQuarterLabel(row?: FmpEarningsRow | null) {
-  if (!row) return "—";
-  return row.fiscalLabel || quarterLabel(row.date);
 }
 
 /**
@@ -658,12 +651,38 @@ async function getEarningsData(symbol: string) {
   //     is exactly the two-way split `time` already encodes, so the existing,
   //     tested reaction arithmetic is reused rather than reimplemented:
   //     after-close maps to "amc", everything else to "bmo".
-  const reactionRows: { label: string; row: FmpEarningsRow }[] = secEvents.length
-    ? secEvents.slice(0, 8).reverse().map((e) => ({
-        label: quarterLabel(e.periodEnd),
-        row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
-      }))
-    : completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), row }));
+  // ── ONE VOCABULARY FOR THE WHOLE PAGE ────────────────────────────────────
+  //
+  // THE DEFECT: the bars were labelled by the CALENDAR quarter of a date, while
+  // every other card on the page uses the filer's own fiscal label. AAPL's
+  // latest bar read "Q2 26" under a snapshot calling the same filing Q3 FY2026;
+  // ABT's read "Q1 26" against a newest quarter of Q2; AAP showed "Q4 23"
+  // twice, and a "Q3 26" for a quarter that had not ended.
+  //
+  // So the label comes from the SAME stored period the rest of the page reads,
+  // looked up by the matched period end. A bar whose period is unknown gets no
+  // fiscal claim at all.
+  const storedLabels = new Map<string, string>();
+  for (const p of [...(cold.status === "ready" ? cold.set.quarters : []),
+    ...(cold.status === "ready" ? cold.set.years : [])]) {
+    if (p.e) storedLabels.set(p.e, periodLabel(p));
+  }
+
+  const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
+    secEvents.length
+      ? secEvents.slice(0, 8).reverse().map((e) => ({
+          periodEnd: e.periodEnd,
+          announcedOn: e.announcedOn,
+          row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
+        }))
+      : completedRows
+          .slice(0, 8)
+          .reverse()
+          .filter((row): row is FmpEarningsRow & { date: string } => Boolean(row.date))
+          .map((row) => ({ periodEnd: null, announcedOn: row.date, row }));
+
+  const barLabels = reactionBarLabels(barRows, (end) => storedLabels.get(end));
+  const reactionRows = barRows.map((b, i) => ({ label: barLabels[i], row: b.row }));
 
   const priceReactionQuarters: EarningsReactionPoint[] = reactionRows.map(({ label, row }) => ({
     label,
@@ -689,7 +708,9 @@ async function getEarningsData(symbol: string) {
       ? { source: "sec", kind: "month", month: secDates.next.month, fromEvents: secDates.next.fromEvents }
       : next?.date
         ? { source: "fmp", date: next.date, time: next.time ?? null }
-        : null;
+        : secEvents.length
+          ? { source: "sec", kind: "none" }
+          : null;
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
@@ -1162,6 +1183,12 @@ export default async function StockEarningsPage({ params }: Props) {
                         ? " Pulled back to the SEC's filing deadline for this period, which the pattern would have run past."
                         : ""}
                     </p>
+                  ) : nextReport.kind === "none" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      Not enough regular reporting history to estimate the next report date.
+                      {" "}{clean}&apos;s past results filings are spread too widely, or too few
+                      of them are on file, for a date or even a month to mean anything here.
+                    </p>
                   ) : (
                     <p style={{ marginBottom: 0 }}>
                       Expected in <strong>{monthName(nextReport.month)}</strong>.
@@ -1239,7 +1266,7 @@ export default async function StockEarningsPage({ params }: Props) {
               <section className="card">
                 <div className="eyebrow">Price reaction</div>
                 <h2>How has {clean} actually traded around its last reports?</h2>
-                <p>This shows the stock&apos;s closing-price move around each report: for reports released before market open, it&apos;s the move from the prior close into the report-day close; for reports released after market close, it&apos;s the move from the report-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
+                <p>This shows the stock&apos;s closing-price move around each report: for results filed with the SEC before market open, it&apos;s the move from the prior close into the filing-day close; for results filed after market close, it&apos;s the move from the filing-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
                 {latestReaction && (latestReaction.reactionPct != null || latestReaction.volumeMultiple != null) && (
                   <p><strong>Most recent reaction ({latestReaction.label}):</strong> {formatPercent(latestReaction.reactionPct)}{latestReaction.volumeMultiple != null ? ` on ${latestReaction.volumeMultiple.toFixed(1)}x average volume` : ""}.</p>
                 )}
