@@ -39,6 +39,15 @@ const extractSrcRaw = fs.readFileSync("lib/server/secExtract.ts", "utf8");
 const extractSrc = extractSrcRaw.replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secFields";/, "");
 const mod = await lift(`${fieldsSrc}\n${extractSrc}`);
 
+// THE SAME TWO FILES, RE-LIFTED WITH ONE LINE OF THE SHIPPED SOURCE BROKEN.
+// Used by §7's mutations: an assertion that survives the removal of the rule it
+// claims to be testing is not testing it.
+const liftMutated = async (mutate) => {
+  const broken = mutate(extractSrc);
+  if (broken === extractSrc) throw new Error("mutation did not apply — the anchor text moved");
+  return lift(`${fieldsSrc}\n${broken}`);
+};
+
 const {
   SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, secFieldsHash, COVER_SHARES_FIELD,
   cumulativeFields, instantFields, asFiledOnlyFields, fieldPartition,
@@ -429,6 +438,141 @@ check("a mid-year tag change is NOT differenced",
   !bq || at(bq, "revenue") === null || at(bq, "revenue").derived !== "differenced");
 check("and the refusal is recorded as a note rather than swallowed",
   out4.notes.some((n) => n.includes("tag changed mid-year")), out4.notes[0] ?? "(none)");
+
+// ── CAPEX, THE FIELD THE RULE WAS RE-RULED FOR, AND UNDER MUTATION ────────
+//
+// Revenue's ASC 606 boundary is the historical case; capex is the live one. Its
+// chain carries TWO concepts — PaymentsToAcquirePropertyPlantAndEquipment and
+// PaymentsToAcquireProductiveAssets — and 23 of 119 SYMBOLS resolve it from
+// more than one of them across their periods, so the two-concept ladder is not
+// a curiosity here, it is the common shape.
+//
+// NOTHING BELOW ASSERTS A CAPEX NUMBER. The values are arbitrary and chosen to
+// be far apart precisely so that any figure appearing where null is required is
+// visibly a subtraction of one concept from the other rather than a plausible
+// quarter. 900 - 400 = 500 is the number the guard must NOT produce.
+const CAPEX_A = "PaymentsToAcquirePropertyPlantAndEquipment";
+const CAPEX_B = "PaymentsToAcquireProductiveAssets";
+const capexIdx = SEC_FIELDS.findIndex((f) => f.key === "capex");
+const twoConcept = {
+  cik: 1,
+  facts: { "us-gaap": {
+    // The 6M frame under one concept...
+    [CAPEX_A]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-06-30", val: 900, accn: "b", filed: "2026-07-20" },
+    ] } },
+    // ...and the 3M it would have to be differenced against under the other.
+    [CAPEX_B]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" },
+    ] } },
+  } },
+};
+const tc = extractCompanyFacts("TWOC", twoConcept);
+const tcQ2 = tc.quarters.find((q) => q.end === "2026-06-30");
+check("both YTD operands must be the SAME concept, or the quarter is null",
+  !tcQ2 || tcQ2.values[capexIdx] === null,
+  `Q2 capex = ${JSON.stringify(tcQ2?.values[capexIdx] ?? null)} — 900 under one concept ` +
+    `minus 400 under another is arithmetic on unrelated numbers, whatever it evaluates to`);
+check("...and the Q1 that IS single-concept still resolves, so the refusal is the quarter, not the field",
+  tc.quarters.find((q) => q.end === "2026-03-31")?.values[capexIdx]?.val === 400,
+  "a rule that emptied the whole field would pass the assertion above for the wrong reason");
+check("...and the refusal names both concepts in a note",
+  tc.notes.some((n) => n.startsWith("capex ") && n.includes(CAPEX_A) && n.includes(CAPEX_B)),
+  tc.notes.find((n) => n.startsWith("capex ")) ?? "(none)");
+
+{
+  // MUTATION: the same-concept test removed, so the differencing takes whatever
+  // frame sits one length below regardless of which concept filed it.
+  const mixMod = await liftMutated((src) =>
+    src.replace("if (prior.best.tag !== f.best.tag) {", "if (false) {")
+  );
+  const mixed = mixMod.extractCompanyFacts("TWOC", twoConcept);
+  const mixedQ2 = mixed.quarters.find((q) => q.end === "2026-06-30");
+  check("MUTATION: allowing mixed operands makes a number appear where null is required",
+    mixedQ2?.values[capexIdx]?.val === 500 &&
+      mixedQ2?.values[capexIdx]?.derived === "differenced",
+    `the mutation renders ${JSON.stringify(mixedQ2?.values[capexIdx]?.val ?? null)} — ` +
+      `a capital-expenditure quarter assembled from two different concepts, and nothing ` +
+      `about the rendered cell would say so`);
+  check("...and the note disappears with it, so the refusal cannot be recorded but unperformed",
+    !mixed.notes.some((n) => n.startsWith("capex ")),
+    "the note and the refusal are the same branch");
+}
+
+// ── AND ACROSS PERIODS: THE CONCEPT THE FILER USES NOW ────────────────────
+//
+// The rule above says which pairs may be subtracted. This says which of two
+// PRESENT readings a period takes: the concept covering the filer's newest
+// period wins, and the other is used only where the preferred one is absent.
+//
+// THE FIXTURE PUBLISHES BOTH CONCEPTS ON THE NEWER YEAR and only the primary on
+// the older one — the migration shape — so rank-first and preferred-tag give
+// DIFFERENT answers on the newer year and the same answer on the older. A
+// fixture where they agree everywhere would pass under either rule.
+const migrated = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [CAPEX_A]: { units: { USD: [
+      { start: "2024-01-01", end: "2024-12-31", val: 100, accn: "a", filed: "2025-02-01" },
+      { start: "2025-01-01", end: "2025-12-31", val: 110, accn: "b", filed: "2026-02-01" },
+    ] } },
+    [CAPEX_B]: { units: { USD: [
+      { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
+      { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
+    ] } },
+  } },
+};
+const mig = extractCompanyFacts("MIGR", migrated);
+const yearAt = (e) => mig.years.find((y) => y.end === e)?.values[capexIdx];
+check("the preferred concept is the one covering the filer's NEWEST period",
+  yearAt("2026-12-31")?.tag === CAPEX_B,
+  `${yearAt("2026-12-31")?.tag} — the only concept on that period, so this is the premise, not the claim`);
+check("...so a period publishing BOTH takes the preferred one, not the chain's first",
+  yearAt("2025-12-31")?.tag === CAPEX_B && yearAt("2025-12-31")?.val === 220,
+  `FY2025 resolved to ${yearAt("2025-12-31")?.tag} = ${yearAt("2025-12-31")?.val}; ` +
+    `rank-first would have taken ${CAPEX_A} = 110 and made one column mean two things`);
+check("...and a period where the preferred concept is ABSENT still resolves, from the other",
+  yearAt("2024-12-31")?.tag === CAPEX_A && yearAt("2024-12-31")?.val === 100,
+  "preferring a concept must never delete a value — it only chooses between present readings");
+
+{
+  // MUTATION: the preference dropped, so resolution is rank-first per period
+  // again and the column splits across concepts down its own length.
+  const rankMod = await liftMutated((src) =>
+    src.replace(
+      "    preferred && conceptKey(c) === preferred ? -1 : c.rank;",
+      "    c.rank;"
+    )
+  );
+  const r = rankMod.extractCompanyFacts("MIGR", migrated);
+  const rYear = (e) => r.years.find((y) => y.end === e)?.values[capexIdx];
+  check("MUTATION: without the preference, one filer's capex column resolves from two concepts",
+    rYear("2025-12-31")?.tag === CAPEX_A && rYear("2026-12-31")?.tag === CAPEX_B,
+    `FY2025 ${rYear("2025-12-31")?.tag} = ${rYear("2025-12-31")?.val} but FY2026 ` +
+      `${rYear("2026-12-31")?.tag} = ${rYear("2026-12-31")?.val} — adjacent rows of one ` +
+      `column, two different measures, no marking`);
+  check("...and the us-gaap-over-ifrs precedence is NOT what the preference is doing",
+    rankMod.extractCompanyFacts("BOTHM", {
+      cik: 1,
+      facts: {
+        "us-gaap": { Assets: { units: { USD: [{ end: "2026-06-30", val: 111, accn: "a", filed: "2026-07-01" }] } } },
+        "ifrs-full": { Assets: { units: { USD: [{ end: "2026-06-30", val: 222, accn: "b", filed: "2026-08-01" }] } } },
+      },
+    }).instants[0]?.values[SEC_FIELDS.findIndex((f) => f.key === "totalAssets")]?.val === 111,
+    "rank still decides across namespaces with the preference gone, so §11's fixture " +
+      "is testing chain rank and this is testing the preference — two rules, two checks");
+}
+
+// AND THE RE-READ KEY HAS TO MOVE WHEN THE RESOLUTION DOES. A stored set
+// written under rank-first holds figures the shipped code would not write; if
+// secChainsHash ignores the policy, needsReread reports every set current and
+// the store serves them forever.
+check("the resolution policy is fed into secChainsHash",
+  /feed\(`policy\|\$\{CHAIN_RESOLUTION_POLICY\}`\)/.test(fieldsSrc) &&
+    mod.secChainsHash() !== (await lift(
+      fieldsSrc.replace("feed(`policy|${CHAIN_RESOLUTION_POLICY}`);", "")
+    )).secChainsHash(),
+  "the hash a set is compared against differs with the policy line present and absent");
 
 // ── 8. the free arithmetic assertion ────────────────────────────────────────
 console.log("\n8. internal identities");
