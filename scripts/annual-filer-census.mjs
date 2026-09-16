@@ -64,6 +64,8 @@ const usable = (set) => {
 
 const bucket = { "annual-only": [], quarterly: [], unusable: [], unpopulated: [] };
 const windows = {};
+/** Every set actually read back, by symbol — the anchor pass below walks it. */
+const setsBySymbol = {};
 for (let i = 0; i < symbols.length; i += 50) {
   const chunk = symbols.slice(i, i + 50);
   const sets = await redis.mget(...chunk.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
@@ -71,6 +73,7 @@ for (let i = 0; i < symbols.length; i += 50) {
     const set = sets[j];
     if (!set || typeof set !== "object") { bucket.unpopulated.push(sym); return; }
     windows[set.w ?? 8] = (windows[set.w ?? 8] ?? 0) + 1;
+    setsBySymbol[sym] = set;
     if (!usable(set)) { bucket.unusable.push(sym); return; }
     if ((set.quarters ?? []).length === 0 && (set.years ?? []).length > 0) bucket["annual-only"].push(sym);
     else bucket.quarterly.push(sym);
@@ -129,6 +132,28 @@ console.log(`\nBELOW THE DENSITY BAR, ${bucket.unusable.length} SYMBOLS:`);
 console.log("  " + (bucket.unusable.join(" ") || "(none)"));
 console.log(`\nQUARTERLY, ${bucket.quarterly.length} SYMBOLS:`);
 console.log("  " + (bucket.quarterly.join(" ") || "(none)"));
+// ── HOW MANY FILERS HAVE A NEWER ANNUAL PERIOD THAN THEIR NEWEST QUARTER ────
+//
+// The snapshot anchors on the newest period BY DATE, and for these SYMBOLS
+// that is the fiscal year, not the quarter. Before the fix they rendered a
+// stale quarter as "most recent" — AZN showed Q2 FY2025 (ended 2025-06-30)
+// while FY2025, ended 2025-12-31, sat in the same set. This counts the blast
+// radius of that defect across the stored universe.
+//
+// Counted only where BOTH exist: a filer with no quarters is the annual-only
+// case, already counted above, and not what this is measuring.
+console.log(`\nNEWEST PERIOD IS A YEAR, NOT A QUARTER, counted in SYMBOLS:`);
+{
+  const affected = [];
+  for (const [sym, set] of Object.entries(setsBySymbol)) {
+    const nq = (set.quarters ?? [])[0]?.e;
+    const ny = (set.years ?? [])[0]?.e;
+    if (nq && ny && ny > nq) affected.push(`${sym}(${nq}->${ny})`);
+  }
+  console.log(`  ${affected.length} SYMBOLS of ${Object.keys(setsBySymbol).length} stored`);
+  console.log("  " + (affected.join(" ") || "(none)"));
+}
+
 console.log(`\nSTORED QUARTER WINDOW, counted in SYMBOLS: ${JSON.stringify(windows)}`);
 console.log("  (anything below 12 is eligible for the rewindow queue)");
 
