@@ -83,10 +83,19 @@ const fetchJson = async (url) => {
 // = 12:30 ET) and every before-open filer moves to the small hours of the same
 // date (07:00Z = 03:00 ET, still "before open" — so the after-close half is
 // what actually decides it).
+// ── THE PANEL, WIDENED TO THIRTY ─────────────────────────────────────────
+// Ten was enough to settle the timezone and not enough to trust it. The
+// before-open half is the only discriminating half, so it carries the most
+// weight: twelve filers whose morning habit is long-standing, twelve whose
+// after-close habit is, and six drawn from the DURING-MARKET bucket at random
+// — because "during market" is the bucket a late filing would land in wrongly,
+// and it is the one nobody has checked.
 const PANEL = {
-  "after-close": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
-  "before-open": ["JPM", "KO", "PG", "CAT", "MMM"],
+  "after-close": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "ORCL", "CRM", "ADBE", "INTC", "AMD"],
+  "before-open": ["JPM", "KO", "PG", "CAT", "MMM", "GS", "BAC", "WFC", "JNJ", "MRK", "PFE", "VZ"],
 };
+/** How many during-market filings to pull an exhibit for. */
+const DURING_SAMPLE = 6;
 
 console.log("=".repeat(76));
 console.log("1. IS acceptanceDateTime EASTERN WALL TIME, OR UTC?");
@@ -136,12 +145,14 @@ console.log("1. IS acceptanceDateTime EASTERN WALL TIME, OR UTC?");
   console.log("");
 }
 
-// ── 2-4. THE CORPUS ──────────────────────────────────────────────────────
+// ── 2-5. THE CORPUS ──────────────────────────────────────────────────────
 const agree = { symbols: new Set(), filings: 0 };
 const disagree = { symbols: new Set(), filings: 0, examples: [] };
 const noFmp = new Set();
 const timingCounts = { "before-open": 0, "during-market": 0, "after-close": 0 };
+const duringMarket = [];
 const backtest = [];
+const gate = { date: 0, month: 0, none: 0 };
 const sixK = { symbols: new Set(), events: 0 };
 let read = 0, noSubs = 0, noEvents = 0;
 
@@ -152,7 +163,6 @@ for (const symbol of targets) {
   if (!subs) { noSubs++; continue; }
   read++;
 
-  // Period ends the STORED FACT SET knows about — the 6-K rule's input.
   const set = await redis.get(`${SEC_FACTS_PREFIX}:${symbol}`);
   const periodEnds = new Set([
     ...(set?.quarters ?? []).map((p) => p.e),
@@ -164,73 +174,208 @@ for (const symbol of targets) {
   for (const e of events) {
     timingCounts[e.timing]++;
     if (e.basis === "6-K near period end") { sixK.events++; sixK.symbols.add(symbol); }
+    if (e.timing === "during-market") duringMarket.push({ symbol, cik, ...e });
   }
 
-  // ── DATE AGREEMENT vs THE STORED FMP ROWS ──────────────────────────────
-  // Stored EarningsRow has `date` and NO time-of-day field, so this compares
-  // DATES only. bmo/amc cannot be compared from the store — see the report.
+  // ── DATE AGREEMENT vs THE STORED FMP ROWS (dates only) ─────────────────
   const rows = (await redis.get(`${EARNINGS_PREFIX}${symbol}`)) ?? [];
   const fmpDates = new Set(rows.map((r) => r?.date).filter(Boolean));
-  if (!fmpDates.size) { noFmp.add(symbol); continue; }
-  for (const e of events) {
-    // Only compare where FMP has an opinion about that period at all: an 8-K
-    // older than FMP's window is not a disagreement.
-    const near = [...fmpDates].some((d) => Math.abs(sec.daysBetween(d, e.announcedOn)) <= 1);
-    const inRange = [...fmpDates].some((d) => Math.abs(sec.daysBetween(d, e.announcedOn)) <= 10);
-    if (!inRange) continue;
-    if (near) { agree.filings++; agree.symbols.add(symbol); }
-    else {
-      disagree.filings++;
-      disagree.symbols.add(symbol);
-      if (disagree.examples.length < 15) {
-        const closest = [...fmpDates].sort(
-          (a, b) => Math.abs(sec.daysBetween(a, e.announcedOn)) - Math.abs(sec.daysBetween(b, e.announcedOn))
-        )[0];
-        disagree.examples.push(`${symbol} SEC ${e.announcedOn} vs FMP ${closest} (${sec.daysBetween(closest, e.announcedOn)}d) ${e.basis}`);
+  if (!fmpDates.size) noFmp.add(symbol);
+  else {
+    for (const e of events) {
+      const near = [...fmpDates].some((d) => Math.abs(sec.daysBetween(d, e.announcedOn)) <= 1);
+      const inRange = [...fmpDates].some((d) => Math.abs(sec.daysBetween(d, e.announcedOn)) <= 10);
+      if (!inRange) continue;
+      if (near) { agree.filings++; agree.symbols.add(symbol); }
+      else {
+        disagree.filings++;
+        disagree.symbols.add(symbol);
+        if (disagree.examples.length < 12) {
+          const closest = [...fmpDates].sort(
+            (a, b) => Math.abs(sec.daysBetween(a, e.announcedOn)) - Math.abs(sec.daysBetween(b, e.announcedOn))
+          )[0];
+          disagree.examples.push(`${symbol} SEC ${e.announcedOn} vs FMP ${closest} (${sec.daysBetween(closest, e.announcedOn)}d) ${e.basis}`);
+        }
       }
     }
   }
 
-  // ── 3. LEAVE-ONE-OUT BACKTEST ──────────────────────────────────────────
-  // Predict the MOST RECENT announcement using only the ones before it. A
-  // median computed over the event it predicts is not a backtest.
+  // ── THE GATE, on the live history ──────────────────────────────────────
   const dated = events.filter((e) => e.periodEnd);
-  if (dated.length >= 4) {
-    const actual = dated[0];
-    const prior = dated.slice(1);
-    const est = sec.estimateNextReport(prior, actual.periodEnd, subs.category, false);
-    if (est) backtest.push({ symbol, error: Math.abs(sec.daysBetween(est.date, actual.announcedOn)), clamped: est.clamped });
+  if (dated.length) {
+    const nextEnd = new Date(Date.parse(dated[0].periodEnd) + 91 * 86400000).toISOString().slice(0, 10);
+    gate[sec.estimateNextReport(dated, nextEnd, subs.category, false).kind]++;
+  }
+
+  // ── 3. THE BACKTEST, WITH THE LEAK CLOSED ──────────────────────────────
+  //
+  // PRIOR MEANS STRICTLY PRIOR, ON BOTH AXES. The target is excluded, and so is
+  // anything for the SAME period (an amendment, a re-index) and anything
+  // announced on or after it. reportEvents already collapses a period to one
+  // event; this is the second lock, because a backtest that depends on the
+  // dedupe being perfect is a backtest that cannot detect the dedupe failing.
+  const target = dated[0];
+  if (target && dated.length >= 5) {
+    const prior = dated.filter(
+      (e) => e.periodEnd < target.periodEnd && e.announcedOn < target.announcedOn
+    );
+    if (prior.length >= 4) {
+      // (i) LAG ONLY: the true next period end is given, so this isolates the
+      //     lag prediction from the calendar derivation.
+      const withTrueEnd = sec.estimateNextReport(prior, target.periodEnd, subs.category, false);
+      // (ii) END TO END: the period end is DERIVED from prior events only,
+      //      which is what production has to do.
+      const spacings = [];
+      for (let i = 0; i + 1 < prior.length; i++) {
+        spacings.push(sec.daysBetween(prior[i + 1].periodEnd, prior[i].periodEnd));
+      }
+      const step = sec.median(spacings.filter((d) => d > 60 && d < 200));
+      const derivedEnd = step
+        ? new Date(Date.parse(prior[0].periodEnd) + step * 86400000).toISOString().slice(0, 10)
+        : null;
+      const withDerivedEnd = derivedEnd
+        ? sec.estimateNextReport(prior, derivedEnd, subs.category, false)
+        : { kind: "none" };
+
+      // ── THE LEAK MUTATION ────────────────────────────────────────────────
+      // Put the target back into its own training set. If the honest error does
+      // not get WORSE than this, the honest run is still leaking.
+      const leaky = sec.estimateNextReport([target, ...prior], target.periodEnd, subs.category, false);
+
+      // ── TWO NAIVE BASELINES ─────────────────────────────────────────────
+      // B1: the same fiscal quarter a year earlier, same lag.
+      const yearAgo = prior.find((e) => {
+        const gap = sec.daysBetween(e.periodEnd, target.periodEnd);
+        return gap >= 330 && gap <= 400;
+      });
+      const b1 = yearAgo
+        ? new Date(Date.parse(target.periodEnd) + sec.daysBetween(yearAgo.periodEnd, yearAgo.announcedOn) * 86400000)
+            .toISOString().slice(0, 10)
+        : null;
+      // B2: a flat 35 days after the period end.
+      const b2 = new Date(Date.parse(target.periodEnd) + 35 * 86400000).toISOString().slice(0, 10);
+
+      const err = (d) => (d ? Math.abs(sec.daysBetween(d, target.announcedOn)) : null);
+      backtest.push({
+        symbol,
+        basis: target.basis,
+        kind: withTrueEnd.kind,
+        lagOnly: withTrueEnd.kind === "date" ? err(withTrueEnd.date) : null,
+        endToEnd: withDerivedEnd.kind === "date" ? err(withDerivedEnd.date) : null,
+        leaky: leaky.kind === "date" ? err(leaky.date) : null,
+        b1: err(b1),
+        b2: err(b2),
+        clamped: withTrueEnd.kind === "date" && withTrueEnd.clamped,
+        priorN: prior.length,
+        lags: prior.slice(0, 6).map((e) => sec.daysBetween(e.periodEnd, e.announcedOn)),
+        medianLag: withTrueEnd.kind === "date" ? withTrueEnd.medianLagDays : null,
+        predicted: withTrueEnd.kind === "date" ? withTrueEnd.date : null,
+        actual: target.announcedOn,
+        periodEnd: target.periodEnd,
+        derivedEnd,
+      });
+    }
   }
 }
 
 console.log("=".repeat(76));
 console.log(`READ ${read} SYMBOLS (${noSubs} no submissions, ${noEvents} no qualifying filing)\n`);
-console.log("2. 8-K/6-K ANNOUNCEMENT DATE vs THE STORED FMP DATE (±1 day = agreement)");
-console.log(`   SYMBOLS:  ${agree.symbols.size} agree · ${disagree.symbols.size} have >=1 disagreement`);
+console.log("2. ANNOUNCEMENT DATE vs THE STORED FMP DATE (±1 day = agreement)");
 console.log(`   FILINGS:  ${agree.filings} agree · ${disagree.filings} disagree`);
-console.log(`   ${noFmp.size} SYMBOLS had no stored FMP rows to compare against`);
+console.log(`   SYMBOLS:  ${agree.symbols.size} with >=1 agreeing · ${disagree.symbols.size} with >=1 disagreeing`);
+console.log(`             (these OVERLAP — a filer can have both. ${noFmp.size} had no stored FMP rows.)`);
 for (const ex of disagree.examples) console.log(`     ${ex}`);
 console.log("");
-console.log("   TIMING DISTRIBUTION (from acceptanceDateTime):");
+console.log("   TIMING DISTRIBUTION:");
 for (const [k, v] of Object.entries(timingCounts)) console.log(`     ${k.padEnd(15)} ${v}`);
 console.log("");
-console.log("   bmo/amc AGREEMENT vs FMP: NOT MEASURED. The stored EarningsRow");
-console.log("   carries `date` and no time-of-day field, and the runner has no");
-console.log("   FMP_API_KEY, so there is nothing to compare the timing against.");
-console.log("");
-console.log("3. NEXT-DATE BACKTEST (leave-one-out, predict the newest from the rest)");
+
+// ── 5. WHAT ARE THE DURING-MARKET FILINGS REALLY? ────────────────────────
+console.log("5. DURING-MARKET FILINGS — are they morning releases filed late?");
 {
-  const errs = backtest.map((b) => b.error);
-  console.log(`   ${backtest.length} SYMBOLS with >=4 dated announcements`);
-  console.log(`   median absolute error: ${sec.median(errs) ?? "n/a"} day(s)`);
-  const within = (d) => errs.filter((e) => e <= d).length;
-  console.log(`   within 0d ${within(0)} · 1d ${within(1)} · 3d ${within(3)} · 7d ${within(7)} of ${errs.length}`);
-  console.log(`   clamped to the statutory deadline: ${backtest.filter((b) => b.clamped).length}`);
-  const worst = [...backtest].sort((a, b) => b.error - a.error).slice(0, 8);
-  for (const w of worst) console.log(`     worst: ${w.symbol} ${w.error}d${w.clamped ? " (clamped)" : ""}`);
+  // A DETERMINISTIC SAMPLE, not Math.random: a probe whose sample changes every
+  // run cannot be re-checked against its own output.
+  const step = Math.max(1, Math.floor(duringMarket.length / DURING_SAMPLE));
+  const sample = [];
+  for (let i = 0; i < duringMarket.length && sample.length < DURING_SAMPLE; i += step) sample.push(duringMarket[i]);
+  console.log(`   ${duringMarket.length} during-market filings; sampling ${sample.length} evenly`);
+  let withTime = 0, morning = 0;
+  for (const f of sample) {
+    const acc = f.accession.replace(/-/g, "");
+    const idx = await fetchJson(
+      `https://data.sec.gov/Archives/edgar/data/${Number(f.cik)}/${acc}/index.json`
+    ).catch(() => null);
+    const items = idx?.directory?.item ?? [];
+    // EX-99.1 is the press release by convention.
+    const ex = items.find((it) => /ex-?99/i.test(String(it.name)) && /\.(htm|html|txt)$/i.test(String(it.name)));
+    let stamp = null;
+    if (ex) {
+      const res = await fetch(
+        `https://www.sec.gov/Archives/edgar/data/${Number(f.cik)}/${acc}/${ex.name}`,
+        { headers: { "User-Agent": UA } }
+      ).catch(() => null);
+      if (res?.ok) {
+        const text = (await res.text()).replace(/<[^>]+>/g, " ");
+        // A press release that carries a time usually writes it beside the
+        // dateline. Anything else is left null rather than guessed at.
+        const t = text.match(/\b(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)\s*(ET|EDT|EST|Eastern)/i);
+        if (t) stamp = `${t[1]}:${t[2]} ${t[3].toUpperCase()} ${t[4].toUpperCase()}`;
+      }
+    }
+    if (stamp) {
+      withTime++;
+      if (/a\.?m\.?/i.test(stamp)) morning++;
+    }
+    console.log(
+      `     ${f.symbol.padEnd(6)} filed ${f.announcedOn} ${f.announcedAt} ET` +
+        `  exhibit=${ex ? ex.name : "none"}  release time=${stamp ?? "not stated"}`
+    );
+  }
+  console.log(`   ${withTime} of ${sample.length} exhibits stated a time; ${morning} of those were a.m.`);
+  console.log("   A morning release filed during market hours is misclassified — and by the");
+  console.log("   session mapping it still selects the SAME reaction day, so it is harmless.");
 }
 console.log("");
-console.log(`4. THE 6-K RULE: ${sixK.events} event(s) across ${sixK.symbols.size} SYMBOLS` +
-  (sixK.symbols.size ? ` — ${[...sixK.symbols].sort().slice(0, 30).join(", ")}` : ""));
-console.log("   Reported apart from the 8-K numbers above on purpose: a 6-K carries");
-console.log("   no item codes and is selected positionally, which is weaker evidence.");
+
+console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
+{
+  const dateRows = backtest.filter((b) => b.kind === "date");
+  const med = (xs) => sec.median(xs.filter((x) => x !== null));
+  console.log(`   ${backtest.length} SYMBOLS with >=5 dated events and >=4 strictly-prior ones`);
+  console.log(`   ${dateRows.length} of them clear the regularity gate and get a DATE\n`);
+  const cols = [
+    ["method (lag only, true period end)", dateRows.map((b) => b.lagOnly)],
+    ["method (end to end, derived end)  ", dateRows.map((b) => b.endToEnd)],
+    ["baseline: same quarter last year  ", dateRows.map((b) => b.b1)],
+    ["baseline: period end + 35 days    ", dateRows.map((b) => b.b2)],
+    ["LEAKY (target in its own median)  ", dateRows.map((b) => b.leaky)],
+  ];
+  for (const [label, xs] of cols) {
+    const v = xs.filter((x) => x !== null);
+    const within = (d) => v.filter((e) => e <= d).length;
+    console.log(`   ${label}  median ${med(xs) ?? "n/a"}d · 0d ${within(0)} · <=1d ${within(1)} · <=3d ${within(3)} · <=7d ${within(7)} of ${v.length}`);
+  }
+  const honest = med(dateRows.map((b) => b.lagOnly));
+  const leaky = med(dateRows.map((b) => b.leaky));
+  console.log("");
+  console.log(`   LEAK TEST: honest ${honest}d vs leaky ${leaky}d — ` +
+    (leaky < honest ? "leaky is BETTER, as it must be: the honest run is not leaking"
+      : "leaky is NOT better, so the honest run is STILL LEAKING"));
+  console.log("");
+  console.log("   FIVE WORKED EXAMPLES:");
+  const domestic = dateRows.filter((b) => b.basis === "8-K item 2.02");
+  const clamped = dateRows.filter((b) => b.clamped);
+  const picked = [...domestic.slice(0, 3), ...clamped.slice(0, 1), ...dateRows.slice(-1)]
+    .filter((v, i, a) => a.indexOf(v) === i).slice(0, 5);
+  for (const b of picked) {
+    console.log(`     ${b.symbol}  prior lags ${JSON.stringify(b.lags)} (n=${b.priorN}) median ${b.medianLag}d`);
+    console.log(`       period end ${b.periodEnd} (derived ${b.derivedEnd}) -> predicted ${b.predicted} · actual ${b.actual}` +
+      ` · error ${b.lagOnly}d${b.clamped ? " CLAMPED" : ""} · ${b.basis}`);
+  }
+}
+console.log("");
+console.log("4. THE REGULARITY GATE, over every symbol read");
+console.log(`   a specific DATE: ${gate.date} · a MONTH only: ${gate.month} · NOTHING: ${gate.none}`);
+console.log("");
+console.log(`6. THE 6-K RULE: ${sixK.events} event(s) across ${sixK.symbols.size} SYMBOLS`);
+console.log("   No 6-K history earns an estimate — estimateNextReport uses the 8-K path only.");

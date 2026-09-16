@@ -238,7 +238,30 @@ export function reportEvents(
   }
 
   out.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
-  return out;
+
+  // ── ONE EVENT PER PERIOD, AND THE EARLIEST ONE ────────────────────────────
+  //
+  // A filer can file several qualifying documents for the SAME period: an
+  // 8-K/A amending the original, a second 8-K carrying the transcript, or —
+  // seen live on ABEV — the same 6-K indexed twice. The ORIGINAL announcement
+  // is the one the market reacted to, so the earliest wins.
+  //
+  // THIS IS NOT COSMETIC, AND IT WAS LEAKING A BACKTEST. With duplicates in the
+  // list, a leave-one-out prediction of the newest event kept a COPY of that
+  // same event in its own training set, whose lag is by definition the lag
+  // being predicted. The median was then pulled onto the answer and the
+  // reported error collapsed toward zero — a number that measured the
+  // duplication, not the method.
+  const byPeriod = new Map<string, ReportEvent>();
+  const undated: ReportEvent[] = [];
+  for (const e of out) {
+    if (!e.periodEnd) { undated.push(e); continue; }
+    const seen = byPeriod.get(e.periodEnd);
+    if (!seen || e.announcedOn < seen.announcedOn) byPeriod.set(e.periodEnd, e);
+  }
+  const deduped = [...byPeriod.values(), ...undated];
+  deduped.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
+  return deduped;
 }
 
 // ── THE NEXT REPORT DATE ───────────────────────────────────────────────────
@@ -277,18 +300,45 @@ export const median = (xs: number[]): number | null => {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 };
 
-export type NextReportEstimate = {
-  /** YYYY-MM-DD. */
-  date: string;
-  /** Days from period end to announcement, this filer's own median. */
-  medianLagDays: number;
-  /** How many past announcements the median came from. */
-  fromEvents: number;
-  /** True when the statutory deadline pulled the estimate earlier. */
-  clamped: boolean;
-  /** The filer's habitual timing, when its past filings agree. */
-  timing: ReportTiming | null;
-};
+/**
+ * ── ONLY PROMISE A DATE WHERE THE FILER HAS EARNED ONE ────────────────────
+ *
+ * A median over four wildly different lags is still a number, and rendering it
+ * as "expected 12 November" tells a reader something the data does not support.
+ * So the estimate is a DISCRIMINATED RESULT and the page renders whichever
+ * shape it gets, rather than a number plus a confidence nobody reads.
+ */
+export type NextReportEstimate =
+  | {
+      kind: "date";
+      date: string;
+      medianLagDays: number;
+      /** max - min over the last four lags. The regularity that earned a date. */
+      spreadDays: number;
+      fromEvents: number;
+      clamped: boolean;
+      timing: ReportTiming | null;
+    }
+  | {
+      kind: "month";
+      /** YYYY-MM. The last four lags all land here, but not on one day. */
+      month: string;
+      spreadDays: number;
+      fromEvents: number;
+      timing: ReportTiming | null;
+    }
+  | { kind: "none"; reason: string };
+
+/**
+ * How far the last four lags may spread and still earn a specific date.
+ *
+ * SEVEN DAYS IS A WEEK OF WEEKDAY DRIFT and nothing more. A filer whose period
+ * end moves across the week announces a few days earlier or later without
+ * changing its habit; one that swings a fortnight has no habit to report.
+ */
+export const REGULAR_SPREAD_DAYS = 7;
+/** Lags are judged over this many of the most recent events. */
+export const REGULARITY_WINDOW = 4;
 
 /**
  * Estimate the next announcement from THE FILER'S OWN HABIT, clamped.
@@ -303,31 +353,101 @@ export function estimateNextReport(
   nextPeriodEnd: string,
   category: unknown,
   annual = false
-): NextReportEstimate | null {
-  const lags = events
-    .filter((e) => e.periodEnd)
+): NextReportEstimate {
+  // ── THE 8-K PATH ONLY ───────────────────────────────────────────────────
+  // The 6-K rule is positional and its backtest tail shows it: every one of
+  // the worst errors measured came from a foreign filer selected that way.
+  // Estimating a date from it would put the weakest evidence behind the most
+  // specific claim on the card.
+  const usable = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  const lags = usable
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
-    // A NEGATIVE OR ABSURD LAG IS BAD DATA, NOT A HABIT. An 8-K reporting a
-    // period before it ended, or a year after, would drag the median silently.
+    // A NEGATIVE OR ABSURD LAG IS BAD DATA, NOT A HABIT.
     .filter((d) => d >= 0 && d <= 200);
-  const lag = median(lags);
-  if (lag === null) return null;
+  if (lags.length < REGULARITY_WINDOW) {
+    return { kind: "none", reason: `only ${lags.length} prior 8-K item 2.02 announcement(s)` };
+  }
 
-  const raw = new Date(Date.parse(nextPeriodEnd) + lag * DAY);
-  const cap = new Date(Date.parse(nextPeriodEnd) + deadlineDays(category, annual) * DAY);
+  const recent = lags.slice(0, REGULARITY_WINDOW);
+  const spread = Math.max(...recent) - Math.min(...recent);
+  const lag = median(lags)!;
+
+  const at = (d: number) => new Date(Date.parse(nextPeriodEnd) + d * DAY);
+  const cap = at(deadlineDays(category, annual));
+  const raw = at(lag);
   const clamped = raw.getTime() > cap.getTime();
 
   // THE FILER'S HABITUAL TIMING, only when its recent filings AGREE. A filer
   // that has moved between before-open and after-close has no habit to report,
   // and inventing one is worse than saying nothing.
-  const recent = events.slice(0, 4).map((e) => e.timing);
-  const timing = recent.length && recent.every((t) => t === recent[0]) ? recent[0] : null;
+  const timings = usable.slice(0, REGULARITY_WINDOW).map((e) => e.timing);
+  const timing = timings.length && timings.every((t) => t === timings[0]) ? timings[0] : null;
 
-  return {
-    date: (clamped ? cap : raw).toISOString().slice(0, 10),
-    medianLagDays: lag,
-    fromEvents: lags.length,
-    clamped,
-    timing,
-  };
+  if (spread <= REGULAR_SPREAD_DAYS) {
+    return {
+      kind: "date",
+      date: (clamped ? cap : raw).toISOString().slice(0, 10),
+      medianLagDays: lag,
+      spreadDays: spread,
+      fromEvents: lags.length,
+      clamped,
+      timing,
+    };
+  }
+
+  // NOT REGULAR ENOUGH FOR A DAY — but if every one of the last four lags
+  // still lands in the same calendar month, the month is a claim the data does
+  // support, and it is more use to a reader than silence.
+  const months = new Set(recent.map((d) => at(d).toISOString().slice(0, 7)));
+  if (months.size === 1) {
+    return { kind: "month", month: [...months][0], spreadDays: spread, fromEvents: lags.length, timing };
+  }
+  return { kind: "none", reason: `last ${REGULARITY_WINDOW} lags spread ${spread} days across ${months.size} months` };
 }
+
+// ── WHICH SESSION THE MARKET REACTED IN ────────────────────────────────────
+
+/**
+ * The trading day whose close reflects the announcement.
+ *
+ * ── WHY THIS COLLAPSES THREE TIMINGS INTO TWO ─────────────────────────────
+ * A release before the open and one at 11:00 are both digested by the SAME
+ * day's close. Only an after-close release waits for the next session. So the
+ * mapping is:
+ *
+ *   before-open   on D  ->  D
+ *   during-market on D  ->  D
+ *   after-close   on D  ->  D + 1 trading day
+ *
+ * AND THAT IS WHY A TIMING MISTAKE IS MOSTLY HARMLESS. The boundary this code
+ * can plausibly get wrong is before-open vs during-market — a morning release
+ * filed late — and both map to the same session, so the reaction is measured on
+ * the right day either way. The boundary that WOULD matter, after-close, is the
+ * one the timestamps are least ambiguous about: nothing accepted at 20:30Z is a
+ * morning release.
+ *
+ * RETURNS A DATE, NOT AN INDEX. The caller owns the bar series and knows which
+ * dates are trading days; this returns the calendar date to look for and the
+ * caller advances to the next available bar. A weekend or holiday after-close
+ * filing therefore lands on the next session without this function needing a
+ * market calendar it would only get wrong.
+ */
+export function reactionDate(event: Pick<ReportEvent, "announcedOn" | "timing">): string {
+  if (event.timing !== "after-close") return event.announcedOn;
+  return new Date(Date.parse(event.announcedOn) + DAY).toISOString().slice(0, 10);
+}
+
+/**
+ * How the page describes the timing.
+ *
+ * IT DESCRIBES THE FILING, NOT THE ANNOUNCEMENT, and the distinction is not
+ * pedantry: what this module observes is when a document reached EDGAR, which
+ * is at or after the moment the company put the news out. "Reported after
+ * close" claims to know the press release time; "filed with the SEC after
+ * market close" claims only what the timestamp shows.
+ */
+export const TIMING_WORDING: Record<ReportTiming, string> = {
+  "before-open": "Results filed with the SEC before market open",
+  "during-market": "Results filed with the SEC during market hours",
+  "after-close": "Results filed with the SEC after market close",
+};
