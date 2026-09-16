@@ -69,44 +69,74 @@ check("nothing says 'reported'",
   !Object.values(m.TIMING_WORDING).some((v) => /\breported\b/i.test(v)),
   Object.values(m.TIMING_WORDING).find((v) => /\breported\b/i.test(v)) ?? "none");
 
-console.log("\n3. one event per period, earliest wins");
+console.log("\n3. the period is MATCHED, never read off the filing");
 
-// An amendment and a duplicate index entry for the same period, plus a real
-// prior quarter. Values are dates and nothing here asserts a figure.
 const subs = (rows) => ({
   filings: {
     recent: {
       accessionNumber: rows.map((r, i) => `a${i}`),
       form: rows.map((r) => r.form),
       items: rows.map((r) => r.items ?? null),
-      reportDate: rows.map((r) => r.period),
+      reportDate: rows.map((r) => r.event),
       acceptanceDateTime: rows.map((r) => r.accepted),
     },
   },
 });
+// The stored fact set's real period ends.
+const PERIODS = new Set(["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"]);
+
+{
+  // ── THE REGRESSION THIS EXISTS FOR ────────────────────────────────────
+  // An Item 2.02 8-K's reportDate is the DATE OF THE EVENT — the results
+  // release — not the quarter it covers. Reading it as a period end makes the
+  // reporting lag announcement-minus-announcement: zero by construction, which
+  // is what a backtest then reports as a perfect model.
+  const out = m.reportEvents(
+    subs([{ form: "8-K", items: "2.02,9.01", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" }]),
+    PERIODS
+  );
+  check("an 8-K event date is kept as eventDate, not as the period",
+    out[0]?.eventDate === "2026-07-30", `${out[0]?.eventDate}`);
+  check("...and the period is the newest STORED end that had already passed",
+    out[0]?.periodEnd === "2026-06-30", `${out[0]?.periodEnd}`);
+  check("...so the reporting lag is real, not zero",
+    m.daysBetween(out[0].periodEnd, out[0].announcedOn) === 30,
+    `${m.daysBetween(out[0].periodEnd, out[0].announcedOn)} days — a lag of 0 is the ` +
+      `identity that made a backtest report 0d median error across 103 filers`);
+  // AND IT REFUSES rather than reaching for the nearest period.
+  const stale = m.reportEvents(
+    subs([{ form: "8-K", items: "2.02", event: "2027-06-01", accepted: "2027-06-01T20:30:00.000Z" }]),
+    PERIODS
+  );
+  check("an announcement with no stored period within the window gets none",
+    stale[0]?.periodEnd === null,
+    `${stale[0]?.periodEnd} — 336 days past the newest stored end is not a match`);
+}
+
+console.log("\n3b. one event per period, earliest wins");
 {
   const out = m.reportEvents(subs([
-    { form: "8-K", items: "2.02,9.01", period: "2026-06-30", accepted: "2026-07-30T20:30:00.000Z" },
-    { form: "8-K/A", items: "2.02", period: "2026-06-30", accepted: "2026-08-04T20:30:00.000Z" },
-    { form: "8-K", items: "2.02", period: "2026-06-30", accepted: "2026-07-30T20:30:00.000Z" },
-    { form: "8-K", items: "2.02", period: "2026-03-31", accepted: "2026-04-29T20:30:00.000Z" },
-  ]));
+    { form: "8-K", items: "2.02,9.01", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" },
+    { form: "8-K/A", items: "2.02", event: "2026-07-30", accepted: "2026-08-04T20:30:00.000Z" },
+    { form: "8-K", items: "2.02", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" },
+    { form: "8-K", items: "2.02", event: "2026-04-29", accepted: "2026-04-29T20:30:00.000Z" },
+  ]), PERIODS);
   check("three filings for one period collapse to one event",
     out.filter((e) => e.periodEnd === "2026-06-30").length === 1,
     `${out.filter((e) => e.periodEnd === "2026-06-30").length}`);
   check("...and it is the EARLIEST, not the amendment",
     out.find((e) => e.periodEnd === "2026-06-30")?.announcedOn === "2026-07-30",
-    `${out.find((e) => e.periodEnd === "2026-06-30")?.announcedOn} — the original is what the market reacted to`);
+    `${out.find((e) => e.periodEnd === "2026-06-30")?.announcedOn}`);
   check("the other period survives", out.length === 2, `${out.length} events`);
   check("an 8-K without item 2.02 is not an earnings announcement",
-    m.reportEvents(subs([{ form: "8-K", items: "5.02", period: "2026-06-30", accepted: "2026-07-30T20:30:00.000Z" }])).length === 0);
+    m.reportEvents(subs([{ form: "8-K", items: "5.02", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" }]), PERIODS).length === 0);
 }
 
 console.log("\n4. the regularity gate");
 
 const ev = (period, accepted, basis = "8-K item 2.02") => ({
-  periodEnd: period, announcedOn: accepted, announcedAt: "16:30", timing: "after-close",
-  form: "8-K", items: "2.02", accession: `x${period}${accepted}`, basis,
+  periodEnd: period, eventDate: accepted, announcedOn: accepted, announcedAt: "16:30",
+  timing: "after-close", form: "8-K", items: "2.02", accession: `x${period}${accepted}`, basis,
 });
 {
   // Four lags of 30, 31, 30, 32 — a spread of 2, comfortably regular.
