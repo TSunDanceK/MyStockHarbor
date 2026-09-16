@@ -23,7 +23,36 @@
 export type ReportTiming = "before-open" | "during-market" | "after-close";
 
 export type ReportEvent = {
-  /** The period the results cover, from the filing's own reportDate. */
+  /**
+   * ── THE 8-K reportDate IS NOT A PERIOD END, AND I BUILT ON THE ASSUMPTION
+   * THAT IT WAS ──────────────────────────────────────────────────────────────
+   *
+   * EDGAR labels it "Date of Report (Date of earliest event reported)". For an
+   * Item 2.02 8-K the earliest event reported IS THE RESULTS RELEASE, so this
+   * field is the announcement date, not the quarter it covers.
+   *
+   * The first version of this module called it `periodEnd` and computed the
+   * reporting lag as announcedOn - reportDate. That is announcement minus
+   * announcement: ZERO by construction. The backtest then "predicted" the
+   * announcement date from the announcement date and reported a median
+   * absolute error of 0 days across 103 filers, which read as an
+   * extraordinarily good model and was an identity.
+   *
+   *   AA  prior lags [0,0,0,0,0,0] (n=42) median 0d
+   *       period end 2026-07-16 -> predicted 2026-07-16 · actual 2026-07-16
+   *
+   * Six zero lags in a row is not a well-behaved filer, it is a tautology, and
+   * the field name was what hid it.
+   */
+  eventDate: string | null;
+  /**
+   * The FISCAL PERIOD the results cover, matched from the stored fact set —
+   * the only place this repository holds real period ends.
+   *
+   * Null where no stored period lines up, and that is the honest answer: an
+   * announcement older than the retention window has no period to measure a
+   * lag against, and inventing one from the filing itself is the mistake above.
+   */
   periodEnd: string | null;
   /** Announcement DATE in ET (YYYY-MM-DD), taken from acceptanceDateTime. */
   announcedOn: string;
@@ -63,6 +92,15 @@ export type ReportEvent = {
  * SEPARATELY and never as one blended number.
  */
 export const SIX_K_IS_A_WEAKER_SIGNAL = true;
+
+/**
+ * How long after a period ends an announcement about it can plausibly arrive.
+ *
+ * Wide enough for a slow annual filer (the statutory 10-K deadline alone is 90
+ * days for a non-accelerated filer) and narrow enough that an announcement
+ * cannot match the period BEFORE the one it is about.
+ */
+export const MAX_PERIOD_TO_ANNOUNCEMENT_DAYS = 120;
 
 /** Item 2.02 — Results of Operations and Financial Condition. */
 const RESULTS_ITEM = "2.02";
@@ -207,16 +245,19 @@ export function reportEvents(
     const isSixK = form === "6-K" || form === "6-K/A";
     if (!isEightK && !isSixK) continue;
 
-    const reportDate = str(recent.reportDate?.[i]);
+    const eventDate = str(recent.reportDate?.[i]);
     let basis: ReportEvent["basis"];
     if (isEightK) {
       if (!hasResultsItem(items)) continue;
       basis = "8-K item 2.02";
     } else {
-      // THE POSITIONAL RULE, and it refuses rather than guesses: a 6-K with no
-      // reportDate, or one whose reportDate is not a period this filer reports
-      // figures for, is not evidence of an earnings announcement.
-      if (!reportDate || !periodEnds.has(reportDate)) continue;
+      // THE POSITIONAL RULE, and it refuses rather than guesses. A 6-K carries
+      // no item codes, so the only handle is its reported date landing on a
+      // period this filer publishes figures for. NOTE the asymmetry with the
+      // 8-K above: on a 6-K that date often IS the period end, which is why
+      // this rule works at all and why the 8-K's identically-named field misled
+      // me. See ReportEvent.eventDate.
+      if (!eventDate || !periodEnds.has(eventDate)) continue;
       basis = "6-K near period end";
     }
 
@@ -225,8 +266,21 @@ export function reportEvents(
     // the substitution this module's header rejects: it is a different fact.
     if (!accepted) continue;
 
+    // ── THE PERIOD IS MATCHED, NEVER READ OFF THE FILING ────────────────
+    // The newest stored period end that had already ENDED when the filing was
+    // accepted, within a window a results announcement can plausibly span.
+    // Nothing outside that window is a match rather than a guess.
+    let periodEnd: string | null = null;
+    for (const end of periodEnds) {
+      if (end > accepted.date) continue;
+      const age = daysBetween(end, accepted.date);
+      if (age > MAX_PERIOD_TO_ANNOUNCEMENT_DAYS) continue;
+      if (!periodEnd || end > periodEnd) periodEnd = end;
+    }
+
     out.push({
-      periodEnd: reportDate,
+      eventDate,
+      periodEnd,
       announcedOn: accepted.date,
       announcedAt: accepted.time,
       timing: timingFor(accepted.minutes),
@@ -252,12 +306,16 @@ export function reportEvents(
   // being predicted. The median was then pulled onto the answer and the
   // reported error collapsed toward zero — a number that measured the
   // duplication, not the method.
+  // KEYED ON THE PERIOD WHERE THERE IS ONE, on the event date otherwise — an
+  // announcement with no matched period is still one announcement, and two
+  // index entries for it must still collapse to one.
   const byPeriod = new Map<string, ReportEvent>();
   const undated: ReportEvent[] = [];
   for (const e of out) {
-    if (!e.periodEnd) { undated.push(e); continue; }
-    const seen = byPeriod.get(e.periodEnd);
-    if (!seen || e.announcedOn < seen.announcedOn) byPeriod.set(e.periodEnd, e);
+    const key = e.periodEnd ?? e.eventDate;
+    if (!key) { undated.push(e); continue; }
+    const seen = byPeriod.get(key);
+    if (!seen || e.announcedOn < seen.announcedOn) byPeriod.set(key, e);
   }
   const deduped = [...byPeriod.values(), ...undated];
   deduped.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
