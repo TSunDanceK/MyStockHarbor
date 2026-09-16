@@ -465,12 +465,12 @@ const WMT = fyFacts([
 const aapNaming = mod.fiscalYearOffset(AAP, "2027-01-02");
 const wmtNaming = mod.fiscalYearOffset(WMT, "2027-01-31");
 check("AAP-shaped: named for the year it mostly occupies",
-  aapNaming.offset === 0 && aapNaming.basis === "10-K", JSON.stringify(aapNaming));
+  aapNaming.offset === 0 && aapNaming.basis === "annual", JSON.stringify(aapNaming));
 check("...and BOTH of its 10-Ks agree, though their year-ends straddle New Year",
   aapNaming.agreeing === 2 && aapNaming.disagreeing === 0,
   `${aapNaming.agreeing} agreeing / ${aapNaming.disagreeing} — an end-year offset would have split them`);
 check("WMT-shaped: named for the year it ENDS in",
-  wmtNaming.offset === 1 && wmtNaming.basis === "10-K", JSON.stringify(wmtNaming));
+  wmtNaming.offset === 1 && wmtNaming.basis === "annual", JSON.stringify(wmtNaming));
 
 // THE LABELS THEMSELVES, which is what a reader sees.
 const lab = (end, anchor, naming) => { const f = mod.fiscalLabel(end, anchor, naming); return `${f.fp} FY${f.fy}`; };
@@ -514,7 +514,25 @@ const FILTER_LINE = "  const recent = readings.slice(0, 4).filter((r) => r.offse
 }
 
 // ── AN UNREADABLE FILER NAMES NOTHING NEW ─────────────────────────────────
-check("no readable 10-K or 10-Q leaves the naming unread, and the label falls back",
+// A FOREIGN PRIVATE ISSUER FILES NO 10-K AT ALL. Eleven of them — BABA, SONY,
+// RYAAY, MUFG among them — read as "naming unreadable" when the filter named
+// only the domestic form, so the annual report is matched by what it IS rather
+// than by one of its names.
+{
+  const SONY = fyFacts([
+    { accn: "f26", form: "20-F", fp: "FY", fy: 2026, start: "2025-04-01", end: "2026-03-31", val: 1 },
+    { accn: "f25", form: "20-F", fp: "FY", fy: 2025, start: "2024-04-01", end: "2025-03-31", val: 1 },
+  ]);
+  const n = mod.fiscalYearOffset(SONY, "2026-03-31");
+  check("a 20-F states the fiscal year just as a 10-K does",
+    n.basis === "annual" && n.offset === 1 && n.agreeing === 2, JSON.stringify(n));
+  const CNI = fyFacts([
+    { accn: "c26", form: "40-F", fp: "FY", fy: 2026, start: "2026-01-01", end: "2026-12-31", val: 1 },
+  ]);
+  check("...and so does a 40-F", mod.fiscalYearOffset(CNI, "2026-12-31").basis === "annual");
+}
+
+check("no readable annual report or 10-Q leaves the naming unread, and the label falls back",
   (() => { const n = mod.fiscalYearOffset(fyFacts([]), "2026-12-31"); return n.basis === null && n.agreeing === 0; })(),
   JSON.stringify(mod.fiscalYearOffset(fyFacts([]), "2026-12-31")));
 check("...and an unread naming leaves every existing label exactly as it was",
