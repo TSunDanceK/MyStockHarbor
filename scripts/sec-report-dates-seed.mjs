@@ -24,7 +24,7 @@ const UA = process.env.SEC_USER_AGENT ??
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   strip("lib/server/secReportDates.ts").replace(/export (const|function|type)/g, "$1") +
-    "\nexport { reportEvents, estimateNextReport, nextPeriodEndFrom };"
+    "\nexport { reportEvents, estimateUpcoming, nextPeriodEndFrom };"
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
@@ -72,6 +72,7 @@ const fetchJson = async (url) => {
   return res.json();
 };
 
+const TODAY = new Date().toISOString().slice(0, 10);
 const tally = { written: 0, noFacts: 0, noSubs: 0, date: 0, month: 0, none: 0, noEvents: 0 };
 const examples = [];
 for (const symbol of targets) {
@@ -87,14 +88,15 @@ for (const symbol of targets) {
   const events = sec.reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
     .filter((e) => e.periodEnd)
     .slice(0, LIMIT);
-  const nextEnd = sec.nextPeriodEndFrom(quarterEnds, yearEnds);
-  const next = sec.estimateNextReport(events, nextEnd?.end ?? null, subs.category, nextEnd?.annual ?? false);
+  const { estimate: next, periodEnd: nextEnd } = sec.estimateUpcoming(
+    events, sec.nextPeriodEndFrom(quarterEnds, yearEnds), subs.category, TODAY
+  );
 
   await redis.set(`${DATES_PREFIX}:${symbol}`, {
     symbol, cik,
     at: new Date().toISOString(),
     events,
-    nextPeriodEnd: nextEnd?.end ?? null,
+    nextPeriodEnd: nextEnd,
     next,
   });
   tally.written++;

@@ -134,7 +134,37 @@ positional rule: **188 events across 24 SYMBOLS**. They are charted, and they
 never earn an estimate — the weakest evidence must not carry the most specific
 claim.
 
-## 7. What ships
+## 7. A past date under "next expected", caught on the first seeded preview
+
+ABT rendered **"Next expected earnings date: 2026-07-18"** on a page read in
+September. The estimate was *correct* for the quarter it was computed for, and
+that quarter had already been reported. The stored fact set lags the filings by
+design — companyfacts carries a period once it is FILED — so a filer that has
+announced Q3 but not yet filed its 10-Q has a fact set ending at Q2, and one
+cadence step past Q2 is a date in the past.
+
+Nothing about it fails, and a reader cannot tell it from a date the company
+missed. `estimateUpcoming` rolls forward one cadence step at a time until the
+estimate lands on or after today (bounded at eight steps — an unbounded roll is
+a hang on a page render), and a month-only estimate whose month has passed
+becomes nothing rather than a stale month.
+
+Rolling by the median step accumulates drift: two steps of 92 days from a
+31 March quarter end lands on **1 October**, not 30 September, and the estimate
+inherits every day of it. So each rolled date is **snapped to the filer's own
+calendar** via `periodAnniversary`, which tells the two filer conventions apart
+by the only thing that distinguishes them — whether the period end is its
+month's last day:
+
+- month-end filer: 2025-09-30 → 2026-09-30 (and 2027-02-28 → **2028-02-29**,
+  which +365 would miss)
+- 52/53-week filer: AAPL's 2026-06-27 → 2027-06-26, 364 days, weekday preserved
+
+`today` is an argument, never read from the clock inside the function: this runs
+in the cron, in the seeder and in checks, and a function that reads the clock
+cannot be given a date to test against.
+
+## 8. What ships
 
 - `lib/server/secReportDates.ts` — selection, the ET conversion, the three
   estimators, the gate, the clamp, the session mapping, the wording.

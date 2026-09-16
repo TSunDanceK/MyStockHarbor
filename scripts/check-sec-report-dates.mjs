@@ -19,7 +19,7 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR };" +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -274,6 +274,77 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
     `${c.kind} ${c.date ?? ""} clamped=${c.clamped} — 40 days after 2026-09-30`);
 }
 
+console.log("\n4b. \"next expected\" is never a date that has already passed");
+
+// ── THE DEFECT, CAUGHT ON THE FIRST SEEDED PREVIEW ───────────────────────
+// ABT rendered "Next expected earnings date: 2026-07-18" on a page read in
+// September. The estimate was CORRECT for the quarter it was computed for —
+// and that quarter had already been reported. The stored fact set lags the
+// filings by design, so one cadence step past its newest period can be behind
+// today, and a past date under "next expected" is worse than no date: nothing
+// fails, and a reader cannot tell it from a date the company missed.
+{
+  // A filer whose stored facts stop two quarters back, exactly the shape a
+  // fact set has between an announcement and the 10-Q that follows it.
+  const stale = [
+    ev("2026-03-31", "2026-04-16"), ev("2025-12-31", "2026-01-16"),
+    ev("2025-09-30", "2025-10-16"), ev("2025-06-30", "2025-07-16"),
+  ];
+  const cadence = m.nextPeriodEndFrom(
+    ["2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30"], []
+  );
+  check("the cadence is read from the filer's own period spacing",
+    cadence && cadence.stepDays >= 89 && cadence.stepDays <= 93, `${cadence?.stepDays}`);
+
+  // UNROLLED, this is the bug: one step past 2026-03-31 is 2026-06-30, whose
+  // announcement lands in July — three months before the day it is read.
+  const raw = m.estimateNextReport(stale, cadence.end, "Large accelerated filer");
+  check("the unrolled estimate really is in the past",
+    raw.kind === "date" && raw.date < "2026-09-16", `${raw.date} — this is what shipped`);
+
+  const rolled = m.estimateUpcoming(stale, cadence, "Large accelerated filer", "2026-09-16");
+  check("rolled forward, the estimate is on or after today",
+    rolled.estimate.kind === "date" && rolled.estimate.date >= "2026-09-16",
+    `${rolled.estimate.date ?? rolled.estimate.reason}`);
+  check("...and it is the NEXT unreported period, not an arbitrary future one",
+    rolled.periodEnd === "2026-09-30",
+    `${rolled.periodEnd} — one period past the newest whose announcement has passed`);
+  // AND IT DOES NOT ROLL FOREVER. A filer with a strange cadence must not hang
+  // a render; after eight steps it says nothing instead.
+  check("the roll is bounded",
+    /for \(let i = 0; i < 8; i\+\+\)/.test(readCodeOnly("lib/server/secReportDates.ts")),
+    "an unbounded roll is a hang on a page render");
+
+  // ── THE TWO FILER CALENDARS, WHICH +365 GETS WRONG FOR BOTH SOMETIMES ──
+  check("a month-end quarter's anniversary is the same month end",
+    m.periodAnniversary("2025-09-30") === "2026-09-30" &&
+      m.periodAnniversary("2025-02-28") === "2026-02-28",
+    `${m.periodAnniversary("2025-09-30")} / ${m.periodAnniversary("2025-02-28")}`);
+  check("...including across a leap year, where +365 would miss",
+    m.periodAnniversary("2027-02-28") === "2028-02-29",
+    `${m.periodAnniversary("2027-02-28")} — February 2028 has 29 days`);
+  check("a 52/53-week quarter's anniversary preserves the WEEKDAY",
+    m.periodAnniversary("2026-06-27") === "2027-06-26",
+    `${m.periodAnniversary("2026-06-27")} — AAPL's June quarter, 364 days on`);
+
+  // A MONTH THAT HAS PASSED is the same mistake in a coarser unit.
+  const irregularStale = [
+    ev("2026-03-31", "2026-04-05"), ev("2025-12-31", "2026-01-25"),
+    ev("2025-09-30", "2025-10-04"), ev("2025-06-30", "2025-07-24"),
+  ];
+  const mo = m.estimateUpcoming(irregularStale, cadence, "Large accelerated filer", "2026-09-16");
+  check("a month-only estimate is never a month already gone",
+    mo.estimate.kind !== "month" || mo.estimate.month >= "2026-09",
+    `${mo.estimate.kind} ${mo.estimate.month ?? mo.estimate.reason ?? ""}`);
+
+  // THE CLOCK IS AN ARGUMENT. A function that reads Date.now() cannot be given
+  // a date to test against, and this whole section is a date to test against.
+  check("today is passed in, never read from the clock",
+    !/Date\.now\(\)|new Date\(\)/.test(
+      (readCodeOnly("lib/server/secReportDates.ts").match(/function estimateUpcoming[\s\S]*?\n\}/) ?? [""])[0]
+    ));
+}
+
 console.log("\n5. the page is wired to the filings, not to the calendar");
 
 // SOURCE-LEVEL, because the page is a server component that reads Redis and
@@ -322,6 +393,9 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     "or a filer with no Item 2.02 history is re-fetched every day forever");
   // THE RATE GATE IS SHARED. SEC's limit is per requester; two fetchers each
   // spacing their own calls would between them double the measured rate.
+  check("the cron rolls the estimate past what has already been reported",
+    /estimateUpcoming\(\s*\n?\s*events, nextPeriodEndFrom\(quarterEnds, yearEnds\), subs\.category, todayIso/.test(job),
+    "estimateNextReport alone would store a date already in the past");
   check("both SEC fetchers share one rate gate",
     (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&
       !/let lastAt2|const lastAt2/.test(job),
