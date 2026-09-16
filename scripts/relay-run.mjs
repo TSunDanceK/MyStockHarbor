@@ -365,6 +365,20 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE ONE-OFF BACKFILL for stored sets no queue can select. DRY RUN unless
+  // the `symbols` input is the word APPLY.
+  //
+  // THE FLAG RIDES `symbols` BECAUSE A NEW INPUT COSTS A MERGE. workflow_dispatch
+  // only registers inputs declared on the DEFAULT BRANCH, so an `apply:` input
+  // could not be dispatched from this branch at all until relay.yml reached main
+  // -- the exact toll the task router exists to remove. Routing it here keeps
+  // the whole thing dispatchable from a branch the same minute.
+  "write-cold-cik-backfill": {
+    script: "scripts/cold-cik-backfill.mjs",
+    args: (env) => (String(env.SYMBOLS ?? "").trim().toUpperCase() === "APPLY" ? ["--apply"] : []),
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
