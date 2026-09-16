@@ -1090,11 +1090,14 @@ export default async function StockEarningsPage({ params }: Props) {
                   {/* THE QUARTERLY TABLE IS QUARTERLY. An annual-only filer has
                       no quarters to tabulate, so it gets the annual card as its
                       SOLE growth table rather than an empty quarterly one. */}
-                  {secView.basis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
+                  {/* GATED ON tableBasis, NOT basis. AZN's anchor is a fiscal
+                      year (its FY2025 ends after its newest quarter) and it
+                      still has twelve quarters to tabulate. */}
+                  {secView.tableBasis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
                   {/* ON EVERY STOCK, not only annual filers: five fiscal years
                       is the longer view a quarterly table cannot give. Same
                       component, same rows, `sole` only changes the wording. */}
-                  <SecAnnualCard view={secView} sole={secView.basis === "year"} />
+                  <SecAnnualCard view={secView} sole={secView.tableBasis === "year"} />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
