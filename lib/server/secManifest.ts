@@ -19,6 +19,7 @@
 // `needsReverify` flag, never as an expiry.
 
 import { Redis } from "@upstash/redis";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
@@ -79,6 +80,12 @@ export type SecManifestEntry = {
    * `quarters === 0 && years > 0`) and cost nothing to keep: the job already
    * holds the encoded set when it writes.
    */
+  /**
+   * The PERIOD LABELLING version this symbol's set was written under.
+   * Absent = 1. Selects for re-read exactly like `w`/`y`/`c`, and is needed
+   * because neither of those can see a labelling change — see SEC_LABEL_VERSION.
+   */
+  lv?: number;
   w?: number;
   /**
    * `y` is the YEAR retention window the set was written under. Absent means 5,
@@ -117,6 +124,21 @@ export type SecManifestEntry = {
   instants?: number;
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
+  /**
+   * When this symbol's SEC report dates were last read from `submissions`.
+   *
+   * THE BACKFILL QUEUE IS ITS ABSENCE, which is why it is stamped even when the
+   * feed yielded no Item 2.02 history at all. A filer with none would otherwise
+   * stay at the head of the queue and be re-fetched every day forever.
+   *
+   * DELIBERATELY NOT `nextExpected` ABOVE. That pair is from the original spec
+   * and is still unwritten; the estimate is a discriminated result (a date, a
+   * month, or nothing, with the estimator and the clamp that produced it) and
+   * flattening it into one string here would give the page two homes for one
+   * value — claude/traps/two-validators-for-one-value.md. The record in
+   * secReportDatesStore is the single home.
+   */
+  reportDatesAt?: number | null;
   verifiedAt: number | null;
   needsReverify: boolean;
   scoreVersion: number;
@@ -275,6 +297,7 @@ export async function readManifest(): Promise<SecManifest | null> {
 /** THE ONLY WRITE. */
 export async function writeManifest(manifest: SecManifest): Promise<boolean> {
   if (!redis) return false;
+  if (!canWriteSecState()) { noteSecWriteBlocked("writeManifest"); return false; }
   try {
     await redis.set(SEC_MANIFEST_KEY, { ...manifest, updatedAt: Date.now() });
     return true;
@@ -554,6 +577,7 @@ export function reconcileCiks(
  */
 export async function discardFactSets(symbols: string[]): Promise<number> {
   if (!redis || symbols.length === 0) return 0;
+  if (!canWriteSecState()) { noteSecWriteBlocked("discardFactSets"); return 0; }
   try {
     return await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
   } catch (err) {

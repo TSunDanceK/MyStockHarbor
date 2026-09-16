@@ -73,6 +73,25 @@ export const SEC_INSTANT_WINDOW = 8;
  */
 export const SEC_YEAR_WINDOW = 6;
 
+/**
+ * The version of how periods are LABELLED AND ADMITTED, bumped whenever the
+ * same payload would produce a different `fy`/`fp` or a different set of rows.
+ *
+ * ── WHY THE CHAIN HASH CANNOT COVER THIS ─────────────────────────────────
+ * `c` moves when a TAG CHAIN changes, and neither a labelling rule nor an
+ * admission rule touches a tag. `h` moves when the FIELD ORDER changes, and
+ * neither is a field. So a set written before any of this keeps its wrong
+ * years on the page forever, and nothing selects it.
+ *
+ * 1 — fiscal year named by the calendar year of its END (AAP read "FY2027" for
+ *     a year the company calls FY2026).
+ * 2 — named by the filer's own DocumentFiscalYearFocus, calibrated per filer.
+ * 3 — a period enters `years` only if it ENDS ON the fiscal year end. A 10-Q's
+ *     twelve-month comparative is a trailing year, not a fiscal one, and six of
+ *     AMZN's rendered on its five-year card as fiscal years.
+ */
+export const SEC_LABEL_VERSION = 3;
+
 export type FactRow = {
   start?: string;
   end?: string;
@@ -586,7 +605,14 @@ export function preferredTag(
  */
 export function fiscalLabel(
   end: string,
-  yearEndAnchor: string | null
+  yearEndAnchor: string | null,
+  /**
+   * The filer's OWN naming of its fiscal year, read from its filings by
+   * `fiscalYearOffset`. NULL means it could not be read, and the label falls
+   * back to naming the year by the calendar year its END falls in — which is
+   * what shipped, is right for most filers, and is wrong for AAP.
+   */
+  naming: FiscalYearNaming | null = null
 ): { fp: string | null; fy: number | null } {
   if (!yearEndAnchor) return { fp: null, fy: null };
   const e = Date.parse(end);
@@ -610,7 +636,211 @@ export function fiscalLabel(
   // quarter Q4 and ARM's December 2025 quarter Q4. Rounding puts a 90-, 91- or
   // 92-day gap at exactly one step, which is what it is.
   const q = 4 - Math.round(daysBefore / 91.3125);
-  return { fp: `Q${Math.min(4, Math.max(1, q))}`, fy: best.year };
+  const fp = `Q${Math.min(4, Math.max(1, q))}`;
+  if (!naming || naming.basis === null) return { fp, fy: best.year };
+  return { fp, fy: fiscalMidYear(best.at) + naming.offset };
+}
+
+/**
+ * The calendar year the FISCAL YEAR MOSTLY SITS IN, from its end.
+ *
+ * ── WHY NOT THE END YEAR, WHICH IS WHAT A READER WOULD REACH FOR ─────────
+ * Because for the filers this matters to it is not stable. AAP's fiscal year
+ * ends on the Saturday nearest 31 December, which lands on 2 January one year
+ * and 27 December the next — so an offset measured against the END year flips
+ * between 0 and -1 for the SAME company with no change in how it names
+ * anything. A calibration that oscillates is worse than none: it would rename
+ * the whole page every few years.
+ *
+ * The midpoint does not move. Half a year back from either boundary is
+ * comfortably mid-year, so the reading is the same on both sides of New Year.
+ */
+export function fiscalMidYear(fiscalYearEndMs: number): number {
+  return new Date(fiscalYearEndMs - 182.5 * DAY).getUTCFullYear();
+}
+
+/**
+ * ── WHICH YEAR THE FILER CALLS ITS FISCAL YEAR, AND WHY IT MUST BE READ ───
+ *
+ * There is no convention to apply. A fiscal year ending in early January is
+ * called FY2026 by AAP and FY2027 by WMT, and both are right — the name is the
+ * filer's, not a function of the date. Naming it by the calendar year its END
+ * falls in is correct for WMT and one year out for AAP, and the page said "Q2
+ * FY2027 (period ending 2026-07-18)" about a quarter AAP calls Q2 FY2026.
+ *
+ * NOTHING ABOUT THAT FAILS. The date beside it is right, the quarter number is
+ * right, and only a reader who knows the company can see the year is wrong.
+ *
+ * So it is CALIBRATED, once per filer, from the filer's own filings. Each fact
+ * row carries the `fy` and `fp` of the FILING it appeared in — which is that
+ * document's DocumentFiscalYearFocus — so a 10-K's own annual period gives the
+ * pairing directly: this twelve-month span ending on this date is the year the
+ * company calls `fy`.
+ *
+ * THE PRIMARY PERIOD, NOT THE COMPARATIVES. A 10-K stamps its own fy on every
+ * prior year it restates, so the pairing is only readable from the LATEST
+ * period in that filing — hence the max end per accession, and durations only
+ * (a cover-page instant is dated at the FILING date, weeks past the year end,
+ * and would shift the pairing by a year on a January filer).
+ *
+ * 10-Q IS THE FALLBACK, not the preference: it needs the year-end anchor to say
+ * which fiscal year its quarter belongs to, so it inherits any error in the
+ * anchor, where the 10-K does not.
+ *
+ * MODE OVER RECENT FILINGS, newest breaking ties. One malformed filing should
+ * not rename every period on the page.
+ */
+export type FiscalYearNaming = {
+  offset: number;
+  /** "annual" is a 10-K, 20-F or 40-F — the filing that states the year outright. */
+  basis: "annual" | "10-Q" | null;
+  /**
+   * The end of the filer's most recent ANNUAL FILING period.
+   *
+   * ── WHY THIS IS A BETTER ANCHOR THAN THE ONE DERIVED FROM FRAMES ────────
+   * The extraction's anchor is "the newest twelve-month frame's end", and not
+   * every twelve-month frame is a fiscal year: a trailing-twelve-month
+   * comparative in a 10-Q is twelve months and ends mid-year. The census found
+   * exactly that — AMZN anchored on 30 June and BG on 31 March, both December
+   * filers, so every quarter either one showed was labelled from the wrong
+   * year-end and had been all along.
+   *
+   * A 10-K's own period end is the fiscal year end by definition. Null when no
+   * annual filing was readable, and then the frame-derived anchor stands.
+   */
+  yearEnd: string | null;
+  /** How many FILINGS agreed. 0 means nothing was readable and offset is 0. */
+  agreeing: number;
+  disagreeing: number;
+};
+
+/**
+ * Does this duration end ON the filer's fiscal year end?
+ *
+ * ── A TWELVE-MONTH FRAME IS NOT A FISCAL YEAR ────────────────────────────
+ * A 10-Q carries twelve-month comparatives. AMZN's payload holds
+ * `2025-07-01..2026-06-30`, 364 days, filed in a 10-Q for Q2 — a trailing year,
+ * ending mid-year, indistinguishable from an annual period by LENGTH alone.
+ * Six of them reached AMZN's `years` list and rendered on the five-year card as
+ * fiscal years, and on the reaction card they took every quarter's label.
+ *
+ * Length cannot tell them apart. The END can: a fiscal year ends on the fiscal
+ * year end, and nothing else does.
+ *
+ * ── AND THE TOLERANCE IS NOT SLACK ───────────────────────────────────────
+ * TEN DAYS, the same figure and the same reason as `fiscalLabel`'s: a
+ * 52/53-week filer's year end moves a few days annually — AAP's lands on
+ * 2 January one year and 27 December the next — so an exact match would drop
+ * every year but the newest. The band is fixed, not cumulative: the year end
+ * oscillates around a weekday, it does not drift away. Ten days is wider than
+ * that oscillation and far narrower than a quarter, so a trailing year ending
+ * three months off is never admitted.
+ *
+ * The candidate years either side are what let a December/January filer match
+ * across the New Year, exactly as in `fiscalLabel`.
+ */
+export const FISCAL_YEAR_END_SLACK_DAYS = 10;
+
+export function onFiscalYearEnd(end: string, yearEndAnchor: string | null): boolean {
+  if (!yearEndAnchor) return true; // nothing to measure against; admit, as before
+  const e = Date.parse(`${end}T00:00:00Z`);
+  const anchor = new Date(`${yearEndAnchor}T00:00:00Z`);
+  if (!Number.isFinite(e) || Number.isNaN(anchor.getTime())) return true;
+  const y = new Date(e).getUTCFullYear();
+  for (const cand of [y - 1, y, y + 1]) {
+    const at = Date.UTC(cand, anchor.getUTCMonth(), anchor.getUTCDate());
+    if (Math.abs((at - e) / DAY) <= FISCAL_YEAR_END_SLACK_DAYS) return true;
+  }
+  return false;
+}
+
+export function fiscalYearOffset(
+  facts: CompanyFacts,
+  yearEndAnchor: string | null
+): FiscalYearNaming {
+  type Primary = { form: string; fy: number; fp: string; end: string; days: number };
+  const byAccn = new Map<string, Primary>();
+  for (const ns of Object.values(facts.facts ?? {})) {
+    for (const tag of Object.values(ns)) {
+      for (const rows of Object.values(tag.units ?? {})) {
+        for (const r of rows) {
+          if (!r.accn || !r.end || !r.start || !r.form || !r.fp) continue;
+          if (typeof r.fy !== "number" || !Number.isFinite(r.fy)) continue;
+          const days = (Date.parse(r.end) - Date.parse(r.start)) / DAY;
+          if (!Number.isFinite(days)) continue;
+          const cur = byAccn.get(r.accn);
+          if (!cur || r.end > cur.end) {
+            byAccn.set(r.accn, { form: r.form, fy: r.fy, fp: r.fp, end: r.end, days });
+          }
+        }
+      }
+    }
+  }
+
+  const readings: { end: string; offset: number }[] = [];
+  // ── THE ANNUAL REPORT, WHATEVER IT IS CALLED ────────────────────────────
+  // 10-K is the domestic form. A foreign private issuer files a 20-F and a
+  // Canadian one a 40-F, and the census found eleven of them — BABA, SONY,
+  // RYAAY, MUFG and the rest — reading as "naming unreadable" purely because
+  // the filter named one form. All three carry `fp: "FY"` and the filing's own
+  // fiscal year focus, so all three answer the question.
+  const ANNUAL_FORMS = ["10-K", "20-F", "40-F"];
+  const annual = [...byAccn.values()]
+    .filter((p) => ANNUAL_FORMS.some((f) => p.form.startsWith(f)) &&
+      p.fp === "FY" && p.days >= 330 && p.days <= 400)
+    // A TOTAL ORDER, not a two-way comparator. Returning -1 for equal keys is
+    // inconsistent and lets the sort reorder ties differently run to run, which
+    // on a tie-break-by-newest rule is a naming that flips at random.
+    .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+  for (const p of annual) {
+    readings.push({ end: p.end, offset: p.fy - fiscalMidYear(Date.parse(`${p.end}T00:00:00Z`)) });
+  }
+  let readFrom: "annual" | "10-Q" | null = readings.length ? "annual" : null;
+
+  if (!readings.length && yearEndAnchor) {
+    const quarterly = [...byAccn.values()]
+      .filter((p) => p.form.startsWith("10-Q") && /^Q[1-4]$/.test(p.fp) && p.days >= 80 && p.days <= 100)
+      .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    for (const p of quarterly) {
+      // The UNCALIBRATED year this quarter belongs to — which is exactly what
+      // the offset corrects.
+      // The quarter's own fiscal-year END, which is what the offset is
+      // measured against — found by labelling it with no naming at all, which
+      // returns the end year, and stepping back to the midpoint.
+      const naive = fiscalLabel(p.end, yearEndAnchor, null);
+      if (naive.fy === null) continue;
+      const anchorDate = new Date(`${yearEndAnchor}T00:00:00Z`);
+      const fyEnd = Date.UTC(naive.fy, anchorDate.getUTCMonth(), anchorDate.getUTCDate());
+      readings.push({ end: p.end, offset: p.fy - fiscalMidYear(fyEnd) });
+    }
+    if (readings.length) readFrom = "10-Q";
+  }
+
+  if (!readings.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: 0, yearEnd: null };
+
+  // ── ONLY 0 AND +1 ARE NAMING CONVENTIONS ────────────────────────────────
+  // Measured from the midpoint year, a filer either names its fiscal year for
+  // the calendar year it mostly occupies (AAP, AAPL: 0) or for the year it ends
+  // in (WMT, ARM: +1). Nothing else is a convention — it is a malformed filing,
+  // and admitting one would rename every period on the page by whatever
+  // nonsense it carried.
+  const recent = readings.slice(0, 4).filter((r) => r.offset === 0 || r.offset === 1);
+  if (!recent.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: readings.length, yearEnd: null };
+  const counts = new Map<number, number>();
+  for (const r of recent) counts.set(r.offset, (counts.get(r.offset) ?? 0) + 1);
+  let best = recent[0].offset;
+  for (const [off, n] of counts) {
+    if (n > (counts.get(best) ?? 0)) best = off;
+  }
+  return {
+    offset: best,
+    basis: readFrom,
+    agreeing: counts.get(best) ?? 0,
+    disagreeing: recent.length - (counts.get(best) ?? 0),
+    // ONLY FROM AN ANNUAL FILING. A 10-Q's period end is a quarter end, and
+    // offering one here as a "year end" would move every label by a quarter.
+    yearEnd: readFrom === "annual" ? (annual[0]?.end ?? null) : null,
+  };
 }
 
 // ── extraction ──────────────────────────────────────────────────────────────
@@ -882,6 +1112,15 @@ export function extractCompanyFacts(
   // at all — and then everything it labels is equally uncertain.
   const yearEnds = [...yearCells.keys()].sort();
   const yearEndAnchor = yearEnds[yearEnds.length - 1] ?? null;
+  // READ ONCE PER FILER, from its own filings. Not a convention, not a guess.
+  const naming = fiscalYearOffset(facts, yearEndAnchor);
+  // ── AND THE ANNUAL FILING'S OWN PERIOD END BEATS THE FRAME-DERIVED ONE ──
+  // `yearEndAnchor` is the newest twelve-month frame, and a trailing-twelve-
+  // month comparative in a 10-Q is twelve months long without being a fiscal
+  // year. AMZN anchored on 30 June and BG on 31 March that way — both December
+  // filers, every quarter labelled off the wrong year-end. A 10-K's own period
+  // end is the fiscal year end by definition, so it wins where it exists.
+  const labelAnchor = naming.yearEnd ?? yearEndAnchor;
 
   const pack = (
     cells: Map<string, Map<string, FieldValue>>,
@@ -891,7 +1130,7 @@ export function extractCompanyFacts(
     [...cells.entries()]
       .map(([end, m]) => {
         const { start, row } = meta(end);
-        const fiscal = fiscalLabel(end, yearEndAnchor);
+        const fiscal = fiscalLabel(end, labelAnchor, naming);
         return {
           end,
           start,
@@ -910,10 +1149,24 @@ export function extractCompanyFacts(
     row: quarterMeta.get(e)?.row,
   })).slice(0, keepQuarters);
 
-  const years = pack(yearCells, (e) => ({
-    start: yearMeta.get(e)?.start ?? null,
-    row: yearMeta.get(e)?.row,
-  }), true).slice(0, keepYears);
+  // ── ONLY PERIODS THAT END ON THE FISCAL YEAR END ARE FISCAL YEARS ───────
+  //
+  // Applied ONCE, HERE, so every consumer of `years` gets the same list: the
+  // five-year card, the snapshot anchor, tableBasis and its 548-day gate, the
+  // annual cash-flow fallback, and the period ends the report-date matcher is
+  // given. Filtering at any one of those would leave the others reading
+  // trailing years as fiscal ones.
+  //
+  // THE ANCHOR IS THE ANNUAL FILING'S OWN PERIOD END, not the newest twelve-
+  // month frame — using the frame-derived anchor here would ask a list to
+  // validate itself, and on AMZN that anchor WAS one of the trailing years.
+  // Where no annual filing could be read there is nothing to measure against
+  // and nothing is dropped, which is exactly what shipped before this.
+  const years = pack(
+    new Map([...yearCells].filter(([e]) => onFiscalYearEnd(e, naming.yearEnd))),
+    (e) => ({ start: yearMeta.get(e)?.start ?? null, row: yearMeta.get(e)?.row }),
+    true
+  ).slice(0, keepYears);
 
   const instants = pack(instantCells, (e) => ({ start: null, row: instantMeta.get(e) })).slice(
     0,

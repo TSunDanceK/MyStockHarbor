@@ -73,6 +73,7 @@
 // "-- queued", and both read as a handled timeout while Next failed the route
 // underneath. A swallowed DynamicServerError is not a handled error.
 import { Redis } from "@upstash/redis";
+import { canWriteSecState, noteSecWriteBlocked, secCounterPrefix } from "./secWriteGate";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
@@ -282,7 +283,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
  * retyped key.
  */
 export const coldRateKey = (d = new Date()) =>
-  `${RATE_PREFIX}:${d.toISOString().slice(0, 16)}`;
+  `${secCounterPrefix(RATE_PREFIX)}:${d.toISOString().slice(0, 16)}`;
 
 /**
  * Days the exhaustion counter is kept. A fortnight answers "is this regular?"
@@ -292,7 +293,7 @@ export const SEC_COLD_EXHAUSTION_TTL_S = 14 * 86400;
 
 /** UTC day key for the exhaustion counter, so the page and the writer agree. */
 export const coldExhaustionKey = (d = new Date()) =>
-  `msh:sec:cold-exhausted:v1:${d.toISOString().slice(0, 10)}`;
+  `${secCounterPrefix("msh:sec:cold-exhausted:v1")}:${d.toISOString().slice(0, 10)}`;
 
 /** One INCR, best effort, only ever called when the budget is already spent. */
 async function bumpExhaustion(): Promise<void> {
@@ -425,6 +426,10 @@ async function claimColdFetch(symbol: string): Promise<boolean> {
 /** Add to the drain queue, unless it is already at its cap. */
 async function enqueue(symbol: string): Promise<boolean> {
   if (!redis) return false;
+  // NOTHING TO DRAIN FOR. The cron that reads this queue runs on production,
+  // and a preview asking it to fetch a symbol is a preview writing production
+  // state at one remove.
+  if (!canWriteSecState()) { noteSecWriteBlocked("coldQueue.enqueue"); return false; }
   try {
     const size = await redis.zcard(SEC_COLD_QUEUE_KEY);
     if (size >= SEC_COLD_QUEUE_MAX) return false;
@@ -448,6 +453,7 @@ export async function readColdQueue(limit: number): Promise<string[]> {
 /** Remove what the cron has dealt with — whether it populated or not. */
 export async function clearColdQueue(symbols: string[]): Promise<number> {
   if (!redis || symbols.length === 0) return 0;
+  if (!canWriteSecState()) { noteSecWriteBlocked("clearColdQueue"); return 0; }
   try {
     return await redis.zrem(SEC_COLD_QUEUE_KEY, ...symbols.map((s) => s.toUpperCase()));
   } catch {
