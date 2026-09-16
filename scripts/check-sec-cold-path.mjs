@@ -58,8 +58,15 @@ for (const status of ["no-cik", "ready", "no-xbrl", "pending"]) {
 check("an empty-but-successful fetch returns no-xbrl, NOT pending",
   /hasUsableData\(set\)\s*\?[\s\S]{0,80}"ready"[\s\S]{0,80}emptyResult\(/.test(code),
   "an IFRS filer would otherwise be permanently 'coming soon'");
+// THE BRANCH GAINED A BODY and this pattern was pinned to the one-line form:
+// `if (hasUsableData(stored)) return { status: "ready" ...`. refresh-on-view
+// added a call before that return, so the regex stopped matching while the
+// PROPERTY it is about — a usable set returns ready, and the fall-through
+// returns emptyResult — was unchanged. Matched on the two anchors with anything
+// between, so the next statement added inside the branch does not break it
+// either.
 check("a stored-but-empty set also returns no-xbrl",
-  /if \(hasUsableData\(stored\)\) return \{ status: "ready"[\s\S]{0,1400}return emptyResult\(/.test(code));
+  /if \(hasUsableData\(stored\)\)[\s\S]{0,1200}status: "ready"[\s\S]{0,2000}return emptyResult\(/.test(code));
 check("the page renders a DISTINCT card for no-xbrl",
   /status === "no-xbrl" \? \(\s*<SecNoXbrlCard/.test(pageCode),
   "not the pending card with different words");

@@ -784,6 +784,14 @@ export const PER_SYMBOL_KEYS: PerSymbolKey[] = [
   // rest of its state, or a later re-admission starts with the alarm already
   // claimed and silently un-warnable.
   { prefix: "msh:evict:preset-alarm:v1:", sep: "" },
+  // REFRESH-ON-VIEW's LOCK AND COOLDOWN. Both are per-symbol and both carry a
+  // TTL, so neither leaks forever — but a delisted symbol re-admitted inside the
+  // hour would start with its cooldown already claimed and would NOT refresh on
+  // its first view, which is precisely the view that matters for a symbol whose
+  // stored set is by then months old. Found by the derived scan, like the
+  // eviction module's own evidence key.
+  { prefix: "msh:sec:refresh-lock:v1", sep: ":" },
+  { prefix: "msh:sec:refresh-cooldown:v1", sep: ":" },
 ];
 
 // THE TWO HASHES ARE THE ACTUAL LEAK. Their fields carry no TTL and the
