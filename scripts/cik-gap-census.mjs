@@ -56,19 +56,49 @@ for (const [n, v] of [["SEC_MANIFEST_KEY", SEC_MANIFEST_KEY], ["SEC_FACTS_PREFIX
 // reconcileCiks goes through lookupBySpelling for exactly this reason, and a
 // census using a plain .get would report BRK.B as unresolvable — inventing a
 // gap that reconcileCiks does not have.
-const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
-const tick = await lift(
-  [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
-    "\nexport { parseTickerFile, padCik };"
-);
-const { map: tickerMap } = tick.parseTickerFile(
-  fs.readFileSync("data/sec/company-tickers.json", "utf8")
-);
+// ── THE MAP RECONCILECIKS ACTUALLY SEES, WHICH IS REDIS FIRST ────────────
+//
+// The committed data/sec/company-tickers.json is the FALLBACK, not the source.
+// resolveTickerMap reads msh:sec:tickers:v2 and only drops to the file when
+// Redis has nothing, so a census reading the file would report a symbol
+// "unresolvable" that reconcileCiks resolves nightly — a gap invented by the
+// instrument. The first run of this census did exactly that and reported BK,
+// EA, EQR and WBS unresolvable off a committed snapshot.
+//
+// `source` is printed, always. A census that cannot say which copy answered
+// cannot tell a fresh map from a year-old commit.
+const TICKER_REDIS_KEY = (
+  fs.readFileSync("lib/server/secTickerMap.ts", "utf8").match(/TICKER_REDIS_KEY = "([^"]+)"/) ?? []
+)[1];
+if (!TICKER_REDIS_KEY) { console.error("FATAL: could not read TICKER_REDIS_KEY"); process.exit(2); }
+const storedTickers = await redis.get(TICKER_REDIS_KEY);
+let tickerMap;
+let tickerSource;
+let tickerFetchedAt = null;
+if (storedTickers?.map) {
+  tickerMap = new Map(Object.entries(storedTickers.map));
+  tickerSource = "redis";
+  tickerFetchedAt = storedTickers.fetchedAt ?? null;
+} else {
+  const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
+  const tick = await lift(
+    [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
+      "\nexport { parseTickerFile, padCik };"
+  );
+  tickerMap = tick.parseTickerFile(
+    fs.readFileSync("data/sec/company-tickers.json", "utf8")
+  ).map;
+  tickerSource = "committed-file";
+}
 
 const manifest = await redis.get(SEC_MANIFEST_KEY);
 if (!manifest?.symbols) { console.error("FATAL: no manifest"); process.exit(2); }
 const entries = Object.entries(manifest.symbols);
-console.log(`manifest holds ${entries.length} SYMBOLS; ticker map holds ${tickerMap.size}\n`);
+console.log(
+  `manifest holds ${entries.length} SYMBOLS; ticker map holds ${tickerMap.size} ` +
+    `(source: ${tickerSource}` +
+    (tickerFetchedAt ? `, fetched ${new Date(tickerFetchedAt).toISOString()}` : "") + ")\n"
+);
 
 const noCik = entries.filter(([, e]) => !e?.cik).map(([s]) => s).sort();
 const resolvable = [];
