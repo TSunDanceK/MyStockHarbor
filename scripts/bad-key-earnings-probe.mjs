@@ -27,8 +27,27 @@ import fs from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 
 const PORT = Number(process.env.PROBE_PORT || 3123);
-const SYMBOL = (process.env.SYMBOLS || "AAPL").split(/[,\s]+/).filter(Boolean)[0] ?? "AAPL";
-const PATHNAME = `/stock/${SYMBOL}/earnings`;
+// ── ONE SYMBOL PER CONDITION, AND THAT IS THE FIX ────────────────────────
+//
+// The first version ran both conditions against the same path and the second
+// was served `x-nextjs-cache: HIT` — it asserted four things about HTML the
+// FIRST condition had rendered, and would have passed with the second
+// condition's code entirely broken.
+//
+// Removing .next/cache between servers DID NOT FIX IT: measured, the second
+// condition still hit. Rather than keep guessing where `next start` keeps an
+// on-demand ISR entry, the probe stops relying on knowing. A cache entry is
+// keyed by PATH, so two different symbols cannot share one — whatever the
+// storage turns out to be.
+//
+// The not-HIT assertion stays, as the thing that caught this. It is what makes
+// a future regression here fail rather than quietly pass.
+const SYMBOLS = (process.env.SYMBOLS || "AAPL,MSFT")
+  .split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+if (SYMBOLS.length < 2) {
+  console.error(`FATAL: need two distinct symbols so the conditions cannot share a cache entry; got ${SYMBOLS.join(",")}`);
+  process.exit(2);
+}
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -61,7 +80,7 @@ const FALLBACK = pick(/<p>(Not enough price history[^<]*?)<\/p>/, "the price-rea
 // string below is a whole text node in the source with no interpolation in it.
 const SEC_MARKERS = ["Quality of earnings", "Balance sheet", "Income statement"];
 
-console.log(`probing ${PATHNAME} on :${PORT}`);
+console.log(`probing ${SYMBOLS.map((x) => `/stock/${x}/earnings`).join(" and ")} on :${PORT}`);
 console.log(`fallback string: ${JSON.stringify(FALLBACK)}`);
 console.log(`SEC markers: ${SEC_MARKERS.join(" | ")}\n`);
 // THE MARKERS MUST BE LITERAL IN THE SOURCE, or the probe is asserting strings
@@ -143,15 +162,20 @@ async function withServer(label, env, fn) {
 const CONDITIONS = [
   // The key is present and the upstream rejects it — an expired or revoked key,
   // which is what actually happens in production.
-  { label: "FMP_API_KEY present but invalid", env: { FMP_API_KEY: "deliberately-invalid-key-for-this-probe" } },
+  {
+    label: "FMP_API_KEY present but invalid",
+    env: { FMP_API_KEY: "deliberately-invalid-key-for-this-probe" },
+    symbol: SYMBOLS[0],
+  },
   // The key is absent entirely — a missing env var on a new deployment.
-  { label: "FMP_API_KEY absent", env: { FMP_API_KEY: "" } },
+  { label: "FMP_API_KEY absent", env: { FMP_API_KEY: "" }, symbol: SYMBOLS[1] },
 ];
 
 for (const cond of CONDITIONS) {
-  console.log(`\n${cond.label}`);
+  const pathname = `/stock/${cond.symbol}/earnings`;
+  console.log(`\n${cond.label}  (${pathname})`);
   await withServer(cond.label, cond.env, async (getLog) => {
-    const res = await fetch(`http://127.0.0.1:${PORT}${PATHNAME}`, { redirect: "manual" });
+    const res = await fetch(`http://127.0.0.1:${PORT}${pathname}`, { redirect: "manual" });
     const body = await res.text();
     // A MISS PROVES THIS CONDITION RENDERED. Next sets x-nextjs-cache on an
     // ISR route; MISS means the HTML was produced by THIS server under THIS
@@ -181,6 +205,6 @@ for (const cond of CONDITIONS) {
 console.log(
   failures
     ? `\n${failures} assertion(s) failed.`
-    : `\nThe earnings page serves ${PATHNAME} with FMP unavailable, both ways.\n`
+    : `\nThe earnings page serves with FMP unavailable, both ways, on ${SYMBOLS.join(" and ")}.\n`
 );
 process.exit(failures ? 1 : 0);
