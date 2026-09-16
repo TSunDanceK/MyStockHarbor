@@ -379,3 +379,106 @@ them; the five-year card still does. Out of scope for this PR by the review's ow
 instruction ("snapshot/five-year card wording unchanged"), and recorded here
 rather than fixed, because the fix — admitting an annual period only where it
 ends on the filer's fiscal year end — changes what that card shows.
+
+---
+
+## 11. Third eye-check round
+
+### 11a. ABT — the probe ruled out before the source was blamed
+
+A count of zero can mean the period is absent, or that the counter is looking in
+the wrong place, and only one of those is a finding about SEC. So the raw rows
+were printed for ABT's own revenue tag and `NetIncomeLoss`, with **no end-date
+filter at all**:
+
+```
+us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax — newest 5:
+  2026-01-01..2026-03-31 (89d)  form=10-Q fy=2026 fp=Q1 filed=2026-04-29
+  2025-01-01..2025-12-31 (364d) form=10-K fy=2025 fp=FY filed=2026-02-20
+  2025-01-01..2025-09-30 (272d) form=10-Q fy=2025 fp=Q3 filed=2025-10-29
+  2025-07-01..2025-09-30 (91d)  form=10-Q fy=2025 fp=Q3 filed=2025-10-29
+  2025-01-01..2025-06-30 (180d) form=10-Q fy=2025 fp=Q2 filed=2025-07-30
+
+us-gaap:NetIncomeLoss — identical newest five.
+```
+
+The newest row of either tag is the **Q1 2026 frame filed 2026-04-29**. There is
+no six-month frame ending 2026-06-30 from the 2026-07-28 10-Q, on any tag. The
+probe was not missing it: **companyfacts has not ingested ABT's Q2 10-Q**, seven
+weeks after filing.
+
+### 11b. `years` now admits only periods that end on the fiscal year end
+
+Measured on AMZN's own payload:
+
+```
+us-gaap:CashCashEquivalents…IncludingExchangeRateEffect
+  2025-07-01..2026-06-30  (364d, filed in a 10-Q for Q2)
+```
+
+Six such trailing years reached AMZN's `years` list. **Length cannot tell them
+apart** — 364 days either way. The END can.
+
+Ten days of slack, the same figure and the same reason as `fiscalLabel`'s:
+a 52/53-week filer's year end moves a few days annually, so an exact match would
+drop every year but the newest. The band is fixed rather than cumulative, so it
+never widens toward a quarter.
+
+**The anchor is the annual filing's own period end**, never the newest
+twelve-month frame — using the frame would ask the list to validate itself, and
+on AMZN that anchor *was* one of the trailing years. Where no annual filing can
+be read, nothing is dropped.
+
+**Applied once, at the source.** Every consumer reads the same `set.years`: the
+five-year card, the snapshot anchor, `basis`, `tableBasis` and its 548-day gate,
+the annual cash-flow fallback, and the period ends handed to the report-date
+matcher. The mutation restores the admit-anything list and asserts the trailing
+year comes back **and lands first**, where the snapshot anchor reads.
+
+`SEC_LABEL_VERSION` is 3 and its docblock now covers admission as well as
+labelling: this changes which rows a stored set holds, and neither `h` nor `c`
+can see that either.
+
+### 11c. The "announced, not yet in the feed" notice
+
+> Results for the quarter ended **2026-06-30** were announced on
+> **2026-07-16**. The SEC has not yet published the figures in its data feed, so
+> this page still shows the previous quarter.
+
+**The test is an ordering, not a window.** A results 8-K newer than the one
+already placed on the newest stored period must be about a *later* period —
+there is no third possibility, because `reportEvents` keeps the earliest
+announcement per period and a filer does not announce the same quarter twice on
+an 8-K. So it compares two announcement dates and needs no plausible-lag window
+to guess with. The mutation that drops the ordering test fires on an up-to-date
+filer, which is what would make the notice mean nothing.
+
+Guards: 8-K only, never a 6-K (no item codes, selected positionally — too weak
+to hang a claim about a specific quarter on) and never an 8-K/A (re-announces a
+period already announced); nothing when the announcement is from today, because
+companyfacts was never going to carry it yet; nothing when the cadence cannot be
+read, because the notice names a quarter; nothing when the derived quarter has
+not ended.
+
+It is computed by the **cron**, from the submissions payload already in hand, and
+stored. The page reads it. Deriving it on a render would mean fetching EDGAR from
+a page render, which this pipeline does not do.
+
+### 11d. Recorded, not built — reading a filing's own XBRL
+
+When companyfacts lags a filed 10-Q by more than ~30 days, the figures exist in
+the filing's own inline XBRL (`Financial_Report.xlsx`, or the `R` files behind
+the filing index) and could be read directly, per-symbol, on demand.
+
+Against it, today: it is a **second extraction path** for the same numbers, and
+this repository's standing rule is that two sources for one value is the
+divergence it keeps finding (`claude/traps/two-validators-for-one-value.md`).
+Every identity check, every derivation code and every restatement tripwire is
+built around companyfacts' shape. A second reader would need all of it again or
+would quietly bypass it.
+
+For it: the lag is real and measured — **58 of 786 SYMBOLS** — and a filer that
+has published its results is not a filer whose figures are unknowable.
+
+The notice in 11c is the cheap half of the answer and costs nothing. The
+extraction is a project, and it needs a ruling rather than a commit.
