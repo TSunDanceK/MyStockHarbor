@@ -14,6 +14,7 @@
 // honest pairing — not a page that loses both because one endpoint moved.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { NextReportEstimate, PendingResults, ReportEvent } from "./secReportDates";
 
 const redis =
@@ -73,6 +74,7 @@ export async function readReportDates(symbol: string): Promise<StoredReportDates
 
 export async function writeReportDates(rec: StoredReportDates): Promise<boolean> {
   if (!redis) return false;
+  if (!canWriteSecState()) { noteSecWriteBlocked("writeReportDates"); return false; }
   try {
     await redis.set(reportDatesKey(rec.symbol), rec);
     return true;
