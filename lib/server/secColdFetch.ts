@@ -274,6 +274,17 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
 }
 
 /**
+ * The minute bucket's key, so the writer and any reader cannot disagree.
+ *
+ * EXPORTED FOR THAT REASON ALONE. secHealth reads this bucket to show the cap
+ * is live, and a hand-typed prefix there would read as a permanent zero — the
+ * same shape as the census that reported 759 of 759 symbols unpopulated off a
+ * retyped key.
+ */
+export const coldRateKey = (d = new Date()) =>
+  `${RATE_PREFIX}:${d.toISOString().slice(0, 16)}`;
+
+/**
  * Days the exhaustion counter is kept. A fortnight answers "is this regular?"
  * and "did the migration week distort it?" without keeping a year of keys.
  */
@@ -347,7 +358,7 @@ async function claimColdFetch(symbol: string): Promise<boolean> {
   if (!redis) return true;
   try {
     // Minute-resolution bucket: slice(0, 16) is YYYY-MM-DDTHH:MM.
-    const key = `${RATE_PREFIX}:${new Date().toISOString().slice(0, 16)}`;
+    const key = coldRateKey();
     const n = await redis.incr(key);
     // 120s, not 60: a bucket created at :59 would otherwise expire a second
     // later and hand the next second a fresh allowance.
