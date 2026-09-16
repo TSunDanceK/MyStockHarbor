@@ -80,6 +80,7 @@ import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secE
 import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
+import { recordColdCik } from "./secColdCik";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -405,6 +406,12 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.
   await writeFactSet(set);
+  // THE MANIFEST IS THE ONLY PLACE THAT DOES NOT KNOW THIS CIK. We cannot have
+  // reached here without one — cikForSymbol is the first gate in
+  // resolveFactSetForRender — and `populationQueues` filters on `e.cik`, so an
+  // entry without one is in NO cron queue. Recorded to a small side channel
+  // rather than written into the 417 KB manifest from a render. See secColdCik.
+  await recordColdCik(symbol, cik);
   return set;
 }
 
@@ -505,6 +512,30 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   // 2. THE STORE.
   const stored = await readFactSet(clean);
   if (stored) {
+    // ── A POPULATED SET IS RETURNED AS IT STANDS. THE CRON OWNS REFRESHING ──
+    //
+    // A refresh-on-view was built here and REMOVED, and the reason is worth
+    // keeping because the idea will come back. It scheduled the re-read in
+    // `after()`, which works, and then called `revalidatePath` to flush the
+    // page it had just corrected — and production refused that call:
+    //
+    //   Dynamic server usage: Route /stock/[symbol]/earnings couldn't be
+    //   rendered statically because it used `revalidatePath`
+    //
+    // `revalidatePath` is not permitted from a page RENDER's after(); the cron
+    // gets away with it because it calls from a route handler. Without the
+    // flush the corrected set sat behind the ISR window for up to an hour, so
+    // the mechanism delivered nothing on the view that paid for it. Worse, the
+    // trigger could only fire on a render: the reload twenty seconds later was
+    // served from the ISR cache, so the one visitor who triggered a refresh was
+    // also the only one who could, and they saw the old figures anyway.
+    //
+    // Moving the trigger to a route handler would work and was declined: with
+    // the CIK recorded on cold writes (secColdCik) every stored symbol is in a
+    // cron queue, the daily index lands nightly, and the cron revalidates the
+    // sets that CHANGED from a route handler where the call is permitted. A
+    // visitor-driven trigger cannot beat that by more than about a day, which
+    // does not justify a public endpoint that causes writes.
     if (hasUsableData(stored)) return { status: "ready", set: stored, cold: false };
     // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
     //

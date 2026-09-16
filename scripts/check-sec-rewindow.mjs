@@ -61,9 +61,9 @@ const STALE = readCodeOnly("lib/server/secStaleness.ts");
  * Lift the three functions the migration rests on, optionally mutated first.
  *
  * ── THE STALENESS RULE IS NO LONGER IN THE ROUTE, AND THAT IS THE POINT ───
- * `needsReread` moved to lib/server/secStaleness so refresh-on-view can import
- * the SAME function instead of a second one that agrees today. This check
- * follows it there rather than keeping a copy, for exactly that reason.
+ * `needsReread` lives in lib/server/secStaleness, not in the cron route, so
+ * this check can lift THE SHIPPED FUNCTION instead of a transcription of it.
+ * A rule inside a route handler is a rule every other caller has to copy.
  *
  * secFields.ts is inlined WHOLE because `needsReread` now closes over
  * secChainsHash() and `restatedPeriods` over SEC_FIELD_KEYS. Pinning either to

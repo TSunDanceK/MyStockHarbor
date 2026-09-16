@@ -125,6 +125,26 @@ export type FieldValue = {
   /** companyfacts units key the value was read from. Stored per period. */
   unit: string | null;
   derived: Derivation;
+  /**
+   * THE FRAME THIS CELL ACTUALLY COVERS — start..end, on every DURATION cell,
+   * whatever its derivation. Absent on instants, which have no span.
+   *
+   * ── THE ROW'S OWN start CANNOT ANSWER THIS, AND THAT IS THE POINT ────────
+   * `quarterMeta` keeps ONE start per period end, written by whichever field
+   * reached that end first and overwritten by every differenced write after
+   * it. So a PeriodRecord's `start` is one field's frame, not the row's, and
+   * measuring a cell against it measures the wrong thing — the first frame
+   * length probe did exactly that and could only ever see the as-filed half.
+   *
+   * With this, every cell carries its own span and "no quarter row mixes
+   * periods" becomes a statement that can be CHECKED rather than argued from
+   * the shape of the code. See scripts/check-sec-period-coherence.mjs.
+   *
+   * IN MEMORY ONLY. StoredPeriod holds `{val, derived}` per cell, so this adds
+   * nothing to the stored set and nothing to contentHash — the same deal `ns`
+   * and `unit` already have.
+   */
+  covers?: [string, string];
   /** Only on "differenced": the two cumulative ends that produced it. */
   from?: [string, string];
   /** Only on "ambiguous": the distinct values that could not be separated. */
@@ -309,6 +329,40 @@ export function quartersCovered(days: number): 1 | 2 | 3 | 4 | null {
   if (days >= 260 && days <= 290) return 3;
   if (days >= 350 && days <= 380) return 4;
   return null;
+}
+
+/**
+ * How far two frames' starts may differ and still be the same reporting period.
+ *
+ * NOT ZERO, AND THE FILINGS ARE WHY. A filer's standalone three-month frame and
+ * the ladder difference that covers the same quarter routinely disagree by a
+ * day at the start: AAPL's Q3 FY2026 net income is filed on 2026-03-29..
+ * 2026-06-27 while its operating cash flow differences out to 2026-03-28..
+ * 2026-06-27, because the quarter's start is the PRIOR frame's END and the
+ * filer's own frame starts the day after. Same quarter, two spellings of its
+ * first day.
+ *
+ * A WEEK IS THE BAND, and it is deliberately far below the gap that matters. A
+ * period mix is a 3M against a 6M — ninety days apart — so seven days cannot
+ * hide one, and it comfortably covers both the off-by-one above and a 4-4-5
+ * calendar's week-length wobble.
+ */
+export const SAME_FRAME_SLACK_DAYS = 7;
+
+/**
+ * Do these two cells cover the same reporting period?
+ *
+ * ENDS MUST MATCH EXACTLY — they are the key the cell is stored under, so a
+ * disagreement here means something built a cell for the wrong row. Starts get
+ * SAME_FRAME_SLACK_DAYS.
+ */
+export function sameFrame(
+  a: [string, string] | undefined,
+  b: [string, string] | undefined
+): boolean {
+  if (!a || !b) return false;
+  if (a[1] !== b[1]) return false;
+  return Math.abs(spanDays(a[0], b[0])) <= SAME_FRAME_SLACK_DAYS;
 }
 
 /**
@@ -671,6 +725,7 @@ export function extractCompanyFacts(
         if (f.n === 4) {
           cell(yearCells, yearMeta).set(field.key, {
             val: f.best.row.val!, tag: f.best.tag, ns: f.best.ns, unit: f.best.unit, derived: "as-filed",
+            covers: [start, f.end],
           });
         }
 
@@ -678,6 +733,7 @@ export function extractCompanyFacts(
           // Q1, as filed. The only quarter that needs no differencing.
           cell(quarterCells, quarterMeta).set(field.key, {
             val: f.best.row.val!, tag: f.best.tag, ns: f.best.ns, unit: f.best.unit, derived: "as-filed",
+            covers: [start, f.end],
           });
           continue;
         }
@@ -715,6 +771,7 @@ export function extractCompanyFacts(
           ns: f.best.ns,
           unit: f.best.unit,
           derived: "differenced",
+          covers: [prior.end, f.end],
           from: [prior.end, f.end],
         });
       }
@@ -742,6 +799,7 @@ export function extractCompanyFacts(
       if (!meta.has(best.row.end)) meta.set(best.row.end, { start: best.row.start, row: best.row });
       m.set(field.key, {
         val: best.row.val!, tag: best.tag, ns: best.ns, unit: best.unit, derived: "as-filed",
+        covers: [best.row.start, best.row.end],
       });
     }
   }
@@ -757,13 +815,30 @@ export function extractCompanyFacts(
     if (!field.ratioSource) continue;
     const { numerator, denominator } = field.ratioSource;
     for (const cells of [quarterCells, yearCells]) {
-      for (const [, m] of cells) {
+      for (const [end, m] of cells) {
         if (m.get(field.key)) continue; // filed; nothing to compute
-        const num = m.get(numerator)?.val ?? null;
-        const den = m.get(denominator)?.val ?? null;
+        const numCell = m.get(numerator);
+        const denCell = m.get(denominator);
+        const num = numCell?.val ?? null;
+        const den = denCell?.val ?? null;
         if (num === null || den === null || den === 0) continue;
+        // ── BOTH OPERANDS FROM THE SAME FRAME, OR NO RATIO AT ALL ──────────
+        // The comment above says a quarter's earnings over a year's share
+        // count is a wrong number that looks like a right one; until `covers`
+        // existed, nothing said so in code — the two operands shared a map key
+        // and that was taken as proof they shared a period. They share an END.
+        // A cell whose start disagrees by more than a week is a different
+        // frame, and dividing across it is the period mix in one line.
+        if (!sameFrame(numCell?.covers, denCell?.covers)) {
+          notes.push(
+            `${field.key} ${end}: ${numerator} covers ${numCell?.covers?.join("..") ?? "?"} ` +
+              `but ${denominator} covers ${denCell?.covers?.join("..") ?? "?"}, not computed`
+          );
+          continue;
+        }
         m.set(field.key, {
           val: num / den,
+          covers: numCell!.covers,
           tag: null,
           // A computed ratio comes from two OTHER fields, not from a tag, so it
           // has no namespace of its own. Null rather than inherited: inheriting
