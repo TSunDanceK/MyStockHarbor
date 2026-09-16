@@ -160,6 +160,75 @@ if (inSource) {
     "two copies that can disagree silently are worse than one");
 }
 
+console.log("\n5. the crawler bypass, and the order that makes it work");
+
+// ── A SECOND RULE, THE SAME DISCIPLINE ───────────────────────────────────
+// Recorded in both places in one parseable shape, for the same reason: the
+// dashboard is invisible to CI, so the most the repo can do is refuse to
+// disagree with itself.
+//
+// THE ORDER IS A FIELD. A bypass configured BELOW the challenge is every field
+// correct and the rule inert — the crawler is challenged anyway and the index
+// drains with nothing in the logs to say why. So "ABOVE the rate limit" is
+// captured and compared like any other field rather than left to prose.
+const BYPASS =
+  /VERCEL FIREWALL BYPASS: (.+?) — AS ([\d,]+) AND user-agent matches (\S+) — (Bypass), (ABOVE|BELOW) the rate limit/;
+const bypassSource = COLD_RAW.match(BYPASS);
+const bypassDoc = DOC.match(BYPASS);
+check("the bypass is recorded in secColdFetch's docblock",
+  !!bypassSource, bypassSource?.[0]?.slice(0, 120) ?? "(not found)");
+check("the bypass is recorded in the doc",
+  !!bypassDoc, bypassDoc?.[0]?.slice(0, 120) ?? "(not found)");
+check("the two copies agree, field for field",
+  !!bypassSource && !!bypassDoc &&
+    bypassSource.slice(1, 6).join("|") === bypassDoc.slice(1, 6).join("|"),
+  `source ${bypassSource?.slice(2, 6).join("|") ?? "?"} vs doc ${bypassDoc?.slice(2, 6).join("|") ?? "?"}`);
+check("...and it is recorded as ABOVE the rate limit",
+  bypassSource?.[5] === "ABOVE",
+  `${bypassSource?.[5] ?? "?"} — below the challenge the bypass never fires and the failure is silent`);
+
+if (bypassSource) {
+  // THE UA PATTERN MUST ACTUALLY MATCH THE CRAWLERS IT NAMES, which is
+  // arithmetic rather than assertion: the recorded pattern is compiled and run
+  // against real user-agent strings. A typo in the alternation would otherwise
+  // read as a correct record of a rule that exempts nobody.
+  const ua = new RegExp(bypassSource[3].replace(/^\/|\/$/g, ""));
+  const SHOULD_MATCH = [
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+    "Mediapartners-Google",
+    "AdsBot-Google (+http://www.google.com/adsbot.html)",
+    "Mozilla/5.0 (compatible; Google-InspectionTool/1.0;)",
+  ];
+  const SHOULD_NOT = ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "python-requests/2.31.0", "curl/8.4.0"];
+  check("the recorded user-agent pattern matches every crawler it names",
+    SHOULD_MATCH.every((u) => ua.test(u)),
+    SHOULD_MATCH.filter((u) => !ua.test(u)).join(" | ") || `${SHOULD_MATCH.length} of ${SHOULD_MATCH.length}`);
+  check("...and does not match an ordinary browser or client",
+    SHOULD_NOT.every((u) => !ua.test(u)),
+    SHOULD_NOT.filter((u) => ua.test(u)).join(" | ") || "none");
+  // BOTH CONDITIONS, NOT EITHER. The ASNs are the whole of GCP and Azure, so a
+  // bypass on ASN alone exempts every scraper on either cloud; a user-agent
+  // alone is a claim `curl -A Googlebot` can make. Asserted as an AND.
+  check("the bypass requires the ASN AND the user-agent, never either alone",
+    / AND user-agent matches /.test(bypassSource[0]) && /^[\d,]+$/.test(bypassSource[2]),
+    `AS ${bypassSource[2]} AND a user-agent pattern — either alone is worthless, for opposite reasons`);
+  check("...and the doc records why ASN alone was rejected",
+    /whole of GCP and the whole\s+of Azure|whole of GCP/.test(DOC) && /datacenter block list/i.test(DOC),
+    "a rule recorded without its rejected alternative gets re-litigated by the next reader");
+}
+
+{
+  // MUTATION: the order flipped in one copy only — every field still correct,
+  // the rule inert, and nothing else in this file would notice.
+  const flipped = DOC.replace("Bypass, ABOVE the rate limit", "Bypass, BELOW the rate limit");
+  check("the order-flip mutation actually applied", flipped !== DOC);
+  const m = flipped.match(BYPASS);
+  check("MUTATION: flipping the recorded order in one copy is caught",
+    !!bypassSource && !!m && bypassSource.slice(1, 6).join("|") !== m.slice(1, 6).join("|"),
+    "order is the property that can be wrong while every field is right");
+}
+
 console.log(
   failures
     ? `\n${failures} assertion(s) failed.`
