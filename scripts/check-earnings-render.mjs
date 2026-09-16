@@ -49,6 +49,24 @@ const vGev = M.buildSecEarningsView(GEV);
 const vKtos = M.buildSecEarningsView(KTOS);
 
 /**
+ * ── THE CNI SHAPE, BUILT FROM AZN'S OWN STALE-BUT-POPULATED QUARTERS ───────
+ *
+ * slice(1, 5) is Q2 FY2024 back to Q2 FY2021: 549, 915, 1280 and 1645 days
+ * behind AZN's newest period, and 15/15/14/14 fields filled. The first draft
+ * used slice(-3), the three OLDEST quarters — also stale, but AZN stores ONE
+ * field for each, so once the recent-periods table gained the thin-row rule the
+ * staleness mutation rendered a table with ZERO rows and the assertion could no
+ * longer tell "the table came back" from "the table stayed away".
+ *
+ * 549 days is one day over the threshold and is real filed data, which makes
+ * this fixture the TSEM case as well as the CNI one.
+ *
+ * MODULE SCOPE because two sections use it — the staleness rule below and
+ * mutation (k) — and two slices of the same intent would drift apart.
+ */
+const STALE_AZN = { ...AZN, quarters: AZN.quarters.slice(1, 5) };
+
+/**
  * The cards the PAGE ACTUALLY RENDERS for one view, gated exactly as
  * page.tsx gates them.
  *
@@ -438,14 +456,13 @@ console.log("\n10. the anchor is the NEWEST period, whichever kind it is");
   check("the staleness threshold is read from the view, not retyped",
     STALE_DAYS === 548, `${STALE_DAYS} days`);
 
-  const staleSet = { ...AZN, quarters: AZN.quarters.slice(-3) };
-  const vStale = M.buildSecEarningsView(staleSet);
+  const vStale = M.buildSecEarningsView(STALE_AZN);
   const staleAge = Math.round(
-    (Date.parse(vStale.latestEnd) - Date.parse(staleSet.quarters[0].e)) / 86400000
+    (Date.parse(vStale.latestEnd) - Date.parse(STALE_AZN.quarters[0].e)) / 86400000
   );
   check("the CNI-shaped set really is stale, by the threshold's own measure",
     staleAge > STALE_DAYS,
-    `newest quarter ${staleSet.quarters[0].e} is ${staleAge} days behind ${vStale.latestEnd}`);
+    `newest quarter ${STALE_AZN.quarters[0].e} is ${staleAge} days behind ${vStale.latestEnd}`);
   check("...so no quarterly table renders for it",
     vStale.tableBasis === "year" &&
       !/Recent reported quarters/.test(visibleText(renderPage(M, vStale))) &&
@@ -462,7 +479,96 @@ console.log("\n10. the anchor is the NEWEST period, whichever kind it is");
   const aznAge = Math.round(
     (Date.parse(vAzn.latestEnd) - Date.parse(AZN.quarters[0].e)) / 86400000
   );
-  check("AZN keeps its table, with room to spare",
+  // ── THE CAPEX HEADING NAMES THE MEASURE THE COLUMN ACTUALLY IS ────────────
+//
+// capex resolves from ONE concept per filer, and the two in its chain are
+// different measures — PaymentsToAcquireProductiveAssets is wider than the
+// PP&E concept. A filer on the fallback is not showing the same line as a filer
+// on the primary, so one heading over both is a false equivalence on exactly
+// the filers that differ. THAT the extractor picks the right concept is
+// asserted in check-sec-extract §7b; THIS is that the heading follows it.
+//
+// THE INPUT IS `cc`, NOT THE ANSWER. These three sets differ only in the stored
+// choice, so the assertion is about the view reading it, and no fixture supplies
+// the label it is checked against.
+{
+  const BROAD = "us-gaap|PaymentsToAcquireProductiveAssets";
+  const NARROW = "us-gaap|PaymentsToAcquirePropertyPlantAndEquipment";
+  const labelOf = (set) => M.buildSecEarningsView(set).cashQuality.capex.label;
+  const rowOf = (set) =>
+    visibleText(html(React.createElement(M.SecCashQualityCard, { view: M.buildSecEarningsView(set) })));
+
+  check("a set written BEFORE the rule has no stored choice, and is not guessed at",
+    GEV.cc === undefined && labelOf(GEV) === "Capital expenditure",
+    `GEV.cc = ${JSON.stringify(GEV.cc ?? null)} — absent means "written before the rule", and ` +
+      `the honest heading is the plain one; inventing the qualifier would mislabel the other direction`);
+  check("a filer on the BROADER concept says so in the row heading",
+    labelOf({ ...GEV, cc: { capex: BROAD } }) === "Capital expenditure (incl. other productive assets)",
+    labelOf({ ...GEV, cc: { capex: BROAD } }));
+  check("...and that heading reaches the reader, not just the view",
+    /Capital expenditure \(incl\. other productive assets\)/.test(rowOf({ ...GEV, cc: { capex: BROAD } })),
+    "the card read the label off the cell rather than hardcoding one");
+  check("a filer on the PP&E concept keeps the plain heading",
+    labelOf({ ...GEV, cc: { capex: NARROW } }) === "Capital expenditure" &&
+      !/incl\. other productive assets/.test(rowOf({ ...GEV, cc: { capex: NARROW } })),
+    "the qualifier is not a standing decoration — it appears only where the measure is wider");
+}
+
+// ── THE RECENT-PERIODS TABLE IS HELD TO THE SAME BAR AS THE GROWTH TABLE ──
+//
+// WHAT THE OWNER SAW ON THE PREVIEW: AZN's "Recent reported quarters" rendered
+// 2019-2021 rows carrying a revenue figure and "Not reported" under both
+// Diluted EPS and Net income. Those are the SAME periods the growth table had
+// already ruled too thin to be a row — AZN stores one field for each — shown
+// one card further down because this table mapped the whole stored list with no
+// filter and no cap while the growth table filtered and sliced it.
+//
+// ASSERTED ON THE RENDERED TABLE, not on view.recentPeriods.length: a cap
+// applied to the array and a cap applied to the rows are the same number until
+// someone renders a subset, and it is the rows a reader counts.
+{
+  const aznRows = (visibleText(html(React.createElement(M.SecRecentPeriodsCard, { view: vAzn })))
+    .match(/Q\d FY20\d\d/g) ?? []);
+  const thinEnds = AZN.quarters
+    .filter((p) => p.v.filter((v) => v !== null).length <= 1)
+    .map((p) => p.e);
+  check("AZN's thin quarters are real, and this is how many there are",
+    thinEnds.length > 0,
+    `${thinEnds.length} of ${AZN.quarters.length} stored quarters carry one field: ${thinEnds.join(" ")}`);
+  check("...and none of them renders a row in the recent-periods table",
+    vAzn.recentPeriods.every((r) => !thinEnds.includes(r.end)),
+    `rows: ${vAzn.recentPeriods.map((r) => r.label).join(" ")}`);
+  check("...so no rendered row reads 'Not reported' under BOTH EPS and net income",
+    vAzn.recentPeriods.every((r) => r.epsDiluted.val !== null || r.netIncome.val !== null),
+    "a row whose only content is revenue is a gap with one number in it, here as in the growth table");
+  check("...and the table is capped at the same number of rows as the growth table",
+    aznRows.length <= RENDERED_QUARTERS_RENDERED && aznRows.length === vAzn.recentPeriods.length,
+    `${aznRows.length} rendered rows against a cap of ${RENDERED_QUARTERS_RENDERED}`);
+  check("...while TTM still reads the FULL stored list, not the rendered one",
+    vAzn.ttmRevenue !== null,
+    "filtering the DISPLAY must not change an aggregate computed from what is stored");
+}
+
+{
+  // MUTATION: the filter and the cap dropped, so the thin rows come back.
+  const rpMod = await loadCards((src) =>
+    src.replace(
+      '      .filter((p) => valueOf(p, "epsDiluted") !== null || valueOf(p, "netIncome") !== null)\n      .slice(0, renderLimit)\n',
+      ""
+    )
+  );
+  const rpView = rpMod.buildSecEarningsView(AZN);
+  const rpRows = (visibleText(html(React.createElement(rpMod.SecRecentPeriodsCard, { view: rpView })))
+    .match(/Q\d FY20\d\d/g) ?? []);
+  check("the recent-periods mutation actually applied", rpView.recentPeriods.length !== vAzn.recentPeriods.length);
+  check("MUTATION: without the filter and cap, the one-field quarters return",
+    rpView.recentPeriods.length === AZN.quarters.length &&
+      rpRows.length > RENDERED_QUARTERS_RENDERED,
+    `${vAzn.recentPeriods.length} rows -> ${rpView.recentPeriods.length}, rendering ` +
+      `${rpRows.length} against a cap of ${RENDERED_QUARTERS_RENDERED} — the 2019-2021 rows come back`);
+}
+
+check("AZN keeps its table, with room to spare",
     vAzn.tableBasis === "quarter" && aznAge < STALE_DAYS,
     `${aznAge} days behind, against a ${STALE_DAYS}-day threshold`);
 
@@ -833,7 +939,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     );
   check("the staleness mutation actually applied", dropStaleTest(cardsSrc) !== cardsSrc);
   const kMod = await loadCards(dropStaleTest);
-  const kView = kMod.buildSecEarningsView({ ...AZN, quarters: AZN.quarters.slice(-3) });
+  const kView = kMod.buildSecEarningsView(STALE_AZN);
   // ASSERTED ON THE RENDERED TABLE, NOT ON growth.every(). The first version of
   // this read `kView.growth.every(...)` and PASSED VACUOUSLY: those three oldest
   // quarters have no prior year stored, so the thin-row filter empties `growth`
@@ -855,8 +961,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // harness gated that card on `basis` where the page gates it on `tableBasis`.
   // Rendered through the same gate the page uses, so it cannot drift again.
   const kGrowth = (kText.match(/Is growth accelerating/g) ?? []).length;
-  const baseGrowth = (visibleText(renderPage(M, M.buildSecEarningsView(
-    { ...AZN, quarters: AZN.quarters.slice(-3) }))).match(/Is growth accelerating/g) ?? []).length;
+  const baseGrowth = (visibleText(renderPage(M, M.buildSecEarningsView(STALE_AZN)))
+    .match(/Is growth accelerating/g) ?? []).length;
   check("(k) ...and the quarterly GROWTH card comes back with it, not just the table",
     kGrowth === 1 && baseGrowth === 0,
     `growth & margins card: ${baseGrowth} unmutated -> ${kGrowth} mutated — the rule drops both, so the mutation must restore both`);

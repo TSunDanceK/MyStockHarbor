@@ -316,6 +316,15 @@ const TASKS = {
   // DROP names the ONE concept the VRT ruling added. Not "everything after the
   // first": this chain already had four entries, so the default would measure
   // what the other three contribute — a real question, and not this one.
+  // WHAT THE ONE-CONCEPT-PER-FILER RULING COSTS, PER CELL. Sibling of the blast
+  // probes: same two-runs-one-payload shape, but the switch is the FIELD FLAG
+  // rather than the chain, because the chain is identical on both sides of this
+  // question and a chain comparison would measure the wrong edit.
+  "sec-sticky-concepts": {
+    script: "scripts/sec-sticky-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   "sec-sti-blast": {
     script: "scripts/sec-capex-blast-probe.mjs",
     args: () => [],

@@ -1,0 +1,183 @@
+// WHAT ONE-CONCEPT-PER-FILER COSTS, PER CELL — measured, not argued.
+//
+// ── THE QUESTION THIS OWES AN ANSWER TO ───────────────────────────────────
+// The ruling fixes ONE concept per filer for a marked field and refuses every
+// other, so a period the chosen concept does not cover reads "Not reported"
+// instead of taking the other one. That is a deliberate loss of cells, and a
+// ruling is owed the size of it: how many rendered cells CHANGE value, and how
+// many become "Not reported", across the analysis universe.
+//
+// ── ONE CODE PATH, RUN TWICE, ONE PAYLOAD ─────────────────────────────────
+// BEFORE is not a remembered number and not a second implementation: the
+// shipped extractor runs against the payload with `oneConceptPerFiler` turned
+// OFF for the field — which is exactly the default policy the rest of the
+// fields use — and then again with it as it ships. Any difference is the flag
+// and nothing else. Sibling of sec-capex-blast-probe, which does the same for a
+// chain edit; the only difference is which switch is flipped between the runs.
+//
+// NOT A CHAIN COMPARISON. The chain is identical in both runs. Pointing
+// sec-capex-blast at this question would measure the wrong edit entirely.
+//
+// Reports, per symbol:
+//   NOT-REPORTED  a cell had a value and now has none      — the cost
+//   CHANGED       a cell's value moved to a different one  — the correction
+//   GAINED        a cell had none and now has one          — should be zero
+//   same          identical before and after               — the control
+//
+// GAINED SHOULD BE ZERO AND IS PRINTED ANYWAY. Restricting the candidate set
+// can only ever remove readings, so a gain would mean the flag is doing
+// something other than what it says. A column that cannot report the
+// impossible cannot tell you when it happens.
+//
+// Read-only: no credential, no store, no writes. Needs the network.
+//
+//   SYMBOLS="CRM,GE,SCHW" node scripts/sec-sticky-concept-probe.mjs
+//   (no SYMBOLS: the frozen dump's analysis universe, capped by LIMIT)
+import fs from "node:fs";
+import path from "node:path";
+import { readCodeOnly } from "./lib/source-code.mjs";
+import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+
+const UA = process.env.SEC_USER_AGENT ??
+  "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; sticky concept cost)";
+const FIELD = process.env.FIELD || "capex";
+const LIMIT = Number(process.env.LIMIT || 120);
+
+const strip = (f) =>
+  fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+    .replace(/^export \* from "\.\/[^"]+";$/gm, "");
+const sec = await lift([
+  fs.readFileSync("lib/server/secFields.ts", "utf8"),
+  strip("lib/server/secExtract.ts"),
+  strip("lib/server/secFactCodec.ts"),
+].join("\n"));
+const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
+const tick = await lift(
+  [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
+    "\nexport { parseTickerFile, padCik };"
+);
+const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf, cell } = sec;
+
+const field = SEC_FIELDS.find((f) => f.key === FIELD);
+if (!field) { console.error(`FATAL: no field "${FIELD}"`); process.exit(2); }
+if (!field.oneConceptPerFiler) {
+  // A PROBE AIMED AT A FIELD THAT DOES NOT USE THE RULE would run the same
+  // policy twice and report "nothing changed" — a clean bill of health for a
+  // measurement that never happened.
+  console.error(`FATAL: ${FIELD} is not marked oneConceptPerFiler, so both runs would use the same policy`);
+  process.exit(2);
+}
+console.log(`${FIELD}: chain [${field.chain.join(", ")}] — identical in both runs; the FLAG is the switch`);
+
+const DIR = process.env.DUMP_DIR || "";
+const fromDump = () => {
+  if (!DIR) return [];
+  try {
+    const u = JSON.parse(fs.readFileSync(path.join(DIR, "universe.json"), "utf8"));
+    return (u?.pickersSymbolsKey ?? []).map(String);
+  } catch { return []; }
+};
+const SYMBOLS = (process.env.SYMBOLS || "").split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+const targets = (SYMBOLS.length ? SYMBOLS : fromDump()).slice(0, LIMIT);
+if (!targets.length) {
+  console.error("FATAL: no symbols — pass SYMBOLS or run with a dump that has universe.json");
+  process.exit(2);
+}
+console.log(`${targets.length} SYMBOLS (source: ${SYMBOLS.length ? "SYMBOLS input" : "frozen dump universe"})\n`);
+
+const { map: tickerMap } = tick.parseTickerFile(
+  fs.readFileSync("data/sec/company-tickers.json", "utf8")
+);
+
+/** Every STORED period's value for the field, keyed so the two runs line up. */
+const readField = (set) => {
+  const out = new Map();
+  for (const [b, periods] of [["q", set.quarters], ["y", set.years], ["i", set.instants]]) {
+    for (const p of periods ?? []) out.set(`${b}:${p.e}`, valueOf(p, FIELD));
+  }
+  return out;
+};
+
+const tally = { notReported: [], changed: [], gained: [], same: 0, noCik: 0, failed: 0 };
+let cellsBefore = 0, cellsAfter = 0, symbolsTouched = 0;
+const choices = new Map();
+
+for (const symbol of targets) {
+  const cik = tickerMap.get(symbol)?.cik;
+  if (!cik) { tally.noCik++; continue; }
+  let facts;
+  try {
+    if (process.env.FACTS_DIR) {
+      facts = JSON.parse(fs.readFileSync(`${process.env.FACTS_DIR}/CIK${cik}.json`, "utf8"));
+    } else {
+      const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
+        headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" },
+      });
+      if (!res.ok) { tally.failed++; continue; }
+      facts = await res.json();
+    }
+  } catch { tally.failed++; continue; }
+
+  // THE SWITCH, flipped in place between two runs of one extractor.
+  field.oneConceptPerFiler = false;
+  const before = readField(encodeFactSet(extractCompanyFacts(symbol, facts)));
+  field.oneConceptPerFiler = true;
+  const afterSet = encodeFactSet(extractCompanyFacts(symbol, facts));
+  const after = readField(afterSet);
+  if (afterSet.cc?.[FIELD]) choices.set(symbol, afterSet.cc[FIELD]);
+
+  const keys = [...new Set([...before.keys(), ...after.keys()])];
+  let lost = 0, moved = 0, got = 0;
+  const detail = [];
+  for (const k of keys) {
+    const b = before.get(k) ?? null;
+    const a = after.get(k) ?? null;
+    if (b === a) continue;
+    if (b !== null && a === null) { lost++; detail.push(`${k} ${b} -> NOT REPORTED`); }
+    else if (b === null && a !== null) { got++; detail.push(`${k} NONE -> ${a}`); }
+    else { moved++; detail.push(`${k} ${b} -> ${a}`); }
+  }
+  for (const v of before.values()) if (v !== null) cellsBefore++;
+  for (const v of after.values()) if (v !== null) cellsAfter++;
+  if (lost || moved || got) {
+    symbolsTouched++;
+    if (lost) tally.notReported.push({ symbol, n: lost, detail: detail.filter((d) => d.includes("NOT REPORTED")) });
+    if (moved) tally.changed.push({ symbol, n: moved, detail: detail.filter((d) => !d.includes("NOT REPORTED") && !d.includes("NONE ->")) });
+    if (got) tally.gained.push({ symbol, n: got, detail: detail.filter((d) => d.includes("NONE ->")) });
+  } else tally.same++;
+}
+
+const read = targets.length - tally.noCik - tally.failed;
+console.log("=".repeat(76));
+console.log(`READ ${read} SYMBOLS of ${targets.length} (${tally.noCik} no CIK, ${tally.failed} fetch failed)`);
+console.log(`${FIELD} cells carrying a figure: ${cellsBefore} before -> ${cellsAfter} after ` +
+  `(${cellsBefore - cellsAfter} fewer)`);
+console.log(`${symbolsTouched} SYMBOLS move at all; ${tally.same} identical\n`);
+
+const sum = (rows) => rows.reduce((a, r) => a + r.n, 0);
+console.log(`1. CELLS THAT BECOME "Not reported": ${sum(tally.notReported)} across ${tally.notReported.length} SYMBOLS`);
+for (const r of tally.notReported.sort((a, b) => b.n - a.n).slice(0, 25)) {
+  console.log(`   ${r.symbol.padEnd(6)} ${String(r.n).padStart(2)} cell(s): ${r.detail.slice(0, 4).join(" | ")}${r.detail.length > 4 ? " …" : ""}`);
+}
+if (!tally.notReported.length) console.log("   (none)");
+
+console.log(`\n2. CELLS THAT CHANGE VALUE: ${sum(tally.changed)} across ${tally.changed.length} SYMBOLS`);
+for (const r of tally.changed.sort((a, b) => b.n - a.n).slice(0, 25)) {
+  console.log(`   ${r.symbol.padEnd(6)} ${String(r.n).padStart(2)} cell(s): ${r.detail.slice(0, 4).join(" | ")}${r.detail.length > 4 ? " …" : ""}`);
+}
+if (!tally.changed.length) console.log("   (none)");
+
+// SHOULD BE EMPTY. Restricting candidates can only remove readings.
+console.log(`\n3. CELLS THAT GAIN A FIGURE: ${sum(tally.gained)} across ${tally.gained.length} SYMBOLS`);
+if (tally.gained.length) {
+  for (const r of tally.gained) console.log(`   ${r.symbol.padEnd(6)} ${r.detail.slice(0, 4).join(" | ")}`);
+  console.log(`   >> A RESTRICTION CANNOT ADD A READING. A gain here means the flag is doing`);
+  console.log(`      something other than what it says, and this run should not be quoted as a cost.`);
+} else {
+  console.log("   (none — as required: a restriction can only ever remove readings)");
+}
+
+const broad = [...choices].filter(([, c]) => c.endsWith("|PaymentsToAcquireProductiveAssets"));
+console.log(`\n4. WHICH CONCEPT EACH FILER IS ON — ${choices.size} SYMBOLS recorded a choice`);
+console.log(`   on the BROADER concept, so the row label changes: ${broad.length} SYMBOLS`);
+console.log(`   ${broad.map(([s]) => s).join(" ") || "(none)"}`);
