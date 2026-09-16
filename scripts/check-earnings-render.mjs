@@ -58,14 +58,29 @@ const vKtos = M.buildSecEarningsView(KTOS);
  * card no reader of that page sees. An assertion about KGC's visible words is
  * worthless if the harness adds words the page does not.
  *
- * Mirrors page.tsx: growth table only on a quarter anchor, annual card always
- * (`sole` on a year anchor), recent-periods card self-gates on the basis.
+ * Mirrors page.tsx: growth table only where the TABLES are quarterly, annual
+ * card always (`sole` where they are not), recent-periods card self-gates.
+ *
+ * ── tableBasis, NOT basis, AND THE TWO ARE NOT THE SAME FIELD ──────────────
+ * This gated on `view.basis` while page.tsx gates on `secView.tableBasis`, and
+ * they differ on exactly the filer this section is calibrated against: AZN's
+ * anchor is FY2025 (basis "year") while its quarters are current (tableBasis
+ * "quarter"). Measured: the page renders a 3,618-character growth & margins
+ * card for AZN that this harness rendered for nobody, so every "what does a
+ * reader see" assertion about AZN was made against a page missing a card the
+ * real one shows.
+ *
+ * AND IT COST THE STALENESS MUTATION HALF ITS REACH. Dropping the 548-day test
+ * flips tableBasis to "quarter" on a CNI-shaped set while basis stays "year",
+ * so the table came back and was caught — and the growth card came back and
+ * could not be, because this line still said not to render it. A mutation that
+ * can only observe half of what it breaks is half a check.
  */
 const renderPage = (mod, view) =>
   [
     html(React.createElement(mod.SecSnapshotCard, { view })),
-    view.basis === "year" ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
-    html(React.createElement(mod.SecAnnualCard, { view, sole: view.basis === "year" })),
+    view.tableBasis === "year" ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
+    html(React.createElement(mod.SecAnnualCard, { view, sole: view.tableBasis === "year" })),
     html(React.createElement(mod.SecCashQualityCard, { view })),
     html(React.createElement(mod.SecBalanceSheetCard, { view })),
     html(React.createElement(mod.SecIncomeStatementCard, { view })),
@@ -834,6 +849,27 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     kMod.buildSecEarningsView(AZN).tableBasis === "quarter" &&
       kMod.buildSecEarningsView(KGC).tableBasis === "year",
     "AZN kept its table either way; KGC has no quarters to restore");
+  // ...AND THE GROWTH & MARGINS CARD, which is the other half of the rule. The
+  // ruling is that a stale quarterly series drops the table AND the quarterly
+  // growth card; this mutation could only ever observe the table, because the
+  // harness gated that card on `basis` where the page gates it on `tableBasis`.
+  // Rendered through the same gate the page uses, so it cannot drift again.
+  const kGrowth = (kText.match(/Is growth accelerating/g) ?? []).length;
+  const baseGrowth = (visibleText(renderPage(M, M.buildSecEarningsView(
+    { ...AZN, quarters: AZN.quarters.slice(-3) }))).match(/Is growth accelerating/g) ?? []).length;
+  check("(k) ...and the quarterly GROWTH card comes back with it, not just the table",
+    kGrowth === 1 && baseGrowth === 0,
+    `growth & margins card: ${baseGrowth} unmutated -> ${kGrowth} mutated — the rule drops both, so the mutation must restore both`);
+
+  // THE HARNESS'S GATE IS THE PAGE'S GATE, read from page.tsx rather than
+  // agreed with. Both fields exist on the view, so a harness on the wrong one
+  // renders a plausible page and asserts about the wrong reader.
+  const pageSrc = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
+  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : <SecGrowthMarginsCard/) ?? [])[1];
+  const soleGate = (pageSrc.match(/<SecAnnualCard view=\{secView\} sole=\{secView\.(\w+) === "year"\}/) ?? [])[1];
+  check("the harness gates the growth card on the same field page.tsx does",
+    pageGate === "tableBasis" && soleGate === "tableBasis",
+    `page.tsx gates on ${pageGate} / ${soleGate}; this harness gates on tableBasis`);
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();
