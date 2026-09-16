@@ -81,7 +81,6 @@ import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
-import { maybeRefreshOnView } from "./secRefreshOnView";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -513,24 +512,31 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   // 2. THE STORE.
   const stored = await readFactSet(clean);
   if (stored) {
-    if (hasUsableData(stored)) {
-      // ── REFRESH ON VIEW, AFTER THE RESPONSE ────────────────────────────
-      //
-      // The set is returned FIRST and unchanged; the refresh runs in after().
-      // A populated stale set previously had no path back to the current
-      // chains except the cron's rewindow queue — three days at the merged
-      // slack allowance, during which a page someone is reading serves figures
-      // resolved under a rule production no longer runs.
-      //
-      // The cron remains the FLOOR: it reaches every symbol whether or not
-      // anyone visits. This is the fast path for the ones being read.
-      //
-      // NOT AWAITED FOR ITS WORK, only for the scheduling call — everything
-      // inside is after(). Staleness is decided by the same exported
-      // needsReread the queue selects on, never by a second predicate here.
-      await maybeRefreshOnView(stored, (sym) => fetchAndStore(sym, cik));
-      return { status: "ready", set: stored, cold: false };
-    }
+    // ── A POPULATED SET IS RETURNED AS IT STANDS. THE CRON OWNS REFRESHING ──
+    //
+    // A refresh-on-view was built here and REMOVED, and the reason is worth
+    // keeping because the idea will come back. It scheduled the re-read in
+    // `after()`, which works, and then called `revalidatePath` to flush the
+    // page it had just corrected — and production refused that call:
+    //
+    //   Dynamic server usage: Route /stock/[symbol]/earnings couldn't be
+    //   rendered statically because it used `revalidatePath`
+    //
+    // `revalidatePath` is not permitted from a page RENDER's after(); the cron
+    // gets away with it because it calls from a route handler. Without the
+    // flush the corrected set sat behind the ISR window for up to an hour, so
+    // the mechanism delivered nothing on the view that paid for it. Worse, the
+    // trigger could only fire on a render: the reload twenty seconds later was
+    // served from the ISR cache, so the one visitor who triggered a refresh was
+    // also the only one who could, and they saw the old figures anyway.
+    //
+    // Moving the trigger to a route handler would work and was declined: with
+    // the CIK recorded on cold writes (secColdCik) every stored symbol is in a
+    // cron queue, the daily index lands nightly, and the cron revalidates the
+    // sets that CHANGED from a route handler where the call is permitted. A
+    // visitor-driven trigger cannot beat that by more than about a day, which
+    // does not justify a public endpoint that causes writes.
+    if (hasUsableData(stored)) return { status: "ready", set: stored, cold: false };
     // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
     //
     // secFieldsHash gates on field ORDER and MEMBERSHIP, deliberately: a
