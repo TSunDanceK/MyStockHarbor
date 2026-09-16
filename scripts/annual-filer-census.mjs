@@ -49,6 +49,7 @@ const sec = await lift(
     strip("lib/server/secExtract.ts"),
     strip("lib/server/secFactCodec.ts"),
     strip("lib/server/secEarningsView.ts"),
+    strip("lib/server/secStaleness.ts"),
   ].join("\n")
 );
 const MIN_PERIOD_FIELDS = Number(
@@ -96,6 +97,50 @@ for (let i = 0; i < symbols.length; i += 50) {
 // SYMBOLS=AAPL,AZN,MU,RYAAY prints the stored window and period counts for
 // those symbols alone, so the same command run before and after a rewindow
 // pass is a before/after on the same instrument.
+/**
+ * WHETHER THIS SYMBOL HAS BEEN RE-READ UNDER THE CHAINS THE CODE SHIPS NOW —
+ * and, when it has not, WHICH chain edit it is behind.
+ *
+ * "Is it stale" is a boolean and a boolean cannot distinguish the two cases
+ * that matter here. A set can be behind because a TAG was added to a chain,
+ * which is a change to what is read, or because the RESOLUTION POLICY moved,
+ * which is a change to how the same tags are read. Both make needsReread true
+ * and the remedy is the same, but a report that cannot tell them apart cannot
+ * say whether an eye-check done yesterday was looking at current data.
+ *
+ * So this prints the stored hash against two: the hash this code computes, and
+ * the hash THIS BRANCH'S CHAINS compute with the policy line taken out. Equal
+ * to the second but not the first means the set already carries every chain
+ * edit on this branch and is behind ONLY the resolution-policy bump.
+ *
+ * THE SECOND IS NOT "main's HASH" and must not be labelled one. This branch
+ * edits chains as well as policy, so a set written under main carries neither
+ * hash, and calling the policy-free figure "main" would report a genuinely
+ * pre-chain-edit set as merely behind a policy bump. The runner checks out one
+ * ref at depth 1, so main's secFields.ts is not on disk to hash honestly.
+ */
+const chainsNow = sec.secChainsHash();
+const fieldsSrcText = fs.readFileSync("lib/server/secFields.ts", "utf8");
+const POLICY_LINE = "feed(`policy|${CHAIN_RESOLUTION_POLICY}`);";
+const chainsWithoutPolicy = fieldsSrcText.includes(POLICY_LINE)
+  ? (await lift(fieldsSrcText.replace(POLICY_LINE, ""))).secChainsHash()
+  : null;
+
+const rereadLine = (set, e) => {
+  const stored = set?.c ?? e?.c ?? null;
+  const reasons = sec.staleReasons
+    ? sec.staleReasons({ w: set?.w, y: set?.y, c: stored })
+    : null;
+  const verdict =
+    stored === null ? "NEVER STAMPED — written before the chain hash existed, so behind by definition"
+    : stored === chainsNow ? "CURRENT under the chains and policy this branch ships"
+    : stored === chainsWithoutPolicy ? "carries this branch's chains; behind ONLY the resolution-policy bump"
+    : "BEHIND A CHAIN EDIT — it has not been re-read under this branch's chains at all";
+  return `chains stored=${stored ?? "absent"} branch=${chainsNow}` +
+    `${chainsWithoutPolicy ? ` branch-chains-old-policy=${chainsWithoutPolicy}` : ""} -> ${verdict}` +
+    `${reasons?.length ? ` (stale: ${reasons.join(", ")})` : ""}`;
+};
+
 const WATCH = (process.env.SYMBOLS ?? "").split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
 if (WATCH.length) {
   console.log(`WATCHED SYMBOLS, as stored right now:`);
@@ -124,6 +169,7 @@ if (WATCH.length) {
       `years=${String((set.years ?? []).length).padStart(2)} instants=${String((set.instants ?? []).length).padStart(2)} ` +
       `| written ${when} by ${wroteIt}` +
       `\n         manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"} cik=${e?.cik ?? "none"}` +
+      `\n         ${rereadLine(set, e)}` +
       `\n         quarters carrying a prior-year match: see the growth table — a young filer has none to find`
     );
   });
