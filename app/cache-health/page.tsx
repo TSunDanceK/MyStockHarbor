@@ -14,6 +14,7 @@ import { getFmpMinuteUsage } from "@/lib/server/historyCache";
 import { isActiveMarketWindow } from "@/lib/server/marketHours";
 import { readAllDatasetHealth, type DatasetHealth } from "@/lib/server/stalenessQueue";
 import { readJobRuns } from "@/lib/server/jobRuns";
+import { readSecHealth } from "@/lib/server/secHealth";
 import { newsProviderMode, activeNewsProviders, feedMaxAgeDays } from "@/lib/server/news";
 import { readNewsProviderStats } from "@/lib/server/newsStore";
 import {
@@ -249,7 +250,7 @@ export default async function CacheHealthPage({
   // 0..0 per dataset, 30 day-hashes for bytes, one mget for job runs. If this
   // page ever needs a scan to answer something, that answer belongs in a
   // counter instead (spec, "The page must be cheap to load").
-  const [usage, minuteCalls, datasets, jobs, redisBandwidth, providerStats] = await Promise.all([
+  const [usage, minuteCalls, datasets, jobs, redisBandwidth, providerStats, secHealth] = await Promise.all([
     readFmpUsage(30),
     getFmpMinuteUsage(),
     readAllDatasetHealth(),
@@ -263,6 +264,11 @@ export default async function CacheHealthPage({
     // universe. Returns null when Redis is absent, which the panel renders as
     // "unknown" rather than as zero.
     readNewsProviderStats(),
+    // FOUR O(1) COMMANDS, and deliberately not a manifest read. Everything
+    // manifest-derived — queue depths, what each run wrote — is already counted
+    // by the cron and already in `jobs` above, at zero additional cost. See
+    // lib/server/secHealth.ts.
+    readSecHealth(),
   ]);
 
   // COMPUTED ONCE, PASSED IN. Pure arithmetic over Intl -- no Redis, no fetch,
@@ -654,6 +660,176 @@ export default async function CacheHealthPage({
             symbols in the count are the ones that already succeeded — a ratio that is 100% by
             construction. It is shown as a raw count, and never green, until something calls
             <code style={{ margin: "0 3px" }}>registerSymbols</code> for them.
+          </p>
+        </section>
+
+        {/* ── SEC filings pipeline ────────────────────────────────────────
+            THE ONE DATASET WITH NO DATASET ROW. Every other source on this page
+            reports through readAllDatasetHealth; the SEC fact sets do not,
+            because they are not warmed on a schedule per symbol — they are
+            populated by a nightly cron working queues, and topped up by a cold
+            path on first view. The numbers that describe that are queue depths
+            and refusals, not staleness.
+
+            EVERY FIGURE HERE IS EITHER A COUNTER OR SOMETHING THE CRON ALREADY
+            COUNTED. Nothing below enumerates symbols or reads the 417 KB
+            manifest. */}
+        <section style={{ marginTop: 22 }}>
+          <h2 style={{ fontSize: 14, color: "#e2e8f0" }}>SEC filings — pipeline</h2>
+          {!secHealth.available && (
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 6 }}>
+              Redis unavailable — the live counters below read <strong>unknown</strong>, not zero.
+            </p>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 10 }}>
+            {[
+              {
+                label: "Cold queue",
+                value: secHealth.available ? `${secHealth.coldQueue} / ${secHealth.coldQueueMax}` : "unknown",
+                // Deep is not by itself bad: the cron drains it nightly. AT THE
+                // CAP is bad, because past it a cold symbol is dropped rather
+                // than queued and only a later visit re-enqueues it.
+                warn: secHealth.available && secHealth.coldQueue >= secHealth.coldQueueMax,
+                note: "symbols seen on a first view, waiting for the cron",
+              },
+              {
+                label: "CIKs awaiting drain",
+                value: secHealth.available ? `${secHealth.coldCikPending} / ${secHealth.coldCikMax}` : "unknown",
+                warn: secHealth.available && secHealth.coldCikPending >= secHealth.coldCikMax,
+                note: "recorded by cold writes, folded in on the next run",
+              },
+              {
+                label: "Cold fetches this minute",
+                value: secHealth.available ? `${secHealth.minuteFetches} / ${secHealth.minuteCap}` : "unknown",
+                warn: false,
+                // A MOVING NUMBER AND ALMOST ALWAYS ZERO. It is here to show
+                // the cap is live, not to be watched — the bucket resets every
+                // minute and most minutes have no cold fetch at all.
+                note: "site-wide budget; resets every minute",
+              },
+              {
+                label: "Budget exhausted",
+                value: secHealth.available
+                  ? `${secHealth.exhaustedToday} today · ${secHealth.exhaustedYesterday} yesterday`
+                  : "unknown",
+                // THE ONLY FIGURE HERE THAT DECIDES ANYTHING. claimColdFetch's
+                // own docblock says this count IS the decision procedure for
+                // whether per-IP isolation in code ever has a case. Zero means
+                // it never did; a regular non-zero is the evidence that would
+                // reopen it. See claude/sec-rate-limits-2026-09-16.md.
+                warn: secHealth.available && secHealth.exhaustedToday > 0,
+                note: "the evidence that would justify per-IP capping in code",
+              },
+            ].map((m) => (
+              <div key={m.label} style={{ minWidth: 190 }}>
+                <div style={{ color: "#94a3b8", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                  {m.label}
+                </div>
+                <div style={{ fontSize: 22, color: m.warn ? "#eab308" : "#e2e8f0", marginTop: 4 }}>
+                  {m.value}
+                </div>
+                <div style={{ color: "#64748b", fontSize: 11, marginTop: 2 }}>{m.note}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* THE CRON'S OWN LAST RUN, read from the record it already writes.
+              Rendered here rather than left to the Warm jobs table below
+              because that table shows one Summary cell per job, and this job's
+              summary is fifteen fields that mean nothing as a blob. */}
+          {(() => {
+            const run = jobs.find((j) => j.job === "sec-facts")?.run ?? null;
+            if (!run) {
+              return (
+                <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 14 }}>
+                  No sec-facts run recorded yet — it fires daily, so silence for part of a day is expected.
+                </p>
+              );
+            }
+            // ── AN ABSENT FIELD IS "not recorded", NEVER 0 ──────────────────
+            //
+            // `?? 0` renders a field the cron never wrote as a confident zero,
+            // and it is the exact case that reached the owner: the panel showed
+            // "Pages revalidated 0 of 434" for a run that PREDATED the
+            // counter — a number that was never measured, presented as a
+            // measurement, and read as the cron flushing nothing.
+            //
+            // `hasOwnProperty`, not a truthiness test: a genuine 0 is a real
+            // reading and must still render as 0.
+            const has = (k: string) => Object.prototype.hasOwnProperty.call(run.summary, k);
+            const n = (k: string) => Number(run.summary[k] ?? 0);
+            /** Every field must be present, or the whole row is unmeasured. */
+            const row = (keys: string[], render: () => string) =>
+              keys.every(has) ? render() : "not recorded";
+            const rows: [string, string][] = [
+              ["Sets written / unchanged / failed",
+                row(["written", "unchanged", "failed"],
+                  () => `${n("written")} / ${n("unchanged")} / ${n("failed")}`)],
+              // CHANGED-ONLY, and the count is the proof. The cron revalidates
+              // the earnings path for a symbol whose content hash MOVED, not
+              // for all ~475 it touched — so this number should track "written"
+              // and never "attempted".
+              ["Pages revalidated",
+                row(["revalidated", "attempted"],
+                  () => `${n("revalidated")} of ${n("attempted")} attempted`)],
+              ["Queues taken by that run (reverify / populate / rewindow)",
+                row(["reverifyTaken", "populateTaken", "rewindowTaken"],
+                  () => `${n("reverifyTaken")} / ${n("populateTaken")} / ${n("rewindowTaken")}`)],
+              // ── "WHEN THE RUN STARTED", AND THE LABEL HAS TO SAY SO ────────
+              //
+              // populationQueues is called ONCE at the top of the run, so these
+              // three are the state the run INHERITED, not the state now — the
+              // run then drains them. Labelled "Backlogs" they read as current,
+              // and that misreading happened immediately: the panel showed
+              // populate 623 while the live queue was 354, because 623 was the
+              // figure BEFORE that run took its 300. Same queue, two moments.
+              ["Backlogs WHEN THAT RUN STARTED (reverify / populate / rewindow)",
+                row(["reverifyBacklog", "populateBacklog", "rewindowBacklog"],
+                  () => `${n("reverifyBacklog")} / ${n("populateBacklog")} / ${n("rewindowBacklog")}`)],
+              ["Cold queue taken / cleared",
+                row(["coldTaken", "coldCleared"], () => `${n("coldTaken")} / ${n("coldCleared")}`)],
+              ["CIKs seen / filled / created / conflicts",
+                row(["coldCikSeen", "coldCikFilled", "coldCikCreated", "coldCikConflicts"],
+                  () => `${n("coldCikSeen")} / ${n("coldCikFilled")} / ${n("coldCikCreated")} / ${n("coldCikConflicts")}`)],
+            ];
+            return (
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Last sec-facts run</th>
+                    {/* fmtAge TAKES A TIMESTAMP, NOT A DURATION. The first
+                        version passed `Date.now() - run.at` and would have
+                        rendered a run from an hour ago as decades old, because
+                        fmtAge subtracts from now itself. Caught by the lint
+                        rule against calling Date.now() during render, which was
+                        pointing at a real defect rather than a style one. */}
+                    <th style={th}>{fmtAge(run.at)}{run.ok ? "" : " · FAULT"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(([k, v]) => (
+                    <tr key={k}>
+                      <td style={{ ...cell, color: "#94a3b8" }}>{k}</td>
+                      {/* Greyed, so an unmeasured row cannot be skim-read as a
+                          figure sitting beside real ones. */}
+                      <td style={{ ...cell, color: v === "not recorded" ? "#64748b" : undefined }}>{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
+          })()}
+          {/* A CONFLICT IS THE ONE ROW THAT NEEDS A PERSON. Everything else
+              above drains on its own; a CIK disagreement is deliberately never
+              applied and keeps being reported until someone rules on it. */}
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 8 }}>
+            Every figure in this table describes <strong>that run</strong>, not the present. The
+            backlogs are what the run inherited before it drained them, so a large number here with
+            a large &ldquo;taken&rdquo; beside it is the queue working, not a queue growing.
+          </p>
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 6 }}>
+            A non-zero <strong>conflicts</strong> count is not self-healing: the drain reports a CIK
+            disagreement and never applies it, because reconcileCiks owns that decision.
           </p>
         </section>
 

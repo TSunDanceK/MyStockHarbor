@@ -56,12 +56,34 @@ for (const [n, v] of [["SEC_MANIFEST_KEY", SEC_MANIFEST_KEY], ["SEC_FACTS_PREFIX
 // THE SHIPPED emptyEntry, not a hand-written object literal. An entry missing a
 // field the queues read is an entry that is present and still unselectable,
 // which is the exact bug this is fixing.
+// ── THE CONSTANT IS A NUMBER, AND JSON.stringify OF A REGEX CAPTURE IS NOT ─
+//
+// THE DEFECT THIS FIXES, FOUND IN THE LIVE MANIFEST: the first version
+// substituted `JSON.stringify(match[1])`, and a regex capture is a STRING — so
+// every one of the 31 entries this created carries `scoreVersion: "1"` where
+// SecManifestEntry declares `scoreVersion: number`. Nothing reads the field
+// today, which is exactly why it went unnoticed; the first comparison against
+// SEC_SCORE_VERSION would have selected all 31 for re-verification forever,
+// because "1" !== 1.
+//
+// Number(), and asserted rather than trusted.
+const SCORE_VERSION = Number((manifestSrc.match(/SEC_SCORE_VERSION = (\d+)/) ?? [])[1]);
+if (!Number.isFinite(SCORE_VERSION)) {
+  console.error("FATAL: could not read SEC_SCORE_VERSION as a number");
+  process.exit(2);
+}
 const man = await lift(
   grabFunction(readCodeOnly("lib/server/secManifest.ts"), "emptyEntry")
-    .replace("SEC_SCORE_VERSION", JSON.stringify(
-      (manifestSrc.match(/SEC_SCORE_VERSION = (\d+)/) ?? [])[1] ?? 1
-    )) + "\nexport { emptyEntry };"
+    .replace("SEC_SCORE_VERSION", String(SCORE_VERSION)) + "\nexport { emptyEntry };"
 );
+{
+  const probe = man.emptyEntry("0000000001");
+  if (typeof probe.scoreVersion !== "number") {
+    console.error(`FATAL: emptyEntry produced scoreVersion ${JSON.stringify(probe.scoreVersion)} ` +
+      `(${typeof probe.scoreVersion}) — the lift is writing the wrong type into the manifest`);
+    process.exit(2);
+  }
+}
 
 const manifest = await redis.get(SEC_MANIFEST_KEY);
 if (!manifest?.symbols) { console.error("FATAL: no manifest"); process.exit(2); }
@@ -125,6 +147,17 @@ for (let i = 0; i < storedSymbols.length; i += 50) {
   });
 }
 
+// ── REPAIR: entries this script previously wrote with a STRING scoreVersion ─
+// Counted always, applied only with --apply, and reported either way. A defect
+// this script introduced is this script's to clear.
+const badScore = Object.entries(manifest.symbols)
+  .filter(([, e]) => e?.scoreVersion !== undefined && typeof e.scoreVersion !== "number")
+  .map(([s]) => s)
+  .sort();
+if (APPLY) {
+  for (const sym of badScore) manifest.symbols[sym].scoreVersion = Number(manifest.symbols[sym].scoreVersion);
+}
+
 // Entries with no CIK and NO stored set — the scan above cannot see them, and
 // they are a different case: nothing to strand, nothing to fix here.
 const noCikNoSet = Object.entries(manifest.symbols)
@@ -145,17 +178,20 @@ console.log(`  UNRESOLVED (stored set, and neither the set nor the map has a CIK
 console.log(`  NO CIK AND NO STORED SET (nothing stranded; only a cold write can fix): ` +
   `${noCikNoSet.length}` + (noCikNoSet.length ? ` — ${noCikNoSet.join(", ")}` : ""));
 console.log(`  ALREADY SELECTABLE: ${fine.length}`);
+console.log(`  scoreVersion REPAIRED from string to number: ${badScore.length}` +
+  (badScore.length ? ` — ${badScore.join(", ")}` : ""));
 console.log("");
 
 if (!APPLY) {
   console.log("DRY RUN — nothing written. Re-run with --apply to write the manifest.");
-} else if (!created.length && !filled.length) {
+} else if (!created.length && !filled.length && !badScore.length) {
   console.log("Nothing to apply; manifest NOT written.");
 } else {
   await redis.set(SEC_MANIFEST_KEY, { ...manifest, updatedAt: Date.now() });
   const after = Object.values(manifest.symbols).filter((e) => !e?.cik).length;
   console.log(
-    `APPLIED: ${created.length} entries created, ${filled.length} CIKs filled. ` +
+    `APPLIED: ${created.length} entries created, ${filled.length} CIKs filled, ` +
+      `${badScore.length} scoreVersion repaired. ` +
       `AFTER: ${after} manifest SYMBOLS still without a CIK, of ${Object.keys(manifest.symbols).length}.`
   );
   for (const { symbol } of [...created, ...filled]) {
