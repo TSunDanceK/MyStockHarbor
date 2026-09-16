@@ -355,6 +355,16 @@ const TASKS = {
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
   // card and how many sets are still on the old quarter window.
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Counts manifest entries with no CIK — the ones populationQueues cannot
+  // select — split into those the ticker map can resolve and those only a cold
+  // write can.
+  "write-cik-gaps": {
+    script: "scripts/cik-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
