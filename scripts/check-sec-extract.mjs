@@ -437,7 +437,7 @@ const bq = out4.quarters.find((q) => q.end === "2018-06-30");
 check("a mid-year tag change is NOT differenced",
   !bq || at(bq, "revenue") === null || at(bq, "revenue").derived !== "differenced");
 check("and the refusal is recorded as a note rather than swallowed",
-  out4.notes.some((n) => n.includes("tag changed mid-year")), out4.notes[0] ?? "(none)");
+  out4.notes.some((n) => n.includes("concept changed mid-year")), out4.notes[0] ?? "(none)");
 
 // ── CAPEX, THE FIELD THE RULE WAS RE-RULED FOR, AND UNDER MUTATION ────────
 //
@@ -484,7 +484,7 @@ check("...and the refusal names both concepts in a note",
   // MUTATION: the same-concept test removed, so the differencing takes whatever
   // frame sits one length below regardless of which concept filed it.
   const mixMod = await liftMutated((src) =>
-    src.replace("if (prior.best.tag !== f.best.tag) {", "if (false) {")
+    src.replace("if (conceptKey(prior.best) !== conceptKey(f.best)) {", "if (false) {")
   );
   const mixed = mixMod.extractCompanyFacts("TWOC", twoConcept);
   const mixedQ2 = mixed.quarters.find((q) => q.end === "2026-06-30");
@@ -497,6 +497,99 @@ check("...and the refusal names both concepts in a note",
   check("...and the note disappears with it, so the refusal cannot be recorded but unperformed",
     !mixed.notes.some((n) => n.startsWith("capex ")),
     "the note and the refusal are the same branch");
+}
+
+// ── A CONCEPT IS ns|tag, AND THE NAMESPACE DEFEATED THIS GUARD ────────────
+//
+// The test above changes the TAG. This one keeps the tag identical and changes
+// only the NAMESPACE, which is the case a bare `prior.best.tag !== f.best.tag`
+// cannot see — and that is exactly what it was, until this fixture.
+//
+// EIGHT MAPPED LINES ARE SPELLED THE SAME under `us-gaap` and `ifrs-full`, so
+// this is not a contrived shape: a dual-tagging foreign private issuer whose 6M
+// frame resolves to `ifrs-full|GrossProfit` and whose 3M frame resolves to
+// `us-gaap|GrossProfit` was differenced, writing 900 − 400 = 500 into one cell
+// stamped `ns: "ifrs-full"` while one operand came from us-gaap — with NO note,
+// because nothing had noticed a change to record.
+//
+// THE DUAL LIST IS DERIVED, NOT TYPED. It is computed from the shipped chains,
+// so a field that gains an identically-spelled ifrs entry later is covered by
+// this check without anyone remembering to add it.
+{
+  const dualFields = SEC_FIELDS.filter(
+    (f) => (f.ifrsChain ?? []).some((t) => (f.chain ?? []).includes(t))
+  );
+  check("the shared-spelling case is real, and derived from the shipped chains",
+    dualFields.length > 0,
+    `${dualFields.length} field(s) spell a concept identically under both taxonomies: ` +
+      dualFields.map((f) => f.key).join(", "));
+
+  // A DURATION field, because instants are never differenced and an assertion
+  // on one could not fail however badly the namespaces were mixed.
+  const dualDur = dualFields.find((f) => String(f.kind).startsWith("duration"));
+  const sharedTag = (dualDur.ifrsChain ?? []).find((t) => (dualDur.chain ?? []).includes(t));
+  const dualIdx = SEC_FIELDS.findIndex((f) => f.key === dualDur.key);
+  const crossNs = {
+    cik: 1,
+    facts: {
+      // The 3M frame under the filer's primary taxonomy...
+      [dualDur.taxonomy]: { [sharedTag]: { units: { USD: [
+        { start: "2026-01-01", end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" },
+      ] } } },
+      // ...and the 6M under ifrs-full. Same spelling, different concept.
+      "ifrs-full": { [sharedTag]: { units: { USD: [
+        { start: "2026-01-01", end: "2026-06-30", val: 900, accn: "b", filed: "2026-07-20" },
+      ] } } },
+    },
+  };
+  const xn = extractCompanyFacts("DUALNS", crossNs);
+  const xnQ2 = xn.quarters.find((q) => q.end === "2026-06-30");
+  check(`a namespace change alone blocks differencing, on ${dualDur.key}`,
+    !xnQ2 || xnQ2.values[dualIdx] === null,
+    `Q2 ${dualDur.key} = ${JSON.stringify(xnQ2?.values[dualIdx] ?? null)} — the tag is ` +
+      `"${sharedTag}" on both sides and the concepts are still different`);
+  check("...and the refusal names both NAMESPACES, not just the tag twice",
+    xn.notes.some((n) =>
+      n.startsWith(`${dualDur.key} `) &&
+      n.includes(`${dualDur.taxonomy}|${sharedTag}`) &&
+      n.includes(`ifrs-full|${sharedTag}`)),
+    xn.notes.find((n) => n.startsWith(`${dualDur.key} `)) ??
+      "(none) — a note reading 'GrossProfit -> GrossProfit' would be worse than none");
+
+  // MUTATION: the guard put back the way it was — comparing bare tag names.
+  // This is the defect as it shipped, not an invented one.
+  const bareMod = await liftMutated((src) =>
+    src.replace(
+      "if (conceptKey(prior.best) !== conceptKey(f.best)) {",
+      "if (prior.best.tag !== f.best.tag) {"
+    )
+  );
+  const bare = bareMod.extractCompanyFacts("DUALNS", crossNs);
+  const bareQ2 = bare.quarters.find((q) => q.end === "2026-06-30");
+  check("MUTATION: comparing bare tag names differences straight across the namespaces",
+    bareQ2?.values[dualIdx]?.val === 500 &&
+      bareQ2?.values[dualIdx]?.derived === "differenced",
+    `the mutation renders ${JSON.stringify(bareQ2?.values[dualIdx]?.val ?? null)} from ` +
+      `900 (ifrs-full) − 400 (${dualDur.taxonomy}), stamped ns="${bareQ2?.values[dualIdx]?.ns}" ` +
+      `— one cell, two taxonomies`);
+  check("...and it records no note, so the mix is silent as well as wrong",
+    !bare.notes.some((n) => n.startsWith(`${dualDur.key} `)),
+    "nothing compared unequal, so nothing was there to report");
+  // THE MUTATION MUST NOT SIMPLY BREAK EVERYTHING: the tag-change case it was
+  // written for still has to refuse under it, or this would pass by disabling
+  // the guard rather than by narrowing it.
+  // A REFUSAL IS EITHER A NULL CELL OR NO QUARTER AT ALL, and which one depends
+  // on whether any other field carried that period. Asserting only `=== null`
+  // read `undefined` as a failure and reported the guard broken when it had
+  // refused correctly — the same shape the capex assertion above already uses.
+  {
+    const bareTwoC = bareMod.extractCompanyFacts("TWOC", twoConcept);
+    const bareTwoQ2 = bareTwoC.quarters.find((q) => q.end === "2026-06-30");
+    check("...while the TAG-change case still refuses under the same mutation",
+      (!bareTwoQ2 || bareTwoQ2.values[capexIdx] === null) &&
+        bareTwoC.notes.some((n) => n.startsWith("capex ")),
+      "the bare-tag guard is narrower, not absent — which is why it read as working");
+  }
 }
 
 // ── AND ACROSS PERIODS: THE CONCEPT THE FILER USES NOW ────────────────────

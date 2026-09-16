@@ -623,13 +623,25 @@ export function extractCompanyFacts(
 
         const prior = byLen.get(f.n - 1);
         if (!prior) continue;
-        // SAME TAG ON BOTH SIDES, or the difference is between two different
-        // concepts and is arithmetic on unrelated numbers. An ASC 606 boundary
-        // falling mid-year is exactly where this happens.
-        if (prior.best.tag !== f.best.tag) {
+        // SAME CONCEPT ON BOTH SIDES, or the difference is between two
+        // different concepts and is arithmetic on unrelated numbers. An ASC 606
+        // boundary falling mid-year is exactly where this happens.
+        //
+        // conceptKey, NOT `tag`. This compared bare tag names and the namespace
+        // defeated it: eight mapped lines are spelled identically under
+        // `us-gaap` and `ifrs-full` — GrossProfit, ProfitLoss, Assets and five
+        // more — so a dual-tagging filer whose 6M frame resolved to
+        // `ifrs-full|GrossProfit` and whose 3M frame resolved to
+        // `us-gaap|GrossProfit` compared EQUAL and was differenced. Measured:
+        // 900 − 400 = 500 written as one cell, stamped `ns: "ifrs-full"` while
+        // one of its operands came from us-gaap, and NO refusal note, because
+        // nothing had noticed a change. That is the same bare-tag mistake this
+        // file's own conceptKey comment records catching in preferredTag — the
+        // guard here had not followed it.
+        if (conceptKey(prior.best) !== conceptKey(f.best)) {
           notes.push(
-            `${field.key} ${start}..${f.end}: tag changed mid-year ` +
-              `(${prior.best.tag} -> ${f.best.tag}), not differenced`
+            `${field.key} ${start}..${f.end}: concept changed mid-year ` +
+              `(${conceptKey(prior.best)} -> ${conceptKey(f.best)}), not differenced`
           );
           continue;
         }
