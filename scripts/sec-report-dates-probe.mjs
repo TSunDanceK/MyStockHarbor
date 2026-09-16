@@ -30,7 +30,8 @@ const LIMIT = Number(process.env.LIMIT || 120);
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   strip("lib/server/secReportDates.ts").replace(/export (const|function|type)/g, "$1") +
-    "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, daysBetween, median, deadlineDays };"
+    "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, daysBetween, median,"
+    + " deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR };"
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
@@ -255,6 +256,20 @@ for (const symbol of targets) {
       // B2: a flat 35 days after the period end.
       const b2 = new Date(Date.parse(target.periodEnd) + 35 * 86400000).toISOString().slice(0, 10);
 
+      // ── THE THREE PRE-DECLARED ESTIMATORS, ON THIS SYMBOL ───────────────
+      //
+      // DECLARED BEFORE THEY WERE RUN and compared on the same `prior` set, the
+      // same corrected period ends and the same target. Each gets the SAME
+      // statutory clamp, because a clamp applied to one and not the others
+      // would be a fourth variant wearing a comparison's clothes.
+      const cap = Date.parse(target.periodEnd) + sec.deadlineDays(subs.category, false) * 86400000;
+      const clampTo = (d) =>
+        d === null ? null : (Date.parse(d) > cap ? new Date(cap).toISOString().slice(0, 10) : d);
+      const abc = {};
+      for (const id of ["A", "B", "C"]) {
+        abc[id] = clampTo(sec.runEstimator(id, prior, target.periodEnd));
+      }
+
       const err = (d) => (d ? Math.abs(sec.daysBetween(d, target.announcedOn)) : null);
       backtest.push({
         symbol,
@@ -265,6 +280,10 @@ for (const symbol of targets) {
         leaky: leaky.kind === "date" ? err(leaky.date) : null,
         b1: err(b1),
         b2: err(b2),
+        estA: err(abc.A),
+        estB: err(abc.B),
+        estC: err(abc.C),
+        hasYearAgo: abc.A !== null,
         clamped: withTrueEnd.kind === "date" && withTrueEnd.clamped,
         priorN: prior.length,
         lags: prior.slice(0, 6).map((e) => sec.daysBetween(e.periodEnd, e.announcedOn)),
@@ -355,6 +374,60 @@ console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
     const within = (d) => v.filter((e) => e <= d).length;
     console.log(`   ${label}  median ${med(xs) ?? "n/a"}d · 0d ${within(0)} · <=1d ${within(1)} · <=3d ${within(3)} · <=7d ${within(7)} of ${v.length}`);
   }
+  // ── 3b. THE ESTIMATOR CHOICE, DECIDED BY A RULE FIXED BEFOREHAND ─────
+  //
+  // THREE CANDIDATES, NO FOURTH. A (period end + last year's same-quarter lag),
+  // B (last year's same-quarter announcement + 364 days), C (median lag). The
+  // rule was fixed before this ran: LOWEST MEAN ABSOLUTE ERROR across the date
+  // group, ties to A as the simplest to explain. Mean, not median — at errors
+  // of 0-3 days a median ties while the tail moves, and the tail is the part a
+  // reader notices.
+  //
+  // COMPARED ON THE SAME SYMBOLS. A and B need the same quarter a year ago; C
+  // does not. Scoring each over whatever it happens to cover would hand C the
+  // symbols A cannot answer and call it a comparison, so the decision runs on
+  // the INTERSECTION and coverage is reported separately beside it.
+  {
+    const mean = (xs) => (xs.length ? xs.reduce((a, c) => a + c, 0) / xs.length : NaN);
+    const all3 = dateRows.filter((b) => b.estA !== null && b.estB !== null && b.estC !== null);
+    console.log("");
+    console.log(`   ESTIMATOR TABLE — decided on the ${all3.length} SYMBOLS all three can answer`);
+    console.log("     id  what it holds fixed                          mean    median  0d  <=1d <=3d <=7d");
+    const WHAT = {
+      A: "the LAG from period end (year-ago lag)   ",
+      B: "the CALENDAR position (year-ago + 364d)  ",
+      C: "nothing — the filer's median lag         ",
+    };
+    const scores = {};
+    for (const id of ["A", "B", "C"]) {
+      const v = all3.map((b) => b[`est${id}`]);
+      scores[id] = mean(v);
+      const within = (d) => v.filter((e) => e <= d).length;
+      console.log(
+        `     ${id}   ${WHAT[id]}  ${scores[id].toFixed(2).padStart(6)}d  ` +
+          `${String(med(v) ?? "n/a").padStart(5)}d  ${String(within(0)).padStart(3)} ` +
+          `${String(within(1)).padStart(4)} ${String(within(3)).padStart(4)} ${String(within(7)).padStart(4)}`
+      );
+    }
+    // COVERAGE, SAID SEPARATELY. It is not part of the decision — it is the
+    // reason C stays as the fallback whichever of A or B wins.
+    for (const id of ["A", "B", "C"]) {
+      const n = dateRows.filter((b) => b[`est${id}`] !== null).length;
+      console.log(`     ${id} covers ${n} of ${dateRows.length} SYMBOLS in the date group`);
+    }
+    // THE RULE, APPLIED. Ties to A, and a tie is declared on the printed
+    // precision rather than on float equality nobody can verify from the table.
+    const order = ["A", "B", "C"].sort((x, y) => {
+      const d = Number(scores[x].toFixed(2)) - Number(scores[y].toFixed(2));
+      return d !== 0 ? d : ["A", "B", "C"].indexOf(x) - ["A", "B", "C"].indexOf(y);
+    });
+    console.log(`   => WINNER BY THE PRE-DECLARED RULE: ${order[0]} ` +
+      `(${scores[order[0]].toFixed(2)}d vs ${order.slice(1).map((i) => `${i} ${scores[i].toFixed(2)}d`).join(", ")})`);
+    console.log(`   => SHIPPED: ${order[0]} as primary, C when the filer has no same-quarter event a year ago`);
+    console.log(`   => lib/server/secReportDates.ts currently ships PRIMARY_ESTIMATOR = ${sec.PRIMARY_ESTIMATOR}` +
+      `${sec.PRIMARY_ESTIMATOR === order[0] ? "" : "  <-- MISMATCH, update it"}`);
+  }
+
   // ── THE LEAK TEST, COMPARED PROPERLY ─────────────────────────────────
   //
   // TWO FAULTS IN THE FIRST VERSION, both of which would have let a leak pass:

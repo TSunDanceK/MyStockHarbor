@@ -376,6 +376,8 @@ export type NextReportEstimate =
       fromEvents: number;
       clamped: boolean;
       timing: ReportTiming | null;
+      /** Which of the three produced it — C means the primary had no input. */
+      estimator: EstimatorId;
     }
   | {
       kind: "month";
@@ -406,21 +408,104 @@ export const REGULARITY_WINDOW = 4;
  * `fromEvents` travels with the number so a one-sample "median" cannot be
  * quoted as if it were a habit.
  */
+/**
+ * ── THREE ESTIMATORS, DECLARED BEFORE THEY WERE MEASURED ──────────────────
+ *
+ * The first attempt used C alone and lost to a one-line baseline. Rather than
+ * tune until something won — which is how a method gets chosen by the noise in
+ * one corpus — exactly three candidates were fixed in advance, compared on the
+ * same symbols with the same corrected data, and the winner taken by lowest
+ * MEAN absolute error with ties going to A as the simplest to explain.
+ *
+ *   A  this period end + LAST YEAR'S SAME-QUARTER LAG
+ *   B  last year's same-quarter announcement + 364 days (preserves weekday)
+ *   C  the filer's MEDIAN LAG over every prior announcement
+ *
+ * A and B differ in what they hold fixed: A holds the gap from period end, B
+ * holds the calendar position. They disagree whenever the period end moves
+ * relative to the week, which is exactly when a fixed lag drifts.
+ */
+export type EstimatorId = "A" | "B" | "C";
+
+/** The year-ago announcement for the same fiscal quarter, or null. */
+export function sameQuarterLastYear(
+  events: readonly ReportEvent[],
+  nextPeriodEnd: string
+): ReportEvent | null {
+  let best: ReportEvent | null = null;
+  for (const e of events) {
+    if (!e.periodEnd || e.basis !== "8-K item 2.02") continue;
+    const gap = daysBetween(e.periodEnd, nextPeriodEnd);
+    // A YEAR, GENEROUSLY: a 52/53-week calendar moves the anniversary by a
+    // week either way, and a 4-4-5 year can be 371 days.
+    if (gap < 330 || gap > 400) continue;
+    if (!best || daysBetween(best.periodEnd!, nextPeriodEnd) > gap) best = e;
+  }
+  return best;
+}
+
+const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+
+/** Run one named estimator. Null when it has no input for this filer. */
+export function runEstimator(
+  id: EstimatorId,
+  events: readonly ReportEvent[],
+  nextPeriodEnd: string
+): string | null {
+  const yearAgo = sameQuarterLastYear(events, nextPeriodEnd);
+  if (id === "A") {
+    if (!yearAgo) return null;
+    return iso(Date.parse(nextPeriodEnd) + daysBetween(yearAgo.periodEnd!, yearAgo.announcedOn) * DAY);
+  }
+  if (id === "B") {
+    if (!yearAgo) return null;
+    // 364, NOT 365: fifty-two whole weeks, so the prediction lands on the same
+    // weekday the filer used last year. A filer that always reports on a
+    // Thursday keeps reporting on a Thursday.
+    return iso(Date.parse(yearAgo.announcedOn) + 364 * DAY);
+  }
+  const lags = events
+    .filter((e) => e.periodEnd && e.basis === "8-K item 2.02")
+    .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
+    .filter((d) => d >= 0 && d <= 200);
+  const lag = median(lags);
+  return lag === null ? null : iso(Date.parse(nextPeriodEnd) + lag * DAY);
+}
+
+/**
+ * THE PRIMARY, CHOSEN BY THE RULE AND NOT REVISITED.
+ *
+ * Set from the measured table (relay run recorded in the commit that changed
+ * it). C remains the fallback for a filer with no same-quarter event a year
+ * ago, which is the one case A and B cannot answer at all.
+ */
+export const PRIMARY_ESTIMATOR: EstimatorId = "A";
+
+/**
+ * Estimate the next announcement.
+ *
+ * ── THE CLAMP NEEDS A REAL PERIOD END ────────────────────────────────────
+ * The statutory deadline is measured from the fiscal period end. `eventDate` is
+ * the announcement, so clamping against it was nonsense in the first version —
+ * a deadline measured from the thing being predicted. This takes
+ * `nextPeriodEnd`, and the caller may only pass a MATCHED period; where none
+ * matched there is no deadline to clamp to and no specific date to offer.
+ */
 export function estimateNextReport(
   events: readonly ReportEvent[],
-  nextPeriodEnd: string,
+  nextPeriodEnd: string | null,
   category: unknown,
   annual = false
 ): NextReportEstimate {
-  // ── THE 8-K PATH ONLY ───────────────────────────────────────────────────
-  // The 6-K rule is positional and its backtest tail shows it: every one of
-  // the worst errors measured came from a foreign filer selected that way.
-  // Estimating a date from it would put the weakest evidence behind the most
-  // specific claim on the card.
+  // NO PERIOD END, NO DATE. Every one of the three estimators is arithmetic on
+  // a period end, and the deadline that caps them is measured from one. Without
+  // it there is nothing to add a lag to and nothing to clamp against, so the
+  // honest output is silence — not a date computed from the announcement, which
+  // is the conflation this whole module exists to keep out.
+  if (!nextPeriodEnd) return { kind: "none", reason: "no matched fiscal period end" };
   const usable = events.filter((e) => e.periodEnd && e.basis === "8-K item 2.02");
   const lags = usable
     .map((e) => daysBetween(e.periodEnd!, e.announcedOn))
-    // A NEGATIVE OR ABSURD LAG IS BAD DATA, NOT A HABIT.
     .filter((d) => d >= 0 && d <= 200);
   if (lags.length < REGULARITY_WINDOW) {
     return { kind: "none", reason: `only ${lags.length} prior 8-K item 2.02 announcement(s)` };
@@ -428,35 +513,33 @@ export function estimateNextReport(
 
   const recent = lags.slice(0, REGULARITY_WINDOW);
   const spread = Math.max(...recent) - Math.min(...recent);
-  const lag = median(lags)!;
 
-  const at = (d: number) => new Date(Date.parse(nextPeriodEnd) + d * DAY);
-  const cap = at(deadlineDays(category, annual));
-  const raw = at(lag);
-  const clamped = raw.getTime() > cap.getTime();
+  const primary = runEstimator(PRIMARY_ESTIMATOR, usable, nextPeriodEnd);
+  const predicted = primary ?? runEstimator("C", usable, nextPeriodEnd);
+  if (!predicted) return { kind: "none", reason: "no usable prior announcement" };
 
-  // THE FILER'S HABITUAL TIMING, only when its recent filings AGREE. A filer
-  // that has moved between before-open and after-close has no habit to report,
-  // and inventing one is worse than saying nothing.
+  const cap = new Date(Date.parse(nextPeriodEnd) + deadlineDays(category, annual) * DAY);
+  const clamped = Date.parse(predicted) > cap.getTime();
+
   const timings = usable.slice(0, REGULARITY_WINDOW).map((e) => e.timing);
   const timing = timings.length && timings.every((t) => t === timings[0]) ? timings[0] : null;
 
   if (spread <= REGULAR_SPREAD_DAYS) {
     return {
       kind: "date",
-      date: (clamped ? cap : raw).toISOString().slice(0, 10),
-      medianLagDays: lag,
+      date: clamped ? cap.toISOString().slice(0, 10) : predicted,
+      medianLagDays: median(lags)!,
       spreadDays: spread,
       fromEvents: lags.length,
       clamped,
       timing,
+      estimator: primary ? PRIMARY_ESTIMATOR : "C",
     };
   }
 
-  // NOT REGULAR ENOUGH FOR A DAY — but if every one of the last four lags
-  // still lands in the same calendar month, the month is a claim the data does
-  // support, and it is more use to a reader than silence.
-  const months = new Set(recent.map((d) => at(d).toISOString().slice(0, 7)));
+  const months = new Set(
+    recent.map((d) => iso(Date.parse(nextPeriodEnd) + d * DAY).slice(0, 7))
+  );
   if (months.size === 1) {
     return { kind: "month", month: [...months][0], spreadDays: spread, fromEvents: lags.length, timing };
   }
@@ -470,8 +553,7 @@ export function estimateNextReport(
  *
  * ── WHY THIS COLLAPSES THREE TIMINGS INTO TWO ─────────────────────────────
  * A release before the open and one at 11:00 are both digested by the SAME
- * day's close. Only an after-close release waits for the next session. So the
- * mapping is:
+ * day's close. Only an after-close release waits for the next session:
  *
  *   before-open   on D  ->  D
  *   during-market on D  ->  D
@@ -479,16 +561,15 @@ export function estimateNextReport(
  *
  * AND THAT IS WHY A TIMING MISTAKE IS MOSTLY HARMLESS. The boundary this code
  * can plausibly get wrong is before-open vs during-market — a morning release
- * filed late — and both map to the same session, so the reaction is measured on
- * the right day either way. The boundary that WOULD matter, after-close, is the
- * one the timestamps are least ambiguous about: nothing accepted at 20:30Z is a
- * morning release.
+ * filed late, and the probe could not resolve how often that happens because
+ * NONE of the sampled EX-99.1 exhibits stated a release time. That question is
+ * openly unanswered. It does not need answering: both map to the same session.
+ * The boundary that WOULD matter, after-close, is the one the timestamps are
+ * least ambiguous about — nothing accepted at 20:30Z is a morning release.
  *
- * RETURNS A DATE, NOT AN INDEX. The caller owns the bar series and knows which
- * dates are trading days; this returns the calendar date to look for and the
- * caller advances to the next available bar. A weekend or holiday after-close
- * filing therefore lands on the next session without this function needing a
- * market calendar it would only get wrong.
+ * RETURNS A DATE, NOT AN INDEX. The caller owns the bar series and advances to
+ * the next available bar, so a weekend or holiday filing lands on the next
+ * session without this needing a market calendar it would only get wrong.
  */
 export function reactionDate(event: Pick<ReportEvent, "announcedOn" | "timing">): string {
   if (event.timing !== "after-close") return event.announcedOn;
