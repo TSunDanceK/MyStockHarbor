@@ -398,6 +398,15 @@ const TASKS = {
   },
   // REPORT DATES AND TIMING FROM EDGAR, measured against the stored FMP dates.
   // Credentialled to read the store; fetches EDGAR itself. No writes.
+  // SEEDS THE REPORT-DATES STORE for a preview, using the shipped functions.
+  // A real write, to a key nothing on main reads; the cron overwrites it once
+  // the branch merges.
+  "write-report-dates-seed": {
+    script: "scripts/sec-report-dates-seed.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-report-dates": {
     script: "scripts/sec-report-dates-probe.mjs",
     args: () => [],
