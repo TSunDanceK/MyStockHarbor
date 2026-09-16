@@ -19,6 +19,7 @@
 // `needsReverify` flag, never as an expiry.
 
 import { Redis } from "@upstash/redis";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
@@ -296,6 +297,7 @@ export async function readManifest(): Promise<SecManifest | null> {
 /** THE ONLY WRITE. */
 export async function writeManifest(manifest: SecManifest): Promise<boolean> {
   if (!redis) return false;
+  if (!canWriteSecState()) { noteSecWriteBlocked("writeManifest"); return false; }
   try {
     await redis.set(SEC_MANIFEST_KEY, { ...manifest, updatedAt: Date.now() });
     return true;
@@ -575,6 +577,7 @@ export function reconcileCiks(
  */
 export async function discardFactSets(symbols: string[]): Promise<number> {
   if (!redis || symbols.length === 0) return 0;
+  if (!canWriteSecState()) { noteSecWriteBlocked("discardFactSets"); return 0; }
   try {
     return await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
   } catch (err) {

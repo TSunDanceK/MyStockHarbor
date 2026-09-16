@@ -25,6 +25,7 @@
 // same shape as the cold QUEUE, for the same reason and with the same
 // ownership: the render path enqueues, the job does the work.
 import { Redis } from "@upstash/redis";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { SecManifest } from "./secManifest";
 import { emptyEntry } from "./secManifest";
@@ -59,6 +60,7 @@ export const SEC_COLD_CIK_MAX = 2000;
  */
 export async function recordColdCik(symbol: string, cik: string): Promise<boolean> {
   if (!redis || !symbol || !cik) return false;
+  if (!canWriteSecState()) { noteSecWriteBlocked("recordColdCik"); return false; }
   try {
     // HLEN BEFORE HSET, so a full hash costs one command rather than growing.
     // Racy by a few entries under concurrency, and that is fine: this is a cap
@@ -142,7 +144,7 @@ export async function drainColdCiks(manifest: SecManifest): Promise<ColdCikDrain
     drained.push(symbol);
   }
 
-  if (drained.length) {
+  if (drained.length && canWriteSecState()) {
     try {
       await redis.hdel(SEC_COLD_CIK_KEY, ...drained);
     } catch {

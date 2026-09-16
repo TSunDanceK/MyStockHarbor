@@ -9,6 +9,7 @@ import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type Stor
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
+import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import {
   reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults,
   type Submissions,
@@ -560,7 +561,11 @@ export async function GET(req: NextRequest) {
         // cached HTML is already right, and flushing it would throw away a
         // valid render -- and with it the FMP calls and Redis reads that
         // produced it -- to rebuild the identical page.
-        revalidatePath(`/stock/${symbol}/earnings`);
+        // FLUSHING A PAGE IS A WRITE TO WHAT EVERY VISITOR SEES. A preview
+        // deployment invalidating a production route is the same defect as a
+        // preview storing a fact set, one layer up.
+        if (canWriteSecState()) revalidatePath(`/stock/${symbol}/earnings`);
+        else noteSecWriteBlocked("revalidatePath");
         // COUNTED, so "changed-only" is a number rather than a claim about the
         // shape of the code. The cache-health panel shows it against
         // `attempted`: if those two ever converge, the flush has escaped this
