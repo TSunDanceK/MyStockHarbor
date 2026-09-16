@@ -81,12 +81,21 @@ for (const s of sites) {
 console.log("\n2. the predicate itself");
 {
   const gate = readCodeOnly("lib/server/secWriteGate.ts");
+  const shared = readCodeOnly("lib/server/deployTarget.ts");
   check("it asks whether this IS production, not whether it is preview",
-    /process\.env\.VERCEL_ENV === "production"/.test(gate) &&
-      !/=== "preview"/.test(gate),
+    /process\.env\.VERCEL_ENV === "production"/.test(shared) &&
+      !/=== "preview"/.test(shared),
     'a local run, a container or a CI job sets none of them and is not production either');
+  // ── ONE ENVIRONMENT QUESTION, NOT TWO ──────────────────────────────────
+  // A second gate now needs the same answer. A copy of the comparison here
+  // would be two places for "am I production" to drift apart, which on a
+  // predicate this quiet is a divergence nobody would notice.
+  check("the SEC gate DELEGATES rather than re-reading the environment",
+    /return isProductionDeployment\(\);/.test(gate) &&
+      !/process\.env\.VERCEL_ENV/.test(gate.replace(/secCounterPrefix[\s\S]*$/, "")),
+    "a second copy of the comparison is a second thing to get wrong");
   check("a blocked write is announced rather than silent",
-    /console\.log\(\s*\n?\s*"\[sec\] writes disabled outside production"/.test(gate),
+    /console\.log\(\s*\n?\s*`\[\$\{gate\}\] writes disabled outside production`/.test(shared),
     "a silent no-write would let the cron report success having stored nothing");
   check("the counters get their OWN bucket rather than none",
     /return canWriteSecState\(\) \? base : `\$\{base\}:preview`/.test(gate),

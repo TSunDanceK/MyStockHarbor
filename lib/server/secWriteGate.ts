@@ -24,6 +24,8 @@
 // eye-check sees exactly what production will see; production's state is not
 // a side effect of looking.
 
+import { isProductionDeployment, noteWriteBlocked } from "./deployTarget";
+
 /**
  * True only on the production deployment.
  *
@@ -41,18 +43,12 @@
  * the cron would report success having stored nothing.
  */
 export function canWriteSecState(): boolean {
-  return process.env.VERCEL_ENV === "production";
+  return isProductionDeployment();
 }
 
-let announced = false;
 /** Log the refusal once per process, so a wrongly-configured host is visible. */
 export function noteSecWriteBlocked(site: string): void {
-  if (announced) return;
-  announced = true;
-  console.log(
-    "[sec] writes disabled outside production",
-    JSON.stringify({ site, vercelEnv: process.env.VERCEL_ENV ?? null })
-  );
+  noteWriteBlocked("sec", site);
 }
 
 /**
