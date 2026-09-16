@@ -168,8 +168,12 @@ for (const symbol of targets) {
 }
 
 if (!NAMED.length) {
+  // THE COUNT LAST. A log tail is what gets read, and putting the answer above
+  // a list of forty entries is how the last census had to be run twice.
+  console.log("=".repeat(78));
+  for (const l of stale.slice(0, 25)) console.log(l + "\n");
+  if (stale.length > 25) console.log(`  ... and ${stale.length - 25} more\n`);
   console.log("=".repeat(78));
   console.log(`READ ${read} SYMBOLS from EDGAR (${current} skipped as current, ${noSet} no set, ${noSubs} no submissions)`);
-  console.log(`\nSTORED PERIOD MORE THAN ${STALE_DAYS} DAYS OLD *AND* A NEWER PERIODIC FILING EXISTS: ${stale.length} SYMBOLS\n`);
-  for (const l of stale) console.log(l + "\n");
+  console.log(`STORED PERIOD MORE THAN ${STALE_DAYS} DAYS OLD *AND* A NEWER PERIODIC FILING EXISTS: ${stale.length} of ${targets.length} SYMBOLS`);
 }
