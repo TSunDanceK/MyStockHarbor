@@ -396,6 +396,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // REPORT DATES AND TIMING FROM EDGAR, measured against the stored FMP dates.
+  // Credentialled to read the store; fetches EDGAR itself. No writes.
+  "write-report-dates": {
+    script: "scripts/sec-report-dates-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
