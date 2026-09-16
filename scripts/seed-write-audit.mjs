@@ -81,6 +81,7 @@ console.log("\n3. THE FACT SETS — can MAIN read them without refetching?");
   // two gates: `h` (correctness, discards and refetches) and needsReread
   // (freshness, queues a re-read).
   const sample = factKeys;
+  const lvSymbols = [];
   let lvSeen = 0, hMismatch = [], cMismatch = [], noQuarters = [];
   const lvValues = new Map();
   for (let i = 0; i < sample.length; i += 50) {
@@ -88,13 +89,18 @@ console.log("\n3. THE FACT SETS — can MAIN read them without refetching?");
     recs.forEach((r, j) => {
       const key = sample[i + j];
       if (!r) return;
-      if (r.lv !== undefined) { lvSeen++; lvValues.set(r.lv, (lvValues.get(r.lv) ?? 0) + 1); }
+      if (r.lv !== undefined) {
+        lvSeen++;
+        lvValues.set(r.lv, (lvValues.get(r.lv) ?? 0) + 1);
+        lvSymbols.push(key.split(":").pop());
+      }
       if (r.h !== H) hMismatch.push(`${key} h=${r.h}`);
       if ((r.c ?? null) !== C) cMismatch.push(`${key} c=${r.c ?? "absent"}`);
       if (!Array.isArray(r.quarters)) noQuarters.push(key);
     });
   }
   console.log(`   ${lvSeen} of ${sample.length} sets carry the new \`lv\` field — ${[...lvValues].map(([k, v]) => `lv=${k}: ${v}`).join(", ")}`);
+  console.log(`   they are: ${lvSymbols.sort().join(" ")}`);
   console.log(`   => main's StoredFactSet type has no \`lv\`; an extra JSON field is ignored by readFactSet`);
   console.log(`   h MISMATCH (main would DISCARD and refetch): ${hMismatch.length}`);
   for (const l of hMismatch.slice(0, 5)) console.log(`     ${l}`);
@@ -112,6 +118,7 @@ console.log("\n4. THE MANIFEST — the fields main selects on");
     ((e.w ?? 8) < 12 || (e.y ?? 5) < 6 || (e.c ?? null) !== C));
   console.log(`   ${entries.length} symbols · ${withLv.length} carry \`lv\` (unknown to main, ignored)`);
   console.log(`   lv values: ${[...new Set(withLv.map(([, e]) => e.lv))].join(", ")}`);
+  console.log(`   manifest-stamped: ${withLv.map(([s]) => s).sort().join(" ")}`);
   console.log(`   MAIN's needsReread (w<12 || y<6 || c!==chains) selects: ${staleOnMain.length} symbols`);
   console.log(`   => that is the rewindow queue main would drain; the seed must not have grown it`);
   console.log(`   manifest updatedAt: ${manifest?.updatedAt ? new Date(manifest.updatedAt).toISOString() : "unset"}`);
