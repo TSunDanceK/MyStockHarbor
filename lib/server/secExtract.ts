@@ -296,8 +296,15 @@ export function quartersCovered(days: number): 1 | 2 | 3 | 4 | null {
   return null;
 }
 
-/** Newest filing wins; `filed` first because an accession does not sort by date. */
-function newer(a: FactRow, b: FactRow): FactRow {
+/**
+ * Newest filing wins; `filed` first because an accession does not sort by date.
+ *
+ * EXPORTED so a probe collapsing restatements before comparing two concepts
+ * uses this rule rather than a second one that agrees today. Comparing an old
+ * filing of one concept against a new filing of the other reports a
+ * restatement as a concept disagreement.
+ */
+export function newer(a: FactRow, b: FactRow): FactRow {
   const af = String(a.filed ?? "");
   const bf = String(b.filed ?? "");
   if (af !== bf) return af > bf ? a : b;

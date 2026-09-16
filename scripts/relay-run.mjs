@@ -295,6 +295,17 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // Read-only: the two questions a two-concept chain owes an answer to —
+  // how many derived quarters the same-concept differencing rule NULLS, and,
+  // where a filer publishes both concepts for one period, how far apart they
+  // are. The first is measured twice (the extractor's own refusal notes, and a
+  // run with the same-concept test mutated out) and the probe says so if the
+  // two routes disagree.
+  "sec-capex-concepts": {
+    script: "scripts/sec-capex-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   // THE SAME PROBE, AIMED AT THE OTHER UNMEASURED CHAIN EDIT — and it is a
   // SEPARATE TASK rather than an input because relay.yml's inputs live on the
   // DEFAULT BRANCH, so adding FIELD/DROP to the dispatch form would cost the

@@ -35,10 +35,20 @@ const SEC_FACTS_PREFIX = (
     .match(/SEC_FACTS_PREFIX = "([^"]+)"/) ?? []
 )[1];
 if (!SEC_FACTS_PREFIX) { console.error("FATAL: could not read SEC_FACTS_PREFIX"); process.exit(2); }
+// THE SHIPPED VIEW BUILDER IS LIFTED WITH THEM, not re-implemented here. The
+// question below — which of these filers still renders a quarterly table — is
+// answered by calling buildSecEarningsView on the stored set and reading its
+// `tableBasis`, so the census reports what the PAGE does. A census that applied
+// the 548-day rule itself would agree with the page only until one of them
+// changed, and the disagreement would show up as a wrong report, not an error.
+const strip = (f) =>
+  readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   [
     fs.readFileSync("lib/server/secFields.ts", "utf8"),
-    readCodeOnly("lib/server/secExtract.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, ""),
+    strip("lib/server/secExtract.ts"),
+    strip("lib/server/secFactCodec.ts"),
+    strip("lib/server/secEarningsView.ts"),
   ].join("\n")
 );
 const MIN_PERIOD_FIELDS = Number(
@@ -148,10 +158,40 @@ console.log(`\nNEWEST PERIOD IS A YEAR, NOT A QUARTER, counted in SYMBOLS:`);
   for (const [sym, set] of Object.entries(setsBySymbol)) {
     const nq = (set.quarters ?? [])[0]?.e;
     const ny = (set.years ?? [])[0]?.e;
-    if (nq && ny && ny > nq) affected.push(`${sym}(${nq}->${ny})`);
+    if (nq && ny && ny > nq) affected.push({ sym, nq, ny });
   }
   console.log(`  ${affected.length} SYMBOLS of ${Object.keys(setsBySymbol).length} stored`);
-  console.log("  " + (affected.join(" ") || "(none)"));
+  console.log("  " + (affected.map((a) => `${a.sym}(${a.nq}->${a.ny})`).join(" ") || "(none)"));
+
+  // ── AND OF THOSE, WHICH STILL RENDER A QUARTERLY TABLE ──────────────────
+  //
+  // A newer annual period does not by itself stop the quarters being recent:
+  // AZN's newest quarter is six months behind its newest year and that table
+  // is current. A filer that stopped filing 10-Qs is years behind and its
+  // table was a decade old under a FY2025 headline. STALE_QUARTER_DAYS splits
+  // them, and `tableBasis` below comes from the shipped view builder rather
+  // than from this file re-deciding.
+  const kept = [];
+  const dropped = [];
+  const nullView = [];
+  for (const { sym, nq, ny } of affected) {
+    let v = null;
+    try { v = sec.buildSecEarningsView(setsBySymbol[sym]); } catch { v = null; }
+    if (!v) { nullView.push(sym); continue; }
+    const age = Math.round((Date.parse(ny) - Date.parse(nq)) / 86400000);
+    (v.tableBasis === "quarter" ? kept : dropped).push(`${sym}(${age}d)`);
+  }
+  console.log(
+    `\n  OF THOSE, the quarterly table (threshold ${sec.STALE_QUARTER_DAYS} days):`
+  );
+  console.log(`    KEPT    ${kept.length} SYMBOLS: ${kept.join(" ") || "(none)"}`);
+  console.log(`    DROPPED ${dropped.length} SYMBOLS: ${dropped.join(" ") || "(none)"}`);
+  if (nullView.length) {
+    // NOT FOLDED INTO EITHER COLUMN. A set the view builder refuses renders no
+    // earnings page at all, and counting it as "dropped" would read as the
+    // staleness rule acting on a filer it never saw.
+    console.log(`    NO VIEW ${nullView.length} SYMBOLS (the builder returns null): ${nullView.join(" ")}`);
+  }
 }
 
 console.log(`\nSTORED QUARTER WINDOW, counted in SYMBOLS: ${JSON.stringify(windows)}`);
