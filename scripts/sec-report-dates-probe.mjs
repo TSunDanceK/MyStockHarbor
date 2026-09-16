@@ -33,6 +33,26 @@ const sec = await lift(
     "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, daysBetween, median,"
     + " deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR };"
 );
+// ── THE SAME MODULE, DELIBERATELY LEAKED ─────────────────────────────────
+//
+// THE LEAK TEST HAS TO PERTURB THE INPUT THE PRIMARY ACTUALLY CONSUMES. The
+// first version restored the target into the event list and measured the
+// MEDIAN LAG — which tested C. With A as primary the median is not read at all,
+// so that mutation changes nothing and the test reports "identical", which
+// reads as a leak and is in fact the mutation missing its target.
+//
+// A consumes exactly one thing: the SAME QUARTER A YEAR AGO. So the leak is
+// built where it would actually live — widen that window to admit a gap of 0
+// and the target qualifies as its own year-ago event, making the prediction the
+// answer. Every error must collapse to 0. If the honest run is anywhere near
+// that, the honest run is leaking.
+const secLeaky = await lift(
+  strip("lib/server/secReportDates.ts")
+    .replace(/export (const|function|type)/g, "$1")
+    .replace("if (gap < 330 || gap > 400) continue;", "if (gap < 0 || gap > 400) continue;") +
+    "\nexport { runEstimator };\n// leaky"
+);
+
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
   [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
@@ -269,6 +289,10 @@ for (const symbol of targets) {
       for (const id of ["A", "B", "C"]) {
         abc[id] = clampTo(sec.runEstimator(id, prior, target.periodEnd));
       }
+      // THE PRIMARY'S OWN LEAK ARM: the target restored, and the year-ago
+      // window widened so it counts as its own year-ago event.
+      const leakA = clampTo(sec.runEstimator("A", [target, ...prior], target.periodEnd)) ;
+      const leakAWide = clampTo(secLeaky.runEstimator("A", [target, ...prior], target.periodEnd));
 
       const err = (d) => (d ? Math.abs(sec.daysBetween(d, target.announcedOn)) : null);
       backtest.push({
@@ -284,6 +308,8 @@ for (const symbol of targets) {
         estB: err(abc.B),
         estC: err(abc.C),
         hasYearAgo: abc.A !== null,
+        leakA: err(leakA),
+        leakAWide: err(leakAWide),
         clamped: withTrueEnd.kind === "date" && withTrueEnd.clamped,
         priorN: prior.length,
         lags: prior.slice(0, 6).map((e) => sec.daysBetween(e.periodEnd, e.announcedOn)),
@@ -365,6 +391,10 @@ console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
   const cols = [
     ["method (lag only, true period end)", dateRows.map((b) => b.lagOnly)],
     ["method (end to end, derived end)  ", dateRows.map((b) => b.endToEnd)],
+    // NOT AN INDEPENDENT BASELINE ANY MORE. The three-way comparison below
+    // chose A, and A *is* this rule, so these two columns are the same numbers
+    // by construction. It is left in place because removing it would quietly
+    // erase the fact that the method lost to it and the baseline was adopted.
     ["baseline: same quarter last year  ", dateRows.map((b) => b.b1)],
     ["baseline: period end + 35 days    ", dateRows.map((b) => b.b2)],
     ["LEAKY (target in its own median)  ", dateRows.map((b) => b.leaky)],
@@ -428,40 +458,58 @@ console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
       `${sec.PRIMARY_ESTIMATOR === order[0] ? "" : "  <-- MISMATCH, update it"}`);
   }
 
-  // ── THE LEAK TEST, COMPARED PROPERLY ─────────────────────────────────
+  // ── THE LEAK TEST, AIMED AT THE ESTIMATOR THAT SHIPS ─────────────────
   //
-  // TWO FAULTS IN THE FIRST VERSION, both of which would have let a leak pass:
+  // THREE FAULTS SO FAR, EACH OF WHICH WOULD HAVE LET A LEAK PASS:
   //
   //  (1) IT COMPARED DIFFERENT POPULATIONS. Restoring the target changes which
-  //      filers clear the regularity gate, so the leaky column was computed
-  //      over 42 symbols and the honest one over 44 — different sets, compared
-  //      as if they were one.
-  //  (2) IT COMPARED MEDIANS ONLY. At errors of 0-3 days the median is coarse
-  //      enough to tie while every individual prediction moved.
+  //      filers clear the regularity gate, so the two columns covered
+  //      different symbol sets and were compared as if they were one.
+  //  (2) IT COMPARED MEDIANS ONLY. At errors of 0-3 days a median ties while
+  //      every individual prediction moves.
+  //  (3) IT PERTURBED THE WRONG INPUT — the fault this run exposed. Putting
+  //      the target back in the event list changes the MEDIAN LAG, which is
+  //      estimator C. A is what ships, and A never reads the median, so the
+  //      mutation left every prediction untouched and the test called that
+  //      "suspicious". A mutation that cannot move the thing under test is not
+  //      a weak test, it is no test.
   //
-  // So: intersect, then compare PER SYMBOL. A leak shows up as the leaky
-  // prediction being better on symbol after symbol, which counting says and a
-  // median cannot.
-  const paired = dateRows.filter((b) => b.lagOnly !== null && b.leaky !== null);
-  const better = paired.filter((b) => b.leaky < b.lagOnly).length;
-  const worse = paired.filter((b) => b.leaky > b.lagOnly).length;
-  const same = paired.length - better - worse;
-  const mean = (xs) => (xs.length ? xs.reduce((a, c) => a + c, 0) / xs.length : NaN);
+  // So there are now two arms, each naming what it perturbs.
+  const mean = (xs) => { const v = xs.filter((x) => x !== null); return v.length ? v.reduce((a, c) => a + c, 0) / v.length : NaN; };
   console.log("");
-  console.log(`   LEAK TEST, on the ${paired.length} SYMBOLS both columns cover:`);
-  console.log(`     per symbol: leaky better ${better} · worse ${worse} · identical ${same}`);
-  console.log(`     mean error: honest ${mean(paired.map((b) => b.lagOnly)).toFixed(2)}d ` +
-    `vs leaky ${mean(paired.map((b) => b.leaky)).toFixed(2)}d`);
-  console.log(`     median:     honest ${med(paired.map((b) => b.lagOnly))}d vs leaky ${med(paired.map((b) => b.leaky))}d`);
-  // A REAL LEAK MAKES THE LEAKY COLUMN BETTER ALMOST EVERYWHERE, because the
-  // answer is sitting in its own training set. A handful of moves either way is
-  // one extra sample shifting a median, which is what an honest run looks like.
-  const verdict = better > paired.length * 0.5
-    ? "leaky wins on most symbols — the honest run is STILL LEAKING"
-    : better === 0 && worse === 0
-      ? "IDENTICAL on every symbol — suspicious: the target may still be in the median"
-      : "leaky does NOT dominate — consistent with the honest run being clean";
-  console.log(`   => ${verdict}`);
+  {
+    // ARM 1 — C's input: the target restored to the median.
+    const paired = dateRows.filter((b) => b.estC !== null && b.leaky !== null);
+    const better = paired.filter((b) => b.leaky < b.estC).length;
+    const worse = paired.filter((b) => b.leaky > b.estC).length;
+    console.log(`   LEAK ARM 1 — C's median, target restored (${paired.length} SYMBOLS both cover):`);
+    console.log(`     per symbol: leaky better ${better} · worse ${worse} · identical ${paired.length - better - worse}`);
+    console.log(`     mean error: honest C ${mean(paired.map((b) => b.estC)).toFixed(2)}d vs leaky ${mean(paired.map((b) => b.leaky)).toFixed(2)}d`);
+    console.log(`     => ${better > paired.length * 0.5 ? "leaky wins on most symbols — C's honest run LEAKS" : "leaky does not dominate — C's honest run is clean"}`);
+  }
+  {
+    // ARM 2 — A's input: the target restored AND the year-ago window widened to
+    // gap 0, so the target is its own year-ago event.
+    const rows2 = dateRows.filter((b) => b.estA !== null);
+    const restored = rows2.filter((b) => b.leakA !== null);
+    const widened = rows2.filter((b) => b.leakAWide !== null);
+    const zeros = widened.filter((b) => b.leakAWide === 0).length;
+    console.log("");
+    console.log(`   LEAK ARM 2 — A's year-ago event, the input that actually ships:`);
+    console.log(`     target merely restored: identical to honest on ` +
+      `${restored.filter((b) => b.leakA === b.estA).length} of ${restored.length} SYMBOLS ` +
+      `(expected — a gap of 0 is outside the 330-400 day window, so A cannot see it)`);
+    console.log(`     window widened to admit it: mean ${mean(widened.map((b) => b.leakAWide)).toFixed(2)}d, ` +
+      `exact on ${zeros} of ${widened.length} SYMBOLS`);
+    console.log(`     honest A:                   mean ${mean(rows2.map((b) => b.estA)).toFixed(2)}d, ` +
+      `exact on ${rows2.filter((b) => b.estA === 0).length} of ${rows2.length} SYMBOLS`);
+    // THE MUTATION MUST BITE. If widening the window does not collapse the
+    // error to zero, the arm is not reaching A's input either and says nothing.
+    const bites = zeros === widened.length && widened.length > 0;
+    console.log(`     => ${bites ? "the mutation BITES (every error 0 when the answer is admitted)" : "!! the mutation did NOT collapse to 0 — this arm proves nothing"}`);
+    console.log(`     => honest A is ${mean(rows2.map((b) => b.estA)).toFixed(2)}d from that floor — ` +
+      `${bites && mean(rows2.map((b) => b.estA)) > 0.5 ? "NOT leaking" : "too close to the floor to distinguish"}`);
+  }
   // ── DOES IT BEAT THE BASELINES? SAID OUT LOUD ────────────────────────
   {
     const pairs = dateRows.filter((b) => b.lagOnly !== null && b.b1 !== null);
@@ -469,6 +517,9 @@ console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
     const loseB1 = pairs.filter((b) => b.lagOnly > b.b1).length;
     console.log("");
     console.log(`   vs SAME QUARTER LAST YEAR (${pairs.length} SYMBOLS): method better ${beatB1} · worse ${loseB1} · tied ${pairs.length - beatB1 - loseB1}`);
+    console.log("      (all tied is the expected result, not a coincidence: the pre-declared");
+    console.log("       comparison chose A, and A is this baseline. The first method lost to");
+    console.log("       it and was replaced by it.)");
     const pairs2 = dateRows.filter((b) => b.lagOnly !== null && b.b2 !== null);
     const beatB2 = pairs2.filter((b) => b.lagOnly < b.b2).length;
     console.log(`   vs PERIOD END + 35 DAYS (${pairs2.length} SYMBOLS): method better ${beatB2} · worse ${pairs2.filter((b) => b.lagOnly > b.b2).length}`);
