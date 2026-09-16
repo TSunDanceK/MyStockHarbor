@@ -464,6 +464,35 @@ It is computed by the **cron**, from the submissions payload already in hand, an
 stored. The page reads it. Deriving it on a render would mean fetching EDGAR from
 a page render, which this pipeline does not do.
 
+### 11e. The censuses
+
+**Five-year card rows change: 3 of 786 SYMBOLS** (relay run 35140905294). No
+symbol's snapshot anchor, `basis` or `tableBasis` changes — every affected
+filer's newest QUARTER already sat at or after the trailing year that was being
+dropped, so `latest` was the quarter either way.
+
+```
+AMCR   drops 2 of 5 year rows: 2024-09-28 · 2023-09-30   (fiscal year end 2026-06-30)
+AMZN   drops 5 of 6 year rows: 2026-06-30 · 2026-03-31 · 2025-09-30 ·
+                               2025-06-30 · 2025-03-31   (fiscal year end 2025-12-31)
+                               newest year row 2026-06-30 -> 2025-12-31
+BG     drops 2 of 6 year rows: 2026-03-31 · 2025-03-31   (fiscal year end 2025-12-31)
+                               newest year row 2026-03-31 -> 2025-12-31
+```
+
+AMCR's two are September ends on a June filer; AMZN's and BG's are March/June/
+September ends on December filers. Every one of them is a trailing twelve months.
+
+**The notice shows on 41 SYMBOLS today** (relay run 35141767176, all 786
+screened, 500 with a stored fact set). Every one is a June quarter announced in
+late July and still absent from companyfacts — ABT, BG, MAA, NEE, PYPL, SOJE
+among them. AAPL, AMZN and AMCR do not show it, which is the control: their
+figures are current.
+
+The 41 is a subset of §10c's 58: that count included 20-F filers with no Item
+2.02 8-K at all (excluded here by design) and symbols whose cadence could not be
+read.
+
 ### 11d. Recorded, not built — reading a filing's own XBRL
 
 When companyfacts lags a filed 10-Q by more than ~30 days, the figures exist in
