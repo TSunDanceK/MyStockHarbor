@@ -56,9 +56,12 @@ const { map: tickerMap } = tick.parseTickerFile(
 );
 
 const SYMBOLS = (process.env.SYMBOLS || "").split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+// NO SLICE. The first version took the first sixty alphabetically, which is
+// fine for a preview and useless for a count — "how many SYMBOLS show the
+// notice" cannot be answered from the As.
 const targets = SYMBOLS.length
   ? SYMBOLS
-  : Object.entries(manifest.symbols).filter(([, e]) => e.cik).map(([s]) => s).sort().slice(0, 60);
+  : Object.entries(manifest.symbols).filter(([, e]) => e.cik).map(([s]) => s).sort();
 console.log(`${targets.length} SYMBOLS\n`);
 
 let lastAt = 0;
@@ -75,6 +78,7 @@ const fetchJson = async (url) => {
 const TODAY = new Date().toISOString().slice(0, 10);
 const tally = { pending: 0, written: 0, noFacts: 0, noSubs: 0, date: 0, month: 0, none: 0, noEvents: 0 };
 const examples = [];
+const pendingList = [];
 for (const symbol of targets) {
   const cik = manifest.symbols[symbol]?.cik ?? tickerMap.get(symbol)?.cik;
   if (!cik) continue;
@@ -104,7 +108,10 @@ for (const symbol of targets) {
   });
   tally.written++;
   tally[next.kind]++;
-  if (pending) tally.pending++;
+  if (pending) {
+    tally.pending++;
+    pendingList.push(`${symbol.padEnd(6)} quarter ended ${pending.periodEnd}, announced ${pending.announcedOn}`);
+  }
   if (!events.length) tally.noEvents++;
   if (examples.length < 14) {
     examples.push(
@@ -119,6 +126,10 @@ for (const symbol of targets) {
 }
 
 console.log("=".repeat(76));
-console.log(JSON.stringify(tally, null, 2));
-console.log("\nEXAMPLES (SYMBOLS):");
+console.log("EXAMPLES (SYMBOLS):");
 for (const e of examples) console.log(`  ${e}`);
+console.log(`\nSYMBOLS SHOWING "announced, not yet in the SEC feed": ${pendingList.length}`);
+for (const l of pendingList.slice(0, 40)) console.log(`  ${l}`);
+if (pendingList.length > 40) console.log(`  ... and ${pendingList.length - 40} more`);
+console.log("");
+console.log(JSON.stringify(tally, null, 2));
