@@ -274,6 +274,28 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
 }
 
 /**
+ * Days the exhaustion counter is kept. A fortnight answers "is this regular?"
+ * and "did the migration week distort it?" without keeping a year of keys.
+ */
+export const SEC_COLD_EXHAUSTION_TTL_S = 14 * 86400;
+
+/** UTC day key for the exhaustion counter, so the page and the writer agree. */
+export const coldExhaustionKey = (d = new Date()) =>
+  `msh:sec:cold-exhausted:v1:${d.toISOString().slice(0, 10)}`;
+
+/** One INCR, best effort, only ever called when the budget is already spent. */
+async function bumpExhaustion(): Promise<void> {
+  if (!redis) return;
+  try {
+    const key = coldExhaustionKey();
+    const n = await redis.incr(key);
+    if (n === 1) await redis.expire(key, SEC_COLD_EXHAUSTION_TTL_S);
+  } catch {
+    // Counting a refusal must never turn it into a throw.
+  }
+}
+
+/**
  * The cold-FETCH budget. Fails OPEN, like every other Redis guard here.
  *
  * COUNTS FETCHES, NOT REQUESTS, and that distinction survives the change below:
@@ -290,18 +312,36 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
  * but a 500, measured (see the caveat at the top of this file). Per-IP capping
  * and ISR cannot both hold here.
  *
- * WHAT IS LOST: a single actor can spend the whole site's minute. The bucket
- * bounds total external work, which is the cost that matters, but it does not
- * isolate one client from another, so a burst from one address can push a real
- * visitor's cold symbol onto the queue-and-pending path.
+ * WHAT IS LOST HERE: a single actor can spend the whole site's minute. The
+ * bucket bounds total external work, which is the cost that matters, but it
+ * does not isolate one client from another.
  *
- * WHAT WOULD RESTORE IT: middleware. middleware.ts already runs on every
- * /stock/* request with Redis in hand (dailyPageLimit), and headers are
- * ordinary there. It would have to tell a cold request from a warm one before
- * counting -- otherwise it is the request cap that is ruled out -- which costs
- * one EXISTS on the fact-set key per earnings REQUEST, not per render, on a
- * Redis billed by command count. Not taken unilaterally; recorded in
- * claude/earnings-page-on-sec-2026-09-15.md as the owner's call.
+ * ── AND THE PER-IP BOUND IS REAL, IT IS JUST NOT IN THIS FILE ──────────────
+ *
+ * It is enforced at the edge, before a request reaches any of this code:
+ *
+ *   VERCEL FIREWALL: /stock — 25 requests / 600s per IP — Challenge
+ *
+ * That is the answer to "what stops one address spending the site's minute",
+ * and it is a better answer than middleware would have been: it costs zero
+ * Redis commands, it runs before the lambda, and it cannot be defeated by a
+ * bug in this file. A burst from one address is challenged at 25 requests in
+ * ten minutes, so it cannot reach 20 cold fetches in one minute at all.
+ *
+ * ── SO THERE IS DELIBERATELY NO PER-IP LOGIC IN THIS CODEBASE ─────────────
+ *
+ * The middleware version -- one EXISTS on the fact-set key per earnings
+ * REQUEST, on a Redis billed by command count -- was considered and REFUSED,
+ * not deferred. Adding per-IP counting here would duplicate a rule the edge
+ * already enforces, at a per-request cost, in the one place where reading the
+ * client address (`headers()`) turns this ISR route into a 500.
+ *
+ * TWO THINGS MUST STAY TRUE and scripts/check-sec-rate-limits.mjs asserts both:
+ * the site-wide bucket below still exists and still refuses past its cap, and
+ * the firewall line above still matches the one in
+ * claude/sec-rate-limits-2026-09-16.md. A rule that lives outside the repo is a
+ * rule that silently stops being true, so the repo keeps a copy and the copy is
+ * checked against itself.
  */
 async function claimColdFetch(symbol: string): Promise<boolean> {
   if (!redis) return true;
@@ -328,6 +368,15 @@ async function claimColdFetch(symbol: string): Promise<boolean> {
         `[sec-cold] rate budget exhausted: ${n} cold fetches this minute ` +
           `(cap ${SEC_COLD_FETCHES_PER_MINUTE}) — ${symbol} queued instead`
       );
+      // ── AND COUNTED, BECAUSE A LOG LINE IS NOT A MEASUREMENT ─────────────
+      //
+      // The paragraph above says this line IS the decision procedure for
+      // whether per-IP isolation ever has a case: "if it appears regularly in
+      // production, there is a pattern". Nobody greps a week of Vercel logs to
+      // answer that. One INCR on a DAY key, on the exhausted path ONLY, makes
+      // it a number the cache-health page can show — so the normal case still
+      // costs exactly the one INCR above and nothing else.
+      await bumpExhaustion();
       return false;
     }
     return true;

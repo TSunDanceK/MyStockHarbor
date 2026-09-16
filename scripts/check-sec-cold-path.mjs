@@ -141,11 +141,72 @@ check("a timeout enqueues and returns pending — it never rethrows",
 
 console.log("\n4. the budget counts FETCHES, not requests");
 
-check("the counter is incremented inside claimColdFetch only",
-  (code.match(/redis\.incr\(/g) ?? []).length === 1 &&
-    code.indexOf("redis.incr(") > code.indexOf("async function claimColdFetch"),
-  "a counter incremented per request would 403 a reader of cached pages — " +
-    "which happened on /insights/videos and is on record");
+// ── COUNTING THE RIGHT THING, NOT COUNTING ONCE ──────────────────────────
+// This asserted `redis.incr` appeared EXACTLY ONCE in the file, which was a
+// proxy for the property and not the property. It broke the moment a SECOND,
+// unrelated counter arrived — the exhaustion tally, which fires only when the
+// budget is ALREADY spent and so cannot possibly run per request. The proxy
+// would have had to be relaxed or the counter dropped, and neither is about
+// what matters.
+//
+// WHAT MATTERS: every INCR in this module sits inside a function reached only
+// when a FETCH is about to happen or has just been refused — never on the path
+// a reader of a cached page takes. Asserted by locating each INCR and naming
+// the function it is in, so a new one in resolveFactSetForRender fails and a
+// new one inside the budget does not.
+{
+  const FETCH_SCOPED = ["claimColdFetch", "bumpExhaustion"];
+  const spans = FETCH_SCOPED.map((fn) => {
+    const start = code.indexOf(`function ${fn}(`);
+    if (start < 0) return { fn, start: -1, end: -1 };
+    // To the next top-level declaration, which is where the function ends for
+    // the purpose of "is this INCR inside it".
+    const next = code.indexOf("\nasync function ", start + 1);
+    const next2 = code.indexOf("\nfunction ", start + 1);
+    const ends = [next, next2, code.length].filter((n) => n > start);
+    return { fn, start, end: Math.min(...ends) };
+  });
+  check("every fetch-scoped counter function was found",
+    spans.every((sp) => sp.start >= 0), spans.map((sp) => `${sp.fn}:${sp.start}`).join(" "));
+  const incrs = [...code.matchAll(/redis\.incr\(/g)].map((m) => m.index);
+  check("this module increments something at all, or the assertion is vacuous",
+    incrs.length > 0, `${incrs.length} INCR site(s)`);
+  const stray = incrs.filter((i) => !spans.some((sp) => i > sp.start && i < sp.end));
+  check("every INCR is inside a fetch-scoped function, never on the read path",
+    stray.length === 0,
+    stray.length
+      ? `${stray.length} INCR(s) outside ${FETCH_SCOPED.join("/")} — a counter incremented ` +
+        `per request would 403 a reader of cached pages, which happened on /insights/videos`
+      : `${incrs.length} INCR(s), all inside ${FETCH_SCOPED.join("/")}`);
+  check("...and the budget's own INCR is one of them",
+    incrs.some((i) => i > spans[0].start && i < spans[0].end),
+    "an assertion that passed with claimColdFetch counting nothing would be worthless");
+
+  // MUTATION: an INCR added on the READ path — the exact regression, a counter
+  // that ticks for a visitor reading a cached page. Judged by the SAME span
+  // arithmetic above, so a pass here would mean the arithmetic is blind.
+  {
+    const mutated = code.replace(
+      'const stored = await readFactSet(clean);',
+      'await redis.incr("msh:sec:requests");\n  const stored = await readFactSet(clean);'
+    );
+    check("the read-path mutation actually applied", mutated !== code);
+    const mSpans = FETCH_SCOPED.map((fn) => {
+      const start = mutated.indexOf(`function ${fn}(`);
+      const ends = [mutated.indexOf("\nasync function ", start + 1),
+        mutated.indexOf("\nfunction ", start + 1), mutated.length].filter((n) => n > start);
+      return { start, end: Math.min(...ends) };
+    });
+    const mStray = [...mutated.matchAll(/redis\.incr\(/g)]
+      .map((m) => m.index)
+      .filter((i) => !mSpans.some((sp) => i > sp.start && i < sp.end));
+    check("MUTATION: an INCR on the read path is caught",
+      mStray.length === 1,
+      mStray.length
+        ? `caught ${mStray.length}`
+        : "(not caught — the span arithmetic cannot see the regression it exists for)");
+  }
+}
 check("it fails OPEN", /catch \{\s*return true;\s*\}/.test(code),
   "a Redis outage must not take the page down");
 check("the bucket outlives its window so a burst cannot roll into a fresh one",
