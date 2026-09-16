@@ -576,6 +576,32 @@ export const RENDERED_QUARTERS = 8;
 export const RENDERED_YEARS = 5;
 
 /**
+ * How stale the newest stored QUARTER may be before the quarterly table stops
+ * rendering, in days from the newest stored period of any kind.
+ *
+ * ── WHAT THIS STOPS ───────────────────────────────────────────────────────
+ * Anchoring the snapshot on the newest period by DATE fixed one defect and
+ * exposed another underneath it. A filer that stopped filing 10-Qs years ago
+ * still has those quarters in the store, so the page showed a FY2025 snapshot
+ * above a table of quarters from another decade — CNI's newest is 2009-09-30,
+ * BIDU's 2018, ESLT's 2016, IAG's 2017. Individually every row was true; the
+ * page as a whole said "here is this company's recent quarterly history" and
+ * meant 2009.
+ *
+ * EIGHTEEN MONTHS, because the thing being tolerated is a REPORTING CADENCE,
+ * not a delay. A half-yearly filer's newest quarter is ~6 months behind its
+ * newest annual period and that table is current; a filer that has genuinely
+ * stopped is years behind. There is a wide empty gap between those two cases
+ * and the threshold sits in it — AZN at 184 days keeps its table with a year
+ * of room to spare.
+ *
+ * NOT A JUDGEMENT ABOUT THE FILER. The quarters are still stored, still read,
+ * and still serve as comparators; what stops is presenting them as a recent
+ * history under a much newer headline.
+ */
+export const STALE_QUARTER_DAYS = 548;
+
+/**
  * ── ONE READER, TWO ANCHORS ───────────────────────────────────────────────
  *
  * This used to hardcode `set.quarters` and return null when a filer had none,
@@ -608,10 +634,12 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   //               snapshot, the score and the Quality of Earnings card are
   //               claims about "the latest reported period", so they follow
   //               this, and `basis` takes its wording from it.
-  //   tableRows   quarters when the filer has any, years otherwise. The
-  //               quarterly table is a table OF QUARTERS; a newer annual
-  //               period does not stop those quarters existing, so it still
-  //               renders below.
+  //   tableBasis  quarters when the filer has any AND they keep up with what
+  //               it is still publishing, years otherwise. A newer annual
+  //               period does not stop recent quarters existing, so AZN's
+  //               table stays; a series that stopped a decade ago is not a
+  //               "recent quarterly history" and stops rendering. See
+  //               STALE_QUARTER_DAYS.
   //
   // COLLAPSING THESE BACK INTO ONE FIELD IS THE BUG. The old `annualOnly` did
   // both jobs, so making the snapshot annual for AZN would have deleted its
@@ -624,14 +652,32 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const latest = (yearIsNewer ? newestYear : newestQuarter)!;
   const basis: PeriodBasis = yearIsNewer ? "year" : "quarter";
 
-  // The list the TABLES walk. Not the anchor list: see above.
-  const q = set.quarters.length ? set.quarters : set.years;
-  if (!q.length) return null;
   // Kept for the places that ask "does this filer publish quarters at all" —
-  // the gap badge, which is a quarterly idea, and the earnings-history table.
+  // the gap badge, which is a quarterly idea.
   const annualOnly = set.quarters.length === 0;
+
+  // ── AND A TABLE OF QUARTERS HAS TO BE ABOUT RECENT QUARTERS ───────────────
+  //
+  // Measured from the newest stored period of ANY kind, not from today: the
+  // question is whether the quarterly series keeps up with what the filer is
+  // still publishing, and a set that is simply old should not lose its table
+  // for being old. See STALE_QUARTER_DAYS.
+  const quarterAgeDays =
+    newestQuarter && latest
+      ? Math.round((Date.parse(latest.e) - Date.parse(newestQuarter.e)) / 86400000)
+      : null;
+  const quartersAreCurrent =
+    !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;
+
   // The kind of period the TABLES walk, which is not always the anchor's kind.
-  const tableBasis: PeriodBasis = annualOnly ? "year" : "quarter";
+  const tableBasis: PeriodBasis = quartersAreCurrent ? "quarter" : "year";
+
+  // The list the TABLES walk. Not the anchor list: see above. A stale quarterly
+  // series falls back to years here as well as in the wording — otherwise the
+  // page would say "fiscal year" over rows that are still quarters.
+  const q = quartersAreCurrent ? set.quarters : set.years;
+  if (!q.length) return null;
+
   // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
   // old `q[4]` printed on AZN and why there is no nearest-row fallback.
   // SEARCHED IN THE LIST `latest` CAME FROM. When the anchor is the year and
