@@ -87,7 +87,6 @@ const PANEL = {
   "after-close": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
   "before-open": ["JPM", "KO", "PG", "CAT", "MMM"],
 };
-const EASTERN_OFFSET_HOURS = 4; // EDT; the panel's filings are all spring-autumn
 
 console.log("=".repeat(76));
 console.log("1. IS acceptanceDateTime EASTERN WALL TIME, OR UTC?");
@@ -103,25 +102,38 @@ console.log("1. IS acceptanceDateTime EASTERN WALL TIME, OR UTC?");
       const events = sec.reportEvents(subs);
       const ev = events[0];
       if (!ev) continue;
+      // The RAW string behind that event, for the control arm.
+      const recent = subs.filings.recent;
+      const i = recent.accessionNumber.indexOf(ev.accession);
+      const raw = i >= 0 ? recent.acceptanceDateTime[i] : null;
+      if (!raw) continue;
       checked++;
-      // As shipped: digits at face value, Eastern.
-      const asEastern = ev.timing;
-      // The alternative: the same instant read as UTC, then converted to ET.
-      const [h, m] = ev.announcedAt.split(":").map(Number);
-      const utcMinutes = ((h - EASTERN_OFFSET_HOURS + 24) % 24) * 60 + m;
-      const asUtc = sec.timingFor(utcMinutes);
+      // AS SHIPPED: the raw instant converted UTC -> America/New_York.
+      const asUtc = ev.timing;
+      // THE ALTERNATIVE THIS REPLACED: the digits taken at face value as
+      // Eastern. Kept as the control so the panel keeps DISCRIMINATING — a
+      // probe that only ever runs the shipped reading cannot tell you it is
+      // right, only that it is consistent with itself.
+      const rawUtc = String(raw).match(/[T ](\d{2}):(\d{2})/);
+      const asEastern = rawUtc
+        ? sec.timingFor(Number(rawUtc[1]) * 60 + Number(rawUtc[2]))
+        : null;
       if (asEastern === expected) score["as-eastern"]++;
       if (asUtc === expected) score["as-utc"]++;
       console.log(
-        `  ${symbol.padEnd(6)} ${ev.announcedOn} ${ev.announcedAt}  expected ${expected.padEnd(13)}` +
-          ` as-eastern=${asEastern.padEnd(13)} as-utc=${asUtc}`
+        `  ${symbol.padEnd(6)} raw ${String(raw).slice(11, 16)}Z -> ${ev.announcedAt} ET  ` +
+          `expected ${expected.padEnd(13)} as-utc(shipped)=${asUtc.padEnd(13)} as-eastern=${asEastern}`
       );
     }
   }
   console.log(`\n  PANEL: ${checked} filers checked`);
   console.log(`    reading the digits as EASTERN puts ${score["as-eastern"]}/${checked} in the expected bucket`);
   console.log(`    reading them as UTC and converting puts ${score["as-utc"]}/${checked} there`);
-  console.log(`  => the shipped reading is ${score["as-eastern"] >= score["as-utc"] ? "SUPPORTED" : "CONTRADICTED"} by this panel\n`);
+  console.log(`  => the shipped reading (UTC -> ET) is ${score["as-utc"] > score["as-eastern"] ? "SUPPORTED" : "NOT SUPPORTED"} by this panel`);
+  if (score["as-utc"] < checked) {
+    console.log(`  !! ${checked - score["as-utc"]} filer(s) did NOT land in the expected bucket under the shipped reading`);
+  }
+  console.log("");
 }
 
 // ── 2-4. THE CORPUS ──────────────────────────────────────────────────────
