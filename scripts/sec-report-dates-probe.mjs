@@ -355,12 +355,51 @@ console.log("3. NEXT-DATE BACKTEST — leak closed, with baselines");
     const within = (d) => v.filter((e) => e <= d).length;
     console.log(`   ${label}  median ${med(xs) ?? "n/a"}d · 0d ${within(0)} · <=1d ${within(1)} · <=3d ${within(3)} · <=7d ${within(7)} of ${v.length}`);
   }
-  const honest = med(dateRows.map((b) => b.lagOnly));
-  const leaky = med(dateRows.map((b) => b.leaky));
+  // ── THE LEAK TEST, COMPARED PROPERLY ─────────────────────────────────
+  //
+  // TWO FAULTS IN THE FIRST VERSION, both of which would have let a leak pass:
+  //
+  //  (1) IT COMPARED DIFFERENT POPULATIONS. Restoring the target changes which
+  //      filers clear the regularity gate, so the leaky column was computed
+  //      over 42 symbols and the honest one over 44 — different sets, compared
+  //      as if they were one.
+  //  (2) IT COMPARED MEDIANS ONLY. At errors of 0-3 days the median is coarse
+  //      enough to tie while every individual prediction moved.
+  //
+  // So: intersect, then compare PER SYMBOL. A leak shows up as the leaky
+  // prediction being better on symbol after symbol, which counting says and a
+  // median cannot.
+  const paired = dateRows.filter((b) => b.lagOnly !== null && b.leaky !== null);
+  const better = paired.filter((b) => b.leaky < b.lagOnly).length;
+  const worse = paired.filter((b) => b.leaky > b.lagOnly).length;
+  const same = paired.length - better - worse;
+  const mean = (xs) => (xs.length ? xs.reduce((a, c) => a + c, 0) / xs.length : NaN);
   console.log("");
-  console.log(`   LEAK TEST: honest ${honest}d vs leaky ${leaky}d — ` +
-    (leaky < honest ? "leaky is BETTER, as it must be: the honest run is not leaking"
-      : "leaky is NOT better, so the honest run is STILL LEAKING"));
+  console.log(`   LEAK TEST, on the ${paired.length} SYMBOLS both columns cover:`);
+  console.log(`     per symbol: leaky better ${better} · worse ${worse} · identical ${same}`);
+  console.log(`     mean error: honest ${mean(paired.map((b) => b.lagOnly)).toFixed(2)}d ` +
+    `vs leaky ${mean(paired.map((b) => b.leaky)).toFixed(2)}d`);
+  console.log(`     median:     honest ${med(paired.map((b) => b.lagOnly))}d vs leaky ${med(paired.map((b) => b.leaky))}d`);
+  // A REAL LEAK MAKES THE LEAKY COLUMN BETTER ALMOST EVERYWHERE, because the
+  // answer is sitting in its own training set. A handful of moves either way is
+  // one extra sample shifting a median, which is what an honest run looks like.
+  const verdict = better > paired.length * 0.5
+    ? "leaky wins on most symbols — the honest run is STILL LEAKING"
+    : better === 0 && worse === 0
+      ? "IDENTICAL on every symbol — suspicious: the target may still be in the median"
+      : "leaky does NOT dominate — consistent with the honest run being clean";
+  console.log(`   => ${verdict}`);
+  // ── DOES IT BEAT THE BASELINES? SAID OUT LOUD ────────────────────────
+  {
+    const pairs = dateRows.filter((b) => b.lagOnly !== null && b.b1 !== null);
+    const beatB1 = pairs.filter((b) => b.lagOnly < b.b1).length;
+    const loseB1 = pairs.filter((b) => b.lagOnly > b.b1).length;
+    console.log("");
+    console.log(`   vs SAME QUARTER LAST YEAR (${pairs.length} SYMBOLS): method better ${beatB1} · worse ${loseB1} · tied ${pairs.length - beatB1 - loseB1}`);
+    const pairs2 = dateRows.filter((b) => b.lagOnly !== null && b.b2 !== null);
+    const beatB2 = pairs2.filter((b) => b.lagOnly < b.b2).length;
+    console.log(`   vs PERIOD END + 35 DAYS (${pairs2.length} SYMBOLS): method better ${beatB2} · worse ${pairs2.filter((b) => b.lagOnly > b.b2).length}`);
+  }
   console.log("");
   console.log("   FIVE WORKED EXAMPLES:");
   const domestic = dateRows.filter((b) => b.basis === "8-K item 2.02");
