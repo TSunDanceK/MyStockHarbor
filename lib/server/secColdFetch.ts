@@ -329,15 +329,39 @@ async function bumpExhaustion(): Promise<void> {
  *
  * ── AND THE PER-IP BOUND IS REAL, IT IS JUST NOT IN THIS FILE ──────────────
  *
- * It is enforced at the edge, before a request reaches any of this code:
+ * It is enforced at the edge, before a request reaches any of this code, by TWO
+ * rules whose ORDER is part of the rule — the bypass is evaluated first, and a
+ * bypass sitting below a challenge does nothing:
  *
+ *   VERCEL FIREWALL BYPASS: Google & Bing crawlers — AS 15169,8075 AND user-agent matches /[Gg]ooglebot|[Bb]ingbot|Mediapartners-Google|AdsBot-Google|Google-InspectionTool/ — Bypass, ABOVE the rate limit
  *   VERCEL FIREWALL: /stock — 25 requests / 600s per IP — Challenge
  *
- * That is the answer to "what stops one address spending the site's minute",
- * and it is a better answer than middleware would have been: it costs zero
- * Redis commands, it runs before the lambda, and it cannot be defeated by a
- * bug in this file. A burst from one address is challenged at 25 requests in
+ * The second is the answer to "what stops one address spending the site's
+ * minute", and it is a better answer than middleware would have been: it costs
+ * zero Redis commands, it runs before the lambda, and it cannot be defeated by
+ * a bug in this file. A burst from one address is challenged at 25 requests in
  * ten minutes, so it cannot reach 20 cold fetches in one minute at all.
+ *
+ * ── AND THE FIRST IS WHY THAT DOES NOT COST US THE INDEX ──────────────────
+ *
+ * /stock/* is 483 of the ~765 sitemap URLs. A crawler challenged at 25 requests
+ * per ten minutes drains most of the index with NO visible symptom on the live
+ * domain. middleware.ts carries the same reasoning for its own isKnownGoodBot
+ * allowlist, and it cannot help here: the firewall runs BEFORE the lambda, so
+ * the challenge is already served by the time middleware could allow anything.
+ *
+ * BOTH CONDITIONS ARE REQUIRED AND NEITHER WOULD DO ALONE. AS 15169 and AS 8075
+ * are the whole of GCP and the whole of Azure, so ASN alone would exempt every
+ * scraper anyone runs on either cloud. A user-agent alone is a claim anyone can
+ * make — `curl -A Googlebot` would walk past the limit. Together they are
+ * verified-crawler identification in the same sense as Google's reverse-DNS
+ * check: that user-agent, from that network.
+ *
+ * AND THOSE ASNs ARE DELIBERATELY NOT ON THE DATACENTER BLOCK LIST. Blocking
+ * them outright instead would break link previews (Slack, Discord, WhatsApp,
+ * iMessage, X all fetch Open Graph tags from cloud IPs), the ads crawlers named
+ * in the bypass above, and the assistant fetchers that largely run on Azure.
+ * See claude/sec-rate-limits-2026-09-16.md.
  *
  * ── SO THERE IS DELIBERATELY NO PER-IP LOGIC IN THIS CODEBASE ─────────────
  *
@@ -349,10 +373,12 @@ async function bumpExhaustion(): Promise<void> {
  *
  * TWO THINGS MUST STAY TRUE and scripts/check-sec-rate-limits.mjs asserts both:
  * the site-wide bucket below still exists and still refuses past its cap, and
- * the firewall line above still matches the one in
- * claude/sec-rate-limits-2026-09-16.md. A rule that lives outside the repo is a
- * rule that silently stops being true, so the repo keeps a copy and the copy is
- * checked against itself.
+ * BOTH firewall lines above still match the ones in
+ * claude/sec-rate-limits-2026-09-16.md, field for field — including the
+ * bypass's recorded ORDER, which is the one property that can be wrong while
+ * every other field is right, and whose failure is silent. A rule that lives
+ * outside the repo is a rule that silently stops being true, so the repo keeps
+ * a copy and the copy is checked against itself.
  */
 async function claimColdFetch(symbol: string): Promise<boolean> {
   if (!redis) return true;
