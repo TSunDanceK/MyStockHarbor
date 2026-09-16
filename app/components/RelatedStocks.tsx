@@ -57,6 +57,28 @@ export default function RelatedStocks({
   const others = symbols.filter((sym) => sym.toUpperCase() !== upperCurrent);
   if (others.length === 0) return null;
 
+  // ── PREFETCH OFF, MEASURED ───────────────────────────────────────────────
+  //
+  // Next prefetches every <Link> in the viewport. On this block that is up to
+  // three routes per card — analysis, news and earnings — for every symbol
+  // shown, and each one is a full server render of a page that reads ~110 KB of
+  // bars and may trigger a synchronous SEC fetch for a symbol nobody asked for.
+  //
+  // MEASURED ON THE PREVIEW, 2026-09-16: one view of /stock/AAPL/earnings at
+  // 19:58:28 was followed at 19:58:50-51 by ten more earnings renders —
+  // INTC, CSCO, ADBE, CRM, ORCL, VZ, T, WMT, KO, PEP — in two seconds. Over
+  // forty minutes the three routes this block links appeared 55, 53 and 47
+  // times, in near-equal numbers, which is the signature of this grid rather
+  // than of readers.
+  //
+  // THE LINKS ARE UNCHANGED. `prefetch={false}` turns off the speculative
+  // fetch; <Link> still renders a real <a href>, so a crawler follows it and a
+  // reader who clicks still navigates client-side. What goes away is the work
+  // done for links nobody clicked.
+  //
+  // NOT APPLIED TO StockPagesBottomNav, deliberately: its three links are the
+  // SAME symbol the reader is already on, so a prefetch there is two renders
+  // for a tab switch that is likely, against a fact set already stored.
   return (
     <section style={outerStyle}>
       <div style={wrapStyle}>
@@ -73,11 +95,11 @@ export default function RelatedStocks({
 
             return (
               <div key={sym} style={cardStyle}>
-                <Link href={`/stock/${encoded}`} style={symbolLinkStyle}>
+                <Link href={`/stock/${encoded}`} prefetch={false} style={symbolLinkStyle}>
                   {sym}
                 </Link>
                 <div style={subRowStyle}>
-                  <Link href={`/stock/${encoded}/news`} style={subLinkStyle}>
+                  <Link href={`/stock/${encoded}/news`} prefetch={false} style={subLinkStyle}>
                     News
                   </Link>
                   {isEtf ? null : (
@@ -87,6 +109,7 @@ export default function RelatedStocks({
                       </span>
                       <Link
                         href={`/stock/${encoded}/earnings`}
+                        prefetch={false}
                         style={subLinkStyle}
                       >
                         Earnings

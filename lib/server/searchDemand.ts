@@ -15,6 +15,7 @@
 // claude/popular-searches-universe-spec-2026-07-23.md.
 
 import { Redis } from "@upstash/redis";
+import { canWriteDemandState, noteDemandWriteBlocked } from "./demandWriteGate";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 const redis =
@@ -86,6 +87,11 @@ export async function recordTickerInterest(
   ip: string
 ): Promise<{ counted: boolean }> {
   if (!redis) return { counted: false };
+  // A REVIEWER CLICKING THROUGH A PREVIEW IS NOT DEMAND. See demandWriteGate.
+  if (!canWriteDemandState()) {
+    noteDemandWriteBlocked("recordTickerInterest");
+    return { counted: false };
+  }
 
   const symbol = normaliseTicker(rawSymbol);
   if (!symbol) return { counted: false };
