@@ -689,7 +689,8 @@ export function fiscalMidYear(fiscalYearEndMs: number): number {
  */
 export type FiscalYearNaming = {
   offset: number;
-  basis: "10-K" | "10-Q" | null;
+  /** "annual" is a 10-K, 20-F or 40-F — the filing that states the year outright. */
+  basis: "annual" | "10-Q" | null;
   /** How many FILINGS agreed. 0 means nothing was readable and offset is 0. */
   agreeing: number;
   disagreeing: number;
@@ -719,8 +720,16 @@ export function fiscalYearOffset(
   }
 
   const readings: { end: string; offset: number }[] = [];
+  // ── THE ANNUAL REPORT, WHATEVER IT IS CALLED ────────────────────────────
+  // 10-K is the domestic form. A foreign private issuer files a 20-F and a
+  // Canadian one a 40-F, and the census found eleven of them — BABA, SONY,
+  // RYAAY, MUFG and the rest — reading as "naming unreadable" purely because
+  // the filter named one form. All three carry `fp: "FY"` and the filing's own
+  // fiscal year focus, so all three answer the question.
+  const ANNUAL_FORMS = ["10-K", "20-F", "40-F"];
   const annual = [...byAccn.values()]
-    .filter((p) => p.form.startsWith("10-K") && p.fp === "FY" && p.days >= 330 && p.days <= 400)
+    .filter((p) => ANNUAL_FORMS.some((f) => p.form.startsWith(f)) &&
+      p.fp === "FY" && p.days >= 330 && p.days <= 400)
     // A TOTAL ORDER, not a two-way comparator. Returning -1 for equal keys is
     // inconsistent and lets the sort reorder ties differently run to run, which
     // on a tie-break-by-newest rule is a naming that flips at random.
@@ -728,7 +737,7 @@ export function fiscalYearOffset(
   for (const p of annual) {
     readings.push({ end: p.end, offset: p.fy - fiscalMidYear(Date.parse(`${p.end}T00:00:00Z`)) });
   }
-  let readFrom: "10-K" | "10-Q" | null = readings.length ? "10-K" : null;
+  let readFrom: "annual" | "10-Q" | null = readings.length ? "annual" : null;
 
   if (!readings.length && yearEndAnchor) {
     const quarterly = [...byAccn.values()]

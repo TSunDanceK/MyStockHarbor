@@ -100,11 +100,13 @@ for (const { symbol, anchor, set } of candidates) {
   else kept.push(line);
 }
 
+// ORDERED SO THE ANSWER IS LAST. A log tail is what gets read, and the list
+// that matters is the short one.
 console.log("=".repeat(78));
-console.log(`RELABELLED: ${changed.length} SYMBOLS`);
-for (const l of changed) console.log(`  ${l}`);
-console.log(`\nCANDIDATES CONFIRMED UNCHANGED: ${kept.length} SYMBOLS`);
+console.log(`CANDIDATES CONFIRMED UNCHANGED: ${kept.length} SYMBOLS`);
 for (const l of kept) console.log(`  ${l}`);
 console.log(`\nNAMING UNREADABLE (label falls back, unchanged): ${unread.length} SYMBOLS`);
 for (const l of unread) console.log(`  ${l}`);
-console.log(`\nTOTAL SYMBOLS WHOSE LABEL CHANGES: ${changed.length} of ${all.length}`);
+console.log(`\n${"=".repeat(78)}`);
+console.log(`RELABELLED: ${changed.length} of ${all.length} SYMBOLS`);
+for (const l of changed) console.log(`  ${l}`);
