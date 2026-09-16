@@ -117,6 +117,21 @@ export type SecManifestEntry = {
   instants?: number;
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
+  /**
+   * When this symbol's SEC report dates were last read from `submissions`.
+   *
+   * THE BACKFILL QUEUE IS ITS ABSENCE, which is why it is stamped even when the
+   * feed yielded no Item 2.02 history at all. A filer with none would otherwise
+   * stay at the head of the queue and be re-fetched every day forever.
+   *
+   * DELIBERATELY NOT `nextExpected` ABOVE. That pair is from the original spec
+   * and is still unwritten; the estimate is a discriminated result (a date, a
+   * month, or nothing, with the estimator and the clamp that produced it) and
+   * flattening it into one string here would give the page two homes for one
+   * value — claude/traps/two-validators-for-one-value.md. The record in
+   * secReportDatesStore is the single home.
+   */
+  reportDatesAt?: number | null;
   verifiedAt: number | null;
   needsReverify: boolean;
   scoreVersion: number;

@@ -24,6 +24,8 @@ import {
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
+import { readReportDates } from "@/lib/server/secReportDatesStore";
+import { TIMING_WORDING, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -37,6 +39,26 @@ type Props = {
 };
 
 type EarningsTone = "good" | "neutral" | "weak";
+
+/**
+ * ── WHERE THE DATES ON THIS PAGE COME FROM ────────────────────────────────
+ *
+ * Preferred: the company's own 8-K Item 2.02 filings (6-K for a foreign
+ * private issuer), read from `submissions` by the sec-facts cron and stored
+ * per symbol. FMP's /earnings calendar is the fallback, for symbols the cron
+ * has not reached yet.
+ *
+ * THE TWO ARE NOT INTERCHANGEABLE AND THE PAGE SAYS WHICH IT USED. A filing
+ * timestamp is when the document reached EDGAR, which is at or after the press
+ * release; a calendar date is a third party's record of the announcement. The
+ * wording differs accordingly — see TIMING_WORDING, which describes the FILING
+ * and never claims a release time nobody here observed.
+ */
+type NextReportView =
+  | { source: "sec"; kind: "date"; date: string; timing: ReportTiming | null; clamped: boolean; fromEvents: number }
+  | { source: "sec"; kind: "month"; month: string; fromEvents: number }
+  | { source: "fmp"; date: string; time: string | null }
+  | null;
 
 type EarningsReactionPoint = {
   label: string;
@@ -144,6 +166,15 @@ function quarterLabel(date?: string | null) {
   return `Q${quarter} ${year}`;
 }
 
+
+/** "2026-11" -> "November 2026". Rendered, so it must not say "2026-11". */
+function monthName(ym: string) {
+  const [y, m] = ym.split("-");
+  const idx = Number(m) - 1;
+  const names = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  return names[idx] ? `${names[idx]} ${y}` : ym;
+}
 
 function displayQuarterLabel(row?: FmpEarningsRow | null) {
   if (!row) return "—";
@@ -542,6 +573,16 @@ async function getEarningsData(symbol: string) {
   // market actually reacted in. getDailyHistory supplies the bars. Market cap,
   // P/E and the reaction card are still on FMP; the bars have not moved.
   // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
+  // ── ONE GET BEFORE THE REST, AND IT DECIDES WHETHER FMP IS CALLED AT ALL ──
+  //
+  // Serial on purpose. The record says whether this symbol's announcement dates
+  // are known from its own filings; if they are, the /earnings call below has
+  // nothing left to supply and is skipped entirely. Putting it in the group
+  // below would save a round trip and keep paying FMP for an answer already in
+  // Redis, which is the call this step exists to remove.
+  const secDates = await readReportDates(symbol);
+  const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
+
   const [cold, dailyHistory, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
     // ── ~110 KB PER RENDER, AND THAT IS THE SECOND-LARGEST READ ON THIS PAGE ─
@@ -558,7 +599,12 @@ async function getEarningsData(symbol: string) {
     // above is what makes it worth making. Move this note onto that adapter's
     // docblock when it exists — it belongs with the thing it justifies.
     getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
-    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
+    // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
+    // an ignored fetch still costs the request, and the daily FMP limit is the
+    // thing the owner has said not to spend.
+    secEvents.length
+      ? Promise.resolve(null)
+      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
   ]);
   const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
 
@@ -598,17 +644,61 @@ async function getEarningsData(symbol: string) {
     })
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] ?? null;
 
-  const priceReactionQuarters: EarningsReactionPoint[] = completedRows
-    .slice(0, 8)
-    .reverse()
-    .map((row) => {
-      const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
-      return { label: displayQuarterLabel(row), ...detail };
-    });
+  // ── THE REACTION CARD, KEYED TO THE FILING DATES ─────────────────────────
+  //
+  // TWO THINGS CHANGE WHEN THE SEC RECORD EXISTS, and both were wrong before:
+  //
+  //  1. THE LABEL COMES FROM THE MATCHED PERIOD END, not from the announcement
+  //     date. A quarter that ended 30 June and was announced 30 July was
+  //     labelled "Q3" — the calendar quarter of the announcement — so every
+  //     bar on this chart named the quarter after the one it measured.
+  //  2. THE SESSION COMES FROM THE FILING TIMESTAMP in Eastern time. A release
+  //     after the close is digested by the NEXT day's close; before the open
+  //     and during the session are both digested by the same day's close. That
+  //     is exactly the two-way split `time` already encodes, so the existing,
+  //     tested reaction arithmetic is reused rather than reimplemented:
+  //     after-close maps to "amc", everything else to "bmo".
+  const reactionRows: { label: string; row: FmpEarningsRow }[] = secEvents.length
+    ? secEvents.slice(0, 8).reverse().map((e) => ({
+        label: quarterLabel(e.periodEnd),
+        row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
+      }))
+    : completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), row }));
+
+  const priceReactionQuarters: EarningsReactionPoint[] = reactionRows.map(({ label, row }) => ({
+    label,
+    ...computeEarningsReactionDetail(row, dailyHistory as Point[]),
+  }));
+
+  // ── THE NEXT REPORT ──────────────────────────────────────────────────────
+  //
+  // THE ESTIMATE IS NOT A FORECAST and the card says so. It is the filer's own
+  // habit — the same quarter a year ago, measured from the matched period end —
+  // and it is only offered as a specific DATE where that habit is regular
+  // enough to have earned one. Where it is not, the card offers the month or
+  // says nothing at all, which is the honest end of the same scale.
+  const nextReport: NextReportView = secDates && secDates.next.kind === "date"
+    ? {
+        source: "sec", kind: "date",
+        date: secDates.next.date,
+        timing: secDates.next.timing,
+        clamped: secDates.next.clamped,
+        fromEvents: secDates.next.fromEvents,
+      }
+    : secDates && secDates.next.kind === "month"
+      ? { source: "sec", kind: "month", month: secDates.next.month, fromEvents: secDates.next.fromEvents }
+      : next?.date
+        ? { source: "fmp", date: next.date, time: next.time ?? null }
+        : null;
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
-  return { earningsRows, completedRows, latest, next, priceReactionQuarters, score, secView, cold };
+  return {
+    earningsRows, completedRows, latest, next, nextReport,
+    priceReactionQuarters, score, secView, cold,
+    /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
+    datesFromSec: secEvents.length > 0,
+  };
 }
 
 
@@ -807,7 +897,7 @@ export default async function StockEarningsPage({ params }: Props) {
   // the ~10,400 registrants in the committed ticker file, not any string.
   if (data.cold.status === "no-cik") notFound();
 
-  const nextReport = data.next;
+  const nextReport = data.nextReport;
   const score = data.score;
   const secView = data.secView;
 
@@ -1050,15 +1140,36 @@ export default async function StockEarningsPage({ params }: Props) {
               {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
                   symbol has none yet, one honest card says so rather than six
                   cards of dashes. */}
-              {nextReport?.date ? (
+              {nextReport ? (
                 <section className="card">
                   <div className="eyebrow">Next report</div>
                   <h3>Next expected earnings date</h3>
-                  <p style={{ marginBottom: 0 }}>
-                    <strong>{nextReport.date}</strong>{nextReport.time ? ` (${nextReport.time === "bmo" ? "before market open" : nextReport.time === "amc" ? "after market close" : nextReport.time})` : ""}.
-                    {" "}This is the announcement date, which is not in SEC filings — it still comes
-                    from the earnings calendar, as does the price-reaction card below.
-                  </p>
+                  {nextReport.source === "fmp" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <strong>{nextReport.date}</strong>{nextReport.time ? ` (${nextReport.time === "bmo" ? "before market open" : nextReport.time === "amc" ? "after market close" : nextReport.time})` : ""}.
+                      {" "}This one comes from the earnings calendar — {clean}&apos;s own filing
+                      history has not been read yet.
+                    </p>
+                  ) : nextReport.kind === "date" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <strong>{nextReport.date}</strong>
+                      {nextReport.timing ? `, ${TIMING_WORDING[nextReport.timing].replace("Results filed", "results filed")} if it follows its usual pattern` : ""}.
+                      {" "}Estimated from {clean}&apos;s own past reporting pattern — the gap between
+                      the end of its financial quarter and the 8-K it files with the results,
+                      over its last {nextReport.fromEvents} reports. It is not a company
+                      announcement and the company is free to break the pattern.
+                      {nextReport.clamped
+                        ? " Pulled back to the SEC's filing deadline for this period, which the pattern would have run past."
+                        : ""}
+                    </p>
+                  ) : (
+                    <p style={{ marginBottom: 0 }}>
+                      Expected in <strong>{monthName(nextReport.month)}</strong>.
+                      {" "}{clean} has reported within the same month each year but not on a
+                      settled day of it, so no specific date is offered here. Based on its last{" "}
+                      {nextReport.fromEvents} reports.
+                    </p>
+                  )}
                 </section>
               ) : null}
 
@@ -1139,6 +1250,16 @@ export default async function StockEarningsPage({ params }: Props) {
                     </div>
                     <SeriesLegend items={[{ label: "Rose after report", color: "#22c55e" }, { label: "Fell after report", color: "#ef4444" }]} />
                     <p className="earningsDataNote">This reflects the stock&apos;s actual price move, which can be driven by broader market moves as well as the earnings report itself &mdash; it isn&apos;t a clean read of earnings reaction alone.</p>
+                    {/* PROVENANCE ON THE CARD, because the two sources measure
+                        different sessions. A filing timestamp is when the
+                        document reached EDGAR; a calendar date is a third
+                        party's record of the announcement. Which one keyed
+                        these bars changes what they mean. */}
+                    <p className="earningsDataNote">
+                      {data.datesFromSec
+                        ? `Each bar is keyed to the date ${clean} filed its results with the SEC, and to the session that filing landed in: a filing after the close is measured against the next day's close.`
+                        : `Each bar is keyed to an earnings-calendar date, not to ${clean}'s own filings — its filing history has not been read yet.`}
+                    </p>
                   </>
                 ) : (
                   <p>Not enough price history is available yet to chart the reaction around earnings.</p>

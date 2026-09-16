@@ -480,6 +480,11 @@ export function runEstimator(
  * ago, which is the one case A and B cannot answer at all.
  */
 export const PRIMARY_ESTIMATOR: EstimatorId = "A";
+// MEASURED, relay run 35120730648, 44 SYMBOLS all three could answer:
+//   A 1.98d mean · B 2.07d · C 3.27d      (claude/sec-report-dates-2026-09-16.md §4)
+// B wins the exact-hit column (26 of 44 against A's 15) and loses the mean. The
+// rule was fixed before the run and says MEAN, so A ships and the split is
+// recorded rather than used to justify a different choice afterwards.
 
 /**
  * Estimate the next announcement.
@@ -590,3 +595,47 @@ export const TIMING_WORDING: Record<ReportTiming, string> = {
   "during-market": "Results filed with the SEC during market hours",
   "after-close": "Results filed with the SEC after market close",
 };
+
+// ── THE PERIOD THE NEXT ANNOUNCEMENT WILL BE ABOUT ────────────────────────
+
+/**
+ * Derive the next fiscal period end from the filer's OWN cadence.
+ *
+ * ── WHY THIS IS NOT "TODAY PLUS NINETY" ──────────────────────────────────
+ * A 4-4-5 filer's quarters end on a weekday that moves; a 52/53-week year adds
+ * a week every five or six years; AAPL's September quarter is thirteen weeks
+ * from the June one and not ninety-one days. The filer's own spacing carries
+ * all of that, and nothing else available here does.
+ *
+ * QUARTERS IF THERE ARE ENOUGH OF THEM, ANNUAL OTHERWISE, never mixed: a set
+ * holding both would otherwise produce a median spacing somewhere between a
+ * quarter and a year, which describes no filer that exists.
+ *
+ * Returns null rather than guessing. Null is what `estimateNextReport` needs to
+ * say nothing at all — and saying nothing is the correct output for a filer
+ * whose stored history is too thin to show a cadence.
+ */
+export function nextPeriodEndFrom(
+  quarterEnds: readonly string[],
+  yearEnds: readonly string[]
+): { end: string; annual: boolean } | null {
+  const pick = (ends: readonly string[]) => {
+    const sorted = [...new Set(ends.filter(Boolean))].sort().reverse();
+    if (sorted.length < 3) return null;
+    const gaps: number[] = [];
+    for (let i = 0; i + 1 < sorted.length; i++) gaps.push(daysBetween(sorted[i + 1], sorted[i]));
+    // A SPACING THAT IS NOT A REPORTING PERIOD is a gap in the stored history,
+    // not a cadence. Bounded either side so a missing quarter cannot stretch
+    // the median into something no filer uses.
+    const step = median(gaps.filter((d) => d >= 60 && d <= 400));
+    if (step === null) return null;
+    return { newest: sorted[0], step };
+  };
+  const q = pick(quarterEnds);
+  const chosen = q ?? pick(yearEnds);
+  if (!chosen) return null;
+  return {
+    end: new Date(Date.parse(chosen.newest) + chosen.step * DAY).toISOString().slice(0, 10),
+    annual: !q,
+  };
+}
