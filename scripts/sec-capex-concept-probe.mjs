@@ -192,12 +192,34 @@ for (const symbol of targets) {
   // ROUTE 2 — quarters that gain a value once the test is mutated out. Matched
   // BY PERIOD END so the two runs line up on periods, not on array position:
   // the mutant emits quarters the shipped run does not, which shifts indices.
-  const shippedQ = new Map((shipped.quarters ?? []).map((q) => [q.end, capexOf(q)]));
-  const looseQ = new Map((loose.quarters ?? []).map((q) => [q.end, capexOf(q)]));
-  const nulled = [];
-  for (const [end, v] of looseQ) {
-    if (v !== null && (shippedQ.get(end) ?? null) === null) nulled.push(end);
-  }
+  const gained = (a, b) => {
+    const A = new Map((a.quarters ?? []).map((q) => [q.end, capexOf(q)]));
+    const B = new Map((b.quarters ?? []).map((q) => [q.end, capexOf(q)]));
+    const out = [];
+    for (const [end, v] of B) if (v !== null && (A.get(end) ?? null) === null) out.push(end);
+    return out;
+  };
+  const nulled = gained(shipped, loose);
+
+  // ── AND THE SAME COMPARISON WITH RETENTION TURNED OFF ────────────────────
+  //
+  // THE FIRST RUN OF THIS PROBE REPORTED 6 AGAINST 43 AND THE CROSS-CHECK
+  // CAUGHT IT. Both numbers were right and they answer different questions.
+  // extractCompanyFacts slices to SEC_QUARTER_WINDOW before returning, so a
+  // refusal on a frame from 2014 is recorded in `notes` and then falls off the
+  // end of the retention window — it never was a stored cell and losing it
+  // costs nothing. `notes` counts every refusal the extractor ever makes;
+  // `nulled` counts the ones that reach the store.
+  //
+  // Running the pair again with the window opened wide separates the two, so
+  // the report can give the cost AND the total rather than picking one and
+  // hoping. If these still disagree, the retention theory is wrong and
+  // something else is going on.
+  const WIDE = { quarters: 100000, years: 100000, instants: 100000 };
+  const nulledAllTime = gained(
+    sec.extractCompanyFacts(symbol, facts, WIDE),
+    mixed.extractCompanyFacts(symbol, facts, WIDE)
+  );
 
   const pairs = bothConcepts(facts);
   const conceptsSeen = new Set();
@@ -212,6 +234,7 @@ for (const symbol of targets) {
     symbol,
     concepts: [...conceptsSeen],
     nulled,
+    nulledAllTime,
     notes: notes.length,
     pairs,
     maxPct: pairs.length ? Math.max(...pairs.map((p) => p.pct)) : null,
@@ -235,20 +258,23 @@ for (const r of rows.filter((x) => x.nulled.length).sort((a, b) => b.nulled.leng
 }
 if (!totalNulled) console.log("   (none — no filer on this sample has a mid-year concept change)");
 
-// THE TWO ROUTES, COMPARED OUT LOUD.
-console.log(`\n   CROSS-CHECK: the mutated run gains ${totalNulled} quarter(s); ` +
-  `the extractor recorded ${totalNotes} refusal note(s).`);
-if (totalNulled !== totalNotes) {
+// THE TWO ROUTES, COMPARED OUT LOUD — AND RETENTION IS WHY THEY DIFFER.
+const totalAllTime = rows.reduce((a, r) => a + r.nulledAllTime.length, 0);
+console.log(`\n   ALL-TIME, retention off: ${totalAllTime} quarter(s) refused across ` +
+  `${rows.filter((r) => r.nulledAllTime.length).length} SYMBOLS.`);
+console.log(`   CROSS-CHECK: the extractor recorded ${totalNotes} refusal note(s).`);
+if (totalAllTime !== totalNotes) {
   console.log(
-    `   >> THE TWO ROUTES DISAGREE by ${Math.abs(totalNulled - totalNotes)}. They count different ` +
-      `things and at least one of them is not counting what this report says it is. ` +
-      `A note is recorded per refused FRAME; a nulled quarter is a period END that gained a ` +
-      `value. A year whose 6M and 9M frames both cross the same concept change refuses twice ` +
-      `and nulls two quarters, so they should agree — read the per-symbol lists before ` +
-      `quoting either number.`
+    `   >> THE TWO ROUTES DISAGREE by ${Math.abs(totalAllTime - totalNotes)} WITH RETENTION OFF, ` +
+      `which retention cannot explain. A note is recorded per refused FRAME and a nulled ` +
+      `quarter is a period END that gained a value, so with no window to slice them they ` +
+      `should match. At least one of these is not counting what this report says it is — ` +
+      `read the per-symbol lists before quoting either number.`
   );
 } else {
-  console.log(`   Both routes agree. The rule's cost is ${totalNulled} rendered cells on this sample.`);
+  console.log(`   Both routes agree once retention is off, so the ${totalNotes - totalNulled} ` +
+    `extra note(s) are refusals on frames too old to be stored under the current window. ` +
+    `THE COST THAT REACHES A PAGE IS ${totalNulled}, not ${totalNotes}.`);
 }
 
 // ── 2. HOW FAR APART THE TWO CONCEPTS ARE ─────────────────────────────────
