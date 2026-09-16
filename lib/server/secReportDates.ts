@@ -737,3 +737,63 @@ export function estimateUpcoming(
   }
   return { estimate, periodEnd: end };
 }
+
+// ── LABELLING THE REACTION BARS ────────────────────────────────────────────
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * What a bar is called when its fiscal period is NOT known.
+ *
+ * ── WHY THIS IS NOT A QUARTER ────────────────────────────────────────────
+ * The fallback path has an announcement date and nothing else, and a quarter
+ * derived from one is a different quarter from the one being reported on. That
+ * is what put "Q3 26" on a quarter that had not ended and the same "Q4 23" on
+ * two different bars: an announcement names the quarter it FALLS IN, and two
+ * announcements can fall in one. So it says only what it knows.
+ */
+export function reportedLabel(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  return `Reported ${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * One label per bar, in the page's own fiscal vocabulary, all distinct.
+ *
+ * ── THE THREE DEFECTS THIS REPLACES, ALL VISIBLE ON ONE PREVIEW ──────────
+ *   AAPL's latest bar read "Q2 26" while the snapshot called the same filing
+ *   Q3 FY2026 — two vocabularies for one filing on one page.
+ *   AAP carried "Q4 23" TWICE, because two of its announcements fell in the
+ *   same calendar quarter.
+ *   AAP and ABEV showed "Q3 26" for a quarter that had not ended.
+ *
+ * All three come from labelling a bar by the calendar quarter of its
+ * ANNOUNCEMENT. The fix is to take the label from the SAME stored period the
+ * rest of the page reads, by the matched period end — and where there is no
+ * matched period, to make no fiscal claim at all.
+ *
+ * `labelFor` is passed in rather than imported: the stored labels live in the
+ * fact set, this module knows nothing about fact sets, and a second copy of the
+ * labeller here is exactly the drift that produced two vocabularies.
+ *
+ * DISTINCTNESS IS ENFORCED, NOT ASSUMED. Matched periods are unique because
+ * `reportEvents` keeps one event per period — but the fallback path has no such
+ * guarantee, and two announcements in one month would collide. A collision
+ * takes the day as well, because a chart with two bars named the same thing
+ * cannot be read at all.
+ */
+export function reactionBarLabels(
+  rows: readonly { periodEnd: string | null; announcedOn: string }[],
+  labelFor: (periodEnd: string) => string | undefined
+): string[] {
+  const out = rows.map((r) =>
+    (r.periodEnd ? labelFor(r.periodEnd) : undefined) ?? reportedLabel(r.announcedOn)
+  );
+  const seen = new Map<string, number>();
+  for (const l of out) seen.set(l, (seen.get(l) ?? 0) + 1);
+  return out.map((l, i) =>
+    (seen.get(l) ?? 0) > 1 ? `${l} (${rows[i].announcedOn.slice(5).replace("-", "/")})` : l
+  );
+}

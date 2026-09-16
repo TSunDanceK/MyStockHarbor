@@ -15,7 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
@@ -72,6 +72,12 @@ export type StoredFactSet = {
   c?: string;
   /** Currencies a mapped tag was published in and refused. See rowsForField. */
   cu?: string[];
+  /**
+   * The PERIOD LABELLING version this set was written under. Absent = 1, the
+   * version that named a fiscal year by the calendar year of its end. See
+   * SEC_LABEL_VERSION; `h` and `c` cannot see a labelling change.
+   */
+  lv?: number;
   /**
    * The QUARTER RETENTION WINDOW this set was written under.
    *
@@ -168,6 +174,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     cc: result.conceptChoice,
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
+    lv: SEC_LABEL_VERSION,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };

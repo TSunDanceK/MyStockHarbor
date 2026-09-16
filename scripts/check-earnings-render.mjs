@@ -754,8 +754,12 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     src.replace(
       "  return {\n    symbol: set.symbol,",
       '  const forcedBasis: PeriodBasis = "quarter";\n  return {\n    symbol: set.symbol,'
-    ).replace("\n    basis,\n", "\n    basis: forcedBasis,\n")
-      .replace("\n    tableBasis,\n", "\n    tableBasis: forcedBasis,\n");
+    // ANCHORED ON THE PAIR, not on "\n    basis,\n" alone. A single-line anchor
+    // is a first-match anchor over three inlined files, and it silently moved
+    // to an unrelated `basis,` shorthand in secExtract — mutating a function
+    // this section has nothing to do with while reporting that it applied.
+    ).replace("\n    basis,\n    tableBasis,\n",
+              "\n    basis: forcedBasis,\n    tableBasis: forcedBasis,\n");
   check("the force-quarter mutation actually applied", forceQuarter(cardsSrc) !== cardsSrc);
   const dMod = await loadCards(forceQuarter);
   const dView = dMod.buildSecEarningsView(KGC);
