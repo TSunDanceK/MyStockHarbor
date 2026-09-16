@@ -71,7 +71,7 @@ const tick = await lift(
   [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
     "\nexport { parseTickerFile, padCik };"
 );
-const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf, cell } = sec;
+const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf, rowsForField } = sec;
 
 const field = SEC_FIELDS.find((f) => f.key === FIELD);
 if (!field) { console.error(`FATAL: no field "${FIELD}"`); process.exit(2); }
@@ -116,6 +116,7 @@ const readField = (set) => {
 const tally = { notReported: [], changed: [], gained: [], same: 0, noCik: 0, failed: 0 };
 let cellsBefore = 0, cellsAfter = 0, symbolsTouched = 0;
 const choices = new Map();
+const perSymbol = new Map();
 
 for (const symbol of targets) {
   const cik = tickerMap.get(symbol)?.cik;
@@ -141,6 +142,14 @@ for (const symbol of targets) {
   const after = readField(afterSet);
   if (afterSet.cc?.[FIELD]) choices.set(symbol, afterSet.cc[FIELD]);
 
+  // WHETHER THE NEWEST PERIOD FILES BOTH — the fact the tie-break turns on, and
+  // the one a reader needs to know whether a correction still applies to what
+  // the page shows. Read from the field's own candidate rows, not inferred.
+  const cands = rowsForField(facts, field);
+  let newestEnd = null;
+  for (const c of cands) if (c.row.end && (newestEnd === null || c.row.end > newestEnd)) newestEnd = c.row.end;
+  const atNewest = new Set(cands.filter((c) => c.row.end === newestEnd).map((c) => `${c.ns}|${c.tag}`));
+
   const keys = [...new Set([...before.keys(), ...after.keys()])];
   let lost = 0, moved = 0, got = 0;
   const detail = [];
@@ -152,8 +161,13 @@ for (const symbol of targets) {
     else if (b === null && a !== null) { got++; detail.push(`${k} NONE -> ${a}`); }
     else { moved++; detail.push(`${k} ${b} -> ${a}`); }
   }
-  for (const v of before.values()) if (v !== null) cellsBefore++;
-  for (const v of after.values()) if (v !== null) cellsAfter++;
+  let symBefore = 0, symAfter = 0;
+  for (const v of before.values()) if (v !== null) { cellsBefore++; symBefore++; }
+  for (const v of after.values()) if (v !== null) { cellsAfter++; symAfter++; }
+  perSymbol.set(symbol, {
+    before: symBefore, after: symAfter, choice: afterSet.cc?.[FIELD] ?? null,
+    newestEnd, newestBoth: newestEnd === null ? null : atNewest.size > 1,
+  });
   if (lost || moved || got) {
     symbolsTouched++;
     if (lost) tally.notReported.push({ symbol, n: lost, detail: detail.filter((d) => d.includes("NOT REPORTED")) });
@@ -208,3 +222,24 @@ const broad = [...choices].filter(([, c]) => c.endsWith("|PaymentsToAcquireProdu
 console.log(`\n4. WHICH CONCEPT EACH FILER IS ON — ${choices.size} SYMBOLS recorded a choice`);
 console.log(`   on the BROADER concept, so the row label changes: ${broad.length} SYMBOLS`);
 console.log(`   ${broad.map(([s]) => s).join(" ") || "(none)"}`);
+
+// ── PER-SYMBOL, FOR THE ONES A RULING TURNS ON ────────────────────────────
+// A total cannot answer "did NVDA keep its column". WATCH names the symbols
+// whose chosen concept and cell count are printed individually, so the report
+// quotes a line rather than an inference from an aggregate.
+const WATCH = (process.env.WATCH || "NVDA,PANW,GE,CRM,SCHW,MELI,ANET")
+  .split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+console.log(`\n5. PER-SYMBOL DETAIL — cells carrying a figure, before -> after`);
+for (const sym of WATCH) {
+  const c = perSymbol.get(sym);
+  if (!c) { console.log(`   ${sym.padEnd(6)} not read in this run`); continue; }
+  const label = c.choice?.endsWith("|PaymentsToAcquireProductiveAssets")
+    ? "BROADER (label changes)" : c.choice ? "PP&E" : "no capex at all";
+  console.log(
+    `   ${sym.padEnd(6)} ${String(c.before).padStart(3)} -> ${String(c.after).padStart(3)} cells` +
+    `   ${label}   ${c.choice ?? "(none)"}` +
+    (c.newestBoth === null ? "" :
+      `\n          newest period ${c.newestEnd} files ${c.newestBoth ? "BOTH concepts" : "one concept"}` +
+      (c.newestBoth ? " — the tie-break decides it" : ""))
+  );
+}

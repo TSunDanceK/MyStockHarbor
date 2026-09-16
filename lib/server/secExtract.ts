@@ -437,7 +437,7 @@ export function resolve(
    * REFUSE every concept but `preferred`, rather than merely ranking it first.
    * Set for a field marked `oneConceptPerFiler`: a period the chosen concept
    * does not cover resolves to NOTHING and renders "Not reported", instead of
-   * silently taking the other measure. See stickyTag and FieldDef.
+   * silently taking the other measure. See preferredTag and FieldDef.
    */
   restrict?: boolean
 ) {
@@ -473,54 +473,31 @@ export function resolve(
  * moves. Returns null when the field has no rows at all.
  */
 /**
- * THE ONE CONCEPT A FILER'S COLUMN USES, for a field marked
- * `oneConceptPerFiler` — the HIGHEST-RANKED chain entry it files for any period
- * INSIDE THE RETENTION WINDOW.
+ * ── WHY A MARKED FIELD HAS NO SELECTOR OF ITS OWN ─────────────────────────
  *
- * ── WHY RANK, AND NOT "THE NEWEST PERIOD'S" LIKE preferredTag ─────────────
- * preferredTag answers "what is this filer doing now", which is right when the
- * entries are two spellings of one measure. Here they are different measures
- * and the chain is a ranking of them by fitness: capex means
- * PaymentsToAcquirePropertyPlantAndEquipment, and the broader productive-assets
- * concept is a fallback for filers that never publish it — not an equal the
- * newest period gets to pick.
+ * There WAS a `stickyTag` here, choosing the highest-ranked chain entry the
+ * filer files for any period in the retention window. The owner's ruling
+ * replaced it: the concept is the one filed for the filer's NEWEST stored
+ * period that carries a figure, with the PP&E concept winning ties.
  *
- * ── AND WHY "INSIDE THE WINDOW" IS NOT A DETAIL ───────────────────────────
- * Deciding over ALL rows would lock a filer that published the primary concept
- * once in 2011 and the fallback ever since onto the primary, and every stored
- * period would read "Not reported" — a column emptied by a filing older than
- * anything on the page. The window is taken as `keepYears` years back from the
- * filer's own newest row, which covers the stored years and, at 12 quarters,
- * the stored quarters inside them.
+ * That is exactly what `preferredTag` already computes. rowsForField drops any
+ * row whose `val` is not a finite number, so every candidate IS a filed figure
+ * and "newest period carrying a figure" is just the newest candidate end; and
+ * `resolve` with no preference is rank-first, so the earlier chain entry wins a
+ * period that files both — PP&E is chain[0].
  *
- * Rows older than the window still resolve against whatever is chosen; they
- * simply do not get a vote, and they are sliced off before storage anyway.
+ * So selection is now IDENTICAL for marked and unmarked fields, and the mark
+ * changes exactly one thing: whether the other concepts are REFUSED for the
+ * rest of the column (see `restrict` on resolve). One selector, one rule about
+ * ties, and no second place for either to drift.
+ *
+ * WHAT THE OLD RULE COST, measured over 119 SYMBOLS: NVDA, PANW and GE file the
+ * PP&E concept on a handful of periods and the broader one on their recent
+ * quarters, so "highest-ranked filed anywhere" took PP&E for the whole column
+ * and refused every quarterly frame — NVDA lost 17 cells, PANW 18, GE 15.
+ * Anchoring on the newest period keeps those columns and still fixes one
+ * measure per filer. It is now the mutation, not the rule.
  */
-export function stickyTag(
-  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[],
-  keepYears: number
-): string | null {
-  let newestEnd: string | null = null;
-  for (const c of candidates) {
-    if (c.row.end && (newestEnd === null || c.row.end > newestEnd)) newestEnd = c.row.end;
-  }
-  if (newestEnd === null) return null;
-  const cutoff = new Date(Date.parse(newestEnd));
-  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - keepYears);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  // A row with no `end` cannot be placed in or out of the window, so it does
-  // not vote. It is not dropped from resolution — only from this decision.
-  const inWindow = candidates.filter((c) => c.row.end !== undefined && c.row.end >= cutoffStr);
-  // NO ROW IN THE WINDOW means no stored period can carry this field whatever
-  // is chosen, so the choice is moot — but returning null would leave the
-  // column unrestricted, which is the one thing this must not do. Fall back to
-  // the full list so a concept is still fixed.
-  const pool = inWindow.length ? inWindow : candidates;
-  let best: (typeof candidates)[number] | null = null;
-  for (const c of pool) if (!best || c.rank < best.rank) best = c;
-  return best ? conceptKey(best) : null;
-}
-
 export function preferredTag(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ): string | null {
@@ -637,7 +614,10 @@ export function extractCompanyFacts(
     // else keeps the newest-period preference with its fallback intact.
     preferred.set(
       field.key,
-      field.oneConceptPerFiler ? stickyTag(all, keepYears) : preferredTag(all)
+      // SAME SELECTOR EITHER WAY. The mark changes what happens to the OTHER
+      // concepts (see `restrict`), not which one is chosen — the ruling
+      // anchors both on the filer's newest period carrying a figure.
+      preferredTag(all)
     );
   }
 
