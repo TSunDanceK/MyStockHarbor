@@ -320,6 +320,24 @@ const TASKS = {
   // probes: same two-runs-one-payload shape, but the switch is the FIELD FLAG
   // rather than the chain, because the chain is identical on both sides of this
   // question and a chain comparison would measure the wrong edit.
+  // DOES EVERY QUARTER CELL COME FROM A QUARTER-LENGTH FRAME. Written for the
+  // NVDA Q2 FY2027 report: net income $59.69B beside a derived operating cash
+  // flow of $24.08B, which is the shape of a six-month figure in a quarter row.
+  "sec-frame-lengths": {
+    script: "scripts/sec-frame-length-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // WHERE THE CASH CARD'S NET INCOME COMES FROM. sec-frame-lengths cleared the
+  // AS-FILED half of the NVDA Q2 FY2027 report (0 offenders); this prints the
+  // DIFFERENCED half — each cell's own span and operands — beside the filer's
+  // raw ladder, which is the only way to check the arithmetic against what was
+  // actually filed.
+  "sec-cash-card": {
+    script: "scripts/sec-cash-card-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   "sec-sticky-concepts": {
     script: "scripts/sec-sticky-concept-probe.mjs",
     args: () => [],
@@ -337,6 +355,30 @@ const TASKS = {
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
   // card and how many sets are still on the old quarter window.
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Counts manifest entries with no CIK — the ones populationQueues cannot
+  // select — split into those the ticker map can resolve and those only a cold
+  // write can.
+  "write-cik-gaps": {
+    script: "scripts/cik-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE ONE-OFF BACKFILL for stored sets no queue can select. DRY RUN unless
+  // the `symbols` input is the word APPLY.
+  //
+  // THE FLAG RIDES `symbols` BECAUSE A NEW INPUT COSTS A MERGE. workflow_dispatch
+  // only registers inputs declared on the DEFAULT BRANCH, so an `apply:` input
+  // could not be dispatched from this branch at all until relay.yml reached main
+  // -- the exact toll the task router exists to remove. Routing it here keeps
+  // the whole thing dispatchable from a branch the same minute.
+  "write-cold-cik-backfill": {
+    script: "scripts/cold-cik-backfill.mjs",
+    args: (env) => (String(env.SYMBOLS ?? "").trim().toUpperCase() === "APPLY" ? ["--apply"] : []),
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],

@@ -58,8 +58,16 @@ for (const status of ["no-cik", "ready", "no-xbrl", "pending"]) {
 check("an empty-but-successful fetch returns no-xbrl, NOT pending",
   /hasUsableData\(set\)\s*\?[\s\S]{0,80}"ready"[\s\S]{0,80}emptyResult\(/.test(code),
   "an IFRS filer would otherwise be permanently 'coming soon'");
+// THE BRANCH GAINED A BODY ONCE and this pattern was pinned to the one-line
+// form: `if (hasUsableData(stored)) return { status: "ready" ...`. A
+// refresh-on-view added a call before that return, so the regex stopped
+// matching while the PROPERTY it is about — a usable set returns ready, and the
+// fall-through returns emptyResult — was unchanged. That refresh has since been
+// removed and the branch is one line again, but the two-anchor form is kept
+// deliberately: it matches BOTH shapes, so this assertion is about the property
+// rather than about the formatting of the day.
 check("a stored-but-empty set also returns no-xbrl",
-  /if \(hasUsableData\(stored\)\) return \{ status: "ready"[\s\S]{0,1400}return emptyResult\(/.test(code));
+  /if \(hasUsableData\(stored\)\)[\s\S]{0,1200}status: "ready"[\s\S]{0,2000}return emptyResult\(/.test(code));
 check("the page renders a DISTINCT card for no-xbrl",
   /status === "no-xbrl" \? \(\s*<SecNoXbrlCard/.test(pageCode),
   "not the pending card with different words");
