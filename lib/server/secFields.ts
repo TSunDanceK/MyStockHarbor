@@ -132,10 +132,20 @@ export type FieldDef = {
    * down its own length, and the 78.9% is how wrong that can be.
    *
    * So on a field marked here:
-   *   - the filer's concept is the HIGHEST-RANKED chain entry it files for any
-   *     period inside the retention window, decided once for the whole column;
+   *   - the filer's concept is the one filed for its NEWEST stored period that
+   *     carries a figure, with the earlier chain entry winning where that period
+   *     files both — decided once for the whole column;
    *   - every other concept is refused outright, so a period the chosen one does
    *     not cover reads "Not reported" rather than switching.
+   *
+   * ── NEWEST PERIOD, NOT HIGHEST RANK FILED ANYWHERE ────────────────────────
+   * The first version chose the highest-ranked entry the filer published at any
+   * point in the window. Measured over 119 SYMBOLS, that cost NVDA 17 cells,
+   * PANW 18 and GE 15 — their whole quarterly capex columns — because all three
+   * file the PP&E concept on a few periods and the broader one on their recent
+   * quarters, so the column was fixed on a concept their quarters do not carry.
+   * Anchoring on the newest period keeps those columns and still fixes ONE
+   * measure per filer. The old rule is now a mutation in check-sec-extract.
    *
    * A REFUSAL IS A COST AND IT IS THE POINT. Some cells that had a figure will
    * read "Not reported" instead. "Not reported" is a true statement about the
@@ -565,7 +575,7 @@ export function secFieldsHash(keys: string[] = SEC_FIELD_KEYS): string {
  * again stores the current hash and stops.
  */
 export const CHAIN_RESOLUTION_POLICY =
-  "preferred-tag-covers-newest-period+one-concept-per-filer-where-marked";
+  "preferred-tag-covers-newest-period+one-concept-per-filer-newest-wins";
 
 export function secChainsHash(): string {
   let h = 0x811c9dc5;

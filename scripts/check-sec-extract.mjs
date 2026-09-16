@@ -681,22 +681,23 @@ check("the resolution policy is fed into secChainsHash",
     )).secChainsHash(),
   "the hash a set is compared against differs with the policy line present and absent");
 
-// ── capex: ONE CONCEPT PER FILER, CHOSEN ONCE, NO FALLBACK ────────────────
+// ── capex: ONE CONCEPT PER FILER, ANCHORED ON THE NEWEST PERIOD ──────────
 //
 // The two blocks above test the DEFAULT policy on a field that uses it. capex
-// is exempt from it, and this is the rule it uses instead:
+// is marked, and the mark changes exactly one thing:
 //
-//   · the filer's concept is the highest-ranked chain entry it files for any
-//     period INSIDE the retention window — the PP&E concept where it publishes
-//     it at all, the broader productive-assets one only where it never does;
-//   · every other concept is refused, so a period the chosen one does not cover
-//     reads "Not reported" rather than switching measure mid-column.
+//   · SELECTION IS THE SAME — the concept filed for the filer's newest period
+//     that carries a figure, with the earlier chain entry winning a period that
+//     files both. That is preferredTag, unchanged, so there is no second
+//     selector and no second rule about ties;
+//   · every OTHER concept is then refused for the rest of the column, so a
+//     period the chosen one does not cover reads "Not reported" instead of
+//     switching measure mid-column.
 //
 // WHY IT WAS RULED THIS WAY, measured: across 119 SYMBOLS, three file both
 // concepts for a period that is still stored and disagree by 78.9% (CRM),
-// 37.6% (GE) and 14.8% (SCHW). The default policy's fallback would fill an
-// absent period from the other concept and put those two measures in one
-// column under one heading.
+// 37.6% (GE) and 14.8% (SCHW) — so a per-period fallback puts two measures in
+// one column under one heading.
 console.log("\n7b. capex resolves from one concept per filer");
 
 const CAPEX_A = "PaymentsToAcquirePropertyPlantAndEquipment";
@@ -708,11 +709,10 @@ check("capex is the field marked for it, and the mark is read from the shipped l
     capexDef.chain[0] === CAPEX_A && capexDef.chain[1] === CAPEX_B,
   `chain [${capexDef.chain.join(", ")}] sticky=${capexDef.oneConceptPerFiler}`);
 
-// A FILER THAT PUBLISHES BOTH, the shape the ruling is about: the primary on
-// the older year, both on the middle one, only the broader on the newest.
-// Under the DEFAULT policy the newest period's concept (B) would win the whole
-// column and FY2024 would fall back to A — one column, two measures.
-const bothCapex = {
+// TIES GO TO PP&E, and the newest period is what decides. Both concepts on
+// FY2025 (the newest), so the tie-break is the claim; FY2024 has only the
+// primary, so it is untouched either way and is the control.
+const tieOnNewest = {
   cik: 1,
   facts: { "us-gaap": {
     [CAPEX_A]: { units: { USD: [
@@ -720,26 +720,49 @@ const bothCapex = {
       { start: "2025-01-01", end: "2025-12-31", val: 110, accn: "b", filed: "2026-02-01" },
     ] } },
     [CAPEX_B]: { units: { USD: [
-      { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
-      { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
+      // FILED LATER than the primary for the same period, so "newest filing
+      // wins" would take it. Rank has to beat filing date here.
+      { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "c", filed: "2026-03-01" },
     ] } },
   } },
 };
-const bc = extractCompanyFacts("BOTHC", bothCapex);
-const bcYear = (e) => bc.years.find((y) => y.end === e)?.values[capexIdx];
-check("a filer that files the PP&E concept at all uses it for the WHOLE column",
-  bcYear("2024-12-31")?.tag === CAPEX_A && bcYear("2025-12-31")?.tag === CAPEX_A,
-  `FY2024 ${bcYear("2024-12-31")?.tag}=${bcYear("2024-12-31")?.val}, ` +
-    `FY2025 ${bcYear("2025-12-31")?.tag}=${bcYear("2025-12-31")?.val} — FY2025 files BOTH ` +
-    `(110 and 220) and takes the primary, though the broader one covers the newest year`);
-check("...and a period the chosen concept does not cover is NOT filled from the other",
-  bcYear("2026-12-31") === null || bcYear("2026-12-31") === undefined,
-  `FY2026 = ${JSON.stringify(bcYear("2026-12-31") ?? null)} — the filer published 230 under ` +
-    `the broader concept and the column refuses it; "Not reported" is true of the measure ` +
-    `this column is, and 230 would not have been`);
-check("...and the choice is recorded on the set, so the page can name the measure",
-  bc.conceptChoice.capex === `us-gaap|${CAPEX_A}`,
-  `conceptChoice.capex = ${bc.conceptChoice.capex}`);
+const tie = extractCompanyFacts("TIEC", tieOnNewest);
+const tieY = (e) => tie.years.find((y) => y.end === e)?.values[capexIdx];
+check("where the newest period files BOTH, the PP&E concept wins the tie",
+  tie.conceptChoice.capex === `us-gaap|${CAPEX_A}` && tieY("2025-12-31")?.val === 110,
+  `chose ${tie.conceptChoice.capex}, FY2025 = ${tieY("2025-12-31")?.val} — and the broader ` +
+    `reading was filed a month LATER, so this is rank beating filing date, not an accident`);
+check("...and the whole column follows it, including older periods",
+  tieY("2024-12-31")?.tag === CAPEX_A && tieY("2024-12-31")?.val === 100,
+  "chosen once, applied to every period");
+
+// THE NVDA / PANW / GE SHAPE, which is what the ruling turned on: the primary
+// concept on an OLD annual period, the broader one on the recent quarters.
+// Under "highest rank filed anywhere" the column is fixed on a concept the
+// quarters do not carry and every quarterly cell is refused.
+const oldPrimaryNewBroad = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [CAPEX_A]: { units: { USD: [
+      { start: "2021-01-01", end: "2021-12-31", val: 55, accn: "z", filed: "2022-02-01" },
+    ] } },
+    [CAPEX_B]: { units: { USD: [
+      { start: "2026-01-01", end: "2026-03-31", val: 200, accn: "p", filed: "2026-04-20" },
+      { start: "2026-01-01", end: "2026-06-30", val: 450, accn: "q", filed: "2026-07-20" },
+      { start: "2026-01-01", end: "2026-12-31", val: 900, accn: "r", filed: "2027-02-01" },
+    ] } },
+  } },
+};
+const nv = extractCompanyFacts("NVSHAPE", oldPrimaryNewBroad);
+const nvQ = (e) => nv.quarters.find((q) => q.end === e)?.values[capexIdx];
+const nvCells = [...nv.quarters, ...nv.years]
+  .filter((p) => p.values[capexIdx]?.val != null).length;
+check("a filer whose RECENT periods are on the broader concept keeps its column",
+  nv.conceptChoice.capex === `us-gaap|${CAPEX_B}` && nvQ("2026-03-31")?.val === 200,
+  `chose ${nv.conceptChoice.capex} — the NVDA/PANW/GE shape: the primary concept appears ` +
+    `once, years ago, and does not get to empty every recent quarter`);
+check("...and that is more than one cell, so the assertion is about a column",
+  nvCells >= 3, `${nvCells} capex cells carry a figure`);
 
 // A FILER THAT NEVER PUBLISHES THE PRIMARY — GEV and KTOS are the real ones.
 const onlyBroad = {
@@ -756,28 +779,27 @@ check("a filer that never files the PP&E concept uses the broader one, and says 
   `conceptChoice.capex = ${ob.conceptChoice.capex} — this is the GEV/KTOS case, and the ` +
     `row label has to change with it`);
 
-// THE WINDOW CLAUSE, AND IT IS NOT A DETAIL. A filer that published the primary
-// ONCE, long ago, and the broader concept ever since must not be locked onto a
-// concept nothing in the retention window carries — that would empty the column
-// on the strength of a filing older than anything the page can show.
-const ancientPrimary = {
+// AND THE REFUSAL, which is the half that costs cells: a filer whose newest
+// period is on the PRIMARY concept refuses the broader one on older periods
+// rather than switching.
+const newPrimaryOldBroad = {
   cik: 1,
   facts: { "us-gaap": {
     [CAPEX_A]: { units: { USD: [
-      { start: "2009-01-01", end: "2009-12-31", val: 5, accn: "z", filed: "2010-02-01" },
+      { start: "2026-01-01", end: "2026-12-31", val: 130, accn: "c", filed: "2027-02-01" },
     ] } },
     [CAPEX_B]: { units: { USD: [
       { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
-      { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
     ] } },
   } },
 };
-const ap = extractCompanyFacts("ANCIENT", ancientPrimary);
-check("a primary-concept filing older than the window does NOT win the column",
-  ap.conceptChoice.capex === `us-gaap|${CAPEX_B}` &&
-    ap.years.find((y) => y.end === "2026-12-31")?.values[capexIdx]?.val === 230,
-  `conceptChoice.capex = ${ap.conceptChoice.capex} — a 2009 filing must not empty every ` +
-    `stored period of a filer that has published the broader concept ever since`);
+const np = extractCompanyFacts("NEWPRIM", newPrimaryOldBroad);
+const npY = (e) => np.years.find((y) => y.end === e)?.values[capexIdx];
+check("a period the chosen concept does not cover is NOT filled from the other",
+  np.conceptChoice.capex === `us-gaap|${CAPEX_A}` &&
+    (npY("2025-12-31") === null || npY("2025-12-31") === undefined),
+  `chose ${np.conceptChoice.capex}; FY2025 = ${JSON.stringify(npY("2025-12-31") ?? null)} — ` +
+    `the filer published 220 under the broader concept and the column refuses it`);
 
 {
   // MUTATION (1): the restriction dropped, so an absent period falls back to
@@ -785,47 +807,46 @@ check("a primary-concept filing older than the window does NOT win the column",
   const noRestrict = await liftMutated((src) =>
     src.replace("  if (restrict && preferred) {", "  if (false) {")
   );
-  const m1 = noRestrict.extractCompanyFacts("BOTHC", bothCapex);
-  const m1y = (e) => m1.years.find((y) => y.end === e)?.values[capexIdx];
+  const m1 = noRestrict.extractCompanyFacts("NEWPRIM", newPrimaryOldBroad);
+  const m1y = m1.years.find((y) => y.end === "2025-12-31")?.values[capexIdx];
   check("MUTATION: without the refusal, the absent period is filled from the OTHER concept",
-    m1y("2026-12-31")?.val === 230 && m1y("2026-12-31")?.tag === CAPEX_B,
-    `FY2026 comes back as ${m1y("2026-12-31")?.tag} = ${m1y("2026-12-31")?.val} beside ` +
-      `FY2025 ${m1y("2025-12-31")?.tag} = ${m1y("2025-12-31")?.val} — two measures, one ` +
-      `column, one heading`);
+    m1y?.val === 220 && m1y?.tag === CAPEX_B,
+    `FY2025 comes back as ${m1y?.tag} = ${m1y?.val} beside FY2026 ` +
+      `${npY("2026-12-31")?.tag} = ${npY("2026-12-31")?.val} — two measures, one column, one heading`);
   check("...and the mutation leaves the non-sticky field alone, so it is the restriction being tested",
     noRestrict.extractCompanyFacts("MIGR", migrated).years
       .find((y) => y.end === "2025-12-31")?.values[ocfIdx]?.tag === OCF_B,
     "operatingCashFlow never took the restrict branch, so its resolution is unchanged");
 
-  // MUTATION (2): chosen by NEWEST PERIOD instead of by chain rank — the
-  // default policy's criterion applied under the sticky rule. FY2025 would then
-  // read 220 rather than 110, silently changing what the column measures on
-  // every filer that files both.
-  const byNewest = await liftMutated((src) =>
+  // MUTATION (2): THE RULE THIS ONE REPLACED — choose the highest-ranked
+  // concept the filer files for ANY period, rather than the newest period's.
+  // This is not an invented mutation: it is what shipped in 17a6422e, and the
+  // 119-symbol run is why it did not stay.
+  const rankAnywhere = await liftMutated((src) =>
     src.replace(
-      "      field.oneConceptPerFiler ? stickyTag(all, keepYears) : preferredTag(all)",
-      "      field.oneConceptPerFiler ? preferredTag(all) : preferredTag(all)"
+      "      preferredTag(all)",
+      "      field.oneConceptPerFiler\n" +
+      "        ? (() => { let b = null; for (const c of all) if (!b || c.rank < b.rank) b = c;\n" +
+      "                   return b ? `${b.ns}|${b.tag}` : null; })()\n" +
+      "        : preferredTag(all)"
     )
   );
-  const m2 = byNewest.extractCompanyFacts("BOTHC", bothCapex);
-  const m2y = (e) => m2.years.find((y) => y.end === e)?.values[capexIdx];
-  check("MUTATION: choosing by newest period instead of chain rank takes the broader measure",
-    m2y("2025-12-31")?.tag === CAPEX_B && m2y("2025-12-31")?.val === 220,
-    `FY2025 becomes ${m2y("2025-12-31")?.tag} = ${m2y("2025-12-31")?.val} where the rule ` +
-      `requires ${CAPEX_A} = 110 — the same cell, a different measure, nothing on the page ` +
-      `to say which`);
-
-  // MUTATION (3): the window clause dropped, so the 2009 filing wins and the
-  // whole stored column empties.
-  const noWindow = await liftMutated((src) =>
-    src.replace("  const pool = inWindow.length ? inWindow : candidates;", "  const pool = candidates;")
-  );
-  const m3 = noWindow.extractCompanyFacts("ANCIENT", ancientPrimary);
-  const m3v = m3.years.find((y) => y.end === "2026-12-31")?.values[capexIdx];
-  check("MUTATION: without the window clause, one 2009 filing empties every stored period",
-    m3.conceptChoice.capex === `us-gaap|${CAPEX_A}` && (m3v === null || m3v === undefined),
-    `conceptChoice becomes ${m3.conceptChoice.capex} and FY2026 reads ` +
-      `${JSON.stringify(m3v ?? null)} — a column emptied by a filing older than anything on the page`);
+  const m2 = rankAnywhere.extractCompanyFacts("NVSHAPE", oldPrimaryNewBroad);
+  const m2cells = [...m2.quarters, ...m2.years]
+    .filter((p) => p.values[capexIdx]?.val != null).length;
+  check("the highest-rank-anywhere mutation actually applied",
+    m2.conceptChoice.capex === `us-gaap|${CAPEX_A}`,
+    `it chose ${m2.conceptChoice.capex} where the rule chooses ${nv.conceptChoice.capex}`);
+  check("MUTATION: choosing the highest-ranked concept filed ANYWHERE empties the column",
+    m2cells < nvCells && m2cells <= 1,
+    `${nvCells} capex cells under the rule -> ${m2cells} under the mutation — one filing from ` +
+      `2021 fixes the column on a concept none of the recent periods carries, which is what ` +
+      `cost NVDA 17 cells, PANW 18 and GE 15 on the 119-symbol run`);
+  check("...and the tie-break is unaffected by it, so the two rules are separable",
+    rankAnywhere.extractCompanyFacts("TIEC", tieOnNewest).conceptChoice.capex ===
+      `us-gaap|${CAPEX_A}`,
+    "a filer whose newest period files both lands on PP&E under either rule — the mutation " +
+      "is about WHICH PERIOD decides, not about how a tie is broken");
 }
 
 // AND THE RE-READ KEY HAS TO MOVE FOR THIS TOO. A stored set written before the
