@@ -74,20 +74,23 @@ export const SEC_INSTANT_WINDOW = 8;
 export const SEC_YEAR_WINDOW = 6;
 
 /**
- * The version of the PERIOD LABELLING, bumped when a stored `fy`/`fp` would
- * come out different from the same payload today.
+ * The version of how periods are LABELLED AND ADMITTED, bumped whenever the
+ * same payload would produce a different `fy`/`fp` or a different set of rows.
  *
  * ── WHY THE CHAIN HASH CANNOT COVER THIS ─────────────────────────────────
- * `c` moves when a TAG CHAIN changes, and a labelling change touches no tag.
- * `h` moves when the FIELD ORDER changes, and the labels are not fields. So a
- * set written before fiscal-year calibration keeps its wrong year on the page
- * forever, and nothing selects it.
+ * `c` moves when a TAG CHAIN changes, and neither a labelling rule nor an
+ * admission rule touches a tag. `h` moves when the FIELD ORDER changes, and
+ * neither is a field. So a set written before any of this keeps its wrong
+ * years on the page forever, and nothing selects it.
  *
  * 1 — fiscal year named by the calendar year of its END (AAP read "FY2027" for
  *     a year the company calls FY2026).
  * 2 — named by the filer's own DocumentFiscalYearFocus, calibrated per filer.
+ * 3 — a period enters `years` only if it ENDS ON the fiscal year end. A 10-Q's
+ *     twelve-month comparative is a trailing year, not a fiscal one, and six of
+ *     AMZN's rendered on its five-year card as fiscal years.
  */
-export const SEC_LABEL_VERSION = 2;
+export const SEC_LABEL_VERSION = 3;
 
 export type FactRow = {
   start?: string;
@@ -711,6 +714,46 @@ export type FiscalYearNaming = {
   disagreeing: number;
 };
 
+/**
+ * Does this duration end ON the filer's fiscal year end?
+ *
+ * ── A TWELVE-MONTH FRAME IS NOT A FISCAL YEAR ────────────────────────────
+ * A 10-Q carries twelve-month comparatives. AMZN's payload holds
+ * `2025-07-01..2026-06-30`, 364 days, filed in a 10-Q for Q2 — a trailing year,
+ * ending mid-year, indistinguishable from an annual period by LENGTH alone.
+ * Six of them reached AMZN's `years` list and rendered on the five-year card as
+ * fiscal years, and on the reaction card they took every quarter's label.
+ *
+ * Length cannot tell them apart. The END can: a fiscal year ends on the fiscal
+ * year end, and nothing else does.
+ *
+ * ── AND THE TOLERANCE IS NOT SLACK ───────────────────────────────────────
+ * TEN DAYS, the same figure and the same reason as `fiscalLabel`'s: a
+ * 52/53-week filer's year end moves a few days annually — AAP's lands on
+ * 2 January one year and 27 December the next — so an exact match would drop
+ * every year but the newest. The band is fixed, not cumulative: the year end
+ * oscillates around a weekday, it does not drift away. Ten days is wider than
+ * that oscillation and far narrower than a quarter, so a trailing year ending
+ * three months off is never admitted.
+ *
+ * The candidate years either side are what let a December/January filer match
+ * across the New Year, exactly as in `fiscalLabel`.
+ */
+export const FISCAL_YEAR_END_SLACK_DAYS = 10;
+
+export function onFiscalYearEnd(end: string, yearEndAnchor: string | null): boolean {
+  if (!yearEndAnchor) return true; // nothing to measure against; admit, as before
+  const e = Date.parse(`${end}T00:00:00Z`);
+  const anchor = new Date(`${yearEndAnchor}T00:00:00Z`);
+  if (!Number.isFinite(e) || Number.isNaN(anchor.getTime())) return true;
+  const y = new Date(e).getUTCFullYear();
+  for (const cand of [y - 1, y, y + 1]) {
+    const at = Date.UTC(cand, anchor.getUTCMonth(), anchor.getUTCDate());
+    if (Math.abs((at - e) / DAY) <= FISCAL_YEAR_END_SLACK_DAYS) return true;
+  }
+  return false;
+}
+
 export function fiscalYearOffset(
   facts: CompanyFacts,
   yearEndAnchor: string | null
@@ -1106,10 +1149,24 @@ export function extractCompanyFacts(
     row: quarterMeta.get(e)?.row,
   })).slice(0, keepQuarters);
 
-  const years = pack(yearCells, (e) => ({
-    start: yearMeta.get(e)?.start ?? null,
-    row: yearMeta.get(e)?.row,
-  }), true).slice(0, keepYears);
+  // ── ONLY PERIODS THAT END ON THE FISCAL YEAR END ARE FISCAL YEARS ───────
+  //
+  // Applied ONCE, HERE, so every consumer of `years` gets the same list: the
+  // five-year card, the snapshot anchor, tableBasis and its 548-day gate, the
+  // annual cash-flow fallback, and the period ends the report-date matcher is
+  // given. Filtering at any one of those would leave the others reading
+  // trailing years as fiscal ones.
+  //
+  // THE ANCHOR IS THE ANNUAL FILING'S OWN PERIOD END, not the newest twelve-
+  // month frame — using the frame-derived anchor here would ask a list to
+  // validate itself, and on AMZN that anchor WAS one of the trailing years.
+  // Where no annual filing could be read there is nothing to measure against
+  // and nothing is dropped, which is exactly what shipped before this.
+  const years = pack(
+    new Map([...yearCells].filter(([e]) => onFiscalYearEnd(e, naming.yearEnd))),
+    (e) => ({ start: yearMeta.get(e)?.start ?? null, row: yearMeta.get(e)?.row }),
+    true
+  ).slice(0, keepYears);
 
   const instants = pack(instantCells, (e) => ({ start: null, row: instantMeta.get(e) })).slice(
     0,

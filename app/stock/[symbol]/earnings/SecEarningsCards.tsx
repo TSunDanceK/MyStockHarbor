@@ -203,7 +203,17 @@ function Metric({ label, children, sub }: { label: string; children: React.React
   );
 }
 
-export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
+export function SecSnapshotCard({
+  view,
+  pending = null,
+}: {
+  view: SecEarningsView;
+  /**
+   * A quarter the filer has ANNOUNCED whose figures SEC's data feed does not
+   * carry yet. Null is the normal state and renders nothing.
+   */
+  pending?: { periodEnd: string; announcedOn: string } | null;
+}) {
   const s = view.snapshot;
   // EVERY PERIOD NOUN ON THIS CARD COMES FROM HERE. See SecEarningsView.basis.
   const w = periodWords(view.basis);
@@ -216,6 +226,24 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
         <strong>{view.latestEnd}</strong>)
         {view.latestFiled ? <>, filed <strong>{view.latestFiled}</strong></> : null}.
       </p>
+      {/* ── WHY THIS PAGE IS A QUARTER BEHIND, WHEN IT IS ──────────────────
+          ABT announced its June quarter on 16 July 2026 and filed the 10-Q on
+          28 July. Seven weeks later SEC's companyfacts carried no frame ending
+          30 June at all — measured, every tag, no filter — so this card read
+          "Most recent quarter filed: Q1 FY2026" and was correct. A reader who
+          knows ABT reported in July reads that as broken.
+
+          HEDGED, AND ABOUT THE FEED RATHER THAN THE COMPANY. What is known is
+          that an Item 2.02 8-K was filed and that the figures are not in the
+          data feed yet. No estimate, no third-party number, nothing about what
+          the results were. */}
+      {pending ? (
+        <p className="earningsDataNote" style={{ marginTop: -4 }}>
+          Results for the quarter ended <strong>{pending.periodEnd}</strong> were announced on{" "}
+          <strong>{pending.announcedOn}</strong>. The SEC has not yet published the figures in its
+          data feed, so this page still shows the previous quarter.
+        </p>
+      ) : null}
       {/* THE ACCESSION IS A DATABASE KEY, NOT A FACT ABOUT THE COMPANY. It read
           as "under accession 0000320193-26-000081" in the middle of a sentence
           a reader was meant to understand. It still identifies the filing, so

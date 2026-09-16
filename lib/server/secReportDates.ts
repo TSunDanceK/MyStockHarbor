@@ -669,6 +669,31 @@ export function periodAnniversary(iso: string): string {
 }
 
 /**
+ * A derived period end, corrected to the filer's own calendar.
+ *
+ * ── WHY A STEPPED DATE IS NOT GOOD ENOUGH ────────────────────────────────
+ * Stepping by the median spacing accumulates: two steps of 92 days from a
+ * 31 March quarter end lands on 1 October, not 30 September, and everything
+ * computed from it inherits every day of that drift. Where the same quarter a
+ * year earlier is on file, its anniversary IS the period end — exactly, by the
+ * filer's own convention — so the stepped date is used only to FIND it.
+ *
+ * Returns the stepped date unchanged when no year-ago period is near enough to
+ * correct it, which is the honest answer rather than a nearest-match.
+ */
+export function snapPeriodEnd(events: readonly ReportEvent[], end: string): string {
+  let best: string | null = null;
+  for (const e of events) {
+    if (!e.periodEnd) continue;
+    const cand = periodAnniversary(e.periodEnd);
+    const off = Math.abs(daysBetween(cand, end));
+    if (off > 20) continue;
+    if (!best || off < Math.abs(daysBetween(best, end))) best = cand;
+  }
+  return best ?? end;
+}
+
+/**
  * The next announcement that HAS NOT HAPPENED YET.
  *
  * ── THE DEFECT THIS EXISTS FOR ────────────────────────────────────────────
@@ -704,23 +729,7 @@ export function estimateUpcoming(
   // NOT PAST TODAY ALONE. A filer that announced yesterday should be estimated
   // for its NEXT quarter, not shown yesterday's date as if it were upcoming.
   const floor = events[0]?.announcedOn && events[0].announcedOn > today ? events[0].announcedOn : today;
-  // ── SNAPPED TO THE FILER'S OWN CALENDAR, NOT LEFT ON THE MEDIAN STEP ────
-  // Stepping by the median spacing accumulates: two steps of 92 days from a
-  // 31 March quarter end lands on 1 October, not 30 September, and the estimate
-  // inherits every day of that drift. Where the same quarter a year earlier is
-  // on file, its anniversary is the period end — exactly, by the filer's own
-  // convention — so the stepped date is only used to FIND it.
-  const snap = (end: string): string => {
-    let best: string | null = null;
-    for (const e of events) {
-      if (!e.periodEnd) continue;
-      const cand = periodAnniversary(e.periodEnd);
-      const off = Math.abs(daysBetween(cand, end));
-      if (off > 20) continue;
-      if (!best || off < Math.abs(daysBetween(best, end))) best = cand;
-    }
-    return best ?? end;
-  };
+  const snap = (end: string) => snapPeriodEnd(events, end);
   let end = snap(cadence.end);
   let estimate = estimateNextReport(events, end, category, cadence.annual);
   for (let i = 0; i < 8; i++) {
@@ -796,4 +805,108 @@ export function reactionBarLabels(
   return out.map((l, i) =>
     (seen.get(l) ?? 0) > 1 ? `${l} (${rows[i].announcedOn.slice(5).replace("-", "/")})` : l
   );
+}
+
+// ── ANNOUNCED, BUT NOT YET IN THE DATA FEED ────────────────────────────────
+
+/**
+ * The newest Item 2.02 announcement, WITHOUT any period matching.
+ *
+ * ── WHY THIS IS SEPARATE FROM `reportEvents` ─────────────────────────────
+ * `reportEvents` exists to place an announcement on a period the store holds,
+ * and it is right to discard one it cannot place: an unplaceable event has no
+ * lag, no label and no bar. But "cannot place" is itself a fact worth keeping —
+ * it is what ABT's page needed and did not have.
+ *
+ * ABT announced its June quarter on 16 July 2026 and filed the 10-Q on 28 July.
+ * Seven weeks later SEC's companyfacts still carried no frame ending
+ * 2026-06-30 — measured, all tags, no filter — so the store's newest period was
+ * 31 March and the page said "Most recent quarter filed: Q1 FY2026". Correct,
+ * and a reader who knows ABT reported in July reads it as broken.
+ *
+ * Inside `reportEvents` the July filing lands on 31 March (the newest stored
+ * end within the window) and then loses the dedupe to the real Q1 announcement
+ * of 16 April, which is the correct outcome for a bar and the wrong one for a
+ * notice. Hence a second, deliberately simpler reader.
+ */
+export function latestResultsAnnouncement(subs: Submissions): ReportEvent | null {
+  const recent = subs?.filings?.recent;
+  if (!recent) return null;
+  const n = Array.isArray(recent.accessionNumber) ? recent.accessionNumber.length : 0;
+  let best: ReportEvent | null = null;
+  for (let i = 0; i < n; i++) {
+    const form = str(recent.form?.[i]);
+    // 8-K ONLY, AND THE ORIGINAL, NOT AN AMENDMENT. A 6-K carries no item codes
+    // and is selected positionally, which is too weak to hang a claim about a
+    // specific quarter on; an 8-K/A re-announces a period already announced.
+    if (form !== "8-K") continue;
+    if (!hasResultsItem(str(recent.items?.[i]))) continue;
+    const accepted = parseAcceptanceEt(recent.acceptanceDateTime?.[i]);
+    if (!accepted) continue;
+    if (best && accepted.date <= best.announcedOn) continue;
+    best = {
+      eventDate: str(recent.reportDate?.[i]),
+      periodEnd: null,
+      announcedOn: accepted.date,
+      announcedAt: accepted.time,
+      timing: timingFor(accepted.minutes),
+      form,
+      items: str(recent.items?.[i]),
+      accession: str(recent.accessionNumber?.[i]) ?? "",
+      basis: "8-K item 2.02",
+    };
+  }
+  return best;
+}
+
+/** A results release the SEC's data feed has not caught up with. */
+export type PendingResults = {
+  /** The quarter the announcement is about, derived from the filer's cadence. */
+  periodEnd: string;
+  announcedOn: string;
+  timing: ReportTiming;
+};
+
+/**
+ * Has the filer announced a quarter the stored figures do not contain yet?
+ *
+ * ── THE TEST IS AN ORDERING, NOT A WINDOW ────────────────────────────────
+ * A results 8-K newer than the one already placed on the newest stored period
+ * must be about a LATER period — there is no third possibility, because
+ * `reportEvents` keeps the earliest announcement per period and a filer does
+ * not announce the same quarter twice on an 8-K. So the comparison is between
+ * two announcement dates and needs no plausible-lag window to guess with.
+ *
+ * ── AND THE PERIOD IS NAMED ONLY IF IT CAN BE DERIVED ────────────────────
+ * The notice says which quarter, so a quarter has to be known. It comes from
+ * the filer's own cadence, snapped to the anniversary of the same quarter a
+ * year earlier — the same arithmetic the next-date estimate uses, which was
+ * measured at a mean error under two days. Where the cadence cannot be read,
+ * this returns null and the page says nothing rather than naming a quarter it
+ * inferred loosely.
+ *
+ * `today` is passed in, never read from the clock: an announcement filed today
+ * is excluded because companyfacts was never going to have it yet, and a rule
+ * about "today" cannot be tested by a function that decides what today is.
+ */
+export function pendingResults(
+  placed: readonly ReportEvent[],
+  latest: ReportEvent | null,
+  cadence: { end: string; annual: boolean; stepDays: number } | null,
+  today: string
+): PendingResults | null {
+  if (!latest || !cadence) return null;
+  const newestPlaced = placed.find((e) => e.periodEnd && e.basis === "8-K item 2.02");
+  if (!newestPlaced) return null;
+  // NOT NEWER THAN WHAT IS ALREADY ON THE PAGE: nothing is pending.
+  if (latest.announcedOn <= newestPlaced.announcedOn) return null;
+  // FILED TODAY IS NOT A LAG. companyfacts was never going to carry it yet, and
+  // a notice saying so on the afternoon of the release is noise.
+  if (latest.announcedOn >= today) return null;
+  const periodEnd = snapPeriodEnd(placed, cadence.end);
+  // THE DERIVED PERIOD MUST ACTUALLY BE LATER than the one on the page, and
+  // must already have ENDED — a quarter that has not finished cannot have been
+  // reported, and naming one would be worse than saying nothing.
+  if (periodEnd <= newestPlaced.periodEnd! || periodEnd > today) return null;
+  return { periodEnd, announcedOn: latest.announcedOn, timing: latest.timing };
 }

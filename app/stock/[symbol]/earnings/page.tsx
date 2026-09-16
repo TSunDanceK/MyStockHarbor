@@ -721,6 +721,13 @@ async function getEarningsData(symbol: string) {
     priceReactionQuarters, score, secView, cold,
     /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
     datesFromSec: secEvents.length > 0,
+    /**
+     * A quarter announced whose figures SEC has not published yet. Read from
+     * the stored record, computed by the cron — the page does not derive it,
+     * because deriving it needs the submissions feed and the page has no
+     * business fetching EDGAR on a render.
+     */
+    pendingResults: secDates?.pending ?? null,
   };
 }
 
@@ -1227,7 +1234,7 @@ export default async function StockEarningsPage({ params }: Props) {
               ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
                 <>
-                  <SecSnapshotCard view={secView} />
+                  <SecSnapshotCard view={secView} pending={data.pendingResults} />
                   {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
                       were the FMP estimate cards: "EPS surprise" and "Revenue
                       surprise", both against FMP's epsEstimated /

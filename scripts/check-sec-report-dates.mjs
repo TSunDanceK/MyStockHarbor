@@ -19,7 +19,7 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel };" +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, snapPeriodEnd };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -497,6 +497,94 @@ const codec = await lift(
     `${future[0]} — 2026-09-30 has not been filed, so there is nothing to name it`);
 }
 
+console.log("\n4d. announced, but not yet in the SEC data feed");
+
+// ── THE CASE, MEASURED ───────────────────────────────────────────────────
+// ABT announced its June quarter on 2026-07-16 and filed the 10-Q on
+// 2026-07-28. Seven weeks later companyfacts carried NO duration frame ending
+// 2026-06-30 — every tag, no filter, its newest end was 2026-03-31. The page
+// said "Most recent quarter filed: Q1 FY2026" and was correct; a reader who
+// knows ABT reported in July reads it as broken.
+{
+  const placed = [
+    ev("2026-03-31", "2026-04-16"), ev("2025-12-31", "2026-01-22"),
+    ev("2025-09-30", "2025-10-15"), ev("2025-06-30", "2025-07-17"),
+  ];
+  const cadence = m.nextPeriodEndFrom(
+    ["2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30"], []
+  );
+  const july = { ...ev("2026-06-30", "2026-07-16"), periodEnd: null };
+
+  const p = m.pendingResults(placed, july, cadence, "2026-09-16");
+  check("an announcement newer than the placed one is pending",
+    p?.periodEnd === "2026-06-30" && p?.announcedOn === "2026-07-16",
+    JSON.stringify(p));
+  check("...and the quarter is SNAPPED to the year-ago anniversary, not the median step",
+    m.snapPeriodEnd(placed, cadence.end) === "2026-06-30",
+    `${m.snapPeriodEnd(placed, cadence.end)} — the stepped date is only used to find it`);
+
+  // ── THE ORDERING IS THE TEST, AND IT MUST NOT FIRE ON A NORMAL FILER ───
+  const uptodate = m.pendingResults(placed, ev("2026-03-31", "2026-04-16"), cadence, "2026-09-16");
+  check("a filer whose newest announcement is already on the page shows nothing",
+    uptodate === null, JSON.stringify(uptodate));
+  check("...nor does one announcing a quarter TODAY",
+    m.pendingResults(placed, { ...july, announcedOn: "2026-09-16" }, cadence, "2026-09-16") === null,
+    "companyfacts was never going to carry it yet, and saying so on the day is noise");
+  check("...nor one whose derived quarter has not ended",
+    m.pendingResults(placed, { ...july, announcedOn: "2026-07-16" }, cadence, "2026-05-01") === null,
+    "a quarter that has not finished cannot have been reported");
+  check("no cadence, no claim about which quarter",
+    m.pendingResults(placed, july, null, "2026-09-16") === null,
+    "the notice names a quarter, so a quarter has to be known");
+  check("no placed 8-K history, no baseline to be newer than",
+    m.pendingResults([], july, cadence, "2026-09-16") === null);
+
+  // ── 8-K ONLY, AND NOT AN AMENDMENT ────────────────────────────────────
+  const feed = (rows) => ({ filings: { recent: {
+    accessionNumber: rows.map((_, i) => `a${i}`),
+    form: rows.map((r) => r.form),
+    items: rows.map((r) => r.items ?? null),
+    reportDate: rows.map((r) => r.event),
+    acceptanceDateTime: rows.map((r) => r.accepted),
+  } } });
+  check("a 6-K is never the pending announcement",
+    m.latestResultsAnnouncement(feed([
+      { form: "6-K", event: "2026-06-30", accepted: "2026-07-16T20:30:00.000Z" },
+    ])) === null,
+    "a 6-K carries no item codes and is selected positionally — too weak for this claim");
+  check("an 8-K/A is not either",
+    m.latestResultsAnnouncement(feed([
+      { form: "8-K/A", items: "2.02", event: "2026-07-16", accepted: "2026-07-16T20:30:00.000Z" },
+    ])) === null,
+    "an amendment re-announces a period already announced");
+  check("an 8-K without item 2.02 is not either",
+    m.latestResultsAnnouncement(feed([
+      { form: "8-K", items: "5.02", event: "2026-07-16", accepted: "2026-07-16T20:30:00.000Z" },
+    ])) === null);
+  check("the newest qualifying 8-K IS it, with no period matching at all",
+    (() => {
+      const got = m.latestResultsAnnouncement(feed([
+        { form: "8-K", items: "2.02", event: "2026-04-16", accepted: "2026-04-16T10:30:00.000Z" },
+        { form: "8-K", items: "2.02,9.01", event: "2026-07-16", accepted: "2026-07-16T10:30:00.000Z" },
+      ]));
+      return got?.announcedOn === "2026-07-16" && got?.periodEnd === null;
+    })(),
+    "matching is what discards it inside reportEvents; this reader must not match");
+
+  // ── THE MUTATION: compare period ends instead of announcement dates ────
+  // The ordering test is the whole design. Comparing the derived period against
+  // the stored one would fire on any filer whose cadence points past its newest
+  // stored quarter — which is every filer, most of the time.
+  {
+    const mut = await load((src) => src.replace(
+      "  if (latest.announcedOn <= newestPlaced.announcedOn) return null;",
+      "  if (false) return null;"), 7);
+    check("MUTATION: dropping the ordering test fires on an up-to-date filer",
+      mut.pendingResults(placed, ev("2026-03-31", "2026-04-16"), cadence, "2026-09-16") !== null,
+      "every filer would carry the notice, which makes it mean nothing");
+  }
+}
+
 console.log("\n5. the page is wired to the filings, not to the calendar");
 
 // SOURCE-LEVEL, because the page is a server component that reads Redis and
@@ -577,9 +665,32 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     "or a filer with no Item 2.02 history is re-fetched every day forever");
   // THE RATE GATE IS SHARED. SEC's limit is per requester; two fetchers each
   // spacing their own calls would between them double the measured rate.
+  // ── THE NOTICE ─────────────────────────────────────────────────────────
+  const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
+  check("the notice names the quarter, the date, and blames the FEED",
+    /Results for the quarter ended/.test(cards) &&
+      /The SEC has not yet published the figures in its\s+data feed/.test(cards),
+    "it must not read as a claim about the company's filing");
+  check("...and asserts nothing about what the results were",
+    !/beat|missed|estimate|consensus/i.test(
+      (cards.match(/Results for the quarter ended[\s\S]{0,400}/) ?? [""])[0]
+    ));
+  check("the page reads it from the stored record, never deriving it on a render",
+    /pendingResults: secDates\?\.pending \?\? null/.test(page) &&
+      !/latestResultsAnnouncement/.test(page),
+    "deriving it needs submissions, and a render has no business fetching EDGAR");
+  check("the cron computes it from the submissions payload already in hand",
+    /pendingResults\(\s*\n?\s*events, latestResultsAnnouncement\(subs\), cadence, todayIso/.test(job),
+    "a second fetch for a notice would double this phase's SEC cost");
+
   check("the cron rolls the estimate past what has already been reported",
-    /estimateUpcoming\(\s*\n?\s*events, nextPeriodEndFrom\(quarterEnds, yearEnds\), subs\.category, todayIso/.test(job),
+    /const cadence = nextPeriodEndFrom\(quarterEnds, yearEnds\);/.test(job) &&
+      /estimateUpcoming\(\s*\n?\s*events, cadence, subs\.category, todayIso\s*\n?\s*\)/.test(job) &&
+      !/estimateNextReport\(/.test(job),
     "estimateNextReport alone would store a date already in the past");
+  check("...and the notice reads the SAME cadence, so the two cannot disagree",
+    (job.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
+    "two derivations would let the estimate and the notice name different quarters");
   check("both SEC fetchers share one rate gate",
     (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&
       !/let lastAt2|const lastAt2/.test(job),

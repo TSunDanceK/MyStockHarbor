@@ -22,7 +22,8 @@ const fieldsSrc = readCodeOnly("lib/server/secFields.ts");
 const extractSrc = readCodeOnly("lib/server/secExtract.ts")
   .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secFields";/, "");
 const sec = await lift(
-  `${fieldsSrc}\n${extractSrc}\nexport { fiscalLabel, fiscalYearOffset, fiscalMidYear };`
+  `${fieldsSrc}\n${extractSrc}\nexport { fiscalLabel, fiscalYearOffset, fiscalMidYear,` +
+    ` onFiscalYearEnd, extractCompanyFacts };`
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
@@ -77,6 +78,7 @@ const fetchJson = async (url) => {
 };
 
 const changed = [];
+const yearRowsChanged = [];
 const kept = [];
 const unread = [];
 for (const { symbol, anchor, set } of candidates) {
@@ -94,6 +96,34 @@ for (const { symbol, anchor, set } of candidates) {
   const was = sec.fiscalLabel(newest, anchor, null);
   const now = sec.fiscalLabel(newest, labelAnchor, naming);
   const moved = anchor !== labelAnchor && anchor.slice(5) !== labelAnchor.slice(5);
+
+  // ── AND WHICH ROWS THE FIVE-YEAR CARD LOSES ───────────────────────────
+  // The stored `years` list against what the shipped extraction would admit
+  // today. A row dropped here is a row that card stops showing, so it is
+  // reported per symbol rather than counted.
+  const storedYearEnds = (set.years ?? []).map((y) => y.e).filter(Boolean);
+  const droppedYears = storedYearEnds.filter((e) => !sec.onFiscalYearEnd(e, naming.yearEnd));
+  // THE ANCHOR AND BASIS THE PAGE READS. `set.years[0]` decides the snapshot
+  // anchor, `basis`, `tableBasis` and the 548-day gate, so a change at the head
+  // of the list is a change to the whole page, not one row.
+  const keptYearEnds = storedYearEnds.filter((e) => sec.onFiscalYearEnd(e, naming.yearEnd));
+  const newestQuarterEnd = (set.quarters ?? [])[0]?.e ?? null;
+  const basisOf = (yearEnds) => {
+    const ny = yearEnds[0] ?? null;
+    const yearIsNewer = !!ny && (!newestQuarterEnd || ny > newestQuarterEnd);
+    return yearIsNewer ? "year" : "quarter";
+  };
+  const basisWas = basisOf(storedYearEnds);
+  const basisNow = basisOf(keptYearEnds);
+  if (droppedYears.length) {
+    yearRowsChanged.push(
+      `${symbol.padEnd(6)} drops ${droppedYears.length} of ${storedYearEnds.length} year rows: ` +
+        `${droppedYears.join(" · ")}  (fiscal year end ${naming.yearEnd ?? "unread"})` +
+        (basisWas !== basisNow ? `  ANCHOR/BASIS CHANGES: ${basisWas} -> ${basisNow}` : "") +
+        (storedYearEnds[0] !== keptYearEnds[0] ? `  newest year row ${storedYearEnds[0]} -> ${keptYearEnds[0] ?? "none"}` : "")
+    );
+  }
+
   const line = `${symbol.padEnd(6)} year-end ${anchor}${moved ? ` -> ${labelAnchor} (ANCHOR WAS WRONG)` : ""}` +
     `  ${was.fp} FY${was.fy} -> ${now.fp} FY${now.fy}` +
     `  (offset ${naming.offset}, from ${naming.basis ?? "nothing"}, ${naming.agreeing} agreeing/${naming.disagreeing} not)`;
@@ -111,3 +141,6 @@ for (const l of unread) console.log(`  ${l}`);
 console.log(`\n${"=".repeat(78)}`);
 console.log(`RELABELLED: ${changed.length} of ${all.length} SYMBOLS`);
 for (const l of changed) console.log(`  ${l}`);
+console.log(`\n${"=".repeat(78)}`);
+console.log(`FIVE-YEAR CARD ROWS CHANGE: ${yearRowsChanged.length} of ${all.length} SYMBOLS`);
+for (const l of yearRowsChanged) console.log(`  ${l}`);

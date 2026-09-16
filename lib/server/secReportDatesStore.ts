@@ -14,7 +14,7 @@
 // honest pairing — not a page that loses both because one endpoint moved.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import type { NextReportEstimate, ReportEvent } from "./secReportDates";
+import type { NextReportEstimate, PendingResults, ReportEvent } from "./secReportDates";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -49,6 +49,14 @@ export type StoredReportDates = {
    */
   nextPeriodEnd: string | null;
   next: NextReportEstimate;
+  /**
+   * A quarter the filer has ANNOUNCED that the stored figures do not contain.
+   *
+   * OPTIONAL, because records written before this exist and absent must mean
+   * "not known", never "nothing pending" — the page renders no notice either
+   * way, but a later reader must not be able to mistake one for the other.
+   */
+  pending?: PendingResults | null;
 };
 
 export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
