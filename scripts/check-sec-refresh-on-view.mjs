@@ -127,9 +127,18 @@ const loadRefresh = async (mutate = (s) => s, redis = makeRedis()) => {
       // than about a race with them.
       `const __AFTERS__ = [];`,
       `const after = (fn) => { const p = fn(); __AFTERS__.push(p); return p; };`,
+      // THE REVALIDATION SPY. revalidatePath cannot run outside a Next request
+      // scope, so it is stubbed and RECORDED — the assertion is which paths it
+      // was called with, which is the property that matters. Whether Next
+      // PERMITS the call from inside after() is a preview check, not a unit one.
+      `const __REVALIDATED__ = [];`,
+      `let __REVALIDATE_THROWS__ = false;`,
+      `const revalidatePath = (p) => { if (__REVALIDATE_THROWS__) throw new Error("static generation store missing"); __REVALIDATED__.push(p); };`,
+      `const revalidations = () => __REVALIDATED__;`,
+      `const makeRevalidateThrow = (v) => { __REVALIDATE_THROWS__ = v; };`,
       `async function settle() { while (__AFTERS__.length) { await __AFTERS__.shift(); } }`,
       src.replace(/export (const|async function|function|type)/g, "$1"),
-      "export { maybeRefreshOnView, needsReread, settle, REFRESH_FETCHES_PER_MINUTE, REFRESH_COOLDOWN_S, REFRESH_LOCK_TTL_S };",
+      "export { maybeRefreshOnView, needsReread, settle, revalidations, makeRevalidateThrow, REFRESH_FETCHES_PER_MINUTE, REFRESH_COOLDOWN_S, REFRESH_LOCK_TTL_S };",
       `// lift-nonce ${nonce++}`,
     ].join("\n").replace("__REDIS__", "globalThis.__FAKE_REDIS__")
   );
@@ -252,6 +261,61 @@ await withRedis(async (M, redis) => {
       `so only the shared budget can be what refused the rest`);
   void redis;
 });
+
+console.log("\n3b. the refreshed page is flushed, or the refresh delivers nothing for an hour");
+
+await withRedis(async (M) => {
+  let called = 0;
+  await M.maybeRefreshOnView(setFor("AAA", { stale: true }), async () => { called++; });
+  await M.settle();
+  check("a successful refresh invalidates exactly that symbol's earnings path",
+    JSON.stringify(M.revalidations()) === JSON.stringify(["/stock/AAA/earnings"]),
+    `revalidated ${JSON.stringify(M.revalidations())} — the route inherits revalidate=3600, so ` +
+      `without this the HTML rendered from the OLD set is served for up to an hour AFTER the new ` +
+      `one lands, and the refresh delivers nothing`);
+  check("...and only that symbol — one path, not a sweep",
+    M.revalidations().length === 1 && called === 1,
+    "the overview and /news do not read the fact set, so they hold nothing to invalidate");
+});
+
+await withRedis(async (M) => {
+  // A FAILED REFRESH MUST NOT FLUSH. Throwing away a valid render to rebuild
+  // the identical page costs the FMP call and the Redis reads that produced it.
+  await M.maybeRefreshOnView(setFor("BAD", { stale: true }), async () => {
+    throw new Error("HTTP 500");
+  });
+  await M.settle();
+  check("a FAILED refresh invalidates nothing",
+    M.revalidations().length === 0,
+    "nothing was written, so the cached HTML is still the right answer");
+});
+
+await withRedis(async (M) => {
+  // AND A REFUSAL BY revalidatePath ITSELF MUST NOT LOSE THE WRITE. The set is
+  // already stored by the time this runs; a throw here must leave it stored.
+  M.makeRevalidateThrow(true);
+  let called = 0;
+  await M.maybeRefreshOnView(setFor("AAA", { stale: true }), async () => { called++; });
+  await M.settle();
+  check("if revalidatePath refuses, the refresh itself still completed",
+    called === 1,
+    "the write is done before the flush is attempted; ISR expiry is the floor either way");
+});
+
+{
+  // MUTATION: the revalidation removed, which is the state this PR shipped in
+  // before the ISR trap was measured.
+  const m = (s) => s.replace("            revalidatePath(`/stock/${symbol}/earnings`);", "");
+  check("the no-revalidation mutation actually applied", m(REFRESH_SRC) !== REFRESH_SRC);
+  await withRedis(async (M) => {
+    await M.maybeRefreshOnView(setFor("AAA", { stale: true }), async () => {});
+    await M.settle();
+    check("MUTATION: without the flush, a refreshed symbol invalidates nothing",
+      M.revalidations().length === 0,
+      "the new set is in Redis and the page keeps serving the old figures until ISR expires — " +
+        "up to an hour in which this module has done nothing a reader can see");
+  }, m);
+}
 
 console.log("\n4. the mutations");
 

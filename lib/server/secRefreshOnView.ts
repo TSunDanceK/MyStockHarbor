@@ -27,6 +27,7 @@
 // predicate that agreed today is how the read path and the write path drift
 // apart, and the whole reason that function was moved out of the route.
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { needsReread, staleReasons } from "./secStaleness";
@@ -207,6 +208,37 @@ export async function maybeRefreshOnView(
           // fetched, extracted, encoded and stored" — and so a change to that
           // path cannot leave a stale duplicate here.
           await refetch(symbol);
+          // ── FLUSH THE PAGE THAT IS STILL SHOWING THE OLD ANSWER ──────────
+          //
+          // WITHOUT THIS THE REFRESH DELIVERS NOTHING FOR UP TO AN HOUR, which
+          // would make this whole module pointless. The route inherits
+          // `revalidate = 3600`, so the HTML rendered from the OLD set — the
+          // render that triggered this refresh — is served for up to an hour
+          // after the new set lands. The cron already does exactly this when it
+          // writes (app/api/jobs/sec-facts/route.ts, inside its `changed`
+          // branch); this is the same flush for the same reason, on the path
+          // that writes between cron runs.
+          //
+          // ONE PATH, AND IT IS THE ONLY READER. resolveFactSetForRender is
+          // imported by app/stock/[symbol]/earnings/page.tsx and nowhere else,
+          // so the overview and /news hold nothing to invalidate.
+          //
+          // GUARDED, AND THE GUARD IS NOT DEFENSIVE HABIT. `revalidatePath`
+          // throws if it is reached during render; this call sits inside
+          // after(), which runs once the response is sent, so it should be
+          // permitted — but "should" is doing real work in that sentence and
+          // the cost of being wrong is a background throw on every refresh.
+          // Caught, logged once, and the ISR window remains the floor: the page
+          // is correct within the hour either way. Verified on the preview, not
+          // here — a render scope cannot be reproduced in a unit check.
+          try {
+            revalidatePath(`/stock/${symbol}/earnings`);
+          } catch (err) {
+            console.warn(
+              `[sec-refresh] ${symbol}: revalidatePath refused (${String((err as Error)?.message ?? err)}) — ` +
+                `the set is written; the page corrects itself when ISR expires`
+            );
+          }
           console.info(
             `[sec-refresh] ${symbol} refreshed on view (was stale: ${staleReasons(set).join(",")})`
           );
