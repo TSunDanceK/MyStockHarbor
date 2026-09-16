@@ -416,6 +416,14 @@ const TASKS = {
   // WHY A STORED SET'S NEWEST PERIOD IS OLDER THAN THE FILER'S NEWEST FILING.
   // Credentialled to read the store and the report-date records; fetches
   // submissions. No writes.
+  // AUDIT OF WHAT THE PREVIEW SEEDING WROTE. Credentialled, READ ONLY — it
+  // asserts its own write-call count is zero before it exits.
+  "write-seed-audit": {
+    script: "scripts/seed-write-audit.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],
