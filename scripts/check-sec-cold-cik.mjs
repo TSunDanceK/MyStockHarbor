@@ -196,6 +196,12 @@ check("the job drains the recorded CIKs BEFORE it builds its queues",
     .replace(/^const redis =[\s\S]*?: null;$/m, "const redis = globalThis.__FAKE_REDIS__;");
   const CC = await lift(
     [
+      // THE WRITE GATE, STUBBED TO PRODUCTION. This section is about the CIK
+      // logic, and every assertion below assumes the writes happen; leaving the
+      // gate unresolved would make them pass for the wrong reason. That the
+      // gate is present at all is check-sec-write-gate's job, per call site.
+      "const canWriteSecState = () => true;",
+      "const noteSecWriteBlocked = () => {};",
       "const emptyEntry = (cik) => ({ cik, contentHash: null, needsReverify: false });",
       src.replace(/export (const|async function|function|type)/g, "$1"),
       "export { recordColdCik, drainColdCiks, SEC_COLD_CIK_KEY };",
@@ -250,6 +256,12 @@ check("the job drains the recorded CIKs BEFORE it builds its queues",
   check("the apply-the-conflict mutation actually applied", conflictSrc !== src);
   const CC2 = await lift(
     [
+      // THE WRITE GATE, STUBBED TO PRODUCTION. This section is about the CIK
+      // logic, and every assertion below assumes the writes happen; leaving the
+      // gate unresolved would make them pass for the wrong reason. That the
+      // gate is present at all is check-sec-write-gate's job, per call site.
+      "const canWriteSecState = () => true;",
+      "const noteSecWriteBlocked = () => {};",
       "const emptyEntry = (cik) => ({ cik, contentHash: null, needsReverify: false });",
       conflictSrc.replace(/export (const|async function|function|type)/g, "$1"),
       "export { recordColdCik, drainColdCiks, SEC_COLD_CIK_KEY };",

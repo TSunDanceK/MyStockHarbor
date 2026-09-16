@@ -773,6 +773,10 @@ export const PER_SYMBOL_KEYS: PerSymbolKey[] = [
   // and LRU on LIVE symbols -- it is not a licence to leave a delisted symbol's
   // data behind, which is the exact failure this list exists to prevent.
   { prefix: "msh:sec:facts:v1", sep: ":" },
+  // The SEC report dates, written from the submissions feed. Same reasoning as
+  // the fact set above: a delisted symbol's announcement history is state, and
+  // leaving it costs storage and answers reads for a page that no longer exists.
+  { prefix: "msh:sec:reportdates:v1", sep: ":" },
   // THIS MODULE'S OWN EVIDENCE KEY. Found by the derived scan, not by thinking
   // about it -- and it matters: leaving the absence record behind means a
   // symbol that is re-admitted later starts with days of stale evidence
