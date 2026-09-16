@@ -583,6 +583,88 @@ check("a nonsense offset is refused rather than renaming every period",
       /fiscalLabel\(end, labelAnchor, naming\)/.test(extractSrc));
 }
 
+// ── 6e. A TWELVE-MONTH COMPARATIVE IS NOT A FISCAL YEAR ───────────────────
+//
+// THE DEFECT, measured on AMZN's own companyfacts:
+//   us-gaap:CashCashEquivalents...IncludingExchangeRateEffect
+//     2025-07-01..2026-06-30  (364d, 10-Q Q2)
+// Six such trailing years reached AMZN's `years` list. On the five-year card
+// they rendered AS FISCAL YEARS; on the reaction card they took every quarter's
+// label. Length cannot tell them apart — 364 days either way. The END can.
+console.log("\n6e. a trailing twelve months is not a fiscal year");
+{
+  // AN AMZN-SHAPED PAYLOAD: a December filer with a real 10-K year, real
+  // quarters, and the 10-Q's twelve-month comparative ending at a QUARTER end.
+  const amznFacts = {
+    cik: 2, entityName: "Trailing Co",
+    facts: {
+      "us-gaap": {
+        NetIncomeLoss: { units: { USD: [
+          // The fiscal year, from the 10-K.
+          { start: "2025-01-01", end: "2025-12-31", val: 400, accn: "k25", form: "10-K", filed: "2026-02-05", fy: 2025, fp: "FY" },
+          { start: "2024-01-01", end: "2024-12-31", val: 300, accn: "k24", form: "10-K", filed: "2025-02-06", fy: 2024, fp: "FY" },
+          // Real quarters.
+          { start: "2026-01-01", end: "2026-03-31", val: 90, accn: "q1", form: "10-Q", filed: "2026-05-01", fy: 2026, fp: "Q1" },
+          { start: "2026-01-01", end: "2026-06-30", val: 190, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+          // THE IMPOSTOR: twelve months ending mid-year, filed in the Q2 10-Q.
+          { start: "2025-07-01", end: "2026-06-30", val: 410, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+        ] } },
+        Assets: { units: { USD: [
+          { end: "2026-06-30", val: 9000, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+        ] } },
+      },
+    },
+  };
+  const amznOut = extractCompanyFacts("AMZN", amznFacts);
+  const yearEnds = amznOut.years.map((y) => y.end);
+  check("the fiscal year is kept",
+    yearEnds.includes("2025-12-31") && yearEnds.includes("2024-12-31"), yearEnds.join(" · "));
+  check("the trailing year ending at a QUARTER end is not in `years`",
+    !yearEnds.includes("2026-06-30"),
+    `${yearEnds.join(" · ")} — a 364-day span ending 30 June is not a fiscal year`);
+  check("...and the quarter at that end survives, untouched",
+    amznOut.quarters.some((q) => q.end === "2026-06-30"),
+    "dropping the trailing year must not drop the quarter that shares its end");
+
+  // THE ANCHOR THE FILTER USES IS THE ANNUAL FILING'S, not the newest frame —
+  // using the frame would ask the list to validate itself, and on AMZN the
+  // newest frame WAS one of the trailing years.
+  check("the filter measures against the 10-K's own period end",
+    /onFiscalYearEnd\(e, naming\.yearEnd\)/.test(extractSrc),
+    "yearEndAnchor is derived FROM yearCells, so it cannot referee them");
+
+  // ── THE MUTATION: admit any twelve-month frame, which is what shipped ────
+  {
+    const anyTwelve = await liftMutated((src) =>
+      src.replace("    new Map([...yearCells].filter(([e]) => onFiscalYearEnd(e, naming.yearEnd))),",
+        "    yearCells,"));
+    const broken = anyTwelve.extractCompanyFacts("AMZN", amznFacts);
+    check("the admit-anything mutation actually applied",
+      broken.years.length !== amznOut.years.length,
+      `${broken.years.map((y) => y.end).join(" · ")}`);
+    check("MUTATION: the trailing year returns to `years` — the five-year card's rows",
+      broken.years.some((y) => y.end === "2026-06-30"),
+      `${broken.years.map((y) => y.end).join(" · ")} — this is what AMZN rendered`);
+    // AND IT IS THE NEWEST, which is the snapshot anchor: the same row that
+    // would decide basis and tableBasis for the whole page.
+    check("...and it lands FIRST, where the snapshot anchor reads",
+      broken.years[0]?.end === "2026-06-30",
+      "the anchor, tableBasis and the 548-day gate all read set.years[0]");
+  }
+
+  // THE SLACK IS FOR WEEKDAY DRIFT, NOT FOR A DIFFERENT PERIOD.
+  check("a year end eight days off the anchor is still a fiscal year",
+    mod.onFiscalYearEnd("2026-01-08", "2026-01-02"));
+  check("...and one a quarter off is not",
+    !mod.onFiscalYearEnd("2026-03-31", "2026-01-02"));
+  check("a December/January filer matches ACROSS the new year",
+    mod.onFiscalYearEnd("2025-12-27", "2027-01-02") && mod.onFiscalYearEnd("2024-12-28", "2027-01-02"),
+    "AAP's year end lands on both sides of it");
+  check("with no annual filing to anchor on, nothing is dropped",
+    mod.onFiscalYearEnd("2026-06-30", null),
+    "that is exactly the behaviour that shipped, and it stays where nothing better is known");
+}
+
 // ── THE RELABEL MUST NOT SPLIT A YEAR-OVER-YEAR PAIR ──────────────────────
 //
 // YoY matches BY LABEL — same fp, fy-1 — so a shift applied to some periods and

@@ -24,7 +24,7 @@ const UA = process.env.SEC_USER_AGENT ??
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   strip("lib/server/secReportDates.ts").replace(/export (const|function|type)/g, "$1") +
-    "\nexport { reportEvents, estimateUpcoming, nextPeriodEndFrom };"
+    "\nexport { reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults };"
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
@@ -73,7 +73,7 @@ const fetchJson = async (url) => {
 };
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const tally = { written: 0, noFacts: 0, noSubs: 0, date: 0, month: 0, none: 0, noEvents: 0 };
+const tally = { pending: 0, written: 0, noFacts: 0, noSubs: 0, date: 0, month: 0, none: 0, noEvents: 0 };
 const examples = [];
 for (const symbol of targets) {
   const cik = manifest.symbols[symbol]?.cik ?? tickerMap.get(symbol)?.cik;
@@ -88,9 +88,11 @@ for (const symbol of targets) {
   const events = sec.reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
     .filter((e) => e.periodEnd)
     .slice(0, LIMIT);
+  const cadence = sec.nextPeriodEndFrom(quarterEnds, yearEnds);
   const { estimate: next, periodEnd: nextEnd } = sec.estimateUpcoming(
-    events, sec.nextPeriodEndFrom(quarterEnds, yearEnds), subs.category, TODAY
+    events, cadence, subs.category, TODAY
   );
+  const pending = sec.pendingResults(events, sec.latestResultsAnnouncement(subs), cadence, TODAY);
 
   await redis.set(`${DATES_PREFIX}:${symbol}`, {
     symbol, cik,
@@ -98,9 +100,11 @@ for (const symbol of targets) {
     events,
     nextPeriodEnd: nextEnd,
     next,
+    pending,
   });
   tally.written++;
   tally[next.kind]++;
+  if (pending) tally.pending++;
   if (!events.length) tally.noEvents++;
   if (examples.length < 14) {
     examples.push(
@@ -108,6 +112,7 @@ for (const symbol of targets) {
         `${next.kind === "date" ? ` ${next.date}${next.clamped ? " (clamped)" : ""} est=${next.estimator} timing=${next.timing ?? "mixed"}` : ""}` +
         `${next.kind === "month" ? ` ${next.month}` : ""}` +
         `${next.kind === "none" ? ` — ${next.reason}` : ""}` +
+        `${pending ? ` · PENDING ${pending.periodEnd} announced ${pending.announcedOn}` : ""}` +
         `${events[0] ? ` · latest ${events[0].periodEnd} -> ${events[0].announcedOn} ${events[0].timing} (${events[0].basis})` : ""}`
     );
   }

@@ -40,7 +40,8 @@ export type StaleInput = {
    */
   c?: string | null;
   /**
-   * SEC_LABEL_VERSION the set's fiscal labels were written under. Absent = 1.
+   * SEC_LABEL_VERSION the set's period labelling AND ADMISSION were written
+   * under. Absent = 1.
    *
    * ITS OWN REASON, because neither of the other two can see it: `c` moves for
    * a TAG CHAIN and a labelling change touches no tag, `h` moves for FIELD

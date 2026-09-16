@@ -9,7 +9,10 @@ import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type Stor
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
-import { reportEvents, estimateUpcoming, nextPeriodEndFrom, type Submissions } from "@/lib/server/secReportDates";
+import {
+  reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults,
+  type Submissions,
+} from "@/lib/server/secReportDates";
 import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
 
 export const runtime = "nodejs";
@@ -647,7 +650,7 @@ export async function GET(req: NextRequest) {
   // is the whole point of the matching in `reportEvents`: an Item 2.02 8-K's
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
-  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0 };
+  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
     const changedSet = new Set(changedThisRun);
@@ -677,8 +680,16 @@ export async function GET(req: NextRequest) {
         // lags the filings — companyfacts carries a period once it is FILED —
         // so one cadence step past its newest period can be a date in the
         // past, rendered under "next expected".
+        const cadence = nextPeriodEndFrom(quarterEnds, yearEnds);
         const { estimate: next, periodEnd: nextEnd } = estimateUpcoming(
-          events, nextPeriodEndFrom(quarterEnds, yearEnds), subs.category, todayIso
+          events, cadence, subs.category, todayIso
+        );
+        // ── ANNOUNCED BUT NOT YET IN THE FEED ─────────────────────────────
+        // Read from the SAME submissions payload already in hand, so this
+        // costs nothing beyond the arithmetic. See pendingResults for why it
+        // cannot come out of `events`.
+        const pending = pendingResults(
+          events, latestResultsAnnouncement(subs), cadence, todayIso
         );
         const ok = await writeReportDates({
           symbol, cik,
@@ -686,11 +697,13 @@ export async function GET(req: NextRequest) {
           events,
           nextPeriodEnd: nextEnd,
           next,
+          pending,
         });
         if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
         if (!events.length) reportDates.noEvents++;
         if (next.kind === "date") reportDates.dated++;
+        if (pending) reportDates.pending++;
         // STAMPED WHETHER OR NOT IT FOUND ANYTHING, for the same reason the cold
         // queue is cleared on a fetch that populated nothing: a filer with no
         // Item 2.02 history would otherwise sit at the head of the backfill
@@ -736,6 +749,10 @@ export async function GET(req: NextRequest) {
     reportDatesFailed: reportDates.failed,
     reportDatesNoEvents: reportDates.noEvents,
     reportDatesDated: reportDates.dated,
+    // SYMBOLS showing "announced, not yet in the SEC feed". A number that
+    // climbs through earnings season and falls back is the feed catching up;
+    // one that only climbs is a bug in the test, not a lag at SEC.
+    reportDatesPending: reportDates.pending,
     reportDatesBacklog: reportDates.backlog,
     manifestWritten: persisted,
   };
