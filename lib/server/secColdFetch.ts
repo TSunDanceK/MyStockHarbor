@@ -80,6 +80,8 @@ import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secE
 import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
+import { recordColdCik } from "./secColdCik";
+import { maybeRefreshOnView } from "./secRefreshOnView";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
 // ABSENCE. @upstash/redis sends `cache: "no-store"` by default, and one such
@@ -405,6 +407,12 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.
   await writeFactSet(set);
+  // THE MANIFEST IS THE ONLY PLACE THAT DOES NOT KNOW THIS CIK. We cannot have
+  // reached here without one — cikForSymbol is the first gate in
+  // resolveFactSetForRender — and `populationQueues` filters on `e.cik`, so an
+  // entry without one is in NO cron queue. Recorded to a small side channel
+  // rather than written into the 417 KB manifest from a render. See secColdCik.
+  await recordColdCik(symbol, cik);
   return set;
 }
 
@@ -505,7 +513,24 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   // 2. THE STORE.
   const stored = await readFactSet(clean);
   if (stored) {
-    if (hasUsableData(stored)) return { status: "ready", set: stored, cold: false };
+    if (hasUsableData(stored)) {
+      // ── REFRESH ON VIEW, AFTER THE RESPONSE ────────────────────────────
+      //
+      // The set is returned FIRST and unchanged; the refresh runs in after().
+      // A populated stale set previously had no path back to the current
+      // chains except the cron's rewindow queue — three days at the merged
+      // slack allowance, during which a page someone is reading serves figures
+      // resolved under a rule production no longer runs.
+      //
+      // The cron remains the FLOOR: it reaches every symbol whether or not
+      // anyone visits. This is the fast path for the ones being read.
+      //
+      // NOT AWAITED FOR ITS WORK, only for the scheduling call — everything
+      // inside is after(). Staleness is decided by the same exported
+      // needsReread the queue selects on, never by a second predicate here.
+      await maybeRefreshOnView(stored, (sym) => fetchAndStore(sym, cik));
+      return { status: "ready", set: stored, cold: false };
+    }
     // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
     //
     // secFieldsHash gates on field ORDER and MEMBERSHIP, deliberately: a
