@@ -363,6 +363,16 @@ export type SecEarningsView = {
    */
   basis: PeriodBasis;
   /**
+   * The kind of period the growth/margins and earnings-history TABLES walk.
+   *
+   * NOT ALWAYS `basis`. A filer can have a newer annual period than its newest
+   * quarter (AZN: FY2025 ended 2025-12-31 against Q2 FY2025 ended 2025-06-30),
+   * and then the snapshot is annual while the quarterly table below it is
+   * still a table of quarters. Cards that describe the TABLE take their nouns
+   * from this; cards that describe THE LATEST PERIOD take them from `basis`.
+   */
+  tableBasis: PeriodBasis;
+  /**
    * Up to five fiscal years, oldest first. Rendered on EVERY stock as its own
    * card, and it is the only growth table an annual-only filer has.
    */
@@ -585,15 +595,50 @@ export const RENDERED_YEARS = 5;
  * FY vs FY-1 by label, with no new code and no array offset.
  */
 export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null {
-  // THE ANCHOR DECIDES BOTH THE DATA AND THE WORDS. See SecEarningsView.basis.
-  const basis: PeriodBasis = set.quarters.length === 0 ? "year" : "quarter";
-  const annualOnly = basis === "year";
-  const q = annualOnly ? set.years : set.quarters;
+  // ── TWO ANCHORS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS ──────────────────
+  //
+  // THE DEFECT THIS SPLITS APART. AZN's snapshot read "Most recent quarter
+  // filed: Q2 FY2025 (period ending 2025-06-30)" while the store held FY2025,
+  // ended 2025-12-31 — six months NEWER — and the five-year card showed it two
+  // cards down. The page presented stale data as the latest thing it had,
+  // because "latest" was decided by KIND (a quarter if any quarters exist)
+  // rather than by DATE.
+  //
+  //   latest      the newest period by PERIOD END, whichever kind it is. The
+  //               snapshot, the score and the Quality of Earnings card are
+  //               claims about "the latest reported period", so they follow
+  //               this, and `basis` takes its wording from it.
+  //   tableRows   quarters when the filer has any, years otherwise. The
+  //               quarterly table is a table OF QUARTERS; a newer annual
+  //               period does not stop those quarters existing, so it still
+  //               renders below.
+  //
+  // COLLAPSING THESE BACK INTO ONE FIELD IS THE BUG. The old `annualOnly` did
+  // both jobs, so making the snapshot annual for AZN would have deleted its
+  // quarterly table, and keeping the table meant keeping the stale snapshot.
+  const newestQuarter = set.quarters[0] ?? null;
+  const newestYear = set.years[0] ?? null;
+  if (!newestQuarter && !newestYear) return null;
+  const yearIsNewer =
+    !!newestYear && (!newestQuarter || newestYear.e > newestQuarter.e);
+  const latest = (yearIsNewer ? newestYear : newestQuarter)!;
+  const basis: PeriodBasis = yearIsNewer ? "year" : "quarter";
+
+  // The list the TABLES walk. Not the anchor list: see above.
+  const q = set.quarters.length ? set.quarters : set.years;
   if (!q.length) return null;
-  const latest = q[0];
+  // Kept for the places that ask "does this filer publish quarters at all" —
+  // the gap badge, which is a quarterly idea, and the earnings-history table.
+  const annualOnly = set.quarters.length === 0;
+  // The kind of period the TABLES walk, which is not always the anchor's kind.
+  const tableBasis: PeriodBasis = annualOnly ? "year" : "quarter";
   // MATCHED BY FISCAL LABEL. See priorYearOf for the four-year comparison the
   // old `q[4]` printed on AZN and why there is no nearest-row fallback.
-  const yearAgo = priorYearOf(q, latest);
+  // SEARCHED IN THE LIST `latest` CAME FROM. When the anchor is the year and
+  // the tables walk quarters, searching `q` would look for FY2024 among
+  // quarters and find nothing — a blank snapshot comparison on a filer that
+  // has the prior year right there.
+  const yearAgo = priorYearOf(yearIsNewer ? set.years : q, latest);
 
   // ── EVERY ROW THE TABLE COULD SHOW, MEASURED BEFORE ANY ARE CHOSEN ───────
   //
@@ -736,8 +781,13 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // test reported basis "quarter" beside a period labelled FY2025 — the exact
   // period mislabel the basis field exists to prevent, arriving through the
   // one branch that had never had a non-quarter anchor.
+  // WHAT KIND OF PERIOD cashFrom ACTUALLY IS, asked of the data rather than
+  // inferred from `latest`. The old test was `annualOnly || cashFrom !== latest`,
+  // which reported "quarter" the moment the anchor itself became a year — the
+  // card would have carried annual figures under quarterly wording on exactly
+  // the filer this change is about.
   const cashBasis: "quarter" | "year" =
-    annualOnly || cashFrom !== latest ? "year" : "quarter";
+    set.years.some((y) => y.e === cashFrom.e && y.fp === cashFrom.fp) ? "year" : "quarter";
 
   // ── THE FIVE-YEAR ANNUAL ROWS, BUILT ONCE FOR BOTH PLACES THEY APPEAR ────
   //
@@ -869,6 +919,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
     },
     basis,
+    tableBasis,
     annual: annualRows,
     margins,
     growth,

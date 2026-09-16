@@ -265,11 +265,10 @@ export function SecSnapshotCard({ view }: { view: SecEarningsView }) {
 }
 
 export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
-  // THIS CARD ONLY RENDERS ON A QUARTERLY ANCHOR, and it still takes its nouns
-  // from the basis rather than writing them out. A literal that happens to be
-  // right today is the thing that went wrong on KGC; the rule is the same
-  // everywhere or it is not a rule.
-  const w = periodWords(view.basis);
+  // TABLE NOUNS COME FROM tableBasis. This card describes the TABLE, not the
+  // latest period, and the two differ when a filer's newest annual period ends
+  // after its newest quarter.
+  const w = periodWords(view.tableBasis);
   return (
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
@@ -645,8 +644,9 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
  * nothing and the five-year card is the history.
  */
 export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
-  if (view.basis === "year") return null;
-  const w = periodWords(view.basis);
+  // tableBasis: this table IS the rows, so it follows what the rows are.
+  if (view.tableBasis === "year") return null;
+  const w = periodWords(view.tableBasis);
   return (
     <section className="card">
       <div className="eyebrow">Earnings history</div>
