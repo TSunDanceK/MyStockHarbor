@@ -114,12 +114,42 @@ export type FieldDef = {
    * like a right one.
    */
   ratioSource?: { numerator: string; denominator: string };
+  /**
+   * ONE CONCEPT PER FILER, CHOSEN ONCE, WITH NO PER-PERIOD FALLBACK.
+   *
+   * ── WHY THIS IS NOT THE DEFAULT ───────────────────────────────────────────
+   * The default policy (CHAIN_RESOLUTION_POLICY, `preferredTag`) picks the
+   * concept covering the filer's newest period and lets the chain fill periods
+   * where that one is absent. That is right where the entries are the SAME
+   * MEASURE under two spellings — AAPL's revenue is `Revenues` before 2018 and
+   * `RevenueFromContractWithCustomer...` after, and the column should follow the
+   * filer's presentation without losing rows.
+   *
+   * It is wrong where the entries are DIFFERENT MEASURES. capex's two are:
+   * measured over 119 SYMBOLS, three file both for a period still stored and
+   * disagree by 78.9% (CRM), 37.6% (GE) and 14.8% (SCHW). A fallback that fills
+   * an absent period from the other concept makes one column mean two things
+   * down its own length, and the 78.9% is how wrong that can be.
+   *
+   * So on a field marked here:
+   *   - the filer's concept is the HIGHEST-RANKED chain entry it files for any
+   *     period inside the retention window, decided once for the whole column;
+   *   - every other concept is refused outright, so a period the chosen one does
+   *     not cover reads "Not reported" rather than switching.
+   *
+   * A REFUSAL IS A COST AND IT IS THE POINT. Some cells that had a figure will
+   * read "Not reported" instead. "Not reported" is a true statement about the
+   * chosen measure; the figure it replaces was a different measure wearing the
+   * same column heading.
+   */
+  oneConceptPerFiler?: boolean;
 };
 
 // The per-block literals below carry only what VARIES. `satisfies` on each
 // array supplies the contextual type, so `unit: "USD"` stays the literal type
 // rather than widening to `string` before the `.map()` re-adds the rest.
-type Seed = Pick<FieldDef, "key" | "chain" | "unit"> & Partial<Pick<FieldDef, "ifrsChain">>;
+type Seed = Pick<FieldDef, "key" | "chain" | "unit"> &
+  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler">>;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
 
 // THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
@@ -340,7 +370,11 @@ const CASH_FLOW: FieldDef[] = ([
    *     a cash-flow line it is both the wrong sign of thing and, at 9.1m
    *     against a real 37.1m, wrong by four times.
    */
-  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], unit: "USD" },
+  // ONE CONCEPT PER FILER — see FieldDef.oneConceptPerFiler. capex is the field
+  // the rule was ruled for: its two entries are different measures, not two
+  // spellings of one, and three filers in 119 file both on a still-stored period
+  // and disagree by up to 78.9%.
+  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], unit: "USD", oneConceptPerFiler: true },
   { key: "shareBasedCompensation", chain: ["ShareBasedCompensation"], unit: "USD" },
   { key: "depreciationAndAmortization", chain: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization"], unit: "USD" },
   { key: "investingCashFlow", chain: ["NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"], unit: "USD" },
@@ -530,7 +564,8 @@ export function secFieldsHash(keys: string[] = SEC_FIELD_KEYS): string {
  * fetch. A set with values is untouched, and a retry that comes back empty
  * again stores the current hash and stops.
  */
-export const CHAIN_RESOLUTION_POLICY = "preferred-tag-covers-newest-period";
+export const CHAIN_RESOLUTION_POLICY =
+  "preferred-tag-covers-newest-period+one-concept-per-filer-where-marked";
 
 export function secChainsHash(): string {
   let h = 0x811c9dc5;
@@ -541,7 +576,12 @@ export function secChainsHash(): string {
     }
   };
   for (const f of [...SEC_FIELDS, COVER_SHARES_FIELD]) {
-    feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`);
+    // oneConceptPerFiler IS PART OF THE KEY. It changes which concept a cell
+    // resolves from and whether an absent one falls back, so a set written
+    // without it holds different numbers from one written with it. Left out,
+    // every stored set would report itself current and keep the mixed column.
+    feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`
+      + `|one:${f.oneConceptPerFiler ? 1 : 0}`);
   }
   // ── THE READING OF THE CHAINS, NOT ONLY THEIR CONTENT ───────────────────
   // A change to HOW a chain is resolved moves stored values exactly as a

@@ -870,7 +870,27 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   }).reverse();
 
   const ocf = view(cashFrom, "operatingCashFlow", "Operating cash flow");
-  const capex = view(cashFrom, "capex", "Capital expenditure");
+  /**
+   * THE CAPEX HEADING NAMES THE MEASURE IT IS ACTUALLY SHOWING.
+   *
+   * capex resolves from ONE concept per filer (FieldDef.oneConceptPerFiler):
+   * PaymentsToAcquirePropertyPlantAndEquipment where the filer publishes it,
+   * and the broader PaymentsToAcquireProductiveAssets only where it never does.
+   * Those are different measures — productive assets is wider — so a filer on
+   * the fallback is not showing the same line as a filer on the primary, and
+   * one heading over both would be a false equivalence on the ones that differ.
+   *
+   * READ FROM THE STORED CHOICE, never inferred from the value or from absence.
+   * A set written before the rule has no `cc`, and for it the honest heading is
+   * the plain one: it does not know which concept it used, and inventing the
+   * qualifier would label some filers wrong in the other direction.
+   */
+  const capexConcept = set.cc?.capex ?? null;
+  const capexIsBroad = capexConcept !== null && capexConcept.endsWith("|PaymentsToAcquireProductiveAssets");
+  const capexLabel = capexIsBroad
+    ? "Capital expenditure (incl. other productive assets)"
+    : "Capital expenditure";
+  const capex = view(cashFrom, "capex", capexLabel);
   const fcf = ocf.val === null || capex.val === null ? null : ocf.val - capex.val;
   /**
    * WHICH INPUT STOPPED A DERIVED FIGURE, so the card can name it.
@@ -1039,13 +1059,37 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       : null,
     incomeStatement: PL.map(([k, label]) => view(latest, k, label)),
     incomeStatementComplete,
-    recentPeriods: q.map((p) => ({
-      label: periodLabel(p),
-      end: p.e,
-      revenue: view(p, "revenue", "Revenue"),
-      epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
-      netIncome: view(p, "netIncome", "Net income"),
-    })),
+    // ── THE SAME THIN-ROW BAR AS THE GROWTH TABLE, AND THE SAME CAP ─────────
+    //
+    // This mapped the WHOLE of `q`, unfiltered and uncapped, while the growth
+    // table above filtered and sliced the identical list. So AZN rendered
+    // twelve rows here, of which 2019-2021 carried a revenue figure and read
+    // "Not reported" under both Diluted EPS and Net income — the exact rows the
+    // growth table had already been ruled thin, in a table one card further
+    // down. One list, two standards.
+    //
+    // THE BAR IS THIS TABLE'S OWN COLUMNS. `hasSomething` is about margins and
+    // an EPS comparison, which this table does not show; here a row needs more
+    // than revenue, meaning a diluted EPS or a net income. Same rule, applied
+    // to what is actually on screen rather than borrowed wholesale.
+    //
+    // NO hasComparator. That rule drops a row with nothing BEHIND it, which
+    // matters for a year-over-year table and not for one that simply lists what
+    // was filed — the oldest period here is a row, not only a base.
+    //
+    // The tableBasis gate needs nothing new: `q` is already the list tableBasis
+    // chose, so a stale quarterly series brings years here too, and
+    // SecRecentPeriodsCard returns null on a year anchor regardless.
+    recentPeriods: q
+      .filter((p) => valueOf(p, "epsDiluted") !== null || valueOf(p, "netIncome") !== null)
+      .slice(0, renderLimit)
+      .map((p) => ({
+        label: periodLabel(p),
+        end: p.e,
+        revenue: view(p, "revenue", "Revenue"),
+        epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+        netIncome: view(p, "netIncome", "Net income"),
+      })),
     ttmRevenue: ttm(q, "revenue"),
     ttmNetIncome: ttm(q, "netIncome"),
     coverShares: set.cover,

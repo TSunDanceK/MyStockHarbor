@@ -203,6 +203,21 @@ export type ExtractResult = {
    * evidence. Empty for a USD reporter. See rowsForField.
    */
   refusedUnits: string[];
+  /**
+   * THE ONE CONCEPT THIS FILER'S COLUMN USES, for each field marked
+   * `oneConceptPerFiler` — `ns|tag`, keyed by field key.
+   *
+   * CARRIED OUT OF THE EXTRACTION BECAUSE THE PAGE NEEDS IT AND CANNOT
+   * RECOVER IT. A stored Cell holds a value and a derivation, not a tag, so
+   * once the set is encoded there is nothing left to say WHICH measure the
+   * column is. The capex row has to read "Capital expenditure (incl. other
+   * productive assets)" when the broader concept was chosen, and a heading
+   * that cannot tell is a heading that will be wrong on some filers.
+   *
+   * One entry per marked field, not per cell: it is a decision about the
+   * filer, and a per-cell copy would be the same string 12 times.
+   */
+  conceptChoice: Record<string, string>;
   notes: string[];
 };
 
@@ -417,8 +432,19 @@ const conceptKey = (c: { tag: string; ns: string }) => `${c.ns}|${c.tag}`;
  */
 export function resolve(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[],
-  preferred?: string | null
+  preferred?: string | null,
+  /**
+   * REFUSE every concept but `preferred`, rather than merely ranking it first.
+   * Set for a field marked `oneConceptPerFiler`: a period the chosen concept
+   * does not cover resolves to NOTHING and renders "Not reported", instead of
+   * silently taking the other measure. See stickyTag and FieldDef.
+   */
+  restrict?: boolean
 ) {
+  if (restrict && preferred) {
+    candidates = candidates.filter((c) => conceptKey(c) === preferred);
+    if (!candidates.length) return null;
+  }
   // Ranks are >= 0, so -1 puts the filer's own current concept above every
   // chain entry without a second comparison branch to get wrong.
   const rankOf = (c: { tag: string; ns: string; rank: number }) =>
@@ -446,6 +472,55 @@ export function resolve(
  * both concepts on its newest period keeps the chain's ranking and nothing
  * moves. Returns null when the field has no rows at all.
  */
+/**
+ * THE ONE CONCEPT A FILER'S COLUMN USES, for a field marked
+ * `oneConceptPerFiler` — the HIGHEST-RANKED chain entry it files for any period
+ * INSIDE THE RETENTION WINDOW.
+ *
+ * ── WHY RANK, AND NOT "THE NEWEST PERIOD'S" LIKE preferredTag ─────────────
+ * preferredTag answers "what is this filer doing now", which is right when the
+ * entries are two spellings of one measure. Here they are different measures
+ * and the chain is a ranking of them by fitness: capex means
+ * PaymentsToAcquirePropertyPlantAndEquipment, and the broader productive-assets
+ * concept is a fallback for filers that never publish it — not an equal the
+ * newest period gets to pick.
+ *
+ * ── AND WHY "INSIDE THE WINDOW" IS NOT A DETAIL ───────────────────────────
+ * Deciding over ALL rows would lock a filer that published the primary concept
+ * once in 2011 and the fallback ever since onto the primary, and every stored
+ * period would read "Not reported" — a column emptied by a filing older than
+ * anything on the page. The window is taken as `keepYears` years back from the
+ * filer's own newest row, which covers the stored years and, at 12 quarters,
+ * the stored quarters inside them.
+ *
+ * Rows older than the window still resolve against whatever is chosen; they
+ * simply do not get a vote, and they are sliced off before storage anyway.
+ */
+export function stickyTag(
+  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[],
+  keepYears: number
+): string | null {
+  let newestEnd: string | null = null;
+  for (const c of candidates) {
+    if (c.row.end && (newestEnd === null || c.row.end > newestEnd)) newestEnd = c.row.end;
+  }
+  if (newestEnd === null) return null;
+  const cutoff = new Date(Date.parse(newestEnd));
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - keepYears);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  // A row with no `end` cannot be placed in or out of the window, so it does
+  // not vote. It is not dropped from resolution — only from this decision.
+  const inWindow = candidates.filter((c) => c.row.end !== undefined && c.row.end >= cutoffStr);
+  // NO ROW IN THE WINDOW means no stored period can carry this field whatever
+  // is chosen, so the choice is moot — but returning null would leave the
+  // column unrestricted, which is the one thing this must not do. Fall back to
+  // the full list so a concept is still fixed.
+  const pool = inWindow.length ? inWindow : candidates;
+  let best: (typeof candidates)[number] | null = null;
+  for (const c of pool) if (!best || c.rank < best.rank) best = c;
+  return best ? conceptKey(best) : null;
+}
+
 export function preferredTag(
   candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
 ): string | null {
@@ -557,7 +632,13 @@ export function extractCompanyFacts(
       else bucket.set(k, [c]);
     }
     buckets.set(field.key, bucket);
-    preferred.set(field.key, preferredTag(all));
+    // TWO POLICIES, CHOSEN BY THE FIELD. Marked fields fix one concept by
+    // chain rank over the retention window and refuse the rest; everything
+    // else keeps the newest-period preference with its fallback intact.
+    preferred.set(
+      field.key,
+      field.oneConceptPerFiler ? stickyTag(all, keepYears) : preferredTag(all)
+    );
   }
 
   // ── durations: cumulative frames, then the differencing ────────────────────
@@ -579,7 +660,7 @@ export function extractCompanyFacts(
     const byStart = new Map<string, { end: string; n: number; best: NonNullable<ReturnType<typeof resolve>> }[]>();
 
     for (const [, cands] of bucket) {
-      const best = resolve(cands, preferred.get(field.key));
+      const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.start || !best.row.end) continue;
       const n = quartersCovered(spanDays(best.row.start, best.row.end));
       if (n === null) continue;
@@ -669,7 +750,7 @@ export function extractCompanyFacts(
   for (const field of asFiledOnlyFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands, preferred.get(field.key));
+      const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.start || !best.row.end) continue;
       const n = quartersCovered(spanDays(best.row.start, best.row.end));
       if (n !== 1 && n !== 4) continue; // a 6M or 9M average belongs to no quarter
@@ -723,7 +804,7 @@ export function extractCompanyFacts(
   for (const field of instantFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands, preferred.get(field.key));
+      const best = resolve(cands, preferred.get(field.key), field.oneConceptPerFiler);
       if (!best?.row.end || best.row.start) continue; // a duration is not an instant
       const end = best.row.end;
 
@@ -797,6 +878,11 @@ export function extractCompanyFacts(
     // think are IFRS. Sorted so a stored set's value is stable across fetches.
     taxonomies: Object.keys(facts.facts ?? {}).sort(),
     refusedUnits: [...refusedUnits].sort(),
+    conceptChoice: Object.fromEntries(
+      SEC_FIELDS.filter((f) => f.oneConceptPerFiler)
+        .map((f) => [f.key, preferred.get(f.key) ?? null])
+        .filter((e): e is [string, string] => e[1] !== null)
+    ),
     notes,
   };
 }

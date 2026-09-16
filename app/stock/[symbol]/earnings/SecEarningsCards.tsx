@@ -479,7 +479,13 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
       ) : null}
       <div style={{ marginTop: 12 }}>
         <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact /></Row>
-        <Row label="Capital expenditure"><CellValue cell={c.capex} compact /></Row>
+        {/* THE LABEL COMES FROM THE CELL, not from this line. capex resolves
+            from one concept per filer and the broader productive-assets one is
+            a different measure, so the heading has to say which it is — see
+            secEarningsView's capexConcept. Hardcoding "Capital expenditure"
+            here put one heading over both and was a false equivalence on every
+            filer that publishes only the broader concept. */}
+        <Row label={c.capex.label}><CellValue cell={c.capex} compact /></Row>
         <Row label="Free cash flow" strong>
           <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
           {c.freeCashFlowDerived ? (

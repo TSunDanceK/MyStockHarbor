@@ -439,30 +439,40 @@ check("a mid-year tag change is NOT differenced",
 check("and the refusal is recorded as a note rather than swallowed",
   out4.notes.some((n) => n.includes("concept changed mid-year")), out4.notes[0] ?? "(none)");
 
-// ── CAPEX, THE FIELD THE RULE WAS RE-RULED FOR, AND UNDER MUTATION ────────
+// ── THE SAME-CONCEPT RULE, ON A FIELD THAT STILL USES THE DEFAULT POLICY ──
 //
-// Revenue's ASC 606 boundary is the historical case; capex is the live one. Its
-// chain carries TWO concepts — PaymentsToAcquirePropertyPlantAndEquipment and
-// PaymentsToAcquireProductiveAssets — and 23 of 119 SYMBOLS resolve it from
-// more than one of them across their periods, so the two-concept ladder is not
-// a curiosity here, it is the common shape.
+// THIS BLOCK USED TO BE AIMED AT CAPEX AND CANNOT BE ANY MORE. capex is now
+// marked `oneConceptPerFiler`: one concept is fixed for the whole column and
+// every other is refused before resolution, so two concepts never reach the
+// differencing and the guard below is UNREACHABLE on it. Left pointed at capex,
+// every assertion here would have gone on passing while testing nothing — the
+// guard removed entirely would not have changed one of them.
 //
-// NOTHING BELOW ASSERTS A CAPEX NUMBER. The values are arbitrary and chosen to
-// be far apart precisely so that any figure appearing where null is required is
+// operatingCashFlow is the field it moves to: duration-cumulative, a two-entry
+// chain, and NOT marked, so it is exactly the shape capex used to be.
+//
+// NOTHING BELOW ASSERTS A CASH-FLOW NUMBER. The values are arbitrary and chosen
+// far apart precisely so that any figure appearing where null is required is
 // visibly a subtraction of one concept from the other rather than a plausible
 // quarter. 900 - 400 = 500 is the number the guard must NOT produce.
-const CAPEX_A = "PaymentsToAcquirePropertyPlantAndEquipment";
-const CAPEX_B = "PaymentsToAcquireProductiveAssets";
-const capexIdx = SEC_FIELDS.findIndex((f) => f.key === "capex");
+const OCF_A = "NetCashProvidedByUsedInOperatingActivities";
+const OCF_B = "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations";
+const ocfIdx = SEC_FIELDS.findIndex((f) => f.key === "operatingCashFlow");
+check("the field the same-concept rule is tested on does NOT use the sticky policy",
+  SEC_FIELDS[ocfIdx].oneConceptPerFiler !== true &&
+    SEC_FIELDS[ocfIdx].chain.length >= 2,
+  `operatingCashFlow: ${SEC_FIELDS[ocfIdx].chain.length} chain entries, sticky=${!!SEC_FIELDS[ocfIdx].oneConceptPerFiler} ` +
+    `— a sticky field would refuse the second concept before the guard could see it`);
+
 const twoConcept = {
   cik: 1,
   facts: { "us-gaap": {
     // The 6M frame under one concept...
-    [CAPEX_A]: { units: { USD: [
+    [OCF_A]: { units: { USD: [
       { start: "2026-01-01", end: "2026-06-30", val: 900, accn: "b", filed: "2026-07-20" },
     ] } },
     // ...and the 3M it would have to be differenced against under the other.
-    [CAPEX_B]: { units: { USD: [
+    [OCF_B]: { units: { USD: [
       { start: "2026-01-01", end: "2026-03-31", val: 400, accn: "a", filed: "2026-04-20" },
     ] } },
   } },
@@ -470,15 +480,15 @@ const twoConcept = {
 const tc = extractCompanyFacts("TWOC", twoConcept);
 const tcQ2 = tc.quarters.find((q) => q.end === "2026-06-30");
 check("both YTD operands must be the SAME concept, or the quarter is null",
-  !tcQ2 || tcQ2.values[capexIdx] === null,
-  `Q2 capex = ${JSON.stringify(tcQ2?.values[capexIdx] ?? null)} — 900 under one concept ` +
-    `minus 400 under another is arithmetic on unrelated numbers, whatever it evaluates to`);
+  !tcQ2 || tcQ2.values[ocfIdx] === null,
+  `Q2 operatingCashFlow = ${JSON.stringify(tcQ2?.values[ocfIdx] ?? null)} — 900 under one ` +
+    `concept minus 400 under another is arithmetic on unrelated numbers, whatever it evaluates to`);
 check("...and the Q1 that IS single-concept still resolves, so the refusal is the quarter, not the field",
-  tc.quarters.find((q) => q.end === "2026-03-31")?.values[capexIdx]?.val === 400,
+  tc.quarters.find((q) => q.end === "2026-03-31")?.values[ocfIdx]?.val === 400,
   "a rule that emptied the whole field would pass the assertion above for the wrong reason");
 check("...and the refusal names both concepts in a note",
-  tc.notes.some((n) => n.startsWith("capex ") && n.includes(CAPEX_A) && n.includes(CAPEX_B)),
-  tc.notes.find((n) => n.startsWith("capex ")) ?? "(none)");
+  tc.notes.some((n) => n.startsWith("operatingCashFlow ") && n.includes(OCF_A) && n.includes(OCF_B)),
+  tc.notes.find((n) => n.startsWith("operatingCashFlow ")) ?? "(none)");
 
 {
   // MUTATION: the same-concept test removed, so the differencing takes whatever
@@ -489,13 +499,13 @@ check("...and the refusal names both concepts in a note",
   const mixed = mixMod.extractCompanyFacts("TWOC", twoConcept);
   const mixedQ2 = mixed.quarters.find((q) => q.end === "2026-06-30");
   check("MUTATION: allowing mixed operands makes a number appear where null is required",
-    mixedQ2?.values[capexIdx]?.val === 500 &&
-      mixedQ2?.values[capexIdx]?.derived === "differenced",
-    `the mutation renders ${JSON.stringify(mixedQ2?.values[capexIdx]?.val ?? null)} — ` +
-      `a capital-expenditure quarter assembled from two different concepts, and nothing ` +
+    mixedQ2?.values[ocfIdx]?.val === 500 &&
+      mixedQ2?.values[ocfIdx]?.derived === "differenced",
+    `the mutation renders ${JSON.stringify(mixedQ2?.values[ocfIdx]?.val ?? null)} — ` +
+      `an operating-cash-flow quarter assembled from two different concepts, and nothing ` +
       `about the rendered cell would say so`);
   check("...and the note disappears with it, so the refusal cannot be recorded but unperformed",
-    !mixed.notes.some((n) => n.startsWith("capex ")),
+    !mixed.notes.some((n) => n.startsWith("operatingCashFlow ")),
     "the note and the refusal are the same branch");
 }
 
@@ -586,13 +596,17 @@ check("...and the refusal names both concepts in a note",
     const bareTwoC = bareMod.extractCompanyFacts("TWOC", twoConcept);
     const bareTwoQ2 = bareTwoC.quarters.find((q) => q.end === "2026-06-30");
     check("...while the TAG-change case still refuses under the same mutation",
-      (!bareTwoQ2 || bareTwoQ2.values[capexIdx] === null) &&
-        bareTwoC.notes.some((n) => n.startsWith("capex ")),
+      (!bareTwoQ2 || bareTwoQ2.values[ocfIdx] === null) &&
+        bareTwoC.notes.some((n) => n.startsWith("operatingCashFlow ")),
       "the bare-tag guard is narrower, not absent — which is why it read as working");
   }
 }
 
 // ── AND ACROSS PERIODS: THE CONCEPT THE FILER USES NOW ────────────────────
+//
+// ON operatingCashFlow FOR THE SAME REASON AS THE BLOCK ABOVE: capex no longer
+// uses this policy at all, so a fixture built on it would assert the default
+// preference against a field that has been exempted from it.
 //
 // The rule above says which pairs may be subtracted. This says which of two
 // PRESENT readings a period takes: the concept covering the filer's newest
@@ -605,27 +619,27 @@ check("...and the refusal names both concepts in a note",
 const migrated = {
   cik: 1,
   facts: { "us-gaap": {
-    [CAPEX_A]: { units: { USD: [
+    [OCF_A]: { units: { USD: [
       { start: "2024-01-01", end: "2024-12-31", val: 100, accn: "a", filed: "2025-02-01" },
       { start: "2025-01-01", end: "2025-12-31", val: 110, accn: "b", filed: "2026-02-01" },
     ] } },
-    [CAPEX_B]: { units: { USD: [
+    [OCF_B]: { units: { USD: [
       { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
       { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
     ] } },
   } },
 };
 const mig = extractCompanyFacts("MIGR", migrated);
-const yearAt = (e) => mig.years.find((y) => y.end === e)?.values[capexIdx];
+const yearAt = (e) => mig.years.find((y) => y.end === e)?.values[ocfIdx];
 check("the preferred concept is the one covering the filer's NEWEST period",
-  yearAt("2026-12-31")?.tag === CAPEX_B,
+  yearAt("2026-12-31")?.tag === OCF_B,
   `${yearAt("2026-12-31")?.tag} — the only concept on that period, so this is the premise, not the claim`);
 check("...so a period publishing BOTH takes the preferred one, not the chain's first",
-  yearAt("2025-12-31")?.tag === CAPEX_B && yearAt("2025-12-31")?.val === 220,
+  yearAt("2025-12-31")?.tag === OCF_B && yearAt("2025-12-31")?.val === 220,
   `FY2025 resolved to ${yearAt("2025-12-31")?.tag} = ${yearAt("2025-12-31")?.val}; ` +
-    `rank-first would have taken ${CAPEX_A} = 110 and made one column mean two things`);
+    `rank-first would have taken ${OCF_A} = 110 and made one column mean two things`);
 check("...and a period where the preferred concept is ABSENT still resolves, from the other",
-  yearAt("2024-12-31")?.tag === CAPEX_A && yearAt("2024-12-31")?.val === 100,
+  yearAt("2024-12-31")?.tag === OCF_A && yearAt("2024-12-31")?.val === 100,
   "preferring a concept must never delete a value — it only chooses between present readings");
 
 {
@@ -638,9 +652,9 @@ check("...and a period where the preferred concept is ABSENT still resolves, fro
     )
   );
   const r = rankMod.extractCompanyFacts("MIGR", migrated);
-  const rYear = (e) => r.years.find((y) => y.end === e)?.values[capexIdx];
-  check("MUTATION: without the preference, one filer's capex column resolves from two concepts",
-    rYear("2025-12-31")?.tag === CAPEX_A && rYear("2026-12-31")?.tag === CAPEX_B,
+  const rYear = (e) => r.years.find((y) => y.end === e)?.values[ocfIdx];
+  check("MUTATION: without the preference, one filer's operatingCashFlow column resolves from two concepts",
+    rYear("2025-12-31")?.tag === OCF_A && rYear("2026-12-31")?.tag === OCF_B,
     `FY2025 ${rYear("2025-12-31")?.tag} = ${rYear("2025-12-31")?.val} but FY2026 ` +
       `${rYear("2026-12-31")?.tag} = ${rYear("2026-12-31")?.val} — adjacent rows of one ` +
       `column, two different measures, no marking`);
@@ -666,6 +680,163 @@ check("the resolution policy is fed into secChainsHash",
       fieldsSrc.replace("feed(`policy|${CHAIN_RESOLUTION_POLICY}`);", "")
     )).secChainsHash(),
   "the hash a set is compared against differs with the policy line present and absent");
+
+// ── capex: ONE CONCEPT PER FILER, CHOSEN ONCE, NO FALLBACK ────────────────
+//
+// The two blocks above test the DEFAULT policy on a field that uses it. capex
+// is exempt from it, and this is the rule it uses instead:
+//
+//   · the filer's concept is the highest-ranked chain entry it files for any
+//     period INSIDE the retention window — the PP&E concept where it publishes
+//     it at all, the broader productive-assets one only where it never does;
+//   · every other concept is refused, so a period the chosen one does not cover
+//     reads "Not reported" rather than switching measure mid-column.
+//
+// WHY IT WAS RULED THIS WAY, measured: across 119 SYMBOLS, three file both
+// concepts for a period that is still stored and disagree by 78.9% (CRM),
+// 37.6% (GE) and 14.8% (SCHW). The default policy's fallback would fill an
+// absent period from the other concept and put those two measures in one
+// column under one heading.
+console.log("\n7b. capex resolves from one concept per filer");
+
+const CAPEX_A = "PaymentsToAcquirePropertyPlantAndEquipment";
+const CAPEX_B = "PaymentsToAcquireProductiveAssets";
+const capexIdx = SEC_FIELDS.findIndex((f) => f.key === "capex");
+const capexDef = SEC_FIELDS[capexIdx];
+check("capex is the field marked for it, and the mark is read from the shipped list",
+  capexDef.oneConceptPerFiler === true &&
+    capexDef.chain[0] === CAPEX_A && capexDef.chain[1] === CAPEX_B,
+  `chain [${capexDef.chain.join(", ")}] sticky=${capexDef.oneConceptPerFiler}`);
+
+// A FILER THAT PUBLISHES BOTH, the shape the ruling is about: the primary on
+// the older year, both on the middle one, only the broader on the newest.
+// Under the DEFAULT policy the newest period's concept (B) would win the whole
+// column and FY2024 would fall back to A — one column, two measures.
+const bothCapex = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [CAPEX_A]: { units: { USD: [
+      { start: "2024-01-01", end: "2024-12-31", val: 100, accn: "a", filed: "2025-02-01" },
+      { start: "2025-01-01", end: "2025-12-31", val: 110, accn: "b", filed: "2026-02-01" },
+    ] } },
+    [CAPEX_B]: { units: { USD: [
+      { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
+      { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
+    ] } },
+  } },
+};
+const bc = extractCompanyFacts("BOTHC", bothCapex);
+const bcYear = (e) => bc.years.find((y) => y.end === e)?.values[capexIdx];
+check("a filer that files the PP&E concept at all uses it for the WHOLE column",
+  bcYear("2024-12-31")?.tag === CAPEX_A && bcYear("2025-12-31")?.tag === CAPEX_A,
+  `FY2024 ${bcYear("2024-12-31")?.tag}=${bcYear("2024-12-31")?.val}, ` +
+    `FY2025 ${bcYear("2025-12-31")?.tag}=${bcYear("2025-12-31")?.val} — FY2025 files BOTH ` +
+    `(110 and 220) and takes the primary, though the broader one covers the newest year`);
+check("...and a period the chosen concept does not cover is NOT filled from the other",
+  bcYear("2026-12-31") === null || bcYear("2026-12-31") === undefined,
+  `FY2026 = ${JSON.stringify(bcYear("2026-12-31") ?? null)} — the filer published 230 under ` +
+    `the broader concept and the column refuses it; "Not reported" is true of the measure ` +
+    `this column is, and 230 would not have been`);
+check("...and the choice is recorded on the set, so the page can name the measure",
+  bc.conceptChoice.capex === `us-gaap|${CAPEX_A}`,
+  `conceptChoice.capex = ${bc.conceptChoice.capex}`);
+
+// A FILER THAT NEVER PUBLISHES THE PRIMARY — GEV and KTOS are the real ones.
+const onlyBroad = {
+  cik: 1,
+  facts: { "us-gaap": { [CAPEX_B]: { units: { USD: [
+    { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
+    { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
+  ] } } } },
+};
+const ob = extractCompanyFacts("ONLYB", onlyBroad);
+check("a filer that never files the PP&E concept uses the broader one, and says so",
+  ob.years.find((y) => y.end === "2026-12-31")?.values[capexIdx]?.tag === CAPEX_B &&
+    ob.conceptChoice.capex === `us-gaap|${CAPEX_B}`,
+  `conceptChoice.capex = ${ob.conceptChoice.capex} — this is the GEV/KTOS case, and the ` +
+    `row label has to change with it`);
+
+// THE WINDOW CLAUSE, AND IT IS NOT A DETAIL. A filer that published the primary
+// ONCE, long ago, and the broader concept ever since must not be locked onto a
+// concept nothing in the retention window carries — that would empty the column
+// on the strength of a filing older than anything the page can show.
+const ancientPrimary = {
+  cik: 1,
+  facts: { "us-gaap": {
+    [CAPEX_A]: { units: { USD: [
+      { start: "2009-01-01", end: "2009-12-31", val: 5, accn: "z", filed: "2010-02-01" },
+    ] } },
+    [CAPEX_B]: { units: { USD: [
+      { start: "2025-01-01", end: "2025-12-31", val: 220, accn: "b", filed: "2026-02-01" },
+      { start: "2026-01-01", end: "2026-12-31", val: 230, accn: "c", filed: "2027-02-01" },
+    ] } },
+  } },
+};
+const ap = extractCompanyFacts("ANCIENT", ancientPrimary);
+check("a primary-concept filing older than the window does NOT win the column",
+  ap.conceptChoice.capex === `us-gaap|${CAPEX_B}` &&
+    ap.years.find((y) => y.end === "2026-12-31")?.values[capexIdx]?.val === 230,
+  `conceptChoice.capex = ${ap.conceptChoice.capex} — a 2009 filing must not empty every ` +
+    `stored period of a filer that has published the broader concept ever since`);
+
+{
+  // MUTATION (1): the restriction dropped, so an absent period falls back to
+  // the other concept again — the mixed column the ruling exists to stop.
+  const noRestrict = await liftMutated((src) =>
+    src.replace("  if (restrict && preferred) {", "  if (false) {")
+  );
+  const m1 = noRestrict.extractCompanyFacts("BOTHC", bothCapex);
+  const m1y = (e) => m1.years.find((y) => y.end === e)?.values[capexIdx];
+  check("MUTATION: without the refusal, the absent period is filled from the OTHER concept",
+    m1y("2026-12-31")?.val === 230 && m1y("2026-12-31")?.tag === CAPEX_B,
+    `FY2026 comes back as ${m1y("2026-12-31")?.tag} = ${m1y("2026-12-31")?.val} beside ` +
+      `FY2025 ${m1y("2025-12-31")?.tag} = ${m1y("2025-12-31")?.val} — two measures, one ` +
+      `column, one heading`);
+  check("...and the mutation leaves the non-sticky field alone, so it is the restriction being tested",
+    noRestrict.extractCompanyFacts("MIGR", migrated).years
+      .find((y) => y.end === "2025-12-31")?.values[ocfIdx]?.tag === OCF_B,
+    "operatingCashFlow never took the restrict branch, so its resolution is unchanged");
+
+  // MUTATION (2): chosen by NEWEST PERIOD instead of by chain rank — the
+  // default policy's criterion applied under the sticky rule. FY2025 would then
+  // read 220 rather than 110, silently changing what the column measures on
+  // every filer that files both.
+  const byNewest = await liftMutated((src) =>
+    src.replace(
+      "      field.oneConceptPerFiler ? stickyTag(all, keepYears) : preferredTag(all)",
+      "      field.oneConceptPerFiler ? preferredTag(all) : preferredTag(all)"
+    )
+  );
+  const m2 = byNewest.extractCompanyFacts("BOTHC", bothCapex);
+  const m2y = (e) => m2.years.find((y) => y.end === e)?.values[capexIdx];
+  check("MUTATION: choosing by newest period instead of chain rank takes the broader measure",
+    m2y("2025-12-31")?.tag === CAPEX_B && m2y("2025-12-31")?.val === 220,
+    `FY2025 becomes ${m2y("2025-12-31")?.tag} = ${m2y("2025-12-31")?.val} where the rule ` +
+      `requires ${CAPEX_A} = 110 — the same cell, a different measure, nothing on the page ` +
+      `to say which`);
+
+  // MUTATION (3): the window clause dropped, so the 2009 filing wins and the
+  // whole stored column empties.
+  const noWindow = await liftMutated((src) =>
+    src.replace("  const pool = inWindow.length ? inWindow : candidates;", "  const pool = candidates;")
+  );
+  const m3 = noWindow.extractCompanyFacts("ANCIENT", ancientPrimary);
+  const m3v = m3.years.find((y) => y.end === "2026-12-31")?.values[capexIdx];
+  check("MUTATION: without the window clause, one 2009 filing empties every stored period",
+    m3.conceptChoice.capex === `us-gaap|${CAPEX_A}` && (m3v === null || m3v === undefined),
+    `conceptChoice becomes ${m3.conceptChoice.capex} and FY2026 reads ` +
+      `${JSON.stringify(m3v ?? null)} — a column emptied by a filing older than anything on the page`);
+}
+
+// AND THE RE-READ KEY HAS TO MOVE FOR THIS TOO. A stored set written before the
+// sticky rule holds capex figures the shipped code would not write — the mixed
+// column — so if secChainsHash ignores the flag, every such set reports itself
+// current and keeps serving them.
+check("oneConceptPerFiler is fed into secChainsHash",
+  mod.secChainsHash() !== (await lift(
+    fieldsSrc.replace('+ `|one:${f.oneConceptPerFiler ? 1 : 0}`', "+ ``")
+  )).secChainsHash(),
+  "a set written under the old resolution must not report itself current");
 
 // ── 8. the free arithmetic assertion ────────────────────────────────────────
 console.log("\n8. internal identities");

@@ -92,6 +92,21 @@ export type StoredFactSet = {
    * the same symbols would be two allowances competing for the same re-read.
    */
   y?: number;
+  /**
+   * THE ONE CONCEPT THIS FILER'S COLUMN USES, per field marked
+   * `oneConceptPerFiler` — `ns|tag`, keyed by field key.
+   *
+   * OPTIONAL, and absent means "written before the rule", not "no choice made".
+   * A reader must not infer the primary concept from its absence: the whole
+   * point is that some filers are on the broader one, and guessing would put
+   * the wrong heading on exactly those.
+   *
+   * NOT in contentHashOf. It is provenance, not a value — a set whose numbers
+   * are identical is not a restatement because it now records which concept
+   * produced them. `c` (secChainsHash) is what makes such a set eligible for
+   * re-read, and it moves with the policy.
+   */
+  cc?: Record<string, string>;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -150,6 +165,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     tx: result.taxonomies,
     c: secChainsHash(),
     cu: result.refusedUnits,
+    cc: result.conceptChoice,
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     notes: result.notes,
