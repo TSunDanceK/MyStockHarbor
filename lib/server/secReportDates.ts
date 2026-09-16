@@ -96,31 +96,67 @@ export type Submissions = {
 /**
  * ── THE TIMEZONE, WHICH IS THE ONE THING HERE THAT CAN BE SILENTLY WRONG ──
  *
- * `acceptanceDateTime` is serialised as `2026-07-31T16:31:22.000Z`. THE Z IS A
- * LIE: EDGAR stamps acceptance in US Eastern and the serializer appends Z
- * anyway. Reading it as UTC shifts every timestamp back four or five hours,
- * which does not fail — it silently reclassifies a 16:31 after-close release as
- * a 12:31 during-market one, for every filer, forever.
+ * `acceptanceDateTime` is serialised as `2026-07-28T14:58:11.000Z`, and THE Z IS
+ * REAL: the digits are UTC and must be converted to Eastern.
  *
- * MEASURED rather than assumed: scripts/sec-report-dates-probe.mjs classifies a
- * panel of filers whose habit is public knowledge under BOTH readings and
- * reports which one puts them in the right bucket. This function implements the
- * reading that measurement supports, and the probe is the evidence.
+ * I ASSUMED THE OPPOSITE AND WAS WRONG. The first version of this module took
+ * the digits at face value as Eastern wall time, on the widely-repeated claim
+ * that EDGAR stamps acceptance in ET and the serializer appends a spurious Z.
+ * scripts/sec-report-dates-probe.mjs was written to settle it rather than
+ * argue it, and it settled it against me:
  *
- * So the string is parsed as WALL TIME — the digits are taken at face value in
- * Eastern — and no timezone conversion is applied.
+ *   PANEL: 10 filers whose habit is public and stable
+ *     digits read as EASTERN            5/10 in the expected bucket
+ *     digits read as UTC and converted  10/10
+ *
+ * THE BEFORE-OPEN HALF IS WHAT DISCRIMINATES. KO, PG, CAT and MMM stamp
+ * 10:58Z, 11:03Z, 10:31Z and 10:34Z. Read as Eastern those are 10:58, 11:03,
+ * 10:31, 10:34 — all "during market", all wrong. Converted they are 06:58,
+ * 07:03, 06:31 and 06:34 ET, which is what a before-open release looks like.
+ *
+ * The after-close half (AAPL, MSFT, NVDA, GOOGL, AMZN) lands after 16:00 under
+ * BOTH readings, which is exactly why a panel of only mega-caps would have
+ * confirmed the wrong answer — 5 of 5, and meaningless.
+ *
+ * HAD THIS SHIPPED, nothing would have failed. Every before-open filer on the
+ * site would simply have been labelled "during market", forever, and the price
+ * reaction card would have measured the wrong session for them.
+ *
+ * ── AND THE CONVERSION IS Intl, NOT A FIXED OFFSET ────────────────────────
+ * Eastern is UTC-5 or UTC-4 depending on the date, and a hardcoded -5 puts
+ * every summer filing an hour early — enough to move a 09:00 ET release across
+ * the 09:30 open. `America/New_York` via Intl knows the rules and the
+ * historical transitions; nothing here needs to.
+ *
+ * THE DATE CONVERTS TOO, which is the part a naive fix misses: a filing
+ * accepted at 00:30Z is 20:30 ET on the PREVIOUS day, and reporting it under
+ * the UTC date puts the announcement on a session that had already closed.
  */
+const ET = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 export function parseAcceptanceEt(raw: unknown): { date: string; time: string; minutes: number } | null {
   if (typeof raw !== "string") return null;
-  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/);
-  if (!m) return null;
-  const hh = Number(m[2]);
-  const mm = Number(m[3]);
-  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh > 23 || mm > 59) return null;
+  // EDGAR writes it with a Z, but not always; a bare "YYYY-MM-DD HH:MM:SS" is
+  // the same instant in UTC and is normalised here rather than at every caller.
+  const iso = /[Zz]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : `${raw.replace(" ", "T")}Z`;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const parts = ET.formatToParts(new Date(t));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const [y, mo, d, hh, mm] = [get("year"), get("month"), get("day"), get("hour"), get("minute")];
+  if (!y || !mo || !d || !hh || !mm) return null;
   return {
-    date: m[1],
-    time: `${m[2]}:${m[3]}`,
-    minutes: hh * 60 + mm,
+    date: `${y}-${mo}-${d}`,
+    time: `${hh}:${mm}`,
+    minutes: Number(hh) * 60 + Number(mm),
   };
 }
 
