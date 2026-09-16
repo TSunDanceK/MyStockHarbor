@@ -21,13 +21,28 @@
 // Reports, per symbol:
 //   NOT-REPORTED  a cell had a value and now has none      — the cost
 //   CHANGED       a cell's value moved to a different one  — the correction
-//   GAINED        a cell had none and now has one          — should be zero
+//   GAINED        a cell had none and now has one          — the refund
 //   same          identical before and after               — the control
 //
-// GAINED SHOULD BE ZERO AND IS PRINTED ANYWAY. Restricting the candidate set
-// can only ever remove readings, so a gain would mean the flag is doing
-// something other than what it says. A column that cannot report the
-// impossible cannot tell you when it happens.
+// ── GAINED IS NOT IMPOSSIBLE, AND THE FIRST VERSION OF THIS PROBE SAID IT WAS
+// It printed ">> A RESTRICTION CANNOT ADD A READING" and told the reader not to
+// quote the run. That reasoning was wrong, and the live run tripped it: MELI
+// q:2023-12-31 went NONE -> 180,000,000.
+//
+// Restricting the candidate set does only remove READINGS — but a reading is
+// not a cell. Every quarter but Q1 is DIFFERENCED, and the differencing refuses
+// to subtract across a concept change. Fixing one concept for the whole column
+// removes those changes, so a quarter the same-concept guard had refused now
+// has two operands of one concept and resolves. The cell is gained by the
+// refusal no longer firing, not by a candidate appearing.
+//
+// Corroborated independently: sec-capex-concepts listed the quarters the
+// same-concept rule nulls as ANET 3, MELI 1 (2023-12-31), TT 1, MAR 1 — and
+// MELI 2023-12-31 is exactly the cell that comes back.
+//
+// So a gain is REPORTED AND EXPLAINED rather than treated as a fault. What
+// would be a fault is a gain on an INSTANT field, which is never differenced
+// and so has no refusal to refund; that is flagged separately below.
 //
 // Read-only: no credential, no store, no writes. Needs the network.
 //
@@ -167,14 +182,26 @@ for (const r of tally.changed.sort((a, b) => b.n - a.n).slice(0, 25)) {
 }
 if (!tally.changed.length) console.log("   (none)");
 
-// SHOULD BE EMPTY. Restricting candidates can only remove readings.
+// EXPECTED ON A DIFFERENCED FIELD, IMPOSSIBLE ON AN INSTANT ONE. See the
+// docblock: fixing one concept removes the mid-year concept changes the
+// differencing refuses to subtract across, so a refused quarter can resolve.
 console.log(`\n3. CELLS THAT GAIN A FIGURE: ${sum(tally.gained)} across ${tally.gained.length} SYMBOLS`);
 if (tally.gained.length) {
   for (const r of tally.gained) console.log(`   ${r.symbol.padEnd(6)} ${r.detail.slice(0, 4).join(" | ")}`);
-  console.log(`   >> A RESTRICTION CANNOT ADD A READING. A gain here means the flag is doing`);
-  console.log(`      something other than what it says, and this run should not be quoted as a cost.`);
+  const onInstant = tally.gained.flatMap((r) =>
+    r.detail.filter((d) => d.startsWith("i:")).map((d) => `${r.symbol} ${d}`));
+  if (onInstant.length) {
+    console.log(`   >> ${onInstant.length} OF THESE ARE ON AN INSTANT PERIOD, WHICH IS NEVER DIFFERENCED,`);
+    console.log(`      so there is no refused subtraction to refund and a restriction cannot have`);
+    console.log(`      added the reading. This run should not be quoted as a cost:`);
+    console.log(`      ${onInstant.join(" | ")}`);
+  } else {
+    console.log(`   Each is a DIFFERENCED quarter the same-concept guard had refused: fixing one`);
+    console.log(`   concept removes the mid-year change, so both operands match and it resolves.`);
+    console.log(`   Cross-check against sec-capex-concepts' own list of quarters that rule nulls.`);
+  }
 } else {
-  console.log("   (none — as required: a restriction can only ever remove readings)");
+  console.log("   (none)");
 }
 
 const broad = [...choices].filter(([, c]) => c.endsWith("|PaymentsToAcquireProductiveAssets"));
