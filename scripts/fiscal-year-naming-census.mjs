@@ -47,7 +47,7 @@ console.log(`${all.length} SYMBOLS with a CIK in the manifest\n`);
 
 // ── PASS 1: the candidates, from the store alone ─────────────────────────
 const candidates = [];
-let noSet = 0, noAnchor = 0, cannotMove = 0;
+let noSet = 0, noAnchor = 0;
 for (let i = 0; i < all.length; i += 50) {
   const batch = all.slice(i, i + 50);
   const sets = await Promise.all(batch.map((s) => redis.get(`${SEC_FACTS_PREFIX}:${s}`)));
@@ -57,17 +57,12 @@ for (let i = 0; i < all.length; i += 50) {
     const yearEnds = (set.years ?? []).map((p) => p.e).filter(Boolean).sort();
     const anchor = yearEnds[yearEnds.length - 1] ?? null;
     if (!anchor) { noAnchor++; return; }
-    const endYear = new Date(`${anchor}T00:00:00Z`).getUTCFullYear();
-    const midYear = sec.fiscalMidYear(Date.parse(`${anchor}T00:00:00Z`));
-    // THE ONLY FILERS A CALIBRATION CAN MOVE.
-    if (endYear === midYear) { cannotMove++; return; }
     candidates.push({ symbol, anchor, set });
   });
 }
 console.log(`  ${noSet} SYMBOLS have no stored fact set`);
 console.log(`  ${noAnchor} SYMBOLS have no annual frame to anchor on`);
-console.log(`  ${cannotMove} SYMBOLS cannot move: year-end and midpoint share a calendar year`);
-console.log(`  ${candidates.length} SYMBOLS are candidates (year-end January to June)\n`);
+console.log(`  ${candidates.length} SYMBOLS are candidates\n`);
 
 // ── PASS 2: the calibration, companyfacts only for the candidates ────────
 let lastAt = 0;
@@ -91,20 +86,26 @@ for (const { symbol, anchor, set } of candidates) {
   if (!facts) { unread.push(`${symbol} (fetch failed)`); continue; }
   const naming = sec.fiscalYearOffset(facts, anchor);
   const newest = (set.quarters ?? [])[0]?.e ?? anchor;
+  // WAS: the frame-derived anchor, no naming — exactly what shipped.
+  // NOW: the annual filing's own year end where it has one, naming read.
+  // Both changes are compared together because both ship together, and
+  // reporting one of them alone would understate what a reader will see.
+  const labelAnchor = naming.yearEnd ?? anchor;
   const was = sec.fiscalLabel(newest, anchor, null);
-  const now = sec.fiscalLabel(newest, anchor, naming);
-  const line = `${symbol.padEnd(6)} year-end ${anchor}  ${was.fp} FY${was.fy} -> ${now.fp} FY${now.fy}` +
+  const now = sec.fiscalLabel(newest, labelAnchor, naming);
+  const moved = anchor !== labelAnchor && anchor.slice(5) !== labelAnchor.slice(5);
+  const line = `${symbol.padEnd(6)} year-end ${anchor}${moved ? ` -> ${labelAnchor} (ANCHOR WAS WRONG)` : ""}` +
+    `  ${was.fp} FY${was.fy} -> ${now.fp} FY${now.fy}` +
     `  (offset ${naming.offset}, from ${naming.basis ?? "nothing"}, ${naming.agreeing} agreeing/${naming.disagreeing} not)`;
   if (naming.basis === null) unread.push(`${symbol.padEnd(6)} naming unreadable — label unchanged`);
-  else if (was.fy !== now.fy) changed.push(line);
+  else if (was.fy !== now.fy || was.fp !== now.fp) changed.push(line);
   else kept.push(line);
 }
 
 // ORDERED SO THE ANSWER IS LAST. A log tail is what gets read, and the list
 // that matters is the short one.
 console.log("=".repeat(78));
-console.log(`CANDIDATES CONFIRMED UNCHANGED: ${kept.length} SYMBOLS`);
-for (const l of kept) console.log(`  ${l}`);
+console.log(`CONFIRMED UNCHANGED: ${kept.length} SYMBOLS (not listed — the point is the short list below)`);
 console.log(`\nNAMING UNREADABLE (label falls back, unchanged): ${unread.length} SYMBOLS`);
 for (const l of unread) console.log(`  ${l}`);
 console.log(`\n${"=".repeat(78)}`);

@@ -547,6 +547,42 @@ check("a nonsense offset is refused rather than renaming every period",
   })(),
   "only 0 and +1 are conventions; anything else is a malformed filing");
 
+// ── THE ANCHOR ITSELF, WHICH THE CENSUS CAUGHT BEING WRONG ───────────────
+//
+// `yearEndAnchor` is "the newest twelve-month frame's end", and a trailing-
+// twelve-month comparative in a 10-Q is twelve months long without being a
+// fiscal year. The census found AMZN anchored on 30 June and BG on 31 March —
+// both December filers — so every quarter either one showed was labelled off
+// the wrong year-end, and had been since before any of this.
+{
+  const AMZN = fyFacts([
+    { accn: "a25", form: "10-K", fp: "FY", fy: 2025, start: "2025-01-01", end: "2025-12-31", val: 1 },
+    { accn: "a24", form: "10-K", fp: "FY", fy: 2024, start: "2024-01-01", end: "2024-12-31", val: 1 },
+    // THE IMPOSTOR: a twelve-month span ending mid-year, filed in a 10-Q.
+    { accn: "q26", form: "10-Q", fp: "Q2", fy: 2026, start: "2025-07-01", end: "2026-06-30", val: 1 },
+  ]);
+  const n = mod.fiscalYearOffset(AMZN, "2026-06-30");
+  check("the annual filing's own period end is offered as the anchor",
+    n.yearEnd === "2025-12-31", `${n.yearEnd} — the 10-K's period end, not the TTM frame's`);
+  check("...and a 10-Q never supplies one, or every label moves by a quarter",
+    mod.fiscalYearOffset(fyFacts([
+      { accn: "q1", form: "10-Q", fp: "Q2", fy: 2026, start: "2026-04-01", end: "2026-06-30", val: 1 },
+      { accn: "q2", form: "10-Q", fp: "Q1", fy: 2026, start: "2026-01-01", end: "2026-03-31", val: 1 },
+      { accn: "q3", form: "10-Q", fp: "Q3", fy: 2025, start: "2025-07-01", end: "2025-09-30", val: 1 },
+    ]), "2025-12-31").yearEnd === null);
+  // THE LABEL, BOTH WAYS. Against the frame-derived anchor the newest quarter
+  // reads a year early; against the filing's own year end it reads right.
+  check("the wrong anchor mislabels AMZN's June quarter",
+    lab("2026-06-30", "2026-06-30", n) === "Q4 FY2025",
+    `${lab("2026-06-30", "2026-06-30", n)} — anchored on a TTM frame`);
+  check("...and the 10-K's year end labels it correctly",
+    lab("2026-06-30", n.yearEnd, n) === "Q2 FY2026",
+    `${lab("2026-06-30", n.yearEnd, n)}`);
+  check("the extraction prefers the filing's year end over the frame's",
+    /const labelAnchor = naming\.yearEnd \?\? yearEndAnchor;/.test(extractSrc) &&
+      /fiscalLabel\(end, labelAnchor, naming\)/.test(extractSrc));
+}
+
 // ── THE RELABEL MUST NOT SPLIT A YEAR-OVER-YEAR PAIR ──────────────────────
 //
 // YoY matches BY LABEL — same fp, fy-1 — so a shift applied to some periods and
@@ -555,8 +591,7 @@ check("a nonsense offset is refused rather than renaming every period",
 // at a single call site, and that is the property asserted: one site, and the
 // gap between any two labels is unchanged by it.
 check("the naming is applied at exactly ONE call site",
-  (extractSrc.match(/fiscalLabel\(end, yearEndAnchor/g) ?? []).length === 1 &&
-    /fiscalLabel\(end, yearEndAnchor, naming\)/.test(extractSrc),
+  (extractSrc.match(/fiscalLabel\(end, labelAnchor/g) ?? []).length === 1,
   "two sites is two places for a filer to be half-relabelled");
 {
   const ends = ["2026-07-18", "2026-04-18", "2026-01-17", "2025-10-05", "2025-07-19"];

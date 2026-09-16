@@ -691,6 +691,21 @@ export type FiscalYearNaming = {
   offset: number;
   /** "annual" is a 10-K, 20-F or 40-F — the filing that states the year outright. */
   basis: "annual" | "10-Q" | null;
+  /**
+   * The end of the filer's most recent ANNUAL FILING period.
+   *
+   * ── WHY THIS IS A BETTER ANCHOR THAN THE ONE DERIVED FROM FRAMES ────────
+   * The extraction's anchor is "the newest twelve-month frame's end", and not
+   * every twelve-month frame is a fiscal year: a trailing-twelve-month
+   * comparative in a 10-Q is twelve months and ends mid-year. The census found
+   * exactly that — AMZN anchored on 30 June and BG on 31 March, both December
+   * filers, so every quarter either one showed was labelled from the wrong
+   * year-end and had been all along.
+   *
+   * A 10-K's own period end is the fiscal year end by definition. Null when no
+   * annual filing was readable, and then the frame-derived anchor stands.
+   */
+  yearEnd: string | null;
   /** How many FILINGS agreed. 0 means nothing was readable and offset is 0. */
   agreeing: number;
   disagreeing: number;
@@ -758,7 +773,7 @@ export function fiscalYearOffset(
     if (readings.length) readFrom = "10-Q";
   }
 
-  if (!readings.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: 0 };
+  if (!readings.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: 0, yearEnd: null };
 
   // ── ONLY 0 AND +1 ARE NAMING CONVENTIONS ────────────────────────────────
   // Measured from the midpoint year, a filer either names its fiscal year for
@@ -767,7 +782,7 @@ export function fiscalYearOffset(
   // and admitting one would rename every period on the page by whatever
   // nonsense it carried.
   const recent = readings.slice(0, 4).filter((r) => r.offset === 0 || r.offset === 1);
-  if (!recent.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: readings.length };
+  if (!recent.length) return { offset: 0, basis: null, agreeing: 0, disagreeing: readings.length, yearEnd: null };
   const counts = new Map<number, number>();
   for (const r of recent) counts.set(r.offset, (counts.get(r.offset) ?? 0) + 1);
   let best = recent[0].offset;
@@ -779,6 +794,9 @@ export function fiscalYearOffset(
     basis: readFrom,
     agreeing: counts.get(best) ?? 0,
     disagreeing: recent.length - (counts.get(best) ?? 0),
+    // ONLY FROM AN ANNUAL FILING. A 10-Q's period end is a quarter end, and
+    // offering one here as a "year end" would move every label by a quarter.
+    yearEnd: readFrom === "annual" ? (annual[0]?.end ?? null) : null,
   };
 }
 
@@ -1053,6 +1071,13 @@ export function extractCompanyFacts(
   const yearEndAnchor = yearEnds[yearEnds.length - 1] ?? null;
   // READ ONCE PER FILER, from its own filings. Not a convention, not a guess.
   const naming = fiscalYearOffset(facts, yearEndAnchor);
+  // ── AND THE ANNUAL FILING'S OWN PERIOD END BEATS THE FRAME-DERIVED ONE ──
+  // `yearEndAnchor` is the newest twelve-month frame, and a trailing-twelve-
+  // month comparative in a 10-Q is twelve months long without being a fiscal
+  // year. AMZN anchored on 30 June and BG on 31 March that way — both December
+  // filers, every quarter labelled off the wrong year-end. A 10-K's own period
+  // end is the fiscal year end by definition, so it wins where it exists.
+  const labelAnchor = naming.yearEnd ?? yearEndAnchor;
 
   const pack = (
     cells: Map<string, Map<string, FieldValue>>,
@@ -1062,7 +1087,7 @@ export function extractCompanyFacts(
     [...cells.entries()]
       .map(([end, m]) => {
         const { start, row } = meta(end);
-        const fiscal = fiscalLabel(end, yearEndAnchor, naming);
+        const fiscal = fiscalLabel(end, labelAnchor, naming);
         return {
           end,
           start,
