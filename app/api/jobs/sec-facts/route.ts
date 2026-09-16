@@ -432,6 +432,12 @@ export async function GET(req: NextRequest) {
   let written = 0;
   let unchanged = 0;
   let failed = 0;
+  /**
+   * Pages flushed. NOT the same as `written` by definition — a cold symbol is
+   * written without a manifest entry, and a future edit could move the flush —
+   * so it is counted where it happens rather than inferred from another number.
+   */
+  let revalidated = 0;
 
   for (const { symbol, reason } of work) {
     const entry = manifest.symbols[symbol];
@@ -501,6 +507,11 @@ export async function GET(req: NextRequest) {
         // valid render -- and with it the FMP calls and Redis reads that
         // produced it -- to rebuild the identical page.
         revalidatePath(`/stock/${symbol}/earnings`);
+        // COUNTED, so "changed-only" is a number rather than a claim about the
+        // shape of the code. The cache-health panel shows it against
+        // `attempted`: if those two ever converge, the flush has escaped this
+        // branch and the cron is re-rendering every stock page it touches.
+        revalidated++;
       } else {
         unchanged++;
       }
@@ -572,7 +583,7 @@ export async function GET(req: NextRequest) {
   const summary = {
     ok: failed === 0 || failed < work.length,
     attempted: work.length,
-    written, unchanged, failed,
+    written, unchanged, failed, revalidated,
     coldTaken: coldSymbols.length,
     coldCleared,
     coldCikSeen: coldCiks.seen,

@@ -55,8 +55,15 @@ const claim = COLD.slice(
 );
 check("claimColdFetch was found and sliced", claim.length > 200, `${claim.length} chars`);
 check("it INCRs a minute-resolution bucket",
-  /redis\.incr\(key\)/.test(claim) && /slice\(0, 16\)/.test(claim),
+  /redis\.incr\(key\)/.test(claim) && /coldRateKey\(\)/.test(claim) &&
+    /coldRateKey = \(d = new Date\(\)\) =>[\s\S]{0,200}slice\(0, 16\)/.test(COLD),
   "YYYY-MM-DDTHH:MM — an hour-resolution key would be a 60x looser cap");
+// ONE KEY BUILDER, SHARED. secHealth reads this bucket; a second spelling there
+// would read as a permanent zero rather than as an error.
+check("the reader builds the key with the writer's helper, not its own string",
+  /coldRateKey\(\)/.test(readCodeOnly("lib/server/secHealth.ts")) &&
+    !/msh:sec:cold-rate/.test(readCodeOnly("lib/server/secHealth.ts")),
+  "a retyped prefix is how a census reported 759 of 759 symbols unpopulated");
 check("the bucket outlives its own window",
   /expire\(key, 120\)/.test(claim),
   "60s would let a bucket created at :59 hand the next second a fresh allowance");
