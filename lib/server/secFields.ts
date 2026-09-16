@@ -530,6 +530,8 @@ export function secFieldsHash(keys: string[] = SEC_FIELD_KEYS): string {
  * fetch. A set with values is untouched, and a retry that comes back empty
  * again stores the current hash and stops.
  */
+export const CHAIN_RESOLUTION_POLICY = "preferred-tag-covers-newest-period";
+
 export function secChainsHash(): string {
   let h = 0x811c9dc5;
   const feed = (str: string) => {
@@ -541,6 +543,15 @@ export function secChainsHash(): string {
   for (const f of [...SEC_FIELDS, COVER_SHARES_FIELD]) {
     feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`);
   }
+  // ── THE READING OF THE CHAINS, NOT ONLY THEIR CONTENT ───────────────────
+  // A change to HOW a chain is resolved moves stored values exactly as a
+  // change to WHAT is in it does — the preferred-tag rule flips which of two
+  // present concepts a period takes — and a hash over the chain text alone
+  // cannot see it. Then `needsReread` reports every set current, the migration
+  // completes without doing anything, and the store keeps serving figures the
+  // shipped code would no longer write. Bumping this string is what re-reads
+  // the universe; leaving it alone is what makes a resolution change invisible.
+  feed(`policy|${CHAIN_RESOLUTION_POLICY}`);
   return h.toString(16).padStart(8, "0");
 }
 

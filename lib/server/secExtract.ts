@@ -370,22 +370,85 @@ export function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?
 }
 
 /**
+ * A CONCEPT IS A NAMESPACE AND A TAG, NEVER A TAG ALONE.
+ *
+ * Eight of the mapped lines are spelled identically under `us-gaap` and
+ * `ifrs-full` — Assets, Goodwill, NetIncomeLoss and five more — so a preference
+ * carried as a bare tag name matches a dual-tagging filer's IFRS row as well as
+ * its us-gaap one. Both then tie at the preferred rank, the newest filing wins,
+ * and the filer's us-gaap reading is replaced by its IFRS one.
+ *
+ * NOT HYPOTHETICAL. That is precisely what the first draft of the preferred-tag
+ * rule did, and check-sec-extract's dual-tagging fixture caught it on the first
+ * run: BOTH's totalAssets came back 222 from `ifrs-full` in place of 111 from
+ * `us-gaap`. The namespace is what disambiguates; the tag name cannot.
+ */
+const conceptKey = (c: { tag: string; ns: string }) => `${c.ns}|${c.tag}`;
+
+/**
  * Resolve one period key to one value, applying trap 2 and trap 3 IN THAT ORDER.
  *
  * Chain rank first: the earliest chain entry that covers this period wins,
  * whatever it was filed in. Only within one rank does the newest accession win.
  * The other order would let a 10-K's legacy `Revenues` restatement beat the
  * current tag because it was filed later.
+ *
+ * ── AND ABOVE RANK: THE CONCEPT THIS FILER IS CURRENTLY USING ─────────────
+ * `preferred` is the tag that covers the filer's NEWEST period for this field
+ * (see preferredTag). It outranks the chain because the chain is a ranking of
+ * concepts IN GENERAL and this is a fact about ONE filer: GEV and KTOS publish
+ * `PaymentsToAcquireProductiveAssets`, not `PaymentsToAcquirePropertyPlantAnd-
+ * Equipment`, and on a filer that publishes the fallback today and the primary
+ * in 2019, rank-first makes one capex column mean two different things down its
+ * own length — the newest rows one concept, the oldest rows another.
+ *
+ * ONLY WHERE THE PREFERRED CONCEPT IS ABSENT does the chain get to choose, so
+ * this never removes a value: it only decides which of two present readings to
+ * take. A filer that publishes a single concept throughout — which is nearly
+ * all of them — resolves identically either way, because the preferred tag IS
+ * the rank-first tag.
  */
 export function resolve(
-  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
+  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[],
+  preferred?: string | null
 ) {
+  // Ranks are >= 0, so -1 puts the filer's own current concept above every
+  // chain entry without a second comparison branch to get wrong.
+  const rankOf = (c: { tag: string; ns: string; rank: number }) =>
+    preferred && conceptKey(c) === preferred ? -1 : c.rank;
   let best: { row: FactRow; tag: string; ns: string; rank: number; unit: string } | null = null;
   for (const c of candidates) {
-    if (!best || c.rank < best.rank) { best = c; continue; }
-    if (c.rank === best.rank && newer(c.row, best.row) === c.row) best = c;
+    if (!best || rankOf(c) < rankOf(best)) { best = c; continue; }
+    if (rankOf(c) === rankOf(best) && newer(c.row, best.row) === c.row) best = c;
   }
   return best;
+}
+
+/**
+ * THE CONCEPT A FILER COVERS ITS NEWEST PERIOD WITH — one tag per field, per
+ * filer, computed from the filer's own rows and nothing else.
+ *
+ * ── WHY "NEWEST PERIOD" AND NOT "MOST FREQUENT" ───────────────────────────
+ * A filer that migrated concepts in 2021 has four years of the old tag and two
+ * of the new, so the most frequent concept is the one it has STOPPED using, and
+ * every column would be anchored on the past and drift as history rolls off.
+ * The newest period is what the filer is doing now; the rest is history that
+ * either matches it or predates it.
+ *
+ * Resolved by rank among the rows at that newest end, so a filer publishing
+ * both concepts on its newest period keeps the chain's ranking and nothing
+ * moves. Returns null when the field has no rows at all.
+ */
+export function preferredTag(
+  candidates: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]
+): string | null {
+  let newestEnd: string | null = null;
+  for (const c of candidates) {
+    if (c.row.end && (newestEnd === null || c.row.end > newestEnd)) newestEnd = c.row.end;
+  }
+  if (newestEnd === null) return null;
+  const best = resolve(candidates.filter((c) => c.row.end === newestEnd));
+  return best ? conceptKey(best) : null;
 }
 
 
@@ -468,16 +531,26 @@ export function extractCompanyFacts(
   const refusedUnits = new Set<string>();
 
   // One pass per field, bucketed by period key.
+  //
+  // ── AND ONE PREFERRED CONCEPT PER FIELD, FOR THIS FILER ──────────────────
+  // Computed over ALL of the field's rows before any period is resolved,
+  // because it is a property of the filer rather than of a period: see
+  // preferredTag. Every resolve() below is handed it, so one column cannot
+  // resolve to the filer's current concept on its newest rows and to a
+  // superseded one on its oldest.
   const buckets = new Map<string, Bucket>();
+  const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    for (const c of rowsForField(facts, field, refusedUnits)) {
+    const all = rowsForField(facts, field, refusedUnits);
+    for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);
       if (list) list.push(c);
       else bucket.set(k, [c]);
     }
     buckets.set(field.key, bucket);
+    preferred.set(field.key, preferredTag(all));
   }
 
   // ── durations: cumulative frames, then the differencing ────────────────────
@@ -499,7 +572,7 @@ export function extractCompanyFacts(
     const byStart = new Map<string, { end: string; n: number; best: NonNullable<ReturnType<typeof resolve>> }[]>();
 
     for (const [, cands] of bucket) {
-      const best = resolve(cands);
+      const best = resolve(cands, preferred.get(field.key));
       if (!best?.row.start || !best.row.end) continue;
       const n = quartersCovered(spanDays(best.row.start, best.row.end));
       if (n === null) continue;
@@ -577,7 +650,7 @@ export function extractCompanyFacts(
   for (const field of asFiledOnlyFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands);
+      const best = resolve(cands, preferred.get(field.key));
       if (!best?.row.start || !best.row.end) continue;
       const n = quartersCovered(spanDays(best.row.start, best.row.end));
       if (n !== 1 && n !== 4) continue; // a 6M or 9M average belongs to no quarter
@@ -631,7 +704,7 @@ export function extractCompanyFacts(
   for (const field of instantFields()) {
     const bucket = buckets.get(field.key)!;
     for (const [, cands] of bucket) {
-      const best = resolve(cands);
+      const best = resolve(cands, preferred.get(field.key));
       if (!best?.row.end || best.row.start) continue; // a duration is not an instant
       const end = best.row.end;
 
