@@ -772,10 +772,18 @@ export default async function CacheHealthPage({
               ["Pages revalidated",
                 row(["revalidated", "attempted"],
                   () => `${n("revalidated")} of ${n("attempted")} attempted`)],
-              ["Queues taken (reverify / populate / rewindow)",
+              ["Queues taken by that run (reverify / populate / rewindow)",
                 row(["reverifyTaken", "populateTaken", "rewindowTaken"],
                   () => `${n("reverifyTaken")} / ${n("populateTaken")} / ${n("rewindowTaken")}`)],
-              ["Backlogs (reverify / populate / rewindow)",
+              // ── "WHEN THE RUN STARTED", AND THE LABEL HAS TO SAY SO ────────
+              //
+              // populationQueues is called ONCE at the top of the run, so these
+              // three are the state the run INHERITED, not the state now — the
+              // run then drains them. Labelled "Backlogs" they read as current,
+              // and that misreading happened immediately: the panel showed
+              // populate 623 while the live queue was 354, because 623 was the
+              // figure BEFORE that run took its 300. Same queue, two moments.
+              ["Backlogs WHEN THAT RUN STARTED (reverify / populate / rewindow)",
                 row(["reverifyBacklog", "populateBacklog", "rewindowBacklog"],
                   () => `${n("reverifyBacklog")} / ${n("populateBacklog")} / ${n("rewindowBacklog")}`)],
               ["Cold queue taken / cleared",
@@ -815,6 +823,11 @@ export default async function CacheHealthPage({
               above drains on its own; a CIK disagreement is deliberately never
               applied and keeps being reported until someone rules on it. */}
           <p style={{ color: "#64748b", fontSize: 11, marginTop: 8 }}>
+            Every figure in this table describes <strong>that run</strong>, not the present. The
+            backlogs are what the run inherited before it drained them, so a large number here with
+            a large &ldquo;taken&rdquo; beside it is the queue working, not a queue growing.
+          </p>
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 6 }}>
             A non-zero <strong>conflicts</strong> count is not self-healing: the drain reports a CIK
             disagreement and never applies it, because reconcileCiks owns that decision.
           </p>
