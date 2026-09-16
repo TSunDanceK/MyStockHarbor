@@ -25,7 +25,7 @@ import {
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDates } from "@/lib/server/secReportDatesStore";
-import { periodLabel } from "@/lib/server/secFactStore";
+import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
@@ -662,11 +662,13 @@ async function getEarningsData(symbol: string) {
   // So the label comes from the SAME stored period the rest of the page reads,
   // looked up by the matched period end. A bar whose period is unknown gets no
   // fiscal claim at all.
-  const storedLabels = new Map<string, string>();
-  for (const p of [...(cold.status === "ready" ? cold.set.quarters : []),
-    ...(cold.status === "ready" ? cold.set.years : [])]) {
-    if (p.e) storedLabels.set(p.e, periodLabel(p));
-  }
+  // ── BUILT BY THE SHIPPED FUNCTION, NOT INLINE HERE ─────────────────────
+  // The first version merged quarters and years into one map with years last,
+  // so on a filer whose 10-Qs carry twelve-month comparatives every quarter
+  // end was overwritten by an annual entry. See reactionPeriodLabels.
+  const storedLabels = cold.status === "ready"
+    ? reactionPeriodLabels(cold.set)
+    : new Map<string, string>();
 
   const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
     secEvents.length

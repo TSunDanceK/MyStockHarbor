@@ -413,6 +413,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHY A STORED SET'S NEWEST PERIOD IS OLDER THAN THE FILER'S NEWEST FILING.
+  // Credentialled to read the store and the report-date records; fetches
+  // submissions. No writes.
+  "write-stale-period-census": {
+    script: "scripts/sec-stale-period-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],

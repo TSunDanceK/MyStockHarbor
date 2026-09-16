@@ -347,6 +347,95 @@ console.log("\n4b. \"next expected\" is never a date that has already passed");
 
 console.log("\n4c. every reaction bar carries the PAGE'S OWN label, and they are distinct");
 
+// ── THE LABEL MAP ITSELF, WHICH THE LAST ROUND'S FIXTURE ASSUMED AWAY ────
+//
+// WHY THE "LATEST BAR EQUALS THE SNAPSHOT" ASSERTION PASSED ON A BROKEN PAGE.
+// It was given a hand-written Map of one label per period end — a model of the
+// map, not the code that builds it. The defect was entirely in the BUILDING:
+// quarters and years were merged with years last, so on a filer whose 10-Qs
+// carry twelve-month comparatives every quarter end was overwritten by an
+// annual entry. AMZN rendered "FY2025 (05/01) · FY2025 (07/31) · FY2025
+// (10/30)" and the assertion could not see it, because the fixture had already
+// decided what the map contained.
+//
+// So the map is now built by the shipped function, from a set shaped like the
+// filer that broke it.
+const codec = await lift(
+  [
+    readCodeOnly("lib/server/secFields.ts"),
+    readCodeOnly("lib/server/secFactCodec.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, ""),
+    "export { reactionPeriodLabels, periodLabel };",
+  ].join("\n")
+);
+{
+  const q = (e, fp, fy) => ({ e, s: null, fp, fy, a: null, f: null, v: [], d: "" });
+  // AMZN-SHAPED: real quarters, plus the twelve-month comparatives its 10-Qs
+  // carry, which land in `years` with ends on QUARTER ends.
+  const amzn = {
+    quarters: [q("2026-06-30", "Q2", 2026), q("2026-03-31", "Q1", 2026),
+      q("2025-12-31", "Q4", 2025), q("2025-09-30", "Q3", 2025)],
+    years: [q("2026-06-30", "FY", 2026), q("2026-03-31", "FY", 2026),
+      q("2025-12-31", "FY", 2025), q("2025-09-30", "FY", 2025)],
+  };
+  const labels = codec.reactionPeriodLabels(amzn);
+  check("a twelve-month comparative never takes a quarter end's label",
+    labels.get("2026-06-30") === "Q2 FY2026" && labels.get("2026-03-31") === "Q1 FY2026",
+    `${labels.get("2026-06-30")} / ${labels.get("2026-03-31")} — "FY2026" is what AMZN rendered`);
+  check("...on every end the two lists share",
+    [...labels.values()].every((l) => /^Q[1-4] FY\d{4}$/.test(l)), [...labels.values()].join(" · "));
+
+  // AND THE COLLISION SUFFIX IS THE TELL. Matched correctly there is nothing to
+  // break, so a "(MM/DD)" on this filer means the map is wrong again.
+  const bars = [
+    { periodEnd: "2025-09-30", announcedOn: "2025-10-30" },
+    { periodEnd: "2025-12-31", announcedOn: "2026-02-05" },
+    { periodEnd: "2026-03-31", announcedOn: "2026-05-01" },
+    { periodEnd: "2026-06-30", announcedOn: "2026-07-31" },
+  ];
+  const amznBars = m.reactionBarLabels(bars, (e) => labels.get(e));
+  check("AMZN's bars carry no collision suffix at all",
+    !amznBars.some((l) => /\(\d{2}\/\d{2}\)/.test(l)), amznBars.join(" · "));
+  check("...and the latest is the quarter the snapshot names",
+    amznBars[amznBars.length - 1] === "Q2 FY2026", amznBars.join(" · "));
+
+  // THE MUTATION: years last, which is what shipped.
+  const yearsWin = await lift(
+    [
+      readCodeOnly("lib/server/secFields.ts"),
+      readCodeOnly("lib/server/secFactCodec.ts")
+        .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+        // THE ORIGINAL INLINE CONSTRUCTION, restored exactly: one loop over
+        // quarters then years, years last, no guard and no Q4 rule.
+        .replace("    if (!p.e || out.has(p.e)) continue;", "    if (!p.e) continue;")
+        .replace("    out.set(p.e, reportsQuarters && p.fy ? `Q4 FY${p.fy}` : periodLabel(p));",
+                 "    out.set(p.e, periodLabel(p));"),
+      "export { reactionPeriodLabels };\n// years win",
+    ].join("\n")
+  );
+  const broken = m.reactionBarLabels(bars, (e) => yearsWin.reactionPeriodLabels(amzn).get(e));
+  check("MUTATION: letting the annual entry win reproduces the rendered defect",
+    broken.some((l) => /\(\d{2}\/\d{2}\)/.test(l)) && broken.some((l) => /^FY\d{4}/.test(l)),
+    broken.join(" · "));
+
+  // ── AN ANNUAL PERIOD IS THE FOURTH QUARTER'S REPORT ────────────────────
+  // On the reaction card only. A bar reading "FY2025" beside "Q3 FY2025"
+  // implies a different KIND of event; it is the same event.
+  const withYearEnd = {
+    quarters: [q("2025-09-30", "Q3", 2025), q("2025-06-30", "Q2", 2025)],
+    years: [q("2025-12-31", "FY", 2025)],
+  };
+  check("a year end with no quarter frame reads Q4, not FY",
+    codec.reactionPeriodLabels(withYearEnd).get("2025-12-31") === "Q4 FY2025",
+    `${codec.reactionPeriodLabels(withYearEnd).get("2025-12-31")}`);
+  check("...but a filer that publishes NO quarters keeps FY",
+    codec.reactionPeriodLabels({ quarters: [], years: [q("2025-12-31", "FY", 2025)] })
+      .get("2025-12-31") === "FY2025",
+    "for an annual filer the year IS the story, and Q4 would be a claim it never made");
+  check("the SNAPSHOT's own labeller is untouched",
+    codec.periodLabel(q("2025-12-31", "FY", 2025)) === "FY2025",
+    "only the reaction card names an announcement; the five-year card names a period");
+}
+
 // ── THREE DEFECTS, ALL VISIBLE ON ONE PREVIEW, ALL ONE CAUSE ─────────────
 // The bars were labelled by the CALENDAR quarter of an announcement date:
 //   AAPL's latest bar read "Q2 26" under a snapshot calling it Q3 FY2026
@@ -447,11 +536,12 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   // under a snapshot calling the same filing Q3 FY2026, AAP showed "Q4 23"
   // twice, and both showed a quarter that had not ended.
   check("a bar's label is the STORED period's label, looked up by matched period end",
-    /reactionBarLabels\(barRows, \(end\) => storedLabels\.get\(end\)\)/.test(page) &&
-      /periodLabel\(p\)/.test(page),
+    /reactionBarLabels\(barRows, \(end\) => storedLabels\.get\(end\)\)/.test(page),
     "a calendar quarter of the announcement is what shipped");
-  check("...built from the same fact set the rest of the page renders",
-    /cold\.status === "ready" \? cold\.set\.quarters : \[\]/.test(page));
+  check("...and the map is built by the SHIPPED function, not inline on the page",
+    /reactionPeriodLabels\(cold\.set\)/.test(page) &&
+      !/storedLabels\.set\(/.test(page),
+    "an inline merge on the page is what let years overwrite quarters, unseen by any check");
   check("BOTH paths go through the one labeller, so neither can drift",
     (page.match(/reactionBarLabels\(/g) ?? []).length === 1 &&
       /periodEnd: null, announcedOn: row\.date, row/.test(page),

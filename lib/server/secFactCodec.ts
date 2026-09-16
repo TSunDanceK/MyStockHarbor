@@ -239,3 +239,44 @@ export function periodLabel(p: StoredPeriod | null | undefined): string {
   if (p.fp && p.fy) return p.fp === "FY" ? `FY${p.fy}` : `${p.fp} FY${p.fy}`;
   return p.e;
 }
+
+/**
+ * The label for each period end AS A RESULTS ANNOUNCEMENT covers it.
+ *
+ * ── TWO RULES, BOTH WITH A RENDERED DEFECT BEHIND THEM ────────────────────
+ *
+ * 1. THE QUARTER FRAME WINS WHERE BOTH EXIST. A 10-Q carries twelve-month
+ *    comparatives, so `years` holds spans ending on QUARTER ends — AMZN's
+ *    reaction card read "FY2025 (05/01) · FY2025 (07/31) · FY2025 (10/30)"
+ *    because the annual entry overwrote the quarter's at every one of those
+ *    ends, and then the collision-breaker stamped a date on each to tell them
+ *    apart. The suffix is the tell: matched correctly, no two bars collide.
+ *
+ *    This is the year-end anchor's trap in a second place — a twelve-month
+ *    duration is not a fiscal year, and nothing about treating one as a fiscal
+ *    year fails.
+ *
+ * 2. AN ANNUAL PERIOD IS THE FOURTH QUARTER'S REPORT, where the filer reports
+ *    quarters at all. A bar reading "FY2025" beside "Q3 FY2025" implies a
+ *    different KIND of event; it is the same event, the quarter whose results
+ *    the annual filing carried. A filer that publishes no quarters keeps
+ *    "FY2025", because for it that is the whole story.
+ *
+ * SEPARATE FROM `periodLabel` ON PURPOSE. The snapshot and the five-year card
+ * name a PERIOD and must keep saying "FY2025"; only the reaction card names an
+ * ANNOUNCEMENT. One function doing both would have to be told which caller it
+ * was serving, which is two functions wearing one name.
+ */
+export function reactionPeriodLabels(set: {
+  quarters: StoredPeriod[];
+  years: StoredPeriod[];
+}): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of set.quarters) if (p.e) out.set(p.e, periodLabel(p));
+  const reportsQuarters = set.quarters.length > 0;
+  for (const p of set.years) {
+    if (!p.e || out.has(p.e)) continue;
+    out.set(p.e, reportsQuarters && p.fy ? `Q4 FY${p.fy}` : periodLabel(p));
+  }
+  return out;
+}
