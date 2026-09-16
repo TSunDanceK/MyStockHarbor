@@ -19,7 +19,7 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays };" +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -132,6 +132,57 @@ console.log("\n3b. one event per period, earliest wins");
     m.reportEvents(subs([{ form: "8-K", items: "5.02", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" }]), PERIODS).length === 0);
 }
 
+console.log("\n3c. THE BUG CLASS: a filing's reported date is never a period end");
+
+// ── WHY THIS HAS ITS OWN SECTION ─────────────────────────────────────────
+// The defect it guards shipped once and was invisible: reading the 8-K's
+// "Date of Report (Date of earliest event reported)" as the fiscal period end
+// makes every reporting lag announcement-minus-announcement — ZERO by
+// construction — and a backtest built on it reported a 0-day median error
+// across 103 filers, which reads as a triumph.
+//
+// NOTHING ABOUT THAT FAILS. No exception, no empty column, no wrong-looking
+// number on a page. Only the lags collapsing to zero gives it away, so that is
+// what this asserts, and the mutation restores the bug to prove the assertion
+// can see it.
+{
+  // The two dates DIFFER by construction: period ends 06-30, announced 07-30.
+  const rows = [
+    { form: "8-K", items: "2.02", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" },
+    { form: "8-K", items: "2.02", event: "2026-04-29", accepted: "2026-04-29T20:30:00.000Z" },
+    { form: "8-K", items: "2.02", event: "2026-01-28", accepted: "2026-01-28T21:30:00.000Z" },
+    { form: "8-K", items: "2.02", event: "2025-10-29", accepted: "2025-10-29T20:30:00.000Z" },
+  ];
+  const lagsOf = (mod) =>
+    mod.reportEvents(subs(rows), PERIODS)
+      .filter((e) => e.periodEnd)
+      .map((e) => mod.daysBetween(e.periodEnd, e.announcedOn));
+
+  const good = lagsOf(m);
+  check("every lag is the real gap from the matched period end",
+    good.length >= 3 && good.every((d) => d >= 20 && d <= 45),
+    `lags ${JSON.stringify(good)} — a real quarterly reporting lag`);
+  check("...and not one of them is zero",
+    good.every((d) => d !== 0),
+    `${good.filter((d) => d === 0).length} zero lag(s) — zero is the signature of the bug`);
+
+  // MUTATION: read the filing's own reported date as the period, which is the
+  // defect verbatim.
+  const bug = await load(
+    (src) => src.replace(
+      "    let periodEnd: string | null = null;",
+      "    let periodEnd: string | null = eventDate;\n    if (false)"
+    ),
+    2
+  );
+  const bugged = lagsOf(bug);
+  check("the read-the-report-date mutation actually applied",
+    JSON.stringify(bugged) !== JSON.stringify(good), `${JSON.stringify(bugged)}`);
+  check("MUTATION: reading the reported date as the period collapses every lag to 0",
+    bugged.length > 0 && bugged.every((d) => d === 0),
+    `${JSON.stringify(bugged)} — this is what produced a 0-day median error across 103 filers`);
+}
+
 console.log("\n4. the regularity gate");
 
 const ev = (period, accepted, basis = "8-K item 2.02") => ({
@@ -146,8 +197,43 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
   ];
   const r = m.estimateNextReport(regular, "2026-09-30", "Large accelerated filer");
   check("a regular filer gets a DATE", r.kind === "date", `${r.kind} ${r.date ?? r.reason ?? ""}`);
+  // THE PRIMARY CARRIES IT WHEN IT CAN. 2025-09-30 sits 365 days before the
+  // target period end, so the same quarter a year ago exists and A — the
+  // estimator chosen by the measured table — is what produced the date.
+  check("...from the PRIMARY estimator, because the same quarter exists a year back",
+    r.kind === "date" && r.estimator === m.PRIMARY_ESTIMATOR,
+    `estimator ${r.estimator}, primary ${m.PRIMARY_ESTIMATOR}`);
+  // A AND B ARE NOT THE SAME ARITHMETIC and this fixture separates them: the
+  // year-ago quarter ended 2025-09-30 and was announced 2025-11-01, a lag of
+  // 32. A holds the LAG (2026-09-30 + 32 = 2026-11-01); B holds the CALENDAR
+  // POSITION (2025-11-01 + 364 = 2026-10-31). A day apart, so a check that
+  // expected one would pass on the other only by accident.
+  check("A holds the lag from period end, B holds the weekday",
+    m.runEstimator("A", regular, "2026-09-30") === "2026-11-01" &&
+      m.runEstimator("B", regular, "2026-09-30") === "2026-10-31",
+    `A ${m.runEstimator("A", regular, "2026-09-30")}, B ${m.runEstimator("B", regular, "2026-09-30")}`);
+  check("...and the shipped date is the primary's own arithmetic",
+    r.kind === "date" && r.date === m.runEstimator(m.PRIMARY_ESTIMATOR, regular, "2026-09-30"),
+    `${r.date}`);
   check("...and the spread that earned it travels with it",
     r.kind === "date" && r.spreadDays <= m.REGULAR_SPREAD_DAYS, `spread ${r.spreadDays}`);
+
+  // ── THE DOCUMENTED FALLBACK ────────────────────────────────────────────
+  // A and B both need the same quarter a year ago. A filer whose stored history
+  // SKIPS that quarter — no matched event for 2025-09-30 — has nothing for them
+  // to work from, and C must carry it rather than the estimate vanishing.
+  const gapped = [
+    ev("2026-06-30", "2026-07-30"), ev("2026-03-31", "2026-05-01"),
+    ev("2025-12-31", "2026-01-30"), ev("2025-06-30", "2025-07-30"),
+  ];
+  check("no same-quarter event a year ago: A and B have no input",
+    m.runEstimator("A", gapped, "2026-09-30") === null &&
+      m.runEstimator("B", gapped, "2026-09-30") === null,
+    `A ${m.runEstimator("A", gapped, "2026-09-30")}, B ${m.runEstimator("B", gapped, "2026-09-30")}`);
+  const g = m.estimateNextReport(gapped, "2026-09-30", "Large accelerated filer");
+  check("...so the estimate falls back to C rather than disappearing",
+    g.kind === "date" && g.estimator === "C" && g.date === "2026-10-30",
+    `${g.kind} ${g.date ?? ""} estimator ${g.estimator} — median lag 30 on 2026-09-30`);
 
   // Lags 20, 40, 25, 55 — a spread of 35, and spanning two months.
   const irregular = [
@@ -168,6 +254,14 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
   const sk = m.estimateNextReport(sixK, "2026-09-30", "Large accelerated filer");
   check("a 6-K history earns no estimate at all",
     sk.kind === "none", `${sk.kind}: ${sk.reason ?? ""} — the weakest evidence must not carry the most specific claim`);
+
+  // ── NO MATCHED PERIOD END, NO DATE ─────────────────────────────────────
+  // All three estimators are arithmetic on a period end and the deadline that
+  // caps them is measured from one. A filer whose next period end could not be
+  // matched gets silence, not a date computed off the announcement.
+  const n = m.estimateNextReport(regular, null, "Large accelerated filer");
+  check("an unmatched next period end yields no date at all",
+    n.kind === "none", `${n.kind}: ${n.reason ?? n.date ?? ""}`);
 
   // The clamp.
   const slow = [
