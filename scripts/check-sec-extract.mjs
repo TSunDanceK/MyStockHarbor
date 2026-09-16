@@ -415,6 +415,282 @@ check("...and one a full quarter off does NOT",
 check("with no annual frame to anchor on, it labels nothing rather than guessing",
   mod.fiscalLabel("2026-06-30", null).fp === null);
 
+// ── 6d. WHICH YEAR THE FILER CALLS IT — READ, NEVER GUESSED ───────────────
+//
+// THE DEFECT, from the #472 preview: AAP's snapshot read "Q2 FY2027 (period
+// ending 2026-07-18)". AAP calls that quarter Q2 FY2026. AAP and WMT both end a
+// fiscal year within days of the new calendar year and name it differently, and
+// NO RULE ABOUT DATES can separate them — the name is the filer's.
+//
+// Nothing about the wrong one fails. The date beside it is right and the
+// quarter number is right; only a reader who knows the company sees it.
+console.log("\n6d. the fiscal YEAR NAME, calibrated per filer");
+
+// ── MEASURED FROM THE MIDPOINT, NOT THE END ───────────────────────────────
+// AAP's year-end is the Saturday nearest 31 December: 2 January one year, 27
+// December the next. An offset measured against the END year would flip
+// between 0 and -1 for the same company with no change in how it names
+// anything, and a calibration that oscillates renames the page every few years.
+const mid = (iso) => mod.fiscalMidYear(Date.parse(`${iso}T00:00:00Z`));
+check("a year-end either side of New Year reads the SAME midpoint year",
+  mid("2027-01-02") === 2026 && mid("2026-12-27") === 2026,
+  `${mid("2027-01-02")} / ${mid("2026-12-27")} — AAP's year-end lands on both sides`);
+check("a September year-end's midpoint year is its own year",
+  mid("2026-09-26") === 2026);
+
+// A companyfacts payload carrying only what the calibration reads: each fact
+// row's `fy`/`fp` are the FILING's DocumentFiscalYearFocus.
+const fyFacts = (rows) => ({
+  facts: { "us-gaap": { Revenues: { units: { USD: rows } } } },
+});
+// AAP-SHAPED: fiscal 2026 ran Dec 2025 - Jan 2027 and the 10-K says fy 2026 —
+// the year it mostly occupies. Offset 0.
+const AAP = fyFacts([
+  { accn: "k26", form: "10-K", fp: "FY", fy: 2026, start: "2025-12-28", end: "2027-01-02", val: 1 },
+  // THE COMPARATIVE, stamped with the SAME fy — which is why the pairing can
+  // only be read from the LATEST period in the filing.
+  { accn: "k26", form: "10-K", fp: "FY", fy: 2026, start: "2024-12-29", end: "2025-12-27", val: 1 },
+  // An earlier 10-K whose year ended on the OTHER side of New Year — 28
+  // December, not 2 January — and which the filer still names for the year it
+  // occupies. The end-year reading would put these two a year apart.
+  { accn: "k24", form: "10-K", fp: "FY", fy: 2024, start: "2023-12-31", end: "2024-12-28", val: 1 },
+]);
+// WMT-SHAPED: fiscal 2027 runs Feb 2026 - Jan 2027 and is named for the year it
+// ENDS in. Offset +1.
+const WMT = fyFacts([
+  { accn: "w27", form: "10-K", fp: "FY", fy: 2027, start: "2026-02-01", end: "2027-01-31", val: 1 },
+  { accn: "w26", form: "10-K", fp: "FY", fy: 2026, start: "2025-02-01", end: "2026-01-31", val: 1 },
+]);
+
+const aapNaming = mod.fiscalYearOffset(AAP, "2027-01-02");
+const wmtNaming = mod.fiscalYearOffset(WMT, "2027-01-31");
+check("AAP-shaped: named for the year it mostly occupies",
+  aapNaming.offset === 0 && aapNaming.basis === "annual", JSON.stringify(aapNaming));
+check("...and BOTH of its 10-Ks agree, though their year-ends straddle New Year",
+  aapNaming.agreeing === 2 && aapNaming.disagreeing === 0,
+  `${aapNaming.agreeing} agreeing / ${aapNaming.disagreeing} — an end-year offset would have split them`);
+check("WMT-shaped: named for the year it ENDS in",
+  wmtNaming.offset === 1 && wmtNaming.basis === "annual", JSON.stringify(wmtNaming));
+
+// THE LABELS THEMSELVES, which is what a reader sees.
+const lab = (end, anchor, naming) => { const f = mod.fiscalLabel(end, anchor, naming); return `${f.fp} FY${f.fy}`; };
+check("AAP's July quarter reads Q2 FY2026, as AAP calls it",
+  lab("2026-07-18", "2027-01-02", aapNaming) === "Q2 FY2026", lab("2026-07-18", "2027-01-02", aapNaming));
+check("...and uncalibrated it reads FY2027, which is the shipped defect",
+  lab("2026-07-18", "2027-01-02", null) === "Q2 FY2027", lab("2026-07-18", "2027-01-02", null));
+check("WMT's July quarter reads Q2 FY2027, as WMT calls it",
+  lab("2026-07-31", "2027-01-31", wmtNaming) === "Q2 FY2027", lab("2026-07-31", "2027-01-31", wmtNaming));
+
+// ── THE MUTATIONS: each convention forced, and the other filer must break ──
+// A calibration that happens to agree with one convention is indistinguishable
+// from that convention hard-coded, so both hard-codings are tried.
+const FILTER_LINE = "  const recent = readings.slice(0, 4).filter((r) => r.offset === 0 || r.offset === 1);";
+{
+  const occupied = await liftMutated((src) =>
+    src.replace(FILTER_LINE, "  const recent = readings.slice(0, 4).map((r) => ({ ...r, offset: 0 }));"));
+  check("MUTATION forcing 'year it occupies': AAP still right (it is that convention)",
+    occupied.fiscalYearOffset(AAP, "2027-01-02").offset === 0);
+  check("MUTATION forcing 'year it occupies': WMT goes wrong",
+    occupied.fiscalYearOffset(WMT, "2027-01-31").offset !== 1,
+    `${occupied.fiscalYearOffset(WMT, "2027-01-31").offset} — a convention applied to a filer that does not use it`);
+
+  const endYear = await liftMutated((src) =>
+    src.replace(FILTER_LINE, "  const recent = readings.slice(0, 4).map((r) => ({ ...r, offset: 1 }));"));
+  check("MUTATION forcing end-year naming: WMT still right (it is that convention)",
+    endYear.fiscalYearOffset(WMT, "2027-01-31").offset === 1);
+  check("MUTATION forcing end-year naming: AAP goes wrong",
+    endYear.fiscalYearOffset(AAP, "2027-01-02").offset !== 0,
+    `${endYear.fiscalYearOffset(AAP, "2027-01-02").offset} — this is the defect restored`);
+}
+
+// ── READING THE COMPARATIVES WOULD BREAK IT ───────────────────────────────
+{
+  const oldest = await liftMutated((src) =>
+    src.replace("          if (!cur || r.end > cur.end) {", "          if (!cur || r.end < cur.end) {"));
+  const got = oldest.fiscalYearOffset(AAP, "2027-01-02");
+  check("MUTATION taking the OLDEST period of a filing: AAP is misnamed",
+    got.offset !== 0 || got.basis === null,
+    `${JSON.stringify(got)} — a 10-K stamps its fy on every comparative it restates`);
+}
+
+// ── AN UNREADABLE FILER NAMES NOTHING NEW ─────────────────────────────────
+// A FOREIGN PRIVATE ISSUER FILES NO 10-K AT ALL. Eleven of them — BABA, SONY,
+// RYAAY, MUFG among them — read as "naming unreadable" when the filter named
+// only the domestic form, so the annual report is matched by what it IS rather
+// than by one of its names.
+{
+  const SONY = fyFacts([
+    { accn: "f26", form: "20-F", fp: "FY", fy: 2026, start: "2025-04-01", end: "2026-03-31", val: 1 },
+    { accn: "f25", form: "20-F", fp: "FY", fy: 2025, start: "2024-04-01", end: "2025-03-31", val: 1 },
+  ]);
+  const n = mod.fiscalYearOffset(SONY, "2026-03-31");
+  check("a 20-F states the fiscal year just as a 10-K does",
+    n.basis === "annual" && n.offset === 1 && n.agreeing === 2, JSON.stringify(n));
+  const CNI = fyFacts([
+    { accn: "c26", form: "40-F", fp: "FY", fy: 2026, start: "2026-01-01", end: "2026-12-31", val: 1 },
+  ]);
+  check("...and so does a 40-F", mod.fiscalYearOffset(CNI, "2026-12-31").basis === "annual");
+}
+
+check("no readable annual report or 10-Q leaves the naming unread, and the label falls back",
+  (() => { const n = mod.fiscalYearOffset(fyFacts([]), "2026-12-31"); return n.basis === null && n.agreeing === 0; })(),
+  JSON.stringify(mod.fiscalYearOffset(fyFacts([]), "2026-12-31")));
+check("...and an unread naming leaves every existing label exactly as it was",
+  CALENDARS.every(([, anchor, ends, want]) =>
+    ends.map((e) => lab(e, anchor, mod.fiscalYearOffset(fyFacts([]), anchor))).join("|") === want),
+  "a filer whose naming cannot be read must not be relabelled by the attempt");
+check("a nonsense offset is refused rather than renaming every period",
+  (() => {
+    const junk = fyFacts([{ accn: "x", form: "10-K", fp: "FY", fy: 1999, start: "2025-12-28", end: "2027-01-02", val: 1 }]);
+    const n = mod.fiscalYearOffset(junk, "2027-01-02");
+    return n.basis === null;
+  })(),
+  "only 0 and +1 are conventions; anything else is a malformed filing");
+
+// ── THE ANCHOR ITSELF, WHICH THE CENSUS CAUGHT BEING WRONG ───────────────
+//
+// `yearEndAnchor` is "the newest twelve-month frame's end", and a trailing-
+// twelve-month comparative in a 10-Q is twelve months long without being a
+// fiscal year. The census found AMZN anchored on 30 June and BG on 31 March —
+// both December filers — so every quarter either one showed was labelled off
+// the wrong year-end, and had been since before any of this.
+{
+  const AMZN = fyFacts([
+    { accn: "a25", form: "10-K", fp: "FY", fy: 2025, start: "2025-01-01", end: "2025-12-31", val: 1 },
+    { accn: "a24", form: "10-K", fp: "FY", fy: 2024, start: "2024-01-01", end: "2024-12-31", val: 1 },
+    // THE IMPOSTOR: a twelve-month span ending mid-year, filed in a 10-Q.
+    { accn: "q26", form: "10-Q", fp: "Q2", fy: 2026, start: "2025-07-01", end: "2026-06-30", val: 1 },
+  ]);
+  const n = mod.fiscalYearOffset(AMZN, "2026-06-30");
+  check("the annual filing's own period end is offered as the anchor",
+    n.yearEnd === "2025-12-31", `${n.yearEnd} — the 10-K's period end, not the TTM frame's`);
+  check("...and a 10-Q never supplies one, or every label moves by a quarter",
+    mod.fiscalYearOffset(fyFacts([
+      { accn: "q1", form: "10-Q", fp: "Q2", fy: 2026, start: "2026-04-01", end: "2026-06-30", val: 1 },
+      { accn: "q2", form: "10-Q", fp: "Q1", fy: 2026, start: "2026-01-01", end: "2026-03-31", val: 1 },
+      { accn: "q3", form: "10-Q", fp: "Q3", fy: 2025, start: "2025-07-01", end: "2025-09-30", val: 1 },
+    ]), "2025-12-31").yearEnd === null);
+  // THE LABEL, BOTH WAYS. Against the frame-derived anchor the newest quarter
+  // reads a year early; against the filing's own year end it reads right.
+  check("the wrong anchor mislabels AMZN's June quarter",
+    lab("2026-06-30", "2026-06-30", n) === "Q4 FY2025",
+    `${lab("2026-06-30", "2026-06-30", n)} — anchored on a TTM frame`);
+  check("...and the 10-K's year end labels it correctly",
+    lab("2026-06-30", n.yearEnd, n) === "Q2 FY2026",
+    `${lab("2026-06-30", n.yearEnd, n)}`);
+  check("the extraction prefers the filing's year end over the frame's",
+    /const labelAnchor = naming\.yearEnd \?\? yearEndAnchor;/.test(extractSrc) &&
+      /fiscalLabel\(end, labelAnchor, naming\)/.test(extractSrc));
+}
+
+// ── 6e. A TWELVE-MONTH COMPARATIVE IS NOT A FISCAL YEAR ───────────────────
+//
+// THE DEFECT, measured on AMZN's own companyfacts:
+//   us-gaap:CashCashEquivalents...IncludingExchangeRateEffect
+//     2025-07-01..2026-06-30  (364d, 10-Q Q2)
+// Six such trailing years reached AMZN's `years` list. On the five-year card
+// they rendered AS FISCAL YEARS; on the reaction card they took every quarter's
+// label. Length cannot tell them apart — 364 days either way. The END can.
+console.log("\n6e. a trailing twelve months is not a fiscal year");
+{
+  // AN AMZN-SHAPED PAYLOAD: a December filer with a real 10-K year, real
+  // quarters, and the 10-Q's twelve-month comparative ending at a QUARTER end.
+  const amznFacts = {
+    cik: 2, entityName: "Trailing Co",
+    facts: {
+      "us-gaap": {
+        NetIncomeLoss: { units: { USD: [
+          // The fiscal year, from the 10-K.
+          { start: "2025-01-01", end: "2025-12-31", val: 400, accn: "k25", form: "10-K", filed: "2026-02-05", fy: 2025, fp: "FY" },
+          { start: "2024-01-01", end: "2024-12-31", val: 300, accn: "k24", form: "10-K", filed: "2025-02-06", fy: 2024, fp: "FY" },
+          // Real quarters.
+          { start: "2026-01-01", end: "2026-03-31", val: 90, accn: "q1", form: "10-Q", filed: "2026-05-01", fy: 2026, fp: "Q1" },
+          { start: "2026-01-01", end: "2026-06-30", val: 190, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+          // THE IMPOSTOR: twelve months ending mid-year, filed in the Q2 10-Q.
+          { start: "2025-07-01", end: "2026-06-30", val: 410, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+        ] } },
+        Assets: { units: { USD: [
+          { end: "2026-06-30", val: 9000, accn: "q2", form: "10-Q", filed: "2026-07-31", fy: 2026, fp: "Q2" },
+        ] } },
+      },
+    },
+  };
+  const amznOut = extractCompanyFacts("AMZN", amznFacts);
+  const yearEnds = amznOut.years.map((y) => y.end);
+  check("the fiscal year is kept",
+    yearEnds.includes("2025-12-31") && yearEnds.includes("2024-12-31"), yearEnds.join(" · "));
+  check("the trailing year ending at a QUARTER end is not in `years`",
+    !yearEnds.includes("2026-06-30"),
+    `${yearEnds.join(" · ")} — a 364-day span ending 30 June is not a fiscal year`);
+  check("...and the quarter at that end survives, untouched",
+    amznOut.quarters.some((q) => q.end === "2026-06-30"),
+    "dropping the trailing year must not drop the quarter that shares its end");
+
+  // THE ANCHOR THE FILTER USES IS THE ANNUAL FILING'S, not the newest frame —
+  // using the frame would ask the list to validate itself, and on AMZN the
+  // newest frame WAS one of the trailing years.
+  check("the filter measures against the 10-K's own period end",
+    /onFiscalYearEnd\(e, naming\.yearEnd\)/.test(extractSrc),
+    "yearEndAnchor is derived FROM yearCells, so it cannot referee them");
+
+  // ── THE MUTATION: admit any twelve-month frame, which is what shipped ────
+  {
+    const anyTwelve = await liftMutated((src) =>
+      src.replace("    new Map([...yearCells].filter(([e]) => onFiscalYearEnd(e, naming.yearEnd))),",
+        "    yearCells,"));
+    const broken = anyTwelve.extractCompanyFacts("AMZN", amznFacts);
+    check("the admit-anything mutation actually applied",
+      broken.years.length !== amznOut.years.length,
+      `${broken.years.map((y) => y.end).join(" · ")}`);
+    check("MUTATION: the trailing year returns to `years` — the five-year card's rows",
+      broken.years.some((y) => y.end === "2026-06-30"),
+      `${broken.years.map((y) => y.end).join(" · ")} — this is what AMZN rendered`);
+    // AND IT IS THE NEWEST, which is the snapshot anchor: the same row that
+    // would decide basis and tableBasis for the whole page.
+    check("...and it lands FIRST, where the snapshot anchor reads",
+      broken.years[0]?.end === "2026-06-30",
+      "the anchor, tableBasis and the 548-day gate all read set.years[0]");
+  }
+
+  // THE SLACK IS FOR WEEKDAY DRIFT, NOT FOR A DIFFERENT PERIOD.
+  check("a year end eight days off the anchor is still a fiscal year",
+    mod.onFiscalYearEnd("2026-01-08", "2026-01-02"));
+  check("...and one a quarter off is not",
+    !mod.onFiscalYearEnd("2026-03-31", "2026-01-02"));
+  check("a December/January filer matches ACROSS the new year",
+    mod.onFiscalYearEnd("2025-12-27", "2027-01-02") && mod.onFiscalYearEnd("2024-12-28", "2027-01-02"),
+    "AAP's year end lands on both sides of it");
+  check("with no annual filing to anchor on, nothing is dropped",
+    mod.onFiscalYearEnd("2026-06-30", null),
+    "that is exactly the behaviour that shipped, and it stays where nothing better is known");
+}
+
+// ── THE RELABEL MUST NOT SPLIT A YEAR-OVER-YEAR PAIR ──────────────────────
+//
+// YoY matches BY LABEL — same fp, fy-1 — so a shift applied to some periods and
+// not others would compare a quarter against one two years away while the page
+// said "compared with Q2 FY2025". The offset is one reading per filer, applied
+// at a single call site, and that is the property asserted: one site, and the
+// gap between any two labels is unchanged by it.
+check("the naming is applied at exactly ONE call site",
+  (extractSrc.match(/fiscalLabel\(end, labelAnchor/g) ?? []).length === 1,
+  "two sites is two places for a filer to be half-relabelled");
+{
+  const ends = ["2026-07-18", "2026-04-18", "2026-01-17", "2025-10-05", "2025-07-19"];
+  const pair = (naming) => ends.map((e) => {
+    const f = mod.fiscalLabel(e, "2027-01-02", naming);
+    return `${f.fp}:${f.fy}`;
+  });
+  const naive = pair(null), calibrated = pair(aapNaming);
+  check("every period shifts by the SAME year, so fp is untouched",
+    naive.every((l, i) => l.split(":")[0] === calibrated[i].split(":")[0]));
+  check("...and every fy shifts by exactly one, so fy-1 still pairs the same rows",
+    naive.every((l, i) => Number(l.split(":")[1]) - Number(calibrated[i].split(":")[1]) === 1),
+    `${naive.join(" ")} vs ${calibrated.join(" ")}`);
+  check("...and no two periods collide after the relabel",
+    new Set(calibrated).size === new Set(naive).size);
+}
+
 // AND THE SOURCE SIDE: pack() must not read the row's own fy/fp again.
 check("pack() does not read fy or fp off the companyfacts row",
   !/fp: row\?\.fp|fy: .*row\?\.fy/.test(extractCode),

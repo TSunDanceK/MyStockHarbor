@@ -396,6 +396,50 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // REPORT DATES AND TIMING FROM EDGAR, measured against the stored FMP dates.
+  // Credentialled to read the store; fetches EDGAR itself. No writes.
+  // SEEDS THE REPORT-DATES STORE for a preview, using the shipped functions.
+  // A real write, to a key nothing on main reads; the cron overwrites it once
+  // the branch merges.
+  // HOW MANY SYMBOLS THE FISCAL-YEAR CALIBRATION RELABELS, and which.
+  // Credentialled to read the store; fetches companyfacts only for the filers
+  // a relabel is arithmetically possible for. No writes.
+  // RE-EXTRACT AND REWRITE NAMED FACT SETS with the shipped extraction, so a
+  // labelling change can be eye-checked before the rewindow queue reaches it.
+  // Refuses an empty symbol list; it is not a backfill.
+  "write-refresh-sets": {
+    script: "scripts/sec-refresh-sets.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY A STORED SET'S NEWEST PERIOD IS OLDER THAN THE FILER'S NEWEST FILING.
+  // Credentialled to read the store and the report-date records; fetches
+  // submissions. No writes.
+  "write-stale-period-census": {
+    script: "scripts/sec-stale-period-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-fy-naming-census": {
+    script: "scripts/fiscal-year-naming-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-report-dates-seed": {
+    script: "scripts/sec-report-dates-seed.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-report-dates": {
+    script: "scripts/sec-report-dates-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],

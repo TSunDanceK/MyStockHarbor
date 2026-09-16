@@ -13,6 +13,7 @@ import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { SEC_FACTS_PREFIX } from "./secManifest";
 import { secFieldsHash } from "./secFields";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { StoredFactSet } from "./secFactCodec";
 
 export * from "./secFactCodec";
@@ -65,6 +66,8 @@ export async function readFactSet(symbol: string): Promise<StoredFactSet | null>
  */
 export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!redis) return false;
+  // A PREVIEW RENDERS FROM THE SET IT HOLDS AND KEEPS NOTHING. See secWriteGate.
+  if (!canWriteSecState()) { noteSecWriteBlocked("writeFactSet"); return false; }
   try {
     await redis.set(factKey(set.symbol), set);
     return true;

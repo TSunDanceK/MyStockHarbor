@@ -9,6 +9,12 @@ import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type Stor
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
+import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
+import {
+  reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults,
+  type Submissions,
+} from "@/lib/server/secReportDates";
+import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +105,25 @@ export const maxDuration = 300;
 export const SEC_COLD_PER_RUN = 50;
 export const SEC_REVERIFY_PER_RUN = 150;
 export const SEC_POPULATE_PER_RUN = 300;
+
+/**
+ * Symbols whose SEC REPORT DATES are refreshed per run, from `submissions`.
+ *
+ * ── ITS OWN ALLOWANCE, AND A SMALL ONE ───────────────────────────────────
+ * This is a SECOND endpoint and a second payload per symbol, and the numbers
+ * above — 300/run, ~810 MB of wire, ~50s of a 300s budget — were measured for
+ * companyfacts alone. Folding report dates into that loop would silently
+ * rewrite every one of those figures, and the first sign would be a cron
+ * timing out mid-drain with the manifest half written.
+ *
+ * So it drains separately and cannot displace the fact-set work: the fact set
+ * is what the page's numbers come from, and a date is the smaller loss.
+ *
+ * 100/RUN IS ~9 DAYS across the CIK-bearing universe, and after that the queue
+ * is only what filed — an 8-K is the only thing that moves these dates, so the
+ * steady state is the daily filing count, not the universe.
+ */
+export const SEC_REPORT_DATES_PER_RUN = 100;
 
 /**
  * Sets re-read per run because they were written under an older quarter window.
@@ -369,6 +394,28 @@ async function fetchCompanyFacts(cik: string): Promise<CompanyFacts> {
   return (await res.json()) as CompanyFacts;
 }
 
+/**
+ * The same rate gate, the other endpoint.
+ *
+ * SHARES `lastAt` DELIBERATELY. SEC's limit is per requester, not per endpoint,
+ * and two fetchers each politely spacing their own calls would between them
+ * double the rate the limit is measured at — which is how a well-behaved
+ * client gets a block for the whole account.
+ */
+async function fetchSubmissions(cik: string): Promise<Submissions> {
+  const wait = Math.max(0, lastAt + MIN_GAP_MS - Date.now());
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastAt = Date.now();
+  const res = await fetch(
+    `https://data.sec.gov/submissions/CIK${cik}.json`,
+    { headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" }, cache: "no-store" }
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
+  return (await res.json()) as Submissions;
+}
+
 export async function GET(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
@@ -429,6 +476,14 @@ export async function GET(req: NextRequest) {
       ];
 
   const results: Record<string, unknown>[] = [];
+  /**
+   * The sets this run produced, kept so the report-dates phase below does not
+   * re-READ from Redis what this loop just WROTE. It needs the period ends, and
+   * they are the period ends in hand.
+   */
+  const setsThisRun = new Map<string, StoredFactSet>();
+  /** Symbols whose numbers moved this run — the signal that an 8-K landed. */
+  const changedThisRun: string[] = [];
   let written = 0;
   let unchanged = 0;
   let failed = 0;
@@ -506,7 +561,11 @@ export async function GET(req: NextRequest) {
         // cached HTML is already right, and flushing it would throw away a
         // valid render -- and with it the FMP calls and Redis reads that
         // produced it -- to rebuild the identical page.
-        revalidatePath(`/stock/${symbol}/earnings`);
+        // FLUSHING A PAGE IS A WRITE TO WHAT EVERY VISITOR SEES. A preview
+        // deployment invalidating a production route is the same defect as a
+        // preview storing a fact set, one layer up.
+        if (canWriteSecState()) revalidatePath(`/stock/${symbol}/earnings`);
+        else noteSecWriteBlocked("revalidatePath");
         // COUNTED, so "changed-only" is a number rather than a claim about the
         // shape of the code. The cache-health panel shows it against
         // `attempted`: if those two ever converge, the flush has escaped this
@@ -543,6 +602,10 @@ export async function GET(req: NextRequest) {
         // instead of 759 GETs, and cost nothing: the set is already in hand.
         entry.w = set.w ?? SEC_QUARTER_WINDOW;
         entry.y = set.y ?? SEC_YEAR_WINDOW;
+        // FROM THE SET for the same reason `c` is, below: the manifest records
+        // what actually produced this set, not what was current when the line
+        // was written. A set written by the cold path never passes through here.
+        entry.lv = set.lv ?? 1;
         // FROM THE SET, NOT FROM secChainsHash() — the manifest must record
         // which chains ACTUALLY produced this set, not which chains were
         // current when the manifest line was written. They are the same value
@@ -555,6 +618,9 @@ export async function GET(req: NextRequest) {
         entry.years = set.years.length;
         entry.instants = set.instants.length;
       }
+
+      setsThisRun.set(symbol, set);
+      if (changed) changedThisRun.push(symbol);
 
       results.push({
         symbol, reason, changed,
@@ -569,6 +635,89 @@ export async function GET(req: NextRequest) {
       // run retry it; clearing it here would turn one bad fetch into a symbol
       // that is never re-read again.
       results.push({ symbol, reason, error: String((err as Error)?.message ?? err) });
+    }
+  }
+
+  // ── REPORT DATES, FROM THE SUBMISSIONS FEED ──────────────────────────────
+  //
+  // WHAT THIS WRITES AND WHY IT IS NOT IN THE LOOP ABOVE: companyfacts carries
+  // fiscal periods and numbers, and carries no announcement dates at all. When
+  // a company told the market is an 8-K Item 2.02 (or, for a foreign private
+  // issuer, a 6-K), and that lives in `submissions`. Two endpoints, two
+  // payloads, so two allowances — see SEC_REPORT_DATES_PER_RUN.
+  //
+  // ORDERED: THE FILERS FIRST. A symbol whose fact set changed this run has
+  // almost certainly just announced, so its dates are the ones a reader is
+  // about to look at. The backfill behind it is the one-off sweep of symbols
+  // populated before this existed, and it drains and then stays drained.
+  //
+  // THE PERIOD ENDS COME FROM THE STORED FACT SET, NEVER FROM THE FILING. That
+  // is the whole point of the matching in `reportEvents`: an Item 2.02 8-K's
+  // "date of report" is the day results were released, and reading it as a
+  // fiscal period end makes every reporting lag zero by construction.
+  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (!only) {
+    const changedSet = new Set(changedThisRun);
+    const backfill = Object.entries(manifest.symbols)
+      .filter(([sym, e]) => e.cik && !e.reportDatesAt && !changedSet.has(sym))
+      .map(([sym]) => sym);
+    reportDates.backlog = backfill.length;
+    for (const symbol of [...changedThisRun, ...backfill].slice(0, SEC_REPORT_DATES_PER_RUN)) {
+      const entry = manifest.symbols[symbol];
+      const cik = entry?.cik ?? cikForSymbol(symbol);
+      if (!cik) continue;
+      reportDates.attempted++;
+      try {
+        const set = setsThisRun.get(symbol) ?? (await readFactSet(symbol));
+        // NO FACT SET, NO PERIOD ENDS, NO MATCHING. Fetching submissions for a
+        // symbol whose periods are unknown would produce events with a null
+        // period every time — rows that cannot be charted and cannot be
+        // estimated from. It waits for populate to reach it.
+        if (!set) continue;
+        const subs = await fetchSubmissions(cik);
+        const quarterEnds = set.quarters.map((p) => p.e).filter(Boolean);
+        const yearEnds = set.years.map((p) => p.e).filter(Boolean);
+        const events = reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
+          .filter((e) => e.periodEnd)
+          .slice(0, STORED_EVENT_LIMIT);
+        // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
+        // lags the filings — companyfacts carries a period once it is FILED —
+        // so one cadence step past its newest period can be a date in the
+        // past, rendered under "next expected".
+        const cadence = nextPeriodEndFrom(quarterEnds, yearEnds);
+        const { estimate: next, periodEnd: nextEnd } = estimateUpcoming(
+          events, cadence, subs.category, todayIso
+        );
+        // ── ANNOUNCED BUT NOT YET IN THE FEED ─────────────────────────────
+        // Read from the SAME submissions payload already in hand, so this
+        // costs nothing beyond the arithmetic. See pendingResults for why it
+        // cannot come out of `events`.
+        const pending = pendingResults(
+          events, latestResultsAnnouncement(subs), cadence, todayIso
+        );
+        const ok = await writeReportDates({
+          symbol, cik,
+          at: new Date().toISOString(),
+          events,
+          nextPeriodEnd: nextEnd,
+          next,
+          pending,
+        });
+        if (!ok) { reportDates.failed++; continue; }
+        reportDates.written++;
+        if (!events.length) reportDates.noEvents++;
+        if (next.kind === "date") reportDates.dated++;
+        if (pending) reportDates.pending++;
+        // STAMPED WHETHER OR NOT IT FOUND ANYTHING, for the same reason the cold
+        // queue is cleared on a fetch that populated nothing: a filer with no
+        // Item 2.02 history would otherwise sit at the head of the backfill
+        // being re-fetched every day forever.
+        if (entry) entry.reportDatesAt = Date.now();
+      } catch (err) {
+        reportDates.failed++;
+        console.warn("[sec-facts] report dates failed", symbol, String((err as Error)?.message ?? err));
+      }
     }
   }
 
@@ -596,6 +745,20 @@ export async function GET(req: NextRequest) {
     reverifyBacklog: q.reverifyBacklog,
     populateBacklog: q.populateBacklog,
     rewindowBacklog: q.rewindowBacklog,
+    // SYMBOLS, not filings — the panel's own rule. `dated` is how many of the
+    // written records earned a specific next-report date rather than a month
+    // or nothing; it is the number that says whether the regularity gate is
+    // behaving in production the way the backtest said it does.
+    reportDatesAttempted: reportDates.attempted,
+    reportDatesWritten: reportDates.written,
+    reportDatesFailed: reportDates.failed,
+    reportDatesNoEvents: reportDates.noEvents,
+    reportDatesDated: reportDates.dated,
+    // SYMBOLS showing "announced, not yet in the SEC feed". A number that
+    // climbs through earnings season and falls back is the feed catching up;
+    // one that only climbs is a bug in the test, not a lag at SEC.
+    reportDatesPending: reportDates.pending,
+    reportDatesBacklog: reportDates.backlog,
     manifestWritten: persisted,
   };
   await recordJobRun("sec-facts", summary.ok, summary);

@@ -15,7 +15,7 @@
 // whose own hash differs treats the record as UNREADABLE and refetches. An order
 // change becomes a cache miss instead of a wrong number.
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
-import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW } from "./secExtract";
+import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
@@ -72,6 +72,12 @@ export type StoredFactSet = {
   c?: string;
   /** Currencies a mapped tag was published in and refused. See rowsForField. */
   cu?: string[];
+  /**
+   * The PERIOD LABELLING version this set was written under. Absent = 1, the
+   * version that named a fiscal year by the calendar year of its end. See
+   * SEC_LABEL_VERSION; `h` and `c` cannot see a labelling change.
+   */
+  lv?: number;
   /**
    * The QUARTER RETENTION WINDOW this set was written under.
    *
@@ -168,6 +174,7 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     cc: result.conceptChoice,
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
+    lv: SEC_LABEL_VERSION,
     notes: result.notes,
   };
   return { ...base, contentHash: contentHashOf(base) };
@@ -231,4 +238,45 @@ export function periodLabel(p: StoredPeriod | null | undefined): string {
   // version produced "FY FY2026".
   if (p.fp && p.fy) return p.fp === "FY" ? `FY${p.fy}` : `${p.fp} FY${p.fy}`;
   return p.e;
+}
+
+/**
+ * The label for each period end AS A RESULTS ANNOUNCEMENT covers it.
+ *
+ * ── TWO RULES, BOTH WITH A RENDERED DEFECT BEHIND THEM ────────────────────
+ *
+ * 1. THE QUARTER FRAME WINS WHERE BOTH EXIST. A 10-Q carries twelve-month
+ *    comparatives, so `years` holds spans ending on QUARTER ends — AMZN's
+ *    reaction card read "FY2025 (05/01) · FY2025 (07/31) · FY2025 (10/30)"
+ *    because the annual entry overwrote the quarter's at every one of those
+ *    ends, and then the collision-breaker stamped a date on each to tell them
+ *    apart. The suffix is the tell: matched correctly, no two bars collide.
+ *
+ *    This is the year-end anchor's trap in a second place — a twelve-month
+ *    duration is not a fiscal year, and nothing about treating one as a fiscal
+ *    year fails.
+ *
+ * 2. AN ANNUAL PERIOD IS THE FOURTH QUARTER'S REPORT, where the filer reports
+ *    quarters at all. A bar reading "FY2025" beside "Q3 FY2025" implies a
+ *    different KIND of event; it is the same event, the quarter whose results
+ *    the annual filing carried. A filer that publishes no quarters keeps
+ *    "FY2025", because for it that is the whole story.
+ *
+ * SEPARATE FROM `periodLabel` ON PURPOSE. The snapshot and the five-year card
+ * name a PERIOD and must keep saying "FY2025"; only the reaction card names an
+ * ANNOUNCEMENT. One function doing both would have to be told which caller it
+ * was serving, which is two functions wearing one name.
+ */
+export function reactionPeriodLabels(set: {
+  quarters: StoredPeriod[];
+  years: StoredPeriod[];
+}): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of set.quarters) if (p.e) out.set(p.e, periodLabel(p));
+  const reportsQuarters = set.quarters.length > 0;
+  for (const p of set.years) {
+    if (!p.e || out.has(p.e)) continue;
+    out.set(p.e, reportsQuarters && p.fy ? `Q4 FY${p.fy}` : periodLabel(p));
+  }
+  return out;
 }
