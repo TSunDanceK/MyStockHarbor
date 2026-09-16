@@ -182,3 +182,103 @@ Wording on the page describes the **filing**, never the announcement: "Results
 filed with the SEC after market close", never "reported after close". What is
 observed is when a document reached EDGAR, which is at or after the press
 release.
+
+---
+
+## 9. Three defects from the rendered eye-check
+
+### 9a. The fiscal year's NAME was a convention, and there is no convention
+
+AAP's snapshot read **"Q2 FY2027 (period ending 2026-07-18)"**. AAP calls that
+quarter Q2 FY2026. The labeller named a fiscal year by the calendar year its
+END falls in — right for WMT, wrong for AAP, and **no rule about dates can
+separate them**, because the name belongs to the filer.
+
+Calibrated instead, per filer, from its own filings. Every companyfacts row
+carries the `fy` of the FILING it appeared in — that document's
+`DocumentFiscalYearFocus` — so an annual report's own period gives the pairing
+outright. Three constraints, each with a failure behind it:
+
+- **The latest period in a filing, not a comparative.** A 10-K stamps its `fy`
+  on every prior year it restates.
+- **Durations only.** A cover-page instant is dated at the FILING date, weeks
+  past the year end, and would shift a January filer by a year.
+- **Measured from the MIDPOINT year, not the end year.** AAP's year-end is the
+  Saturday nearest 31 December: 2 January one year, 27 December the next. An
+  offset against the end year flips between 0 and -1 for the same company with
+  no change in how it names anything, and a calibration that oscillates renames
+  the page every few years.
+
+Only **0** (named for the year it occupies — AAP, AAPL) and **+1** (named for
+the year it ends in — WMT, ARM) are conventions. Anything else is a malformed
+filing and is refused. A filer whose naming cannot be read keeps today's label
+exactly, asserted against all four existing calendar fixtures.
+
+`10-K`, **`20-F` and `40-F`**: the first census run reported eleven foreign
+private issuers — BABA, SONY, RYAAY, MUFG, INFY, HMC, TAK, NMR, MFG, HMY, WSE —
+as "naming unreadable", purely because the filter named the domestic form.
+
+### 9b. The year-end anchor itself was wrong for two filers
+
+The census turned up **AMZN anchored on 30 June and BG on 31 March**, both
+December filers. Not introduced here: the anchor is "the newest twelve-month
+frame's end", and a trailing-twelve-month comparative in a 10-Q is twelve
+months long without being a fiscal year. Every quarter either page showed was
+labelled off a fiscal year that does not exist.
+
+An annual filing's own period end IS the fiscal year end, and the calibration
+already has it — so it is offered as the anchor and the extraction prefers it.
+Only an annual filing may supply one: a 10-Q's period end is a quarter end, and
+taking one would move every label by a quarter.
+
+### 9c. The census — 13 of 786 SYMBOLS relabelled
+
+Relay run 35127993140, every CIK-bearing symbol screened, companyfacts read for
+the 493 with a stored fact set and an annual frame.
+
+| | symbols |
+|---|---|
+| relabelled | **13** |
+| confirmed unchanged | 479 |
+| naming unreadable (label unchanged) | 1 — CNI |
+
+**Eleven retail/January-calendar filers**, all `Q2 FY2027 → Q2 FY2026`:
+AAP · BJ · BURL · CRWD · DAR · DKS · DLTR · EXEL · FIVE · HD · TGT
+
+**Two from the anchor fix:**
+- AMZN — year-end `2026-06-30 → 2025-12-31`, `Q4 FY2026 → Q2 FY2026`
+- BG — year-end `2026-03-31 → 2025-12-31`, `Q4 FY2026 → Q1 FY2026`
+
+### 9d. It reaches the stored sets, and it does not split a YoY pair
+
+Neither `h` (field order) nor `c` (tag chains) moves for a labelling change, so
+a set written before this would keep its wrong year forever with nothing
+selecting it. `SEC_LABEL_VERSION` is a fourth staleness reason, **absent
+meaning 1**, and the rewindow queue drains it.
+
+Year-over-year matching is by label — same `fp`, `fy-1` — so the checks assert
+the naming is applied at **exactly one call site** and that every period of a
+filer shifts by the same year: `fp` untouched, `fy-1` still pairing the same
+rows, no collisions after the relabel.
+
+### 9e. The reaction bars spoke a different language from the page
+
+AAPL's latest bar read "Q2 26" under a snapshot calling the same filing Q3
+FY2026; AAP carried "Q4 23" **twice**; AAP and ABEV showed a "Q3 26" that had
+not ended. One cause: the bars were labelled by the calendar quarter of an
+ANNOUNCEMENT, which names the quarter it falls in rather than the one it
+reports on — and two announcements can fall in one.
+
+Every bar now takes the label of the stored period it matched, through one
+labeller both paths share. A bar with no matched period says
+**"Reported Aug 2026"** and makes no fiscal claim at all; a collision on that
+path is broken by the day, because a chart with two identically named bars
+cannot be read.
+
+### 9f. The gate's refusal is rendered
+
+On AAP no "Next report" card appeared — the same blank a symbol with no SEC
+data gets, so a reader could not tell "its history is too irregular to promise
+a date" from "we never looked". The `nothing` outcome now renders its own line.
+And the reaction card's explanation said "released before market open", which
+asserts a press-release time nothing here observes; it describes the filing.
