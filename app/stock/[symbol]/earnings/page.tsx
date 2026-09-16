@@ -544,6 +544,19 @@ async function getEarningsData(symbol: string) {
   // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
   const [cold, dailyHistory, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
+    // ── ~110 KB PER RENDER, AND THAT IS THE SECOND-LARGEST READ ON THIS PAGE ─
+    //
+    // MEASURED, not estimated: the full daily bar series for one symbol, read
+    // from Redis on every render that misses the ISR cache. Only the encoded
+    // SEC fact set is bigger.
+    //
+    // RECORDED HERE BECAUSE THIS IS WHERE IT WILL BE READ. The price-derived
+    // work (step 5) introduces a `getDailyBars(symbol, from, to)` adapter, and
+    // the figure is the reason that signature takes a RANGE: this page needs
+    // roughly a year of bars around the last eight reports and currently reads
+    // the whole series to get them. A bounded range is the change; the number
+    // above is what makes it worth making. Move this note onto that adapter's
+    // docblock when it exists — it belongs with the thing it justifies.
     getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
   ]);

@@ -379,6 +379,23 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // END-TO-END, NOT A READ OF THE SOURCE: builds the app, starts it twice with
+  // FMP broken two different ways, and asserts the earnings page still 200s
+  // with its SEC content and its no-history fallback. Credentialled because the
+  // BUILD needs Upstash; it performs no writes.
+  "write-bad-key-earnings": {
+    script: "scripts/bad-key-earnings-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // WHY THE POPULATE BACKLOG MOVED AND HOW LONG REWINDOW TAKES, simulated with
+  // the shipped populationQueues rather than divided. Credentialled, read-only.
+  "write-queue-projection": {
+    script: "scripts/sec-queue-projection.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
