@@ -320,6 +320,14 @@ const TASKS = {
   // probes: same two-runs-one-payload shape, but the switch is the FIELD FLAG
   // rather than the chain, because the chain is identical on both sides of this
   // question and a chain comparison would measure the wrong edit.
+  // DOES EVERY QUARTER CELL COME FROM A QUARTER-LENGTH FRAME. Written for the
+  // NVDA Q2 FY2027 report: net income $59.69B beside a derived operating cash
+  // flow of $24.08B, which is the shape of a six-month figure in a quarter row.
+  "sec-frame-lengths": {
+    script: "scripts/sec-frame-length-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   "sec-sticky-concepts": {
     script: "scripts/sec-sticky-concept-probe.mjs",
     args: () => [],
