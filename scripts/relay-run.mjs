@@ -189,6 +189,22 @@ const TASKS = {
     needsDump: true,
     needsTypescript: true,
   },
+  // THE SAME PROBE AS ITS OWN "BEFORE". Removes the concepts this branch added
+  // to the field chains, then reports exactly as sec-extract does — so the null
+  // rate per field, both canaries and the identities table are comparable
+  // line for line against the sec-extract run from the SAME commit.
+  //
+  // NOT `ref=main`, which was the first attempt and is the wrong instrument
+  // twice over: it compares two runs of DIFFERENT CODE, so a difference is the
+  // chains plus whatever else moved between the refs — and the probe crashes
+  // on main anyway, on a loss-making filer's crossing string.
+  "sec-extract-before": {
+    script: "scripts/sec-extract-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    needsTypescript: true,
+    env: { REVERT_CHAINS: "1" },
+  },
   // Read-only, NO CREDENTIAL: Phase 0 of the logo-harvest brief. Asks FMP's
   // image CDN whether it actually holds a logo for each symbol in the union
   // universe. The CDN needs no API key, so this belongs in the uncredentialled
@@ -249,6 +265,74 @@ const TASKS = {
     script: "scripts/sec-fixture-capture.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
+  },
+  // Read-only: WHY a field renders "—" on a given filer. Lists every concept
+  // the filer actually tagged in the period whose name could plausibly be the
+  // figure, with values, and says whether our chain lists it. Answers "chain
+  // gap or not tagged" with evidence instead of a guess.
+  "sec-missing-fields": {
+    script: "scripts/sec-missing-field-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: the NEXT question after sec-missing-fields. That probe says
+  // whether the filer tagged the concept; this one says why a concept it DID
+  // tag, and our chain DOES list, still renders blank — extraction, period
+  // selection, or render. Prints the frame ladder, the stored periods and the
+  // view's own numbers together.
+  "sec-blank-cell": {
+    script: "scripts/sec-blank-cell-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: the blast radius of a chain ADDITION, measured by running the
+  // shipped extractor twice over one payload — once with the chain minus the
+  // entries the edit added, once as it ships. Separates "cells that were null
+  // now carry a figure" (the intent) from "cells that had a figure now have a
+  // different one" (the risk).
+  "sec-capex-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // Read-only: the two questions a two-concept chain owes an answer to —
+  // how many derived quarters the same-concept differencing rule NULLS, and,
+  // where a filer publishes both concepts for one period, how far apart they
+  // are. The first is measured twice (the extractor's own refusal notes, and a
+  // run with the same-concept test mutated out) and the probe says so if the
+  // two routes disagree.
+  "sec-capex-concepts": {
+    script: "scripts/sec-capex-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  // THE SAME PROBE, AIMED AT THE OTHER UNMEASURED CHAIN EDIT — and it is a
+  // SEPARATE TASK rather than an input because relay.yml's inputs live on the
+  // DEFAULT BRANCH, so adding FIELD/DROP to the dispatch form would cost the
+  // merge-and-wait this whole relay exists to remove. The task name carries
+  // the parameters instead, which also makes "what was measured" answerable
+  // from the run's title rather than from its form values.
+  //
+  // DROP names the ONE concept the VRT ruling added. Not "everything after the
+  // first": this chain already had four entries, so the default would measure
+  // what the other three contribute — a real question, and not this one.
+  // WHAT THE ONE-CONCEPT-PER-FILER RULING COSTS, PER CELL. Sibling of the blast
+  // probes: same two-runs-one-payload shape, but the switch is the FIELD FLAG
+  // rather than the chain, because the chain is identical on both sides of this
+  // question and a chain comparison would measure the wrong edit.
+  "sec-sticky-concepts": {
+    script: "scripts/sec-sticky-concept-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
+  "sec-sti-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "shortTermInvestments",
+      DROP: "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+    },
   },
   // Credentialled because Upstash lives in that job; performs NO writes.
   // Counts, from the STORED universe, how many SYMBOLS render the annual-filer
@@ -406,6 +490,19 @@ if (spec.needsDump && !process.env.DUMP_DIR) {
 }
 
 const args = spec.args(process.env).filter((a) => a !== "");
+// ── A TASK MAY PIN ITS OWN PARAMETERS, AND THEY WIN ──────────────────────
+// relay.yml's inputs are fixed on the default branch, so a task needing a knob
+// the form does not have would otherwise cost a merge. `env` puts the knob on
+// the TASK instead, and the task name becomes the record of what was measured.
+//
+// SPEC WINS OVER THE AMBIENT ENVIRONMENT, deliberately. If the surrounding env
+// could override it, a stray variable on a runner would silently change what a
+// named task measures while the run still reported the task's name — a report
+// that says one thing and did another.
+const env = { ...process.env, ...(spec.env ?? {}) };
+if (spec.env) {
+  console.log(`relay: ${task} pins ${Object.entries(spec.env).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+}
 console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
-const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit" });
+const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit", env });
 process.exit(res.status ?? 1);

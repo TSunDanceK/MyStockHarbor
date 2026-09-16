@@ -114,12 +114,52 @@ export type FieldDef = {
    * like a right one.
    */
   ratioSource?: { numerator: string; denominator: string };
+  /**
+   * ONE CONCEPT PER FILER, CHOSEN ONCE, WITH NO PER-PERIOD FALLBACK.
+   *
+   * ── WHY THIS IS NOT THE DEFAULT ───────────────────────────────────────────
+   * The default policy (CHAIN_RESOLUTION_POLICY, `preferredTag`) picks the
+   * concept covering the filer's newest period and lets the chain fill periods
+   * where that one is absent. That is right where the entries are the SAME
+   * MEASURE under two spellings — AAPL's revenue is `Revenues` before 2018 and
+   * `RevenueFromContractWithCustomer...` after, and the column should follow the
+   * filer's presentation without losing rows.
+   *
+   * It is wrong where the entries are DIFFERENT MEASURES. capex's two are:
+   * measured over 119 SYMBOLS, three file both for a period still stored and
+   * disagree by 78.9% (CRM), 37.6% (GE) and 14.8% (SCHW). A fallback that fills
+   * an absent period from the other concept makes one column mean two things
+   * down its own length, and the 78.9% is how wrong that can be.
+   *
+   * So on a field marked here:
+   *   - the filer's concept is the one filed for its NEWEST stored period that
+   *     carries a figure, with the earlier chain entry winning where that period
+   *     files both — decided once for the whole column;
+   *   - every other concept is refused outright, so a period the chosen one does
+   *     not cover reads "Not reported" rather than switching.
+   *
+   * ── NEWEST PERIOD, NOT HIGHEST RANK FILED ANYWHERE ────────────────────────
+   * The first version chose the highest-ranked entry the filer published at any
+   * point in the window. Measured over 119 SYMBOLS, that cost NVDA 17 cells,
+   * PANW 18 and GE 15 — their whole quarterly capex columns — because all three
+   * file the PP&E concept on a few periods and the broader one on their recent
+   * quarters, so the column was fixed on a concept their quarters do not carry.
+   * Anchoring on the newest period keeps those columns and still fixes ONE
+   * measure per filer. The old rule is now a mutation in check-sec-extract.
+   *
+   * A REFUSAL IS A COST AND IT IS THE POINT. Some cells that had a figure will
+   * read "Not reported" instead. "Not reported" is a true statement about the
+   * chosen measure; the figure it replaces was a different measure wearing the
+   * same column heading.
+   */
+  oneConceptPerFiler?: boolean;
 };
 
 // The per-block literals below carry only what VARIES. `satisfies` on each
 // array supplies the contextual type, so `unit: "USD"` stays the literal type
 // rather than widening to `string` before the `.map()` re-adds the rest.
-type Seed = Pick<FieldDef, "key" | "chain" | "unit"> & Partial<Pick<FieldDef, "ifrsChain">>;
+type Seed = Pick<FieldDef, "key" | "chain" | "unit"> &
+  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler">>;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
 
 // THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
@@ -305,7 +345,46 @@ const INCOME: FieldDef[] = ([
 // a free arithmetic assertion on the differencing itself.
 const CASH_FLOW: FieldDef[] = ([
   { key: "operatingCashFlow", chain: ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"], unit: "USD" },
-  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment"], unit: "USD" },
+  /**
+   * ── A ONE-DEEP CHAIN, AND IT WAS EMPTY ON BOTH FILERS TESTED ────────────
+   *
+   * WHAT WAS MEASURED (relay 35024074183 and 35024136855, GEV / KTOS / AAPL):
+   * `PaymentsToAcquirePropertyPlantAndEquipment` is ABSENT FROM THE PAYLOAD on
+   * GEV and on KTOS — not thin, not mis-framed, absent — so capex was null on
+   * EVERY stored quarter and EVERY stored year for both, and free cash flow
+   * read "Can't calculate — capital expenditure not reported" beside an
+   * operating cash flow that resolved perfectly. AAPL is the control: it
+   * publishes that tag 105 times and its ladders are complete.
+   *
+   * Both filers publish `PaymentsToAcquireProductiveAssets` instead — GEV
+   * 783,000,000 and KTOS 37,100,000, each on the 6M frame of the 10-Q for
+   * 2026Q2. It is the same measure: cash paid for productive assets, the line
+   * a cash-flow statement calls capital expenditure.
+   *
+   * SECOND, NOT FIRST. Resolution is rank-first per period, so a filer that
+   * publishes both keeps the narrower PP&E reading and nothing about AAPL
+   * moves. The fallback only reaches filers that have no first entry at all.
+   *
+   * ── THE THREE NEAR-MISSES ON THE SAME PRINTED LIST, AND WHY EACH IS OUT ──
+   * The probe lists every concept whose name could plausibly be this figure,
+   * with its value, precisely so the ones that must NOT be taken are visible:
+   *   · PaymentsToAcquireBusinessesNetOfCashAcquired — GEV 4,885,000,000,
+   *     KTOS 346,800,000. Buying companies, not building assets. Taking it
+   *     would report an acquisition as capital expenditure and put a 6x
+   *     overstatement into free cash flow on GEV.
+   *   · PaymentsToAcquireEquityMethodInvestments / ...InterestInJointVenture —
+   *     investments, the same category error one level down.
+   *   · CapitalExpendituresIncurredButNotYetPaid — KTOS 9,100,000. It matches
+   *     the name pattern and is the most dangerous of the three: it is a
+   *     NON-CASH supplemental disclosure of capex NOT paid this period, so on
+   *     a cash-flow line it is both the wrong sign of thing and, at 9.1m
+   *     against a real 37.1m, wrong by four times.
+   */
+  // ONE CONCEPT PER FILER — see FieldDef.oneConceptPerFiler. capex is the field
+  // the rule was ruled for: its two entries are different measures, not two
+  // spellings of one, and three filers in 119 file both on a still-stored period
+  // and disagree by up to 78.9%.
+  { key: "capex", chain: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], unit: "USD", oneConceptPerFiler: true },
   { key: "shareBasedCompensation", chain: ["ShareBasedCompensation"], unit: "USD" },
   { key: "depreciationAndAmortization", chain: ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet", "DepreciationAndAmortization"], unit: "USD" },
   { key: "investingCashFlow", chain: ["NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"], unit: "USD" },
@@ -352,7 +431,25 @@ const BALANCE_SHEET: FieldDef[] = ([
       "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
       "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
     ], unit: "USD", taxonomy: "us-gaap" },
-  { key: "shortTermInvestments", chain: ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"], unit: "USD", taxonomy: "us-gaap" },
+  // DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent
+  // is the CARRYING VALUE of current held-to-maturity securities — the figure
+  // that sits on the balance sheet. Added on evidence: VRT files it at
+  // 300,000,000 for 2026-06-30 and files none of the three above, so the line
+  // rendered blank on a filer that plainly holds short-term investments
+  // (probe, relay 35017263145).
+  //
+  // ITS FAIR-VALUE TWIN IS NOT ADDED. DebtSecuritiesHeldToMaturityFairValueCurrent
+  // carries the same 300,000,000 here and will not on a filer whose holdings
+  // have moved; amortized cost is what the balance sheet reports, and taking
+  // whichever appeared first would make the column mean different things on
+  // different symbols. Nor is ProceedsFromSaleOfShortTermInvestments, which
+  // matched the name pattern and is a CASH-FLOW item, not a balance.
+  { key: "shortTermInvestments", chain: [
+      "ShortTermInvestments",
+      "MarketableSecuritiesCurrent",
+      "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
+      "DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent",
+    ], unit: "USD", taxonomy: "us-gaap" },
   { key: "receivables", chain: ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"], unit: "USD", taxonomy: "us-gaap" },
   { key: "inventory", chain: ["InventoryNet"], unit: "USD", taxonomy: "us-gaap" },
   { key: "totalCurrentAssets", chain: ["AssetsCurrent"], unit: "USD", taxonomy: "us-gaap" },
@@ -477,6 +574,9 @@ export function secFieldsHash(keys: string[] = SEC_FIELD_KEYS): string {
  * fetch. A set with values is untouched, and a retry that comes back empty
  * again stores the current hash and stops.
  */
+export const CHAIN_RESOLUTION_POLICY =
+  "preferred-tag-covers-newest-period+one-concept-per-filer-newest-wins";
+
 export function secChainsHash(): string {
   let h = 0x811c9dc5;
   const feed = (str: string) => {
@@ -486,8 +586,22 @@ export function secChainsHash(): string {
     }
   };
   for (const f of [...SEC_FIELDS, COVER_SHARES_FIELD]) {
-    feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`);
+    // oneConceptPerFiler IS PART OF THE KEY. It changes which concept a cell
+    // resolves from and whether an absent one falls back, so a set written
+    // without it holds different numbers from one written with it. Left out,
+    // every stored set would report itself current and keep the mixed column.
+    feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`
+      + `|one:${f.oneConceptPerFiler ? 1 : 0}`);
   }
+  // ── THE READING OF THE CHAINS, NOT ONLY THEIR CONTENT ───────────────────
+  // A change to HOW a chain is resolved moves stored values exactly as a
+  // change to WHAT is in it does — the preferred-tag rule flips which of two
+  // present concepts a period takes — and a hash over the chain text alone
+  // cannot see it. Then `needsReread` reports every set current, the migration
+  // completes without doing anything, and the store keeps serving figures the
+  // shipped code would no longer write. Bumping this string is what re-reads
+  // the universe; leaving it alone is what makes a resolution change invisible.
+  feed(`policy|${CHAIN_RESOLUTION_POLICY}`);
   return h.toString(16).padStart(8, "0");
 }
 

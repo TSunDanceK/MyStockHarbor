@@ -35,10 +35,21 @@ const SEC_FACTS_PREFIX = (
     .match(/SEC_FACTS_PREFIX = "([^"]+)"/) ?? []
 )[1];
 if (!SEC_FACTS_PREFIX) { console.error("FATAL: could not read SEC_FACTS_PREFIX"); process.exit(2); }
+// THE SHIPPED VIEW BUILDER IS LIFTED WITH THEM, not re-implemented here. The
+// question below — which of these filers still renders a quarterly table — is
+// answered by calling buildSecEarningsView on the stored set and reading its
+// `tableBasis`, so the census reports what the PAGE does. A census that applied
+// the 548-day rule itself would agree with the page only until one of them
+// changed, and the disagreement would show up as a wrong report, not an error.
+const strip = (f) =>
+  readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   [
     fs.readFileSync("lib/server/secFields.ts", "utf8"),
-    readCodeOnly("lib/server/secExtract.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, ""),
+    strip("lib/server/secExtract.ts"),
+    strip("lib/server/secFactCodec.ts"),
+    strip("lib/server/secEarningsView.ts"),
+    strip("lib/server/secStaleness.ts"),
   ].join("\n")
 );
 const MIN_PERIOD_FIELDS = Number(
@@ -64,6 +75,8 @@ const usable = (set) => {
 
 const bucket = { "annual-only": [], quarterly: [], unusable: [], unpopulated: [] };
 const windows = {};
+/** Every set actually read back, by symbol — the anchor pass below walks it. */
+const setsBySymbol = {};
 for (let i = 0; i < symbols.length; i += 50) {
   const chunk = symbols.slice(i, i + 50);
   const sets = await redis.mget(...chunk.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
@@ -71,6 +84,7 @@ for (let i = 0; i < symbols.length; i += 50) {
     const set = sets[j];
     if (!set || typeof set !== "object") { bucket.unpopulated.push(sym); return; }
     windows[set.w ?? 8] = (windows[set.w ?? 8] ?? 0) + 1;
+    setsBySymbol[sym] = set;
     if (!usable(set)) { bucket.unusable.push(sym); return; }
     if ((set.quarters ?? []).length === 0 && (set.years ?? []).length > 0) bucket["annual-only"].push(sym);
     else bucket.quarterly.push(sym);
@@ -83,6 +97,50 @@ for (let i = 0; i < symbols.length; i += 50) {
 // SYMBOLS=AAPL,AZN,MU,RYAAY prints the stored window and period counts for
 // those symbols alone, so the same command run before and after a rewindow
 // pass is a before/after on the same instrument.
+/**
+ * WHETHER THIS SYMBOL HAS BEEN RE-READ UNDER THE CHAINS THE CODE SHIPS NOW —
+ * and, when it has not, WHICH chain edit it is behind.
+ *
+ * "Is it stale" is a boolean and a boolean cannot distinguish the two cases
+ * that matter here. A set can be behind because a TAG was added to a chain,
+ * which is a change to what is read, or because the RESOLUTION POLICY moved,
+ * which is a change to how the same tags are read. Both make needsReread true
+ * and the remedy is the same, but a report that cannot tell them apart cannot
+ * say whether an eye-check done yesterday was looking at current data.
+ *
+ * So this prints the stored hash against two: the hash this code computes, and
+ * the hash THIS BRANCH'S CHAINS compute with the policy line taken out. Equal
+ * to the second but not the first means the set already carries every chain
+ * edit on this branch and is behind ONLY the resolution-policy bump.
+ *
+ * THE SECOND IS NOT "main's HASH" and must not be labelled one. This branch
+ * edits chains as well as policy, so a set written under main carries neither
+ * hash, and calling the policy-free figure "main" would report a genuinely
+ * pre-chain-edit set as merely behind a policy bump. The runner checks out one
+ * ref at depth 1, so main's secFields.ts is not on disk to hash honestly.
+ */
+const chainsNow = sec.secChainsHash();
+const fieldsSrcText = fs.readFileSync("lib/server/secFields.ts", "utf8");
+const POLICY_LINE = "feed(`policy|${CHAIN_RESOLUTION_POLICY}`);";
+const chainsWithoutPolicy = fieldsSrcText.includes(POLICY_LINE)
+  ? (await lift(fieldsSrcText.replace(POLICY_LINE, ""))).secChainsHash()
+  : null;
+
+const rereadLine = (set, e) => {
+  const stored = set?.c ?? e?.c ?? null;
+  const reasons = sec.staleReasons
+    ? sec.staleReasons({ w: set?.w, y: set?.y, c: stored })
+    : null;
+  const verdict =
+    stored === null ? "NEVER STAMPED — written before the chain hash existed, so behind by definition"
+    : stored === chainsNow ? "CURRENT under the chains and policy this branch ships"
+    : stored === chainsWithoutPolicy ? "carries this branch's chains; behind ONLY the resolution-policy bump"
+    : "BEHIND A CHAIN EDIT — it has not been re-read under this branch's chains at all";
+  return `chains stored=${stored ?? "absent"} branch=${chainsNow}` +
+    `${chainsWithoutPolicy ? ` branch-chains-old-policy=${chainsWithoutPolicy}` : ""} -> ${verdict}` +
+    `${reasons?.length ? ` (stale: ${reasons.join(", ")})` : ""}`;
+};
+
 const WATCH = (process.env.SYMBOLS ?? "").split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
 if (WATCH.length) {
   console.log(`WATCHED SYMBOLS, as stored right now:`);
@@ -94,10 +152,25 @@ if (WATCH.length) {
       console.log(`  ${sym.padEnd(6)} no stored set (manifest contentHash ${e?.contentHash ?? "absent"})`);
       return;
     }
+    // ── WHICH PATH WROTE IT, AND WHEN ────────────────────────────────────
+    //
+    // The manifest's contentHash is written ONLY by /api/jobs/sec-facts.
+    // secColdFetch calls writeFactSet directly for an on-demand page view and
+    // never touches the manifest, so a stored set whose manifest entry has no
+    // contentHash was written by the cold path. `at` is stamped by
+    // encodeFactSet at write time, which dates it.
+    //
+    // This is the difference between "the cold path ignores the window" and
+    // "this set predates the deploy", which look identical from w alone.
+    const wroteIt = e?.contentHash ? "cron job" : "cold path (page view)";
+    const when = set.at ? new Date(set.at).toISOString().replace("T", " ").slice(0, 19) + "Z" : "no timestamp";
     console.log(
       `  ${sym.padEnd(6)} w=${String(set.w ?? 8).padStart(2)} quarters=${String((set.quarters ?? []).length).padStart(2)} ` +
       `years=${String((set.years ?? []).length).padStart(2)} instants=${String((set.instants ?? []).length).padStart(2)} ` +
-      `| manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"}`
+      `| written ${when} by ${wroteIt}` +
+      `\n         manifest w=${e?.w ?? "absent"} contentHash=${e?.contentHash ?? "null"} cik=${e?.cik ?? "none"}` +
+      `\n         ${rereadLine(set, e)}` +
+      `\n         quarters carrying a prior-year match: see the growth table — a young filer has none to find`
     );
   });
   console.log("");
@@ -115,6 +188,58 @@ console.log(`\nBELOW THE DENSITY BAR, ${bucket.unusable.length} SYMBOLS:`);
 console.log("  " + (bucket.unusable.join(" ") || "(none)"));
 console.log(`\nQUARTERLY, ${bucket.quarterly.length} SYMBOLS:`);
 console.log("  " + (bucket.quarterly.join(" ") || "(none)"));
+// ── HOW MANY FILERS HAVE A NEWER ANNUAL PERIOD THAN THEIR NEWEST QUARTER ────
+//
+// The snapshot anchors on the newest period BY DATE, and for these SYMBOLS
+// that is the fiscal year, not the quarter. Before the fix they rendered a
+// stale quarter as "most recent" — AZN showed Q2 FY2025 (ended 2025-06-30)
+// while FY2025, ended 2025-12-31, sat in the same set. This counts the blast
+// radius of that defect across the stored universe.
+//
+// Counted only where BOTH exist: a filer with no quarters is the annual-only
+// case, already counted above, and not what this is measuring.
+console.log(`\nNEWEST PERIOD IS A YEAR, NOT A QUARTER, counted in SYMBOLS:`);
+{
+  const affected = [];
+  for (const [sym, set] of Object.entries(setsBySymbol)) {
+    const nq = (set.quarters ?? [])[0]?.e;
+    const ny = (set.years ?? [])[0]?.e;
+    if (nq && ny && ny > nq) affected.push({ sym, nq, ny });
+  }
+  console.log(`  ${affected.length} SYMBOLS of ${Object.keys(setsBySymbol).length} stored`);
+  console.log("  " + (affected.map((a) => `${a.sym}(${a.nq}->${a.ny})`).join(" ") || "(none)"));
+
+  // ── AND OF THOSE, WHICH STILL RENDER A QUARTERLY TABLE ──────────────────
+  //
+  // A newer annual period does not by itself stop the quarters being recent:
+  // AZN's newest quarter is six months behind its newest year and that table
+  // is current. A filer that stopped filing 10-Qs is years behind and its
+  // table was a decade old under a FY2025 headline. STALE_QUARTER_DAYS splits
+  // them, and `tableBasis` below comes from the shipped view builder rather
+  // than from this file re-deciding.
+  const kept = [];
+  const dropped = [];
+  const nullView = [];
+  for (const { sym, nq, ny } of affected) {
+    let v = null;
+    try { v = sec.buildSecEarningsView(setsBySymbol[sym]); } catch { v = null; }
+    if (!v) { nullView.push(sym); continue; }
+    const age = Math.round((Date.parse(ny) - Date.parse(nq)) / 86400000);
+    (v.tableBasis === "quarter" ? kept : dropped).push(`${sym}(${age}d)`);
+  }
+  console.log(
+    `\n  OF THOSE, the quarterly table (threshold ${sec.STALE_QUARTER_DAYS} days):`
+  );
+  console.log(`    KEPT    ${kept.length} SYMBOLS: ${kept.join(" ") || "(none)"}`);
+  console.log(`    DROPPED ${dropped.length} SYMBOLS: ${dropped.join(" ") || "(none)"}`);
+  if (nullView.length) {
+    // NOT FOLDED INTO EITHER COLUMN. A set the view builder refuses renders no
+    // earnings page at all, and counting it as "dropped" would read as the
+    // staleness rule acting on a filer it never saw.
+    console.log(`    NO VIEW ${nullView.length} SYMBOLS (the builder returns null): ${nullView.join(" ")}`);
+  }
+}
+
 console.log(`\nSTORED QUARTER WINDOW, counted in SYMBOLS: ${JSON.stringify(windows)}`);
 console.log("  (anything below 12 is eligible for the rewindow queue)");
 
@@ -163,16 +288,39 @@ if (read > claimsPopulated) {
 // drain is computed from. A census that re-derives the predicate is a second
 // opinion about the code rather than a measurement of it.
 const ROUTE = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+const STALE = readCodeOnly("lib/server/secStaleness.ts");
 const num = (n) => Number((ROUTE.match(new RegExp(`${n} = (\\d+)`)) ?? [])[1]);
+
+// ── THIS LIFT WAS BROKEN AND WOULD HAVE CRASHED THE CENSUS ────────────────
+// It read /export const needsRewindow = [^;]+;/ — the arrow form — which
+// stopped matching when the function became a declaration, so the match was
+// undefined and `.replace` on it threw. Nothing caught it because this task is
+// credentialled and does not run under check-all. The check that lifts the same
+// function had already hit this and had already moved to grabFunction; this
+// copy did not follow. Two lifters of one function, one updated.
+//
+// grabFunction here too, and from secStaleness where the rule now lives.
+// secFields is inlined WHOLE because needsReread closes over secChainsHash():
+// pinning it to a literal would make the census agree with a chain list that
+// had moved underneath it, and report a drained queue that is not drained.
+const needs = grabFunction(STALE, "needsReread");
+const queues = grabFunction(ROUTE, "populationQueues");
+if (!needs || !queues) {
+  console.error("FATAL: could not lift needsReread / populationQueues — the census cannot measure what it cannot run.");
+  process.exit(2);
+}
 const job = await lift(
   [
+    readCodeOnly("lib/server/secFields.ts"),
     `const SEC_QUARTER_WINDOW = ${sec.SEC_QUARTER_WINDOW};`,
+    `const SEC_YEAR_WINDOW = ${sec.SEC_YEAR_WINDOW};`,
     `const SEC_REVERIFY_PER_RUN = ${num("SEC_REVERIFY_PER_RUN")};`,
     `const SEC_POPULATE_PER_RUN = ${num("SEC_POPULATE_PER_RUN")};`,
     `const SEC_REWINDOW_PER_RUN = ${num("SEC_REWINDOW_PER_RUN")};`,
-    (ROUTE.match(/export const needsRewindow = [^;]+;/) ?? [])[0].replace("export const", "const"),
-    grabFunction(ROUTE, "populationQueues").replace("export function", "function"),
-    "export { populationQueues };",
+    needs.replace("export function", "function"),
+    grabFunction(STALE, "staleReasons").replace("export function", "function"),
+    queues.replace("export function", "function"),
+    "export { populationQueues, needsReread, staleReasons, secChainsHash };",
   ].join("\n")
 );
 const q = job.populationQueues(manifest);
@@ -186,3 +334,47 @@ for (const [name, taken, backlog, perRun] of [
   console.log(`  ${name.padEnd(9)} ${String(taken).padStart(4)} of ${String(backlog).padStart(4)} SYMBOLS @ ${String(perRun).padStart(3)}/run -> ${days(backlog, perRun)}`);
 }
 console.log(`  rewindow queue on first run: ${q.rewindow.join(" ") || "(none)"}`);
+
+// ── WHY THE REWINDOW BACKLOG IS THE SIZE IT IS ────────────────────────────
+//
+// A backlog of 4 and a backlog of 759 are the same number to a reader who
+// cannot see WHICH staleness selected them. One chain edit makes the whole
+// populated universe eligible at once — that is the case SEC_REWINDOW_PER_RUN
+// was sized for — and it reads identically to a genuine window migration
+// unless the reasons are counted separately.
+const CHAINS = job.secChainsHash();
+const reasons = { quarters: 0, years: 0, chains: 0 };
+const eligible = Object.entries(manifest.symbols)
+  .filter(([, e]) => e.cik && !e.needsReverify && e.contentHash !== null && job.needsReread(e));
+for (const [, e] of eligible) for (const r of job.staleReasons(e)) reasons[r]++;
+console.log(`\nWHY THE ${eligible.length} ELIGIBLE SYMBOLS ARE ELIGIBLE (a symbol can be behind on more than one):`);
+console.log(`  quarter window behind   ${String(reasons.quarters).padStart(4)} SYMBOLS`);
+console.log(`  year window behind      ${String(reasons.years).padStart(4)} SYMBOLS`);
+console.log(`  chains behind           ${String(reasons.chains).padStart(4)} SYMBOLS   (current chains ${CHAINS})`);
+const chainsOnly = eligible.filter(([, e]) => {
+  const r = job.staleReasons(e);
+  return r.length === 1 && r[0] === "chains";
+}).length;
+console.log(`  of which chains ONLY    ${String(chainsOnly).padStart(4)} SYMBOLS   — sets that would NEVER have been re-read before this change`);
+
+// ── WHICH SETS HAVE ALREADY BEEN RE-READ, BY NAME ────────────────────────
+//
+// FOR THE EYE-CHECK, and it is the difference between testing a fix and
+// testing a stale set. A page renders from the STORED set, so a symbol whose
+// entry is still eligible is showing the OLD chains however correct the code
+// is. Naming them stops a reviewer concluding from a blank cell that the fix
+// does not work.
+// The same list SYMBOLS already named above, so one input drives both sections
+// rather than two that can disagree about which symbols are being watched.
+const EYE = WATCH.length ? WATCH : ["GEV", "KTOS", "VRT", "NVDA", "AAPL"];
+console.log(`\nRE-READ STATUS OF THE EYE-CHECK SYMBOLS (stored set, not the code):`);
+for (const symbol of EYE) {
+  const e = manifest.symbols[symbol];
+  if (!e) { console.log(`  ${symbol.padEnd(6)} not in the manifest — cold-path only, so only a visit re-reads it`); continue; }
+  if (e.contentHash === null) { console.log(`  ${symbol.padEnd(6)} never populated — populate's, not rewindow's`); continue; }
+  const why = job.staleReasons(e);
+  console.log(
+    `  ${symbol.padEnd(6)} ${why.length ? `STALE (${why.join(",")})` : "RE-READ — renders today's chains"}` +
+    `   w=${e.w ?? "absent"} y=${e.y ?? "absent"} c=${e.c ?? "absent"}`
+  );
+}
