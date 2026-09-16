@@ -5,6 +5,7 @@ import {
   recordDailyPageView,
 } from "@/lib/server/dailyPageLimit";
 import { isKnownGoodBot } from "@/lib/server/knownGoodBots";
+import { canWriteDemandState } from "@/lib/server/demandWriteGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,10 @@ const ALLOWED_CATEGORIES = new Set(["stock", "site"]);
 // this fires on every real pageview in the tracked categories, so it needs
 // to be cheap and it must never throw a visible error back to the client.
 export async function POST(request: NextRequest) {
+  // A PREVIEW'S PAGE VIEWS ARE NOT THE SITE'S, and the 204 is identical to the
+  // one a counted view gets — a beacon that could tell the difference would be
+  // a way to probe which deployment it is talking to.
+  if (!canWriteDemandState()) return new NextResponse(null, { status: 204 });
   try {
     const body = await request.json().catch(() => null);
     const category = typeof body?.category === "string" ? body.category : "";
