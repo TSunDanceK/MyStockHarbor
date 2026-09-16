@@ -17,6 +17,7 @@
 // Both are properties of source, read through readCodeOnly so the prose
 // describing them cannot satisfy them.
 import { readCodeOnly } from "./lib/source-code.mjs";
+import { lift } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -104,6 +105,81 @@ check("every field the panel reads is one the cron writes",
   check("MUTATION: a renamed summary field is caught, not rendered as 0",
     [...new Set(read)].some((k) => !after.has(k)),
     "the page would have shown 0 pages revalidated on a run that flushed hundreds");
+}
+
+console.log("\n2b. a summary that LACKS a field renders 'not recorded', never 0");
+
+// ── THE CASE THAT REACHED THE OWNER ──────────────────────────────────────
+// The panel showed "Pages revalidated 0 of 434" for a run recorded BEFORE the
+// counter existed. `?? 0` cannot tell an absent key from a measured zero, and
+// the two are opposite facts: one says the cron flushed nothing, the other says
+// nobody counted. §2 above catches the field being RENAMED; it cannot catch the
+// stored record being OLDER than the code, which needs no rename at all — every
+// deploy that adds a field creates exactly this state for one day.
+//
+// RUN, NOT READ. The rendering rule is arithmetic over an object, so it is
+// lifted and called with a summary that is missing the field.
+{
+  const RENDER = PAGE.slice(PAGE.indexOf("const has = (k: string)"), PAGE.indexOf("const rows:"));
+  check("the guard is in the page at all",
+    /hasOwnProperty\.call\(run\.summary, k\)/.test(RENDER),
+    RENDER.length ? `${RENDER.length} chars` : "(not found)");
+  check("...and it is hasOwnProperty, not a truthiness test",
+    !/if \(!run\.summary\[k\]\)|run\.summary\[k\] \|\|/.test(RENDER),
+    "a truthiness test would render a genuine 0 as 'not recorded', which is the same lie inverted");
+
+  // ── THE SHIPPED HELPERS, LIFTED AND CALLED WITH A CHOSEN SUMMARY ───────
+  //
+  // TYPES STRIPPED LONGEST-FIRST, and that is not a detail: stripping
+  // `: string` before `: string[]` turns `keys: string[]` into `keys[]` and the
+  // lift dies on a SyntaxError — which is how the first version of this block
+  // failed, loudly and immediately, rather than passing against half a
+  // function.
+  const strip = (src) => src
+    .replace(/: string\[\]/g, "")
+    .replace(/: \(\) => string/g, "")
+    .replace(/: string/g, "");
+  let nonce = 0;
+  const withSummary = (summary) =>
+    lift(
+      `const run = { summary: ${JSON.stringify(summary)} };\n` +
+        strip(RENDER) +
+        `\nexport { has, n, row };\n// nonce ${nonce++}`
+    );
+  const revalRow = (m) =>
+    m.row(["revalidated", "attempted"], () => `${m.n("revalidated")} of ${m.n("attempted")} attempted`);
+
+  // A run recorded before the counter existed: attempted and written, no
+  // revalidated. This is the exact shape the owner was shown.
+  const older = await withSummary({ attempted: 434, written: 419 });
+  check("a summary WITHOUT revalidated renders 'not recorded'",
+    revalRow(older) === "not recorded",
+    `got ${JSON.stringify(revalRow(older))} — "0 of 434" is the confident zero this exists to prevent`);
+
+  // AND A MEASURED ZERO MUST STILL RENDER AS ZERO, or the guard has only moved
+  // the lie: a run that genuinely flushed nothing is a real reading.
+  const measuredZero = await withSummary({ attempted: 434, revalidated: 0 });
+  // ASSERTED ON THE SHAPE, NOT ON A HAND-TYPED SENTENCE. The first version
+  // expected "0 of 434" while the row renders "0 of 434 attempted" — the check
+  // failed on its own typo while the code was correct, which is the cheap
+  // version of a harness measuring itself.
+  check("...but a MEASURED zero still renders as 0",
+    revalRow(measuredZero) !== "not recorded" && /^0 of 434\b/.test(revalRow(measuredZero)),
+    `got ${JSON.stringify(revalRow(measuredZero))}`);
+
+  // MUTATION: the guard removed, so the page is back to `?? 0`.
+  const unguarded = await lift(
+    `const run = { summary: { attempted: 434, written: 419 } };\n` +
+      strip(RENDER).replace("keys.every(has)", "true") +
+      `\nexport { has, n, row };\n// nonce ${nonce++}`
+  );
+  check("the remove-the-guard mutation actually applied",
+    strip(RENDER).includes("keys.every(has)"),
+    "the anchor must exist in the shipped source for the mutation to mean anything");
+  check("MUTATION: without the guard the absent field renders as a confident 0",
+    /^0 of 434\b/.test(revalRow(unguarded)),
+    `got ${JSON.stringify(revalRow(unguarded))} — which is what shipped, and what was read ` +
+      `as the cron flushing nothing`);
 }
 
 console.log("\n3. changed-only revalidation, as a counted fact");
