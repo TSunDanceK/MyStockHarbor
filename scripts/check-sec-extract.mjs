@@ -51,7 +51,7 @@ const liftMutated = async (mutate) => {
 const {
   SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, secFieldsHash, COVER_SHARES_FIELD,
   cumulativeFields, instantFields, asFiledOnlyFields, fieldPartition,
-  extractCompanyFacts, readCoverShares, quartersCovered,
+  extractCompanyFacts, readCoverShares, quartersCovered, spanDays, sameFrame,
   checkIdentities, identityRates,
 } = mod;
 
@@ -1069,6 +1069,249 @@ console.log("\n FRAME LENGTHS: a field with no adjacent frame yields no quarter"
       "— 100 - 40 = 60, which is the difference the cash chain cannot take");
   check("...and the differenced one is labelled as differenced, not as filed",
     q2?.values[idxOf("revenue")]?.derived === "differenced");
+}
+
+console.log("\n PERIOD COHERENCE: one quarter row, one reporting period");
+
+// ── THE CARD THAT MUST NEVER MIX PERIODS ──────────────────────────────────
+//
+// WHAT PROMPTED IT. NVDA's Quality of Earnings card, Q2 FY2027: net income
+// $59.69B beside a derived operating cash flow of $24.08B. secEarningsView
+// reads BOTH from the same PeriodRecord, so a gap that size is either a real
+// accrual gap or one of the two cells is built from a six-month frame.
+//
+// MEASURED, relay 35086929046, on the shipped extractor and NVDA's own
+// payload: net income is AS-FILED from 2026-04-27..2026-07-26 (90d, the
+// filer's own CY2026Q2 frame) and operating cash flow is 74.42B on
+// 2026-01-26..2026-07-26 minus 50.34B on 2026-01-26..2026-04-26, which covers
+// 2026-04-26..2026-07-26 (91d). BOTH ARE QUARTERS. There was no period mix;
+// the gap is the filer's.
+//
+// ── SO THIS IS A GUARD, NOT A FIX, AND IT GUARDS SOMETHING REAL ───────────
+// Nothing asserted that invariant. The cell that decides it is `covers`, and
+// before this it did not exist: a PeriodRecord's `start` is written into
+// quarterMeta by whichever FIELD reached that period end first and overwritten
+// by every differenced write after it, so it is one field's frame and not the
+// row's. Measuring a cell against the row's start measures the wrong thing --
+// the first frame-length probe did exactly that and could only ever see the
+// as-filed half.
+//
+// TWO PROPERTIES, both of the mechanism and neither of any number:
+//   (i)  every duration cell on a QUARTER row covers ONE quarter
+//   (ii) every duration cell on one row covers the SAME quarter as its
+//        neighbours, within SAME_FRAME_SLACK_DAYS
+// The values below are 10/30/60/90 and mean nothing.
+{
+  const row = (start, end, val) => ({ start, end, val, accn: `a${val}`, filed: "2026-09-01" });
+  const idxOf = (k) => SEC_FIELDS.findIndex((f) => f.key === k);
+  const DURATION_KEYS = SEC_FIELDS
+    .map((f, i) => [f, i])
+    .filter(([f]) => f.kind !== "instant")
+    .map(([f, i]) => [f.key, i]);
+
+  /**
+   * THE INVARIANT ITSELF, as a function, so the mutations below are judged by
+   * the SAME code that judges the shipped extractor. An assertion written out
+   * twice is two assertions that can disagree.
+   *
+   * Returns the offending cells, so a failure names them instead of saying no.
+   */
+  const incoherent = (out, mod = { quartersCovered, sameFrame }) => {
+    const bad = [];
+    for (const q of out.quarters) {
+      const cells = DURATION_KEYS
+        .map(([key, i]) => [key, q.values[i]])
+        .filter(([, v]) => v && v.val !== null);
+      for (const [key, v] of cells) {
+        if (!v.covers) { bad.push(`${q.end} ${key}: no covers`); continue; }
+        const n = mod.quartersCovered(spanDays(v.covers[0], v.covers[1]));
+        if (n !== 1) {
+          bad.push(`${q.end} ${key}: covers ${v.covers.join("..")} = ${n ?? "no"} quarter(s)`);
+        }
+      }
+      // (ii) against the FIRST cell rather than pairwise: sameFrame pins the
+      // end exactly and the start within a week, so agreement with one is
+      // agreement with all, and the report names a reference frame.
+      const [, ref] = cells[0] ?? [];
+      for (const [key, v] of cells.slice(1)) {
+        if (!mod.sameFrame(v.covers, ref?.covers)) {
+          bad.push(
+            `${q.end} ${key}: covers ${v.covers?.join("..") ?? "?"} but the row's other ` +
+              `cells cover ${ref?.covers?.join("..") ?? "?"}`
+          );
+        }
+      }
+    }
+    return bad;
+  };
+
+  // A FILER WITH BOTH SHAPES IN ONE ROW, which is the case the invariant is
+  // about: net income filed standalone, cash flow only cumulative. Q2 must come
+  // out as-filed on one and differenced on the other, and still be one period.
+  const mixedShape = {
+    cik: 1,
+    facts: { "us-gaap": {
+      NetIncomeLoss: { units: { USD: [
+        row("2026-01-01", "2026-03-31", 10),
+        // The standalone quarter, starting the day AFTER the prior frame ends
+        // -- the off-by-one SAME_FRAME_SLACK_DAYS exists for.
+        row("2026-04-01", "2026-06-30", 30),
+      ] } },
+      NetCashProvidedByUsedInOperatingActivities: { units: { USD: [
+        row("2026-01-01", "2026-03-31", 60),
+        row("2026-01-01", "2026-06-30", 90),
+      ] } },
+    } },
+  };
+  const mixed = extractCompanyFacts("MIX", mixedShape);
+  const mq2 = mixed.quarters.find((q) => q.end === "2026-06-30");
+  check("the fixture really does exercise both derivations in ONE row",
+    mq2?.values[idxOf("netIncome")]?.derived === "as-filed" &&
+      mq2?.values[idxOf("operatingCashFlow")]?.derived === "differenced",
+    `netIncome=${mq2?.values[idxOf("netIncome")]?.derived} ` +
+      `operatingCashFlow=${mq2?.values[idxOf("operatingCashFlow")]?.derived} ` +
+      "— a fixture where both cells came out the same way would test half of it");
+  check("every duration cell carries the frame it covers",
+    DURATION_KEYS.every(([, i]) => {
+      const v = mq2?.values[i];
+      return !v || v.val === null || Array.isArray(v.covers);
+    }),
+    "a cell with no covers cannot be checked at all, which is the state this replaced");
+  check("no quarter row mixes periods",
+    incoherent(mixed).length === 0, incoherent(mixed).join("; ") || "clean");
+  check("...and the as-filed cell's one-day-later start is ACCEPTED, not a failure",
+    mq2?.values[idxOf("netIncome")]?.covers?.[0] === "2026-04-01" &&
+      mq2?.values[idxOf("operatingCashFlow")]?.covers?.[0] === "2026-03-31",
+    "the two spellings of the quarter's first day are a week apart at most, by design");
+
+  {
+    // MUTATION (1): the differencing steps TWO frame lengths instead of one, so
+    // a quarter row is handed a six-month figure -- the exact shape the NVDA
+    // report suspected. The invariant must see it.
+    const twoStep = await liftMutated((src) =>
+      src.replace("const prior = byLen.get(f.n - 1);", "const prior = byLen.get(f.n - 2);")
+    );
+    const broken = twoStep.extractCompanyFacts("MIX", {
+      cik: 1,
+      facts: { "us-gaap": {
+        NetIncomeLoss: { units: { USD: [
+          row("2026-01-01", "2026-03-31", 10),
+          row("2026-04-01", "2026-06-30", 30),
+        ] } },
+        NetCashProvidedByUsedInOperatingActivities: { units: { USD: [
+          row("2026-01-01", "2026-03-31", 60),
+          row("2026-01-01", "2026-06-30", 90),
+          row("2026-01-01", "2026-09-30", 120),
+        ] } },
+      } },
+    });
+    const bad = incoherent(broken, { quartersCovered: twoStep.quartersCovered, sameFrame: twoStep.sameFrame });
+    check("MUTATION: differencing across two frame lengths puts a half-year in a quarter row",
+      bad.length > 0, bad.join("; ") || "(the invariant saw nothing — it is not testing this)");
+    check("...and it is the SPAN that gives it away, not a missing value",
+      bad.some((b) => /= 2 quarter\(s\)|but the row's other cells cover/.test(b)),
+      bad.join("; ") || "(none)");
+  }
+
+  {
+    // MUTATION (2): covers dropped from the differenced write. A cell with no
+    // frame is unjudgeable, and the check must FAIL on that rather than skip
+    // it -- "no covers" is the state that let the question go unanswered for a
+    // day.
+    const noCovers = await liftMutated((src) =>
+      src.replace(`          derived: "differenced",\n          covers: [prior.end, f.end],`, `          derived: "differenced",`)
+    );
+    const blind = noCovers.extractCompanyFacts("MIX", mixedShape);
+    const bad = incoherent(blind, { quartersCovered: noCovers.quartersCovered, sameFrame: noCovers.sameFrame });
+    check("MUTATION: a duration cell with no covers is a failure, never a pass",
+      bad.some((b) => b.includes("no covers")), bad.join("; ") || "(silently skipped)");
+  }
+
+  // ── THE RATIO FALLBACK, WHICH IS WHERE A MIX WOULD ACTUALLY BE COMPUTED ──
+  //
+  // "A quarter's earnings over a year's share count is a wrong number that
+  // looks like a right one" is what the code says. Both operands sit in one
+  // cell map keyed by period END, and that was taken as proof they shared a
+  // period -- they share an end. A denominator whose START is a year earlier
+  // is a different frame and the division crosses it.
+  {
+    const ratio = SEC_FIELDS.find((f) => f.ratioSource);
+    check("there is a ratio field to test the guard on", !!ratio, ratio?.key ?? "(none)");
+    const num = SEC_FIELDS.find((f) => f.key === ratio.ratioSource.numerator);
+    const den = SEC_FIELDS.find((f) => f.key === ratio.ratioSource.denominator);
+    // ── THE TWO FRAMES HAVE TO BE REACHABLE, AND ONE SHAPE IS NOT ─────────
+    //
+    // The obvious fixture -- a year-long denominator -- CANNOT reach this code
+    // and the first draft of this block asserted a pass it was not earning:
+    // a duration-average field only writes to quarterCells on an n=1 frame, so
+    // a 365-day share count lands in yearCells and the quarter simply has no
+    // denominator. Null, for a reason that has nothing to do with the guard.
+    //
+    // The reachable shape is both operands inside the quarter BAND (80-105
+    // days) but not the same quarter: quartersCovered is deliberately wide for
+    // 4-4-5 calendars, so a numerator differenced out to 100 days and a filed
+    // 90-day share count share an END and cover ten days differently. Each
+    // cell is a legal quarter on its own; the DIVISION across them is not.
+    const crossed = {
+      cik: 1,
+      facts: { "us-gaap": {
+        // 180d - 80d = a 100-day "quarter", the wide end of the band.
+        [num.chain[0]]: { units: { USD: [
+          row("2026-01-01", "2026-03-22", 10),
+          row("2026-01-01", "2026-06-30", 40),
+        ] } },
+        // ...against a share count filed on the ordinary 90-day quarter.
+        [den.chain[0]]: { units: { shares: [row("2026-04-01", "2026-06-30", 90)] } },
+      } },
+    };
+    const cr = extractCompanyFacts("XFRM", crossed);
+    const crQ = cr.quarters.find((q) => q.end === "2026-06-30");
+    check("the fixture puts BOTH operands in the quarter map, or it tests nothing",
+      crQ?.values[idxOf(num.key)]?.val === 30 && crQ?.values[idxOf(den.key)]?.val === 90,
+      `${num.key}=${JSON.stringify(crQ?.values[idxOf(num.key)]?.val ?? null)} ` +
+        `${den.key}=${JSON.stringify(crQ?.values[idxOf(den.key)]?.val ?? null)} ` +
+        "— a denominator that never reached the quarter would make the next assertion pass for free");
+    check("...and each operand is a legal quarter ON ITS OWN, so only the division is wrong",
+      quartersCovered(spanDays(...crQ.values[idxOf(num.key)].covers)) === 1 &&
+        quartersCovered(spanDays(...crQ.values[idxOf(den.key)].covers)) === 1,
+      `${crQ?.values[idxOf(num.key)]?.covers?.join("..")} and ` +
+        `${crQ?.values[idxOf(den.key)]?.covers?.join("..")}`);
+    check("a ratio is NOT computed across two different frames",
+      crQ?.values[idxOf(ratio.key)] == null,
+      `${ratio.key} = ${JSON.stringify(crQ?.values[idxOf(ratio.key)]?.val ?? null)} ` +
+        "— a hundred days of earnings over ninety days of shares");
+    check("...and the refusal names both frames in a note",
+      cr.notes.some((n) => n.startsWith(`${ratio.key} `) && n.includes("covers")),
+      cr.notes.find((n) => n.startsWith(`${ratio.key} `)) ?? "(none)");
+    check("...and the row-level invariant sees the same disagreement independently",
+      incoherent(cr).some((b) => b.includes("but the row's other cells cover")),
+      incoherent(cr).join("; ") || "(clean — then the guard and the invariant disagree)");
+
+    // MUTATION: the guard removed, so the two frames divide.
+    const unguarded = await liftMutated((src) =>
+      src.replace("if (!sameFrame(numCell?.covers, denCell?.covers)) {", "if (false) {")
+    );
+    const un = unguarded.extractCompanyFacts("XFRM", crossed);
+    const unQ = un.quarters.find((q) => q.end === "2026-06-30");
+    check("MUTATION: without the guard the cross-frame ratio is computed",
+      unQ?.values[idxOf(ratio.key)]?.val === 30 / 90,
+      `the mutation renders ${JSON.stringify(unQ?.values[idxOf(ratio.key)]?.val ?? null)} — ` +
+        "a per-share figure whose numerator and denominator cover different periods");
+    // AND IT MUST NOT SIMPLY BREAK EVERYTHING: a ratio whose operands DO agree
+    // still has to compute, or the guard above would pass by emptying the field.
+    const aligned = extractCompanyFacts("XFRM2", {
+      cik: 1,
+      facts: { "us-gaap": {
+        [num.chain[0]]: { units: { USD: [row("2026-04-01", "2026-06-30", 30)] } },
+        [den.chain[0]]: { units: { shares: [row("2026-04-01", "2026-06-30", 90)] } },
+      } },
+    });
+    const alQ = aligned.quarters.find((q) => q.end === "2026-06-30");
+    check("...and a ratio whose operands DO share a frame still computes",
+      alQ?.values[idxOf(ratio.key)]?.val === 30 / 90,
+      `${ratio.key} = ${JSON.stringify(alQ?.values[idxOf(ratio.key)]?.val ?? null)} ` +
+        "— a guard that emptied the field would pass the assertion above for the wrong reason");
+  }
 }
 
 console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
