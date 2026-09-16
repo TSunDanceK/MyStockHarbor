@@ -404,6 +404,15 @@ const TASKS = {
   // HOW MANY SYMBOLS THE FISCAL-YEAR CALIBRATION RELABELS, and which.
   // Credentialled to read the store; fetches companyfacts only for the filers
   // a relabel is arithmetically possible for. No writes.
+  // RE-EXTRACT AND REWRITE NAMED FACT SETS with the shipped extraction, so a
+  // labelling change can be eye-checked before the rewindow queue reaches it.
+  // Refuses an empty symbol list; it is not a backfill.
+  "write-refresh-sets": {
+    script: "scripts/sec-refresh-sets.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
