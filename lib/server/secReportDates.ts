@@ -618,7 +618,7 @@ export const TIMING_WORDING: Record<ReportTiming, string> = {
 export function nextPeriodEndFrom(
   quarterEnds: readonly string[],
   yearEnds: readonly string[]
-): { end: string; annual: boolean } | null {
+): { end: string; annual: boolean; stepDays: number } | null {
   const pick = (ends: readonly string[]) => {
     const sorted = [...new Set(ends.filter(Boolean))].sort().reverse();
     if (sorted.length < 3) return null;
@@ -637,5 +637,103 @@ export function nextPeriodEndFrom(
   return {
     end: new Date(Date.parse(chosen.newest) + chosen.step * DAY).toISOString().slice(0, 10),
     annual: !q,
+    stepDays: chosen.step,
   };
+}
+
+/**
+ * The same period end, one year on.
+ *
+ * ── TWO KINDS OF FILER, AND +365 IS WRONG FOR BOTH SOMETIMES ─────────────
+ * A calendar filer's quarter ends on the LAST DAY OF A MONTH: 30 September
+ * this year, 30 September next, and +365 lands on the 30th only when no leap
+ * day intervenes. A 52/53-week filer's quarter ends on a fixed WEEKDAY:
+ * AAPL's June quarter ended 2026-06-27, and its successor is 2027-06-26 —
+ * 364 days, fifty-two whole weeks, so the weekday is preserved.
+ *
+ * The two are told apart by the one thing that distinguishes them: whether the
+ * date is its month's last day. Nothing else here can, and guessing wrong costs
+ * a day or two on every estimate that rolls.
+ */
+export function periodAnniversary(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const y = d.getUTCFullYear();
+  const mo = d.getUTCMonth();
+  const lastDay = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+  if (d.getUTCDate() === lastDay) {
+    const nextLast = new Date(Date.UTC(y + 1, mo + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y + 1, mo, nextLast)).toISOString().slice(0, 10);
+  }
+  return new Date(d.getTime() + 364 * DAY).toISOString().slice(0, 10);
+}
+
+/**
+ * The next announcement that HAS NOT HAPPENED YET.
+ *
+ * ── THE DEFECT THIS EXISTS FOR ────────────────────────────────────────────
+ * The first wiring rendered "Next expected earnings date: 2026-07-18" on a page
+ * read in September. It was not a bad estimate — it was a correct estimate for
+ * a quarter already reported. The stored fact set lags the filings by design:
+ * companyfacts carries a period once it is FILED, so a filer that has announced
+ * Q3 but not yet filed its 10-Q has a fact set ending at Q2, and one cadence
+ * step past Q2 is a date in the past.
+ *
+ * A date in the past under the heading "next expected" is worse than no date.
+ * Nothing about it fails, and a reader has no way to tell it from a date the
+ * company missed.
+ *
+ * SO IT ROLLS FORWARD, one cadence step at a time, until the estimate lands on
+ * or after `today` — and stops after a bounded number of steps rather than
+ * looping, because an unbounded roll on a filer with a strange cadence is a
+ * hang on a page render.
+ *
+ * `today` IS PASSED IN, never read from the clock here: this runs in the cron,
+ * in the seeder and in checks, and a function that reads the clock cannot be
+ * given a date to test against.
+ */
+export function estimateUpcoming(
+  events: readonly ReportEvent[],
+  cadence: { end: string; annual: boolean; stepDays: number } | null,
+  category: unknown,
+  today: string
+): { estimate: NextReportEstimate; periodEnd: string | null } {
+  if (!cadence) {
+    return { estimate: estimateNextReport(events, null, category, false), periodEnd: null };
+  }
+  // NOT PAST TODAY ALONE. A filer that announced yesterday should be estimated
+  // for its NEXT quarter, not shown yesterday's date as if it were upcoming.
+  const floor = events[0]?.announcedOn && events[0].announcedOn > today ? events[0].announcedOn : today;
+  // ── SNAPPED TO THE FILER'S OWN CALENDAR, NOT LEFT ON THE MEDIAN STEP ────
+  // Stepping by the median spacing accumulates: two steps of 92 days from a
+  // 31 March quarter end lands on 1 October, not 30 September, and the estimate
+  // inherits every day of that drift. Where the same quarter a year earlier is
+  // on file, its anniversary is the period end — exactly, by the filer's own
+  // convention — so the stepped date is only used to FIND it.
+  const snap = (end: string): string => {
+    let best: string | null = null;
+    for (const e of events) {
+      if (!e.periodEnd) continue;
+      const cand = periodAnniversary(e.periodEnd);
+      const off = Math.abs(daysBetween(cand, end));
+      if (off > 20) continue;
+      if (!best || off < Math.abs(daysBetween(best, end))) best = cand;
+    }
+    return best ?? end;
+  };
+  let end = snap(cadence.end);
+  let estimate = estimateNextReport(events, end, category, cadence.annual);
+  for (let i = 0; i < 8; i++) {
+    if (estimate.kind !== "date" || estimate.date >= floor) break;
+    end = snap(new Date(Date.parse(end) + cadence.stepDays * DAY).toISOString().slice(0, 10));
+    estimate = estimateNextReport(events, end, category, cadence.annual);
+  }
+  // A MONTH THAT HAS PASSED IS THE SAME MISTAKE IN A COARSER UNIT.
+  if (estimate.kind === "month" && estimate.month < today.slice(0, 7)) {
+    return { estimate: { kind: "none", reason: "the estimated month has already passed" }, periodEnd: end };
+  }
+  if (estimate.kind === "date" && estimate.date < floor) {
+    return { estimate: { kind: "none", reason: "no upcoming date within eight periods" }, periodEnd: end };
+  }
+  return { estimate, periodEnd: end };
 }

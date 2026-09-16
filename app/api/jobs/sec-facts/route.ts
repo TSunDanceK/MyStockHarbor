@@ -9,7 +9,7 @@ import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type Stor
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
-import { reportEvents, estimateNextReport, nextPeriodEndFrom, type Submissions } from "@/lib/server/secReportDates";
+import { reportEvents, estimateUpcoming, nextPeriodEndFrom, type Submissions } from "@/lib/server/secReportDates";
 import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
 
 export const runtime = "nodejs";
@@ -644,6 +644,7 @@ export async function GET(req: NextRequest) {
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
   const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0 };
+  const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
     const changedSet = new Set(changedThisRun);
     const backfill = Object.entries(manifest.symbols)
@@ -668,13 +669,18 @@ export async function GET(req: NextRequest) {
         const events = reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
           .filter((e) => e.periodEnd)
           .slice(0, STORED_EVENT_LIMIT);
-        const nextEnd = nextPeriodEndFrom(quarterEnds, yearEnds);
-        const next = estimateNextReport(events, nextEnd?.end ?? null, subs.category, nextEnd?.annual ?? false);
+        // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
+        // lags the filings — companyfacts carries a period once it is FILED —
+        // so one cadence step past its newest period can be a date in the
+        // past, rendered under "next expected".
+        const { estimate: next, periodEnd: nextEnd } = estimateUpcoming(
+          events, nextPeriodEndFrom(quarterEnds, yearEnds), subs.category, todayIso
+        );
         const ok = await writeReportDates({
           symbol, cik,
           at: new Date().toISOString(),
           events,
-          nextPeriodEnd: nextEnd?.end ?? null,
+          nextPeriodEnd: nextEnd,
           next,
         });
         if (!ok) { reportDates.failed++; continue; }
