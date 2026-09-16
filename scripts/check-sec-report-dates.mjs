@@ -274,7 +274,61 @@ const ev = (period, accepted, basis = "8-K item 2.02") => ({
     `${c.kind} ${c.date ?? ""} clamped=${c.clamped} — 40 days after 2026-09-30`);
 }
 
+console.log("\n5. the page is wired to the filings, not to the calendar");
+
+// SOURCE-LEVEL, because the page is a server component that reads Redis and
+// fetches FMP — lifting it would mean stubbing both, and the stubs are where a
+// check like this quietly stops testing the real thing.
+{
+  const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+
+  // ── THE FMP CALL IS SKIPPED, NOT IGNORED ───────────────────────────────
+  // An ignored fetch still spends the daily limit, which is the cost this step
+  // exists to remove.
+  check("the /earnings call is conditional on the SEC record being empty",
+    /secEvents\.length\s*\?\s*Promise\.resolve\(null\)\s*:\s*fetchFmpJson/.test(page),
+    "the FMP call must be behind the SEC record, not merely unused");
+
+  // ── THE LABEL COMES FROM THE PERIOD, NOT THE ANNOUNCEMENT ──────────────
+  // THE DEFECT THIS GUARDS: a quarter ending 30 June announced 30 July was
+  // labelled from the announcement, so it read "Q3" — the quarter AFTER the one
+  // the bar measures. Every bar on the chart named the wrong quarter, and
+  // nothing about that fails.
+  check("the reaction bars are labelled from the matched period end",
+    /label:\s*quarterLabel\(e\.periodEnd\)/.test(page),
+    "quarterLabel(e.announcedOn) would name the quarter after the one measured");
+  check("...and the session comes from the filing timing",
+    /e\.timing === "after-close" \? "amc" : "bmo"/.test(page),
+    "after-close is the only timing that advances the session");
+
+  // ── THE PAGE NEVER CLAIMS THE COMPANY ANNOUNCED IT ─────────────────────
+  check("the estimated date is labelled as an estimate from past pattern",
+    /Estimated from \{clean\}&apos;s own past reporting pattern/.test(page));
+  check("...and says the company may break it",
+    /free to break the pattern/.test(page));
+  // A MONTH IS RENDERED AS A MONTH. "Expected in 2026-11" is a machine talking.
+  check("a month-only estimate renders a month name, not YYYY-MM",
+    /monthName\(nextReport\.month\)/.test(page) && /names\[idx\]/.test(page));
+
+  // ── THE CRON WRITES IT, AND MATCHES RATHER THAN READS ──────────────────
+  const job = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+  check("the cron passes the STORED period ends into the matcher",
+    /reportEvents\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(job),
+    "period ends must come from the fact set, never from the filing");
+  check("...and only stores events whose period was matched",
+    /\.filter\(\(e\) => e\.periodEnd\)/.test(job));
+  check("...and stamps the symbol even when it found no events",
+    /if \(entry\) entry\.reportDatesAt = Date\.now\(\);/.test(job),
+    "or a filer with no Item 2.02 history is re-fetched every day forever");
+  // THE RATE GATE IS SHARED. SEC's limit is per requester; two fetchers each
+  // spacing their own calls would between them double the measured rate.
+  check("both SEC fetchers share one rate gate",
+    (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&
+      !/let lastAt2|const lastAt2/.test(job),
+    "a second gate would let the two endpoints double the request rate");
+}
+
 console.log(
-  failures ? `\n${failures} assertion(s) failed.` : "\nSession mapping, wording, dedupe and the gate hold.\n"
+  failures ? `\n${failures} assertion(s) failed.` : "\nSession mapping, wording, dedupe, the gate and the page wiring hold.\n"
 );
 process.exit(failures ? 1 : 0);
