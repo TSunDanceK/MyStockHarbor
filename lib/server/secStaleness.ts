@@ -2,16 +2,18 @@
 // function, one place, three reasons.
 //
 // ── WHY THIS IS ITS OWN MODULE AND NOT A HELPER IN THE CRON ROUTE ─────────
-// It lived in app/api/jobs/sec-facts/route.ts, which is fine while the CRON is
-// the only thing that asks the question. It is not going to be: refresh-on-view
-// asks exactly the same question from the READ path, and a lib module cannot
-// import from a route without inverting the dependency. Two copies of a
-// staleness rule is the shape where one gains a condition and the other does
-// not, and the symptom is a migration that silently completes on one path while
-// the other keeps serving stale sets.
+// It lived in app/api/jobs/sec-facts/route.ts. It was pulled out for a second
+// caller on the READ path, and that caller — refresh-on-view — has since been
+// removed (see secColdFetch's populated branch for why). So the cron is once
+// again the only thing that asks the question, and this module could in
+// principle fold back into the route. IT SHOULD NOT.
 //
-// So it lives here, the route imports it, and refresh-on-view imports the SAME
-// function rather than a second one that agrees today.
+// A rule living inside a route handler is a rule nothing outside that route can
+// import, and the answer every time something else needs it is a second copy.
+// That is how the rewindow migration nearly shipped with two staleness
+// predicates that agreed on the day they were written. check-sec-rewindow lifts
+// THIS function rather than a transcription of it, which is only possible
+// because it is here.
 //
 // ── ABSENT MUST SELECT, NEVER SKIP ────────────────────────────────────────
 // Every field below was added after sets were already being written, so the
@@ -25,7 +27,7 @@ import { secChainsHash } from "./secFields";
  * What a manifest entry has to carry for staleness to be decidable.
  *
  * Structural rather than the full SecManifestEntry, so a check can call this
- * with a literal and refresh-on-view can call it with whatever it holds.
+ * with a literal rather than having to build a whole manifest entry.
  */
 export type StaleInput = {
   /** Quarter retention window the set was written under. Absent = 8. */

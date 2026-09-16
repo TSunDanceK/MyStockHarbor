@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
+import { drainColdCiks } from "@/lib/server/secColdCik";
 import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
@@ -392,6 +393,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(summary, { status: 503 });
   }
 
+  // ── FOLD IN THE CIKs THE COLD PATH RESOLVED, BEFORE THE QUEUES ARE BUILT ──
+  //
+  // ORDER MATTERS AND IS THE POINT. populationQueues filters on `e.cik`, so a
+  // symbol whose CIK arrives from the cold path is in NO queue until this has
+  // run. Draining after would fill the entry and then leave it unqueued for a
+  // whole day — the exact ONDS state this exists to end, one run later.
+  const coldCiks = await drainColdCiks(manifest);
+  if (coldCiks.conflicts.length) {
+    // REPORTED, NOT APPLIED. A CIK that disagrees with the manifest is
+    // reconcileCiks's decision, with its ticker map and its change threshold;
+    // taking the cold path's value here would route a CIK change around both.
+    console.warn(
+      `[sec-facts] cold-CIK conflicts (not applied): ` +
+        coldCiks.conflicts.map((c) => `${c.symbol} manifest=${c.manifest} cold=${c.cold}`).join(", ")
+    );
+  }
+
   const q = populationQueues(manifest);
   const url = new URL(req.url);
   // One symbol, on demand — for checking a single page after a deploy without
@@ -557,6 +575,10 @@ export async function GET(req: NextRequest) {
     written, unchanged, failed,
     coldTaken: coldSymbols.length,
     coldCleared,
+    coldCikSeen: coldCiks.seen,
+    coldCikFilled: coldCiks.filled,
+    coldCikCreated: coldCiks.created,
+    coldCikConflicts: coldCiks.conflicts.length,
     reverifyTaken: only ? 0 : q.reverify.length,
     populateTaken: only ? 0 : q.populate.length,
     rewindowTaken: only ? 0 : q.rewindow.length,
