@@ -406,6 +406,51 @@ console.log("\n10. the anchor is the NEWEST period, whichever kind it is");
     vKgc.basis === "year" && vKgc.tableBasis === "year",
     `${vKgc.basis} / ${vKgc.tableBasis}`);
 
+  // ── A TABLE OF QUARTERS HAS TO BE ABOUT RECENT QUARTERS ─────────────────
+  //
+  // Anchoring on the newest period by date exposed this underneath: a filer
+  // that stopped filing 10-Qs years ago still has those quarters stored, so a
+  // FY2025 snapshot sat above a table from another decade. Production: CNI
+  // 2009-09-30, ESLT 2016, IAG 2017, BIDU 2018.
+  //
+  // THE CNI SHAPE IS BUILT FROM REAL DATA, by keeping only AZN's OLDEST
+  // quarters — a genuine filed series whose newest entry is years behind the
+  // newest annual period. Nothing here invents a period.
+  const STALE_DAYS = Number(
+    (fs.readFileSync("lib/server/secEarningsView.ts", "utf8")
+      .match(/STALE_QUARTER_DAYS = (\d+)/) ?? [])[1]
+  );
+  check("the staleness threshold is read from the view, not retyped",
+    STALE_DAYS === 548, `${STALE_DAYS} days`);
+
+  const staleSet = { ...AZN, quarters: AZN.quarters.slice(-3) };
+  const vStale = M.buildSecEarningsView(staleSet);
+  const staleAge = Math.round(
+    (Date.parse(vStale.latestEnd) - Date.parse(staleSet.quarters[0].e)) / 86400000
+  );
+  check("the CNI-shaped set really is stale, by the threshold's own measure",
+    staleAge > STALE_DAYS,
+    `newest quarter ${staleSet.quarters[0].e} is ${staleAge} days behind ${vStale.latestEnd}`);
+  check("...so no quarterly table renders for it",
+    vStale.tableBasis === "year" &&
+      !/Recent reported quarters/.test(visibleText(renderPage(M, vStale))) &&
+      vStale.growth.every((g) => /^FY\d{4}$/.test(g.label)),
+    `tableBasis=${vStale.tableBasis}, rows: ${vStale.growth.map((g) => g.label).join(" ")}`);
+  check("...and the page reads as annual throughout, with the five-year card as its growth table",
+    /Latest reported year/.test(visibleText(renderPage(M, vStale))) &&
+      strayQuarters(visibleText(renderPage(M, vStale))).length === 0,
+    "wording follows tableBasis, so it cannot say 'quarter' over fiscal-year rows");
+
+  // AZN ITSELF IS THE CONTROL, and it is the reason the threshold is 18 months
+  // rather than something tighter: a half-yearly filer is ~6 months behind by
+  // CADENCE, not by having stopped.
+  const aznAge = Math.round(
+    (Date.parse(vAzn.latestEnd) - Date.parse(AZN.quarters[0].e)) / 86400000
+  );
+  check("AZN keeps its table, with room to spare",
+    vAzn.tableBasis === "quarter" && aznAge < STALE_DAYS,
+    `${aznAge} days behind, against a ${STALE_DAYS}-day threshold`);
+
   // AND THE COMPARATOR IS SEARCHED IN THE ANCHOR'S OWN LIST. With the anchor a
   // year and the tables on quarters, searching the table list for FY2024 finds
   // nothing — a blank comparison on a filer that has the prior year stored.
@@ -764,6 +809,31 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   check("...and KGC is unaffected either way, because it has no quarters to prefer",
     jMod.buildSecEarningsView(KGC).basis === "year",
     "a mutation that also broke the annual-only filer would be testing something else");
+
+  // ── (k) THE STALENESS TEST IS REMOVED ───────────────────────────────────
+  const dropStaleTest = (src) =>
+    src.replace(
+      "    !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;",
+      "    !annualOnly;"
+    );
+  check("the staleness mutation actually applied", dropStaleTest(cardsSrc) !== cardsSrc);
+  const kMod = await loadCards(dropStaleTest);
+  const kView = kMod.buildSecEarningsView({ ...AZN, quarters: AZN.quarters.slice(-3) });
+  // ASSERTED ON THE RENDERED TABLE, NOT ON growth.every(). The first version of
+  // this read `kView.growth.every(...)` and PASSED VACUOUSLY: those three oldest
+  // quarters have no prior year stored, so the thin-row filter empties `growth`
+  // and `every` on an empty array is true. A check that cannot fail is not a
+  // check — the same class of defect this suite exists to catch, in the suite.
+  const kText = visibleText(renderPage(kMod, kView));
+  const kQuarterRows = (kText.match(/Q\d FY20(0|1|2)\d/g) ?? []);
+  check("(k) MUTATION: without the 548-day test, the decade-old table comes back",
+    kView.tableBasis === "quarter" && /Recent reported quarters/.test(kText) &&
+      kQuarterRows.length > 0,
+    `the table returns with ${kQuarterRows.length} quarter labels — ${[...new Set(kQuarterRows)].join(" ")} — under a FY2025 snapshot`);
+  check("...and AZN is unaffected, so the mutation is not simply turning everything quarterly",
+    kMod.buildSecEarningsView(AZN).tableBasis === "quarter" &&
+      kMod.buildSecEarningsView(KGC).tableBasis === "year",
+    "AZN kept its table either way; KGC has no quarters to restore");
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();
