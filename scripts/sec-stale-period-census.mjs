@@ -162,6 +162,30 @@ for (const symbol of targets) {
       for (const h of hits.slice(0, 8)) console.log(`           ${h}`);
       const stored = (set.quarters ?? []).slice(0, 6).map((q) => `${q.fp} FY${q.fy} ${q.e}`);
       console.log(`         stored quarters: ${stored.join(" · ")}`);
+
+      // ── RULE THE PROBE OUT BEFORE BLAMING THE SOURCE ───────────────────
+      // A count of zero can mean the period is absent OR that the counter is
+      // looking in the wrong place. So the raw rows are printed for the two
+      // tags every filer publishes — whichever revenue tag this one uses, and
+      // NetIncomeLoss — with no filtering on end date at all. If the 10-Q's
+      // six-month frame is there, it shows up here and the counter is wrong.
+      const REVENUE_TAGS = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet",
+        "SalesRevenueGoodsNet"];
+      for (const tag of [...REVENUE_TAGS, "NetIncomeLoss"]) {
+        const def = facts.facts?.["us-gaap"]?.[tag];
+        if (!def) continue;
+        const rows = Object.values(def.units ?? {}).flat()
+          .filter((r) => r.start)
+          .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0))
+          .slice(0, 5);
+        if (!rows.length) continue;
+        console.log(`         us-gaap:${tag} — newest 5 duration rows:`);
+        for (const r of rows) {
+          const days = Math.round((Date.parse(r.end) - Date.parse(r.start)) / 86400000);
+          console.log(`           ${r.start}..${r.end} (${days}d) form=${r.form} fy=${r.fy} fp=${r.fp} filed=${r.filed}`);
+        }
+      }
     }
     console.log("");
   }
