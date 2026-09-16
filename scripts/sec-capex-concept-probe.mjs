@@ -222,6 +222,25 @@ for (const symbol of targets) {
   );
 
   const pairs = bothConcepts(facts);
+
+  // ── WHICH OF THOSE PERIODS ACTUALLY RENDER ───────────────────────────────
+  //
+  // A 99% disagreement on a 2017 quarter is a different fact from a 99%
+  // disagreement on the newest one. The first run listed 14 SYMBOLS over the
+  // line and every worst case was dated 2011–2022 — which is either "these
+  // concepts diverge badly and it is live" or "they diverged years ago and
+  // nothing on the page can see it", and the output gave no way to tell.
+  // Reporting the headline without this would have handed a ruling to the
+  // owner with the one qualification it turns on left out.
+  //
+  // MATCHED ON PERIOD END against the periods the SHIPPED extraction keeps,
+  // after its retention slice. A pair on an end that survives is a pair on a
+  // row a reader can see.
+  const storedEnds = new Set([
+    ...(shipped.quarters ?? []).map((q) => q.end),
+    ...(shipped.years ?? []).map((y) => y.end),
+  ]);
+  const livePairs = pairs.filter((x) => storedEnds.has(x.period.split("..")[1]));
   const conceptsSeen = new Set();
   for (const q of [...(shipped.quarters ?? []), ...(shipped.years ?? [])]) {
     const t = q.values?.[idx]?.tag;
@@ -237,7 +256,9 @@ for (const symbol of targets) {
     nulledAllTime,
     notes: notes.length,
     pairs,
+    livePairs,
     maxPct: pairs.length ? Math.max(...pairs.map((p) => p.pct)) : null,
+    maxLivePct: livePairs.length ? Math.max(...livePairs.map((p) => p.pct)) : null,
   });
   await new Promise((r) => setTimeout(r, 120));
 }
@@ -283,10 +304,14 @@ console.log(`\n2. PERIODS PUBLISHING BOTH CONCEPTS — max difference per SYMBOL
 console.log(`   ${withPairs.length} SYMBOLS file both concepts for at least one period\n`);
 for (const r of withPairs) {
   const worst = r.pairs.reduce((a, b) => (b.pct > a.pct ? b : a));
+  const live = r.maxLivePct === null
+    ? "no such period is still stored"
+    : `${r.maxLivePct.toFixed(2)}% on ${r.livePairs.length} still-stored period(s)`;
   console.log(
     `   ${r.symbol.padEnd(6)} max ${r.maxPct.toFixed(2).padStart(7)}%  ` +
       `(${r.pairs.length} period(s) carry both; worst ${worst.period}: ` +
-      `${worst.a.split("|")[1]} ${worst.va} vs ${worst.b.split("|")[1]} ${worst.vb})`
+      `${worst.a.split("|")[1]} ${worst.va} vs ${worst.b.split("|")[1]} ${worst.vb})` +
+      `\n          IN WINDOW: ${live}`
   );
 }
 if (!withPairs.length) {
@@ -300,10 +325,23 @@ if (!withPairs.length) {
 }
 
 const over = withPairs.filter((r) => r.maxPct > SPREAD_ALERT_PCT);
-console.log(`\n   OVER ${SPREAD_ALERT_PCT}%: ${over.length} SYMBOLS`);
+console.log(`\n   OVER ${SPREAD_ALERT_PCT}%, ALL TIME: ${over.length} SYMBOLS`);
 if (over.length) {
   console.log(`   ${over.map((r) => `${r.symbol} ${r.maxPct.toFixed(1)}%`).join(", ")}`);
-  console.log(`   >> These two concepts are not the same measure on these filers. Rule before merging.`);
 } else if (withPairs.length) {
   console.log(`   (none — every filer that files both agrees within ${SPREAD_ALERT_PCT}% on every shared period)`);
+}
+
+// THE ONE THAT DECIDES ANYTHING TODAY. A spread on a period that rolled out of
+// the retention window is a fact about 2017, not about the page.
+const overLive = withPairs.filter((r) => (r.maxLivePct ?? -1) > SPREAD_ALERT_PCT);
+console.log(`\n   OVER ${SPREAD_ALERT_PCT}% ON A PERIOD THAT IS STILL STORED: ${overLive.length} SYMBOLS`);
+if (overLive.length) {
+  console.log(`   ${overLive.map((r) => `${r.symbol} ${r.maxLivePct.toFixed(1)}%`).join(", ")}`);
+  console.log(`   >> These are live. On these filers the two concepts are not the same measure ` +
+    `and a rendered cell today depends on which one is taken.`);
+} else {
+  console.log(`   (none — every spread above the line is on a period that has rolled out of the`);
+  console.log(`    retention window, so no rendered cell today turns on the choice. It is still a`);
+  console.log(`    real divergence between the two concepts; it is simply not visible on the page.)`);
 }
