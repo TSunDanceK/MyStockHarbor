@@ -35,9 +35,36 @@ const RENDERED_QUARTERS_RENDERED = Number(
 const AAPL = fixture("AAPL");
 const KGC = fixture("KGC");
 const AZN = fixture("AZN");
+const TSLA = fixture("TSLA");
+// THE TWO FILERS THAT PUBLISH NO PaymentsToAcquirePropertyPlantAndEquipment.
+// Every fixture above does, so none of them could ever have caught the capex
+// chain gap — see §14. GEV is also the spun-off filer with four fiscal years.
+const GEV = fixture("GEV");
+const KTOS = fixture("KTOS");
 const vAapl = M.buildSecEarningsView(AAPL);
 const vKgc = M.buildSecEarningsView(KGC);
 const vAzn = M.buildSecEarningsView(AZN);
+const vTsla = M.buildSecEarningsView(TSLA);
+const vGev = M.buildSecEarningsView(GEV);
+const vKtos = M.buildSecEarningsView(KTOS);
+
+/**
+ * ── THE CNI SHAPE, BUILT FROM AZN'S OWN STALE-BUT-POPULATED QUARTERS ───────
+ *
+ * slice(1, 5) is Q2 FY2024 back to Q2 FY2021: 549, 915, 1280 and 1645 days
+ * behind AZN's newest period, and 15/15/14/14 fields filled. The first draft
+ * used slice(-3), the three OLDEST quarters — also stale, but AZN stores ONE
+ * field for each, so once the recent-periods table gained the thin-row rule the
+ * staleness mutation rendered a table with ZERO rows and the assertion could no
+ * longer tell "the table came back" from "the table stayed away".
+ *
+ * 549 days is one day over the threshold and is real filed data, which makes
+ * this fixture the TSEM case as well as the CNI one.
+ *
+ * MODULE SCOPE because two sections use it — the staleness rule below and
+ * mutation (k) — and two slices of the same intent would drift apart.
+ */
+const STALE_AZN = { ...AZN, quarters: AZN.quarters.slice(1, 5) };
 
 /**
  * The cards the PAGE ACTUALLY RENDERS for one view, gated exactly as
@@ -49,14 +76,29 @@ const vAzn = M.buildSecEarningsView(AZN);
  * card no reader of that page sees. An assertion about KGC's visible words is
  * worthless if the harness adds words the page does not.
  *
- * Mirrors page.tsx: growth table only on a quarter anchor, annual card always
- * (`sole` on a year anchor), recent-periods card self-gates on the basis.
+ * Mirrors page.tsx: growth table only where the TABLES are quarterly, annual
+ * card always (`sole` where they are not), recent-periods card self-gates.
+ *
+ * ── tableBasis, NOT basis, AND THE TWO ARE NOT THE SAME FIELD ──────────────
+ * This gated on `view.basis` while page.tsx gates on `secView.tableBasis`, and
+ * they differ on exactly the filer this section is calibrated against: AZN's
+ * anchor is FY2025 (basis "year") while its quarters are current (tableBasis
+ * "quarter"). Measured: the page renders a 3,618-character growth & margins
+ * card for AZN that this harness rendered for nobody, so every "what does a
+ * reader see" assertion about AZN was made against a page missing a card the
+ * real one shows.
+ *
+ * AND IT COST THE STALENESS MUTATION HALF ITS REACH. Dropping the 548-day test
+ * flips tableBasis to "quarter" on a CNI-shaped set while basis stays "year",
+ * so the table came back and was caught — and the growth card came back and
+ * could not be, because this line still said not to render it. A mutation that
+ * can only observe half of what it breaks is half a check.
  */
 const renderPage = (mod, view) =>
   [
     html(React.createElement(mod.SecSnapshotCard, { view })),
-    view.basis === "year" ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
-    html(React.createElement(mod.SecAnnualCard, { view, sole: view.basis === "year" })),
+    view.tableBasis === "year" ? "" : html(React.createElement(mod.SecGrowthMarginsCard, { view })),
+    html(React.createElement(mod.SecAnnualCard, { view, sole: view.tableBasis === "year" })),
     html(React.createElement(mod.SecCashQualityCard, { view })),
     html(React.createElement(mod.SecBalanceSheetCard, { view })),
     html(React.createElement(mod.SecIncomeStatementCard, { view })),
@@ -84,11 +126,11 @@ check("both fixtures carry the current quarter window",
 check("AAPL is the DENSE case", AAPL.quarters.length === 12,
   `${AAPL.quarters.length} quarters stored — 12 is what makes 8 rendered rows reachable`);
 check("AZN is the SPARSE QUARTERLY case — 12 stored, a three-quarter hole",
-  AZN.quarters.length === 12 && AZN.years.length === 5 && AZN.w === 12,
+  AZN.quarters.length === 12 && AZN.years.length === 6 && AZN.w === 12,
   `q=${AZN.quarters.length} y=${AZN.years.length} w=${AZN.w}`);
 check("KGC is the ANNUAL-ONLY control",
-  KGC.quarters.length === 0 && KGC.years.length === 5,
-  `q=${KGC.quarters.length} y=${KGC.years.length} — unchanged by the window, which is the point`);
+  KGC.quarters.length === 0 && KGC.years.length === 6,
+  `q=${KGC.quarters.length} y=${KGC.years.length} — no quarters at all, which is the point`);
 check("neither fixture was hand-built: both carry a real fieldsHash",
   AAPL.h === KGC.h && /^[0-9a-f]{8}$/.test(AAPL.h), AAPL.h);
 
@@ -108,12 +150,29 @@ console.log("\n2. A2 — every rendered row can reach its prior year");
       return m && b && m[1] === b[1] && Number(m[2]) - 1 === Number(b[2]);
     }),
     vAapl.growth.map((g) => `${g.label}<-${g.comparedWith}`).join(" "));
-  // A ROW WITH NO PRIOR YEAR STILL SAYS SO. The window does not manufacture a
-  // comparator — KGC's oldest fiscal year has none and must read "not on file".
-  const oldest = vKgc.annual[0];
-  check("a period with genuinely no prior year still reads 'not on file'",
-    oldest.comparedWith === null && oldest.revenueYoY === null,
-    `${oldest.label} — widening the window must not invent a base`);
+  // A ROW WITH NO PRIOR YEAR STILL SAYS SO — and the window change MOVED where
+  // that case lives. It used to be KGC's oldest fiscal year, which had nothing
+  // behind it at five stored; at six stored, every rendered year reaches one.
+  // That is the fix working, not the property lapsing, so the assertion moves
+  // to a set that genuinely runs out: see mutation (h), which truncates a real
+  // fixture to five years and asserts the oldest cell reads "not on file".
+  // ── ON THE FIXTURES CAPTURED AT THE CURRENT WINDOW ───────────────────────
+  // AAPL's fixture predates the year window (y=5, no `y` field) and is kept
+  // that way ON PURPOSE: it is exactly what a set written before this change
+  // looks like, so it is the live control for "five stored, oldest row blank"
+  // sitting beside three that have six. Its own assertion is the inverse one,
+  // below, and mutation (h) reproduces the same state from a six-year set.
+  const currentWindow = [vAzn, vKgc, vTsla];
+  check("every rendered year reaches a prior one, on the fixtures captured at y=6",
+    currentWindow.every((v) => v.annual.every((r) => r.comparedWith !== null)),
+    currentWindow.map((v) => `${v.symbol}:${v.annual.filter((r) => !r.comparedWith).length} blank`).join(" "));
+  // AAPL is stored at y=5, so its oldest year has no comparator — and is now
+  // DROPPED rather than rendered blank. Four rows, all compared. That is both
+  // halves of the fix visible on one fixture.
+  check("...and AAPL, stored at y=5, renders four compared rows rather than five with a blank",
+    AAPL.years.length === 5 && vAapl.annual.length === 4 &&
+      vAapl.annual.every((r) => r.comparedWith !== null),
+    `${vAapl.annual.map((r) => `${r.label}<-${r.comparedWith}`).join(" ")} — the uncompared year is a base, not a row`);
 }
 
 console.log("\n3. A5 — the five retired ids render nothing at all");
@@ -291,10 +350,18 @@ console.log("\n9. a percentage change across zero is not printed as a number");
       rows.FY2023?.epsDiluted.val === 0.34,
     `FY2021 $${rows.FY2021?.epsDiluted.val} -> FY2022 $${rows.FY2022?.epsDiluted.val} -> FY2023 $${rows.FY2023?.epsDiluted.val}`);
 
-  check("a profit-to-loss year is n/m, not a percentage",
-    rows.FY2022?.epsYoY === "n/m", `FY2022 epsYoY = ${JSON.stringify(rows.FY2022?.epsYoY)}`);
-  check("a loss-to-profit year is n/m, not a percentage",
-    rows.FY2023?.epsYoY === "n/m", `FY2023 epsYoY = ${JSON.stringify(rows.FY2023?.epsYoY)}`);
+  check("a profit-to-loss year says 'Swung to loss'",
+    rows.FY2022?.epsYoY === "swung-to-loss" && /Swung to loss/.test(kgcText),
+    `FY2022 epsYoY = ${JSON.stringify(rows.FY2022?.epsYoY)}`);
+  check("a loss-to-profit year says 'Turned profitable'",
+    rows.FY2023?.epsYoY === "turned-profitable" && /Turned profitable/.test(kgcText),
+    `FY2023 epsYoY = ${JSON.stringify(rows.FY2023?.epsYoY)}`);
+  // THE ABBREVIATION IS GONE. The owner did not know what "n/m" meant, which is
+  // the whole verdict on it — an abbreviation tells a reader something is being
+  // withheld without saying what.
+  check("...and 'n/m' appears nowhere a reader can see it",
+    !/\bn\/m\b/.test(kgcText) && !/not meaningful/i.test(kgcText),
+    "replaced by what actually happened in the period");
 
   // A NUMBER THAT WAS MEANINGFUL MUST STILL PRINT. A guard that suppressed
   // every EPS comparison would pass the two assertions above and be useless.
@@ -302,124 +369,279 @@ console.log("\n9. a percentage change across zero is not printed as a number");
     typeof rows.FY2025?.epsYoY === "number" && /\+153\.2%/.test(kgcText),
     `FY2025 epsYoY = ${rows.FY2025?.epsYoY}`);
   check("and revenue, which never crosses zero here, is untouched",
-    vKgc.annual.filter((r) => typeof r.revenueYoY === "number").length === 4,
+    vKgc.annual.filter((r) => typeof r.revenueYoY === "number").length === vKgc.annual.length,
     vKgc.annual.map((r) => `${r.label}:${typeof r.revenueYoY}`).join(" "));
 
-  check("the marker reaches the reader with its legend, in visible text",
-    /n\/m/.test(kgcText) && /not meaningful/i.test(kgcText) &&
+  check("the wording reaches the reader with its legend, in visible text",
+    /crosses between profit and loss/.test(kgcText) &&
       !/-376\.5%/.test(kgcText) && !/\+172\.3%/.test(kgcText),
-    "the two numbers the eye-check found are gone and the marker explains itself");
+    "the two numbers the eye-check found are gone and the words explain themselves");
 
   // THE LEGEND IS CONDITIONAL, so a page with no n/m cell must not carry it.
-  check("...and a page with no n/m cell does not carry the legend",
-    !/not meaningful/i.test(visibleText(renderPage(M, vAapl))),
+  check("...and a page with no crossing does not carry the legend",
+    !/crosses between profit and loss/.test(visibleText(renderPage(M, vAapl))),
     "a standing legend for a marker that never appears is noise on every other page");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log("\n10. the THIRD shape — a quarterly anchor whose cash flow is annual");
-// ════════════════════════════════════════════════════════════════════════════
+console.log("\n10. the anchor is the NEWEST period, whichever kind it is");
+
+// ── THE DEFECT, ON PRODUCTION ─────────────────────────────────────────────
+// AZN's snapshot read "Most recent quarter filed: Q2 FY2025 (period ending
+// 2025-06-30)" while the store held FY2025, ended 2025-12-31 — six months
+// newer — and the five-year card showed it two cards down. "Latest" was
+// decided by KIND, not by DATE, so the page presented stale data as current.
 //
-// AZN is neither of the other two fixtures. It files 20-F/6-K half-yearly, so
-// its ANCHOR is a quarter while its cash-flow statement exists only on 6- and
-// 12-month frames — the cash card falls back to the year while the rest of the
-// page stays quarterly.
-//
-// IT IS THE CASE THE CASH CARD'S FALLBACK PARAGRAPH IS FOR, and it is also the
-// case that made that paragraph wrong on KGC: the paragraph was gated on the
-// CASH basis alone, so an annual-only filer got "every figure here is the full
-// year FY2025, not FY2025" — the same period named twice as if it were two.
+// AZN IS THE SHAPE FOR THIS, and it is no longer the shape section 10 used to
+// test. Its cash card used to disagree with its anchor (annual cash under a
+// quarterly anchor); now the anchor IS the year, the cash card is the same
+// year, and they agree — so the period-mismatch paragraph correctly does NOT
+// render for it any more. That paragraph is still guarded (asserted below),
+// but no committed fixture currently produces it; recorded rather than quietly
+// dropped.
 {
-  check("AZN's anchor is a quarter while its cash card is a year",
-    vAzn.basis === "quarter" && vAzn.cashQuality.basis === "year",
-    `anchor ${vAzn.basis} / cash ${vAzn.cashQuality.basis} ${vAzn.cashQuality.period} vs latest ${vAzn.latestLabel}`);
+  const newest = (list) => list[0]?.e ?? null;
 
-  const aznCash = visibleText(html(React.createElement(M.SecCashQualityCard, { view: vAzn })));
-  const kgcCash = visibleText(html(React.createElement(M.SecCashQualityCard, { view: vKgc })));
+  check("AZN's newest annual period ends AFTER its newest quarter",
+    newest(AZN.years) > newest(AZN.quarters),
+    `year ${newest(AZN.years)} > quarter ${newest(AZN.quarters)}`);
 
-  check("the mismatch paragraph renders for AZN, where the two periods differ",
-    /does not publish a quarterly cash-flow statement/.test(aznCash) &&
-      new RegExp(`not ${vAzn.latestLabel}`).test(aznCash),
-    `cash ${vAzn.cashQuality.period} against anchor ${vAzn.latestLabel}`);
+  check("...so its anchor is the YEAR, and the snapshot says so",
+    vAzn.basis === "year" && vAzn.latestLabel === "FY2025" &&
+      vAzn.latestEnd === newest(AZN.years) &&
+      /Most recent year filed: FY2025/.test(visibleText(html(React.createElement(M.SecSnapshotCard, { view: vAzn })))),
+    `basis=${vAzn.basis} latest=${vAzn.latestLabel} (${vAzn.latestEnd})`);
 
-  check("...and NOT for KGC, where they are the same period",
-    !/does not publish a quarterly cash-flow statement/.test(kgcCash) &&
-      vKgc.cashQuality.period === vKgc.latestLabel,
-    `KGC cash ${vKgc.cashQuality.period} IS its anchor ${vKgc.latestLabel} — "the full year FY2025, not FY2025"`);
+  // THE TABLE IS STILL A TABLE OF QUARTERS. A newer annual period does not
+  // stop twelve quarters existing, and deleting them was the cost of the
+  // obvious one-field fix.
+  check("...while the quarterly table below it still renders, off quarters",
+    vAzn.tableBasis === "quarter" && vAzn.growth.length > 0 &&
+      vAzn.growth.every((g) => /^Q\d FY\d{4}$/.test(g.label)),
+    `tableBasis=${vAzn.tableBasis}, ${vAzn.growth.length} rows: ${vAzn.growth.map((g) => g.label).join(" ")}`);
 
-  // AND THE SPARSE QUARTERLY SHAPE STILL MATCHES BY LABEL, not by offset —
-  // this is the fixture the original YoY defect was measured on.
-  const byLabel = vAzn.growth.filter((g) => {
-    const m = /^Q(\d) FY(\d+)$/.exec(g.label);
-    const b = /^Q(\d) FY(\d+)$/.exec(g.comparedWith ?? "");
-    return m && b && m[1] === b[1] && Number(m[2]) - 1 === Number(b[2]);
-  }).length;
-  // NOT A HARDCODED COUNT. This read `byLabel === 8` and went stale the moment
-  // the thin-row filter changed how many rows AZN renders — a literal that
-  // measures the fixture rather than the property. The property is that every
-  // row carrying a comparator matches by fiscal label, and that the only row
-  // without one is the oldest, whose prior year is not in the stored window.
-  const withBase = vAzn.growth.filter((g) => g.comparedWith).length;
-  check("every AZN row with a comparator compares against its own fiscal quarter, one year back",
-    byLabel === withBase && withBase === vAzn.growth.length - 1,
-    `${byLabel} of ${vAzn.growth.length} rows match by label; only the oldest (${vAzn.growth[0].label}) has no prior year stored — ` +
-      `this is the filer whose table read "+75.9% Compared with Q2 FY2021" against a latest of Q2 FY2025`);
+  check("...and the Quality of Earnings card agrees with the anchor",
+    vAzn.cashQuality.basis === "year" && vAzn.cashQuality.period === "FY2025",
+    `${vAzn.cashQuality.basis} ${vAzn.cashQuality.period} — no mismatch paragraph is due, and none renders`);
+  check("...so the period-mismatch paragraph does NOT render for it",
+    !/does not publish a quarterly cash-flow statement/.test(
+      visibleText(html(React.createElement(M.SecCashQualityCard, { view: vAzn })))));
 
-  check("AZN still reads as quarterly throughout, which is correct for it",
-    /quarter/i.test(visibleText(renderPage(M, vAzn))) && vAzn.basis === "quarter");
+  // THE CONTROLS. A rule that made everything annual would pass the three
+  // assertions above and be a different bug.
+  for (const [sym, view, set] of [["AAPL", vAapl, AAPL], ["TSLA", vTsla, TSLA]]) {
+    check(`${sym}: newest quarter is later than its newest year, so the anchor stays a quarter`,
+      newest(set.quarters) > newest(set.years) && view.basis === "quarter" &&
+        view.tableBasis === "quarter",
+      `quarter ${newest(set.quarters)} > year ${newest(set.years)} -> ${view.basis}`);
+  }
+  check("KGC has no quarters at all, so both anchors are the year",
+    vKgc.basis === "year" && vKgc.tableBasis === "year",
+    `${vKgc.basis} / ${vKgc.tableBasis}`);
+
+  // ── A TABLE OF QUARTERS HAS TO BE ABOUT RECENT QUARTERS ─────────────────
+  //
+  // Anchoring on the newest period by date exposed this underneath: a filer
+  // that stopped filing 10-Qs years ago still has those quarters stored, so a
+  // FY2025 snapshot sat above a table from another decade. Production: CNI
+  // 2009-09-30, ESLT 2016, IAG 2017, BIDU 2018.
+  //
+  // THE CNI SHAPE IS BUILT FROM REAL DATA, by keeping only AZN's OLDEST
+  // quarters — a genuine filed series whose newest entry is years behind the
+  // newest annual period. Nothing here invents a period.
+  const STALE_DAYS = Number(
+    (fs.readFileSync("lib/server/secEarningsView.ts", "utf8")
+      .match(/STALE_QUARTER_DAYS = (\d+)/) ?? [])[1]
+  );
+  check("the staleness threshold is read from the view, not retyped",
+    STALE_DAYS === 548, `${STALE_DAYS} days`);
+
+  const vStale = M.buildSecEarningsView(STALE_AZN);
+  const staleAge = Math.round(
+    (Date.parse(vStale.latestEnd) - Date.parse(STALE_AZN.quarters[0].e)) / 86400000
+  );
+  check("the CNI-shaped set really is stale, by the threshold's own measure",
+    staleAge > STALE_DAYS,
+    `newest quarter ${STALE_AZN.quarters[0].e} is ${staleAge} days behind ${vStale.latestEnd}`);
+  check("...so no quarterly table renders for it",
+    vStale.tableBasis === "year" &&
+      !/Recent reported quarters/.test(visibleText(renderPage(M, vStale))) &&
+      vStale.growth.every((g) => /^FY\d{4}$/.test(g.label)),
+    `tableBasis=${vStale.tableBasis}, rows: ${vStale.growth.map((g) => g.label).join(" ")}`);
+  check("...and the page reads as annual throughout, with the five-year card as its growth table",
+    /Latest reported year/.test(visibleText(renderPage(M, vStale))) &&
+      strayQuarters(visibleText(renderPage(M, vStale))).length === 0,
+    "wording follows tableBasis, so it cannot say 'quarter' over fiscal-year rows");
+
+  // AZN ITSELF IS THE CONTROL, and it is the reason the threshold is 18 months
+  // rather than something tighter: a half-yearly filer is ~6 months behind by
+  // CADENCE, not by having stopped.
+  const aznAge = Math.round(
+    (Date.parse(vAzn.latestEnd) - Date.parse(AZN.quarters[0].e)) / 86400000
+  );
+  // ── THE CAPEX HEADING NAMES THE MEASURE THE COLUMN ACTUALLY IS ────────────
+//
+// capex resolves from ONE concept per filer, and the two in its chain are
+// different measures — PaymentsToAcquireProductiveAssets is wider than the
+// PP&E concept. A filer on the fallback is not showing the same line as a filer
+// on the primary, so one heading over both is a false equivalence on exactly
+// the filers that differ. THAT the extractor picks the right concept is
+// asserted in check-sec-extract §7b; THIS is that the heading follows it.
+//
+// THE INPUT IS `cc`, NOT THE ANSWER. These three sets differ only in the stored
+// choice, so the assertion is about the view reading it, and no fixture supplies
+// the label it is checked against.
+{
+  const BROAD = "us-gaap|PaymentsToAcquireProductiveAssets";
+  const NARROW = "us-gaap|PaymentsToAcquirePropertyPlantAndEquipment";
+  const labelOf = (set) => M.buildSecEarningsView(set).cashQuality.capex.label;
+  const rowOf = (set) =>
+    visibleText(html(React.createElement(M.SecCashQualityCard, { view: M.buildSecEarningsView(set) })));
+
+  check("a set written BEFORE the rule has no stored choice, and is not guessed at",
+    GEV.cc === undefined && labelOf(GEV) === "Capital expenditure",
+    `GEV.cc = ${JSON.stringify(GEV.cc ?? null)} — absent means "written before the rule", and ` +
+      `the honest heading is the plain one; inventing the qualifier would mislabel the other direction`);
+  check("a filer on the BROADER concept says so in the row heading",
+    labelOf({ ...GEV, cc: { capex: BROAD } }) === "Capital expenditure (incl. other productive assets)",
+    labelOf({ ...GEV, cc: { capex: BROAD } }));
+  check("...and that heading reaches the reader, not just the view",
+    /Capital expenditure \(incl\. other productive assets\)/.test(rowOf({ ...GEV, cc: { capex: BROAD } })),
+    "the card read the label off the cell rather than hardcoding one");
+  check("a filer on the PP&E concept keeps the plain heading",
+    labelOf({ ...GEV, cc: { capex: NARROW } }) === "Capital expenditure" &&
+      !/incl\. other productive assets/.test(rowOf({ ...GEV, cc: { capex: NARROW } })),
+    "the qualifier is not a standing decoration — it appears only where the measure is wider");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-console.log("\n11. a row too thin to carry the table does not take a slot");
-// ════════════════════════════════════════════════════════════════════════════
+// ── THE RECENT-PERIODS TABLE IS HELD TO THE SAME BAR AS THE GROWTH TABLE ──
 //
-// Measured on the #465 preview, /stock/AZN/earnings: Q3 FY2020, Q4 FY2020 and
-// Q1 FY2021 rendered with four of five cells empty. AZN stores exactly ONE
-// field for those periods (revenue) against 15 for its full quarters, so each
-// produced a revenue YoY and nothing else — three of the eight slots carrying
-// one number apiece.
+// WHAT THE OWNER SAW ON THE PREVIEW: AZN's "Recent reported quarters" rendered
+// 2019-2021 rows carrying a revenue figure and "Not reported" under both
+// Diluted EPS and Net income. Those are the SAME periods the growth table had
+// already ruled too thin to be a row — AZN stores one field for each — shown
+// one card further down because this table mapped the whole stored list with no
+// filter and no cap while the growth table filtered and sliced it.
 //
-// The bar is an EPS comparison or a margin. The assertion is on the RENDERED
-// ROWS, and the fixture cannot supply it: which periods survive is decided by
-// what AZN filed.
+// ASSERTED ON THE RENDERED TABLE, not on view.recentPeriods.length: a cap
+// applied to the array and a cap applied to the rows are the same number until
+// someone renders a subset, and it is the rows a reader counts.
 {
-  /** Filled cells per rendered row, read back off the view the cards receive. */
-  const filled = (v) =>
-    v.margins.map((m, i) => {
-      const g = v.growth[i];
-      return {
-        label: m.label,
-        n: [g.revenueYoY, g.epsYoY, m.gross, m.operating, m.net]
-          .filter((x) => x !== null).length,
-      };
-    });
+  const aznRows = (visibleText(html(React.createElement(M.SecRecentPeriodsCard, { view: vAzn })))
+    .match(/Q\d FY20\d\d/g) ?? []);
+  const thinEnds = AZN.quarters
+    .filter((p) => p.v.filter((v) => v !== null).length <= 1)
+    .map((p) => p.e);
+  check("AZN's thin quarters are real, and this is how many there are",
+    thinEnds.length > 0,
+    `${thinEnds.length} of ${AZN.quarters.length} stored quarters carry one field: ${thinEnds.join(" ")}`);
+  check("...and none of them renders a row in the recent-periods table",
+    vAzn.recentPeriods.every((r) => !thinEnds.includes(r.end)),
+    `rows: ${vAzn.recentPeriods.map((r) => r.label).join(" ")}`);
+  check("...so no rendered row reads 'Not reported' under BOTH EPS and net income",
+    vAzn.recentPeriods.every((r) => r.epsDiluted.val !== null || r.netIncome.val !== null),
+    "a row whose only content is revenue is a gap with one number in it, here as in the growth table");
+  check("...and the table is capped at the same number of rows as the growth table",
+    aznRows.length <= RENDERED_QUARTERS_RENDERED && aznRows.length === vAzn.recentPeriods.length,
+    `${aznRows.length} rendered rows against a cap of ${RENDERED_QUARTERS_RENDERED}`);
+  check("...while TTM still reads the FULL stored list, not the rendered one",
+    vAzn.ttmRevenue !== null,
+    "filtering the DISPLAY must not change an aggregate computed from what is stored");
+}
 
-  const aznRows = filled(vAzn);
-  check("no AZN row is down to a bare revenue comparison",
-    aznRows.every((r) => r.n >= 3),
-    aznRows.map((r) => `${r.label}(${r.n}/5)`).join(" "));
+{
+  // MUTATION: the filter and the cap dropped, so the thin rows come back.
+  const rpMod = await loadCards((src) =>
+    src.replace(
+      '      .filter((p) => valueOf(p, "epsDiluted") !== null || valueOf(p, "netIncome") !== null)\n      .slice(0, renderLimit)\n',
+      ""
+    )
+  );
+  const rpView = rpMod.buildSecEarningsView(AZN);
+  const rpRows = (visibleText(html(React.createElement(rpMod.SecRecentPeriodsCard, { view: rpView })))
+    .match(/Q\d FY20\d\d/g) ?? []);
+  check("the recent-periods mutation actually applied", rpView.recentPeriods.length !== vAzn.recentPeriods.length);
+  check("MUTATION: without the filter and cap, the one-field quarters return",
+    rpView.recentPeriods.length === AZN.quarters.length &&
+      rpRows.length > RENDERED_QUARTERS_RENDERED,
+    `${vAzn.recentPeriods.length} rows -> ${rpView.recentPeriods.length}, rendering ` +
+      `${rpRows.length} against a cap of ${RENDERED_QUARTERS_RENDERED} — the 2019-2021 rows come back`);
+}
 
-  check("...and the three the eye-check named are the ones that went",
-    !aznRows.some((r) => ["Q3 FY2020", "Q4 FY2020", "Q1 FY2021"].includes(r.label)),
-    "each stored one field — revenue — against 15 on AZN's full quarters");
+check("AZN keeps its table, with room to spare",
+    vAzn.tableBasis === "quarter" && aznAge < STALE_DAYS,
+    `${aznAge} days behind, against a ${STALE_DAYS}-day threshold`);
 
-  // THE FILTER MUST NOT SILENTLY SHORTEN A DENSE FILER'S TABLE. AAPL and KGC
-  // are the controls: a rule that trimmed them too would pass the assertion
-  // above and be a different bug.
-  check("a dense filer still renders its full eight rows",
-    filled(vAapl).length === RENDERED_QUARTERS_RENDERED,
-    filled(vAapl).map((r) => `${r.label}(${r.n}/5)`).join(" "));
-  check("and the annual filer still renders all five fiscal years",
-    filled(vKgc).length === 5,
-    filled(vKgc).map((r) => `${r.label}(${r.n}/5)`).join(" "));
+  // AND THE COMPARATOR IS SEARCHED IN THE ANCHOR'S OWN LIST. With the anchor a
+  // year and the tables on quarters, searching the table list for FY2024 finds
+  // nothing — a blank comparison on a filer that has the prior year stored.
+  check("the snapshot's prior-year comparison resolves for AZN",
+    vAzn.snapshot.comparedWith === "FY2024",
+    `compared with ${vAzn.snapshot.comparedWith}`);
+}
 
-  // AND THE ROWS ARE STILL PAIRED. margins[i] and growth[i] are read together
-  // by the card, so a filter applied to one list and not the other would put a
-  // margin beside another period's growth — plausible, and wrong.
-  check("every margins row is paired with the growth row for the SAME period",
-    vAzn.margins.length === vAzn.growth.length &&
-      vAzn.margins.every((m, i) => m.label === vAzn.growth[i].label),
-    `${vAzn.margins.length} rows, labels aligned`);
+console.log("\n14. capex reaches a filer that does not publish the PP&E concept");
+// ════════════════════════════════════════════════════════════════════════════
+//
+// THE DEFECT: the capex chain held ONE tag. GEV and KTOS do not publish it at
+// all — measured against the payloads, relay 35024074183 — so capex was null on
+// every stored quarter and every stored year for both, and the Quality of
+// Earnings card said "Can't calculate — capital expenditure not reported"
+// beside an operating cash flow that had resolved perfectly.
+//
+// GEV AND KTOS ARE THE FIXTURES FOR IT, and they are the reason the fixtures
+// exist: AAPL, TSLA, AZN and KGC all publish the first chain entry, so not one
+// of them could ever have failed this, and an assertion over the four already
+// committed would have passed throughout the defect.
+{
+  const chainSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
+  const capexChain = (chainSrc.match(/key: "capex", chain: \[([^\]]*)\]/) ?? [])[1] ?? "";
+  const entries = [...capexChain.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+  // ORDER IS THE GUARANTEE, not membership. Resolution is rank-first per
+  // period, so the broad concept sitting SECOND is what keeps a filer that
+  // publishes both on the narrower PP&E reading. Reversed, this check still
+  // finds two entries and AAPL quietly changes meaning.
+  check("the PP&E concept is first and the productive-assets fallback second",
+    entries[0] === "PaymentsToAcquirePropertyPlantAndEquipment" &&
+      entries[1] === "PaymentsToAcquireProductiveAssets",
+    entries.join(" -> "));
+
+  // THE NEAR-MISSES ARE NAMED SO THEY CANNOT BE ADDED BACK QUIETLY. Each was on
+  // the same printed list as the concept that was taken, each matches the same
+  // name patterns, and each would put a plausible wrong number on the card:
+  // business acquisitions overstate GEV's capex ~6x, and the accrual line is
+  // not a cash flow at all and reads 9.1m against KTOS's real 37.1m.
+  const banned = [
+    "PaymentsToAcquireBusinessesNetOfCashAcquired",
+    "PaymentsToAcquireEquityMethodInvestments",
+    "PaymentsToAcquireInterestInJointVenture",
+    "CapitalExpendituresIncurredButNotYetPaid",
+  ];
+  const taken = banned.filter((t) => entries.includes(t));
+  check("no near-miss concept was taken alongside it", taken.length === 0,
+    taken.length ? `in the chain: ${taken.join(", ")}` : `none of ${banned.length} candidates`);
+
+  for (const [sym, view] of [["GEV", vGev], ["KTOS", vKtos]]) {
+    const q = view.cashQuality;
+    check(`${sym}: capital expenditure has a figure, and free cash flow computes`,
+      q.capex.val !== null && q.freeCashFlow !== null && q.freeCashFlowMissing === null,
+      `ocf=${q.operatingCashFlow.val} capex=${q.capex.val} (${q.capex.derived}) fcf=${q.freeCashFlow}`);
+
+    // READ OUT OF THE MARKUP, not off the view. The view holding a number and
+    // the reader seeing one are different claims, and this file exists for the
+    // second of them.
+    const text = visibleText(renderPage(M, view));
+    check(`${sym}: and the card no longer says the figure is not reported`,
+      !/capital expenditure not reported/i.test(text),
+      `"Can't calculate" absent from ${text.length} chars of rendered text`);
+  }
+
+  // THE CONTROL, and it is the whole risk of this change: a filer that already
+  // resolved must resolve to the SAME number. AAPL publishes both concepts.
+  check("AAPL is unmoved — a filer publishing both keeps the narrower reading",
+    vAapl.cashQuality.capex.val === 2455000000,
+    `Q3 FY2026 capex ${vAapl.cashQuality.capex.val} (${vAapl.cashQuality.capex.derived})`);
 }
 
 console.log("\n7. the three mutations, each re-rendered from broken source");
@@ -478,18 +700,39 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     "AAPL is gapless, so four rows back IS one year back — recording this so the " +
       "next person does not 'fix' this mutation by pointing it at AAPL");
 
-  // (b) NULL COALESCED TO 0 — "0.00" reads as a filed zero.
-  const b = await render((src) =>
+  // ── (b) AN ABSENT FIGURE IS GIVEN A VALUE ───────────────────────────────
+  //
+  // RETARGETED, and the reason is worth keeping. This used to mutate `pct` and
+  // count dashes: with rows lacking a comparator now dropped, and Q4 EPS
+  // intercepted by its own "not filed" branch, NO null reaches pct on any
+  // committed fixture — so the old mutation passed by mutating a path nothing
+  // travels. The guarantee moved to CellValue, so the mutation follows it.
+  //
+  // "$0" for an unfiled figure is the specific lie this guards: a zero is a
+  // claim the company filed nil, and it is the same failure as the retired
+  // "EPS surprise: 0.00", which read as "came in exactly in line".
+  const coalesceCell = (src) =>
     src.replace(
-      'v == null || !Number.isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`',
-      '!Number.isFinite(v ?? 0) ? "—" : `${(v ?? 0) >= 0 ? "+" : ""}${(v ?? 0).toFixed(digits)}%`'
-    )
-  );
-  const dashesNow = (visibleText(renderAll(M, vAapl, "AAPL")).match(/—/g) ?? []).length;
-  const dashesMutated = (b.text.match(/—/g) ?? []).length;
-  check("(b) a null coalesced to 0 is caught",
-    dashesMutated < dashesNow && /\+0\.0%/.test(b.text),
-    `${dashesNow} dashes become ${dashesMutated}; "+0.0%" now appears where a figure was absent`);
+      "  if (cell.val == null) {\n    return <span style={{ color: \"#94a3b8\", fontWeight: 600 }}>{NOT_REPORTED}</span>;\n  }",
+      ""
+    ).replace(
+      "? money(cell.val, compact && !cell.perShare, cell.perShare)",
+      "? money(cell.val ?? 0, compact && !cell.perShare, cell.perShare)"
+    );
+  check("the absent-figure mutation actually applied", coalesceCell(cardsSrc) !== cardsSrc);
+  const bMod = await loadCards(coalesceCell);
+  const bText = visibleText(renderPage(bMod, bMod.buildSecEarningsView(AAPL)));
+  const absentNow = (visibleText(renderPage(M, vAapl)).match(/Not reported/g) ?? []).length;
+  const absentMutated = (bText.match(/Not reported/g) ?? []).length;
+  // FEWER, NOT ZERO. DerivedValue is a second mechanism with its own null
+  // branch and this mutation does not touch it, so the three cells it owns
+  // still read "Not reported" — asserting zero would be asserting that one
+  // mutation breaks two independent guards, which is not true and would make
+  // the check fail for a correct reason.
+  check("(b) an unfiled figure given a value is caught",
+    absentNow > 0 && absentMutated < absentNow && /\$0\b/.test(bText),
+    `${absentNow} cells read "Not reported" -> ${absentMutated} (the rest are DerivedValue's, untouched); ` +
+      `"$0" now stands where the filer published nothing`);
 
   // ── (d) THE BASIS IS FORCED BACK TO "quarter" ───────────────────────────
   //
@@ -504,11 +747,15 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // matters, not that the nouns follow it. Forcing the PUBLISHED field leaves
   // the annual data in place and lies to the cards about what kind of period it
   // is, which is precisely the state the page shipped in.
+  // FORCES BOTH PUBLISHED FIELDS, which is what this mutation meant before the
+  // anchor split: one field used to decide both the wording and whether the
+  // quarterly tables render, and this reproduces that state exactly.
   const forceQuarter = (src) =>
     src.replace(
       "  return {\n    symbol: set.symbol,",
       '  const forcedBasis: PeriodBasis = "quarter";\n  return {\n    symbol: set.symbol,'
-    ).replace("\n    basis,\n", "\n    basis: forcedBasis,\n");
+    ).replace("\n    basis,\n", "\n    basis: forcedBasis,\n")
+      .replace("\n    tableBasis,\n", "\n    tableBasis: forcedBasis,\n");
   check("the force-quarter mutation actually applied", forceQuarter(cardsSrc) !== cardsSrc);
   const dMod = await loadCards(forceQuarter);
   const dView = dMod.buildSecEarningsView(KGC);
@@ -529,13 +776,13 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // renderer — they are what the unguarded arithmetic produces from the filed
   // EPS figures.
   const dropNmGuard = (src) =>
-    src.replace(
-      "  if (then <= 0 || now < 0) return NOT_MEANINGFUL;\n",
-      ""
-    ).replace(
-      "  return ((now - then) / then) * 100;",
-      "  if (then === 0) return null;\n  return ((now - then) / Math.abs(then)) * 100;"
-    );
+    src.replace('if (then < 0 && now >= 0) return "turned-profitable";', "")
+       .replace('if (then >= 0 && now < 0) return "swung-to-loss";', "")
+       .replace('if (then < 0 && now < 0) return "loss-both";', "")
+       .replace('if (then === 0) return now > 0 ? "turned-profitable" : null;',
+                "if (then === 0) return null;")
+       .replace("  return ((now - then) / then) * 100;",
+                "  return ((now - then) / Math.abs(then)) * 100;");
   check("the n/m-guard mutation actually applied", dropNmGuard(cardsSrc) !== cardsSrc);
   const eMod = await loadCards(dropNmGuard);
   const eView = eMod.buildSecEarningsView(KGC);
@@ -544,7 +791,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     /-376\.5%/.test(eText) && /\+172\.3%/.test(eText),
     "the same swing rendered once as a collapse and once as a boom — both from a negative base");
   check("...and the legend disappears with them, so it cannot be a standing decoration",
-    !/not meaningful/i.test(eText),
+    !/crosses between profit and loss/.test(eText),
     "the note is conditional on a marker actually being present");
 
   // ── (f) THE THIN-ROW FILTER IS REMOVED ──────────────────────────────────
@@ -554,8 +801,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // found.
   const dropRowFilter = (src) =>
     src.replace(
-      "const rows = measured.filter(hasSomething).slice(0, RENDERED_QUARTERS);",
-      "const rows = measured.slice(0, RENDERED_QUARTERS);"
+      "const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);",
+      "const rows = measured.filter(hasComparator).slice(0, renderLimit);"
     );
   check("the thin-row mutation actually applied", dropRowFilter(cardsSrc) !== cardsSrc);
   const fMod = await loadCards(dropRowFilter);
@@ -568,6 +815,167 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     fThin.length === 3 &&
       fThin.map((m) => m.label).sort().join(" ") === "Q1 FY2021 Q3 FY2020 Q4 FY2020",
     `${fThin.length} rows return with one filled cell — ${fThin.map((m) => m.label).join(" ")}`);
+
+  // ── (g) THE PER-SHARE PRECISION IS REVERTED ─────────────────────────────
+  const revertMoney = (src) =>
+    src.replace(
+      `const digits = perShare
+    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    : { maximumFractionDigits: 2 };`,
+      "const digits = { maximumFractionDigits: 2 };"
+    );
+  check("the money-format mutation actually applied", revertMoney(cardsSrc) !== cardsSrc);
+  const gMod = await loadCards(revertMoney);
+  const gText = [AAPL, AZN, KGC]
+    .map((f) => visibleText(renderPage(gMod, gMod.buildSecEarningsView(f)))).join(" ");
+  const gStrays = [...new Set([...gText.matchAll(/\$-?\d+\.\d(?![\dBM])/g)].map((m) => m[0]))];
+  check("(g) MUTATION: without the per-share rule, one-decimal money comes back",
+    gStrays.length > 0,
+    `${gStrays.length} distinct: ${gStrays.slice(0, 6).join(" ")}`);
+
+  // ── (h) THE YEAR WINDOW IS NARROWED BACK TO FIVE ────────────────────────
+  //
+  // Mutating the DATA rather than the code, because that is what a set written
+  // before the change actually looks like: five years stored, five rendered,
+  // nothing for the oldest to reach.
+  const fiveYearSet = { ...TSLA, years: TSLA.years.slice(0, 5) };
+  const hView = M.buildSecEarningsView(fiveYearSet);
+  check("(h) MUTATION: five years stored renders one row FEWER, not one row blank",
+    hView.annual.length === vTsla.annual.length - 1 &&
+      hView.annual.every((r) => r.comparedWith !== null),
+    `${vTsla.annual.length} rows at y=6 -> ${hView.annual.length} at y=5, all compared — ` +
+      `the year that cannot be compared is a base, not a row`);
+
+  // AND IT READS "not on file", NOT A NEIGHBOUR. Widening the window must not
+  // teach the card to reach for the nearest row when the right one is absent:
+  // a genuinely missing FY-1 is still a blank.
+  // ON THE CELL, NOT ON TEXT DISTANCE. The first version of this asserted that
+  // the oldest row's label was not followed by the NEXT row's label within the
+  // visible text — which is meaningless, because visibleText runs the whole
+  // table together with no row separator, so the pattern matched every time and
+  // the assertion was testing nothing. The claim is about ONE CELL, so it is
+  // read out of the markup by the data-label the card gives it.
+  const hMarkup = html(React.createElement(M.SecAnnualCard, { view: hView, sole: false }));
+  const comparedCells = [...hMarkup.matchAll(/data-label="Compared with"[^>]*>([\s\S]*?)<\/td>/g)]
+    .map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+  // DROPPING A ROW MUST NOT RE-BASE THE NEXT ONE. The risk in removing rows is
+  // that the survivors quietly shift onto whatever is now below them; every
+  // remaining row still names its OWN fiscal year minus one.
+  check("...and no surviving row is re-based onto a neighbour",
+    comparedCells.length === hView.annual.length &&
+      hView.annual.every((r, i) =>
+        comparedCells[i] === r.comparedWith &&
+        Number(String(r.label).slice(2)) - 1 === Number(String(r.comparedWith).slice(2))),
+    `compared-with column: ${comparedCells.join(" | ")} — a wrong base is worse than a blank, because a blank cannot be quoted`);
+
+  // ── (i) THE CAPEX CHAIN GAP, REPRODUCED IN THE DATA ─────────────────────
+  //
+  // MUTATING THE DATA, NOT THE SOURCE, and for the same reason as (h): the
+  // chain runs in the EXTRACTOR, and a fixture is already extracted, so there
+  // is no source edit that can un-resolve a value already stored. What a set
+  // written before the chain gained its second entry actually looks like is
+  // this — every capex cell null, everything else untouched — so that is what
+  // is built, from the real GEV fixture rather than a hand-made one.
+  //
+  // WITHOUT THIS, §14 IS DECORATIVE. It asserts the card does NOT say
+  // "capital expenditure not reported"; that is only a claim if the card is
+  // known to say it when capex is absent.
+  const CAPEX_INDEX = M.SEC_FIELD_KEYS.indexOf("capex");
+  check("the capex field index was found, so the mutation can reach the cell",
+    CAPEX_INDEX >= 0, `capex is field ${CAPEX_INDEX} of ${M.SEC_FIELD_KEYS.length}`);
+  const blankCapex = (p) => ({
+    ...p,
+    v: p.v.map((val, i) => (i === CAPEX_INDEX ? null : val)),
+    d: p.d.slice(0, CAPEX_INDEX) + "-" + p.d.slice(CAPEX_INDEX + 1),
+  });
+  const iSet = {
+    ...GEV,
+    quarters: GEV.quarters.map(blankCapex),
+    years: GEV.years.map(blankCapex),
+  };
+  check("the capex mutation actually applied",
+    vGev.cashQuality.capex.val !== null &&
+      M.buildSecEarningsView(iSet).cashQuality.capex.val === null,
+    `GEV capex ${vGev.cashQuality.capex.val} -> null`);
+  const iView = M.buildSecEarningsView(iSet);
+  const iText = visibleText(renderPage(M, iView));
+  check("(i) MUTATION: with capex gone, the card names it as the input that stopped FCF",
+    iView.cashQuality.freeCashFlow === null &&
+      iView.cashQuality.freeCashFlowMissing === "capital expenditure" &&
+      /capital expenditure not reported/i.test(iText),
+    `freeCashFlowMissing=${iView.cashQuality.freeCashFlowMissing} — the exact state GEV was in`);
+
+  // AND IT DOES NOT SILENTLY SUBSTITUTE. The risk in a fallback chain is that
+  // a missing figure reaches for the nearest available one; operating cash
+  // flow is untouched by the mutation and free cash flow still refuses.
+  check("...and operating cash flow is unaffected, so FCF refused rather than guessed",
+    iView.cashQuality.operatingCashFlow.val === vGev.cashQuality.operatingCashFlow.val,
+    `ocf ${iView.cashQuality.operatingCashFlow.val} on both sides of the mutation`);
+
+  // ── (j) "ALWAYS PREFER QUARTERS" — the rule that shipped the stale snapshot ─
+  const preferQuarters = (src) =>
+    src.replace(
+      "    !!newestYear && (!newestQuarter || newestYear.e > newestQuarter.e);",
+      "    !!newestYear && !newestQuarter;"
+    );
+  check("the prefer-quarters mutation actually applied", preferQuarters(cardsSrc) !== cardsSrc);
+  const jMod = await loadCards(preferQuarters);
+  const jView = jMod.buildSecEarningsView(AZN);
+  const jSnap = visibleText(html(React.createElement(jMod.SecSnapshotCard, { view: jView })));
+  check("(j) MUTATION: preferring quarters puts AZN's stale snapshot back",
+    jView.basis === "quarter" && jView.latestLabel === "Q2 FY2025" &&
+      jView.latestEnd === "2025-06-30" &&
+      /Most recent quarter filed: Q2 FY2025/.test(jSnap),
+    `snapshot returns to ${jView.latestLabel} ended ${jView.latestEnd}, six months older than the FY2025 the store holds`);
+  check("...and KGC is unaffected either way, because it has no quarters to prefer",
+    jMod.buildSecEarningsView(KGC).basis === "year",
+    "a mutation that also broke the annual-only filer would be testing something else");
+
+  // ── (k) THE STALENESS TEST IS REMOVED ───────────────────────────────────
+  const dropStaleTest = (src) =>
+    src.replace(
+      "    !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;",
+      "    !annualOnly;"
+    );
+  check("the staleness mutation actually applied", dropStaleTest(cardsSrc) !== cardsSrc);
+  const kMod = await loadCards(dropStaleTest);
+  const kView = kMod.buildSecEarningsView(STALE_AZN);
+  // ASSERTED ON THE RENDERED TABLE, NOT ON growth.every(). The first version of
+  // this read `kView.growth.every(...)` and PASSED VACUOUSLY: those three oldest
+  // quarters have no prior year stored, so the thin-row filter empties `growth`
+  // and `every` on an empty array is true. A check that cannot fail is not a
+  // check — the same class of defect this suite exists to catch, in the suite.
+  const kText = visibleText(renderPage(kMod, kView));
+  const kQuarterRows = (kText.match(/Q\d FY20(0|1|2)\d/g) ?? []);
+  check("(k) MUTATION: without the 548-day test, the decade-old table comes back",
+    kView.tableBasis === "quarter" && /Recent reported quarters/.test(kText) &&
+      kQuarterRows.length > 0,
+    `the table returns with ${kQuarterRows.length} quarter labels — ${[...new Set(kQuarterRows)].join(" ")} — under a FY2025 snapshot`);
+  check("...and AZN is unaffected, so the mutation is not simply turning everything quarterly",
+    kMod.buildSecEarningsView(AZN).tableBasis === "quarter" &&
+      kMod.buildSecEarningsView(KGC).tableBasis === "year",
+    "AZN kept its table either way; KGC has no quarters to restore");
+  // ...AND THE GROWTH & MARGINS CARD, which is the other half of the rule. The
+  // ruling is that a stale quarterly series drops the table AND the quarterly
+  // growth card; this mutation could only ever observe the table, because the
+  // harness gated that card on `basis` where the page gates it on `tableBasis`.
+  // Rendered through the same gate the page uses, so it cannot drift again.
+  const kGrowth = (kText.match(/Is growth accelerating/g) ?? []).length;
+  const baseGrowth = (visibleText(renderPage(M, M.buildSecEarningsView(STALE_AZN)))
+    .match(/Is growth accelerating/g) ?? []).length;
+  check("(k) ...and the quarterly GROWTH card comes back with it, not just the table",
+    kGrowth === 1 && baseGrowth === 0,
+    `growth & margins card: ${baseGrowth} unmutated -> ${kGrowth} mutated — the rule drops both, so the mutation must restore both`);
+
+  // THE HARNESS'S GATE IS THE PAGE'S GATE, read from page.tsx rather than
+  // agreed with. Both fields exist on the view, so a harness on the wrong one
+  // renders a plausible page and asserts about the wrong reader.
+  const pageSrc = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
+  const pageGate = (pageSrc.match(/\{secView\.(\w+) === "year" \? null : <SecGrowthMarginsCard/) ?? [])[1];
+  const soleGate = (pageSrc.match(/<SecAnnualCard view=\{secView\} sole=\{secView\.(\w+) === "year"\}/) ?? [])[1];
+  check("the harness gates the growth card on the same field page.tsx does",
+    pageGate === "tableBasis" && soleGate === "tableBasis",
+    `page.tsx gates on ${pageGate} / ${soleGate}; this harness gates on tableBasis`);
 
   // (c) THE CARD REVERTS TO PENDING — the permanent-pending failure.
   const c = await loadCards();

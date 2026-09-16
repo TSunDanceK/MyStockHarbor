@@ -70,7 +70,59 @@ const tick = await lift(
 );
 const { SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, extractCompanyFacts, checkIdentities,
         identityRates, secFieldsHash, encodeFactSet, cell, buildSecEarningsView,
+        isPct, CROSSING_WORDS,
         RETIRED_SOURCES } = sec;
+
+/**
+ * ── RUNNING THIS PROBE AS THE "BEFORE" OF A CHAIN EDIT ────────────────────
+ *
+ * REVERT_CHAINS=1 removes the concepts this branch ADDED to the field chains
+ * before anything is extracted, so the whole report — null rate per field,
+ * both canaries, the identities table — comes out as it would have on `main`.
+ *
+ * WHY NOT JUST DISPATCH THE RELAY AT ref=main. That was the first attempt and
+ * it is the wrong instrument twice over. It compares two runs of DIFFERENT
+ * CODE, so any difference is the chains plus whatever else moved between the
+ * refs; and it could not run at all, because this probe crashes on `main` (see
+ * the `pct` helper below). One code path, run twice, with the only difference
+ * named here.
+ *
+ * THE TABLE IS ASSERTED AGAINST THE SHIPPED CHAINS, not trusted. A stale entry
+ * would silently make BEFORE and AFTER identical and report "nothing changed"
+ * — the most confident possible wrong answer. If a concept named here is not
+ * in the chain it claims to be in, this exits rather than measuring.
+ */
+const CHAIN_EDITS = [
+  { field: "capex", added: ["PaymentsToAcquireProductiveAssets"] },
+  { field: "shortTermInvestments", added: ["DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLossCurrent"] },
+];
+const REVERT = process.env.REVERT_CHAINS === "1";
+{
+  const missing = [];
+  for (const { field, added } of CHAIN_EDITS) {
+    const def = SEC_FIELDS.find((f) => f.key === field);
+    if (!def) { missing.push(`${field} (no such field)`); continue; }
+    for (const tag of added) if (!def.chain.includes(tag)) missing.push(`${field}:${tag}`);
+  }
+  if (missing.length) {
+    console.error(
+      `FATAL: CHAIN_EDITS is stale — ${missing.join(", ")} not in the shipped chain. ` +
+        `A stale table makes BEFORE and AFTER identical and reports "nothing changed", ` +
+        `which is the most confident possible wrong answer.`
+    );
+    process.exit(2);
+  }
+  if (REVERT) {
+    for (const { field, added } of CHAIN_EDITS) {
+      const def = SEC_FIELDS.find((f) => f.key === field);
+      const kept = def.chain.filter((t) => !added.includes(t));
+      def.chain.length = 0;
+      def.chain.push(...kept);
+    }
+    console.log(`*** REVERT_CHAINS=1 — this run is the BEFORE: ${CHAIN_EDITS.map((e) => `${e.field} -${e.added.join("/")}`).join(", ")} ***`);
+    console.log(`*** chains now: ${CHAIN_EDITS.map((e) => `${e.field}=[${SEC_FIELDS.find((f) => f.key === e.field).chain.join(", ")}]`).join("  ")} ***\n`);
+  }
+}
 
 // A PRE-NETWORK SMOKE TEST, AND IT CALLS THE FUNCTIONS RATHER THAN TYPEOF-ING
 // THEM. A missing transitive callee is present as a symbol and absent only when
@@ -319,8 +371,29 @@ for (const symbol of SYMBOLS) {
     const v = pageView;
     const m = (n) => (n === null || n === undefined ? "—" : Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : String(Number(n.toFixed(4))));
     const d = (c) => (c?.derived && c.derived !== "as-filed" ? `[${c.derived}]` : "");
+    /**
+     * A PERCENTAGE CHANGE IS NOT ALWAYS A NUMBER, and this probe crashed on it.
+     *
+     * `Pct` is `number | PctCrossing | null`: when a comparison crosses zero
+     * the view returns "turned-profitable" / "swung-to-loss" / "loss-both",
+     * because a percentage change from a loss is not a percentage of anything.
+     * The probe called `.toFixed(1)` on it, and ASTS — a loss-making filer and
+     * one of this probe's five FIXED symbols — made that throw:
+     *
+     *   TypeError: v.snapshot.epsYoY?.toFixed is not a function
+     *
+     * So `sec-extract` had been crashing for every run since the crossing
+     * strings landed, taking the canaries and the identities table with it.
+     * The optional chain hid it in review: `?.` guards null, not "the wrong
+     * kind of thing", and the line reads as safe.
+     *
+     * Formatted through the view's OWN helpers rather than a local guess, so a
+     * new crossing kind cannot silently render as "[object Object]".
+     */
+    const pct = (v) =>
+      v === null || v === undefined ? "—" : isPct(v) ? `${v.toFixed(1)}%` : CROSSING_WORDS[v] ?? String(v);
     console.log(`    ${v.entityName} — ${v.latestLabel}, period ending ${v.latestEnd}, filed ${v.latestFiled} (${v.latestAccession})`);
-    console.log(`    snapshot   revenue ${m(v.snapshot.revenue.val)}${d(v.snapshot.revenue)}  YoY ${v.snapshot.revenueYoY?.toFixed(1) ?? "—"}%  |  EPS ${m(v.snapshot.epsDiluted.val)}${d(v.snapshot.epsDiluted)}  YoY ${v.snapshot.epsYoY?.toFixed(1) ?? "—"}%  vs ${v.snapshot.comparedWith}`);
+    console.log(`    snapshot   revenue ${m(v.snapshot.revenue.val)}${d(v.snapshot.revenue)}  YoY ${pct(v.snapshot.revenueYoY)}  |  EPS ${m(v.snapshot.epsDiluted.val)}${d(v.snapshot.epsDiluted)}  YoY ${pct(v.snapshot.epsYoY)}  vs ${v.snapshot.comparedWith}`);
     console.log(`    cash       OCF ${m(v.cashQuality.operatingCashFlow.val)}${d(v.cashQuality.operatingCashFlow)}  capex ${m(v.cashQuality.capex.val)}${d(v.cashQuality.capex)}  FCF ${m(v.cashQuality.freeCashFlow)}${v.cashQuality.freeCashFlowDerived ? "[derived]" : ""}  accruals ${m(v.cashQuality.accruals)}`);
     console.log(`    balance    asOf ${v.balance?.asOf}  cash ${m(v.balance?.cash.val)}  debt ${m(v.balance?.totalDebt)}  net ${m(v.balance?.netCash)}  current ${v.balance?.currentRatio?.toFixed(2) ?? "—"}  A ${m(v.balance?.totalAssets.val)}  L ${m(v.balance?.totalLiabilities.val)}  E ${m(v.balance?.stockholdersEquity.val)}`);
     console.log(`    P&L waterfall complete: ${v.incomeStatementComplete}`);
