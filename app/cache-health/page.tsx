@@ -746,21 +746,43 @@ export default async function CacheHealthPage({
                 </p>
               );
             }
+            // ── AN ABSENT FIELD IS "not recorded", NEVER 0 ──────────────────
+            //
+            // `?? 0` renders a field the cron never wrote as a confident zero,
+            // and it is the exact case that reached the owner: the panel showed
+            // "Pages revalidated 0 of 434" for a run that PREDATED the
+            // counter — a number that was never measured, presented as a
+            // measurement, and read as the cron flushing nothing.
+            //
+            // `hasOwnProperty`, not a truthiness test: a genuine 0 is a real
+            // reading and must still render as 0.
+            const has = (k: string) => Object.prototype.hasOwnProperty.call(run.summary, k);
             const n = (k: string) => Number(run.summary[k] ?? 0);
+            /** Every field must be present, or the whole row is unmeasured. */
+            const row = (keys: string[], render: () => string) =>
+              keys.every(has) ? render() : "not recorded";
             const rows: [string, string][] = [
-              ["Sets written / unchanged / failed", `${n("written")} / ${n("unchanged")} / ${n("failed")}`],
+              ["Sets written / unchanged / failed",
+                row(["written", "unchanged", "failed"],
+                  () => `${n("written")} / ${n("unchanged")} / ${n("failed")}`)],
               // CHANGED-ONLY, and the count is the proof. The cron revalidates
               // the earnings path for a symbol whose content hash MOVED, not
               // for all ~475 it touched — so this number should track "written"
               // and never "attempted".
-              ["Pages revalidated", `${n("revalidated")} of ${n("attempted")} attempted`],
+              ["Pages revalidated",
+                row(["revalidated", "attempted"],
+                  () => `${n("revalidated")} of ${n("attempted")} attempted`)],
               ["Queues taken (reverify / populate / rewindow)",
-                `${n("reverifyTaken")} / ${n("populateTaken")} / ${n("rewindowTaken")}`],
+                row(["reverifyTaken", "populateTaken", "rewindowTaken"],
+                  () => `${n("reverifyTaken")} / ${n("populateTaken")} / ${n("rewindowTaken")}`)],
               ["Backlogs (reverify / populate / rewindow)",
-                `${n("reverifyBacklog")} / ${n("populateBacklog")} / ${n("rewindowBacklog")}`],
-              ["Cold queue taken / cleared", `${n("coldTaken")} / ${n("coldCleared")}`],
+                row(["reverifyBacklog", "populateBacklog", "rewindowBacklog"],
+                  () => `${n("reverifyBacklog")} / ${n("populateBacklog")} / ${n("rewindowBacklog")}`)],
+              ["Cold queue taken / cleared",
+                row(["coldTaken", "coldCleared"], () => `${n("coldTaken")} / ${n("coldCleared")}`)],
               ["CIKs seen / filled / created / conflicts",
-                `${n("coldCikSeen")} / ${n("coldCikFilled")} / ${n("coldCikCreated")} / ${n("coldCikConflicts")}`],
+                row(["coldCikSeen", "coldCikFilled", "coldCikCreated", "coldCikConflicts"],
+                  () => `${n("coldCikSeen")} / ${n("coldCikFilled")} / ${n("coldCikCreated")} / ${n("coldCikConflicts")}`)],
             ];
             return (
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14 }}>
@@ -780,7 +802,9 @@ export default async function CacheHealthPage({
                   {rows.map(([k, v]) => (
                     <tr key={k}>
                       <td style={{ ...cell, color: "#94a3b8" }}>{k}</td>
-                      <td style={cell}>{v}</td>
+                      {/* Greyed, so an unmeasured row cannot be skim-read as a
+                          figure sitting beside real ones. */}
+                      <td style={{ ...cell, color: v === "not recorded" ? "#64748b" : undefined }}>{v}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -388,6 +388,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // WHY THE POPULATE BACKLOG MOVED AND HOW LONG REWINDOW TAKES, simulated with
+  // the shipped populationQueues rather than divided. Credentialled, read-only.
+  "write-queue-projection": {
+    script: "scripts/sec-queue-projection.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
