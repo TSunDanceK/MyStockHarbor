@@ -130,6 +130,20 @@ export const SEC_POPULATE_PER_RUN = 300;
  */
 export const SEC_REWINDOW_PER_RUN = 25;
 
+/**
+ * THE POPULATE BACKLOG ABOVE WHICH REWINDOW STOPS BORROWING SLACK.
+ *
+ * Below this, rewindow may take whatever reverify and populate leave unused in
+ * the same run (see populationQueues). Above it, populate is under real
+ * pressure — a page reading "not loaded yet" is worse than a page reading a
+ * figure from an older window — and rewindow drops back to its guaranteed floor.
+ *
+ * 400 is a ceiling on the BACKLOG, not on the slice. populate takes 300/run, so
+ * a backlog under 400 clears in two runs; above it, the queue is growing faster
+ * than one run drains and the slack is not spare.
+ */
+export const SEC_POPULATE_SLACK_CEILING = 400;
+
 /** SEC asks for at most 10 requests a second with a declared User-Agent. */
 const MIN_GAP_MS = 125;
 
@@ -248,7 +262,12 @@ export function populationQueues(
     reverify: SEC_REVERIFY_PER_RUN,
     populate: SEC_POPULATE_PER_RUN,
     rewindow: SEC_REWINDOW_PER_RUN,
-  }
+  },
+  /**
+   * The backlog above which rewindow stops borrowing. A parameter so the check
+   * can drive both sides of the boundary without editing the constant.
+   */
+  slackCeiling = SEC_POPULATE_SLACK_CEILING
 ) {
   const entries = Object.entries(manifest.symbols).filter(([, e]) => e.cik);
 
@@ -280,10 +299,49 @@ export function populationQueues(
     .map(([s]) => s)
     .sort();
 
+  // ── REWINDOW BORROWS WHAT THE OTHER TWO QUEUES DO NOT USE ────────────────
+  //
+  // THE PROBLEM THIS SOLVES, MEASURED. A chain edit makes the whole populated
+  // universe eligible at once — `oneConceptPerFiler` did exactly that, and the
+  // census on 01ea371a read 431 SYMBOLS eligible against 25/run: EIGHTEEN DAYS.
+  // For eighteen days the store would serve capex resolved under the old rule
+  // while the code that replaced it sat in production. That is not a migration,
+  // it is a standing discrepancy.
+  //
+  // AND THE SLACK IS REAL RATHER THAN THEORETICAL. reverify is driven by what
+  // actually filed: its allowance is 150 and it took ONE. populate is capped at
+  // 300 against a backlog of 323. So 149 of 525 per-run fetches went unspent
+  // while the queue that needed them was throttled to 25.
+  //
+  // THE TOTAL DOES NOT MOVE. rewindow's ceiling is its floor plus exactly what
+  // the other two left, so cold + reverify + populate + rewindow still sums to
+  // at most the same 525 it did before — no extra wire, no extra wall time, and
+  // nothing new to check against SEC's rate limit. This is reallocation, not
+  // an increase, and that is the whole reason it needs no new measurement.
+  //
+  // THE FLOOR IS STILL GUARANTEED. `Math.max` with limits.rewindow, so the
+  // borrowing can only ever add. The original design note stands: ordering
+  // rewindow last would mean zero re-reads on any day populate is full, which
+  // is exactly earnings season.
+  //
+  // AND IT STOPS WHEN POPULATE IS UNDER PRESSURE. Above the ceiling the backlog
+  // is growing faster than one run drains it, so the unused reverify slice is
+  // not spare — a symbol showing "not loaded yet" outranks one showing a figure
+  // read under an older policy.
+  const reverifyTaken = Math.min(reverify.length, limits.reverify);
+  const populateTaken = Math.min(populate.length, limits.populate);
+  const slack =
+    populate.length < slackCeiling
+      ? limits.reverify - reverifyTaken + (limits.populate - populateTaken)
+      : 0;
+  const rewindowLimit = Math.max(limits.rewindow, limits.rewindow + slack);
+
   return {
     reverify: reverify.slice(0, limits.reverify),
     populate: populate.slice(0, limits.populate),
-    rewindow: rewindow.slice(0, limits.rewindow),
+    rewindow: rewindow.slice(0, rewindowLimit),
+    /** What rewindow was actually allowed this run, floor plus borrowed slack. */
+    rewindowLimit,
     // The BACKLOG, not just what this run took. A drain that never shortens is
     // invisible from a per-run count alone, and this is the number that says
     // whether the standing path is keeping up.

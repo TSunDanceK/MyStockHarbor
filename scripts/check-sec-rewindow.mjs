@@ -96,6 +96,11 @@ const loadRewindow = async (mutate = (s) => s, mutateStale = (s) => s) => {
       `const SEC_REVERIFY_PER_RUN = ${allowance("SEC_REVERIFY_PER_RUN")};`,
       `const SEC_POPULATE_PER_RUN = ${allowance("SEC_POPULATE_PER_RUN")};`,
       `const SEC_REWINDOW_PER_RUN = ${allowance("SEC_REWINDOW_PER_RUN")};`,
+      // READ FROM THE ROUTE like the others. Omitting it is not a silent
+      // default: populationQueues names it in a default parameter, so a lift
+      // without it throws ReferenceError the moment the function is called —
+      // which is how this was caught rather than passing with a wrong ceiling.
+      `const SEC_POPULATE_SLACK_CEILING = ${allowance("SEC_POPULATE_SLACK_CEILING")};`,
       needs.replace("export function", "function"),
       restated.replace("export function", "function"),
       queues.replace("export function", "function"),
@@ -243,6 +248,126 @@ check(
   q.reverify.includes("STALE") && !q.rewindow.includes("STALE")
 );
 
+// ── REWINDOW BORROWS UNUSED SLACK, AND ONLY WHILE POPULATE IS QUIET ───────
+//
+// A chain edit makes the whole populated universe eligible at once. Measured on
+// 01ea371a: 431 SYMBOLS eligible against a 25/run floor is EIGHTEEN DAYS of the
+// store serving values the shipped code would not write. Meanwhile reverify's
+// allowance of 150 was taking ONE.
+//
+// BUILT FROM A GENERATED MANIFEST, not the seven-symbol one above: this is a
+// question about ARITHMETIC OVER QUEUE LENGTHS, and seven entries cannot
+// exercise a 150-slot allowance. The counts below are the input, and the limit
+// the function returns is the claim — no fixture supplies the expected number.
+const bulk = (n, make) =>
+  Object.fromEntries(Array.from({ length: n }, (_, i) => make(i)));
+const bulkManifest = (opts) => ({
+  symbols: {
+    ...bulk(opts.reverify, (i) => [`RV${i}`, {
+      cik: String(900000 + i).padStart(10, "0"), contentHash: "h",
+      needsReverify: true, enqueuedAt: i,
+    }]),
+    ...bulk(opts.populate, (i) => [`PP${i}`, {
+      cik: String(800000 + i).padStart(10, "0"), contentHash: null, needsReverify: false,
+    }]),
+    ...bulk(opts.rewindow, (i) => [`RW${i}`, {
+      cik: String(700000 + i).padStart(10, "0"), contentHash: "h", needsReverify: false,
+    }]),
+  },
+});
+const LIM = {
+  reverify: Number((ROUTE.match(/SEC_REVERIFY_PER_RUN = (\d+)/) ?? [])[1]),
+  populate: Number((ROUTE.match(/SEC_POPULATE_PER_RUN = (\d+)/) ?? [])[1]),
+  rewindow: Number((ROUTE.match(/SEC_REWINDOW_PER_RUN = (\d+)/) ?? [])[1]),
+};
+const CEILING = Number((ROUTE.match(/SEC_POPULATE_SLACK_CEILING = (\d+)/) ?? [])[1]);
+check("the allowances and the slack ceiling are read from the route, not retyped",
+  LIM.reverify > 0 && LIM.populate > 0 && LIM.rewindow > 0 && CEILING > 0,
+  `reverify ${LIM.reverify}, populate ${LIM.populate}, rewindow ${LIM.rewindow}, ceiling ${CEILING}`);
+
+// THE LIVE SHAPE, from the census on 01ea371a: reverify 1, populate 323,
+// rewindow 431.
+{
+  const live = M.populationQueues(bulkManifest({ reverify: 1, populate: 323, rewindow: 431 }));
+  const expectedSlack = LIM.reverify - 1 + (LIM.populate - Math.min(323, LIM.populate));
+  check("rewindow borrows exactly what the other two queues left unused",
+    live.rewindowLimit === LIM.rewindow + expectedSlack,
+    `rewindow limit ${live.rewindowLimit} = floor ${LIM.rewindow} + slack ${expectedSlack} ` +
+      `(reverify took 1 of ${LIM.reverify}, populate took ${Math.min(323, LIM.populate)} of ${LIM.populate})`);
+  check("...so the drain is days rather than weeks",
+    Math.ceil(431 / live.rewindowLimit) <= 3,
+    `431 SYMBOLS at ${live.rewindowLimit}/run -> ${Math.ceil(431 / live.rewindowLimit)} days, ` +
+      `against ${Math.ceil(431 / LIM.rewindow)} at the floor alone`);
+  // THE PROPERTY THAT MAKES THIS NEED NO NEW BUDGET MEASUREMENT.
+  const total = live.reverify.length + live.populate.length + live.rewindow.length;
+  check("the three queues together still fit the allowance they had before",
+    total <= LIM.reverify + LIM.populate + LIM.rewindow,
+    `${live.reverify.length} + ${live.populate.length} + ${live.rewindow.length} = ${total} ` +
+      `against ${LIM.reverify + LIM.populate + LIM.rewindow} — reallocation, not an increase`);
+}
+
+// THE CEILING, DRIVEN FROM BOTH SIDES. One below and one above, so the
+// assertion is about the boundary rather than about one arbitrary backlog.
+{
+  const under = M.populationQueues(bulkManifest({ reverify: 0, populate: CEILING - 1, rewindow: 500 }));
+  const over = M.populationQueues(bulkManifest({ reverify: 0, populate: CEILING, rewindow: 500 }));
+  check(`below the ceiling (${CEILING - 1} in populate) rewindow still borrows`,
+    under.rewindowLimit > LIM.rewindow,
+    `limit ${under.rewindowLimit}`);
+  check(`at the ceiling (${CEILING} in populate) it drops back to the guaranteed floor`,
+    over.rewindowLimit === LIM.rewindow && over.rewindow.length === LIM.rewindow,
+    `limit ${over.rewindowLimit}, took ${over.rewindow.length} — a page reading "not loaded yet" ` +
+      `outranks one reading a figure from an older policy`);
+}
+
+// AND THE FLOOR IS A FLOOR: populate full, reverify full, nothing to lend.
+{
+  // BOTH QUEUES ACTUALLY FULL. The first version of this used populate: 10 and
+  // called it "full" — populate then took 10 of 300, lent 290, and rewindow's
+  // limit came out 315. The assertion failed and was right to: the fixture did
+  // not build the state its own name described.
+  const FULL = { reverify: LIM.reverify, populate: LIM.populate, rewindow: 500 };
+  const busy = M.populationQueues(bulkManifest(FULL));
+  check("with both queues full there is no slack, and rewindow still gets its floor",
+    busy.rewindowLimit === LIM.rewindow && busy.rewindow.length === LIM.rewindow,
+    `reverify ${busy.reverify.length}/${LIM.reverify}, populate ${busy.populate.length}/${LIM.populate} ` +
+      `-> rewindow limit ${busy.rewindowLimit} — borrowing can only ever ADD, never take the floor away`);
+}
+
+{
+  // MUTATION: the slack added WITHOUT the floor, so a full run starves rewindow
+  // to nothing — the "ordered last" design the original note rejected.
+  // THE ROUTE IS loadRewindow's FIRST ARGUMENT. Passing these as the second
+  // mutates secStaleness instead, which contains neither string — so both
+  // mutations silently no-opped and their "actually applied" guards caught it.
+  // That guard is the only reason this was not reported as a passing check.
+  const FULL = { reverify: LIM.reverify, populate: LIM.populate, rewindow: 500 };
+  const noFloor = await loadRewindow((src) =>
+    src.replace(
+      "const rewindowLimit = Math.max(limits.rewindow, limits.rewindow + slack);",
+      "const rewindowLimit = slack;"
+    ));
+  check("the no-floor mutation actually applied",
+    noFloor.populationQueues(bulkManifest(FULL)).rewindowLimit !== LIM.rewindow);
+  check("MUTATION: without the floor, a busy run re-reads NOTHING",
+    noFloor.populationQueues(bulkManifest(FULL)).rewindow.length === 0,
+    "which is exactly the starvation the guaranteed slice exists to prevent, and it is " +
+      "invisible from a total: the run still fetches its full allowance");
+
+  // MUTATION: the ceiling removed, so rewindow borrows while populate is
+  // drowning and readers keep seeing "not loaded yet".
+  const noCeiling = await loadRewindow((src) =>
+    src.replace("populate.length < slackCeiling", "true"));
+  const drowning = { reverify: 0, populate: CEILING * 3, rewindow: 500 };
+  check("the no-ceiling mutation actually applied",
+    noCeiling.populationQueues(bulkManifest(drowning)).rewindowLimit !== LIM.rewindow);
+  check("MUTATION: without the ceiling, rewindow borrows even with populate drowning",
+    noCeiling.populationQueues(bulkManifest(drowning)).rewindowLimit ===
+      LIM.rewindow + LIM.reverify,
+    `it takes reverify's whole unused slice at a ${CEILING * 3}-SYMBOL populate backlog, ` +
+      `where the shipped rule gives it ${M.populationQueues(bulkManifest(drowning)).rewindowLimit}`);
+}
+
 // THE MUTATION: read a missing field as "already current".
 const absentMeansCurrent = (src) =>
   src.replace("(e.w ?? 8) < SEC_QUARTER_WINDOW", "(e.w ?? SEC_QUARTER_WINDOW) < SEC_QUARTER_WINDOW")
@@ -281,10 +406,16 @@ check(
 );
 
 // THE MUTATION: give rewindow whatever is left of a shared per-run budget.
+// TARGETS `rewindowLimit`, WHICH IS WHERE THE SLICE READS ITS SIZE NOW. It
+// used to replace `limits.rewindow` at the slice; the slack change moved that
+// to a computed `rewindowLimit`, so the old string stopped matching and the
+// mutation silently no-opped. Its "actually applied" guard is what caught it —
+// without that guard this would have gone on reporting a pass for a mutation
+// that never ran.
 const shareTheBudget = (src) =>
   src.replace(
-    "rewindow: rewindow.slice(0, limits.rewindow),",
-    "rewindow: rewindow.slice(0, Math.max(0, limits.populate - populate.length)),"
+    "const rewindowLimit = Math.max(limits.rewindow, limits.rewindow + slack);",
+    "const rewindowLimit = Math.max(0, limits.populate - populate.length);"
   );
 const mutated3 = await loadRewindow(shareTheBudget);
 check("the shared-budget mutation actually applied", shareTheBudget(ROUTE) !== ROUTE);
