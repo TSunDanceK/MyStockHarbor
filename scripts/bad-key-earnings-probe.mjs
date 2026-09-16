@@ -92,8 +92,24 @@ if (build.status !== 0) {
 }
 console.log("  build OK\n");
 
-/** Start the server, wait for it to answer, run `fn`, always kill it. */
+/**
+ * Start the server, wait for it to answer, run `fn`, always kill it.
+ *
+ * ── THE ISR CACHE IS CLEARED FIRST, AND THAT IS THE WHOLE POINT ──────────
+ *
+ * /stock/[symbol]/earnings inherits `revalidate = 3600`. `next start` reads and
+ * writes that cache under .next/cache, and the directory SURVIVES a restart —
+ * so the second condition would be served the FIRST condition's HTML without
+ * rendering anything, and would pass while testing nothing.
+ *
+ * The first run of this probe returned 210409 bytes under both conditions.
+ * Identical sizes are what you would expect either way — both conditions make
+ * fetchFmpJson return null, so a genuine render produces the same page — which
+ * is precisely why byte-equality could not settle it and why the cache is now
+ * removed rather than reasoned about.
+ */
 async function withServer(label, env, fn) {
+  fs.rmSync(".next/cache", { recursive: true, force: true });
   const child = spawn("npx", ["next", "start", "-p", String(PORT)], {
     env: { ...process.env, ...env, NEXT_TELEMETRY_DISABLED: "1" },
     stdio: ["ignore", "pipe", "pipe"],
@@ -137,6 +153,13 @@ for (const cond of CONDITIONS) {
   await withServer(cond.label, cond.env, async (getLog) => {
     const res = await fetch(`http://127.0.0.1:${PORT}${PATHNAME}`, { redirect: "manual" });
     const body = await res.text();
+    // A MISS PROVES THIS CONDITION RENDERED. Next sets x-nextjs-cache on an
+    // ISR route; MISS means the HTML was produced by THIS server under THIS
+    // env, not read from a cache the previous condition warmed.
+    const cacheState = res.headers.get("x-nextjs-cache") ?? "(absent)";
+    check("the response was rendered, not served from the previous condition",
+      cacheState !== "HIT",
+      `x-nextjs-cache: ${cacheState}`);
     check("the page returns 200", res.status === 200,
       `HTTP ${res.status}${res.status !== 200 ? `\n${getLog().slice(-1500)}` : ""}`);
     check("...and it is not Next's error page",
