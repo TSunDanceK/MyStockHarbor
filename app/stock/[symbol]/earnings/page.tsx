@@ -26,7 +26,7 @@ import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDates } from "@/lib/server/secReportDatesStore";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
-import { TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
+import { NO_PRICE_HISTORY_NOTE, TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -74,6 +74,14 @@ type EarningsReactionPoint = {
   volumeMultiple: number | null;
   drift5Pct: number | null;
   drift20Pct: number | null;
+  /**
+   * WHY there are no figures, when there are none. Null means the figures are
+   * present, or absent for an ordinary reason the card already explains.
+   *
+   * "uncovered" is the one case worth naming: the price series does not reach
+   * back to this report. See NO_PRICE_HISTORY_NOTE.
+   */
+  reason: "uncovered" | null;
 };
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
@@ -126,8 +134,10 @@ function formatPercent(value: number | null | undefined, digits = 1) {
  */
 const REACTION_SESSION_GAP_DAYS = 7;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
-  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null; reason: "uncovered" | null } {
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, reason: null as "uncovered" | null };
+  /** The series does not reach this report — a fact about the bars, not the filing. */
+  const uncovered = { ...empty, reason: "uncovered" as const };
   if (!row.date || !points.length) return empty;
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
@@ -153,6 +163,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
     const gapDays =
       next === -1 ? Infinity : (Date.parse(dates[next]) - Date.parse(String(row.date))) / 86400000;
     idx = next !== -1 && gapDays <= REACTION_SESSION_GAP_DAYS ? next : -1;
+    if (idx === -1) return uncovered;
   }
   if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
@@ -165,7 +176,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   // A REPORT AT THE VERY EDGE OF THE SERIES HAS NO PRIOR CLOSE. This was
   // already the outcome — points[-1] is undefined and every figure fell to
   // null — but by accident rather than by decision, so it is stated.
-  if (baseIdx < 0) return empty;
+  if (baseIdx < 0) return uncovered;
 
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
@@ -196,7 +207,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
     if (typeof close20 === "number" && Number.isFinite(close20)) drift20Pct = ((close20 - base) / Math.abs(base)) * 100;
   }
 
-  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
+  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct, reason: null };
 }
 
 
@@ -1010,6 +1021,11 @@ export default async function StockEarningsPage({ params }: Props) {
     { name: "+20 trading days", color: "#22c55e", values: data.priceReactionQuarters.map((q) => q.drift20Pct) },
   ];
   const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
+  // NAMED, NOT COUNTED. The reader is looking at labelled bars; a count tells
+  // them a number is missing without telling them which.
+  const uncoveredLabels = data.priceReactionQuarters
+    .filter((q) => q.reason === "uncovered")
+    .map((q) => q.label);
   const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
 
   // Curated, deterministic set of OTHER stock symbols for the "Explore More
@@ -1366,6 +1382,18 @@ export default async function StockEarningsPage({ params }: Props) {
                         ? `Each bar is keyed to the date ${clean} filed its results with the SEC, and to the session that filing landed in: a filing after the close is measured against the next day's close.`
                         : `Each bar is keyed to an earnings-calendar date, not to ${clean}'s own filings — its filing history has not been read yet.`}
                     </p>
+                    {/* ── A MISSING BAR IS EXPLAINED, NOT LEFT TO INFERENCE ──
+                        A gap in this chart reads as "the market shrugged" or
+                        "they did not file". Neither is true: the price series
+                        simply starts later than the report. Naming the periods
+                        is the point — "some are missing" is not checkable by a
+                        reader looking at the chart. */}
+                    {uncoveredLabels.length > 0 && (
+                      <p className="earningsDataNote">
+                        <strong>{uncoveredLabels.join(", ")}</strong>{" "}
+                        {uncoveredLabels.length === 1 ? "has" : "have"} no bar above. {NO_PRICE_HISTORY_NOTE}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p>Not enough price history is available yet to chart the reaction around earnings.</p>
