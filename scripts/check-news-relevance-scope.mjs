@@ -60,7 +60,7 @@ for (const m of importLines) {
   const stub = names.map((n) => `const ${n} = (() => {});`).join(" ");
   src = src.replace(m[0], stub || "");
 }
-src += "\nexport { rankNews, isClearlyAboutRequestedCompany, articleMatchesRequestedSymbol, companyNameVariants, getCleanCompanyName, anchoredNameSignal };\n";
+src += "\nexport { rankNews, scoreNews, MARKET_NEWS_SCOPE, isClearlyAboutRequestedCompany, articleMatchesRequestedSymbol, companyNameVariants, getCleanCompanyName, anchoredNameSignal };\n";
 if (/^import /m.test(src)) {
   console.error("FAIL: an import survived stubbing:\n" +
     src.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
@@ -682,16 +682,95 @@ check(
   "a default argument is how the stock page acquired market scope by forgetting two of them"
 );
 check(
-  "the stock page asks for SYMBOL scope, naming both parts",
-  /rankNews\(news, \{ kind: "symbol", symbol: upper, companyName \}\)/.test(code),
+  "the stock page builds SYMBOL scope ONCE, naming both parts",
+  /const newsScope: NewsScope = \{ kind: "symbol", symbol: upper, companyName \}/.test(code),
   "the feed is about one company"
 );
 check(
-  "scoreNews asks for MARKET scope explicitly",
-  /rankNews\(news, MARKET_NEWS_SCOPE\)/.test(code),
-  "this is the second half of the divergence, deliberately unchanged and filed separately — " +
-    "the explicit argument is what stops it being invisible while it waits"
+  "...and hands that SAME object to the feed and to the score",
+  /rankNews\(news, newsScope\)/.test(code) && /scoreNews\(news, newsScope\)/.test(code),
+  "two separately-built scope objects would agree today and drift on the next edit; " +
+    "one binding cannot disagree with itself"
 );
+check(
+  "scoreNews takes a scope and passes the CALLER'S through",
+  /function scoreNews\(\s*news: NewsItem\[\],\s*scope: NewsScope/.test(code) &&
+    /const ranked = rankNews\(news, scope\)/.test(code),
+  "it used to pass MARKET_NEWS_SCOPE unconditionally, so a stock page scored over " +
+    "items the feed beside it had just rejected — the second half of the divergence"
+);
+check(
+  "...and scoreNews has NO default scope",
+  !/function scoreNews\([^)]*scope: NewsScope\s*=/.test(code),
+  "a default is how the first half of this bug happened; market scope must be asked for"
+);
+check(
+  "the SECTOR page still asks for market scope, which is legitimate there",
+  /scoreNews\(news, MARKET_NEWS_SCOPE\)/.test(read("lib/sector-news-data.ts")),
+  "a sector has no symbol to be about — the no-symbol path is the point of the type"
+);
+
+// ── THE BEFORE/AFTER, RUN RATHER THAN GREPPED ────────────────────────────
+// A structural match passes happily on a call that returns nothing, so the
+// property is asserted by RUNNING scoreNews over a pool that mixes the FAST
+// fixture with real headlines about other companies (captured from relay run
+// 199, not invented). Under symbol scope the foreign items must make NO
+// difference; under market scope they must make one. Either half failing alone
+// means the narrowing is a no-op or the fixture stopped mixing.
+const FOREIGN = [
+  { title: "Apple Stock Gets Stunning Price Target Hike on Strong iPhone Demand",
+    link: "https://x/f1", source: "finance.yahoo.com", pubDate: "2026-09-12T00:00:00Z", provider: "gnews" },
+  { title: "Coca-Cola (KO) Stock Looks Fairly Priced After Its 89% Run",
+    link: "https://x/f2", source: "simplywall.st", pubDate: "2026-09-11T00:00:00Z", provider: "gnews" },
+  { title: "Bank of America CEO Sparks Bank Stock Selloff With One Small Word",
+    link: "https://x/f3", source: "barrons.com", pubDate: "2026-09-10T00:00:00Z", provider: "gnews" },
+];
+const NOW = Date.parse("2026-09-13T00:00:00Z");
+const MIXED = [...FRESH, ...FOREIGN];
+
+check(
+  "the foreign headlines really are foreign — the fixture mixes something",
+  FOREIGN.every((item) => !mod.isClearlyAboutRequestedCompany(item, SYMBOL, NAME)),
+  "if these ever pass the relevance rule, both halves below pass for the wrong reason"
+);
+const symbolMixed = mod.scoreNews(MIXED, SYMBOL_SCOPE, NOW);
+const symbolClean = mod.scoreNews(FRESH, SYMBOL_SCOPE, NOW);
+const marketMixed = mod.scoreNews(MIXED, mod.MARKET_NEWS_SCOPE, NOW);
+const marketClean = mod.scoreNews(FRESH, mod.MARKET_NEWS_SCOPE, NOW);
+check(
+  "AFTER: under symbol scope the foreign items change NOTHING — not one field",
+  JSON.stringify(symbolMixed) === JSON.stringify(symbolClean),
+  "the whole result, not just the score: adding three headlines about other " +
+    "companies must be indistinguishable from not adding them"
+);
+// ── THE NUMBER THAT MOVED IS NOT THE SCORE ──────────────────────────────
+// Both come out 50 on this fixture, and asserting a score delta would have
+// been the wrong assertion: what market scope inflated is the EVIDENCE claim.
+// It reported "Medium" confidence from 5 headlines when only 2 of them were
+// about Fastenal at all -- a reading of other companies' news presented as
+// this company's tone. That is the user-visible defect, and it is the pair of
+// fields below rather than the number beside them.
+check(
+  "BEFORE: market scope counted the foreign headlines as evidence about FAST",
+  marketMixed.available === true && symbolMixed.available === false,
+  `market: ${JSON.stringify(marketMixed.reason)} | ` +
+    `symbol: ${JSON.stringify(symbolMixed.reason)}`
+);
+check(
+  "...and reported higher confidence off them",
+  marketMixed.confidence === "Medium" && symbolMixed.confidence === "Low",
+  "three headlines about Apple, Coca-Cola and Bank of America were raising the " +
+    "confidence of a Fastenal reading — equal confidence here would mean this " +
+    "fixture no longer demonstrates the bug"
+);
+check(
+  "...while market scope on the CLEAN pool agrees with symbol scope",
+  JSON.stringify(marketClean) === JSON.stringify(symbolClean),
+  "the scopes must differ only where the pool contains foreign items; if they " +
+    "differed on a pool that is entirely on-topic, the narrowing would be " +
+    "removing relevant news rather than irrelevant news"
+);
+
 check(
   "both scopes remain expressible — the no-symbol path is legitimate",
   /kind: "market"/.test(code) && /kind: "symbol"/.test(code),

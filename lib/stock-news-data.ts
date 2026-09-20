@@ -1488,7 +1488,7 @@ export function dedupeNews(items: NewsItem[]): NewsItem[] {
  * about — so the defect was never that the no-symbol path exists. It was that
  * it was reachable by forgetting.
  */
-type NewsScope =
+export type NewsScope =
   | { kind: "symbol"; symbol: string; companyName: string }
   | { kind: "market" };
 
@@ -1604,7 +1604,11 @@ function recencyWeight(pubDate: string | null, nowMs: number): number {
   return 0.35 + 0.65 * (1 - ageDays / NEWS_SCORE_WINDOW_DAYS);
 }
 
-export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult {
+export function scoreNews(
+  news: NewsItem[],
+  scope: NewsScope,
+  nowMs = Date.now()
+): NewsScoreResult {
   if (!news.length) {
     return {
       available: false,
@@ -1619,17 +1623,22 @@ export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult
     };
   }
 
-  // MARKET SCOPE, STATED. This is the second half of the divergence and it is
-  // DELIBERATELY UNCHANGED here: the score computes over every stored item,
-  // including ones no relevance rule would keep. Correcting it moves a
-  // user-visible number on 2,620 pages and deserves its own before/after rather
-  // than arriving inside an outage fix. Filed separately.
+  // THE CALLER'S SCOPE, NOT A SCOPE CHOSEN HERE. This was the second half of the
+  // divergence: the score used to pass MARKET_NEWS_SCOPE unconditionally, so on
+  // a stock page it scored over every stored item — including the ones the feed
+  // beside it had just rejected as not about the company. The two numbers were
+  // computed over different SETS while sitting in the same render.
   //
-  // What the fix above DOES guarantee is that the feed and the score now differ
-  // only in their WINDOW (14 days here, 45 on the feed), not in their relevance
-  // set — once this call is narrowed. Until then the explicit argument is what
-  // stops the difference being invisible.
-  const ranked = rankNews(news, MARKET_NEWS_SCOPE);
+  // They are now guaranteed to differ only in their WINDOW — 14 days here, 45
+  // on the feed — which is a difference that should exist. The relevance set is
+  // the same one, because it is the same scope object: getStockNewsData hands
+  // the identical `{ kind: "symbol", symbol: upper, companyName }` to rankNews
+  // and to this function, two lines apart.
+  //
+  // Market scope is still reachable and still legitimate — lib/sector-news-data
+  // has no symbol to be about — but it is now something a caller ASKS for
+  // rather than something this function imposes on every caller.
+  const ranked = rankNews(news, scope);
   // CHURN IS EXCLUDED FROM THE SCORE THOUGH IT IS ONLY CAPPED ON THE PAGE, and
   // the two treatments differ for a reason rather than by oversight. "Chokshi &
   // Queen Wealth Advisors Inc Takes Position in Micron Technology" is worth a
@@ -2597,10 +2606,13 @@ async function buildStockNewsBaseData(
     ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
 
-  const rankedNews = rankNews(news, { kind: "symbol", symbol: upper, companyName });
+  const newsScope: NewsScope = { kind: "symbol", symbol: upper, companyName };
+  const rankedNews = rankNews(news, newsScope);
   const rankedEarningsNews = rankEarningsNews(earningsNews);
 
-  const keywordNewsScore = scoreNews(news);
+  // THE SAME SCOPE OBJECT rankNews got two lines up. Passing a freshly built
+  // one would work today and drift tomorrow; this cannot disagree with the feed.
+  const keywordNewsScore = scoreNews(news, newsScope);
   const keywordEarningsScore = scoreEarnings(earningsNews);
 
   const earningsQualityGuardrails = getEarningsQualityGuardrails(rankedEarningsNews);
