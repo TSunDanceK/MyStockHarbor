@@ -40,6 +40,9 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
+  // and every FRED series the adapter names; touches no store, so read-only.
+  "fx-filer-diagnosis": { script: "scripts/fx-filer-diagnosis.mjs", args: () => [] },
   // Added on a branch and dispatched the same minute, with no workflow edit and
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
