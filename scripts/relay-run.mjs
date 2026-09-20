@@ -469,6 +469,16 @@ const TASKS = {
   },
   // MANIFEST ENTRIES WHOSE STAMP IS BEHIND THEIR OWN STORED SET, counted.
   // Credentialled to read the manifest and the fact sets; writes nothing.
+  // WHY ONE REPORT VANISHES FROM THE PRICE-REACTION CARDS. Runs the shipped
+  // reaction calculation over the full series AND the bounded window and
+  // prints both, so the window is convicted or exonerated by the same data.
+  // Credentialled to read the bar cache and the report dates; writes nothing.
+  "write-reaction-window": {
+    script: "scripts/reaction-window-diagnosis.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-manifest-stamp-census": {
     script: "scripts/manifest-stamp-census.mjs",
     args: () => [],
