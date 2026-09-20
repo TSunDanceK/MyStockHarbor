@@ -71,9 +71,17 @@ if (DUMP_DIR && fs.existsSync(path.join(DUMP_DIR, "universe.json"))) {
 }
 const universe = [...new Set([...pickers, ...Object.keys(profile.rows ?? {})])].sort();
 
-// The dot/dash fallback is applied HERE TOO, or BRK.B would be reported as
-// unresolved and a human would be asked to adjudicate a bug that is already
-// fixed at the lookup (lib/server/news/secProvider.ts cikFor).
+// EVERY SPELLING, not just the dot/dash pair this line used to roll by hand, or
+// BRK.B would be reported as unresolved and a human would be asked to
+// adjudicate a bug that is already fixed at the lookup
+// (lib/server/news/secProvider.ts cikFor).
+//
+// lookupSpellingIn widens over symbolSpellings, which also emits the DOLLAR
+// forms Nasdaq Trader uses for suffixed preferreds (MER-PK -> MER$K) and that a
+// hand-rolled dot/dash cannot reach. They find nothing in the SEC file —
+// preferreds resolve to the parent CIK and are simply absent — and that costs
+// one map lookup each, which is the trade the helper's own header argues for:
+// a spare candidate is free, a missing one fails open.
 const resolved = (s) => Boolean(lookupSpellingIn(cikMap, s));
 const unresolved = universe.filter((s) => !resolved(s));
 
@@ -376,6 +384,12 @@ const findRow = (sym) =>
   nasdaqRows.find((r) => r.symbol === sym || r.altSymbol === sym) ??
   otherRows.find((r) => r.symbol === sym || r.altSymbol === sym);
 for (const symbol of universe) {
+  // EVERY SPELLING, MOST LIKELY FIRST. This line used to try the symbol and then
+  // one hand-rolled dash->dot form, and the result is measurable: all 18
+  // suffixed symbols in the universe are absent from data/company-names.json,
+  // including every name the comment above lists as the reason the fallback
+  // exists. Dot was never the spelling to reach for — Nasdaq Trader writes a
+  // suffixed preferred with a DOLLAR (MER$K), which only symbolSpellings emits.
   const row = symbolSpellings(symbol).map(findRow).find(Boolean);
   if (row) snapshot[symbol] = row.rawName;
 }
