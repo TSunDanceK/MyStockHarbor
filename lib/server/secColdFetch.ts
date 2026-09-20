@@ -78,7 +78,8 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
-import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
+import { type StoredFactSet } from "./secFactCodec";
+import { toStoredSet } from "./secFactBuild";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
@@ -493,7 +494,11 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   const ct = res.headers.get("content-type") ?? "";
   // A 200 carrying HTML is not data. Same strictness that caught Stooq.
   if (!ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
-  const set = encodeFactSet(extractCompanyFacts(symbol, (await res.json()) as CompanyFacts));
+  // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
+  // here is the shape where one path gains a condition and the other does not.
+  const set = await toStoredSet(
+    extractCompanyFacts(symbol, (await res.json()) as CompanyFacts)
+  );
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.

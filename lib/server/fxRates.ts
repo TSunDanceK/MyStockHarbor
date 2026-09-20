@@ -92,8 +92,12 @@ export const FX_SPOT_BACKFILL_DAYS = 7;
  */
 export const FX_AVERAGE_MIN_COVERAGE = 0.6;
 
-const DAY = 86400000;
-const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+// PREFIXED BECAUSE CHECKS CONCATENATE SOURCES. Several harnesses lift this
+// module alongside secExtract, which declares its own `DAY`, and two top-level
+// consts of the same name make the whole lift a SyntaxError rather than a
+// failed assertion — a check that cannot run looks like a check that is fine.
+const FX_DAY_MS = 86400000;
+const fxIso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /**
  * THE RATE ON A BALANCE-SHEET DATE — spot, walking BACKWARD when the market
@@ -122,7 +126,7 @@ export function spotOn(series: FxSeries, dateISO: string): FxObservation | null 
     best = o;
   }
   if (!best) return null;
-  const gap = (target - Date.parse(best.date)) / DAY;
+  const gap = (target - Date.parse(best.date)) / FX_DAY_MS;
   // A GAP WIDER THAN THE RULE IS A REFUSAL, not a stale rate. A series that
   // stopped publishing would otherwise convert every period after it at the
   // last rate it ever had, silently and forever.
@@ -156,7 +160,7 @@ export function averageOver(
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   const inSpan = series.observations.filter((o) => o.date >= startISO && o.date <= endISO);
   if (!inSpan.length) return null;
-  const days = Math.round((end - start) / DAY) + 1;
+  const days = Math.round((end - start) / FX_DAY_MS) + 1;
   const coverage = inSpan.length / days;
   // NOT ENOUGH OF THE PERIOD IS COVERED. Returning the mean of what happened to
   // be there would answer a different question than the one asked, in the same
@@ -351,4 +355,4 @@ export const defaultSources = (): FxSource[] => [fredSource(), ecbSource()];
 
 /** ISO date `days` before `dateISO`, for sizing a fetch window. */
 export const isoDaysBefore = (dateISO: string, days: number) =>
-  iso(Date.parse(dateISO) - days * DAY);
+  fxIso(Date.parse(dateISO) - days * FX_DAY_MS);

@@ -42,6 +42,11 @@
 import type { CompanyFacts, ExtractResult, PeriodRecord } from "./secExtract";
 import { SEC_FIELDS } from "./secFields";
 import { averageOver, spotOn, type FxSeries } from "./fxRates";
+// TYPE-ONLY, DELIBERATELY. This module is pure currency arithmetic and is
+// lifted by checks that concatenate sources; a value import of the codec would
+// drag the store's whole dependency tree into every one of them. Building a
+// stored set lives in secFactBuild, which may depend on both.
+import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
 
 /** Non-financial namespaces never carry the reporting currency. */
 const MONEY_UNITS = new Set(["USD", "USD/shares"]);
@@ -266,4 +271,31 @@ export function convertExtractResult(
       refused,
     },
   };
+}
+
+/**
+ * A STORED period's values back in the filer's own currency.
+ *
+ * The same job as inReportingCurrency, one layer down: the view reads
+ * StoredPeriod (positional `v`), not PeriodRecord. Two shapes, one rule, and
+ * the rule is `moneyFieldIndexes` in both — so a field added to SEC_FIELDS
+ * moves both at once rather than one of them.
+ *
+ * RETURNS THE PERIOD UNCHANGED FOR AN UNCONVERTED SET. A USD filer has no
+ * conversion and its stored values already ARE reporting currency, so this is
+ * the identity for every symbol rendering today.
+ */
+export function storedInReportingCurrency(
+  period: StoredPeriod,
+  fx: StoredFactSet["fx"] | undefined
+): StoredPeriod | null {
+  if (!fx) return period;
+  const rate = fx.applied.find((a) => a.end === period.e)?.usdPerUnit ?? null;
+  // NO RATE MEANS NO HONEST ANSWER. Returning the converted values would hand
+  // back dollars labelled as the filer's currency, which is the mislabelling
+  // this file exists to prevent — and growth computed on them would be the FX
+  // move. The caller drops the comparison instead.
+  if (rate === null || !(rate > 0)) return null;
+  const money = moneyFieldIndexes();
+  return { ...period, v: period.v.map((x, i) => (x === null || !money.has(i) ? x : x / rate)) };
 }

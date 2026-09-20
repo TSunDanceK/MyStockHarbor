@@ -17,6 +17,7 @@
 import { SEC_FIELD_KEYS, secChainsHash, secFieldsHash } from "./secFields";
 import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExtract";
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
+import type { FxConversion } from "./secCurrency";
 
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
 export type StoredPeriod = {
@@ -70,6 +71,40 @@ export type StoredFactSet = {
    * values is never invalidated by it. See secFields.secChainsHash.
    */
   c?: string;
+  /**
+   * THE CURRENCY THE FILER REPORTS IN. Absent means USD — every set written
+   * before currencies were admitted was, by construction, a USD reader.
+   *
+   * NOT in contentHashOf, for the reason `tx` is not: it describes the SOURCE.
+   * A filer does not restate by being Irish.
+   */
+  cur?: string;
+  /**
+   * HOW THIS SET WAS CONVERTED INTO USD, or absent if it never was.
+   *
+   * ── THE RATES ARE STORED, AND THAT IS THE POINT ──────────────────────────
+   * `applied` carries the rate used for every period end. Two things depend on
+   * it and neither is decoration:
+   *
+   *   1. GROWTH IS COMPUTED IN THE REPORTING CURRENCY, which means dividing
+   *      the stored USD figure back out by the rate its period was converted
+   *      at. Without the rate here that recovery is impossible and growth
+   *      would silently become "business result compounded with FX move".
+   *   2. A HISTORICAL FIGURE MUST NOT MOVE. The rate travels with the set, so
+   *      re-reading tomorrow reproduces today's number rather than reconverting
+   *      at tomorrow's rate.
+   *
+   * NOT in contentHashOf. The hash exists to catch a RESTATEMENT — the filer
+   * changing a number — and a rate revision is not the filer doing anything.
+   * Including it would make every FX tick look like a silent restatement and
+   * drown the log that exists to surface real ones.
+   */
+  fx?: {
+    from: string;
+    source: string;
+    applied: { end: string; usdPerUnit: number; basis: "average" | "spot" }[];
+    refused: string[];
+  };
   /** Currencies a mapped tag was published in and refused. See rowsForField. */
   cu?: string[];
   /**
@@ -157,7 +192,27 @@ export function contentHashOf(set: Omit<StoredFactSet, "contentHash">): string {
   return h.toString(16).padStart(8, "0");
 }
 
-export function encodeFactSet(result: ExtractResult): StoredFactSet {
+export function encodeFactSet(
+  result: ExtractResult,
+  /**
+   * How `result` was converted, and WHAT THE FILER ACTUALLY PUBLISHED.
+   *
+   * ── WHY THE HASH IS TAKEN ON `reported` AND NOT ON THE STORED VALUES ─────
+   * contentHash is Layer 2 of the corrections failsafe: a figure that moved
+   * with no filing event behind it is a SILENT RESTATEMENT. That test is about
+   * the FILER changing a number.
+   *
+   * An exchange rate is not the filer doing anything. If the hash were taken
+   * on converted values, every rate revision would raise a restatement, and a
+   * log that cries restatement on ordinary FX noise is a log nobody reads —
+   * which is the same as not having one, for the real restatements it exists
+   * to catch.
+   *
+   * So the hash is computed on the reporting-currency figures. A genuine
+   * restatement still moves it; a rate move never does.
+   */
+  fx?: { conversion: FxConversion; reported: ExtractResult }
+): StoredFactSet {
   const base = {
     h: secFieldsHash(),
     symbol: result.symbol,
@@ -175,9 +230,19 @@ export function encodeFactSet(result: ExtractResult): StoredFactSet {
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,
+    cur: result.reportingCurrency,
+    fx: fx?.conversion,
     notes: result.notes,
   };
-  return { ...base, contentHash: contentHashOf(base) };
+  const hashInput = fx
+    ? {
+        ...base,
+        quarters: fx.reported.quarters.map(encodePeriod),
+        years: fx.reported.years.map(encodePeriod),
+        instants: fx.reported.instants.map(encodePeriod),
+      }
+    : base;
+  return { ...base, contentHash: contentHashOf(hashInput) };
 }
 
 
