@@ -28,6 +28,11 @@ import {
   secFieldsHash,
   type FieldDef,
 } from "./secFields";
+// VALUE IMPORTS FROM secCurrency, WHICH IMPORTS ONLY TYPES BACK FROM HERE.
+// `import type` is erased, so there is no runtime cycle — the currency decision
+// genuinely has to happen before the first field is read, and it needs the same
+// field definitions this file does.
+import { reportingCurrency, unitKeysFor } from "./secCurrency";
 
 /** One row as companyfacts publishes it, narrowed to what is read here. */
 /**
@@ -89,8 +94,14 @@ export const SEC_YEAR_WINDOW = 6;
  * 3 — a period enters `years` only if it ENDS ON the fiscal year end. A 10-Q's
  *     twelve-month comparative is a trailing year, not a fiscal one, and six of
  *     AMZN's rendered on its five-year card as fiscal years.
+ * 4 — a filer's own reporting currency is admitted instead of refused. Same
+ *     payload, different set of rows: RYAAY's EUR lines were read as nothing
+ *     and are now read as periods. THIS IS THE ADMISSION HALF OF THE NAME —
+ *     no tag moved and no field order moved, so neither `c` nor `h` can see
+ *     it, and a stored set written under 3 would keep its empty tables
+ *     forever with nothing selecting it.
  */
-export const SEC_LABEL_VERSION = 3;
+export const SEC_LABEL_VERSION = 4;
 
 export type FactRow = {
   start?: string;
@@ -221,6 +232,16 @@ export type ExtractResult = {
   instants: PeriodRecord[];
   /** Filer-level, with its own asOf. Null when the filer published none. */
   coverShares: CoverShares | null;
+  /**
+   * THE CURRENCY THE VALUES ABOVE ARE IN — always, including "USD".
+   *
+   * Stated rather than assumed, because the alternative is a number whose
+   * units depend on which branch produced it. Extraction performs NO
+   * conversion: it is network-free and a rate lookup is not, so it reports the
+   * currency and the caller (the cron) converts. That also keeps the
+   * conversion after differencing, which happens inside this function.
+   */
+  reportingCurrency: string;
   /**
    * EVERY TAXONOMY NAMESPACE THE PAYLOAD CARRIED, read rather than assumed.
    *
@@ -408,7 +429,21 @@ export function newer(a: FactRow, b: FactRow): FactRow {
  * Collapsing here is trap 2: AAPL's revenue is `RevenueFromContractWith...`
  * from 2018 and `Revenues` before it, and one tag for the symbol loses half.
  */
-export function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?: Set<string>) {
+export function rowsForField(
+  facts: CompanyFacts,
+  field: FieldDef,
+  refusedUnits?: Set<string>,
+  /**
+   * The filer's ONE reporting currency, decided before this is called.
+   *
+   * DEFAULTS TO USD, so every existing caller and every USD filer reads exactly
+   * as it did. This parameter RETARGETS the unit guard; it does not widen it.
+   * One currency is admitted and every other is still refused, so a filer
+   * publishing both EUR and JPY lines yields nothing from the JPY ones — the
+   * plausible-wrong-number failure the guard exists for is untouched.
+   */
+  currency: string = "USD"
+) {
   const out: { row: FactRow; tag: string; ns: string; rank: number; unit: string }[] = [];
 
   // TWO NAMESPACES, ONE RANKED LIST. The primary chain first, then the same
@@ -436,8 +471,7 @@ export function rowsForField(facts: CompanyFacts, field: FieldDef, refusedUnits?
       // tag; this reads only the declared one, so a non-USD reporter yields
       // NULL rather than a euro figure rendered with a dollar sign. That is the
       // honest failure and it is structural, not a rule anyone has to remember.
-      const keys =
-        field.unit === "USD/shares" ? ["USD/shares", "USD/share"] : [field.unit];
+      const keys = unitKeysFor(field.unit, currency);
       let took = 0;
       for (const unit of keys) {
         for (const row of units[unit] ?? []) {
@@ -873,6 +907,15 @@ export function extractCompanyFacts(
   // Units a mapped, published tag was refused in. See rowsForField.
   const refusedUnits = new Set<string>();
 
+  // ── THE CURRENCY, DECIDED BEFORE THE FIRST FIELD IS READ ─────────────────
+  //
+  // It is a property of the FILER, not of a field, so it cannot be decided
+  // inside the loop: a per-field decision is how one column ends up in euros
+  // and the next in dollars. Falling back to USD when the payload is ambiguous
+  // keeps today's behaviour exactly — the foreign units are then refused and
+  // recorded, and unreadableReason says so, as it does now.
+  const currency = reportingCurrency(facts) ?? "USD";
+
   // One pass per field, bucketed by period key.
   //
   // ── AND ONE PREFERRED CONCEPT PER FIELD, FOR THIS FILER ──────────────────
@@ -885,7 +928,7 @@ export function extractCompanyFacts(
   const preferred = new Map<string, string | null>();
   for (const field of SEC_FIELDS) {
     const bucket: Bucket = new Map();
-    const all = rowsForField(facts, field, refusedUnits);
+    const all = rowsForField(facts, field, refusedUnits, currency);
     for (const c of all) {
       const k = periodKey(c.row);
       const list = bucket.get(k);
@@ -1182,6 +1225,7 @@ export function extractCompanyFacts(
     years,
     instants,
     coverShares,
+    reportingCurrency: currency,
     // THE CENSUS, from the payload itself rather than from a list of filers we
     // think are IFRS. Sorted so a stored set's value is stable across fetches.
     taxonomies: Object.keys(facts.facts ?? {}).sort(),

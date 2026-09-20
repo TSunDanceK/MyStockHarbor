@@ -78,7 +78,9 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
-import { encodeFactSet, type StoredFactSet } from "./secFactCodec";
+import { type StoredFactSet } from "./secFactCodec";
+import { toStoredSet } from "./secFactBuild";
+import { needsReread } from "./secStaleness";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
@@ -493,7 +495,11 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   const ct = res.headers.get("content-type") ?? "";
   // A 200 carrying HTML is not data. Same strictness that caught Stooq.
   if (!ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
-  const set = encodeFactSet(extractCompanyFacts(symbol, (await res.json()) as CompanyFacts));
+  // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
+  // here is the shape where one path gains a condition and the other does not.
+  const set = await toStoredSet(
+    extractCompanyFacts(symbol, (await res.json()) as CompanyFacts)
+  );
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.
@@ -640,8 +646,25 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
     //
     // Scoped to EMPTY sets only, so it is not a mass re-populate: a set with
     // values is never re-fetched by this, and a set that re-fetches to nothing
-    // again stores the current hash and stops retrying.
-    if (SEC_UA && stored.c !== secChainsHash()) {
+    // again stores the current stamps and stops retrying.
+    //
+    // ── needsReread, NOT A HAND-ROLLED CHAIN COMPARISON ─────────────────────
+    //
+    // This read `stored.c !== secChainsHash()` and nothing else, which is a
+    // SECOND COPY of a staleness rule that already lives in secStaleness — the
+    // exact shape that module's docblock warns about, where one copy gains a
+    // condition and the other does not.
+    //
+    // It did. `lv` (SEC_LABEL_VERSION) covers LABELLING AND ADMISSION, and
+    // currency admission bumped it to 4 while touching no tag chain — so
+    // `secChainsHash()` was unchanged and every cached empty set for a
+    // non-USD filer compared equal and never retried. MEASURED: RYAAY and ABEV
+    // kept serving the "reports in EUR/BRL" block across reloads on a
+    // deployment whose code could read them, because the render path never
+    // asked SEC again. These filers are cold-only — not in the manifest — so
+    // the cron's needsReread never reaches them and this is the ONLY thing
+    // that can.
+    if (SEC_UA && needsReread(stored)) {
       const retried = await retryEmpty(clean, cik);
       if (retried) return retried;
     }

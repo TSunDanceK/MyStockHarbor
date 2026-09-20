@@ -8,6 +8,7 @@ import {
   cell, periodLabel, ttm, valueOf,
   type Cell, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
+import { storedInReportingCurrency } from "./secCurrency";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -98,6 +99,41 @@ export const retiredSource = (id: string): RetiredSource => {
 
 /** Named once. Every card that states its source reads this. */
 export const SEC_ATTRIBUTION = "SEC EDGAR filings";
+
+/**
+ * THE CONVERSION LABEL — one sentence, always visible, never a tooltip.
+ *
+ * A reader holding Ryanair's own results announcement sees euros; this page
+ * shows dollars. Without a visible statement of that, the honest conclusion
+ * available to them is that the page is wrong. So the label names the source
+ * currency, the rate actually applied to the period on screen, and whether
+ * that rate was the period's average or its closing spot — because those are
+ * different numbers and which one was used is the first thing anyone checking
+ * the arithmetic needs.
+ *
+ * GROWTH IS EXEMPTED IN SO MANY WORDS. Percentages on this page are computed
+ * before conversion, and a reader who assumes otherwise would "correct" them
+ * back by the FX move and get the wrong answer.
+ */
+export function conversionNote(c: NonNullable<SecEarningsView["currency"]>): string {
+  const rate =
+    c.latestRate === null
+      ? null
+      : `1 ${c.reporting} = $${c.latestRate.toFixed(4)}`;
+  const basis =
+    c.latestBasis === "average" ? "the average rate across the period"
+    : c.latestBasis === "spot" ? "the rate on the period end date"
+    : null;
+  return [
+    `Figures converted from ${c.reporting} to US dollars`,
+    rate && basis ? ` at ${rate}, ${basis}` : "",
+    `. Each period uses its own rate, so historical figures do not move with today's.`,
+    ` Growth percentages are calculated in ${c.reporting} before conversion, so they show the business result rather than the currency move.`,
+    c.refused.length
+      ? ` ${c.refused.length} earlier period${c.refused.length === 1 ? "" : "s"} omitted: no exchange rate on file.`
+      : "",
+  ].join("");
+}
 
 /**
  * EPS IS GAAP, AND THE PAGE SAYS SO.
@@ -337,6 +373,30 @@ export type SecEarningsView = {
     operatingIncome: ViewCell;
     comparedWith: string | null;
   };
+  /**
+   * WHAT CURRENCY THE FIGURES ON THIS PAGE ARE IN, AND HOW THEY GOT THERE.
+   *
+   * Null for a USD filer — there is nothing to say and no label to render.
+   * Present means every money figure shown was CONVERTED, and the page must
+   * say so: a reader comparing a converted revenue against a headline in the
+   * filer's own press release will otherwise conclude the page is wrong.
+   *
+   * A set whose currency could NOT be converted never reaches here — the
+   * builder refuses it, because those figures are not dollars and this page
+   * renders dollars. See the guard at the top of buildSecEarningsView.
+   */
+  currency: {
+    /** The filer's own reporting currency, e.g. "EUR". */
+    reporting: string;
+    /** Which rate source produced the conversion. */
+    source: string;
+    /** Rate applied to the anchor period, for the label to quote. */
+    latestRate: number | null;
+    /** Whether that rate was a period average or a balance-sheet-date spot. */
+    latestBasis: "average" | "spot" | null;
+    /** Period ends dropped for want of an honest rate. */
+    refused: string[];
+  } | null;
   margins: {
     label: string;
     /** True when the NEXT row down (older) is not the immediately preceding fiscal quarter. */
@@ -621,6 +681,17 @@ export const STALE_QUARTER_DAYS = 548;
  * FY vs FY-1 by label, with no new code and no array offset.
  */
 export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null {
+  // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
+  //
+  // `cur` non-USD with `fx` absent means the filer reports in a currency the
+  // rate sources could not serve, so the stored values are the filer's own
+  // figures. Every card below renders them with a dollar sign. Returning null
+  // sends the page down the same path it already takes for a filer it cannot
+  // read — which is exactly where these symbols are today — rather than
+  // printing euros as dollars, which is the single worst outcome available
+  // here and the one nobody would catch by looking.
+  if ((set.cur ?? "USD") !== "USD" && !set.fx) return null;
+
   // ── TWO ANCHORS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS ──────────────────
   //
   // THE DEFECT THIS SPLITS APART. AZN's snapshot read "Most recent quarter
@@ -696,13 +767,31 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // the cards read them BY INDEX (`view.growth[i]` beside `view.margins[i]`).
   // Two independently filtered lists would silently pair a margin with another
   // period's growth — a wrong number that looks entirely plausible.
+  // ── GROWTH IS TAKEN IN THE CURRENCY THE FILER REPORTS IN ─────────────────
+  //
+  // Each period was converted at ITS OWN rate, which is right for a figure and
+  // wrong for a rate of change: a YoY across two converted periods is the
+  // business result COMPOUNDED WITH THE CURRENCY MOVE. Measured on real rates,
+  // a filer whose home currency moved 8.35% shows that 8.35% as "growth" on a
+  // genuinely flat year.
+  //
+  // So the two YoY lines below read the reporting-currency figures, recovered
+  // from the rate stored with the set. For a USD filer `home` is the identity
+  // and nothing changes — which is every symbol rendering today.
+  //
+  // MARGINS DELIBERATELY DO NOT USE IT. A margin is a ratio WITHIN one period,
+  // so the rate appears on both sides and cancels exactly; routing them through
+  // here would add a way for a row to vanish (no rate -> null) in exchange for
+  // no difference in the number.
+  const home = (p: StoredPeriod | null) =>
+    p === null ? null : storedInReportingCurrency(p, set.fx);
   const measured = q.map((p) => {
     const prior = priorYearOf(q, p);
     return {
       p,
       prior,
-      revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
-      epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
+      revenueYoY: yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue")),
+      epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
       gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
       operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
       net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
@@ -977,13 +1066,27 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     latestFiled: latest.f,
     snapshot: {
       revenue: view(latest, "revenue", "Revenue"),
-      revenueYoY: yoy(valueOf(latest, "revenue"), valueOf(yearAgo, "revenue")),
+      // SAME REPORTING-CURRENCY RULE AS THE GROWTH TABLE. The snapshot's two
+      // YoY figures are the most prominent numbers on the page, so leaving
+      // them on converted values would put the FX move in the headline while
+      // the table below it read correctly.
+      revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
       epsDiluted: view(latest, "epsDiluted", "Diluted EPS (GAAP)"),
-      epsYoY: yoy(valueOf(latest, "epsDiluted"), valueOf(yearAgo, "epsDiluted")),
+      epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
     },
+    currency:
+      (set.cur ?? "USD") === "USD"
+        ? null
+        : {
+            reporting: set.cur as string,
+            source: set.fx!.source,
+            latestRate: set.fx?.applied.find((a) => a.end === latest.e)?.usdPerUnit ?? null,
+            latestBasis: set.fx?.applied.find((a) => a.end === latest.e)?.basis ?? null,
+            refused: set.fx?.refused ?? [],
+          },
     basis,
     tableBasis,
     annual: annualRows,

@@ -5,7 +5,9 @@ import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
 import { drainColdCiks } from "@/lib/server/secColdCik";
 import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
-import { encodeFactSet, readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
+import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
+import { toStoredSet } from "@/lib/server/secFactBuild";
+import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
@@ -482,6 +484,14 @@ export async function GET(req: NextRequest) {
    * they are the period ends in hand.
    */
   const setsThisRun = new Map<string, StoredFactSet>();
+  /**
+   * Rate series already loaded this run, by currency.
+   *
+   * A run touching twelve euro filers would otherwise pull the same six-year
+   * series twelve times. A null entry is a REMEMBERED FAILURE, kept so a
+   * source that is down is asked once rather than once per symbol.
+   */
+  const fxSeriesThisRun = new Map<string, FxSeries | null>();
   /** Symbols whose numbers moved this run — the signal that an 8-K landed. */
   const changedThisRun: string[] = [];
   let written = 0;
@@ -508,7 +518,11 @@ export async function GET(req: NextRequest) {
     try {
       const facts = await fetchCompanyFacts(cik);
       const extracted = extractCompanyFacts(symbol, facts);
-      const set = encodeFactSet(extracted);
+      // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
+      // network-free and a rate lookup is not; keeping the fetch out here is
+      // also what keeps the conversion after differencing, which happens
+      // inside it. A USD filer takes no extra call at all.
+      const set = await toStoredSet(extracted, defaultSources(), fxSeriesThisRun);
       const rates = identityRates(checkIdentities(extracted));
 
       const prior = await readFactSet(symbol);
