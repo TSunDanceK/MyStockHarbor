@@ -440,6 +440,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // MANIFEST ENTRIES WHOSE STAMP IS BEHIND THEIR OWN STORED SET, counted.
+  // Credentialled to read the manifest and the fact sets; writes nothing.
+  "write-manifest-stamp-census": {
+    script: "scripts/manifest-stamp-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-annual-filer-census": {
     script: "scripts/annual-filer-census.mjs",
     args: () => [],
