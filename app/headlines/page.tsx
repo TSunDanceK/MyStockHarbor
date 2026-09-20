@@ -3,10 +3,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getGeneralMarketHeadlines, type GeneralHeadline } from "@/lib/general-market-news";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
+import NewsCardArt from "@/app/components/NewsCardArt";
+import { planCardArt, type CardArt } from "@/lib/server/news/art";
+import { eventTypeFromTitle } from "@/lib/server/news/eventType";
 
 const PAGE_TITLE = "Market Headlines | Latest Stock Market News | MyStockHarbor";
+// NO LONGER PROMISES IMAGES. This said "with images and article excerpts" and
+// had said so since the publisher-thumbnail render was switched off in Step 0 --
+// a description advertising a feature the page had stopped having. Even with
+// the event art wired in below, most general headlines match no title pattern
+// and render no picture, so "images" is not a claim this page can make.
 const PAGE_DESCRIPTION =
-  "The latest general market headlines, pulled straight from the news wire with images and article excerpts, linked out to the full story - no AI commentary, just the news.";
+  "The latest general market headlines, straight from the news wire with article excerpts, linked out to the full story - no AI commentary, just the news.";
 const PAGE_URL = "https://www.mystockharbor.com/headlines";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
@@ -66,6 +74,46 @@ function compactSource(source: string) {
 
 export default async function HeadlinesPage() {
   const headlines = await getGeneralMarketHeadlines();
+
+  // ── THE ART PLAN, COMPUTED ONCE FOR THE WHOLE PAGE ──────────────────────
+  // This page was the fourth call site guarded by SHOW_PUBLISHER_IMAGES and the
+  // only one that never got a fallback when the guard went false, so every card
+  // fell through to nothing. The other three took NewsCardArt + planCardArt;
+  // this is that same pair, with the two inputs a general headline cannot
+  // supply pinned to their honest values.
+  //
+  // sectorBucket: null — a GeneralHeadline carries title/image/date/source/
+  // excerpt/url and NO symbol and NO sector. The stock and sector pages can
+  // name a bucket because the route tells them which company or sector they are
+  // about; there is nothing here to derive one from, and guessing a sector from
+  // free text would put an oil rig next to a story about semiconductors.
+  //
+  // canGenerate: false — the generated card's entire content is a ticker and a
+  // sparkline. With no symbol there is nothing to draw, and art.ts already
+  // states the rule: a ticker card with no ticker is worse than a blank slot.
+  //
+  // Together those two make the plan exactly: event-bucket library art when the
+  // title matches a pattern, and `none` otherwise. Nothing is ever guessed.
+  //
+  // PER BUCKET AND COMPUTED HERE, not inside the card, for the same reason as
+  // the other two pages: `taken` is mutated to stop one bucket's art repeating
+  // down the grid, so every card has to consult the same map in render order.
+  const takenByBucket = new Map<string, Set<number>>();
+  const headlineArt: CardArt[] = headlines.map((item) =>
+    planCardArt({
+      variant: "lead",
+      // Leg 3 of §7's cascade, and the only leg reachable from this feed: legs
+      // 1 and 2 read an SEC form and a wire subject, neither of which a general
+      // headline has. So this returns earnings, analyst or deal — never macro
+      // or filing, which eventType.ts documents as deliberately unreachable
+      // from a title — or null, which is the expected answer for most.
+      eventType: eventTypeFromTitle(item.title),
+      sectorBucket: null,
+      key: item.url,
+      taken: takenByBucket,
+      canGenerate: false,
+    })
+  );
 
   const headlinesJsonLd = {
     "@context": "https://schema.org",
@@ -185,8 +233,8 @@ export default async function HeadlinesPage() {
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 0 }}>
               The latest general market headlines, straight from the news
-              wire - image, source, first paragraph, and a link to the full
-              story. No AI summaries or scoring here, just the news in
+              wire - source, first paragraph, and a link to the full story.
+              No AI summaries or scoring here, just the news in
               reverse-chronological order.
             </p>
           </section>
@@ -209,7 +257,11 @@ export default async function HeadlinesPage() {
           ) : (
             <div style={headlinesGridStyle}>
               {headlines.map((item, index) => (
-                <HeadlineCard key={`${item.url}-${index}`} item={item} />
+                <HeadlineCard
+                  key={`${item.url}-${index}`}
+                  item={item}
+                  art={headlineArt[index]}
+                />
               ))}
             </div>
           )}
@@ -239,20 +291,48 @@ export default async function HeadlinesPage() {
   );
 }
 
-function HeadlineCard({ item }: { item: GeneralHeadline }) {
+function HeadlineCard({ item, art }: { item: GeneralHeadline; art: CardArt }) {
   return (
     <article style={headlineCardStyle}>
       {/*
         HIDDEN, NOT DELETED — the site had no right to display publisher
         thumbnails passed through by FMP, who were never the rights holder.
         lib/news-image-policy.ts has the reasoning and the single flag.
+
+        THE `: null` HERE IS WHAT BROKE THE PAGE. With the flag false this was
+        the whole of the branch, so every card rendered no picture at all.
+
+        AND NO CHECK WAS MISSING — one was asserting the opposite. This file sat
+        in check-news-art's IMAGELESS_BY_DESIGN list, whose stated reason was
+        "5% wire-to-universe match — no per-item symbol to reach a bucket with
+        and no price data for a generated card". Both halves are TRUE, and
+        neither rules out library art: bucketForItem(eventType, null) reaches an
+        event bucket from a TITLE ALONE. A reason sound for the generated card
+        was read as a reason for nothing at all — the identical mistake recorded
+        against the sector page one step earlier.
       */}
       {SHOW_PUBLISHER_IMAGES && item.image ? (
         <div style={headlineThumbWrapStyle}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.image} alt="" loading="lazy" style={headlineThumbImgStyle} />
         </div>
-      ) : null}
+      ) : art.kind === "none" ? null : (
+        /* A headline whose title matches no pattern still renders nothing, and
+           that is the designed outcome rather than a gap: with no symbol and no
+           sector there is no honest picture to put here. The wrapper is only
+           mounted when there IS art, so an imageless card keeps exactly the
+           layout it has today instead of gaining an empty box. */
+        <div style={headlineThumbWrapStyle}>
+          <NewsCardArt
+            plan={art}
+            symbol=""
+            changePct={null}
+            points={[]}
+            sizes="(max-width: 640px) 100vw, 380px"
+            style={headlineThumbImgStyle}
+          />
+        </div>
+      )}
 
       <div style={headlineMetaRowStyle}>
         <span style={headlineSourcePillStyle}>{compactSource(item.source)}</span>
