@@ -167,7 +167,31 @@ That is the same failure shape as two others today: the User-Agent env read that
 could go blank, and the `fieldHits` ReferenceError that passed three gates.
 **Silent defaults are how all three shipped.**
 
-## 6a. HELD — the score half, filed separately
+## 6a. ~~HELD~~ **LANDED 2026-09-20** — the score half
+
+> **Superseded by the change itself.** `scoreNews` now takes a `NewsScope` and
+> passes the caller's through, so `getStockNewsData` hands the *same*
+> `newsScope` binding to `rankNews` and to `scoreNews` two lines apart. The
+> section below is kept as the original filing; what it describes as pending is
+> done.
+>
+> **The before/after, and the number that moved is not the score.** On the FAST
+> fixture mixed with three real off-topic headlines (Apple, Coca-Cola, Bank of
+> America, captured from relay run 199), both scopes come out **50** — so a
+> score delta would have been the wrong assertion. What market scope inflated is
+> the **evidence claim**: it reported `available: true`, *"Based on 5 of 5
+> headlines from the last 14 days"*, **Medium** confidence, when only **2** of
+> those headlines were about Fastenal. Under symbol scope the same pool returns
+> `available: false` and **Low** — the honest answer. A tone read off other
+> companies' news is the user-visible defect, not the integer beside it.
+>
+> `check-news-relevance-scope.mjs` asserts it by *running* both scopes over one
+> pool, with a control that market scope on a clean pool still agrees with
+> symbol scope — so the narrowing is removing irrelevant news, not relevant
+> news. 3 / 3 mutations caught.
+
+### The original filing
+
 
 The acceptance criterion in the report — "the two numbers must not be able to
 disagree" — was corrected by its own author and the narrower version is right:
