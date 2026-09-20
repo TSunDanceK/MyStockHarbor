@@ -360,7 +360,26 @@ console.log("\nNEXT RUN TAKES, and the backlog behind it, in SYMBOLS:");
 for (const [name, taken, backlog, perRun] of [
   ["reverify", q.reverify.length, q.reverifyBacklog, num("SEC_REVERIFY_PER_RUN")],
   ["populate", q.populate.length, q.populateBacklog, num("SEC_POPULATE_PER_RUN")],
-  ["rewindow", q.rewindow.length, q.rewindowBacklog, num("SEC_REWINDOW_PER_RUN")],
+  // ── THE RATE THE CRON ACTUALLY USES, NOT THE FLOOR ──────────────────────
+  //
+  // `SEC_REWINDOW_PER_RUN` is rewindow's GUARANTEED MINIMUM, and since #468 it
+  // is almost never what the queue takes: populationQueues lets rewindow borrow
+  // whatever reverify and populate leave unused while the populate backlog is
+  // under SEC_POPULATE_SLACK_CEILING, and returns the result as `rewindowLimit`
+  // on the same object this line already reads.
+  //
+  // Dividing the backlog by the floor understated the drain by an order of
+  // magnitude and did it while printing the contradiction one column to its
+  // left: measured against a populate backlog of 57 (well under the 400
+  // ceiling) the borrowed limit was 268, so `taken` read 268 on a line that
+  // went on to claim "@ 25/run". A reader reconciles that by believing the
+  // rate, because a rate is what a days-to-drain figure is made of.
+  //
+  // IT IS THIS RUN'S RATE, NOT A CONSTANT, and the estimate inherits that: the
+  // slack grows as populate drains and collapses to zero above the ceiling, so
+  // this is "at today's rate", not a schedule. The run-by-run simulation in
+  // scripts/sec-queue-projection.mjs is the one that models the change.
+  ["rewindow", q.rewindow.length, q.rewindowBacklog, q.rewindowLimit],
 ]) {
   console.log(`  ${name.padEnd(9)} ${String(taken).padStart(4)} of ${String(backlog).padStart(4)} SYMBOLS @ ${String(perRun).padStart(3)}/run -> ${days(backlog, perRun)}`);
 }
@@ -374,14 +393,38 @@ console.log(`  rewindow queue on first run: ${q.rewindow.join(" ") || "(none)"}`
 // was sized for — and it reads identically to a genuine window migration
 // unless the reasons are counted separately.
 const CHAINS = job.secChainsHash();
-const reasons = { quarters: 0, years: 0, chains: 0 };
+// ── COUNTED BY WHAT staleReasons RETURNS, NOT BY A HAND-LISTED OBJECT ──────
+//
+// This was `{ quarters: 0, years: 0, chains: 0 }` and `staleReasons` returns a
+// fourth, "labels", added with SEC_LABEL_VERSION in #472. `reasons["labels"]++`
+// wrote NaN into a key nothing printed, so a set stale ONLY for its period
+// labelling was counted in `eligible.length` and then vanished from the
+// breakdown that exists to explain that number — the reasons summed to less
+// than the total and nothing said why.
+//
+// THE FIX IS THE SHAPE, NOT THE MISSING KEY. A literal listing the reasons is
+// a second copy of staleReasons' return type, maintained by hand, and the next
+// reason added will be dropped exactly as this one was. A Map keyed by whatever
+// comes back cannot miss one; the ORDER below is presentation, and anything not
+// named in it still prints rather than disappearing.
+const reasons = new Map();
 const eligible = Object.entries(manifest.symbols)
   .filter(([, e]) => e.cik && !e.needsReverify && e.contentHash !== null && job.needsReread(e));
-for (const [, e] of eligible) for (const r of job.staleReasons(e)) reasons[r]++;
+for (const [, e] of eligible) for (const r of job.staleReasons(e)) reasons.set(r, (reasons.get(r) ?? 0) + 1);
+const REASON_WORDS = {
+  quarters: "quarter window behind",
+  years: "year window behind",
+  labels: "period labelling behind",
+  chains: "chains behind",
+};
 console.log(`\nWHY THE ${eligible.length} ELIGIBLE SYMBOLS ARE ELIGIBLE (a symbol can be behind on more than one):`);
-console.log(`  quarter window behind   ${String(reasons.quarters).padStart(4)} SYMBOLS`);
-console.log(`  year window behind      ${String(reasons.years).padStart(4)} SYMBOLS`);
-console.log(`  chains behind           ${String(reasons.chains).padStart(4)} SYMBOLS   (current chains ${CHAINS})`);
+for (const key of [...Object.keys(REASON_WORDS), ...[...reasons.keys()].filter((k) => !(k in REASON_WORDS))]) {
+  const label = REASON_WORDS[key] ?? `${key} behind (UNNAMED — added to staleReasons since this census was written)`;
+  console.log(
+    `  ${label.padEnd(23)} ${String(reasons.get(key) ?? 0).padStart(4)} SYMBOLS` +
+      (key === "chains" ? `   (current chains ${CHAINS})` : "")
+  );
+}
 const chainsOnly = eligible.filter(([, e]) => {
   const r = job.staleReasons(e);
   return r.length === 1 && r[0] === "chains";
