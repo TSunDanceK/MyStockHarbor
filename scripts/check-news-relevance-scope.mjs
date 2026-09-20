@@ -214,7 +214,7 @@ check(
 
 console.log("\n  -- the anchored fallback for names too short to be a needle --\n");
 
-// 66 of the 2,592 committed names produce NO variant once cleanName has run
+// 66 of the 2,610 committed names produce NO variant once cleanName has run
 // over them: every candidate is under the guard, `.some()` on an empty array is
 // false by construction, and only an explicit ticker signal can match. Most are
 // names that ARE their ticker (CSX, RTX, KKR, LKQ, EQT, XPO, PVH …); the rest
