@@ -187,6 +187,16 @@ async function fetchForSymbol(
   // the text-relevance filter downstream still has to agree. The log line is
   // what the manual override list gets built from -- MSTR ("Strategy") and POST
   // ("Post") are the known cases.
+  //
+  // AND `fund-or-note` IS DELIBERATELY NOT AN EXCEPTION TO THAT, which is worth
+  // saying here because assessCompanyName's marker list reads like a skip list.
+  // 90 committed names carry the verdict; relay run 199 measured 20 of them
+  // live and 17 returned news. The verdict fires on real operating companies
+  // (every MLP trips `Units?`; PFBC is a bank named "Preferred Bank") as well as
+  // on genuine notes, so a skip would delete a working news leg to save a fetch.
+  // The cost of querying anyway is a handful of content-farm items on the
+  // genuine instruments -- real, and much smaller than the alternative.
+  // claude/fund-or-note-stays-a-warning-2026-09-20.md has the per-symbol table.
   const verdict = assessCompanyName(cleanName);
   if (!verdict.ok) {
     console.warn(`[gnews] ${symbol}: weak query name ${JSON.stringify(cleanName)} (${verdict.reason}) — override candidate`);
