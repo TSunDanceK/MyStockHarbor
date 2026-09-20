@@ -187,6 +187,16 @@ const item = (title, ageDays, extra = {}) => ({
   ...extra,
 });
 
+// ── SCOPE, SUPPLIED ONCE FOR THIS WHOLE FILE ─────────────────────────────
+// scoreNews now REQUIRES a NewsScope: the score used to pass MARKET_NEWS_SCOPE
+// itself, which is how a stock page scored over headlines its own feed had
+// rejected. Every fixture below is about the WINDOW, the CHURN rule or the
+// TONE -- none is about relevance, and none carries a symbol to be relevant to
+// -- so market scope is the right answer here rather than a leftover default.
+// The relevance half is asserted in check-news-relevance-scope.mjs, which runs
+// both scopes over one pool and compares them.
+const scoreNews = (items, now = NOW) => m.scoreNews(items, m.MARKET_NEWS_SCOPE, now);
+
 console.log("\n=== 1. The score has a time window ===\n");
 // Five loud headlines from six months ago. The old code scored these and called
 // it "right now"; the only correct answer is that there is no recent coverage.
@@ -197,7 +207,7 @@ const stale = [
   item("Micron wins major contract expansion", 165),
   item("Micron profit jumps on memory demand", 160),
 ];
-const staleScore = m.scoreNews(stale, NOW);
+const staleScore = scoreNews(stale, NOW);
 check(
   "five loud headlines from six months ago do NOT produce a score",
   staleScore.available === false,
@@ -210,7 +220,7 @@ const fresh = [
   item("Micron upgraded to buy on strong demand", 2),
   item("Micron raises guidance after blowout quarter", 4),
 ];
-const freshScore = m.scoreNews(fresh, NOW);
+const freshScore = scoreNews(fresh, NOW);
 check("three headlines from this week DO produce a score", freshScore.available === true);
 
 // ── Institutional-holding churn must not be read as a market opinion ────────
@@ -229,13 +239,13 @@ const CHURN_TITLES = [
 const churnOnly = CHURN_TITLES.map((t, i) => item(t, i + 1));
 check(
   "a pool of nothing but holding notices produces NO score",
-  m.scoreNews(churnOnly, NOW).available === false,
-  m.scoreNews(churnOnly, NOW).reason?.slice(0, 90)
+  scoreNews(churnOnly, NOW).available === false,
+  scoreNews(churnOnly, NOW).reason?.slice(0, 90)
 );
 // AND THE SCORE IS UNMOVED BY THEM, which the check above cannot show on its
 // own: an empty pool falls back to `ranked`, so "no score" could come from the
 // fallback rather than from the exclusion.
-const withChurn = m.scoreNews([...fresh, ...churnOnly], NOW);
+const withChurn = scoreNews([...fresh, ...churnOnly], NOW);
 check(
   "...and adding five of them to three real headlines changes nothing",
   withChurn.available === freshScore.available && withChurn.score === freshScore.score,
@@ -243,7 +253,7 @@ check(
 );
 check(
   "...while five ordinary headlines in their place DO move it",
-  m.scoreNews([...fresh, ...CHURN_TITLES.map((_, i) => item(`Micron cuts guidance on weak demand ${i}`, i + 1))], NOW).score !== freshScore.score,
+  scoreNews([...fresh, ...CHURN_TITLES.map((_, i) => item(`Micron cuts guidance on weak demand ${i}`, i + 1))], NOW).score !== freshScore.score,
   "otherwise the assertion above would pass for a pool the score simply ignores"
 );
 check("...and it reads bullish", freshScore.score > 58, `score ${freshScore.score}`);
@@ -256,7 +266,7 @@ check("...and it reads bullish", freshScore.score > 58, `score ${freshScore.scor
 // which is what running the real functions buys.
 check(
   "an item 13 days old is inside the window",
-  m.scoreNews(
+  scoreNews(
     [
       item("Micron beats estimates on record revenue", 13),
       item("Micron names a new chief financial officer", 2),
@@ -267,17 +277,17 @@ check(
 );
 check(
   "an item 15 days old is outside it",
-  m.scoreNews([item("Micron beats estimates on record revenue", 15), item("Micron upgraded on demand", 16), item("Micron raises guidance", 17)], NOW)
+  scoreNews([item("Micron beats estimates on record revenue", 15), item("Micron upgraded on demand", 16), item("Micron raises guidance", 17)], NOW)
     .available === false
 );
 check(
   "two in-window items are still too few to score",
-  m.scoreNews([fresh[0], fresh[1]], NOW).available === false
+  scoreNews([fresh[0], fresh[1]], NOW).available === false
 );
 // A date is required, not assumed. An undated item cannot be shown to be recent.
 check(
   "undated items do not count as recent",
-  m.scoreNews([item("Micron beats on revenue", null), item("Micron upgraded", null), item("Micron raises guidance", null)], NOW)
+  scoreNews([item("Micron beats on revenue", null), item("Micron upgraded", null), item("Micron raises guidance", null)], NOW)
     .available === false
 );
 
@@ -291,8 +301,8 @@ const bullNew = item("Micron beats estimates as revenue surges to a record", 0);
 const bearOld = item("Micron misses estimates as revenue declines, guidance cut", 13);
 const filler = [item("Micron announces plant expansion", 3), item("Micron names new CFO", 5)];
 
-const freshBearish = m.scoreNews([bullOld, bearNew, ...filler], NOW);
-const freshBullish = m.scoreNews([bullNew, bearOld, ...filler], NOW);
+const freshBearish = scoreNews([bullOld, bearNew, ...filler], NOW);
+const freshBullish = scoreNews([bullNew, bearOld, ...filler], NOW);
 check(
   "the fresher headline moves the score, whichever way it points",
   freshBullish.score > freshBearish.score,
@@ -304,7 +314,7 @@ check(
 );
 
 console.log("\n=== 3. Confidence reports coverage, not drama ===\n");
-const loudFew = m.scoreNews(
+const loudFew = scoreNews(
   [
     item("Micron beats estimates as revenue surges to a record", 1),
     item("Micron upgraded to buy, price target raised", 2),
@@ -327,7 +337,7 @@ const NINE_SUBJECTS = [
   "Micron expands apprenticeships in Idaho",
   "Micron appoints two independent directors",
 ];
-const quietMany = m.scoreNews(NINE_SUBJECTS.map((title, i) => item(title, i)), NOW);
+const quietMany = scoreNews(NINE_SUBJECTS.map((title, i) => item(title, i)), NOW);
 check("nine recent headlines read High, however quiet", quietMany.confidence === "High", quietMany.confidence);
 check(
   "confidence no longer keys off signalCount",

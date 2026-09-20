@@ -19,6 +19,7 @@ import {
   mergeNewsPools,
   newestFirst,
   scoreEarnings,
+  MARKET_NEWS_SCOPE,
   scoreNews,
   scoreNewsItem,
   scoreToEarningsLabel,
@@ -387,7 +388,12 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
   const rankedNews = rankSectorNews(news);
   const earningsNews = news.filter(isEarningsNewsItem);
 
-  const keywordNewsScore = scoreNews(news);
+  // MARKET SCOPE, AND HERE IT IS THE RIGHT ANSWER RATHER THAN THE DEFAULT ONE.
+  // A sector has no symbol to be about, so there is no relevance rule to narrow
+  // by -- this is the legitimate no-symbol path the scope type exists to keep
+  // expressible. It is spelled out because scoreNews no longer chooses for its
+  // callers: on a stock page the same call now narrows to that company.
+  const keywordNewsScore = scoreNews(news, MARKET_NEWS_SCOPE);
   const keywordEarningsScore = scoreEarnings(earningsNews);
 
   const hasActualEarningsHeadlines = earningsNews.some((item) =>
