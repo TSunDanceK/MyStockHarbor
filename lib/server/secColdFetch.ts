@@ -80,6 +80,7 @@ import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
+import { needsReread } from "./secStaleness";
 import { secChainsHash } from "./secFields";
 import { readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
@@ -645,8 +646,25 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
     //
     // Scoped to EMPTY sets only, so it is not a mass re-populate: a set with
     // values is never re-fetched by this, and a set that re-fetches to nothing
-    // again stores the current hash and stops retrying.
-    if (SEC_UA && stored.c !== secChainsHash()) {
+    // again stores the current stamps and stops retrying.
+    //
+    // ── needsReread, NOT A HAND-ROLLED CHAIN COMPARISON ─────────────────────
+    //
+    // This read `stored.c !== secChainsHash()` and nothing else, which is a
+    // SECOND COPY of a staleness rule that already lives in secStaleness — the
+    // exact shape that module's docblock warns about, where one copy gains a
+    // condition and the other does not.
+    //
+    // It did. `lv` (SEC_LABEL_VERSION) covers LABELLING AND ADMISSION, and
+    // currency admission bumped it to 4 while touching no tag chain — so
+    // `secChainsHash()` was unchanged and every cached empty set for a
+    // non-USD filer compared equal and never retried. MEASURED: RYAAY and ABEV
+    // kept serving the "reports in EUR/BRL" block across reloads on a
+    // deployment whose code could read them, because the render path never
+    // asked SEC again. These filers are cold-only — not in the manifest — so
+    // the cron's needsReread never reaches them and this is the ONLY thing
+    // that can.
+    if (SEC_UA && needsReread(stored)) {
       const retried = await retryEmpty(clean, cik);
       if (retried) return retried;
     }

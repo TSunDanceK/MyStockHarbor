@@ -1703,9 +1703,15 @@ console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
       },
     },
   });
-  check("two foreign currencies and no USD is REFUSED, not voted on",
-    eurJpy.reportingCurrency === "USD" && eurJpy.instants.length === 0,
-    "picking the more common one puts two currencies in one column");
+  // THE WINNER IS THE CURRENCY COVERING THE MOST FIELDS, and the loser's rows
+  // are NOT READ — which is what makes a winner safe. This fixture gives EUR
+  // and JPY one field each, so USD takes the tie by the documented rule and
+  // both are refused; the point being asserted is that the JPY rows never
+  // reach a field the EUR rows also populate.
+  check("a second foreign currency never shares a column with the first",
+    eurJpy.instants.every((p) =>
+      p.values.every((v) => v === null || v.val !== 777777)),
+    `decided ${eurJpy.reportingCurrency}; the JPY figure must not appear anywhere`);
   // AND A DOLLAR REPORTER IS UNMOVED. Any USD at all wins, so no symbol
   // rendering today can be pulled onto a conversion path by this change.
   const mixed = extractCompanyFacts("MIXED", {

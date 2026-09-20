@@ -230,19 +230,70 @@ console.log("\n5. THE CURRENCY IS DECIDED ONCE, PER FILER");
     tag()(facts({ EUR: [{ val: 1 }] })) === "EUR"
   );
   check(
-    "a filer publishing any USD at all is read as USD, so nothing rendering today moves",
-    tag()(facts({ EUR: [{ val: 1 }], USD: [{ val: 1 }] })) === "USD"
+    "a filer whose dollars cover as many fields as anything else is read as USD",
+    tag()(facts({ EUR: [{ val: 1 }], USD: [{ val: 1 }] })) === "USD",
+    "USD takes every tie, so nothing rendering today moves"
+  );
+
+  // ── THE RYAAY SHAPE, FROM THE REAL PAYLOAD (relay 35496797255) ───────────
+  // Euros across the whole mapped set; dollars on a handful of cash-flow and
+  // profit lines, six years each — a convenience translation. Measured counts:
+  // EUR 641 rows (91.2%), USD 62 (8.8%). The old "any USD wins" rule read
+  // those 62 as proof of a dollar reporter and refused all 641.
+  const wideEur = {
+    cik: 1,
+    facts: {
+      "ifrs-full": Object.fromEntries([
+        // Every money field gets a euro row...
+        ...mod.SEC_FIELDS.filter((f) => f.unit === "USD").map((f) => [
+          f.chain[0] ?? f.key,
+          { units: { EUR: [{ val: 1 }] } },
+        ]),
+      ]),
+    },
+  };
+  // ...and a few of them ALSO get a dollar row, with MORE rows each than the
+  // euro lines carry, so a row-count rule would still pick the wrong one.
+  const convenienceTags = mod.SEC_FIELDS.filter((f) => f.unit === "USD").slice(0, 3);
+  for (const f of convenienceTags) {
+    const tagName = f.chain[0] ?? f.key;
+    wideEur.facts["ifrs-full"][tagName] = {
+      units: { EUR: [{ val: 1 }], USD: Array.from({ length: 40 }, () => ({ val: 2 })) },
+    };
+  }
+  check(
+    "a convenience translation does NOT make a euro filer a dollar filer",
+    tag()(wideEur) === "EUR",
+    `${convenienceTags.length} USD fields with 40 rows each against ` +
+      `${mod.SEC_FIELDS.filter((f) => f.unit === "USD").length} EUR fields with 1 — ` +
+      `decided ${tag()(wideEur)}`
   );
   check(
-    "two foreign currencies and no USD REFUSES rather than voting",
-    tag()(facts({ EUR: [{ val: 1 }, { val: 2 }], PLN: [{ val: 1 }] })) === null,
-    "a column half in euros and half in zloty is the failure the unit guard exists to prevent"
+    "...and it is decided by FIELDS covered, not by row count",
+    tag()(wideEur) === "EUR",
+    "the USD rows outnumber the EUR rows here, so a plurality-by-rows rule would say USD"
+  );
+  // A GENUINE ROW-COUNT MUTATION. The first attempt randomised the key, which
+  // still added once per field and so still counted fields — the mutation
+  // passed and proved nothing. Keying by row index makes the set size equal
+  // the ROW count, which is the rule being ruled out.
+  await underMutation(
+    "currency decided by row count instead of fields covered",
+    "          seen.add(field.key);",
+    "          for (let i = 0; i < rows.length; i++) seen.add(field.key + \":\" + i);",
+    (m) => m.reportingCurrency(wideEur) === "EUR"
   );
   await underMutation(
-    "ambiguous currency resolved by majority vote",
-    "  if (foreign.length !== 1) return null;\n  return foreign[0][0];",
-    "  return foreign.sort((a, b) => b[1] - a[1])[0][0];",
-    (m) => m.reportingCurrency(facts({ EUR: [{ val: 1 }, { val: 2 }], PLN: [{ val: 1 }] })) === null
+    "any USD at all wins (the rule that refused RYAAY's 641 euro rows)",
+    "  const ranked = [...fieldsPerCurrency.entries()].sort((a, b) => {",
+    "  if (fieldsPerCurrency.has(\"USD\")) return \"USD\";\n  const ranked = [...fieldsPerCurrency.entries()].sort((a, b) => {",
+    (m) => m.reportingCurrency(wideEur) === "EUR"
+  );
+  check(
+    "the winner is stable against payload order",
+    tag()(facts({ PLN: [{ val: 1 }], EUR: [{ val: 1 }] })) ===
+      tag()(facts({ EUR: [{ val: 1 }], PLN: [{ val: 1 }] })),
+    "a currency that flipped between fetches would flip cur, the conversion and the figures"
   );
 }
 

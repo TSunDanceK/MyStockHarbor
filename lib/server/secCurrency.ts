@@ -84,24 +84,42 @@ export function unitKeysFor(unit: string, currency: string): string[] {
 /**
  * THE FILER'S ONE REPORTING CURRENCY, read from the payload.
  *
- * Counts how many published rows each money unit carries across the mapped
- * chains, and returns the winner. Three rules, each with a reason:
+ * ── BY DISTINCT FIELDS COVERED, NOT BY ROW COUNT AND NOT BY "ANY USD WINS" ──
  *
- *   USD WINS WHENEVER IT APPEARS AT ALL. A dual reporter that files any USD
- *   lines is read as a USD filer, unchanged from today. That keeps every
- *   symbol currently rendering exactly as it renders — this can only ever add
- *   filers, never move an existing one onto a conversion path.
+ * The first rule here was "USD wins whenever it appears at all", chosen so no
+ * symbol rendering today could be pulled onto a conversion path. MEASURED, it
+ * was wrong for exactly the filers this work is for (relay 35496797255):
  *
- *   ONE NON-USD CURRENCY, AND IT IS THE ANSWER.
+ *   RYAAY   EUR 641 rows (91.2%)   USD 62 rows (8.8%)   -> decided USD
  *
- *   TWO OR MORE NON-USD AND NO USD IS A REFUSAL, not a vote. Picking the more
- *   common one would silently drop the other's lines into the same column, and
- *   a column half in euros and half in zloty is the exact failure the unit
- *   guard exists to prevent. Refusing leaves the page saying it cannot read
- *   the filer, which is true.
+ * Those 62 USD rows are a CONVENIENCE TRANSLATION — `ProfitLoss`,
+ * `CashFlowsFromUsedInOperatingActivities` and six more cash-flow lines, six
+ * years each — published alongside primary statements that are entirely in
+ * euros. "Any USD wins" read them as proof of a dollar reporter and refused
+ * all 641 euro rows, so RYAAY rendered nothing.
+ *
+ * A ROW-COUNT PLURALITY WOULD FIX RYAAY AND BREAK THE OTHER DIRECTION: a US
+ * filer with extensive EUR segment disclosure could out-row its own primary
+ * statements, and the page would then show segment data as headline figures —
+ * not a wrong number exactly, but the wrong SERIES, which is worse for being
+ * plausible.
+ *
+ * DISTINCT FIELDS COVERED separates the two cleanly, because it measures the
+ * thing that actually distinguishes them: primary statements cover the whole
+ * mapped set, a convenience translation covers a handful of lines. RYAAY's
+ * euros cover most of the 43 money fields; its dollars cover about ten.
+ *
+ * USD WINS A TIE, which preserves the original guarantee where it matters: a
+ * filer whose dollars cover as many fields as any other currency is read as a
+ * dollar filer, so no symbol rendering today moves.
+ *
+ * NO MIXING IS POSSIBLE whichever way this goes, and that is what makes a
+ * "winner" safe at all: the caller admits ONE unit and refuses every other, so
+ * the loser's rows are not read rather than blended into the same column.
  */
 export function reportingCurrency(facts: CompanyFacts): string | null {
-  const counts = new Map<string, number>();
+  /** currency -> the set of FIELD KEYS it publishes at least one row for. */
+  const fieldsPerCurrency = new Map<string, Set<string>>();
   for (const field of SEC_FIELDS) {
     if (!MONEY_UNITS.has(field.unit)) continue;
     const sources: { ns: string; chain: string[] }[] = [
@@ -113,19 +131,36 @@ export function reportingCurrency(facts: CompanyFacts): string | null {
         const units = facts.facts?.[ns]?.[tag]?.units;
         if (!units) continue;
         for (const [unit, rows] of Object.entries(units)) {
+          if (!(rows?.length ?? 0)) continue;
           // The currency code, whether the unit is "EUR" or "EUR/shares".
           const code = unit.split("/")[0];
           if (!/^[A-Z]{3}$/.test(code)) continue;
-          counts.set(code, (counts.get(code) ?? 0) + (rows?.length ?? 0));
+          // THE FIELD, NOT THE TAG. One field's chain holds several tags, and
+          // counting tags would let a currency published under three synonyms
+          // of one line outscore a currency publishing three different lines.
+          let seen = fieldsPerCurrency.get(code);
+          if (!seen) fieldsPerCurrency.set(code, (seen = new Set()));
+          seen.add(field.key);
         }
       }
     }
   }
-  if (!counts.size) return null;
-  if ((counts.get("USD") ?? 0) > 0) return "USD";
-  const foreign = [...counts.entries()].filter(([c]) => c !== "USD");
-  if (foreign.length !== 1) return null;
-  return foreign[0][0];
+  if (!fieldsPerCurrency.size) return null;
+  // SORTED, SO THE ANSWER CANNOT DEPEND ON PAYLOAD ORDER. Map iteration is
+  // insertion order, which here is "whichever currency SEC happened to list
+  // first" — and a reporting currency that flips between two equal candidates
+  // from one fetch to the next would flip `cur`, the conversion and the stored
+  // figures with it.
+  //
+  // Most fields wins; USD takes any tie; a tie between two others is broken
+  // alphabetically. The last rule is arbitrary and is there only to be STABLE.
+  const ranked = [...fieldsPerCurrency.entries()].sort((a, b) => {
+    if (b[1].size !== a[1].size) return b[1].size - a[1].size;
+    if (a[0] === "USD") return -1;
+    if (b[0] === "USD") return 1;
+    return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
+  });
+  return ranked[0][0];
 }
 
 /** What a converted set records about how it was converted. */

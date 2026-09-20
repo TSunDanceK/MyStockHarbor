@@ -110,9 +110,23 @@ check("resolveFactSetForRender was found and sliced",
 // EVERYTHING THAT REACHES SEC FROM THIS MODULE, by name. fetchAndStore and
 // retryEmpty both fetch; retryEmpty is ALLOWED, and only on an empty set.
 const FETCHERS = ["fetchAndStore", "fetchCompanyFacts", "retryEmpty"];
+// ── THE END MARKER IS ASSERTED, NOT ASSUMED ──────────────────────────────
+// This sliced to `if (SEC_UA && stored.c !== secChainsHash())`. That line was
+// replaced by a needsReread() call when the cold path stopped hand-rolling a
+// staleness rule, indexOf returned -1, and `slice(start, -1)` quietly ran to
+// the end of the function — swallowing the retryEmpty call into the branch
+// that is asserted to contain no fetch. The assertion failed, which was the
+// lucky direction; a marker that moved the other way would have shrunk the
+// slice and passed. So the marker is now checked before it is used, exactly as
+// the slice above it already is.
+const RETRY_GUARD = "if (SEC_UA && needsReread(stored))";
+const retryAt = populated.indexOf(RETRY_GUARD);
+check("the empty-set retry guard was found",
+  retryAt > 0,
+  retryAt > 0 ? "" : `source no longer contains: ${RETRY_GUARD} — every assertion below is slicing blind`);
 const usableBranch = populated.slice(
   populated.indexOf("if (hasUsableData(stored))"),
-  populated.indexOf("if (SEC_UA && stored.c !== secChainsHash())")
+  retryAt > 0 ? retryAt : undefined
 );
 check("the populated branch is a bare return",
   /if \(hasUsableData\(stored\)\) return \{ status: "ready", set: stored, cold: false \};/.test(usableBranch),
