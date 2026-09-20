@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
-import { getDailyHistory } from "@/lib/server/historyCache";
+import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import {
   computeIndicatorSeed,
@@ -576,22 +576,45 @@ async function getEarningsData(symbol: string) {
   const secDates = await readReportDates(symbol);
   const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
 
+  // ── HOW MANY BARS THIS RENDER ACTUALLY NEEDS ─────────────────────────────
+  //
+  // computeEarningsReactionDetail reaches 20 trading days BACK from each report
+  // (the volume-average lookback) and 20 FORWARD (drift20), so the window is
+  // +/-20 trading days around the oldest and newest of the eight reports.
+  // 45 CALENDAR days covers that with room for holidays and long weekends —
+  // and the buffer is deliberately generous because a window one day too
+  // narrow does not error, it drops drift20 to null and the card simply shows
+  // fewer numbers.
+  //
+  // ONLY ON THE SEC-DATES PATH, and that is the whole reason it costs nothing:
+  // `secDates` is already read serially above, so when the filings supply the
+  // announcement dates the window is known BEFORE this fetch starts. On the
+  // FMP fallback the dates arrive in the same round trip that would have to
+  // carry them, so bounding would mean a second sequential read — worse than
+  // the thing it saves. That path keeps the full series.
+  const BAR_WINDOW_DAYS = 45;
+  const shiftIso = (iso: string, days: number) =>
+    new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
+  const barWindow = (() => {
+    const dates = secEvents.slice(0, 8).map((e) => e.announcedOn).filter(Boolean).sort();
+    if (!dates.length) return null;
+    return {
+      from: shiftIso(dates[0], -BAR_WINDOW_DAYS),
+      to: shiftIso(dates[dates.length - 1], BAR_WINDOW_DAYS),
+    };
+  })();
+
   const [cold, dailyHistory, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
-    // ── ~110 KB PER RENDER, AND THAT IS THE SECOND-LARGEST READ ON THIS PAGE ─
-    //
-    // MEASURED, not estimated: the full daily bar series for one symbol, read
-    // from Redis on every render that misses the ISR cache. Only the encoded
-    // SEC fact set is bigger.
-    //
-    // RECORDED HERE BECAUSE THIS IS WHERE IT WILL BE READ. The price-derived
-    // work (step 5) introduces a `getDailyBars(symbol, from, to)` adapter, and
-    // the figure is the reason that signature takes a RANGE: this page needs
-    // roughly a year of bars around the last eight reports and currently reads
-    // the whole series to get them. A bounded range is the change; the number
-    // above is what makes it worth making. Move this note onto that adapter's
-    // docblock when it exists — it belongs with the thing it justifies.
-    getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
+    // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
+    // including what a range does NOT save, which is the Redis read itself:
+    // bars are one value per symbol, so the GET returns every bar whatever
+    // range is asked for. What it saves is everything downstream of it.
+    barWindow
+      ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
+          .catch(() => [] as Point[])
+      : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
     // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
     // an ignored fetch still costs the request, and the daily FMP limit is the
     // thing the owner has said not to spend.

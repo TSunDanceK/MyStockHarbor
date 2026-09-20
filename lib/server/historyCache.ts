@@ -1827,3 +1827,61 @@ export async function ensureQualifiedHistory(symbol: string) {
   const daily = await getDailyHistory(normalized);
   return Array.isArray(daily) && daily.length >= MIN_QUALIFIED_POINTS;
 }
+
+/**
+ * A DATE-BOUNDED SLICE OF ONE SYMBOL'S DAILY BARS.
+ *
+ * ── THE MEASUREMENT THAT ASKED FOR THIS ───────────────────────────────────
+ *
+ * Moved here from app/stock/[symbol]/earnings/page.tsx, where it was recorded
+ * against the call site it was measured at:
+ *
+ *   ~110 KB PER RENDER, AND THAT IS THE SECOND-LARGEST READ ON THIS PAGE.
+ *   MEASURED, not estimated: the full daily bar series for one symbol, read
+ *   from Redis on every render that misses the ISR cache. Only the encoded SEC
+ *   fact set is bigger.
+ *
+ * The earnings page needs roughly a year of bars around the last eight reports
+ * and was reading the whole series to get them.
+ *
+ * ── WHAT A RANGE DOES AND DOES NOT SAVE, STATED PLAINLY ───────────────────
+ *
+ * IT DOES NOT SHRINK THE REDIS READ. Bars are stored as ONE VALUE per symbol
+ * at `msh:history:v7:<SYM>` — a single HistoryCacheEntry holding the whole
+ * `daily` array — so the GET returns every bar whatever range is asked for.
+ * Slicing happens after the bytes have already arrived.
+ *
+ * That is worth saying because the note above reads like a billing fix and
+ * this is not one. Reading fewer bytes off the wire needs the STORAGE chunked
+ * by period (lib/server/chunkByBytes.ts exists for that shape), which changes
+ * the write path and the cache version and is a separate decision.
+ *
+ * WHAT IT DOES SAVE is everything downstream of the read: the array the caller
+ * holds, iterates, passes through a render and serialises into the payload a
+ * client receives. For the earnings page that is ~110 KB of bars reduced to
+ * the year it actually reads, on every render.
+ *
+ * ── BOUNDS ARE INCLUSIVE, AND AN EMPTY RANGE IS EMPTY ─────────────────────
+ *
+ * A caller asking for a window with no trading days gets `[]`, not the whole
+ * series — the failure direction matters, because a range filter that falls
+ * back to "everything" on no match turns a narrow question into the widest
+ * possible answer while looking like it worked.
+ */
+export async function getDailyBars(
+  symbol: string,
+  from: string,
+  to: string,
+  opts: { force?: boolean; caller?: string } = {}
+): Promise<Point[]> {
+  // THE SAME CACHE, THE SAME IN-FLIGHT DEDUPE, THE SAME QUALIFICATION. This is
+  // a view over getDailyHistory rather than a second read path; a parallel
+  // fetcher would double the FMP budget and could disagree about whether a
+  // symbol qualifies.
+  const all = await getDailyHistory(symbol, opts);
+  if (!Array.isArray(all) || !all.length) return [];
+  if (!from || !to || from > to) return [];
+  // Ascending by date (historyCache sorts on write), so a filter is enough and
+  // a binary search would be a micro-optimisation over an in-memory array.
+  return all.filter((p) => p.date >= from && p.date <= to);
+}
