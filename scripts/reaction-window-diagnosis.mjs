@@ -38,9 +38,22 @@ const WINDOW_DAYS = Number((PAGE.match(/BAR_WINDOW_DAYS = (\d+)/) ?? [])[1]);
 const REPORTS = Number((PAGE.match(/REACTION_REPORTS = (\d+)/) ?? [])[1]);
 if (!WINDOW_DAYS || !REPORTS) { console.error("FATAL: could not read the window constants"); process.exit(2); }
 
+// THE CONSTANTS THE LIFTED FUNCTIONS NAME, READ FROM THE SOURCE AND SUPPLIED.
+//
+// computeEarningsReactionDetail closes over REACTION_SESSION_GAP_DAYS. A lift
+// without it throws ReferenceError the moment the function is CALLED — after
+// the header, the bar counts and the window have already printed, so it reads
+// as a run that stopped rather than as a missing constant. That is the exact
+// failure #474 fixed in the annual-filer census, and it has now happened three
+// times in this repo; the constant is read from the source rather than pinned,
+// so a change to it moves this with it.
+const GAP_DAYS = Number((PAGE.match(/REACTION_SESSION_GAP_DAYS = (\d+)/) ?? [])[1]);
+if (!GAP_DAYS) { console.error("FATAL: could not read REACTION_SESSION_GAP_DAYS"); process.exit(2); }
+
 const mod = await lift(
   [
-    grabFunction(PAGE, "computeEarningsReactionDetail").replace("function", "function"),
+    `const REACTION_SESSION_GAP_DAYS = ${GAP_DAYS};`,
+    grabFunction(PAGE, "computeEarningsReactionDetail"),
     grabFunction(HIST, "getDailyBars")
       .replace("export async function", "async function")
       // The store is not reachable from the slicing logic; the caller supplies
@@ -54,7 +67,7 @@ const SYMS = (process.env.SYMBOLS || "RYAAY,AAPL,CNI").split(/[,\s]+/).filter(Bo
 const shiftIso = (iso, d) => new Date(Date.parse(iso) + d * 86400000).toISOString().slice(0, 10);
 
 console.log("=".repeat(78));
-console.log(`window +/-${WINDOW_DAYS} calendar days around the newest ${REPORTS} reports`);
+console.log(`window +/-${WINDOW_DAYS} calendar days around the newest ${REPORTS} reports · session gap bound ${GAP_DAYS}d`);
 console.log("=".repeat(78));
 
 for (const symbol of SYMS) {
