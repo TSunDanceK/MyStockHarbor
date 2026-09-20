@@ -31,6 +31,26 @@ import { spawnSync } from "node:child_process";
 // phase is an edit HERE, on a branch, with no workflow change and no merge.
 const TASKS = {
   "stooq-access": { script: "scripts/stooq-access-probe.mjs", args: () => [] },
+  // WHAT FED H.10 AND THE ECB ACTUALLY SERVE. Read-only and UNCREDENTIALLED on
+  // purpose: it touches no store, so it belongs in the job that cannot reach
+  // one. Both hosts are 403 CONNECT from the agent sandbox, so this is the only
+  // place the rate sources can be measured at all.
+  "fx-sources": { script: "scripts/fx-source-probe.mjs", args: () => [] },
+  // THE SAME FOUR QUESTIONS asked of FRED's clean-CSV endpoint for the H.10
+  // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
+  // URL from an unavailable source. Read-only and uncredentialled likewise.
+  "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
+  // and every FRED series the adapter names; touches no store, so read-only.
+  "fx-filer-diagnosis": {
+    script: "scripts/fx-filer-diagnosis.mjs",
+    args: () => [],
+    // It LIFTS the shipped reportingCurrency and extractCompanyFacts out of
+    // .ts modules, so it needs the compiler to erase types. The router
+    // installs it in isolation; this stays in the read-only job because it
+    // touches no store.
+    needsTypescript: true,
+  },
   // Added on a branch and dispatched the same minute, with no workflow edit and
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
@@ -443,6 +463,14 @@ const TASKS = {
   },
   "write-report-dates": {
     script: "scripts/sec-report-dates-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // MANIFEST ENTRIES WHOSE STAMP IS BEHIND THEIR OWN STORED SET, counted.
+  // Credentialled to read the manifest and the fact sets; writes nothing.
+  "write-manifest-stamp-census": {
+    script: "scripts/manifest-stamp-census.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,

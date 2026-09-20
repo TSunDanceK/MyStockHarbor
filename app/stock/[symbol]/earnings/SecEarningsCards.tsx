@@ -4,7 +4,7 @@
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import {
-  CROSSING_NOTE, CROSSING_WORDS, GAAP_EPS_NOTE, SEC_ATTRIBUTION,
+  CROSSING_NOTE, CROSSING_WORDS, GAAP_EPS_NOTE, SEC_ATTRIBUTION, conversionNote,
   isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
@@ -280,6 +280,10 @@ export function SecSnapshotCard({
         <Metric label="Net income"><CellValue cell={s.netIncome} compact /></Metric>
       </div>
       <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
+      {/* ON THE SNAPSHOT, WHICH IS THE CARD EVERY READER SEES. A conversion
+          note further down the page is a note most readers never reach, and
+          the figures it explains are the ones at the top. */}
+      {view.currency ? <p className="earningsDataNote">{conversionNote(view.currency)}</p> : null}
       {/* PERIOD LABELS ARE THE FILER'S OWN FISCAL PERIOD, NOT THE CALENDAR. The
           probe set's year-ends are 31 Mar, 26 Sep, 3 Sep, 31 Oct and 31 Dec, so
           two companies' "2026" can be nine months apart. */}
