@@ -36,6 +36,10 @@ const TASKS = {
   // one. Both hosts are 403 CONNECT from the agent sandbox, so this is the only
   // place the rate sources can be measured at all.
   "fx-sources": { script: "scripts/fx-source-probe.mjs", args: () => [] },
+  // THE SAME FOUR QUESTIONS asked of FRED's clean-CSV endpoint for the H.10
+  // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
+  // URL from an unavailable source. Read-only and uncredentialled likewise.
+  "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
   // Added on a branch and dispatched the same minute, with no workflow edit and
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
