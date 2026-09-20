@@ -502,16 +502,29 @@ const SURFACES = [
   { file: "app/stock/[symbol]/news/page.tsx", label: "stock news page", compact: true },
   { file: "app/sector/[slug]/news/page.tsx", label: "sector news page", compact: true },
   { file: "app/components/DashboardClient.tsx", label: "dashboard news strip", compact: false },
+  // ── /headlines MOVED HERE OUT OF IMAGELESS_BY_DESIGN ──────────────────
+  // Its recorded reason was "5% wire-to-universe match — no per-item symbol to
+  // reach a bucket with and no price data for a generated card". Both halves
+  // are TRUE and neither rules out library art: bucketForItem(eventType, null)
+  // reaches an event bucket from a TITLE ALONE, with no symbol and no prices.
+  //
+  // That is the identical mistake this file already records against the sector
+  // page — "that reasoning applied to the FALLBACK and was taken to rule out
+  // the library art too, which it never did". A reason that is sound for the
+  // generated card was read as a reason for nothing at all, twice.
+  //
+  // noneIsNull, because this surface is the one that can legitimately plan
+  // `none`: with sectorBucket null and canGenerate false, a title matching no
+  // pattern has no honest picture, and an empty 16:9 wrapper on most of the
+  // grid would be worse than the blank it replaces.
+  { file: "app/headlines/page.tsx", label: "headlines page", compact: false, noneIsNull: true },
 ];
 
-// DELIBERATELY IMAGELESS, with the reason attached: step 4's real poll resolved
-// 2 of 40 wire items to a universe symbol (5.0%), so /headlines has no per-item
-// symbol to reach a bucket with and no price data for a generated card.
-// Per-sector search is the option to revisit. If this list grows, it grows with
-// a reason.
-const IMAGELESS_BY_DESIGN = [
-  { file: "app/headlines/page.tsx", why: "5% wire-to-universe match — no per-item symbol to reach a bucket with" },
-];
+// DELIBERATELY IMAGELESS, with the reason attached. EMPTY, and the partition
+// assertion below is what stops that being vacuous: every render site must be
+// in exactly one of these two lists, so a site cannot leave SURFACES without
+// arriving here with a stated reason. If this list grows, it grows with one.
+const IMAGELESS_BY_DESIGN = [];
 
 for (const surface of SURFACES) {
   const code = readCodeOnly(surface.file);
@@ -532,16 +545,30 @@ for (const surface of SURFACES) {
   // compact row's ternary matched in its place. Splitting on the marker means
   // every occurrence has to stand on its own.
   const branches = flat.split("SHOW_PUBLISHER_IMAGES && item.image ?").slice(1);
+  // ONE EXTRA STEP IS PERMITTED, AND ONLY ONE, AND ONLY ON noneIsNull SURFACES:
+  // a short-circuit on the PLAN's own kind. It has to be spelled against the
+  // plan — `art.kind === "none" ? null :` — so a constant-false guard cannot
+  // reappear in that slot wearing the same shape. Everything else is unchanged:
+  // one optional wrapper div, then the render.
+  const ELSE_BRANCH = surface.noneIsNull
+    ? /^[\s\S]*?\) : (?:\w+\.kind === "none" \? null : )?\( ?(<div[^>]*> )?<NewsCardArt/
+    : /^[\s\S]*?\) : \( ?(<div[^>]*> )?<NewsCardArt/;
   check(
     `${surface.label}: EVERY publisher ternary renders art in its else-branch`,
     branches.length > 0 &&
       branches.every((b) =>
-        // One optional wrapper div between the branch and the render, and
-        // nothing else — no guard, no `&&`, no second condition.
-        /^[\s\S]*?\) : \( ?(<div[^>]*> )?<NewsCardArt/.test(b.slice(0, b.indexOf("<NewsCardArt") + 12) || b)
+        ELSE_BRANCH.test(b.slice(0, b.indexOf("<NewsCardArt") + 12) || b)
       ),
     `${branches.length} ternar${branches.length === 1 ? "y" : "ies"} — a structural fact, not an identifier: \`{false && <NewsCardArt/>}\` fails this where a grep for the name passed`
   );
+  if (surface.noneIsNull) {
+    check(
+      `${surface.label}: the null branch is conditioned on the PLAN, not on a constant`,
+      /\w+\.kind === "none" \? null :/.test(flat),
+      "rendering nothing is legitimate here only when planCardArt SAID none; " +
+        "`{cond ? art : null}` with any other condition is the original bug"
+    );
+  }
   check(
     `${surface.label}: no plan of its own — planCardArt or a server-sent plan`,
     /planCardArt\(/.test(code) || /plan=\{item\.art/.test(code)
@@ -568,6 +595,133 @@ for (const { file, why } of IMAGELESS_BY_DESIGN) {
     why
   );
 }
+
+// ── THE GAP THAT LET /headlines SHIP BLANK ──────────────────────────────
+// §1 asserted a GUARD at all four render sites; the loop above asserted a
+// FALLBACK only at the three in SURFACES. /headlines was in neither — it sat in
+// IMAGELESS_BY_DESIGN, whose assertion is the INVERSE one, so every check
+// passed while the page rendered no picture on any card. Nothing was wrong with
+// either list; what was missing was anything requiring them to COVER the render
+// sites between them.
+//
+// So the two lists are now a PARTITION of RENDER_SITES. A site cannot be
+// dropped from SURFACES without landing in IMAGELESS_BY_DESIGN with a written
+// reason, and cannot be in both. The failure mode this closes is silence, so
+// the assertion names the specific files rather than just counting.
+const covered = [...SURFACES.map((x) => x.file), ...IMAGELESS_BY_DESIGN.map((x) => x.file)];
+const uncovered = RENDER_SITES.filter((f) => !covered.includes(f));
+const doubled = RENDER_SITES.filter(
+  (f) => SURFACES.some((x) => x.file === f) && IMAGELESS_BY_DESIGN.some((x) => x.file === f)
+);
+const stray = covered.filter((f) => !RENDER_SITES.includes(f));
+check(
+  "every render site is EITHER an art surface OR imageless with a reason",
+  uncovered.length === 0 && doubled.length === 0,
+  uncovered.length
+    ? `uncovered: ${uncovered.join(", ")} — asserted to guard the publisher image, asserted to do nothing else`
+    : doubled.length
+      ? `in both lists: ${doubled.join(", ")}`
+      : `${RENDER_SITES.length} sites: ${SURFACES.length} render art, ${IMAGELESS_BY_DESIGN.length} imageless by design`
+);
+check(
+  "...and neither list names a file that is not a render site",
+  stray.length === 0,
+  stray.length ? `stray: ${stray.join(", ")}` : "a renamed page would otherwise leave a passing assertion behind"
+);
+// ── /headlines, WITH THE EXACT INPUTS THE PAGE PASSES ───────────────────
+// The structural checks above prove the page DELEGATES. They cannot prove the
+// delegation produces a picture, and "wired up but always none" is the failure
+// this whole section exists to stop being invisible. So the page's own two
+// pinned arguments -- sectorBucket null, canGenerate false -- are run here
+// against the real title classifier.
+const etSrc = read("lib/server/news/eventType.ts")
+  .split("\n").filter((l) => !/^import /.test(l)).join("\n")
+  .replace(/export type EventType = NonNullable<NewsItem\["eventType"\]>;/, "export type EventType = string;");
+if (!/export function eventTypeFromTitle\(/.test(etSrc)) {
+  console.error("FAIL: eventTypeFromTitle was not found after stubbing eventType.ts.");
+  process.exit(1);
+}
+const et = await import(`data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(etSrc, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+).toString("base64")}`);
+
+// REAL HEADLINES, captured rather than written to pass. The first two are the
+// shapes the title leg is built for; the third is an ordinary market headline
+// of the kind that dominates this feed.
+const headlinePlan = (title) =>
+  art.planCardArt({
+    variant: "lead",
+    eventType: et.eventTypeFromTitle(title),
+    sectorBucket: null,
+    key: title,
+    taken: new Map(),
+    canGenerate: false,
+  });
+
+check(
+  "/headlines: an earnings-shaped title reaches LIBRARY art with no symbol at all",
+  (() => {
+    const p = headlinePlan("Nvidia beats estimates as data-centre revenue sets a record");
+    return p.kind === "library" && /event-earnings/.test(p.art.src);
+  })(),
+  "this is the half the IMAGELESS_BY_DESIGN reason missed: the event bucket needs " +
+    "a title, not a ticker and not a price series"
+);
+// AGAINST THE REAL MANIFEST, NOT THE SYNTHETIC ONE. The check above runs on the
+// substituted manifest, which carries event-earnings and deliberately not the
+// others -- so it proves the MECHANISM and can say nothing about what ships. An
+// analyst-shaped title classified correctly but landing on an empty bucket would
+// fall through to sectorBucket, which is null here, and render nothing: wired up
+// and still blank, the exact outcome this page is being fixed for.
+//
+// So the shipped counts are asserted directly, for every type the title leg can
+// actually return. Not all five: macro and filing are unreachable from a title.
+const shippedManifest = JSON.parse(read("public/news-art/manifest.json"));
+const TITLE_REACHABLE = { earnings: "event-earnings", analyst: "event-analyst", deal: "event-deals" };
+const emptyBuckets = Object.entries(TITLE_REACHABLE)
+  .filter(([, bucket]) => !(shippedManifest[bucket] > 0))
+  .map(([type, bucket]) => `${type} -> ${bucket}`);
+check(
+  "/headlines: every event bucket the title leg can reach holds shipped art",
+  emptyBuckets.length === 0,
+  emptyBuckets.length
+    ? `empty: ${emptyBuckets.join(", ")} — those headlines classify and then render nothing`
+    : Object.entries(TITLE_REACHABLE).map(([t, b]) => `${t}=${shippedManifest[b]}`).join(" ")
+);
+check(
+  "...and the title leg really does return all three, so that list is not aspirational",
+  ["Nvidia beats estimates on record revenue", "Analyst raises price target on Apple",
+   "Acme agrees to acquire Beta Corp"].map((t) => et.eventTypeFromTitle(t)).join(",") ===
+    "earnings,analyst,deal",
+  "a bucket list naming types the classifier never produces would pass the check above vacuously"
+);
+check(
+  "/headlines: an ordinary headline plans NONE — never a guessed sector",
+  headlinePlan("Stocks drift as investors wait on the Fed").kind === "none",
+  "with sectorBucket null and canGenerate false the only alternatives are the " +
+    "right art or no art; a mismatched illustration cannot be produced"
+);
+check(
+  "/headlines: the page's comment is true — the title leg never returns macro or filing",
+  ["macro", "filing"].every((t) =>
+    !Object.values({
+      a: "Fed holds rates steady as inflation cools",
+      b: "Tariffs pressure Deere's margins",
+      c: "Company files its 10-Q for the September quarter",
+      d: "New economic policy reshapes trade",
+    }).some((title) => et.eventTypeFromTitle(title) === t)
+  ),
+  "eventType.ts documents both as deliberately unreachable from a title; the page " +
+    "says so in a comment, and a comment that stops being true is how the last one shipped"
+);
+
+check(
+  "every IMAGELESS_BY_DESIGN entry carries a real reason",
+  IMAGELESS_BY_DESIGN.every((x) => typeof x.why === "string" && x.why.trim().length > 20),
+  "the list is empty today; the rule is what makes re-adding a site cost a sentence"
+);
 
 check(
   "the dashboard decides its art SERVER-side",
