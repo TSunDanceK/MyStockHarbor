@@ -679,17 +679,20 @@ check(
   "the name snapshot tries EVERY spelling for a suffixed universe symbol",
   (() => {
     // 17 of the first snapshot's 28 misses were dashed dual-class and preferred
-    // names. The directory lists those under the ACT Symbol only, because their
-    // NASDAQ Symbol column is empty — they are NYSE-listed.
+    // names. The directory lists those under the dotted ACT Symbol only,
+    // because their NASDAQ Symbol column is empty — they are NYSE-listed.
     //
-    // THIS ASSERTION USED TO PIN THE HAND-ROLLED DASH->DOT FORM, and it was
-    // testing the wrong thing rather than nothing: the shape it pinned recovered
-    // ZERO of the 18 suffixed symbols in the universe. Dot is not the spelling
-    // Nasdaq Trader uses for a suffixed preferred — it writes MER$K, not MER.PK
-    // — and only symbolSpellings emits that. The property is "every spelling the
-    // helper knows", so that is what is pinned now.
+    // ASSERTS THE BEHAVIOUR, NOT THE SPELLING OF IT, and this assertion used to
+    // pin a hand-rolled dash->dot form — testing the wrong thing rather than
+    // nothing, since the shape it pinned recovered ZERO of the 18 suffixed
+    // symbols in the universe. Dot is not the spelling Nasdaq Trader uses for a
+    // suffixed preferred; it writes MER$K, not MER.PK, and only symbolSpellings
+    // emits that. The property is "every spelling the helper knows", so that is
+    // what is pinned now — matched through the import rather than one phrasing,
+    // because a check pinned to a phrasing fails on every correct refactor.
     return /const findRow = \(sym\) =>/.test(script) &&
-      /symbolSpellings\(symbol\)\.map\(findRow\)\.find\(Boolean\)/.test(script);
+      /symbolSpellings\(symbol\)\.map\(findRow\)/.test(script) &&
+      /from "\.\/lib\/symbol-spellings\.mjs"/.test(script);
   })(),
   "BRK-B is in the preset universe, so this is a guaranteed slot losing its news leg"
 );
@@ -782,8 +785,9 @@ check(
   "the spelling fallback is applied before calling a symbol unresolved",
   // Also restated from a pinned `s.replace(/\./g, "-")`. The CIK map is where a
   // dot/dash miss actually mattered (BRK.B), and it still does — what changed is
-  // that the caller no longer decides which single alternative to try.
-  /symbolSpellings\(s\)\.some\(\(spelling\) => Boolean\(cikMap\[spelling\]\)\)/.test(script),
+  // that the caller no longer decides which single alternative to try: the
+  // helper subsumes the inline line and widens it to the dollar forms too.
+  /lookupSpellingIn\(cikMap, s\)/.test(script),
   "otherwise BRK.B is queued for human adjudication of a bug already fixed at the lookup"
 );
 check(
