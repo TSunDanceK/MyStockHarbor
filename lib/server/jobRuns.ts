@@ -68,6 +68,7 @@ export const JOBS = {
   // own request to latestProcessableDate() regardless, so an early fire asks for
   // a date that exists rather than 403ing on one that does not.
   "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
+  "sec-facts": { label: "SEC fact sets — reverify then populate (daily 04:20)", instrumented: true, cron: "20 4 * * *" },
 } as const;
 
 /**

@@ -85,6 +85,22 @@ const ALLOWED_FIXTURES = new Map([
     "ZZZZ.Z@scripts/check-sec-adapter.mjs",
     "the not-in-either-spelling case, proving cikFor returns undefined rather than inventing a CIK",
   ],
+  // The DOTTED forms are the whole subject of these three: seedManifest read
+  // the map with a plain get() and BRK.B came back with no CIK, which made it
+  // invisible to the daily index forever. The fixture has to hold the spelling
+  // the universe actually uses or it would assert nothing.
+  [
+    "BRK.B@scripts/check-sec-daily-index.mjs",
+    "the dotted-universe-ticker-resolves-to-dashed-map-entry fixture; the defect this asserts against",
+  ],
+  [
+    "BF.B@scripts/check-sec-daily-index.mjs",
+    "second dotted form in the same fixture — one symbol passing proves nothing about the shape",
+  ],
+  [
+    "MKC.V@scripts/check-sec-daily-index.mjs",
+    "third dotted form, and the non-B suffix, so the fixture is not three instances of one pattern",
+  ],
 ]);
 
 /** A dotted literal is excused only in the exact file its fixture entry names. */

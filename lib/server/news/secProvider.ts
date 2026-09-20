@@ -32,6 +32,7 @@ import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
 import { secUserAgent } from "./userAgent";
 import type { NewsItem, NewsProvider } from "./types";
+import { lookupOneWay, toDashed } from "@/lib/symbolSpellings.mjs";
 
 const CIK_BY_SYMBOL = cikMap as Record<string, string>;
 
@@ -280,8 +281,12 @@ export function cikFor(
   symbol: string,
   ciks: Record<string, string> = CIK_BY_SYMBOL
 ): string | undefined {
-  const upper = symbol.trim().toUpperCase();
-  return ciks[upper] ?? (upper.includes(".") ? ciks[upper.replace(/\./g, "-")] : undefined);
+  // Through the shared helper, and ONE-WAY on purpose. The CIK map has a
+  // single canonical spelling -- the dash -- so a dotted symbol may reach a
+  // dashed key and a dashed miss must NOT reach a dotted one. Routing this
+  // through the full candidate list widened it in both directions, and
+  // check-sec-adapter.mjs caught it the same run.
+  return lookupOneWay(ciks, symbol, toDashed);
 }
 
 /**

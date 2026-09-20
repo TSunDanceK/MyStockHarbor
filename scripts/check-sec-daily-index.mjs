@@ -100,7 +100,15 @@ const man = await lift(
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
    grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue")].join("\n") +
     "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
-  "const SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
+  // THE TRANSITIVE CALLEE, AND IT FAILED AT RUN TIME FIRST. grabFunction lifts
+  // ONE body and does not follow imports, so seedManifest's lookupBySpelling
+  // threw ReferenceError the moment it was called. The helper's REAL source is
+  // injected rather than a stand-in: a hand-written stub here would be a second
+  // implementation of the exact thing the helper exists to keep single, and the
+  // check would then pass against a spelling rule the app does not use.
+  fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8")
+    .replace(/^export /gm, "") +
+    "\nconst SEC_SCORE_VERSION = 1;\nconst DELIST_REFRESHES = 3;\nconst SEC_REREAD_DRAIN_PER_RUN = 40;"
 );
 
 const tick = await lift(
@@ -167,6 +175,83 @@ console.log("\n3. Seeding");
 check("seeds the universe once", seed.seeded && seed.symbols === 5, `${seed.symbols} symbols`);
 check("every symbol has a CIK", seed.withCik === 5 && seed.withoutCik.length === 0);
 check("reseeding is idempotent and adds nothing", man.seedManifest(manifest, [...FIXTURE_CIK.keys()], FIXTURE_CIK, true).seeded === false);
+// ── THE DOTTED TICKER, WHICH HAD NO CIK AND THEREFORE NO PAGE ──────────────
+//
+// `cikByTicker.get(symbol)` alone gave BRK.B nothing: the universe spells it
+// with a DOT and SEC's exchange file with a DASH. A symbol with no CIK is
+// invisible to the daily index, never enters the re-read queue, and can never
+// be populated -- so its page reads "not loaded yet" forever with no error
+// anywhere to say why.
+//
+// REAL SPELLINGS FROM THE COMMITTED TICKER FILE, not invented ones: BRK-B,
+// BF-B and MKC-V are how data/sec/company-tickers.json actually writes them,
+// and all three are absent under the dotted form the universe uses.
+const DOTTED = new Map([
+  ["BRK-B", { cik: "0001067983", exchange: "NYSE" }],
+  ["BF-B", { cik: "0000014693", exchange: "NYSE" }],
+  ["MKC-V", { cik: "0000063754", exchange: "NYSE" }],
+  ["AAPL", { cik: "0000320193", exchange: "Nasdaq" }],
+]);
+const dotManifest = man.emptyManifest();
+const dotSeed = man.seedManifest(dotManifest, ["BRK.B", "BF.B", "MKC.V", "AAPL"], DOTTED, true);
+check("a DOTTED universe ticker resolves to the DASHED map entry's CIK",
+  dotManifest.symbols["BRK.B"]?.cik === "0001067983",
+  dotManifest.symbols["BRK.B"]?.cik ?? "no CIK — the defect this asserts against");
+check("...and so do the other two dotted forms in the universe",
+  dotManifest.symbols["BF.B"]?.cik === "0000014693" &&
+    dotManifest.symbols["MKC.V"]?.cik === "0000063754");
+check("none of the four lands in withoutCik", dotSeed.withoutCik.length === 0,
+  dotSeed.withoutCik.join(", "));
+// The manifest keeps the UNIVERSE's spelling as its key, not the map's -- the
+// rest of the pipeline joins on that, and rewriting it here would move the
+// problem rather than fix it.
+check("the manifest is keyed by the universe's spelling, not the ticker file's",
+  "BRK.B" in dotManifest.symbols && !("BRK-B" in dotManifest.symbols));
+// An undotted symbol genuinely absent from the map must still report absent:
+// the helper widens the search, it does not invent a hit.
+check("a symbol absent under EVERY spelling still reports no CIK",
+  man.seedManifest(man.emptyManifest(), ["NOSUCH"], DOTTED, true).withoutCik.join() === "NOSUCH");
+
+// ── THE REAL PRESET AGAINST THE REAL TICKER FILE ──────────────────────────
+//
+// Everything above runs on a four-row map chosen to contain the defect, which
+// is fine for the RULE and useless for the QUESTION the review actually asked:
+// how many preset symbols were silently missing a CIK, measured, rather than an
+// assertion that BRK.B was the only one. A crafted map cannot answer that — it
+// can only confirm what its author already put in it.
+//
+// So this seeds the SHIPPED PRESET_UNIVERSE from the SHIPPED ticker file and
+// counts. It also recomputes what a plain Map.get would have produced, so the
+// count is a difference between two rules rather than a number to be believed.
+{
+  const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
+  const tickMod = await lift(
+    [grabFunction(tickSrc, "padCik"), grabFunction(tickSrc, "parseTickerFile")].join("\n") +
+      "\nexport { parseTickerFile, padCik };"
+  );
+  const { map: realMap } = tickMod.parseTickerFile(
+    fs.readFileSync("data/sec/company-tickers.json", "utf8")
+  );
+  const presetMod = await lift(readCodeOnly("lib/server/presetUniverse.ts"));
+  const preset = presetMod.PRESET_UNIVERSE;
+
+  const viaSeed = man.seedManifest(man.emptyManifest(), preset, realMap, true);
+  const viaPlainGet = preset.filter((sym) => !realMap.get(sym));
+
+  check("every preset symbol resolves to a CIK through the shipped seed path",
+    viaSeed.withoutCik.length === 0,
+    viaSeed.withoutCik.length
+      ? `${viaSeed.withoutCik.join(", ")} — each of these is invisible to the daily index forever`
+      : `all ${preset.length} of PRESET_UNIVERSE`);
+  // THE MEASURED COUNT, not the claim. If a second dotted preset symbol is
+  // added later this number moves and the detail line says which.
+  check("...and the plain Map.get the seed used to do misses exactly the dotted ones",
+    viaPlainGet.length === 1 && viaPlainGet[0] === "BRK.B",
+    `${viaPlainGet.length} of ${preset.length} missed by Map.get: ` +
+      `${viaPlainGet.join(", ") || "none"} — the spelling helper recovers ` +
+      `${viaPlainGet.length - viaSeed.withoutCik.length} of them`);
+}
+
 const byCik = man.symbolsByCik(manifest);
 check("the CIK index registers BOTH padded and unpadded spellings",
   byCik.get("0000320193") === "AAPL" && byCik.get("320193") === "AAPL",
@@ -1172,6 +1257,45 @@ console.log("\n17b. The real 20260908-11 window");
   check("no symbol queues on an amended Form 4 alone",
     !added.some((sym) => post.has(sym)),
     "4/A, 144/A and SCHEDULE 13D/A are not financial statements");
+  // ── WHICH AMENDING FORM ACTUALLY DID IT ───────────────────────────────────
+  // applyFilings' docblock said the dropped symbols "had filed an amended Form
+  // 4". Derived here instead of believed: only ONE of the seven did. Six were
+  // amended beneficial-ownership statements. The docblock is corrected and this
+  // is what stops it drifting back.
+  const amendingForms = {};
+  for (const sym of added) {
+    for (const f of fx.filings.filter((x) => x.symbol === sym && x.amendment)) {
+      amendingForms[f.form] = (amendingForms[f.form] ?? 0) + 1;
+    }
+  }
+  const byOwnership = added.filter((sym) =>
+    fx.filings.some((f) => f.symbol === sym && f.amendment && /^SCHEDULE 13[DG]\/A$/.test(f.form)));
+  const byForm4 = added.filter((sym) =>
+    fx.filings.some((f) => f.symbol === sym && f.amendment && /^4\/A$/.test(f.form)));
+  // ── TWO UNITS, AND THEY MUST NOT BE CONFLATED ─────────────────────────────
+  // 7 is a count of SYMBOLS; 8 is a count of FILINGS, because BEN filed two
+  // 13D/A. Both are right and the docblock implied one count. This is the same
+  // union-vs-sum distinction that produced an unpassable rereadQueued gate, so
+  // both are asserted separately and the detail line names the unit.
+  const amendingFilingCount = Object.values(amendingForms).reduce((a, b) => a + b, 0);
+  check("7 is a count of SYMBOLS", added.length === 7, added.join(","));
+  check("8 is a count of FILINGS across those symbols",
+    amendingFilingCount === 8,
+    `${amendingFilingCount} amending filings over ${added.length} symbols — ` +
+      `BEN filed two, which is the whole of the difference`);
+  check("six of the seven SYMBOLS are queued by an amended 13D/A or 13G/A, not a 4/A",
+    byOwnership.length === 6 && byForm4.length === 1 &&
+      byForm4[0] === "DOCU" && !byOwnership.includes("DOCU"),
+    `ownership ${byOwnership.join(",")} | form4 ${byForm4.join(",")} | ` +
+      `filings ${JSON.stringify(amendingForms)}`);
+  check("...and applyFilings' docblock says so, with the unit on every figure",
+    (() => {
+      const doc = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
+      return /SIX of the seven SYMBOLS/.test(doc) &&
+        /134 SYMBOLS queued, 7 SYMBOLS dropped/.test(doc) &&
+        /THE FORMS ARE COUNTED IN FILINGS, NOT SYMBOLS/.test(doc);
+    })(),
+    "the stale version named Form 4, and the first correction implied one count");
 }
 
 // ── 17c. The 100 guaranteed slots are actually in the manifest ─────────────
@@ -1331,7 +1455,22 @@ const walk = (dir) => {
 walk("app"); walk("lib");
 check("only job routes touch the manifest", readers.every((r) => r.startsWith("app/api/jobs/")),
   readers.join(", ") || "none");
-check("...and it is exactly one file today", readers.length === 1, readers.join(", "));
+// NAMED, NOT COUNTED. "Exactly one file" was right while sec-daily-index was the
+// only job; step 3's population path is a second, and a bare count would have to
+// be bumped to 2 and would then wave through a third. The property is WHICH
+// files, so a new reader -- especially a render path -- still has to be added
+// here deliberately.
+const ALLOWED_MANIFEST_READERS = [
+  "app/api/jobs/sec-daily-index/route.ts",
+  // Step 3. It reads the manifest to build its two queues and writes it back
+  // once with the contentHash and verifiedAt it filled. Still a job, still once
+  // a day, still nowhere near a render.
+  "app/api/jobs/sec-facts/route.ts",
+];
+check("...and they are exactly the two job routes that are supposed to",
+  readers.length === ALLOWED_MANIFEST_READERS.length &&
+    readers.every((r) => ALLOWED_MANIFEST_READERS.includes(r)),
+  readers.join(", "));
 check("no .tsx file references it at all", !readers.some((r) => r.endsWith(".tsx")),
   "a page importing it would pull 417 KB into a render");
 check("the manifest module is not imported by any page or component",

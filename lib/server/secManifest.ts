@@ -19,6 +19,8 @@
 // `needsReverify` flag, never as an expiry.
 
 import { Redis } from "@upstash/redis";
+import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
+import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
 import { EARNINGS_PEAK_DAY_SHARE } from "./earningsPlan";
@@ -64,8 +66,79 @@ export type SecManifestEntry = {
   lastFiled: string | null;
   /** Hash of the extracted fact set. Step 3 populates it; null until then. */
   contentHash: string | null;
+  /**
+   * ── WHAT THE STORED SET ACTUALLY HOLDS, RECORDED HERE SO THE CRON NEED NOT
+   *    READ 759 SETS TO FIND OUT ──────────────────────────────────────────
+   *
+   * `w` is the quarter retention window the set was written under. Absent
+   * means 8 — the window before the field existed — and a set at 8 is eligible
+   * for a re-read under the wider one. It is NOT a correctness gate: `h` is
+   * the gate and does not move for a window change, so an 8-quarter set stays
+   * readable and renders exactly as it does today until its turn comes.
+   *
+   * The three counts are the census input (annual-only filers are
+   * `quarters === 0 && years > 0`) and cost nothing to keep: the job already
+   * holds the encoded set when it writes.
+   */
+  /**
+   * The PERIOD LABELLING version this symbol's set was written under.
+   * Absent = 1. Selects for re-read exactly like `w`/`y`/`c`, and is needed
+   * because neither of those can see a labelling change — see SEC_LABEL_VERSION.
+   */
+  lv?: number;
+  w?: number;
+  /**
+   * `y` is the YEAR retention window the set was written under. Absent means 5,
+   * and 5 is one short of what the five-year card needs to reach its own FY-1,
+   * so an entry without it is eligible for the same re-read `w` triggers.
+   *
+   * NOT `years`, which is two lines down and means something else entirely:
+   * `years` is HOW MANY the set actually holds (a filer three years old has
+   * 3), `y` is how many it was ALLOWED to hold. A young filer is not stale.
+   */
+  y?: number;
+  /**
+   * `c` is `secChainsHash()` at the time the set was written — WHICH TAG
+   * CHAINS produced it, as opposed to `w`/`y` which say how much of the result
+   * was kept.
+   *
+   * ── WHY A THIRD STALENESS FIELD, WHEN A CHAIN EDIT CANNOT MAKE A STORED
+   *    VALUE WRONG ──────────────────────────────────────────────────────
+   * It cannot, and that was measured rather than assumed: 0 of 119 SYMBOLS had
+   * a capex figure move when the productive-assets fallback landed. But it can
+   * make a stored set INCOMPLETE, and 24 of those same 119 gained a capital
+   * expenditure line they did not have — NVDA, AMZN, V, HD, CVX and QCOM going
+   * from nothing at all to 18 of 18 periods. Without this field those sets keep
+   * their blank line until something unrelated happens to re-read them.
+   *
+   * ABSENT MEANS OLDER THAN THE FIELD, therefore older than every chain edit
+   * since, therefore stale. It must SELECT, never skip — see secStaleness.
+   *
+   * NOT a correctness gate. `h` is, and it does not move for a chain edit, so a
+   * set written under older chains stays readable and renders exactly as it
+   * does today until the queue reaches it.
+   */
+  c?: string | null;
+  quarters?: number;
+  years?: number;
+  instants?: number;
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
+  /**
+   * When this symbol's SEC report dates were last read from `submissions`.
+   *
+   * THE BACKFILL QUEUE IS ITS ABSENCE, which is why it is stamped even when the
+   * feed yielded no Item 2.02 history at all. A filer with none would otherwise
+   * stay at the head of the queue and be re-fetched every day forever.
+   *
+   * DELIBERATELY NOT `nextExpected` ABOVE. That pair is from the original spec
+   * and is still unwritten; the estimate is a discriminated result (a date, a
+   * month, or nothing, with the estimator and the clamp that produced it) and
+   * flattening it into one string here would give the page two homes for one
+   * value — claude/traps/two-validators-for-one-value.md. The record in
+   * secReportDatesStore is the single home.
+   */
+  reportDatesAt?: number | null;
   verifiedAt: number | null;
   needsReverify: boolean;
   scoreVersion: number;
@@ -224,6 +297,7 @@ export async function readManifest(): Promise<SecManifest | null> {
 /** THE ONLY WRITE. */
 export async function writeManifest(manifest: SecManifest): Promise<boolean> {
   if (!redis) return false;
+  if (!canWriteSecState()) { noteSecWriteBlocked("writeManifest"); return false; }
   try {
     await redis.set(SEC_MANIFEST_KEY, { ...manifest, updatedAt: Date.now() });
     return true;
@@ -252,6 +326,22 @@ export type SeedResult = {
  * Dropping it would make the universe silently smaller than it is; a null CIK
  * simply never matches the daily index, and the count says so out loud.
  */
+/**
+ * THE CIK LOOKUP GOES THROUGH THE SPELLING HELPER, and this was a real miss.
+ *
+ * `cikByTicker.get(symbol)` alone gave BRK.B no CIK: the universe spells it
+ * with a DOT and SEC's exchange file with a DASH, and nothing bridged them.
+ * A symbol with no CIK is invisible to the daily index, never enters the
+ * re-read queue, and can never be populated -- so the page reads "not loaded
+ * yet" forever, with no error anywhere to say why.
+ *
+ * It surfaced only when PRESET_UNIVERSE joined the seed: the dynamic pool
+ * happened to carry no dotted ticker, so `withoutCik` was four unrelated
+ * symbols and looked settled.
+ *
+ * Verified against the committed ticker file: BRK.B -> BRK-B, BF.B -> BF-B,
+ * MKC.V -> MKC-V, all three absent on a direct read.
+ */
 export function seedManifest(
   manifest: SecManifest,
   universe: string[],
@@ -262,7 +352,7 @@ export function seedManifest(
   let added = 0;
 
   for (const symbol of universe) {
-    const found = cikByTicker.get(symbol) ?? null;
+    const found = lookupBySpelling(cikByTicker, symbol)?.value ?? null;
     const cik = found?.cik ?? null;
     if (!cik) withoutCik.push(symbol);
     const existing = manifest.symbols[symbol];
@@ -395,7 +485,17 @@ export function reconcileCiks(
   let absentFromMap = 0;
 
   for (const [symbol, entry] of Object.entries(manifest.symbols)) {
-    const fresh = cikByTicker.get(symbol);
+    // THROUGH THE SPELLING HELPER, for the same reason seedManifest is. The
+    // manifest is keyed by the UNIVERSE's spelling (dotted) and this map by
+    // SEC's (dashed), so a direct .get counted BRK.B as absentFromMap -- which
+    // is not a gap in the map, it is a gap in the lookup, and recording it as
+    // the first makes the second invisible.
+    //
+    // IT WIDENS THE LOOKUP, NOT THE RULE: lookupBySpelling only tries the
+    // dot/dash rewrite of the same symbol. A symbol genuinely absent under both
+    // spellings still reports absent, which is what keeps "never delete on
+    // absence" meaningful.
+    const fresh = lookupBySpelling(cikByTicker, symbol)?.value;
     if (!fresh) {
       absentFromMap++;
       continue;
@@ -477,6 +577,7 @@ export function reconcileCiks(
  */
 export async function discardFactSets(symbols: string[]): Promise<number> {
   if (!redis || symbols.length === 0) return 0;
+  if (!canWriteSecState()) { noteSecWriteBlocked("discardFactSets"); return 0; }
   try {
     return await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
   } catch (err) {
@@ -740,7 +841,8 @@ export function reconcileExchanges(
   }
 
   for (const [symbol, entry] of Object.entries(manifest.symbols)) {
-    const fresh = cikByTicker.get(symbol);
+    // Through the spelling helper, as reconcileCiks and seedManifest are.
+    const fresh = lookupBySpelling(cikByTicker, symbol)?.value;
     // ABSENT FROM THE MAP IS NOT THE SAME AS BLANK IN THE MAP. Absence is a gap
     // (or a delisting, handled elsewhere); a blank cell is SEC saying it has no
     // venue for a filer it does list. Only the second is an observation.

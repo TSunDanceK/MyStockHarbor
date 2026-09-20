@@ -38,13 +38,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { emitPayload } from "./lib/relay-capture.mjs";
 import { rankCandidates } from "./lib/sec-title-match.mjs";
+import { symbolSpellings, lookupSpellingIn } from "./lib/symbol-spellings.mjs";
 import {
   NASDAQ_LISTED_URL,
   OTHER_LISTED_URL,
   parseDirectory,
   nameMap,
 } from "./lib/nasdaq-directory.mjs";
-import { symbolSpellings } from "./lib/symbol-spellings.mjs";
 
 const DUMP_DIR = process.argv[2] || "";
 const ROOT = process.cwd();
@@ -76,13 +76,13 @@ const universe = [...new Set([...pickers, ...Object.keys(profile.rows ?? {})])].
 // adjudicate a bug that is already fixed at the lookup
 // (lib/server/news/secProvider.ts cikFor).
 //
-// symbolSpellings also emits the DOLLAR forms Nasdaq Trader uses for suffixed
-// preferreds (MER-PK -> MER$K), which a hand-rolled dot/dash cannot reach. They
-// find nothing in the SEC file — preferreds resolve to the parent CIK and are
-// simply absent — and that costs one map lookup each, which is the trade the
-// helper's own header argues for: a spare candidate is free, a missing one
-// fails open.
-const resolved = (s) => symbolSpellings(s).some((spelling) => Boolean(cikMap[spelling]));
+// lookupSpellingIn widens over symbolSpellings, which also emits the DOLLAR
+// forms Nasdaq Trader uses for suffixed preferreds (MER-PK -> MER$K) and that a
+// hand-rolled dot/dash cannot reach. They find nothing in the SEC file —
+// preferreds resolve to the parent CIK and are simply absent — and that costs
+// one map lookup each, which is the trade the helper's own header argues for:
+// a spare candidate is free, a missing one fails open.
+const resolved = (s) => Boolean(lookupSpellingIn(cikMap, s));
 const unresolved = universe.filter((s) => !resolved(s));
 
 // ── COMPANY NAMES: THE NASDAQ TRADER DIRECTORY, NOT THE DUMP ──────────────
