@@ -575,6 +575,18 @@ async function getEarningsData(symbol: string) {
   // Redis, which is the call this step exists to remove.
   const secDates = await readReportDates(symbol);
   const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
+  /**
+   * THE EIGHT REPORTS THE REACTION CHART WALKS — ONE LIST, TWO READERS.
+   *
+   * `barRows` builds the chart from these, and the bar-fetch window below is
+   * sized to cover them. Those were two separate `secEvents.slice(0, 8)` calls,
+   * which is the shape where one gains a condition and the other does not:
+   * widening the chart to ten reports without widening the window would fetch
+   * a range that stops short of the two oldest, and the only symptom would be
+   * two cards quietly missing their drift figures.
+   */
+  const REACTION_REPORTS = 8;
+  const barEvents = secEvents.slice(0, REACTION_REPORTS);
 
   // ── HOW MANY BARS THIS RENDER ACTUALLY NEEDS ─────────────────────────────
   //
@@ -596,7 +608,7 @@ async function getEarningsData(symbol: string) {
   const shiftIso = (iso: string, days: number) =>
     new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
   const barWindow = (() => {
-    const dates = secEvents.slice(0, 8).map((e) => e.announcedOn).filter(Boolean).sort();
+    const dates = barEvents.map((e) => e.announcedOn).filter(Boolean).sort();
     if (!dates.length) return null;
     return {
       from: shiftIso(dates[0], -BAR_WINDOW_DAYS),
@@ -695,7 +707,7 @@ async function getEarningsData(symbol: string) {
 
   const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
     secEvents.length
-      ? secEvents.slice(0, 8).reverse().map((e) => ({
+      ? barEvents.slice().reverse().map((e) => ({
           periodEnd: e.periodEnd,
           announcedOn: e.announcedOn,
           row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },

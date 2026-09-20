@@ -154,5 +154,27 @@ console.log("\nIT IS A VIEW OVER getDailyHistory, NOT A SECOND FETCH PATH");
     "an unattributed read reports as 'unattributed' instead of vanishing");
 }
 
+console.log("\nTHE PAGE'S WINDOW AND ITS CHART READ THE SAME LIST");
+{
+  // A SOURCE ASSERTION, because the failure is a DIVERGENCE between two
+  // expressions and no single render can show it: the window and the chart
+  // would each be internally consistent while covering different reports. The
+  // symptom would be the two oldest cards quietly missing drift figures.
+  const PAGE = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+  const slices = PAGE.match(/secEvents\.slice\(/g) ?? [];
+  // EXACTLY ONE, and it is the definition of barEvents itself. Zero would mean
+  // the shared list had been removed; two or more means a reader has gone back
+  // to slicing for itself, which is the divergence this exists to stop.
+  check("secEvents is sliced exactly once, to define the shared list",
+    slices.length === 1 && /const barEvents = secEvents\.slice\(0, REACTION_REPORTS\)/.test(PAGE),
+    `${slices.length} secEvents.slice( call(s); barEvents defined: ${/const barEvents = secEvents\.slice\(/.test(PAGE)}`);
+  check("the bar window is derived from barEvents",
+    /const dates = barEvents\.map\(/.test(PAGE),
+    "so widening the chart widens the fetch with it");
+  check("the chart is derived from barEvents",
+    /barEvents\.slice\(\)\.reverse\(\)/.test(PAGE),
+    "and copies before reversing — an in-place reverse on a shared array is a latent corruption");
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);
