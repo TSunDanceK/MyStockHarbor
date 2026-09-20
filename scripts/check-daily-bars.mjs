@@ -176,5 +176,54 @@ console.log("\nTHE PAGE'S WINDOW AND ITS CHART READ THE SAME LIST");
     "and copies before reversing — an in-place reverse on a shared array is a latent corruption");
 }
 
+console.log("\nA REPORT THE SERIES DOES NOT COVER GETS NO ANSWER");
+{
+  // THE CNI SHAPE, MEASURED (relay 35498747512): bars begin 2021-09-21 while
+  // four reports sit at 2009-07-20, 2009-10-20, 2020-01-28 and 2021-01-26.
+  // Unbounded, every one fell through to index 0 and all four rendered the
+  // IDENTICAL figures — four different reports, one real bar, four plausible
+  // wrong numbers. The repetition was the only tell, and the labels differ.
+  const PAGE_SRC = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+  const GAP = Number((PAGE_SRC.match(/REACTION_SESSION_GAP_DAYS = (\d+)/) ?? [])[1]);
+  check("the session-gap bound is read from the source", GAP > 0, `got ${GAP}`);
+
+  const react = await lift(
+    [
+      `const REACTION_SESSION_GAP_DAYS = ${GAP};`,
+      grabFunction(PAGE_SRC, "computeEarningsReactionDetail"),
+      "export { computeEarningsReactionDetail };",
+    ].join("\n")
+  );
+  const detail = (date, time) =>
+    react.computeEarningsReactionDetail({ symbol: "T", date, time }, BARS);
+  const allNull = (r) =>
+    r.reactionPct === null && r.volumeMultiple === null &&
+    r.drift5Pct === null && r.drift20Pct === null;
+
+  // BARS run 2026-01-01..2026-03-31 in this file's fixture.
+  const ancient = detail("2009-07-20", "amc");
+  check("a report years before the first bar returns nothing",
+    allNull(ancient),
+    `got ${JSON.stringify(ancient)} — 'amc' is the dangerous timing: baseIdx = idx = 0 exists, so it PRODUCES numbers`);
+
+  const ancient2 = detail("2020-01-28", "amc");
+  check("...and a second such report does not return the SAME numbers as the first",
+    allNull(ancient2),
+    "identical figures on different reports is what the defect looked like in production");
+
+  // THE CASE THE FALLBACK EXISTS FOR still works: a report on a Sunday resolves
+  // to the Monday session.
+  const weekend = detail("2026-02-14", "bmo"); // 2026-02-14 is a Saturday
+  check("a report on a non-trading day still resolves to the next session",
+    !allNull(weekend),
+    `got react ${weekend.reactionPct?.toFixed?.(2) ?? "—"} — the bound must not break the legitimate case`);
+
+  // THE EDGE OF THE SERIES: the very first bar has no prior close.
+  const firstBar = detail(BARS[0].date, "bmo");
+  check("a report on the first bar returns nothing — there is no prior close",
+    allNull(firstBar),
+    "baseIdx would be -1; this is now stated rather than falling out of an undefined lookup");
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);

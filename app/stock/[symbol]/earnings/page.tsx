@@ -116,13 +116,43 @@ function formatPercent(value: number | null | undefined, digits = 1) {
 }
 
 
+/**
+ * How far past a report date the next trading session may be.
+ *
+ * See the fallback inside computeEarningsReactionDetail: a weekend plus a long
+ * holiday, and no further. It is the same shape as FX_SPOT_BACKFILL_DAYS in
+ * fxRates and for the same reason — a gap wider than the rule means the series
+ * does not cover the date, not that the nearest value will do.
+ */
+const REACTION_SESSION_GAP_DAYS = 7;
+
 function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
   const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
   if (!row.date || !points.length) return empty;
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
   if (idx === -1) {
-    idx = dates.findIndex((d) => d >= String(row.date));
+    // ── THE NEXT SESSION, BUT ONLY IF IT IS ACTUALLY THE NEXT SESSION ──────
+    //
+    // A report lands on a weekend or a holiday and the reaction happens at the
+    // next open, so falling forward is right — for a gap of DAYS.
+    //
+    // UNBOUNDED, IT SILENTLY ATTRIBUTES ANY OLD REPORT TO THE FIRST BAR HELD.
+    // MEASURED (relay 35498747512): CNI's cached bars begin 2021-09-21 and it
+    // has reports from 2009-07-20, 2009-10-20, 2020-01-28 and 2021-01-26 — all
+    // four predate the series, all four fell through to index 0, and all four
+    // rendered the IDENTICAL figures (react -0.3, vol 0.85, d5 0.6, d20 7.8).
+    // Four different reports, one real bar, four plausible wrong numbers on a
+    // live page. Nothing about the output said so; only the repetition did,
+    // and the labels differ so the repetition is not obvious either.
+    //
+    // 7 DAYS covers a weekend plus a long public holiday, which is the whole
+    // of the case this fallback exists for. Beyond that the series simply does
+    // not cover the report, and the honest answer is no answer.
+    const next = dates.findIndex((d) => d >= String(row.date));
+    const gapDays =
+      next === -1 ? Infinity : (Date.parse(dates[next]) - Date.parse(String(row.date))) / 86400000;
+    idx = next !== -1 && gapDays <= REACTION_SESSION_GAP_DAYS ? next : -1;
   }
   if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
@@ -131,6 +161,11 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
   else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
   else { baseIdx = idx - 1; reactIdx = idx + 1; }
+
+  // A REPORT AT THE VERY EDGE OF THE SERIES HAS NO PRIOR CLOSE. This was
+  // already the outcome — points[-1] is undefined and every figure fell to
+  // null — but by accident rather than by decision, so it is stated.
+  if (baseIdx < 0) return empty;
 
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
