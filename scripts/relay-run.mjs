@@ -85,6 +85,13 @@ const TASKS = {
   // how much of that is the company rather than the index, the month or the
   // noun. news.google.com is refused from the sandbox; a runner reaches it.
   "anchor-collisions": { script: "scripts/anchor-collision-sample.mjs", args: () => [] },
+  // Does a fund-or-note verdict EVER produce a usable query? assessCompanyName
+  // says such a name should never reach a per-symbol query; gnewsProvider warns
+  // and queries anyway. 90 committed names carry the verdict, and the marker
+  // fires on real MLPs and BDCs as well as on genuine instruments, so a skip
+  // cannot be made safe by reading either file. news.google.com is refused from
+  // the sandbox; a runner reaches it.
+  "fund-or-note": { script: "scripts/fund-or-note-sample.mjs", args: () => [] },
   // Read-only, but needs the frozen universe to compute the match ratio: the
   // question "how many wire items are about a stock we cover" cannot be answered
   // without the symbol set.
