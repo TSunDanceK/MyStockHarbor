@@ -31,6 +31,11 @@ import { spawnSync } from "node:child_process";
 // phase is an edit HERE, on a branch, with no workflow change and no merge.
 const TASKS = {
   "stooq-access": { script: "scripts/stooq-access-probe.mjs", args: () => [] },
+  // WHAT FED H.10 AND THE ECB ACTUALLY SERVE. Read-only and UNCREDENTIALLED on
+  // purpose: it touches no store, so it belongs in the job that cannot reach
+  // one. Both hosts are 403 CONNECT from the agent sandbox, so this is the only
+  // place the rate sources can be measured at all.
+  "fx-sources": { script: "scripts/fx-source-probe.mjs", args: () => [] },
   // Added on a branch and dispatched the same minute, with no workflow edit and
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
