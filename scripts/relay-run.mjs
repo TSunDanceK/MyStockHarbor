@@ -42,7 +42,15 @@ const TASKS = {
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
-  "fx-filer-diagnosis": { script: "scripts/fx-filer-diagnosis.mjs", args: () => [] },
+  "fx-filer-diagnosis": {
+    script: "scripts/fx-filer-diagnosis.mjs",
+    args: () => [],
+    // It LIFTS the shipped reportingCurrency and extractCompanyFacts out of
+    // .ts modules, so it needs the compiler to erase types. The router
+    // installs it in isolation; this stays in the read-only job because it
+    // touches no store.
+    needsTypescript: true,
+  },
   // Added on a branch and dispatched the same minute, with no workflow edit and
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
