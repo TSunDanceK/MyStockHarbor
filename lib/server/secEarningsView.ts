@@ -323,6 +323,16 @@ export const isCrossing = (v: Pct): v is PctCrossing =>
 // ── the view ────────────────────────────────────────────────────────────────
 
 export type ViewCell = Cell & {
+  /**
+   * The SEC_FIELD_KEYS name this cell came from.
+   *
+   * CARRIED SO A CONSUMER CAN INDEX BY NAME. The P&L waterfall needs revenue,
+   * cost of revenue and the opex lines out of `incomeStatement`, and the two
+   * ways to get them without this are matching on the display LABEL (which is
+   * prose, and changes) or on POSITION in the PL array (which is the shifted-
+   * array failure secFactCodec's `cell()` exists to prevent, one layer up).
+   */
+  key: string;
   label: string;
   derivedNote: string | null;
   /**
@@ -353,7 +363,7 @@ const PER_SHARE_KEYS = new Set(["epsBasic", "epsDiluted"]);
 
 const view = (p: StoredPeriod | null | undefined, key: string, label: string): ViewCell => {
   const c = cell(p, key);
-  return { ...c, label, derivedNote: derivationNote(c.derived), perShare: PER_SHARE_KEYS.has(key) };
+  return { ...c, key, label, derivedNote: derivationNote(c.derived), perShare: PER_SHARE_KEYS.has(key) };
 };
 
 export type SecEarningsView = {
