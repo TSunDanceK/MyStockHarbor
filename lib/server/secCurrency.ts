@@ -1,0 +1,269 @@
+// WHAT CURRENCY A FILER REPORTS IN, AND TURNING ITS FIGURES INTO USD.
+//
+// Two jobs that have to stay in this order and in this file:
+//
+//   1. DECIDE the filer's ONE reporting currency, before any field is read.
+//   2. CONVERT a finished extraction into USD, after every derivation the
+//      extraction performs.
+//
+// ── WHY THE CURRENCY IS DECIDED ONCE, PER FILER, AND NOT PER FIELD ────────
+//
+// The unit guard in secExtract exists because "read whatever unit is there"
+// puts a JPY series into a USD field, and a yen figure rendered with a dollar
+// sign is the plausible-wrong-number failure this whole pipeline is built
+// against. Admitting non-USD filers must not weaken that.
+//
+// So the guard is not relaxed — it is RETARGETED. One currency is chosen for
+// the filer up front, and every field then reads that one unit and no other.
+// A filer publishing both EUR and JPY lines still yields nothing from the JPY
+// ones. The guard's shape is unchanged; only which single unit it admits moves.
+//
+// ── CONVERSION HAPPENS AFTER DIFFERENCING, AND THE TYPE ENFORCES IT ───────
+//
+// SEC filers publish year-to-date figures, so a Q3 quarter is YTD_Q3 - YTD_Q2.
+// Converting first and differencing after computes
+//
+//     (YTD_Q3 x rate_3) - (YTD_Q2 x rate_2)
+//
+// where the correct figure is
+//
+//     (YTD_Q3 - YTD_Q2) x rate_Q3
+//
+// Those agree only when the rate never moved. When it did, the error is a
+// perfectly ordinary-looking revenue number — no NaN, no exception, right
+// order of magnitude — and it is WORST for the fields that matter most,
+// because the cumulative figures being subtracted are the largest ones.
+//
+// This function takes an `ExtractResult`, which is what extractCompanyFacts
+// RETURNS. Differencing happens inside that function. So conversion cannot run
+// before differencing without someone moving code into a different file, which
+// is the point: the ordering is a property of the module boundary rather than
+// a comment asking people to be careful.
+import type { CompanyFacts, ExtractResult, PeriodRecord } from "./secExtract";
+import { SEC_FIELDS } from "./secFields";
+import { averageOver, spotOn, type FxSeries } from "./fxRates";
+
+/** Non-financial namespaces never carry the reporting currency. */
+const MONEY_UNITS = new Set(["USD", "USD/shares"]);
+
+/**
+ * Which SEC_FIELD_KEYS positions hold MONEY, and which hold share counts.
+ *
+ * DERIVED FROM THE FIELD DEFINITIONS, never hand-listed. A share count
+ * converted as if it were money is not a rounding error — it is a company with
+ * 1.4x the shares it has, feeding straight into per-share arithmetic. The one
+ * place that distinction is recorded is `field.unit`, so this reads it there
+ * and moves automatically when a field is added.
+ */
+export const moneyFieldIndexes = (): Set<number> => {
+  const out = new Set<number>();
+  SEC_FIELDS.forEach((f, i) => { if (MONEY_UNITS.has(f.unit)) out.add(i); });
+  return out;
+};
+
+/**
+ * The unit keys a field should be read under, for a given reporting currency.
+ *
+ * `shares` IS NOT TOUCHED. A share count is a count, in every currency.
+ */
+export function unitKeysFor(unit: string, currency: string): string[] {
+  if (unit === "shares") return ["shares"];
+  if (unit === "USD/shares") {
+    return currency === "USD"
+      ? ["USD/shares", "USD/share"]
+      : [`${currency}/shares`, `${currency}/share`];
+  }
+  return [currency];
+}
+
+/**
+ * THE FILER'S ONE REPORTING CURRENCY, read from the payload.
+ *
+ * Counts how many published rows each money unit carries across the mapped
+ * chains, and returns the winner. Three rules, each with a reason:
+ *
+ *   USD WINS WHENEVER IT APPEARS AT ALL. A dual reporter that files any USD
+ *   lines is read as a USD filer, unchanged from today. That keeps every
+ *   symbol currently rendering exactly as it renders — this can only ever add
+ *   filers, never move an existing one onto a conversion path.
+ *
+ *   ONE NON-USD CURRENCY, AND IT IS THE ANSWER.
+ *
+ *   TWO OR MORE NON-USD AND NO USD IS A REFUSAL, not a vote. Picking the more
+ *   common one would silently drop the other's lines into the same column, and
+ *   a column half in euros and half in zloty is the exact failure the unit
+ *   guard exists to prevent. Refusing leaves the page saying it cannot read
+ *   the filer, which is true.
+ */
+export function reportingCurrency(facts: CompanyFacts): string | null {
+  const counts = new Map<string, number>();
+  for (const field of SEC_FIELDS) {
+    if (!MONEY_UNITS.has(field.unit)) continue;
+    const sources: { ns: string; chain: string[] }[] = [
+      { ns: field.taxonomy, chain: field.chain },
+    ];
+    if (field.ifrsChain?.length) sources.push({ ns: "ifrs-full", chain: field.ifrsChain });
+    for (const { ns, chain } of sources) {
+      for (const tag of chain) {
+        const units = facts.facts?.[ns]?.[tag]?.units;
+        if (!units) continue;
+        for (const [unit, rows] of Object.entries(units)) {
+          // The currency code, whether the unit is "EUR" or "EUR/shares".
+          const code = unit.split("/")[0];
+          if (!/^[A-Z]{3}$/.test(code)) continue;
+          counts.set(code, (counts.get(code) ?? 0) + (rows?.length ?? 0));
+        }
+      }
+    }
+  }
+  if (!counts.size) return null;
+  if ((counts.get("USD") ?? 0) > 0) return "USD";
+  const foreign = [...counts.entries()].filter(([c]) => c !== "USD");
+  if (foreign.length !== 1) return null;
+  return foreign[0][0];
+}
+
+/** What a converted set records about how it was converted. */
+export type FxConversion = {
+  /** The currency the filer reports in. */
+  from: string;
+  /** Which adapter produced the rates. */
+  source: string;
+  /** Rates actually applied, by period end — the audit trail. */
+  applied: { end: string; usdPerUnit: number; basis: "average" | "spot" }[];
+  /** Periods dropped because no honest rate covered them. */
+  refused: string[];
+};
+
+/**
+ * THE REPORTING-CURRENCY VALUE BACK OUT OF A CONVERTED ONE.
+ *
+ * ── WHY GROWTH IS COMPUTED HERE AND NOT ON WHAT THE PAGE PRINTS ───────────
+ *
+ * Each period is converted at ITS OWN rate, which is correct for a figure and
+ * wrong for a RATE OF CHANGE. Growth taken across two converted periods is
+ *
+ *     (v2 x r2) / (v1 x r1) - 1
+ *
+ * which is the company's growth COMPOUNDED WITH THE CURRENCY MOVE. For a filer
+ * whose home currency fell 8% against the dollar, a flat year reads as an 8%
+ * decline, and the page would be reporting an FX move as a business result
+ * under a heading that says "growth".
+ *
+ * So growth, and anything built on it, is computed in the currency the filer
+ * reports in. The rates are already recorded per period end, so the reporting
+ * figure is recoverable exactly rather than needing a second copy of every
+ * value stored beside the first.
+ *
+ * ── MARGINS ARE NOT AFFECTED, AND THAT IS WORTH STATING ───────────────────
+ *
+ * A margin is a ratio WITHIN one period, so both sides carry the same rate and
+ * it cancels: (income x r) / (revenue x r) is income / revenue exactly. Margins
+ * need no special handling, and a future change that "fixes" them would be
+ * fixing nothing. Only CROSS-PERIOD ratios are exposed, which is why this
+ * function exists for growth and not for margins.
+ */
+export function reportingRateFor(conversion: FxConversion, end: string): number | null {
+  return conversion.applied.find((a) => a.end === end)?.usdPerUnit ?? null;
+}
+
+/**
+ * A period's values back in the filer's own currency.
+ *
+ * Returns null when no rate was recorded for that end, rather than the
+ * converted values unchanged — handing back USD figures labelled as reporting
+ * currency is precisely the mislabelling this whole file guards against.
+ */
+export function inReportingCurrency(
+  period: PeriodRecord,
+  conversion: FxConversion
+): PeriodRecord | null {
+  const rate = reportingRateFor(conversion, period.end);
+  if (rate === null || !(rate > 0)) return null;
+  const money = moneyFieldIndexes();
+  return {
+    ...period,
+    values: period.values.map((v, i) =>
+      v === null || !money.has(i) || v.val === null ? v : { ...v, val: v.val / rate }
+    ),
+  };
+}
+
+/**
+ * ONE PERIOD'S RATE: average across a duration, spot on an instant.
+ *
+ * The two are genuinely different questions and that is why they are two
+ * selectors rather than one with a flag — see fxRates. A duration is earned
+ * throughout its span; a balance sheet is a photograph of one day.
+ */
+function rateForPeriod(
+  period: PeriodRecord,
+  series: FxSeries
+): { usdPerUnit: number; basis: "average" | "spot" } | null {
+  if (period.start) {
+    const avg = averageOver(series, period.start, period.end);
+    return avg ? { usdPerUnit: avg.usdPerUnit, basis: "average" } : null;
+  }
+  const spot = spotOn(series, period.end);
+  return spot ? { usdPerUnit: spot.usdPerUnit, basis: "spot" } : null;
+}
+
+/**
+ * CONVERT A FINISHED EXTRACTION INTO USD.
+ *
+ * Takes the result of extractCompanyFacts — therefore everything in it has
+ * already been differenced, resolved and windowed — and returns a new result
+ * whose money values are USD. Share counts pass through untouched.
+ *
+ * A PERIOD WITH NO HONEST RATE IS DROPPED, not left in its own currency. A set
+ * mixing converted and unconverted periods in one column would put a euro
+ * figure and a dollar figure in the same table under one heading, which is
+ * worse than a shorter table. The dropped ends are recorded so the page can
+ * say the series is short rather than implying the filer did not report.
+ */
+export function convertExtractResult(
+  result: ExtractResult,
+  series: FxSeries
+): { result: ExtractResult; conversion: FxConversion } {
+  const money = moneyFieldIndexes();
+  const applied: FxConversion["applied"] = [];
+  const refused: string[] = [];
+
+  const convertList = (periods: PeriodRecord[]): PeriodRecord[] => {
+    const out: PeriodRecord[] = [];
+    for (const p of periods) {
+      const rate = rateForPeriod(p, series);
+      if (!rate) { refused.push(p.end); continue; }
+      applied.push({ end: p.end, usdPerUnit: rate.usdPerUnit, basis: rate.basis });
+      out.push({
+        ...p,
+        values: p.values.map((v, i) => {
+          if (v === null) return null;
+          // NOT MONEY, NOT CONVERTED. A share count is a count.
+          if (!money.has(i)) return v;
+          // A NULL STAYS NULL. `val` is nullable — a period can carry a cell
+          // whose value never resolved — and 0 * rate is a figure, not a gap.
+          if (v.val === null) return v;
+          return { ...v, val: v.val * rate.usdPerUnit };
+        }),
+      });
+    }
+    return out;
+  };
+
+  return {
+    result: {
+      ...result,
+      quarters: convertList(result.quarters),
+      years: convertList(result.years),
+      instants: convertList(result.instants),
+      // coverShares IS A SHARE COUNT and is deliberately not touched here.
+    },
+    conversion: {
+      from: series.currency,
+      source: series.source,
+      applied,
+      refused,
+    },
+  };
+}
