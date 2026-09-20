@@ -309,6 +309,23 @@ if (!needs || !queues) {
   console.error("FATAL: could not lift needsReread / populationQueues — the census cannot measure what it cannot run.");
   process.exit(2);
 }
+// ── EVERY CONSTANT THE LIFT NEEDS, CHECKED BEFORE IT IS USED ─────────────
+// The census printed four blocks and then died on a ReferenceError from inside
+// a lifted default parameter — a failure that reads as "the run stopped" rather
+// than as "a constant is missing". Naming them here turns the next one into a
+// line of output instead of a stack trace.
+for (const n of ["SEC_REVERIFY_PER_RUN", "SEC_POPULATE_PER_RUN", "SEC_REWINDOW_PER_RUN",
+  "SEC_POPULATE_SLACK_CEILING"]) {
+  if (!Number.isFinite(num(n))) {
+    console.error(`FATAL: ${n} not found in the cron route — the lift would throw inside populationQueues.`);
+    process.exit(2);
+  }
+}
+if (!Number.isFinite(sec.SEC_LABEL_VERSION)) {
+  console.error("FATAL: SEC_LABEL_VERSION not readable — needsReread would throw.");
+  process.exit(2);
+}
+
 const job = await lift(
   [
     readCodeOnly("lib/server/secFields.ts"),
@@ -317,6 +334,20 @@ const job = await lift(
     `const SEC_REVERIFY_PER_RUN = ${num("SEC_REVERIFY_PER_RUN")};`,
     `const SEC_POPULATE_PER_RUN = ${num("SEC_POPULATE_PER_RUN")};`,
     `const SEC_REWINDOW_PER_RUN = ${num("SEC_REWINDOW_PER_RUN")};`,
+    // ── TWO CONSTANTS THIS LIFT DID NOT SUPPLY, AND THE CENSUS DIED ────────
+    // populationQueues names SEC_POPULATE_SLACK_CEILING in a DEFAULT
+    // PARAMETER, so the lift compiled and then threw ReferenceError the moment
+    // the function was called — after the census had already printed four
+    // blocks, which is why it read as a working run that stopped. needsReread
+    // gained SEC_LABEL_VERSION the same way in #472 and would have been the
+    // next throw.
+    //
+    // check-sec-rewindow's own lift was fixed for the first of these and says
+    // so in as many words; this file has the same shape and was not. READ FROM
+    // THE SOURCE, never pinned: a literal here would let the census agree with
+    // itself against a constant that had moved.
+    `const SEC_POPULATE_SLACK_CEILING = ${num("SEC_POPULATE_SLACK_CEILING")};`,
+    `const SEC_LABEL_VERSION = ${sec.SEC_LABEL_VERSION};`,
     needs.replace("export function", "function"),
     grabFunction(STALE, "staleReasons").replace("export function", "function"),
     queues.replace("export function", "function"),
