@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
-import { getDailyHistory } from "@/lib/server/historyCache";
+import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import {
   computeIndicatorSeed,
@@ -116,13 +116,43 @@ function formatPercent(value: number | null | undefined, digits = 1) {
 }
 
 
+/**
+ * How far past a report date the next trading session may be.
+ *
+ * See the fallback inside computeEarningsReactionDetail: a weekend plus a long
+ * holiday, and no further. It is the same shape as FX_SPOT_BACKFILL_DAYS in
+ * fxRates and for the same reason — a gap wider than the rule means the series
+ * does not cover the date, not that the nearest value will do.
+ */
+const REACTION_SESSION_GAP_DAYS = 7;
+
 function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
   const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
   if (!row.date || !points.length) return empty;
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
   if (idx === -1) {
-    idx = dates.findIndex((d) => d >= String(row.date));
+    // ── THE NEXT SESSION, BUT ONLY IF IT IS ACTUALLY THE NEXT SESSION ──────
+    //
+    // A report lands on a weekend or a holiday and the reaction happens at the
+    // next open, so falling forward is right — for a gap of DAYS.
+    //
+    // UNBOUNDED, IT SILENTLY ATTRIBUTES ANY OLD REPORT TO THE FIRST BAR HELD.
+    // MEASURED (relay 35498747512): CNI's cached bars begin 2021-09-21 and it
+    // has reports from 2009-07-20, 2009-10-20, 2020-01-28 and 2021-01-26 — all
+    // four predate the series, all four fell through to index 0, and all four
+    // rendered the IDENTICAL figures (react -0.3, vol 0.85, d5 0.6, d20 7.8).
+    // Four different reports, one real bar, four plausible wrong numbers on a
+    // live page. Nothing about the output said so; only the repetition did,
+    // and the labels differ so the repetition is not obvious either.
+    //
+    // 7 DAYS covers a weekend plus a long public holiday, which is the whole
+    // of the case this fallback exists for. Beyond that the series simply does
+    // not cover the report, and the honest answer is no answer.
+    const next = dates.findIndex((d) => d >= String(row.date));
+    const gapDays =
+      next === -1 ? Infinity : (Date.parse(dates[next]) - Date.parse(String(row.date))) / 86400000;
+    idx = next !== -1 && gapDays <= REACTION_SESSION_GAP_DAYS ? next : -1;
   }
   if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
@@ -131,6 +161,11 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
   else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
   else { baseIdx = idx - 1; reactIdx = idx + 1; }
+
+  // A REPORT AT THE VERY EDGE OF THE SERIES HAS NO PRIOR CLOSE. This was
+  // already the outcome — points[-1] is undefined and every figure fell to
+  // null — but by accident rather than by decision, so it is stated.
+  if (baseIdx < 0) return empty;
 
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
@@ -575,23 +610,58 @@ async function getEarningsData(symbol: string) {
   // Redis, which is the call this step exists to remove.
   const secDates = await readReportDates(symbol);
   const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
+  /**
+   * THE EIGHT REPORTS THE REACTION CHART WALKS — ONE LIST, TWO READERS.
+   *
+   * `barRows` builds the chart from these, and the bar-fetch window below is
+   * sized to cover them. Those were two separate `secEvents.slice(0, 8)` calls,
+   * which is the shape where one gains a condition and the other does not:
+   * widening the chart to ten reports without widening the window would fetch
+   * a range that stops short of the two oldest, and the only symptom would be
+   * two cards quietly missing their drift figures.
+   */
+  const REACTION_REPORTS = 8;
+  const barEvents = secEvents.slice(0, REACTION_REPORTS);
+
+  // ── HOW MANY BARS THIS RENDER ACTUALLY NEEDS ─────────────────────────────
+  //
+  // computeEarningsReactionDetail reaches 20 trading days BACK from each report
+  // (the volume-average lookback) and 20 FORWARD (drift20), so the window is
+  // +/-20 trading days around the oldest and newest of the eight reports.
+  // 45 CALENDAR days covers that with room for holidays and long weekends —
+  // and the buffer is deliberately generous because a window one day too
+  // narrow does not error, it drops drift20 to null and the card simply shows
+  // fewer numbers.
+  //
+  // ONLY ON THE SEC-DATES PATH, and that is the whole reason it costs nothing:
+  // `secDates` is already read serially above, so when the filings supply the
+  // announcement dates the window is known BEFORE this fetch starts. On the
+  // FMP fallback the dates arrive in the same round trip that would have to
+  // carry them, so bounding would mean a second sequential read — worse than
+  // the thing it saves. That path keeps the full series.
+  const BAR_WINDOW_DAYS = 45;
+  const shiftIso = (iso: string, days: number) =>
+    new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
+  const barWindow = (() => {
+    const dates = barEvents.map((e) => e.announcedOn).filter(Boolean).sort();
+    if (!dates.length) return null;
+    return {
+      from: shiftIso(dates[0], -BAR_WINDOW_DAYS),
+      to: shiftIso(dates[dates.length - 1], BAR_WINDOW_DAYS),
+    };
+  })();
 
   const [cold, dailyHistory, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
-    // ── ~110 KB PER RENDER, AND THAT IS THE SECOND-LARGEST READ ON THIS PAGE ─
-    //
-    // MEASURED, not estimated: the full daily bar series for one symbol, read
-    // from Redis on every render that misses the ISR cache. Only the encoded
-    // SEC fact set is bigger.
-    //
-    // RECORDED HERE BECAUSE THIS IS WHERE IT WILL BE READ. The price-derived
-    // work (step 5) introduces a `getDailyBars(symbol, from, to)` adapter, and
-    // the figure is the reason that signature takes a RANGE: this page needs
-    // roughly a year of bars around the last eight reports and currently reads
-    // the whole series to get them. A bounded range is the change; the number
-    // above is what makes it worth making. Move this note onto that adapter's
-    // docblock when it exists — it belongs with the thing it justifies.
-    getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
+    // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
+    // including what a range does NOT save, which is the Redis read itself:
+    // bars are one value per symbol, so the GET returns every bar whatever
+    // range is asked for. What it saves is everything downstream of it.
+    barWindow
+      ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
+          .catch(() => [] as Point[])
+      : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
     // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
     // an ignored fetch still costs the request, and the daily FMP limit is the
     // thing the owner has said not to spend.
@@ -672,7 +742,7 @@ async function getEarningsData(symbol: string) {
 
   const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
     secEvents.length
-      ? secEvents.slice(0, 8).reverse().map((e) => ({
+      ? barEvents.slice().reverse().map((e) => ({
           periodEnd: e.periodEnd,
           announcedOn: e.announcedOn,
           row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
