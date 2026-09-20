@@ -189,8 +189,22 @@ export function assessCompanyName(normalised: string): NameVerdict {
   if (letters.length <= 2) return { ok: false, reason: "too-short" };
 
   // Funds, notes and preferreds are not companies, and their names are product
-  // descriptions. They should never reach a per-symbol news query, but the
-  // universe is not guaranteed clean, so this says so rather than searching.
+  // descriptions. A WARNING, NOT A SKIP -- gnewsProvider logs this and queries
+  // anyway, and that is now a measured decision rather than an oversight.
+  //
+  // THIS COMMENT USED TO SAY SUCH NAMES "should never reach a per-symbol news
+  // query". Relay run 199 measured 20 of the 90 committed names that carry this
+  // verdict against the live feed, and 17 returned a non-empty pool -- ET 98,
+  // PFBC 67, MSDL 63, BIP 42. The three that returned nothing have news under
+  // their parent name, so even there the QUERY missed it rather than the news
+  // not existing. There was no row on which suppressing the fetch was better.
+  //
+  // The reason is that this test does not separate an instrument from a
+  // company. `Units?` catches every MLP (ET "Energy Transfer LP Common Units"),
+  // and `Preferred` catches a commercial bank called "Preferred Bank" (PFBC).
+  // See claude/fund-or-note-stays-a-warning-2026-09-20.md for the table and for
+  // the narrower fix this points at -- which is HERE, in these markers, not in
+  // what the provider does with the verdict.
   if (/\b(ETF|ETN|ETNs|Fund|Notes?|Debentures?|Preferred|Preference|Units?)\b/i.test(normalised)) {
     return { ok: false, reason: "fund-or-note" };
   }
