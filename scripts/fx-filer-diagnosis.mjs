@@ -34,13 +34,38 @@ const mod = await lift(
   ].join("\n")
 );
 
-const tickers = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
-const cikOf = (sym) => {
-  for (const row of Object.values(tickers)) {
-    if (String(row.ticker).toUpperCase() === sym) return String(row.cik_str).padStart(10, "0");
+// ── THE TICKER FILE IS THE fields/data SHAPE, AND COLUMNS ARE READ BY NAME ──
+//
+// The first run of this probe assumed the LEGACY {cik_str, ticker} shape and
+// reported "no CIK in the ticker file" for all three filers — a wrong answer
+// that looked like a finding about the filers rather than about the reader.
+//
+// secTickerMap.parseTickerFile is the shipped reader and is NOT lifted here
+// because it imports @upstash/redis, which the read-only relay job deliberately
+// does not install. So the shape is read directly, by COLUMN NAME rather than
+// by position, which is the rule that parser's own docblock gives: a positional
+// read is one column insertion away from filing every exchange under `name`.
+const tickerFile = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
+const cikBySymbol = (() => {
+  const out = new Map();
+  const fields = tickerFile.fields;
+  const rows = tickerFile.data;
+  if (!Array.isArray(fields) || !Array.isArray(rows)) {
+    throw new Error("company-tickers.json is not the fields/data shape this probe reads");
   }
-  return null;
-};
+  const idx = (name) => fields.findIndex((f) => String(f).toLowerCase() === name);
+  const iCik = idx("cik");
+  const iTicker = idx("ticker");
+  if (iCik === -1 || iTicker === -1) throw new Error(`missing cik/ticker column in ${fields.join(",")}`);
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    const t = String(row[iTicker] ?? "").trim().toUpperCase();
+    // FIRST WINS, as the shipped parser does: dual-class names share one CIK.
+    if (t && !out.has(t)) out.set(t, String(row[iCik]).padStart(10, "0"));
+  }
+  return out;
+})();
+const cikOf = (sym) => cikBySymbol.get(sym) ?? null;
 
 const SYMS = (process.env.SYMBOLS || "RYAAY,CNI,ABEV").split(/[,\s]+/).filter(Boolean);
 
