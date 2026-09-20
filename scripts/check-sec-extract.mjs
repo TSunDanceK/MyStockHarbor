@@ -35,9 +35,20 @@ const check = (name, ok, detail = "") => {
 // secFields.ts imports nothing, so it lifts whole. secExtract.ts imports only
 // from it, so the two concatenate once that one import line is dropped.
 const fieldsSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
+// secExtract now also imports secCurrency (the reporting-currency decision has
+// to happen before the first field is read), and secCurrency imports fxRates.
+// All three concatenate once their import lines are dropped — secCurrency's
+// only other import is type-only and erases.
+const fxSrc = fs.readFileSync("lib/server/fxRates.ts", "utf8");
+const currencySrc = fs
+  .readFileSync("lib/server/secCurrency.ts", "utf8")
+  .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const extractSrcRaw = fs.readFileSync("lib/server/secExtract.ts", "utf8");
-const extractSrc = extractSrcRaw.replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secFields";/, "");
-const mod = await lift(`${fieldsSrc}\n${extractSrc}`);
+const extractSrc = extractSrcRaw
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secFields";/, "")
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*"\.\/secCurrency";/, "");
+const PRELUDE = `${fieldsSrc}\n${fxSrc}\n${currencySrc}`;
+const mod = await lift(`${PRELUDE}\n${extractSrc}`);
 
 // THE SAME TWO FILES, RE-LIFTED WITH ONE LINE OF THE SHIPPED SOURCE BROKEN.
 // Used by §7's mutations: an assertion that survives the removal of the rule it
@@ -45,7 +56,7 @@ const mod = await lift(`${fieldsSrc}\n${extractSrc}`);
 const liftMutated = async (mutate) => {
   const broken = mutate(extractSrc);
   if (broken === extractSrc) throw new Error("mutation did not apply — the anchor text moved");
-  return lift(`${fieldsSrc}\n${broken}`);
+  return lift(`${PRELUDE}\n${broken}`);
 };
 
 const {
@@ -1656,20 +1667,81 @@ console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
   check("...and an ifrs-only filer falls through to it",
     ifrsOnly.instants[0]?.values[idx]?.val === 222 &&
       ifrsOnly.instants[0]?.values[idx]?.ns === "ifrs-full");
-  // THE CURRENCY GUARD. A EUR figure must not reach a USD field, and the
-  // refusal must be RECORDED so the page can name the currency rather than
-  // implying the filing is unreadable.
+  // ── THE CURRENCY GUARD, RETARGETED RATHER THAN RELAXED ───────────────────
+  //
+  // The rule used to be "only USD is ever read". It is now "only the filer's
+  // ONE reporting currency is ever read", and the distinction these three
+  // assertions defend is that the second is still a guard: admitting EUR for a
+  // euro reporter must not admit JPY for that same filer, and must not admit
+  // EUR for a filer that reports in dollars.
+  //
+  // The extraction performs NO conversion — it is network-free — so these
+  // values are euros and `reportingCurrency` says so. Turning them into
+  // dollars is secCurrency's job and is checked in check-sec-currency.
   const eur = extractCompanyFacts("EUR", {
     cik: 1,
     facts: { "ifrs-full": { Assets: { units: { EUR: [{ end: "2026-06-30", val: 999, accn: "b", filed: "2026-07-01" }] } } } },
   });
-  check("a EUR figure never reaches a USD field", eur.instants.length === 0,
-    "a euro number under a dollar sign is the plausible wrong number");
-  check("...and the refusal is recorded as currency evidence",
-    eur.refusedUnits.includes("EUR"),
-    "without it the page cannot tell 'we have no mapping' from 'this filer reports in euros'");
+  check("a euro reporter's figures ARE read, and in euros",
+    eur.instants[0]?.values[idx]?.val === 999 && eur.reportingCurrency === "EUR",
+    `got ${eur.instants[0]?.values[idx]?.val} in ${eur.reportingCurrency} — ` +
+      "no conversion here; the extraction is network-free and says what currency it read");
+  // THE GUARD ITSELF: a SECOND foreign currency on the same filer is still
+  // refused. This is the assertion that would fail if "admit the home
+  // currency" had been implemented as "admit any currency".
+  const eurJpy = extractCompanyFacts("EURJPY", {
+    cik: 1,
+    facts: {
+      "ifrs-full": {
+        Assets: {
+          units: {
+            EUR: [{ end: "2026-06-30", val: 999, accn: "b", filed: "2026-07-01" },
+                  { end: "2026-03-31", val: 998, accn: "c", filed: "2026-04-01" }],
+            JPY: [{ end: "2026-06-30", val: 777777, accn: "b", filed: "2026-07-01" }],
+          },
+        },
+      },
+    },
+  });
+  // THE WINNER IS THE CURRENCY COVERING THE MOST FIELDS, and the loser's rows
+  // are NOT READ — which is what makes a winner safe. This fixture gives EUR
+  // and JPY one field each, so USD takes the tie by the documented rule and
+  // both are refused; the point being asserted is that the JPY rows never
+  // reach a field the EUR rows also populate.
+  check("a second foreign currency never shares a column with the first",
+    eurJpy.instants.every((p) =>
+      p.values.every((v) => v === null || v.val !== 777777)),
+    `decided ${eurJpy.reportingCurrency}; the JPY figure must not appear anywhere`);
+  // AND A DOLLAR REPORTER IS UNMOVED. Any USD at all wins, so no symbol
+  // rendering today can be pulled onto a conversion path by this change.
+  const mixed = extractCompanyFacts("MIXED", {
+    cik: 1,
+    facts: {
+      "ifrs-full": {
+        Assets: {
+          units: {
+            USD: [{ end: "2026-06-30", val: 111, accn: "a", filed: "2026-07-01" }],
+            EUR: [{ end: "2026-06-30", val: 999, accn: "b", filed: "2026-07-01" }],
+          },
+        },
+      },
+    },
+  });
+  check("a filer publishing any USD at all is read as USD, and its EUR ignored",
+    mixed.reportingCurrency === "USD" &&
+      mixed.instants[0]?.values[idx]?.val === 111,
+    `got ${mixed.instants[0]?.values[idx]?.val} in ${mixed.reportingCurrency}`);
+  // AND NOTHING IS RECORDED AS REFUSED, WHICH IS CORRECT RATHER THAN A GAP.
+  // refusedUnits exists to explain an EMPTY extraction to the reader — it is
+  // only written when a field took nothing at all. Here the field took its USD
+  // value, and the EUR rows are the same facts filed twice, so there is no
+  // unreadability to explain and naming a "refused" currency would invite
+  // unreadableReason to report one on a filer that read perfectly.
+  check("...and records no refusal, because nothing was left unexplained",
+    mixed.refusedUnits.length === 0,
+    `refused ${JSON.stringify(mixed.refusedUnits)}`);
   check("a USD reporter records no refused currency",
-    ifrsOnly.refusedUnits.length === 0);
+    ifrsOnly.refusedUnits.length === 0 && ifrsOnly.reportingCurrency === "USD");
   check("the ifrs table cites the run that corrected it",
     /relay 34970388423|34971118882|34971551511/.test(fieldsSrc),
     "four entries were deleted and two added on this evidence");

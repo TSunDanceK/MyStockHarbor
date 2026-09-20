@@ -66,9 +66,15 @@ const stripImports = (f) =>
  * line is dropped. One unit, no module graph, no path aliases.
  */
 export async function loadCards(mutate = (src) => src) {
+  // ORDER IS THE DEPENDENCY ORDER, and fxRates/secCurrency are in it because
+  // the view now computes growth in the filer's reporting currency (see
+  // storedInReportingCurrency). They are plain concatenation like the rest —
+  // secCurrency's only imports are secFields, fxRates, and types that erase.
   const view = [
     fs.readFileSync("lib/server/secFields.ts", "utf8"),
     stripImports("lib/server/secExtract.ts"),
+    stripImports("lib/server/fxRates.ts"),
+    stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
     stripImports("lib/server/secEarningsView.ts"),
   ].join("\n");
