@@ -360,12 +360,32 @@ console.log("\n4c. every reaction bar carries the PAGE'S OWN label, and they are
 //
 // So the map is now built by the shipped function, from a set shaped like the
 // filer that broke it.
+// ── ONE PRELUDE FOR BOTH CODEC LIFTS ────────────────────────────────────────
+//
+// secFactCodec reads SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW and SEC_LABEL_VERSION
+// from secExtract, and secExtract reads the currency decision, which reads the
+// rate selectors. Stripping imports left all three constants free: the lifts
+// here only call reactionPeriodLabels and periodLabel, which never touch them,
+// so nothing failed — until assertLiftIsClosed refused an open lift outright.
+//
+// One value, used twice, so the mutation lift below cannot drift from the
+// unmutated one it is compared against.
+const stripImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+const CODEC_PRELUDE = [
+  readCodeOnly("lib/server/secFields.ts"),
+  stripImports("lib/server/secExtract.ts"),
+  stripImports("lib/server/fxRates.ts"),
+  stripImports("lib/server/secCurrency.ts"),
+].join("\n");
+
 const codec = await lift(
   [
-    readCodeOnly("lib/server/secFields.ts"),
-    readCodeOnly("lib/server/secFactCodec.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, ""),
+    CODEC_PRELUDE,
+    stripImports("lib/server/secFactCodec.ts"),
     "export { reactionPeriodLabels, periodLabel };",
-  ].join("\n")
+  ].join("\n"),
+  "",
+  "secFactCodec"
 );
 {
   const q = (e, fp, fy) => ({ e, s: null, fp, fy, a: null, f: null, v: [], d: "" });
@@ -401,9 +421,8 @@ const codec = await lift(
   // THE MUTATION: years last, which is what shipped.
   const yearsWin = await lift(
     [
-      readCodeOnly("lib/server/secFields.ts"),
-      readCodeOnly("lib/server/secFactCodec.ts")
-        .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+      CODEC_PRELUDE,
+      stripImports("lib/server/secFactCodec.ts")
         // THE ORIGINAL INLINE CONSTRUCTION, restored exactly: one loop over
         // quarters then years, years last, no guard and no Q4 rule.
         .replace("    if (!p.e || out.has(p.e)) continue;", "    if (!p.e) continue;")
