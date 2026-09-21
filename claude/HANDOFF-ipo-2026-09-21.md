@@ -2,22 +2,25 @@
 
 Continues `claude/HANDOFF-ipo-2026-09-17.md`, which is still correct about
 everything up to its own date. **Read that one first; this one is what happened
-after it.** Work is on `claude/confident-tesla-0ozvb4`.
+after it.** Shipped in PR #492 (the migration) and PR #493 (the watermark defect).
 
 ---
 
 ## TL;DR
 
-The four steps the 09-17 handoff left are done, bar the flip itself:
+**The flip is done. `/upcoming-ipos` serves SEC EDGAR filings in production and
+the FMP dependency for this page is gone** — which closes the standing risk the
+09-17 handoff opened with, the FMP quote expiring 2026-10-14.
 
 1. **The app-side refresh route is built and running the write.** ✅
-2. **The store is populated** — 753 records, watermark `20260920`. ✅
-3. **Steps 6 and 7 are in the PR** (Market Cap hidden, copy, labels). ✅
-4. **`IPO_PROVIDER=sec` is NOT yet flipped.** ⬅ the only thing left.
+2. **The store is populated and REPAIRED** — see "The third defect" below. ✅
+3. **Steps 6 and 7 shipped** (Market Cap hidden, copy, labels) — PR #492. ✅
+4. **`IPO_PROVIDER=sec` is live in Vercel Production.** ✅
 
-Two defects were found and fixed along the way that nobody was looking for, both
-in the cover parser, both producing **confident wrong numbers on the live page**.
-They are the substance of this document.
+THREE defects were found and fixed along the way that nobody was looking for.
+Two were in the cover parser and produced **confident wrong numbers**; the third
+was in the ingest and produced **confidently missing ones**. They are the
+substance of this document.
 
 ---
 
@@ -226,24 +229,148 @@ how the first share-count rule got written.
   repeated to read its own answer. Payload first, or behind a flag
   (`IPO_EMIT_DOCUMENT=1`).
 
+- **A FIX THAT IS NOT MERGED IS NOT DEPLOYED, AND "is it live?" HAS THREE
+  ANSWERS.** PR #493 was opened, green, and then sat while its own fix was
+  being verified against production — because the report ended by offering to
+  merge rather than merging. The symptoms were a 404 on the new debug route and
+  a missing `filersTruncated` field, both of which read as a broken deploy.
+  Check in this order and do not assume any of them: is the commit an ancestor
+  of `main` (`git merge-base --is-ancestor`), did a production deployment get
+  created FROM that sha, did it reach READY and get the domain alias. Two of
+  the three were moot here because the first was false.
+
+- **A BUILD IN FLIGHT IS NOT A BUILD THAT SAW YOUR WRITE.** `/upcoming-ipos`
+  prerenders at build time, so a deploy that started before the last store
+  write captures the store as it was. When a redeploy exists to pick up a data
+  repair, start it AFTER the writes finish rather than reusing one that happens
+  to be building — the timing is invisible afterwards and looks exactly like a
+  failed repair.
+
 - **`node --check` parses and does not run**, and eslint's `no-undef` is off
   under this repo's TypeScript preset. A deleted `const` cost a full 51-day relay
   run that failed on its last few lines, after every network round trip was spent.
 
 ---
 
-## WHAT IS LEFT
+## THE THIRD DEFECT — A WATERMARK THAT MARKED DATES NOBODY FINISHED
 
-**Flip `IPO_PROVIDER=sec` in Vercel Production, then trigger a production
-redeploy.** An env change alone is not picked up — the correction PR #453 made
-the hard way for `NEWS_PROVIDER`.
+Found the day the flip went live. `/upcoming-ipos` rendered with **Deal Size a
+dash on 12 of 13 Recent rows, and Price Range dashing alongside it on most.**
 
-Then verify the live page, and specifically **check Deal Size renders on the
-SPAC rows**, since that is the column both defects above ran through.
+**THE OBVIOUS EXPLANATION WAS WRONG, AND THE WAY IT WAS WRONG IS THE LESSON.**
+"the parser fix does not apply retroactively to records already written" is
+true of the share count and accounts for nothing else: `26c5fd3d..01813f2e`
+does not touch a single PRICE pattern, so a stale parse cannot leave a price
+blank. **A price and a deal size going blank TOGETHER is the signature of
+`terms === null` — a cover that was never read at all**, which is a different
+fault with a different fix.
 
-Rolling back is setting the var back and redeploying. Nothing else has to move:
-the FMP branch is untouched, `app/api/debug/ipo-calendar` and `fmpFetch` stay
-while `IPO_PROVIDER=fmp` remains a working fallback.
+Relay **35597668901** re-parsed the same live covers with the shipped code and
+got 8 of 9 Recent rows populated — ETRA $350.00M, HYAC $250.00M, TLAC $100.00M,
+RNAQ $75.00M, SCAT $75.00M. The code was right; the stored document was not.
+
+### The mechanism
+
+`ingestIpoWindow` walks in two phases against ONE deadline:
+
+```
+DATE loop    reads each daily index, collects touched filers,
+             advances lastIndexDate per date
+FILER loop   reads submissions and covers for those filers
+```
+
+Running out of time in the DATE loop is harmless — the unwalked dates sit ahead
+of the watermark and come back next run. Running out in the **FILER loop** is
+not: the watermark already sits past those dates, so every filer that never got
+its turn **is never looked at again**. `mergeIpoRecords`'s "a run that could not
+parse must not erase what an earlier one did" then keeps the empty terms
+forever. Nothing retries them.
+
+**The run reports `ok: true, caughtUp: true, daysRemaining: 0`.** The cold-start
+bootstrap walked 90 days in two browser calls and said exactly that.
+
+### The fix (PR #493)
+
+The watermark now states what it was always supposed to state — that a date is
+FINISHED, index read AND filers read. On truncation `ingestIpoWindow` returns
+`lastIndexDate: null`, which `writeStoredIpoFilings` already treats as "keep
+what you had", so the slice is walked again instead of lost. `ok` drops to
+false and **`filersTruncated`** is in the response, because a run that dropped
+filers is invisible in every other number there.
+
+A window too slow to finish now refuses to advance rather than advancing
+wrongly. That is a livelock and a VISIBLE one — `daysRemaining` stops falling
+and `filersTruncated` says why. The remedy is a smaller `maxDays`, which is why
+it is a query parameter. Fixture 5 holds both halves: break the fix and 5a
+fails, hardcode null and the 5b control fails.
+
+### The repair, and how to do it again
+
+The store was refilled by re-walking 2026-08-08..2026-09-20 in four 12-day
+slices under the fixed code:
+
+```
+/api/jobs/ipo-refresh?key=...&from=20260808&maxDays=12
+                              &from=20260820
+                              &from=20260901
+                              &from=20260913
+```
+
+All four came back `filersTruncated: false`, `failed: 0` — 553 filers touched,
+112 covers parsed. **`upperCohort.termsNull: 0` and `lowerCohort.termsNull: 0`**
+afterwards: every filer eligible to render has a terms object.
+
+Three things make this repeatable rather than folklore:
+
+- **RUN THE SLICES ONE AT A TIME.** SEC's fair-access limit is per REQUESTER,
+  not per endpoint. The first attempt ran them back to back and two died on a
+  503 and a 20s timeout; the retry, spaced out, was clean. That was EDGAR
+  flakiness, not a second bug.
+- **A FAILED DAY STOPS THE SLICE BY DESIGN** and does not advance the watermark
+  past itself, so dates after it in that slice are never attempted. Check
+  `failed: 0`, not just `ok`.
+- **REPLAYS CANNOT REWIND THE CRON.** The watermark is monotonic in
+  `writeStoredIpoFilings`, so walking old dates with `?from=` is safe.
+
+### And the page will not change until it is rebuilt
+
+`/upcoming-ipos` is `revalidate = 86400` and prerenders at BUILD time — the
+build log shows `○ /upcoming-ipos 1d 1y`. Repairing the store does nothing
+visible for up to 24 hours. **A production redeploy is what re-renders it**,
+the same shape as the `IPO_PROVIDER` lesson below. Reading the page to check a
+store repair without redeploying first will show the old render and look like
+the repair failed.
+
+---
+
+## ROLLING BACK
+
+Set `IPO_PROVIDER` back to `fmp` (or delete it — the code defaults to `fmp`)
+**and trigger a production redeploy**. An env change alone is not picked up —
+the correction PR #453 made the hard way for `NEWS_PROVIDER`.
+
+Nothing else has to move: the FMP branch is untouched, and
+`app/api/debug/ipo-calendar` and `fmpFetch` stay while `IPO_PROVIDER=fmp`
+remains a working fallback.
+
+---
+
+## FOLLOW-UPS — none of these blocks anything
+
+The flip is verified. These are open items on a working page, not reasons to
+hold it. Each wants its own measurement first; see "KNOWN, DELIBERATELY
+DEFERRED" above for the full reasoning on each.
+
+| | what it costs today | what it needs |
+|---|---|---|
+| **JATT III (JTTT)** renders ~$2.25M | one wrong row | a probe that dumps its cover around every agreeing count/total pair — NOT a third guessed pattern |
+| **`US$`-prefixed prices** parse as no price | a dash on some F-1/A filers | a measurement of how many filings carry the `US$` form before widening the pattern |
+| **the 3× range guard** has a single-price blind spot | nothing — the one affected row is dropped as a follow-on | a price-coverage measurement, as the share count had |
+
+**`/api/debug/ipo-store` is the instrument for all three.** It reads through
+`readStoredIpoFilings` — the same function the page calls — and separates terms
+never parsed from terms parsed-and-declined, which is the distinction that cost
+a full diagnosis cycle to establish the first time.
 
 ---
 
@@ -262,6 +389,8 @@ covers, not editing a regex until the numbers look better.
 
 ---
 
-*Written 2026-09-21. Relay runs cited: 35583959865 (share counts, 94 covers),
+*Written 2026-09-21, extended the same day with the third defect. Relay runs
+cited: 35583959865 (share counts, 94 covers), 35597668901 (the re-parse that
+separated a stale store from a broken parser),
 35586785501 (SPAC covers, before), 35587433966 (SPAC covers, after),
 35585163429 / 35587711390 (ingest).*
