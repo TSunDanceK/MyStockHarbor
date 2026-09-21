@@ -17,10 +17,11 @@ the FMP dependency for this page is gone** — which closes the standing risk th
 3. **Steps 6 and 7 shipped** (Market Cap hidden, copy, labels) — PR #492. ✅
 4. **`IPO_PROVIDER=sec` is live in Vercel Production.** ✅
 
-THREE defects were found and fixed along the way that nobody was looking for.
+FOUR defects were found and fixed along the way that nobody was looking for.
 Two were in the cover parser and produced **confident wrong numbers**; the third
-was in the ingest and produced **confidently missing ones**. They are the
-substance of this document.
+was in the ingest and produced **confidently missing ones**; the fourth meant
+the page **was never reading the store at all**. They are the substance of this
+document, and the fourth is the one most likely to be rediscovered the hard way.
 
 ---
 
@@ -340,6 +341,99 @@ visible for up to 24 hours. **A production redeploy is what re-renders it**,
 the same shape as the `IPO_PROVIDER` lesson below. Reading the page to check a
 store repair without redeploying first will show the old render and look like
 the repair failed.
+
+---
+
+## THE FOURTH DEFECT — THE PAGE WAS NEVER READING THE STORE
+
+**THIS ONE BLOCKED THE FLIP AND TOOK SEVERAL ROUNDS TO FIND, WHICH IS WHY IT IS
+NOT IN THE FOLLOW-UPS TABLE.** It is also the one a future session is most
+likely to rediscover the hard way, because every instinct it defeats is a
+reasonable one.
+
+The store was repaired and verified through `/api/debug/ipo-store`. Two
+production deployments were confirmed READY, aliased to the domain, built from
+the right commit. The page kept rendering the pre-repair rows — every Recent row
+but one showing a dash for BOTH Price Range and Deal Size, the
+terms-never-parsed signature the store no longer had. A hard refresh changed
+nothing.
+
+### `/upcoming-ipos` does not read `msh:ipo:filings:v1`
+
+```
+getIpoTables()
+  └─ readFeed(ipoFeedKey(), () => fetchIpoRows(...), { freshSeconds: 86400 })
+       ├─ memory                      empty on a fresh lambda or build
+       ├─ Redis  msh:feed:ipo:all     HIT — written when the flag was flipped
+       └─ isFresh(entry, 86400) → true  →  RETURN
+                                            fetchItems()       never called
+                                            fetchSecIpoRows()  never called
+                                            the store          never opened
+```
+
+**BOTH ENDS CHECKED OUT BECAUSE THEY ARE NOT THE SAME PATH.** The debug route
+reads the store directly and was right. The page read a snapshot of how the
+store looked hours earlier and was also right. Nothing in between logged
+anything, because nothing in between is wrong from its own point of view — a
+cache serving a fresh entry is a cache working.
+
+### THREE CACHES, ONE TTL, AND WHY A REDEPLOY PROVES NOTHING
+
+```
+ISR HTML          revalidate = 86400   prerendered at build
+  feed memory     freshSeconds 86400   per-instance, dies with the lambda
+    feed Redis    freshSeconds 86400   msh:feed:ipo:* , 7-day retention
+      msh:ipo:filings:v1               the thing that was actually repaired
+```
+
+A redeploy clears exactly ONE of those — the in-memory tier — **and Redis is
+precisely what that tier falls back to.** So a redeploy looks like it should
+prove freshness and cannot. Two were run, both confirmed READY and aliased,
+neither changed a pixel. The build log says so plainly in hindsight: `[youtube]`
+and `[pickers]` lines during prerender and nothing at all for the IPO feed,
+because no fetch happened.
+
+**A DEPLOYMENT REACHING READY IS EVIDENCE ABOUT THE BUILD, NOT ABOUT THE DATA
+IN IT.** When a data repair has to become visible, the question is which cache
+layers stand between the repaired key and the reader, and whether anything
+drops them.
+
+### The provider-namespacing gap, found while confirming the above
+
+The feed key was the bare string `ipo:all`, shared by both providers. So for up
+to 24 hours after `IPO_PROVIDER` changes, the page serves the OLD provider's
+rows under the NEW provider's chrome: the footer, the column labels and the
+intro copy all read the flag and switch instantly, while the table underneath
+does not. **Every surface a reader would check to confirm a flip says it
+worked.**
+
+It missed the 2026-09-21 flip by luck alone — the `fmp` entry had already aged
+past its freshness window, so the first `sec` render refetched. A flip made a
+few hours after any page view would have shown FMP rows under a "Data source:
+SEC EDGAR" footer.
+
+### The fix (PR #498)
+
+- **`invalidateFeed(key)`** — one DEL, and `ipo-refresh` calls it after a
+  successful write. Whoever rewrites a source key is responsible for dropping
+  what was derived from it. `dryRun` does not write and must not invalidate,
+  or a debug parameter would carry a live side effect.
+- **`feedInvalidated` in the job response.** A repair that leaves it false has
+  not reached a reader, and that was untellable from any field the job printed
+  before. **Trust the field over the assumption.**
+- **`ipoFeedKey()` namespaces by provider** — `ipo:all:sec`, `ipo:all:fmp` — so
+  a flip has no entry to inherit and the first read goes upstream. This is what
+  makes the NEXT flip safe, including a rollback to `fmp`.
+
+It still does not clear the in-memory tier of OTHER running instances, and
+nothing short of a deploy can. So the repair sequence is three steps and all
+three are needed:
+
+```
+1. a writing ipo-refresh run   drops the derived feed   (feedInvalidated: true)
+2. a production redeploy       re-renders the ISR HTML with a cold memory tier
+3. read the page
+```
 
 ---
 
