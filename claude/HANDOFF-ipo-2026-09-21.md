@@ -191,9 +191,14 @@ Lannister writes `"between US$4 and US$6 per Unit"`. The price patterns expect
 why the probe printed `price —-—` for it. **Foreign private issuers filing F-1/A
 use the `US$` form routinely**, so this is likely more than one filer.
 
-Found while isolating a fixture, not while looking for it. Not fixed here: it is
-a coverage question, and widening a price pattern without measuring what else it
-then catches is how the first share-count rule got written.
+**IT FAILS SAFE, AND THAT IS WHY IT CAN WAIT.** The cover parses no price at
+all, so the row renders a dash — null, not wrong. That is a different category
+from the two defects this pass fixed, both of which produced confident wrong
+figures. A coverage gap can be deferred; a wrong number cannot.
+
+Found while isolating a fixture, not while looking for it. Not fixed here:
+widening a price pattern without measuring how many filings it then catches is
+how the first share-count rule got written.
 
 ---
 
