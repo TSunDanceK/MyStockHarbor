@@ -82,6 +82,7 @@ import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
 import { secChainsHash } from "./secFields";
+import { admitSymbolForExtraction } from "./securityKind";
 import { readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
 
@@ -187,7 +188,22 @@ export type ColdResult =
       taxonomies: string[];
     }
   /** Timed out, refused by a guard, or failed. Queued where possible. */
-  | { status: "pending"; reason: string };
+  | { status: "pending"; reason: string }
+  /**
+   * This ticker is not the security the issuer's statements describe.
+   *
+   * A CIK identifies a FILER, not a security, so MER-PK resolves to Bank of
+   * America's CIK and every field on this page would be Bank of America's.
+   * NOT a 404 and not "pending": the ticker genuinely trades and nothing is
+   * going to arrive later. See lib/server/securityKind.ts.
+   */
+  | {
+      status: "not-issuer-equity";
+      reason: "derivative-of-issuer" | "unverifiable";
+      /** Other tickers on the same CIK, so the page can point somewhere real. */
+      siblings: string[];
+      cik: string;
+    };
 
 /**
  * The minimum populated fields in a SINGLE period for a page to be worth
@@ -606,6 +622,29 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
   // 1. THE CIK GATE, FIRST AND CHEAPEST. No network, no Redis, no write.
   const cik = cikForSymbol(clean);
   if (!cik) return { status: "no-cik" };
+
+  // 1b. THE SECURITY-KIND GATE, IMMEDIATELY AFTER IT AND FOR THE SAME REASONS.
+  //
+  // A CIK resolving is not the same as this TICKER being the security those
+  // filings describe. MER-PK resolves to Bank of America's CIK 0000070858
+  // along with sixteen other securities, so every figure below would be Bank
+  // of America's, rendered under a preferred's ticker. Complete, plausible and
+  // entirely wrong -- which is worse than empty, because nothing on screen
+  // says so.
+  //
+  // BEFORE THE STORE READ, not after. A stored set for one of these symbols
+  // already exists (extraction has been running without this gate), so gating
+  // on the read would hand back the very data this exists to withhold.
+  // Synchronous and committed-file-only, like the CIK gate above.
+  const kind = admitSymbolForExtraction(clean, cik);
+  if (!kind.admit) {
+    return {
+      status: "not-issuer-equity",
+      reason: kind.reason,
+      siblings: kind.siblings,
+      cik: kind.cik,
+    };
+  }
 
   // 2. THE STORE.
   const stored = await readFactSet(clean);
