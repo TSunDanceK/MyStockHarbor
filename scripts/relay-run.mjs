@@ -551,6 +551,22 @@ const TASKS = {
   // READS ONLY, but the bars and the report dates both live in Upstash and the
   // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
   // not a claim about what the script does.
+  // BETA FROM BARS ALREADY IN REDIS — the worked example the read-only probe
+  // could not produce, because the sandbox has no Upstash credentials and every
+  // bars provider is refused at the gateway.
+  //
+  // READ-ONLY DESPITE THE PREFIX. It issues GETs for two history keys and
+  // nothing else. `write-` here means "needs the credentials", which is the
+  // boundary this file and relay.yml both enforce; it does not mean the task
+  // mutates anything. See the routing docblock at the top of this file.
+  "write-beta-mu": {
+    script: "scripts/beta-worked-example.mjs",
+    args: () => [],
+    // PINNED ON THE TASK, so the task NAME is the record of what was measured.
+    // relay.yml's inputs live on the default branch and have no symbol field;
+    // pinning here is what lets a branch measure a named symbol without a merge.
+    env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC" },
+  },
   "write-valuation-price": {
     script: "scripts/valuation-price-probe.mjs",
     args: () => [],
