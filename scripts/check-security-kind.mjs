@@ -20,14 +20,22 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-// The module imports cikForSymbol from secColdFetch, which drags in Redis.
-// Only the pure half is under test, so the import is stripped -- the impure
-// helper (cikGroupFor) is not exercised here and is not what decides anything.
+// THE PURE HALF ONLY. The module's render-path entry point loads the committed
+// ticker map and name snapshot through "@/..." aliases that a bare transpile
+// cannot resolve, so both imports are stubbed and the entry point itself is
+// cut. What is under test here is the DECISION -- admitForExtraction and
+// securityKindFromName -- fed from the real maps read directly below, which is
+// a stronger input than the module's own loader would be.
+//
+// The wiring those stubs stand in for is asserted separately, in §8, by
+// reading the call sites. A stub here plus an unasserted call site is exactly
+// how #483's signal ended up with no reader.
 const SOURCE = fs.readFileSync(SRC, "utf8");
 const build = async (src) => {
   const pure = src
-    .replace(/import \{ cikForSymbol \} from "\.\/secColdFetch";/, "const cikForSymbol = () => null;")
-    .replace(/export function cikGroupFor[\s\S]*$/, "");
+    .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+    .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+    .replace(/\/\/ ─+\n\/\/ THE RENDER-PATH ENTRY POINT[\s\S]*$/, "");
   const js = ts.transpileModule(pure, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText;
@@ -179,7 +187,53 @@ console.log("\n7. POPULATION — reported, because a rule nobody sized is a gues
     "a rule refusing most of its population is matching something other than what it names");
 }
 
-console.log("\n8. THE MUTANTS");
+// ── 8. THE CALL SITES ─────────────────────────────────────────────────────
+// The lesson from the failure-vs-absence bug, applied before it can repeat: a
+// module the render path never consults fails exactly the way a missing module
+// does, and every section above would still pass. #483 shipped a correct
+// signal that nothing read for weeks. This section reads the wiring.
+console.log("\n8. THE RENDER PATH CONSUMES IT");
+{
+  const cold = fs.readFileSync(path.join(ROOT, "lib/server/secColdFetch.ts"), "utf8");
+  const page = fs.readFileSync(path.join(ROOT, "app/stock/[symbol]/earnings/page.tsx"), "utf8");
+  const cards = fs.readFileSync(path.join(ROOT, "app/stock/[symbol]/earnings/SecEarningsCards.tsx"), "utf8");
+  const score = fs.readFileSync(path.join(ROOT, "lib/server/secEarningsScore.ts"), "utf8");
+
+  // ANCHORED ON THE ASSIGNMENT, not the bare identifier: `admitSymbolForExtraction(`
+  // alone matches a DECLARATION too, so a file that merely re-declared the name
+  // would pass. check-assertion-anchors.mjs caught exactly that here.
+  check("resolveFactSetForRender calls the gate",
+    /const kind = admitSymbolForExtraction\(/.test(cold),
+    "a gate nobody calls is indistinguishable from no gate");
+
+  // THE ORDERING, ASSERTED ON THE SOURCE. A stored set already exists for these
+  // symbols -- extraction has been running without the gate -- so gating after
+  // the store read would hand back the very data this withholds.
+  const gateAt = cold.indexOf("const kind = admitSymbolForExtraction(");
+  const readAt = cold.indexOf("await readFactSet(clean)");
+  check("...BEFORE the store read, not after",
+    gateAt > 0 && readAt > 0 && gateAt < readAt,
+    `gate at ${gateAt}, readFactSet at ${readAt} — a stored set for MER-PK already exists`);
+
+  check("the page renders a dedicated card for it",
+    /status === "not-issuer-equity"/.test(page) && /SecNotIssuerEquityCard/.test(page));
+  check("...and that card exists",
+    /export function SecNotIssuerEquityCard/.test(cards));
+
+  // THE SPECIFIC WRONG OUTCOME, named so it cannot come back by deletion: with
+  // no branch of its own this status falls through to the pending card, which
+  // promises figures that are never coming.
+  const branchAt = page.indexOf('status === "not-issuer-equity"');
+  const pendingAt = page.indexOf("<SecPendingCard");
+  check("...ahead of the pending card, which would promise data that never arrives",
+    branchAt > 0 && pendingAt > 0 && branchAt < pendingAt);
+
+  check("the score gives an honest reason rather than 'not been read yet'",
+    /not-issuer-equity/.test(score),
+    "the default reason says the filings will be read, which is false for a preferred");
+}
+
+console.log("\n9. THE MUTANTS");
 {
   await underMutation(
     "step 3: the shared-CIK guard removed (a derivative renders the parent's financials)",

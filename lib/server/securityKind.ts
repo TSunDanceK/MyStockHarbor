@@ -43,7 +43,8 @@
 // Security Name: 75 excluded, 404 kept, and every named probe lands correctly
 // (MER-PK, TBB, CTA-PA, EP-PC out; ET, MPLX, BEP, BIP, ASML, AEG, BN, KOF,
 // AMX, BABA, BHP, MKC-V, BRK-A, GOOG, BAC in).
-import { cikForSymbol } from "./secColdFetch";
+import { loadTickerMap } from "./secTickerMap";
+import { snapshotCompanyName } from "./companyNameSnapshot";
 
 /**
  * ADR/registry-share wording. CHECKED BEFORE EVERYTHING ELSE.
@@ -155,11 +156,62 @@ export function refusalWords(v: Extract<ExtractionVerdict, { admit: false }>): s
   );
 }
 
-/** Convenience for the render path, which has a symbol and nothing else. */
-export function cikGroupFor(symbol: string, allSymbols: Iterable<string>): string[] {
-  const cik = cikForSymbol(symbol);
-  if (!cik) return [];
-  const group: string[] = [];
-  for (const s of allSymbols) if (cikForSymbol(s) === cik) group.push(s);
-  return group;
+// ─────────────────────────────────────────────────────────────────────────────
+// THE RENDER-PATH ENTRY POINT.
+//
+// NO NETWORK AND NO REDIS, deliberately, and for the reason secColdFetch's own
+// CIK gate states: this runs on every cold render, and a gate that depends on
+// an external fetch is a gate that opens when that fetch is slow. A gate that
+// opens is this bug returning.
+//
+// Both inputs are already committed and already have synchronous loaders --
+// loadTickerMap (validated on load, ~10,400 registrants) and
+// snapshotCompanyName (2,610 names, keyed in the directory's own spelling with
+// the dot/dash rewrite handled). Nothing new is fetched or stored.
+
+/** CIK -> every symbol resolving to it. Built once from the committed map. */
+let cikIndex: Map<string, string[]> | null = null;
+
+function cikGroups(): Map<string, string[]> {
+  if (cikIndex) return cikIndex;
+  const built = new Map<string, string[]>();
+  const { present, map } = loadTickerMap();
+  if (present) {
+    for (const [symbol, entry] of map) {
+      const cik = entry?.cik;
+      if (!cik) continue;
+      const list = built.get(cik);
+      if (list) list.push(symbol);
+      else built.set(cik, [symbol]);
+    }
+  }
+  // CACHED ONLY ONCE THE MAP WAS PRESENT. Caching an empty index built from a
+  // missing file would make every later call admit everything -- fail-open,
+  // permanently, from one unlucky first call.
+  if (present) cikIndex = built;
+  return built;
+}
+
+/** Test seam: drop the memoised index so a reload is observable. */
+export function resetCikGroupsForTest(): void {
+  cikIndex = null;
+}
+
+/**
+ * The gate, for a symbol and nothing else.
+ *
+ * Returns `{ admit: true }` for every symbol that does not share its CIK, which
+ * is the overwhelming majority, before any name lookup happens.
+ */
+export function admitSymbolForExtraction(symbol: string, cik: string | null): ExtractionVerdict {
+  const clean = String(symbol ?? "").trim().toUpperCase();
+  if (!cik) return { admit: true };
+  const group = cikGroups().get(cik) ?? [];
+  if (group.length < 2) return { admit: true };
+  return admitForExtraction({
+    symbol: clean,
+    cik,
+    cikGroup: group,
+    securityName: snapshotCompanyName(clean) || null,
+  });
 }

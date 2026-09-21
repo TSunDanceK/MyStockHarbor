@@ -3,6 +3,7 @@
 // Presentational and server-rendered: every decision about which number is
 // which, and what is derived, is made in lib/server/secEarningsView.ts and
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
+import Link from "next/link";
 import {
   CROSSING_NOTE, CROSSING_WORDS, GAAP_EPS_NOTE, SEC_ATTRIBUTION, conversionNote,
   isCrossing, periodWords, retiredSource,
@@ -1238,6 +1239,65 @@ export function SecNoQuartersCard({
         </a>
         .
       </p>
+    </section>
+  );
+}
+
+/**
+ * THIS TICKER IS NOT THE SECURITY THE FILINGS DESCRIBE.
+ *
+ * NOT a 404 and not "pending". MER-PK genuinely trades, so a 404 is its own
+ * wrong answer, and nothing is going to arrive later, so the pending card --
+ * which is where this case landed before this component existed -- promises
+ * data that will never come.
+ *
+ * WHAT THE READER NEEDS IS THE SIBLING. Someone on /stock/MER-PK/earnings
+ * wants Bank of America's numbers; they just asked with the wrong ticker. The
+ * card says so and links there, rather than stopping at a refusal.
+ */
+export function SecNotIssuerEquityCard({
+  symbol,
+  reason,
+  siblings,
+}: {
+  symbol: string;
+  reason: "derivative-of-issuer" | "unverifiable";
+  siblings: string[];
+}) {
+  // The likeliest parent is the shortest sibling with no class/series suffix:
+  // BAC among BAC-PB, BML-PG, MER-PK. A heuristic for a LINK, never for the
+  // refusal itself -- getting it wrong costs a pointer, not a wrong figure,
+  // which is why it is allowed to be a heuristic at all.
+  const parent = siblings
+    .filter((s) => !/[-.]/.test(s))
+    .sort((a, b) => a.length - b.length)[0];
+
+  return (
+    <section className="card">
+      <div className="eyebrow">Not this security</div>
+      <h2>{symbol} does not file its own financial statements</h2>
+      {reason === "derivative-of-issuer" ? (
+        <p>
+          {symbol} is debt, preferred stock or a warrant. It is registered with {SEC_ATTRIBUTION}{" "}
+          under the same filer as {parent ? <strong>{parent}</strong> : "another company"}, and the
+          financial statements filed there describe that company — its revenue, its earnings, its
+          cash flow — not this security. They are not shown here, because showing them under this
+          ticker would read as {symbol}&apos;s own results.
+        </p>
+      ) : (
+        <p>
+          {symbol} shares a filer with other securities, and which security it is could not be
+          established from the exchange listing. The statements on that filer describe the company,
+          not necessarily this ticker, so they are not shown here rather than shown under a ticker
+          they may not belong to.
+        </p>
+      )}
+      {parent ? (
+        <p style={{ marginBottom: 0 }}>
+          For the company&apos;s own results, see{" "}
+          <Link href={`/stock/${parent}/earnings`}>{parent}</Link>.
+        </p>
+      ) : null}
     </section>
   );
 }
