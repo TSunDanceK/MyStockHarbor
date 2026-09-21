@@ -23,6 +23,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments, assertStripKeptTheCode } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = path.join(ROOT, "lib/server/earningsCalendar.ts");
@@ -524,7 +525,18 @@ console.log("\n8. F4 — the manual override does not read the flag the bug corr
 {
   const btn = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/BackfillButton.tsx"), "utf8");
   const page = fs.readFileSync(path.join(ROOT, "app/earnings-calendar/page.tsx"), "utf8");
-  const code = btn.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  // THROUGH THE SHARED STRIPPER, not a hand-rolled one. #483 shipped the naive
+  // line filter below and check-comment-stripper has been failing on it since --
+  // that PR ran tsc, eslint and this suite, but not check-all, which is exactly
+  // the gap that let it through.
+  //
+  // It matters here specifically: both assertions in this block are NEGATIVE
+  // ("takes no prop", "no longer renders"), and a strip that eats too much makes
+  // a negative assertion pass by deleting the text it searches. The naive filter
+  // also missed /* */ blocks entirely, so a commented-out prop would have
+  // satisfied the first check while still being commented out.
+  const code = stripComments(btn, { file: "app/earnings-calendar/BackfillButton.tsx" });
+  assertStripKeptTheCode(btn, code, "app/earnings-calendar/BackfillButton.tsx");
   check("BackfillButton takes no `complete` prop", !/\bcomplete\s*[,:]/.test(code.split("export default")[1] ?? ""), "the override must not be gated on completeness");
   // MATCHED ON THE BUTTON LABEL, NOT THE PHRASE. "fully populated" also appears
   // in the post-success message, which is legitimate and should stay -- the first
