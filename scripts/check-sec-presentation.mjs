@@ -244,6 +244,68 @@ console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter
   );
 }
 
+console.log("\n4b. A MARKET CAP IS A CLAIM ABOUT TODAY, SO THE PRICE MUST BE");
+{
+  // ── THE DEFECT THIS EXISTS FOR, MEASURED ON THE PREVIEW ──────────────────
+  // RYAAY's card valued the company at 50.40 as of 2025-05-15 against a live
+  // 53.51, and CNI at 106.22 as of 2026-03-16 against 118.95 — sixteen and six
+  // months stale. The price was the last bar of the REACTION CHART'S window,
+  // which is sized around report dates and so stops months short of today for
+  // any filer that has not reported recently. ABEV passed only because its
+  // report cycle happens to be current, which is why one symbol looking right
+  // proved nothing about the others.
+  //
+  // TWO SEPARATE THINGS ARE HELD HERE: the page reads the WHOLE SERIES for
+  // this figure (asserted against the source, because no fixture can show
+  // which of two fetches a value came from), and a close past the bound is
+  // refused rather than used (asserted against the rule).
+  const TODAY = "2026-09-21";
+  check("a close from today is current", mod.priceIsCurrent(TODAY, TODAY));
+  check("a long weekend either side of a holiday is still current",
+    mod.priceIsCurrent("2026-09-13", TODAY),
+    `8 days, inside the ${mod.VALUATION_PRICE_MAX_AGE_DAYS}-day bound`);
+  check("RYAAY's sixteen-month-old close is NOT current",
+    !mod.priceIsCurrent("2025-05-15", TODAY),
+    "the exact value the preview priced the company with");
+  check("CNI's six-month-old close is NOT current",
+    !mod.priceIsCurrent("2026-03-16", TODAY));
+  check("a missing date is not current either",
+    !mod.priceIsCurrent(null, TODAY),
+    "no date is not the same as no staleness");
+  check("a close dated AFTER today is refused, not treated as fresh",
+    !mod.priceIsCurrent("2026-09-22", TODAY),
+    "the series and the clock disagreeing is not a reason to be generous");
+  await underMutation(
+    "staleness bound removed",
+    "  return (t - a) / 86400000 <= VALUATION_PRICE_MAX_AGE_DAYS;",
+    "  return true;",
+    (m) => !m.priceIsCurrent("2025-05-15", TODAY)
+  );
+  await underMutation(
+    "future dates allowed through",
+    "  if (a > t) return false;",
+    "",
+    (m) => !m.priceIsCurrent("2026-09-22", TODAY)
+  );
+
+  // THE SOURCE OF THE PRICE, ASSERTED AGAINST THE PAGE. The bound above cannot
+  // catch a regression here: a price taken from the bounded window is a real
+  // close on a real date, and on a filer that reported last week it is even
+  // the RIGHT one. The defect only appears on filers that have not reported
+  // recently, so what has to hold is which list the value is read from.
+  const PAGE = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+  check("the valuation price is the last bar of the WHOLE series",
+    /const lastBar = \(latestBars as Point\[\]\)\.at\(-1\)/.test(PAGE),
+    "not dailyHistory, which is the reaction chart's bounded window");
+  check("...and that series is fetched alongside the bounded one, not instead of it",
+    /caller: "stock-earnings-valuation"/.test(PAGE) && /getDailyBars\(symbol, barWindow\.from/.test(PAGE),
+    "the reaction chart still wants the bound; only this figure does not");
+  check("the render date is read once on the server, not inside a card",
+    /renderedOn: new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/.test(PAGE) &&
+      /today=\{data\.renderedOn\}/.test(PAGE),
+    "a card calling the clock itself is untestable and can differ from its own server render");
+}
+
 console.log("\n5. THE WATERFALL IS DRAWN ONLY WHERE IT ADDS UP");
 {
   const cell = (key, label, val) => ({ key, label, val, derived: null, derivedNote: null, perShare: false, tag: null, ns: null });

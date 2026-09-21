@@ -663,7 +663,7 @@ async function getEarningsData(symbol: string) {
     };
   })();
 
-  const [cold, dailyHistory, earningsJson] = await Promise.all([
+  const [cold, dailyHistory, latestBars, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
@@ -674,6 +674,23 @@ async function getEarningsData(symbol: string) {
       ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
           .catch(() => [] as Point[])
       : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    // ── THE WHOLE SERIES, FOR ITS LAST BAR AND NOTHING ELSE ─────────────────
+    //
+    // The valuation card needs the MOST RECENT close. The window above is
+    // sized around report dates, which is right for the reaction chart and
+    // wrong for this: a filer that has not reported recently has a window that
+    // stops months short of today. MEASURED ON THE PREVIEW — RYAAY priced at
+    // 50.40 as of 2025-05-15 against a live 53.51, CNI at 106.22 as of
+    // 2026-03-16 against 118.95. ABEV looked fine only because its report
+    // cycle happens to be current, which is why one symbol passing proves
+    // nothing about the others.
+    //
+    // THIS COSTS NOTHING. getDailyBars is a view over getDailyHistory, and
+    // getDailyHistory dedupes by symbol while a read is in flight — both
+    // entries of this Promise.all start in the same tick, so the second finds
+    // the first's promise already registered and awaits it. One read, two
+    // shapes of answer.
+    getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
     // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
     // an ignored fetch still costs the request, and the daily FMP limit is the
     // thing the owner has said not to spend.
@@ -806,11 +823,14 @@ async function getEarningsData(symbol: string) {
   // rest of this page is built on and a second price source would be a second
   // number for one fact.
   //
-  // ON THE BOUNDED PATH the newest bar is up to BAR_WINDOW_DAYS before today,
-  // which is why the card prints the date it closed on rather than implying it
-  // is live.
+  // THE LAST BAR OF THE WHOLE SERIES, never of the reaction window — see the
+  // fetch above for the measurement. The card still prints the date it closed
+  // on, because a close is not a live quote, and refuses outright past
+  // VALUATION_PRICE_MAX_AGE_DAYS: a market cap is a claim about today, and one
+  // built on a year-old close is confidently wrong with nothing on screen to
+  // say so.
   const valuation = cold.status === "ready" ? valuationInputs(cold.set) : { shares: null, eps: null, refusals: [] };
-  const lastBar = (dailyHistory as Point[]).at(-1) ?? null;
+  const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
   const latestCloseOn = lastBar?.date ?? null;
 
@@ -818,6 +838,12 @@ async function getEarningsData(symbol: string) {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, score, secView, cold,
     valuation, latestClose, latestCloseOn,
+    /**
+     * THE DATE THIS RENDER RAN, read once here rather than inside a component.
+     * A card that called Date.now() itself would be untestable and would also
+     * differ between the server render and any later hydration.
+     */
+    renderedOn: new Date().toISOString().slice(0, 10),
     /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
     datesFromSec: secEvents.length > 0,
     /**
@@ -1412,6 +1438,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     inputs={data.valuation}
                     price={data.latestClose}
                     priceAsOf={data.latestCloseOn}
+                    today={data.renderedOn}
                   />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />

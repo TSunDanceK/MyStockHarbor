@@ -9,7 +9,8 @@ import {
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
-  barValue, growthToneWord, marginToneWord, toneBandNote, toneBg, toneColor,
+  STALE_PRICE_WORDS, barValue, growthToneWord, marginToneWord, priceIsCurrent,
+  stalePriceNote, toneBandNote, toneBg, toneColor,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate,
   TREND_MIN_PERIODS,
   type EarningsTone,
@@ -1410,21 +1411,31 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
  * end, and the price is today's close.
  */
 export function SecValuationCard({
-  view, inputs, price, priceAsOf,
+  view, inputs, price, priceAsOf, today,
 }: {
   view: SecEarningsView;
   inputs: ValuationInputs;
   price: number | null;
   priceAsOf: string | null;
+  /** The render date, passed in rather than read from the clock — see priceIsCurrent. */
+  today: string;
 }) {
-  const cap = marketCap(inputs, price);
-  const pe = peRatio(inputs, price);
+  // ── A STALE CLOSE IS NOT A PRICE ─────────────────────────────────────────
+  // Every other figure on this page is a filed fact frozen at its period end.
+  // These two are assertions about today's market, so an old close does not
+  // make them slightly out of date, it makes them wrong — and nothing on
+  // screen would say so. Past the bound the card shows the close it has and
+  // declines to value the company with it.
+  const current = priceIsCurrent(priceAsOf, today);
+  const usable = current ? price : null;
+  const cap = marketCap(inputs, usable);
+  const pe = peRatio(inputs, usable);
   // NO PRICE IS NOT A FILING REFUSAL. Both figures need one, and saying the
   // cover page is at fault for a bars outage would misname the gap.
   if (price === null) return null;
   const figure = (f: ReturnType<typeof marketCap>, fmt: (n: number) => string) =>
-    f === null ? NOT_REPORTED : f.ok ? fmt(f.val) : REFUSAL_WORDS[f.why];
-  const isRefusal = (f: ReturnType<typeof marketCap>) => f !== null && !f.ok;
+    !current ? STALE_PRICE_WORDS : f === null ? NOT_REPORTED : f.ok ? fmt(f.val) : REFUSAL_WORDS[f.why];
+  const isRefusal = (f: ReturnType<typeof marketCap>) => !current || (f !== null && !f.ok);
   return (
     <section className="card">
       <div className="eyebrow">Valuation</div>
@@ -1459,9 +1470,11 @@ export function SecValuationCard({
         </div>
       </div>
       <p className="earningsDataNote">
-        Price {price.toFixed(2)}{priceAsOf ? ` at the close on ${priceAsOf}` : ""}. Earnings are
-        GAAP as filed, never an adjusted figure. {GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}, with
-        the share price from market data.
+        {current
+          ? `Price ${price.toFixed(2)}${priceAsOf ? ` at the close on ${priceAsOf}` : ""}.`
+          : stalePriceNote(price, priceAsOf ?? "an unknown date")}{" "}
+        Earnings are GAAP as filed, never an adjusted figure. {GAAP_EPS_NOTE} Source:{" "}
+        {SEC_ATTRIBUTION}, with the share price from market data.
       </p>
       {view.currency ? (
         <p className="earningsDataNote">

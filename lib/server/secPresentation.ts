@@ -218,6 +218,70 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   };
 }
 
+// ── how old a price may be and still be called a price ────────────────────
+
+/**
+ * How stale the close behind market cap and P/E may be, in calendar days.
+ *
+ * ── WHY THERE IS A BOUND AT ALL ──────────────────────────────────────────
+ * MEASURED ON THE PREVIEW: RYAAY's card priced the company at 50.40 as of
+ * 2025-05-15 against a live 53.51, and CNI at 106.22 as of 2026-03-16 against
+ * 118.95 — sixteen and six months out. The cause was the price coming off the
+ * REACTION CHART'S window, which is sized around report dates and so never
+ * reaches near today for a filer that has not reported recently. That is
+ * fixed at the source (the card now reads the whole series), but the bound
+ * stays, because the same wrong number can arrive a second way: a symbol
+ * whose bar cache simply stops — delisted, renamed, or never refilled.
+ *
+ * A MARKET CAP IS A CLAIM ABOUT NOW. Unlike every other figure on this page,
+ * which is a filed fact frozen at its period end, market cap and P/E are
+ * assertions about today's market, and a year-old close makes both of them
+ * confidently wrong with nothing on screen to say so. Past the bound the card
+ * says what it has instead of computing with it.
+ *
+ * TEN DAYS covers a long weekend either side of a public holiday and a bar
+ * cache that refreshes a day late, and nothing longer. It is not a trading-day
+ * count because the staleness being caught is measured in months.
+ */
+export const VALUATION_PRICE_MAX_AGE_DAYS = 10;
+
+/**
+ * Whether a close is recent enough to value a company with.
+ *
+ * `today` is passed in rather than read from the clock so the rule can be
+ * tested at a fixed date — a bound that can only be exercised by waiting is a
+ * bound nobody exercises.
+ */
+export function priceIsCurrent(asOf: string | null, today: string): boolean {
+  if (!asOf) return false;
+  const t = Date.parse(today);
+  const a = Date.parse(asOf);
+  if (!Number.isFinite(t) || !Number.isFinite(a)) return false;
+  // A BAR DATED AFTER TODAY IS NOT FRESH, IT IS WRONG. A future date means the
+  // series and the clock disagree, and the honest response to that is the same
+  // refusal, not the most generous reading of it.
+  if (a > t) return false;
+  return (t - a) / 86400000 <= VALUATION_PRICE_MAX_AGE_DAYS;
+}
+
+/**
+ * What the two figures read when the close behind them is too old to use.
+ *
+ * NOT "Not reported" — the filer reported its share count perfectly well; the
+ * missing half is the price. Naming the filing there would send a reader to
+ * EDGAR looking for something that is already on the page.
+ */
+export const STALE_PRICE_WORDS = "No recent price";
+
+/** Said under the figures, so the staleness is stated rather than implied. */
+export function stalePriceNote(price: number, asOf: string): string {
+  return (
+    `The most recent close on file for this symbol is ${price.toFixed(2)} on ${asOf}, which is ` +
+    `more than ${VALUATION_PRICE_MAX_AGE_DAYS} days old. Market cap and P/E are claims about ` +
+    `today's market, so they are not computed from it.`
+  );
+}
+
 // ── the P&L waterfall gate ────────────────────────────────────────────────
 
 /**
