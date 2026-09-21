@@ -126,13 +126,23 @@ const MIN_GAP_MS = 125;
  * index. Every date from the watermark forward is walked, oldest first, and the
  * watermark is left wherever it got to.
  *
- * 15 is sized against the 300s function budget: a day costs one index fetch
- * (~2-4 MB) plus three requests for each filer that filed an offering form that
- * day -- about eight, from the seed's 722 filers over 90 days. DEADLINE_MS
- * below is the real guard; this cap only keeps a quiet stretch from walking
- * further than anyone asked.
+ * ── NOW SIZED ON A MEASUREMENT RATHER THAN AN ESTIMATE ───────────────────
+ * It was 15, guessed from "about eight filers a day". Relay run 35580719192
+ * walked 2026-09-08..09-19 for real: 12 dates (9 trading days, 3 absent), 198
+ * filers, 352 SEC requests, 46.7 SECONDS END TO END -- about 3.9s per date,
+ * nearly all of it the 125ms pacing gate rather than transfer. 45 dates is
+ * therefore ~175s against the 240s deadline and the 300s platform limit.
+ *
+ * THIS ONLY EVER MATTERS FOR CATCH-UP. The standing daily run walks one date.
+ * The cap governs the 90-day cold start, which at 15 took six invocations and
+ * now takes two -- and every run reports `stoppedOnDeadline`, so a walk cut
+ * short says so rather than looking like a quiet fortnight.
+ *
+ * IPO_INGEST_DEADLINE_MS is still the real guard: days are not equally
+ * expensive, and a measurement of nine of them is not a promise about the next
+ * nine.
  */
-export const IPO_MAX_DAYS_PER_RUN = 15;
+export const IPO_MAX_DAYS_PER_RUN = 45;
 
 /**
  * Wall-clock budget, and the reason there are two limits rather than one.
