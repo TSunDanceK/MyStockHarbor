@@ -165,6 +165,90 @@ console.log("\n4. THE 4x2 MATRIX — every filer category, both period types");
   }
 }
 
+console.log("\n4b. THE 9.01 PREFERENCE — restored from the deleted module");
+{
+  // Two 8-Ks, SAME period, SAME acceptance date. One carries 2.02 only; the
+  // other carries 2.02 and 9.01, the exhibit that attaches the statements.
+  // The 9.01 filing is the release and must win.
+  //
+  // THE TIE IS THE WHOLE TEST. On equal announcedOn the dedup's "earliest
+  // wins" has nothing to say, so before this rule the winner was whichever
+  // filing came first in the submissions array -- index order, not a rule.
+  // The fixture lists the 2.02-only filing FIRST so index order would pick
+  // the wrong one, and the assertion fails if the preference is absent.
+  const PERIOD = "2026-06-30";
+  const subs = (order) => ({
+    filings: { recent: {
+      accessionNumber: order.map((o) => o.accn),
+      form: order.map(() => "8-K"),
+      items: order.map((o) => o.items),
+      reportDate: order.map(() => "2026-07-28"),
+      acceptanceDateTime: order.map(() => "2026-07-28T20:05:00Z"),
+    } },
+  });
+  const PLAIN = { accn: "0000000000-26-000001", items: "2.02" };
+  const EXHIB = { accn: "0000000000-26-000002", items: "2.02,9.01" };
+  const ends = new Set([PERIOD]);
+
+  const plainFirst = dates.reportEvents(subs([PLAIN, EXHIB]), ends);
+  check("the two filings collapse to one event for the period", plainFirst.length === 1,
+    `${plainFirst.length} event(s)`);
+  check("the 2.02+9.01 filing wins even when listed second",
+    plainFirst[0]?.accession === EXHIB.accn, plainFirst[0]?.items ?? "(none)");
+
+  // ORDER-INDEPENDENT, or it is index order wearing a rule's name.
+  const exhibFirst = dates.reportEvents(subs([EXHIB, PLAIN]), ends);
+  check("and wins when listed first — the result does not depend on array order",
+    exhibFirst[0]?.accession === EXHIB.accn, exhibFirst[0]?.items ?? "(none)");
+
+  // ── THE NARROWING, ASSERTED SO IT CANNOT DRIFT BACK ────────────────────
+  // The deleted module preferred 9.01 even across DIFFERENT dates. That would
+  // override "earliest wins" and move announcedOn onto a later amendment --
+  // which is what the stock page's reaction card measures against. So an
+  // EARLIER 2.02-only filing must still beat a LATER 9.01 one.
+  const across = dates.reportEvents({
+    filings: { recent: {
+      accessionNumber: [PLAIN.accn, EXHIB.accn],
+      form: ["8-K", "8-K"],
+      items: [PLAIN.items, EXHIB.items],
+      reportDate: ["2026-07-28", "2026-07-30"],
+      acceptanceDateTime: ["2026-07-28T20:05:00Z", "2026-07-30T20:05:00Z"],
+    } },
+  }, ends);
+  check("an EARLIER 2.02-only filing still beats a LATER 9.01 one",
+    across[0]?.accession === PLAIN.accn,
+    `${across[0]?.accession} on ${across[0]?.announcedOn} — earliest stays load-bearing`);
+
+  // ── THE PRE-SORT IS LOAD-BEARING FOR THE NARROWING ────────────────────
+  // A mutation run showed that widening `beats` to override earliest changes
+  // NOTHING observable, because reportEvents sorts newest-first before the
+  // dedup: the incumbent is always the newer event, so a candidate is never
+  // newer and the overriding branch is unreachable.
+  //
+  // That makes the widened form an EQUIVALENT mutant -- and it means the
+  // narrowing is held in place by the sort as much as by the comparison. If
+  // the sort is ever dropped or reversed, the wide rule silently becomes
+  // reachable and announcedOn starts moving onto later amendments. So the
+  // contract is asserted here rather than assumed.
+  const ordering = dates.reportEvents({
+    filings: { recent: {
+      accessionNumber: ["old", "new", "mid"],
+      form: ["8-K", "8-K", "8-K"],
+      items: ["2.02", "2.02", "2.02"],
+      reportDate: ["2026-01-28", "2026-07-28", "2026-04-28"],
+      acceptanceDateTime: ["2026-01-28T20:05:00Z", "2026-07-28T20:05:00Z", "2026-04-28T20:05:00Z"],
+    } },
+  }, new Set(["2025-12-31", "2026-06-30", "2026-03-31"]));
+  const days = ordering.map((e) => e.announcedOn);
+  check("reportEvents returns events NEWEST FIRST — the invariant the tie-break rests on",
+    days.length === 3 && days[0] > days[1] && days[1] > days[2], days.join(" > "));
+
+  check("carriesExhibits tolerates EDGAR's prose spelling",
+    dates.carriesExhibits("Item 2.02 Results of Operations,Item 9.01 Financial Statements")
+      && !dates.carriesExhibits("Item 2.02 Results of Operations")
+      && !dates.carriesExhibits("7.01,8.01"));
+}
+
 console.log("\n5. The retired module is actually gone, not merely unreferenced");
 {
   check("lib/server/secResultsDate.ts no longer exists",
