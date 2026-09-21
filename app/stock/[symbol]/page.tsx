@@ -4,9 +4,10 @@ import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
-  getSecEarningsSnapshot,
+  getStockPageSecFacts,
   type SecEarningsSnapshot,
 } from "@/lib/server/secEarningsSnapshot";
+import type { ProfileDividend } from "@/lib/server/secDividend";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
 import {
@@ -147,8 +148,11 @@ async function fetchCompanyName(symbol: string): Promise<string> {
  * regeneration it keeps serving the last good copy. Same reasoning as the
  * history/quote guard below.
  */
-async function fetchEarningsSnapshot(symbol: string): Promise<SecEarningsSnapshot> {
-  return getSecEarningsSnapshot(symbol);
+async function fetchStockPageSecFacts(symbol: string): Promise<{
+  snapshot: SecEarningsSnapshot;
+  dividend: ProfileDividend;
+}> {
+  return getStockPageSecFacts(symbol);
 }
 
 function num(value: unknown): number | null {
@@ -376,7 +380,7 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, earningsSnapshot, profile, shareHistory] =
+  const [historyResult, quoteResult, companyName, secFacts, profile, shareHistory] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -387,7 +391,11 @@ export default async function StockPage({ params }: Props) {
       ),
       fetchQuote(upper),
       fetchCompanyName(upper),
-      fetchEarningsSnapshot(upper),
+      // ONE FACT-SET READ, TWO ANSWERS: the sidebar snapshot and the Dividend
+      // row. They were two calls in the first draft, on the belief that
+      // secColdFetch dedupes an in-flight read per symbol the way
+      // getDailyHistory does. It does not — see getStockPageSecFacts.
+      fetchStockPageSecFacts(upper),
       fetchCompanyProfile(upper).catch(() => null),
       fetchShareHistory(upper).catch(() => null),
     ]);
@@ -570,7 +578,8 @@ export default async function StockPage({ params }: Props) {
 
       <StockSymbolPageClient
         symbol={upper}
-        earningsSnapshot={earningsSnapshot}
+        earningsSnapshot={secFacts.snapshot}
+        dividend={secFacts.dividend}
         profile={profile}
         shareHistory={shareHistory}
         seed={seed}

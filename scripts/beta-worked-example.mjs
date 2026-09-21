@@ -1,12 +1,16 @@
 // BETA, COMPUTED FROM BARS ALREADY IN REDIS — the worked example.
 //
 // ── WHAT THIS ANSWERS ────────────────────────────────────────────────────
-// The read-only probe (2026-09-21) established that computing beta in-house is
-// near-free: `^GSPC` daily bars are already cached by /markets/spx, the stock's
-// own bars are already cached by /stock/[symbol], and beta is a covariance over
-// two series the site already holds. What it could NOT do is produce a number:
-// the agent sandbox has no Upstash credentials and every bars provider is
-// refused at the gateway.
+// The read-only probe (2026-09-21) argued that computing beta in-house is
+// near-free: the stock's own daily bars are already cached by /stock/[symbol],
+// `^GSPC` is fetched by /markets/spx, and beta is a covariance over two series
+// the site already holds. What it could NOT do is produce a number, or test
+// that argument: the agent sandbox has no Upstash credentials and every bars
+// provider is refused at the gateway.
+//
+// HALF OF THAT ARGUMENT DID NOT SURVIVE CONTACT — see correction 2 below. The
+// stock side holds. The benchmark side does not, and the first run is what
+// showed it.
 //
 // So this runs on the relay, where the credentials are, and prints the number.
 //
@@ -17,13 +21,25 @@
 // OUR beta where FMP's used to be, and that is only honest if the two are
 // close enough to be the same claim.
 //
-// THE CONVENTION GAP IS THE POINT, NOT A CAVEAT. MAX_CACHED_HISTORY_DAYS caps
-// the cache at 1,400 CALENDAR days (~3.8 years), so a 5-year weekly beta --
-// the common vendor convention, and most likely FMP's -- CANNOT be computed
-// from this cache at all. What can is a ~2-year daily beta. Those are different
-// statistics, not two estimates of one statistic, and a daily beta is typically
-// the noisier and often the higher of the two. This prints several windows so
-// the spread is visible rather than asserted.
+// TWO THINGS THE FIRST RUN (35597389132) CORRECTED, both worth keeping:
+//
+//  1. MAX_CACHED_HISTORY_DAYS IS A COUNT OF BARS, NOT OF CALENDAR DAYS. It is
+//     applied as `parsed.slice(-MAX_CACHED_HISTORY_DAYS)` over the parsed ROWS,
+//     so 1,400 is ~5.6 TRADING years, not ~3.8 calendar ones. The read-only
+//     probe reported the calendar reading and concluded a 5-year weekly beta
+//     was impossible from this cache. It is not: MU came back with 1,268 bars
+//     spanning 2021-08-31..2026-09-18, which is 5.05 years, so a 5-year weekly
+//     beta is computable and is printed below beside the daily ones.
+//
+//  2. THE BENCHMARK IS NOT RELIABLY CACHED. `^GSPC` returned ZERO bars. The
+//     page that populates it, /markets/spx, is `export const dynamic =
+//     "force-dynamic"` and the entry's TTL is 50h, so the series exists only
+//     while somebody has visited that page recently. "No new fetch needed" was
+//     therefore too strong a claim. So this scans several candidate benchmarks
+//     and reports what is actually there, rather than assuming one.
+//
+// The convention gap is still the thing the owner is deciding on, so the
+// windows are printed side by side rather than summarised.
 //
 // ── WHAT THIS DOES NOT DO ────────────────────────────────────────────────
 // It does not fetch FMP's beta for comparison. The relay carries Upstash
@@ -53,28 +69,43 @@ if (!HISTORY_PREFIX) { console.error("FATAL: could not read REDIS_HISTORY_PREFIX
 if (!MAX_DAYS) { console.error("FATAL: could not read MAX_CACHED_HISTORY_DAYS from source"); process.exit(2); }
 
 const SYMBOL = (process.env.BETA_SYMBOL || "MU").trim().toUpperCase();
-// THE BENCHMARK THE SITE ALREADY CACHES. /markets/spx calls
-// getDailyHistory("^GSPC"), and stalenessQueue.ts names it explicitly as a
-// member of the daily-history denominator. Not a new fetch.
-const BENCH = (process.env.BETA_BENCH || "^GSPC").trim().toUpperCase();
+// ── CANDIDATE BENCHMARKS, SCANNED RATHER THAN ASSUMED ───────────────────
+// `^GSPC` is what /markets/spx fetches and what stalenessQueue.ts names as a
+// member of the daily-history denominator — and it came back EMPTY on the
+// first run, because that page is force-dynamic and the entry lives 50h. The
+// ETF proxies are what benchmarksBuilder.ts already uses site-wide ("S&P 500
+// (via SPY)"), so they are the next most likely to be warm. Every candidate is
+// reported whether or not it is used: which of these the cache actually holds
+// is half of what this run is for.
+const BENCH_CANDIDATES = (process.env.BETA_BENCH || "^GSPC,SPY,VOO,IVV,QQQ,DIA")
+  .split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
 
 const key = (s) => `${HISTORY_PREFIX}:${s}`;
+const barsOf = (e) => (Array.isArray(e?.daily) ? e.daily : []);
 
-const [stockEntry, benchEntry] = await Promise.all([
+const [stockEntry, ...benchEntries] = await Promise.all([
   redis.get(key(SYMBOL)),
-  redis.get(key(BENCH)),
+  ...BENCH_CANDIDATES.map((b) => redis.get(key(b))),
 ]);
 
-const barsOf = (e) => (Array.isArray(e?.daily) ? e.daily : []);
 const stockBars = barsOf(stockEntry);
-const benchBars = barsOf(benchEntry);
+const candidates = BENCH_CANDIDATES.map((sym, i) => ({ sym, bars: barsOf(benchEntries[i]) }));
+const chosen = candidates.find((c) => c.bars.length >= 250) ?? null;
+const BENCH = chosen?.sym ?? BENCH_CANDIDATES[0];
+const benchBars = chosen?.bars ?? [];
 
+const span = (b) => (b.length ? ` (${b[0].date} .. ${b[b.length - 1].date})` : "");
 console.log("=".repeat(92));
 console.log(`BETA WORKED EXAMPLE — ${SYMBOL} against ${BENCH}`);
-console.log(`cache ceiling MAX_CACHED_HISTORY_DAYS=${MAX_DAYS} calendar days (~${(MAX_DAYS / 365).toFixed(1)}y)`);
+// A COUNT OF BARS. See the header: the constant is named DAYS and sliced over
+// rows, which is how the earlier reading turned ~5.6 trading years into ~3.8.
+console.log(`cache ceiling MAX_CACHED_HISTORY_DAYS=${MAX_DAYS} BARS (~${(MAX_DAYS / 252).toFixed(1)} trading years)`);
 console.log("=".repeat(92));
-console.log(`${SYMBOL}: ${stockBars.length} cached bars${stockBars.length ? ` (${stockBars[0].date} .. ${stockBars[stockBars.length - 1].date})` : ""}`);
-console.log(`${BENCH}: ${benchBars.length} cached bars${benchBars.length ? ` (${benchBars[0].date} .. ${benchBars[benchBars.length - 1].date})` : ""}`);
+console.log(`${SYMBOL}: ${stockBars.length} cached bars${span(stockBars)}`);
+console.log("benchmark candidates, as cached:");
+for (const c of candidates) {
+  console.log(`  ${c.sym.padEnd(7)} ${String(c.bars.length).padStart(5)} bars${span(c.bars)}${c.sym === BENCH && chosen ? "   <- used" : ""}`);
+}
 
 // AN ABSENT BENCHMARK IS A RESULT, NOT A CRASH. The whole cost argument rests
 // on ^GSPC already being cached; if it is not, that is the finding.
@@ -82,7 +113,7 @@ if (!stockBars.length || !benchBars.length) {
   console.log("");
   console.log("REFUSED: one or both series is not in the cache. No beta computed.");
   console.log(!benchBars.length
-    ? `  ${BENCH} absent means the "no new fetch" premise does not hold as stated — it holds only while /markets/spx has been rendered recently enough to keep the entry inside its 50h TTL.`
+    ? `  NO candidate benchmark is cached. The "one extra Redis read, no new fetch" premise does not hold: /markets/spx is force-dynamic and its entry lives 50h, and the ETF proxies are not in the universe either. Beta needs the benchmark WARMED — one getDailyHistory call per 50h, shared by every symbol, which is still cheap but is a fetch.`
     : `  ${SYMBOL} absent means nothing has rendered /stock/${SYMBOL} inside the TTL.`);
   process.exit(0);
 }
@@ -170,7 +201,7 @@ const windowFrom = (dates, days) => {
 };
 
 const WINDOWS = [
-  { label: "full cached window", days: MAX_DAYS },
+  { label: "5 years (daily)", days: 1826 },
   { label: "2 years (daily)", days: 730 },
   { label: "1 year (daily)", days: 365 },
 ];
@@ -200,14 +231,19 @@ for (const w of WINDOWS) {
 console.log("");
 console.log("── WEEKLY-SAMPLED BETA over the same cached span ─────────────────────────");
 {
-  const weekly = common.filter((_, i) => i % 5 === 0);
+  // THE VENDOR CONVENTION, NOW THAT IT IS REACHABLE: 5 years of weekly
+  // returns. Sampled every 5th common trading date over the last 1,826
+  // calendar days, which is the closest this cache can come to a weekly close
+  // series without a second source.
+  const fiveYear = windowFrom(common, 1826);
+  const weekly = fiveYear.filter((_, i) => i % 5 === 0);
   if (weekly.length >= 40) {
     const r = regress(returns(weekly, sMap), returns(weekly, bMap));
     console.log(
       `every 5th trading day  ${weekly[0]}  ${weekly[weekly.length - 1]}  ${String(r.n).padStart(4)}  ` +
       `${r.beta.toFixed(3).padStart(6)}  ${r.corr.toFixed(3).padStart(5)}  ${r.r2.toFixed(3).padStart(5)}`
     );
-    const daily = results.find((x) => x.label === "full cached window");
+    const daily = results.find((x) => x.label === "5 years (daily)");
     if (daily) {
       console.log(`  same span, daily vs weekly: ${daily.beta.toFixed(3)} vs ${r.beta.toFixed(3)} ` +
         `(${(Math.abs(r.beta - daily.beta) / daily.beta * 100).toFixed(1)}% apart on sampling frequency alone)`);
@@ -220,9 +256,10 @@ console.log("── WEEKLY-SAMPLED BETA over the same cached span ────�
 const spanYears = (Date.parse(common[common.length - 1]) - Date.parse(common[0])) / (365.25 * 86400000);
 console.log("");
 console.log("── WHAT THIS IS, AND IS NOT ──────────────────────────────────────────────");
-console.log(`This is a DAILY-return beta over ${spanYears.toFixed(2)} years of cached bars.`);
-console.log(`It is NOT a 5-year weekly beta and cannot be made into one from this cache:`);
-console.log(`  5 years needs 1,826 calendar days; MAX_CACHED_HISTORY_DAYS is ${MAX_DAYS}.`);
+console.log(`The cache holds ${spanYears.toFixed(2)} years of overlapping bars for this pair.`);
+console.log(`Both conventions are therefore computable: the daily rows above and the`);
+console.log(`5-year weekly row, which is the one most likely comparable to a vendor's.`);
+console.log(`Sampling frequency alone moves the number — compare the two before deciding.`);
 console.log(`FMP's published MU beta is NOT fetched here — the relay holds Upstash secrets only.`);
 console.log(`Compare by hand before deciding whether Beta is un-hidden on CompanyProfile.`);
 console.log("");
