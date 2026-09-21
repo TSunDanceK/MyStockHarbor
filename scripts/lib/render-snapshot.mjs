@@ -129,6 +129,59 @@ export async function loadProfile(mutate = (src) => src) {
   return importTsxSource(mutate(unit));
 }
 
+/**
+ * The Dividend row's builder, with the codec it reads through.
+ *
+ * SEPARATE FROM loadProfile BECAUSE THE TWO HALVES ARE SEPARATE. The builder
+ * is server-side and reads a stored fact set; the component takes its output as
+ * plain data and cannot import it (see the type-only note in CompanyProfile).
+ * Loading them as one unit would hide exactly the coupling that is supposed not
+ * to exist.
+ */
+export async function loadDividend(mutate = (src) => src) {
+  const unit = [
+    fs.readFileSync("lib/server/secFields.ts", "utf8"),
+    stripImports("lib/server/secExtract.ts"),
+    stripImports("lib/server/fxRates.ts"),
+    stripImports("lib/server/secCurrency.ts"),
+    stripImports("lib/server/secFactCodec.ts"),
+    // getProfileDividend's cold-path call is stripped with the imports and is
+    // never invoked: every assertion drives buildProfileDividend, the pure
+    // half, which is why it is a separate function.
+    stripImports("lib/server/secDividend.ts"),
+  ].join("\n");
+  return importTsxSource(mutate(unit));
+}
+
+/**
+ * A mutation anchored on a string that MUST appear exactly once.
+ *
+ * ── THE FAILURE THIS EXISTS FOR, FOUND THE HARD WAY ──────────────────────
+ * These loaders concatenate several modules into one unit, and
+ * `String.prototype.replace` with a string pattern rewrites only the FIRST
+ * occurrence. A mutation written against `for (const p of periods) {` in
+ * secDividend.ts hit the identical line in secCurrency.ts instead — 100 lines
+ * earlier in the unit — and broke a currency conversion the fixture never
+ * exercises. The dividend walk was untouched, the "mutation" changed nothing,
+ * and the check reported PASS for the property it was supposed to be breaking.
+ *
+ * A mutation that silently misses is worse than no mutation, because it is
+ * indistinguishable from one that bit. So the anchor is counted, and anything
+ * other than exactly one match throws before the module is built.
+ *
+ * Use it for every mutation in a check that loads more than one module.
+ */
+export const once = (find, replaceWith) => (src) => {
+  const n = src.split(find).length - 1;
+  if (n !== 1) {
+    throw new Error(
+      `mutation anchor matched ${n} times, needs exactly 1 — ` +
+        `pick a longer, unique anchor. Anchor: ${JSON.stringify(find.slice(0, 80))}`
+    );
+  }
+  return src.replace(find, replaceWith);
+};
+
 /** Render one element to markup. */
 export const html = (el) => renderToStaticMarkup(el);
 
