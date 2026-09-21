@@ -1,5 +1,20 @@
 # NVDA has no market cap in any cached source. Measured on fresh data
 
+> ## MEASURED 2026-09-21. THE HEADLINE WAS WRONG, AND THE REASON MATTERS
+>
+> **Three of the four sources DO carry NVDA's market cap. The consumer could not
+> see them.** `fundamentals.json` prices 699 of the 700 universe symbols,
+> NVDA among them. Nothing was missing from the data; the reader was reading
+> the wrong key.
+>
+> The original text below is left unedited, because the shape of the mistake is
+> the useful part: every counter in the run was green, the coverage figure was
+> precise to one decimal place, and the conclusion drawn from it —
+> *"NOTHING IN THE STEP 0 DUMP PRICES NVDA"* — was confidently false.
+>
+> The measurement pass is in **"What the measurement found"** at the foot of
+> this doc. Still no fix. Read that section before acting on anything above it.
+
 **Finding only. No fix proposed, and none should be attempted from this doc
 alone** — the cause is unknown and sits in Pickers' cap sourcing, a different
 subsystem from the one that found it.
@@ -107,3 +122,171 @@ relay.yml  task=due-strip-universe  run_id=<id> -> prints the canary line
 
 The canary line prints on every run, pass or fail, so the state is visible
 without waiting for a failure.
+
+
+---
+
+# What the measurement found
+
+Measured 2026-09-21 by `scripts/pricepool-cap-gap-probe.mjs`, relay task
+`pricepool-cap-gap`, against the same fresh step-0 dump (run `35627342399`).
+Four dispatches: [35631103914], [35631353569], [35631581348], [35631829246].
+
+**Measurement only. No fix applied, and `scripts/due-strip-universe.mjs` is
+deliberately untouched.**
+
+## The short answer
+
+`fundamentals.json` should hold NVDA's cap **and does**. So do
+`screener-fundamentals.json` and `price-pool.json`. The symbol reads as
+unpriced because the consumer sees only one of the four sources — the one where
+NVDA's row happens to be null.
+
+Reading each file correctly:
+
+| source | entries | universe symbols with a cap |
+|---|---:|---|
+| `price-pool.json` | 841 | 696 / 700 |
+| `screener-fundamentals.json` | 2588 | 693 / 700 |
+| `fundamentals.json` | 758 | **699 / 700** |
+| `stockdata.json` | 759 | 0 / 700 — carries `enterpriseValue`, no cap field at all |
+
+Universe symbols with no cap in **any** source: **1**, not 4. And that one is
+not really uncapped either — see the spelling split below.
+
+## Cause 1 — a reader bug in our code, and it is the load-bearing one
+
+The dump does not wrap every dataset the same way:
+
+```
+price-pool.json   { dumpedAt, dataset, key, readAs, entries, value  }
+the other three   { dumpedAt, dataset, key,         present, values }
+```
+
+`.value` singular against `.values` plural. `entriesOf()` unwraps `.value`,
+misses `values`, falls through to `?? doc`, and enumerates the **wrapper's own
+five keys** as if they were ticker symbols. That is why files of 176 KB, 650 KB
+and 680 KB each reported exactly five entries — named `DUMPEDAT`, `DATASET`,
+`KEY`, `PRESENT`, `VALUES` — and why `KEY` surfaced as an unparseable symbol.
+
+**This is the same reader `due-strip-universe.mjs` uses, and its committed
+conclusion rests on it.** That file's header states, as measured fact:
+
+> Adding the other three sources contributed ZERO new caps. […] So the
+> conclusion is about the dump, not about this script: NOTHING IN THE STEP 0
+> DUMP PRICES NVDA. […] a top-50 by market cap cannot be generated from this
+> input, and widening the chain further is not the fix. The fix is a cap source
+> that covers the whole market, which is the whole-market bars migration, which
+> is off the roadmap.
+
+Every sentence of that was derived from enumerating five wrapper keys. The
+sources were never read. **Three of them price NVDA.**
+
+The dump states its own row count in a `present` field — 758 and 759 — sitting
+in the same object the reader was mis-parsing. A reader that compared what it
+extracted against the count the file supplied would have failed loudly on the
+first run instead of reporting a confident zero.
+
+## Cause 2 — a real, separate null-cap pattern inside `price-pool.json`
+
+Independent of the reader. Of the pool's 841 rows, **6** carry no cap:
+
+```
+BRK.B  INTC  IREN  NOK  NVDA  SPCX
+```
+
+Null-field counts, capped rows against uncapped, whole source:
+
+| field | capped | uncapped |
+|---|---|---|
+| `marketCap` | 0 / 835 | **6 / 6** |
+| `volume` | 0 / 835 | **6 / 6** |
+| `open` | 0 / 835 | **6 / 6** |
+| `dayHigh` | 0 / 835 | **6 / 6** |
+| `dayLow` | 0 / 835 | **6 / 6** |
+| `price` | 0 / 835 | 1 / 6 |
+| `pe` | 90 / 835 | 3 / 6 |
+
+Five fields separate the two populations perfectly. This is not "the pool does
+not populate these fields" — 835 rows populate all five without exception.
+
+NVDA's row, beside a control:
+
+```
+NVDA  {price:226.28, changePct:1.80411, volume:null, marketCap:null, open:null,
+       dayHigh:null, dayLow:null, pe:27.958, ts:1790008814859, peTs:1790003416211}
+
+AAPL  {price:337.97, marketCap:4963885707320, changePct:0.5474, volume:13410074,
+       open:335.20001, dayHigh:338.47, dayLow:333.05, pe:38.489,
+       ts:1790007915488, peTs:1790003414609, failStreak:0, failAt:0}
+```
+
+NVDA, INTC and NOK also **lack the `failStreak` and `failAt` keys entirely**,
+which all 835 capped rows carry. Two writers, two row shapes, one key space.
+The price is live and correct — this is not a fetch failure.
+
+## Cause 3 — BRK.B is a spelling split, not a missing cap
+
+The one universe symbol with no cap under a corrected read:
+
+```
+BRK.B  price-pool           = NULL-CAP
+       screener-fundamentals = held as BRK-B, cap 1,099,499,257,123
+       fundamentals          = held as BRK-B, cap 1,093,244,381,698
+       stockdata             = NULL-CAP
+```
+
+`price-pool` and `stockdata` spell it `BRK.B`; `screener-fundamentals` and
+`fundamentals` spell it `BRK-B`. Both caps are real and current. The consumer
+uppercases and does nothing else, so it matches neither.
+
+`lib/symbolSpellings.mjs` exists for exactly this and is not used here.
+
+Its pool row is also a **separate** fault from cause 2: it is full-shape
+(carries `failStreak`/`failAt`) but every value is null, and its `ts` is
+`1787983440576` — **2026-08-29, 23 days stale** — while the other uncapped rows
+stamp the current minute. `failStreak: 0` on a row that has been null for three
+weeks is its own claim worth checking.
+
+## Answering the three questions as asked
+
+**Which source should hold NVDA's cap and doesn't?** None. All three that carry
+caps hold it. The consumer reads one source and that source's NVDA row is null.
+
+**Why?** Not a fetch failure and not a field that changed shape. A `.value` vs
+`.values` unwrap bug hid three of four sources (cause 1), on top of a genuine
+partial-write pattern affecting 6 of 841 pool rows (cause 2). BRK.B adds a third,
+unrelated spelling mismatch (cause 3).
+
+**Isolated to NVDA?** No, and not a one-off. Six pool rows across a 50-name
+large-cap sample chosen by name and a full 700-symbol sweep. The reader bug is
+not per-symbol at all — it hid three entire sources for every symbol.
+
+## Still not known
+
+- **Why those six rows are written partially.** The writer has not been read;
+  this measurement only characterises its output.
+- Whether the live site's rendered figures take the same path as these cached
+  aggregates, or a different one.
+- Whether `stockdata.json` is *supposed* to carry a cap. It carries none for any
+  symbol, which is consistent but unconfirmed as intended.
+- What else consumes `entriesOf()`-shaped readers against `.values` dumps. Not
+  surveyed.
+
+## Scope note
+
+Three distinct defects, in two subsystems, one of which invalidates a committed
+roadmap conclusion. **That is more than one PR's worth** and the ordering is a
+decision, not an implementation detail: cause 1 changes what the due strip can
+do, cause 3 is a one-line class of bug with a helper already written for it, and
+cause 2 lives in a writer nobody has read yet.
+
+## Reproducing it
+
+```
+relay.yml  task=pricepool-cap-gap  run_id=35627342399  artifact_name=step0-dump
+```
+
+No network, no credential. Prints each file's structure, both readers side by
+side, the whole-source null-field table, capped controls, the full sweep and the
+named large-cap sample.
