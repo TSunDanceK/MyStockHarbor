@@ -44,10 +44,33 @@ const UA =
 
 const SYMBOLS = ["HDB", "IBN", "TSM", "BABA", "ASML"];
 
-// The three tags, in the same spelling lib/server/secFields.ts resolves.
-const NET_INCOME = "NetIncomeLoss";
-const SHARES_DILUTED = "WeightedAverageNumberOfDilutedSharesOutstanding";
-const EPS_DILUTED = "EarningsPerShareDiluted";
+// The three tags, in the same spellings lib/server/secFields.ts resolves --
+// AND IN BOTH TAXONOMIES, which the first run of this probe did not do.
+//
+// WHY THE FIRST RUN COULD NOT JUDGE TSM AND IBN. It read `us-gaap` only, and
+// reported `{netIncome: 0, sharesDiluted: 0, epsDiluted: 0}` for TSM -- not a
+// filer missing three tags, a filer with NO us-gaap facts at all, because it
+// reports under `ifrs-full`. The probe said "cannot be judged" rather than
+// inventing a verdict from three zeroes, which is the only reason that was
+// visible instead of being read as an absence.
+//
+// The chains below are lifted from secFields.ts's own IFRS_CHAIN rather than
+// written from memory of the taxonomy, so this probe judges a filer by the
+// same tags the site would actually extract from it.
+const CHAINS = {
+  netIncome: {
+    "us-gaap": ["NetIncomeLoss"],
+    "ifrs-full": ["ProfitLossAttributableToOwnersOfParent", "ProfitLoss"],
+  },
+  sharesDiluted: {
+    "us-gaap": ["WeightedAverageNumberOfDilutedSharesOutstanding"],
+    "ifrs-full": ["AdjustedWeightedAverageShares", "WeightedAverageShares"],
+  },
+  epsDiluted: {
+    "us-gaap": ["EarningsPerShareDiluted"],
+    "ifrs-full": ["DilutedEarningsLossPerShare"],
+  },
+};
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,10 +84,28 @@ async function getJson(url) {
   return { ok: true, body: await res.json() };
 }
 
-/** Every (end, accn) a tag reports, keyed so three tags can be intersected. */
-function byPeriod(facts, tag) {
+/**
+ * Every (end, accn) a field reports, keyed so three fields can be intersected.
+ *
+ * ONE TAXONOMY WINS OUTRIGHT, and it is not a merge. A filer publishing both
+ * namespaces would otherwise have a us-gaap net income intersected against an
+ * ifrs-full share count -- two different measurement bases on one line, which
+ * is the mixing this probe's strictness exists to prevent. First namespace
+ * that yields anything is used, and which one is reported.
+ */
+function byPeriod(facts, field) {
+  for (const [ns, tags] of Object.entries(CHAINS[field])) {
+    for (const tag of tags) {
+      const out = collect(facts, ns, tag);
+      if (out.size) return { ns, tag, rows: out };
+    }
+  }
+  return { ns: null, tag: null, rows: new Map() };
+}
+
+function collect(facts, ns, tag) {
   const out = new Map();
-  const units = facts?.facts?.["us-gaap"]?.[tag]?.units;
+  const units = facts?.facts?.[ns]?.[tag]?.units;
   if (!units) return out;
   for (const rows of Object.values(units)) {
     for (const r of rows) {
@@ -98,13 +139,33 @@ for (const symbol of SYMBOLS) {
   await sleep(250);
   const facts = await getJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
   if (!facts.ok) {
-    results.push({ symbol, cik, verdict: "UNRESOLVED", why: `companyfacts ${facts.status}` });
+    // A 404 ON companyfacts HAS TWO CAUSES and they call for different
+    // actions: a CIK that does not exist (our map is wrong) versus a filer
+    // that exists and publishes no XBRL facts (nothing to extract, ever).
+    // Asking submissions separates them; guessing would put the wrong one in
+    // a decision doc.
+    await sleep(250);
+    const subs = await getJson(`https://data.sec.gov/submissions/CIK${cik}.json`);
+    results.push({
+      symbol, cik, verdict: "UNRESOLVED",
+      why: `companyfacts ${facts.status}`,
+      filerExists: subs.ok,
+      forms: subs.ok ? [...new Set((subs.body?.filings?.recent?.form ?? []).slice(0, 40))] : null,
+      note: subs.ok
+        ? "the filer exists but publishes no XBRL companyfacts, so no EPS can be extracted for it at all"
+        : "the CIK itself does not resolve",
+    });
     continue;
   }
 
-  const ni = byPeriod(facts.body, NET_INCOME);
-  const sh = byPeriod(facts.body, SHARES_DILUTED);
-  const eps = byPeriod(facts.body, EPS_DILUTED);
+  const niF = byPeriod(facts.body, "netIncome");
+  const shF = byPeriod(facts.body, "sharesDiluted");
+  const epsF = byPeriod(facts.body, "epsDiluted");
+  const ni = niF.rows, sh = shF.rows, eps = epsF.rows;
+  const resolved = { netIncome: niF.tag, sharesDiluted: shF.tag, epsDiluted: epsF.tag };
+  // A filer whose three fields came from DIFFERENT namespaces is not judged.
+  const namespaces = [niF.ns, shF.ns, epsF.ns].filter(Boolean);
+  const oneNamespace = namespaces.length === 3 && new Set(namespaces).size === 1;
 
   const ratios = [];
   let skipped = 0;
@@ -118,10 +179,20 @@ for (const symbol of SYMBOLS) {
     ratios.push({ key, ratio: (epsVal * shVal) / niVal, eps: epsVal, shares: shVal, netIncome: niVal });
   }
 
+  if (namespaces.length === 3 && !oneNamespace) {
+    results.push({
+      symbol, cik, verdict: "MIXED TAXONOMIES — NOT JUDGED",
+      namespaces: { netIncome: niF.ns, sharesDiluted: shF.ns, epsDiluted: epsF.ns },
+      note: "intersecting a us-gaap operand with an ifrs-full one would compare two measurement bases",
+    });
+    continue;
+  }
+
   if (!ratios.length) {
     results.push({
       symbol, cik, verdict: "NO OVERLAPPING PERIODS", skipped,
       counts: { netIncome: ni.size, sharesDiluted: sh.size, epsDiluted: eps.size },
+      resolved, namespace: niF.ns ?? shF.ns ?? epsF.ns,
       note: "the three tags never co-occur on one accession; this filer cannot be judged from companyfacts",
     });
     continue;
@@ -150,6 +221,7 @@ for (const symbol of SYMBOLS) {
 
   results.push({
     symbol, cik, verdict,
+    namespace: niF.ns, resolved,
     periods: ratios.length, skipped,
     ratio: { median: +median.toFixed(4), min: +min.toFixed(4), max: +max.toFixed(4) },
     sample: ratios.slice(-3).map((r) => ({
