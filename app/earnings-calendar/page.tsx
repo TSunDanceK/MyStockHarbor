@@ -18,14 +18,31 @@ import {
   getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
 import { resolveCalendarDay, dayStateMessage } from "@/lib/server/calendarDayState";
+import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
 import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
+
+// ── THE HOUSE COPY RULE, WHICH IS NOT A STYLE PREFERENCE ──────────────────
+// Present tense about the public record. "have filed", never "will report",
+// and never a date a company is expected to report on. Two routes to a real
+// forward calendar were measured and both failed -- cadence prediction landed
+// 2 of 48 filers inside their own p90 band, and 8-K scheduling announcements
+// put 0 of 276 in the band a calendar would need (lib/server/dueToReport.ts).
+// So the page describes what HAS been filed and what is outstanding; it does
+// not predict.
+//
+// The old description promised "price and market cap" without qualification.
+// That is now conditional -- see lib/server/gridPriceCoverage.ts -- and a meta
+// description is a claim Google quotes, so it says what the page actually
+// offers rather than what it used to.
 const PAGE_DESCRIPTION =
-  "Navigable monthly earnings calendar - see how many companies report each day, then drill into any date for tickers, EPS/revenue estimates, price and market cap.";
+  "Which companies have filed results on each date, taken from their own SEC filings, " +
+  "alongside the largest companies whose results are not yet on file. Based on the " +
+  "public filing record, not a forecast of when a company will report.";
 const PAGE_URL = "https://www.mystockharbor.com/earnings-calendar";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
@@ -608,7 +625,9 @@ export default async function EarningsCalendarPage({
                 fontWeight: 900,
               }}
             >
-              Earnings Calendar: {selectedDateLabel}
+              {selectedDate === todayDate
+                ? "Earnings filed today"
+                : `Earnings filed on ${selectedDateLabel}`}
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
@@ -821,6 +840,17 @@ export default async function EarningsCalendarPage({
                 initialHasMore={dayData.items.length > 50}
                 complete={dateComplete}
               />
+              {/* ONCE, AND ONLY WHEN A ROW IS ACTUALLY BLANK. Printed under the
+                  table rather than in every cell: fifty rows each saying "not
+                  covered" is noise, and a tooltip is invisible on a phone. The
+                  condition matters as much as the words -- a standing note on a
+                  day where every row IS covered would explain a gap that is not
+                  there, which is its own small lie. */}
+              {dayData.items.some((i) => i.priceCoverage === "outside-bar-universe") ? (
+                <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 12, marginBottom: 0 }}>
+                  {PRICE_COVERAGE_NOTE}
+                </p>
+              ) : null}
             </div>
           </section>
 
