@@ -27,7 +27,13 @@
 import fs from "node:fs";
 import http from "node:http";
 
-import { IPO_FILINGS_REDIS_KEY } from "../lib/server/ipoSecStore.ts";
+import "./lib/register-ts-here.mjs";
+
+// DYNAMIC, because the static form is hoisted past the loader registration
+// above and ipoSecStore's own `from "./redisCacheMode"` carries no extension.
+// Constructing its Redis client here is inert -- there are no credentials in
+// this environment, which is the entire reason this file exists.
+const { IPO_FILINGS_REDIS_KEY } = await import("../lib/server/ipoSecStore.ts");
 
 const docPath = process.argv[2];
 const PORT = Number(process.argv[3] || 8079);
@@ -51,7 +57,15 @@ if (!doc || !Array.isArray(doc.records)) {
 const store = new Map();
 // THE KEY IS IMPORTED, NOT TYPED. A local harness seeded under a key the app
 // does not read would render an empty page and look like a classifier bug.
-store.set(IPO_FILINGS_REDIS_KEY, doc);
+//
+// ── STORED AS A STRING, BECAUSE THAT IS WHAT UPSTASH RETURNS ──────────────
+// Upstash's REST API answers `{"result": "<the stored string>"}` and
+// @upstash/redis JSON.parses it on the way out. Seeding a JS OBJECT here made
+// the client hand back null, `readStoredIpoFilings` reported "no stored SEC
+// filing records", and the page rendered its degraded state -- a harness bug
+// wearing the exact costume of an empty store. Everything that goes in goes in
+// as a string, the way a real SET delivers it.
+store.set(IPO_FILINGS_REDIS_KEY, JSON.stringify(doc));
 
 console.log(`local-upstash: ${doc.records.length} records seeded at ${IPO_FILINGS_REDIS_KEY}`);
 console.log(`local-upstash: windowStart ${doc.windowStart} · lastIndexDate ${doc.lastIndexDate}`);

@@ -218,39 +218,50 @@ console.log(JSON.stringify(payload));
 console.log(`<<<ENDRAW name=ipo-shares-probe.json>>>`);
 
 // ── THE EVIDENCE ──────────────────────────────────────────────────────────
-// Only the covers where the shipped rule and the anchored candidates DISAGREE,
-// plus three where they agree. A dump of every filer is unreadable, and the
-// agreeing cases are the negative control: a candidate that "fixes" the
-// disagreements by matching nothing would look identical here without them.
-const disagree = rows.filter((r) =>
-  Object.values(r.candidateHits).some((v) => v !== null && v !== r.shippedShares)
+// SELECTED ON THE DEFECT, NOT ON DISAGREEMENT. The first version of this
+// printed covers where a candidate anchor differed from the shipped rule --
+// which is precisely the wrong set, because the 12 covers whose shipped answer
+// came from an "outstanding" sentence are mostly ones where NO candidate
+// matched at all, so they were filtered out. The report showed everything
+// except the thing being investigated.
+const shippedOnOutstandingRows = rows.filter((r) =>
+  r.shippedShares !== null &&
+  r.occurrences.some((o) => o.value === r.shippedShares && o.saysOutstanding)
 );
-const agree = rows.filter((r) => !disagree.includes(r)).slice(0, 3);
+// The other half of the problem: 56 of 94 got no number at all. A rule that
+// only refuses bad matches leaves those where they are, so the sentences that
+// DO carry an offering size need reading too.
+const shippedNull = rows.filter((r) => r.shippedShares === null).slice(0, 6);
+// Controls: shipped returned a number and its sentence does NOT say
+// outstanding. Without these, a fix that refuses everything looks like a fix.
+const shippedLooksRight = rows.filter(
+  (r) => r.shippedShares !== null && !shippedOnOutstandingRows.includes(r)
+).slice(0, 4);
 
 const dump = (r, heading) => {
   const deal = r.impliedDealSize === null ? "—" : `$${(r.impliedDealSize / 1e6).toFixed(1)}M`;
   console.log("─".repeat(78));
   console.log(`${heading} ${r.company.slice(0, 44)}  ·  ${r.form} ${r.date}  ·  SIC ${r.sic ?? "?"}`);
   console.log(`   SHIPPED ${r.shippedShares === null ? "null" : r.shippedShares.toLocaleString()} via ${r.shippedWhich}   price ${r.priceLow ?? "—"}-${r.priceHigh ?? "—"}  deal ${deal}`);
-  for (const [name, v] of Object.entries(r.candidateHits)) {
-    console.log(`   cand ${name.padEnd(20)} ${v === null ? "—" : v.toLocaleString()}`);
-  }
-  for (const o of r.occurrences.slice(0, 6)) {
-    console.log(`      ${String(o.value).padStart(12)} ${o.noun.padEnd(6)} ${o.saysOutstanding ? "[OUTSTANDING]" : "             "} …${o.context.slice(0, 150)}…`);
+  const cands = Object.entries(r.candidateHits).filter(([, v]) => v !== null);
+  if (cands.length) console.log(`   candidates: ${cands.map(([n, v]) => `${n}=${v.toLocaleString()}`).join("  ")}`);
+  for (const o of r.occurrences.slice(0, 5)) {
+    const mark = o.value === r.shippedShares ? "<<SHIPPED" : "         ";
+    console.log(`      ${String(o.value).padStart(12)} ${o.noun.padEnd(6)} ${o.saysOutstanding ? "[OUTST]" : "       "} ${mark} …${o.context.slice(0, 145)}…`);
   }
 };
 
-console.log(`\n${"═".repeat(78)}\nDISAGREEMENTS (${disagree.length}) — where the anchored rules differ from the shipped one\n${"═".repeat(78)}`);
-for (const r of disagree) dump(r, "[DIFF]");
-console.log(`\n${"═".repeat(78)}\nCONTROLS (${agree.length}) — covers where they agree; a candidate that matched\nnothing would look like a fix without these\n${"═".repeat(78)}`);
-for (const r of agree) dump(r, "[SAME]");
+console.log(`\n${"═".repeat(78)}\nWRONG (${shippedOnOutstandingRows.length}) — shipped answer came from an "outstanding" sentence\n${"═".repeat(78)}`);
+for (const r of shippedOnOutstandingRows) dump(r, "[BAD]");
+console.log(`\n${"═".repeat(78)}\nMISSED (${shippedNull.length} of ${rows.filter((r) => r.shippedShares === null).length}) — no share count at all; what IS on these covers?\n${"═".repeat(78)}`);
+for (const r of shippedNull) dump(r, "[NONE]");
+console.log(`\n${"═".repeat(78)}\nCONTROLS (${shippedLooksRight.length}) — shipped returned a number that is NOT from an\noutstanding sentence. A fix that refuses everything must break these.\n${"═".repeat(78)}`);
+for (const r of shippedLooksRight) dump(r, "[OK]");
 
 // ── THE AGGREGATE, WHICH IS WHAT DECIDES THE RULE ─────────────────────────
 console.log(`\n${"═".repeat(78)}\nAGGREGATE\n${"═".repeat(78)}`);
 const withShipped = rows.filter((r) => r.shippedShares !== null);
-const shippedOnOutstanding = rows.filter((r) =>
-  r.occurrences.some((o) => o.value === r.shippedShares && o.saysOutstanding)
-);
+const shippedOnOutstanding = shippedOnOutstandingRows;
 console.log(`   covers examined                                     ${rows.length}`);
 console.log(`   shipped rule returned a number                      ${withShipped.length}`);
 console.log(`   ...and its sentence says "outstanding"              ${shippedOnOutstanding.length}   <<< THE FINDING`);
