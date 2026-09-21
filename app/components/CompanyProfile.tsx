@@ -7,6 +7,117 @@ import { sectorNewsPath, sectorSlugFromLabel } from "@/lib/sectors";
 // Server-rendered "About" block built from the FMP company profile endpoint.
 // Presentational only (no hooks) so it renders into the crawlable initial HTML.
 
+/**
+ * ── STAT ROWS WHOSE SOURCE HAS NOWHERE TO GO. HIDDEN, NOT REMOVED. ────────
+ *
+ * The owner's standing rule, and the same registry shape as RETIRED_SOURCES in
+ * lib/server/secEarningsView.ts. Deleting the rows loses the record of WHY, and
+ * the next person to look at a five-row gap in the stat grid re-adds them,
+ * wires them to whatever is nearest, and ships a CEO name that is four years
+ * out of date.
+ *
+ * WHAT MAKES THESE FIVE DIFFERENT FROM THE REST OF THE GRID. Sector, industry,
+ * market cap, the 52-week range, dividend, exchange, country, IPO date and
+ * website all still come from FMP today and all have a free successor to move
+ * to — SEC's submissions feed, Tiingo, or the Nasdaq Trader directory. These
+ * five have none. Checked 2026-09-21 by the owner across SEC EDGAR, Tiingo and
+ * the Nasdaq Trader symbol directory: not one of them carries CEO, employee
+ * count, beta, ISIN or CUSIP. (EDGAR files officer names inside DEF 14A prose
+ * and employee counts inside 10-K prose — neither is a structured field, and a
+ * regex over a proxy statement is not a data source.) So when FMP goes, these
+ * rows have no replacement, and they go dark rather than go stale.
+ *
+ * NOTHING RENDERS IN THEIR PLACE — no dashed "not shown" cell, no dash. That
+ * is the reversal already made on the earnings page (see HiddenCard in
+ * app/stock/[symbol]/earnings/SecEarningsCards.tsx): a reader who never saw a
+ * CEO row is not owed an apology for its absence, and nine stat cards read as
+ * a stat grid while nine plus five apologies read as a broken one.
+ *
+ * THE RECORD IS WHAT STAYS. `HIDDEN_PROFILE_ROWS` names every one, what fed it
+ * and when it went dark, and `rows` below is filtered THROUGH it — so hiding a
+ * row without registering it, or registering one and leaving it rendering,
+ * are both impossible rather than merely discouraged.
+ */
+export type HiddenProfileRow = {
+  /** Exactly the `label` the row renders with. The filter matches on this. */
+  label: string;
+  /** What used to supply it. */
+  source: string;
+  /** When it stopped being shown. */
+  hiddenOn: string;
+  /** Why there is no successor. One sentence. */
+  reason: string;
+};
+
+export const HIDDEN_PROFILE_ROWS: HiddenProfileRow[] = [
+  {
+    label: "CEO",
+    source: "FMP /stable/profile ceo",
+    hiddenOn: "2026-09-21",
+    reason:
+      "Officer names appear in DEF 14A prose, not as a structured field, and no free " +
+      "feed publishes them.",
+  },
+  {
+    label: "Employees",
+    source: "FMP /stable/profile fullTimeEmployees",
+    hiddenOn: "2026-09-21",
+    reason:
+      "Headcount appears in 10-K prose, not as an XBRL fact, and no free feed publishes it.",
+  },
+  {
+    label: "Beta",
+    source: "FMP /stable/profile beta",
+    hiddenOn: "2026-09-21",
+    reason:
+      "Beta is a vendor-computed statistic over a window the vendor chooses, not a " +
+      "filed or listed figure, so there is nothing free to read it from.",
+  },
+  {
+    label: "ISIN",
+    source: "FMP /stable/profile isin",
+    hiddenOn: "2026-09-21",
+    reason: "ISIN assignment is licensed; neither SEC, Tiingo nor Nasdaq Trader carries it.",
+  },
+  {
+    label: "CUSIP",
+    source: "FMP /stable/profile cusip",
+    hiddenOn: "2026-09-21",
+    reason: "CUSIP assignment is licensed; neither SEC, Tiingo nor Nasdaq Trader carries it.",
+  },
+];
+
+const HIDDEN_PROFILE_LABELS = new Set(HIDDEN_PROFILE_ROWS.map((r) => r.label));
+
+/**
+ * Drop the registered rows, and REFUSE a registration that matched nothing.
+ *
+ * ── THE FAILURE THE SECOND HALF EXISTS FOR ────────────────────────────────
+ * A Set filter alone is silently tolerant in one direction: register "Beta "
+ * with a trailing space, or "Employee count" for a row labelled "Employees",
+ * and the filter removes nothing while the registry states the row is hidden.
+ * The page then renders the row, the record says it does not, and the two
+ * disagree in the direction nobody looks — exactly the shape of the hidden
+ * card that rendered anyway, which is why HiddenCard on the earnings page
+ * validates its id rather than trusting it (see `retiredSource`).
+ *
+ * So the registry is checked AGAINST the rows it claims to hide, in the same
+ * pass that hides them. Cheap — five lookups over a thirteen-row array — and
+ * it turns a silent no-op into a render that fails loudly and immediately.
+ */
+function applyHiddenRows<T extends { label: string }>(rows: T[]): T[] {
+  const present = new Set(rows.map((r) => r.label));
+  for (const label of HIDDEN_PROFILE_LABELS) {
+    if (!present.has(label)) {
+      throw new Error(
+        `HIDDEN_PROFILE_ROWS registers "${label}", which no stat row builds. ` +
+          `Hiding it removes nothing and the registry is claiming otherwise.`
+      );
+    }
+  }
+  return rows.filter((r) => !HIDDEN_PROFILE_LABELS.has(r.label));
+}
+
 export type CompanyProfile = {
   companyName: string | null;
   description: string | null;
@@ -106,7 +217,7 @@ export default function CompanyProfile({
   // and hardcoded target="_blank" + rel="nofollow". Reusing it as-is for an
   // INTERNAL link would open our own page in a new tab and pass no internal
   // link equity, so internal rows opt out via this flag.
-  const rows: Array<{
+  const allRows: Array<{
     label: string;
     value: string | null;
     href?: string;
@@ -140,7 +251,22 @@ export default function CompanyProfile({
         : undefined,
       external: true,
     },
-  ].filter((r) => r.value);
+  ];
+
+  // THE REGISTRY IS THE FILTER, not a comment beside one. Every row above keeps
+  // its entry and its formatter — that is what "hidden, not removed" means
+  // here — and is dropped on the way to render by its presence in
+  // HIDDEN_PROFILE_ROWS. Delete an entry from the registry and its row comes
+  // straight back. There is no second list to keep in step, and no way to
+  // register a row without hiding it (see applyHiddenRows).
+  //
+  // BEFORE THE `r.value` FILTER, NOT AFTER, and the order is load-bearing.
+  // applyHiddenRows refuses a registration that matches no row; run it over
+  // the already-value-filtered list and every symbol whose CEO field FMP
+  // happens to return empty — a real and common case — throws a page-breaking
+  // error instead of rendering. The registry is a claim about the rows this
+  // component BUILDS, so it has to be checked against all of them.
+  const rows = applyHiddenRows(allRows).filter((r) => r.value);
 
   const hasDescription = Boolean(profile.description);
   const hasRows = rows.length > 0;
