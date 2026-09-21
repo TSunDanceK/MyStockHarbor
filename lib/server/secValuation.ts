@@ -45,6 +45,7 @@ import { isConsecutive } from "./secEarningsView";
 export type ValuationRefusal =
   | "no-cover-share-count"
   | "multi-class-share-count-is-ambiguous"
+  | "ads-ratio-makes-shares-incomparable"
   | "no-twelve-month-eps"
   | "eps-is-zero-or-negative";
 
@@ -53,6 +54,8 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "the filer's cover page does not state a share count",
   "multi-class-share-count-is-ambiguous":
     "this filer has more than one share class and the SEC feed does not name them",
+  "ads-ratio-makes-shares-incomparable":
+    "this company files its share count in ordinary shares and trades here as depositary shares, which are not the same unit",
   "no-twelve-month-eps":
     "twelve months of diluted EPS are not on file",
   "eps-is-zero-or-negative":
@@ -145,8 +148,65 @@ function newestFiscalYear(years: StoredPeriod[]): EpsBasis | null {
  * would be hiding a figure that is on file. Each is decided on its own inputs
  * and each carries its own refusal.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// FOREIGN PRIVATE ISSUERS: THE SHARE COUNT AND THE PRICE ARE IN DIFFERENT UNITS
+//
+// A foreign private issuer files its cover-page share count in ORDINARY SHARES,
+// because that is what it has issued. What trades on a US exchange -- and what
+// every price on this site is a price OF -- is an AMERICAN DEPOSITARY SHARE,
+// which represents some ratio of those ordinary shares. The ratio is set by the
+// depositary bank and is not in the filing.
+//
+//   TSM: 1 ADS = 5 ordinary shares.
+//
+// So `shares x price` multiplies a count of one instrument by the price of a
+// different one. For TSM that overstates the market cap FIVE TIMES OVER. The
+// number is not noisy or slightly stale -- it is a category error, and it lands
+// in the plausible range, which is what makes it dangerous. A reader cannot
+// see that it is wrong; it looks exactly like a market cap.
+//
+// WHY A LIST AND NOT A DETECTOR. There is no field in companyfacts that says
+// "this is an ADS" and none that carries the ratio. The honest options were a
+// named list or a wrong number, and a wrong number is not an option. The list
+// is the five FPIs in the analysis universe, checked by hand against their
+// filings. It is deliberately conservative: a name absent from it gets a cap
+// computed the ordinary way, which is correct for a domestic filer.
+//
+// WHEN TO EXTEND IT. Any 20-F filer admitted to the universe belongs here.
+// `data/static-profile.json` is not a source for this -- the flaw is in the
+// UNIT, not in any figure, so a profile field could not express it.
+//
+// THE COMPANIES STAY IN EVERY LIST THEY BELONG TO. This suppresses a FIGURE,
+// not a company. TSM and BABA are among the largest listed companies on earth
+// and dropping them from a page because one column cannot be computed would be
+// a far bigger lie than the column's absence.
+const ADS_FILERS_WITHOUT_A_STATED_RATIO = new Set([
+  "HDB",  // HDFC Bank
+  "IBN",  // ICICI Bank
+  "TSM",  // Taiwan Semiconductor -- 1 ADS = 5 ordinary
+  "BABA", // Alibaba
+  "ASML", // ASML Holding
+]);
+
+/**
+ * Whether this filer's cover-page share count is denominated in a different
+ * instrument from the price this site quotes. Exported so the check suite can
+ * assert the membership rather than re-declaring it.
+ */
+export function sharesAreIncomparableToPrice(symbol: string): boolean {
+  return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());
+}
+
 export function valuationInputs(set: StoredFactSet): ValuationInputs {
   const refusals: ValuationRefusal[] = [];
+
+  // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
+  // count is in, so it holds whatever the cover page turns out to say -- a
+  // perfectly clean, unambiguous, single-class ordinary-share count is exactly
+  // the case this refusal exists for.
+  if (sharesAreIncomparableToPrice(set.symbol)) {
+    refusals.push("ads-ratio-makes-shares-incomparable");
+  }
 
   let shares: SharesBasis | null = null;
   const cover = set.cover;
@@ -183,6 +243,16 @@ export function marketCap(
   inputs: ValuationInputs,
   price: number | null
 ): ValuationFigure | null {
+  // FIRST, AND BEFORE THE SHARE COUNT IS CONSULTED. An ADS filer usually HAS a
+  // clean share count -- that is the trap. Ordering this after the `!shares`
+  // guard would let a well-behaved cover page produce a five-times-wrong cap.
+  //
+  // It is also the more specific answer when both apply: a multi-class ADS
+  // filer is refused for the unit mismatch, which is certain, rather than for
+  // the class ambiguity, which is merely also true.
+  if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {
+    return { ok: false, why: "ads-ratio-makes-shares-incomparable" };
+  }
   if (!inputs.shares) {
     const why = inputs.refusals.find(
       (r) => r === "multi-class-share-count-is-ambiguous" || r === "no-cover-share-count"
@@ -195,6 +265,28 @@ export function marketCap(
 
 /**
  * P/E — price divided by twelve months of diluted EPS, or a named refusal.
+ *
+ * ── OPEN, AND DELIBERATELY NOT DECIDED HERE (2026-09-21) ─────────────────
+ * `ads-ratio-makes-shares-incomparable` is NOT consulted below, because the
+ * owner decision it implements (claude/DECISIONS-earnings-calendar-v1-2026-09-21
+ * §1) names the market-cap column and only that column.
+ *
+ * BUT THE SAME UNIT MISMATCH APPEARS TO REACH THIS FIGURE. `epsDiluted` is
+ * netIncome over `WeightedAverageNumberOfDilutedSharesOutstanding`, which is an
+ * ORDINARY-share count, while `price` is per ADS -- so a TSM P/E would be
+ * overstated by the same factor of five as the cap that is now refused, and it
+ * would be printed in the cell immediately beside it.
+ *
+ * That is stated as a finding, not acted on: widening a scoped decision from
+ * inside the implementation of it is how a decision stops meaning anything. If
+ * the owner extends the rule, this is a one-line change -- add the same
+ * `refusals.includes(...)` guard at the top of this function, and add the
+ * mutant to scripts/mutate-fpi-market-cap.mjs so removing it fails.
+ *
+ * WHAT WOULD SETTLE IT: whether these filers' 20-F EPS is stated per ADS (in
+ * which case price and EPS already agree and there is no defect) or per
+ * ordinary share (in which case there is). It is per-filer and it is checkable
+ * against the filings; it was not checked in this pass.
  *
  * A NON-POSITIVE EPS IS REFUSED RATHER THAN DIVIDED. A loss-making company has
  * a negative P/E arithmetically and no P/E in any sense a reader uses the
