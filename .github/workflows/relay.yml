@@ -170,6 +170,7 @@ jobs:
             task.log
             ${{ steps.locate.outputs.dir }}/*.json
             data/sec/*.json
+            data/consensus/*
             sec-symbol-status.json
             sec-reread-probe.json
           retention-days: 90
