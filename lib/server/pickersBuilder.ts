@@ -27,8 +27,9 @@ import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
   jsonByteLength,
+  pctOfRequestLimit,
+  setRequestBytes,
   REQUEST_BYTE_BUDGET,
-  UPSTASH_MAX_REQUEST_BYTES,
 } from "./chunkByBytes";
 import { registerSymbols } from "./stalenessQueue";
 import {
@@ -498,7 +499,7 @@ const PICKERS_REDIS_TTL_SECONDS = 60 * 60;
 // the manifest naming it lands, so a reader either sees the old manifest and
 // reads a complete old payload, or the new one and reads a complete new one.
 // Never a mix.
-const PICKERS_MANIFEST_KEY = "msh:pickers:v10:manifest";
+export const PICKERS_MANIFEST_KEY = "msh:pickers:v10:manifest";
 const PICKERS_CHUNK_PREFIX = "msh:pickers:v10:chunk";
 // Longer than the manifest's TTL so a chunk can never expire out from under a
 // manifest that still points at it -- the same reasoning as
@@ -516,7 +517,7 @@ const PICKERS_CHUNK_TTL_SECONDS = 3 * 60 * 60;
 // Longer-lived than the manifest for the same reason the chunks are: the three
 // crons that read it should not fall through to the expensive path just
 // because a build is a few minutes late.
-const PICKERS_SYMBOLS_KEY = "msh:pickers:v10:symbols";
+export const PICKERS_SYMBOLS_KEY = "msh:pickers:v10:symbols";
 const PICKERS_SYMBOLS_TTL_SECONDS = 3 * 60 * 60;
 
 /** What the manifest carries: which chunk keys, in order, and how to size them. */
@@ -923,23 +924,17 @@ function splitPickersPayload(data: PickersPayload): {
 // bytes, and a payload full of company names has non-ASCII in it. Buffer.byteLength
 // is the figure the ceiling is actually about.
 //
-// THE PASS-THROUGH BRANCH IS NOT DECORATION. #427 measured one write, of an
-// object, so it could stringify unconditionally. This now measures the chunk
-// writes too, and a chunk value that is already a string would be double-quoted
-// by a blind JSON.stringify -- reporting an inflation that the real client
-// never applies. Same construction as defaultSerializer, or the reconstruction
-// stops being one.
-function setRequestBytes(key: string, value: unknown, ttlSeconds: number) {
-  const serialized = typeof value === "string" ? value : JSON.stringify(value);
-  const valueBytes = Buffer.byteLength(serialized, "utf8");
-  const bodyBytes = Buffer.byteLength(
-    JSON.stringify(["set", key, serialized, "ex", ttlSeconds]),
-    "utf8"
-  );
-  return { valueBytes, bodyBytes };
-}
-
-/** The same figure, guarded: a measurement must never break the write. */
+// THE PASS-THROUGH BRANCH IS NOT DECORATION, and it now lives in
+// chunkByBytes.ts rather than here. #427 measured one write, of an object, so it
+// could stringify unconditionally. This measures the chunk writes too, and a
+// chunk value that is already a string would be double-quoted by a blind
+// JSON.stringify -- reporting an inflation that the real client never applies.
+//
+// WHY IT MOVED. The SEC writes need the same reconstruction (secManifest.ts,
+// secTickerMap.ts), and a second copy of it would be
+// claude/traps/a-reconstruction-cannot-corroborate-its-source.md: two copies
+// drift, and the one that drifts is the one nobody is reading when the Upstash
+// email arrives. One home, imported by everyone who measures.
 function tryMeasureSet(key: string, value: unknown, ttlSeconds: number) {
   try {
     return setRequestBytes(key, value, ttlSeconds);
@@ -948,8 +943,7 @@ function tryMeasureSet(key: string, value: unknown, ttlSeconds: number) {
   }
 }
 
-const pctOfLimit = (bytes: number) =>
-  `${((bytes / UPSTASH_MAX_REQUEST_BYTES) * 100).toFixed(1)}%`;
+const pctOfLimit = (bytes: number) => pctOfRequestLimit(bytes);
 
 // COST: one extra JSON.stringify of the records per build, on a path that runs
 // at most a few times an hour. #427 paid the same cost for one ~7MB object;
