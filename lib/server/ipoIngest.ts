@@ -403,6 +403,12 @@ export type IpoIngestResult = {
   noticesSkipped: number;
   historyTruncated: string[];
   stoppedOnDeadline: boolean;
+  /**
+   * The FILER loop ran out of time, so some filers touched by the dates that
+   * WERE walked never got a record. See the watermark note below -- this is
+   * the flag that stops those dates being marked done.
+   */
+  filersTruncated: boolean;
   requests: number;
   ms: number;
 };
@@ -464,6 +470,7 @@ export async function ingestIpoWindow(opts: {
   let noticesSkipped = 0;
   let lastIndexDate: string | null = null;
   let stoppedOnDeadline = false;
+  let filersTruncated = false;
 
   const dates: string[] = [];
   for (let d = opts.from; d <= to && dates.length < maxDays; d = addDays(d, 1)) dates.push(d);
@@ -528,6 +535,12 @@ export async function ingestIpoWindow(opts: {
   for (const filer of touched.values()) {
     if (Date.now() - started > deadlineMs) {
       stoppedOnDeadline = true;
+      // NOT THE SAME AS RUNNING OUT OF TIME IN THE DATE LOOP. Breaking there
+      // leaves dates unwalked and the watermark correctly short of them.
+      // Breaking HERE leaves filers from dates that WERE walked without a
+      // record, while the watermark already sits past those dates -- so the
+      // next run starts after them and they are never looked at again.
+      filersTruncated = true;
       break;
     }
     const padded = String(Number(filer.cik)).padStart(10, "0");
@@ -584,7 +597,25 @@ export async function ingestIpoWindow(opts: {
   return {
     records,
     days,
-    lastIndexDate,
+    // ── THE WATERMARK IS A CLAIM THAT A DATE IS FINISHED ─────────────────
+    // A date is finished when its filings are in the index AND every filer
+    // they touched has been read. The filer loop can run out of time after
+    // the date loop has already moved the watermark, and the two together
+    // produce the one failure this whole design is supposed to prevent: a run
+    // that reports `caughtUp: true, daysRemaining: 0` while having silently
+    // dropped filers it will never revisit.
+    //
+    // NULL MEANS "DO NOT ADVANCE", not "cold start" -- writeStoredIpoFilings
+    // keeps the watermark it already had, so the slice is walked again rather
+    // than lost. The cost is repeating those dates; the alternative is losing
+    // them quietly, and this store has no way to notice a filer that is simply
+    // absent.
+    //
+    // A window too slow to finish will now refuse to advance instead of
+    // advancing wrongly. That is a LIVELOCK, and a visible one: the response
+    // reports filersTruncated and daysRemaining stops falling. The fix is a
+    // smaller maxDays, which is why it is a query parameter.
+    lastIndexDate: filersTruncated ? null : lastIndexDate,
     filersTouched: touched.size,
     submissionsRead,
     submissionsFailed,
@@ -593,6 +624,7 @@ export async function ingestIpoWindow(opts: {
     noticesSkipped,
     historyTruncated,
     stoppedOnDeadline,
+    filersTruncated,
     requests,
     ms: Date.now() - started,
   };
