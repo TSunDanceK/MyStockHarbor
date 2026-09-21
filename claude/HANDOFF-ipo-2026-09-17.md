@@ -1,5 +1,13 @@
 # HANDOFF — /upcoming-ipos off FMP, 2026-09-17
 
+> **SUPERSEDED IN PART — see `claude/HANDOFF-ipo-2026-09-21.md`.**
+> Everything below is still accurate as of its own date and its settled
+> decisions all stand. What changed after it: the refresh route was built, the
+> store was populated (753 records), steps 6 and 7 shipped, and TWO cover-parser
+> defects were found that nobody was looking for — the share count was wrong 71%
+> of the time it answered, and the SPAC deal-size anchor matched 1 of 94 covers.
+> The flip is still the only thing outstanding.
+
 Written to hand this to a fresh session cold. **Read this first; everything else is detail.**
 Work lives on branch `claude/confident-tesla-0ozvb4`. Docs are on `main`.
 
