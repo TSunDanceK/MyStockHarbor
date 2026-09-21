@@ -796,11 +796,10 @@ export default async function EarningsCalendarPage({
           </section>
 
           <div style={{ marginTop: 16 }}>
-            <BackfillButton
-              date={selectedDate}
-              complete={dateComplete}
-              hasEarnings={dayData.totalCandidates > 0}
-            />
+            {/* NOT gated on dateComplete: that is the flag the poisoning
+                corrupts, and gating the manual override on it disabled the
+                override exactly when it was needed. See BackfillButton. */}
+            <BackfillButton date={selectedDate} hasEarnings={dayData.totalCandidates > 0} />
           </div>
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
