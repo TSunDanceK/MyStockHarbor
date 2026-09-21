@@ -36,6 +36,8 @@
 // the period ended. A universe-wide median is a different and worse rule: the
 // spread across filers is the thing being exploited.
 
+import { deadlineDays } from "./secReportDates";
+
 /** One symbol's outstanding period, as the manifest knows it. */
 export type DueInput = {
   symbol: string;
@@ -44,10 +46,14 @@ export type DueInput = {
   /** This symbol's own median days from period end to results filing. */
   medianLagDays: number;
   /**
-   * Large accelerated filers get 40 days to file the periodic report, everyone
-   * else 45. Only the overdue cap reads this.
+   * The filer's SEC category, verbatim from submissions. Passed to
+   * secReportDates.deadlineDays rather than interpreted here -- see the note on
+   * the overdue cap below for why this module no longer owns a deadline table.
    */
-  largeAccelerated: boolean;
+  filerCategory: string | null;
+  /** Whether the outstanding period is an ANNUAL one. The deadline differs by
+   *  60/75/90 days rather than 40/45, so this is not a detail. */
+  annual: boolean;
 };
 
 export type DueEntry = {
@@ -65,9 +71,24 @@ export type DueEntry = {
 /** k. See the header for the sweep this comes from. */
 export const DUE_LEAD_DAYS = 7;
 
-/** Statutory deadlines for the periodic report, in days after the period end. */
-export const DEADLINE_LARGE_ACCELERATED_DAYS = 40;
-export const DEADLINE_OTHER_DAYS = 45;
+// ── THE DEADLINE TABLE LIVES IN secReportDates.ts, NOT HERE ───────────────
+// This module briefly carried its own: DEADLINE_LARGE_ACCELERATED_DAYS = 40 and
+// DEADLINE_OTHER_DAYS = 45, selected by a boolean. That was a SECOND validator
+// for a value secReportDates already owned, and it was wrong in two of the six
+// cells the real rule has (17 CFR 240.13a-1 / 13a-13):
+//
+//                            10-Q        10-K       this module said
+//   large accelerated        40          60         40  /  40
+//   accelerated              40          75         45  /  45   <- both wrong
+//   non-accelerated          45          90         45  /  45   <- annual wrong
+//
+// An ACCELERATED filer files its 10-Q in 40 days, not 45 -- only the
+// non-accelerated tier gets 45 -- and no annual deadline existed here at all,
+// so an annual period was capped at 40 or 45 days instead of 60/75/90 and a
+// perfectly punctual annual filer could be dropped from the strip up to 50 days
+// before its statutory deadline.
+//
+// Consolidated onto deadlineDays() per claude/traps/two-validators-for-one-value.md.
 
 /**
  * How far past the statutory deadline a symbol may stay in the strip.
@@ -89,16 +110,26 @@ export const DEADLINE_OTHER_DAYS = 45;
  */
 export const OVERDUE_GRACE_DAYS = 30;
 
-// ── NO ATTRIBUTION-HORIZON CLAUSE, AND HERE IS WHY NOT ────────────────────
-// A first draft also refused anything past secResultsDate's MAX_ATTRIBUTION_DAYS
-// (120), reasoning that the strip should not claim a period the attribution
-// layer could never clear. It is unreachable: the widest the overdue cap allows
-// is DEADLINE_OTHER_DAYS + OVERDUE_GRACE_DAYS = 75 days, well inside 120, so the
-// clause could never fire and would have shipped as a branch no test can reach.
+// ── NO ATTRIBUTION-HORIZON CLAUSE, AND THE MARGIN THAT JUST DISAPPEARED ───
+// A first draft also refused anything past the attribution horizon (120 days),
+// reasoning that the strip should not claim a period the attribution layer could
+// never clear. While this module capped at 45 + 30 = 75 days that clause was
+// unreachable by a wide margin, so it was left out rather than shipped as a
+// branch no test can reach.
 //
-// The relationship is the real thing, so it is ASSERTED in
-// scripts/check-due-to-report.mjs rather than expressed as a dead branch here.
-// If OVERDUE_GRACE_DAYS ever grows past 75, that check fails and says so.
+// CONSOLIDATING ONTO THE REAL DEADLINE TABLE CONSUMED THAT MARGIN EXACTLY.
+// The widest cell is now the non-accelerated ANNUAL deadline:
+//
+//   90 (annual, non-accelerated) + 30 (OVERDUE_GRACE_DAYS) = 120
+//   MAX_ATTRIBUTION_DAYS                                   = 120
+//
+// They meet, with nothing to spare. The strip keeps a symbol to D <= P + 120 and
+// attribution reaches to P + 120, so there is still no gap -- but any future
+// widening of either, in either module, opens one immediately, and the failure
+// would be a symbol stuck in the strip that nothing can ever clear.
+//
+// The relationship is asserted in scripts/check-due-to-report.mjs, which now
+// tests an EQUALITY rather than comfortable inequality.
 
 const DAY = 86_400_000;
 const parse = (d: string): number => Date.parse(`${d}T00:00:00.000Z`);
@@ -132,7 +163,7 @@ export function selectDue(inputs: DueInput[], today: string): DueEntry[] {
     if (D < P + (it.medianLagDays - DUE_LEAD_DAYS) * DAY) continue;
 
     // ── THE OVERDUE CAP ──────────────────────────────────────────────────
-    const deadline = it.largeAccelerated ? DEADLINE_LARGE_ACCELERATED_DAYS : DEADLINE_OTHER_DAYS;
+    const deadline = deadlineDays(it.filerCategory, it.annual);
     if (D > P + (deadline + OVERDUE_GRACE_DAYS) * DAY) continue;
 
     out.push({
