@@ -565,7 +565,12 @@ const TASKS = {
     // PINNED ON THE TASK, so the task NAME is the record of what was measured.
     // relay.yml's inputs live on the default branch and have no symbol field;
     // pinning here is what lets a branch measure a named symbol without a merge.
-    env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC" },
+    // THE PIN IS THE CANDIDATE LIST, not one symbol. Run 35597733409 scanned
+    // ^GSPC alone and nothing else, because this env PIN WINS over the ambient
+    // environment by design (see the note where `env` is applied below) — so
+    // the script's own multi-candidate default never applied. The router was
+    // right and the pin was wrong.
+    env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC,SPY,VOO,IVV,QQQ,DIA" },
     // scripts/lib/source-code.mjs imports typescript to strip comments before
     // the prefix regexes run, and the credentialled job installs only
     // @upstash/redis. Same flag as every other task that lifts from source.
