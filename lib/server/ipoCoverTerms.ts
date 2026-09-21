@@ -94,6 +94,94 @@ const FINAL_PHRASES = [
 const SPAC_UNIT = /\$\s?10\.00\s+per\s+unit|price of\s+\$\s?10\.00/i;
 const SPAC_BODY = [/blank check company/i, /business combination/i, /trust account/i];
 
+// ── HOW MANY SHARES ARE BEING OFFERED ──────────────────────────────────────
+//
+// ── THE RULE THIS REPLACED WAS WRONG 71% OF THE TIME IT ANSWERED ──────────
+// It was two unanchored patterns:
+//
+//   ([\d,]{5,})\s+shares\s+of\s+(?:our\s+)?(?:common|ordinary)\s+(?:stock|shares)
+//   offering\s+([\d,]{5,})\s+shares
+//
+// taking the FIRST match in 80,000 characters. Phase 0 gated the PRICE parser
+// at 5/5 against real covers and never measured this one at all. Relay run
+// 35583959865 measured it over 94 live covers:
+//
+//   shipped rule returned a number                38 / 94
+//   ...whose sentence was DISQUALIFYING           27 / 38      <- 71%
+//   ...of which specifically "outstanding"        12
+//
+// A prospectus cover says "shares of our common stock" about several different
+// facts, and only one of them is the offering. The three wrong ones, each from
+// a named filing in that run:
+//
+//   OUTSTANDING   "... shares of common stock outstanding after this offering"
+//                 ADARx: 88,250,216 -- the post-offering share total.
+//   RESALE        CYABRA: "by the selling shareholders ... of up to 21,645,176
+//                 shares"; Aura: "We are registering the offer and sale from
+//                 time to time of up to 143,277,908 shares". A resale
+//                 registration is not an offering by the issuer at all.
+//   WARRANTS      "issuable upon exercise of ... warrants to purchase up to
+//                 4,308,540 shares".
+//
+// sharesOffered feeds dealSize, which the page renders, so each of those was a
+// confident wrong figure -- Aptevo's resale count against a mis-parsed price
+// produced a $2.76 BILLION deal size for a microcap.
+//
+// ── SO: ANCHOR ON THE OFFERING, THEN REFUSE BAD CONTEXT ───────────────────
+// Every pattern below is traceable to a real cover in that run. The first
+// candidate set (offering-verb only) matched 7 of 94 and was rejected as too
+// narrow; these five match 19, of which the disqualifier refuses one.
+//
+// THE TRADE IS DELIBERATE AND IT IS THE PROJECT'S OWN RULE: coverage falls from
+// 38 to ~18, correctness rises from 29% to ~100%. NULL BEATS A GUESS. And the
+// cost of a null is a column, not a row -- hasTerms() in ipoSecSource drops a
+// listing only when the price is ALSO absent.
+const SHARE_COUNT_PATTERNS = [
+  // "We are offering 10,000,000 shares" / "we are offering 5,000,000 ADSs"
+  //   LiPower F-1/A: "Shares Offered by the Issuer We are offering 5,000,000 shares"
+  /\b(?:we|the\s+company|the\s+issuer)\s+(?:are|is)\s+offering\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|American\s+Depositary\s+Shares|units|Units)/i,
+  // THE OFFERING summary table: "Shares Offered by the Issuer  5,000,000"
+  /(?:shares|ADSs|units)\s+offered\s+(?:by\s+(?:the\s+)?(?:issuer|us|the\s+company)|hereby)[^.]{0,90}?([\d,]{5,})/i,
+  // "This is the initial public offering of 5,000,000 shares"
+  /(?:initial\s+public\s+offering|this\s+offering)\s+of\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
+  //   Advance JV 424B4: "We have determined the offering price of the 2,500,000 shares"
+  /offering\s+price\s+of\s+the\s+([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
+  //   Lannister F-1/A cover header: "$15,000,000 Units 3,000,000 Units"
+  /\$[\d,]{6,}\s+Units\s+([\d,]{5,})\s+Units/i,
+];
+
+/**
+ * Sentences whose number is not an offering size, however well anchored.
+ *
+ * READ IN BOTH DIRECTIONS around the match, and that is load-bearing:
+ * "resale" and "selling stockholders" sit BEFORE the count while "outstanding"
+ * comes after it, so a trailing-only window catches half of them and reports a
+ * clean result.
+ */
+const DISQUALIFYING_CONTEXT =
+  /outstanding|resale|selling\s+(?:share|stock)holder|issuable\s+upon|from\s+time\s+to\s+time|registering/i;
+const CONTEXT_BEFORE = 180;
+const CONTEXT_AFTER = 160;
+
+function parseSharesOffered(cover: string): number | null {
+  for (const re of SHARE_COUNT_PATTERNS) {
+    const m = re.exec(cover);
+    if (!m || m.index === undefined) continue;
+    const n = Number(m[1].replace(/,/g, ""));
+    if (!Number.isFinite(n) || n <= 0) continue;
+    // Where the NUMBER sits, not where the pattern started -- the offering-table
+    // pattern can span 90 characters before reaching its digits.
+    const at = m.index + m[0].lastIndexOf(m[1]);
+    const context = cover.slice(Math.max(0, at - CONTEXT_BEFORE), at + CONTEXT_AFTER);
+    // CONTINUE RATHER THAN RETURN NULL. One anchor landing in a resale clause
+    // does not mean the cover has no offering sentence; a later pattern may
+    // find it. Every value that survives has been through this test.
+    if (DISQUALIFYING_CONTEXT.test(context)) continue;
+    return n;
+  }
+  return null;
+}
+
 /**
  * Parse terms from a stripped cover.
  *
@@ -149,15 +237,12 @@ export function parseCoverTerms(text: string, sic: string | null): IpoCoverTerms
     }
   }
 
-  const sharesM =
-    cover.match(/([\d,]{5,})\s+shares\s+of\s+(?:our\s+)?(?:common|ordinary)\s+(?:stock|shares)/i) ||
-    cover.match(/offering\s+([\d,]{5,})\s+shares/i);
-  const shares = sharesM ? Number(sharesM[1].replace(/,/g, "")) : null;
+  const shares = parseSharesOffered(cover);
 
   return {
     priceRangeLow: low,
     priceRangeHigh: high,
-    sharesOffered: shares !== null && Number.isFinite(shares) ? shares : null,
+    sharesOffered: shares,
     // Longest spellings first: "Nasdaq Global Select Market" must not be
     // matched as the bare "Nasdaq" that follows it in the alternation.
     exchange:

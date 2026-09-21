@@ -41,7 +41,11 @@ console.log("\nipoCoverTerms — null beats a guess\n");
     t.priceRangeLow === 14 && t.priceRangeHigh === 16,
     `got ${t.priceRangeLow}-${t.priceRangeHigh}`
   );
-  check("and the share count with it", t.sharesOffered === 10_000_000, `got ${t.sharesOffered}`);
+  check(
+    "and the share count with it",
+    t.sharesOffered === 10_000_000,
+    `got ${t.sharesOffered} — "We are offering 10,000,000 shares of our common stock"`
+  );
 }
 
 // ── THE APTEVO CASE. The one that produced a $1.42 BILLION deal size. ────
@@ -146,6 +150,163 @@ console.log("\nipoCoverTerms — null beats a guess\n");
     t.priceRangeLow === 16 && t.priceRangeHigh === 16,
     "the range columns are what the page renders; a priced deal has one number and " +
       "both ends are it"
+  );
+}
+
+// ── THE SHARE COUNT. Measured over 94 live covers, relay 35583959865. ────
+//
+// The rule this replaced answered on 38 of those and was WRONG on 27 — it was
+// unanchored, so it took the first "<n> shares of common stock" anywhere in
+// 80,000 characters, and a cover says that phrase about several different
+// facts. Every fixture below is a real sentence from a named filing in that
+// run, not an invented one.
+console.log("");
+{
+  // LiPower New Energy F-1/A, 2026-09-03.
+  const t = parseCoverTerms(
+    "THE OFFERING Issuer LiPower New Energy Holding Limited Shares Offered by " +
+      "the Issuer We are offering 5,000,000 shares of our ordinary shares.",
+    "3690"
+  );
+  check("\"We are offering N shares\" is read", t.sharesOffered === 5_000_000, `got ${t.sharesOffered}`);
+}
+{
+  // Lannister Mining F-1/A, 2026-09-17 — the SPAC-style cover header, where the
+  // count appears with no verb at all.
+  const t = parseCoverTerms(
+    "PRELIMINARY PROSPECTUS SUBJECT TO COMPLETION DATED SEPTEMBER 16, 2026 " +
+      "$15,000,000 Units 3,000,000 Units Each Unit consists of one share.",
+    "6770"
+  );
+  check("the unit cover header is read", t.sharesOffered === 3_000_000, `got ${t.sharesOffered}`);
+}
+{
+  // Advance JV Group 424B4, 2026-09-01.
+  const t = parseCoverTerms(
+    "We have determined the offering price of the 2,500,000 shares to be sold.",
+    "1540"
+  );
+  check("\"the offering price of the N shares\" is read", t.sharesOffered === 2_500_000, `got ${t.sharesOffered}`);
+}
+
+// ── THE THREE WRONG SENTENCES, each one a live row before this fix ────────
+{
+  // ADARx Pharmaceuticals S-1/A — the number that reached the live page.
+  const t = parseCoverTerms(
+    "Immediately following this offering there will be 88,250,216 shares of our " +
+      "common stock outstanding.",
+    "2836"
+  );
+  check(
+    "a POST-OFFERING total is refused",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — ADARx rendered 88,250,216 as its offering size; it is ` +
+      `the share count after the deal, and it feeds dealSize`
+  );
+}
+{
+  // CYABRA S-1/A and Aura Consolidated S-1/A — resale registrations.
+  const cyabra = parseCoverTerms(
+    "This prospectus relates to the offer and sale from time to time by the " +
+      "selling shareholders identified in this prospectus of up to an aggregate " +
+      "of 21,645,176 shares of our common stock.",
+    "7372"
+  );
+  check(
+    "a SELLING-SHAREHOLDER resale count is refused",
+    cyabra.sharesOffered === null,
+    `got ${cyabra.sharesOffered} — a resale registration is not an offering by the issuer`
+  );
+  const aura = parseCoverTerms(
+    "We are registering the offer and sale from time to time of up to " +
+      "143,277,908 shares of common stock.",
+    "7372"
+  );
+  check(
+    "and so is \"we are registering ... from time to time\"",
+    aura.sharesOffered === null,
+    `got ${aura.sharesOffered} — "we are registering" is a resale shelf, not an offering, ` +
+      `and it survives an offering-verb anchor`
+  );
+}
+{
+  // Aptevo Therapeutics 424B4 — warrant shares.
+  const t = parseCoverTerms(
+    "common stock purchase warrants to purchase up to 4,308,540 shares issuable " +
+      "upon exercise thereof.",
+    "2834"
+  );
+  check(
+    "shares ISSUABLE UPON EXERCISE of warrants are refused",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — warrant shares are not the offering`
+  );
+}
+{
+  // THE DISQUALIFIER MUST READ BOTH DIRECTIONS. "resale" precedes the number;
+  // "outstanding" follows it. A trailing-only window catches half of them and
+  // reports a clean result on the rest.
+  const before = parseCoverTerms(
+    "This prospectus relates to the resale of shares. We are offering 9,000,000 " +
+      "shares of common stock.",
+    "7372"
+  );
+  check(
+    "a disqualifier BEFORE the number still refuses it",
+    before.sharesOffered === null,
+    `got ${before.sharesOffered} — "resale" sits ahead of the count on every such cover`
+  );
+}
+{
+  // NEGATIVE CONTROL FOR THE WHOLE SECTION. A rule that refuses everything
+  // would pass every assertion above.
+  const t = parseCoverTerms(
+    "We are offering 12,500,000 shares of our common stock. The initial public " +
+      "offering price is $18.00 per share.",
+    "7372"
+  );
+  check(
+    "a clean offering sentence is still read",
+    t.sharesOffered === 12_500_000 && t.priceRangeLow === 18,
+    `got ${t.sharesOffered} @ ${t.priceRangeLow} — without this, "return null always" ` +
+      `passes every refusal assertion above`
+  );
+}
+{
+  // ── THE ANCHOR'S OWN CONTROL, AND IT WAS MISSING ───────────────────────
+  // Every refusal above is also caught by the DISQUALIFYING_CONTEXT list, so
+  // re-introducing the old unanchored pattern broke NONE of them — verified by
+  // doing exactly that and watching the suite stay green. A guard the fixtures
+  // cannot fail is a guard nobody has shown to work.
+  //
+  // This sentence carries no disqualifying word at all. It is ordinary
+  // authorised-capital language, it is not an offering, and only the anchor
+  // refuses it.
+  const t = parseCoverTerms(
+    "Our amended certificate of incorporation authorizes the issuance of " +
+      "200,000,000 shares of common stock, par value $0.0001 per share.",
+    "7372"
+  );
+  check(
+    "authorised capital is refused by the ANCHOR, with no disqualifier to help",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — this is the fixture that fails if the old unanchored ` +
+      `"N shares of common stock" pattern is ever put back`
+  );
+}
+{
+  // ENTRATA S-1/A: "customers that have 1,000 units or more on our Operating
+  // System". Five digits including the comma, and the old rule's second branch
+  // was one word away from taking it.
+  const t = parseCoverTerms(
+    "We sort our customers from highest to lowest ARPU and then only select " +
+      "customers that have 1,000 units or more on our Operating System.",
+    "7372"
+  );
+  check(
+    "a business metric that happens to say \"units\" is not an offering size",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered}`
   );
 }
 
