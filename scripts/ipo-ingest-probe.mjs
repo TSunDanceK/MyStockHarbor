@@ -216,7 +216,19 @@ const payload = {
   recent,
 };
 fs.writeFileSync("data/sec/ipo-ingest-probe.json", JSON.stringify(payload));
+fs.writeFileSync("data/sec/ipo-ingest-document.json", JSON.stringify(doc));
 console.log(`\n<<<RAW name=ipo-ingest-probe.json bytes=0>>>`);
-console.log(JSON.stringify(payload, null, 2).slice(0, 200000));
+console.log(JSON.stringify(payload, null, 2).slice(0, 120000));
 console.log(`<<<ENDRAW name=ipo-ingest-probe.json>>>`);
+
+// ── THE DOCUMENT ITSELF, COMPACT, IN ITS OWN BLOCK ────────────────────────
+// Separate and unindented on purpose. The summary above is pretty-printed for
+// reading; the document is what scripts/local-upstash.mjs is seeded from, and
+// pretty-printing 198 records would push it past the log's practical limit and
+// truncate it into invalid JSON -- which reads as a parse bug rather than as a
+// truncation. The sandbox cannot reach the Actions artifact blob host, so this
+// log block is the only way the records get back to where the render runs.
+console.log(`\n<<<RAW name=ipo-ingest-document.json bytes=${JSON.stringify(doc).length}>>>`);
+console.log(JSON.stringify(doc));
+console.log(`<<<ENDRAW name=ipo-ingest-document.json>>>`);
 console.log(`\nDONE ${new Date().toISOString()}`);
