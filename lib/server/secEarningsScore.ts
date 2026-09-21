@@ -274,6 +274,17 @@ export function clamp(value: number, min: number, max: number) {
  * with 24 populated fields in its best period and not one quarter.
  */
 function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): string {
+  // FIRST, BECAUSE THE FALLBACK AT THE BOTTOM IS FALSE FOR THIS CASE. It says
+  // the filings "have not been read into the site yet", which promises they
+  // will be. For a preferred or a baby bond there is nothing of its own to
+  // read, ever -- the filings on that CIK belong to the issuer, and that is
+  // the point of refusing them.
+  if (cold.status === "not-issuer-equity") {
+    const parent = cold.siblings.filter((x) => !/[-.]/.test(x)).sort((a, b) => a.length - b.length)[0];
+    return cold.reason === "derivative-of-issuer"
+      ? `${symbol} is debt, preferred stock or a warrant. The financial statements filed under its SEC registrant describe ${parent ?? "another company"}, not this security, so there is nothing here to score.`
+      : `${symbol} shares an SEC registrant with other securities and which one it is could not be established, so the filings there cannot be attributed to it.`;
+  }
   if (cold.status === "no-xbrl") {
     const named = cold.taxonomies.join(", ");
     switch (cold.why) {
