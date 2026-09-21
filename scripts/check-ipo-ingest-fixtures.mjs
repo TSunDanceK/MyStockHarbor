@@ -36,6 +36,7 @@ const {
   IPO_OFFERING_FORMS,
   IPO_PERIODIC_FORMS,
   filerFromSubmissions,
+  ingestIpoWindow,
   pickCoverDocument,
   touchedFilersIn,
 } = await import("../lib/server/ipoIngest.ts");
@@ -374,6 +375,104 @@ console.log("");
     EDGAR_GENERATED_ACCESSION.test("9999999995-26-002778") &&
       !EDGAR_GENERATED_ACCESSION.test("0009999999995-26-000001"),
     "unanchored, it would match a real accession that merely contains the digits"
+  );
+}
+
+
+// ── 5. A WATERMARK THAT CLAIMS A DATE NOBODY FINISHED ─────────────────────
+//
+// ingestIpoWindow walks in two phases: a DATE loop that reads each daily index
+// and advances lastIndexDate, then a FILER loop that reads submissions and
+// covers for everyone those dates touched. Both watch the same deadline.
+//
+// Running out of time in the DATE loop is harmless -- the unwalked dates are
+// behind the watermark and come back next run. Running out in the FILER loop
+// is not: the watermark already sits past those dates, so the filers that
+// never got a record are never looked at again. The run reports
+// `caughtUp: true, daysRemaining: 0` and the store is quietly short.
+//
+// THAT IS THE EXACT SHAPE OF THE 2026-09-21 DEFECT: the bootstrap walked 90
+// days in two calls, reported caught up, and /upcoming-ipos went live with
+// Deal Size AND Price blank on most Recent rows.
+//
+// The control is the pair. Asserting only the truncated case would pass with
+// lastIndexDate hardcoded to null, which would stop the watermark advancing
+// EVER -- a different silent failure with the same green tick.
+{
+  const DATE = "20260918";
+  const INDEX_BODY = [
+    "CIK|Company Name|Form Type|Date Filed|Filename",
+    "--------------------------------------------------------",
+    `1800000|Testco Inc|424B4|2026-09-18|edgar/data/1800000/0001-26-1.txt`,
+  ].join("\n");
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const realFetch = globalThis.fetch;
+
+  // The index read is what burns the clock. A deadline shorter than it means
+  // the date loop completes its one date (its check runs BEFORE the fetch) and
+  // the filer loop then finds itself already over.
+  const makeFetch = (indexDelayMs) => async (url) => {
+    const u = String(url);
+    if (u.includes("master.")) {
+      await sleep(indexDelayMs);
+      return new Response(INDEX_BODY, { status: 200 });
+    }
+    // Submissions: a minimal well-formed payload. Reached only when there is
+    // time left, which is the difference the two cases are measuring.
+    return new Response(
+      JSON.stringify({
+        cik: "1800000",
+        name: "Testco Inc",
+        sic: "2836",
+        filings: { recent: { form: ["424B4"], filingDate: ["2026-09-18"], accessionNumber: ["0001-26-1"] }, files: [] },
+      }),
+      { status: 200 }
+    );
+  };
+
+  const run = async (indexDelayMs, deadlineMs) => {
+    globalThis.fetch = makeFetch(indexDelayMs);
+    try {
+      return await ingestIpoWindow({
+        ua: "fixture fixture@example.com",
+        windowStart: "2026-06-23",
+        from: DATE,
+        to: DATE,
+        maxDays: 1,
+        deadlineMs,
+        now: new Date("2026-09-21T00:00:00Z"),
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  };
+
+  // TRUNCATED: the index read alone outlasts the deadline.
+  const cut = await run(120, 40);
+  check(
+    "5a. a filer loop that runs out of time reports filersTruncated",
+    cut.filersTruncated === true,
+    "without the flag there is nothing to tell the watermark to hold, and nothing in the response a reader could notice"
+  );
+  check(
+    "5a. ...and the watermark does NOT advance past the unfinished date",
+    cut.lastIndexDate === null,
+    `got ${JSON.stringify(cut.lastIndexDate)} — a date whose filers were never read would be marked done and never revisited`
+  );
+
+  // THE CONTROL: same walk, time to spare. If this one also came back null the
+  // watermark would never move and the cold start would never finish.
+  const whole = await run(0, 60_000);
+  check(
+    "5b. CONTROL — a walk with time to spare does not report truncation",
+    whole.filersTruncated === false,
+    "if this fires, the flag is stuck on and every run refuses to advance"
+  );
+  check(
+    "5b. CONTROL — ...and the watermark DOES advance",
+    whole.lastIndexDate === DATE,
+    `got ${JSON.stringify(whole.lastIndexDate)} — expected ${DATE}; holding it always is a livelock, not a fix`
   );
 }
 
