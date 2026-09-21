@@ -122,6 +122,17 @@ export type SecManifestEntry = {
   quarters?: number;
   years?: number;
   instants?: number;
+  // ── NO lastResultsDate HERE. THE STORE IS THE SINGLE HOME. ──────────────
+  // The v1 build added lastResultsDate / lastResultsPeriod / lastResultsAccn
+  // here, arguing that one field in the manifest beat "a parallel store". The
+  // note on reportDatesAt below already said the opposite about the very same
+  // value, in this very same file -- two docblocks fifteen lines apart, each
+  // citing two-validators-for-one-value.md against the other.
+  //
+  // The note below wins, because those three fields were a PROJECTION: every
+  // one of them is the newest stored event's own announcedOn / periodEnd /
+  // accession. Derive them with secReportDatesStore.latestResults() instead;
+  // reportDatesAt is the freshness stamp and the backfill queue.
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
   /**

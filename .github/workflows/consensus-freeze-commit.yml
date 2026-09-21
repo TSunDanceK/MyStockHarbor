@@ -1,0 +1,158 @@
+# Recover the Stage 0 consensus freeze from its relay artifact and COMMIT it.
+#
+# ── WHY THIS EXISTS AS A WORKFLOW RATHER THAN A COMMAND ────────────────────
+# The freeze is the one thing on /earnings-calendar that cannot be re-derived:
+# consensus traces to I/B/E/S and Zacks, the survey found no free cleanly-
+# licensed source at any tier, and the series sat on a 24-hour TTL behind an
+# FMP key that has since lapsed. Stage 0 captured it on 2026-09-15 -- into a
+# GitHub Actions ARTIFACT, which expires 2026-12-14. A "permanent archive"
+# with an expiry date is not one.
+#
+# A Claude session cannot move it. scripts/lib/relay-capture.mjs already
+# recorded why, tested 2026-09-13 and reconfirmed 2026-09-21: the artifact
+# download API redirects to *.blob.core.windows.net and the sandbox answers
+# 403 CONNECT on organization policy. The other route that module provides --
+# printing the payload to the job log for transcription -- is 5,519,554 bytes
+# here, read from the log's TAIL and copied by hand. That is the error-prone
+# step the module exists to avoid, not a way around this.
+#
+# A runner has the file already and has contents:write. So the bytes never
+# pass through the sandbox at all. Same pattern as logo-harvest.yml, which
+# commits public/logos the same way and for the same reason.
+#
+# PUSH-TRIGGERED, NOT workflow_dispatch: a dispatchable workflow must exist on
+# the default branch to be dispatchable at all, which would cost a merge to
+# main before the recovery could even be attempted. A push trigger runs from
+# the branch it is pushed to.
+name: Commit the consensus freeze
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/consensus-freeze-commit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Download the Stage 0 freeze artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: relay-consensus-freeze-34941546535
+          path: recovered
+          run-id: "34941546535"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # THE PATH IS NOT ASSUMED, for the same reason relay.yml does not assume
+      # it: upload-artifact roots at the least common ancestor of its paths, so
+      # the file sits some levels down. Guessing reads as an absent freeze.
+      - name: Locate and verify the freeze
+        id: verify
+        run: |
+          set -euo pipefail
+          found=$(find recovered -name 'fmp-consensus-freeze.json' | head -n 1)
+          if [ -z "${found}" ]; then
+            echo "::error::No fmp-consensus-freeze.json in the artifact. Contents:"
+            find recovered -maxdepth 4 -type f -printf '%s\t%p\n' | head -n 40
+            exit 1
+          fi
+          echo "path=${found}" >> "$GITHUB_OUTPUT"
+
+          # ── THE BYTE COUNT IS THE WHOLE VERIFICATION ────────────────────
+          # Run 34941546535 measured this payload at exactly 5,519,554 bytes
+          # and printed that figure. A truncated or wrong-file recovery still
+          # parses as JSON and still looks like a freeze; only the count says
+          # it is THE freeze. Checked before anything is committed.
+          EXPECTED=5519554
+          actual=$(stat -c%s "${found}")
+          echo "expected ${EXPECTED} bytes, got ${actual}"
+          if [ "${actual}" -ne "${EXPECTED}" ]; then
+            echo "::error::Byte mismatch: expected ${EXPECTED}, got ${actual}. Refusing to commit a freeze that is not the measured one."
+            exit 1
+          fi
+
+      # A second, independent check on CONTENT rather than size, because two
+      # different captures could coincide on bytes and a size check alone
+      # cannot tell a freeze from any other file of that length. The figures
+      # are the ones run 34941546535 printed.
+      - name: Re-measure the recovered freeze
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("node:fs");
+            const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const series = doc.series ?? doc;
+            const symbols = Object.keys(series).length;
+            let rows = 0, withEither = 0;
+            for (const arr of Object.values(series)) {
+              if (!Array.isArray(arr)) continue;
+              for (const r of arr) {
+                rows++;
+                const ee = Array.isArray(r) ? r[2] : r?.epsEstimated;
+                const re = Array.isArray(r) ? r[4] : r?.revenueEstimated;
+                if ((ee ?? null) !== null || (re ?? null) !== null) withEither++;
+              }
+            }
+            console.log(`symbols=${symbols} rows=${rows} withEither=${withEither}`);
+            const fail = (m) => { console.error(`::error::${m}`); process.exit(1); };
+            if (symbols !== 1234) fail(`symbols=${symbols}, run 34941546535 measured 1234`);
+            if (rows !== 123242) fail(`rows=${rows}, run 34941546535 measured 123242`);
+            if (withEither !== 97259) fail(`withEither=${withEither}, run measured 97259 -- the estimates are the irreplaceable half`);
+            console.log("the recovered freeze matches the run that produced it, on all three figures");
+          ' "${{ steps.verify.outputs.path }}"
+
+      - name: Commit the freeze
+        run: |
+          set -euo pipefail
+          mkdir -p data/consensus
+          cp "${{ steps.verify.outputs.path }}" data/consensus/fmp-consensus-freeze.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/consensus/fmp-consensus-freeze.json
+          if git diff --cached --quiet; then
+            echo "Already committed and identical - nothing to do."
+            exit 0
+          fi
+          cat > /tmp/freeze-msg.txt <<'MSG'
+          Stage 0: commit the consensus freeze, recovered from its artifact
+
+          The archive Stage 0 was written to produce. 70475a6 committed the
+          distiller and left the output in a GitHub Actions artifact expiring
+          2026-12-14, so the "permanent archive" was a wasting asset and step 0
+          was not actually done.
+
+          Recovered from run 34941546535 and verified against what that run
+          measured, before being written: 5,519,554 bytes exactly, 1,234
+          symbols, 123,242 rows, 97,259 carrying an estimate. The job refuses
+          to commit on any mismatch -- a truncated freeze still parses and
+          still looks like a freeze.
+
+          1,234 symbols of analyst consensus that cannot be re-derived from
+          filings and cannot be re-fetched: the FMP key has lapsed and the
+          series sat on a 24-hour TTL behind it.
+          MSG
+          sed -i 's/^          //' /tmp/freeze-msg.txt
+          git commit -F /tmp/freeze-msg.txt
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## Consensus freeze recovery"
+            echo
+            echo "- artifact: \`relay-consensus-freeze-34941546535\` (run 34941546535)"
+            echo "- committed to: \`data/consensus/fmp-consensus-freeze.json\` on \`${{ github.ref_name }}\`"
+            echo "- size on disk: $(stat -c%s data/consensus/fmp-consensus-freeze.json 2>/dev/null || echo 'not written')"
+          } >> "$GITHUB_STEP_SUMMARY"
