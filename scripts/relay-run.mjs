@@ -496,6 +496,15 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     writes: true,
   },
+  // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
+  // reports whether the empty-day poisoning has already fired in production.
+  // The live read happens in the Step 0 job under Upstash's read-only token;
+  // this half only does arithmetic on the result.
+  "earnings-poisoning": {
+    script: "scripts/earnings-poisoning-scan.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
 };
 
 const argv = process.argv.slice(2);
