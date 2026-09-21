@@ -17,9 +17,16 @@ import {
   buildSecEarningsView, isPct, periodWords,
   type PeriodBasis, type SecEarningsView,
 } from "@/lib/server/secEarningsView";
+// ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
+// median and the waterfall gate are imported by SecEarningsCards.tsx, which is
+// where they are drawn; re-importing them here would just be a second name for
+// the same rule.
+import { toneBg, toneColor, type EarningsTone as PresentationTone } from "@/lib/server/secPresentation";
+import { valuationInputs } from "@/lib/server/secValuation";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
+  SecTrendSummaryCard, SecValuationCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
@@ -39,7 +46,9 @@ type Props = {
   params: Promise<{ symbol: string }>;
 };
 
-type EarningsTone = "good" | "neutral" | "weak";
+// THE TYPE COMES FROM THE RULES MODULE TOO, so a fourth tone could not be
+// added to one side only.
+type EarningsTone = PresentationTone;
 
 /**
  * ── WHERE THE DATES ON THIS PAGE COME FROM ────────────────────────────────
@@ -269,17 +278,9 @@ function bandFor(score: number): EarningsTone {
   return SCORE_BANDS.find((b) => score >= b.from)!.tone;
 }
 
-function toneColor(tone: EarningsTone) {
-  if (tone === "good") return "#22c55e";
-  if (tone === "weak") return "#ef4444";
-  return "#facc15";
-}
-
-function toneBg(tone: EarningsTone) {
-  if (tone === "good") return "rgba(34,197,94,0.10)";
-  if (tone === "weak") return "rgba(239,68,68,0.10)";
-  return "rgba(250,204,21,0.10)";
-}
+// toneColor and toneBg now live in lib/server/secPresentation.ts, because the
+// cards in SecEarningsCards.tsx need the same greens and had no way to reach
+// these. Two `#22c55e`s is how one of them becomes `#22c55d`.
 
 /**
  * The five things the score can read, DESCRIBED IN THE PAGE'S OWN PERIOD.
@@ -797,9 +798,26 @@ async function getEarningsData(symbol: string) {
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
+  // ── THE VALUATION LEGS ───────────────────────────────────────────────────
+  //
+  // The SEC half comes from the stored set and refuses on its own terms (see
+  // secValuation). The price half is the LAST BAR THIS RENDER ALREADY HOLDS —
+  // no extra fetch, and no quote endpoint, because the bars are the series the
+  // rest of this page is built on and a second price source would be a second
+  // number for one fact.
+  //
+  // ON THE BOUNDED PATH the newest bar is up to BAR_WINDOW_DAYS before today,
+  // which is why the card prints the date it closed on rather than implying it
+  // is live.
+  const valuation = cold.status === "ready" ? valuationInputs(cold.set) : { shares: null, eps: null, refusals: [] };
+  const lastBar = (dailyHistory as Point[]).at(-1) ?? null;
+  const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
+  const latestCloseOn = lastBar?.date ?? null;
+
   return {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, score, secView, cold,
+    valuation, latestClose, latestCloseOn,
     /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
     datesFromSec: secEvents.length > 0,
     /**
@@ -1102,6 +1120,47 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
         .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
         .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        /* ── THE NEW MARKS ──────────────────────────────────────────────────
+           Thin bars, 4px rounded data-ends anchored to the baseline, a 2px
+           surface gap between adjacent fills, and recessive tracks. Text stays
+           in the page's ink tokens — never the series colour — so a value is
+           readable whether or not its mark's hue reaches the reader. */
+        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+        .toneChip i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
+
+        .hbarList { margin-top: 14px; display: grid; gap: 12px; }
+        .hbarRow { display: grid; gap: 6px; }
+        .hbarHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        .hbarValue { font-size: 14px; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
+        .hbarSub { font-size: 11px; color: rgba(148,163,184,0.72); }
+        .hbarTrack { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
+        .hbarFill { display: block; height: 100%; border-radius: 999px; }
+
+        .gmChart { margin-top: 10px; display: flex; align-items: stretch; gap: 2px; height: 148px; }
+        .gmCol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+        .gmPlot { position: relative; flex: 1 1 auto; }
+        .gmPlot::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed rgba(255,255,255,0.12); }
+        .gmBar { position: absolute; left: 10%; right: 10%; border-radius: 4px; min-height: 2px; }
+        .gmUp { bottom: 50%; }
+        .gmDown { top: 50%; }
+        .gmNone { position: absolute; left: 30%; right: 30%; top: calc(50% - 1px); height: 2px; border-radius: 999px; background: rgba(148,163,184,0.35); }
+        .gmTick { margin-top: 7px; font-size: 10px; font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .waterfall { margin-top: 12px; display: grid; gap: 8px; }
+        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr minmax(64px, auto); align-items: center; gap: 10px; }
+        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        .wfTrack { height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
+        .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+        .wfValue { font-size: 12px; font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
+        .wfTotal .wfLabel, .wfTotal .wfValue { color: #dbeafe; }
+        .wfTotal { border-top: 1px solid rgba(255,255,255,0.10); padding-top: 8px; }
+
+        .trendGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+        .trendCell { display: grid; gap: 4px; align-content: start; }
+        .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
+        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) 1fr minmax(56px, auto); } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
         .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
@@ -1344,6 +1403,16 @@ export default async function StockEarningsPage({ params }: Props) {
                       is the longer view a quarterly table cannot give. Same
                       component, same rows, `sole` only changes the wording. */}
                   <SecAnnualCard view={secView} sole={secView.tableBasis === "year"} />
+                  {/* AFTER THE TABLES IT SUMMARISES. The card states a median
+                      over the rows above, so it has to follow them: a summary
+                      above its own source reads as a separate claim. */}
+                  <SecTrendSummaryCard view={secView} />
+                  <SecValuationCard
+                    view={secView}
+                    inputs={data.valuation}
+                    price={data.latestClose}
+                    priceAsOf={data.latestCloseOn}
+                  />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from

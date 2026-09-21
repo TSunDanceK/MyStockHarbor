@@ -8,6 +8,15 @@ import {
   isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
+import {
+  barValue, growthToneWord, marginToneWord, toneBandNote, toneBg, toneColor,
+  toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate,
+  TREND_MIN_PERIODS,
+  type EarningsTone,
+} from "@/lib/server/secPresentation";
+import {
+  REFUSAL_WORDS, marketCap, peRatio, type ValuationInputs,
+} from "@/lib/server/secValuation";
 
 /**
  * ── WHAT AN EMPTY CELL MEANS, IN WORDS ────────────────────────────────────
@@ -26,6 +35,148 @@ import {
  * it is only true when the filing actually says nil.
  */
 const NOT_REPORTED = "Not reported";
+
+/**
+ * A TONE, SHOWN AS COLOUR AND AS A WORD — never as colour alone.
+ *
+ * ── WHY THE WORD IS NOT OPTIONAL ──────────────────────────────────────────
+ * The two colours carrying the verdict here are red and green, which is the
+ * common colour-vision deficiency. A chip that is only green says nothing to
+ * that reader, and nothing at all in print or forced-colors mode. The colour
+ * is the fast path for everyone else; the word is the claim.
+ *
+ * A NULL TONE IS A REAL STATE and gets the muted ink, not a hue: n/m and
+ * "not on file" are the page declining to judge, and a yellow chip there would
+ * read as "flat", which is a measurement nobody took.
+ */
+export function ToneChip({ tone, word }: { tone: EarningsTone | null; word: string }) {
+  return (
+    <span
+      className="toneChip"
+      style={{ color: toneColor(tone), background: toneBg(tone), borderColor: toneColor(tone) }}
+    >
+      <i style={{ background: toneColor(tone) }} aria-hidden="true" />
+      {word}
+    </span>
+  );
+}
+
+/**
+ * ONE HORIZONTAL BAR, SCALED AGAINST THE BIGGEST FIGURE IN ITS OWN LIST.
+ *
+ * ── WHY A SHARED MAXIMUM AND NOT A PER-ROW ONE ───────────────────────────
+ * These lists compare magnitudes — operating cash flow against capex, cash
+ * against debt — and that comparison only exists if every bar is drawn to the
+ * same scale. A per-row bar normalised to itself is a row of identical full-
+ * width bars carrying no information at all while looking like a chart.
+ *
+ * ABSOLUTE VALUE FOR THE LENGTH, SIGN FOR THE SIDE. Capex is filed negative
+ * and free cash flow can be; a length cannot be negative, so the magnitude is
+ * the width and the direction is the colour and the printed figure.
+ *
+ * A NULL DRAWS NOTHING. Not a zero-width bar — see barValue in
+ * secPresentation: a mark on the axis reads as a measured zero.
+ */
+function HBar({ value, max, tone }: { value: number | null; max: number; tone: EarningsTone | null }) {
+  if (value === null || !Number.isFinite(value) || max <= 0) {
+    return <div className="hbarTrack" aria-hidden="true" />;
+  }
+  const pct = Math.max(0, Math.min(100, (Math.abs(value) / max) * 100));
+  return (
+    <div className="hbarTrack" aria-hidden="true">
+      <span className="hbarFill" style={{ width: `${pct}%`, background: toneColor(tone) }} />
+    </div>
+  );
+}
+
+/**
+ * A LIST OF LABELLED MAGNITUDES, each with its bar.
+ *
+ * The rows carry their own figures as text — the bar is a second encoding of a
+ * number the reader can already read, which is what makes it safe to drop for
+ * anyone the colour does not reach.
+ */
+function HBarList({ rows }: { rows: { label: string; value: number | null; tone: EarningsTone | null; text: React.ReactNode; sub?: string }[] }) {
+  const max = Math.max(0, ...rows.map((r) => (r.value === null || !Number.isFinite(r.value) ? 0 : Math.abs(r.value))));
+  return (
+    <div className="hbarList">
+      {rows.map((r) => (
+        <div className="hbarRow" key={r.label}>
+          <div className="hbarHead">
+            <span className="hbarLabel">{r.label}</span>
+            <span className="hbarValue">{r.text}</span>
+          </div>
+          <HBar value={r.value} max={max} tone={r.tone} />
+          {r.sub ? <span className="hbarSub">{r.sub}</span> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * THE P&L WATERFALL — drawn only where the lines reconcile.
+ *
+ * The gate is waterfallGate in secPresentation, which reads the SAME
+ * `incomeStatementComplete` flag the card's wording turns on. This component
+ * never decides; it is handed steps that already sum to the total or it is not
+ * rendered at all. See the gate's docblock for why a chart that visibly fails
+ * to sum is worse than no chart.
+ *
+ * EACH STEP IS DRAWN FROM WHERE THE LAST ONE ENDED, which is the whole of a
+ * waterfall: the offset carries the running total and the bar carries the
+ * change. The final bar is anchored at zero because it is a LEVEL, not a step.
+ */
+function Waterfall({
+  steps, total, totalLabel, format,
+}: {
+  steps: { key: string; label: string; delta: number }[];
+  total: number;
+  totalLabel: string;
+  format: (n: number) => string;
+}) {
+  // A PLAIN LOOP, NOT A map() OVER A MUTATED CLOSURE. The running total has to
+  // be carried from one step to the next — that is what a waterfall is — and
+  // `let running` reassigned inside a `.map` callback is exactly the shape the
+  // React compiler rejects (react-hooks/immutability), because a callback that
+  // outlives the render would then read a moving value. The loop says the same
+  // thing with the accumulator where it belongs.
+  const points: { key: string; label: string; delta: number; from: number; to: number }[] = [];
+  for (const s of steps) {
+    const from = points.length ? points[points.length - 1].to : 0;
+    points.push({ ...s, from, to: from + s.delta });
+  }
+  const span = Math.max(...points.map((p) => Math.max(p.from, p.to)), total, 0);
+  if (!(span > 0)) return null;
+  const pc = (n: number) => `${(Math.abs(n) / span) * 100}%`;
+  return (
+    <div className="waterfall">
+      {points.map((p) => (
+        <div className="wfRow" key={p.key}>
+          <span className="wfLabel">{p.label}</span>
+          <div className="wfTrack">
+            <span
+              className="wfBar"
+              style={{
+                marginLeft: pc(Math.min(p.from, p.to)),
+                width: pc(p.delta),
+                background: p.delta >= 0 ? toneColor("good") : toneColor("weak"),
+              }}
+            />
+          </div>
+          <span className="wfValue">{format(p.delta)}</span>
+        </div>
+      ))}
+      <div className="wfRow wfTotal">
+        <span className="wfLabel">{totalLabel}</span>
+        <div className="wfTrack">
+          <span className="wfBar" style={{ width: pc(total), background: "rgba(147,197,253,0.85)" }} />
+        </div>
+        <span className="wfValue">{format(total)}</span>
+      </div>
+    </div>
+  );
+}
 
 /** The footnote that explains it, carried by every card that can show one. */
 const NOT_REPORTED_NOTE =
@@ -296,6 +447,133 @@ export function SecSnapshotCard({
   );
 }
 
+
+/**
+ * GROWTH AND MARGINS AS A PICTURE, over the same periods the table walks.
+ *
+ * ── WHY IT IS BUILT FROM view.growth AND view.margins, BY INDEX ──────────
+ * Those two lists are derived together in buildSecEarningsView precisely so
+ * they can be read by index — the docblock there says so. Rebuilding either
+ * here would be a second derivation of the same rows, and the first thing it
+ * would get wrong is which margin belongs to which period.
+ *
+ * NO BAR FOR AN n/m. barValue returns null for a crossing, and a null is not
+ * drawn — see its docblock: a zero-height bar sits on the axis and reads as
+ * "no change".
+ */
+function GrowthMarginsChart({ view }: { view: SecEarningsView }) {
+  const w = periodWords(view.tableBasis);
+  const rows = view.margins.map((m, i) => ({
+    label: m.label,
+    revenue: barValue(view.growth[i]?.revenueYoY ?? null),
+    operating: m.operating,
+  }));
+  const revenues = rows.map((r) => r.revenue).filter((v): v is number => v !== null);
+  if (revenues.length < 2) return null;
+  // TWO REASONS A BAR IS MISSING, COUNTED SEPARATELY. barValue returns null
+  // for both a crossing and an absence, and the sentence under the chart has
+  // to name the one that actually happened — "no bar because the comparison
+  // crossed" is a false explanation for a period the filer never filed.
+  const crossings = view.growth.filter((g) => isCrossing(g.revenueYoY)).length;
+  const absent = rows.filter((r) => r.revenue === null).length - crossings;
+  // ── ALREADY OLDEST FIRST — DO NOT REVERSE IT ─────────────────────────────
+  // buildSecEarningsView reverses `margins` and `growth` on the way out (see
+  // the `.reverse()` on both), so view.margins[0] is the OLDEST period and the
+  // table's own intro says "newest last". A `[...rows].reverse()` here was
+  // therefore drawing the chart newest-first under a heading that said oldest
+  // first — the same data sloping the opposite direction, which is precisely
+  // the failure the ordering rule exists to stop, committed by the rule.
+  const ordered = rows;
+  const span = Math.max(...revenues.map((v) => Math.abs(v)), 1);
+  return (
+    <div className="chartBlock">
+      <div className="chartBlockTitle">Revenue growth by {w.one}, oldest first</div>
+      <div className="gmChart">
+        {ordered.map((r) => {
+          const tone = toneForGrowth(r.revenue);
+          const h = r.revenue === null ? 0 : (Math.abs(r.revenue) / span) * 100;
+          return (
+            <div className="gmCol" key={r.label}>
+              <div className="gmPlot">
+                {r.revenue === null ? (
+                  <span className="gmNone" title="Not measured" />
+                ) : (
+                  <span
+                    className={r.revenue >= 0 ? "gmBar gmUp" : "gmBar gmDown"}
+                    style={{ height: `${h / 2}%`, background: toneColor(tone) }}
+                  />
+                )}
+              </div>
+              <span className="gmTick">{r.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="chartLegend">
+        <span><i style={{ background: toneColor("good") }} />Growing</span>
+        <span><i style={{ background: toneColor("neutral") }} />Flat</span>
+        <span><i style={{ background: toneColor("weak") }} />Declining</span>
+        {/* THE FOURTH SWATCH ONLY WHERE A FOURTH STATE EXISTS — the same rule
+            as the n/m legend above it. A grey "Not measured" key on a filer
+            whose every period is measured sends the reader hunting for a mark
+            that is not on the chart. */}
+        {crossings + absent > 0
+          ? <span><i style={{ background: toneColor(null) }} />Not measured</span>
+          : null}
+      </div>
+      <p className="earningsDataNote">
+        {toneBandNote(crossings)}
+        {crossings > 0
+          ? ` ${crossings} ${crossings === 1 ? `${w.one} has` : `${w.many} have`} no bar for that reason.`
+          : ""}
+        {absent > 0
+          ? ` ${absent} ${absent === 1 ? `${w.one} has` : `${w.many} have`} no bar because the period it would be compared with is not on file.`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * DID THE MARGIN ACTUALLY MOVE? — the newest period against its own comparator.
+ *
+ * ── WHY THE BASE IS FOUND BY LABEL AND NOT BY INDEX ──────────────────────
+ * `growth[0].comparedWith` is the view's OWN answer to "which period is this
+ * measured against", and it is already on the page in the table's own column.
+ * Walking back four rows instead would be a SECOND rule for the same question,
+ * and the first filer it disagrees with is the one with a hole in its run —
+ * exactly the AZN shape the table already carries a `gap` badge for. Looking
+ * the label up in `margins` is a join, not a derivation: if the comparator is
+ * not itself on file, there is no base and the line is not drawn.
+ *
+ * A PERCENTAGE-POINT DIFFERENCE, NOT A PERCENTAGE CHANGE. 6% to 7% is +1.0pp
+ * and also +16.7%, and the second is true but useless here; the word "pp" is
+ * on the figure so the two cannot be read for each other. MARGIN_BAND_PP is
+ * ±0.5pp — a tenth of the growth band — because a margin that moves half a
+ * point is a real move and revenue that moves half a percent is noise.
+ */
+function MarginDelta({ view }: { view: SecEarningsView }) {
+  const w = periodWords(view.tableBasis);
+  const latest = view.margins[view.margins.length - 1];
+  const base = view.growth[view.growth.length - 1]?.comparedWith ?? null;
+  if (!latest || base === null) return null;
+  const prior = view.margins.find((m) => m.label === base);
+  if (!prior || latest.operating === null || prior.operating === null) return null;
+  const pp = latest.operating - prior.operating;
+  const tone = toneForMarginDelta(pp);
+  return (
+    <p className="earningsDataNote">
+      Operating margin, <strong>{latest.label}</strong> against <strong>{base}</strong>:{" "}
+      <strong>{`${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`}</strong>{" "}
+      ({latest.operating.toFixed(1)}% from {prior.operating.toFixed(1)}%).{" "}
+      <ToneChip tone={tone} word={marginToneWord(tone)} />{" "}
+      A move of half a percentage point or more is counted; anything smaller is
+      called flat, because a margin that size moves on rounding alone from one{" "}
+      {w.one} to the next.
+    </p>
+  );
+}
+
 export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
   // TABLE NOUNS COME FROM tableBasis. This card describes the TABLE, not the
   // latest period, and the two differ when a filer's newest annual period ends
@@ -325,6 +603,13 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
         {/* VISIBLE, not hover-only — the same lesson as the gap badge. */}{" "}
         <strong>{Q4_EPS_NOTE}</strong>
       </p>
+      {/* ── THE CHART IS KEYED TO tableBasis, LIKE THE NOUNS ABOVE ───────────
+          Same list, same order, same basis. A chart headed "by quarter" over a
+          table of fiscal years is the defect the noun rule already exists to
+          stop, one element further down the card — and a reader trusts a
+          picture faster than a column header. */}
+      <GrowthMarginsChart view={view} />
+      <MarginDelta view={view} />
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
           <thead>
@@ -478,6 +763,81 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
   );
 }
 
+
+/** Money, short. The cards elsewhere use the same shape via CellValue. */
+const shortMoney = (n: number) => {
+  const abs = Math.abs(n);
+  const unit = abs >= 1e12 ? ["T", 1e12] : abs >= 1e9 ? ["B", 1e9] : abs >= 1e6 ? ["M", 1e6] : ["K", 1e3];
+  return `${n < 0 ? "-" : ""}$${(abs / (unit[1] as number)).toFixed(abs / (unit[1] as number) >= 100 ? 0 : 1)}${unit[0]}`;
+};
+
+/**
+ * The three cash figures as magnitudes against one scale.
+ *
+ * CAPEX IS FILED NEGATIVE AND IS SHOWN AS SPENDING, not as a negative bar
+ * pointing the other way: on this card it is a quantity of cash leaving, and
+ * its tone is red because that is what it is, not because the sign is minus.
+ * Free cash flow keeps its sign, because a negative one is the finding.
+ */
+function CashQualityBars({ view }: { view: SecEarningsView }) {
+  const c = view.cashQuality;
+  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const ocf = num(c.operatingCashFlow.val);
+  const capex = num(c.capex.val);
+  // A PLAIN NUMBER ON THIS ONE, not a ViewCell: free cash flow is derived here
+  // rather than filed, so it has no cell of its own. See the view's shape.
+  const fcf = num(c.freeCashFlow);
+  if (ocf === null && capex === null && fcf === null) return null;
+  return (
+    <HBarList
+      rows={[
+        { label: "Operating cash flow", value: ocf, tone: ocf !== null && ocf >= 0 ? "good" : "weak",
+          text: ocf === null ? NOT_REPORTED : shortMoney(ocf) },
+        { label: c.capex.label, value: capex, tone: "weak",
+          text: capex === null ? NOT_REPORTED : shortMoney(Math.abs(capex)),
+          sub: capex === null ? undefined : "cash spent on productive assets" },
+        { label: "Free cash flow", value: fcf, tone: fcf === null ? null : fcf >= 0 ? "good" : "weak",
+          text: fcf === null ? NOT_REPORTED : shortMoney(fcf) },
+      ]}
+    />
+  );
+}
+
+/**
+ * The balance sheet as magnitudes: what the company holds against what it owes.
+ *
+ * NET CASH IS THE ONE THAT CARRIES A VERDICT, and it is the only one toned by
+ * sign. Cash and debt are quantities — a large debt is not automatically bad
+ * and a large cash pile is not automatically good — so they are drawn in the
+ * page's neutral ink rather than being scored.
+ */
+function BalanceSheetBars({ view }: { view: SecEarningsView }) {
+  // NULLABLE: a filer with no balance sheet on file has none of this, and the
+  // card above already says so in words.
+  const b = view.balance;
+  if (!b) return null;
+  const num = (v: number | null | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const cash = num(b.cash?.val);
+  // totalDebt and netCash are DERIVED sums, so they are plain numbers; only
+  // `cash` is a filed cell.
+  const debt = num(b.totalDebt);
+  const net = num(b.netCash);
+  if (cash === null && debt === null && net === null) return null;
+  return (
+    <HBarList
+      rows={[
+        { label: "Cash & equivalents", value: cash, tone: "neutral",
+          text: cash === null ? NOT_REPORTED : shortMoney(cash) },
+        { label: "Total debt", value: debt, tone: "neutral",
+          text: debt === null ? NOT_REPORTED : shortMoney(debt) },
+        { label: "Net cash", value: net, tone: net === null ? null : net >= 0 ? "good" : "weak",
+          text: net === null ? NOT_REPORTED : shortMoney(net),
+          sub: net === null ? undefined : net >= 0 ? "more cash than debt" : "more debt than cash" },
+      ]}
+    />
+  );
+}
+
 export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const c = view.cashQuality;
   const w = periodWords(view.basis);
@@ -509,6 +869,15 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           not {view.latestLabel}.
         </p>
       ) : null}
+      {/* ── THE MAGNITUDES, BEFORE THE ROWS THAT SPELL THEM OUT ─────────────
+          The question this card asks — is the profit turning into cash — is a
+          COMPARISON of three magnitudes, and three numbers in a column is the
+          one shape that makes a comparison hard. The bars are scaled against
+          the largest of them, so operating cash flow against capex is a length
+          a reader can see rather than two figures they have to divide.
+          The rows below still carry every figure as text; the bars are a
+          second encoding, which is what makes them safe to ignore. */}
+      <CashQualityBars view={view} />
       <div style={{ marginTop: 12 }}>
         <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact /></Row>
         {/* THE LABEL COMES FROM THE CELL, not from this line. capex resolves
@@ -594,6 +963,10 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           these are {Math.abs(spread!)} days apart.
         </p>
       ) : null}
+      {/* WHAT IT HOLDS AGAINST WHAT IT OWES, as lengths. The rows below carry
+          every figure; these make the one comparison the card is named for
+          visible without arithmetic. */}
+      <BalanceSheetBars view={view} />
       <div style={{ marginTop: 12 }}>
         {/* THE LABEL FOLLOWS THE FIGURE. When the filer published only the
             restricted-inclusive total, this row IS that total, and calling it
@@ -636,12 +1009,52 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   );
 }
 
+
+/**
+ * The latest period's P&L as a waterfall, or nothing.
+ *
+ * This component makes NO decision about whether the arithmetic closes — that
+ * is waterfallGate's job, and it reads the flag the card's own note reads. All
+ * that happens here is drawing.
+ */
+function PlWaterfall({ view }: { view: SecEarningsView }) {
+  const gate = waterfallGate(view);
+  if (!gate.ok) return null;
+  const w = periodWords(view.basis);
+  return (
+    <div className="chartBlock">
+      <div className="chartBlockTitle">From revenue to operating income — {view.latestLabel}</div>
+      <Waterfall
+        steps={gate.steps}
+        total={gate.total}
+        totalLabel="Operating income"
+        format={(n) => shortMoney(n)}
+      />
+      <p className="earningsDataNote">
+        Each bar starts where the one above it ended, so the drop from revenue to operating income
+        is the sum of the costs between them. Shown only where the filed expense lines actually
+        reach the filed operating income for this {w.one}; where they do not, the table below says
+        so instead.
+      </p>
+    </div>
+  );
+}
+
 export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   const w = periodWords(view.basis);
   return (
     <section className="card">
       <div className="eyebrow">Income statement</div>
       <h3>Full profit &amp; loss — {view.latestLabel}</h3>
+      {/* ── THE WATERFALL, ONLY WHERE THE LINES RECONCILE ──────────────────
+          waterfallGate reads view.incomeStatementComplete — the SAME flag the
+          note below turns on — so the chart and the wording cannot disagree on
+          screen. On the ~16% of quarters where the breakdown misses operating
+          income (measured: ARM, MU, by 1-7%), no chart is drawn and the table
+          below carries its existing "partial" explanation instead. A waterfall
+          asserts that its bars sum to its total; drawing one that does not is
+          worse than drawing nothing. */}
+      <PlWaterfall view={view} />
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
           <Row key={c.label} label={c.label}>
@@ -915,3 +1328,147 @@ export function SecNoXbrlCard({
   );
 }
 
+
+/**
+ * THE RUN OF PERIODS, IN ONE CARD — what a typical one looks like.
+ *
+ * ── WHY THIS IS A MEDIAN AND SAYS SO ─────────────────────────────────────
+ * trendSummary takes the median rather than the mean, and excludes every
+ * period whose comparison crosses between profit and loss. Both choices change
+ * the number, so the card states them: a reader who assumes "average" and
+ * recomputes from the table will get a different figure, and the honest
+ * response to that is to say which statistic this is rather than to hope
+ * nobody checks.
+ *
+ * THE COUNTS ARE PART OF THE FIGURE, not a footnote. "Typical quarter: +8%"
+ * over eight rows means something different from the same figure over three,
+ * and the card shows the denominator either way.
+ */
+export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
+  const t = trendSummary(view);
+  const w = periodWords(t.basis);
+  // NOTHING TO SUMMARISE IS NOT AN EMPTY CARD. A filer with too few comparable
+  // periods gets no card at all rather than a grid of "Not measured", which
+  // would read as a fault in the page.
+  if (!t.lines.some((l) => l.value !== null)) return null;
+  return (
+    <section className="card">
+      <div className="eyebrow">Trend</div>
+      <h3>What does a typical {w.one} look like?</h3>
+      <p>
+        The middle value across the {w.many} on file — not an average, which one unusual{" "}
+        {w.one} can dominate. Figures are the same ones in the table above.
+      </p>
+      <div className="trendGrid">
+        {t.lines.map((l) => {
+          // THE KIND, NOT THE LABEL'S SPELLING. trendSummary says which lines
+          // are rates and which are levels; a /margin/i over the wording was a
+          // second copy of that rule, one rename away from disagreeing.
+          const word = l.kind === "level" ? marginToneWord(l.tone) : growthToneWord(l.tone);
+          return (
+            <div className="trendCell" key={l.label}>
+              <span className="metricLabel">{l.label}</span>
+              <span className="metricValue" style={{ color: toneColor(l.tone) }}>
+                {/* NO SIGN ON A LEVEL. A margin of 32% is not "+32%". */}
+                {l.value === null
+                  ? "—"
+                  : `${l.kind === "rate" && l.value >= 0 ? "+" : ""}${l.value.toFixed(1)}%`}
+              </span>
+              <div className="trendChipRow">
+                {/* A LEVEL GETS NO VERDICT CHIP. trendSummary leaves the
+                    operating-margin line untoned on purpose: whether 6% is good
+                    depends on the industry and this page has no comparison. */}
+                {l.tone === null && l.value !== null ? null : <ToneChip tone={l.tone} word={word} />}
+                <span className="trendCount">
+                  {l.value === null
+                    ? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`
+                    : `${l.counted} of ${l.counted + l.skipped} ${l.counted + l.skipped === 1 ? w.one : w.many}`}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {t.exclusionNote ? <p className="earningsDataNote">{t.exclusionNote}</p> : null}
+      <p className="earningsDataNote">{toneBandNote(t.crossings)} Source: {SEC_ATTRIBUTION}.</p>
+    </section>
+  );
+}
+
+/**
+ * MARKET CAP AND P/E, BUILT FROM THE FILINGS AND ONE PRICE.
+ *
+ * ── EVERY ABSENCE HERE IS NAMED ──────────────────────────────────────────
+ * "P/E: —" invites the reader to conclude the company has no earnings, which
+ * is a claim about the company. The true claim is almost always about the
+ * filing — a share count the filer publishes per class without saying which,
+ * or a year that is not yet four quarters. secValuation returns WHY, and this
+ * card prints it.
+ *
+ * THE TWO AS-OF DATES ARE BOTH SHOWN, because they differ and the difference
+ * matters: the share count is as of the cover page, weeks after the period
+ * end, and the price is today's close.
+ */
+export function SecValuationCard({
+  view, inputs, price, priceAsOf,
+}: {
+  view: SecEarningsView;
+  inputs: ValuationInputs;
+  price: number | null;
+  priceAsOf: string | null;
+}) {
+  const cap = marketCap(inputs, price);
+  const pe = peRatio(inputs, price);
+  // NO PRICE IS NOT A FILING REFUSAL. Both figures need one, and saying the
+  // cover page is at fault for a bars outage would misname the gap.
+  if (price === null) return null;
+  const figure = (f: ReturnType<typeof marketCap>, fmt: (n: number) => string) =>
+    f === null ? NOT_REPORTED : f.ok ? fmt(f.val) : REFUSAL_WORDS[f.why];
+  const isRefusal = (f: ReturnType<typeof marketCap>) => f !== null && !f.ok;
+  return (
+    <section className="card">
+      <div className="eyebrow">Valuation</div>
+      <h3>What the market is paying for these earnings</h3>
+      <div className="metricGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+        <div>
+          <span className="metricLabel">Market cap</span>
+          <span className="metricValue" style={{ fontSize: isRefusal(cap) ? 14 : undefined }}>
+            {figure(cap, shortMoney)}
+          </span>
+          {inputs.shares ? (
+            <span className="metricSub">
+              {(inputs.shares.val / 1e6).toFixed(1)}M shares, as stated on the cover page of the
+              filing dated {inputs.shares.asOf}
+            </span>
+          ) : null}
+        </div>
+        <div>
+          <span className="metricLabel">P/E (GAAP, trailing)</span>
+          <span className="metricValue" style={{ fontSize: isRefusal(pe) ? 14 : undefined }}>
+            {figure(pe, (n) => n.toFixed(1))}
+          </span>
+          {inputs.eps ? (
+            <span className="metricSub">
+              ${inputs.eps.val.toFixed(2)} diluted EPS over{" "}
+              {inputs.eps.basis === "four-quarters"
+                ? "the last four quarters"
+                : "the latest full fiscal year"}
+              , to {inputs.eps.periodEnd}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <p className="earningsDataNote">
+        Price {price.toFixed(2)}{priceAsOf ? ` at the close on ${priceAsOf}` : ""}. Earnings are
+        GAAP as filed, never an adjusted figure. {GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}, with
+        the share price from market data.
+      </p>
+      {view.currency ? (
+        <p className="earningsDataNote">
+          Earnings are converted from {view.currency.reporting}; the share price is already in US
+          dollars, so both sides of these figures are dollars.
+        </p>
+      ) : null}
+    </section>
+  );
+}

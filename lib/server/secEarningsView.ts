@@ -513,6 +513,10 @@ export type SecEarningsView = {
    * Measured to fail on 5 of 32 probe quarters (ARM, MU) by 1-7%, always because
    * the filer expenses something the stored breakdown has no line for. The card
    * must not imply the waterfall is complete when it is not.
+   *
+   * SUMMING IS THE WHOLE TEST — a line the filer did not report contributes
+   * nothing and does not fail it. See the comment at the computation for the
+   * measurement that made that distinction necessary.
    */
   incomeStatementComplete: boolean;
   /**
@@ -1058,13 +1062,35 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // Does the stored breakdown actually reach the filed operating income? If it
   // does not, the card says the waterfall is partial rather than presenting a
   // subtraction that does not work.
+  //
+  // ── WHY AN ABSENT LINE NO LONGER FAILS THIS ──────────────────────────────
+  // This used to also require all three expense lines to be PRESENT, which is
+  // a different question from whether they add up, and it is the requirement
+  // that was actually failing. MEASURED over the six committed fixtures: all
+  // six reported false, every one of them for a missing line rather than a
+  // failed subtraction — AAPL files no OtherOperatingExpense, and
+  // 109.42B − 54.65B − 11.73B − 7.35B reaches its filed 35.70B to within 0.03%.
+  // The card therefore told every reader that Apple's expense lines "do not
+  // add up to operating income", which is false, and the waterfall built on
+  // this flag would have drawn for nobody.
+  //
+  // A LINE THE FILER NEVER REPORTED IS NOT AN UNRECONCILED LINE. The sum below
+  // already treats it as contributing nothing, and the table above already
+  // says "Not reported" beside it. What matters is whether the lines that DO
+  // exist close the gap, which is what remains asserted — plus at least one
+  // real expense line, because "revenue minus nothing equals operating income"
+  // reconciles trivially and breaks nothing down.
   const gp = valueOf(latest, "grossProfit");
   const opex = ["researchAndDevelopment", "sellingGeneralAndAdministrative", "otherOperatingExpense"]
     .map((k) => valueOf(latest, k));
   const opInc = valueOf(latest, "operatingIncome");
   const incomeStatementComplete =
-    gp !== null && opInc !== null && opex.every((v) => v !== null) &&
-    Math.abs(gp - opex.reduce((a, b) => a + (b ?? 0), 0) - opInc) <=
+    gp !== null && opInc !== null && opex.some((v) => v !== null) &&
+    // `reduce<number>` because `some` does not narrow the array the way
+    // `every((v) => v !== null)` did — TS infers a type predicate there and
+    // handed the reduce a number[]. The `?? 0` was always doing the work; the
+    // annotation just says so out loud.
+    Math.abs(gp - opex.reduce<number>((a, b) => a + (b ?? 0), 0) - opInc) <=
       Math.max(Math.abs(opInc), 1) * 0.01;
 
   return {

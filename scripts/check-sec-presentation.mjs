@@ -161,6 +161,62 @@ console.log("\n3. THE TREND SUMMARY NEVER AVERAGES ACROSS AN n/m");
   );
 }
 
+console.log("\n3b. A LEGEND FOR A MARKER THAT NEVER APPEARS IS NOT SHOWN");
+{
+  // ── THE RULE THIS SHARES WITH THE n/m LEGEND ─────────────────────────────
+  // check-earnings-render already holds it for the crossing legend: "a
+  // standing legend for a marker that never appears is noise on every other
+  // page". AAPL has never crossed between profit and loss, so a sentence
+  // explaining what the page does when it does is a sentence about nothing —
+  // and a reader who takes it as a description goes looking for a grey bar
+  // that is not there. The band wording obeys the same rule.
+  const CLAUSE = /crosses between profit and loss/;
+  check("with no crossing, the note states the bands and stops",
+    !CLAUSE.test(mod.toneBandNote(0)) && /±3%/.test(mod.toneBandNote(0)),
+    mod.toneBandNote(0));
+  check("with a crossing, it explains the grey", CLAUSE.test(mod.toneBandNote(1)));
+  await underMutation(
+    "crossing clause made unconditional",
+    "  if (crossings <= 0) return bands;",
+    "",
+    (m) => !CLAUSE.test(m.toneBandNote(0))
+  );
+
+  // THE COUNT IS THE CALLER'S ONLY WAY IN, and it has to be the count of
+  // CROSSINGS rather than of everything excluded — a filer with one missing
+  // margin and no crossing must not be told its figures crossed zero.
+  // THE SKIP IS IN THE GROWTH ROWS, NOT THE MARGINS. `crossings` is only ever
+  // touched inside the growth `line()`, so a fixture whose only hole is a
+  // margin leaves nothing for the mutation below to get wrong — it passed
+  // either way and proved nothing. A null revenue/EPS row is an ABSENCE: it is
+  // skipped, and it is not a crossing.
+  const clean = [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8), growthRow(null, null)];
+  const cleanMargins = [marginRow(20), marginRow(21), marginRow(19)];
+  const tClean = mod.trendSummary(viewOf(clean, cleanMargins));
+  check("a skipped period that is NOT a crossing does not count as one",
+    tClean.crossings === 0 && !CLAUSE.test(mod.toneBandNote(tClean.crossings)),
+    `crossings ${tClean.crossings}; note: ${tClean.exclusionNote}`);
+  check("...and the reason it gives is the reason that happened",
+    typeof tClean.exclusionNote === "string" && !CLAUSE.test(tClean.exclusionNote) &&
+      /not on file/.test(tClean.exclusionNote),
+    tClean.exclusionNote ?? "no note");
+
+  const crossed = [
+    growthRow(10, 10), growthRow(12, 12), growthRow(8, 8),
+    growthRow("swung-to-loss", "swung-to-loss"),
+  ];
+  const tCrossed = mod.trendSummary(viewOf(crossed, []));
+  check("a real crossing IS counted, once per line that saw it",
+    tCrossed.crossings === 2,
+    `got ${tCrossed.crossings} — revenue and EPS each carry the same crossing`);
+  await underMutation(
+    "crossings counted as everything skipped",
+    "    crossings += values.filter(isCrossing).length;",
+    "    crossings += skipped;",
+    (m) => m.trendSummary(viewOf(clean, cleanMargins)).crossings === 0
+  );
+}
+
 console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter'");
 {
   const annual = mod.trendSummary(viewOf(
@@ -218,12 +274,91 @@ console.log("\n5. THE WATERFALL IS DRAWN ONLY WHERE IT ADDS UP");
     (m) => m.waterfallGate(viewOf([], [], { incomeStatement: lines, incomeStatementComplete: false })).ok === false
   );
 
-  // A NULL LINE IS NOT A ZERO EXPENSE.
+  // ── A NULL LINE IS OMITTED, NOT DRAWN AT ZERO ────────────────────────────
+  //
+  // This check used to require a REFUSAL here, and that requirement was
+  // measured to be wrong: all six committed fixtures failed the gate, every
+  // one of them on a missing line rather than a failed subtraction, so the
+  // waterfall drew for nobody. AAPL files no OtherOperatingExpense and its
+  // remaining lines reach filed operating income to within 0.03%.
+  //
+  // The hazard was only ever the ZERO-LENGTH STEP — a flat "R&D" bar claiming
+  // the company spends nothing. Omitting the step makes no claim at all, and
+  // incomeStatementComplete has already established that what remains sums.
   const holed = lines.map((c) => (c.key === "researchAndDevelopment" ? { ...c, val: null } : c));
-  const gap = mod.waterfallGate(viewOf([], [], { incomeStatement: holed, incomeStatementComplete: true }));
-  check("a missing expense line refuses rather than drawing a zero-length step",
-    gap.ok === false && gap.why === "missing-lines",
-    "a zero R&D step reads as 'this company spends nothing on R&D'");
+  // The 100 that R&D carried has to go somewhere or the chart would not sum,
+  // so operating income moves with it — this fixture is a filer that reports
+  // no R&D line at all, not one whose R&D vanished from a reconciling set.
+  const holedTotal = holed.map((c) => (c.key === "operatingIncome" ? { ...c, val: 200 } : c));
+  const gap = mod.waterfallGate(viewOf([], [], { incomeStatement: holedTotal, incomeStatementComplete: true }));
+  check("a missing expense line is left out of the chart, not drawn at zero",
+    gap.ok === true && !gap.steps.some((st) => st.key === "researchAndDevelopment"),
+    gap.ok ? gap.steps.map((st) => st.key).join(" ") : `refused: ${gap.why}`);
+  check("...and no step has zero length, whatever the reason it is absent",
+    gap.ok && gap.steps.every((st) => st.delta !== 0),
+    "a bar of no length is a label with nothing behind it");
+  await underMutation(
+    "absent lines drawn as zero steps",
+    "    if (v === null || v === 0) continue;",
+    "    const drawn = v ?? 0;\n    steps.push({ key: p.key, label: p.label, delta: -drawn });\n    continue;",
+    (m) => {
+      const g = m.waterfallGate(viewOf([], [], { incomeStatement: holedTotal, incomeStatementComplete: true }));
+      return g.ok && !g.steps.some((st) => st.key === "researchAndDevelopment");
+    }
+  );
+
+  // ── THE CHART ADDS UP ITS OWN BARS ───────────────────────────────────────
+  //
+  // incomeStatementComplete measures GROSS PROFIT minus opex; this chart runs
+  // from REVENUE through cost of revenue. A filer whose filed gross profit is
+  // not revenue minus cost of revenue passes the flag and would still draw
+  // bars that visibly miss the total. `holed` above is exactly that shape —
+  // flag hand-set to true, R&D's 100 unaccounted for — and it must refuse.
+  const unsummed = mod.waterfallGate(viewOf([], [], { incomeStatement: holed, incomeStatementComplete: true }));
+  check("steps that do not reach the filed total refuse, flag or no flag",
+    unsummed.ok === false,
+    unsummed.ok
+      ? `drew ${unsummed.steps.reduce((a, st) => a + st.delta, 0)} against a filed ${unsummed.total}`
+      : unsummed.why);
+  await underMutation(
+    "the chart's own sum check removed",
+    "  if (Math.abs(drawn - operating) > Math.max(Math.abs(operating), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {",
+    "  if (false) {",
+    (m) => m.waterfallGate(viewOf([], [], { incomeStatement: holed, incomeStatementComplete: true })).ok === false
+  );
+  check("the declared tolerance is the one enforced",
+    /WATERFALL_TOLERANCE_PCT \/ 100/.test(SRC),
+    "a constant nothing reads is a tolerance nobody is held to");
+
+  // A FILED ZERO IS OMITTED FOR THE SAME REASON — it has no length either.
+  // The omitted 50 moves into operating income, so the chart still reaches its
+  // total — otherwise the sum check refuses first and this proves nothing.
+  const zeroed = lines.map((c) =>
+    c.key === "otherOperatingExpense" ? { ...c, val: 0 }
+      : c.key === "operatingIncome" ? { ...c, val: 150 } : c);
+  const zg = mod.waterfallGate(viewOf([], [], { incomeStatement: zeroed, incomeStatementComplete: true }));
+  check("a filed zero is omitted too, rather than drawn as a flat bar",
+    zg.ok === true && !zg.steps.some((st) => st.key === "otherOperatingExpense"),
+    zg.ok ? zg.steps.map((st) => st.key).join(" ") : `refused: ${zg.why}`);
+
+  // NOTHING LEFT TO BREAK DOWN IS NOT A WATERFALL.
+  // OPERATING INCOME EQUAL TO REVENUE, deliberately: without the floor this
+  // fixture draws one step that sums perfectly, so the floor is the ONLY rule
+  // that can refuse it. With a smaller total the sum check would refuse too
+  // and the mutation below would pass for the wrong reason.
+  const bare = lines
+    .filter((c) => c.key === "revenue" || c.key === "operatingIncome")
+    .map((c) => (c.key === "operatingIncome" ? { ...c, val: 1000 } : c));
+  const bg = mod.waterfallGate(viewOf([], [], { incomeStatement: bare, incomeStatementComplete: true }));
+  check("revenue with no expense line at all refuses — two bars break nothing down",
+    bg.ok === false && bg.why === "missing-lines",
+    bg.ok ? `drew ${bg.steps.length} steps` : bg.why);
+  await underMutation(
+    "one-expense-step floor removed",
+    "  if (steps.length < 2) return { ok: false, why: \"missing-lines\" };",
+    "",
+    (m) => m.waterfallGate(viewOf([], [], { incomeStatement: bare, incomeStatementComplete: true })).ok === false
+  );
   check("the gate reads the SAME flag the card's wording turns on",
     /view\.incomeStatementComplete/.test(SRC),
     "a second reconciliation test here would disagree with the card the first time either tolerance moved");

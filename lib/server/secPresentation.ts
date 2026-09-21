@@ -24,7 +24,7 @@
 // as "+172%" is exactly the number CROSSING_NOTE exists to stop being printed;
 // averaging it into a trend summary would print it again, once removed.
 import type { PeriodBasis, Pct, SecEarningsView } from "./secEarningsView";
-import { isPct, periodWords } from "./secEarningsView";
+import { isCrossing, isPct, periodWords } from "./secEarningsView";
 
 /** Good, mixed, weak — the page's existing three. Null is "no claim". */
 export type EarningsTone = "good" | "neutral" | "weak";
@@ -96,6 +96,16 @@ export const TREND_MIN_PERIODS = 3;
 
 export type TrendLine = {
   label: string;
+  /**
+   * A RATE OR A LEVEL — and the card must not print them the same way.
+   *
+   * "+32.0%" for a median operating margin reads as 32% growth in the margin.
+   * It is a level: the typical period's margin WAS 32%. The sign belongs on a
+   * rate of change and nowhere else, and the card takes it from here rather
+   * than from a regex over the label, which is a second rule that goes wrong
+   * the first time a label is reworded.
+   */
+  kind: "rate" | "level";
   /** The median across the periods that were figures. Null when refused. */
   value: number | null;
   tone: EarningsTone | null;
@@ -110,6 +120,14 @@ export type TrendSummary = {
   lines: TrendLine[];
   /** Said on the card when anything was left out. Null when nothing was. */
   exclusionNote: string | null;
+  /**
+   * How many of the excluded periods were CROSSINGS rather than absences.
+   *
+   * The card needs the two apart: they are excluded for different reasons and
+   * only one of them is worth explaining to a reader who has never seen it.
+   * See toneBandNote.
+   */
+  crossings: number;
 };
 
 /**
@@ -137,14 +155,19 @@ function median(xs: number[]): number | null {
  */
 export function trendSummary(view: SecEarningsView): TrendSummary {
   const w = periodWords(view.tableBasis);
+  // COUNTED HERE, not inferred by the caller: a crossing is a string in a Pct
+  // and an absence is a null, and once both have been filtered out by isPct
+  // the difference is unrecoverable.
+  let crossings = 0;
   const line = (label: string, values: Pct[]): TrendLine => {
     const nums = values.filter(isPct) as number[];
     const skipped = values.length - nums.length;
+    crossings += values.filter(isCrossing).length;
     if (nums.length < TREND_MIN_PERIODS) {
-      return { label, value: null, tone: null, counted: nums.length, skipped };
+      return { label, kind: "rate", value: null, tone: null, counted: nums.length, skipped };
     }
     const m = median(nums);
-    return { label, value: m, tone: toneForGrowth(m as Pct), counted: nums.length, skipped };
+    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), counted: nums.length, skipped };
   };
 
   const growth = view.growth ?? [];
@@ -160,6 +183,7 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const m = median(opMargins);
     lines.push({
       label: `Operating margin, typical ${w.one}`,
+      kind: "level",
       value: m,
       // A LEVEL HAS NO TONE HERE. Whether a 6% operating margin is good depends
       // on the industry, and this page has no industry comparison — colouring
@@ -171,14 +195,26 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   }
 
   const totalSkipped = lines.reduce((a, l) => a + l.skipped, 0);
+  // THE REASON GIVEN IS THE REASON THAT HAPPENED. The note used to offer both
+  // ("either not on file, or the comparison crosses...") on every filer that
+  // skipped anything, which tells a reader with one missing margin and no
+  // crossing something untrue about their own page.
+  const why =
+    crossings === 0
+      ? `the ${w.one} is not on file`
+      : crossings === totalSkipped
+        ? `the comparison crosses between profit and loss, where a percentage would be an artefact ` +
+          `of the arithmetic rather than a rate of change`
+        : `either the ${w.one} is not on file, or the comparison crosses between profit and loss, ` +
+          `where a percentage would be an artefact of the arithmetic rather than a rate of change`;
   return {
     basis: view.tableBasis,
     lines,
     exclusionNote: totalSkipped
       ? `${totalSkipped} ${totalSkipped === 1 ? `${w.one} is` : `${w.many} are`} left out of these ` +
-        `figures: either the ${w.one} is not on file, or the comparison crosses between profit and ` +
-        `loss, where a percentage would be an artefact of the arithmetic rather than a rate of change.`
+        `figures: ${why}.`
       : null,
+    crossings,
   };
 }
 
@@ -240,12 +276,131 @@ export function waterfallGate(view: SecEarningsView): WaterfallGate {
   const steps = [{ key: "revenue", label: "Revenue", delta: revenue }];
   for (const p of parts) {
     const v = val(p.key);
-    // A NULL LINE IS NOT A ZERO EXPENSE. incomeStatementComplete has already
-    // established the lines reconcile, so a null here means the gate and the
-    // cells disagree — refuse rather than draw a step of length zero, which
-    // would read as "this company spends nothing on R&D".
-    if (v === null) return { ok: false, why: "missing-lines" };
+    // ── AN ABSENT LINE IS OMITTED, NOT DRAWN AT ZERO AND NOT A REFUSAL ──────
+    //
+    // A ZERO-LENGTH STEP IS THE THING TO AVOID: a flat "R&D" bar reads as
+    // "this company spends nothing on R&D", which is a claim the filing never
+    // made. But refusing the whole chart is not the fix — AAPL files no
+    // OtherOperatingExpense and its four remaining lines reach operating
+    // income to within 0.03%, so refusing there threw away a chart that was
+    // entirely correct.
+    //
+    // OMITTING IS SAFE BECAUSE THE SUM IS CHECKED SEPARATELY:
+    // incomeStatementComplete has already established that the lines that DO
+    // exist close the gap to operating income, so a chart of those lines adds
+    // up exactly as drawn. The line the filer did not report appears in the
+    // table above as "Not reported" — the reader is not told it is zero, they
+    // are told it is absent, and the chart makes no claim about it at all.
+    //
+    // A FILED ZERO IS OMITTED TOO, for the original reason: it has no length,
+    // so it can only be read as a mislabelled gap.
+    if (v === null || v === 0) continue;
     steps.push({ key: p.key, label: p.label, delta: -v });
   }
+  // ONE EXPENSE STEP AT MINIMUM. "Revenue, then operating income" is a chart
+  // of two bars that breaks nothing down, and a waterfall with no waterfall in
+  // it is worse than the table it replaced.
+  if (steps.length < 2) return { ok: false, why: "missing-lines" };
+
+  // ── THE CHART CHECKS THE SUM IT ACTUALLY DRAWS ───────────────────────────
+  //
+  // This is NOT a second opinion on incomeStatementComplete — it is a
+  // different subtraction. That flag measures GROSS PROFIT minus the operating
+  // expenses; this chart runs from REVENUE, through cost of revenue, to
+  // operating income. The two agree only where the filer's reported gross
+  // profit equals revenue minus cost of revenue, and gross profit is its own
+  // filed line, not a derivation: a filer that classifies something into it
+  // that these lines do not carry passes the flag and would still draw a
+  // waterfall whose bars visibly do not reach the total.
+  //
+  // "Never a chart that visibly fails to sum, never a fudged residual" is the
+  // rule, so the last thing the gate does is add up its own steps. This is
+  // also what WATERFALL_TOLERANCE_PCT is for — it was declared and never
+  // enforced, which is a stated tolerance nothing was holding to.
+  const drawn = steps.reduce((a, st) => a + st.delta, 0);
+  if (Math.abs(drawn - operating) > Math.max(Math.abs(operating), 1) * (WATERFALL_TOLERANCE_PCT / 100)) {
+    return { ok: false, why: "incomplete-breakdown" };
+  }
   return { ok: true, steps, total: operating };
+}
+
+// ── how a tone is SHOWN ────────────────────────────────────────────────────
+
+/**
+ * THE COLOURS, MOVED HERE SO THE PAGE AND THE CARDS SHARE ONE SET.
+ *
+ * These lived in page.tsx while every card that needed them lived in
+ * SecEarningsCards.tsx, so the cards had no way to reach them and the next
+ * green would have been typed again. Two `#22c55e`s is how one of them becomes
+ * `#22c55d` and nobody notices.
+ *
+ * Null is the FOURTH state and it is not a colour decision at all: no claim is
+ * being made, so the mark is the page's muted ink rather than a hue that reads
+ * as a verdict.
+ */
+export function toneColor(tone: EarningsTone | null): string {
+  if (tone === "good") return "#22c55e";
+  if (tone === "weak") return "#ef4444";
+  if (tone === "neutral") return "#facc15";
+  return "rgba(148,163,184,0.55)";
+}
+
+export function toneBg(tone: EarningsTone | null): string {
+  if (tone === "good") return "rgba(34,197,94,0.10)";
+  if (tone === "weak") return "rgba(239,68,68,0.10)";
+  if (tone === "neutral") return "rgba(250,204,21,0.10)";
+  return "rgba(148,163,184,0.08)";
+}
+
+/**
+ * THE WORD THAT GOES WITH THE COLOUR — because colour alone is not a label.
+ *
+ * ── WHY EVERY CHIP CARRIES TEXT ──────────────────────────────────────────
+ * Red-green is the common colour-vision deficiency, and these are the two
+ * colours carrying the verdict. A chip that is only green says nothing to a
+ * reader who cannot separate it from the red one, and nothing at all in print
+ * or forced-colors mode. The colour is the fast path; the word is the claim.
+ *
+ * SEPARATE VERBS PER MEASURE, because "Good" is not what a margin does. A rate
+ * grows or declines; a level widens or narrows. Reusing the score's
+ * Good/Mixed/Weak here would import a verdict this card has not earned — see
+ * the operating-margin line in trendSummary, which deliberately has no tone.
+ */
+export function growthToneWord(tone: EarningsTone | null): string {
+  if (tone === "good") return "Growing";
+  if (tone === "weak") return "Declining";
+  if (tone === "neutral") return "Flat";
+  return "Not measured";
+}
+
+export function marginToneWord(tone: EarningsTone | null): string {
+  if (tone === "good") return "Widening";
+  if (tone === "weak") return "Narrowing";
+  if (tone === "neutral") return "Steady";
+  return "Not measured";
+}
+
+/**
+ * The band, as one readable sentence, so the colours on the card can be checked
+ * against the rule that produced them rather than guessed at.
+ *
+ * ── WHY THE CROSSING CLAUSE IS CONDITIONAL ───────────────────────────────
+ * The page already has this rule for the n/m legend, and check-earnings-render
+ * locks it: "a standing legend for a marker that never appears is noise on
+ * every other page". AAPL has never crossed between profit and loss, so a
+ * sentence explaining what happens when it does is a sentence about nothing —
+ * and a reader who scans it goes looking for the marker it describes.
+ *
+ * Shipped as a FUNCTION rather than two constants so the caller cannot pick
+ * the crossing wording without having counted any crossings.
+ */
+export function toneBandNote(crossings: number): string {
+  const bands =
+    `Growth is called growing or declining beyond ±${GROWTH_BAND_PCT}%, and flat inside it. ` +
+    `A margin move is called beyond ±${MARGIN_BAND_PP} percentage points.`;
+  if (crossings <= 0) return bands;
+  return (
+    `${bands} Where a comparison crosses between profit and loss no colour is shown, because a ` +
+    `percentage there is an artefact of the arithmetic rather than a rate of change.`
+  );
 }
