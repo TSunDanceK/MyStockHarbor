@@ -38,7 +38,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const SECTOR_INDEX_KEY = "msh:sector-index:v1";
+export const SECTOR_INDEX_KEY = "msh:sector-index:v1";
 // Sector membership and market-cap ordering are near-static; the inputs
 // themselves only refresh daily-ish. Six hours keeps the page cheap while still
 // picking up newly-classified symbols within a trading day.

@@ -159,3 +159,87 @@ export function jsonByteLength(value: unknown): number {
     return REQUEST_BYTE_BUDGET + 1;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MEASURING ONE WRITE, AS THE CLIENT WOULD SEND IT.
+//
+// This started life as a private helper inside pickersBuilder.ts, where #428
+// used it to report the largest chunk body. It is here now because it was
+// needed a second time -- by the SEC writes, which #427/#428 never covered --
+// and a second copy of a reconstruction is the shape
+// claude/traps/a-reconstruction-cannot-corroborate-its-source.md warns about:
+// two copies drift, and the one that drifts is the one nobody is reading when
+// the email arrives.
+//
+// THE PASS-THROUGH BRANCH IS NOT DECORATION. @upstash/redis's defaultSerializer
+// passes strings through and JSON.stringifies everything else. A blind
+// JSON.stringify here would double-quote an already-serialized value and report
+// escaping the real request never applies -- a reconstruction that measures
+// something the client does not send.
+//
+// TTL IS OPTIONAL, and that is the part the SEC writes need. `redis.set(k, v)`
+// with no options sends `["set", key, value]`; appending `"ex", undefined`
+// would add bytes Upstash never sees. secManifest's header says NO TTL, EVER,
+// so the no-TTL command is the one it is measured under.
+export function setRequestBytes(
+  key: string,
+  value: unknown,
+  ttlSeconds?: number
+): { valueBytes: number; bodyBytes: number } {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  const valueBytes = Buffer.byteLength(serialized, "utf8");
+  const command =
+    ttlSeconds === undefined
+      ? ["set", key, serialized]
+      : ["set", key, serialized, "ex", ttlSeconds];
+  const bodyBytes = Buffer.byteLength(JSON.stringify(command), "utf8");
+  return { valueBytes, bodyBytes };
+}
+
+/** The same figure, guarded: a measurement must never break the write. */
+export function trySetRequestBytes(
+  key: string,
+  value: unknown,
+  ttlSeconds?: number
+): { valueBytes: number; bodyBytes: number } | null {
+  try {
+    return setRequestBytes(key, value, ttlSeconds);
+  } catch {
+    return null;
+  }
+}
+
+/** A body size as a share of the plan ceiling, in the unit a reader acts on. */
+export function pctOfRequestLimit(bytes: number): string {
+  return `${((bytes / UPSTASH_MAX_REQUEST_BYTES) * 100).toFixed(1)}%`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE ESCAPING INFLATION, MEASURED RATHER THAN ASSUMED.
+//
+// §4 of claude/upstash-request-size-2026-09-11.md reasoned about "a 15%
+// inflation" and said plainly that it was inference. #428's instrumentation
+// has since reported the real figure on every build. From the production
+// warm-picker-universe run of 2026-09-21 07:02 UTC:
+//
+//   6,049,468 bytes serialized value -> 6,491,458 bytes total request body
+//
+// which is +7.3%, roughly half the assumed 15%. The assumption was
+// CONSERVATIVE, so nothing sized against it was unsafe -- but a projection that
+// wants to say "this key is at 68% of the ceiling" has to use the measured
+// number or it is not a projection, it is the old guess wearing a percentage.
+//
+// USED ONLY FOR PROJECTING A KEY WHOSE VALUE IS NOT IN HAND (the debug route
+// works from STRLEN, which costs nothing, rather than pulling megabytes back
+// to measure them exactly). Anywhere the value IS in hand, setRequestBytes
+// measures it instead of estimating.
+export const MEASURED_ESCAPING_INFLATION = 1.073;
+export const MEASURED_ESCAPING_AT = "2026-09-21";
+export const MEASURED_ESCAPING_SOURCE =
+  "[pickers] payload write (chunked) in production at 07:02 UTC: 6,049,468 bytes " +
+  "serialized value, 6,491,458 bytes total request body";
+
+/** STRLEN -> the request body it would be sent in. The cheap projection. */
+export function projectBodyBytes(storedBytes: number): number {
+  return Math.round(storedBytes * MEASURED_ESCAPING_INFLATION);
+}
