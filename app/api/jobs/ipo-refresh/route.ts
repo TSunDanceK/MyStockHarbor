@@ -7,6 +7,8 @@ import {
   coldStartFrom,
   ingestIpoWindow,
 } from "@/lib/server/ipoIngest";
+import { invalidateFeed } from "@/lib/server/feedCache";
+import { ipoFeedKey } from "@/lib/server/ipoCalendar";
 import {
   IPO_REFRESH_COMMANDS_PER_RUN,
   readStoredIpoFilingsMeta,
@@ -176,6 +178,27 @@ export async function GET(req: NextRequest) {
         lastIndexDate: ingest.lastIndexDate,
       });
 
+  // ── THE WRITE IS NOT FINISHED UNTIL WHAT WAS DERIVED FROM IT IS DROPPED ──
+  //
+  // /upcoming-ipos does not read msh:ipo:filings:v1. It reads a DERIVED feed,
+  // `msh:feed:ipo:all:<provider>`, which readFeed serves straight from Redis
+  // for IPO_REVALIDATE_SECONDS (24h) without calling the fetcher at all. So a
+  // run that repairs the store changes nothing a reader sees until that entry
+  // ages out -- and a REDEPLOY DOES NOT HELP, because it clears only the
+  // in-memory tier that Redis is the fallback for.
+  //
+  // Measured the hard way on 2026-09-21: the store was repaired and verified
+  // through /api/debug/ipo-store, two redeploys were confirmed READY and
+  // aliased, and the page still served the pre-repair rows. Both ends checked
+  // out individually; the layer between them was never looked at.
+  //
+  // ONE DEL, and only when a write actually happened. dryRun does not write, so
+  // it must not invalidate either -- a "nothing written" run that nonetheless
+  // cleared the page's cache would be a debug parameter with a live side
+  // effect, which is the mistake the `from`/`to` comment above records.
+  const feedInvalidated =
+    !dryRun && write.ok ? await invalidateFeed(ipoFeedKey()) : false;
+
   const failedDays = ingest.days.filter((d) => d.outcome === "failed").length;
 
   // ── HOW MUCH OF THE COLD START IS LEFT, AND WHY IT IS THE WATERMARK ──────
@@ -255,10 +278,20 @@ export async function GET(req: NextRequest) {
     storedAfter: write.after,
     prunedFilers: write.pruned,
     writeOk: write.ok,
+    // True means the page's derived feed was dropped, so the next render reads
+    // the store again rather than a snapshot of how it used to look. A repair
+    // that leaves this false has not reached a reader.
+    feedInvalidated,
+    feedKey: ipoFeedKey(),
     writeReason: write.reason,
     secRequests: ingest.requests,
     // One meta GET, then the write's own GET + SET.
-    redisCommands: dryRun ? 1 : 1 + IPO_REFRESH_COMMANDS_PER_RUN,
+    // One meta GET, then the write's own GET + SET, then the derived feed's
+    // DEL. The DEL is a fourth command on write days and is the cost of the
+    // repair being visible; the settled "one key, two commands" decision was
+    // about not adding a second STORE key for the watermark, not about never
+    // spending a command on correctness.
+    redisCommands: dryRun ? 1 : 1 + IPO_REFRESH_COMMANDS_PER_RUN + (feedInvalidated ? 1 : 0),
     dryRun,
     ms: Date.now() - started,
   };
