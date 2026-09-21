@@ -93,20 +93,44 @@ const ALL_COUNTS = /([\d,]{5,})\s+(shares|Units|units|ADSs|American Depositary S
 const SHIPPED_A = /([\d,]{5,})\s+shares\s+of\s+(?:our\s+)?(?:common|ordinary)\s+(?:stock|shares)/i;
 const SHIPPED_B = /offering\s+([\d,]{5,})\s+shares/i;
 
-// ── CANDIDATES. Each anchors on the OFFERING rather than on the phrase
-// "shares of common stock", which a cover uses for several different facts.
+// ── CANDIDATES, WRITTEN FROM THE SENTENCES RUN 35583603426 PRINTED ────────
+// The first set (offeringVerb / ipoOf / unitsOffered) matched 7, 1 and 1 of 94
+// -- far too narrow to replace anything. These are the shapes the covers
+// actually use, each traceable to a filing in that run's output:
+//
+//   LiPower F-1/A     "Shares Offered by the Issuer We are offering 5,000,000 shares"
+//   Lannister F-1/A   "$15,000,000 Units 3,000,000 Units Each ..."  (the cover header)
+//   Advance JV 424B4  "We have determined the offering price of the 2,500,000 shares"
 const CANDIDATES = {
-  // "We are offering 10,000,000 shares ..." / "we are offering 5,000,000 ADSs"
+  // "We are offering 10,000,000 shares" / "we are offering 5,000,000 ADSs"
   offeringVerb:
-    /\b(?:we|the\s+company|the\s+issuer)\s+(?:are|is)\s+offering\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
-  // "This is the initial public offering of 5,000,000 shares ..."
+    /\b(?:we|the\s+company|the\s+issuer)\s+(?:are|is)\s+offering\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|American\s+Depositary\s+Shares|units|Units)/i,
+  // The OFFERING summary table: "Shares Offered by the Issuer  5,000,000"
+  offeringTable:
+    /(?:shares|ADSs|units)\s+offered\s+(?:by\s+(?:the\s+)?(?:issuer|us|the\s+company)|hereby)[^.]{0,90}?([\d,]{5,})/i,
+  // "This is the initial public offering of 5,000,000 shares"
   ipoOf:
-    /initial\s+public\s+offering\s+of\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
-  // "offering 20,000,000 Units" — the SPAC shape
-  unitsOffered: /offering\s+(?:of\s+)?(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:units|Units)/i,
-  // The shipped pattern, but refusing a hit whose sentence says "outstanding".
-  sharesOfNotOutstanding: null, // computed below; needs lookahead over context
+    /(?:initial\s+public\s+offering|this\s+offering)\s+of\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
+  // "the offering price of the 2,500,000 shares"
+  offeringPriceOf: /offering\s+price\s+of\s+the\s+([\d,]{5,})\s+(?:shares|ADSs|units|Units)/i,
+  // The SPAC cover header: "$15,000,000 Units 3,000,000 Units"
+  unitHeader: /\$[\d,]{6,}\s+Units\s+([\d,]{5,})\s+Units/i,
 };
+
+// ── THE DISQUALIFIERS, ALSO FROM THE FILINGS ──────────────────────────────
+// A count is not an offering size when its sentence is about something else,
+// and the run above showed THREE distinct somethings, only one of which was
+// the "outstanding" case this probe set out to find:
+//
+//   CYABRA   "by the selling shareholders ... of up to 21,645,176 shares"
+//   Aura     "We are registering the offer and sale from time to time of up to
+//             143,277,908 shares"        (a RESALE, not an offering)
+//   Aptevo   "resale from time to time by certain selling stockholders ... up to
+//             6,444,858 shares"          + a $428.40 price -> a $2.76 BILLION
+//                                          deal size for a microcap
+//   many     "... shares of common stock outstanding after this offering"
+//   many     "issuable upon exercise of ... warrants"
+const DISQUALIFY = /outstanding|resale|selling\s+(?:share|stock)holder|issuable\s+upon|from\s+time\s+to\s+time|registering/i;
 
 const ctx = (text, idx, before = 130, after = 90) =>
   text.slice(Math.max(0, idx - before), Math.min(text.length, idx + after)).replace(/\s+/g, " ");
@@ -170,6 +194,10 @@ for (const record of ingest.records) {
       // "outstanding" anywhere in the trailing clause is the tell we are
       // looking for; recorded per occurrence rather than judged here.
       saysOutstanding: /outstanding/i.test(cover.slice(hit.index, hit.index + 160)),
+      // The WHOLE sentence around the number, both directions -- "resale" and
+      // "selling stockholders" sit BEFORE the count, "outstanding" after it,
+      // so a trailing-only window sees half the disqualifiers.
+      disqualified: DISQUALIFY.test(cover.slice(Math.max(0, hit.index - 180), hit.index + 160)),
       context: ctx(cover, hit.index),
     });
   }
@@ -273,12 +301,12 @@ console.log(`   shipped branch B (offering N shares)                ${rows.filte
 console.log(`   shipped matched nothing                             ${rows.filter((r) => r.shippedWhich === "none").length}`);
 for (const name of Object.keys(CANDIDATES).filter((n) => CANDIDATES[n])) {
   const hits = rows.filter((r) => r.candidateHits[name] !== null);
-  const onOutstanding = hits.filter((r) =>
-    r.occurrences.some((o) => o.value === r.candidateHits[name] && o.saysOutstanding)
+  const bad = hits.filter((r) =>
+    r.occurrences.some((o) => o.value === r.candidateHits[name] && o.disqualified)
   );
   console.log(
     `   cand ${name.padEnd(20)} matched ${String(hits.length).padStart(3)}/${rows.length}` +
-      `   on an "outstanding" sentence: ${onOutstanding.length}`
+      `   of which DISQUALIFIED context: ${bad.length}`
   );
 }
 // COVERAGE IS ONLY HALF THE QUESTION. A rule that matches 40% and is right is
@@ -287,4 +315,22 @@ for (const name of Object.keys(CANDIDATES).filter((n) => CANDIDATES[n])) {
 // ALSO null, so a miss costs a column, not a row.
 const anyCandidate = rows.filter((r) => Object.values(r.candidateHits).some((v) => v !== null));
 console.log(`   at least one anchored candidate matched             ${anyCandidate.length}/${rows.length}`);
+const shippedDisqualified = rows.filter(
+  (r) => r.shippedShares !== null && r.occurrences.some((o) => o.value === r.shippedShares && o.disqualified)
+);
+console.log(`   shipped answer sat in DISQUALIFIED context          ${shippedDisqualified.length}/${rows.filter((r) => r.shippedShares !== null).length}`);
+console.log(`   >>> wider than the "outstanding" count above: it adds resale and`);
+console.log(`   >>> selling-shareholder registrations, which are not offerings at all.`);
+
+// ── A SECOND DEFECT, MEASURED BECAUSE IT WAS IN FRONT OF US ───────────────
+// Aptevo's 424B4 parsed a price of $428.40 -- inside the $1-$500 plausibility
+// bound, and a SINGLE price, so the 3x range-ratio guard never applies to it.
+// Combined with a resale share count it produced a $2.76 BILLION deal size.
+// Not the share count's fault and not this probe's brief; counted so the
+// decision to fix it or not is made against a number.
+const highPrice = rows.filter((r) => r.priceLow !== null && r.priceLow > 100);
+console.log(`\n   covers whose parsed price is above $100/share       ${highPrice.length}`);
+for (const r of highPrice) {
+  console.log(`      ${r.company.slice(0, 40).padEnd(42)} $${r.priceLow}${r.priceHigh !== r.priceLow ? `-$${r.priceHigh}` : " (single price — the 3x ratio guard does not apply)"}`);
+}
 console.log(`\nDONE ${new Date().toISOString()}`);
