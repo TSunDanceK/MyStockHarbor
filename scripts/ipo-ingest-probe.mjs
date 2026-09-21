@@ -166,26 +166,32 @@ console.log(`         prior-reporting only            ${String(funnel.followOnPr
 console.log(`     − no terms on the cover             ${String(funnel.droppedNoTermsLower).padStart(4)}`);
 console.log(`   = RECENT                              ${String(funnel.recent).padStart(4)}`);
 
-console.log(`\n── UPPER TABLE (${upcoming.length})`);
-for (const r of upcoming) {
-  const range =
-    r.priceRangeLow === null
-      ? "—"
-      : r.priceRangeLow === r.priceRangeHigh
-        ? `$${r.priceRangeLow.toFixed(2)}`
-        : `$${r.priceRangeLow.toFixed(2)}-$${r.priceRangeHigh.toFixed(2)}`;
-  console.log(`   ${(r.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 38).padEnd(40)} terms ${r.date} · ${(r.exchange ?? "—").padEnd(28)} ${range}`);
-}
-console.log(`\n── LOWER TABLE (${recent.length})`);
-for (const r of recent) {
-  const range =
-    r.priceRangeLow === null
-      ? "—"
-      : r.priceRangeLow === r.priceRangeHigh
-        ? `$${r.priceRangeLow.toFixed(2)}`
-        : `$${r.priceRangeLow.toFixed(2)}-$${r.priceRangeHigh.toFixed(2)}`;
-  console.log(`   ${(r.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 38).padEnd(40)} listed ${r.date} · ${(r.exchange ?? "—").padEnd(28)} ${range}`);
-}
+// THE COLUMNS THE PAGE RENDERS, not a subset. Shares and deal size were left
+// off this print, so "does Deal Size actually appear?" could not be answered
+// from a run -- only from the stored document, which travels as 80 lines of
+// base64 and pushes this report out of the log tail.
+const money = (v) =>
+  v === null ? "—" : v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : `$${(v / 1e6).toFixed(2)}M`;
+const priceOf = (r) =>
+  r.priceRangeLow === null
+    ? "—"
+    : r.priceRangeLow === r.priceRangeHigh
+      ? `$${r.priceRangeLow.toFixed(2)}`
+      : `$${r.priceRangeLow.toFixed(2)}-$${r.priceRangeHigh.toFixed(2)}`;
+const line = (r, verb) =>
+  `   ${(r.symbol ?? "—").padEnd(6)} ${r.company.slice(0, 34).padEnd(36)} ${verb} ${r.date} · ` +
+  `${priceOf(r).padEnd(15)} ${(r.sharesOffered === null ? "—" : r.sharesOffered.toLocaleString()).padStart(13)} ` +
+  `${money(r.dealSize).padStart(10)}`;
+
+console.log(`\n── UPPER TABLE (${upcoming.length})   symbol · company · date · price · SHARES · DEAL SIZE`);
+for (const r of upcoming) console.log(line(r, "terms "));
+console.log(`\n── LOWER TABLE (${recent.length})   symbol · company · date · price · SHARES · DEAL SIZE`);
+for (const r of recent) console.log(line(r, "listed"));
+const withDeal = [...upcoming, ...recent].filter((r) => r.dealSize !== null).length;
+console.log(
+  `\n   DEAL SIZE POPULATED ON ${withDeal}/${upcoming.length + recent.length} RENDERED ROWS` +
+    ` — the number the SPAC fix exists to move.`
+);
 
 // A WALK OF ONE WEEK CANNOT FILL EITHER TABLE, and saying so here is what stops
 // a small number being read as a quiet market. The upper table draws on 45 days
@@ -245,10 +251,19 @@ fs.writeFileSync("data/sec/ipo-ingest-document.json", JSON.stringify(doc));
 //   tr -d '\n' < b64 | base64 -d | gunzip > document.json   # CRC must pass
 //   sha256sum document.json                                  # must match below
 const json = JSON.stringify(doc);
-const gz = zlib.gzipSync(Buffer.from(json, "utf8")).toString("base64");
 const sha = crypto.createHash("sha256").update(json, "utf8").digest("hex");
-console.log(`\n<<<GZIP name=ipo-ingest-document.json.gz b64=${gz.length} records=${doc.records.length} sha256=${sha}>>>`);
-for (let i = 0; i < gz.length; i += 120) console.log(gz.slice(i, i + 120));
-console.log(`<<<ENDGZIP name=ipo-ingest-document.json.gz>>>`);
+console.log(`\n   document sha256 ${sha}  (${json.length} bytes, ${doc.records.length} records)`);
+// OFF BY DEFAULT. The payload is ~80 wrapped lines and the log is read as a
+// TAIL measured in lines, so printing it unconditionally buries the report it
+// sits beneath -- which is what happened on runs 35585163429 and 35587711390.
+// Ask for it only when the records are actually needed locally.
+if (process.env.IPO_EMIT_DOCUMENT === "1") {
+  const gz = zlib.gzipSync(Buffer.from(json, "utf8")).toString("base64");
+  console.log(`<<<GZIP name=ipo-ingest-document.json.gz b64=${gz.length} sha256=${sha}>>>`);
+  for (let i = 0; i < gz.length; i += 120) console.log(gz.slice(i, i + 120));
+  console.log(`<<<ENDGZIP name=ipo-ingest-document.json.gz>>>`);
+} else {
+  console.log(`   (set IPO_EMIT_DOCUMENT=1 to print the gzipped document too)`);
+}
 
 console.log(`\nDONE ${new Date().toISOString()}`);
