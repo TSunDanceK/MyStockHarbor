@@ -206,6 +206,10 @@ export async function GET(req: NextRequest) {
   const ok =
     failedDays === 0 &&
     (dryRun || write.ok) &&
+    // A RUN THAT DROPPED FILERS IS NOT AN OK RUN. It used to report ok:true
+    // with caughtUp:true because the date loop had finished; the filers it
+    // never read are invisible from every other number in this response.
+    !ingest.filersTruncated &&
     // A run that read no submissions at all while claiming to have touched
     // filers is a failed run wearing a success's clothes.
     !(ingest.filersTouched > 0 && ingest.submissionsRead === 0);
@@ -220,6 +224,11 @@ export async function GET(req: NextRequest) {
     absent: ingest.days.filter((d) => d.outcome === "absent").length,
     failed: failedDays,
     stoppedOnDeadline: ingest.stoppedOnDeadline,
+    // THE ONE TO READ WHEN A RE-WALK LOOKS DONE BUT THE PAGE DOES NOT CHANGE.
+    // True means the filer loop ran out of time, so this slice was NOT
+    // finished and the watermark deliberately did not move. Re-run the same
+    // slice with a smaller maxDays.
+    filersTruncated: ingest.filersTruncated,
     watermark: write.lastIndexDate,
     // Days between the watermark and the latest index EDGAR has published.
     // 0 AND caughtUp:true is the only state in which the store can serve both
