@@ -269,6 +269,65 @@ is how the two scales become interchangeable.
 
 ---
 
+## 4a. The lead-paragraph stammer, found on the preview
+
+Not in the brief and not on my eye-check list — the owner found it on
+`/stock/AAPL/news`:
+
+> "Earnings tone is currently mixed earnings tone."
+
+**It was on every band and every symbol, not just AAPL and not just MIXED.**
+`scoreToEarningsLabel` returns a complete noun phrase — "Positive earnings
+tone" / "Mixed earnings tone" / "Weak earnings tone" — and `buildLeadSummary`
+interpolated it into a sentence that had already said the noun. There is a
+fourth case that is wrong differently: with no earnings headlines the label is
+"No clear earnings read", giving *"Earnings tone is currently no clear earnings
+read."*
+
+**Pre-existing**, on `main` since #451. Nothing in this pass touched
+`buildLeadSummary` or the scorer; the preview is simply the first time anyone
+read the paragraph.
+
+### Why reading that line did not catch it
+
+The clause immediately before it interpolates `newsScore.label` **identically
+and correctly**, because `scoreToNewsLabel` returns a bare adjective
+("Bullish") — so "a bullish headline tone" reads fine and the template looks
+sound. Two scorers returned **different parts of speech under one field name**,
+`label`, and nothing in the types could say so.
+
+### The fix
+
+`EARNINGS_TONE_BANDS` in `lib/stock-news-data.ts` — one table carrying
+threshold, bare `word`, standalone `label` and `tone`. `scoreToEarningsLabel`
+and the new `scoreToEarningsWord` both read it, and `EarningsScoreResult` gains
+`word: string | null`. Prose takes the word; chips (the sector page,
+`AiInsightCard`) keep the label, where the full phrase is correct.
+
+A null `word` takes a different sentence rather than a blank — "There is no
+clear earnings read in the recent headlines." Same rule the function already
+applied to a null trend: no headlines is not a tone of "mixed", it is no
+reading, and naming a state that was never established is the thing to avoid.
+
+**The fix also removed a duplicate that was already there.** `scoreEarnings()`
+carried its own inline `if (score >= 64) … else if (score <= 36)` chain with
+the same three label strings, 700 lines from `scoreToEarningsLabel`. They
+agreed, which is the only reason nobody noticed — and adding a third form to
+two copies would have made three. It now reads the table for label and tone and
+keeps only its `reason`, which genuinely differs per branch.
+
+`scripts/check-news-lead-copy.mjs` runs the real builder over every band and
+both sides of every boundary, asserts the null-word case, and pins the 64/37
+split the if/else chain had — the actual risk of rewriting it as a
+`>= from` table. Mutations included: interpolating the label again brings the
+stammer back, and the check fails if it does not.
+
+**Not changed:** `earningsTone: earningsScore.label` reaching the AI brief
+prompt (`app/api/stock-news/insight/route.ts:127`). It is a field value, not
+rendered copy — mildly redundant to a model, not a defect.
+
+---
+
 ## 5. What is still on FMP, and is a follow-up rather than a regression
 
 `lib/latest-earnings-data.ts` is **unchanged and still live**. The card no
@@ -308,8 +367,9 @@ renaming the type would not rename the JSON.
 ```
 npx tsc --noEmit                    clean
 npx eslint <changed files>          no new errors or warnings vs main's baseline
-node scripts/check-all.mjs          101 of 102 pass
+node scripts/check-all.mjs          102 of 103 pass
 node scripts/check-earnings-snapshot.mjs   all pass
+node scripts/check-news-lead-copy.mjs      all pass
 ```
 
 The one failure is `check-doc-citations.mjs`, which **already fails on `main`**

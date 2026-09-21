@@ -172,14 +172,34 @@ function buildLeadSummary(args: {
   companyName: string;
   trend: string | null;
   newsScore: LiveNewsScore;
-  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string; };
+  earningsScore: { score: number; tone: ScoreTone; label: string; word: string | null; reason: string; };
 }) {
   const { symbol, companyName, trend, newsScore, earningsScore } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
   // A null trend is not a "mixed backdrop", it is no backdrop. Drop the clause
   // rather than naming a state that was never established.
   const backdrop = trend === null ? "" : ` with a ${trend.toLowerCase()} backdrop`;
-  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
+  // ── THE EARNINGS CLAUSE, AND WHY IT IS NOT `earningsScore.label` ────────
+  //
+  // It was, and it read "Earnings tone is currently mixed earnings tone." on
+  // every symbol and in every band. `label` is a complete noun phrase
+  // ("Mixed earnings tone") built for a standalone chip; this sentence has
+  // already supplied the noun. `word` is the bare adjective for exactly this
+  // position -- see EARNINGS_TONE_BANDS in lib/stock-news-data.ts.
+  //
+  // WHY THE BUG SURVIVED A READING OF THIS LINE: the clause immediately before
+  // it interpolates newsScore.label the same way and is CORRECT, because
+  // scoreToNewsLabel returns a bare adjective ("Bullish"). Two scorers, one
+  // field name, different parts of speech.
+  //
+  // A null word takes a different sentence rather than a blank, for the same
+  // reason the backdrop clause above is dropped entirely: no earnings
+  // headlines is not a tone of "mixed", it is no reading at all, and naming a
+  // state that was never established is the thing to avoid.
+  const earningsClause = earningsScore.word
+    ? `Earnings tone is currently ${earningsScore.word}.`
+    : "There is no clear earnings read in the recent headlines.";
+  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. ${earningsClause}`;
 }
 
 // NOT a duplicate of the lib's isLowValueNewsItem, despite the shared name: the
