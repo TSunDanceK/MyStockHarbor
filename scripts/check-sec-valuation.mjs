@@ -212,5 +212,74 @@ console.log("\n4. THE FIGURES, AND WHAT THEY REFUSE");
     mod.marketCap(ok, 0) === null && mod.peRatio(ok, -3) === null);
 }
 
+console.log("\n6. A FOREIGN PRIVATE ISSUER'S SHARE COUNT IS IN A DIFFERENT UNIT FROM ITS PRICE");
+{
+  // The trap in one line: this cover page is PERFECT. Single class, no
+  // candidates, a clean positive count. Every guard that already existed
+  // passes it, and the cap it produces is five times too big.
+  const tsm = mod.valuationInputs(set({ symbol: "TSM", quarters: FOUR }));
+  check("the share basis is still read -- the count is a real filed fact",
+    tsm.shares?.val === 1_000_000,
+    "suppressing the COUNT would hide something the filer did state");
+  check("but the refusal is raised, off the symbol and not off the cover page",
+    tsm.refusals.includes("ads-ratio-makes-shares-incomparable"));
+  check("...so market cap refuses rather than multiplying ordinary shares by an ADS price",
+    mod.marketCap(tsm, 50)?.ok === false &&
+      mod.marketCap(tsm, 50)?.why === "ads-ratio-makes-shares-incomparable",
+    `got ${JSON.stringify(mod.marketCap(tsm, 50))} — 1,000,000 x 50 = 50,000,000 is plausible and wrong`);
+  check("...and the refusal names the UNIT, not the company",
+    /ordinary|depositary/.test(mod.REFUSAL_WORDS["ads-ratio-makes-shares-incomparable"]));
+
+  check("all five decided filers are suppressed",
+    ["HDB", "IBN", "TSM", "BABA", "ASML"].every((x) => mod.sharesAreIncomparableToPrice(x)),
+    "claude/DECISIONS-earnings-calendar-v1-2026-09-21 names exactly these five");
+  check("...case-insensitively, since symbols reach this from several stores",
+    mod.sharesAreIncomparableToPrice("tsm") && mod.sharesAreIncomparableToPrice(" Tsm "));
+  check("a domestic filer is UNAFFECTED and still gets a cap",
+    mod.marketCap(mod.valuationInputs(set({ quarters: FOUR })), 50)?.ok === true,
+    "the default fixture symbol is T — a 20-F rule must not reach a 10-K filer");
+
+  // THE ADS REASON WINS OVER THE CLASS REASON. Both are true for a
+  // multi-class FPI; only one of them is certain.
+  const both = mod.valuationInputs(set({
+    symbol: "BABA", quarters: FOUR,
+    cover: { asOf: "2026-07-15", accession: "a", filed: "2026-07-15", val: null, derived: "ambiguous", candidates: [6, 4] },
+  }));
+  check("a multi-class FPI is refused for the UNIT, the more specific reason",
+    mod.marketCap(both, 50)?.why === "ads-ratio-makes-shares-incomparable");
+
+  // SCOPED DELIBERATELY. See the note on peRatio: the same mismatch appears to
+  // reach P/E, and extending the rule there is an owner decision that has not
+  // been taken. This asserts TODAY'S decided behaviour so that changing it is a
+  // visible, deliberate edit to this line rather than a silent drift.
+  check("P/E is NOT suppressed — scope is the market-cap column, and that is recorded",
+    mod.peRatio(tsm, 50)?.ok === true,
+    "if the owner extends the rule, change this line and add the P/E mutant");
+
+  await underMutation(
+    "stage 4: FPI market-cap suppression removed",
+    '  if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {\n    return { ok: false, why: "ads-ratio-makes-shares-incomparable" };\n  }',
+    "",
+    (m) => m.marketCap(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.ok === false
+  );
+  // THE ORDERING MUTANT, AND IT IS THE ONE THAT MATTERS. Gating the guard on a
+  // MISSING share count is the plausible way to write this, and it is wrong in
+  // exactly the case the rule exists for: TSM's cover page is clean, so
+  // `inputs.shares` is set, so the guard never fires and the cap goes out five
+  // times too big. Nothing throws and nothing looks odd on screen.
+  await underMutation(
+    "stage 4: FPI suppression gated on a missing share count (ordering)",
+    '  if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {',
+    '  if (!inputs.shares && inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {',
+    (m) => m.marketCap(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.ok === false
+  );
+  await underMutation(
+    "stage 4: FPI symbol matching stops normalising case",
+    "return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());",
+    "return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol));",
+    (m) => m.sharesAreIncomparableToPrice("tsm") === true
+  );
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);
