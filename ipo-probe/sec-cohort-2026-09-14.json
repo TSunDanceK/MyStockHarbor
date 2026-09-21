@@ -1,0 +1,667 @@
+{
+  "window": [
+    "2026-07-16",
+    "2026-09-14"
+  ],
+  "formCounts": {
+    "25": 18,
+    "144": 13180,
+    "425": 910,
+    "487": 155,
+    "497": 2149,
+    "1-A": 28,
+    "1-A POS": 34,
+    "1-A-W": 8,
+    "1-A/A": 33,
+    "1-K": 6,
+    "1-K/A": 3,
+    "1-SA": 14,
+    "1-U": 110,
+    "1-U/A": 2,
+    "1-Z": 6,
+    "1-Z-W": 1,
+    "1/A": 96,
+    "10-12B": 3,
+    "10-12B/A": 5,
+    "10-12G": 12,
+    "10-12G/A": 11,
+    "10-D": 1733,
+    "10-D/A": 66,
+    "10-K": 203,
+    "10-K/A": 47,
+    "10-KT": 1,
+    "10-Q": 5216,
+    "10-Q/A": 53,
+    "11-K": 3,
+    "11-K/A": 1,
+    "13F-HR": 8195,
+    "13F-HR/A": 360,
+    "13F-NT": 1896,
+    "13F-NT/A": 13,
+    "144/A": 146,
+    "15-12G": 85,
+    "15-12G/A": 2,
+    "15-15D": 22,
+    "15F-12B": 2,
+    "15F-12G": 1,
+    "18-K": 5,
+    "18-K/A": 20,
+    "20-F": 80,
+    "20-F/A": 16,
+    "20FR12B": 1,
+    "20FR12B/A": 4,
+    "24F-2NT": 627,
+    "24F-2NT/A": 4,
+    "25-NSE": 262,
+    "253G1": 4,
+    "253G2": 69,
+    "253G3": 3,
+    "3/A": 124,
+    "305B2": 31,
+    "4/A": 814,
+    "40-17F1": 15,
+    "40-17F2": 32,
+    "40-17G": 351,
+    "40-17G/A": 6,
+    "40-24B2": 5,
+    "40-33": 6,
+    "40-6B": 6,
+    "40-8B25": 3,
+    "40-8F-2/A": 1,
+    "40-APP": 443,
+    "40-APP/A": 639,
+    "40-F": 2,
+    "40FR12B": 2,
+    "40FR12B/A": 2,
+    "424B1": 4,
+    "424B2": 33294,
+    "424B3": 1855,
+    "424B4": 73,
+    "424B5": 1305,
+    "424B7": 56,
+    "424B8": 37,
+    "424H": 38,
+    "424H/A": 2,
+    "485APOS": 262,
+    "485BPOS": 543,
+    "485BXT": 1017,
+    "486APOS": 5,
+    "486BPOS": 90,
+    "486BXT": 5,
+    "497AD": 61,
+    "497J": 632,
+    "497K": 3118,
+    "497VPI": 192,
+    "497VPSUB": 9,
+    "497VPU": 311,
+    "6-K": 4712,
+    "6-K/A": 63,
+    "6B ORDR": 2,
+    "8-A12B": 276,
+    "8-A12B/A": 20,
+    "8-A12G": 8,
+    "8-K": 10931,
+    "8-K/A": 269,
+    "8-K12B": 11,
+    "8-K12G3": 1,
+    "8-K15D5": 1,
+    "ABS-15G": 335,
+    "ABS-15G/A": 27,
+    "ABS-EE": 1487,
+    "ABS-EE/A": 35,
+    "ANNLRPT": 2,
+    "APP NTC": 15,
+    "APP ORDR": 16,
+    "APP WD": 189,
+    "APP WDG": 6,
+    "ARS": 129,
+    "ARS/A": 1,
+    "ATS-N-W": 1,
+    "ATS-N/CA": 2,
+    "ATS-N/MA": 11,
+    "ATS-N/UA": 10,
+    "AW": 41,
+    "AW WD": 2,
+    "C-AR": 43,
+    "C-TR": 8,
+    "C-TR-W": 1,
+    "C-U": 89,
+    "C-W": 9,
+    "C/A": 110,
+    "C/A-W": 1,
+    "CB": 11,
+    "CB/A": 2,
+    "CERT": 243,
+    "CFPORTAL/A": 2,
+    "CORRESP": 12,
+    "D/A": 3588,
+    "DEF 14A": 345,
+    "DEF 14C": 72,
+    "DEFA14A": 751,
+    "DEFA14C": 2,
+    "DEFC14A": 15,
+    "DEFM14A": 35,
+    "DEFM14C": 4,
+    "DEFR14A": 3,
+    "DEFR14C": 1,
+    "DEL AM": 9,
+    "DFAN14A": 90,
+    "DFRN14A": 6,
+    "DRS": 21,
+    "DRS/A": 32,
+    "DSTRBRPT": 18,
+    "EFFECT": 648,
+    "F-1": 56,
+    "F-1/A": 81,
+    "F-10": 8,
+    "F-10/A": 6,
+    "F-10EF": 4,
+    "F-10POS": 2,
+    "F-1MEF": 2,
+    "F-3": 59,
+    "F-3/A": 27,
+    "F-3ASR": 12,
+    "F-4": 10,
+    "F-4/A": 38,
+    "F-6": 22,
+    "F-6 POS": 68,
+    "F-6/A": 2,
+    "F-6EF": 114,
+    "F-80": 1,
+    "F-N": 4,
+    "F-X": 27,
+    "F-X/A": 1,
+    "FWP": 4535,
+    "G-FIN/A": 3,
+    "IRANNOTICE": 22,
+    "MA": 1,
+    "MA-A": 18,
+    "MA-I": 54,
+    "MA-I/A": 126,
+    "MA-W": 3,
+    "MA/A": 17,
+    "MSD/A": 7,
+    "N-14": 27,
+    "N-14 8C": 7,
+    "N-14 8C/A": 3,
+    "N-14/A": 3,
+    "N-18F1": 1,
+    "N-1A": 3,
+    "N-1A/A": 6,
+    "N-2": 46,
+    "N-2/A": 51,
+    "N-23C-2": 38,
+    "N-23C3A": 98,
+    "N-2ASR": 3,
+    "N-30B-2": 147,
+    "N-30D": 42,
+    "N-4": 2,
+    "N-4/A": 2,
+    "N-54A": 4,
+    "N-54C": 3,
+    "N-6": 1,
+    "N-6F": 1,
+    "N-6F/A": 2,
+    "N-8A": 16,
+    "N-8B-2/A": 1,
+    "N-8F": 13,
+    "N-8F NTC": 11,
+    "N-8F ORDR": 8,
+    "N-8F/A": 6,
+    "N-CEN": 267,
+    "N-CEN/A": 19,
+    "N-CSR": 424,
+    "N-CSR/A": 22,
+    "N-CSRS": 1014,
+    "N-CSRS/A": 27,
+    "N-MFP3": 652,
+    "N-MFP3/A": 17,
+    "N-PX": 11153,
+    "N-PX/A": 119,
+    "N-VP/A": 76,
+    "NPORT-P": 9606,
+    "NPORT-P/A": 79,
+    "NRSRO-UPD": 3,
+    "NT 10-K": 25,
+    "NT 10-K/A": 1,
+    "NT 10-Q": 221,
+    "NT 10-Q/A": 7,
+    "NT 20-F": 22,
+    "NT N-CEN": 2,
+    "NT NPORT-P": 114,
+    "NT-NCSR": 1,
+    "POS AM": 175,
+    "POS AMI": 15,
+    "POS EX": 61,
+    "POSASR": 656,
+    "PRE 14A": 175,
+    "PRE 14C": 41,
+    "PREC14A": 14,
+    "PREM14A": 33,
+    "PREM14C": 1,
+    "PREN14A": 2,
+    "PRER14A": 22,
+    "PRER14C": 3,
+    "PRRN14A": 16,
+    "PX14A6G": 20,
+    "QRTLYRPT": 2,
+    "QUALIF": 36,
+    "REVOKED": 3,
+    "RW": 46,
+    "RW WD": 2,
+    "S-1": 167,
+    "S-1/A": 177,
+    "S-11": 4,
+    "S-11/A": 3,
+    "S-1MEF": 7,
+    "S-3": 133,
+    "S-3/A": 39,
+    "S-3ASR": 385,
+    "S-3D": 2,
+    "S-3DPOS": 2,
+    "S-3MEF": 2,
+    "S-4": 80,
+    "S-4 POS": 2,
+    "S-4/A": 96,
+    "S-4MEF": 1,
+    "S-6": 189,
+    "S-6/A": 39,
+    "S-8": 466,
+    "S-8 POS": 427,
+    "S-B": 2,
+    "S-B/A": 4,
+    "SBSE-A/A": 13,
+    "SBSE-BD": 1,
+    "SBSE-C": 1,
+    "SBSE/A": 1,
+    "SC 13D/A": 1,
+    "SC 13E3": 6,
+    "SC 13E3/A": 6,
+    "SC 14D9": 2,
+    "SC 14D9/A": 11,
+    "SC 14F1": 3,
+    "SC TO-C": 12,
+    "SC TO-I": 113,
+    "SC TO-I/A": 124,
+    "SC TO-T": 4,
+    "SC TO-T/A": 38,
+    "SC13E4F": 1,
+    "SC13E4F/A": 2,
+    "SC14D1F": 2,
+    "SC14D1F/A": 2,
+    "SC14D9C": 7,
+    "SC14D9F": 1,
+    "SCHEDULE 13D": 386,
+    "SCHEDULE 13G": 4472,
+    "SD": 32,
+    "SD/A": 2,
+    "SF-1": 2,
+    "SF-3": 1,
+    "SF-3/A": 6,
+    "SP 15D2": 1,
+    "SUPPL": 16,
+    "TA-1": 4,
+    "TA-1/A": 30,
+    "TA-2": 6,
+    "TA-2/A": 1,
+    "UPLOAD": 13,
+    "X-17A-5": 119,
+    "X-17A-5/A": 7
+  },
+  "cohort": {
+    "eightA": 187,
+    "withRegistration": 41,
+    "withFinal": 38
+  },
+  "assessed": [
+    {
+      "company": "Robinhood Ventures Fund II",
+      "cik": "2131040",
+      "filings": [
+        {
+          "form": "8-A12B",
+          "date": "2026-07-20"
+        },
+        {
+          "form": "424B1",
+          "date": "2026-08-13"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": null,
+        "eightAToFinal": 24,
+        "amendToFinal": null
+      },
+      "final": {
+        "form": "424B1",
+        "date": "2026-08-13",
+        "doc": "ck0002131040-20260813.htm",
+        "bytes": 4784904,
+        "priceRange": null,
+        "priceFinal": "25.00",
+        "shares": "8,000,000",
+        "exchange": "New York Stock Exchange",
+        "ticker": "RVII",
+        "listingDate": [
+          "have been approved for listing, subject to official notice of issuance, on the New York Stock Exchange ( NYSE ) under the symbol RVII"
+        ]
+      }
+    },
+    {
+      "company": "AMR Resources Acquisition Corp.",
+      "cik": "2110119",
+      "filings": [
+        {
+          "form": "8-A12B",
+          "date": "2026-07-16"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-07-17"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": null,
+        "eightAToFinal": 1,
+        "amendToFinal": null
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-07-17",
+        "doc": "ea0274132-05.htm",
+        "bytes": 4271103,
+        "priceRange": null,
+        "priceFinal": "11.50",
+        "shares": null,
+        "exchange": "Nasdaq",
+        "ticker": null,
+        "listingDate": [
+          "shares and warrants comprising the units are expected to begin separate trading on the 52 nd &#x00a0;day following the date of this prospectus unless BTIG informs us of its decision to allow earlier separate trading, subject to our having f",
+          "have been approved for listing on The Global Market tier of The Nasdaq Stock Market LLC, or Nasdaq, under the symbol &#x201c;AMACU,&#x201d; on or promptly after the date of this prospectus",
+          "on or about July 20, 2026"
+        ]
+      }
+    },
+    {
+      "company": "ARC Group Securities Acquisition I",
+      "cik": "2094712",
+      "filings": [
+        {
+          "form": "S-1/A",
+          "date": "2026-07-29"
+        },
+        {
+          "form": "8-A12B",
+          "date": "2026-08-03"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-08-05"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": 5,
+        "eightAToFinal": 2,
+        "amendToFinal": 7
+      },
+      "amend": {
+        "form": "S-1/A",
+        "date": "2026-07-29",
+        "doc": "forms-1a.htm",
+        "bytes": 120910,
+        "priceRange": null,
+        "priceFinal": null,
+        "shares": null,
+        "exchange": "Nasdaq",
+        "ticker": null,
+        "listingDate": []
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-08-05",
+        "doc": "form424b4.htm",
+        "bytes": 2982103,
+        "priceRange": null,
+        "priceFinal": "11.50",
+        "shares": null,
+        "exchange": "Nasdaq",
+        "ticker": "FJDIU",
+        "listingDate": [
+          "expected to begin trading on or promptly after the date of this prospectus",
+          "shares, rights and warrants: The units are expected to begin trading on or promptly after the date of this prospectus",
+          "on or about August 5, 2026"
+        ]
+      }
+    },
+    {
+      "company": "Advasa Holdings, Inc.",
+      "cik": "2084227",
+      "filings": [
+        {
+          "form": "8-A12B",
+          "date": "2026-08-11"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-08-12"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": null,
+        "eightAToFinal": 1,
+        "amendToFinal": null
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-08-12",
+        "doc": "form424b4.htm",
+        "bytes": 1238580,
+        "priceRange": null,
+        "priceFinal": "0.00001",
+        "shares": "94,046,357",
+        "exchange": "Nasdaq Global Market",
+        "ticker": null,
+        "listingDate": [
+          "expect our Common Stock to begin trading on Nasdaq on or about August 17, 2026",
+          "on or about August 17, 2026"
+        ]
+      }
+    },
+    {
+      "company": "Apnimed, Inc.",
+      "cik": "1745648",
+      "filings": [
+        {
+          "form": "S-1/A",
+          "date": "2026-07-27"
+        },
+        {
+          "form": "8-A12B",
+          "date": "2026-07-29"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-07-31"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": 2,
+        "eightAToFinal": 2,
+        "amendToFinal": 4
+      },
+      "amend": {
+        "form": "S-1/A",
+        "date": "2026-07-27",
+        "doc": "apni-20260727.htm",
+        "bytes": 8029195,
+        "priceRange": "$14.00\u2013$16.00",
+        "priceFinal": "15.00",
+        "shares": "10,000,000",
+        "exchange": "Nasdaq Global Market",
+        "ticker": null,
+        "listingDate": []
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-07-31",
+        "doc": "apmd_424b4.htm",
+        "bytes": 7693918,
+        "priceRange": null,
+        "priceFinal": "16.00",
+        "shares": "12,000,000",
+        "exchange": "Nasdaq Global Select Market",
+        "ticker": null,
+        "listingDate": [
+          "has been approved for listing on The Nasdaq Global Select Market (Nasdaq) under the symbol &#x201c;APMD",
+          "on or about August 3, 2026"
+        ]
+      }
+    },
+    {
+      "company": "Attovia Therapeutics, Inc.",
+      "cik": "2058707",
+      "filings": [
+        {
+          "form": "8-A12B",
+          "date": "2026-07-29"
+        },
+        {
+          "form": "S-1/A",
+          "date": "2026-07-29"
+        },
+        {
+          "form": "S-1/A",
+          "date": "2026-08-04"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-08-05"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": 0,
+        "eightAToFinal": 7,
+        "amendToFinal": 7
+      },
+      "amend": {
+        "form": "S-1/A",
+        "date": "2026-08-04",
+        "doc": "d40469ds1a.htm",
+        "bytes": 2580277,
+        "priceRange": null,
+        "priceFinal": "17.00",
+        "shares": "17,000,000",
+        "exchange": "Nasdaq Global Market",
+        "ticker": "ATTO",
+        "listingDate": []
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-08-05",
+        "doc": "d40469d424b4.htm",
+        "bytes": 2526517,
+        "priceRange": null,
+        "priceFinal": "17.00",
+        "shares": "17,000,000",
+        "exchange": "Nasdaq Global Market",
+        "ticker": "ATTO",
+        "listingDate": [
+          "has been approved for listing on the Nasdaq Global Market under the symbol ATTO"
+        ]
+      }
+    },
+    {
+      "company": "B&R Technology Merger Corp.",
+      "cik": "2131350",
+      "filings": [
+        {
+          "form": "8-A12B",
+          "date": "2026-07-20"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-07-21"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": null,
+        "eightAToFinal": 1,
+        "amendToFinal": null
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-07-21",
+        "doc": "d112816d424b4.htm",
+        "bytes": 1894755,
+        "priceRange": null,
+        "priceFinal": "11.50",
+        "shares": null,
+        "exchange": "Nasdaq Global Market",
+        "ticker": "BRTMU",
+        "listingDate": [
+          "have been approved for listing on the Nasdaq Global Market, or Nasdaq, under the symbol BRTMU on or promptly after the date of this prospectus",
+          "on or about July 22, 2026"
+        ]
+      }
+    },
+    {
+      "company": "BOA Acquisition Corp. II",
+      "cik": "2080216",
+      "filings": [
+        {
+          "form": "S-1/A",
+          "date": "2026-07-21"
+        },
+        {
+          "form": "S-1/A",
+          "date": "2026-07-27"
+        },
+        {
+          "form": "8-A12B",
+          "date": "2026-08-03"
+        },
+        {
+          "form": "424B4",
+          "date": "2026-08-04"
+        }
+      ],
+      "leadTimes": {
+        "firstFilingToEightA": 13,
+        "eightAToFinal": 1,
+        "amendToFinal": 14
+      },
+      "amend": {
+        "form": "S-1/A",
+        "date": "2026-07-27",
+        "doc": "d820212ds1a.htm",
+        "bytes": 3072038,
+        "priceRange": null,
+        "priceFinal": "0.004",
+        "shares": null,
+        "exchange": "Nasdaq Global Market",
+        "ticker": "THEOU",
+        "listingDate": [
+          "expected to begin trading promptly after the date of this prospectus",
+          "shares and rights The units are expected to begin trading promptly after the date of this prospectus"
+        ]
+      },
+      "final": {
+        "form": "424B4",
+        "date": "2026-08-04",
+        "doc": "d820212d424b4.htm",
+        "bytes": 1931123,
+        "priceRange": null,
+        "priceFinal": "0.004",
+        "shares": null,
+        "exchange": "Nasdaq Global Market",
+        "ticker": "THEOU",
+        "listingDate": [
+          "expected to begin trading on August 4, 2026",
+          "shares and rights The units are expected to begin trading promptly after the date of this prospectus",
+          "have been approved for listing on the Nasdaq Global Market ( Nasdaq ) under the symbol THEOU and are expected to begin trading on August 4, 2026",
+          "on or about August 5, 2026"
+        ]
+      }
+    }
+  ]
+}
