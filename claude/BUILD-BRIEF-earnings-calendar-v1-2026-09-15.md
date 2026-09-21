@@ -1,15 +1,131 @@
 # BUILD BRIEF — /earnings-calendar v1 (2026-09-15)
 
-> **PARTIAL MIRROR — §§6 (tail) to 10.** Mirrored 2026-09-21 from the operator's
-> pastes, in two rounds: §9 first, then §§6(tail)–10.
+> **COMPLETE MIRROR.** Mirrored 2026-09-21 from the operator's pastes, in three
+> rounds: §9 first, then §§6(tail)–10, then §§1–5. The earlier PARTIAL warning is
+> removed because the gap it named is closed.
 >
-> **§§1 to 5, and the head of §6, are still MISSING and are NOT reconstructed
-> here.** The brief is the denominator for coverage on this build, and a
-> reconstructed denominator is worse than an absent one — it reads as the real
-> list to whoever opens it next. Treat any claim about "what the brief says"
-> outside the sections below as unsourced.
+> §6's head — the measurement that chose k=7 — was never supplied separately; the
+> tail below opens at the top-50 cut. That is the one known remainder.
 >
 > Cited by `scripts/check-brief-mutants.mjs`, which reads §9 as the denominator.
+
+---
+
+## §1 — What the page becomes
+
+Two halves, each with one honest promise.
+
+**Top — "Due to report".** Top 50 by market cap, k=7. The existing
+`getUpcomingTickerItems` strip, re-sourced. Nearest 8–10 visible, expand on a heavy day
+(peak max is 21).
+
+**Below — the confirmed grid.** Window inverts to roughly the last 90 days. Same grid,
+same day list, same sortable headers, same paging, same dedupe. Only the direction changes
+and some of the fill machinery deletes.
+
+URL stays `/earnings-calendar`. H1 and description change to match the content.
+
+---
+
+## §2 — Field inventory — what ships and how far to trust it
+
+| field | source | trust |
+|---|---|---|
+| Symbol, company | `company_tickers_exchange.json` | exact, public-domain identifiers |
+| Date reported | the results filing per §3 | exact, lands within a day |
+| Revenue, year-ago quarter | `msh:sec:facts:v1:SYM` | exact as filed, needs the tag chain |
+| EPS, year-ago quarter | same source | exact as filed, needs fiscal matching |
+| Delta between them | arithmetic on two filed facts | exact |
+| Presence dots | confirmed filings | exact |
+| Price | the whole-market bar store (**now revised, see handoff decision 7**) | exact but a **close** — label it |
+| Market cap | shares × close | derived, needs care, §5 |
+| Due strip | top 50, k=7 | ~3%, with attribution uncertainty of similar magnitude |
+
+**Do not build:** EPS/revenue estimates, surprise, beat/miss dots, predicted dates for the
+full universe, the Overdue badge. All either have no licence-clean source or were measured
+and failed.
+
+---
+
+## §3 — The results date — the spine of both halves
+
+A results filing is the **first 8-K carrying item 2.02 after period end P**. For foreign
+private issuers use **6-K**, deduplicated on `accn`, preferring one whose `reportDate` is a
+quarter end — ARM files them in same-day pairs, measured.
+
+Prefer the **strict** form — items containing **2.02 AND 9.01** — falling back to loose when
+strict resolves to **zero**. Measured: resolves 12.3% of ambiguous periods outright, drops
+the lag-outlier rate 51.5% → 44.7%, and only 0.8% resolve to zero and need the fallback.
+Free and strictly better; it does **not** fix attribution and is not expected to.
+
+The daily index gives **form type only, not item numbers**. Items come from
+`data.sec.gov/submissions/CIK##########.json`, approximately 25 KB a symbol.
+
+**Storage recommendation:** extend the existing manifest rather than adding a parallel store
+— `msh:sec:manifest:v1` plus `lastResultsDate`, `lastResultsPeriod`, `lastResultsAccn`. Both
+halves read it — the grid inverts it by date, the strip asks which periods have no entry.
+One dataset, one source of truth, no drift between two answers to the same question.
+
+> *(This recommendation was implemented and later fully reconciled — see handoff decision 4
+> — `secResultsDate.ts`, the parallel store that resulted, has since been deleted entirely
+> in favour of `secReportDatesStore`.)*
+
+---
+
+## §4 — The year-ago columns — where wrong numbers get built in
+
+`end − 365 days` is **wrong** for any 52/53-week filer (AAPL's quarter ends 26 Sep one year,
+28 Sep the next). Measured fiscal year ends across five probe symbols: 31 Mar, 26 Sep, 3
+Sep, 31 Oct, 31 Dec. **Nothing may assume calendar quarters.**
+
+Resolve in order:
+
+1. **`frame` when present** — match `CY<year>Q<n>` against `CY<year−1>Q<n>`. SEC assigns
+   non-calendar periods to the nearest calendar frame, so this is both correct and robust,
+   but not present on every fact.
+2. **duration plus tolerance** — comparable duration (about 90 days) whose `end` falls
+   within ±7 days of one year before the current period's `end`.
+
+**Never match on `fy` or `fp`.** Those describe the *report the fact was filed in*, not the
+fact's own period, and silently pair wrong quarters across a fiscal boundary. Cross-check
+only.
+
+**Tag chain order for revenue:** `RevenueFromContractWithCustomerExcludingAssessedTax`, then
+`Revenues`, then `SalesRevenueNet`. `Revenues` is **legacy** — AAPL's latest value is
+2018-09-29, MU's is 2018-08-30. It must sit **below** the contract-revenue tag or large
+filers render 2018 revenue as current.
+
+**Rows that get a dash:** recent IPOs and spin-offs (no year-ago quarter exists),
+pre-revenue filers (a delta off a de-minimis base is meaningless). Absence stated honestly,
+never a zero.
+
+---
+
+## §5 — Market cap — the only column that can be quietly wrong
+
+It is the **default sort**, so an error reorders the page rather than printing one bad cell.
+Expect the first bug here.
+
+**Multi-class:** `dei:EntityCommonStockSharesOutstanding` is filed per share class with
+different contexts. **Group tickers by CIK** and compute the sum of each class's shares ×
+that class's own close, assigning the group total to every ticker in it. Otherwise GOOGL
+reads as half of Google.
+
+**Foreign private issuers get no market cap.** Shares are filed in ordinary shares, price is
+per ADS, TSM is 1 ADS = 5 ordinary — the naive product is out by 5×, and the ADS ratio lives
+in the F-6 and is not structured anywhere free. Detection is free from the form set
+(20-F/6-K). Existing sort is nulls-last, so they fall to the bottom.
+
+> **Departure, flagged for veto at the time:** HDB, IBN, TSM, BABA and ASML currently showed
+> a cap and would stop. Owner previously chose to keep ADRs in the list; this changes how
+> they present, not whether they appear. *(Resolved — see handoff decision 2, implemented in
+> #489 and #491.)*
+
+**Tag chain:** `EntityCommonStockSharesOutstanding`, then `CommonStockSharesOutstanding`,
+with the **weighted-average diluted tag explicitly excluded** — a different number that
+looks like the right one.
+
+---
 
 ## §9 — Mutation coverage
 

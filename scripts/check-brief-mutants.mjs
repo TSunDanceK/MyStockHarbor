@@ -80,7 +80,21 @@ console.log("\n1. THE LIST IS READ FROM THE BRIEF, NOT FROM THIS FILE");
   if (!ok) { console.log(`\n${++failures} FAILED`); process.exit(1); }
 
   const src = fs.readFileSync(BRIEF, "utf8");
-  const listed = [...src.matchAll(/^(\d+)\.\s+(.+)$/gm)].map((m) => m[2].trim());
+
+  // SCOPED TO §9, and the first version was not. It matched every numbered list
+  // in the file, so completing the mirror with §§1-5 -- whose §4 numbers its
+  // two resolution steps -- took the count from 10 to 12 and turned this red.
+  //
+  // That is the check working: a denominator read by a loose regex is a
+  // denominator that changes when someone edits an unrelated section. The
+  // window is cut at the §9 heading and closed at the next one.
+  const from = src.indexOf("## §9");
+  check("the brief still contains a §9", from >= 0,
+    "the mutant list is the denominator; if its heading moved, this file must follow");
+  const rest = src.slice(from + 1);
+  const to = rest.indexOf("\n## ");
+  const section9 = to >= 0 ? rest.slice(0, to) : rest;
+  const listed = [...section9.matchAll(/^(\d+)\.\s+(.+)$/gm)].map((m) => m[2].trim());
   check("the brief lists exactly ten mutants", listed.length === 10, `found ${listed.length}`);
   check("the ledger covers every one of them, in order",
     LEDGER.length === listed.length && LEDGER.every((e, i) => e.brief === listed[i]),

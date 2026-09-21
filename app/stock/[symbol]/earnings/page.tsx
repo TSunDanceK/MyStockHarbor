@@ -30,7 +30,7 @@ import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecTrendSummaryCard, SecValuationCard,
-  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
+  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -1046,7 +1046,19 @@ export default async function StockEarningsPage({ params }: Props) {
                   filed year yet -- and it must NEVER render as pending, because
                   the cron would re-read it daily and get the same nothing.
                   The 404 case never reaches here; see the guard above. */}
-              {data.cold.status === "no-xbrl" ? (
+              {/* NOT THE SECURITY THESE FILINGS DESCRIBE — first, because it is
+                  the only branch that must not fall through to the pending
+                  card. "Pending" promises figures that are never coming, and
+                  the figures it would eventually show belong to another
+                  company. See lib/server/securityKind.ts. */}
+              {data.cold.status === "not-issuer-equity" ? (
+                <SecNotIssuerEquityCard
+                  symbol={clean}
+                  reason={data.cold.reason}
+                  siblings={data.cold.siblings}
+                />
+              ) :
+               data.cold.status === "no-xbrl" ? (
                 <SecNoXbrlCard
                   symbol={clean}
                   reason={data.cold.why}
