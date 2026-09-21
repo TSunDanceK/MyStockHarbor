@@ -114,6 +114,7 @@ console.log(`   EDGAR notices skipped   ${String(result.noticesSkipped).padStart
 console.log(`   histories TRUNCATED     ${String(result.historyTruncated.length).padStart(5)}  ${result.historyTruncated.length ? `>>> ${result.historyTruncated.join(", ")} — submissions.recent should hold a year; if it does not, an 8-A12B just outside it reads as a follow-on` : "(expected: 0)"}`);
 console.log(`   SEC requests            ${String(result.requests).padStart(5)}`);
 console.log(`   stopped on deadline     ${result.stoppedOnDeadline}`);
+console.log(`   FILERS TRUNCATED        ${result.filersTruncated}${result.filersTruncated ? "  >>> the filer loop ran out of time: filers from walked dates got NO record, and the watermark is deliberately held back" : ""}`);
 console.log(`   elapsed                 ${String(result.ms).padStart(5)}ms`);
 
 if (failedDays.length) {
