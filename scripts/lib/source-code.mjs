@@ -221,6 +221,53 @@ export function stripComments(text, { file, dropLines = false, minRetainedFracti
 }
 
 /** Read a repo file and strip its comments in one step. */
+/**
+ * One exported `const NAME = ...;` from a module, without the module.
+ *
+ * WHY A MODULE CANNOT SIMPLY BE CONCATENATED. secReportDates declares
+ * `const DAY = 86400000` and so does secExtract, so a harness that inlines
+ * both turns two correct modules into "Identifier 'DAY' has already been
+ * declared". render-snapshot.mjs hit that first and grew a local copy of this
+ * helper; check-sec-valuation.mjs then needed the same thing for
+ * DEADLINE_FALLBACK, and a second copy of a helper about not keeping two
+ * copies of a value would have been its own joke. One definition, both
+ * callers.
+ *
+ * TWO SHAPES, AND THE ORDER BETWEEN THEM IS DECIDED BY THE FIRST LINE, not by
+ * which pattern is tried first. Both orders are wrong as a blanket rule:
+ *
+ *   multi-line first  a one-liner has no `\n};` of its own, so the pattern runs
+ *                     ON to the next one and swallows whatever sits between.
+ *                     DEADLINE_FALLBACK did exactly this, absorbing the code
+ *                     after it and producing "FILING_DEADLINE_DAYS is read but
+ *                     never declared" from a lift that looked fine.
+ *   one-line first    a table's opening line matches and returns a fragment
+ *                     that parses as valid JavaScript while meaning something
+ *                     else.
+ *
+ * So the first line decides: if it ends in `;` the declaration is complete
+ * there, and only otherwise is the multi-line form used. That is a property of
+ * the text rather than a guess about which shape is more common.
+ *
+ * THROWS RATHER THAN RETURNING EMPTY. A miss would drop the declaration
+ * silently, the lift's closure check would report the name as undeclared, and
+ * the next reader would "fix" that by pinning a literal -- which is the thing
+ * these helpers exist to prevent.
+ *
+ * `export` is stripped, because callers concatenate into a unit that declares
+ * its own exports.
+ */
+export function grabConst(file, name) {
+  const src = fs.readFileSync(file, "utf8");
+  const firstLine = (src.match(new RegExp(`^export const ${name}[^=]*=.*$`, "m")) ?? [])[0];
+  const complete = firstLine != null && /;\s*$/.test(firstLine);
+  const found = complete
+    ? firstLine
+    : (src.match(new RegExp(`^export const ${name}[^=]*=[\\s\\S]*?\\n\\};$`, "m")) ?? [])[0];
+  if (!found) throw new Error(`grabConst: ${name} not found in ${file} — renamed, or no longer exported`);
+  return found.replace(/^export /, "");
+}
+
 export function readCodeOnly(relPath, opts = {}) {
   const full = path.join(process.cwd(), relPath);
   return stripComments(fs.readFileSync(full, "utf8"), { file: relPath, ...opts });

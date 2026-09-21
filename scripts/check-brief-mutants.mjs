@@ -52,21 +52,36 @@ const LEDGER = [
     status: "inapplicable", why: "stage-5 dynamic ranking, off the roadmap (owner decision 4/5, 2026-09-21)" },
   { n: 4, brief: "year-ago absence rendered as `0` rather than a dash",
     status: "uncovered" },
-  // CORRECTED 2026-09-21. This was recorded as CAUGHT and was not, and the
-  // over-claim is worth keeping visible rather than quietly fixed: it is the
-  // exact failure this whole file was built to prevent, committed by the file
-  // itself on its first outing.
+  // RECLASSIFIED TO INAPPLICABLE 2026-09-21 (owner decision), and the route
+  // here is worth keeping because it passed through a wrong answer first.
   //
-  // The mutant it cited -- "ambiguous multi-class count picked anyway" --
-  // asserts the extractor REFUSES TO PRODUCE a share count when the candidates
-  // are ambiguous. The brief's #5 is about GROUPING BY CIK AND SUMMING across
-  // classes to produce a group total. Refusing and aggregating are different
-  // behaviours; a check for one proves nothing about the other, and the words
-  // "multi-class" appearing in both is the whole reason the mis-mapping was
-  // easy to make.
+  // It was recorded as CAUGHT, citing "ambiguous multi-class count picked
+  // anyway" -- which asserts the extractor REFUSES TO PRODUCE a count. The
+  // brief's #5 is about GROUPING BY CIK AND SUMMING. Refusing and aggregating
+  // are different behaviours, and "multi-class" appearing in both is why the
+  // mis-mapping was easy. Corrected to `uncovered`.
+  //
+  // Then measured, and `uncovered` was wrong too: the grouping is not merely
+  // unbuilt, it is UNBUILDABLE from this source. Relay 35620148960 --
+  //
+  //   Alphabet (GOOGL/GOOG)  no dei:EntityCommonStockSharesOutstanding AT ALL
+  //   Under Armour (UAA/UA)  no cover tag at all
+  //   Berkshire              one row, dated 2011-04-29, Class A count only
+  //   Fox                    one row, dated 2010-01-29
+  //   Apple (control)        current and correct, so not a probe artefact
+  //
+  // "The sum of each class's shares times that class's own close" needs a
+  // per-class count. Two of four filers publish none, and the two that do
+  // publish one class, fifteen years ago. Alphabet is the brief's own worked
+  // example.
+  //
+  // So this is a DEAD DESIGN, not a coverage gap -- the same category as #1 and
+  // #3, reached by measurement rather than by a roadmap decision. The staleness
+  // bound (check-sec-valuation §7) is what handles Berkshire and Fox now: they
+  // fall into "no valid share count" without any grouping formula.
   { n: 5, brief: "multi-class grouping removed (per-ticker cap instead of per-CIK)",
-    status: "uncovered",
-    why: "the grouping does not exist yet; the cited mutant covers REFUSAL, not aggregation" },
+    status: "inapplicable",
+    why: "unbuildable: companyfacts carries no per-class share count (relay 35620148960, claude/multiclass-shares-not-computable-2026-09-21)" },
   { n: 6, brief: "FPI market-cap suppression removed",
     status: "caught",
     covers: ["scripts/check-sec-valuation.mjs", "stage 4: FPI market-cap suppression removed"] },
