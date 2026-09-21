@@ -238,6 +238,17 @@ const TASKS = {
     // the runner strips the types itself.
     nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
   },
+  // WHAT A SPAC COVER ACTUALLY SAYS. The share-count fix took correctness from
+  // 29% to ~100% and its cost landed on the SPAC rows that dominate this page:
+  // the one unit-shaped anchor matched 1 of 94 covers, so Deal Size is blank on
+  // almost everything live. This prints the masthead and every dollar amount,
+  // unit count and trust sentence — and deliberately carries NO candidate
+  // patterns, so the output cannot be read as confirmation of a guess.
+  "ipo-spac": {
+    script: "scripts/ipo-spac-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   // MEASURE THE SHARE COUNT, which Phase 0 never did -- it gated the PRICE
   // parser at 5/5 and left sharesOffered untested. The first live ingest run
   // produced ADARx at 88,250,216 shares (shares outstanding, not an offering)
