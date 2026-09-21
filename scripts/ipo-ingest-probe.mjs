@@ -47,16 +47,32 @@ const NOW = new Date();
 const LATEST = latestProcessableDate(NOW);
 
 // The relay forwards `symbols` already, so the window rides in it rather than
-// costing a merge to main for a dedicated input. "<from>" or "<from>..<to>".
+// costing a merge to main for a dedicated input. Accepted forms:
+//   "<from>"  "<from>..<to>"  "<from>..<to>|<maxDays>"  "<from>..<to>|<maxDays>|<deadlineSec>"
+// The two optional knobs ride here for the same reason the window does: relay.yml
+// forwards a FIXED set of inputs, so a dedicated one costs a merge to main, and a
+// diagnosis that needs a longer walk should not have to wait on that.
 const RANGE = (process.env.SYMBOLS ?? "").trim();
-const m = RANGE.match(/^(\d{8})(?:\.\.(\d{8}))?$/);
+const [RANGE_PART = "", MAX_PART = "", DEADLINE_PART = ""] = RANGE.split("|").map((x) => x.trim());
+const m = RANGE_PART.match(/^(\d{8})(?:\.\.(\d{8}))?$/);
 const FROM = m ? m[1] : addDays(LATEST, -6);
 const TO = m?.[2] ?? LATEST;
-const MAX_DAYS = Number(process.env.IPO_PROBE_MAX_DAYS || 20);
+const MAX_DAYS = Number(MAX_PART || process.env.IPO_PROBE_MAX_DAYS || 20);
+// THE SHIPPED 240s DEADLINE IS SIZED FOR A CRON TICK, NOT FOR A DIAGNOSIS.
+// ingestIpoWindow already takes deadlineMs; the route leaves it at the default
+// because it runs under a 300s platform limit. A runner has 30 minutes, and the
+// question "does the LOWER table fill" cannot be asked of a walk that stops
+// before the 30-day 424B window is covered -- it would report an empty Recent
+// table as a finding when it is only an unfinished walk.
+//
+// DEFAULTS TO THE SHIPPED VALUE so an ordinary run still measures what the cron
+// experiences. Only a run that explicitly asks gets longer.
+const DEADLINE_MS = Number(DEADLINE_PART || 0) * 1000 || undefined;
 
 console.log("=".repeat(78));
 console.log(`IPO INGEST PROBE — the shipped ingest, live EDGAR, no write`);
 console.log(`   walking ${FROM}..${TO}  (latest processable: ${LATEST})`);
+console.log(`   maxDays ${MAX_DAYS} · deadline ${DEADLINE_MS ?? "240000 (shipped default)"}ms`);
 console.log("=".repeat(78));
 
 const windowStart = windowStartFor(NOW);
@@ -68,6 +84,7 @@ const result = await ingestIpoWindow({
   from: FROM,
   to: TO,
   maxDays: MAX_DAYS,
+  deadlineMs: DEADLINE_MS,
   now: NOW,
 });
 
