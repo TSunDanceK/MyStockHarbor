@@ -80,6 +80,88 @@ stale — this replaces both. Build spec
    75 confirmed derivatives, since an unverifiable security sharing another company's CIK is
    exactly the same live-wrong-render risk as MER-PK itself.
 
+## FINAL STATE (2026-09-21, end of build)
+
+**Everything in this build is done and live EXCEPT the due strip, which is
+BLOCKED on a production data gap outside this build's scope — not on anything
+left to build here.**
+
+That distinction is the point, and it is the same one the build spent itself
+enforcing elsewhere: the strip is not unbuilt, and it is not broken. Its code
+path exists, is tested and works. It has nothing to render.
+
+### Done and live
+
+| Stage | State |
+|---|---|
+| **0** Consensus freeze | committed via workflow |
+| **1** Results date | reconciled onto `secReportDatesStore`; `secResultsDate.ts` deleted (#484) |
+| **2a** Window inverted | done |
+| **2b** Due rule | done, deadline table corrected against 17 CFR 240.13a-1 |
+| **3** Year-ago columns | superseded — #464/#467/#472/#479/#482 landed the extraction |
+| **4** Price + market cap | **done**, revised scope — five refusal/hide reasons, below |
+| **5** Dynamic top-50 | **closed**, will not be built |
+| **Page cutover** | **done and live** — H1, description, grid, five-reason composition (#501) |
+| **Security-kind (MER-PK)** | **done and live** — `/stock/MER-PK/earnings` no longer renders Bank of America (#495) |
+
+### The five reasons a price or market cap is withheld
+
+Four are refusals about a figure we have, and they form a precedence ladder
+asserted in `check-sec-valuation` §8. The fifth is not a fifth tier and is
+asserted separately, because it says there is nothing to refuse.
+
+| Reason | PR | Gates at |
+|---|---|---|
+| security-kind | #495 | `resolveFactSetForRender`, before the store read |
+| FPI / ADS unit | #489, #491 | `marketCap()` / `peRatio()`, first |
+| staleness | #497 | `valuationInputs`, after the chain |
+| weighted-average tag | #500 | in the chain — never becomes a count |
+| **universe coverage** | #501 | `earningsCalendar` item assembly — *not* a refusal |
+
+### BLOCKED: the due strip
+
+Its three parts, and which is actually stuck:
+
+1. **`dueStripState.ts`** — built, tested, 8/8 mutants. **Works.**
+2. **`selectDue()`** — built. **But nothing constructs a `DueInput`.** The
+   producer does not exist; it would read the store per universe symbol and
+   supply `medianLagDays`, `filerCategory` and `annual`. A module on the scale
+   of `dueStripState` or `securityKind` — its own PR when unblocked.
+3. **The static top-50 membership list — THE BLOCKER.** It cannot be generated.
+   `scripts/due-strip-universe.mjs` refuses to emit a cap-ranked list that omits
+   a canary, and **NVDA has no market cap in any of the four cached sources**.
+   Confirmed on a dump minutes old, so it is not staleness.
+
+**See `claude/BRIEF-price-pool-missing-market-cap-2026-09-21.md`.** That is a
+Pickers cap-sourcing problem, deliberately opened as its own item rather than
+chased from here. It also affects the screener's default sort, which is by
+market cap.
+
+**The canary refusing is the build working, not failing.** A list that omitted
+the largest company in it is exactly the "plausible and wrong" output this build
+spent itself refusing. Do not widen `CUT` or drop NVDA from `CANARIES` to get a
+green run.
+
+### What "there is no stage 1 backfill" means
+
+Earlier drafts of this doc and of `dueStripState.ts` said the strip was waiting
+on a stage-1 backfill. **That is wrong and has been corrected.** #484 deleted
+`secResultsDate.ts`; `lastResultsDate` is not stored — `latestResults()` derives
+it from `secReportDatesStore`, written continuously by
+`app/api/jobs/sec-facts/route.ts`, a production cron. There is no job to run.
+
+### To finish, in order
+
+1. Resolve the price-pool cap gap (separate brief, separate priority call).
+2. Re-run `due-strip-universe` against a fresh step-0 dump; commit the list to
+   `data/` with its generation date.
+3. Build the `DueInput` producer.
+4. Wire the strip; verify cutover requirement (b) against real rendered rows.
+
+Steps 2–4 are ordinary work. **Step 1 is the only unknown.**
+
+---
+
 ## State of the build
 
 - **Stage 0** (consensus freeze): done, committed via workflow.
