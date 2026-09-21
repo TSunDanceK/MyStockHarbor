@@ -19,6 +19,8 @@
 // field. See secFields.ts for why the flag lives on the definition.
 import {
   COVER_SHARES_FIELD,
+  COVER_SHARES_FALLBACK,
+  FORBIDDEN_COVER_TAGS,
   SEC_FIELDS,
   SEC_FIELD_KEYS,
   SEC_FIELD_INDEX,
@@ -1249,9 +1251,38 @@ export function extractCompanyFacts(
  * caller decide what to render.
  */
 export function readCoverShares(facts: CompanyFacts): CoverShares | null {
-  const rows = (facts.facts?.dei?.[COVER_SHARES_FIELD.chain[0]]?.units?.shares ?? []).filter(
-    (r) => typeof r?.val === "number" && Number.isFinite(r.val) && r.end
-  );
+  // ── THE CHAIN, WALKED, RATHER THAN chain[0] UNDER dei ────────────────────
+  //
+  // This read exactly one tag in one namespace. MEASURED (relay 35620148960):
+  // Alphabet and Under Armour publish NO dei:EntityCommonStockSharesOutstanding
+  // at all, so they had no share count and no market cap for a reason that was
+  // a gap in the read rather than a gap in the filing.
+  //
+  // PREFERENCE, NOT A MERGE. Each source is tried in order and the FIRST that
+  // yields rows wins outright; rows from two namespaces are never pooled. They
+  // are as-of different dates -- the cover page is the filer's most recent
+  // statement, the balance-sheet line is as of the period end weeks earlier --
+  // and mixing them would make the ambiguity test below compare a cover reading
+  // against a balance-sheet one and call two dates two share classes.
+  const sources: { ns: string; chain: readonly string[] }[] = [
+    { ns: COVER_SHARES_FIELD.taxonomy, chain: COVER_SHARES_FIELD.chain },
+    { ns: COVER_SHARES_FALLBACK.taxonomy, chain: COVER_SHARES_FALLBACK.chain },
+  ];
+
+  // THE DENYLIST IS CHECKED HERE TOO, not only at module load. The load-time
+  // assertion covers the shipped constants; this covers a chain reaching this
+  // function by any other route, and costs one array scan on a cold read.
+  let rows: FactRow[] = [];
+  for (const { ns, chain } of sources) {
+    for (const tag of chain) {
+      if (FORBIDDEN_COVER_TAGS.includes(tag)) continue;
+      const found = (facts.facts?.[ns]?.[tag]?.units?.shares ?? []).filter(
+        (r) => typeof r?.val === "number" && Number.isFinite(r.val) && r.end
+      );
+      if (found.length) { rows = found; break; }
+    }
+    if (rows.length) break;
+  }
   if (!rows.length) return null;
 
   const newestRow = rows.reduce((a, b) => (newer(a, b) === a ? a : b));
