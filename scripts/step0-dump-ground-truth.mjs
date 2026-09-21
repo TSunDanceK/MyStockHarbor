@@ -75,7 +75,14 @@ const KEYS = {
   earningsRow: "msh:pickers:earnings:v1:",
   // lib/server/earningsCalendar.ts / earningsStore.ts
   earningsDayItems: "msh:earnings-day-items:v1",
-  earningsDayComplete: "msh:earnings-day-complete:v2",
+  // BOTH VERSIONS. v3 is live; v2 is the pre-F1 generation the bump retired and
+  // is still dumped as evidence that it is now unreachable rather than gone.
+  earningsDayComplete: "msh:earnings-day-complete:v3",
+  earningsDayCompleteV2: "msh:earnings-day-complete:v2",
+  // The per-symbol quote markers. Not values -- only how many exist, because a
+  // symbol carrying one costs no hourly-cap slot and the re-evaluation budget
+  // after a completeness bump turns entirely on that count.
+  earningsQuotedSymbol: "msh:earnings-quoted-symbol:v1",
   earningsSchedule: "msh:earnings-schedule:v1",
   // lib/server/dynamicUniverseCache.ts  SCORE_KEY / SEEN_KEY
   universeScore: "msh:dynamic-universe:v2:score",
@@ -304,8 +311,21 @@ console.log("\n3. Per-symbol datasets");
  * members; scanning finds everything still there, including symbols no list
  * mentions any more. Both numbers go in the report.
  */
-async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analyse } = {}) {
-  const scanned = await scanPrefix(`${prefix}*`);
+async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analyse, isSymbol } = {}) {
+  const scannedAll = await scanPrefix(`${prefix}*`);
+  // ── A PREFIX IS NOT ALWAYS ONE KEY FAMILY ────────────────────────────────
+  //
+  // scanPrefix takes everything after the prefix as a SYMBOL. That is true for
+  // most of these datasets and false for msh:pickers:earnings:v1:, which is
+  // three families sharing a prefix (see the earningsRow call site). "due:AAPL"
+  // and "queue" were counted as tickers; the due stamps are strings, so they
+  // survived the MGET and landed in `values` looking like earnings rows.
+  //
+  // `isSymbol` lets a caller say which suffixes are actually symbols. The
+  // rejected ones are COUNTED, not silently dropped -- a filter that quietly
+  // removes rows is how a coverage figure becomes wrong in the other direction.
+  const scanned = isSymbol ? scannedAll.filter((k) => isSymbol(suffixOf(k, prefix))) : scannedAll;
+  const rejected = scannedAll.length - scanned.length;
   const symbols = [...new Set([...scanned.map((k) => suffixOf(k, prefix)), ...universe])].sort();
   const keys = symbols.map((s) => `${prefix}${s}`);
 
@@ -331,6 +351,7 @@ async function dumpPerSymbol(name, prefix, { chunkSize = SMALL_MGET_CHUNK, analy
   report.datasets[name] = {
     key: `${prefix}<SYM>`,
     keysScanned: scanned.length,
+    ...(isSymbol ? { keysScannedBeforeFilter: scannedAll.length, keysRejectedAsNotASymbol: rejected } : {}),
     present,
     coverageOfDumpUniversePct: pct,
     // KEY-EXISTS IS NOT VALUE-PRESENT, and conflating them is exactly the gap
@@ -398,7 +419,24 @@ await dumpPerSymbol("profile", KEYS.profile, { analyse: analyseProfile });
 // the gap is what separates "unavailable" from "never fetched".
 await dumpPerSymbol("profile-noindustry-tombstones", KEYS.profileEmpty);
 await dumpPerSymbol("screener-fundamentals", KEYS.screenerFundamentals);
-await dumpPerSymbol("earnings-rows", KEYS.earningsRow, { chunkSize: 50 });
+// ── THREE KEY FAMILIES SHARE THIS PREFIX, AND ONLY ONE IS A SYMBOL ────────
+//
+//   msh:pickers:earnings:v1:<SYM>       the earnings rows            (the dataset)
+//   msh:pickers:earnings:v1:due:<SYM>   a TTL'd timestamp string     (pickersBuilder.ts:545, written :1400)
+//   msh:pickers:earnings:v1:queue       a SET                        (pickersBuilder.ts:544, written :1395)
+//
+// Unfiltered, "due:AAPL" and "queue" were read as tickers. The queue is a SET so
+// MGET returned nil and it vanished; the due stamps are strings and did not --
+// they landed in `values` alongside real rows and inflated `present` and every
+// percentage derived from it. Measured on the 2026-09-14T20:06 dump:
+// rows=1235, due=13, queue=1.
+//
+// The due stamps are dumped SEPARATELY rather than discarded: they are the only
+// record of when a symbol's earnings row is next due, and losing them to a filter
+// would trade one measurement error for another.
+const isEarningsRowSymbol = (suffix) => !suffix.startsWith("due:") && suffix !== "queue";
+await dumpPerSymbol("earnings-rows", KEYS.earningsRow, { chunkSize: 50, isSymbol: isEarningsRowSymbol });
+await dumpPerSymbol("earnings-due-stamps", `${KEYS.earningsRow}due:`, { chunkSize: 100 });
 // stockdata carries rating / priceTarget / analystCount and is the biggest of the
 // small datasets, so it gets a narrower chunk.
 const stockData = await dumpPerSymbol("stockdata", KEYS.stockData, { chunkSize: 25 });
@@ -531,9 +569,181 @@ const entryCountOf = (value) => {
   return 1;
 };
 
+// ── 6a. THE DATE-KEYED EARNINGS KEYS ARE NOT SINGLETONS ──────────────────────
+//
+// THEY WERE DECLARED AS HASHES AND DUMPED NOTHING, SILENTLY, EVERY RUN.
+// earningsCalendar.ts writes `${DAY_ITEMS_PREFIX}:${date}` and
+// `${DAY_COMPLETE_PREFIX}:${date}` -- one string key PER DATE. No key of the bare
+// prefix name has ever existed, so TYPE returned "none", the declared "hash" hint
+// survived, HGETALL on a missing key returned {}, and the dataset was recorded
+// `entries: 0, present: false`. The artifacts are 174 and 168 bytes.
+//
+// That reads as "production holds no earnings day data", which is a claim about
+// the database. The truth was that the dump asked for the wrong key shape --
+// failure presenting as absence, the same confusion these files keep paying for.
+// TYPE cannot catch it: a prefix that is not itself a key is indistinguishable
+// from a key that does not exist yet.
+//
+// TTL IS CAPTURED PER KEY because it cannot be recovered later. These carry
+// absolute expiries set at write time (30d/32d/33d, earningsCalendar.ts:153/217/241)
+// and a dump taken without them cannot answer how long a bad entry has left.
+async function dumpDateKeyed(name, prefix) {
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  const ttlSeconds = {};
+
+  for (const group of chunk(keys, SMALL_MGET_CHUNK)) {
+    let got;
+    try {
+      got = await redis.mget(...group);
+    } catch (e) {
+      report.warnings.push(`${name} mget failed for ${group.length} keys: ${String(e?.message ?? e)}`);
+      continue;
+    }
+    for (let i = 0; i < group.length; i++) {
+      const v = got?.[i];
+      if (v == null) continue;
+      values[suffixOf(group[i], prefix)] = v;
+    }
+  }
+
+  // One TTL per key. The window is ~126 days wide, so this is bounded at roughly
+  // that many round trips, not a scan of the keyspace.
+  for (const k of keys) {
+    try {
+      ttlSeconds[suffixOf(k, prefix)] = await redis.ttl(k);
+    } catch (e) {
+      report.warnings.push(`${name} ttl failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+
+  const present = Object.keys(values).length;
+  report.datasets[name] = { key: `${prefix}:<DATE>`, keysScanned: keys.length, present };
+  report.files.push(
+    writeJson(`${name}.json`, {
+      dumpedAt: DUMPED_AT,
+      dataset: name,
+      key: `${prefix}:<DATE>`,
+      keysScanned: keys.length,
+      present,
+      values,
+      ttlSeconds,
+    })
+  );
+  console.log(`   ${name.padEnd(24)} ${String(present).padStart(6)} dates    (scanned ${keys.length})`);
+}
+
+await dumpDateKeyed("earnings-day-items", KEYS.earningsDayItems);
+await dumpDateKeyed("earnings-day-complete", KEYS.earningsDayComplete);
+await dumpDateKeyed("earnings-day-complete-v2", KEYS.earningsDayCompleteV2);
+
+// The quoted-symbol markers, counted rather than read. One per symbol quoted in
+// the last 30 days; each is a symbol that re-quotes for free after a bump.
+{
+  const keys = await scanPrefix(`${KEYS.earningsQuotedSymbol}:*`);
+  const symbols = keys.map((k) => suffixOf(k, KEYS.earningsQuotedSymbol)).sort();
+  report.datasets["earnings-quoted-symbols"] = { key: `${KEYS.earningsQuotedSymbol}:<SYM>`, keysScanned: keys.length };
+  report.files.push(
+    writeJson("earnings-quoted-symbols.json", {
+      dumpedAt: DUMPED_AT,
+      dataset: "earnings-quoted-symbols",
+      key: `${KEYS.earningsQuotedSymbol}:<SYM>`,
+      count: symbols.length,
+      symbols,
+    })
+  );
+  console.log(`   ${"earnings-quoted-symbols".padEnd(24)} ${String(symbols.length).padStart(6)} symbols`);
+}
+
+// ── THE earningsRow KEY FAMILIES, SPLIT ─────────────────────────────────────
+//
+// msh:pickers:earnings:v1: is THREE key families sharing one prefix:
+//   <SYM>        the earnings rows themselves
+//   due:<SYM>    a TTL'd timestamp string (pickersBuilder.ts:545, written :1400)
+//   queue        a SET (pickersBuilder.ts:544, written :1395)
+//
+// dumpPerSymbol scans `${prefix}*` and takes everything after the prefix as a
+// SYMBOL, so "due:AAPL" and "queue" are counted as tickers. The due stamps are
+// strings, so they survive the MGET and land in `values` looking like earnings
+// rows; they inflate `present` and the coverage percentage derived from it.
+// Split here so the size of that inflation is a measured number.
+{
+  const prefix = "msh:pickers:earnings:v1:";
+  const keys = await scanPrefix(`${prefix}*`);
+  const suffixes = keys.map((k) => k.slice(prefix.length));
+  const families = {
+    rows: suffixes.filter((x) => !x.startsWith("due:") && x !== "queue").length,
+    due: suffixes.filter((x) => x.startsWith("due:")).length,
+    queue: suffixes.filter((x) => x === "queue").length,
+  };
+  report.datasets["earnings-row-key-families"] = { key: `${prefix}*`, keysScanned: keys.length, ...families };
+  report.files.push(writeJson("earnings-row-key-families.json", { dumpedAt: DUMPED_AT, prefix, keysScanned: keys.length, ...families }));
+  console.log(`   ${"earnings-row-families".padEnd(24)} rows=${families.rows} due=${families.due} queue=${families.queue}`);
+}
+
+// The month candidate feed. Needed to tell a legitimately empty date (nobody
+// reports) from a poisoned one (reporters exist and the stored blob is []).
+{
+  const prefix = "msh:reference:v1:earnings-calendar";
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  for (const k of keys) {
+    try {
+      const v = await redis.get(k);
+      if (v != null) values[suffixOf(k, prefix)] = v;
+    } catch (e) {
+      report.warnings.push(`earnings-month-feed read failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+  report.datasets["earnings-month-feed"] = { key: `${prefix}:<YYYY-MM>`, keysScanned: keys.length, present: Object.keys(values).length };
+  report.files.push(
+    writeJson("earnings-month-feed.json", { dumpedAt: DUMPED_AT, dataset: "earnings-month-feed", key: `${prefix}:<YYYY-MM>`, months: Object.keys(values), values })
+  );
+  console.log(`   ${"earnings-month-feed".padEnd(24)} ${String(Object.keys(values).length).padStart(6)} months`);
+}
+
+// The job-run records. §5 of the earnings-calendar findings is inference until
+// scheduleCovered exists as a number: scheduleSize says the earnings index BUILT,
+// but it is global, and a healthy index can still cover none of a given slice --
+// in which case every symbol in it rides the 120-day floor silently. The counter
+// exists in the code (stockDataCache.ts:596) and is recorded per run; nothing has
+// ever read it back out.
+{
+  const prefix = "msh:job-run:v1";
+  const keys = await scanPrefix(`${prefix}:*`);
+  const values = {};
+  for (const k of keys) {
+    try {
+      const v = await redis.get(k);
+      if (v != null) values[suffixOf(k, prefix)] = v;
+    } catch (e) {
+      report.warnings.push(`job-runs read failed for ${k}: ${String(e?.message ?? e)}`);
+    }
+  }
+  report.datasets["job-runs"] = { key: `${prefix}:<JOB>`, keysScanned: keys.length, present: Object.keys(values).length };
+  report.files.push(writeJson("job-runs.json", { dumpedAt: DUMPED_AT, dataset: "job-runs", key: `${prefix}:<JOB>`, values }));
+  console.log(`   ${"job-runs".padEnd(24)} ${String(Object.keys(values).length).padStart(6)} jobs`);
+}
+
+// The fill frontier. A plain string with NO TTL (earningsCalendar.ts:290), so a
+// value parked past the window end stays parked; the TTL is captured anyway so a
+// future change away from that is visible rather than assumed.
+{
+  const key = "msh:earnings-fill-frontier:v2";
+  let value = null;
+  let ttl = null;
+  try {
+    value = await redis.get(key);
+    ttl = await redis.ttl(key);
+  } catch (e) {
+    report.warnings.push(`fill-frontier read failed: ${String(e?.message ?? e)}`);
+  }
+  report.datasets["earnings-fill-frontier"] = { key, value, ttlSeconds: ttl, present: value != null };
+  report.files.push(writeJson("earnings-fill-frontier.json", { dumpedAt: DUMPED_AT, dataset: "earnings-fill-frontier", key, value, ttlSeconds: ttl }));
+  console.log(`   ${"earnings-fill-frontier".padEnd(24)} ${String(value ?? "(absent)").padStart(12)}  ttl=${ttl}`);
+}
+
 for (const [name, key, kind] of [
-  ["earnings-day-items", KEYS.earningsDayItems, "hash"],
-  ["earnings-day-complete", KEYS.earningsDayComplete, "hash"],
   // redis.set of a plain object (earningsSchedule.ts:146) -> a JSON string, not a hash.
   ["earnings-schedule", KEYS.earningsSchedule, "json"],
   ["history-newest-bar", KEYS.newestBar, "hash"],
