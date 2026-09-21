@@ -233,3 +233,45 @@ export function warnIfImplausiblyEmpty(feed: Feed<unknown>, key: string, why: st
     console.warn(`[feed:${key}] upstream read returned an EMPTY list. ${why}`);
   }
 }
+
+/**
+ * Drop a feed's cached copy so the next read goes upstream.
+ *
+ * ── WHY A DERIVED CACHE NEEDS THIS AT ALL ─────────────────────────────────
+ * readFeed answers from Redis WITHOUT calling fetchItems whenever the stored
+ * entry is inside its freshness window. That is the whole point of it, and it
+ * is also a trap the moment the data underneath is repaired rather than simply
+ * ageing: the source key can be entirely correct while the page serves a
+ * derived snapshot taken before the repair, and BOTH ENDS CHECK OUT when
+ * inspected separately.
+ *
+ * That is not hypothetical. On 2026-09-21 msh:ipo:filings:v1 was repaired, a
+ * debug route read it back correct, two production redeploys were confirmed
+ * READY and aliased, and /upcoming-ipos kept rendering the pre-repair rows --
+ * because `msh:feed:ipo:all` was written at the flip and stays fresh for
+ * IPO_REVALIDATE_SECONDS, which is 24 hours. A REDEPLOY DOES NOT HELP: it
+ * clears `memory` and Redis is exactly what `memory` falls back to.
+ *
+ * So whoever rewrites a source key is responsible for invalidating what was
+ * derived from it, and this is the call that lets them.
+ *
+ * ONE DEL, and only on a write. It does not touch the in-memory copy of OTHER
+ * running instances -- nothing can, short of a deploy -- so a page that must
+ * reflect the repair immediately still needs its render redone. What this
+ * guarantees is that the render, whenever it happens, reads the source again
+ * instead of a snapshot of how the source used to look.
+ */
+export async function invalidateFeed(key: string): Promise<boolean> {
+  delete memory[key];
+  if (!redis) return false;
+  try {
+    await redis.del(`${REDIS_PREFIX}:${key}`);
+    return true;
+  } catch (err) {
+    // Never throw: this runs at the end of a job that has already done its real
+    // work, and failing the run over a cache drop would report the write as
+    // broken when the write succeeded.
+    console.error(`[feed:${key}] redis invalidate failed:`, err);
+    return false;
+  }
+}
