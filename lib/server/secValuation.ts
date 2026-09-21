@@ -46,6 +46,7 @@ export type ValuationRefusal =
   | "no-cover-share-count"
   | "multi-class-share-count-is-ambiguous"
   | "ads-ratio-makes-shares-incomparable"
+  | "ads-ratio-makes-eps-incomparable"
   | "no-twelve-month-eps"
   | "eps-is-zero-or-negative";
 
@@ -56,6 +57,8 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "this filer has more than one share class and the SEC feed does not name them",
   "ads-ratio-makes-shares-incomparable":
     "this company files its share count in ordinary shares and trades here as depositary shares, which are not the same unit",
+  "ads-ratio-makes-eps-incomparable":
+    "this company files earnings per ordinary share and trades here as depositary shares, which are not the same unit",
   "no-twelve-month-eps":
     "twelve months of diluted EPS are not on file",
   "eps-is-zero-or-negative":
@@ -205,7 +208,15 @@ export function valuationInputs(set: StoredFactSet): ValuationInputs {
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
   if (sharesAreIncomparableToPrice(set.symbol)) {
+    // TWO REFUSALS, NOT ONE, because they are two different claims about two
+    // different figures and only one of them was ever assumed. The share-count
+    // one is true by definition: a cover-page count is a count of ordinary
+    // shares. The EPS one is a fact about what the filer CHOSE to state, and it
+    // was measured rather than inferred from the first -- see the note above
+    // ADS_FILERS_WITHOUT_A_STATED_RATIO. Collapsing them into one refusal would
+    // make a measured finding look like a restatement of a definition.
     refusals.push("ads-ratio-makes-shares-incomparable");
+    refusals.push("ads-ratio-makes-eps-incomparable");
   }
 
   let shares: SharesBasis | null = null;
@@ -266,27 +277,33 @@ export function marketCap(
 /**
  * P/E — price divided by twelve months of diluted EPS, or a named refusal.
  *
- * ── OPEN, AND DELIBERATELY NOT DECIDED HERE (2026-09-21) ─────────────────
- * `ads-ratio-makes-shares-incomparable` is NOT consulted below, because the
- * owner decision it implements (claude/DECISIONS-earnings-calendar-v1-2026-09-21
- * §1) names the market-cap column and only that column.
+ * ── MEASURED, AND THE ANSWER WAS NOT SYMMETRY (2026-09-21) ───────────────
+ * #489 left this OPEN rather than assuming the share-count rule extended to
+ * EPS. It does, and the measurement is the reason that is a fact here rather
+ * than a guess: relay run 35588547888 computed, from each filer's own
+ * arithmetic, `epsDiluted x sharesDiluted / netIncome` over every period where
+ * all three came from the SAME accession.
  *
- * BUT THE SAME UNIT MISMATCH APPEARS TO REACH THIS FIGURE. `epsDiluted` is
- * netIncome over `WeightedAverageNumberOfDilutedSharesOutstanding`, which is an
- * ORDINARY-share count, while `price` is per ADS -- so a TSM P/E would be
- * overstated by the same factor of five as the cap that is now refused, and it
- * would be printed in the cell immediately beside it.
+ *   HDB   us-gaap     1.0000  over 47 periods   per ordinary share
+ *   TSM   ifrs-full   0.9999  over 11 periods   per ordinary share
+ *   BABA  us-gaap     0.9984  over 47 periods   per ordinary share
+ *   ASML  us-gaap     1.0002  over 51 periods   per ordinary share
+ *   IBN   --          no XBRL companyfacts at all (6-K and 20-F only)
  *
- * That is stated as a finding, not acted on: widening a scoped decision from
- * inside the implementation of it is how a decision stops meaning anything. If
- * the owner extends the rule, this is a one-line change -- add the same
- * `refusals.includes(...)` guard at the top of this function, and add the
- * mutant to scripts/mutate-fpi-market-cap.mjs so removing it fails.
+ * A ratio of 1 means EPS is in the same unit as the ordinary share count and a
+ * DIFFERENT unit from the ADS price, so the P/E is wrong by the ADS ratio --
+ * five times over for TSM, printed beside the cap that already refuses.
  *
- * WHAT WOULD SETTLE IT: whether these filers' 20-F EPS is stated per ADS (in
- * which case price and EPS already agree and there is no defect) or per
- * ordinary share (in which case there is). It is per-filer and it is checkable
- * against the filings; it was not checked in this pass.
+ * TWO THINGS THE FIRST PROBE GOT WRONG AND SAID SO, worth keeping because both
+ * would have produced a confident wrong answer:
+ *   - It read `us-gaap` only, so TSM came back {0, 0, 0} -- not a filer missing
+ *     three tags but one with no us-gaap facts at all. It reported "cannot be
+ *     judged" instead of resolving three zeroes into a verdict. TSM reports
+ *     under `ifrs-full`, which secFields.ts already reads.
+ *   - IBN's 404 was ambiguous until submissions was asked too: the filer
+ *     exists and publishes NO XBRL, so nothing can be extracted for it at all.
+ *     Its suppression is therefore vacuous today and kept anyway, because the
+ *     rule should already be in place if it ever starts filing XBRL.
  *
  * A NON-POSITIVE EPS IS REFUSED RATHER THAN DIVIDED. A loss-making company has
  * a negative P/E arithmetically and no P/E in any sense a reader uses the
@@ -298,6 +315,13 @@ export function peRatio(
   inputs: ValuationInputs,
   price: number | null
 ): ValuationFigure | null {
+  // FIRST, for the same reason the cap's guard is first: these filers usually
+  // HAVE a clean twelve months of EPS on file. The figure is present, well
+  // formed and in the wrong unit, so nothing downstream of `!inputs.eps` can
+  // catch it.
+  if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
+    return { ok: false, why: "ads-ratio-makes-eps-incomparable" };
+  }
   if (!inputs.eps) {
     return inputs.refusals.includes("no-twelve-month-eps")
       ? { ok: false, why: "no-twelve-month-eps" }
