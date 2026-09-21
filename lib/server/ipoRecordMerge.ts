@@ -17,6 +17,22 @@ export type StoredIpoFilings = {
   windowDays: number;
   /** Oldest filing date retained, ISO. Everything older has been pruned. */
   windowStart: string;
+  /**
+   * The last daily index the refresh successfully walked, yyyymmdd, or null.
+   *
+   * THE WATERMARK RIDES IN THE DOCUMENT AND THAT IS THE WHOLE REASON THE
+   * REFRESH COSTS TWO COMMANDS. A second key would be a third and fourth
+   * command every day, on an account a cache bill has already suspended once
+   * (claude/outage-upstash-suspended-2026-08-28.md), for one short string.
+   * secManifest carries `lastIndexDate` in exactly the same way and for exactly
+   * the same reason.
+   *
+   * NULL MEANS "NEVER WALKED", which is a cold start, not an error. The seed
+   * sets it to its own window end, so a seeded store and a walked store are
+   * indistinguishable to the next run -- the point of both writers sharing this
+   * function.
+   */
+  lastIndexDate: string | null;
   records: IpoFilerRecord[];
 };
 
@@ -57,7 +73,14 @@ export function mergeIpoRecords(
   existing: IpoFilerRecord[],
   incoming: IpoFilerRecord[],
   windowStart: string,
-  now = Date.now()
+  now = Date.now(),
+  // THE CALLER SUPPLIES THE WATERMARK IT WANTS STORED, and passing nothing
+  // stores null. That is deliberately NOT "keep whatever was there": this
+  // function is given two arrays of records and has no access to the previous
+  // document, so it cannot preserve a field it never saw. Deciding what to
+  // carry forward belongs to writeStoredIpoFilings, which does hold the prior
+  // document -- putting it here would mean a merge silently inventing state.
+  meta: { lastIndexDate?: string | null } = {}
 ): StoredIpoFilings {
   const byCik = new Map<string, IpoFilerRecord>();
 
@@ -100,6 +123,7 @@ export function mergeIpoRecords(
     fetchedAt: now,
     windowDays: IPO_WINDOW_DAYS,
     windowStart,
+    lastIndexDate: meta.lastIndexDate ?? null,
     records,
   };
 }

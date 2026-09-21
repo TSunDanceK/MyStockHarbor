@@ -36,6 +36,12 @@ import { buildSecIpoTables } from "../lib/server/ipoSecSource.ts";
 // writes -- two writers producing subtly different rows would both look
 // plausible and disagree only where nobody checks.
 import { mergeIpoRecords, validateStored, windowStartFor } from "../lib/server/ipoRecordMerge.ts";
+// AND THE SAME COVER PARSER. This was ~60 lines of regexes living in this file,
+// which meant the seed and the daily refresh would each have had their own copy
+// of the price rules -- two writers filling the same field, drifting silently,
+// and both producing prices that look equally plausible. Same argument as the
+// merge above; the parser was simply the last piece still duplicated.
+import { parseCoverTerms, stripHtml, TERMS_BEARING_FORM } from "../lib/server/ipoCoverTerms.ts";
 
 const SEC_UA = process.env.SEC_USER_AGENT || "MyStockHarbor sonnybrindle@mystockharbor.com";
 const WINDOW_DAYS = Number(process.env.IPO_SEED_WINDOW_DAYS || 90);
@@ -82,91 +88,6 @@ async function get(url, timeoutMs = 120000) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-const strip = (html) =>
-  html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x201c;|&#x201d;/g, '"')
-    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, " ")
-    .replace(/\s+/g, " ");
-
-// ── Cover-page terms. The parser Phase 0 gated at 5/5 on correctness. ──────
-// Plausibility bounds, phrase anchors, and NULL RATHER THAN A GUESS: a dash in
-// the column is honest, "$0.00001" is a par value the old parser read as an
-// offer price.
-const plausible = (n) => Number.isFinite(n) && n >= 1 && n <= 500;
-const RANGE_PHRASES = [
-  /(?:initial public offering price|public offering price|offering price)[^.]{0,60}?between\s+\$\s?([\d.]+)\s+and\s+\$\s?([\d.]+)/i,
-  /between\s+\$\s?([\d.]+)\s+and\s+\$\s?([\d.]+)\s+per\s+(?:share|ADS)/i,
-  /\$\s?([\d.]+)\s*(?:to|and|–|—|-)\s*\$\s?([\d.]+)\s+per\s+(?:share|ADS)/i,
-];
-const FINAL_PHRASES = [
-  /initial public offering price (?:is|of|was)\s+\$\s?([\d.]+)/i,
-  /public offering price (?:is|of|was)\s+\$\s?([\d.]+)\s+per\s+(?:share|ADS)/i,
-  /offering price of\s+\$\s?([\d.]+)\s+per\s+(?:share|ADS)/i,
-];
-const SPAC_UNIT = /\$\s?10\.00\s+per\s+unit|price of\s+\$\s?10\.00/i;
-const SPAC_BODY = [/blank check company/i, /business combination/i, /trust account/i];
-
-function parseTerms(text, sic) {
-  const cover = text.slice(0, 80000);
-  const isSpac = sic === "6770" || SPAC_BODY.filter((re) => re.test(cover)).length >= 2;
-
-  let low = null;
-  let high = null;
-  for (const re of RANGE_PHRASES) {
-    const m = cover.match(re);
-    if (m) {
-      const lo = Number(m[1]);
-      const hi = Number(m[2]);
-      // BOTH ENDS PLAUSIBLE IS NOT ENOUGH. The first seed run produced Aptevo
-      // at $11.70-$428.40 -- every value inside the $1-$500 bound, and a deal
-      // size of $1.42 BILLION for a microcap follow-on. A real IPO range is
-      // tight; underwriters do not market a 36x spread. Anything wider than 3x
-      // means the two numbers came from different sentences.
-      const RATIO_MAX = 3;
-      if (plausible(lo) && plausible(hi) && lo <= hi && hi <= lo * RATIO_MAX) {
-        low = lo;
-        high = hi;
-      }
-      break;
-    }
-  }
-  // A SPAC unit is fixed at $10.00 and has no range. The $11.50 nearby is the
-  // WARRANT EXERCISE PRICE and was 3 of the first parser's 8 wrong answers.
-  if (low === null && isSpac && SPAC_UNIT.test(cover)) { low = 10.0; high = 10.0; }
-  if (low === null) {
-    for (const re of FINAL_PHRASES) {
-      const m = cover.match(re);
-      if (m) {
-        const n = Number(m[1]);
-        if (plausible(n)) { low = n; high = n; }
-        break;
-      }
-    }
-  }
-
-  const sharesM =
-    cover.match(/([\d,]{5,})\s+shares\s+of\s+(?:our\s+)?(?:common|ordinary)\s+(?:stock|shares)/i) ||
-    cover.match(/offering\s+([\d,]{5,})\s+shares/i);
-  const shares = sharesM ? Number(sharesM[1].replace(/,/g, "")) : null;
-
-  return {
-    priceRangeLow: low,
-    priceRangeHigh: high,
-    sharesOffered: Number.isFinite(shares) ? shares : null,
-    exchange:
-      (cover.match(
-        /(New York Stock Exchange|NYSE American|Nasdaq Global Select Market|Nasdaq Global Market|Nasdaq Capital Market|NYSE|Nasdaq)/i
-      ) ?? [])[1] ?? null,
-    proposedSymbol:
-      (cover.match(/(?:symbol|ticker)\s*["'"]?\s*:?\s*["'"]?\s*([A-Z]{1,5})\b/) ?? [])[1] ?? null,
-  };
 }
 
 console.log("=".repeat(78));
@@ -318,9 +239,7 @@ const all = [...byCik.values()];
 // something upstream ate its input. The classifier owns every exclusion; this
 // only decides whose cover is worth fetching, and an unfetched cover is exactly
 // what "no terms" means.
-const needsSic = all.filter((r) =>
-  r.filings.some((f) => /^(424B[14]|S-1\/A|F-1\/A)$/.test(f.form))
-);
+const needsSic = all.filter((r) => r.filings.some((f) => TERMS_BEARING_FORM.test(f.form)));
 console.log(`\n   fetching SIC for ${needsSic.length} filers (submissions.json, parsed)`);
 let sicOk = 0;
 for (const rec of needsSic) {
@@ -350,7 +269,7 @@ console.log(`\n   fetching cover terms for ${needsTerms.length} of ${needsSic.le
 let termsOk = 0;
 for (const rec of needsTerms) {
   const relevant = rec.filings
-    .filter((f) => /^(424B[14]|S-1\/A|F-1\/A)$/.test(f.form))
+    .filter((f) => TERMS_BEARING_FORM.test(f.form))
     .sort((a, b) => a.date.localeCompare(b.date));
   const f = relevant.pop();
   if (!f) continue;
@@ -370,7 +289,7 @@ for (const rec of needsTerms) {
   await sleep(140);
   const doc = await get(`https://www.sec.gov/Archives/edgar/data/${Number(rec.cik)}/${accession}/${primary}`);
   if (!doc.ok) continue;
-  rec.terms = parseTerms(strip(doc.body), rec.sic);
+  rec.terms = parseCoverTerms(stripHtml(doc.body), rec.sic);
   if (rec.terms.priceRangeLow !== null || rec.terms.sharesOffered !== null) termsOk += 1;
 }
 console.log(`   terms extracted for ${termsOk}/${needsTerms.length}`);
@@ -478,7 +397,13 @@ for (const r of recent) {
 // Not hand-assembled here. mergeIpoRecords is what the daily ingest calls, so
 // seeding and accumulating cannot drift apart in the record shape, the prune
 // boundary or the ordering.
-const doc = mergeIpoRecords([], all, windowStartFor(TODAY, WINDOW_DAYS), TODAY.getTime());
+// THE WATERMARK IS PART OF THE SHAPE. A seeded document and a walked one must
+// be indistinguishable to the next refresh, which reads lastIndexDate to decide
+// where to resume; a seed that left it null would send the following run back a
+// full 90 days to re-walk what this just built.
+const doc = mergeIpoRecords([], all, windowStartFor(TODAY, WINDOW_DAYS), TODAY.getTime(), {
+  lastIndexDate: TODAY_ISO.replace(/-/g, ""),
+});
 const valid = validateStored(doc);
 console.log(`\n── STORE DOCUMENT (built by the shared merge, not by this script)`);
 console.log(`   records after merge+prune: ${doc.records.length} (from ${all.length} parsed)`);

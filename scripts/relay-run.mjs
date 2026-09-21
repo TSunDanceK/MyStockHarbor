@@ -238,6 +238,20 @@ const TASKS = {
     // the runner strips the types itself.
     nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
   },
+  // THE FIRST LIVE RUN OF THE DAILY INGEST. Steps 3-5 have only ever been
+  // fixture-proven; this calls ingestIpoWindow(), mergeIpoRecords() and
+  // buildSecIpoTables() -- the shipped functions, not copies -- against real
+  // EDGAR and prints both tables. Read-only by construction: the write is
+  // app-side (app/api/jobs/ipo-refresh) because that is where the write token
+  // is, and this job holds none.
+  "ipo-ingest": {
+    script: "scripts/ipo-ingest-probe.mjs",
+    args: () => [],
+    // Same reason as ipo-seed: it imports the app's .ts modules directly, and
+    // Node's ESM loader needs the resolve hook to find their extensionless
+    // relative specifiers.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
   // and diffs every extracted number against the frozen FMP ground truth in the
   // dump. Needs the dump for the FMP side and the network for the SEC side, and
