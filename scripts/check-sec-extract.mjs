@@ -53,6 +53,24 @@ const mod = await lift(`${PRELUDE}\n${extractSrc}`);
 // THE SAME TWO FILES, RE-LIFTED WITH ONE LINE OF THE SHIPPED SOURCE BROKEN.
 // Used by §7's mutations: an assertion that survives the removal of the rule it
 // claims to be testing is not testing it.
+/**
+ * Mutate the WHOLE unit, not just secExtract.
+ *
+ * WHY THIS EXISTS BESIDE liftMutated. The brief's mutant #7 is "weighted-average
+ * diluted tag ADMITTED TO THE SHARES CHAIN", and the chain lives in secFields,
+ * which liftMutated does not touch. The first version of that mutant removed the
+ * runtime denylist while leaving the chain alone -- so the loop never reached a
+ * forbidden tag, removing the guard changed nothing, and the mutant PASSED WHILE
+ * PROVING NOTHING. That is the failure this whole harness exists to make visible,
+ * and it took a third look to spot.
+ */
+const liftUnitMutated = async (mutate) => {
+  const unit = `${PRELUDE}\n${extractSrc}`;
+  const broken = mutate(unit);
+  if (broken === unit) throw new Error("unit mutation did not apply — the anchor text moved");
+  return lift(broken);
+};
+
 const liftMutated = async (mutate) => {
   const broken = mutate(extractSrc);
   if (broken === extractSrc) throw new Error("mutation did not apply — the anchor text moved");
@@ -63,6 +81,7 @@ const {
   SEC_FIELDS, SEC_FIELD_KEYS, SEC_FIELD_INDEX, secFieldsHash, COVER_SHARES_FIELD,
   cumulativeFields, instantFields, asFiledOnlyFields, fieldPartition,
   extractCompanyFacts, readCoverShares, quartersCovered, spanDays, sameFrame,
+  COVER_SHARES_FALLBACK, FORBIDDEN_COVER_TAGS, assertCoverChainsAreClean,
   checkIdentities, identityRates,
 } = mod;
 
@@ -1745,6 +1764,138 @@ console.log("\n IFRS: a second namespace, ranked BELOW the primary one");
   check("the ifrs table cites the run that corrected it",
     /relay 34970388423|34971118882|34971551511/.test(fieldsSrc),
     "four entries were deleted and two added on this evidence");
+}
+
+// ── THE COVER SHARE CHAIN ──────────────────────────────────────────────────
+// Brief mutant #7: "weighted-average diluted tag admitted to the shares chain".
+//
+// A weighted-average count is an AVERAGE OVER A PERIOD, not a count at a date,
+// and it is inflated by options and convertibles that may never be exercised.
+// Multiplying it by a price gives a diluted-basis valuation wearing a market
+// cap's label -- a few percent off for most filers, far more for one with heavy
+// option overhang. Plausible, and wrong, which is the only kind of error this
+// pipeline treats as serious.
+console.log("\n9. the cover share chain, and the tag that must never enter it");
+
+// THE FALLBACK, AND WHY IT EXISTS. Measured (relay 35620148960): Alphabet and
+// Under Armour publish NO dei cover tag at all, so before this they had no
+// share count for a reason that was a gap in the READ, not in the filing.
+{
+  const usGaapOnly = { facts: { "us-gaap": { CommonStockSharesOutstanding: { units: { shares: [
+    { end: "2026-07-18", val: 12_345, accn: "b", filed: "2026-07-20" },
+  ] } } } } };
+  const cover = readCoverShares(usGaapOnly);
+  check("a filer with no dei cover tag falls back to the us-gaap line",
+    cover?.val === 12_345 && cover?.derived === "as-filed",
+    `${JSON.stringify(cover)} — Alphabet and Under Armour are this shape`);
+
+  // PREFERENCE, NOT A MERGE. The cover page is the filer's most recent
+  // statement; the balance-sheet line is as of the period end, weeks earlier.
+  const both = { facts: {
+    dei: { EntityCommonStockSharesOutstanding: { units: { shares: [
+      { end: "2026-07-18", val: 999, accn: "b", filed: "2026-07-20" },
+    ] } } },
+    "us-gaap": { CommonStockSharesOutstanding: { units: { shares: [
+      { end: "2026-06-30", val: 888, accn: "b", filed: "2026-07-20" },
+    ] } } },
+  } };
+  const pref = readCoverShares(both);
+  check("dei WINS where both exist — it is the newer statement",
+    pref?.val === 999, JSON.stringify(pref));
+  check("...and the two are never pooled, which would read two dates as two classes",
+    pref?.derived === "as-filed" && pref?.candidates === undefined,
+    "pooling 999 and 888 would yield `ambiguous` and blank a figure both sources agree exists");
+}
+
+// THE EXCLUSION, AS AN ENFORCED RULE RATHER THAN AN ABSENCE.
+{
+  check("the weighted-average diluted tag is on the denylist",
+    FORBIDDEN_COVER_TAGS.includes("WeightedAverageNumberOfDilutedSharesOutstanding"));
+  check("...along with the basic and IFRS spellings of the same mistake",
+    ["WeightedAverageNumberOfSharesOutstandingBasic", "AdjustedWeightedAverageShares", "WeightedAverageShares"]
+      .every((t) => FORBIDDEN_COVER_TAGS.includes(t)));
+  check("neither shipped chain names a forbidden tag",
+    [...COVER_SHARES_FIELD.chain, ...COVER_SHARES_FALLBACK.chain]
+      .every((t) => !FORBIDDEN_COVER_TAGS.includes(t)));
+
+  // THE ASSERTION IS A FUNCTION, so it can be run against a BAD chain here
+  // rather than only against the shipped good one. A guard only ever exercised
+  // on correct input is a guard nobody has seen work.
+  let threw = false;
+  try { assertCoverChainsAreClean(["WeightedAverageNumberOfDilutedSharesOutstanding"], []); }
+  catch { threw = true; }
+  check("the load-time guard THROWS on a chain that names one",
+    threw, "this is what makes the denylist a rule rather than a comment");
+
+  let threwFallback = false;
+  try { assertCoverChainsAreClean([], ["AdjustedWeightedAverageShares"]); }
+  catch { threwFallback = true; }
+  check("...on EITHER branch of the chain, not just the primary",
+    threwFallback, "the fallback is the newer and less-watched of the two");
+
+  // AND THE READ REFUSES IT EVEN IF THE GUARD IS ROUTED AROUND. A filer that
+  // publishes ONLY a weighted-average count must yield no cover count at all,
+  // not that count.
+  const weightedOnly = { facts: { "us-gaap": {
+    WeightedAverageNumberOfDilutedSharesOutstanding: { units: { shares: [
+      { end: "2026-07-18", val: 5_000, accn: "b", filed: "2026-07-20" },
+    ] } },
+  } } };
+  check("a filer publishing ONLY a weighted-average count yields no cover count",
+    readCoverShares(weightedOnly) === null,
+    "5,000 x a price is a diluted-basis figure labelled as a market cap");
+}
+
+// ── THE MUTANT THAT CLOSES BRIEF #7, IN THREE PARTS ───────────────────────
+// The edit it describes is a real and tempting one: after the measurement that
+// Alphabet and Under Armour publish no dei cover tag, "extend the chain to
+// improve coverage" is exactly what someone would try next.
+{
+  // The filer that makes the difference visible: NO usable count under either
+  // real tag, and a weighted-average one sitting right there.
+  const weightedOnly = { facts: { "us-gaap": {
+    CommonStockSharesOutstanding: { units: { shares: [] } },
+    WeightedAverageNumberOfDilutedSharesOutstanding: { units: { shares: [
+      { end: "2026-07-18", val: 5_000, accn: "b", filed: "2026-07-20" },
+    ] } },
+  } } };
+
+  const ADMIT = [
+    'chain: ["CommonStockSharesOutstanding"],',
+    'chain: ["CommonStockSharesOutstanding", "WeightedAverageNumberOfDilutedSharesOutstanding"],',
+  ];
+  const DROP_LOAD_GUARD = ["\nassertCoverChainsAreClean();", "\n"];
+  const DROP_RUNTIME_GUARD = [
+    "      if (FORBIDDEN_COVER_TAGS.includes(tag)) continue;",
+    "      // removed",
+  ];
+
+  // 7a — the chain is extended and NOTHING else changes. The load-time guard
+  // must refuse the module outright.
+  let loadRefused = false;
+  try { await liftUnitMutated((u) => u.replace(...ADMIT)); }
+  catch { loadRefused = true; }
+  check('MUTATION "weighted-average diluted tag admitted to the shares chain" is refused at load',
+    loadRefused,
+    loadRefused ? "" : "the module loaded with a weighted-average tag in its chain");
+
+  // 7b — the load guard is ALSO removed, so the module loads. The runtime
+  // denylist is the second line and must still refuse the value.
+  const noLoadGuard = await liftUnitMutated((u) =>
+    u.replace(...ADMIT).replace(...DROP_LOAD_GUARD));
+  check("...and with the load guard gone, the READ still refuses it",
+    noLoadGuard.readCoverShares(weightedOnly) === null,
+    "two independent guards, so neither is the only thing standing between this and a render");
+
+  // 7c — BOTH guards removed. This one must NOT refuse: if it did, 7a and 7b
+  // would be passing for some other reason and proving nothing about either
+  // guard. This is the control that makes the two above mean something.
+  const noGuards = await liftUnitMutated((u) =>
+    u.replace(...ADMIT).replace(...DROP_LOAD_GUARD).replace(...DROP_RUNTIME_GUARD));
+  const leaked = noGuards.readCoverShares(weightedOnly);
+  check("CONTROL: with BOTH guards removed the weighted-average value DOES leak through",
+    leaked?.val === 5_000,
+    `got ${JSON.stringify(leaked)} — if this refuses too, 7a and 7b prove nothing`);
 }
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nExtraction structure is sound.\n");
