@@ -30,7 +30,8 @@ import {
   buildSecEarningsView, conversionNote, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
-import { resolveFactSetForRender } from "./secColdFetch";
+import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
+import { buildProfileDividend, type ProfileDividend } from "./secDividend";
 import { readReportDates, latestResults } from "./secReportDatesStore";
 import {
   TIMING_WORDING, type ReportTiming,
@@ -362,6 +363,47 @@ export async function getSecEarningsSnapshot(symbol: string): Promise<SecEarning
     resolveFactSetForRender(clean),
     readReportDates(clean).catch(() => null),
   ]);
+  return snapshotFrom(clean, cold, dates);
+}
+
+/**
+ * The stock page needs TWO things out of one fact set. This reads it once.
+ *
+ * ── WHY THIS EXISTS RATHER THAN TWO CALLS ────────────────────────────────
+ * The obvious shape is `getSecEarningsSnapshot(sym)` and
+ * `getProfileDividend(sym)` side by side in the page's Promise.all, and the
+ * first draft was exactly that, with a comment claiming the second read came
+ * free because secColdFetch dedupes an in-flight read per symbol.
+ *
+ * IT DOES NOT. `resolveFactSetForRender` calls `readFactSet` unconditionally —
+ * there is no in-flight map in that module, unlike `getDailyHistory`, which
+ * has one and is probably where the belief came from. Two calls are two Redis
+ * reads of the same ~15 KB value, on the most-crawled route on the site, for
+ * data that cannot have changed between them.
+ *
+ * So the read happens once here and both answers are derived from it. Same
+ * shape as the earnings page's bars: one read, two shapes of answer.
+ */
+export async function getStockPageSecFacts(symbol: string): Promise<{
+  snapshot: SecEarningsSnapshot;
+  dividend: ProfileDividend;
+}> {
+  const clean = symbol.trim().toUpperCase();
+  const [cold, dates] = await Promise.all([
+    resolveFactSetForRender(clean),
+    readReportDates(clean).catch(() => null),
+  ]);
+  return {
+    snapshot: snapshotFrom(clean, cold, dates),
+    dividend: buildProfileDividend(cold.status === "ready" ? cold.set : null),
+  };
+}
+
+function snapshotFrom(
+  clean: string,
+  cold: ColdResult,
+  dates: Awaited<ReturnType<typeof readReportDates>>
+): SecEarningsSnapshot {
   const view = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
   const score = scoreFromSec(view, clean, cold);
 
