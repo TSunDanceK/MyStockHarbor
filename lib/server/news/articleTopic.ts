@@ -81,9 +81,21 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   ["chips",            /\b(semiconductors?|semis|chipmakers?|chip[- ]industry|memory[- ]chips?|dram|wafers?|foundry)\b/i],
   ["ai-compute",       /\b(ai (buildout|infrastructure|capex|compute|chips?)|data ?cent(er|re)s?)\b/i],
   ["crypto",           /\b(bitcoin|crypto|ethereum|stablecoins?|digital assets?)\b/i],
+  // ── MOVED ABOVE THE TWO COMMODITY PATTERNS, AND MEASURED ────────────────
+  // `pipelines` sat below `refining` and `oil-gas-upstream` and was shadowed by
+  // both on the way a pipeline headline is actually written: "Natural gas
+  // pipeline operator lifts its expansion budget" scored `oil-gas-upstream` and
+  // "Crude pipeline outage lifts diesel prices" scored `refining`. It could
+  // only fire on a headline that named a pipeline and no commodity at all,
+  // which is rare enough that the tag was very nearly dead.
+  //
+  // `\bpipelines?\b` is one word with one meaning in a financial headline,
+  // where `crude` and `diesel` appear in stories about many other things. That
+  // is what NARROW BEFORE BROAD means, and it is the same shape as the
+  // "medical devices before medical" ordering in art.ts's INDUSTRY_BUCKETS.
+  ["pipelines",        /\bpipelines?\b/i],
   ["refining",         /\b(refiner(y|ies)|diesel|jet fuel|gasoline|refining margins?)\b/i],
   ["oil-gas-upstream", /\b(crude|opec|barrels?|natural gas|lng|oil (price|export|forecast|market)s?)\b/i],
-  ["pipelines",        /\bpipelines?\b/i],
   ["utilities-grid",   /\b(utilit(y|ies)|power grid|electricity|electrification)\b/i],
   ["nuclear",          /\b(nuclear|reactors?|uranium)\b/i],
   ["solar",            /\bsolar\b/i],
@@ -104,9 +116,15 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // while "banks", "regional lenders" and "the banking sector" still do. It
   // costs no true positive on that sample — there were none to lose — and the
   // whole read-through is in claude/news-art-v2-headlines-2026-09-21.md §6.
+  ["banks",            /\b(banks|lenders|banking (sector|industry|stocks)|regional bank\b)/i],
   ["asset-management", /\b(etfs?|fund managers?|asset managers?|investment managers?|private equity)\b/i],
   ["exchanges",        /\b(s&p 500|nasdaq composite|stock futures|market breadth|wall street)\b/i],
-  ["pharma",           /\b(drugs?|pharma|biopharma|vaccines?)\b/i],
+  // `pharma` ALONE CANNOT MATCH "Pharmaceuticals", which is how the word
+  // appears in most headlines — \b after `pharma` needs a non-word character
+  // and gets a `c`. "Acme Pharmaceuticals slides" reached nothing at all.
+  // `biopharma` stays spelled out because there is no word boundary in front of
+  // its `pharma` for the first alternative to anchor to.
+  ["pharma",           /\b(drugs?|pharma(?:ceuticals?)?|biopharma(?:ceuticals?)?|vaccines?)\b/i],
   ["biotech",          /\bbiotech\b/i],
   ["autos",            /\b(carmakers?|automakers?|auto industry)\b/i],
   // ── LEFT AS THE DRAFT, ON PURPOSE, AND THE ONE HIT IS RECORDED ─────────
@@ -143,7 +161,20 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
  * phrase that carries one.
  */
 const MOTIF_PATTERNS: Array<[string, RegExp]> = [
-  ["macro",      /\b(fed|federal reserve|rate (hike|cut)|interest rates?|inflation|treasury yields?|tariffs?|trade (war|truce)|gdp|central bank)\b/i],
+  // TWO WIDENINGS, BOTH FROM STORIES THAT REACHED NOTHING ON A GENERAL-FEED
+  // SAMPLE, and both kept phrase-anchored rather than made generous:
+  //
+  //   BONDS. `treasury yields` matched and `bond yields` did not, so half the
+  //   rates coverage fell through. `(treasury|bond) yields?` plus `bond market`
+  //   covers it. A bare `yields?` is NOT here: "the strategy yields returns" is
+  //   not a rates story.
+  //
+  //   TRADE TALKS. `trade (war|truce)` matched the outcome and not the event.
+  //   `trade talks` and `trade negotiations` are unambiguous; a bare `summit`
+  //   is not, and is deliberately absent — an AI summit and a developer summit
+  //   are not macro, and there is no phrase that separates them from a G20 one
+  //   without naming it.
+  ["macro",      /\b(fed|federal reserve|rate (hike|cut)|interest rates?|inflation|(treasury|bond) yields?|bond market|tariffs?|trade (war|truce|talks|negotiations)|g7|g20|gdp|central bank)\b/i],
   ["deal",       /\b(takeover|mergers?|acquisitions?|to acquire|funding round|bid for)\b/i],
   ["legal",      /\b(lawsuits?|sues?|court|settlements?|antitrust)\b/i],
   ["jobs",       /\b(layoffs?|hiring|labor unions?|workforce)\b/i],

@@ -69,3 +69,28 @@
 {"src":"probe","title":"Steel mills raise prices across Europe","description":"Crude steel output fell. Crude oil costs are up too.","subjects":["steel"],"motifs":[],"why":"THE TWO PASSES ARE WHOLE PASSES. `oil-gas-upstream` sits far above `steel` in the table and matches this description twice, so a single merged pass would return crude. The title wins because it is the title, not because of where it sits."}
 {"src":"probe","title":"Solar installers face a wave of lawsuits over rooftop leases","subjects":["solar"],"motifs":["legal"],"why":"SUBJECT AND MOTIF ARE SEPARATE AXES. A story is allowed to be both, and the scoring is built on that: 3 for the subject, 2 for the motif."}
 {"src":"probe","title":"","description":null,"subjects":[],"motifs":[],"why":"no text at all is not an error and is not a picture."}
+{"src":"probe","title":"Bitcoin slips below $60,000 as crypto funds see outflows","subjects":["crypto"],"motifs":[],"why":"TAG REACHABILITY. Every row below exists so that one tag in the table is PROVEN to fire. A pattern that cannot fire is dead code that looks alive, and three shapes of that shipped in the first cut of this file: one deleted outright (banks), one shadowed by a pattern above it (pipelines), one unable to match its own word (pharma)."}
+{"src":"probe","title":"Refining margins widen as diesel cracks hit a summer high","subjects":["refining"],"motifs":[]}
+{"src":"probe","title":"Natural gas pipeline operator lifts its expansion budget","subjects":["pipelines"],"motifs":[],"why":"THE SHADOWING REGRESSION, pinned. This is how a pipeline headline is actually written — it names the commodity — and with `pipelines` below `oil-gas-upstream` it scored oil-gas-upstream instead. Moving the tag back down the table fails here."}
+{"src":"probe","title":"Crude pipeline outage lifts diesel prices","subjects":["pipelines"],"motifs":[],"why":"the same shadowing from the other side: `refining` took this one on `diesel`."}
+{"src":"probe","title":"Utilities lift capital plans as power grid demand climbs","subjects":["utilities-grid"],"motifs":[]}
+{"src":"probe","title":"Uranium prices climb as reactors restart","subjects":["nuclear"],"motifs":[]}
+{"src":"probe","title":"Offshore wind turbines get a fresh subsidy","subjects":["wind"],"motifs":[]}
+{"src":"probe","title":"Tanker freight rates surge through the Strait of Hormuz","subjects":["shipping"],"motifs":[]}
+{"src":"probe","title":"Airlines add capacity as air travel demand holds up","subjects":["airlines"],"motifs":[]}
+{"src":"probe","title":"Big banks rally as lenders report stronger margins","subjects":["banks"],"motifs":[],"why":"THE DELETED PATTERN, pinned. `banks` had fourteen lines of comment explaining its narrowing and no pattern line at all — an editing accident that nothing caught, because a tag that never fires breaks no build and fails no manifest check."}
+{"src":"probe","title":"ETFs pull in record inflows as fund managers rotate","subjects":["asset-management"],"motifs":[]}
+{"src":"probe","title":"Stock futures slip as market breadth narrows","subjects":["exchanges"],"motifs":[]}
+{"src":"probe","title":"Acme Pharmaceuticals wins approval for its new therapy","subjects":["pharma"],"motifs":[],"why":"THE WORD IT COULD NOT MATCH. `\\bpharma\\b` needs a non-word character after `pharma` and gets a `c`, so the commonest spelling of the industry reached nothing."}
+{"src":"probe","title":"Biotech shares jump on the trial readout","subjects":["biotech"],"motifs":[]}
+{"src":"probe","title":"Automakers cut output as the auto industry slows","subjects":["autos"],"motifs":[]}
+{"src":"probe","title":"Retailers brace for weaker holiday shopping","subjects":["retail-stores"],"motifs":[]}
+{"src":"probe","title":"Software makers lean on SaaS renewals","subjects":["software"],"motifs":[]}
+{"src":"probe","title":"Housing starts fall as homebuilders pull back","subjects":["homebuilders"],"motifs":[]}
+{"src":"probe","title":"Gold climbs to a record as silver follows","subjects":["mining-precious"],"motifs":[]}
+{"src":"probe","title":"Wheat and corn futures slide as farmers expand acreage","subjects":["agriculture"],"motifs":[]}
+{"src":"probe","title":"The Fed holds rates steady as inflation cools","subjects":[],"motifs":["macro"]}
+{"src":"probe","title":"Bond yields jump after a weak auction","subjects":[],"motifs":["macro"],"why":"`treasury yields` matched and `bond yields` did not, so half the rates coverage fell through to nothing."}
+{"src":"probe","title":"US and China open fresh trade talks","subjects":[],"motifs":["macro"],"why":"`trade war` and `trade truce` matched the outcome and not the event."}
+{"src":"probe","title":"Layoffs mount as the workforce shrinks","subjects":[],"motifs":["jobs"]}
+{"src":"probe","title":"The company plans a listing in New York","subjects":[],"motifs":["ipo"]}

@@ -49,6 +49,20 @@ const check = (label, ok, detail = "") => {
 // the next reader to convert a page that was converted long ago. A mirrored doc
 // is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
+  // ADDED 2026-09-21 with the news-art v2 doc. The held-out GENERAL-FEED review
+  // exists outside the repo: 42 live /headlines headlines the pattern table was
+  // never written against, scored 31% subject / 14% motif-only / 55% nothing,
+  // with all 19 matches read by eye. It is also where four of the five defects
+  // patched in that change were first seen.
+  //
+  // THE CITATION IS KEPT AND ALLOWLISTED RATHER THAN DELETED, because the doc
+  // citing it says in as many words that the 31% cannot be reproduced from this
+  // repo and that anyone quoting it should find the review first. Removing the
+  // path would leave that warning pointing at nothing nameable, which is worse
+  // than a dangling citation: a reader could not even tell what to go and look
+  // for. Strike this line when the review is mirrored -- the stale-entry
+  // assertion below will force it out on the next run either way.
+  "claude/REVIEW-news-art-v2-held-out-2026-09-21.md",
   // ADDED 2026-09-21 with the dashboard-off-FMP scoping doc, mirrored verbatim
   // for the whole-market bars migration. That doc cites this one, which is
   // Project-only and was never mirrored -- the SAME mirroring gap, one level

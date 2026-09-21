@@ -4,9 +4,11 @@ The brief this implements was written outside the repo, so this file carries its
 substance rather than a link to it. It also carries what the implementation
 found, which is not the same as what the brief expected — §6 in particular.
 
-**Status: the machinery is in, the images are not.** `manifest-v2.json` ships
-empty and every tagged lookup returns null, so `/headlines` renders exactly what
-it rendered before this change. §4.1 says what landing the images consists of.
+**Status: complete. The machinery and all 330 images are in.**
+`manifest-v2.json` holds 330 tagged entries, every one of them backed by its two
+files, and the check's manifest and tag assertions execute for real rather than
+skipping. `/headlines` now has the whole library reachable from a headline's own
+words.
 
 ---
 
@@ -34,12 +36,21 @@ The manifest entry is the image's tags, keyed by the WHOLE FILE STEM:
                    "motif": ["macro"],  "tone": "flat", "palette": "mono plus accent" }
 ```
 
-**The files live on the owner's PC (`Downloads\zapi-img`), not in this repo and
-not anywhere a Claude session can reach** — the sandbox's outbound allowlist
-covers GitHub's API and npm and nothing else (CLAUDE.md, "Claude's cloud sandbox
-has a restrictive outbound network allowlist"). So the code landed without them.
-The manifest is the source of truth for what exists; do not assume four of
-anything.
+**Landed on `main` on 2026-09-21**, after the code. The manifest is FLAT —
+`Object.keys()` gives image names, with no `version`/`images` wrapper — which is
+the shape `artTags.ts` reads.
+
+**`any-deal` and `any-macro` hold THREE images, not four.** `any-deal-03` and
+`any-macro-04` are being regenerated. Their names are not contiguous either:
+`any-deal` is 01, 02, 04. Nothing assumes four and nothing derives a filename
+from an index, so neither costs anything — but it is the concrete reason the
+manifest is the source of truth for what exists.
+
+**One incident worth keeping.** The tagged entries were briefly written over
+`manifest.json` itself. The build failed at `art.ts:27` — the exact failure the
+two-manifests rule above predicts — and nothing reached production. `manifest.json`
+was restored byte-for-byte. A shape check would not have been the thing that
+saved it; a separate file was.
 
 ---
 
@@ -82,14 +93,14 @@ and much less reliable classifier than this one.
 
 ### 4.1 Files
 
-`public/news-art/manifest-v2.json`, **empty**, beside the untouched
-`manifest.json`. Landing the images is a data-only follow-up:
+`public/news-art/manifest-v2.json` with its 330 entries, beside the untouched
+`manifest.json`, and the 660 image files alongside the v1 library. The order for
+adding more, which the first landing did not follow and got away with:
 
-1. Unzip both archives into `public/news-art/` (flat, beside the existing
-   library).
-2. Copy `news-art-manifest-full.json` to `public/news-art/manifest-v2.json`.
-3. `node scripts/check-news-art.mjs` — it fails if any name lacks its two
-   files, if any file is unreachable from the manifest, or if any pattern in the
+1. Both sizes of every image into `public/news-art/`.
+2. Then the names into `manifest-v2.json` with their tags.
+3. `node scripts/check-news-art.mjs` — it fails if any name lacks its two files,
+   if any file is unreachable from the manifest, or if any pattern in the
    classifier names a tag no image carries.
 
 In that order. A manifest entry with no file behind it is a broken image on a
@@ -101,7 +112,7 @@ regardless and only a visitor sees it.
 three working surfaces at build time or, worse, silently. Two manifests, two
 consumers, no shared type — asserted in §5.
 
-Repo weight when the images land: +~24 MB, largest single file ~200 KB, within
+Repo weight: +~24 MB, largest single file ~200 KB, within
 GitHub's 1 MB-per-object guidance and nowhere near the 100 MB hard limit.
 
 ### 4.1b Serving, which was already wrong and is fixed here
@@ -183,11 +194,26 @@ twice, where wrapping a render in `{false ? … : null}` left every identifier a
 grep looked for in place while the page went blank.
 
 So the rule moved out of the page body into `planHeadlineArt`, and section 9
-tests it by calling it. The same mutation now fails three assertions. Seven
-other mutations were run against the new checks and all seven fail: score-0
-returning an image, the names left unsorted, motif outscoring subject, a
-manifest name with no file, a file with no manifest name, the fall-through
-deleted, and the description weighted as heavily as the title.
+tests it by calling it. The same mutation now fails three assertions.
+
+**A second assertion was not good enough either, and it cost three defects.**
+"Every tag exists in the manifest" proves a tag has a PICTURE; it cannot prove
+the tag ever FIRES. Three patterns that never fired shipped in the first cut,
+each looking perfectly alive in the source — see §6. So every tag in the table
+must now be proven to fire by a fixture row that produces it, which is a
+requirement on the fixture as much as on the table: a tag added without a row
+fails immediately.
+
+Eleven mutations have been run against these checks and all eleven fail:
+score-0 returning an image, the names left unsorted, motif outscoring subject,
+a manifest name with no file, a file with no manifest name, the tagged branch
+constant-false, the fall-through deleted, the description weighted as heavily as
+the title, and each of §6's three dead-pattern shapes put back.
+
+One of those eleven initially passed and the probe was wrong, not the check: the
+`pharma` row said "wins approval for its new vaccine", so it matched on
+`vaccines?` and proved nothing about the spelling under test. A probe for a
+pattern has to be a string only that pattern can match.
 
 ---
 
@@ -288,45 +314,106 @@ phrases would cost precision on every product-launch headline that says
 "target". Both are kept in the fixture as asserted negatives so the trade is
 visible rather than forgotten.
 
+### A second held-out sample, on the general feed
+
+A review run against **42 live `/headlines` headlines the table was never
+written against** was reported to me as scoring **31% subject / 14% motif-only /
+55% nothing**, with all 19 matches read by eye: 17 fair, 2 weak, 0 wrong.
+
+**Those numbers are recorded second-hand and cannot be reproduced from this
+repo.** The review they come from,
+`claude/REVIEW-news-art-v2-held-out-2026-09-21.md`, is not on `main` and not in
+this branch — I looked. Neither is the 42-headline sample. Anyone quoting the
+31% should find that doc first; if it stays unmirrored, the number has the same
+standing as a figure from a chat, which is the gap `check-doc-citations` exists
+to shrink.
+
+What that run **did** produce, and what is verified here, is five defects. Each
+was reproduced against the shipped code before being patched, and each now has a
+fixture row pinning it:
+
+| defect | evidence | patch |
+|---|---|---|
+| `pipelines` shadowed | "Natural gas pipeline operator lifts its expansion budget" scored `oil-gas-upstream`; "Crude pipeline outage lifts diesel prices" scored `refining` | moved above both commodity patterns — one word with one meaning beats two words that appear in many stories |
+| `pharma` cannot match "Pharmaceuticals" | "Shares of Acme Pharmaceuticals slide" → nothing | `pharma(?:ceuticals?)?`, with `biopharma` still spelled out (no word boundary in front of its own `pharma`) |
+| bond/yield stories reach nothing | "Bond yields jump after the auction" → nothing, while "Treasury yields climb" matched | `(treasury\|bond) yields?` and `bond market`. A bare `yields?` is NOT added — "the strategy yields returns" is not a rates story |
+| trade-talks stories reach nothing | "US and China open fresh trade talks" → nothing, while `trade war` matched | `trade (war\|truce\|talks\|negotiations)`, plus `g7\|g20`. A bare `summit` is deliberately absent: an AI summit and a developer summit are not macro |
+| **`banks` never fired at all** | "Big banks rally as lenders report stronger margins" → nothing | the pattern line was **missing** — fourteen lines of comment explaining its narrowing, and no pattern. An editing accident in the first cut, found here |
+
+The fifth is mine and was not in the review; it is the worst of the five,
+because the comment above it describes a narrowing that the code did not
+implement, so the file read as if the tag worked. Nothing caught it: it breaks
+no build, no type, and no manifest assertion. That is what the new
+proven-to-fire check in §5 exists for.
+
+**The patches are mine, not the review's.** I could not read the review's, so
+where it proposed something different the two should be compared before this is
+called settled.
+
+### The patches do not move the per-symbol number
+
+Re-running the 2026-09-13 sample after all five: **still 6.8% / 15.1% /
+78.1%**, byte-identical. None of the five patched patterns fires on a per-symbol
+tech-and-consumer feed at all. That is not a disappointment, it is the argument
+for the second sample: three dead patterns and two coverage gaps were completely
+invisible on the sample I had, and only a different feed exposed them.
+
 ### Still owed
 
-A general-feed measurement, on the feed `/headlines` actually renders. The
-sandbox cannot reach `financialmodelingprep.com` (all outbound returns `000`
-through the proxy), so it needs either a relay capture of
-`getGeneralMarketHeadlines()` committed as a fixture, or the numbers taken
-owner-side. Until then the honest statement of coverage on this page is "between
-7% and 58%, and nobody has measured where".
+A general-feed measurement **reproducible from this repo**. The sandbox cannot
+reach `financialmodelingprep.com` (all outbound returns `000` through the
+proxy), so it needs a relay capture of `getGeneralMarketHeadlines()` committed
+as a fixture, the way `eventtype-gnews.jsonl` was. Until then the honest
+statement of coverage on this page is "7% on company copy, 31% on the general
+feed per an unmirrored review, and one reproducible number short".
 
 ---
 
 ## 7. Acceptance — what is and is not verified
 
-Verified here: `tsc --noEmit` clean; `eslint` unchanged at 215 pre-existing
-problems, none in the files this change touches; `node scripts/check-news-art.mjs`
-passes in full, including the eight sections that existed before; eight
-mutations fail the checks they should fail.
+Verified here: `tsc --noEmit` clean; `eslint` unchanged at its pre-existing
+problem count, none in the files this change touches; `node
+scripts/check-news-art.mjs` passes in full with the REAL 330-entry manifest —
+every name backed by two files, no file unreachable, all 25 subjects and 8
+motifs both present in the manifest and proven to fire; `node
+scripts/check-all.mjs` green; eleven mutations fail the checks they should.
 
 **Not verified here, and cannot be:** anything rendered. The sandbox cannot
 reach `*.vercel.app` or `www.mystockharbor.com` (`403 CONNECT tunnel failed`),
 and `next build` cannot complete without Upstash credentials — both recorded in
-CLAUDE.md. Confirming the deployed page, and that `/stock/*/news`,
-`/sector/*/news` and the dashboard strip are unchanged, is an owner-side step.
-It is a cheap one in this case: with the manifest empty, every card on every one
-of those surfaces is planned by code paths this change does not touch.
+CLAUDE.md. So the one thing left is an owner-side look at the deployed page:
+
+1. `/headlines` shows art on the cards the classifier matches and nothing on the
+   rest — not a picture on every card, which would mean something is guessing.
+2. Spot-check five pictures against their headlines. The failure to look for is
+   a picture that asserts something the article does not say; a merely generic
+   one is fine.
+3. `/stock/*/news`, `/sector/*/news` and the dashboard strip are unchanged.
+   Confirm by loading one of each, not by reasoning about the diff.
+4. No broken images. Every name is asserted against its files here, so a 404
+   would mean a deploy or serving problem, not a manifest one — check the
+   `news-art/` matcher exclusion survived if so.
 
 ---
 
 ## 8. Open, not in this change
 
-- **The images themselves**, per §4.1. Until they land this is machinery with
-  nothing to select from, and the check says so in a NOTE on every run.
-- **A general-feed measurement**, per §6.
+- **A reproducible general-feed measurement**, per §6. The most valuable single
+  thing left.
+- **Mirroring `claude/REVIEW-news-art-v2-held-out-2026-09-21.md`** into the
+  repo, and comparing its four patches against the five landed here.
+- **Two motif redos** — `any-deal-03`, `any-macro-04`. `any-deal` and
+  `any-macro` hold three images until then, and `any-deal`'s names are not
+  contiguous (01, 02, 04). Nothing assumes four.
 - **The provider-map** (FMP labels + SIC → concepts) and switching the three
   symbol-led surfaces to tag scoring. That is where the 268 subject images pay
   off properly, and it needs the FMP-exit work to settle first.
-- **Two motif redos** (`any-deal-03`, `any-macro-04`); the manifest already
-  reflects their absence.
 - **Wave 2** (a second palette and scene per subject) and **Wave 4** (subject +
   motif combinations for the busiest subjects) are not started.
-- **Eight motifs with art and no patterns**, per §4.3. Add one only with a
-  phrase that carries a single meaning in a financial headline.
+- **Eight motifs with art and no patterns** — `cash`, `contract`, `filing`,
+  `launch`, `leadership`, `partnership`, `split`, `supply`. Add one only with a
+  phrase that carries a single meaning in a financial headline. Each will need a
+  fixture row, which §5's proven-to-fire check now enforces.
+- **42 of the 67 subjects have art and no pattern.** Same rule, same cost: a
+  pattern is worth adding when a phrase for it is decisive, not because an image
+  is sitting there.

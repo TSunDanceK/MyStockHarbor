@@ -932,6 +932,37 @@ check(
   })(),
   `${asserted.filter((r) => r.src !== "probe").length} real rows, ${asserted.filter((r) => r.src === "probe").length} probes`
 );
+// ── THE CHECK THAT WAS MISSING, AND IT COST THREE DEFECTS ─────────────────
+// "Every tag exists in the manifest" (above) proves a tag has a PICTURE. It
+// cannot prove the tag ever FIRES, and three patterns that never fired shipped
+// in the first cut of articleTopic.ts, each looking perfectly alive in the
+// source:
+//
+//   banks     — fourteen lines of comment explaining the narrowing, and the
+//               pattern line itself deleted by an editing accident.
+//   pipelines — present and correct, and shadowed by `oil-gas-upstream` and
+//               `refining` on every headline that names the commodity, which
+//               is how a pipeline headline is written.
+//   pharma    — `\bpharma\b` cannot match "Pharmaceuticals".
+//
+// None of the three breaks a build, a type, or any assertion above. So every
+// tag must now be PROVEN to fire by a row that produces it, which is a
+// requirement on the fixture as much as on the table: a tag added to the table
+// without a row lands here immediately.
+const emittedSubjects = new Set(asserted.flatMap((r) => r.subjects));
+const emittedMotifs = new Set(asserted.flatMap((r) => r.motifs));
+const neverFires = [
+  ...topic.SUBJECT_TAGS.filter((t) => !emittedSubjects.has(t)).map((t) => `subject:${t}`),
+  ...topic.MOTIF_TAGS.filter((t) => !emittedMotifs.has(t)).map((t) => `motif:${t}`),
+];
+check(
+  "every tag in the table is PROVEN to fire by a fixture row that produces it",
+  neverFires.length === 0,
+  neverFires.length
+    ? `never fires: ${neverFires.join(", ")} — deleted, shadowed by a pattern above it, or unable to match its own word`
+    : `${topic.SUBJECT_TAGS.length} subjects, ${topic.MOTIF_TAGS.length} motifs, all reachable`
+);
+
 for (const row of imprecise) {
   console.log(`  NOTE  imprecise: "${row.title.slice(0, 60)}" — ${row.imprecise.split(".")[0]}.`);
 }
