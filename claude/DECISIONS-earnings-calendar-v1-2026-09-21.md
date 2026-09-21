@@ -45,3 +45,51 @@ When a claude.ai Project doc is pasted into context, commit it verbatim to
 mirrored at `claude/dashboard-off-fmp-scoping-2026-09-12.md`. The interim
 second-hand summary has been deleted rather than left beside it — two files on
 one subject at different fidelities is how the wrong one gets cited.
+
+---
+
+# Owner decisions, later on 2026-09-21
+
+## 5. Whole-market bars + stage 5 (dynamic top-50) — OFF THE ROADMAP
+
+**Closed, not deferred.** No budget for a paid bars source — Tiingo and the
+others were declined 2026-09-12 and that was reconfirmed on 2026-09-21. The free
+route is gone rather than licence-ambiguous: Stooq was eliminated from **three
+independent egress paths** (a GitHub Actions runner, a residential UK browser,
+and Vercel `iad1`), so it is not a datacentre-IP problem, not a rate limit, and
+not a retry candidate.
+
+Consequences already applied:
+
+- `scripts/due-strip-universe.mjs` — the static top-50 is **permanent** (§6
+  below). Its stage-5 replacement language is removed, not softened.
+- Brief mutants **#1** and **#3** become **permanently inapplicable**. They are
+  kept in the denominator and reported separately by
+  `scripts/check-brief-mutants.mjs` — see that file's header for why netting
+  them out would be a coverage lie.
+- Stage 4 (price + market cap) is re-scoped to the existing 700-symbol analysis
+  universe, with cells **hidden** rather than dashed for anything outside it.
+
+**This closure still needs recording in
+`claude/HANDOFF-earnings-calendar-v1-2026-09-21.md`, which does not exist —
+see below.**
+
+## 6. Due strip — the static top-50 is PERMANENT
+
+Not an interim v1 simplification. Regeneration stays periodic with the
+generation date visible in the file; no live ranking is coming.
+
+## 7. Doc loss, fourth occurrence — STILL OPEN
+
+`HANDOFF-earnings-calendar-v1-2026-09-21` was to be mirrored here verbatim. The
+paste carried a placeholder directing a session to pull it from the claude.ai
+Project or to ask the operator, and **a Claude Code sandbox session has no
+Project access** — so it was not mirrored, and deliberately not reconstructed
+from memory, which the placeholder also forbids.
+
+`BUILD-BRIEF-earnings-calendar-v1-2026-09-15` is mirrored **§9 only**, which is
+what was supplied. Its header says so and refuses to stand in for the rest.
+
+`scripts/check-doc-citations.mjs` has been **red on `main`** on every run this
+session for four dangling IPO-doc citations. The detector for this class of loss
+already exists and is being run past.

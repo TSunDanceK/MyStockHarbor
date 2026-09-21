@@ -2,9 +2,23 @@
 //
 // WHY A STATIC LIST AT ALL. The strip is a CUT -- the largest companies with
 // results outstanding, not a census -- and the cut is by market cap. Computing
-// that live would couple the strip to the whole-market bars migration (stage 4)
-// and block a page that otherwise works with no vendor at all. Membership moves
-// a few names a quarter, so it is frozen with its generation date visible.
+// that live would couple the strip to the whole-market bars migration and block
+// a page that otherwise works with no vendor at all. Membership moves a few
+// names a quarter, so it is frozen with its generation date visible.
+//
+// ── THIS IS PERMANENT, NOT AN INTERIM V1 SIMPLIFICATION (2026-09-21) ───────
+// It was written as a stopgap for stage 5, which would have replaced it with a
+// live ranking off a whole-market bars pipeline. OWNER DECISION 4/5 OF
+// 2026-09-21 PUT BOTH OFF THE ROADMAP -- closed, not deferred. There is no
+// budget for a paid bars source (Tiingo and the rest declined 2026-09-12 and
+// reconfirmed), and the free route is gone: Stooq was eliminated from three
+// independent egress paths (GitHub runner, a residential UK browser, and Vercel
+// iad1), so it is not a datacentre-IP problem, not a rate limit, and not a
+// retry candidate.
+//
+// So this file is the design, not a placeholder in front of one. It keeps its
+// periodic regeneration and its visible generation date, and nothing is waiting
+// to replace it. Do not reintroduce a TODO pointing at a live ranking.
 //
 // WHAT IS FROZEN IS MEMBERSHIP, NOT A READING. data/static-profile.json's own
 // header is explicit that freezing marketCap "puts a stale number on a live page,
@@ -78,7 +92,7 @@ if (analysis.length < 100) {
 // and states the search that was actually made -- but a top-50 by market cap
 // cannot be generated from this input, and widening the chain further is not
 // the fix. The fix is a cap source that covers the whole market, which is the
-// stage 4 bars migration. See the canary block below.
+// whole-market bars migration, which is off the roadmap. See the canary block below.
 const CAP_SOURCES = ["price-pool.json", "screener-fundamentals.json", "fundamentals.json", "stockdata.json"];
 
 /** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
@@ -198,8 +212,9 @@ const doc = {
     "with results outstanding, not a census -- and this is the cut. Membership only: no market " +
     "cap figure is stored, because a frozen reading on a live page is worse than an absent one " +
     "(see data/static-profile.json). Regenerate with the relay task \"due-strip-universe\" " +
-    "against a fresh step 0 dump; do not hand-edit. Stage 5 of the earnings-calendar build " +
-    "replaces this file with a live ranking off the whole-market bars pipeline.",
+    "against a fresh step 0 dump; do not hand-edit. This list is PERMANENT: the live ranking " +
+    "that would have replaced it was taken off the roadmap on 2026-09-21 along with the " +
+    "whole-market bars migration it depended on.",
   generatedAt: new Date().toISOString().slice(0, 10),
   source: `step 0 dump ${path.basename(DUMP)} · marketCap from ${CAP_SOURCES.join(" -> ")} (widest first, later sources fill gaps only) · analysis universe ${analysis.length} symbols, ${withCap.length} with a cap`,
   cut: CUT,

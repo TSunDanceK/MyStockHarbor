@@ -60,6 +60,21 @@ const KNOWN_MISSING = new Set([
   // evidence behind "crypto is the one place FMP's live data was genuinely
   // live" (§4), so losing the pointer loses the reason that decision was made.
   "claude/pickers-earnings-longcache-and-price-pool-2026-07-22.md",
+  // ADDED 2026-09-21. THE FOURTH LOSS OF THIS KIND, and the first one this
+  // allowlist is being asked to hold open rather than record after the fact.
+  //
+  // The handoff was to be mirrored verbatim; the paste carried a placeholder
+  // saying to pull it from the claude.ai Project or ask the operator, and
+  // forbidding reconstruction from memory. A Claude Code sandbox session has no
+  // Project access, so it could not be mirrored and was deliberately not
+  // invented.
+  //
+  // THE CITATION STAYS AND THE ENTRY IS THE TRACKER. Deleting the reference
+  // would turn a known-missing document into an unknown-missing one, which is
+  // the failure mode this whole file exists for. The stale-entry assertion
+  // below then forces this line out the moment the doc lands -- so the
+  // allowlist clears itself rather than needing someone to remember.
+  "claude/HANDOFF-earnings-calendar-v1-2026-09-21.md",
   // ADDED 2026-09-13 with the SEC build brief. The brief and the evidence docs
   // it supersedes landed in the repo together; these seven are cited by
   // earnings-page-free-sources and sec-pipeline-spec and were never mirrored --
