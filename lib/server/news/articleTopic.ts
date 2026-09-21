@@ -93,7 +93,26 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // where `crude` and `diesel` appear in stories about many other things. That
   // is what NARROW BEFORE BROAD means, and it is the same shape as the
   // "medical devices before medical" ordering in art.ts's INDUSTRY_BUCKETS.
-  ["pipelines",        /\bpipelines?\b/i],
+  // ── AND THEN PHRASE-ANCHORED, BECAUSE THE MOVE INTRODUCED A WORSE BUG ──
+  // Above the commodity patterns also means above `pharma`, and `pipeline` is
+  // ordinary business English for a queue of work — in drug coverage it is THE
+  // standard word. `\bpipelines?\b` therefore took all four of these:
+  //
+  //   "Novo Nordisk's obesity drug pipeline deepens"   -> pipelines
+  //   "Pfizer highlights its oncology pipeline"        -> pipelines
+  //   "Salesforce says its sales pipeline is strongest"-> pipelines
+  //   "Biotech M&A pipeline builds as rates fall"      -> pipelines
+  //
+  // An oil pipeline on a Novo story asserts what the article does not say,
+  // which is the same failure `banks` was narrowed for one entry below. A TAG
+  // THAT FIRES IS NOT A TAG THAT FIRES ON THE RIGHT THING, and every check in
+  // section 9 passed while this was live: the proven-to-fire rows only ask that
+  // the tag CAN fire.
+  //
+  // So the word is anchored to a fuel on one side or a piece of infrastructure
+  // on the other. Both real rows still match — "Natural gas pipeline operator"
+  // on the first alternative and the second, "Crude pipeline outage" on both.
+  ["pipelines",        /\b(?:oil|gas|crude|natural gas|lng|fuel|energy|midstream)\s+pipelines?\b|\bpipelines?\s+(?:operator|network|shutdown|outage|capacity|rupture|system)\b/i],
   ["refining",         /\b(refiner(y|ies)|diesel|jet fuel|gasoline|refining margins?)\b/i],
   ["oil-gas-upstream", /\b(crude|opec|barrels?|natural gas|lng|oil (price|export|forecast|market)s?)\b/i],
   ["utilities-grid",   /\b(utilit(y|ies)|power grid|electricity|electrification)\b/i],
@@ -116,7 +135,12 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // while "banks", "regional lenders" and "the banking sector" still do. It
   // costs no true positive on that sample — there were none to lose — and the
   // whole read-through is in claude/news-art-v2-headlines-2026-09-21.md §6.
-  ["banks",            /\b(banks|lenders|banking (sector|industry|stocks)|regional bank\b)/i],
+  // THE GROUP CLOSES WITH \b, and it did not: only the last alternative carried
+  // one, so `banks` matched inside a longer word and "Banksy artwork sells for
+  // record sum at auction" scored a bank vault. The narrowing itself is
+  // unaffected — "Bank of America resets Apple stock price target" still
+  // reaches nothing here.
+  ["banks",            /\b(?:banks|lenders|banking (?:sector|industry|stocks)|regional bank)\b/i],
   ["asset-management", /\b(etfs?|fund managers?|asset managers?|investment managers?|private equity)\b/i],
   ["exchanges",        /\b(s&p 500|nasdaq composite|stock futures|market breadth|wall street)\b/i],
   // `pharma` ALONE CANNOT MATCH "Pharmaceuticals", which is how the word

@@ -153,7 +153,11 @@ for (const [bucket, count] of Object.entries(manifest)) {
     counted.add(`${bucket}-${nn}-sm.webp`);
   }
 }
-const uncounted = [...files].filter((f) => !counted.has(f));
+// V2 FILES ARE NOT UNCOUNTED V1 FILES. Without this exclusion the note fires on
+// all 660 tagged images and tells the reader to "raise the bucket count" for
+// files that have no bucket and are already reachable through manifest-v2 —
+// advice that is not just noise but wrong to follow. §9 owns those files.
+const uncounted = [...files].filter((f) => !counted.has(f) && /^(?:sector|event)-/.test(f));
 if (uncounted.length) {
   console.log(
     `  NOTE  ${uncounted.length} .webp present but not counted in the manifest — ` +
@@ -900,15 +904,46 @@ if (v2Names.length === 0) {
 // separates the real rows from the constructed probes; `imprecise` rows are
 // printed rather than asserted, so a later narrowing that fixes one does not
 // fail this suite for fixing it.
-const topicRows = read("scripts/fixtures/article-topic.jsonl")
-  .split("\n").filter((l) => l.trim() && !l.startsWith("#")).map((l) => JSON.parse(l));
+// ── TWO FIXTURES, TWO POPULATIONS, ONE ASSERTION ───────────────────────────
+// article-topic.jsonl's real rows are the PER-SYMBOL feed, where a story about
+// Costco says "Costco" and not "retailers". article-topic-general's are the
+// GENERAL feed, which is what /headlines actually serves and where the subject
+// is usually named outright. They score very differently — 6.8% against 33% —
+// and neither is wrong; what is wrong is quoting one number without its sample.
+//
+// Both are asserted by the same code, so a pattern change has to satisfy both
+// populations at once. That is the point: every defect fixed on this branch so
+// far was invisible on one sample and obvious on the other.
+const TOPIC_FIXTURES = [
+  {
+    file: "scripts/fixtures/article-topic.jsonl",
+    // HAND-PICKED FROM A 192-HEADLINE POLL, deliberately over-weighted towards
+    // matches so the precision read-through had something to read. Its split is
+    // a property of that SELECTION and is not a rate: the measured rate on the
+    // full poll is 6.8%, from scripts/newsart-topic-sample.mjs.
+    composition: "hand-picked from a 192-item poll — NOT a rate (the poll measures 6.8%)",
+  },
+  {
+    file: "scripts/fixtures/article-topic-general-2026-09-21.jsonl",
+    // THE WHOLE CAPTURE, every headline on the grid. Its split IS the rate, and
+    // it is a floor: the excerpts are truncated at ~100 characters by the
+    // capture, so rule 3's two-occurrence description leg under-fires here
+    // relative to production.
+    composition: "the whole capture — this IS the rate, and a floor (excerpts truncated at ~100 chars)",
+  },
+];
+const topicRows = TOPIC_FIXTURES.flatMap(({ file }) =>
+  read(file)
+    .split("\n").filter((l) => l.trim() && !l.startsWith("#"))
+    .map((l) => ({ file, ...JSON.parse(l) }))
+);
 const asserted = topicRows.filter((r) => !r.imprecise);
 const imprecise = topicRows.filter((r) => r.imprecise);
 const wrong = [];
 for (const row of asserted) {
   const got = topic.articleTopic(row.title, row.description ?? null);
   if (got.subjects.join(",") !== row.subjects.join(",") || got.motifs.join(",") !== row.motifs.join(",")) {
-    wrong.push(`"${row.title.slice(0, 48)}" -> ${JSON.stringify(got)} want ${JSON.stringify({ subjects: row.subjects, motifs: row.motifs })}`);
+    wrong.push(`[${path.basename(row.file)}] "${row.title.slice(0, 44)}" -> ${JSON.stringify(got)} want ${JSON.stringify({ subjects: row.subjects, motifs: row.motifs })}`);
   }
 }
 check(
@@ -920,18 +955,43 @@ check(
 // and a fixture of all-negatives would pass one that never returns anything.
 // Both shapes are asserted present, so neither degenerate module can pass.
 check(
-  "...and that fixture is not degenerate: real positives, real negatives, both axes",
+  "...and neither fixture is degenerate: real positives, real negatives, both feeds, both axes",
   (() => {
     const real = asserted.filter((r) => r.src !== "probe");
+    // BOTH POPULATIONS, asserted by name. A per-symbol-only fixture is how the
+    // three dead patterns survived: every one of them was silent on that feed
+    // and the suite was green.
+    const perSymbol = real.filter((r) => /gnews/.test(r.src));
+    const general = real.filter((r) => /headlines/.test(r.src));
     return (
-      real.filter((r) => r.subjects.length || r.motifs.length).length >= 15 &&
-      real.filter((r) => !r.subjects.length && !r.motifs.length).length >= 10 &&
+      perSymbol.length >= 30 && general.length >= 30 &&
+      real.filter((r) => r.subjects.length || r.motifs.length).length >= 25 &&
+      real.filter((r) => !r.subjects.length && !r.motifs.length).length >= 25 &&
       asserted.some((r) => r.subjects.length && r.motifs.length) &&
       asserted.some((r) => r.description)
     );
   })(),
-  `${asserted.filter((r) => r.src !== "probe").length} real rows, ${asserted.filter((r) => r.src === "probe").length} probes`
+  `${asserted.filter((r) => /gnews/.test(r.src)).length} per-symbol, ${asserted.filter((r) => /headlines/.test(r.src)).length} general, ${asserted.filter((r) => r.src === "probe").length} probes`
 );
+
+// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ───────────────────────────
+// A match RATE moves with the feed, so pinning it to a threshold produces a
+// check that fails for a reason nobody can act on. Printing it here keeps the
+// number the doc quotes computable from the repo instead of remembered, which
+// is the whole reason the general sample was committed.
+for (const { file, composition } of TOPIC_FIXTURES) {
+  const rows = topicRows.filter((r) => r.file === file && r.src !== "probe");
+  if (!rows.length) continue;
+  const subject = rows.filter((r) => r.subjects.length).length;
+  const motifOnly = rows.filter((r) => !r.subjects.length && r.motifs.length).length;
+  const pc = (n) => `${((n / rows.length) * 100).toFixed(0)}%`;
+  console.log(
+    `  NOTE  ${path.basename(file)}: ${rows.length} real rows — ` +
+      `${subject} subject (${pc(subject)}), ${motifOnly} motif-only, ` +
+      `${rows.length - subject - motifOnly} nothing\n` +
+      `        ${composition}`
+  );
+}
 // ── THE CHECK THAT WAS MISSING, AND IT COST THREE DEFECTS ─────────────────
 // "Every tag exists in the manifest" (above) proves a tag has a PICTURE. It
 // cannot prove the tag ever FIRES, and three patterns that never fired shipped
@@ -964,7 +1024,7 @@ check(
 );
 
 for (const row of imprecise) {
-  console.log(`  NOTE  imprecise: "${row.title.slice(0, 60)}" — ${row.imprecise.split(".")[0]}.`);
+  console.log(`  NOTE  imprecise [${path.basename(row.file).replace(/^article-topic-?/, "").replace(/\.jsonl$/, "") || "per-symbol"}]: "${row.title.slice(0, 52)}" — ${row.imprecise.split(".")[0]}.`);
 }
 
 // ── THE PICKER, AGAINST A SYNTHETIC MANIFEST ───────────────────────────────

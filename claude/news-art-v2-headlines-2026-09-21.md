@@ -204,11 +204,12 @@ must now be proven to fire by a fixture row that produces it, which is a
 requirement on the fixture as much as on the table: a tag added without a row
 fails immediately.
 
-Eleven mutations have been run against these checks and all eleven fail:
+Thirteen mutations have been run against these checks and all thirteen fail:
 score-0 returning an image, the names left unsorted, motif outscoring subject,
 a manifest name with no file, a file with no manifest name, the tagged branch
 constant-false, the fall-through deleted, the description weighted as heavily as
-the title, and each of §6's three dead-pattern shapes put back.
+the title, each of §6's three dead-pattern shapes put back, and each of the two
+regressions in §6's table 6 and 7.
 
 One of those eleven initially passed and the probe was wrong, not the check: the
 `pharma` row said "wins approval for its new vaccine", so it matched on
@@ -316,56 +317,89 @@ visible rather than forgotten.
 
 ### A second held-out sample, on the general feed
 
-A review run against **42 live `/headlines` headlines the table was never
-written against** was reported to me as scoring **31% subject / 14% motif-only /
-55% nothing**, with all 19 matches read by eye: 17 fair, 2 weak, 0 wrong.
+**42 live `/headlines` headlines**, captured 2026-09-21 after the feed rotated
+past the fitted 50, committed as
+`scripts/fixtures/article-topic-general-2026-09-21.jsonl` and asserted by the
+same check that reads the per-symbol fixture. Against the patched table:
+**14 subject (33%), 6 motif-only, 22 nothing**, with all 19 matches read by eye
+— 17 fair, 2 weak, 0 wrong.
 
-**Those numbers are recorded second-hand and cannot be reproduced from this
-repo.** The review they come from,
-`claude/REVIEW-news-art-v2-held-out-2026-09-21.md`, is not on `main` and not in
-this branch — I looked. Neither is the 42-headline sample. Anyone quoting the
-31% should find that doc first; if it stays unmirrored, the number has the same
-standing as a figure from a chat, which is the gap `check-doc-citations` exists
-to shrink.
+**33% is a FLOOR.** The capture truncates each excerpt at ~100 characters, so
+rule 3's two-occurrence description leg under-fires relative to production.
 
-What that run **did** produce, and what is verified here, is five defects. Each
-was reproduced against the shipped code before being patched, and each now has a
-fixture row pinning it:
+Three numbers now exist and each one needs its sample attached:
 
-| defect | evidence | patch |
+| | sample | |
 |---|---|---|
-| `pipelines` shadowed | "Natural gas pipeline operator lifts its expansion budget" scored `oil-gas-upstream`; "Crude pipeline outage lifts diesel prices" scored `refining` | moved above both commodity patterns — one word with one meaning beats two words that appear in many stories |
-| `pharma` cannot match "Pharmaceuticals" | "Shares of Acme Pharmaceuticals slide" → nothing | `pharma(?:ceuticals?)?`, with `biopharma` still spelled out (no word boundary in front of its own `pharma`) |
-| bond/yield stories reach nothing | "Bond yields jump after the auction" → nothing, while "Treasury yields climb" matched | `(treasury\|bond) yields?` and `bond market`. A bare `yields?` is NOT added — "the strategy yields returns" is not a rates story |
-| trade-talks stories reach nothing | "US and China open fresh trade talks" → nothing, while `trade war` matched | `trade (war\|truce\|talks\|negotiations)`, plus `g7\|g20`. A bare `summit` is deliberately absent: an AI summit and a developer summit are not macro |
-| **`banks` never fired at all** | "Big banks rally as lenders report stronger margins" → nothing | the pattern line was **missing** — fourteen lines of comment explaining its narrowing, and no pattern. An editing accident in the first cut, found here |
+| 58% | general feed, 50 headlines | **fitted** — the table was written on them |
+| 33% | general feed, 42 headlines | held out, and a floor |
+| 6.8% | per-symbol feed, 192 headlines | held out |
 
-The fifth is mine and was not in the review; it is the worst of the five,
-because the comment above it describes a narrowing that the code did not
-implement, so the file read as if the tag worked. Nothing caught it: it breaks
-no build, no type, and no manifest assertion. That is what the new
-proven-to-fire check in §5 exists for.
+The full reasoning is in `claude/REVIEW-news-art-v2-held-out-2026-09-21.md`,
+mirrored into the repo on 2026-09-21. The `check-doc-citations` allowlist entry
+that stood in for it while it was unmirrored is gone, forced out by that check's
+own stale-entry assertion — which is the mechanism working exactly as its header
+claims. One citation one level down, to a Cowork-side handoff, took its place.
 
-**The patches are mine, not the review's.** I could not read the review's, so
-where it proposed something different the two should be compared before this is
-called settled.
+### Seven defects, not five
+
+Four came from the general-feed run, one was mine and found while fixing them,
+and **two more were introduced BY those fixes** and found by the same run:
+
+| # | defect | evidence |
+|---|---|---|
+| 1 | `pipelines` shadowed by the commodity patterns | "Saudi East-West pipeline shutdown … crude importers" → `oil-gas-upstream` |
+| 2 | `\bpharma\b` cannot match "Pharmaceuticals" | "ADARx Pharmaceuticals … in US IPO" → no subject |
+| 3 | bond/yield stories reach nothing | 4 of 42 |
+| 4 | trade-talks stories reach nothing | 5 of 42 |
+| 5 | `banks` never fired at all — the pattern line was missing | "Big banks rally as lenders report stronger margins" → nothing |
+| 6 | **`pipelines` then took the metaphor** | "Novo Nordisk's obesity drug pipeline deepens" → `pipelines` |
+| 7 | **`banks` matched "Banksy"** | the group closed without `\b` |
+
+**6 and 7 are the interesting pair, because they are the cost of 1 and 5.**
+Moving `pipelines` above the commodity patterns also put it above `pharma`, and
+"pipeline" is ordinary business English for a queue of work — in drug coverage
+it is the standard word. So the fix for a tag that never fired produced a tag
+that fired on four headlines it had no business on. It is now anchored to a fuel
+on one side or a piece of infrastructure on the other:
+
+```ts
+/\b(?:oil|gas|crude|natural gas|lng|fuel|energy|midstream)\s+pipelines?\b|\bpipelines?\s+(?:operator|network|shutdown|outage|capacity|rupture|system)\b/i
+```
+
+**A TAG THAT FIRES IS NOT A TAG THAT FIRES ON THE RIGHT THING.** §5's
+proven-to-fire check passed throughout defect 6 — it asks only that a tag CAN
+fire, and `pipelines` could. What catches it is a fixture row for the wrong
+answer, which is now there: four of them, two per regression.
+
+All seven were reproduced against shipped code before being patched, and each
+has a fixture row pinning it.
 
 ### The patches do not move the per-symbol number
 
-Re-running the 2026-09-13 sample after all five: **still 6.8% / 15.1% /
-78.1%**, byte-identical. None of the five patched patterns fires on a per-symbol
-tech-and-consumer feed at all. That is not a disappointment, it is the argument
-for the second sample: three dead patterns and two coverage gaps were completely
-invisible on the sample I had, and only a different feed exposed them.
+Re-running the 2026-09-13 sample after all seven: **still 6.8% / 15.1% /
+78.1%**, byte-identical. Not one of the patched patterns fires on a per-symbol
+tech-and-consumer feed. That is the argument for holding both samples rather
+than a disappointment: three dead patterns, two coverage gaps and two
+regressions were all invisible on the sample that was there first.
+
+Both fixtures are asserted by the same check now, so a pattern change has to
+satisfy both populations at once.
 
 ### Still owed
 
-A general-feed measurement **reproducible from this repo**. The sandbox cannot
-reach `financialmodelingprep.com` (all outbound returns `000` through the
-proxy), so it needs a relay capture of `getGeneralMarketHeadlines()` committed
-as a fixture, the way `eventtype-gnews.jsonl` was. Until then the honest
-statement of coverage on this page is "7% on company copy, 31% on the general
-feed per an unmirrored review, and one reproducible number short".
+A capture whose excerpts are not truncated, so the description leg is measured
+rather than bounded. The sandbox cannot reach `financialmodelingprep.com` (all
+outbound returns `000` through the proxy), so this is a relay or Cowork-side
+capture.
+
+The fixture's `note` rows are the recall misses, each recorded with the phrase
+that would have reached it, so the next widening argues with a case rather than
+a hunch. Four worth naming: `aerospace-defence` has four images and no pattern
+at all; bare "bonds" does not reach `macro` where "bond yields" does; "Hormuz"
+alone does not reach `shipping`, and widening to the bare place name would put a
+tanker on every Gulf diplomacy story; and four AI-policy stories reach neither
+axis.
 
 ---
 
@@ -376,7 +410,7 @@ problem count, none in the files this change touches; `node
 scripts/check-news-art.mjs` passes in full with the REAL 330-entry manifest —
 every name backed by two files, no file unreachable, all 25 subjects and 8
 motifs both present in the manifest and proven to fire; `node
-scripts/check-all.mjs` green; eleven mutations fail the checks they should.
+scripts/check-all.mjs` green; thirteen mutations fail the checks they should.
 
 **Not verified here, and cannot be:** anything rendered. The sandbox cannot
 reach `*.vercel.app` or `www.mystockharbor.com` (`403 CONNECT tunnel failed`),
