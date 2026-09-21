@@ -49,9 +49,16 @@ import {
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
-import { readPricePoolBulk } from "./pricePool";`;
+import { readPricePoolBulk } from "./pricePool";
+import { priceCoverage, type PriceCoverage } from "./gridPriceCoverage";`;
 
 const STUBS = `
+// THE REAL RULE, NOT A STUB. gridPriceCoverage is pure, imports nothing, and
+// decides which rows show a price -- so stubbing it would let this harness
+// assert day-building behaviour against a coverage rule the site does not use.
+// It is three lines; inlining the real one costs nothing and keeps the module
+// under test honest.
+const priceCoverage = (i) => (i.fromPricePool ? "covered" : "outside-bar-universe");
 const REFERENCE_TTL_DAILY_SECONDS = 86400;
 const REFERENCE_TTL_MONTHLY_SECONDS = 2592000;
 const PAGE_READ_CACHE = {};
