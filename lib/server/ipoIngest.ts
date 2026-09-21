@@ -100,6 +100,17 @@ export const IPO_PERIODIC_FORMS = new Set([
  * MATCHES THE RIGHT THING (claude/traps/a-filter-that-matches-nothing-looks-
  * correct.md, addendum). The count of what this removes is reported per run for
  * the same reason.
+ *
+ * ── AND A ZERO HERE IS EXPECTED, WHICH IS WORTH SAYING OUT LOUD ───────────
+ * Relay run 35580719192 walked nine trading days and skipped ZERO. This project
+ * treats zero as a defect until proven otherwise, so: the reason is that
+ * `EFFECT` is its OWN form type in both the daily index and submissions.json,
+ * and neither IPO_OFFERING_FORMS nor IPO_PERIODIC_FORMS contains it -- so a
+ * notice is normally dropped by the form test before this pattern is ever
+ * reached. What this catches is the rarer case that actually bit the seed: a
+ * generated item listed UNDER AN OFFERING FORM'S SPELLING, where the form test
+ * waves it through. That is a second line of defence, not the first, and a long
+ * run of zeros is the healthy reading rather than a broken rule.
  */
 export const EDGAR_GENERATED_ACCESSION = /^9999999995-/;
 
@@ -203,6 +214,16 @@ export type SubmissionsPayload = {
       filingDate?: string[];
       accessionNumber?: string[];
     };
+    /**
+     * THE OVERFLOW PAGES, AND THE ONLY HONEST TRUNCATION SIGNAL.
+     *
+     * SEC splits a filer's history across `recent` plus these extra files once
+     * it outgrows one page. An EMPTY `files` therefore means `recent` IS the
+     * complete history -- which is the difference between "we were cut off" and
+     * "this company has not filed anything older", and those look identical
+     * from `recent` alone.
+     */
+    files?: { name?: string }[];
   };
 };
 
@@ -211,14 +232,26 @@ export type FilerFromSubmissions = {
   /** The newest filing that could carry terms, or null if there is none. */
   termsFiling: { form: string; date: string; accession: string } | null;
   /**
-   * TRUE WHEN submissions.recent DOES NOT REACH BACK TO windowStart.
+   * TRUE WHEN THIS FILER'S HISTORY WAS GENUINELY CUT OFF INSIDE THE WINDOW.
    *
-   * SEC documents `recent` as holding at least a year of filings or the most
-   * recent 1,000, whichever is more, so for a company filing an S-1 this should
-   * never fire. It is reported anyway, because the alternative to reporting it
-   * is a filer whose 8-A12B sits just outside a truncated history and is
-   * therefore READ AS A FOLLOW-ON -- a correct-looking exclusion of a real IPO,
-   * with nothing to distinguish it from a correct one.
+   * WHY IT MATTERS: a filer whose 8-A12B sits just outside a truncated history
+   * is READ AS A FOLLOW-ON, which deletes a real IPO from the page and looks
+   * exactly like a correct exclusion.
+   *
+   * ── THE FIRST VERSION OF THIS FLAG WAS WRONG, AND THE FIRST LIVE RUN SAID SO
+   * It tested `oldest filing in recent > windowStart` and nothing else, and
+   * fired for 15 of 198 filers on relay run 35580719192. Every one of those was
+   * a CIK in the 21xxxxx range -- registrants created this year, whose entire
+   * filing history begins inside a 90-day window because they did not exist
+   * before it. Nothing was truncated; they are simply young. A flag that fires
+   * on 8% of a healthy run is a flag the next reader learns to scroll past,
+   * which is the same "alarm that cries wolf" argument already written into
+   * warnIfEntityFilterMatchedNothing's candidate floor.
+   *
+   * So truncation now needs BOTH: the history stops inside the window AND SEC
+   * says there are overflow pages holding more of it. With no overflow pages,
+   * `recent` is the whole record and its oldest entry is a fact about the
+   * company rather than about the fetch.
    */
   historyTruncated: boolean;
 };
@@ -299,7 +332,10 @@ export function filerFromSubmissions(
       terms: null,
     },
     termsFiling,
-    historyTruncated: oldestSeen !== null && oldestSeen > windowStart,
+    historyTruncated:
+      oldestSeen !== null &&
+      oldestSeen > windowStart &&
+      (payload.filings?.files?.length ?? 0) > 0,
   };
 }
 

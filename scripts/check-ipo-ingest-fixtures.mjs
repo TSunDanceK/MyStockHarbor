@@ -276,32 +276,54 @@ const submissions = (over = {}) => ({
   );
 }
 {
-  const truncated = submissions({
-    filings: {
-      recent: {
-        form: ["424B4"],
-        filingDate: ["2026-09-15"],
-        accessionNumber: ["0002089447-26-000012"],
-      },
+  // TRUNCATION NEEDS TWO THINGS, and the first live run is why. The flag
+  // originally tested only "the oldest filing in recent is inside the window"
+  // and fired for 15 of 198 filers on relay run 35580719192 — every one a CIK
+  // in the 21xxxxx range, i.e. a registrant created this year whose whole
+  // history begins inside a 90-day window because it did not exist before it.
+  // Nothing was cut off. SEC's `filings.files` overflow pages are what tell the
+  // two apart, so both fixtures below are the same `recent` with and without
+  // them.
+  const shortRecent = {
+    recent: {
+      form: ["424B4"],
+      filingDate: ["2026-09-15"],
+      accessionNumber: ["0002089447-26-000012"],
     },
-  });
-  const built = filerFromSubmissions({ cik: "1", company: "X", forms: ["424B4"] }, truncated, WINDOW_START);
-  check(
-    "a history that does not reach windowStart is FLAGGED",
-    built.historyTruncated === true,
-    "SEC documents recent as holding a year or 1,000 filings, so this should never " +
-      "fire — and if it does, an 8-A12B just outside the truncation reads as a " +
-      "follow-on and deletes a real IPO with no symptom"
-  );
-  const full = filerFromSubmissions(
+  };
+  const cutOff = filerFromSubmissions(
     { cik: "1", company: "X", forms: ["424B4"] },
-    submissions(),
+    submissions({ filings: { ...shortRecent, files: [{ name: "CIK0000000001-submissions-001.json" }] } }),
     WINDOW_START
   );
   check(
-    "and a history that does reach back is NOT flagged",
+    "a history cut off inside the window, WITH overflow pages, is FLAGGED",
+    cutOff.historyTruncated === true,
+    "an 8-A12B just outside a truncation reads as a follow-on and deletes a real " +
+      "IPO from the page with no symptom"
+  );
+  const youngFiler = filerFromSubmissions(
+    { cik: "1", company: "X", forms: ["424B4"] },
+    submissions({ filings: { ...shortRecent, files: [] } }),
+    WINDOW_START
+  );
+  check(
+    "the SAME short history with NO overflow pages is NOT flagged",
+    youngFiler.historyTruncated === false,
+    "a company incorporated this year has no older filings to be cut off from — " +
+      "flagging it fired on 8% of a healthy live run, and an alarm that cries " +
+      "wolf is worse than no alarm"
+  );
+  const full = filerFromSubmissions(
+    { cik: "1", company: "X", forms: ["424B4"] },
+    submissions({ filings: { ...submissions().filings, files: [{ name: "more.json" }] } }),
+    WINDOW_START
+  );
+  check(
+    "and a history that DOES reach past windowStart is not flagged either",
     full.historyTruncated === false,
-    "a flag that is always on is a flag nobody reads"
+    "overflow pages alone mean nothing; it is only truncation when the window is " +
+      "not covered"
   );
 }
 {
