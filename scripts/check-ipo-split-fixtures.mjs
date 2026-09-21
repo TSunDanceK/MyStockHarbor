@@ -16,10 +16,18 @@
 // filter that cannot be shown to fire has not been tested; a filter that cannot
 // be shown to LEAVE THINGS ALONE has not been tested either.
 //
-//   node --experimental-strip-types --import ./scripts/lib/register-ts.mjs \
-//        scripts/check-ipo-split-fixtures.mjs
-//   (Node >= 24 needs no --experimental-strip-types)
-import { buildSecIpoTables } from "../lib/server/ipoSecSource.ts";
+//   node scripts/check-ipo-split-fixtures.mjs
+//
+// RUNS BARE, AND HAS TO. It used to require
+// `--import ./scripts/lib/register-ts.mjs`, and scripts/check-all.mjs runs
+// every check with no flags -- so in the suite this file reported
+// ERR_MODULE_NOT_FOUND rather than a result, and every fixture below was
+// unexercised while looking merely broken. The hook is registered from inside
+// the process instead; see scripts/lib/register-ts-here.mjs for why the import
+// underneath it must be dynamic.
+import "./lib/register-ts-here.mjs";
+
+const { buildSecIpoTables } = await import("../lib/server/ipoSecSource.ts");
 
 let failures = 0;
 const check = (label, ok, detail = "") => {

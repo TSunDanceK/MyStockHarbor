@@ -15,6 +15,7 @@
 // runner, never backfilled a day at a time from a function.
 import { Redis } from "@upstash/redis";
 
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { IpoFilerRecord } from "./ipoSecSource";
 import {
   mergeIpoRecords,
@@ -48,12 +49,26 @@ export const IPO_FILINGS_REDIS_KEY = "msh:ipo:filings:v1";
 export const IPO_REFRESH_COMMANDS_PER_RUN = 2;
 
 
+// PAGE_READ_CACHE, BECAUSE /upcoming-ipos IS A PRERENDERED ROUTE AND THIS
+// CLIENT IS IN ITS MODULE GRAPH. readStoredIpoFilings is called by
+// fetchSecIpoRows, which the page reaches through getIpoTables. @upstash/redis
+// defaults every REST call to `cache: "no-store"`, and under the App Router
+// that one hint opts the route out of static rendering -- silently, because
+// readFeed swallows the DynamicServerError and the only symptom is an `f` in
+// the build's route table.
+//
+// THIS WAS A BARE CLIENT AND scripts/check-page-read-cache.mjs CAUGHT IT --
+// which is the point of that check deriving reachability from the import graph
+// rather than trusting a list. The page declares `revalidate = 86400`; a
+// no-store hint here would have quietly made that number describe a cadence the
+// page does not have, exactly as claude/traps/fetch-revalidate-caps-the-page.md
+// records happening to this same route once already.
+//
+// It introduces no staleness: Upstash's REST API is POST and Next's fetch cache
+// only caches GET, so no read here becomes cacheable. See redisCacheMode.ts.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      })
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 /**

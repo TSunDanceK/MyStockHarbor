@@ -23,6 +23,7 @@
 //
 //   node scripts/check-ipo-exclusions.mjs
 import fs from "node:fs";
+import { readCodeOnly } from "./lib/source-code.mjs";
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -40,9 +41,15 @@ const src = fs.readFileSync(FILE, "utf8");
 // Strip comments before matching. The header DISCUSSES 6770 at length, and a
 // naive substring search would match the prose explaining the rule and report a
 // violation -- the same trap check-relay-isolation.mjs documents.
-const stripComments = (text) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-const code = stripComments(src);
+//
+// THROUGH THE SHARED STRIPPER, NOT A LOCAL REGEX. The two-line version that
+// used to live here is the exact one check-comment-stripper.mjs was written
+// against: `*/*` inside a string closes the preceding block comment to it, so
+// it eats a region and every NEGATIVE assertion below ("6770 is not in the
+// excluded set") then passes on text that was deleted rather than on code.
+// Hand-rolled stripping is also what check-comment-stripper.mjs §7 forbids
+// outright, and this file was the one harness still doing it.
+const code = readCodeOnly(FILE);
 
 const setBody = (name) => {
   const m = code.match(new RegExp(`${name}\\s*=\\s*new Set\\(\\[([\\s\\S]*?)\\]\\)`));
@@ -141,7 +148,7 @@ check(
 // reads the table closely.
 const SRC2 = "lib/server/ipoSecSource.ts";
 if (fs.existsSync(SRC2)) {
-  const sec = stripComments(fs.readFileSync(SRC2, "utf8"));
+  const sec = readCodeOnly(SRC2);
   console.log("");
 
   check(
