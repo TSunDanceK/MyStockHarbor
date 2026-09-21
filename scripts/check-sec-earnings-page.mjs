@@ -208,8 +208,25 @@ console.log("\n7b. the YoY base is a FISCAL MATCH, run rather than read");
 // scripts/sec-period-match-probe.mjs, which cannot supply its own answer
 // because it fetches companyfacts.
 {
+  // ── THE MODULES secEarningsView READS FROM, LIFTED WITH IT ──────────────
+  //
+  // Stripping its imports leaves `cell`, `valueOf`, `ttm`, `periodLabel` and
+  // `storedInReportingCurrency` free. This check only calls priorYearOf, which
+  // touches none of them, so it passed — right up until something here called a
+  // function that did. assertLiftIsClosed refuses the open lift outright now,
+  // which is how this was found rather than reported later as a stopped run.
+  const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
   const viewMod = await lift(
-    fs.readFileSync(VIEW, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+    [
+      readCodeOnly("lib/server/secFields.ts"),
+      strip("lib/server/secExtract.ts"),
+      strip("lib/server/fxRates.ts"),
+      strip("lib/server/secCurrency.ts"),
+      strip("lib/server/secFactCodec.ts"),
+      strip(VIEW),
+    ].join("\n"),
+    "",
+    "secEarningsView"
   );
   const P = (fp, fy) => ({ e: `${fy}-06-30`, s: `${fy}-04-01`, fp, fy, v: [], d: "" });
   const dense = [];
@@ -344,6 +361,10 @@ return lift(
    grabFunction(pageRaw, "bandFor"),
    grabFunction(pageRaw, "scoreExplanation"), grabFunction(pageRaw, "scoreGaps"),
    grabFunction(pageRaw, "buildScoreResult"), grabFunction(pageRaw, "scoreFromSec"),
+   // CALLED BY buildScoreResult AND NOT LIFTED WITH IT. Same shape as the view
+   // lift above: the assertions here never reached the branch that calls it, so
+   // the gap sat unnoticed until assertLiftIsClosed refused the lift.
+   grabFunction(pageRaw, "noScoreReason"),
  grabFunction(pageRaw, "scoreBandNote")].join("\n") +
     "\nexport { scoreFromSec, scoreComponents, toneLabel, bandFor, scoreBandNote };"
 );

@@ -77,6 +77,17 @@ export async function loadCards(mutate = (src) => src) {
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
     stripImports("lib/server/secEarningsView.ts"),
+    // THE CARDS' OTHER TWO SOURCES. SecEarningsCards.tsx imports the tone
+    // bands and the trend median from secPresentation and the valuation legs
+    // from secValuation; both are stripped of their imports and concatenated
+    // like the rest, and both sit AFTER secEarningsView because that is what
+    // they read (periodWords/isPct, and isConsecutive respectively).
+    //
+    // A MISSING MODULE HERE FAILS AT RENDER, NOT AT IMPORT — the first card
+    // that calls barValue throws ReferenceError mid-tree, which is how this
+    // was found. Anything the cards import has to be added here too.
+    stripImports("lib/server/secPresentation.ts"),
+    stripImports("lib/server/secValuation.ts"),
   ].join("\n");
   const cards = fs
     .readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8")
