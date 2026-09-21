@@ -164,7 +164,23 @@ const SHARE_COUNT_PATTERNS = [
  * clean result.
  */
 const DISQUALIFYING_CONTEXT =
-  /outstanding|resale|selling\s+(?:share|stock)holder|issuable\s+upon|from\s+time\s+to\s+time|registering/i;
+  // ── "private placement" ADDED AFTER IT REACHED THE RENDERED TABLE ───────
+  // The arithmetic cross-check below is satisfied by ANY count-and-total pair
+  // that agrees, and a SPAC cover carries a second one: the sponsor's private
+  // placement, priced at the same $10.00 per unit and therefore multiplying out
+  // just as cleanly. Relay 35588270240 rendered
+  //
+  //   JTTT  JATT III Acquisition Corp   listed 2026-08-26 · $10.00  234,000  $2.34M
+  //
+  // and a SPAC raising $2.34M does not happen. Three Lions' cover shows the
+  // shape verbatim: "an aggregate of 400,000 private units at a price of $10.00
+  // per unit for a total purchase price of $4,000,000 in a private placement".
+  //
+  // A CORROBORATED PAIR IS STILL THE WRONG PAIR IF IT IS THE WRONG DEAL. The
+  // cross-check proves two numbers belong together; it cannot prove they are
+  // the public offering, so the context test has to say which transaction is
+  // being described.
+  /outstanding|resale|selling\s+(?:share|stock)holder|issuable\s+upon|from\s+time\s+to\s+time|registering|private\s+(?:placement|units?)/i;
 const CONTEXT_BEFORE = 180;
 const CONTEXT_AFTER = 160;
 

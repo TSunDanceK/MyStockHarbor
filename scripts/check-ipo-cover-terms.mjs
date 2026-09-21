@@ -379,6 +379,49 @@ console.log("");
   );
 }
 {
+  // ── THE SPONSOR'S PRIVATE PLACEMENT ALSO MULTIPLIES OUT ────────────────
+  // Verbatim from Three Lions' cover. Priced at the same $10.00 per unit, so
+  // 400,000 x $10.00 = $4,000,000 agrees exactly — a corroborated pair that is
+  // the WRONG DEAL. This reached the rendered table as JATT III at $2.34M
+  // (relay 35588270240) before the context test learned the phrase.
+  //
+  // ── THE COUNT HAS TO BE ADJACENT TO "units" OR THIS TESTS NOTHING ──────
+  // Three Lions writes "400,000 private units", with a word between the number
+  // and the noun, so COUNTED_SECURITY never offers it as a candidate and the
+  // fixture passed with the disqualifier deleted — verified by deleting it.
+  // The shape that DOES reach the arithmetic is the count adjacent to the noun
+  // with the private-placement wording around it, which is what this uses.
+  const t = parseCoverTerms(
+    "The sponsor has agreed to purchase from us an aggregate of 400,000 units " +
+      "in a private placement, at a price of $10.00 per unit for a total " +
+      "purchase price of $4,000,000. Each unit has a price of $10.00 and " +
+      "proceeds are held in a trust account pending a business combination.",
+    "6770"
+  );
+  check(
+    "a private placement that multiplies out is still refused",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — the cross-check proves two numbers belong together; ` +
+      `it cannot prove they are the PUBLIC offering, and a SPAC raising $4M does not happen`
+  );
+  // NEGATIVE CONTROL: the public offering on the SAME cover must survive the
+  // new phrase being in the disqualifier list.
+  const both = parseCoverTerms(
+    "Prospectus $100,000,000 THREE LIONS ACQUISITION CORP. 10,000,000 Units. " +
+      "Each unit has a price of $10.00 per unit, held in a trust account pending " +
+      "a business combination. Separately, the sponsor has agreed to purchase an " +
+      "aggregate of 400,000 private units at a price of $10.00 per unit for a " +
+      "total purchase price of $4,000,000 in a private placement.",
+    "6770"
+  );
+  check(
+    "and the public offering on the same cover is still read",
+    both.sharesOffered === 10_000_000,
+    `got ${both.sharesOffered} — a phrase added to the disqualifier list must not ` +
+      `reach past its own sentence and take the masthead with it`
+  );
+}
+{
   // ── ISOLATING THE CROSS-CHECK'S PRICE-AWARENESS ────────────────────────
   // CONSTRUCTED, and labelled so: Lannister's real numbers in Three Lions'
   // masthead shape. The verbatim Lannister cover is matched by the adjacency
