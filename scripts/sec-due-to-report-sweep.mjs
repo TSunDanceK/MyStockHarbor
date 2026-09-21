@@ -33,7 +33,19 @@ const K_VALUES = [3, 5, 7, 10, 14];
 const CAP_CUTS = [20, 50, 100];
 const CAP_KS = [3, 5, 7];
 const MIN_PRIOR_LAGS = 3;
-const MAX_ATTRIBUTION_DAYS = 120;
+// READ FROM SOURCE, NEVER PINNED. This probe held a third copy of the horizon
+// while two modules held the other two; the copy that was deleted with
+// secResultsDate.ts was one of them. A pinned probe constant silently measures
+// a bound the code no longer uses, and agrees with itself while doing it.
+const HORIZON_SRC = fs.readFileSync(new URL("../lib/server/secReportDates.ts", import.meta.url), "utf8");
+const HORIZON_M = /MAX_PERIOD_TO_ANNOUNCEMENT_DAYS = (\d+)/.exec(HORIZON_SRC);
+if (!HORIZON_M) {
+  console.error("FATAL: MAX_PERIOD_TO_ANNOUNCEMENT_DAYS not found in secReportDates.ts.");
+  console.error("Refusing to fall back to a pinned 120 -- a probe measuring a bound the code");
+  console.error("does not use reports a confident wrong number.");
+  process.exit(2);
+}
+const MAX_ATTRIBUTION_DAYS = Number(HORIZON_M[1]);
 const HISTORY_WANTED_DAYS = 3 * 365;
 const OUTLIER_DAYS = 10;
 

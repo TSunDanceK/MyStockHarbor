@@ -143,11 +143,15 @@ console.log("\n3. The overdue cap — inert in the shipped cut, and still bounde
 // that nothing can ever clear.
 console.log("\n4. The strip can never outlast the window attribution works in");
 {
-  const attribution = /MAX_ATTRIBUTION_DAYS = (\d+)/.exec(fs.readFileSync(path.join(ROOT, "lib/server/secResultsDate.ts"), "utf8"));
-  check("MAX_ATTRIBUTION_DAYS is readable from the attribution module", attribution != null);
+  const deadlines = fs.readFileSync(path.join(ROOT, "lib/server/secReportDates.ts"), "utf8");
+  // ONE horizon constant now. secResultsDate.ts carried a second copy named
+  // MAX_ATTRIBUTION_DAYS; it was deleted with the module, so this reads the
+  // survivor. Read from source, never pinned, so the assertion cannot agree
+  // with itself against a value that has moved.
+  const attribution = /MAX_PERIOD_TO_ANNOUNCEMENT_DAYS = (\d+)/.exec(deadlines);
+  check("MAX_PERIOD_TO_ANNOUNCEMENT_DAYS is readable from the module that owns it", attribution != null);
   const horizon = Number(attribution?.[1]);
 
-  const deadlines = fs.readFileSync(path.join(ROOT, "lib/server/secReportDates.ts"), "utf8");
   const table = /FILING_DEADLINE_DAYS[\s\S]*?\{([\s\S]*?)\n\};/.exec(deadlines);
   check("the deadline table is readable from the module that owns it", table != null);
   const widestCell = Math.max(...[...(table?.[1] ?? "").matchAll(/annual:\s*(\d+)/g)].map((x) => Number(x[1])));

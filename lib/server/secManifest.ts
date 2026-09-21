@@ -122,26 +122,17 @@ export type SecManifestEntry = {
   quarters?: number;
   years?: number;
   instants?: number;
-  /**
-   * THE RESULTS DATE -- the spine of both halves of /earnings-calendar.
-   *
-   * The grid inverts it by date; the due strip asks which periods have no
-   * entry. One field answering one question, in the manifest rather than a
-   * parallel store: two stores answering "when did this company report" is
-   * two-validators-for-one-value with extra steps.
-   *
-   * Attribution lives in lib/server/secResultsDate.ts -- first 8-K carrying
-   * item 2.02 after the period end, preferring one that also carries 9.01, with
-   * 6-K for foreign private issuers. Null until a per-symbol submissions read
-   * has happened for this symbol; the daily index carries FORM TYPES ONLY and
-   * cannot populate these.
-   */
-  lastResultsDate: string | null;
-  /** Fiscal period end that release reports on, YYYY-MM-DD. NOT derived from
-   *  the filing date: 52/53-week filers move their period end by a day or two
-   *  a year, so any arithmetic between the two is wrong by construction. */
-  lastResultsPeriod: string | null;
-  lastResultsAccn: string | null;
+  // ── NO lastResultsDate HERE. THE STORE IS THE SINGLE HOME. ──────────────
+  // The v1 build added lastResultsDate / lastResultsPeriod / lastResultsAccn
+  // here, arguing that one field in the manifest beat "a parallel store". The
+  // note on reportDatesAt below already said the opposite about the very same
+  // value, in this very same file -- two docblocks fifteen lines apart, each
+  // citing two-validators-for-one-value.md against the other.
+  //
+  // The note below wins, because those three fields were a PROJECTION: every
+  // one of them is the newest stored event's own announcedOn / periodEnd /
+  // accession. Derive them with secReportDatesStore.latestResults() instead;
+  // reportDatesAt is the freshness stamp and the backfill queue.
   nextExpected: string | null;
   nextExpectedSource: "announcement" | "cadence" | null;
   /**
@@ -267,9 +258,6 @@ export function emptyEntry(cik: string | null, exchange: string | null = null): 
     lastAccession: null,
     lastFiled: null,
     contentHash: null,
-    lastResultsDate: null,
-    lastResultsPeriod: null,
-    lastResultsAccn: null,
     nextExpected: null,
     nextExpectedSource: null,
     verifiedAt: null,

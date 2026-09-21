@@ -111,7 +111,8 @@ export const DUE_LEAD_DAYS = 7;
 export const OVERDUE_GRACE_DAYS = 30;
 
 // ── NO ATTRIBUTION-HORIZON CLAUSE, AND THE MARGIN THAT JUST DISAPPEARED ───
-// A first draft also refused anything past the attribution horizon (120 days),
+// A first draft also refused anything past the attribution horizon
+// (secReportDates.MAX_PERIOD_TO_ANNOUNCEMENT_DAYS, 120 days),
 // reasoning that the strip should not claim a period the attribution layer could
 // never clear. While this module capped at 45 + 30 = 75 days that clause was
 // unreachable by a wide margin, so it was left out rather than shipped as a
@@ -121,7 +122,7 @@ export const OVERDUE_GRACE_DAYS = 30;
 // The widest cell is now the non-accelerated ANNUAL deadline:
 //
 //   90 (annual, non-accelerated) + 30 (OVERDUE_GRACE_DAYS) = 120
-//   MAX_ATTRIBUTION_DAYS                                   = 120
+//   MAX_PERIOD_TO_ANNOUNCEMENT_DAYS                        = 120
 //
 // They meet, with nothing to spare. The strip keeps a symbol to D <= P + 120 and
 // attribution reaches to P + 120, so there is still no gap -- but any future
