@@ -318,6 +318,29 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * The derived feed's cache key, NAMESPACED BY PROVIDER.
+ *
+ * IT USED TO BE THE BARE STRING "ipo:all", AND THAT IS A FLIP THAT DOES NOT
+ * TAKE EFFECT. The two providers produce different rows from different
+ * upstreams into one cache entry, so for up to IPO_REVALIDATE_SECONDS after
+ * IPO_PROVIDER changes, the page serves the OLD provider's rows wrapped in the
+ * NEW provider's chrome -- the footer, the column labels and the intro copy all
+ * come from the flag and switch instantly, while the table underneath does not.
+ * Every surface a reader would check to confirm the flip says it happened.
+ *
+ * It did not bite on the 2026-09-21 flip only by luck: the fmp entry had
+ * already aged past its freshness window, so the first sec render refetched.
+ * A flip made a few hours after a page view would have shown FMP data under a
+ * "Data source: SEC EDGAR" footer.
+ *
+ * Namespacing costs one cache entry per provider and makes the flip atomic:
+ * there is no entry under the new name, so the first read goes upstream.
+ */
+export function ipoFeedKey(provider: IpoProvider = ipoProvider()): string {
+  return `ipo:all:${provider}`;
+}
+
 /** Both tables, from ONE cached read. */
 export type IpoTables = {
   upcoming: ConfirmedIpo[];
@@ -345,7 +368,7 @@ export async function getIpoTables(): Promise<IpoTables> {
   const from = toIsoDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
   const to = toIsoDate(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000));
 
-  const feed = await readFeed("ipo:all", () => fetchIpoRows(from, to), {
+  const feed = await readFeed(ipoFeedKey(), () => fetchIpoRows(from, to), {
     freshSeconds: IPO_REVALIDATE_SECONDS,
   });
 
