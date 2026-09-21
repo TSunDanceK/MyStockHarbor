@@ -479,6 +479,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY, but the bars and the report dates both live in Upstash and the
+  // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
+  // not a claim about what the script does.
+  "write-valuation-price": {
+    script: "scripts/valuation-price-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-manifest-stamp-census": {
     script: "scripts/manifest-stamp-census.mjs",
     args: () => [],
@@ -548,6 +557,15 @@ const TASKS = {
   // figure is carried out of the run.
   "due-strip-universe": {
     script: "scripts/due-strip-universe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
+  // reports whether the empty-day poisoning has already fired in production.
+  // The live read happens in the Step 0 job under Upstash's read-only token;
+  // this half only does arithmetic on the result.
+  "earnings-poisoning": {
+    script: "scripts/earnings-poisoning-scan.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },

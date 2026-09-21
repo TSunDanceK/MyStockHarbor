@@ -590,6 +590,27 @@ export function reactionDate(event: Pick<ReportEvent, "announcedOn" | "timing">)
  * close" claims to know the press release time; "filed with the SEC after
  * market close" claims only what the timestamp shows.
  */
+/**
+ * WHY A REPORT HAS NO PRICE REACTION, said rather than left blank.
+ *
+ * A bar that is simply absent invites the reader to conclude something about
+ * the report — that the market ignored it, or that the company did not file.
+ * The true claim is about the PRICE SERIES: it does not reach back that far.
+ *
+ * MEASURED (relay 35499147949): RYAAY's cached bars begin 2021-09-02 and its
+ * FY2021 report is 2021-03-31, so there is no prior close to measure against.
+ * CNI has four reports older than its series for the same reason. Before this,
+ * those reports either vanished or — worse, when the filing was after-close —
+ * borrowed the first bar held and rendered four identical fabricated figures.
+ *
+ * Same convention as derivationNote and CROSSING_NOTE: name the limit, and
+ * make it a statement about the data on file rather than about the filer.
+ */
+export const NO_PRICE_HISTORY_NOTE =
+  "No price history on file before this report, so its market reaction " +
+  "cannot be measured. The price series this page holds starts later than " +
+  "the report date; the filing itself is unaffected.";
+
 export const TIMING_WORDING: Record<ReportTiming, string> = {
   "before-open": "Results filed with the SEC before market open",
   "during-market": "Results filed with the SEC during market hours",

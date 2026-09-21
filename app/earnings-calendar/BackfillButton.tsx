@@ -4,39 +4,41 @@ import { useState } from "react";
 import type React from "react";
 
 // Owner-only "fill this date in now" control, rendered at the bottom of
-// app/earnings-calendar/page.tsx. Greyed out when there's nothing to do --
-// either the date has no earnings to pull, or it's already fully quoted.
-// Otherwise reveals an inline code entry that posts to
+// app/earnings-calendar/page.tsx. Greyed out only when the date has no earnings
+// to pull at all. Otherwise reveals an inline code entry that posts to
 // /api/earnings-calendar/backfill-date -- same safety rules as normal browsing
 // (site-wide FMP budget always enforced), just without the hourly cap for this
 // one date. Wrong-code lockout (3 attempts / 10 min) is enforced server-side.
+// ── WHY THIS NO LONGER READS THE COMPLETENESS FLAG ─────────────────────────
+//
+// It used to grey itself out on `complete`, which is the very flag the
+// empty-day poisoning corrupts. A date wrongly marked complete-and-empty
+// therefore disabled the one control that could have refilled it: the manual
+// override switched itself off at exactly the moment it was needed, and told
+// the owner "this date is fully populated" while showing zero companies.
+// Measured on 2026-09-14.
+//
+// AN OVERRIDE MUST NOT BE GATED ON THE STATE IT OVERRIDES. The only thing that
+// can make backfilling meaningless is there being nothing to fetch, so
+// `hasEarnings` -- the candidate count -- is the only gate left. Re-running on
+// an already-full date is harmless: it re-quotes from cache and marks it
+// complete again.
 export default function BackfillButton({
   date,
-  complete,
   hasEarnings,
 }: {
   date: string;
-  complete: boolean;
   hasEarnings: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const [isComplete, setIsComplete] = useState(complete);
 
   if (!hasEarnings) {
     return (
       <button type="button" disabled style={{ ...btnStyle, opacity: 0.35, cursor: "default" }}>
         Backfill (no earnings on this date)
-      </button>
-    );
-  }
-
-  if (isComplete) {
-    return (
-      <button type="button" disabled style={{ ...btnStyle, opacity: 0.35, cursor: "default" }}>
-        Backfill (this date is fully populated)
       </button>
     );
   }
@@ -73,7 +75,6 @@ export default function BackfillButton({
       }
 
       setStatus("done");
-      setIsComplete(Boolean(json?.complete));
       setMessage(
         `Populated ${json?.usListedCount ?? "?"} US-listed of ${json?.totalCandidates ?? "?"} candidates${
           json?.complete ? " -- date is now fully populated." : " -- some remain, run again if needed."
