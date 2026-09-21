@@ -1453,8 +1453,38 @@ const walk = (dir) => {
   }
 };
 walk("app"); walk("lib");
-check("only job routes touch the manifest", readers.every((r) => r.startsWith("app/api/jobs/")),
-  readers.join(", ") || "none");
+// ── ONE EXEMPTION, AND IT IS A PROPERTY RATHER THAN A NAME ────────────────
+//
+// /api/debug/redis-write-sizes reports which Redis key is nearest Upstash's
+// 10MB REQUEST limit, so it has to NAME the manifest key. It never reads the
+// value: STRLEN returns an integer and the route is built specifically not to
+// pull megabytes back (a route investigating 10MB requests must not issue one).
+//
+// The exemption is CONDITIONAL on the three things that make it safe, not on
+// the path, so it cannot quietly widen into the read this section forbids: a
+// debug route, behind the key, that touches none of the value-returning
+// helpers. A file that later added `readManifest` would fail here as before.
+//
+// STRING LITERALS ARE BLANKED BEFORE THE TEST, and that is not fussiness:
+// readCodeOnly strips comments but not strings, and the route's own rows carry
+// `owner: "lib/server/secManifest.ts writeManifest()"` -- a human-readable
+// pointer to the file that does the write. Tested against the raw source, that
+// label reads as a CALL to writeManifest and the exemption silently refuses a
+// route that does nothing of the sort. A guard that a documentation string can
+// flip is measuring the wrong text.
+const codeOnly = (src) => src.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""');
+const keyOnlyReaders = readers.filter((rel) => {
+  if (!rel.startsWith("app/api/debug/")) return false;
+  const src = readCodeOnly(rel);
+  if (!/guardDebugRequest/.test(src)) return false;
+  if (/readManifest|writeManifest|secRereadQueue/.test(codeOnly(src))) return false;
+  return /SEC_MANIFEST_KEY/.test(src) && /\bstrlen\b/.test(codeOnly(src));
+});
+const valueReaders = readers.filter((r) => !keyOnlyReaders.includes(r));
+check("only job routes read the manifest VALUE", valueReaders.every((r) => r.startsWith("app/api/jobs/")),
+  `${valueReaders.join(", ") || "none"}${
+    keyOnlyReaders.length ? ` (key-name-only, STRLEN: ${keyOnlyReaders.join(", ")})` : ""
+  }`);
 // NAMED, NOT COUNTED. "Exactly one file" was right while sec-daily-index was the
 // only job; step 3's population path is a second, and a bare count would have to
 // be bumped to 2 and would then wave through a third. The property is WHICH
@@ -1468,9 +1498,18 @@ const ALLOWED_MANIFEST_READERS = [
   "app/api/jobs/sec-facts/route.ts",
 ];
 check("...and they are exactly the two job routes that are supposed to",
-  readers.length === ALLOWED_MANIFEST_READERS.length &&
-    readers.every((r) => ALLOWED_MANIFEST_READERS.includes(r)),
-  readers.join(", "));
+  valueReaders.length === ALLOWED_MANIFEST_READERS.length &&
+    valueReaders.every((r) => ALLOWED_MANIFEST_READERS.includes(r)),
+  valueReaders.join(", "));
+check("a key-name-only reader stays key-name-only",
+  keyOnlyReaders.every((rel) => {
+    const src = readCodeOnly(rel);
+    // The value-returning reads, on any key. A debug route that started
+    // GETting would be pulling the 417 KB this section exists to keep off
+    // anything but the daily job.
+    return !/\.\s*(get|mget|getdel|hgetall)\s*\(/.test(codeOnly(src));
+  }),
+  keyOnlyReaders.join(", ") || "none — the exemption is unused, which is also fine");
 check("no .tsx file references it at all", !readers.some((r) => r.endsWith(".tsx")),
   "a page importing it would pull 417 KB into a render");
 check("the manifest module is not imported by any page or component",

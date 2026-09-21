@@ -59,7 +59,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const TIER1_KEY = "msh:price-tier1:v1";
+export const TIER1_KEY = "msh:price-tier1:v1";
 // Outlives the warm-targets cache that writes it, so a failed rebuild degrades
 // to a slightly stale tier list rather than to no tier list -- which would
 // silently demote the whole universe to the hourly tail.

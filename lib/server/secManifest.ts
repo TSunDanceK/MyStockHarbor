@@ -13,12 +13,25 @@
 // chunking by byte size (lib/server/chunkByBytes.ts exists for exactly that),
 // not a key per symbol.
 //
+// THAT SENTENCE IS NOW MEASURED RATHER THAN ASSERTED, and it was an assertion
+// for long enough to be worth saying so. writeManifest logs the reconstructed
+// request body on every write; the first figures and the projection to the
+// ticker-map ceiling are in its docblock and in
+// claude/upstash-request-size-secstate-2026-09-21.md. The count it reports is
+// a HIGH-WATER MARK -- nothing in this file deletes a symbol -- so it is the
+// number to watch, not the universe cap.
+//
 // NO TTL, EVER. A TTL means eviction, eviction means a cold key, and a cold key
 // means a render that has to fetch -- the failure already recorded in
 // pool-ttl-died-behind-the-market-gate. Freshness is expressed as the
 // `needsReverify` flag, never as an expiry.
 
 import { Redis } from "@upstash/redis";
+import {
+  pctOfRequestLimit,
+  trySetRequestBytes,
+  REQUEST_BYTE_BUDGET,
+} from "./chunkByBytes";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -35,6 +48,33 @@ export const SEC_MANIFEST_KEY = "msh:sec:manifest:v1";
 
 /** Bumped when the scoring basis changes, so a score move can be attributed. */
 export const SEC_SCORE_VERSION = 1;
+
+// ── THE SIZE OF THIS THING, AS DATA RATHER THAN AS PROSE ────────────────────
+//
+// readCodeOnly strips comments, so a figure that only exists in a docblock is
+// a figure scripts/check-request-size.mjs measures a blank line against -- the
+// same trap PICKER_CHARTS_MEASURED_AVG_CHARS was moved out of comments to fix.
+//
+// THIS IS A COUNT OF ENTRIES, NOT OF THE UNIVERSE, and the difference is the
+// point. `manifest.symbols` is a HIGH-WATER MARK: seedManifest only adds,
+// reconcileDelistings only flags, and nothing in this file or any other deletes
+// a key. 822 already exceeds PRESET_UNIVERSE (100) + MAX_DYNAMIC_UNIVERSE_SIZE
+// (700) by 22, so the universe cap is NOT the bound on this write and sizing
+// against it would be sizing against a proxy -- the defect chunkByBytes.ts
+// exists to replace, reintroduced in the guard.
+export const SEC_MANIFEST_SYMBOLS_MEASURED = 822;
+export const SEC_MANIFEST_MEASURED_AT = "2026-09-21";
+export const SEC_MANIFEST_MEASURED_SOURCE =
+  'sec-daily-index in production at 04:00:16 UTC: {"universe":822,"withCik":818,' +
+  '"tickerMapCount":10438,"redisCommands":3}';
+
+/**
+ * THE REAL CEILING on the entry count: every symbol here arrives from the
+ * universe, every universe symbol resolves through the ticker map, and nothing
+ * is ever removed. So the map's own size is the number this write has to stay
+ * under -- not the universe cap, which it has already passed.
+ */
+export const SEC_MANIFEST_ENTRY_CEILING = 10_438;
 
 export type SecManifestEntry = {
   cik: string | null;
@@ -305,12 +345,94 @@ export async function readManifest(): Promise<SecManifest | null> {
   }
 }
 
-/** THE ONLY WRITE. */
+/**
+ * THE ONLY WRITE, AND THE ONLY PLACE ITS SIZE IS KNOWN.
+ *
+ * ── WHY THIS IS MEASURED AT ALL ──────────────────────────────────────────
+ * The header above asserts "a few hundred KB at 700 symbols, comfortably inside
+ * Upstash's 10 MB per-request ceiling". That was an estimate, it was never
+ * instrumented, and scripts/check-request-size.mjs -- the check written for
+ * exactly this failure -- reads pickersBuilder.ts and chunkByBytes.ts and
+ * nothing else. So the one claim standing between this write and the 10MB wall
+ * was a sentence in a comment.
+ *
+ * Measured 2026-09-21 against the production run at 04:00:16 UTC:
+ * `universe: 822` symbols in the manifest, which projects to roughly 0.5 MB of
+ * request body -- about 5% of the ceiling. The estimate was right. See
+ * claude/upstash-request-size-secstate-2026-09-21.md for the working, and for
+ * why the 07:2x Upstash emails cannot be this write.
+ *
+ * ── WHY IT IS STILL GUARDED ──────────────────────────────────────────────
+ * `manifest.symbols` is NOT bounded by the universe cap. seedManifest only ever
+ * ADDS, reconcileDelistings only ever FLAGS, and nothing anywhere deletes a
+ * key -- so the entry count is a high-water mark of every symbol that has ever
+ * entered the universe, not a snapshot of the one that is in it. The 822
+ * measured above already exceeds PRESET_UNIVERSE (100) plus
+ * MAX_DYNAMIC_UNIVERSE_SIZE (700) by 22. Its real ceiling is the ticker map,
+ * 10,438 symbols on that same run.
+ *
+ * At that ceiling the emptyEntry() FLOOR alone -- 368 bytes, recomputed from
+ * this module's own emptyEntry by check-request-size.mjs §5 rather than typed
+ * anywhere -- is 3.9 MB of body before a single field is populated, and a
+ * populated entry is a multiple of the floor (a fixture carrying every optional
+ * field measures ~792 bytes, which would put the ceiling near 8.8 MB). Those
+ * two are PROJECTIONS from entry shapes, not measurements of a live manifest at
+ * 10,438; the only measured points are 822 entries and whatever the log line
+ * below reports each run. What they are enough to establish is that the
+ * headroom here is bounded by a structure with no cap to raise, which is why
+ * the refusal below is load-bearing rather than defensive decoration.
+ *
+ * ── WHY IT REFUSES RATHER THAN CHUNKS ────────────────────────────────────
+ * An over-limit SET does not truncate; Upstash returns an error, the catch
+ * below swallows it, and the previous value stays. Refusing here produces the
+ * SAME data outcome -- no write -- and says so out loud, which is the whole
+ * difference between a datapoint and an email three days later. Chunking the
+ * symbol map across keys is the documented answer when the ceiling is actually
+ * approached (the header names chunkByBytes for it), and building that path
+ * now would mean shipping a reassembly branch that cannot fire for years and so
+ * would never be exercised before the day it had to work.
+ */
 export async function writeManifest(manifest: SecManifest): Promise<boolean> {
   if (!redis) return false;
   if (!canWriteSecState()) { noteSecWriteBlocked("writeManifest"); return false; }
+
+  const value = { ...manifest, updatedAt: Date.now() };
+
+  // NO TTL, so the command is measured WITHOUT `ex` -- the header three
+  // paragraphs up is emphatic about the no-TTL rule, and appending a TTL the
+  // client never sends would report bytes Upstash never receives.
+  const measured = trySetRequestBytes(SEC_MANIFEST_KEY, value);
+  const symbolCount = Object.keys(manifest.symbols ?? {}).length;
+
+  if (measured) {
+    const { valueBytes, bodyBytes } = measured;
+    const inflationPct = valueBytes > 0 ? ((bodyBytes / valueBytes - 1) * 100).toFixed(1) : "0.0";
+    const line =
+      `[sec-manifest] write: ${symbolCount} symbols, ${valueBytes} bytes serialized value, ` +
+      `${bodyBytes} bytes request body (+${inflationPct}% escaping), ` +
+      `${pctOfRequestLimit(bodyBytes)} of the 10MB request limit`;
+
+    if (bodyBytes > REQUEST_BYTE_BUDGET) {
+      // REFUSED, and the refusal is the loud version of what Upstash would do
+      // anyway. Returning false is what every caller already handles as "not
+      // persisted"; the watermark does not move and the next run retries.
+      console.error(
+        `${line} -- REFUSED: over the ${REQUEST_BYTE_BUDGET}-byte budget. ` +
+          `Shard SecManifest.symbols with chunkByBytes (see the docblock on this ` +
+          `function) -- the entry count is a high-water mark and nothing prunes it.`
+      );
+      return false;
+    }
+    console.log(line);
+  } else {
+    // An unmeasurable manifest is reported rather than written silently: a
+    // circular or unserializable value is a bug whose next symptom would be a
+    // swallowed Upstash error.
+    console.warn(`[sec-manifest] write: ${symbolCount} symbols, size could not be measured`);
+  }
+
   try {
-    await redis.set(SEC_MANIFEST_KEY, { ...manifest, updatedAt: Date.now() });
+    await redis.set(SEC_MANIFEST_KEY, value);
     return true;
   } catch (err) {
     console.error("[sec-manifest] write failed", err);
