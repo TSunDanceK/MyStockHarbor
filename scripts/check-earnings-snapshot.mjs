@@ -23,7 +23,14 @@
 // NO FIXTURE SUPPLIES AN EXPECTED VALUE. data/sec/factset-fixture-*.json come
 // from live companyfacts via the shipped extractor. Every number is SEC's.
 import fs from "node:fs";
-import { loadSnapshot, loadProfile, html, visibleText, React } from "./lib/render-snapshot.mjs";
+import { loadSnapshot, loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
+
+// EVERY MUTATION BELOW GOES THROUGH `once`. These loaders concatenate several
+// modules, and a string anchor that appears in more than one of them rewrites
+// the FIRST — which happened in check-profile-dividend.mjs: an anchor meant for
+// secDividend hit the identical line in secCurrency, broke a conversion the
+// fixture never runs, and the "mutation" assertion passed having changed
+// nothing. `once` counts the anchor and throws on anything but a single match.
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -75,8 +82,7 @@ console.log("\n1. no estimate, surprise or guidance figure reaches a reader");
 
   // THE MUTATION. Put one label back and the scan must catch it — otherwise
   // the assertion above is reading a string that was never going to be there.
-  const withLabel = await loadSnapshot((s) =>
-    s.replace('label="Net income"', 'label="EPS surprise"'));
+  const withLabel = await loadSnapshot(once('label="Net income"', 'label="EPS surprise"'));
   check("...and the scan CATCHES a retired label put back",
     /EPS surprise/i.test(textFor(withLabel, "AAPL")),
     "a mutation that re-adds the label rendered clean, so the scan proves nothing");
@@ -115,8 +121,8 @@ console.log("\n3. a margin is a level; growth is a change");
   check("growth prints WITH its sign", Boolean(growth) && /^[+-]/.test(growth), `revenue growth: ${growth}`);
 
   // THE MUTATION. One formatter for both is exactly how the old card did it.
-  const oneFormatter = await loadSnapshot((s) =>
-    s.replace(/formatLevel\(snapshot\.margins\.gross\)/, "formatGrowth(snapshot.margins.gross)"));
+  const oneFormatter = await loadSnapshot(once(
+    "formatLevel(snapshot.margins.gross)", "formatGrowth(snapshot.margins.gross)"));
   const mutated = (textFor(oneFormatter, "AAPL").match(/Gross margin ([+-]?[\d.]+%)/) ?? [])[1];
   check("...and the assertion CATCHES the growth formatter on a margin",
     Boolean(mutated) && mutated.startsWith("+"), `mutated gross margin: ${mutated}`);
@@ -146,8 +152,8 @@ console.log("\n4. a refused score prints nothing, never the neutral seed");
     t.slice(0, 160));
 
   // THE MUTATION.
-  const seedThrough = await loadSnapshot((s) =>
-    s.replace("score: score.available ? score.score : null,", "score: score.score,"));
+  const seedThrough = await loadSnapshot(once(
+    "score: score.available ? score.score : null,", "score: score.score,"));
   const mutated = seedThrough.buildSecEarningsSnapshot({
     symbol: "ZZZZ", view: null,
     score: seedThrough.scoreFromSec(null, "ZZZZ", { status: "pending", reason: "x" }),
@@ -171,8 +177,19 @@ console.log("\n5. an unavailable verdict is not painted as a neutral one");
   const amber = "250,204,21";
   check("the unavailable pill carries no amber", !markup.includes(amber), "amber is the Mixed colour");
 
+  // BOTH PAINT SITES, ANCHORED ON THEIR OWN SIGNATURES. The line
+  // `const rgb = available ? TONE_RGB[tone] : "148,163,184";` occurs TWICE in
+  // the card — in earningsCardStyle (the border) and earningsTonePillStyle
+  // (the pill) — so the bare anchor was ambiguous and `once` refused it. That
+  // ambiguity was live in this check before the guard existed: the mutation
+  // was rewriting only the first, and this assertion covers both. Composing
+  // two unique anchors breaks the property the assertion actually reads.
+  const unpaint = (fn) => once(
+    `function ${fn}(tone: ToneKey, available: boolean): CSSProperties {\n  const rgb = available ? TONE_RGB[tone] : "148,163,184";`,
+    `function ${fn}(tone: ToneKey, available: boolean): CSSProperties {\n  const rgb = TONE_RGB[tone];`
+  );
   const painted = await loadSnapshot((s) =>
-    s.replace('const rgb = available ? TONE_RGB[tone] : "148,163,184";', "const rgb = TONE_RGB[tone];"));
+    unpaint("earningsTonePillStyle")(unpaint("earningsCardStyle")(s)));
   const mutatedMarkup = html(React.createElement(painted.default, {
     snapshot: painted.buildSecEarningsSnapshot({
       symbol: "ZZZZ", view: null,
@@ -224,8 +241,8 @@ console.log("\n6. growth across a sign change is words, never a percentage");
   check("a crossing is not silently dropped",
     !/EPS \(diluted\) \$[\d.]+ —/.test(t));
 
-  const dropped = await loadSnapshot((s) =>
-    s.replace('if (p.kind === "crossing") return p.words;', 'if (p.kind === "crossing") return null;'));
+  const dropped = await loadSnapshot(once(
+    'if (p.kind === "crossing") return p.words;', 'if (p.kind === "crossing") return null;'));
   const mutatedText = visibleText(html(React.createElement(dropped.default, {
     snapshot: {
       ...crossing,
@@ -254,8 +271,8 @@ console.log("\n7. the figures belong to the newest period");
     shipped.margins.gross === newest.gross,
     `snapshot ${shipped.margins.gross}, newest ${newest?.gross}`);
 
-  const firstRow = await loadSnapshot((s) =>
-    s.replace("const m = view.margins.at(-1) ?? null;", "const m = view.margins[0] ?? null;"));
+  const firstRow = await loadSnapshot(once(
+    "const m = view.margins.at(-1) ?? null;", "const m = view.margins[0] ?? null;"));
   check("...and the assertion CATCHES the oldest row being used",
     snapshotFor(firstRow, "AAPL").margins.gross === oldest.gross);
 
@@ -300,7 +317,14 @@ console.log("\n9. the hidden CompanyProfile rows are decided by the registry");
     marketCap: 1.2e11, beta: 1.34, price: 100, rangeLow: 60, rangeHigh: 140,
     lastDividend: 0.46, currency: "USD",
   };
-  const t = visibleText(html(React.createElement(P.default, { profile, symbol: "TEST" })));
+  // THE DIVIDEND ROW IS A REQUIRED PROP NOW, and this check is not about it —
+  // see scripts/check-profile-dividend.mjs. A hidden row is the value that
+  // changes nothing here: it renders no row, so the five hidden labels and the
+  // rest of the grid are asserted against exactly the grid they were before.
+  const noDividend = { state: "hidden", why: { reason: "no-facts", note: "" } };
+  const render = (mod) =>
+    visibleText(html(React.createElement(mod.default, { profile, symbol: "TEST", dividend: noDividend })));
+  const t = render(P);
 
   const hidden = P.HIDDEN_PROFILE_ROWS.map((r) => r.label);
   check("the registry names exactly the five rows with no free successor",
@@ -323,7 +347,7 @@ console.log("\n9. the hidden CompanyProfile rows are decided by the registry");
   const unregistered = await loadProfile((s) =>
     s.replace(/export const HIDDEN_PROFILE_ROWS: HiddenProfileRow\[\] = \[[\s\S]*?\n\];/,
       "const HIDDEN_PROFILE_ROWS = [];"));
-  const back = visibleText(html(React.createElement(unregistered.default, { profile, symbol: "TEST" })));
+  const back = render(unregistered);
   check("...emptying the registry brings all five back",
     hidden.every((l) => new RegExp(`\\b${l}\\b`).test(back)),
     "so the registry is what decides, not a deletion elsewhere");
@@ -331,9 +355,8 @@ console.log("\n9. the hidden CompanyProfile rows are decided by the registry");
   // A REGISTRATION THAT MATCHES NO ROW IS A SILENT NO-OP WITHOUT THIS.
   let refused = false;
   try {
-    const typo = await loadProfile((s) =>
-      s.replace('label: "Beta",', 'label: "Beta ",'));
-    html(React.createElement(typo.default, { profile, symbol: "TEST" }));
+    const typo = await loadProfile(once('label: "Beta",', 'label: "Beta ",'));
+    render(typo);
   } catch { refused = true; }
   check("a registry entry that matches no row is refused at render",
     refused, "otherwise a typo hides nothing while the record says it does");
