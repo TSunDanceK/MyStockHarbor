@@ -248,13 +248,24 @@ console.log("\n6. A FOREIGN PRIVATE ISSUER'S SHARE COUNT IS IN A DIFFERENT UNIT 
   check("a multi-class FPI is refused for the UNIT, the more specific reason",
     mod.marketCap(both, 50)?.why === "ads-ratio-makes-shares-incomparable");
 
-  // SCOPED DELIBERATELY. See the note on peRatio: the same mismatch appears to
-  // reach P/E, and extending the rule there is an owner decision that has not
-  // been taken. This asserts TODAY'S decided behaviour so that changing it is a
-  // visible, deliberate edit to this line rather than a silent drift.
-  check("P/E is NOT suppressed — scope is the market-cap column, and that is recorded",
-    mod.peRatio(tsm, 50)?.ok === true,
-    "if the owner extends the rule, change this line and add the P/E mutant");
+  // MEASURED 2026-09-21, relay 35588547888. The unit mismatch DOES reach EPS:
+  // HDB 1.0000/47, TSM 0.9999/11 (ifrs-full), BABA 0.9984/47, ASML 1.0002/51.
+  // Four of five confirmed per-ordinary-share; IBN publishes no XBRL at all.
+  check("P/E is suppressed too, and for its OWN reason rather than the cap's",
+    mod.peRatio(tsm, 50)?.ok === false &&
+      mod.peRatio(tsm, 50)?.why === "ads-ratio-makes-eps-incomparable",
+    `got ${JSON.stringify(mod.peRatio(tsm, 50))} — 50 / 3.9 = 12.8 is plausible and five times wrong`);
+  check("...and the two refusals stay DISTINCT, because only one was measured",
+    mod.marketCap(tsm, 50)?.why !== mod.peRatio(tsm, 50)?.why,
+    "a cover-page count is ordinary BY DEFINITION; what EPS is denominated in was a finding");
+  check("...with EPS words that name earnings, not the share count",
+    /earnings per ordinary share/.test(mod.REFUSAL_WORDS["ads-ratio-makes-eps-incomparable"]));
+  check("a domestic filer's P/E is UNAFFECTED",
+    mod.peRatio(mod.valuationInputs(set({ quarters: FOUR })), 50)?.ok === true);
+  // The EPS itself is still read and still rendered beneath the refusal: it is
+  // a real filed fact, and it is the reason the ratio is absent.
+  check("the EPS basis is still populated — the figure is real, the DIVISION is not",
+    near(tsm.eps?.val, 3.9));
 
   await underMutation(
     "stage 4: FPI market-cap suppression removed",
@@ -272,6 +283,31 @@ console.log("\n6. A FOREIGN PRIVATE ISSUER'S SHARE COUNT IS IN A DIFFERENT UNIT 
     '  if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {',
     '  if (!inputs.shares && inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {',
     (m) => m.marketCap(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.ok === false
+  );
+  await underMutation(
+    "stage 4: FPI P/E suppression removed",
+    '  if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {\n    return { ok: false, why: "ads-ratio-makes-eps-incomparable" };\n  }',
+    "",
+    (m) => m.peRatio(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.ok === false
+  );
+  // The plausible-but-wrong placement again, and it fails the same way: these
+  // filers HAVE a clean twelve months of EPS, so a guard gated on its absence
+  // never fires.
+  await underMutation(
+    "stage 4: FPI P/E suppression gated on a missing EPS (ordering)",
+    '  if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {',
+    '  if (!inputs.eps && inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {',
+    (m) => m.peRatio(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.ok === false
+  );
+  // Collapsing the two refusals would still suppress both figures, so a test
+  // that only checked "is it refused" would pass. What breaks is the WORDS: the
+  // P/E would blame the share count, which is not why it is absent.
+  await underMutation(
+    "stage 4: the two ADS refusals collapsed into one",
+    '    refusals.push("ads-ratio-makes-shares-incomparable");\n    refusals.push("ads-ratio-makes-eps-incomparable");',
+    '    refusals.push("ads-ratio-makes-shares-incomparable");',
+    (m) => m.peRatio(m.valuationInputs(set({ symbol: "TSM", quarters: FOUR })), 50)?.why
+      === "ads-ratio-makes-eps-incomparable"
   );
   await underMutation(
     "stage 4: FPI symbol matching stops normalising case",
