@@ -566,6 +566,16 @@ const TASKS = {
     // relay.yml's inputs live on the default branch and have no symbol field;
     // pinning here is what lets a branch measure a named symbol without a merge.
     env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC" },
+    // scripts/lib/source-code.mjs imports typescript to strip comments before
+    // the prefix regexes run, and the credentialled job installs only
+    // @upstash/redis. Same flag as every other task that lifts from source.
+    needsTypescript: true,
+    // NEEDS THE CREDENTIALS; PERFORMS NO WRITES. Same declaration and the same
+    // reason as "write-bad-key-earnings" above. The flag is what the router
+    // checks against the name — the two must agree or it fails closed, which is
+    // how this task failed its first dispatch (run 35597058149) rather than
+    // running uncredentialled and reporting "no cached bars".
+    writes: true,
   },
   "write-valuation-price": {
     script: "scripts/valuation-price-probe.mjs",
