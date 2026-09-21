@@ -67,7 +67,7 @@ jobs:
             find recovered -maxdepth 4 -type f -printf '%s\t%p\n' | head -n 40
             exit 1
           fi
-          echo "path=${found}" >> "$GITHUB_STEP_OUTPUT"
+          echo "path=${found}" >> "$GITHUB_OUTPUT"
 
           # ── THE BYTE COUNT IS THE WHOLE VERIFICATION ────────────────────
           # Run 34941546535 measured this payload at exactly 5,519,554 bytes
