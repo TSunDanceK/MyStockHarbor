@@ -95,12 +95,28 @@ check(
     "and Next's Data Cache would silently win"
 );
 
+// WAS `=== 2`, FOR `ipo:upcoming` AND `ipo:recent`. Those two feeds were
+// collapsed into one `ipo:all` read: the page renders both tables from a single
+// cached window, with each row carrying which table it belongs to. So the
+// correct assertion is ONE, and this number changing is the point of the change
+// rather than a regression in it.
+//
+// The reason the assertion exists is unchanged: a feed left on feedCache's
+// default freshness would re-fetch every 30 minutes and have nothing to show
+// for it, against a bandwidth cap whose penalty is suspension.
 const freshArgs = ipo.match(/freshSeconds:\s*IPO_REVALIDATE_SECONDS/g) ?? [];
 check(
-  "both IPO feeds ask readFeed for that same freshness",
-  freshArgs.length === 2,
-  `${freshArgs.length} of 2 (ipo:upcoming, ipo:recent) — a feed left on the ` +
-    `default would keep re-fetching every 30 minutes with nothing to show for it`
+  "the single IPO feed asks readFeed for that same freshness",
+  freshArgs.length === 1,
+  `${freshArgs.length} of 1 (ipo:all) — two would mean the split feeds came back`
+);
+
+// The collapse halved the page's upstream cost. Assert the old keys are gone,
+// so a revert shows up here rather than as a quietly doubled bill.
+check(
+  "the retired per-table feed keys are not back",
+  !/"ipo:upcoming"|"ipo:recent"/.test(ipo),
+  "one window, one cache entry, one call a day"
 );
 
 const pageDecl = page.match(/export\s+const\s+revalidate\s*=\s*(\d+)\s*;/);

@@ -1,0 +1,17 @@
+{
+  "_what": "Nasdaq reachability, measured from a GitHub Actions runner (DATACENTRE IP) on 2026-09-14. Relay run 34883412035, job 104108002717.",
+  "_not": "This is NOT the owner's residential path and NOT Vercel. It is a third egress. See claude/ipo-source-probe-RESULTS-2026-09-14.md section 2.",
+  "_userAgent": "MyStockHarbor/1.0 (+https://www.mystockharbor.com; sonnybrindle@mystockharbor.com; IPO calendar source evaluation)",
+  "api.nasdaq.com": {
+    "2026-09": { "status": 0, "ms": 30005, "bytes": 0, "error": "AbortError: This operation was aborted", "note": "hung to the 30s client timeout; no response headers, no body, no TCP-level refusal" },
+    "2026-10": { "skipped": true, "why": "the brief says record a refusal and stop, not retry" },
+    "2026-08": { "skipped": true, "why": "the brief says record a refusal and stop, not retry" }
+  },
+  "www.nasdaq.com": {
+    "robots.txt":        { "status": 0, "ms": 30001, "bytes": 0, "error": "AbortError: This operation was aborted" },
+    "terms-of-service":  { "status": 0, "ms": 30000, "bytes": 0, "error": "AbortError: This operation was aborted" },
+    "legal-disclaimer":  { "status": 0, "ms": 30001, "bytes": 0, "error": "AbortError: This operation was aborted" }
+  },
+  "_shape": "HANG, not refusal. Four requests to two hosts on one domain, each ~30000ms to the client-side abort. No 403, no challenge page, no RST. This is the same failure shape claude/news-flip-done-2026-09-14.md section 1 records for Nasdaq from Vercel (25s timeout, both attempts, every feed).",
+  "_consequence": "The licence question (probe section 3) could not be answered from this egress either -- www.nasdaq.com/terms-of-service is on the same domain that hangs."
+}
