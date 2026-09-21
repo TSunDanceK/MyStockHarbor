@@ -17,6 +17,7 @@
 // companyfacts by the shipped extractor (scripts/sec-fixture-capture.mjs) and
 // committed under data/sec/. Every number in them comes from SEC.
 import fs from "node:fs";
+import { grabConst } from "./source-code.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -87,6 +88,13 @@ export async function loadCards(mutate = (src) => src) {
     // that calls barValue throws ReferenceError mid-tree, which is how this
     // was found. Anything the cards import has to be added here too.
     stripImports("lib/server/secPresentation.ts"),
+    // THE STATUTORY TABLE, AHEAD OF secValuation THAT READS IT.
+    // COVER_SHARES_MAX_AGE_DAYS is DERIVED from DEADLINE_FALLBACK rather than
+    // written as a number, so the concatenated unit needs the declaration or
+    // the cards throw ReferenceError mid-render. ONE declaration, not the
+    // module: secReportDates declares `const DAY` and so does secExtract above,
+    // and the duplicate is a SyntaxError at import.
+    grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
     stripImports("lib/server/secValuation.ts"),
   ].join("\n");
   const cards = fs
