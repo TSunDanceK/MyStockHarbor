@@ -238,6 +238,17 @@ const TASKS = {
     // the runner strips the types itself.
     nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
   },
+  // MEASURE THE SHARE COUNT, which Phase 0 never did -- it gated the PRICE
+  // parser at 5/5 and left sharesOffered untested. The first live ingest run
+  // produced ADARx at 88,250,216 shares (shares outstanding, not an offering)
+  // and Alopexx at a $2.1M NYSE American IPO. Prints every "<n> shares" on each
+  // cover with its sentence, so the rule is chosen by reading the filings
+  // rather than by guessing a tighter regex.
+  "ipo-shares": {
+    script: "scripts/ipo-shares-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   // THE FIRST LIVE RUN OF THE DAILY INGEST. Steps 3-5 have only ever been
   // fixture-proven; this calls ingestIpoWindow(), mergeIpoRecords() and
   // buildSecIpoTables() -- the shipped functions, not copies -- against real
