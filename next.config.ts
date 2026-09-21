@@ -33,6 +33,26 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // ── GENERATED NEWS ART ──────────────────────────────────────────
+      // Same default, same fix, same reasoning as the logos above: without this
+      // a repeat visitor re-requests every illustration on the page, and
+      // /headlines is a grid of them. Also not `immutable`: the library grows
+      // and an image can be regenerated, and a day of freshness is what lets a
+      // replacement reach visitors within a day.
+      //
+      // WHY IT WAS NOT HERE ALREADY: the art library shipped straight into
+      // public/ without going past
+      // claude/serving-assets-from-public-2026-09-15.md, which is the doc that
+      // owns this path and was written for exactly this class of miss.
+      {
+        source: "/news-art/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=2592000",
+          },
+        ],
+      },
       ...NOINDEX_PICKER_PAGES.map((source) => ({
         source,
         headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
