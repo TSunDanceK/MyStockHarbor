@@ -8,6 +8,7 @@ import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard from "@/app/components/LatestEarningsCard";
 import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
+import type { ProfileDividend } from "@/lib/server/secDividend";
 import { isRetiredBlock } from "./retiredBlocks";
 import CompanyProfile, {
   type CompanyProfile as CompanyProfileData,
@@ -116,6 +117,8 @@ type StockSymbolPageClientProps = {
   pageToken?: string;
   earningsSnapshot: SecEarningsSnapshot;
   profile: CompanyProfileData | null;
+  /** The Dividend row, resolved server-side from the filings. */
+  dividend: ProfileDividend;
   shareHistory: DilutionHistoryData | null;
   seed?: IndicatorSeed | null;
   // Recent daily history computed on the server. Seeds `history` so the page
@@ -706,7 +709,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
@@ -1255,6 +1258,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <CompanyProfile
                   profile={profile}
                   symbol={symbol}
+                  dividend={dividend}
                   belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
                   belowStats={learnIndicatorsAside}
                 />

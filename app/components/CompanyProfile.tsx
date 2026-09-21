@@ -2,6 +2,11 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 
 import { sectorNewsPath, sectorSlugFromLabel } from "@/lib/sectors";
+// TYPE ONLY, AND IT HAS TO STAY THAT WAY. This component is imported by
+// StockSymbolPageClient.tsx ("use client"), so it ships to the browser. A value
+// import from lib/server would drag secColdFetch -> Redis into the client
+// bundle and fail the build — the same rule LatestEarningsCard.tsx carries.
+import type { ProfileDividend } from "@/lib/server/secDividend";
 
 // -- Company profile card -----------------------------------------------------
 // Server-rendered "About" block built from the FMP company profile endpoint.
@@ -180,11 +185,19 @@ function hostname(url: string | null) {
 export default function CompanyProfile({
   profile,
   symbol,
+  dividend: dividendRow,
   belowDescription,
   belowStats,
 }: {
   profile: CompanyProfile;
   symbol: string;
+  /**
+   * The Dividend row, from the company's own filings.
+   *
+   * RESOLVED ON THE SERVER, passed as plain data. See the type-only import
+   * note above: this component cannot reach lib/server at runtime.
+   */
+  dividend: ProfileDividend;
   // Optional extra content (e.g. the share-dilution chart) rendered directly
   // under the description paragraph, in the same flowing column as the
   // description (i.e. beside/below the floated stat sidebar — see the layout
@@ -197,10 +210,27 @@ export default function CompanyProfile({
   belowStats?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
-  const dividend =
-    typeof profile.lastDividend === "number" && Number.isFinite(profile.lastDividend) && profile.lastDividend > 0
-      ? `Yes · ${fmtMoney2(profile.lastDividend)}`
-      : "No";
+
+  // ── THE DIVIDEND ROW, ON FILINGS SINCE 2026-09-21 ──────────────────────
+  //
+  // WAS: `profile.lastDividend` from FMP, rendered "Yes · $0.26" or "No".
+  // Both halves were doing something the filings will not support — see the
+  // docblock on ProfileDividend in lib/server/secDividend.ts. The short of it:
+  // FMP's field carried no period, so a dividend declared two years ago read
+  // exactly like last quarter's; and "No" was asserted from the field being
+  // empty, which is a claim about the company made from a gap in the data.
+  //
+  // `profile.lastDividend` IS DELIBERATELY STILL ON THE TYPE and still parsed
+  // by fetchCompanyProfile. Hidden, not removed: deleting it loses the record
+  // that this row ever had another source, and the field costs nothing — it
+  // arrives in a profile payload the page fetches anyway.
+  //
+  // THE PERIOD IS PART OF THE VALUE, not a decoration. A per-share dividend
+  // with no period attached is the defect above wearing a new source.
+  const dividendValue =
+    dividendRow.state === "declared"
+      ? `${fmtMoney2(dividendRow.perShare)} · ${dividendRow.periodLabel}`
+      : null;
 
   const rangeText =
     typeof profile.rangeLow === "number" && typeof profile.rangeHigh === "number"
@@ -235,7 +265,13 @@ export default function CompanyProfile({
     { label: "Market cap", value: fmtLargeMoney(profile.marketCap) },
     { label: "Beta", value: typeof profile.beta === "number" && Number.isFinite(profile.beta) ? profile.beta.toFixed(2) : null },
     { label: "52-week range", value: rangeText },
-    { label: "Dividend", value: dividend },
+    // A NULL VALUE DROPS THE ROW, via the `r.value` filter below. That is the
+    // hide, and it is PER SYMBOL rather than site-wide: HIDDEN_PROFILE_ROWS is
+    // a claim about a row on every page, and "this filer publishes no
+    // per-share dividend tag" is a claim about one filer. The reason it is
+    // hidden for is carried on the payload (ProfileDividend.why) so a probe
+    // can read it even though nothing renders it.
+    { label: "Dividend", value: dividendValue },
     { label: "Exchange", value: profile.exchange },
     { label: "Country", value: profile.country },
     { label: "IPO date", value: fmtDate(profile.ipoDate) },
