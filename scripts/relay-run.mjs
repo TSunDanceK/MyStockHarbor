@@ -555,6 +555,11 @@ const TASKS = {
   // frozen pool's market cap and emits the due strip's static top-50 membership.
   // The strip is a CUT, and this generates the cut. Membership only -- no cap
   // figure is carried out of the run.
+  // WHICH UNIT A FOREIGN PRIVATE ISSUER'S EPS IS FILED IN. #489 suppressed the
+  // market cap for five ADS filers and recorded the P/E beside it as an OPEN
+  // question, explicitly not to be settled by assuming symmetry. This settles
+  // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
+  "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
   "due-strip-universe": {
     script: "scripts/due-strip-universe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
