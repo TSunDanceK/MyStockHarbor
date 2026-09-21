@@ -18,7 +18,7 @@
 // document (scripts/ipo-ingest-probe.mjs's output, EDGAR-derived), so what the
 // page renders is what the shipped classifier makes of real filings.
 //
-//   node scripts/local-upstash.mjs <document.json> [port]
+//   node scripts/local-upstash.mjs <document.json> [port] [sha256]
 //
 // then, in another shell:
 //   UPSTASH_REDIS_REST_URL=http://127.0.0.1:8porting \
@@ -26,6 +26,7 @@
 //   IPO_PROVIDER=sec npm run dev
 import fs from "node:fs";
 import http from "node:http";
+import crypto from "node:crypto";
 
 import "./lib/register-ts-here.mjs";
 
@@ -42,7 +43,31 @@ if (!docPath || !fs.existsSync(docPath)) {
   process.exit(1);
 }
 
-const raw = JSON.parse(fs.readFileSync(docPath, "utf8"));
+// ── VERIFY THE COPY BEFORE SERVING IT ─────────────────────────────────────
+// A document that reached here through a log transport can arrive with a byte
+// changed and still parse. That happened: one corrupted literal rendered
+// "Nasdaq Capital Marktt" on 52 rows and looked exactly like a parser defect.
+// Pass the sha256 the probe printed and this refuses a copy that does not match.
+const text = fs.readFileSync(docPath, "utf8");
+const expectSha = process.argv[4];
+if (expectSha) {
+  const got = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+  if (got !== expectSha) {
+    console.error(`FATAL: ${docPath} does not match the expected sha256.`);
+    console.error(`  expected ${expectSha}`);
+    console.error(`  got      ${got}`);
+    console.error(`A document that parses is not a document that survived the trip.`);
+    process.exit(1);
+  }
+  console.log(`local-upstash: sha256 verified (${got.slice(0, 16)}…)`);
+} else {
+  console.warn(
+    `local-upstash: NO sha256 GIVEN — serving ${docPath} unverified. A copy that ` +
+      `parses can still carry a changed byte; pass the hash the probe printed as ` +
+      `the 3rd argument.`
+  );
+}
+const raw = JSON.parse(text);
 // Accept either a bare stored document or the ingest probe's payload wrapper,
 // so whichever artefact is to hand can be used without reshaping it by hand.
 const doc = raw.records ? raw : raw.document?.records ? raw.document : null;

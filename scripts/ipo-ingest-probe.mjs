@@ -29,6 +29,7 @@
 //   inputs: symbols = "<from>[..<to>]" as yyyymmdd, blank = the last 7 days
 import fs from "node:fs";
 import zlib from "node:zlib";
+import crypto from "node:crypto";
 
 import { ingestIpoWindow } from "../lib/server/ipoIngest.ts";
 import { mergeIpoRecords, validateStored, windowStartFor } from "../lib/server/ipoRecordMerge.ts";
@@ -223,20 +224,31 @@ fs.mkdirSync("data/sec", { recursive: true });
 fs.writeFileSync("data/sec/ipo-ingest-probe.json", JSON.stringify(payload));
 fs.writeFileSync("data/sec/ipo-ingest-document.json", JSON.stringify(doc));
 
-// ── THE DOCUMENT, GZIPPED, AS ONE LINE ────────────────────────────────────
-// The sandbox reads these runs through the Actions log API, which returns a
-// TAIL measured in lines, and cannot reach the artifact blob host at all. So
-// the log is the only route the records have back to where the render runs --
-// and a 250 KB pretty-printed block is both unreadable and large enough to
-// push the human report out of any tail worth fetching.
+// ── THE DOCUMENT, GZIPPED AND CHECKSUMMED ─────────────────────────────────
+// The sandbox reads these runs through the Actions log API and cannot reach the
+// artifact blob host at all, so the log is the only route the records have back
+// to where the render runs.
 //
-// gzip+base64 is ~10x smaller and exactly one line, so `tail` gets the report
-// AND the payload in the same fetch. Decoded with:
+// ── AND THAT ROUTE CORRUPTS, SILENTLY, IN A WAY THAT LOOKS LIKE A BUG ─────
+// MEASURED: a 219-record document came back with ONE byte changed. gzip's CRC
+// caught it; the DEFLATE stream still decompressed and the JSON still parsed,
+// so overriding the CRC produced a document that looked complete and read
+// "Nasdaq Capital Marktt" FIFTY-TWO TIMES -- one corrupted LZ77 literal
+// inherited by every back-reference to it. That is a data defect's exact
+// costume, and the only reason it was caught is that the runner's own table
+// printout said "Market".
 //
-//   base64 -d <file> | gunzip > document.json
-const gz = zlib.gzipSync(Buffer.from(JSON.stringify(doc), "utf8")).toString("base64");
-console.log(`\n<<<GZIP name=ipo-ingest-document.json.gz bytes=${gz.length} records=${doc.records.length}>>>`);
-console.log(gz);
+// So: the base64 is WRAPPED at 120 columns, because a single 12,000-character
+// line is what the transport mishandles, and a SHA-256 of the uncompressed JSON
+// is printed beside it. Verify before trusting a decoded copy:
+//
+//   tr -d '\n' < b64 | base64 -d | gunzip > document.json   # CRC must pass
+//   sha256sum document.json                                  # must match below
+const json = JSON.stringify(doc);
+const gz = zlib.gzipSync(Buffer.from(json, "utf8")).toString("base64");
+const sha = crypto.createHash("sha256").update(json, "utf8").digest("hex");
+console.log(`\n<<<GZIP name=ipo-ingest-document.json.gz b64=${gz.length} records=${doc.records.length} sha256=${sha}>>>`);
+for (let i = 0; i < gz.length; i += 120) console.log(gz.slice(i, i + 120));
 console.log(`<<<ENDGZIP name=ipo-ingest-document.json.gz>>>`);
 
 console.log(`\nDONE ${new Date().toISOString()}`);
