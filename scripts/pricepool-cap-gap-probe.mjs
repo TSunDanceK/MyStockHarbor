@@ -6,16 +6,25 @@
 //
 // ── WHAT "source: none" CANNOT TELL APART ─────────────────────────────────
 // due-strip-universe reports a symbol as uncapped when capOf() returns null for
-// every source. That single verdict covers three entirely different states:
+// every source. That single verdict covers four entirely different states:
 //
 //   ABSENT     the symbol has no entry in that source at all
 //   NULL       an entry exists and its cap field is null/0/absent
 //   SHAPE      an entry exists and carries a cap under a key capOf() does not
 //              read, or as a type it rejects
+//   SPELLING   the entry is there under another spelling of the ticker
 //
-// The first is an ingest gap, the second is an upstream gap, the third is a
-// parsing gap in OUR code -- three different owners. So each is reported
+// The first is an ingest gap, the second is an upstream gap, and the last two
+// are parsing gaps in OUR code -- different owners. So each is reported
 // separately, per source, per symbol.
+//
+// ── AND A NULL CAP IS NOT SELF-EXPLANATORY EITHER ─────────────────────────
+// Run 35631103914 found NVDA present in the pool with a live price and P/E and
+// a null marketCap -- and a null volume, open, dayHigh and dayLow beside it.
+// "These four symbols failed" and "the pool populates none of these fields and
+// the 696 caps come from elsewhere" produce the same NVDA row. So the whole
+// source is tabulated field by field, capped rows against uncapped ones, and
+// capped rows are printed in full as CONTROLS.
 //
 // ── EVERY KEY, NOT A CHOSEN SUBSET ────────────────────────────────────────
 // The same rule the multi-class probe needed: "nothing carries a cap here"
@@ -161,12 +170,21 @@ const LARGE_CAPS = [
   "TXN", "QCOM", "IBM", "GE", "CAT", "VZ", "DIS", "NOW", "AMGN", "INTC",
 ];
 
+// MEMBERSHIP TOLERATES SPELLING, AND THE FIRST RUN DID NOT. This list writes
+// Berkshire as BRK-B and the universe writes it BRK.B, so run 35631103914
+// counted it "not in universe" and dropped it from the sample — while the full
+// sweep, which reads the universe's own spellings, found it uncapped anyway.
+// The sample was wrong about one of the four symbols it exists to find, and the
+// sweep is the only reason that was visible. Both are kept for that reason.
+const universeSpellingOf = (sym) => symbolSpellings(sym).find((a) => universe.includes(a)) ?? null;
+
 const focus = [];
 for (const sym of LARGE_CAPS) {
+  const canon = universeSpellingOf(sym);
   const perSource = {};
-  for (const file of CAP_SOURCES) perSource[file] = inspect(file, sym);
+  for (const file of CAP_SOURCES) perSource[file] = inspect(file, canon ?? sym);
   const anyCap = Object.values(perSource).some((v) => v.state === "HAS-CAP");
-  focus.push({ symbol: sym, inUniverse: universe.includes(sym), anyCap, perSource });
+  focus.push({ symbol: sym, universeSpelling: canon, inUniverse: Boolean(canon), anyCap, perSource });
 }
 
 // THE FULL SWEEP, so the answer does not depend on the hand-written list.
@@ -182,19 +200,20 @@ for (const sym of universe) {
     // consumer would not find it either. It is recorded so the reason shows.
     if (v.state === "SPELLED-DIFFERENTLY" && v.cap != null) states[file] = `SPELLED-DIFFERENTLY(${v.matched}, cap present)`;
   }
-  if (!anyCap) unpriced.push({ symbol: sym, states });
+  if (!anyCap) unpriced.push({ symbol: sym, states, entry: inspect(CAP_SOURCES[0], sym).entry ?? null });
 }
 
 // Per-source coverage, with the denominator beside it.
 const coverage = {};
+const otherStateExamples = {};
 for (const file of CAP_SOURCES) {
   const src = sources.get(file);
   // EVERY STATE GETS ITS OWN COUNTER, and the else-branch is a counter of its
   // own rather than a bucket. The first draft folded "source-missing" into
   // nullCap, which reported a source ABSENT FROM THE DUMP as one that answered
-  // for every symbol and carried no cap -- the failure-vs-absence confusion
-  // this build has been correcting elsewhere, reintroduced in the measurement
-  // of it. The totals are asserted to add up so a future state cannot vanish.
+  // for every symbol and carried no cap — the failure-vs-absence confusion this
+  // build has been correcting, reintroduced in the measurement of it. The
+  // totals are asserted to add up so a future state cannot vanish.
   let has = 0, absent = 0, nul = 0, shape = 0, spelled = 0, sourceMissing = 0, other = 0;
   for (const sym of universe) {
     const v = inspect(file, sym);
@@ -204,7 +223,14 @@ for (const file of CAP_SOURCES) {
     else if (v.state === "SHAPE-MISMATCH") shape++;
     else if (v.state === "NULL-CAP") nul++;
     else if (v.state === "source-missing") sourceMissing++;
-    else other++;
+    else {
+      other++;
+      // AN "OTHER" COUNTER WITH NO EXAMPLE IS A NUMBER NOBODY CAN ACT ON. Run
+      // 35631103914 printed OTHER=1 against three sources and nothing said what
+      // it was, which is the same shape of unactionable verdict this probe
+      // exists to replace.
+      (otherStateExamples[file] ??= []).push({ symbol: sym, ...v });
+    }
   }
   const tally = has + absent + spelled + shape + nul + sourceMissing + other;
   if (tally !== universe.length) {
@@ -225,6 +251,43 @@ for (const file of CAP_SOURCES) {
   };
 }
 
+// ── THE WHOLE SOURCE, NOT JUST THE UNIVERSE'S SLICE ───────────────────────
+// The pool carries 841 entries against a 700-symbol universe, and the universe
+// slice cannot say whether a null cap is rare everywhere or common outside it.
+// A rate measured only where the consumer looks is a rate that moves when the
+// consumer's list moves.
+//
+// AND THE CO-NULLITY IS THE ACTUAL EVIDENCE. NVDA's row carries a live price
+// and a live P/E beside a null marketCap — AND a null volume, open, dayHigh and
+// dayLow. Whether that set of nulls is peculiar to the uncapped rows or is the
+// ordinary shape of every row in the pool is the difference between "these four
+// symbols failed" and "the pool never populates these fields and 696 caps come
+// from somewhere else". Nothing printed so far distinguishes them, so both
+// populations are tabulated field by field.
+const POOL = CAP_SOURCES[0];
+const poolSrc = sources.get(POOL);
+const nullnessCapped = {}, nullnessUncapped = {};
+let poolCapped = 0, poolUncapped = 0;
+const poolUncappedSymbols = [];
+const bump = (tbl, k) => { tbl[k] = (tbl[k] ?? 0) + 1; };
+for (const [sym, raw] of poolSrc.entries) {
+  const obj = parsed(raw);
+  if (obj == null || typeof obj !== "object") continue;
+  const capped = capOf(raw) != null;
+  if (capped) poolCapped++; else { poolUncapped++; poolUncappedSymbols.push(sym); }
+  const tbl = capped ? nullnessCapped : nullnessUncapped;
+  for (const k of Object.keys(obj)) if (obj[k] == null) bump(tbl, k);
+}
+
+// CONTROLS: capped rows printed in full beside the uncapped ones. Without them
+// "NVDA's volume is null" is an observation with nothing to compare it to.
+const controls = [];
+for (const sym of ["AAPL", "MSFT", "AMZN"]) {
+  const canon = universeSpellingOf(sym) ?? sym;
+  const v = inspect(POOL, canon);
+  if (v.state === "HAS-CAP") controls.push({ symbol: canon, cap: v.cap, entry: parsed(poolSrc.entries.get(canon)) });
+}
+
 // ── report ────────────────────────────────────────────────────────────────
 console.log("\n=== PRICE-POOL CAP GAP ===");
 console.log(`universe: ${universe.length} symbols · sources read from due-strip-universe.mjs: ${CAP_SOURCES.join(", ")}\n`);
@@ -242,18 +305,38 @@ for (const [file, c] of Object.entries(coverage)) {
     `shapeMismatch=${c.universeShapeMismatch} · spelledDifferently=${c.universeSpelledDifferently}` +
     (c.universeOtherState ? ` · OTHER=${c.universeOtherState}` : "")
   );
+  for (const ex of otherStateExamples[file] ?? []) {
+    console.log(`      OTHER: ${ex.symbol} → ${ex.state}${ex.rawType ? ` (raw typeof ${ex.rawType})` : ""}`);
+  }
 }
+
+console.log(`\n${POOL} AS A WHOLE, not just the universe's slice`);
+console.log(`  ${poolSrc.entries.size} entries · ${poolCapped} with a cap · ${poolUncapped} without`);
+console.log(`  uncapped: ${poolUncappedSymbols.join(" ") || "(none)"}`);
+console.log("\n  NULL FIELDS, capped rows vs uncapped rows (count of rows where the field is null)");
+const fields = [...new Set([...Object.keys(nullnessCapped), ...Object.keys(nullnessUncapped)])].sort();
+for (const f of fields) {
+  console.log(`    ${f.padEnd(14)} capped ${String(nullnessCapped[f] ?? 0).padStart(4)}/${poolCapped}   ·   uncapped ${String(nullnessUncapped[f] ?? 0).padStart(3)}/${poolUncapped}`);
+}
+
+console.log("\n  CONTROLS — rows that DO carry a cap, printed in full");
+for (const c of controls) console.log(`    ${c.symbol.padEnd(6)} cap=${c.cap} · ${JSON.stringify(c.entry)}`);
 
 console.log(`\nUNIVERSE SYMBOLS WITH NO CAP IN ANY SOURCE: ${unpriced.length}`);
 for (const u of unpriced) {
   console.log(`  ${u.symbol.padEnd(8)} ${CAP_SOURCES.map((f) => `${f.split(".")[0]}=${u.states[f]}`).join(" · ")}`);
+  if (u.entry) console.log(`      pool entry: ${JSON.stringify(u.entry)}`);
 }
 
 console.log("\nLARGE-CAP SAMPLE (written by name, so the sample does not depend on the missing field)");
 const sampleMissing = focus.filter((f) => f.inUniverse && !f.anyCap);
+const renamed = focus.filter((f) => f.universeSpelling && f.universeSpelling !== f.symbol);
 console.log(`  in universe: ${focus.filter((f) => f.inUniverse).length}/${focus.length} · of those, WITHOUT a cap: ${sampleMissing.length}`);
+if (renamed.length) console.log(`  matched only via a spelling widening: ${renamed.map((f) => `${f.symbol}→${f.universeSpelling}`).join(", ")}`);
+const notInUniverse = focus.filter((f) => !f.inUniverse).map((f) => f.symbol);
+if (notInUniverse.length) console.log(`  not in the universe under any spelling: ${notInUniverse.join(", ")}`);
 for (const f of sampleMissing) {
-  console.log(`  ${f.symbol}:`);
+  console.log(`  ${f.symbol}${f.universeSpelling !== f.symbol ? ` (as ${f.universeSpelling})` : ""}:`);
   for (const file of CAP_SOURCES) {
     const v = f.perSource[file];
     console.log(`     ${file.padEnd(28)} ${v.state}` +
@@ -266,5 +349,7 @@ for (const f of sampleMissing) {
 
 emitPayload("pricepool-cap-gap", JSON.stringify({
   at: new Date().toISOString(), capSources: CAP_SOURCES,
-  universeSize: universe.length, coverage, unpriced, focus,
+  universeSize: universe.length, coverage, otherStateExamples, unpriced, focus,
+  pool: { name: POOL, entries: poolSrc.entries.size, capped: poolCapped, uncapped: poolUncapped, poolUncappedSymbols, nullnessCapped, nullnessUncapped },
+  controls,
 }, null, 2));
