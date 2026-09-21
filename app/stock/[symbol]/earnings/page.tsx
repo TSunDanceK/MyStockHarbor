@@ -17,16 +17,23 @@ import {
   buildSecEarningsView, isPct, periodWords,
   type PeriodBasis, type SecEarningsView,
 } from "@/lib/server/secEarningsView";
+// ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
+// median and the waterfall gate are imported by SecEarningsCards.tsx, which is
+// where they are drawn; re-importing them here would just be a second name for
+// the same rule.
+import { toneBg, toneColor, type EarningsTone as PresentationTone } from "@/lib/server/secPresentation";
+import { valuationInputs } from "@/lib/server/secValuation";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
+  SecTrendSummaryCard, SecValuationCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDates } from "@/lib/server/secReportDatesStore";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
-import { TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
+import { NO_PRICE_HISTORY_NOTE, TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -39,7 +46,9 @@ type Props = {
   params: Promise<{ symbol: string }>;
 };
 
-type EarningsTone = "good" | "neutral" | "weak";
+// THE TYPE COMES FROM THE RULES MODULE TOO, so a fourth tone could not be
+// added to one side only.
+type EarningsTone = PresentationTone;
 
 /**
  * ── WHERE THE DATES ON THIS PAGE COME FROM ────────────────────────────────
@@ -74,6 +83,14 @@ type EarningsReactionPoint = {
   volumeMultiple: number | null;
   drift5Pct: number | null;
   drift20Pct: number | null;
+  /**
+   * WHY there are no figures, when there are none. Null means the figures are
+   * present, or absent for an ordinary reason the card already explains.
+   *
+   * "uncovered" is the one case worth naming: the price series does not reach
+   * back to this report. See NO_PRICE_HISTORY_NOTE.
+   */
+  reason: "uncovered" | null;
 };
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
@@ -126,8 +143,10 @@ function formatPercent(value: number | null | undefined, digits = 1) {
  */
 const REACTION_SESSION_GAP_DAYS = 7;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
-  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null; reason: "uncovered" | null } {
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, reason: null as "uncovered" | null };
+  /** The series does not reach this report — a fact about the bars, not the filing. */
+  const uncovered = { ...empty, reason: "uncovered" as const };
   if (!row.date || !points.length) return empty;
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
@@ -153,6 +172,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
     const gapDays =
       next === -1 ? Infinity : (Date.parse(dates[next]) - Date.parse(String(row.date))) / 86400000;
     idx = next !== -1 && gapDays <= REACTION_SESSION_GAP_DAYS ? next : -1;
+    if (idx === -1) return uncovered;
   }
   if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
@@ -165,7 +185,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   // A REPORT AT THE VERY EDGE OF THE SERIES HAS NO PRIOR CLOSE. This was
   // already the outcome — points[-1] is undefined and every figure fell to
   // null — but by accident rather than by decision, so it is stated.
-  if (baseIdx < 0) return empty;
+  if (baseIdx < 0) return uncovered;
 
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
@@ -196,7 +216,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
     if (typeof close20 === "number" && Number.isFinite(close20)) drift20Pct = ((close20 - base) / Math.abs(base)) * 100;
   }
 
-  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
+  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct, reason: null };
 }
 
 
@@ -258,17 +278,9 @@ function bandFor(score: number): EarningsTone {
   return SCORE_BANDS.find((b) => score >= b.from)!.tone;
 }
 
-function toneColor(tone: EarningsTone) {
-  if (tone === "good") return "#22c55e";
-  if (tone === "weak") return "#ef4444";
-  return "#facc15";
-}
-
-function toneBg(tone: EarningsTone) {
-  if (tone === "good") return "rgba(34,197,94,0.10)";
-  if (tone === "weak") return "rgba(239,68,68,0.10)";
-  return "rgba(250,204,21,0.10)";
-}
+// toneColor and toneBg now live in lib/server/secPresentation.ts, because the
+// cards in SecEarningsCards.tsx need the same greens and had no way to reach
+// these. Two `#22c55e`s is how one of them becomes `#22c55d`.
 
 /**
  * The five things the score can read, DESCRIBED IN THE PAGE'S OWN PERIOD.
@@ -651,7 +663,7 @@ async function getEarningsData(symbol: string) {
     };
   })();
 
-  const [cold, dailyHistory, earningsJson] = await Promise.all([
+  const [cold, dailyHistory, latestBars, earningsJson] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
@@ -662,6 +674,23 @@ async function getEarningsData(symbol: string) {
       ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
           .catch(() => [] as Point[])
       : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    // ── THE WHOLE SERIES, FOR ITS LAST BAR AND NOTHING ELSE ─────────────────
+    //
+    // The valuation card needs the MOST RECENT close. The window above is
+    // sized around report dates, which is right for the reaction chart and
+    // wrong for this: a filer that has not reported recently has a window that
+    // stops months short of today. MEASURED ON THE PREVIEW — RYAAY priced at
+    // 50.40 as of 2025-05-15 against a live 53.51, CNI at 106.22 as of
+    // 2026-03-16 against 118.95. ABEV looked fine only because its report
+    // cycle happens to be current, which is why one symbol passing proves
+    // nothing about the others.
+    //
+    // THIS COSTS NOTHING. getDailyBars is a view over getDailyHistory, and
+    // getDailyHistory dedupes by symbol while a read is in flight — both
+    // entries of this Promise.all start in the same tick, so the second finds
+    // the first's promise already registered and awaits it. One read, two
+    // shapes of answer.
+    getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
     // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
     // an ignored fetch still costs the request, and the daily FMP limit is the
     // thing the owner has said not to spend.
@@ -786,9 +815,35 @@ async function getEarningsData(symbol: string) {
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
+  // ── THE VALUATION LEGS ───────────────────────────────────────────────────
+  //
+  // The SEC half comes from the stored set and refuses on its own terms (see
+  // secValuation). The price half is the LAST BAR THIS RENDER ALREADY HOLDS —
+  // no extra fetch, and no quote endpoint, because the bars are the series the
+  // rest of this page is built on and a second price source would be a second
+  // number for one fact.
+  //
+  // THE LAST BAR OF THE WHOLE SERIES, never of the reaction window — see the
+  // fetch above for the measurement. The card still prints the date it closed
+  // on, because a close is not a live quote, and refuses outright past
+  // VALUATION_PRICE_MAX_AGE_DAYS: a market cap is a claim about today, and one
+  // built on a year-old close is confidently wrong with nothing on screen to
+  // say so.
+  const valuation = cold.status === "ready" ? valuationInputs(cold.set) : { shares: null, eps: null, refusals: [] };
+  const lastBar = (latestBars as Point[]).at(-1) ?? null;
+  const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
+  const latestCloseOn = lastBar?.date ?? null;
+
   return {
     earningsRows, completedRows, latest, next, nextReport,
     priceReactionQuarters, score, secView, cold,
+    valuation, latestClose, latestCloseOn,
+    /**
+     * THE DATE THIS RENDER RAN, read once here rather than inside a component.
+     * A card that called Date.now() itself would be untestable and would also
+     * differ between the server render and any later hydration.
+     */
+    renderedOn: new Date().toISOString().slice(0, 10),
     /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
     datesFromSec: secEvents.length > 0,
     /**
@@ -1010,6 +1065,11 @@ export default async function StockEarningsPage({ params }: Props) {
     { name: "+20 trading days", color: "#22c55e", values: data.priceReactionQuarters.map((q) => q.drift20Pct) },
   ];
   const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
+  // NAMED, NOT COUNTED. The reader is looking at labelled bars; a count tells
+  // them a number is missing without telling them which.
+  const uncoveredLabels = data.priceReactionQuarters
+    .filter((q) => q.reason === "uncovered")
+    .map((q) => q.label);
   const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
 
   // Curated, deterministic set of OTHER stock symbols for the "Explore More
@@ -1086,6 +1146,47 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
         .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
         .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        /* ── THE NEW MARKS ──────────────────────────────────────────────────
+           Thin bars, 4px rounded data-ends anchored to the baseline, a 2px
+           surface gap between adjacent fills, and recessive tracks. Text stays
+           in the page's ink tokens — never the series colour — so a value is
+           readable whether or not its mark's hue reaches the reader. */
+        .toneChip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+        .toneChip i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
+
+        .hbarList { margin-top: 14px; display: grid; gap: 12px; }
+        .hbarRow { display: grid; gap: 6px; }
+        .hbarHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+        .hbarLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        .hbarValue { font-size: 14px; font-weight: 950; color: #f1f5f9; letter-spacing: -0.02em; white-space: nowrap; }
+        .hbarSub { font-size: 11px; color: rgba(148,163,184,0.72); }
+        .hbarTrack { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.05); overflow: hidden; }
+        .hbarFill { display: block; height: 100%; border-radius: 999px; }
+
+        .gmChart { margin-top: 10px; display: flex; align-items: stretch; gap: 2px; height: 148px; }
+        .gmCol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+        .gmPlot { position: relative; flex: 1 1 auto; }
+        .gmPlot::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed rgba(255,255,255,0.12); }
+        .gmBar { position: absolute; left: 10%; right: 10%; border-radius: 4px; min-height: 2px; }
+        .gmUp { bottom: 50%; }
+        .gmDown { top: 50%; }
+        .gmNone { position: absolute; left: 30%; right: 30%; top: calc(50% - 1px); height: 2px; border-radius: 999px; background: rgba(148,163,184,0.35); }
+        .gmTick { margin-top: 7px; font-size: 10px; font-weight: 800; color: rgba(148,163,184,0.72); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .waterfall { margin-top: 12px; display: grid; gap: 8px; }
+        .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr minmax(64px, auto); align-items: center; gap: 10px; }
+        .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
+        .wfTrack { height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
+        .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+        .wfValue { font-size: 12px; font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
+        .wfTotal .wfLabel, .wfTotal .wfValue { color: #dbeafe; }
+        .wfTotal { border-top: 1px solid rgba(255,255,255,0.10); padding-top: 8px; }
+
+        .trendGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+        .trendCell { display: grid; gap: 4px; align-content: start; }
+        .trendChipRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+        .trendCount { font-size: 11px; color: rgba(148,163,184,0.75); }
+        @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) 1fr minmax(56px, auto); } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
         .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
@@ -1328,6 +1429,17 @@ export default async function StockEarningsPage({ params }: Props) {
                       is the longer view a quarterly table cannot give. Same
                       component, same rows, `sole` only changes the wording. */}
                   <SecAnnualCard view={secView} sole={secView.tableBasis === "year"} />
+                  {/* AFTER THE TABLES IT SUMMARISES. The card states a median
+                      over the rows above, so it has to follow them: a summary
+                      above its own source reads as a separate claim. */}
+                  <SecTrendSummaryCard view={secView} />
+                  <SecValuationCard
+                    view={secView}
+                    inputs={data.valuation}
+                    price={data.latestClose}
+                    priceAsOf={data.latestCloseOn}
+                    today={data.renderedOn}
+                  />
                   <SecCashQualityCard view={secView} />
                   <SecBalanceSheetCard view={secView} />
                   {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
@@ -1366,6 +1478,18 @@ export default async function StockEarningsPage({ params }: Props) {
                         ? `Each bar is keyed to the date ${clean} filed its results with the SEC, and to the session that filing landed in: a filing after the close is measured against the next day's close.`
                         : `Each bar is keyed to an earnings-calendar date, not to ${clean}'s own filings — its filing history has not been read yet.`}
                     </p>
+                    {/* ── A MISSING BAR IS EXPLAINED, NOT LEFT TO INFERENCE ──
+                        A gap in this chart reads as "the market shrugged" or
+                        "they did not file". Neither is true: the price series
+                        simply starts later than the report. Naming the periods
+                        is the point — "some are missing" is not checkable by a
+                        reader looking at the chart. */}
+                    {uncoveredLabels.length > 0 && (
+                      <p className="earningsDataNote">
+                        <strong>{uncoveredLabels.join(", ")}</strong>{" "}
+                        {uncoveredLabels.length === 1 ? "has" : "have"} no bar above. {NO_PRICE_HISTORY_NOTE}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p>Not enough price history is available yet to chart the reaction around earnings.</p>

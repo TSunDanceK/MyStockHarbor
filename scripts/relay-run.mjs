@@ -479,6 +479,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY, but the bars and the report dates both live in Upstash and the
+  // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
+  // not a claim about what the script does.
+  "write-valuation-price": {
+    script: "scripts/valuation-price-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-manifest-stamp-census": {
     script: "scripts/manifest-stamp-census.mjs",
     args: () => [],
