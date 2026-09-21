@@ -490,7 +490,7 @@ async function getEarningsData(symbol: string) {
   // VALUATION_PRICE_MAX_AGE_DAYS: a market cap is a claim about today, and one
   // built on a year-old close is confidently wrong with nothing on screen to
   // say so.
-  const valuation = cold.status === "ready" ? valuationInputs(cold.set) : { shares: null, eps: null, refusals: [] };
+  const valuation = cold.status === "ready" ? valuationInputs(cold.set, todayIso) : { shares: null, eps: null, refusals: [] };
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
   const latestCloseOn = lastBar?.date ?? null;

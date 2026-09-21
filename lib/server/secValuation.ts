@@ -40,6 +40,7 @@
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
 import { valueOf } from "./secFactCodec";
 import { isConsecutive } from "./secEarningsView";
+import { DEADLINE_FALLBACK } from "./secReportDates";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
 export type ValuationRefusal =
@@ -47,6 +48,7 @@ export type ValuationRefusal =
   | "multi-class-share-count-is-ambiguous"
   | "ads-ratio-makes-shares-incomparable"
   | "ads-ratio-makes-eps-incomparable"
+  | "share-count-is-stale"
   | "no-twelve-month-eps"
   | "eps-is-zero-or-negative";
 
@@ -59,11 +61,71 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "this company files its share count in ordinary shares and trades here as depositary shares, which are not the same unit",
   "ads-ratio-makes-eps-incomparable":
     "this company files earnings per ordinary share and trades here as depositary shares, which are not the same unit",
+  "share-count-is-stale":
+    "the most recent share count this company has filed is too old to value it with",
   "no-twelve-month-eps":
     "twelve months of diluted EPS are not on file",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW OLD A SHARE COUNT MAY BE, AND WHY THERE HAS TO BE A BOUND
+//
+// MEASURED (relay 35620148960, claude/multiclass-shares-not-computable-2026-09-21):
+// the newest dei:EntityCommonStockSharesOutstanding companyfacts holds for
+// Berkshire Hathaway is dated 2011-04-29 and Fox's is 2010-01-29 -- fifteen and
+// sixteen years old. Nothing rejected them. `valuationInputs` accepted any row
+// with `val > 0` and any `asOf` at all, so that 2011 figure was multiplied by
+// today's close and rendered as a market cap.
+//
+// IT IS NOT A NEAR MISS. Berkshire's 941,481 is the CLASS A count; BRK.B has
+// roughly 1.3 billion shares. Pricing one against the other is wrong by about
+// 2,400x. The only mercy is that it lands nowhere plausible -- the usual danger
+// on this page is the opposite.
+//
+// priceIsCurrent (secPresentation) already bounds the OTHER half of the same
+// product for exactly this reason, and had no counterpart here. A market cap is
+// shares x price; bounding one operand and not the other bounds nothing.
+//
+// ── THE BOUND IS DERIVED, NOT PICKED ──────────────────────────────────────
+// A company that still files states a fresh count on every periodic report. The
+// slowest lawful cadence is annual, and the slowest annual deadline in the table
+// this repo already verified against 17 CFR 240.13a-1 is DEADLINE_FALLBACK.annual.
+// So the oldest cover a COMPLIANT annual-only filer can present is one year of
+// cadence plus one deadline's lateness:
+//
+//   365 + 90 = 455 days
+//
+// Past that the filer has missed a required report, and its share count is not a
+// fact about the company today. The figure is IMPORTED rather than copied, so a
+// correction to the statutory table moves this bound with it -- the trap recorded
+// in claude/traps/two-validators-for-one-value.md, which is what the report-date
+// reconciliation (#484) was about.
+//
+// DELIBERATELY GENEROUS. The cost of a bound slightly too loose is a share count
+// a few months stale, which moves a market cap by the buyback rate. The cost of
+// one too tight is refusing a figure a company did file. The error this exists to
+// stop is measured in DECADES, so it is caught by any bound in this region.
+export const COVER_SHARES_MAX_AGE_DAYS = 365 + DEADLINE_FALLBACK.annual;
+
+/**
+ * Whether a cover-page share count is recent enough to value a company with.
+ *
+ * `today` is passed in rather than read from the clock, for the reason
+ * priceIsCurrent gives: a bound that can only be exercised by waiting is a
+ * bound nobody exercises.
+ */
+export function coverIsCurrent(asOf: string | null | undefined, today: string): boolean {
+  if (!asOf) return false;
+  const t = Date.parse(today);
+  const a = Date.parse(asOf);
+  if (!Number.isFinite(t) || !Number.isFinite(a)) return false;
+  // A COUNT DATED AFTER TODAY IS NOT FRESH, IT IS WRONG -- the same rule, and
+  // the same reasoning, as priceIsCurrent's future-date guard.
+  if (a > t) return false;
+  return (t - a) / 86400000 <= COVER_SHARES_MAX_AGE_DAYS;
+}
 
 /**
  * THE SHARE COUNT AND ITS OWN AS-OF DATE.
@@ -200,7 +262,7 @@ export function sharesAreIncomparableToPrice(symbol: string): boolean {
   return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());
 }
 
-export function valuationInputs(set: StoredFactSet): ValuationInputs {
+export function valuationInputs(set: StoredFactSet, today: string): ValuationInputs {
   const refusals: ValuationRefusal[] = [];
 
   // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
@@ -226,7 +288,16 @@ export function valuationInputs(set: StoredFactSet): ValuationInputs {
     // that decision from the other end of the pipeline.
     refusals.push("multi-class-share-count-is-ambiguous");
   } else if (typeof cover?.val === "number" && cover.val > 0 && cover.asOf) {
-    shares = { val: cover.val, asOf: cover.asOf };
+    // AGE IS CHECKED AFTER THE VALUE IS KNOWN GOOD, so a stale row is refused
+    // for BEING STALE rather than folded into "no cover share count". The two
+    // are different facts about the filer -- one has never stated a count, the
+    // other stated one and stopped -- and a reader sent to EDGAR by the wrong
+    // one of those goes looking for something that is there.
+    if (coverIsCurrent(cover.asOf, today)) {
+      shares = { val: cover.val, asOf: cover.asOf };
+    } else {
+      refusals.push("share-count-is-stale");
+    }
   } else {
     refusals.push("no-cover-share-count");
   }
@@ -266,7 +337,10 @@ export function marketCap(
   }
   if (!inputs.shares) {
     const why = inputs.refusals.find(
-      (r) => r === "multi-class-share-count-is-ambiguous" || r === "no-cover-share-count"
+      (r) =>
+        r === "multi-class-share-count-is-ambiguous" ||
+        r === "share-count-is-stale" ||
+        r === "no-cover-share-count"
     );
     return why ? { ok: false, why } : null;
   }

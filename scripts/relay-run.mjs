@@ -660,6 +660,11 @@ const TASKS = {
   // question, explicitly not to be settled by assuming symmetry. This settles
   // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
   "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
+  // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
+  // prescribes summing each class's shares x that class's close; secFields.ts
+  // records from measurement that companyfacts carries no class label. Both
+  // cannot be acted on, and guessing produces a plausible wrong market cap.
+  "multiclass-shares": { script: "scripts/multiclass-shares-probe.mjs", args: () => [] },
   "due-strip-universe": {
     script: "scripts/due-strip-universe.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],

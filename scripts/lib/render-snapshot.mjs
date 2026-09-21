@@ -20,6 +20,7 @@
 // captured from live companyfacts by the shipped extractor
 // (scripts/sec-fixture-capture.mjs). Every number in them comes from SEC.
 import fs from "node:fs";
+import { grabConst } from "./source-code.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -45,22 +46,6 @@ async function importTsxSource(src) {
     fs.rmSync(tmp, { force: true });
   }
 }
-
-/**
- * One exported `const NAME = ...;` from a module, without the module.
- *
- * Anchored on `^export const NAME` and closed on the first line that is a bare
- * `};` — the shape every table in these files has. It returns the declaration
- * with `export` stripped, because the caller concatenates it into a unit that
- * declares its own exports.
- */
-const grabConst = (file, name) => {
-  const src = fs.readFileSync(file, "utf8");
-  const re = new RegExp(`^export const ${name}[^=]*=[\\s\\S]*?\\n\\};$`, "m");
-  const found = (src.match(re) ?? [])[0];
-  if (!found) throw new Error(`grabConst: ${name} not found in ${file}`);
-  return found.replace(/^export /, "");
-};
 
 const stripImports = (f) =>
   fs.readFileSync(f, "utf8")
