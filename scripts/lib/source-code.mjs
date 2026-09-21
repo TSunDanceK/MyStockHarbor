@@ -253,3 +253,143 @@ export function eventTypeSource() {
     .replace(/export function eventTypeFromTitle\(title: string\): EventType \| null/, "function eventTypeFromTitle(title)")
     .replace(/export function deriveEventType\(inputs: EventTypeInputs\): \{[\s\S]*?^\} \{/m, "function deriveEventType(inputs) {");
 }
+
+// ── A LIFT THAT IS MISSING A CONSTANT MUST SAY SO, NOT THROW LATER ────────
+//
+// THREE TIMES NOW, in this repo, the same shape:
+//
+//   #474  scripts/annual-filer-census.mjs lifted populationQueues, which names
+//         SEC_POPULATE_SLACK_CEILING in a DEFAULT PARAMETER. The lift compiled
+//         and threw only when the function was CALLED — after four blocks of
+//         correct-looking census output had already printed.
+//   #472  needsReread gained SEC_LABEL_VERSION the same way and would have
+//         been the next one.
+//   #482  reaction-window-diagnosis lifted computeEarningsReactionDetail after
+//         it gained REACTION_SESSION_GAP_DAYS. Same failure, same lateness:
+//         the header, the bar counts and the window all printed first.
+//
+// WHY IT KEEPS HAPPENING. A lifted function's free variables are invisible at
+// lift time: the module parses, imports fine, and holds a closure over a name
+// that does not exist. Nothing is wrong until the call, and by then the script
+// has produced output, so it reads as "the run stopped" rather than "a constant
+// is missing". The ReferenceError names the SYMBOL and not the REASON, so the
+// next person re-derives the reason from scratch.
+//
+// AND THE FIX KEEPS BEING AD HOC. Each site independently learned to read its
+// constants from the source and inject them. The fourth site will not.
+//
+// So: `assertLiftIsClosed(src)` is run BEFORE the module is built, and reports
+// EVERY missing name at once rather than the first one to be reached at
+// runtime — which matters, because they are normally discovered one call at a
+// time across several dispatches.
+//
+// ── CONSERVATIVE BY CONSTRUCTION ──────────────────────────────────────────
+//
+// Declarations are collected WITHOUT scope analysis: every binding name
+// anywhere in the source counts as declared. That over-approximates, so a
+// correctly-scoped program can never be flagged. What it still catches with
+// certainty is a name that is declared NOWHERE — which is exactly the bug.
+// A conservative check that never cries wolf is one people leave switched on.
+import tsc from "typescript";
+
+/** Names a lifted fragment may use without declaring. Not a style list. */
+const AMBIENT = new Set([
+  // ECMAScript
+  "globalThis", "Object", "Array", "String", "Number", "Boolean", "Symbol",
+  "BigInt", "Math", "JSON", "Date", "RegExp", "Error", "TypeError",
+  "RangeError", "SyntaxError", "ReferenceError", "Map", "Set", "WeakMap",
+  "WeakSet", "Promise", "Proxy", "Reflect", "Intl", "ArrayBuffer",
+  "Uint8Array", "Int32Array", "Float64Array", "DataView", "Function",
+  "parseInt", "parseFloat", "isNaN", "isFinite", "encodeURIComponent",
+  "decodeURIComponent", "encodeURI", "decodeURI", "structuredClone",
+  "undefined", "NaN", "Infinity", "arguments", "eval",
+  // host
+  "console", "process", "fetch", "Headers", "Request", "Response", "URL",
+  "URLSearchParams", "TextEncoder", "TextDecoder", "AbortController",
+  "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask",
+  "Buffer", "performance", "crypto", "atob", "btoa",
+  // React, for the card lifts
+  "React",
+]);
+
+/**
+ * Every name the source BINDS, anywhere, at any depth.
+ *
+ * Deliberately flat. See the header: over-approximating declarations is what
+ * makes a false positive impossible.
+ */
+function boundNames(sourceFile) {
+  const out = new Set();
+  const bind = (name) => {
+    if (!name) return;
+    if (tsc.isIdentifier(name)) out.add(name.text);
+    else if (tsc.isObjectBindingPattern(name) || tsc.isArrayBindingPattern(name)) {
+      for (const el of name.elements) if (!tsc.isOmittedExpression(el)) bind(el.name);
+    }
+  };
+  const walk = (node) => {
+    if (tsc.isVariableDeclaration(node) || tsc.isParameter(node) || tsc.isBindingElement(node)) bind(node.name);
+    else if (tsc.isFunctionDeclaration(node) || tsc.isClassDeclaration(node) || tsc.isFunctionExpression(node)) {
+      if (node.name) out.add(node.name.text);
+    } else if (tsc.isImportSpecifier(node) || tsc.isImportClause(node) || tsc.isNamespaceImport(node)) {
+      if (node.name) out.add(node.name.text);
+    } else if (tsc.isCatchClause(node) && node.variableDeclaration) bind(node.variableDeclaration.name);
+    tsc.forEachChild(node, walk);
+  };
+  walk(sourceFile);
+  return out;
+}
+
+/**
+ * Every name the source READS as a value.
+ *
+ * Property accesses, property names, labels and import/export specifiers are
+ * skipped: `a.SEC_LABEL_VERSION` is not a reference to a free variable, and
+ * counting it would flag every stored-set field.
+ */
+function readNames(sourceFile) {
+  const out = new Set();
+  const walk = (node) => {
+    if (tsc.isIdentifier(node)) {
+      const p = node.parent;
+      const isProperty =
+        p &&
+        ((tsc.isPropertyAccessExpression(p) && p.name === node) ||
+          (tsc.isPropertyAssignment(p) && p.name === node) ||
+          (tsc.isPropertySignature(p) && p.name === node) ||
+          (tsc.isMethodDeclaration(p) && p.name === node) ||
+          (tsc.isBindingElement(p) && p.propertyName === node) ||
+          tsc.isImportSpecifier(p) ||
+          tsc.isExportSpecifier(p) ||
+          tsc.isLabeledStatement(p) ||
+          tsc.isBreakOrContinueStatement(p));
+      if (!isProperty) out.add(node.text);
+    }
+    tsc.forEachChild(node, walk);
+  };
+  walk(sourceFile);
+  return out;
+}
+
+/**
+ * Throw unless every name the lifted source reads is one it can resolve.
+ *
+ * `label` names the lift in the message, because a check often builds several
+ * and "which one" is the first thing anyone asks.
+ */
+export function assertLiftIsClosed(src, label = "lift") {
+  const sf = tsc.createSourceFile("lift.ts", src, tsc.ScriptTarget.ES2020, true, tsc.ScriptKind.TS);
+  const declared = boundNames(sf);
+  const missing = [...readNames(sf)].filter((n) => !declared.has(n) && !AMBIENT.has(n)).sort();
+  if (missing.length) {
+    throw new Error(
+      `${label}: ${missing.length} name(s) are read but never declared — ` +
+        `${missing.join(", ")}.\n` +
+        `  A lifted function closes over these and will throw ReferenceError on ` +
+        `its first CALL, after the script has already printed output.\n` +
+        `  Read each from the source and prepend it to the lift (never pin a ` +
+        `literal — see scripts/lib/source-code.mjs for why this check exists).`
+    );
+  }
+  return src;
+}

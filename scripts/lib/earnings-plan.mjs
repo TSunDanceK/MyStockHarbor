@@ -13,7 +13,7 @@
 // (which check-cache-health-page asserts against vercel.json), and the two TTLs
 // from earningsStore.
 import ts from "typescript";
-import { readCodeOnly } from "./source-code.mjs";
+import { readCodeOnly, assertLiftIsClosed } from "./source-code.mjs";
 
 const erase = (src) =>
   ts.transpileModule(src, {
@@ -55,8 +55,22 @@ export const grabFunction = (tsSrc, name) => {
   return null;
 };
 
-export const lift = async (src, extra = "") => {
+/**
+ * Lift source into a live module — REFUSING one that cannot resolve itself.
+ *
+ * The closure check runs on the ERASED output rather than the TypeScript,
+ * because type positions read like value references (`x: SomeType`) and would
+ * be reported as missing names. After erasure only real value references
+ * remain, which is exactly the set that can throw at call time.
+ *
+ * See assertLiftIsClosed in scripts/lib/source-code.mjs for why this is worth
+ * a gate rather than a convention: three separate checks have shipped a lift
+ * missing a closed-over constant, and each failed on the first CALL, after
+ * output had printed, naming the symbol and not the reason.
+ */
+export const lift = async (src, extra = "", label = "lift") => {
   const js = erase(`${extra}\n${src}`);
+  assertLiftIsClosed(js, label);
   return import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 };
 
