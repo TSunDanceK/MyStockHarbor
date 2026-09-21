@@ -90,6 +90,7 @@ import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
 import { readPricePoolBulk } from "./pricePool";
+import { priceCoverage, type PriceCoverage } from "./gridPriceCoverage";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -359,6 +360,16 @@ export type EarningsCandidate = {
 export type EarningsListItem = EarningsCandidate & {
   price: number | null;
   marketCap: number | null;
+  /**
+   * Whether the bar source holds this symbol at all. See
+   * lib/server/gridPriceCoverage.ts for why this is NOT a fifth tier of the
+   * four market-cap refusals -- it says there is nothing to refuse.
+   *
+   * OPTIONAL, because rows cached before this existed do not carry it. Absent
+   * is read as "covered" at the render site so an old blob keeps rendering what
+   * it always did, rather than blanking a whole day's figures on deploy.
+   */
+  priceCoverage?: PriceCoverage;
 };
 
 export type FullDayEarnings = {
@@ -1246,6 +1257,11 @@ export async function getFullDayEarnings(
         ...candidate,
         price: quote?.price ?? null,
         marketCap: quote?.marketCap ?? null,
+        // `usOk` IS the pool hit: it is set only on the branch that reads the
+        // shared price pool, which is the bar source the analysis universe is
+        // warmed into. Reusing it here keeps one fact with one producer rather
+        // than adding a second, separately-maintained universe test.
+        priceCoverage: priceCoverage({ fromPricePool: Boolean(quote?.usOk) }),
       };
     })
     .filter((item): item is EarningsListItem => item !== null);
