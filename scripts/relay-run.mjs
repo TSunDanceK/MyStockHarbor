@@ -205,6 +205,75 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, no dump: it fetches public endpoints only. The runner is a
+  // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
+  // residential path NOR Vercel -- the script says so itself rather than
+  // leaving the reader to remember it.
+  "ipo-sources": { script: "scripts/ipo-source-probe.mjs", args: () => [] },
+  // Run 2. Run 1's S-1/A sample turned out to be already-listed issuers filing
+  // resale registrations, so its "price range 0/5" measured the sampling frame
+  // rather than the filings. This one defines the cohort from 8-A12B -- the form
+  // that means a class is being registered on an exchange -- and reports the hit
+  // rate within it.
+  "ipo-sec-cohort": { script: "scripts/ipo-sec-cohort-probe.mjs", args: () => [] },
+  // Phase 0 of the IPO build brief. Measure and stop: the S-1/A extraction rate
+  // with SPACs separated (a SPAC unit is fixed at $10 and has no range, which is
+  // what made the earlier 1/4 meaningless), the price parser against a negative
+  // control, and the age histogram the withdrawal cap needs.
+  "ipo-phase0": { script: "scripts/ipo-phase0-probe.mjs", args: () => [] },
+  // §4.10's three exclusion classes, measured before any is built. Checks the
+  // ticker map for OTC coverage first, because if it carries OTC issuers then
+  // class (a) already catches uplistings and class (c) costs nothing.
+  "ipo-exclusions": { script: "scripts/ipo-exclusions-probe.mjs", args: () => [] },
+  // Build order step 2: seed the 90-day window. Imports the SAME TypeScript
+  // classifier the render calls -- Node 24 strips the types, so no build step
+  // and no npm ci. If this re-implemented the rules, seeded and daily rows would
+  // disagree about what an IPO is and both would look plausible.
+  "ipo-seed": {
+    script: "scripts/ipo-seed.mjs",
+    args: () => [],
+    // Imports the app's TypeScript classifier directly. Node's ESM loader needs
+    // explicit extensions and lib/server/*.ts does not carry them, so a resolve
+    // hook bridges the gap WITHOUT editing any app file or tsconfig. Node 24 on
+    // the runner strips the types itself.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // WHAT A SPAC COVER ACTUALLY SAYS. The share-count fix took correctness from
+  // 29% to ~100% and its cost landed on the SPAC rows that dominate this page:
+  // the one unit-shaped anchor matched 1 of 94 covers, so Deal Size is blank on
+  // almost everything live. This prints the masthead and every dollar amount,
+  // unit count and trust sentence — and deliberately carries NO candidate
+  // patterns, so the output cannot be read as confirmation of a guess.
+  "ipo-spac": {
+    script: "scripts/ipo-spac-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // MEASURE THE SHARE COUNT, which Phase 0 never did -- it gated the PRICE
+  // parser at 5/5 and left sharesOffered untested. The first live ingest run
+  // produced ADARx at 88,250,216 shares (shares outstanding, not an offering)
+  // and Alopexx at a $2.1M NYSE American IPO. Prints every "<n> shares" on each
+  // cover with its sentence, so the rule is chosen by reading the filings
+  // rather than by guessing a tighter regex.
+  "ipo-shares": {
+    script: "scripts/ipo-shares-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // THE FIRST LIVE RUN OF THE DAILY INGEST. Steps 3-5 have only ever been
+  // fixture-proven; this calls ingestIpoWindow(), mergeIpoRecords() and
+  // buildSecIpoTables() -- the shipped functions, not copies -- against real
+  // EDGAR and prints both tables. Read-only by construction: the write is
+  // app-side (app/api/jobs/ipo-refresh) because that is where the write token
+  // is, and this job holds none.
+  "ipo-ingest": {
+    script: "scripts/ipo-ingest-probe.mjs",
+    args: () => [],
+    // Same reason as ipo-seed: it imports the app's .ts modules directly, and
+    // Node's ESM loader needs the resolve hook to find their extensionless
+    // relative specifiers.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
   // and diffs every extracted number against the frozen FMP ground truth in the
   // dump. Needs the dump for the FMP side and the network for the SEC side, and
@@ -730,5 +799,9 @@ if (spec.env) {
   console.log(`relay: ${task} pins ${Object.entries(spec.env).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 }
 console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
-const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit", env });
+// nodeArgs are flags for the node PROCESS, not arguments to the task. Only a
+// task that declares them gets them, so nothing else changes behaviour.
+const nodeArgs = spec.nodeArgs ?? [];
+if (nodeArgs.length) console.log(`relay: node flags ${nodeArgs.join(" ")}`);
+const res = spawnSync("node", [...nodeArgs, spec.script, ...args], { stdio: "inherit", env });
 process.exit(res.status ?? 1);

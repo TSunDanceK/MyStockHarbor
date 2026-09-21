@@ -69,6 +69,13 @@ export const JOBS = {
   // a date that exists rather than 403ing on one that does not.
   "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
   "sec-facts": { label: "SEC fact sets — reverify then populate (daily 04:20)", instrumented: true, cron: "20 4 * * *" },
+  // 04:40, AFTER sec-facts RATHER THAN BESIDE IT, and the gap is the rule.
+  // SEC's fair-access limit is per REQUESTER, not per endpoint: two jobs each
+  // politely pacing their own calls to 8/s would between them ask for 16/s and
+  // earn a block on the whole account. sec-facts paces 1,920 requests at 8/s,
+  // so it is done inside four minutes; twenty is comfortably clear of it and
+  // still well ahead of the 07:00 warm cluster.
+  "ipo-refresh": { label: "IPO filings window (daily 04:40)", instrumented: true, cron: "40 4 * * *" },
 } as const;
 
 /**

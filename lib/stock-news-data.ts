@@ -57,7 +57,23 @@ export type NewsScoreResult = {
 
 export type EarningsScoreResult = {
   score: number;
+  /**
+   * The standalone noun phrase: "Mixed earnings tone". For a chip or heading.
+   *
+   * NOT INTERCHANGEABLE WITH `word`, even though both are strings and both are
+   * "the tone". Dropping this into a sentence that has already said "earnings
+   * tone" produces "Earnings tone is currently mixed earnings tone", which is
+   * what shipped. See EARNINGS_TONE_BANDS.
+   */
   label: string;
+  /**
+   * The bare adjective: "mixed". For prose that supplies its own noun.
+   *
+   * Null when no earnings headlines were found at all — that is not a tone of
+   * "mixed", it is the absence of a reading, and a caller must drop its clause
+   * rather than name a state that was never established.
+   */
+  word: string | null;
   tone: ScoreTone;
   reason: string;
 };
@@ -1909,10 +1925,66 @@ export function scoreToNewsLabel(score: number) {
   return "Neutral";
 }
 
+/**
+ * ── THE EARNINGS TONE BANDS: THRESHOLD, WORD, LABEL AND COLOUR, IN ONE TABLE ─
+ *
+ * ── WHY THIS IS A TABLE AND NOT THREE FUNCTIONS ───────────────────────────
+ * The thresholds and the three label strings existed TWICE — here, and again
+ * as an inline if/else chain inside scoreEarnings() 700 lines below, which
+ * reached the same verdict by the same numbers in its own words. They agreed,
+ * which is the only reason nobody noticed; two copies of a threshold agree
+ * right up until someone moves one of them
+ * (claude/traps/two-validators-for-one-value.md). scoreEarnings now reads this
+ * table for its label and tone, and keeps only its `reason`, which genuinely
+ * differs per branch because it depends on which drivers were found.
+ *
+ * ── AND WHY EACH BAND CARRIES A BARE `word` AS WELL AS A `label` ──────────
+ * A rendering defect the owner found on /stock/AAPL/news, and it was on every
+ * symbol and every band: the lead paragraph read
+ *
+ *     "Earnings tone is currently mixed earnings tone."
+ *
+ * The sentence is `Earnings tone is currently ${label.toLowerCase()}.` and the
+ * label is a complete noun phrase. It reads correctly as a chip on the sector
+ * page, and it reads as a stammer in a sentence that has already said the noun.
+ *
+ * THE ASYMMETRY THAT HID IT: the FIRST half of that same sentence interpolates
+ * scoreToNewsLabel, which returns a bare adjective ("Bullish"), so
+ * "a bullish headline tone" is correct and the template looked sound. The two
+ * scorers returned different PARTS OF SPEECH under the same name, `label`, and
+ * nothing in the types could say so.
+ *
+ * So the band owns both forms. `word` goes in prose, `label` is the standalone
+ * chip, and neither is derived from the other by string surgery at a call site.
+ */
+export const EARNINGS_TONE_BANDS: {
+  from: number;
+  word: string;
+  label: string;
+  tone: ScoreTone;
+}[] = [
+  { from: 64, word: "positive", label: "Positive earnings tone", tone: "green" },
+  { from: 37, word: "mixed", label: "Mixed earnings tone", tone: "yellow" },
+  { from: 0, word: "weak", label: "Weak earnings tone", tone: "red" },
+];
+
+/** The band a score falls in. Ordered high-to-low, so the first hit wins. */
+export const earningsBand = (score: number) =>
+  EARNINGS_TONE_BANDS.find((b) => score >= b.from) ?? EARNINGS_TONE_BANDS[EARNINGS_TONE_BANDS.length - 1];
+
+/** The standalone noun phrase, for a chip or a heading. */
 export function scoreToEarningsLabel(score: number) {
-  if (score >= 64) return "Positive earnings tone";
-  if (score <= 36) return "Weak earnings tone";
-  return "Mixed earnings tone";
+  return earningsBand(score).label;
+}
+
+/**
+ * The bare adjective, for prose that has already supplied the noun.
+ *
+ * Use this anywhere the surrounding sentence says "earnings tone"; use
+ * scoreToEarningsLabel where the phrase has to stand on its own.
+ */
+export function scoreToEarningsWord(score: number) {
+  return earningsBand(score).word;
 }
 
 export function getEarningsQualityGuardrails(items: NewsItem[]) {
@@ -2416,6 +2488,9 @@ export function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
     return {
       score: 50,
       label: "No clear earnings read",
+      // NULL, NOT "mixed". There is no tone word because no tone was
+      // established -- see the `word` field on EarningsScoreResult.
+      word: null,
       tone: "yellow",
       reason: "There are no clear recent earnings-result headlines in the dedicated earnings feed.",
     };
@@ -2500,20 +2575,19 @@ export function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
     earningsQualityGuardrails.earningsCap
   );
 
-  let label = "Mixed earnings tone";
-  let tone: ScoreTone = "yellow";
+  // LABEL AND TONE COME FROM THE BAND TABLE, not from a second if/else chain
+  // with the same numbers in it. Only `reason` is decided here, because it is
+  // the one part that depends on WHICH drivers were found rather than on where
+  // the score landed. See EARNINGS_TONE_BANDS.
+  const band = earningsBand(score);
   let reason =
     "Recent earnings-linked headlines are mixed, so the score stays close to the middle.";
 
-  if (score >= 64) {
-    label = "Positive earnings tone";
-    tone = "green";
+  if (band.word === "positive") {
     reason = positiveDrivers.length
       ? "Recent earnings-linked headlines look constructive, with stronger signals around beats, guidance, revenue, or share-price reaction."
       : "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
-  } else if (score <= 36) {
-    label = "Weak earnings tone";
-    tone = "red";
+  } else if (band.word === "weak") {
     reason = negativeDrivers.length
       ? "Recent earnings-linked headlines look pressured, with weaker signals around misses, guidance cuts, or disappointing results."
       : "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
@@ -2521,8 +2595,9 @@ export function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
 
   return {
     score,
-    label,
-    tone,
+    label: band.label,
+    word: band.word,
+    tone: band.tone,
     reason,
   };
 }
@@ -2641,6 +2716,9 @@ async function buildStockNewsBaseData(
     label: hasActualEarningsHeadlines
       ? scoreToEarningsLabel(fallbackEarningsScoreValue)
       : "No clear earnings read",
+    word: hasActualEarningsHeadlines
+      ? scoreToEarningsWord(fallbackEarningsScoreValue)
+      : null,
     reason: hasActualEarningsHeadlines
       ? keywordEarningsScore.reason
       : "FMP did not return recent earnings-specific headlines. Use the structured earnings snapshot instead.",

@@ -8,6 +8,18 @@ type Props = {
   ipos: ConfirmedIpo[];
   emptyMessage: string;
   dateColumnLabel: string;
+  /**
+   * Whether to render the Market Cap column at all.
+   *
+   * A PROP RATHER THAN A DELETION, and rather than this component reading the
+   * env var itself. Deleting the column would make restoring it a rewrite;
+   * reading `IPO_PROVIDER` here would put a server-only value in a "use client"
+   * file, where NEXT_PUBLIC_ is the only thing that reaches the bundle — and
+   * that inlines it at BUILD time, so a provider flip would need a rebuild to
+   * show. The page is a server component and already knows the provider, so it
+   * decides and passes a boolean.
+   */
+  showMarketCap: boolean;
 };
 
 function formatDate(dateStr: string) {
@@ -54,7 +66,21 @@ type FieldDef = {
   has: (ipo: ConfirmedIpo) => boolean;
 };
 
-const FIELDS: FieldDef[] = [
+// ── MARKET CAP IS HIDDEN ON THE SEC PATH, NOT DELETED ─────────────────────
+//
+// SOURCE AND DATE, as the brief asks: measured 2026-09-14, NO FREE SOURCE
+// CARRIES IT. Not SEC — market capitalisation is not a filed field, and a
+// company that has not listed has no market to capitalise. Not Nasdaq's own
+// feed either: absent from every bucket, and prohibited anyway on licence
+// terms (claude/nasdaq-licence-verdict-2026-09-14.md). FMP did carry it, which
+// is why the column exists at all.
+//
+// So on IPO_PROVIDER=sec every row's marketCap is null by construction
+// (ipoSecSource.toConfirmedIpo sets it so, deliberately, rather than guessing)
+// and the column would be a header over a solid line of dashes. Same convention
+// as the earnings hide list: hidden behind the flag, kept in the code, restored
+// by flipping one boolean if a licence-clean source ever appears.
+const FIELDS_ALL: FieldDef[] = [
   {
     key: "exchange",
     label: "Exchange",
@@ -87,9 +113,23 @@ const FIELDS: FieldDef[] = [
   },
 ];
 
+const fieldsFor = (showMarketCap: boolean) =>
+  showMarketCap ? FIELDS_ALL : FIELDS_ALL.filter((f) => f.key !== "marketCap");
+
+// IDENTITY IS THE CIK, NOT THE SYMBOL. This was `${ipo.symbol}-${ipo.date}`, and
+// once the upper table began carrying companies that have filed but not priced --
+// which have no ticker yet -- that key collided: every such row became
+// "null-<date>", so two companies amending on the same day produced DUPLICATE
+// REACT KEYS. React then reuses one row's state for the other, and the wrong
+// panel opens. A CIK is always present and is unique per filer.
 function rowKey(ipo: ConfirmedIpo) {
-  return `${ipo.symbol}-${ipo.date}`;
+  return `${ipo.cik}-${ipo.date}`;
 }
+
+// What to show where a ticker has not been assigned yet. An em dash, not an empty
+// cell: a blank reads as a loading state, the same reasoning as the narrow view's
+// "only the terms this deal actually has".
+const SYMBOL_FALLBACK = "—";
 
 // Desktop keeps the nine-column table. Below 720px the same rows render
 // full-width instead: symbol, company and the date, with a chevron that opens
@@ -101,7 +141,8 @@ function rowKey(ipo: ConfirmedIpo) {
 // is being indexed, and the listings are the whole reason it ranks. isNarrow
 // starts false, so the server render -- and therefore Googlebot -- always gets
 // the table, exactly as before this change.
-export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) {
+export default function IpoList({ ipos, emptyMessage, dateColumnLabel, showMarketCap }: Props) {
+  const fields = fieldsFor(showMarketCap);
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -141,7 +182,7 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
           // Only the terms this deal actually has. A listing with no
           // reported market cap has none to report -- a column of dashes reads
           // like a loading state rather than an answer.
-          const fields = FIELDS.filter((field) => field.has(ipo));
+          const rowFields = fields.filter((field) => field.has(ipo));
           const priceRange = formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh);
           return (
             <div key={key} className={open ? "ipoRow open" : "ipoRow"}>
@@ -154,10 +195,16 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
                 className="ipoRowTop"
                 onClick={() => toggleRow(key)}
                 aria-expanded={open}
-                aria-label={open ? `Hide ${ipo.symbol} deal terms` : `Show ${ipo.symbol} deal terms`}
+                // ipo.company, not the symbol: a screen reader announcing "Show
+                // null deal terms" is worse than announcing a long name.
+                aria-label={
+                  open
+                    ? `Hide ${ipo.symbol ?? ipo.company} deal terms`
+                    : `Show ${ipo.symbol ?? ipo.company} deal terms`
+                }
               >
                 <span className="ipoRowId">
-                  <span className="ipoRowSym">{ipo.symbol}</span>
+                  <span className="ipoRowSym">{ipo.symbol ?? SYMBOL_FALLBACK}</span>
                   <span className="ipoRowName" title={ipo.company}>
                     {ipo.company}
                   </span>
@@ -173,9 +220,9 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
               </button>
               {open ? (
                 <div className="ipoRowPanel">
-                  {fields.length ? (
+                  {rowFields.length ? (
                     <div className="ipoRowFields">
-                      {fields.map((field) => (
+                      {rowFields.map((field) => (
                         <div key={field.key} className="ipoRowField">
                           <span className="ipoRowFieldLabel">{field.label}</span>
                           <span className="ipoRowFieldValue">{field.format(ipo)}</span>
@@ -184,7 +231,7 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
                     </div>
                   ) : (
                     <div className="ipoRowEmpty">
-                      No deal terms published for {ipo.symbol} yet.
+                      No deal terms published for {ipo.symbol ?? ipo.company} yet.
                     </div>
                   )}
                 </div>
@@ -266,7 +313,9 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
           width: "100%",
           borderCollapse: "collapse",
           fontSize: 14,
-          minWidth: 880,
+          // Narrower by one column when Market Cap is hidden. Leaving 880 would
+          // force a horizontal scrollbar on a table that now fits.
+          minWidth: showMarketCap ? 880 : 780,
         }}
       >
         <thead>
@@ -278,14 +327,20 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
             <th style={{ ...thStyle, textAlign: "right" }}>Price Range</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
+            {/* Hidden on the SEC path — see FIELDS_ALL for the source and date.
+                The narrow view drops it through `fields`; this table spells its
+                columns out, so it has to be dropped here too or desktop and
+                mobile would disagree about what the page even offers. */}
+            {showMarketCap ? (
+              <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
           {ipos.map((ipo: ConfirmedIpo) => (
             <tr key={rowKey(ipo)} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <td style={tdStyle}>{formatDate(ipo.date)}</td>
-              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol}</td>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol ?? SYMBOL_FALLBACK}</td>
               <td style={tdStyle}>{ipo.company}</td>
               <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>
@@ -293,7 +348,9 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
               </td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatShares(ipo.sharesOffered)}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.dealSize)}</td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
+              {showMarketCap ? (
+                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
+              ) : null}
             </tr>
           ))}
         </tbody>

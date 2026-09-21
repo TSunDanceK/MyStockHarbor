@@ -87,6 +87,14 @@ const KNOWN_MISSING = new Set([
   "claude/earnings-probe-adjudication-2026-09-13.md",
   "claude/tiering-freshness-follows-display-2026-09-01.md",
   "claude/fmp-exit-options-pickers-2026-09-12.md",
+  // ADDED 2026-09-21 with the /stock/[symbol] FMP-exit handoff. Same situation
+  // as the seven above and the same resolution: it is a Project-only doc, cited
+  // by the brief that commissioned that work, and the handoff records what it
+  // could and could not verify against the repo BECAUSE this doc is unreadable
+  // from here. Dropping the citation would delete the reason the handoff's §0.2
+  // exists at all -- that the Pickers Analysts-tab hide it was told to mirror is
+  // not present in the code -- and turn a recorded gap into a silent assumption.
+  "claude/HANDOFF-earnings-2026-09-17.md",
   "claude/firewall-asn-audit-2026-08-31.md",
 
   "claude/seo-recovery-plan-2026-08-15.md",

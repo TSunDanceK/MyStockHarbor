@@ -19,12 +19,74 @@
 // simplified version of the old API route's methodology, so the Earnings
 // page's overall score gauge keeps working.
 
-import type {
-  LatestEarningsData,
-  EarningsPeriodSummary,
-  EarningsYearSummary,
-  ScoreTone,
-} from "@/app/components/LatestEarningsCard";
+// ── THESE TYPES USED TO LIVE IN LatestEarningsCard.tsx ────────────────────
+//
+// They were the CARD'S props, and this module built them. On 2026-09-21 the
+// card came off FMP and onto SEC filings (see
+// lib/server/secEarningsSnapshot.ts), and its props became
+// `SecEarningsSnapshot` — so the shape below stopped describing anything the
+// card renders.
+//
+// IT STILL DESCRIBES SOMETHING REAL, which is why it moved here rather than
+// going with the card: /api/stock-earnings/[symbol] serves exactly this, and
+// the dashboard overview chip (app/components/DashboardClient.tsx) and the
+// earnings-calendar ticker search read it. Those surfaces are still on FMP and
+// still show the estimate-derived tone this shape carries.
+//
+// SO THE NAME IS NOW SLIGHTLY WRONG ON PURPOSE. `LatestEarningsData` is kept
+// verbatim because the HTTP route's consumers key off these field names over
+// the wire, and renaming the type would not rename the JSON. The rest of the
+// migration — moving /dashboard and /earnings-calendar onto the SEC snapshot
+// too, at which point this file and its estimate fields go — is the follow-up
+// recorded in claude/HANDOFF-stock-page-fmp-exit-2026-09-21.md.
+export type ScoreTone = "green" | "yellow" | "red";
+
+export type EarningsPeriodSummary = {
+  label: string;
+  date: string | null;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprisePercent: number | null;
+  revenueSurprisePercent: number | null;
+};
+
+export type EarningsYearSummary = {
+  year: string;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  goodCount: number;
+  neutralCount: number;
+  weakCount: number;
+};
+
+// A superset of the /api/stock-earnings payload. fiscalDate / guidanceSummary /
+// score are optional so the raw API response satisfies this type directly.
+export type LatestEarningsData = {
+  hasStructuredData: boolean;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+  score?: number | null;
+  reportDate: string | null;
+  fiscalDate?: string | null;
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprise: number | null;
+  epsSurprisePercent: number | null;
+  revenue: number | null;
+  revenueEstimate: number | null;
+  revenueSurprise: number | null;
+  revenueSurprisePercent: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netIncome: number | null;
+  guidanceSummary?: string | null;
+  nextEarningsDate: string | null;
+  recentReports: EarningsPeriodSummary[];
+  yearlySummaries: EarningsYearSummary[];
+  sourceNote: string;
+};
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import {
@@ -33,13 +95,6 @@ import {
   writeEarningsRows,
 } from "@/lib/server/earningsStore";
 import { beginTiming } from "./server/timing";
-
-export type {
-  LatestEarningsData,
-  EarningsPeriodSummary,
-  EarningsYearSummary,
-  ScoreTone,
-};
 
 type FmpEarningsSurprise = {
   date?: string;

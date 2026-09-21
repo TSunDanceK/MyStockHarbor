@@ -64,4 +64,5 @@ export {
   scoreToTone,
   scoreToNewsLabel,
   scoreToEarningsLabel,
+  scoreToEarningsWord,
 } from "@/lib/stock-news-data";
