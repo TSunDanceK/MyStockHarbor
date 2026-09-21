@@ -425,5 +425,67 @@ console.log("\n7. A SHARE COUNT THE FILER STOPPED UPDATING IS NOT A FACT ABOUT T
   );
 }
 
+// ── 8. HOW THE FOUR REFUSALS COMPOSE ──────────────────────────────────────
+// Stage 4 ended with FOUR separate reasons a market cap can be withheld, landed
+// across four PRs. They are deliberately NOT one "no data" branch: each names a
+// different fact, and merging them would make the page say the same thing about
+// four different situations and make any one of them impossible to revisit
+// alone.
+//
+//   security-kind (#495)   this ticker is not the security the filings describe
+//                          -> gated in resolveFactSetForRender, BEFORE the store
+//                             read, so such a symbol never reaches this module
+//   FPI / ADS (#489,#491)  the count is in ordinary shares, the price per ADS
+//   staleness (#497)       the filer stopped updating its count
+//   weighted-average (#7)  the tag is an average over a period, not a count
+//                          -> refused in the CHAIN, so it never becomes a count
+//                             at all and has no refusal of its own here
+//
+// WHAT THIS SECTION ASSERTS IS THE PRECEDENCE, because two can be true at once
+// and the reader must get the one that is certain.
+console.log("\n8. THE FOUR REFUSALS COMPOSE, AND THE ORDER BETWEEN THEM IS DELIBERATE");
+{
+  const staleCover = { asOf: "2011-04-29", accession: "a", filed: "2011-04-29", val: 941_481, derived: "as-filed" };
+
+  // FPI beats staleness. An ADS filer with an ancient count has two problems,
+  // and the unit mismatch is the one that holds whatever the date says -- a
+  // FRESH count would still be in the wrong unit.
+  const fpiAndStale = mod.valuationInputs(
+    set({ symbol: "TSM", quarters: FOUR, cover: staleCover }), TODAY);
+  check("an ADS filer with a stale count is refused for the UNIT, not the date",
+    mod.marketCap(fpiAndStale, 50)?.why === "ads-ratio-makes-shares-incomparable",
+    "refreshing the count would not fix it; the unit is wrong at any age");
+
+  // Multi-class beats staleness for the same reason: ambiguity is not cured by
+  // recency either.
+  const ambiguousAndStale = mod.valuationInputs(set({
+    quarters: FOUR,
+    cover: { ...staleCover, val: null, derived: "ambiguous", candidates: [600_000, 400_000] },
+  }), TODAY);
+  check("an ambiguous count that is ALSO stale is refused for the ambiguity",
+    mod.marketCap(ambiguousAndStale, 50)?.why === "multi-class-share-count-is-ambiguous");
+
+  // Each reason keeps its own words. Four distinct sentences, not one.
+  const reasons = [
+    "ads-ratio-makes-shares-incomparable",
+    "multi-class-share-count-is-ambiguous",
+    "share-count-is-stale",
+    "no-cover-share-count",
+  ];
+  check("the four share-count refusals say four different things",
+    new Set(reasons.map((r) => mod.REFUSAL_WORDS[r])).size === reasons.length,
+    "one merged 'no data' branch is what makes a defect impossible to see from the page");
+  check("...and every one of them is a claim about the FILING, not about the company",
+    reasons.every((r) => !/no earnings|not profitable|worthless/i.test(mod.REFUSAL_WORDS[r])));
+
+  // THE WEIGHTED-AVERAGE TAG HAS NO REFUSAL HERE, AND THAT IS CORRECT. It is
+  // excluded one layer down, in the chain, so it never becomes a cover count
+  // this module could refuse. Asserted so nobody "completes the set" by adding
+  // a fifth refusal that can never fire.
+  check("there is no weighted-average refusal at this layer — it is refused in the chain",
+    !Object.keys(mod.REFUSAL_WORDS).some((r) => /weighted/i.test(r)),
+    "see check-sec-extract §9; a refusal here would be dead code pretending to be a guard");
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);

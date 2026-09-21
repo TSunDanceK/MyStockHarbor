@@ -85,18 +85,21 @@ const LEDGER = [
   { n: 6, brief: "FPI market-cap suppression removed",
     status: "caught",
     covers: ["scripts/check-sec-valuation.mjs", "stage 4: FPI market-cap suppression removed"] },
-  // CORRECTED 2026-09-21, same over-claim, same shape. The cited assertion says
-  // sharesBasic/sharesDiluted carry kind "duration-average" -- a statement about
-  // PERIOD ARITHMETIC, how those values combine across quarters. The brief's #7
-  // is about which tags may feed the MARKET-CAP SHARES CHAIN, where the
-  // weighted-average tag must be excluded because it is "a different number that
-  // looks like the right one". COVER_SHARES_FIELD's chain currently holds only
-  // EntityCommonStockSharesOutstanding, with no CommonStockSharesOutstanding
-  // fallback and no exclusion expressed anywhere, so the behaviour this mutant
-  // names does not exist to be covered.
+  // CLOSED 2026-09-21, after first being wrongly recorded as caught. The
+  // original citation was an assertion that sharesBasic/sharesDiluted carry
+  // kind "duration-average" -- PERIOD ARITHMETIC, not the market-cap chain.
+  //
+  // The behaviour now exists and is guarded TWICE: assertCoverChainsAreClean
+  // runs at module load, and readCoverShares re-checks the denylist per tag.
+  // check-sec-extract §9 mutates the CHAIN ITSELF to admit the tag and proves
+  // each guard separately, with a CONTROL showing the value does leak when both
+  // are removed -- without that control the two would pass for any reason at
+  // all. The first attempt at this mutant removed the runtime guard while
+  // leaving the chain alone, so the loop never reached a forbidden tag and the
+  // mutant passed while proving nothing.
   { n: 7, brief: "weighted-average diluted tag admitted to the shares chain",
-    status: "uncovered",
-    why: "the cited assertion is about period arithmetic, not the market-cap shares chain" },
+    status: "caught",
+    covers: ["scripts/check-sec-extract.mjs", "weighted-average diluted tag admitted to the shares chain"] },
   { n: 8, brief: "strict 2.02+9.01 falling back to loose when strict resolves to one, not zero",
     status: "caught",
     covers: ["scripts/check-sec-report-dates.mjs", "9.01"] },
