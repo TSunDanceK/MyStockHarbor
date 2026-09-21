@@ -2,9 +2,11 @@
 import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import { searchSymbols } from "@/lib/server/symbolSearch";
-import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
+import {
+  getSecEarningsSnapshot,
+  type SecEarningsSnapshot,
+} from "@/lib/server/secEarningsSnapshot";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
 import {
@@ -117,50 +119,36 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
-function emptyEarnings(): LatestEarningsData {
-  return {
-    hasStructuredData: false,
-    tone: "yellow",
-    toneLabel: "Unavailable",
-    score: null,
-    reportDate: null,
-    fiscalDate: null,
-    actualEps: null,
-    estimatedEps: null,
-    epsSurprise: null,
-    epsSurprisePercent: null,
-    revenue: null,
-    revenueEstimate: null,
-    revenueSurprise: null,
-    revenueSurprisePercent: null,
-    grossMargin: null,
-    operatingMargin: null,
-    netIncome: null,
-    guidanceSummary: null,
-    nextEarningsDate: null,
-    recentReports: [],
-    yearlySummaries: [],
-    sourceNote: "Structured earnings data is unavailable right now.",
-  };
-}
-
-// Fetch the structured earnings snapshot on the SERVER (same computation the
-// /api/stock-earnings HTTP route and the Earnings page use) and pass it down
-// as a prop. This calls the shared lib function IN-PROCESS rather than doing
-// an HTTP self-fetch to our own /api/stock-earnings/[symbol] route: that
-// route is BotID-protected (see instrumentation-client.ts), and BotID only
-// validates a signed header attached by a real browser running the client
-// script — a server-to-server self-fetch never carries one, so it always
-// reads as an unverified bot and 403s itself. This is the same self-block
-// failure mode documented in claude/pickers-firewall-selfblock-2026-07-17.md
-// for the Pickers pages; the fix there (and here) is to skip the HTTP hop
-// entirely and call the data function directly in-process.
-async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> {
-  try {
-    return await getLatestEarningsData(symbol, "yellow");
-  } catch {
-    return emptyEarnings();
-  }
+/**
+ * The sidebar earnings snapshot, from the company's own SEC filings.
+ *
+ * ── WHY THIS IS NO LONGER getLatestEarningsData ──────────────────────────
+ * That function reads FMP's stable/earnings rows, which carry an analyst
+ * estimate and a surprise beside every actual. Those estimates left with the
+ * FMP licence on 2026-09-15 and /stock/[symbol]/earnings already hides them
+ * (RETIRED_SOURCES in lib/server/secEarningsView.ts) — but this sidebar, one
+ * click away on the same stock, was still drawing "EPS surprise" and "Revenue
+ * estimate" from the same dead source. getSecEarningsSnapshot reads the stored
+ * fact sets and runs the SAME scorer the full report runs, so the two cannot
+ * disagree about one filing.
+ *
+ * NO try/catch AND NO EMPTY FALLBACK, WHICH IS THE CHANGE THAT MATTERS MOST
+ * HERE. `emptyEarnings()` used to return hasStructuredData:false on any throw,
+ * and this route is ISR-cached — so one transient Redis blip produced a
+ * plausible-looking card reading "Structured EPS and revenue data is not
+ * available for this symbol right now", and that artefact was then served to
+ * every visitor and crawler for the next 15 minutes. Indistinguishable from a
+ * symbol that genuinely has no filings.
+ *
+ * getSecEarningsSnapshot has an `available: false` branch of its own for the
+ * cases that ARE a real answer (not read in yet, non-USD filer, no quarterly
+ * periods), each with its own sentence. Anything else is a failure, and a
+ * failure should throw: Next does not cache a render that throws, and on
+ * regeneration it keeps serving the last good copy. Same reasoning as the
+ * history/quote guard below.
+ */
+async function fetchEarningsSnapshot(symbol: string): Promise<SecEarningsSnapshot> {
+  return getSecEarningsSnapshot(symbol);
 }
 
 function num(value: unknown): number | null {
@@ -388,7 +376,7 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, latestEarnings, profile, shareHistory] =
+  const [historyResult, quoteResult, companyName, earningsSnapshot, profile, shareHistory] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -399,7 +387,7 @@ export default async function StockPage({ params }: Props) {
       ),
       fetchQuote(upper),
       fetchCompanyName(upper),
-      fetchLatestEarnings(upper),
+      fetchEarningsSnapshot(upper),
       fetchCompanyProfile(upper).catch(() => null),
       fetchShareHistory(upper).catch(() => null),
     ]);
@@ -582,7 +570,7 @@ export default async function StockPage({ params }: Props) {
 
       <StockSymbolPageClient
         symbol={upper}
-        latestEarnings={latestEarnings}
+        earningsSnapshot={earningsSnapshot}
         profile={profile}
         shareHistory={shareHistory}
         seed={seed}

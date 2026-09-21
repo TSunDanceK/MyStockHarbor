@@ -21,14 +21,38 @@ const check = (name, ok, detail = "") => {
 const PAGE = "app/stock/[symbol]/earnings/page.tsx";
 const CARDS = "app/stock/[symbol]/earnings/SecEarningsCards.tsx";
 const VIEW = "lib/server/secEarningsView.ts";
+// ── THE SCORER MOVED OUT OF THE PAGE (2026-09-21) ────────────────────────
+//
+// Every band, component, guard and sentence this file asserts about the score
+// used to be read out of PAGE with a regex. It now lives in its own module,
+// because the sidebar snapshot card needs the same function and a second copy
+// of it would be two scorers for one value.
+//
+// THE ASSERTIONS ARE UNCHANGED — they read SCORE instead of PAGE. That is
+// strictly a better instrument for the same questions: grabbing a function out
+// of a 1,200-line page by brace-matching worked, but it could not tell a
+// scorer from a lookalike declared elsewhere in the same file, and it broke
+// whenever the page was reorganised around it. What still reads PAGE is what
+// is genuinely ABOUT the page: the JSX that draws the gauge, the hidden-card
+// call sites, and the prose.
+const SCORE = "lib/server/secEarningsScore.ts";
 
 const pageRaw = fs.readFileSync(PAGE, "utf8");
+const scoreRaw = fs.readFileSync(SCORE, "utf8");
+// The lift below supplies its own export list, so a declaration that is
+// already exported would be exported twice and the module would not parse.
+// Stripping the keyword is what lets the scorer be a real module and still be
+// lifted as a fragment.
+const unexport = (s) => (s ?? "").replace(/^export /gm, "");
 // readCodeOnly strips /* */ and // — it does NOT strip {/* ... */}, which is a
 // JSX EXPRESSION containing a comment, and the page is full of them recording
 // what moved off FMP. Scanning for user-visible text has to drop those too, or
 // the record of the migration reads as a promise the page is still making.
 const stripJsxComments = (src) => src.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "");
 const pageCode = stripJsxComments(readCodeOnly(PAGE));
+// The scorer's own code, comments stripped, for the two assertions that read a
+// whole function body rather than matching a line inside it.
+const scoreCode = readCodeOnly(SCORE);
 const cardsRaw = fs.readFileSync(CARDS, "utf8");
 const cardsCode = stripJsxComments(readCodeOnly(CARDS));
 
@@ -296,7 +320,7 @@ console.log("\n7c. the score cannot claim an input it did not read");
   // an inline comment names it again — so a containment check run over the raw
   // text finds the phrase outside the guard and fails on prose. The property is
   // about code.
-  const expl = (pageCode.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
+  const expl = (scoreCode.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
   check("the cash clause is guarded by the cash component having run",
     /if \(ran\.has\("cashConversion"\)\) \{[\s\S]{0,160}backed by cash/.test(expl),
     "it used to be emitted from the tone alone");
@@ -313,7 +337,7 @@ console.log("\n7c. the score cannot claim an input it did not read");
     `guarded block ${guardEnd - guardAt}b, ${outsideGuard.length}b outside it — ` +
       "both the good and the weak phrasing must be inside the one branch");
   check("the score reports WHICH components it could not read",
-    /unavailable: scoreGaps\(ran, basis\)/.test(pageRaw) && /function scoreGaps/.test(pageRaw),
+    /unavailable: scoreGaps\(ran, basis\)/.test(scoreRaw) && /function scoreGaps/.test(scoreRaw),
     "a count would hide the one that mattered");
   check("...and the page renders that list on the score card itself",
     /score\.available && score\.unavailable\.length/.test(pageRaw),
@@ -322,7 +346,7 @@ console.log("\n7c. the score cannot claim an input it did not read");
   // the accruals branch and broke when that line became contribute(); the
   // property it was after is that a null chain produces NO entry at all.
   check("an absent input adds no points and no signal",
-    /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\("cashConversion"/.test(pageRaw),
+    /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\("cashConversion"/.test(scoreRaw),
     "the guard is on the value, so a null chain cannot contribute a default");
   // The behavioural half is section 7e's `absent` case, which scores a shape
   // with accruals: null and asserts the key is missing from contributions.
@@ -340,7 +364,7 @@ console.log("\n7c. the score cannot claim an input it did not read");
  * subset and assert against different code.
  */
 async function liftScorer() {
-  const consts = [...pageRaw.matchAll(/^const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
+  const consts = [...scoreRaw.matchAll(/^export const (SCORE_[A-Z_]+)[^=]*= ([\s\S]*?);$/gm)]
     .map((m) => `const ${m[1]} = ${m[2].replace(/ as const$/, "")};`).join("\n");
   // NOTE: `consts` above already picks up SCORE_BANDS — it matches every
   // top-level `const SCORE_*`. Lifting it a second time declares it twice and
@@ -355,17 +379,18 @@ const vocab = [
   (readCodeOnly(VIEW).match(/export const NOT_MEANINGFUL = [^;]+;/) ?? [""])[0].replace("export const", "const"),
   (readCodeOnly(VIEW).match(/export const isPct = [^;]+;/) ?? [""])[0].replace("export const", "const"),
 ].join("\n");
-const scoreComponentsSrc = (pageRaw.match(/const scoreComponents = \(basis: PeriodBasis\)[\s\S]*?\n\};/) ?? [""])[0];
+const scoreComponentsSrc = unexport((scoreRaw.match(/export const scoreComponents = \(basis: PeriodBasis\)[\s\S]*?\n\};/) ?? [""])[0]);
 return lift(
-    [vocab, scoreComponentsSrc, consts.replace(/: \{ tone: EarningsTone; label: string; from: number \}\[\]/, ""), grabFunction(pageRaw, "clamp"), grabFunction(pageRaw, "toneLabel"),
-   grabFunction(pageRaw, "bandFor"),
-   grabFunction(pageRaw, "scoreExplanation"), grabFunction(pageRaw, "scoreGaps"),
-   grabFunction(pageRaw, "buildScoreResult"), grabFunction(pageRaw, "scoreFromSec"),
+    [vocab, scoreComponentsSrc, consts.replace(/: \{ tone: EarningsTone; label: string; from: number \}\[\]/, ""),
+   unexport(grabFunction(scoreRaw, "clamp")), unexport(grabFunction(scoreRaw, "toneLabel")),
+   unexport(grabFunction(scoreRaw, "bandFor")),
+   unexport(grabFunction(scoreRaw, "scoreExplanation")), unexport(grabFunction(scoreRaw, "scoreGaps")),
+   unexport(grabFunction(scoreRaw, "buildScoreResult")), unexport(grabFunction(scoreRaw, "scoreFromSec")),
    // CALLED BY buildScoreResult AND NOT LIFTED WITH IT. Same shape as the view
    // lift above: the assertions here never reached the branch that calls it, so
    // the gap sat unnoticed until assertLiftIsClosed refused the lift.
-   grabFunction(pageRaw, "noScoreReason"),
- grabFunction(pageRaw, "scoreBandNote")].join("\n") +
+   unexport(grabFunction(scoreRaw, "noScoreReason")),
+ unexport(grabFunction(scoreRaw, "scoreBandNote"))].join("\n") +
     "\nexport { scoreFromSec, scoreComponents, toneLabel, bandFor, scoreBandNote };"
 );
 }
@@ -381,9 +406,9 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
 //
 // It is not that scale, and this asserts the arithmetic rather than saying so.
 {
-  const seed = Number((pageRaw.match(/const SCORE_SEED = (\d+)/) ?? [])[1]);
+  const seed = Number((scoreRaw.match(/SCORE_SEED = (\d+)/) ?? [])[1]);
   const maxes = Object.fromEntries(
-    [...(pageRaw.match(/SCORE_MAX_CONTRIBUTION: Record<ScoreComponent, number> = \{([\s\S]*?)\};/) ?? ["", ""])[1]
+    [...(scoreRaw.match(/SCORE_MAX_CONTRIBUTION: Record<ScoreComponent, number> = \{([\s\S]*?)\};/) ?? ["", ""])[1]
       .matchAll(/(\w+):\s*(\d+)/g)].map((m) => [m[1], Number(m[2])])
   );
   check("the scale is a seed plus signed contributions, not a percentage",
@@ -415,7 +440,7 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
   // comparison then fails — silently, in the direction that looks like a real
   // finding. Reading the table is both correct and impossible to half-match.
   const strongAt = Number(
-    (pageRaw.match(/\{ tone: "good", label: "[^"]*", from: (\d+) \}/) ?? [])[1]
+    (scoreRaw.match(/\{ tone: "good", label: "[^"]*", from: (\d+) \}/) ?? [])[1]
   );
   check("the STRONG threshold is readable from the band table",
     Number.isFinite(strongAt), `top band starts at ${strongAt}`);
@@ -430,18 +455,18 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
       JSON.stringify(reachable));
   check("...and an absent component contributes exactly zero, not a default",
     /const pts = sc/.test("") ||
-      /if \(isPct\(s\.revenueYoY\)\) contribute\(/.test(pageRaw) &&
-      /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(pageRaw) &&
-      /if \(s\.netIncome\.val != null\) contribute\(/.test(pageRaw) &&
-      /if \(opMargins\.length >= 2\) \{\s*contribute\(/.test(pageRaw) &&
-      /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(pageRaw),
+      /if \(isPct\(s\.revenueYoY\)\) contribute\(/.test(scoreRaw) &&
+      /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(scoreRaw) &&
+      /if \(s\.netIncome\.val != null\) contribute\(/.test(scoreRaw) &&
+      /if \(opMargins\.length >= 2\) \{\s*contribute\(/.test(scoreRaw) &&
+      /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(scoreRaw),
     "every contribute() sits behind a guard on its own input, with no else");
   check("points, membership and the recorded amount are ONE act",
     /const contribute = \(key: ScoreComponent, points: number\) => \{[\s\S]{0,200}score \+= points;[\s\S]{0,120}ran\.add\(key\);[\s\S]{0,120}contributions\[key\] = points;/
-      .test(pageRaw),
+      .test(scoreRaw),
     "three separate statements are three chances for the total and the list to disagree");
   check("no component adds points outside contribute()",
-    (pageRaw.match(/score \+=/g) ?? []).length === 1,
+    (scoreRaw.match(/score \+=/g) ?? []).length === 1,
     "the only `score +=` is inside contribute");
 }
 
@@ -482,7 +507,7 @@ console.log("\n7e. the cash card is ONE period, and says which");
       /does not publish a quarterly cash-flow statement/.test(cardsRaw),
     "a reader must not have to infer that the numbers changed period");
   check("the score's narrative names the period when the cash leg is annual",
-    /cashBasis === "year" \? ` over \$\{cashPeriod\}`/.test(pageRaw),
+    /cashBasis === "year" \? ` over \$\{cashPeriod\}`/.test(scoreRaw),
     "otherwise quarterly growth and annual cash are described as one period");
 
   // ── THE 4x TRAP, RUN RATHER THAN DESCRIBED ────────────────────────────────
@@ -531,7 +556,7 @@ console.log("\n7f. one message per situation, and none of them contradicts a car
 // on SEC EDGAR" — two statements about the same company contradicting each
 // other, three inches apart. RYAAY has been read in; it reports in euros.
 {
-  const reason = (pageCode.match(/function noScoreReason[\s\S]*?\n\}/) ?? [""])[0];
+  const reason = (scoreCode.match(/function noScoreReason[\s\S]*?\n\}/) ?? [""])[0];
   check("the no-score reason branches on the cold status, not on view === null",
     /cold\.status === "no-xbrl"/.test(reason) && /switch \(cold\.why\)/.test(reason),
     "one message for six situations is how a page contradicts itself");
@@ -556,7 +581,7 @@ console.log("\n7f. one message per situation, and none of them contradicts a car
   //
   // So the function is lifted and called once per state, and the assertion is
   // on the sentence it returns.
-  const reasonFn = (await lift(`export ${grabFunction(pageRaw, "noScoreReason")}`)).noScoreReason;
+  const reasonFn = (await lift(`export ${unexport(grabFunction(scoreRaw, "noScoreReason"))}`)).noScoreReason;
   const say = (cold, hasSet) => reasonFn("RYAAY", cold, hasSet);
   const cases = {
     currency: say({ status: "no-xbrl", why: "currency", taxonomies: ["EUR"] }, true),
@@ -639,7 +664,7 @@ console.log("\n7h. the band the number falls in, and the period it was built on"
 // past the top of the scale rather than by reading the source.
 {
   const scorer2 = await liftScorer();
-  const bands = [...pageRaw.matchAll(/\{ tone: "(\w+)", label: "([^"]+)", from: (\d+) \}/g)]
+  const bands = [...scoreRaw.matchAll(/\{ tone: "(\w+)", label: "([^"]+)", from: (\d+) \}/g)]
     .map((m) => ({ tone: m[1], label: m[2], from: Number(m[3]) }));
   check("there is ONE band table, with a threshold on every band",
     bands.length === 3 && bands.every((b) => Number.isFinite(b.from)),

@@ -23,6 +23,7 @@ import {
   scoreNews,
   scoreNewsItem,
   scoreToEarningsLabel,
+  scoreToEarningsWord,
   scoreToNewsLabel,
   scoreToTone,
   stripHtmlTags,
@@ -420,6 +421,11 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
     label: hasActualEarningsHeadlines
       ? scoreToEarningsLabel(earningsScoreValue)
       : "No clear earnings read",
+    // The bare adjective, for any prose that supplies its own noun. The sector
+    // page renders the LABEL as a chip, where the full phrase is right, but the
+    // field travels with the score so a future sentence here cannot repeat the
+    // /stock/[symbol]/news stammer. See EARNINGS_TONE_BANDS.
+    word: hasActualEarningsHeadlines ? scoreToEarningsWord(earningsScoreValue) : null,
     reason: hasActualEarningsHeadlines
       ? keywordEarningsScore.reason
       : `There are no fresh earnings-result headlines across the largest ${sector.name} names right now.`,
