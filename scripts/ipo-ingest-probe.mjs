@@ -198,6 +198,27 @@ console.log(
     `   seed's 19/8 unless the walk covered the same span.`
 );
 
+const payload = {
+  probedAt: NOW.toISOString(),
+  walked: [FROM, TO],
+  days: result.days,
+  counters: {
+    filersTouched: result.filersTouched,
+    submissionsRead: result.submissionsRead,
+    submissionsFailed: result.submissionsFailed,
+    coversFetched: result.coversFetched,
+    coversParsed: result.coversParsed,
+    noticesSkipped: result.noticesSkipped,
+    historyTruncated: result.historyTruncated,
+    requests: result.requests,
+    ms: result.ms,
+  },
+  document: { records: doc.records.length, bytes, valid, lastIndexDate: doc.lastIndexDate },
+  funnel,
+  upcoming,
+  recent,
+};
+
 fs.mkdirSync("data/sec", { recursive: true });
 fs.writeFileSync("data/sec/ipo-ingest-probe.json", JSON.stringify(payload));
 fs.writeFileSync("data/sec/ipo-ingest-document.json", JSON.stringify(doc));
