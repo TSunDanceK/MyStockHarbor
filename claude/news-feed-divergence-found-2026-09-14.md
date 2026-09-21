@@ -167,7 +167,31 @@ That is the same failure shape as two others today: the User-Agent env read that
 could go blank, and the `fieldHits` ReferenceError that passed three gates.
 **Silent defaults are how all three shipped.**
 
-## 6a. HELD — the score half, filed separately
+## 6a. ~~HELD~~ **LANDED 2026-09-20** — the score half
+
+> **Superseded by the change itself.** `scoreNews` now takes a `NewsScope` and
+> passes the caller's through, so `getStockNewsData` hands the *same*
+> `newsScope` binding to `rankNews` and to `scoreNews` two lines apart. The
+> section below is kept as the original filing; what it describes as pending is
+> done.
+>
+> **The before/after, and the number that moved is not the score.** On the FAST
+> fixture mixed with three real off-topic headlines (Apple, Coca-Cola, Bank of
+> America, captured from relay run 199), both scopes come out **50** — so a
+> score delta would have been the wrong assertion. What market scope inflated is
+> the **evidence claim**: it reported `available: true`, *"Based on 5 of 5
+> headlines from the last 14 days"*, **Medium** confidence, when only **2** of
+> those headlines were about Fastenal. Under symbol scope the same pool returns
+> `available: false` and **Low** — the honest answer. A tone read off other
+> companies' news is the user-visible defect, not the integer beside it.
+>
+> `check-news-relevance-scope.mjs` asserts it by *running* both scopes over one
+> pool, with a control that market scope on a clean pool still agrees with
+> symbol scope — so the narrowing is removing irrelevant news, not relevant
+> news. 3 / 3 mutations caught.
+
+### The original filing
+
 
 The acceptance criterion in the report — "the two numbers must not be able to
 disagree" — was corrected by its own author and the narrower version is right:
@@ -208,7 +232,76 @@ no symbol, which is the case `rankNews`'s defaults were written for.
 
 ## 8. Not done
 
-The funnel sample across ~200 random symbols, for the **rate**. Four of seven is
-seven data points and is not a percentage. **Worth running after (a) lands**,
+### 8a. The funnel sample — unblocked, but it is no longer the same question
+
+~~The funnel sample across ~200 random symbols, for the **rate**. Four of seven
+is seven data points and is not a percentage. **Worth running after (a) lands**,
 since the numbers have now changed and the pre-fix ones would only measure the
-bug.
+bug.~~
+
+**Still not run, and both preconditions are now met** — (a) landed with §6, (b)
+landed 2026-09-20 as the score half (§6a). But *"run it now"* is the wrong
+instruction, because **what it would measure has changed underneath it.**
+
+**Four of seven was measuring the exclusivity bug, and that bug is gone.** Those
+seven data points are the bimodal drop in §4 — `7-9%` versus `36-64%` at `pool`
+— and §4 explains the split as *"store holds ≥1 FMP record → only those
+survive."* That branch was removed in #457. Re-running the same funnel today
+cannot reproduce that split, because nothing in the read path is exclusive any
+more.
+
+So the rate a ~200-symbol sample would return now is a **different number**:
+how many symbols still retain a **pre-flip FMP record** in the persistent store.
+That is a **store-hygiene** measurement, not a relevance-filter one. It is a
+legitimate question — those records are the fossils `check-news-relevance-scope`
+keeps a tripwire on — but it is not the question this section was filed to ask.
+
+**Before spending a credentialled run, decide which question is wanted.** The
+sample needs Upstash reads, so it is a `write-`-prefixed relay task in the
+stateful job, not the uncredentialled one the news probes have used so far
+(`gnews-sample`, `anchor-collisions`, `fund-or-note`). Three candidates, and
+they need different jobs:
+
+| question | what it needs |
+|---|---|
+| how many symbols still hold a pre-flip FMP record | store reads — credentialled |
+| what the per-stage funnel looks like post-fix (fetched → relevant → rendered) | store reads — credentialled |
+| how often a symbol's live query returns nothing usable | Google News only — **uncredentialled**, the shape `fund-or-note` already uses |
+
+The third is the cheapest and needs no credentials at all.
+
+### 8b. The wire per-feed cost case — there is no prior brief to recover
+
+`BRIEF-wire-per-feed-2026-09-14.md` — in this directory — **does not exist**:
+not in the working tree, not on any branch, and not anywhere in history
+(`git log --all --diff-filter=A` finds no commit that ever added it). Nothing in
+this repo cites it or a `§B1` — checked repo-wide — so **there was no stale
+reference to remove**; this note exists so the next session does not spend the
+search again.
+
+> **Its name is deliberately written without the `claude/` prefix above.**
+> `check-doc-citations` greps for `claude/<anything>.md` in prose, so spelling
+> the full path here would file a citation to a document that has never
+> existed — and the first draft of this section did exactly that, turning a
+> note *about* a missing doc into a new dangling citation. Same shape as the
+> `grep-finds-the-comment` trap #463 hit in `check-security-spellings`: the
+> guard matching a sentence that describes an absence. Naming it short is the
+> fix that does not require an exemption entry.
+
+**The nearest document is a different document with the opposite conclusion.**
+[`claude/wire-egress-verdict-2026-09-14.md`](wire-egress-verdict-2026-09-14.md)
+establishes that GlobeNewswire is *not* blocked from Vercel and that the
+5,002ms hang was **our missing User-Agent**, fixed in #456. Its `§B` reference
+points at a *prior* brief's §B — *"stop polling it per-symbol because the host
+is unreachable"* — and then **rules that out in as many words**: *"does not
+apply… per-symbol wire attribution is recoverable."* Reading it as the source of
+a per-feed cleanup plan inverts its finding.
+
+So if the cleanup is still wanted, the cost case has to be **built fresh** from
+`pollAll` in `lib/server/news/wireProvider.ts` as it stands today: two feeds,
+one shared poll on `revalidate: 3600`, already per-feed-timed via
+`beginTiming("news", \`wireFeed \${source.id}\`)`. The claim to test is the
+standing one that the wires contribute ~1 item/day (`fetchForSymbol`'s own note
+records **2 of 40** items resolving to a universe symbol in one real poll) while
+still costing a fetch on every cold render. That is a measurement against the
+current code, not a plan to be recovered.

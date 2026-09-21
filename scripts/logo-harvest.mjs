@@ -48,6 +48,38 @@ const FLOOR = 24;    // narrower than this renders worse than the monogram
 // with only AI at 0.34 and BWA at 0.06 anywhere near.
 const BLANK_STDEV = 2;
 
+// ── LEGIBILITY PASS, claude/BRIEF-logo-legibility-2026-09-15.md ───────────
+// Below this contrast ratio against the chip's white, a mark does not read at
+// all. Measured over the committed harvest, 223 of 2,622 marks (8.5%) are white
+// on transparency and land at ~1.00:1 -- V, UNH, IBM, CAT, BA, DIS, NKE among
+// them. A RATIO rather than a luminance threshold, because the thing being
+// decided is contrast against a known background, and a mark that is mostly
+// light with dark detail would be misjudged by mean luminance alone.
+// Below this much variation, once composited onto the chip's white, there is
+// nothing for a viewer to see. Empirical: the 170 invisible marks measured 0-0.3,
+// while the least-varied genuinely visible logo sits at 13.6, so the threshold
+// falls in a wide gap rather than on a judgement call.
+const LEGIBLE_STDEV = 8;
+// The chip paints #ffffff behind the image (TickerLogo's box), so that is what
+// a mark has to be legible against.
+const CHIP_BG = { r: 255, g: 255, b: 255 };
+// COLORS.cardBg from DashboardClient -- the card these chips sit on. Taken from
+// the palette rather than invented, per the brief, and it matches what the site
+// already ships: 305 harvested logos arrive with their own dark baked
+// background, median rgb(15,44,82), the same dark-navy family.
+const BACKING = { r: 0x14, g: 0x1b, b: 0x2b, alpha: 1 };
+// Margin around a mark placed on that backing, so it does not touch the edge.
+const INSET = 0.12;
+// Trim that removes more than this of BOTH dimensions is treated as a misfire
+// rather than a tight crop, and the untrimmed original is kept.
+const TRIM_SUSPICIOUS = 0.6;
+// This pass changes how logos LOOK, not which ones harvest. A count that moves
+// by more than this means something else happened, so the run stops instead of
+// committing. ~1% of the 2,622 the harvest settled on.
+const COUNT_DRIFT_LIMIT = Number(process.env.HARVEST_COUNT_DRIFT ?? 25);
+// Above this, public/ stops being the right home and that is the owner's call.
+const BYTE_CEILING = Number(process.env.HARVEST_BYTE_CEILING ?? 10 * 1024 * 1024);
+
 const pad = (s, n) => String(s).padEnd(n);
 
 function universe() {
@@ -71,6 +103,114 @@ async function runPool(items, worker, size) {
     })
   );
   return out;
+}
+
+/**
+ * Is there nothing in this image on ANY background?
+ *
+ * Background-independent on purpose, and that is the distinction that matters
+ * next to invisibleOnChip above. "Invisible" is a fact about a mark against a
+ * particular background and is fixed by changing the background. "Blank" is a
+ * fact about the image and cannot be fixed at all.
+ *
+ * Kept exactly as #458 settled it: an earlier version composited onto white and
+ * flagged 166 real logos, because a white mark on transparency vanishes against
+ * white while being a perfectly good image. A mark of any single colour, white
+ * included, varies in ALPHA and is kept.
+ */
+async function isBlank(buf) {
+  const st = await sharp(buf).stats();
+  const rgbStdev = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
+  const alphaCh = st.channels[3];
+  const fullyTransparent = Boolean(alphaCh) && alphaCh.max === 0;
+  const flatEverywhere = rgbStdev < BLANK_STDEV && (!alphaCh || alphaCh.stdev < BLANK_STDEV);
+  return {
+    blank: fullyTransparent || flatEverywhere,
+    why: fullyTransparent ? "fully transparent" : "uniform colour",
+    rgbStdev,
+    alphaStdev: alphaCh ? alphaCh.stdev : null,
+  };
+}
+
+/**
+ * Crop a uniform border, with the guards the brief requires.
+ *
+ * WHY THIS FIXES THE SIZING PROBLEM. A handful of sources carry an OPAQUE baked
+ * margin with the mark floating inside it -- AAPL fills 49% of its own frame,
+ * BRK.B 67%. object-fit: contain then correctly fits the whole image, margin
+ * included, so the mark renders small. trim() crops a flat border using the
+ * top-left pixel as reference, so it removes baked white exactly as it removes
+ * transparent padding, and it is a NO-OP on the marks that already fill their
+ * frame. That is what makes it safe to apply to everything rather than to a
+ * hand-maintained list -- scaling up globally would crop or distort the
+ * majority to fix a handful.
+ */
+async function trimBorder(input, width, height) {
+  try {
+    const { data, info } = await sharp(input).trim().toBuffer({ resolveWithObject: true });
+    if (!info?.width || !info?.height || info.width < 2 || info.height < 2) {
+      return { buf: input, width, height, note: "trim-empty" };
+    }
+    // Suspicious only when BOTH dimensions collapse. A wordmark legitimately
+    // loses most of one dimension and none of the other.
+    if (info.width < width * (1 - TRIM_SUSPICIOUS) && info.height < height * (1 - TRIM_SUSPICIOUS)) {
+      return { buf: input, width, height, note: "trim-suspicious" };
+    }
+    const trimmedAway = info.width < width || info.height < height;
+    return { buf: data, width: info.width, height: info.height, note: trimmedAway ? "trimmed" : "no-op" };
+  } catch {
+    // sharp throws when an image is entirely uniform. The blank guard below is
+    // the thing that should judge that, not this.
+    return { buf: input, width, height, note: "trim-threw" };
+  }
+}
+
+/**
+ * Will anything of this mark be visible once the chip paints white behind it?
+ *
+ * ── WHY THIS REPLACED THE BRIEF'S TWO-PART CONDITION ──────────────────────
+ * The brief specified: mean colour of the opaque pixels, contrast below 1.5:1
+ * against white, AND a transparent corner. Implemented literally it left two
+ * marks invisible and mis-measured 202 more, because BOTH halves are proxies
+ * that break in opposite directions:
+ *
+ *   contrast of the MEAN is the same flaw the brief warns about in mean
+ *   luminance -- a mark that is mostly light with dark detail averages light.
+ *   202 of the files it flagged are plainly visible, at 13-100 variation.
+ *
+ *   a TRANSPARENT CORNER is meant to mean "not already carrying a background",
+ *   but any opaque corner passes, INCLUDING A WHITE ONE, which provides no
+ *   contrast whatever. AI and AVB are white marks on white backgrounds and were
+ *   skipped for "already having a background" that cannot be seen.
+ *   Asking the trimmed copy instead is worse, not better: trim removes the
+ *   transparent margin, so a mark filling its own bounding box then reports an
+ *   opaque corner and reads as already-backed -- exactly backwards.
+ *
+ * Compositing onto the chip's own colour and measuring what remains asks the
+ * real question directly, and it decides all four shapes correctly: a white
+ * mark on transparency disappears (back it); a white mark on its own dark
+ * background does not (leave it); a dark mark inside a baked white margin does
+ * not (leave it); a white mark on a white background disappears (back it).
+ *
+ * THIS IS NOT THE MEASUREMENT #458 REJECTED, though it looks like it. That one
+ * used composite-on-white to decide BLANKNESS and would have DELETED 166 real
+ * logos. The measurement is right for legibility and wrong for blankness: the
+ * question "is it visible on this background" is exactly what a backing
+ * decision turns on, and being wrong here adds a dark panel behind something
+ * that was already fine -- cosmetic, and recoverable. Blankness still uses the
+ * background-independent test further down, unchanged.
+ *
+ * Materialised to a buffer before stats(), because sharp's stats() reads the
+ * INPUT and silently ignores chained operations -- the trap recorded in
+ * claude/serving-assets-from-public-2026-09-15.md.
+ */
+async function invisibleOnChip(buf) {
+  const flat = await sharp(buf)
+    .flatten({ background: { r: CHIP_BG.r, g: CHIP_BG.g, b: CHIP_BG.b } })
+    .toBuffer();
+  const st = await sharp(flat).stats();
+  const visible = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
+  return { invisible: visible < LEGIBLE_STDEV, visible };
 }
 
 async function harvest(symbol) {
@@ -115,12 +255,63 @@ async function harvest(symbol) {
     // Keeping both would be strictly worse -- a small but valid logo would be
     // skipped and mislabelled "placeholder", which a synthetic test caught.
     const meta = await sharp(input).metadata();
-    const width = meta.width ?? 0;
-    if (!width) return { symbol, ok: false, reason: "undecodable: no width in metadata" };
-    if (width < FLOOR) return { symbol, ok: false, reason: `source-too-small (${width}px < ${FLOOR}px floor)` };
+    const srcWidth = meta.width ?? 0;
+    if (!srcWidth) return { symbol, ok: false, reason: "undecodable: no width in metadata" };
+
+    // ── 1. TRIM, BEFORE THE RESIZE ──────────────────────────────────────
+    const trimmed = await trimBorder(input, srcWidth, meta.height ?? srcWidth);
+    const width = trimmed.width;
+
+    // ── 2. THE FLOOR IS RE-CHECKED AGAINST THE TRIMMED WIDTH ────────────
+    // Deliberately after the trim, not before. A 32px source whose mark
+    // occupies a corner of its frame can land under the floor once the margin
+    // is gone, and the old rule was written against the untrimmed width.
+    // Checking first would keep exactly the upscaled mush the floor exists to
+    // reject, and the mistake would be invisible -- it renders, just badly.
+    if (width < FLOOR) {
+      return {
+        symbol,
+        ok: false,
+        reason: `source-too-small (${width}px < ${FLOOR}px floor, after trim from ${srcWidth}px)`,
+      };
+    }
 
     const target = Math.min(TARGET, width);
-    const out = await sharp(input)
+
+    // ── 3. BAKE CONTRAST IN WHERE THE MARK WOULD BE INVISIBLE ───────────
+    // TickerLogo cannot pick a chip colour per symbol: that needs a per-symbol
+    // lookup, which is exactly what #458 removed for costing 6.4 KB gzipped on
+    // every page. So the contrast has to live in the image.
+    // ── BLANK IS DECIDED BEFORE BACKING, and the order is the bug fix ───
+    // A uniform square composites to a uniform result, so invisibleOnChip
+    // cannot tell it apart from a white mark on transparency -- both vanish.
+    // With the blank test left until after the composite, KNX and NGVT were
+    // handed a dark panel, gained variation from it, sailed through the guard
+    // that had rejected them in #458, and came back as files. Two logos the
+    // harvest had deliberately dropped reappeared looking deliberate.
+    // Blankness is a property of the image, so it is judged on the image,
+    // before anything is painted behind it.
+    const pre = await isBlank(trimmed.buf);
+    if (pre.blank) {
+      return {
+        symbol,
+        ok: false,
+        reason:
+          `blank-image (${pre.why}; rgbStdev=${pre.rgbStdev.toFixed(2)} ` +
+          `alphaStdev=${pre.alphaStdev === null ? "n/a" : pre.alphaStdev.toFixed(2)}; ` +
+          `source ${input.length}B ${srcWidth}px)`,
+      };
+    }
+
+    // ── THE BACKING DECISION IS MADE ON WHAT SHIPS, NOT ON THE SOURCE ───
+    // Render the plain version first and judge THAT. Deciding on the
+    // full-resolution trimmed source instead put four marks -- AN, AVT, IHS,
+    // CDNS -- on the wrong side of the line: downscaling to 72px averages
+    // neighbouring pixels and pulls variation down, so a mark that clears the
+    // threshold at 250px can land under it at 72px and ship as a faint smudge.
+    // The asset that ships is the one the reader sees, so it is the one the
+    // test has to be run against.
+    const plain = await sharp(trimmed.buf)
       .resize({
         width: target,
         height: target,
@@ -130,50 +321,75 @@ async function harvest(symbol) {
         background: { r: 0, g: 0, b: 0, alpha: 0 },
         withoutEnlargement: true,
       })
-      .webp({ quality: 90, effort: 6 })
+      .png()
       .toBuffer();
 
-    // ── BLANKNESS, MEASURED ON THE IMAGE ITSELF ─────────────────────────
-    // A spot-check of the first harvest found files that decode perfectly at
-    // 72x72 and carry no content at all -- KNX and NGVT among them. Neither
-    // earlier guard catches that shape: the width floor passes (they are full
-    // size) and a byte-size floor passes (Q's source is 43 KB at 1596px). A
-    // blank chip is worse than the monogram it replaces and worse than a 404,
-    // because nothing downstream can tell it failed -- <img> fires load, not
-    // error, so the fallback chain never advances.
-    //
-    // THE TEST IS BACKGROUND-INDEPENDENT, and that correction matters. An
-    // earlier version composited onto the chip's white and measured that, which
-    // flagged 166 files including IBM, DIS, NKE and V. Those are NOT blank:
-    // their marks are WHITE on transparency, so they vanish against white while
-    // being perfectly good images. Skipping them would have silently dropped
-    // a hundred major brands on a measurement error. Their invisibility against
-    // a white chip is a real and separate issue, it predates this change (the
-    // same PNG renders into the same white box today), and it is the owner's
-    // call -- not something a harvest should decide by deleting files.
-    //
-    // So "blank" means the IMAGE has no variation anywhere:
-    //   fully transparent            -> nothing to see on any background
-    //   flat colour AND flat alpha   -> one uniform square
-    // A mark of any single colour, white included, varies in alpha and is kept.
-    const st = await sharp(out).stats();
-    const rgbStdev = Math.max(...st.channels.slice(0, 3).map((c) => c.stdev));
-    const alphaCh = st.channels[3];
-    const fullyTransparent = Boolean(alphaCh) && alphaCh.max === 0;
-    const flatEverywhere = rgbStdev < BLANK_STDEV && (!alphaCh || alphaCh.stdev < BLANK_STDEV);
-    if (fullyTransparent || flatEverywhere) {
+    const chip = await invisibleOnChip(plain);
+    const needsBacking = chip.invisible;
+
+    let out;
+    if (needsBacking) {
+      // ── THE BACKING CANVAS IS ALWAYS A FULL-SIZE SQUARE ─────────────
+      // TARGET, not `target`. `target` is capped by the trimmed width so a
+      // small mark is never upscaled, which is right for a bare mark -- but a
+      // backing is GENERATED, not scaled source, so making it smaller buys
+      // nothing and costs uniformity. Trim turns a wordmark into a wide short
+      // image, and a backing sized to those bounds would render as a dark
+      // stripe in a white chip instead of a filled square.
+      //
+      // Every one of the 168 backed files already came out 72x72 square,
+      // because a mark that needs backing has so far always trimmed wider than
+      // the target. This closes the path rather than fixing a live defect: a
+      // future small invisible mark would otherwise get a small canvas.
+      const canvas = TARGET;
+      const inner = Math.max(1, Math.round(canvas * (1 - 2 * INSET)));
+      const mark = await sharp(trimmed.buf)
+        .resize({
+          width: inner,
+          height: inner,
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer();
+      out = await sharp({
+        create: { width: canvas, height: canvas, channels: 4, background: BACKING },
+      })
+        .composite([{ input: mark, gravity: "centre" }])
+        .webp({ quality: 90, effort: 6 })
+        .toBuffer();
+    } else {
+      out = await sharp(plain).webp({ quality: 90, effort: 6 }).toBuffer();
+    }
+
+    // The same test again on the encoded result, which is where the brief asks
+    // for it. It should never fire now that the pre-check above exists -- a
+    // backed image always varies -- but an assertion that costs one stats() call
+    // and guards against a future pipeline change is worth keeping.
+    const post = await isBlank(out);
+    if (post.blank) {
       return {
         symbol,
         ok: false,
         reason:
-          `blank-image (${fullyTransparent ? "fully transparent" : "uniform colour"}; ` +
-          `rgbStdev=${rgbStdev.toFixed(2)} alphaStdev=${alphaCh ? alphaCh.stdev.toFixed(2) : "n/a"}; ` +
-          `source ${input.length}B ${width}px)`,
+          `blank-image after encode (${post.why}; rgbStdev=${post.rgbStdev.toFixed(2)}; ` +
+          `source ${input.length}B ${srcWidth}px)`,
       };
     }
 
     fs.writeFileSync(path.join(OUT_DIR, `${symbol}.webp`), out);
-    return { symbol, ok: true, bytes: out.length, sourceWidth: width, target };
+    return {
+      symbol,
+      ok: true,
+      bytes: out.length,
+      sourceWidth: width,
+      srcWidth,
+      target,
+      trim: trimmed.note,
+      backed: needsBacking,
+      visible: chip.visible,
+    };
   } catch (err) {
     return { symbol, ok: false, reason: `sharp-failed: ${String(err?.message ?? err).split("\n")[0]}` };
   }
@@ -201,9 +417,10 @@ if (cleared) console.log(`cleared ${cleared} file(s) from a previous run\n`);
 let symbols = universe();
 if (LIMIT > 0) symbols = symbols.slice(0, LIMIT);
 
-console.log("LOGO HARVEST — Phase 2");
+console.log("LOGO HARVEST — Phase 2 + legibility pass");
 console.log(`User-Agent: ${UA}`);
-console.log(`target ${TARGET}px · floor ${FLOOR}px · concurrency ${CONCURRENCY}`);
+console.log(`target ${TARGET}px · floor ${FLOOR}px (checked AFTER trim) · concurrency ${CONCURRENCY}`);
+console.log(`backing #${[BACKING.r, BACKING.g, BACKING.b].map((v) => v.toString(16).padStart(2, "0")).join("")} when invisible on the white chip (variation <${LEGIBLE_STDEV}) · inset ${(INSET * 100).toFixed(0)}%`);
 console.log(`universe: ${symbols.length} symbols${LIMIT ? ` (capped at ${LIMIT})` : ""}\n`);
 
 const t0 = Date.now();
@@ -218,6 +435,34 @@ const totalBytes = kept.reduce((a, r) => a + r.bytes, 0);
 // were actually written -- never from the symbol list that was attempted.
 // A skipped symbol absent from it is what makes the fallback chain correct.
 const manifest = kept.map((r) => r.symbol).sort();
+
+// ── STOP RATHER THAN COMMIT, per the legibility brief ────────────────────
+// Checked BEFORE the manifest is written, so a bad run leaves the previous
+// harvest intact and exits non-zero. The workflow's commit step has no
+// `if: always()`, so a failure here means nothing is committed -- which is the
+// whole point: a run that quietly dropped 200 logos would otherwise land as a
+// perfectly clean-looking commit.
+const previous = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")).length : 0;
+const drift = previous ? Math.abs(manifest.length - previous) : 0;
+if (previous && drift > COUNT_DRIFT_LIMIT) {
+  console.error(
+    `\nFATAL: file count moved from ${previous} to ${manifest.length} (${drift} symbols, ` +
+      `limit ${COUNT_DRIFT_LIMIT}). The legibility pass should not change WHICH logos ` +
+      `harvest, only how they look. The manifest is UNCHANGED and the job fails, so ` +
+      `nothing is committed. Investigate before re-running.`
+  );
+  process.exit(1);
+}
+if (totalBytes > BYTE_CEILING) {
+  console.error(
+    `\nFATAL: total ${(totalBytes / 1048576).toFixed(2)} MB exceeds the ${(BYTE_CEILING / 1048576).toFixed(0)} MB ` +
+      `ceiling. Compositing adds opaque pixels so growth is expected, but clearing this ` +
+      `reopens the storage decision settled in the harvest brief. The manifest is ` +
+      `UNCHANGED and the job fails, so nothing is committed.`
+  );
+  process.exit(1);
+}
+
 fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest)}\n`);
 
 console.log("RESULT");
@@ -227,6 +472,22 @@ console.log(`  mean file     : ${kept.length ? Math.round(totalBytes / kept.leng
 console.log(`  skipped       : ${skipped.length}`);
 console.log(`  wall-clock    : ${wall.toFixed(1)}s`);
 console.log(`  manifest      : ${MANIFEST} (${manifest.length} entries)\n`);
+
+// ── LEGIBILITY PASS ACCOUNTING ────────────────────────────────────────────
+const trimmedCount = kept.filter((r) => r.trim === "trimmed").length;
+const noopCount = kept.filter((r) => r.trim === "no-op").length;
+const suspicious = kept.filter((r) => r.trim === "trim-suspicious");
+const threw = kept.filter((r) => r.trim === "trim-threw" || r.trim === "trim-empty");
+const backed = kept.filter((r) => r.backed);
+console.log("LEGIBILITY PASS");
+console.log(`  trimmed (border removed) : ${trimmedCount}`);
+console.log(`  trim was a no-op         : ${noopCount}`);
+console.log(`  trim rejected by guard   : ${suspicious.length} suspicious + ${threw.length} empty/threw`);
+console.log(`  dark backing applied     : ${backed.length}  (invisible on the white chip)`);
+if (suspicious.length) {
+  console.log(`  SUSPICIOUS TRIMS, original kept: ${suspicious.map((r) => r.symbol).join(" ")}`);
+}
+console.log();
 
 const nativeKept = kept.filter((r) => r.target < TARGET);
 console.log(`KEPT AT NATIVE SIZE (source ${FLOOR}-${TARGET}px, not upscaled): ${nativeKept.length}`);

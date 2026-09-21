@@ -23,7 +23,7 @@
 // floor under it — the taxonomy survived the FMP exit because it happened to be
 // cached, and the names did not.
 //
-// data/company-names.json is that floor: 2,592 symbols captured from the SAME
+// data/company-names.json is that floor: 2,610 symbols captured from the SAME
 // two directory files fetchCompanyName reads, so the fallback and the live path
 // cannot disagree about what a company is called. Raw Security Name values,
 // uncleaned, because cleanName below is the normaliser and running it twice
@@ -52,6 +52,7 @@
 // toward ITS OWN source's convention. One global canonical spelling would be
 // wrong for one of the two sources no matter which it picked.
 import companyNameSnapshot from "@/data/company-names.json";
+import { lookupOneWay, toDotted } from "@/lib/symbolSpellings.mjs";
 
 const SNAPSHOT_NAMES = (companyNameSnapshot as { rows?: Record<string, string> }).rows ?? {};
 
@@ -67,5 +68,8 @@ export const COMPANY_NAME_SNAPSHOT_AS_OF: string =
 export function snapshotCompanyName(symbol: string): string {
   const upper = String(symbol ?? "").trim().toUpperCase();
   if (!upper) return "";
-  return SNAPSHOT_NAMES[upper] ?? (upper.includes("-") ? SNAPSHOT_NAMES[upper.replace(/-/g, ".")] ?? "" : "");
+  // ONE-WAY, preserving the original direction exactly. The snapshot is keyed
+  // by the exchange directory's spelling, so a dashed universe symbol may reach
+  // a dotted key; the reverse is not a miss this map can have.
+  return lookupOneWay(SNAPSHOT_NAMES, upper, toDotted) ?? "";
 }

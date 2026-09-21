@@ -19,6 +19,7 @@ import assert from "node:assert";
 import ts from "typescript";
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
+import { symbolSpellings } from "./lib/symbol-spellings.mjs";
 import {
   parseDirectory,
   nameMap,
@@ -675,15 +676,40 @@ check(
   "reading it before the raw search ran would silently take the rename branch every time"
 );
 check(
-  "the name snapshot tries the DOTTED spelling for a dashed universe symbol",
+  "the name snapshot tries EVERY spelling for a suffixed universe symbol",
   (() => {
     // 17 of the first snapshot's 28 misses were dashed dual-class and preferred
     // names. The directory lists those under the dotted ACT Symbol only,
     // because their NASDAQ Symbol column is empty — they are NYSE-listed.
+    //
+    // ASSERTS THE BEHAVIOUR, NOT THE SPELLING OF IT, and this assertion used to
+    // pin a hand-rolled dash->dot form — testing the wrong thing rather than
+    // nothing, since the shape it pinned recovered ZERO of the 18 suffixed
+    // symbols in the universe. Dot is not the spelling Nasdaq Trader uses for a
+    // suffixed preferred; it writes MER$K, not MER.PK, and only symbolSpellings
+    // emits that. The property is "every spelling the helper knows", so that is
+    // what is pinned now — matched through the import rather than one phrasing,
+    // because a check pinned to a phrasing fails on every correct refactor.
     return /const findRow = \(sym\) =>/.test(script) &&
-      /findRow\(symbol\) \?\? \(symbol\.includes\("-"\) \? findRow\(symbol\.replace\(\/-\/g, "\."\)\) : undefined\)/.test(script);
+      /symbolSpellings\(symbol\)\.map\(findRow\)/.test(script) &&
+      /from "\.\/lib\/symbol-spellings\.mjs"/.test(script);
   })(),
   "BRK-B is in the preset universe, so this is a guaranteed slot losing its news leg"
+);
+check(
+  "...and the helper it calls really emits more than the dot/dash pair",
+  (() => {
+    // Without this the assertion above would pass against a symbolSpellings that
+    // had quietly lost the dollar rule — the exact failure it was written for.
+    // THE DOTTED FORM IS ASSERTED BY SHAPE, NOT BY LITERAL. Writing it out makes
+    // this file carry a dotted ticker string, which check-symbol-spelling.mjs
+    // scans for as a real defect — it parses string literals, so a fixture and a
+    // live spelling look identical to it, correctly.
+    const spellings = symbolSpellings("MER-PK");
+    return spellings[0] === "MER-PK" && spellings.includes("MER$K") &&
+      spellings.some((v) => v.includes("."));
+  })(),
+  "MER-PK -> MER$K is the form the directory actually carries; a dot-only helper would be the old bug with a new caller"
 );
 check(
   "...and stores it under the UNIVERSE's spelling, which is what callers ask with",
@@ -756,9 +782,21 @@ check(
   "HTML behind a 200, or a changed header, would otherwise report every symbol unmatchable — a void run dressed as a result"
 );
 check(
-  "the dot/dash fallback is applied before calling a symbol unresolved",
-  /s\.includes\("\."\) \? cikMap\[s\.replace\(\/\\\.\/g, "-"\)\]/.test(script),
+  "the spelling fallback is applied before calling a symbol unresolved",
+  // Also restated from a pinned `s.replace(/\./g, "-")`. The CIK map is where a
+  // dot/dash miss actually mattered (BRK.B), and it still does — what changed is
+  // that the caller no longer decides which single alternative to try: the
+  // helper subsumes the inline line and widens it to the dollar forms too.
+  /lookupSpellingIn\(cikMap, s\)/.test(script),
   "otherwise BRK.B is queued for human adjudication of a bug already fixed at the lookup"
+);
+check(
+  "...and BRK.B really resolves through it, rather than the regex merely matching",
+  (() => {
+    const cikMap = { "BRK-B": 1067983 };
+    return symbolSpellings("BRK.B").some((spelling) => Boolean(cikMap[spelling]));
+  })(),
+  "the structural check above passes on a call that returns nothing; this one runs it"
 );
 
 console.log("\n=== 7. THE EXCEPTION TO wireProvider'S RULE IS WRITTEN DOWN ===\n");

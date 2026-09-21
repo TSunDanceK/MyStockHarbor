@@ -54,6 +54,9 @@ export {
   mergeNewsPools,
   newestFirst,
   // Aggregate scoring
+  // MARKET_NEWS_SCOPE travels WITH scoreNews, because scoreNews now requires a
+  // scope and a caller that can reach one without the other has to invent it.
+  MARKET_NEWS_SCOPE,
   scoreNews,
   scoreEarnings,
   rankEarningsNews,

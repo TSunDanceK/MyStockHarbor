@@ -25,7 +25,8 @@ two-day S-1→424B4 gap is itself the tell: no first-time IPO clears SEC review 
 
 **Wellchange IPO'd in 2024** (F-1 2024-02-08 → 8-A12B 2024-09-30, file no. 001-42294). The
 6-K on 2026-08-21 is conclusive on its own — only a foreign private issuer already
-registered under the Exchange Act files one.
+registered under the Exchange Act files one. (Its 2026 424B4 **does** exist — see the
+retraction in §2 — which changes nothing about this verdict.)
 
 **Advance JV Group is the interesting one.** Nine filings, ever; no 8-A of any spelling; no
 periodic reports. It is a genuine first-time offering — and its 424B4 cover says the shares
@@ -38,24 +39,37 @@ and **"exchange listing"**. Advance JV is a true positive for the first and a tr
 for the second. For a page about IPOs on Nasdaq and NYSE, the 8-A12B test is asking the
 right question, and this row is correctly absent.
 
-## 2. NEW BUG — an `EFFECT` notice was recorded as a 424B4
+## 2. ~~NEW BUG — an `EFFECT` notice was recorded as a 424B4~~ — RETRACTED 2026-09-15
 
-**Wellchange has no 424B4 on its record at all.** The item the seed recorded as a 424B4 on
-2026-08-28 is an **`EFFECT` notice**, accession **`9999999995-26-002778`**.
+> **This section was WRONG and is struck rather than deleted, so nobody acts on it.**
+> Refuted by the seed run against `form.idx`, which is the pipeline's actual input.
+>
+> **`form.idx` gives Wellchange a real `424B4` on 2026-08-28 under accession
+> `0001213900-26-094944`** — an ordinary filer-agent accession, not a `9999999995-` notice.
+> **Zero of the 24 lower candidates carry an EDGAR-generated accession.** There was no
+> mis-mapping and there is no bug in this pipeline.
+>
+> **The error was mine, and its cause is §5 of this same document.** The verification read
+> the HTML directory listing, which silently truncates and drops the *newest* filings. It
+> saw the `EFFECT` notice and never saw the 424B4 that follows it, and I reported the
+> absence as a finding. A warning I wrote in §5 is the thing that caught me one section
+> earlier — which is the argument for §5 being enforced in code rather than remembered.
+>
+> **The guard was kept anyway**, on the correct grounds: `9999999995-` accessions are a real
+> input class and excluding them is free. But it has excluded nothing, and a guard that has
+> never fired must not be described as a fix that worked — that is the failure mode the
+> trap doc exists for.
+>
+> Wellchange is excluded from the lower table regardless, by **both** tests: no `8-A12B` in
+> window, and seven `6-K`s before its prospectus. The §1 verdict stands; only the mechanism
+> claimed here was false.
 
-Accessions beginning `9999999995-` are **EDGAR-generated notices, not company filings**.
-`EFFECT` means the registration statement went effective; no final prospectus has been filed.
-Something upstream mapped that notice onto a 424B4 form type.
-
-**This inflates the lower table's candidate count.** The 24 includes at least one
-non-filing, and the 15 "follow-ons" therefore include rows that were never 424B4s at all.
-Every number in the lower funnel needs re-deriving after the fix.
-
-It is the same shape as everything else this week: an input that looks like data, parses
-cleanly, and is not what it claims to be. Worth a line in
-`claude/traps/a-filter-that-matches-nothing-looks-correct.md`'s neighbourhood, or its own
-trap — **a filter that matches the wrong thing looks exactly as correct as one that matches
-the right thing.**
+The retained, correct version of the point: **an input that looks like data, parses cleanly,
+and is not what it claims to be** is the week's recurring shape. `9999999995-` accessions
+are one instance of it. Recorded in
+`claude/traps/a-filter-that-matches-nothing-looks-correct.md` alongside its mirror —
+**a filter that matches the wrong thing looks exactly as correct as one that matches the
+right thing** — which is also what this retraction is an instance of.
 
 ## 3. The free secondary discriminator that would have made this immediate
 
@@ -76,16 +90,23 @@ registered under the Exchange Act.
 
 ## 4. Does this close the 9-vs-28 gap?
 
-Substantially, though not entirely. Three of six suspected misses are confirmed
-non-IPOs-for-this-page, and the `EFFECT` bug means the 24 candidates were never all 424B4s.
+Three of six suspected misses are confirmed non-IPOs-for-this-page. (An earlier version of
+this section also credited the `EFFECT` bug; that claim is retracted in §2 — all 24
+candidates are genuine 424B4s.)
 
-The residual gap is likely composition: **stockanalysis.com's ~28/month counts OTC and
-OTCQB offerings, uplistings and direct listings**, which this page excludes by design.
-Advance JV is a worked example — it would appear in a broad IPO count and correctly not in
-this one.
+The gap is composition, not loss: **stockanalysis.com's ~28/month counts OTC and OTCQB
+offerings, uplistings and direct listings**, which this page excludes by design. Advance JV
+is a worked example — it would appear in a broad IPO count and correctly not in this one.
 
 **Do not tune toward 28.** The number to match is exchange IPOs, and that is not the number
 that was being compared against.
+
+**The remaining open question is seasonal, and it is cheap to settle.** The measured window
+ends 2026-09-15, so it covers mid-August to mid-September — historically the quietest stretch
+of the IPO year, with issuers avoiding August and the autumn window opening only after Labor
+Day (2026-09-07). Re-running the same funnel over an earlier 30 days (say 2026-06-15 →
+07-15) distinguishes *"8 is seasonal"* from *"8 is structurally short."* Worth doing before
+the flag is flipped, not before the plumbing is refactored.
 
 ## 5. Two method warnings for the build
 
@@ -94,7 +115,8 @@ returned 7 rows and volunteered a "no entries appear in the date range" note —
 count is 9, and the two it dropped were the *newest*, including the 424B4. Fetching the
 folder path directly proved they existed. **`/Archives/edgar/data/<cik>/index.json` returned
 the complete 9 and should be preferred for enumeration.** A listing that drops the most
-recent filings is the worst possible failure mode for a calendar.
+recent filings is the worst possible failure mode for a calendar — and §2 is the worked
+example of it producing a false finding.
 
 **WebFetch caches per URL for 15 minutes.** Re-fetching the same URL to double-check a
 suspicious read returns the cached response, so it is not independent verification. To
@@ -104,3 +126,5 @@ different document in the same filing.
 ---
 
 *Verified against primary EDGAR filings, 2026-09-15, independently of the seed run.*
+*§2 retracted the same day after the seed run refuted it against `form.idx`. §1, §3, §4 and
+§5 stand.*

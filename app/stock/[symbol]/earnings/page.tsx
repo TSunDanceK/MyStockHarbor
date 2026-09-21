@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
-import { getDailyHistory } from "@/lib/server/historyCache";
+import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import {
   computeIndicatorSeed,
@@ -11,9 +11,22 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCard, BalanceSheetCard, type IncomeDetail, type AnnualConsensus, type CashFlow, type BalanceHealth, type SegmentGroup } from "./EarningsDetail";
+import { resolveFactSetForRender, type ColdResult } from "@/lib/server/secColdFetch";
+import { notFound } from "next/navigation";
+import {
+  buildSecEarningsView, isPct, periodWords,
+  type PeriodBasis, type SecEarningsView,
+} from "@/lib/server/secEarningsView";
+import {
+  HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
+  SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
+  SecPendingCard, SecNoXbrlCard, SecNoQuartersCard,
+} from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
+import { readReportDates } from "@/lib/server/secReportDatesStore";
+import { reactionPeriodLabels } from "@/lib/server/secFactStore";
+import { TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -27,6 +40,50 @@ type Props = {
 };
 
 type EarningsTone = "good" | "neutral" | "weak";
+
+/**
+ * ── WHERE THE DATES ON THIS PAGE COME FROM ────────────────────────────────
+ *
+ * Preferred: the company's own 8-K Item 2.02 filings (6-K for a foreign
+ * private issuer), read from `submissions` by the sec-facts cron and stored
+ * per symbol. FMP's /earnings calendar is the fallback, for symbols the cron
+ * has not reached yet.
+ *
+ * THE TWO ARE NOT INTERCHANGEABLE AND THE PAGE SAYS WHICH IT USED. A filing
+ * timestamp is when the document reached EDGAR, which is at or after the press
+ * release; a calendar date is a third party's record of the announcement. The
+ * wording differs accordingly — see TIMING_WORDING, which describes the FILING
+ * and never claims a release time nobody here observed.
+ */
+type NextReportView =
+  | { source: "sec"; kind: "date"; date: string; timing: ReportTiming | null; clamped: boolean; fromEvents: number }
+  | { source: "sec"; kind: "month"; month: string; fromEvents: number }
+  // ── "NOTHING" IS AN OUTCOME, NOT AN ABSENCE ─────────────────────────────
+  // The gate refuses a specific date for half the filers it sees, and on AAP
+  // the card simply did not render — the same blank a symbol with no SEC data
+  // at all gets. A reader cannot tell "we looked, and its history is too
+  // irregular to promise a date" from "we never looked", so the refusal is
+  // rendered rather than left as a gap.
+  | { source: "sec"; kind: "none" }
+  | { source: "fmp"; date: string; time: string | null }
+  | null;
+
+type EarningsReactionPoint = {
+  label: string;
+  reactionPct: number | null;
+  volumeMultiple: number | null;
+  drift5Pct: number | null;
+  drift20Pct: number | null;
+};
+
+const FMP_BASE = "https://financialmodelingprep.com/stable";
+
+function cleanSymbol(value: string) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, "")
+    .trim();
+}
 
 type FmpEarningsRow = {
   symbol?: string;
@@ -42,92 +99,6 @@ type FmpEarningsRow = {
   time?: string;
 };
 
-type FmpIncomeStatementRow = {
-  date?: string;
-  calendarYear?: string;
-  period?: string;
-  revenue?: number | null;
-  costOfRevenue?: number | null;
-  grossProfit?: number | null;
-  researchAndDevelopment?: number | null;
-  sga?: number | null;
-  operatingIncome?: number | null;
-  ebitda?: number | null;
-  interestExpense?: number | null;
-  incomeBeforeTax?: number | null;
-  incomeTaxExpense?: number | null;
-  netIncome?: number | null;
-  eps?: number | null;
-  epsDiluted?: number | null;
-  weightedAverageShsDil?: number | null;
-};
-
-type FmpHistoricalEarningCalendarRow = {
-  date?: string;
-  epsActual?: number | null;
-  epsEstimated?: number | null;
-};
-
-type FmpAnalystEstimateRow = {
-  date?: string;
-  revenueLow?: number | null;
-  revenueHigh?: number | null;
-  revenueAvg?: number | null;
-  epsLow?: number | null;
-  epsHigh?: number | null;
-  epsAvg?: number | null;
-  numAnalystsRevenue?: number | null;
-  numAnalystsEps?: number | null;
-};
-
-type EarningsTrendPoint = {
-  label: string;
-  tone: EarningsTone;
-  epsActual: number | null;
-  epsEstimated: number | null;
-  revenueActual: number | null;
-  revenueEstimated: number | null;
-};
-
-type EarningsGrowthMarginPoint = {
-  label: string;
-  yoyEpsGrowth: number | null;
-  yoyRevenueGrowth: number | null;
-  grossMarginPct: number | null;
-  operatingMarginPct: number | null;
-};
-
-type EarningsReactionPoint = {
-  label: string;
-  reactionPct: number | null;
-  volumeMultiple: number | null;
-  drift5Pct: number | null;
-  drift20Pct: number | null;
-};
-
-type YearlySummary = {
-  year: string;
-  tone: EarningsTone;
-  toneLabel: string;
-  positiveCount: number;
-  totalCount: number;
-};
-
-type SharedEarningsScore = {
-  score: number | null;
-  tone: "green" | "yellow" | "red";
-  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
-};
-
-const FMP_BASE = "https://financialmodelingprep.com/stable";
-
-function cleanSymbol(value: string) {
-  return String(value || "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, "")
-    .trim();
-}
-
 function asNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -137,60 +108,23 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "Unavailable";
-  const dt = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
 
-function formatMoney(value: number | null | undefined, compact = false) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  const abs = Math.abs(value);
-  if (compact) {
-    if (abs >= 1_000_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000_000).toFixed(2)}B`;
-    if (abs >= 1_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(1)}M`;
-    if (abs >= 1_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000).toFixed(1)}K`;
-  }
-  return `${value < 0 ? "-" : ""}$${abs.toFixed(2)}`;
-}
 
 function formatPercent(value: number | null | undefined, digits = 1) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-function calcDifference(actual: number | null, estimate: number | null) {
-  if (actual == null || estimate == null) return null;
-  return actual - estimate;
-}
 
-function calcPercentDifference(actual: number | null, estimate: number | null) {
-  if (actual == null || estimate == null || estimate === 0) return null;
-  return ((actual - estimate) / Math.abs(estimate)) * 100;
-}
-
-function calcGrowth(current: number | null, previous: number | null) {
-  if (current == null || previous == null || previous === 0) return null;
-  return ((current - previous) / Math.abs(previous)) * 100;
-}
-
-function findSameQuarterLastYear(row: FmpEarningsRow, rows: FmpEarningsRow[]): FmpEarningsRow | null {
-  const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
-  const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null;
-  if (!rowQuarter || rowYear == null) return null;
-  return rows.find((candidate) => {
-    if (!candidate.date || candidate.date === row.date) return false;
-    const candidateQuarter = candidate.fiscalLabel?.split(" ")[0] ?? null;
-    const candidateYear = candidate.fiscalYear && Number.isFinite(Number(candidate.fiscalYear)) ? Number(candidate.fiscalYear) : null;
-    return candidateQuarter === rowQuarter && candidateYear === rowYear - 1;
-  }) ?? null;
-}
-
-function marginPct(numerator: number | null | undefined, revenue: number | null | undefined) {
-  if (typeof numerator !== "number" || typeof revenue !== "number" || !Number.isFinite(numerator) || !Number.isFinite(revenue) || revenue === 0) return null;
-  return (numerator / Math.abs(revenue)) * 100;
-}
+/**
+ * How far past a report date the next trading session may be.
+ *
+ * See the fallback inside computeEarningsReactionDetail: a weekend plus a long
+ * holiday, and no further. It is the same shape as FX_SPOT_BACKFILL_DAYS in
+ * fxRates and for the same reason — a gap wider than the rule means the series
+ * does not cover the date, not that the nearest value will do.
+ */
+const REACTION_SESSION_GAP_DAYS = 7;
 
 function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
   const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
@@ -198,7 +132,27 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
   if (idx === -1) {
-    idx = dates.findIndex((d) => d >= String(row.date));
+    // ── THE NEXT SESSION, BUT ONLY IF IT IS ACTUALLY THE NEXT SESSION ──────
+    //
+    // A report lands on a weekend or a holiday and the reaction happens at the
+    // next open, so falling forward is right — for a gap of DAYS.
+    //
+    // UNBOUNDED, IT SILENTLY ATTRIBUTES ANY OLD REPORT TO THE FIRST BAR HELD.
+    // MEASURED (relay 35498747512): CNI's cached bars begin 2021-09-21 and it
+    // has reports from 2009-07-20, 2009-10-20, 2020-01-28 and 2021-01-26 — all
+    // four predate the series, all four fell through to index 0, and all four
+    // rendered the IDENTICAL figures (react -0.3, vol 0.85, d5 0.6, d20 7.8).
+    // Four different reports, one real bar, four plausible wrong numbers on a
+    // live page. Nothing about the output said so; only the repetition did,
+    // and the labels differ so the repetition is not obvious either.
+    //
+    // 7 DAYS covers a weekend plus a long public holiday, which is the whole
+    // of the case this fallback exists for. Beyond that the series simply does
+    // not cover the report, and the honest answer is no answer.
+    const next = dates.findIndex((d) => d >= String(row.date));
+    const gapDays =
+      next === -1 ? Infinity : (Date.parse(dates[next]) - Date.parse(String(row.date))) / 86400000;
+    idx = next !== -1 && gapDays <= REACTION_SESSION_GAP_DAYS ? next : -1;
   }
   if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
@@ -207,6 +161,11 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
   else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
   else { baseIdx = idx - 1; reactIdx = idx + 1; }
+
+  // A REPORT AT THE VERY EDGE OF THE SERIES HAS NO PRIOR CLOSE. This was
+  // already the outcome — points[-1] is undefined and every figure fell to
+  // null — but by accident rather than by decision, so it is stated.
+  if (baseIdx < 0) return empty;
 
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
@@ -240,45 +199,63 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
 }
 
-function quarterLabel(date?: string | null) {
-  if (!date) return "—";
-  const dt = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) return date;
-  const month = dt.getUTCMonth();
-  const quarter = Math.floor(month / 3) + 1;
-  const year = String(dt.getUTCFullYear()).slice(-2);
-  return `Q${quarter} ${year}`;
+
+/** "2026-11" -> "November 2026". Rendered, so it must not say "2026-11". */
+function monthName(ym: string) {
+  const [y, m] = ym.split("-");
+  const idx = Number(m) - 1;
+  const names = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  return names[idx] ? `${names[idx]} ${y}` : ym;
 }
 
-function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
-  if (!row) return null;
-  const period = String(row.period || "").toUpperCase();
-  const year = row.calendarYear || (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : "");
-  if (/^Q[1-4]$/.test(period) && year) return `${period} ${String(year).slice(-2)}`;
-  return row.date ? quarterLabel(row.date) : null;
-}
+/**
+ * THE BANDS, WITH THEIR THRESHOLDS, IN ONE TABLE — AND THE GAUGE READS IT.
+ *
+ * ── THE CONTRADICTION THIS REMOVES ────────────────────────────────────────
+ * Measured on the #465 preview, /stock/KGC/earnings: a pill reading "Good"
+ * sitting directly above a gauge whose axis was labelled Weak / Mixed /
+ * Strong, under the number 100/100. Two vocabularies for one scale, and the
+ * top of the axis named a band the pill could never produce — so a perfect
+ * score looked like it had fallen short of a "Strong" that does not exist.
+ *
+ * NOT A CLAMP BUG, which was the other candidate: `tone` is derived from
+ * `rounded`, the SAME clamped value the card prints, so the number and the
+ * band always agree with each other. The axis was the only thing disagreeing.
+ *
+ * The thresholds were also invisible. A reader could see 100/100 and "Good"
+ * and had no way to know what 100 had to clear, so the card states them.
+ */
+const SCORE_BANDS: { tone: EarningsTone; label: string; from: number }[] = [
+  { tone: "good", label: "Good", from: 66 },
+  { tone: "neutral", label: "Mixed", from: 40 },
+  { tone: "weak", label: "Weak", from: 0 },
+];
 
-function displayQuarterLabel(row?: FmpEarningsRow | null) {
-  if (!row) return "—";
-  return row.fiscalLabel || quarterLabel(row.date);
-}
-
-function classifyQuarter(row: FmpEarningsRow): EarningsTone {
-  const epsPct = calcPercentDifference(asNumber(row.epsActual), asNumber(row.epsEstimated));
-  const revenuePct = calcPercentDifference(asNumber(row.revenueActual), asNumber(row.revenueEstimated));
-  let score = 0;
-  if (epsPct != null) { if (epsPct > 2) score += 1; else if (epsPct < -2) score -= 1; }
-  if (revenuePct != null) { if (revenuePct > 1) score += 1; else if (revenuePct < -1) score -= 1; }
-  if (asNumber(row.epsActual) != null) score += Number(row.epsActual) > 0 ? 0.5 : -0.5;
-  if (score >= 1.25) return "good";
-  if (score <= -1.25) return "weak";
-  return "neutral";
-}
-
+/** The band a tone belongs to. The pill and the gauge axis both call this. */
 function toneLabel(tone: EarningsTone) {
-  if (tone === "good") return "Good";
-  if (tone === "weak") return "Weak";
-  return "Mixed";
+  return SCORE_BANDS.find((b) => b.tone === tone)!.label;
+}
+
+/**
+ * The thresholds as one sentence, so the number on the card can be read.
+ *
+ * A FUNCTION, NOT A CONST, because SCORE_SEED is declared further down this
+ * module and a top-level const reading it here throws in the temporal dead
+ * zone at import — a blank page, not a wrong word.
+ */
+function scoreBandNote() {
+  return (
+    `${SCORE_BANDS[0].label} is ${SCORE_BANDS[0].from} and above, ` +
+    `${SCORE_BANDS[1].label} is ${SCORE_BANDS[1].from} to ${SCORE_BANDS[0].from - 1}, ` +
+    `${SCORE_BANDS[2].label} is ${SCORE_BANDS[1].from - 1} and below. ` +
+    `${SCORE_SEED} is the neutral starting point, not a reading.`
+  );
+}
+
+/** The band for a score, read from the same table the axis is labelled from. */
+function bandFor(score: number): EarningsTone {
+  return SCORE_BANDS.find((b) => score >= b.from)!.tone;
 }
 
 function toneColor(tone: EarningsTone) {
@@ -293,21 +270,147 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
-function sharedToneToEarningsTone(tone: SharedEarningsScore["tone"]): EarningsTone {
-  if (tone === "green") return "good";
-  if (tone === "red") return "weak";
-  return "neutral";
-}
-
-function scoreExplanation(tone: EarningsTone) {
-  if (tone === "good") return "The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.";
-  if (tone === "weak") return "The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.";
-  return "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
-}
-
-function buildScoreResult(score: number, tone: EarningsTone) {
+/**
+ * The five things the score can read, DESCRIBED IN THE PAGE'S OWN PERIOD.
+ *
+ * These strings said "the same quarter a year earlier" and "whether the
+ * quarter was profitable" for every filer, including one whose every figure is
+ * a fiscal year. They take the basis now, like every other period noun on the
+ * page — see PeriodBasis in secEarningsView.
+ */
+const scoreComponents = (basis: PeriodBasis) => {
+  const w = periodWords(basis);
   return {
-    available: true as const, score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
+    revenueGrowth: `revenue growth against ${w.yoyPhrase}`,
+    epsGrowth: `EPS growth against ${w.yoyPhrase}`,
+    profitability: `whether the ${w.one} was profitable`,
+    marginTrend: "the direction of operating margin",
+    // The wording stays period-neutral because it also appears in the
+    // "Not measured" list, where no period applies.
+    cashConversion: "whether reported profit is turning into cash",
+  } as const;
+};
+/** The quarterly wording, for the states where there is no view to take a basis from. */
+const SCORE_COMPONENTS = scoreComponents("quarter");
+type ScoreComponent = keyof ReturnType<typeof scoreComponents>;
+
+/**
+ * THE NARRATIVE IS BUILT FROM WHAT ACTUALLY RAN, not from the tone alone.
+ *
+ * ── WHAT THE TONE-ONLY VERSION CLAIMED ────────────────────────────────────
+ * Measured on the #464 preview, /stock/AZN/earnings: every field of the
+ * Quality of Earnings card rendered "—" — operating cash flow, capital
+ * expenditure, free cash flow, cash-flow-less-net-income, share-based
+ * compensation — and the score directly above it read GOOD, 100/100, with
+ * "reported profit is backed by cash."
+ *
+ * The scorer had not awarded points for the missing chain; the sentence was
+ * canned per tone and asserted the claim regardless. That is the same failure
+ * shape as a check that supplies its own expected value: the component that
+ * could not be measured still spoke.
+ *
+ * So the clauses are assembled from the components that RAN, and a component
+ * that did not run contributes no clause and is listed as unavailable.
+ */
+function scoreExplanation(
+  tone: EarningsTone,
+  ran: Set<ScoreComponent>,
+  /** The period the cash component actually read. See SecCashQualityCard. */
+  cashBasis: "quarter" | "year",
+  cashPeriod: string,
+  /** The page's own anchor. NOT cashBasis: those differ on a half-yearly filer. */
+  basis: PeriodBasis = "quarter"
+) {
+  const w = periodWords(basis);
+  const clauses: string[] = [];
+  const up = tone === "good";
+  if (ran.has("revenueGrowth") || ran.has("epsGrowth")) {
+    clauses.push(up ? "revenue and profit are growing year over year" : "growth is under pressure");
+  }
+  if (ran.has("marginTrend")) clauses.push(up ? "margins are holding" : "margins are slipping");
+  // THE CLAUSE THAT WAS WRONG. It appears only when the cash component ran —
+  // AND IT NAMES ITS PERIOD when that period is not the quarter the rest of the
+  // sentence is about. A half-yearly filer's cash component reads the full
+  // year, and a sentence that said "backed by cash" beside quarterly growth
+  // would be describing two different periods as one.
+  if (ran.has("cashConversion")) {
+    const over = cashBasis === "year" ? ` over ${cashPeriod}` : "";
+    clauses.push(up ? `reported profit is backed by cash${over}` : `cash conversion is weak${over}`);
+  } else if (ran.has("profitability")) {
+    clauses.push(up ? `the ${w.one} was profitable` : `the ${w.one} was loss-making`);
+  }
+  const body = clauses.length
+    ? clauses.join(", ").replace(/, ([^,]*)$/, " and $1")
+    : "the filing carries few of the figures this score reads";
+  if (tone === "good") return `The latest filed ${w.one} reads constructive: ${body}.`;
+  if (tone === "weak") return `The latest filed ${w.one} reads weak: ${body}.`;
+  return `The latest earnings read is mixed: ${body}. Investors should focus on whether future reports confirm improvement or reveal more pressure.`;
+}
+
+/** What the score could NOT read, in the page's own words and its own period. */
+function scoreGaps(ran: Set<ScoreComponent>, basis: PeriodBasis = "quarter"): string[] {
+  const names = scoreComponents(basis);
+  return (Object.keys(names) as ScoreComponent[])
+    .filter((k) => !ran.has(k))
+    .map((k) => names[k]);
+}
+
+/**
+ * THE SCALE, STATED ONCE SO IT CAN BE CHECKED.
+ *
+ * 50 is the neutral seed and each component adds a signed contribution. That is
+ * what makes an absent component NEUTRAL rather than a penalty: it contributes
+ * ZERO, and zero is the middle of its own range, not the bottom of it.
+ *
+ * THE MIRROR-IMAGE FAILURE THIS RULES OUT. Had the score been a percentage over
+ * a FIXED denominator of five, a filer whose cash chain cannot produce a
+ * quarterly figure would be capped at four fifths — 80 — and could never read
+ * STRONG however good its filings were. That would have replaced a score that
+ * claimed an input it could not see with one that punished the filer for the
+ * page's own limit. Measured against these bounds: the four non-cash components
+ * sum to +58 at their maxima, so 50 + 58 = 108 clamps to 100. A filer with no
+ * cash chain can still reach 100.
+ */
+const SCORE_SEED = 50;
+const SCORE_MAX_CONTRIBUTION: Record<ScoreComponent, number> = {
+  revenueGrowth: 22,
+  epsGrowth: 20,
+  profitability: 6,
+  marginTrend: 10,
+  cashConversion: 10,
+};
+
+function buildScoreResult(
+  score: number,
+  tone: EarningsTone,
+  ran: Set<ScoreComponent>,
+  contributions: Partial<Record<ScoreComponent, number>>,
+  cashBasis: "quarter" | "year",
+  cashPeriod: string,
+  basis: PeriodBasis = "quarter"
+) {
+  return {
+    available: true as const,
+    score,
+    tone,
+    label: toneLabel(tone),
+    explanation: scoreExplanation(tone, ran, cashBasis, cashPeriod, basis),
+    // THE SCORE SAYS WHICH KIND OF PERIOD IT READ. Point 5 of the approved
+    // scope: an annual-only filer's score is built on fiscal years, and a
+    // reader comparing it with a 10-Q filer's score has to be told that.
+    basis,
+    // NOT a count. A reader needs to know WHICH input was missing to judge the
+    // number; "4 of 5 signals" is the kind of summary that hides the one that
+    // mattered.
+    unavailable: scoreGaps(ran, basis),
+    // THE ARITHMETIC, NOT A DESCRIPTION OF IT. Carried so a probe and a check
+    // can read the points each component actually added, rather than inferring
+    // them from the total -- which is how "80 is four fifths of 100, so the
+    // denominator must be five" becomes plausible. It is not: 80 here is
+    // 50 + 6.4 + 8.0 + 6 + 10.
+    seed: SCORE_SEED,
+    contributions,
+  };
 }
 
 // Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
@@ -323,101 +426,154 @@ function buildScoreResult(score: number, tone: EarningsTone) {
 // every load. Same self-block failure mode as
 // claude/pickers-firewall-selfblock-2026-07-17.md and
 // claude/stock-page-earnings-selfblock-2026-07-21.md.
-async function fetchSharedEarningsScore(symbol: string) {
-  try {
-    const data = await getLatestEarningsData(symbol, "yellow");
-    if (typeof data.score !== "number" || !Number.isFinite(data.score)) return null;
-    return buildScoreResult(data.score, sharedToneToEarningsTone(data.tone));
-  } catch { return null; }
-}
 
-function getMetricHelp(label: string) {
-  if (label === "FMP EPS") return "EPS means earnings per share. This value comes from FMP earnings data and may differ from GAAP EPS or adjusted EPS quoted in company headlines.";
-  if (label === "EPS surprise") return "EPS surprise compares FMP EPS with the FMP analyst estimate. A positive number means EPS came in better than FMP's estimate.";
-  if (label === "Revenue surprise") return "Revenue surprise compares actual revenue with the analyst estimate. A positive number means sales came in better than expected.";
-  if (label === "Revenue") return "Revenue is the company's sales for the quarter before expenses are removed.";
-  if (label === "YoY EPS growth") return "Year-over-year EPS growth compares this quarter's FMP EPS with the same quarter last year.";
-  if (label === "YoY revenue growth") return "Year-over-year revenue growth compares this quarter's revenue with the same quarter last year.";
-  return "This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.";
-}
 
-function MetricLabelWithHelp({ label }: { label: string }) {
-  return (
-    <div className="metricLabelWrap">
-      <span className="metricLabel">{label}</span>
-      <span className="metricHelp" tabIndex={0} aria-label={`${label} explanation`}>
-        ?
-        <span className="metricHelpBubble">{getMetricHelp(label)}</span>
-      </span>
-    </div>
-  );
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYear: FmpEarningsRow | null; completedRows: FmpEarningsRow[]; }) {
-  const { latest, sameQuarterLastYear, completedRows } = args;
-  // `available: false` is the point. This returns score 50 because the shape
-  // requires a number, but 50 is NOT a reading -- it is the neutral seed with
-  // nothing added to it, and the card must not render it as one. Callers key
-  // off this flag rather than sniffing label === "Unavailable".
-  if (!latest) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "Structured earnings data is not available for this symbol yet." };
-  const epsActual = asNumber(latest.epsActual);
-  const epsEstimated = asNumber(latest.epsEstimated);
-  const revenueActual = asNumber(latest.revenueActual);
-  const revenueEstimated = asNumber(latest.revenueEstimated);
-  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
-  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
-  const yoyEpsGrowth = calcGrowth(epsActual, asNumber(sameQuarterLastYear?.epsActual));
-  const yoyRevenueGrowth = calcGrowth(revenueActual, asNumber(sameQuarterLastYear?.revenueActual));
-  // #314 guarded !latest -- total absence. This is the partial case it missed:
-  // completedRows is filtered on epsActual OR revenueActual, so `latest` can be
-  // a row carrying only revenueActual with no estimate to compare it against.
-  // Every term below then skips and the score stays on its 50 seed, which
-  // rendered as a 50/100 "Mixed" gauge with the needle at dead centre.
-  let score = 50;
-  let signals = 0;
-  if (epsSurprisePct != null) { score += clamp(epsSurprisePct * 1.35, -22, 22); signals++; }
-  if (revenueSurprisePct != null) { score += clamp(revenueSurprisePct * 3.2, -20, 20); signals++; }
-  if (epsActual != null) { score += epsActual > 0 ? 6 : -8; signals++; }
-  if (yoyEpsGrowth != null) { score += clamp(yoyEpsGrowth * 0.18, -10, 10); signals++; }
-  if (yoyRevenueGrowth != null) { score += clamp(yoyRevenueGrowth * 0.22, -10, 10); signals++; }
-  if (signals === 0) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "This report has no figures that can be scored yet -- there are no estimates to compare against and no prior-year quarter to measure growth from." };
-  const recent = completedRows.slice(0, 4);
-  for (const row of recent) { const tone = classifyQuarter(row); if (tone === "good") score += 2.5; if (tone === "weak") score -= 2.5; }
-  const recentTones = completedRows.slice(0, 6).map(classifyQuarter);
-  const weakRecentCount = recentTones.filter((item) => item === "weak").length;
-  const mixedRecentCount = recentTones.filter((item) => item === "neutral").length;
-  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
-  const rounded = Math.round(clamp(score, 0, maxScore));
-  const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
-  return buildScoreResult(rounded, tone);
+/**
+ * The earnings score, rebuilt on filed figures.
+ *
+ * TWO OF ITS THREE SIGNALS WERE ESTIMATES, AND THEY ARE GONE. The old version
+ * weighted EPS surprise at 1.35x and revenue surprise at 3.2x -- together the
+ * dominant term -- against FMP's analyst consensus, which left with the FMP
+ * licence. Those terms were not simply deleted: a score still described as
+ * measuring "estimate performance" while silently running on growth alone is
+ * worse than no score, because it keeps the authority of the old one.
+ *
+ * So it is scored on what the filings actually contain -- growth against the
+ * year-ago quarter, profitability, margin direction, and whether reported
+ * profit is turning into cash -- and the explanation says so.
+ *
+ * `available: false` is still the point. It returns 50 because the shape
+ * requires a number, but 50 is NOT a reading: it is the neutral seed with
+ * nothing added, and the card must not render it as one.
+ */
+/**
+ * WHY THERE IS NO SCORE, in the same words the cards below use.
+ *
+ * ── ONE MESSAGE WAS SERVING SIX SITUATIONS ────────────────────────────────
+ * The unavailable branch said "This company's SEC filings have not been read
+ * into the site yet" whenever `view` was null, and that is true of exactly one
+ * of them. On /stock/RYAAY/earnings it put that sentence at the top of a page
+ * whose own card two sections down said "Its filings are available now on SEC
+ * EDGAR" — two statements contradicting each other about the same company,
+ * three inches apart. Ryanair HAS been read in: 5 instants and 5 years are
+ * stored. What it does not have is figures this page can print, because it
+ * reports in euros.
+ *
+ * The states, and which sentence each gets:
+ *
+ *   no-cik                     404s before this runs.
+ *   pending                    genuinely not read in yet — the original text.
+ *   no-xbrl / currency         read in; reports in a currency this page does
+ *                              not print. RYAAY lands here.
+ *   no-xbrl / unread-taxonomy  read in; filed under a taxonomy not read yet.
+ *   no-xbrl / unread-detail    read in; nothing resolved from what we do read.
+ *   no-xbrl / none             filed no XBRL financial statements at all.
+ *   no-xbrl / unknown          stored before the taxonomy census existed.
+ *   ready, no quarters         read in, with data — but no QUARTERLY periods,
+ *                              and every term of this score is a quarter.
+ *
+ * The last one is not hypothetical either: KGC stores 5 years and 8 instants
+ * with 24 populated fields in its best period and not one quarter.
+ */
+function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): string {
+  if (cold.status === "no-xbrl") {
+    const named = cold.taxonomies.join(", ");
+    switch (cold.why) {
+      case "currency":
+        return `${symbol}'s filings have been read, but it reports in ${named} and this page reads US-dollar figures only — so there is nothing here to score.`;
+      case "unread-taxonomy":
+        return `${symbol}'s filings have been read, but they are filed under the ${named} taxonomy, which this page does not read yet.`;
+      case "none":
+        return `${symbol} has not filed XBRL financial statements, so there is nothing to score.`;
+      default:
+        return `${symbol}'s filings have been read, but none of the figures this score reads resolved from them.`;
+    }
+  }
+  if (hasSet) {
+    // READ IN, WITH DATA, AND STILL NOT SCORABLE. Every term here is a quarter,
+    // and some filers publish only annual periods.
+    return `${symbol} has filed no quarterly periods — this score is built on quarters, and its annual figures cannot stand in for one.`;
+  }
+  return `${symbol}'s SEC filings have not been read into the site yet, so there is nothing to score.`;
 }
 
-function makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {
-  const groups = new Map<string, FmpEarningsRow[]>();
-  for (const row of rows) {
-    if (!row.date) continue;
-    const year = row.fiscalYear || row.date.slice(0, 4);
-    if (!groups.has(year)) groups.set(year, []);
-    groups.get(year)?.push(row);
+function scoreFromSec(view: SecEarningsView | null, symbol: string, cold: ColdResult) {
+  if (!view) {
+    return {
+      score: 50, available: false as const, tone: "neutral" as EarningsTone,
+      label: "Unavailable",
+      explanation: noScoreReason(symbol, cold, cold.status === "ready"),
+      unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      basis: "quarter" as PeriodBasis,
+      seed: SCORE_SEED,
+      contributions: {} as Partial<Record<ScoreComponent, number>>,
+    };
   }
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => Number(b) - Number(a))
-    .slice(0, 5)
-    .map(([year, group]) => {
-      const tones = group.map(classifyQuarter);
-      const goodCount = tones.filter((x) => x === "good").length;
-      const weakCount = tones.filter((x) => x === "weak").length;
-      const totalCount = tones.length;
-      let tone: EarningsTone = "neutral";
-      if (goodCount > weakCount && goodCount >= Math.ceil(totalCount / 2)) tone = "good";
-      if (weakCount > goodCount && weakCount >= Math.ceil(totalCount / 2)) tone = "weak";
-      return { year, tone, toneLabel: toneLabel(tone), positiveCount: goodCount, totalCount };
-    });
+
+  let score = SCORE_SEED;
+  // WHICH COMPONENTS ACTUALLY RAN, not how many. An absent input contributes no
+  // points AND no clause; see scoreExplanation for the sentence that used to
+  // claim cash backing from an empty cash-flow chain.
+  const ran = new Set<ScoreComponent>();
+  const contributions: Partial<Record<ScoreComponent, number>> = {};
+  // ONE PLACE WHERE A COMPONENT ENTERS THE SCALE. Adding points and recording
+  // both the membership and the amount in three separate statements is how the
+  // three drift apart; this makes them one act.
+  const contribute = (key: ScoreComponent, points: number) => {
+    score += points;
+    ran.add(key);
+    contributions[key] = points;
+  };
+  const s = view.snapshot;
+
+  // isPct, NOT `!= null`. A "n/m" is a string, so `!= null` admitted it and
+  // TypeScript then multiplied it — KGC's FY2023 sign flip out of a loss was
+  // worth a full +20, the largest contribution any component can make, for an
+  // artefact of dividing by a negative. A figure that cannot be RENDERED must
+  // not be SCORED; see Pct in secEarningsView.
+  if (isPct(s.revenueYoY)) contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
+  if (isPct(s.epsYoY)) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
+  if (s.netIncome.val != null) contribute("profitability", s.netIncome.val > 0 ? 6 : -8);
+
+  // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
+  // single-quarter reading: one quarter's margin move is as often mix as trend.
+  const opMargins = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
+  if (opMargins.length >= 2) {
+    contribute("marginTrend", clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10));
+  }
+
+  // CASH AGAINST PROFIT. Positive accruals mean cash is running ahead of
+  // reported profit, which is the quality signal the page's own card shows.
+  const acc = view.cashQuality.accruals;
+  const ni = view.cashQuality.netIncome.val;
+  if (acc != null && ni != null && ni !== 0) {
+    contribute("cashConversion", clamp((acc / Math.abs(ni)) * 8, -10, 10));
+  }
+
+  if (ran.size === 0) {
+    return {
+      score: 50, available: false as const, tone: "neutral" as EarningsTone,
+      label: "Unavailable",
+      explanation: `${symbol}'s latest filing carries no figures that can be scored yet — there is no prior-year ${periodWords(view.basis).one} to measure growth from.`,
+      unavailable: Object.values(scoreComponents(view.basis)) as string[],
+      basis: view.basis,
+      seed: SCORE_SEED,
+      contributions: {} as Partial<Record<ScoreComponent, number>>,
+    };
+  }
+
+  const rounded = Math.round(clamp(score, 0, 100));
+  // FROM THE SAME TABLE THE AXIS IS LABELLED FROM, and from the CLAMPED value
+  // the card prints — so the number, the pill and the gauge cannot disagree.
+  const tone = bandFor(rounded);
+  return buildScoreResult(rounded, tone, ran, contributions, view.cashQuality.basis, view.cashQuality.period, view.basis);
 }
+
 
 async function fetchFmpJson<T>(path: string): Promise<T | null> {
   const apiKey = process.env.FMP_API_KEY;
@@ -430,198 +586,221 @@ async function fetchFmpJson<T>(path: string): Promise<T | null> {
   } catch { return null; }
 }
 
-async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return null;
-  const url = `https://financialmodelingprep.com/api/v3${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
-  try {
-    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 6 } });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch { return null; }
-}
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, annualEstimatesJson, cashFlowJson, balanceJson, productSegJson, geoSegJson, dailyHistory] = await Promise.all([
-    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
-    fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
-    fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
-    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=24`),
-    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=annual&limit=6`),
-    fetchFmpJson<unknown[]>(`/cash-flow-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=4`),
-    fetchFmpJson<unknown[]>(`/balance-sheet-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=1`),
-    fetchFmpJson<unknown[]>(`/revenue-product-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
-    fetchFmpJson<unknown[]>(`/revenue-geographic-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
-    getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+  // ── WHAT THIS PAGE READS, AND FROM WHERE ──────────────────────────────────
+  //
+  // EVERY FINANCIAL NUMBER COMES FROM THE STORED SEC FACT SET. One Redis GET,
+  // written by /api/jobs/sec-facts from data.sec.gov's companyfacts. Revenue,
+  // EPS, margins, cash flow, the balance sheet and the P&L all come from there.
+  //
+  // TWO FMP CALLS REMAIN, AND BOTH ARE PRICE-DERIVED, WHICH THIS PASS DOES NOT
+  // TOUCH. /earnings supplies the ANNOUNCEMENT date and its before-open /
+  // after-close timing, which SEC filings do not carry -- a filing date is not
+  // an announcement date, and the price-reaction card needs the session the
+  // market actually reacted in. getDailyHistory supplies the bars. Market cap,
+  // P/E and the reaction card are still on FMP; the bars have not moved.
+  // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
+  // ── ONE GET BEFORE THE REST, AND IT DECIDES WHETHER FMP IS CALLED AT ALL ──
+  //
+  // Serial on purpose. The record says whether this symbol's announcement dates
+  // are known from its own filings; if they are, the /earnings call below has
+  // nothing left to supply and is skipped entirely. Putting it in the group
+  // below would save a round trip and keep paying FMP for an answer already in
+  // Redis, which is the call this step exists to remove.
+  const secDates = await readReportDates(symbol);
+  const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
+  /**
+   * THE EIGHT REPORTS THE REACTION CHART WALKS — ONE LIST, TWO READERS.
+   *
+   * `barRows` builds the chart from these, and the bar-fetch window below is
+   * sized to cover them. Those were two separate `secEvents.slice(0, 8)` calls,
+   * which is the shape where one gains a condition and the other does not:
+   * widening the chart to ten reports without widening the window would fetch
+   * a range that stops short of the two oldest, and the only symptom would be
+   * two cards quietly missing their drift figures.
+   */
+  const REACTION_REPORTS = 8;
+  const barEvents = secEvents.slice(0, REACTION_REPORTS);
+
+  // ── HOW MANY BARS THIS RENDER ACTUALLY NEEDS ─────────────────────────────
+  //
+  // computeEarningsReactionDetail reaches 20 trading days BACK from each report
+  // (the volume-average lookback) and 20 FORWARD (drift20), so the window is
+  // +/-20 trading days around the oldest and newest of the eight reports.
+  // 45 CALENDAR days covers that with room for holidays and long weekends —
+  // and the buffer is deliberately generous because a window one day too
+  // narrow does not error, it drops drift20 to null and the card simply shows
+  // fewer numbers.
+  //
+  // ONLY ON THE SEC-DATES PATH, and that is the whole reason it costs nothing:
+  // `secDates` is already read serially above, so when the filings supply the
+  // announcement dates the window is known BEFORE this fetch starts. On the
+  // FMP fallback the dates arrive in the same round trip that would have to
+  // carry them, so bounding would mean a second sequential read — worse than
+  // the thing it saves. That path keeps the full series.
+  const BAR_WINDOW_DAYS = 45;
+  const shiftIso = (iso: string, days: number) =>
+    new Date(Date.parse(iso) + days * 86400000).toISOString().slice(0, 10);
+  const barWindow = (() => {
+    const dates = barEvents.map((e) => e.announcedOn).filter(Boolean).sort();
+    if (!dates.length) return null;
+    return {
+      from: shiftIso(dates[0], -BAR_WINDOW_DAYS),
+      to: shiftIso(dates[dates.length - 1], BAR_WINDOW_DAYS),
+    };
+  })();
+
+  const [cold, dailyHistory, earningsJson] = await Promise.all([
+    resolveFactSetForRender(symbol),
+    // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
+    // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
+    // including what a range does NOT save, which is the Redis read itself:
+    // bars are one value per symbol, so the GET returns every bar whatever
+    // range is asked for. What it saves is everything downstream of it.
+    barWindow
+      ? getDailyBars(symbol, barWindow.from, barWindow.to, { caller: "stock-earnings" })
+          .catch(() => [] as Point[])
+      : getDailyHistory(symbol, { caller: "stock-earnings" }).catch(() => [] as Point[]),
+    // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
+    // an ignored fetch still costs the request, and the daily FMP limit is the
+    // thing the owner has said not to spend.
+    secEvents.length
+      ? Promise.resolve(null)
+      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
   ]);
+  const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
 
+  // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
+  // off these rows any more, even though they are present: two sources for one
+  // number is the divergence this repo keeps finding
+  // (claude/traps/two-validators-for-one-value.md), and the SEC figure is the
+  // one the page states its source as.
   const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
-    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "", time: typeof row.time === "string" ? row.time.toLowerCase() : undefined }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    ? earningsJson
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          return {
+            symbol,
+            date: typeof row.date === "string" ? row.date : "",
+            epsActual: asNumber(row.epsActual),
+            revenueActual: asNumber(row.revenueActual),
+            time: typeof row.time === "string" ? row.time.toLowerCase() : undefined,
+          } as FmpEarningsRow;
+        })
+        .filter((row) => Boolean(row.date))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     : [];
 
-  const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
-    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", calendarYear: typeof row.calendarYear === "string" ? row.calendarYear : "", period: typeof row.period === "string" ? row.period : "", revenue: asNumber(row.revenue), costOfRevenue: asNumber(row.costOfRevenue), grossProfit: asNumber(row.grossProfit), researchAndDevelopment: asNumber(row.researchAndDevelopmentExpenses) ?? asNumber(row.researchAndDevelopment), sga: asNumber(row.sellingGeneralAndAdministrativeExpenses) ?? asNumber(row.generalAndAdministrativeExpenses) ?? asNumber(row.sellingAndMarketingExpenses), operatingIncome: asNumber(row.operatingIncome), ebitda: asNumber(row.ebitda), interestExpense: asNumber(row.interestExpense), incomeBeforeTax: asNumber(row.incomeBeforeTax), incomeTaxExpense: asNumber(row.incomeTaxExpense), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted), weightedAverageShsDil: asNumber(row.weightedAverageShsOutDil) ?? asNumber(row.weightedAverageShsOut) }; }).filter((row) => Boolean(row.date))
-    : [];
-
-  const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(historicalCalendarJson)
-    ? historicalCalendarJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.actualEarningResult) ?? asNumber(row.epsActual) ?? asNumber(row.actualEPS), epsEstimated: asNumber(row.estimatedEarning) ?? asNumber(row.epsEstimated) ?? asNumber(row.estimatedEPS) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : [];
-
-  const analystEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(analystEstimatesJson)
-    ? analystEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    : [];
-
-  const annualEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(annualEstimatesJson)
-    ? annualEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    : [];
-
-  const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));
-  const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
-
-  const completedRows = earningsRows
-    .filter((row) => row.epsActual != null || row.revenueActual != null)
-    .map((row, index) => {
-      const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
-      const matchingIncome = incomeRows[index] ?? null;
-      const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
-      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null, grossProfit: matchingIncome?.grossProfit ?? null, operatingIncome: matchingIncome?.operatingIncome ?? null };
-    });
-
+  const completedRows = earningsRows.filter(
+    (row) => row.epsActual != null || row.revenueActual != null
+  );
   const latest = completedRows[0] ?? null;
-  // Use start-of-day (UTC) rather than the current instant so a report
-  // scheduled for *today* still counts as the next expected date. With the old
-  // `> today.getTime()` comparison, on the earnings day itself the row's
-  // midnight-UTC timestamp was already in the past, so the day-of report was
-  // dropped from `next` while its actuals were still null — leaving the field
-  // blank ("Unavailable") until the numbers posted. Also pick the *soonest*
-  // upcoming row (earningsRows is sorted newest-first, so `.find` returned the
-  // farthest-out future row).
+
+  const todayIso = new Date().toISOString().slice(0, 10);
   const startOfTodayUtcMs = new Date(`${todayIso}T00:00:00Z`).getTime();
   const next = earningsRows
-    .filter((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() >= startOfTodayUtcMs && row.epsActual == null && row.revenueActual == null; })
-    .sort((a, b) => new Date(`${a.date}T00:00:00Z`).getTime() - new Date(`${b.date}T00:00:00Z`).getTime())[0] ?? null;
+    .filter((row) => {
+      if (!row.date) return false;
+      const dt = new Date(`${row.date}T00:00:00Z`);
+      return dt.getTime() >= startOfTodayUtcMs && row.epsActual == null && row.revenueActual == null;
+    })
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] ?? null;
 
-  const nextEstimate = analystEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
+  // ── THE REACTION CARD, KEYED TO THE FILING DATES ─────────────────────────
+  //
+  // TWO THINGS CHANGE WHEN THE SEC RECORD EXISTS, and both were wrong before:
+  //
+  //  1. THE LABEL COMES FROM THE MATCHED PERIOD END, not from the announcement
+  //     date. A quarter that ended 30 June and was announced 30 July was
+  //     labelled "Q3" — the calendar quarter of the announcement — so every
+  //     bar on this chart named the quarter after the one it measured.
+  //  2. THE SESSION COMES FROM THE FILING TIMESTAMP in Eastern time. A release
+  //     after the close is digested by the NEXT day's close; before the open
+  //     and during the session are both digested by the same day's close. That
+  //     is exactly the two-way split `time` already encodes, so the existing,
+  //     tested reaction arithmetic is reused rather than reimplemented:
+  //     after-close maps to "amc", everything else to "bmo".
+  // ── ONE VOCABULARY FOR THE WHOLE PAGE ────────────────────────────────────
+  //
+  // THE DEFECT: the bars were labelled by the CALENDAR quarter of a date, while
+  // every other card on the page uses the filer's own fiscal label. AAPL's
+  // latest bar read "Q2 26" under a snapshot calling the same filing Q3 FY2026;
+  // ABT's read "Q1 26" against a newest quarter of Q2; AAP showed "Q4 23"
+  // twice, and a "Q3 26" for a quarter that had not ended.
+  //
+  // So the label comes from the SAME stored period the rest of the page reads,
+  // looked up by the matched period end. A bar whose period is unknown gets no
+  // fiscal claim at all.
+  // ── BUILT BY THE SHIPPED FUNCTION, NOT INLINE HERE ─────────────────────
+  // The first version merged quarters and years into one map with years last,
+  // so on a filer whose 10-Qs carry twelve-month comparatives every quarter
+  // end was overwritten by an annual entry. See reactionPeriodLabels.
+  const storedLabels = cold.status === "ready"
+    ? reactionPeriodLabels(cold.set)
+    : new Map<string, string>();
 
-  const latestFiscalQuarter = latest?.fiscalLabel?.split(" ")[0] ?? null;
-  const latestFiscalYear = latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear)) ? Number(latest.fiscalYear) : null;
-  const sameQuarterLastYear = latestFiscalQuarter && latestFiscalYear
-    ? completedRows.find((row) => { if (!row.date || row.date === latest?.date) return false; const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null; const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null; return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1; }) ?? null
-    : completedRows[4] ?? null;
+  const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
+    secEvents.length
+      ? barEvents.slice().reverse().map((e) => ({
+          periodEnd: e.periodEnd,
+          announcedOn: e.announcedOn,
+          row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
+        }))
+      : completedRows
+          .slice(0, 8)
+          .reverse()
+          .filter((row): row is FmpEarningsRow & { date: string } => Boolean(row.date))
+          .map((row) => ({ periodEnd: null, announcedOn: row.date, row }));
 
-  const matchingIncome = latest?.periodEndDate ? incomeRows.find((row) => row.date === latest.periodEndDate) ?? incomeRows[0] ?? null : incomeRows[0] ?? null;
-  const grossMargin = matchingIncome?.grossProfit != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.grossProfit / Math.abs(matchingIncome.revenue)) * 100 : null;
-  const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;
-  const netIncome = matchingIncome?.netIncome ?? null;
-  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
-  const chartQuarters: EarningsTrendPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
-  const growthMarginQuarters: EarningsGrowthMarginPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
-    const priorYearRow = findSameQuarterLastYear(row, completedRows);
-    return {
-      label: displayQuarterLabel(row),
-      yoyEpsGrowth: calcGrowth(asNumber(row.epsActual), asNumber(priorYearRow?.epsActual)),
-      yoyRevenueGrowth: calcGrowth(asNumber(row.revenueActual), asNumber(priorYearRow?.revenueActual)),
-      grossMarginPct: marginPct(row.grossProfit, row.revenueActual),
-      operatingMarginPct: marginPct(row.operatingIncome, row.revenueActual),
-    };
-  });
-  const yearlySummaries = makeYearlySummaries(completedRows);
-  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
-    const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
-    return { label: displayQuarterLabel(row), ...detail };
-  });
-  const epsBeatFlags = completedRows.slice(0, 8).map((row) => (row.epsActual != null && row.epsEstimated != null ? row.epsActual >= row.epsEstimated : null));
-  const epsBeatConsidered = epsBeatFlags.filter((v): v is boolean => v != null);
-  const epsBeatCount = epsBeatConsidered.filter(Boolean).length;
-  const epsBeatTotal = epsBeatConsidered.length;
-  let currentStreakCount = 0;
-  let currentStreakType: "beat" | "miss" | null = null;
-  for (const flag of epsBeatFlags) {
-    if (flag == null) break;
-    if (currentStreakType == null) { currentStreakType = flag ? "beat" : "miss"; currentStreakCount = 1; }
-    else if ((flag && currentStreakType === "beat") || (!flag && currentStreakType === "miss")) currentStreakCount += 1;
-    else break;
-  }
-  const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
-  const sharedScore = await fetchSharedEarningsScore(symbol);
-  const score = sharedScore ?? localScore;
+  const barLabels = reactionBarLabels(barRows, (end) => storedLabels.get(end));
+  const reactionRows = barRows.map((b, i) => ({ label: barLabels[i], row: b.row }));
 
-  // Forward full-year consensus, a trailing-12-month base for growth context, and the full latest P&L.
-  const annualEstimate = annualEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
-  const last4Income = incomeRows.slice(0, 4);
-  const ttmRevenue = last4Income.length === 4 && last4Income.every((r) => r.revenue != null) ? last4Income.reduce((sum, r) => sum + (r.revenue ?? 0), 0) : null;
-  const ttmEps = last4Income.length === 4 && last4Income.every((r) => (r.epsDiluted ?? r.eps) != null) ? last4Income.reduce((sum, r) => sum + ((r.epsDiluted ?? r.eps) ?? 0), 0) : null;
-  const li = matchingIncome;
-  const latestIncomeStatement = li ? {
-    periodEnd: li.date ?? null,
-    periodLabel: li.period ?? null,
-    revenue: li.revenue ?? null,
-    costOfRevenue: li.costOfRevenue ?? (li.revenue != null && li.grossProfit != null ? li.revenue - li.grossProfit : null),
-    grossProfit: li.grossProfit ?? null,
-    researchAndDevelopment: li.researchAndDevelopment ?? null,
-    sga: li.sga ?? null,
-    operatingIncome: li.operatingIncome ?? null,
-    ebitda: li.ebitda ?? null,
-    interestExpense: li.interestExpense ?? null,
-    incomeBeforeTax: li.incomeBeforeTax ?? null,
-    incomeTaxExpense: li.incomeTaxExpense ?? null,
-    netIncome: li.netIncome ?? null,
-    epsDiluted: li.epsDiluted ?? li.eps ?? null,
-    weightedAverageShsDil: li.weightedAverageShsDil ?? null,
-  } : null;
+  const priceReactionQuarters: EarningsReactionPoint[] = reactionRows.map(({ label, row }) => ({
+    label,
+    ...computeEarningsReactionDetail(row, dailyHistory as Point[]),
+  }));
 
-  // Cash flow (quality of earnings + FCF), balance-sheet health, and revenue segmentation.
-  const cashRows = Array.isArray(cashFlowJson)
-    ? cashFlowJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", operatingCashFlow: asNumber(row.netCashProvidedByOperatingActivities) ?? asNumber(row.operatingCashFlow), capex: asNumber(row.capitalExpenditure) ?? asNumber(row.investmentsInPropertyPlantAndEquipment), freeCashFlow: asNumber(row.freeCashFlow), netIncome: asNumber(row.netIncome), stockBasedCompensation: asNumber(row.stockBasedCompensation) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : [];
-  const cashLatest = (latest?.periodEndDate ? cashRows.find((r) => r.date === latest.periodEndDate) : null) ?? cashRows[0] ?? null;
-  const cashflow = cashLatest ? {
-    periodEnd: cashLatest.date ?? null,
-    operatingCashFlow: cashLatest.operatingCashFlow ?? null,
-    capex: cashLatest.capex ?? null,
-    freeCashFlow: cashLatest.freeCashFlow ?? (cashLatest.operatingCashFlow != null && cashLatest.capex != null ? cashLatest.operatingCashFlow + cashLatest.capex : null),
-    netIncome: cashLatest.netIncome ?? null,
-    stockBasedCompensation: cashLatest.stockBasedCompensation ?? null,
-  } : null;
+  // ── THE NEXT REPORT ──────────────────────────────────────────────────────
+  //
+  // THE ESTIMATE IS NOT A FORECAST and the card says so. It is the filer's own
+  // habit — the same quarter a year ago, measured from the matched period end —
+  // and it is only offered as a specific DATE where that habit is regular
+  // enough to have earned one. Where it is not, the card offers the month or
+  // says nothing at all, which is the honest end of the same scale.
+  const nextReport: NextReportView = secDates && secDates.next.kind === "date"
+    ? {
+        source: "sec", kind: "date",
+        date: secDates.next.date,
+        timing: secDates.next.timing,
+        clamped: secDates.next.clamped,
+        fromEvents: secDates.next.fromEvents,
+      }
+    : secDates && secDates.next.kind === "month"
+      ? { source: "sec", kind: "month", month: secDates.next.month, fromEvents: secDates.next.fromEvents }
+      : next?.date
+        ? { source: "fmp", date: next.date, time: next.time ?? null }
+        : secEvents.length
+          ? { source: "sec", kind: "none" }
+          : null;
 
-  const balRow = Array.isArray(balanceJson) && balanceJson.length ? (balanceJson[0] as Record<string, unknown>) : null;
-  const balCash = balRow ? asNumber(balRow.cashAndShortTermInvestments) : null;
-  const balDebt = balRow ? asNumber(balRow.totalDebt) : null;
-  const balNetDebt = balRow ? asNumber(balRow.netDebt) : null;
-  const balCurAssets = balRow ? asNumber(balRow.totalCurrentAssets) : null;
-  const balCurLiab = balRow ? asNumber(balRow.totalCurrentLiabilities) : null;
-  const balance = balRow ? {
-    periodEnd: typeof balRow.date === "string" ? balRow.date : null,
-    cashAndStInvestments: balCash,
-    totalDebt: balDebt,
-    netCash: balCash != null && balDebt != null ? balCash - balDebt : (balNetDebt != null ? -balNetDebt : null),
-    currentRatio: balCurAssets != null && balCurLiab != null && balCurLiab !== 0 ? balCurAssets / balCurLiab : null,
-  } : null;
+  const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
-  const latestSegment = (json: unknown) => {
-    if (!Array.isArray(json)) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
-    const rows = json.map((item) => item as Record<string, unknown>).filter((row) => row && typeof row.data === "object" && row.data != null).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    const top = rows[0];
-    if (!top) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
-    const data = top.data as Record<string, unknown>;
-    const items = Object.entries(data).map(([name, val]) => ({ name, value: asNumber(val) })).filter((s) => s.value != null && s.value !== 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    const fiscalYear = (typeof top.fiscalYear === "number" || typeof top.fiscalYear === "string") ? top.fiscalYear : (typeof top.date === "string" ? top.date.slice(0, 4) : null);
-    return { fiscalYear, items };
+  return {
+    earningsRows, completedRows, latest, next, nextReport,
+    priceReactionQuarters, score, secView, cold,
+    /** SYMBOLS-level provenance, rendered on the card rather than assumed. */
+    datesFromSec: secEvents.length > 0,
+    /**
+     * A quarter announced whose figures SEC has not published yet. Read from
+     * the stored record, computed by the cron — the page does not derive it,
+     * because deriving it needs the submissions feed and the page has no
+     * business fetching EDGAR on a render.
+     */
+    pendingResults: secDates?.pending ?? null,
   };
-  const productSeg = latestSegment(productSegJson);
-  const geoSeg = latestSegment(geoSegJson);
-
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, annualEstimate, ttmRevenue, ttmEps, latestIncomeStatement, cashflow, balance, productSeg, geoSeg, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
 }
 
-function metricCardStyle(tone: EarningsTone | "default" = "default") {
-  const border = tone === "good" ? "rgba(34,197,94,0.22)" : tone === "weak" ? "rgba(239,68,68,0.22)" : tone === "neutral" ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.08)";
-  const bg = tone === "good" ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.22))" : tone === "weak" ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(15,23,42,0.22))" : tone === "neutral" ? "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(15,23,42,0.22))" : "rgba(255,255,255,0.035)";
-  return { border: `1px solid ${border}`, borderRadius: 18, padding: 16, background: bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" };
-}
-
-type BarChartPoint = { label: string; actual: number | null; estimate: number | null };
 
 // Nominal width (in "user units") for the chart SVGs below. Choosing a
 // realistic pixel-scale number here -- rather than an abstract 0-100 -- and
@@ -660,71 +839,7 @@ function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children 
   );
 }
 
-function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartPoint[]; formatValue: (v: number) => string; height?: number; }) {
-  const values = data.flatMap((d) => [d.actual, d.estimate]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.0001) : 1;
-  const zeroY = height / 2;
-  const usable = zeroY - 10;
-  const groupW = CHART_VIEW_W / Math.max(data.length, 1);
 
-  return (
-    <ChartFrame
-      height={height}
-      labels={data.map((d) => d.label)}
-      scaleTop={values.length ? formatValue(maxAbs) : undefined}
-      scaleMid={values.length ? formatValue(0) : undefined}
-      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
-    >
-      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Actual versus estimate chart">
-        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-        {data.map((d, i) => {
-          const cx = i * groupW + groupW / 2;
-          const barW = Math.min(groupW * 0.30, 26);
-          const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
-          const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
-          const estUp = (d.estimate ?? 0) >= 0;
-          const actUp = (d.actual ?? 0) >= 0;
-          const beat = d.actual != null && d.estimate != null ? d.actual >= d.estimate : null;
-          const actualColor = beat == null ? "#60a5fa" : beat ? "#22c55e" : "#ef4444";
-          return (
-            <g key={`${d.label}-${i}`}>
-              {d.estimate != null && (
-                <rect
-                  x={cx - barW - 3}
-                  y={estUp ? zeroY - estH : zeroY}
-                  width={barW}
-                  height={Math.max(estH, 2)}
-                  fill="rgba(148,163,184,0.38)"
-                  rx="3"
-                />
-              )}
-              {d.actual != null && (
-                <rect
-                  x={cx + 3}
-                  y={actUp ? zeroY - actH : zeroY}
-                  width={barW}
-                  height={Math.max(actH, 2)}
-                  fill={actualColor}
-                  rx="3"
-                />
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </ChartFrame>
-  );
-}
-
-function ChartLegend({ actualLabel = "Actual" }: { actualLabel?: string }) {
-  return (
-    <div className="chartLegend">
-      <span><i style={{ background: "#22c55e" }} /> {actualLabel} (beat)</span>
-      <span><i style={{ background: "#ef4444" }} /> {actualLabel} (miss)</span>
-      <span><i style={{ background: "rgba(148,163,184,0.6)" }} /> Estimate</span>
-    </div>
-  );
-}
 
 type LineSeries = { name: string; color: string; values: (number | null)[] };
 
@@ -838,9 +953,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", price, date);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
-  const trendStr = seed.trend ? `, ${seed.trend}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
-  const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
+  // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
+  // either when FMP's analyst consensus left on 2026-09-15, and a description
+  // promising them in search results is a promise the page cannot keep.
+  //
+  // ── AND NO TREND LABEL ───────────────────────────────────────────────────
+  // It used to interpolate `seed.trend` as a BARE LABEL mid-sentence, so the
+  // description read "...cash flow and balance sheet, Uptrend, with
+  // year-over-year context..." on AAPL and "...balance sheet, Range / Mixed,
+  // with..." on KGC. Two problems, and the second is the reason it is removed
+  // rather than reworded:
+  //
+  //   1. It is a price-chart reading in an EARNINGS description — this page is
+  //      built on filed figures and says nothing about moving averages.
+  //   2. It changes with the price, so the same page advertises itself
+  //      differently on different crawls, from data that is not on it.
+  //
+  // The /stock/[symbol] page states the trend too, and that is NOT this bug:
+  // it uses buildSeoDescription, which writes it as a sentence ("AAPL is in an
+  // uptrend") on the page whose subject IS the trend.
+  const description = `Review ${clean} stock earnings as filed with the SEC: GAAP EPS, revenue, margins, cash flow and balance sheet, with year-over-year context and a simple earnings score.`;
   return {
     title, description,
     robots: {
@@ -858,49 +991,16 @@ export default async function StockEarningsPage({ params }: Props) {
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
 
-  const latest = data.latest;
-  const next = data.next;
-  const nextEstimate = data.nextEstimate;
-  const incomeDetail: IncomeDetail | null = data.latestIncomeStatement;
-  const annualEstimateRow = data.annualEstimate;
-  const annualConsensus: AnnualConsensus | null = annualEstimateRow
-    ? {
-        date: annualEstimateRow.date ?? null,
-        revenueAvg: annualEstimateRow.revenueAvg ?? null,
-        revenueLow: annualEstimateRow.revenueLow ?? null,
-        revenueHigh: annualEstimateRow.revenueHigh ?? null,
-        epsAvg: annualEstimateRow.epsAvg ?? null,
-        epsLow: annualEstimateRow.epsLow ?? null,
-        epsHigh: annualEstimateRow.epsHigh ?? null,
-        numAnalystsRevenue: annualEstimateRow.numAnalystsRevenue ?? null,
-        numAnalystsEps: annualEstimateRow.numAnalystsEps ?? null,
-        ttmRevenue: data.ttmRevenue,
-        ttmEps: data.ttmEps,
-      }
-    : null;
-  const epsActual = latest?.epsActual ?? null;
-  const epsEstimated = latest?.epsEstimated ?? null;
-  const epsSurprise = calcDifference(epsActual, epsEstimated);
-  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
-  const revenueActual = latest?.revenueActual ?? null;
-  const revenueEstimated = latest?.revenueEstimated ?? null;
-  const revenueSurprise = calcDifference(revenueActual, revenueEstimated);
-  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
-  const yoyEpsGrowth = calcGrowth(epsActual, data.sameQuarterLastYear?.epsActual ?? null);
-  const yoyRevenueGrowth = calcGrowth(revenueActual, data.sameQuarterLastYear?.revenueActual ?? null);
-  const score = data.score;
+  // THE CIK GATE, AS A 404. A symbol SEC has never heard of gets no page at
+  // all: nothing was fetched for it and nothing was queued. This is what bounds
+  // an endpoint anyone can hit -- the set of strings that can trigger work is
+  // the ~10,400 registrants in the committed ticker file, not any string.
+  if (data.cold.status === "no-cik") notFound();
 
-  const epsChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.epsActual, estimate: q.epsEstimated }));
-  const revenueChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.revenueActual, estimate: q.revenueEstimated }));
-  const growthLabels = data.growthMarginQuarters.map((q) => q.label);
-  const growthSeries: LineSeries[] = [
-    { name: "Revenue growth", color: "#60a5fa", values: data.growthMarginQuarters.map((q) => q.yoyRevenueGrowth) },
-    { name: "EPS growth", color: "#22c55e", values: data.growthMarginQuarters.map((q) => q.yoyEpsGrowth) },
-  ];
-  const marginSeries: LineSeries[] = [
-    { name: "Gross margin", color: "#38bdf8", values: data.growthMarginQuarters.map((q) => q.grossMarginPct) },
-    { name: "Operating margin", color: "#facc15", values: data.growthMarginQuarters.map((q) => q.operatingMarginPct) },
-  ];
+  const nextReport = data.nextReport;
+  const score = data.score;
+  const secView = data.secView;
+
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
   const hasAnyReaction = reactionData.some((d) => d.value != null);
   const driftLabels = data.priceReactionQuarters.map((q) => q.label);
@@ -911,7 +1011,6 @@ export default async function StockEarningsPage({ params }: Props) {
   ];
   const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
   const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
-  const epsBeatPct = data.epsBeatTotal > 0 ? Math.round((data.epsBeatCount / data.epsBeatTotal) * 100) : null;
 
   // Curated, deterministic set of OTHER stock symbols for the "Explore More
   // Stocks" internal-linking module (see lib/curatedSymbols.ts and
@@ -922,7 +1021,7 @@ export default async function StockEarningsPage({ params }: Props) {
     "@context": "https://schema.org", "@type": "WebPage",
     name: `${clean} Stock Earnings`,
     url: `https://www.mystockharbor.com/stock/${clean}/earnings`,
-    description: `${clean} stock earnings, EPS, revenue and earnings score.`,
+    description: `${clean} stock earnings from SEC filings: GAAP EPS, revenue, margins, cash flow and balance sheet.`,
     breadcrumb: { "@type": "BreadcrumbList", itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: "https://www.mystockharbor.com/" },
       { "@type": "ListItem", position: 2, name: clean, item: `https://www.mystockharbor.com/stock/${clean}` },
@@ -1043,13 +1142,13 @@ export default async function StockEarningsPage({ params }: Props) {
           .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }
           .historyTable td:last-child { border-bottom: none; }
           .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
-          .historyTable td:nth-child(1)::before { content: "Quarter"; }
-          .historyTable td:nth-child(2)::before { content: "EPS"; }
-          .historyTable td:nth-child(3)::before { content: "EPS Est."; }
-          .historyTable td:nth-child(4)::before { content: "EPS Surprise"; }
-          .historyTable td:nth-child(5)::before { content: "Revenue"; }
-          .historyTable td:nth-child(6)::before { content: "Revenue Surprise"; }
-          .historyTable td:nth-child(7)::before { content: "Read"; }
+          /* READ FROM THE CELL, NOT FROM ITS POSITION. These used to be seven
+             nth-child rules naming the estimate columns that were retired on
+             2026-09-15. There are now two tables on this page with different
+             column sets, and a positional rule cannot serve both: it would
+             silently relabel one of them. Each <td> carries its own
+             data-label. */
+          .historyTable td::before { content: attr(data-label); }
         }
         @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
       `}</style>
@@ -1061,7 +1160,7 @@ export default async function StockEarningsPage({ params }: Props) {
               <ShareButton
                 url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
                 title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
-                text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+                text={`${clean} earnings — GAAP EPS, revenue & earnings score 📊 MyStockHarbor`}
               />
             </div>
             <div>
@@ -1069,7 +1168,12 @@ export default async function StockEarningsPage({ params }: Props) {
                 <TickerLogo symbol={clean} size={34} radius={8} />
                 <h1 style={{ margin: 0 }}>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
               </div>
-              <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
+              {/* THE LEDE TAKES THE PERIOD FROM THE VIEW. It said "latest reported
+                  quarter" on KGC, whose latest reported period is a fiscal
+                  year. `secView` can be null (nothing read in yet), and the
+                  quarterly wording is right for that: the page is about a
+                  quarter until a filer's own filings say otherwise. */}
+              <p>Review {clean}&apos;s latest reported {periodWords(secView?.basis ?? "quarter").one} as filed with the SEC — GAAP EPS, revenue, margins, cash flow and the balance sheet, with year-over-year context and a simple earnings score.</p>
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <aside className="scoreCard">
@@ -1091,102 +1195,157 @@ export default async function StockEarningsPage({ params }: Props) {
                     <EarningsScoreWatermark />
                   </div>
                   <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
-                  <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+                  {/* THE AXIS IS LABELLED FROM THE BAND TABLE. It read
+                      Weak / Mixed / Strong beside a pill that can only ever say
+                      Weak / Mixed / Good, so KGC's 100/100 "Good" looked as
+                      though it had missed a higher band that does not exist. */}
+                  <div className="scoreLabels">
+                    {/* SCORE_BANDS is ordered high-to-low (the lookup wants that);
+                        the axis reads low-to-high left to right. */}
+                    {[...SCORE_BANDS].reverse().map((b) => <span key={b.tone}>{b.label}</span>)}
+                  </div>
+                  {/* AND THE THRESHOLDS ARE VISIBLE. 100/100 above an unlabelled
+                      gauge tells a reader nothing about what 100 had to clear. */}
+                  <p className="earningsDataNote" style={{ marginTop: 8 }}>{scoreBandNote()}</p>
                 </>
               ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>
+              {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
+                  Every term of this score is measured over the anchor period,
+                  and a reader comparing an annual filer's score with a 10-Q
+                  filer's has to be told they are not the same measurement. */}
+              {score.available && score.basis === "year" ? (
+                <p className="earningsDataNote" style={{ marginTop: 10 }}>
+                  <strong>{clean} files annually</strong>, so this score is built on its fiscal
+                  years — growth is year against prior year, and there are no quarterly figures
+                  behind it.
+                </p>
+              ) : null}
+              {/* WHAT THE SCORE COULD NOT SEE, ON THE SCORE ITSELF.
+                  /stock/AZN/earnings rendered GOOD 100/100 above a Quality of
+                  Earnings card whose every field was "—". The number is only
+                  readable next to its own gaps, so they sit here rather than
+                  being inferable from a card further down the page. */}
+              {score.available && score.unavailable.length ? (
+                <p className="earningsDataNote" style={{ marginTop: 10 }}>
+                  Not measured, because {clean}&apos;s filings do not carry it:{" "}
+                  {score.unavailable.join("; ")}.
+                </p>
+              ) : null}
             </aside>
           </section>
 
           <section className="contentGrid">
             <div style={{ display: "grid", gap: 18 }}>
-              <section className="card">
-                <div className="eyebrow">Latest report</div>
-                <h2>{clean} latest earnings snapshot</h2>
-                <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>
-                {!latest ? (
-                  <p>Structured earnings data is not available for this symbol yet.</p>
-                ) : (
-                  <>
-                    <div className="metricGrid">
-                      <div className="metricCard" style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
-                      <div className="metricCard" style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                      <div className="metricCard" style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                    </div>
-                    <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
-                  </>
-                )}
-              </section>
+              {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
+                  symbol has none yet, one honest card says so rather than six
+                  cards of dashes. */}
+              {nextReport ? (
+                <section className="card">
+                  <div className="eyebrow">Next report</div>
+                  <h3>Next expected earnings date</h3>
+                  {nextReport.source === "fmp" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <strong>{nextReport.date}</strong>{nextReport.time ? ` (${nextReport.time === "bmo" ? "before market open" : nextReport.time === "amc" ? "after market close" : nextReport.time})` : ""}.
+                      {" "}This one comes from the earnings calendar — {clean}&apos;s own filing
+                      history has not been read yet.
+                    </p>
+                  ) : nextReport.kind === "date" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <strong>{nextReport.date}</strong>
+                      {nextReport.timing ? `, ${TIMING_WORDING[nextReport.timing].replace("Results filed", "results filed")} if it follows its usual pattern` : ""}.
+                      {" "}Estimated from {clean}&apos;s own past reporting pattern — the gap between
+                      the end of its financial quarter and the 8-K it files with the results,
+                      over its last {nextReport.fromEvents} reports. It is not a company
+                      announcement and the company is free to break the pattern.
+                      {nextReport.clamped
+                        ? " Pulled back to the SEC's filing deadline for this period, which the pattern would have run past."
+                        : ""}
+                    </p>
+                  ) : nextReport.kind === "none" ? (
+                    <p style={{ marginBottom: 0 }}>
+                      Not enough regular reporting history to estimate the next report date.
+                      {" "}{clean}&apos;s past results filings are spread too widely, or too few
+                      of them are on file, for a date or even a month to mean anything here.
+                    </p>
+                  ) : (
+                    <p style={{ marginBottom: 0 }}>
+                      Expected in <strong>{monthName(nextReport.month)}</strong>.
+                      {" "}{clean} has reported within the same month each year but not on a
+                      settled day of it, so no specific date is offered here. Based on its last{" "}
+                      {nextReport.fromEvents} reports.
+                    </p>
+                  )}
+                </section>
+              ) : null}
 
-              <section className="card">
-                <div className="eyebrow">Recent earnings trend</div>
-                <h2>How recent earnings have been landing</h2>
-                <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
-                {epsBeatPct != null ? (
-                  <p><strong>{clean}</strong> has beaten EPS estimates in <strong>{data.epsBeatCount} of the last {data.epsBeatTotal}</strong> quarters ({epsBeatPct}%){data.currentStreakType ? `, including a current streak of ${data.currentStreakCount} straight ${data.currentStreakType === "beat" ? "beats" : "misses"}` : ""}.</p>
-                ) : null}
-                {data.recentTrend.length ? (
-                  <div className="trendDots">
-                    {data.recentTrend.map((item) => (
-                      <div key={item.label} className="trendDot">
-                        <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />
-                        <strong>{item.label}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p>No recent completed earnings trend is available yet.</p>}
-
-                {data.chartQuarters.length ? (
-                  <>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">EPS: actual vs. estimate by quarter</div>
-                      <EarningsBarChart data={epsChartData} formatValue={(v) => formatMoney(v)} />
-                    </div>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">Revenue: actual vs. estimate by quarter</div>
-                      <EarningsBarChart data={revenueChartData} formatValue={(v) => formatMoney(v, true)} />
-                    </div>
-                    <ChartLegend />
-                  </>
-                ) : null}
-              </section>
-
-              <section className="card">
-                <div className="eyebrow">Growth &amp; margins</div>
-                <h2>Is growth accelerating, and are margins holding up?</h2>
-                <p>A single quarter&apos;s beat matters less than the trend behind it. These lines show whether year-over-year growth is speeding up or slowing down, and whether margins are expanding or getting squeezed.</p>
-                {growthLabels.length ? (
-                  <>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">YoY revenue &amp; EPS growth by quarter</div>
-                      <MultiLineChart labels={growthLabels} series={growthSeries} />
-                      <SeriesLegend items={[{ label: "Revenue growth", color: "#60a5fa" }, { label: "EPS growth", color: "#22c55e" }]} />
-                    </div>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">Gross &amp; operating margin by quarter</div>
-                      <MultiLineChart labels={growthLabels} series={marginSeries} />
-                      <SeriesLegend items={[{ label: "Gross margin", color: "#38bdf8" }, { label: "Operating margin", color: "#facc15" }]} />
-                    </div>
-                    <p className="earningsDataNote">Growth compares each quarter with the same quarter a year earlier. Margins are gross profit and operating income as a share of revenue for that quarter.</p>
-                  </>
-                ) : (
-                  <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
-                )}
-              </section>
-
-              <CashFlowCard cashflow={data.cashflow} />
-
-              <BalanceSheetCard balance={data.balance} />
-
-              <SegmentationCard product={data.productSeg} geographic={data.geoSeg} />
+              {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
+                  fetch of nothing usable -- an IFRS filer, or a company with no
+                  filed year yet -- and it must NEVER render as pending, because
+                  the cron would re-read it daily and get the same nothing.
+                  The 404 case never reaches here; see the guard above. */}
+              {data.cold.status === "no-xbrl" ? (
+                <SecNoXbrlCard
+                  symbol={clean}
+                  reason={data.cold.why}
+                  taxonomies={data.cold.taxonomies}
+                />
+              ) :
+               /* READ IN, WITH DATA, BUT NO QUARTERS *AND* NO YEARS — the
+                  only case left with nothing to render. An annual-only filer
+                  now builds a real view off its years (see
+                  buildSecEarningsView), so this no longer catches KGC. */
+               !secView && data.cold.status === "ready" ? (
+                <SecNoQuartersCard
+                  symbol={clean}
+                  years={data.cold.set.years.length}
+                  instants={data.cold.set.instants.length}
+                />
+              ) :
+               !secView ? <SecPendingCard symbol={clean} /> : (
+                <>
+                  <SecSnapshotCard view={secView} pending={data.pendingResults} />
+                  {/* HIDDEN, NOT REMOVED — the owner's standing rule. These two
+                      were the FMP estimate cards: "EPS surprise" and "Revenue
+                      surprise", both against FMP's epsEstimated /
+                      revenueEstimated, which left the site on 2026-09-15 with
+                      the rest of the FMP licence. Analyst consensus is not in
+                      SEC filings and no free source covers it.
+                      Deleting these loses the record of why the layout has a
+                      gap, and the next person re-adds the column and wires it
+                      to whatever is nearest. The registry entry is in
+                      lib/server/secEarningsView.ts RETIRED_SOURCES. */}
+                  <HiddenCard id="eps-estimate" />
+                  <HiddenCard id="revenue-estimate" />
+                  {/* THE QUARTERLY TABLE IS QUARTERLY. An annual-only filer has
+                      no quarters to tabulate, so it gets the annual card as its
+                      SOLE growth table rather than an empty quarterly one. */}
+                  {/* GATED ON tableBasis, NOT basis. AZN's anchor is a fiscal
+                      year (its FY2025 ends after its newest quarter) and it
+                      still has twelve quarters to tabulate. */}
+                  {secView.tableBasis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
+                  {/* ON EVERY STOCK, not only annual filers: five fiscal years
+                      is the longer view a quarterly table cannot give. Same
+                      component, same rows, `sole` only changes the wording. */}
+                  <SecAnnualCard view={secView} sole={secView.tableBasis === "year"} />
+                  <SecCashQualityCard view={secView} />
+                  <SecBalanceSheetCard view={secView} />
+                  {/* HIDDEN, NOT REMOVED. Revenue by product and by region, from
+                      FMP /revenue-product-segmentation and
+                      /revenue-geographic-segmentation, retired 2026-09-15.
+                      Segment revenue is filed on an XBRL segment axis and
+                      companyfacts publishes the DEFAULT CONTEXT ONLY, so the
+                      breakdown is not in it — this is not a chain gap that a
+                      better tag would close. The source is unresolved and the
+                      entry in RETIRED_SOURCES says so. */}
+                  <HiddenCard id="revenue-by-segment" />
+                </>
+              )}
 
               <section className="card">
                 <div className="eyebrow">Price reaction</div>
                 <h2>How has {clean} actually traded around its last reports?</h2>
-                <p>This shows the stock&apos;s closing-price move around each report: for reports released before market open, it&apos;s the move from the prior close into the report-day close; for reports released after market close, it&apos;s the move from the report-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
+                <p>This shows the stock&apos;s closing-price move around each report: for results filed with the SEC before market open, it&apos;s the move from the prior close into the filing-day close; for results filed after market close, it&apos;s the move from the filing-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
                 {latestReaction && (latestReaction.reactionPct != null || latestReaction.volumeMultiple != null) && (
                   <p><strong>Most recent reaction ({latestReaction.label}):</strong> {formatPercent(latestReaction.reactionPct)}{latestReaction.volumeMultiple != null ? ` on ${latestReaction.volumeMultiple.toFixed(1)}x average volume` : ""}.</p>
                 )}
@@ -1197,6 +1356,16 @@ export default async function StockEarningsPage({ params }: Props) {
                     </div>
                     <SeriesLegend items={[{ label: "Rose after report", color: "#22c55e" }, { label: "Fell after report", color: "#ef4444" }]} />
                     <p className="earningsDataNote">This reflects the stock&apos;s actual price move, which can be driven by broader market moves as well as the earnings report itself &mdash; it isn&apos;t a clean read of earnings reaction alone.</p>
+                    {/* PROVENANCE ON THE CARD, because the two sources measure
+                        different sessions. A filing timestamp is when the
+                        document reached EDGAR; a calendar date is a third
+                        party's record of the announcement. Which one keyed
+                        these bars changes what they mean. */}
+                    <p className="earningsDataNote">
+                      {data.datesFromSec
+                        ? `Each bar is keyed to the date ${clean} filed its results with the SEC, and to the session that filing landed in: a filing after the close is measured against the next day's close.`
+                        : `Each bar is keyed to an earnings-calendar date, not to ${clean}'s own filings — its filing history has not been read yet.`}
+                    </p>
                   </>
                 ) : (
                   <p>Not enough price history is available yet to chart the reaction around earnings.</p>
@@ -1213,35 +1382,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
-              <section className="card">
-                <div className="eyebrow">Earnings history</div>
-                <h2>Recent reported quarters</h2>
-                {data.completedRows.length ? (
-                  <table className="historyTable">
-                    <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>
-                    <tbody>
-                      {data.completedRows.slice(0, 8).map((row) => {
-                        const rowEpsActual = asNumber(row.epsActual);
-                        const rowEpsEstimated = asNumber(row.epsEstimated);
-                        const rowRevenueActual = asNumber(row.revenueActual);
-                        const rowRevenueEstimated = asNumber(row.revenueEstimated);
-                        const rowTone = classifyQuarter(row);
-                        return (
-                          <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
-                            <td>{displayQuarterLabel(row)}</td>
-                            <td>{formatMoney(rowEpsActual)}</td>
-                            <td>{formatMoney(rowEpsEstimated)}</td>
-                            <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
-                            <td>{formatMoney(rowRevenueActual, true)}</td>
-                            <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>
-                            <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : <p>No completed earnings history is available yet.</p>}
-              </section>
+              {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>
 
             <aside className="sideColumn">
@@ -1249,62 +1390,44 @@ export default async function StockEarningsPage({ params }: Props) {
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>
                 <p>{score.explanation}</p>
+                {/* The generic bullets describe what the score reads WHEN it
+                    can. A component that did not run must not be described
+                    here as if it had -- the cash bullet is the one that read
+                    as a claim on AZN, where the cash chain is empty. */}
                 <ul className="bulletList">
-                  <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>
-                  <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>
-                  <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
+                  <li>Year-over-year growth separates one-{periodWords(secView?.basis ?? "quarter").one} noise from a real earnings trend.</li>
+                  <li>Margins show whether the company is keeping more of each pound of revenue.</li>
+                  {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
+                    <li>
+                      Cash flow against net income would show whether reported profit is turning into
+                      cash — {clean}&apos;s filings do not carry a cash-flow statement this page can
+                      read, so it is not part of the score above.
+                    </li>
+                  ) : (
+                    <li>Cash flow against net income shows whether reported profit is turning into cash.</li>
+                  )}
                 </ul>
               </section>
 
-              {nextEstimate ? (
-                <section className="card">
-                  <div className="eyebrow">Wall Street expectations</div>
-                  <h3>Analyst estimates for the next report</h3>
-                  <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
-                  <div className="estimateGrid estimateGridStacked">
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus EPS</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
-                    </div>
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus revenue</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
-                    </div>
-                  </div>
-                  <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
-                </section>
-              ) : null}
+              {/* HIDDEN, NOT REMOVED. This was "Analyst estimates for the next
+                  report" and the forward full-year consensus card, both from
+                  FMP /analyst-estimates, retired 2026-09-15. Forward consensus
+                  is not in SEC filings at all — company guidance appears in 8-K
+                  exhibits as prose, not as structured data. */}
+              <HiddenCard id="forward-consensus" stacked />
 
-              <AnnualConsensusCard estimate={annualConsensus} stacked />
-
-              <IncomeStatementCard income={incomeDetail} />
-
-              <section className="card">
-                <div className="eyebrow">Yearly earnings read</div>
-                <h3>Recent yearly pattern</h3>
-                {data.yearlySummaries.length ? (
-                  <div className="yearGrid">
-                    {data.yearlySummaries.map((item) => (
-                      <div key={item.year} className="yearBadge" style={{ color: "#f8fafc", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>
-                        <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p>No yearly earnings pattern is available yet.</p>}
-              </section>
+              {secView ? <SecIncomeStatementCard view={secView} /> : null}
 
               <section className="card">
                 <div className="eyebrow">Why it matters</div>
                 <h3>Earnings can reset the stock narrative</h3>
-                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
+                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and cash generation.</p>
               </section>
 
               <section className="card">
                 <div className="eyebrow">Learn</div>
                 <h3>New to reading earnings?</h3>
-                <p>Understand EPS, revenue surprise, margins and the three financial statements behind every earnings report — in plain English.</p>
+                <p>Understand EPS, margins, cash flow and the three financial statements behind every earnings report — in plain English.</p>
                 <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                   <Link className="actionLink green" href="/learn/how-to-read-financial-data">How to Read Financial Data &rarr;</Link>
                 </div>

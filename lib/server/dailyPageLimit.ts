@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { canWriteDemandState, noteDemandWriteBlocked } from "./demandWriteGate";
 import { withRedisTimeout } from "./redisGuardTimeout";
 
 // Cumulative per-IP, per-category, 24h *real page view* counter, plus a
@@ -147,6 +148,8 @@ export async function recordDailyPageView(
   ip: string
 ): Promise<void> {
   if (!redis || !ip || ip === "unknown") return;
+  // A PREVIEW'S PAGE VIEWS ARE NOT THE SITE'S. See demandWriteGate.
+  if (!canWriteDemandState()) { noteDemandWriteBlocked("recordDailyPageView"); return; }
 
   try {
     const key = getKey(VIEWS_PREFIX, category, ip, new Date());
