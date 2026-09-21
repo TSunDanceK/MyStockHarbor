@@ -20,16 +20,34 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const raw = fs.readFileSync(SRC, "utf8");
-const js = ts.transpileModule(raw, {
+const transpile = (file) => ts.transpileModule(fs.readFileSync(file, "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText;
-const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+
+// ── THE DEADLINE TABLE IS IMPORTED NOW, SO IT HAS TO BE LOADED TOO ────────
+// dueToReport no longer owns its deadlines; it calls secReportDates.deadlineDays.
+// A data: module cannot resolve a relative specifier, so the dependency is
+// transpiled to its own data URL and the specifier rewritten to it.
+//
+// secReportDates is a LEAF -- it imports nothing -- which is what makes a
+// one-level rewrite sufficient rather than a bundler. Asserted, not assumed:
+// if it grows an import this check fails loudly here instead of silently
+// testing a module that never loaded.
+const depSrc = fs.readFileSync(path.join(ROOT, "lib/server/secReportDates.ts"), "utf8");
+if (/^\s*import\s/m.test(depSrc)) {
+  console.error("FATAL: secReportDates.ts has grown an import. The one-level rewrite below");
+  console.error("is no longer sufficient and this check would test a module that cannot load.");
+  process.exit(2);
+}
+const depUrl = dataUrl(transpile(path.join(ROOT, "lib/server/secReportDates.ts")));
+const js = transpile(SRC).replace(/from\s+["']\.\/secReportDates["']/g, `from "${depUrl}"`);
+const m = await import(dataUrl(js));
 
 const DAY = 86_400_000;
 const shift = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 const P = "2026-03-31";
-const sym = (o) => ({ symbol: o.symbol ?? "AAA", periodEnd: o.periodEnd ?? P, medianLagDays: o.medianLagDays ?? 30, largeAccelerated: o.largeAccelerated ?? true });
+const sym = (o) => ({ symbol: o.symbol ?? "AAA", periodEnd: o.periodEnd ?? P, medianLagDays: o.medianLagDays ?? 30, filerCategory: "filerCategory" in o ? o.filerCategory : "Large Accelerated Filer", annual: o.annual ?? false });
 const has = (rows, s) => rows.some((r) => r.symbol === s);
 
 // ── 1. k is 7, and the entry day is exactly where 7 puts it ────────────────
@@ -67,40 +85,84 @@ console.log("\n2. A period that has not ended is never due");
 console.log("\n3. The overdue cap — inert in the shipped cut, and still bounded");
 {
   check("OVERDUE_GRACE_DAYS is 30", m.OVERDUE_GRACE_DAYS === 30, String(m.OVERDUE_GRACE_DAYS));
-  check("the two statutory deadlines are 40 and 45", m.DEADLINE_LARGE_ACCELERATED_DAYS === 40 && m.DEADLINE_OTHER_DAYS === 45);
-
-  // Large accelerated: 40 + 30 = 70 days past the period end.
-  const la = [sym({ largeAccelerated: true, medianLagDays: 30 })];
-  check("a large accelerated filer is still listed on P+70", has(m.selectDue(la, shift(P, 70)), "AAA"));
-  check("and is dropped on P+71", !has(m.selectDue(la, shift(P, 71)), "AAA"));
-
-  // Everyone else: 45 + 30 = 75.
-  const other = [sym({ largeAccelerated: false, medianLagDays: 30 })];
-  check("a non-accelerated filer is still listed on P+75", has(m.selectDue(other, shift(P, 75)), "AAA"));
-  check("and is dropped on P+76", !has(m.selectDue(other, shift(P, 76)), "AAA"));
   check(
-    "the two deadlines are not interchangeable",
-    has(m.selectDue(other, shift(P, 73)), "AAA") && !has(m.selectDue(la, shift(P, 73)), "AAA"),
-    "P+73 is inside one cap and outside the other"
+    "this module no longer owns a deadline table",
+    m.DEADLINE_LARGE_ACCELERATED_DAYS === undefined && m.DEADLINE_OTHER_DAYS === undefined,
+    "consolidated onto secReportDates.deadlineDays -- two validators for one value"
   );
+
+  // ── THE SIX CELLS, AGAINST 17 CFR 240.13a-1 / 13a-13 ────────────────────
+  // Driven through selectDue rather than asserted on the table, because the
+  // bug that mattered was the CALL SITE picking the wrong cell, not the table.
+  // Two of these six were wrong before the consolidation and are marked.
+  const cells = [
+    ["Large Accelerated Filer", false, 40],
+    ["Accelerated Filer",       false, 40],  // was 45 here -- WRONG, too lenient
+    ["Non-accelerated Filer",   false, 45],
+    ["Large Accelerated Filer", true,  60],  // no annual concept existed -- WRONG
+    ["Accelerated Filer",       true,  75],  // "
+    ["Non-accelerated Filer",   true,  90],  // "
+  ];
+  for (const [filerCategory, annual, deadline] of cells) {
+    const last = deadline + m.OVERDUE_GRACE_DAYS;
+    const s1 = [sym({ filerCategory, annual, medianLagDays: 30 })];
+    const label = `${filerCategory}${annual ? " (annual)" : " (quarterly)"}`;
+    check(`${label}: listed on P+${last}`, has(m.selectDue(s1, shift(P, last)), "AAA"));
+    check(`${label}: dropped on P+${last + 1}`, !has(m.selectDue(s1, shift(P, last + 1)), "AAA"));
+  }
+
+  // THE REGRESSION THIS CONSOLIDATION FIXES, stated as its own case: an
+  // accelerated filer used to be given 45 days because it was not "large
+  // accelerated", so it sat in the strip for 5 days it was already overdue for.
+  const accel = [sym({ filerCategory: "Accelerated Filer", annual: false, medianLagDays: 30 })];
+  check(
+    "an accelerated filer is dropped on P+71, not P+76",
+    !has(m.selectDue(accel, shift(P, 71)), "AAA"),
+    "40 + 30, not 45 + 30 -- the cell the boolean split got wrong"
+  );
+
+  // An unknown category must not TIGHTEN the clamp -- it falls back to the
+  // slowest tier, so an unrecognised filer is never dropped early.
+  const unknown = [sym({ filerCategory: null, annual: false, medianLagDays: 30 })];
+  check("an unknown category falls back to the slowest tier (45+30)",
+    has(m.selectDue(unknown, shift(P, 75)), "AAA") && !has(m.selectDue(unknown, shift(P, 76)), "AAA"));
 }
 
 // ── 4. The invariant that replaces an attribution-horizon clause ───────────
 //
-// selectDue deliberately has NO check against secResultsDate's 120-day
-// attribution horizon, because the overdue cap already keeps every entry well
-// inside it and the clause would have been an unreachable branch. That is only
-// true while the numbers hold, so the relationship is asserted here.
+// selectDue deliberately has NO check against the 120-day attribution horizon,
+// because the overdue cap kept every entry inside it and the clause would have
+// been an unreachable branch.
+//
+// THE MARGIN IS NOW ZERO, WHICH IS WHY THIS IS AN EQUALITY. Before the deadline
+// consolidation the widest cap was 45 + 30 = 75 against a 120-day horizon. The
+// real table's widest cell is the non-accelerated ANNUAL deadline, 90, so the
+// widest cap is 90 + 30 = 120 and the two now meet exactly. There is still no
+// gap, but there is nothing spare: widening either number in either module
+// opens one immediately, and the symptom would be a symbol stuck in the strip
+// that nothing can ever clear.
 console.log("\n4. The strip can never outlast the window attribution works in");
 {
   const attribution = /MAX_ATTRIBUTION_DAYS = (\d+)/.exec(fs.readFileSync(path.join(ROOT, "lib/server/secResultsDate.ts"), "utf8"));
   check("MAX_ATTRIBUTION_DAYS is readable from the attribution module", attribution != null);
   const horizon = Number(attribution?.[1]);
-  const widest = m.DEADLINE_OTHER_DAYS + m.OVERDUE_GRACE_DAYS;
+
+  const deadlines = fs.readFileSync(path.join(ROOT, "lib/server/secReportDates.ts"), "utf8");
+  const table = /FILING_DEADLINE_DAYS[\s\S]*?\{([\s\S]*?)\n\};/.exec(deadlines);
+  check("the deadline table is readable from the module that owns it", table != null);
+  const widestCell = Math.max(...[...(table?.[1] ?? "").matchAll(/annual:\s*(\d+)/g)].map((x) => Number(x[1])));
+  check("the widest statutory cell is the non-accelerated annual deadline", widestCell === 90, String(widestCell));
+
+  const widest = widestCell + m.OVERDUE_GRACE_DAYS;
   check(
-    "the widest the cap allows is inside the attribution horizon",
+    "the widest the cap allows does not exceed the attribution horizon",
     widest <= horizon,
-    `widest ${widest}d vs horizon ${horizon}d — if this fails, selectDue needs the horizon clause back`
+    `widest ${widest}d vs horizon ${horizon}d — they are now EQUAL; any widening opens a gap`
+  );
+  check(
+    "and the margin is exactly zero, recorded so a future widening is deliberate",
+    widest === horizon,
+    `${widest} === ${horizon}`
   );
 }
 

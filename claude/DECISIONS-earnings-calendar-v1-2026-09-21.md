@@ -41,8 +41,7 @@ on any mismatch.
 When a claude.ai Project doc is pasted into context, commit it verbatim to
 `claude/<same-filename>` before or alongside the work that uses it.
 
-**Not satisfiable for the bars-migration spec.** The 2026-09-21 message carried
-a placeholder — `[PASTE FULL TEXT OF ... §1 here`— followed by a bracketed
-summary, not the document. What is known from that summary is recorded in
-`claude/bars-migration-SUMMARY-2026-09-21.md` and is explicitly labelled as a
-second-hand summary, not the spec.
+**RESOLVED 2026-09-21 (later same day).** The spec arrived verbatim and is
+mirrored at `claude/dashboard-off-fmp-scoping-2026-09-12.md`. The interim
+second-hand summary has been deleted rather than left beside it — two files on
+one subject at different fidelities is how the wrong one gets cited.
