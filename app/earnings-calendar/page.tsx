@@ -15,7 +15,9 @@ import {
   isDateInWindow,
   getCachedDayItems,
   daysInMonth,
+  getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
+import { resolveCalendarDay, dayStateMessage } from "@/lib/server/calendarDayState";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
@@ -428,6 +430,29 @@ export default async function EarningsCalendarPage({
     getUpcomingTickerItems(todayDate),
   ]);
 
+  // ── WHAT AN EMPTY DAY MEANS, RESOLVED ONCE ───────────────────────────────
+  // This page used to ask `dayData.usListedCount > 0` and render one of two
+  // sentences. That is a bare emptiness test, and it is the defect #483 fixed
+  // ONE LAYER DOWN and this page then reintroduced at the top: a date whose
+  // month read FAILED and a genuinely quiet Sunday both produce zero rows, and
+  // both got the quiet-Sunday words.
+  //
+  // #483 shipped the two signals needed to tell them apart -- `complete` and
+  // getMonthVisibility -- and NOTHING IN lib/ OR app/ CONSULTED EITHER. A
+  // distinction nothing reads is not a fix, which is why this is wired here
+  // rather than documented again.
+  //
+  // READ AFTER loadDay, DELIBERATELY. getDayCandidates resolves the whole month
+  // behind the date, so the visibility map is populated by the await above;
+  // reading it before would report "unseen" for every date on every render.
+  const dayState = resolveCalendarDay({
+    items: dayData.items,
+    totalCandidates: dayData.totalCandidates,
+    complete: dateComplete,
+    monthVisibility: getMonthVisibility(year, month),
+  });
+  const dayStateNote = dayStateMessage(dayState);
+
   const selectedDateLabel = formatDateLabel(selectedDate);
 
   // Background auto-populate: after this response is sent, quietly fill in the
@@ -587,17 +612,17 @@ export default async function EarningsCalendarPage({
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
-              {dayData.usListedCount > 0 ? (
+              {dayState.kind === "listed" ? (
                 <>
-                  <strong>{dayData.usListedCount}</strong> US-listed{" "}
-                  {dayData.usListedCount === 1 ? "company reports" : "companies report"} on{" "}
-                  {selectedDateLabel}. See how many report each day, then drill into any date for
-                  tickers, EPS/revenue estimates, price and market cap.
+                  <strong>{dayState.items.length}</strong> US-listed{" "}
+                  {dayState.items.length === 1 ? "company has" : "companies have"} results on file
+                  for {selectedDateLabel}. See how many have filed on each day, then drill into any
+                  date for tickers, EPS/revenue estimates, price and market cap.
                 </>
               ) : (
                 <>
-                  See how many companies report each day, then drill into any date for tickers,
-                  EPS/revenue estimates, price and market cap.
+                  {dayStateNote} See how many companies have filed on each day, then drill into any
+                  date for tickers, EPS/revenue estimates, price and market cap.
                 </>
               )}
             </p>
@@ -780,8 +805,12 @@ export default async function EarningsCalendarPage({
             <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{formatDateLabel(selectedDate)}</div>
               <div style={{ fontSize: 12.5, opacity: 0.6, marginTop: 3 }}>
-                {dayData.usListedCount} US-listed compan{dayData.usListedCount === 1 ? "y" : "ies"} reporting
-                {!dateComplete && dayData.totalCandidates > 0 ? " · still populating…" : ""}
+                {dayState.kind === "listed"
+                  ? `${dayState.items.length} US-listed compan${dayState.items.length === 1 ? "y has" : "ies have"} results on file`
+                  : dayStateNote}
+                {dayState.kind === "listed" && !dateComplete && dayData.totalCandidates > 0
+                  ? " · still populating…"
+                  : ""}
               </div>
             </div>
 
