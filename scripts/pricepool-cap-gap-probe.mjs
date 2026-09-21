@@ -288,6 +288,57 @@ for (const sym of ["AAPL", "MSFT", "AMZN"]) {
   if (v.state === "HAS-CAP") controls.push({ symbol: canon, cap: v.cap, entry: parsed(poolSrc.entries.get(canon)) });
 }
 
+// ── THE SHAPE OF EACH FILE, BEFORE ANY CONCLUSION IS DRAWN FROM IT ────────
+//
+// Run 35631353569 reported 5 entries each for screener-fundamentals.json
+// (650 KB), fundamentals.json (176 KB) and stockdata.json (680 KB). A 650 KB
+// file with five entries in it is not a file with five entries in it -- it is
+// a reader that has not understood the file.
+//
+// THAT IS NOT A PROBE BUG ALONE. entriesOf() here is a copy of the one in
+// due-strip-universe.mjs, and that script's committed conclusion -- "adding the
+// other three sources contributed ZERO new caps", the finding that closed the
+// question -- was reached through the SAME reader. If the reader is wrong, so
+// is the conclusion, and nobody would have been able to tell from the counters.
+//
+// So the structure is printed BEFORE any verdict rests on it: top-level type,
+// the first keys, and one level down. No interpretation, just what is there.
+console.log("\n=== FILE STRUCTURE — printed before any conclusion rests on it ===");
+for (const file of CAP_SOURCES) {
+  const doc = readJson(file);
+  if (doc == null) { console.log(`  ${file}: absent or unparseable`); continue; }
+  const describe = (v, depth = 0) => {
+    const pad = "    ".repeat(depth + 1);
+    if (Array.isArray(v)) {
+      console.log(`${pad}Array(${v.length})`);
+      if (v.length) {
+        const f = v[0];
+        console.log(`${pad}  [0] typeof ${typeof f}${f && typeof f === "object" ? ` keys=[${Object.keys(f).slice(0, 15).join(",")}]` : ` = ${String(f).slice(0, 120)}`}`);
+      }
+      return;
+    }
+    if (v && typeof v === "object") {
+      const k = Object.keys(v);
+      console.log(`${pad}Object with ${k.length} keys: [${k.slice(0, 15).join(",")}]${k.length > 15 ? ` … +${k.length - 15}` : ""}`);
+      if (depth < 2) {
+        for (const key of k.slice(0, 3)) {
+          console.log(`${pad}  .${key} →`);
+          describe(v[key], depth + 2);
+        }
+      }
+      return;
+    }
+    const t = String(v);
+    console.log(`${pad}${typeof v}, ${t.length} chars: ${t.slice(0, 200)}${t.length > 200 ? " …" : ""}`);
+  };
+  console.log(`  ${file}:`);
+  describe(doc);
+  // AND WHAT THE READER MADE OF IT, side by side with the above, so a
+  // disagreement between the file and the reader is visible in one place.
+  const got = entriesOf(doc);
+  console.log(`    entriesOf() read ${got.length} entr${got.length === 1 ? "y" : "ies"}: [${got.slice(0, 10).map(([k]) => k).join(",")}]`);
+}
+
 // ── report ────────────────────────────────────────────────────────────────
 console.log("\n=== PRICE-POOL CAP GAP ===");
 console.log(`universe: ${universe.length} symbols · sources read from due-strip-universe.mjs: ${CAP_SOURCES.join(", ")}\n`);
