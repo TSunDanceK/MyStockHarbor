@@ -10,6 +10,7 @@
 //        scripts/check-ipo-merge-fixtures.mjs
 import {
   mergeIpoRecords,
+  resolveWatermark,
   validateStored,
   windowStartFor,
   MAX_STORED_RECORDS,
@@ -150,6 +151,45 @@ console.log("\nipoRecordMerge — merge, prune, and the rules that fail silently
     "the validator catches a filing older than windowStart",
     !validateStored({ ...doc, records: [{ ...doc.records[0], filings: [{ form: "S-1", date: d(-300) }] }] }).ok,
     "an independent check on the prune, not a restatement of it"
+  );
+}
+
+// ── The watermark. Neither failure here raises anything. ─────────────────
+{
+  check(
+    "a later date advances the watermark",
+    resolveWatermark("20260910", "20260919") === "20260919"
+  );
+  check(
+    "an EARLIER date does NOT rewind it",
+    resolveWatermark("20260919", "20260910") === "20260919",
+    "the refresh accepts a `from` override so the cold start can be driven by hand; " +
+      "a replay that rewound the watermark would send the next scheduled run back " +
+      "over days already covered, re-fetching every index and cover for nothing — " +
+      "the defect sec-daily-index had to correct after a from/to run moved its own " +
+      "watermark 20260912 -> 20260911"
+  );
+  check(
+    "null incoming KEEPS the stored watermark",
+    resolveWatermark("20260919", null) === "20260919",
+    "incoming is null when every date in a run failed; storing that reads as " +
+      "'never walked' on the next run, which is a 90-day cold start triggered by " +
+      "one bad morning"
+  );
+  check(
+    "undefined incoming keeps it too",
+    resolveWatermark("20260919", undefined) === "20260919",
+    "the caller may omit the field entirely — same meaning, and a check that only " +
+      "covered null would miss it"
+  );
+  check(
+    "a cold start takes the first date it walks",
+    resolveWatermark(null, "20260919") === "20260919"
+  );
+  check(
+    "and a cold start that walked nothing stays cold",
+    resolveWatermark(null, null) === null,
+    "null is 'never walked', which is a real state and not an error"
   );
 }
 

@@ -128,6 +128,36 @@ export function mergeIpoRecords(
   };
 }
 
+/**
+ * Which watermark to store, given what was there and what this run walked.
+ *
+ * ── IT MUST NEVER GO BACKWARDS, AND THAT IS NOT A TIDINESS RULE ───────────
+ * The refresh accepts a `from` override so a range can be replayed by hand,
+ * which is how the cold start is driven. Without this, a replay of an older
+ * range would rewind the watermark and send the NEXT scheduled run back over
+ * days it had already covered -- re-fetching every index and every cover for
+ * nothing, and reading as a healthy run while doing it. sec-daily-index shipped
+ * exactly that defect and had to correct it after a from/to run moved its
+ * watermark 20260912 -> 20260911.
+ *
+ * ── AND AN ABSENT INCOMING VALUE MUST NOT CLEAR IT ────────────────────────
+ * `incoming` is null when a run walked no dates successfully -- every one
+ * failed. Storing that null would read as "never walked" on the next run, which
+ * is the COLD START: 90 days of index fetches triggered by one bad morning.
+ *
+ * Pure and exported so a fixture can hold it to both cases, because neither
+ * failure produces an error -- just a slower, more expensive, entirely
+ * plausible-looking run.
+ */
+export function resolveWatermark(
+  prior: string | null,
+  incoming: string | null | undefined
+): string | null {
+  if (!incoming) return prior;
+  if (!prior) return incoming;
+  return incoming > prior ? incoming : prior;
+}
+
 /** The window start for a given day. Exported so both writers agree on it. */
 export function windowStartFor(now = new Date(), windowDays = IPO_WINDOW_DAYS): string {
   return new Date(now.getTime() - windowDays * 86400000).toISOString().slice(0, 10);

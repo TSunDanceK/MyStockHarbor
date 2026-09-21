@@ -29,6 +29,7 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { IpoFilerRecord } from "./ipoSecSource";
 import {
   mergeIpoRecords,
+  resolveWatermark,
   validateStored,
   windowStartFor,
   type StoredIpoFilings,
@@ -155,15 +156,10 @@ export async function writeStoredIpoFilings(
     return { ok: false, reason: `read failed: ${String(err)}`, commands, before: 0, after: 0, pruned: 0, lastIndexDate: null };
   }
 
-  // NEVER GOES BACKWARDS. A caller replaying an older date range (the `from`
-  // override exists exactly for that) would otherwise rewind the watermark and
-  // make the next scheduled run re-walk days already covered -- the defect
-  // sec-daily-index had to fix after a from/to run moved its watermark
-  // 20260912 -> 20260911.
-  const lastIndexDate =
-    options.lastIndexDate && (!priorWatermark || options.lastIndexDate > priorWatermark)
-      ? options.lastIndexDate
-      : priorWatermark;
+  // NEVER BACKWARDS, AND NEVER CLEARED. Both rules live in resolveWatermark,
+  // where a fixture can reach them -- neither failure raises anything, they just
+  // make the next run repeat work while looking entirely healthy.
+  const lastIndexDate = resolveWatermark(priorWatermark, options.lastIndexDate);
 
   const doc = mergeIpoRecords(existing, incoming, windowStartFor(now), now.getTime(), { lastIndexDate });
 
