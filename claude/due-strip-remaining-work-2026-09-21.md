@@ -31,6 +31,53 @@ frozen dump is months old and its caps can no longer produce a trustworthy cut.
 read-only token — not the relay. Committing a list from the stale dump would be
 committing the exact hole the canary exists to stop.
 
+## (a2) A FRESH dump was taken, and the canary refused AGAIN — identically
+
+Step-0 run [35627342399], dispatched 2026-09-21 with the read-only Upstash
+token. It succeeded: a **26 MB** dump (the previous artifact was ~7 MB), so the
+read reached real data.
+
+Relay [35627557686] ran `due-strip-universe` against it, minutes old:
+
+```
+[due-universe] caps assembled: 835 symbols from 4 candidate sources
+[due-universe] analysis universe: 700 symbols · 696 with a cap (99.4%)
+[due-universe] canaries: NVDA=MISSING AAPL=#1 MSFT=#4 GOOGL=#2 AMZN=#5 META=#6
+
+FATAL: 1 of 6 canary symbols are not in the top 50. Attribution:
+  NVDA: in analysis universe=true · has a cap=false (source: none) · never ranked
+```
+
+**This is not staleness.** It is the same symbol, the same signature and the
+same 99.4% coverage figure the canary was originally written against — now
+reproduced on a dump taken minutes before the run. The script's own header
+records the first occurrence; this is the second, and the input is new.
+
+**The attribution line is unambiguous and it is the middle cause:**
+`has a cap=false (source: none)`. NVDA **is** in the 700-symbol analysis
+universe, and **none of the four cap sources in production prices it** —
+`price-pool.json`, `screener-fundamentals.json`, `fundamentals.json`,
+`stockdata.json`. Four of 700 universe symbols carry no cap; NVDA is one.
+
+So the finding is about **production data, not about this dump**: the largest or
+near-largest US-listed company has no market capitalisation in any cached
+source the site holds. Every other canary resolved from `price-pool.json` and
+ranked in the top six.
+
+A fresh dump cannot fix this, and neither can re-running. **Until NVDA has a cap
+in some source, this script will refuse to emit — correctly.** Widening `CUT`
+or dropping NVDA from `CANARIES` would produce a "top 50 by market cap" that is
+missing the largest company in it, which is exactly the outcome the canary
+exists to prevent.
+
+### What this blocks, and what it does not
+
+It blocks committing a top-50 membership list. It says nothing about the other
+items below — those were already a different shape.
+
+**The open question for the owner is why the price pool has no cap for NVDA**,
+which is a Pickers/price-pool question rather than an earnings-calendar one.
+
 ## (b) There is no "stage 1 backfill" to run
 
 `lastResultsDate` is not a stored field. #484 deleted `secResultsDate.ts` and
