@@ -674,6 +674,18 @@ const TASKS = {
   // reports whether the empty-day poisoning has already fired in production.
   // The live read happens in the Step 0 job under Upstash's read-only token;
   // this half only does arithmetic on the result.
+  // MEASUREMENT ONLY, no fix: separates the three states due-strip-universe's
+  // single "source: none" verdict cannot tell apart -- the symbol is ABSENT
+  // from a source, present with a NULL cap, present under a key capOf does not
+  // read, or present under a different SPELLING. Different owners, one verdict
+  // today. Lifts CAP_SOURCES and capOf out of due-strip-universe.mjs so the
+  // probe cannot measure a set the consumer does not use. Read-only, no
+  // credential, NO NETWORK; needs a step 0 dump.
+  "pricepool-cap-gap": {
+    script: "scripts/pricepool-cap-gap-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "earnings-poisoning": {
     script: "scripts/earnings-poisoning-scan.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
