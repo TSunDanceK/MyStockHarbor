@@ -310,6 +310,144 @@ console.log("");
   );
 }
 
+// ── THE SPAC MASTHEAD. Measured over 9 SPAC covers, relay 35586785501. ───
+//
+// After the share-count fix, the shipped parser returned a count on 1 of those
+// 9 — so Deal Size went blank on almost every row this page shows, because the
+// cohort is SPAC-dominated. The one unit-shaped anchor had been written against
+// a single filing (Lannister) and the masthead shape varies in exactly the way
+// a positional pattern cannot follow.
+console.log("");
+{
+  // Three Lions Acquisition Corp 424B4, 2026-09. The masthead, verbatim: the
+  // COMPANY NAME sits between the aggregate and the count, which is precisely
+  // what the old adjacency pattern required to be absent.
+  const cover =
+    "Prospectus $100,000,000 THREE LIONS ACQUISITION CORP. 10,000,000 Units " +
+    "Three Lions Acquisition Corp. is a blank check company. Each unit has a " +
+    "price of $10.00 per unit and the proceeds will be held in a trust account " +
+    "pending a business combination. We have also granted the underwriter a " +
+    "45-day option to purchase up to an additional 1,500,000 units to cover " +
+    "over-allotments. Securities offered 10,000,000 units, at $10.00 per unit " +
+    "(or 11,500,000 units if the over-allotment option is exercised in full). " +
+    "Number outstanding after this offering and private placement 10,400,000 units.";
+  const t = parseCoverTerms(cover, "6770");
+  check(
+    "the Three Lions masthead yields 10,000,000 units",
+    t.sharesOffered === 10_000_000,
+    `got ${t.sharesOffered} — the company name sits between "$100,000,000" and ` +
+      `"10,000,000 Units", which is why the adjacency pattern matched 1 of 94 covers`
+  );
+  check(
+    "and NOT the 1,500,000 over-allotment option",
+    t.sharesOffered !== 1_500_000,
+    "the underwriter's option is not the offering"
+  );
+  check(
+    "and NOT the 11,500,000 with-option total",
+    t.sharesOffered !== 11_500_000,
+    "the parenthetical is a conditional, not the deal"
+  );
+  check(
+    "and NOT the 10,400,000 post-offering count",
+    t.sharesOffered !== 10_400_000,
+    "'outstanding after this offering' — the same class of wrong sentence the " +
+      "operating-company fix was about, on a SPAC cover"
+  );
+  check(
+    "the price still reads $10.00, so dealSize computes",
+    t.priceRangeLow === 10 && t.priceRangeHigh === 10,
+    `got ${t.priceRangeLow} — 10,000,000 x $10.00 = $100,000,000, the figure printed ` +
+      `on the cover`
+  );
+}
+{
+  // Lannister Mining F-1/A, 2026-09-17. NOT a $10 SPAC: the range is $4-$6, and
+  // 3,000,000 x $5.00 (the midpoint) = $15,000,000. The cross-check has to work
+  // off the parsed price rather than assuming a unit is always $10.
+  const t = parseCoverTerms(
+    "PRELIMINARY PROSPECTUS DATED SEPTEMBER 16, 2026 $15,000,000 Units " +
+      "3,000,000 Units Each Unit consists of one share. We anticipate that the " +
+      "initial public offering price will be between US$4 and US$6 per Unit.",
+    "6770"
+  );
+  check(
+    "the Lannister masthead still reads, via the adjacency anchor",
+    t.sharesOffered === 3_000_000,
+    `got ${t.sharesOffered} — "$15,000,000 Units 3,000,000 Units", the one shape the ` +
+      `old pattern did fit`
+  );
+}
+{
+  // ── ISOLATING THE CROSS-CHECK'S PRICE-AWARENESS ────────────────────────
+  // CONSTRUCTED, and labelled so: Lannister's real numbers in Three Lions'
+  // masthead shape. The verbatim Lannister cover is matched by the adjacency
+  // anchor above and therefore never reaches the arithmetic at all — verified
+  // by hardcoding $10.00 into the cross-check and watching that fixture stay
+  // green. A test that passes for the wrong reason is this file's own subject.
+  //
+  // With the company name between the two numbers no anchor applies, so only
+  // the cross-check can answer, and it can only answer correctly by using the
+  // $4-$6 midpoint rather than assuming a unit costs $10.00.
+  //
+  // ── ONE DEVIATION FROM THE REAL COVER, AND IT IS A FINDING ─────────────
+  // Lannister writes "between US$4 and US$6 per Unit". The price patterns
+  // expect `$` immediately after the whitespace, so "US$" does not match and
+  // THAT COVER PARSES NO PRICE AT ALL — which is why the probe printed
+  // `price —-—` for it. Foreign private issuers filing F-1/A commonly use the
+  // "US$" form. That is a price-coverage gap, distinct from the deal-size work
+  // in this pass and not fixed here; it is logged in the handoff alongside the
+  // Aptevo range-guard hole, to be measured before it is touched.
+  //
+  // So this fixture writes the price the way a domestic cover writes it. The
+  // NUMBERS are Lannister's; the price phrasing is the parsable form.
+  const t = parseCoverTerms(
+    "PRELIMINARY PROSPECTUS $15,000,000 LANNISTER MINING CORPORATION 3,000,000 " +
+      "Units. Each Unit consists of one share. We anticipate that the initial " +
+      "public offering price will be between $4.00 and $6.00 per Unit.",
+    "6770"
+  );
+  check(
+    "a non-$10 unit corroborates at the RANGE MIDPOINT, not at an assumed $10",
+    t.sharesOffered === 3_000_000,
+    `got ${t.sharesOffered} — 3,000,000 x $5.00 = $15,000,000. Assuming $10.00 gives ` +
+      `$30,000,000, which no figure on this cover matches, so the count would be refused`
+  );
+}
+{
+  // THE CROSS-CHECK'S OWN CONTROL. Every SPAC refusal above is ALSO caught by
+  // an anchor or the disqualifier list, so none of them fails if the arithmetic
+  // is removed. This one has no anchor phrasing and no disqualifying word — the
+  // numbers simply do not multiply out — so only the cross-check refuses it.
+  const t = parseCoverTerms(
+    "Prospectus $250,000,000 EXAMPLE ACQUISITION CORP. 7,300,000 Units. " +
+      "Each unit has a price of $10.00 per unit and proceeds are held in a " +
+      "trust account pending a business combination.",
+    "6770"
+  );
+  check(
+    "a count that does NOT multiply to any printed aggregate is refused",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — 7,300,000 x $10.00 is $73,000,000 and the cover says ` +
+      `$250,000,000; this is the fixture that fails if the arithmetic agreement ` +
+      `is dropped and the masthead is read positionally again`
+  );
+}
+{
+  // And the corroboration must not fire without a price to corroborate against.
+  const t = parseCoverTerms(
+    "Prospectus $100,000,000 EXAMPLE CORP. 10,000,000 Units. A blank check " +
+      "company pursuing a business combination with funds in a trust account.",
+    null
+  );
+  check(
+    "with no parsed price there is nothing to cross-check, so no count",
+    t.sharesOffered === null,
+    `got ${t.sharesOffered} — the aggregate rule multiplies by the price; without ` +
+      `one it must not guess $10.00 and call the result corroborated`
+  );
+}
+
 // ── Exchange and symbol ──────────────────────────────────────────────────
 {
   const t = parseCoverTerms(

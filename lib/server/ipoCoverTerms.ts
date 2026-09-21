@@ -137,6 +137,11 @@ const SPAC_BODY = [/blank check company/i, /business combination/i, /trust accou
 // cost of a null is a column, not a row -- hasTerms() in ipoSecSource drops a
 // listing only when the price is ALSO absent.
 const SHARE_COUNT_PATTERNS = [
+  // "Securities offered 10,000,000 units, at $10.00 per unit"
+  //   Three Lions Acquisition 424B4 — the OFFERING summary row. The noun is
+  //   "Securities", not "units", which is why the offering-table pattern below
+  //   (anchored on "units offered by the issuer") walked straight past it.
+  /\bsecurities\s+offered\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:units|Units|shares|ADSs)/i,
   // "We are offering 10,000,000 shares" / "we are offering 5,000,000 ADSs"
   //   LiPower F-1/A: "Shares Offered by the Issuer We are offering 5,000,000 shares"
   /\b(?:we|the\s+company|the\s+issuer)\s+(?:are|is)\s+offering\s+(?:an\s+aggregate\s+of\s+)?([\d,]{5,})\s+(?:shares|ADSs|American\s+Depositary\s+Shares|units|Units)/i,
@@ -163,7 +168,87 @@ const DISQUALIFYING_CONTEXT =
 const CONTEXT_BEFORE = 180;
 const CONTEXT_AFTER = 160;
 
-function parseSharesOffered(cover: string): number | null {
+/**
+ * THE AGGREGATE AND THE COUNT CHECK EACH OTHER.
+ *
+ * ── WHY A CROSS-CHECK RATHER THAN ANOTHER POSITIONAL REGEX ────────────────
+ * A SPAC states its deal in the masthead, and relay 35586785501 showed the
+ * shape varies in exactly the way a position-based pattern cannot follow:
+ *
+ *   Three Lions 424B4   "$100,000,000 THREE LIONS ACQUISITION CORP. 10,000,000 Units"
+ *   Lannister F-1/A     "$15,000,000 Units 3,000,000 Units"
+ *
+ * The company name sits between the two numbers in one and not the other,
+ * which is why `unitHeader` -- written against Lannister alone -- matched 1 of
+ * 94 covers and left Deal Size blank on almost every row the page shows.
+ *
+ * What does NOT vary is the arithmetic: the aggregate IS the count times the
+ * price. 10,000,000 x $10.00 = $100,000,000. 3,000,000 x $5.00 (the midpoint
+ * of that cover's $4-$6 range) = $15,000,000. So instead of guessing where the
+ * numbers sit, this accepts a count only when some dollar figure on the cover
+ * AGREES with it. Two independent numbers that multiply out is a far stronger
+ * claim than either one's position.
+ *
+ * ── AND IT REFUSES THE THREE DISTRACTORS THE SAME COVER CARRIES ───────────
+ * Three Lions' cover also says 1,500,000 units (the underwriter's
+ * over-allotment option), 11,500,000 units (the with-option total) and
+ * 10,400,000 units ("outstanding after this offering and private placement").
+ * None of those multiplies to a dollar figure printed on the cover, and the
+ * last is refused by the disqualifying-context test as well.
+ *
+ * FIRST AGREEING PAIR IN DOCUMENT ORDER WINS, because the masthead comes
+ * first -- before the over-allotment discussion that could, on some cover,
+ * manufacture a second agreeing pair.
+ */
+const AGGREGATE_DOLLARS = /\$\s?([\d,]{6,})(?!\s*(?:per|\/))/g;
+const COUNTED_SECURITY = /([\d,]{5,})\s+(?:units|Units|shares|ADSs)/g;
+/** Rounding slack. A cover states a round aggregate; this is not a fuzzy match. */
+const AGGREGATE_TOLERANCE = 0.005;
+
+function sharesFromAggregate(
+  cover: string,
+  low: number | null,
+  high: number | null
+): number | null {
+  if (low === null && high === null) return null;
+  // LOW, MID AND HIGH ARE ALL LEGITIMATE. A cover may state the aggregate at
+  // either end of the range or at the midpoint, and which one it chose is not
+  // something to guess -- any of the three agreeing is the corroboration.
+  const prices = [...new Set([low, high, low !== null && high !== null ? (low + high) / 2 : null])]
+    .filter((p): p is number => p !== null && p > 0);
+  if (!prices.length) return null;
+
+  const dollars: number[] = [];
+  AGGREGATE_DOLLARS.lastIndex = 0;
+  let d: RegExpExecArray | null;
+  while ((d = AGGREGATE_DOLLARS.exec(cover)) !== null && dollars.length < 40) {
+    dollars.push(Number(d[1].replace(/,/g, "")));
+  }
+  if (!dollars.length) return null;
+
+  COUNTED_SECURITY.lastIndex = 0;
+  let c: RegExpExecArray | null;
+  while ((c = COUNTED_SECURITY.exec(cover)) !== null) {
+    const n = Number(c[1].replace(/,/g, ""));
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const at = c.index;
+    const context = cover.slice(Math.max(0, at - CONTEXT_BEFORE), at + CONTEXT_AFTER);
+    if (DISQUALIFYING_CONTEXT.test(context)) continue;
+    for (const price of prices) {
+      const expected = n * price;
+      if (dollars.some((t) => Math.abs(t - expected) <= expected * AGGREGATE_TOLERANCE)) {
+        return n;
+      }
+    }
+  }
+  return null;
+}
+
+function parseSharesOffered(
+  cover: string,
+  low: number | null = null,
+  high: number | null = null
+): number | null {
   for (const re of SHARE_COUNT_PATTERNS) {
     const m = re.exec(cover);
     if (!m || m.index === undefined) continue;
@@ -179,7 +264,9 @@ function parseSharesOffered(cover: string): number | null {
     if (DISQUALIFYING_CONTEXT.test(context)) continue;
     return n;
   }
-  return null;
+  // NO ANCHOR MATCHED. Fall back to the arithmetic cross-check, which is what
+  // covers the SPAC mastheads whose wording no anchor can follow.
+  return sharesFromAggregate(cover, low, high);
 }
 
 /**
@@ -237,7 +324,10 @@ export function parseCoverTerms(text: string, sic: string | null): IpoCoverTerms
     }
   }
 
-  const shares = parseSharesOffered(cover);
+  // THE PRICE IS RESOLVED FIRST AND PASSED IN, because the aggregate
+  // cross-check needs it: a count is accepted when count x price equals a
+  // dollar figure printed on the same cover.
+  const shares = parseSharesOffered(cover, low, high);
 
   return {
     priceRangeLow: low,
