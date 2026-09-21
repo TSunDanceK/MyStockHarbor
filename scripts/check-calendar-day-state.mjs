@@ -170,5 +170,45 @@ console.log("\n4. THE MUTANTS — each removes one guard and must break somethin
   );
 }
 
+// ── 5. THE PART THAT ACTUALLY REGRESSED ───────────────────────────────────
+// Sections 1-4 test a module. The module was never the problem: #483's signals
+// were correct, exported, and READ BY NOTHING. So this section asserts the
+// CALL SITE, because a resolver nobody calls fails exactly the way a missing
+// resolver does and passes every test above while doing it.
+console.log("\n5. THE PAGE CONSUMES IT — the assertion the last two fixes lacked");
+{
+  const PAGE = path.join(process.cwd(), "app/earnings-calendar/page.tsx");
+  const src = fs.readFileSync(PAGE, "utf8");
+
+  check("the page imports the resolver",
+    /from "@\/lib\/server\/calendarDayState"/.test(src),
+    "a resolver nobody calls is indistinguishable from no resolver");
+  check("...and calls it",
+    /resolveCalendarDay\(/.test(src));
+  check("...feeding it the month visibility #483 shipped and nothing read",
+    /monthVisibility:\s*getMonthVisibility\(/.test(src),
+    "this is the signal whose absence from the page WAS the bug");
+  check("...and the completeness flag",
+    /complete:\s*dateComplete/.test(src));
+
+  // THE REGRESSION ITSELF, spelled as the thing to stay absent. Any resurrection
+  // of a count-shaped branch on usListedCount is the bug returning.
+  const bareEmptiness = /dayData\.usListedCount\s*>\s*0\s*\?/.test(src);
+  check("the bare emptiness test is GONE and must not come back",
+    !bareEmptiness,
+    "`dayData.usListedCount > 0 ? quiet : quiet` is the exact line that undid #483");
+
+  // A renderable branch per state, so a new state cannot be added and silently
+  // fall through to whichever branch happens to be last.
+  check("every non-listed state reaches a message rather than a blank",
+    ["none-scheduled", "none-us-listed", "unavailable"].every((k) =>
+      typeof m.dayStateMessage(
+        k === "unavailable" ? { kind: k, reason: "month-unread" }
+        : k === "none-us-listed" ? { kind: k, totalCandidates: 1 }
+        : { kind: k }
+      ) === "string"
+    ));
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);
