@@ -204,46 +204,76 @@ for (const record of ingest.records) {
 
 console.log(`\n   covers re-fetched with text: ${fetched}\n`);
 
-// ── THE EVIDENCE, one filer at a time ─────────────────────────────────────
-for (const r of rows) {
+fs.mkdirSync("data/sec", { recursive: true });
+const payload = { probedAt: NOW.toISOString(), walked: [FROM, TO], rows };
+fs.writeFileSync("data/sec/ipo-shares-probe.json", JSON.stringify(payload));
+
+// ── THE RAW BLOCK GOES FIRST, AND THAT IS NOT A STYLE CHOICE ──────────────
+// The sandbox reads these runs through the Actions log API, which returns the
+// TAIL. A 200 KB JSON dump printed last pushes the report off the end and the
+// run has to be repeated to read its own findings -- which is what happened on
+// run 35582966306. Evidence and verdict come after it.
+console.log(`<<<RAW name=ipo-shares-probe.json bytes=${JSON.stringify(payload).length}>>>`);
+console.log(JSON.stringify(payload));
+console.log(`<<<ENDRAW name=ipo-shares-probe.json>>>`);
+
+// ── THE EVIDENCE ──────────────────────────────────────────────────────────
+// Only the covers where the shipped rule and the anchored candidates DISAGREE,
+// plus three where they agree. A dump of every filer is unreadable, and the
+// agreeing cases are the negative control: a candidate that "fixes" the
+// disagreements by matching nothing would look identical here without them.
+const disagree = rows.filter((r) =>
+  Object.values(r.candidateHits).some((v) => v !== null && v !== r.shippedShares)
+);
+const agree = rows.filter((r) => !disagree.includes(r)).slice(0, 3);
+
+const dump = (r, heading) => {
   const deal = r.impliedDealSize === null ? "—" : `$${(r.impliedDealSize / 1e6).toFixed(1)}M`;
   console.log("─".repeat(78));
-  console.log(`${r.company.slice(0, 50)}  ·  CIK ${r.cik}  ·  ${r.form} ${r.date}  ·  SIC ${r.sic ?? "?"}`);
-  console.log(`   SHIPPED: ${r.shippedShares === null ? "null" : r.shippedShares.toLocaleString()} via ${r.shippedWhich}`);
-  console.log(`   price ${r.priceLow ?? "—"}-${r.priceHigh ?? "—"}  ->  implied deal size ${deal}`);
+  console.log(`${heading} ${r.company.slice(0, 44)}  ·  ${r.form} ${r.date}  ·  SIC ${r.sic ?? "?"}`);
+  console.log(`   SHIPPED ${r.shippedShares === null ? "null" : r.shippedShares.toLocaleString()} via ${r.shippedWhich}   price ${r.priceLow ?? "—"}-${r.priceHigh ?? "—"}  deal ${deal}`);
   for (const [name, v] of Object.entries(r.candidateHits)) {
-    console.log(`   candidate ${name.padEnd(22)} ${v === null ? "—" : v.toLocaleString()}`);
+    console.log(`   cand ${name.padEnd(20)} ${v === null ? "—" : v.toLocaleString()}`);
   }
-  console.log(`   occurrences on the cover (${r.occurrences.length}):`);
-  for (const o of r.occurrences) {
-    console.log(`      ${String(o.value).padStart(12)} ${o.noun.padEnd(6)} ${o.saysOutstanding ? "[OUTSTANDING]" : "             "} …${o.context}…`);
+  for (const o of r.occurrences.slice(0, 6)) {
+    console.log(`      ${String(o.value).padStart(12)} ${o.noun.padEnd(6)} ${o.saysOutstanding ? "[OUTSTANDING]" : "             "} …${o.context.slice(0, 150)}…`);
   }
-}
+};
 
-// ── THE AGGREGATE, which is what decides the rule ─────────────────────────
+console.log(`\n${"═".repeat(78)}\nDISAGREEMENTS (${disagree.length}) — where the anchored rules differ from the shipped one\n${"═".repeat(78)}`);
+for (const r of disagree) dump(r, "[DIFF]");
+console.log(`\n${"═".repeat(78)}\nCONTROLS (${agree.length}) — covers where they agree; a candidate that matched\nnothing would look like a fix without these\n${"═".repeat(78)}`);
+for (const r of agree) dump(r, "[SAME]");
+
+// ── THE AGGREGATE, WHICH IS WHAT DECIDES THE RULE ─────────────────────────
 console.log(`\n${"═".repeat(78)}\nAGGREGATE\n${"═".repeat(78)}`);
 const withShipped = rows.filter((r) => r.shippedShares !== null);
 const shippedOnOutstanding = rows.filter((r) =>
   r.occurrences.some((o) => o.value === r.shippedShares && o.saysOutstanding)
 );
-console.log(`   covers examined                       ${rows.length}`);
-console.log(`   shipped rule returned a number        ${withShipped.length}`);
-console.log(`   ...and that number's sentence says "outstanding"   ${shippedOnOutstanding.length}`);
-console.log(`   >>> THAT SECOND NUMBER IS THE FINDING. A count taken from the`);
-console.log(`   >>> post-offering share total is not an offering size, and it is`);
-console.log(`   >>> multiplied by the price midpoint to produce dealSize.`);
+console.log(`   covers examined                                     ${rows.length}`);
+console.log(`   shipped rule returned a number                      ${withShipped.length}`);
+console.log(`   ...and its sentence says "outstanding"              ${shippedOnOutstanding.length}   <<< THE FINDING`);
+console.log(`   >>> A count taken from the post-offering share total is not an`);
+console.log(`   >>> offering size, and it is multiplied by the price midpoint to`);
+console.log(`   >>> produce the dealSize the page renders.`);
+console.log(`   shipped branch A (shares of common stock)           ${rows.filter((r) => r.shippedWhich.startsWith("A")).length}`);
+console.log(`   shipped branch B (offering N shares)                ${rows.filter((r) => r.shippedWhich.startsWith("B")).length}`);
+console.log(`   shipped matched nothing                             ${rows.filter((r) => r.shippedWhich === "none").length}`);
 for (const name of Object.keys(CANDIDATES).filter((n) => CANDIDATES[n])) {
   const hits = rows.filter((r) => r.candidateHits[name] !== null);
-  const agreeWithShipped = hits.filter((r) => r.candidateHits[name] === r.shippedShares);
+  const onOutstanding = hits.filter((r) =>
+    r.occurrences.some((o) => o.value === r.candidateHits[name] && o.saysOutstanding)
+  );
   console.log(
-    `   candidate ${name.padEnd(22)} matched ${String(hits.length).padStart(3)}/${rows.length}` +
-      `   agrees with shipped on ${agreeWithShipped.length}`
+    `   cand ${name.padEnd(20)} matched ${String(hits.length).padStart(3)}/${rows.length}` +
+      `   on an "outstanding" sentence: ${onOutstanding.length}`
   );
 }
-
-fs.mkdirSync("data/sec", { recursive: true });
-fs.writeFileSync("data/sec/ipo-shares-probe.json", JSON.stringify({ probedAt: NOW.toISOString(), walked: [FROM, TO], rows }));
-console.log(`\n<<<RAW name=ipo-shares-probe.json bytes=0>>>`);
-console.log(JSON.stringify({ probedAt: NOW.toISOString(), walked: [FROM, TO], rows }, null, 2).slice(0, 400000));
-console.log(`<<<ENDRAW name=ipo-shares-probe.json>>>`);
+// COVERAGE IS ONLY HALF THE QUESTION. A rule that matches 40% and is right is
+// better than one that matches 100% and is sometimes the wrong sentence --
+// hasTerms() treats a null share count as "no terms" only when the price is
+// ALSO null, so a miss costs a column, not a row.
+const anyCandidate = rows.filter((r) => Object.values(r.candidateHits).some((v) => v !== null));
+console.log(`   at least one anchored candidate matched             ${anyCandidate.length}/${rows.length}`);
 console.log(`\nDONE ${new Date().toISOString()}`);
