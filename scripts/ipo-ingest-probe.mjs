@@ -28,6 +28,7 @@
 //   dispatch relay.yml, task `ipo-ingest`
 //   inputs: symbols = "<from>[..<to>]" as yyyymmdd, blank = the last 7 days
 import fs from "node:fs";
+import zlib from "node:zlib";
 
 import { ingestIpoWindow } from "../lib/server/ipoIngest.ts";
 import { mergeIpoRecords, validateStored, windowStartFor } from "../lib/server/ipoRecordMerge.ts";
@@ -69,16 +70,20 @@ const result = await ingestIpoWindow({
   now: NOW,
 });
 
+// ── THE WALK, SUMMARISED ──────────────────────────────────────────────────
+// One line per date is right for a fortnight and noise for a quarter, and this
+// report is read through an Actions log tail measured in LINES -- 82 date lines
+// push the funnel and the tables out of it. Failures are always named
+// individually, because those are the ones a summary would hide.
+const parsedDays = result.days.filter((d) => d.outcome === "parsed");
+const absentDays = result.days.filter((d) => d.outcome === "absent");
+const failedDays = result.days.filter((d) => d.outcome === "failed");
 console.log(`\n${"═".repeat(78)}\nTHE WALK\n${"═".repeat(78)}`);
-for (const d of result.days) {
-  const extra =
-    d.outcome === "parsed"
-      ? `${String(d.indexRows).padStart(5)} rows · ${String(d.filers).padStart(3)} filers · ${d.noticesSkipped} notice(s) skipped`
-      : d.outcome === "absent"
-        ? `no index published (HTTP ${d.status}) — weekend or holiday`
-        : `HTTP ${d.status} — ${d.reason}`;
-  console.log(`   ${d.date}  ${d.outcome.padEnd(7)} ${String(d.ms).padStart(6)}ms  ${extra}`);
-}
+console.log(`   dates walked      ${result.days.length}  (${result.days[0]?.date} .. ${result.days.at(-1)?.date})`);
+console.log(`   parsed            ${parsedDays.length}   rows ${parsedDays.reduce((a, d) => a + (d.indexRows ?? 0), 0)} · filers ${parsedDays.reduce((a, d) => a + (d.filers ?? 0), 0)}`);
+console.log(`   absent            ${absentDays.length}   (weekends and market holidays — no index is published)`);
+console.log(`   FAILED            ${failedDays.length}`);
+for (const d of failedDays) console.log(`      ${d.date}  HTTP ${d.status} — ${d.reason}`);
 console.log(`\n   filers touched          ${String(result.filersTouched).padStart(5)}`);
 console.log(`   submissions read        ${String(result.submissionsRead).padStart(5)}`);
 console.log(`   submissions FAILED      ${String(result.submissionsFailed).padStart(5)}`);
@@ -93,9 +98,8 @@ console.log(`   SEC requests            ${String(result.requests).padStart(5)}`)
 console.log(`   stopped on deadline     ${result.stoppedOnDeadline}`);
 console.log(`   elapsed                 ${String(result.ms).padStart(5)}ms`);
 
-const failed = result.days.filter((d) => d.outcome === "failed");
-if (failed.length) {
-  console.log(`\n   >>> ${failed.length} day(s) FAILED. The watermark would stop at ${result.lastIndexDate ?? "(nothing)"}.`);
+if (failedDays.length) {
+  console.log(`\n   >>> ${failedDays.length} day(s) FAILED. The watermark would stop at ${result.lastIndexDate ?? "(nothing)"}.`);
 }
 
 // ── THE DOCUMENT THAT WOULD BE WRITTEN ────────────────────────────────────
@@ -195,40 +199,23 @@ console.log(
 );
 
 fs.mkdirSync("data/sec", { recursive: true });
-const payload = {
-  probedAt: NOW.toISOString(),
-  walked: [FROM, TO],
-  days: result.days,
-  counters: {
-    filersTouched: result.filersTouched,
-    submissionsRead: result.submissionsRead,
-    submissionsFailed: result.submissionsFailed,
-    coversFetched: result.coversFetched,
-    coversParsed: result.coversParsed,
-    noticesSkipped: result.noticesSkipped,
-    historyTruncated: result.historyTruncated,
-    requests: result.requests,
-    ms: result.ms,
-  },
-  document: { records: doc.records.length, bytes, valid, lastIndexDate: doc.lastIndexDate },
-  funnel,
-  upcoming,
-  recent,
-};
 fs.writeFileSync("data/sec/ipo-ingest-probe.json", JSON.stringify(payload));
 fs.writeFileSync("data/sec/ipo-ingest-document.json", JSON.stringify(doc));
-console.log(`\n<<<RAW name=ipo-ingest-probe.json bytes=0>>>`);
-console.log(JSON.stringify(payload, null, 2).slice(0, 120000));
-console.log(`<<<ENDRAW name=ipo-ingest-probe.json>>>`);
 
-// ── THE DOCUMENT ITSELF, COMPACT, IN ITS OWN BLOCK ────────────────────────
-// Separate and unindented on purpose. The summary above is pretty-printed for
-// reading; the document is what scripts/local-upstash.mjs is seeded from, and
-// pretty-printing 198 records would push it past the log's practical limit and
-// truncate it into invalid JSON -- which reads as a parse bug rather than as a
-// truncation. The sandbox cannot reach the Actions artifact blob host, so this
-// log block is the only way the records get back to where the render runs.
-console.log(`\n<<<RAW name=ipo-ingest-document.json bytes=${JSON.stringify(doc).length}>>>`);
-console.log(JSON.stringify(doc));
-console.log(`<<<ENDRAW name=ipo-ingest-document.json>>>`);
+// ── THE DOCUMENT, GZIPPED, AS ONE LINE ────────────────────────────────────
+// The sandbox reads these runs through the Actions log API, which returns a
+// TAIL measured in lines, and cannot reach the artifact blob host at all. So
+// the log is the only route the records have back to where the render runs --
+// and a 250 KB pretty-printed block is both unreadable and large enough to
+// push the human report out of any tail worth fetching.
+//
+// gzip+base64 is ~10x smaller and exactly one line, so `tail` gets the report
+// AND the payload in the same fetch. Decoded with:
+//
+//   base64 -d <file> | gunzip > document.json
+const gz = zlib.gzipSync(Buffer.from(JSON.stringify(doc), "utf8")).toString("base64");
+console.log(`\n<<<GZIP name=ipo-ingest-document.json.gz bytes=${gz.length} records=${doc.records.length}>>>`);
+console.log(gz);
+console.log(`<<<ENDGZIP name=ipo-ingest-document.json.gz>>>`);
+
 console.log(`\nDONE ${new Date().toISOString()}`);
