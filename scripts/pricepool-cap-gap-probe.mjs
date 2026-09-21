@@ -81,8 +81,27 @@ const readJson = (n) => {
   try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; }
 };
 
-/** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
-function entriesOf(doc) {
+// ── TWO READERS, DELIBERATELY, AND THE DIFFERENCE IS THE MEASUREMENT ──────
+//
+// The dump wraps each dataset, and it does NOT wrap them all the same way:
+//
+//   price-pool.json   { dumpedAt, dataset, key, readAs, entries, value  }
+//   the other three   { dumpedAt, dataset, key,         present, values }
+//
+// `.value` singular against `.values` plural. The consumer's reader looks for
+// `.value`, misses `values`, falls through to `?? doc` and then enumerates the
+// WRAPPER's own five keys as if they were ticker symbols -- which is why three
+// files of 176 KB, 650 KB and 680 KB each reported exactly five entries named
+// DUMPEDAT, DATASET, KEY, PRESENT and VALUES (run 35631581348).
+//
+// So the probe keeps BOTH readers. consumerEntriesOf is the verbatim shape of
+// the one in due-strip-universe.mjs and shows what the shipped code sees;
+// entriesOf also accepts `.values` and shows what is actually in the file.
+// Reporting only the corrected reading would hide the size of the gap, and
+// reporting only the consumer's would repeat its mistake.
+//
+// THIS IS NOT A FIX. due-strip-universe.mjs is untouched.
+function consumerEntriesOf(doc) {
   const v = doc?.value ?? doc;
   if (Array.isArray(v)) {
     const out = [];
@@ -92,6 +111,21 @@ function entriesOf(doc) {
   if (v && typeof v === "object") return Object.entries(v).map(([k, e]) => [String(k).toUpperCase(), e]);
   return [];
 }
+
+/** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
+function entriesOf(doc) {
+  const v = doc?.value ?? doc?.values ?? doc;
+  if (Array.isArray(v)) {
+    const out = [];
+    for (const e of v) { const sym = e?.symbol ?? e?.ticker; if (sym) out.push([String(sym).toUpperCase(), e]); }
+    return out;
+  }
+  if (v && typeof v === "object") return Object.entries(v).map(([k, e]) => [String(k).toUpperCase(), e]);
+  return [];
+}
+
+const inspectRaw = (raw) => { try { return String(capOfSafe(raw)); } catch (e) { return `threw: ${e.message}`; } };
+const capOfSafe = (raw) => capOf(raw);
 
 const parsed = (x) => {
   if (typeof x === "string") { try { return JSON.parse(x); } catch { return null; } }
@@ -335,8 +369,21 @@ for (const file of CAP_SOURCES) {
   describe(doc);
   // AND WHAT THE READER MADE OF IT, side by side with the above, so a
   // disagreement between the file and the reader is visible in one place.
-  const got = entriesOf(doc);
-  console.log(`    entriesOf() read ${got.length} entr${got.length === 1 ? "y" : "ies"}: [${got.slice(0, 10).map(([k]) => k).join(",")}]`);
+  const mine = entriesOf(doc);
+  const theirs = consumerEntriesOf(doc);
+  console.log(`    the file holds        ${String(mine.length).padStart(5)} entries: [${mine.slice(0, 8).map(([k]) => k).join(",")}]`);
+  console.log(`    the CONSUMER's reader ${String(theirs.length).padStart(5)} entries: [${theirs.slice(0, 8).map(([k]) => k).join(",")}]` +
+    (mine.length !== theirs.length ? "   <-- DISAGREEMENT" : ""));
+  if (typeof doc?.present === "number") console.log(`    the dump's own \`present\` count: ${doc.present}`);
+  // AND WHAT ONE ROW LOOKS LIKE, so "does this source carry a cap at all" is
+  // answerable from the run rather than from the file name.
+  if (mine.length) {
+    const [sym, raw] = mine[0];
+    const obj = parsed(raw);
+    console.log(`    sample row ${sym}: ${obj && typeof obj === "object" ? `keys=[${Object.keys(obj).join(",")}]` : `typeof ${typeof raw}`}`);
+    const nv = inspectRaw(raw);
+    console.log(`      capOf() → ${nv}`);
+  }
 }
 
 // ── report ────────────────────────────────────────────────────────────────
