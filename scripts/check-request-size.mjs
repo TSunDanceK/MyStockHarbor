@@ -1,5 +1,13 @@
-// The pickers payload write stays under Upstash's 10MB REQUEST limit, and the
-// chunks actually go as separate requests.
+// Every whole-collection Redis write stays under Upstash's 10MB REQUEST limit,
+// and the pickers chunks actually go as separate requests.
+//
+// SCOPE, AND WHY IT WIDENED. This file used to read pickersBuilder.ts and
+// chunkByBytes.ts and nothing else, while its own §5 note said "fix the
+// pattern, not just the one site that is currently firing". The two SEC writes
+// -- secManifest.ts and secTickerMap.ts -- are each a single unchunked SET of a
+// whole collection, which is precisely the shape §5 is about, and neither was
+// covered. A guard whose scope is narrower than the defect it names is how the
+// next site gets to fail the same way; §5 below is the fix for that.
 //
 // THE FAILURE THIS GUARDS. Upstash rejected the payload write three times --
 // 2026-09-05, 09-07 and 09-10, all at 07:21-07:22 UTC. An over-limit operation
@@ -373,7 +381,13 @@ check(
 // THE SERIALIZER MATCHES THE CLIENT'S. defaultSerializer passes strings
 // through; a blind JSON.stringify would double-quote an already-serialized
 // value and report escaping the real request never applies.
-const measureFn = grab(builder, "pickersBuilder.ts", "setRequestBytes");
+//
+// READ FROM chunkByBytes.ts, NOT FROM THE BUILDER. The reconstruction lived
+// privately in pickersBuilder.ts until the SEC writes needed the same one, and
+// a copied reconstruction is
+// claude/traps/a-reconstruction-cannot-corroborate-its-source.md -- two copies
+// drift and the drifted one is the one being read when the email arrives.
+const measureFn = grab(helper, "chunkByBytes.ts", "setRequestBytes");
 check(
   "the reconstruction passes strings through, as defaultSerializer does",
   measureFn !== null && /typeof value === "string" \? value : JSON\.stringify\(value\)/.test(measureFn),
@@ -381,10 +395,207 @@ check(
     "four values and must not invent inflation the client would not produce"
 );
 check(
+  "there is ONE reconstruction, and the builder imports it rather than keeping its own",
+  grab(builder, "pickersBuilder.ts", "setRequestBytes") === null &&
+    /setRequestBytes,/.test(builder),
+  "a second copy in the builder would pass this section while the SEC writes " +
+    "measured themselves with a different one"
+);
+check(
+  "the no-TTL command is measurable, because the SEC writes have no TTL",
+  measureFn !== null &&
+    /ttlSeconds === undefined/.test(measureFn) &&
+    /\["set", key, serialized\]/.test(measureFn),
+  'secManifest.ts says NO TTL, EVER -- appending `"ex", undefined` would report ' +
+    "bytes Upstash never receives, which is a reconstruction of something else"
+);
+check(
   "the reduced-payload fallback is still measured on its own single write",
   /logPayloadWriteSize\(entry, "reduced"\)/.test(builder),
   "it is the write that lands on a day the full one breaches, and it is still " +
     "a single v9 value, so #427's original question applies to it unchanged"
+);
+
+// ── 5. THE SEC WRITES, WHICH THIS FILE USED NOT TO LOOK AT ─────────────────
+console.log("\n5. The SEC state writes are measured and guarded, not just the pickers one");
+
+// WHY THIS SECTION EXISTS. secManifest.ts and secTickerMap.ts each do a single
+// unchunked `redis.set` of a whole collection -- the pickersBuilder shape
+// before #428 -- and neither appeared anywhere in this file. The header of
+// secManifest.ts asserted the size was "comfortably inside" the ceiling; that
+// assertion was never instrumented and nothing would have noticed if it stopped
+// being true. §5 of claude/upstash-request-size-2026-09-11.md said to fix the
+// pattern rather than the one firing site, and this is the missing half of it.
+const secManifest = readCodeOnly("lib/server/secManifest.ts");
+const secTickers = readCodeOnly("lib/server/secTickerMap.ts");
+
+const writeManifestFn = grab(secManifest, "secManifest.ts", "writeManifest");
+if (!writeManifestFn) {
+  console.error("FAIL: could not extract writeManifest — this section would measure nothing.");
+  process.exit(1);
+}
+
+check(
+  "writeManifest measures the request body before it sends one",
+  /trySetRequestBytes\(\s*SEC_MANIFEST_KEY/.test(writeManifestFn),
+  "an over-limit SET returns an error rather than truncating, and the catch " +
+    "below it swallows that — so without this the only detector is an Upstash " +
+    "email naming a 15-minute window and no key"
+);
+check(
+  "it measures the NO-TTL command, which is the one it actually sends",
+  /trySetRequestBytes\(\s*SEC_MANIFEST_KEY,\s*value\s*\)/.test(writeManifestFn) &&
+    !/trySetRequestBytes\(\s*SEC_MANIFEST_KEY,[^)]*,[^)]*\)/.test(writeManifestFn),
+  'the file says NO TTL, EVER; passing a ttl here would measure `["set", k, v, ' +
+    '"ex", n]` against a request that never carries it'
+);
+check(
+  "it refuses an over-budget write rather than firing it",
+  /bodyBytes > REQUEST_BYTE_BUDGET/.test(writeManifestFn) &&
+    /return false;/.test(writeManifestFn),
+  "the data outcome is identical either way — no write, previous value stands — " +
+    "so the only thing refusing changes is that it is LOUD. Returning false is " +
+    "what every caller already treats as 'not persisted'"
+);
+check(
+  "the refusal is an error, not a warn or a log",
+  /console\.error\(/.test(writeManifestFn),
+  "a warn among 40 lines of job output is a line nobody greps for"
+);
+check(
+  "the manifest write is not pipelined or issued concurrently",
+  !/\.pipeline\(/.test(writeManifestFn) && !/Promise\.all/.test(writeManifestFn),
+  "same reason as §2 — enableAutoPipelining defaults to TRUE, so a concurrent " +
+    "write collapses into one body with whatever else is in flight"
+);
+check(
+  "the ticker-map store is measured and guarded the same way",
+  /trySetRequestBytes\(\s*TICKER_REDIS_KEY/.test(secTickers) &&
+    /bodyBytes > REQUEST_BYTE_BUDGET/.test(secTickers) &&
+    /console\.error\(/.test(secTickers),
+  "lower risk on cadence (weekly, not daily) but the larger collection by 12x — " +
+    "risk-ranking a write out of the guard is how the ranking stops being checked"
+);
+check(
+  "both measurements come from the shared helper, not a local copy",
+  /from "\.\/chunkByBytes"/.test(secManifest) && /from "\.\/chunkByBytes"/.test(secTickers),
+  "a third and fourth copy of setRequestBytes would each be right on the day " +
+    "they were written and drift separately after"
+);
+
+// ── THE PROJECTION, AND THE BOUND IT USES ──────────────────────────────────
+//
+// Sized against the TICKER MAP, not against ANALYSIS_UNIVERSE_CAP, and that is
+// the load-bearing choice. `manifest.symbols` is a high-water mark: nothing
+// deletes an entry, so the universe cap is not a bound on it at all. It is
+// already past PRESET_UNIVERSE + MAX_DYNAMIC_UNIVERSE_SIZE.
+const num = (src, name) =>
+  Number((src.match(new RegExp(`${name} = ([0-9_]+)`)) ?? [])[1]?.replace(/_/g, "") ?? 0);
+
+const measuredSymbols = num(secManifest, "SEC_MANIFEST_SYMBOLS_MEASURED");
+const entryCeiling = num(secManifest, "SEC_MANIFEST_ENTRY_CEILING");
+const tickerCount = num(secTickers, "TICKER_MAP_COUNT_MEASURED");
+const presetCount = (
+  readCodeOnly("lib/server/presetUniverse.ts").match(/"[A-Z.\-]+"/g) ?? []
+).length;
+const dynamicCap = num(readCodeOnly("lib/server/dynamicUniverseCache.ts"), "MAX_DYNAMIC_UNIVERSE_SIZE");
+
+if (!measuredSymbols || !entryCeiling || !tickerCount || !dynamicCap) {
+  console.error(
+    `FAIL: could not read the measured manifest size (${measuredSymbols}), its ceiling ` +
+      `(${entryCeiling}), the ticker count (${tickerCount}) or the dynamic cap ` +
+      `(${dynamicCap}) — the projection below would be invented.`
+  );
+  process.exit(1);
+}
+
+check(
+  "the measurements carry their own provenance",
+  /SEC_MANIFEST_MEASURED_AT = "\d{4}-\d{2}-\d{2}"/.test(secManifest) &&
+    /SEC_MANIFEST_MEASURED_SOURCE =/.test(secManifest) &&
+    /TICKER_MAP_MEASURED_AT = "\d{4}-\d{2}-\d{2}"/.test(secTickers),
+  "a bare 822 with no history is exactly as bad as a typed one — this file has " +
+    "already been bitten by a residual nobody could date"
+);
+check(
+  "the entry ceiling is the ticker map, not the universe cap",
+  entryCeiling >= tickerCount && entryCeiling > presetCount + dynamicCap,
+  `ceiling ${entryCeiling} against a universe cap of ${presetCount}+${dynamicCap}=` +
+    `${presetCount + dynamicCap} — and the manifest ALREADY holds ${measuredSymbols}, ` +
+    `which is past that cap. Sizing this write against the universe would size it ` +
+    `against a number it has already exceeded`
+);
+check(
+  "the measured entry count has outgrown the universe cap, which is why the ceiling differs",
+  measuredSymbols > presetCount + dynamicCap,
+  `${measuredSymbols} entries against a ${presetCount + dynamicCap} universe — ` +
+    `nothing prunes manifest.symbols, so this gap only widens. If this ever goes ` +
+    `red because the numbers converged, something started deleting entries and ` +
+    `the ceiling argument above needs rewriting, not the constant`
+);
+
+// THE REAL CHUNKER AND THE REAL ENTRY SHAPE, rather than arithmetic here.
+// emptyEntry() is lifted from the module so the per-entry floor is the module's
+// own field set -- the same construction check-redis-bandwidth.mjs uses to keep
+// a projection from drifting away from the code it projects.
+const emptyEntryFn = grab(secManifest, "secManifest.ts", "emptyEntry");
+if (!emptyEntryFn) {
+  console.error("FAIL: could not extract emptyEntry — the per-entry floor would be a guess.");
+  process.exit(1);
+}
+const entryMod = await import(
+  `data:text/javascript;base64,${Buffer.from(
+    ts.transpileModule(
+      // transpileModule ERASES the annotations; a regex that tried to would eat
+      // `lastAccession: null` along with `cik: string | null`, which it did on
+      // the first attempt — the property values ARE colon-separated too.
+      `const SEC_SCORE_VERSION = 1;\n${emptyEntryFn}\nexport { emptyEntry };`,
+      { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
+    ).outputText
+  ).toString("base64")}`
+);
+const floorEntryBytes = Buffer.byteLength(
+  JSON.stringify({ AAAA: entryMod.emptyEntry("0000320193", "Nasdaq") }),
+  "utf8"
+);
+
+const escaping = Number((helper.match(/MEASURED_ESCAPING_INFLATION = ([0-9.]+)/) ?? [])[1] ?? 0);
+check(
+  "the escaping factor used for projections is measured, with provenance",
+  escaping > 1 &&
+    /MEASURED_ESCAPING_AT = "\d{4}-\d{2}-\d{2}"/.test(helper) &&
+    /MEASURED_ESCAPING_SOURCE =/.test(helper),
+  `x${escaping} — §4 of the brief reasoned about "a 15% inflation" and said ` +
+    `plainly it was inference. #428's log reports the real figure every build`
+);
+
+const floorAtToday = Math.round(floorEntryBytes * measuredSymbols * escaping);
+const floorAtCeiling = Math.round(floorEntryBytes * entryCeiling * escaping);
+
+check(
+  "at the measured entry count the manifest write is well inside the budget",
+  floorAtToday < budget / 2,
+  `${measuredSymbols} entries x ${floorEntryBytes}B floor = ` +
+    `${(floorAtToday / 1024 / 1024).toFixed(2)}MB of body against a ` +
+    `${(budget / 1024 / 1024).toFixed(0)}MB budget — the header's "comfortably inside" ` +
+    `holds, and it is now a number rather than a sentence`
+);
+check(
+  "a populated entry is bigger than the floor, so the floor is not read as the answer",
+  floorEntryBytes > 0 && floorEntryBytes < 1000,
+  `${floorEntryBytes}B is emptyEntry() — every nulled field above fills in as the ` +
+    `pipeline runs (contentHash, accession, the w/y/c staleness trio), so a real ` +
+    `manifest is a multiple of this. The floor is what can be derived from source ` +
+    `WITHOUT guessing; the live figure comes from writeManifest's own log line`
+);
+check(
+  "the guard is what covers the ceiling, because the projection there is not comfortable",
+  floorAtCeiling > 0 && /bodyBytes > REQUEST_BYTE_BUDGET/.test(writeManifestFn),
+  `${entryCeiling} entries x ${floorEntryBytes}B floor = ` +
+    `${(floorAtCeiling / 1024 / 1024).toFixed(2)}MB of body BEFORE any field is ` +
+    `populated, against a ${(budget / 1024 / 1024).toFixed(0)}MB budget and a ` +
+    `${(planLimit / 1024 / 1024).toFixed(0)}MB limit. This is the assertion that ` +
+    `says the refusal branch is load-bearing rather than defensive decoration`
 );
 
 console.log(

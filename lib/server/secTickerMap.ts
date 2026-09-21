@@ -24,6 +24,11 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Redis } from "@upstash/redis";
+import {
+  pctOfRequestLimit,
+  trySetRequestBytes,
+  REQUEST_BYTE_BUDGET,
+} from "./chunkByBytes";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 export const TICKER_FILE = "data/sec/company-tickers.json";
@@ -151,6 +156,18 @@ export function parseTickerFile(text: string): { map: Map<string, TickerEntry>; 
  * Measured 2026-09-13: 10,426 tickers.
  */
 export const MIN_EXPECTED_TICKERS = 5000;
+
+// THE UPPER FIGURE, AS DATA, for the same reason MIN_EXPECTED_TICKERS is here
+// rather than in a comment: scripts/check-request-size.mjs sizes the SEC writes
+// against it, and readCodeOnly would measure a blank line if it lived in prose.
+// 10,426 on 2026-09-13; 10,438 on 2026-09-21, so it drifts upward slowly rather
+// than being fixed -- which is exactly why the writes are measured per run and
+// not sized once against this.
+export const TICKER_MAP_COUNT_MEASURED = 10_438;
+export const TICKER_MAP_MEASURED_AT = "2026-09-21";
+export const TICKER_MAP_MEASURED_SOURCE =
+  'sec-daily-index in production at 04:00:16 UTC: {"tickerMapCount":10438,' +
+  '"symbolsWithExchange":10219,"tickerFileShape":"fields+data"}';
 const SENTINEL_TICKERS = ["AAPL", "MU", "PLAB"];
 
 export function validateTickerMap(map: Map<string, TickerEntry>): { ok: boolean; reason: string | null } {
@@ -439,6 +456,45 @@ export async function refreshTickerMap(
         withExchange: [...map.values()].filter((e) => e.exchange).length,
         map: Object.fromEntries(map),
       };
+
+      // ── THE SECOND UNCHUNKED WHOLE-COLLECTION WRITE, MEASURED ────────────
+      // This one carries EVERY ticker SEC publishes, not the analysis
+      // universe: 10,438 rows on the 2026-09-21 04:00 run against 822 in the
+      // manifest. It is the larger collection by an order of magnitude and the
+      // one with no cap at all -- its size is whatever SEC's file is that week.
+      // It is also far smaller per row ({cik, exchange} against a
+      // twenty-field SecManifestEntry), which is why it still lands around
+      // 0.6 MB rather than near the wall. Both facts are worth having as a
+      // number rather than as a comparison, because only one of them is stable.
+      //
+      // WEEKLY, so the cost of the extra stringify is irrelevant, and the
+      // refusal below costs a week's staleness at worst -- against a silent
+      // Upstash rejection that costs the same staleness and says nothing.
+      const measured = trySetRequestBytes(TICKER_REDIS_KEY, stored);
+      if (measured) {
+        const { valueBytes, bodyBytes } = measured;
+        const inflationPct =
+          valueBytes > 0 ? ((bodyBytes / valueBytes - 1) * 100).toFixed(1) : "0.0";
+        const line =
+          `[sec-tickers] store: ${map.size} tickers, ${valueBytes} bytes serialized value, ` +
+          `${bodyBytes} bytes request body (+${inflationPct}% escaping), ` +
+          `${pctOfRequestLimit(bodyBytes)} of the 10MB request limit`;
+        if (bodyBytes > REQUEST_BYTE_BUDGET) {
+          console.error(
+            `${line} -- REFUSED: over the ${REQUEST_BYTE_BUDGET}-byte budget. ` +
+              `The committed file stays the fallback and the next refresh retries.`
+          );
+          base.ok = false;
+          base.error =
+            `fetched and validated, but the store was refused: ${bodyBytes} bytes of ` +
+            `request body exceeds the ${REQUEST_BYTE_BUDGET}-byte budget`;
+          return base;
+        }
+        console.log(line);
+      } else {
+        console.warn(`[sec-tickers] store: ${map.size} tickers, size could not be measured`);
+      }
+
       try {
         await redis.set(TICKER_REDIS_KEY, stored);
       } catch (err) {
