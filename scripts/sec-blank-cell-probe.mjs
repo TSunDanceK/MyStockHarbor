@@ -56,9 +56,20 @@ const strip = (f) =>
 // The view is lifted with the extractor and the codec as ONE unit, the same way
 // scripts/lib/render-cards.mjs builds it, so the numbers printed under VIEW are
 // the numbers the cards are handed — not a second opinion about them.
+//
+// fxRates AND secCurrency ARE IN THE UNIT BECAUSE #479 PUT THEM THERE. The
+// view now computes growth in the filer's reporting currency, so
+// secEarningsView reads reportingCurrency, storedInReportingCurrency and
+// unitKeysFor. Without them this probe lifted a view that threw ReferenceError
+// on its first CALL -- after the header had printed -- which is precisely the
+// failure assertLiftIsClosed was added to catch, and it caught this one at
+// import time instead. scripts/lib/render-cards.mjs took the same two lines
+// for the same reason; a module the view reads has to be added to BOTH.
 const sec = await lift([
   fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"),
+  strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
   strip("lib/server/secEarningsView.ts"),
 ].join("\n"));
