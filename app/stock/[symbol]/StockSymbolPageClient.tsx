@@ -6,9 +6,9 @@ import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
-import LatestEarningsCard, {
-  type LatestEarningsData,
-} from "@/app/components/LatestEarningsCard";
+import LatestEarningsCard from "@/app/components/LatestEarningsCard";
+import type { SecEarningsSnapshot } from "@/lib/server/secEarningsSnapshot";
+import { isRetiredBlock } from "./retiredBlocks";
 import CompanyProfile, {
   type CompanyProfile as CompanyProfileData,
 } from "@/app/components/CompanyProfile";
@@ -114,7 +114,7 @@ type StockSymbolPageClientProps = {
   // echoed back on the /api/quote fetch below. "" / undefined means the feature
   // is unconfigured, and we send no header at all.
   pageToken?: string;
-  latestEarnings: LatestEarningsData;
+  earningsSnapshot: SecEarningsSnapshot;
   profile: CompanyProfileData | null;
   shareHistory: DilutionHistoryData | null;
   seed?: IndicatorSeed | null;
@@ -706,7 +706,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, latestEarnings, profile, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
@@ -855,6 +855,27 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
   }, [symbol]);
 
   useEffect(() => {
+    // HIDING THE BLOCK HAS TO STOP THE FETCH, or the hide costs what it saved.
+    //
+    // The section below is guarded by isRetiredBlock("analyst-ratings") and
+    // reaches no reader, but this effect ran on every load regardless and
+    // spent an FMP call per view on data nothing draws. That is not a
+    // theoretical cost: claude/fmp-bandwidth-97pct-2026-08-30.md has the plan
+    // at 97% of its allowance, and /stock/[symbol] is the most-crawled route
+    // on the site.
+    //
+    // ONE FLAG DECIDES BOTH. Reading the registry here rather than hardcoding
+    // `false` is what keeps them in step — un-register the block to bring it
+    // back and the data it needs comes back with it, in the same edit.
+    if (isRetiredBlock("analyst-ratings")) {
+      // NOT the loading state. `analystRatingLoading` left true would render
+      // every figure in the block as an em dash if it were ever un-hidden
+      // without this being revisited; false with a null payload is the state
+      // the block already knows how to draw ("unavailable right now").
+      setAnalystRatingLoading(false);
+      setAnalystRating(null);
+      return;
+    }
     let cancelled = false;
     async function loadAnalystRating() {
       setAnalystRatingLoading(true);
@@ -1022,7 +1043,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
               </div>
 
               {/* Earnings snapshot — sidebar */}
-              <LatestEarningsCard earnings={latestEarnings} symbol={symbol} />
+              <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} />
 
             </aside>
 
@@ -1114,75 +1135,94 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
               </section>
 
               {/* -- Analyst ratings & price targets (FMP) ------------ */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                <div style={sectionLabelStyle}>Analyst Ratings</div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
-                  <h2 style={sectionHeadingStyle}>{symbol} analyst consensus</h2>
-                  {!analystRatingLoading && analystRating?.consensusRating ? (
-                    <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
-                      {analystRating.consensusRating}
-                      {typeof analystRating.totalAnalysts === "number" ? ` · ${analystRating.totalAnalysts} analysts` : ""}
-                    </span>
-                  ) : null}
-                </div>
-                {!analystRatingLoading && !analystRating?.consensusRating && analystRating?.targetConsensus == null ? (
-                  <p style={{ margin: 0, fontSize: 13, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
-                ) : (
-                  <>
-                    {!analystRatingLoading ? (
-                      <div style={{ marginBottom: 18 }}>
-                        <AnalystTargetChart
-                          price={quote?.price ?? null}
-                          low={analystRating?.targetLow ?? null}
-                          avg={analystRating?.targetConsensus ?? analystRating?.targetMedian ?? null}
-                          high={analystRating?.targetHigh ?? null}
-                        />
-                      </div>
+              {/* HIDDEN, NOT REMOVED — the owner's standing rule, 2026-09-21.
+                  The whole block below still compiles and still knows how to
+                  draw itself; RETIRED_BLOCKS["analyst-ratings"] in
+                  ./retiredBlocks.ts is what stops it reaching a reader, and
+                  names the source (FMP /stable/grades-consensus and
+                  /price-target-summary, via /api/stock-analyst-rating), the
+                  date, and why there is no successor to move it to.
+
+                  THE SOURCE NOTE GOES DARK WITH IT, which is the point of
+                  hiding the SECTION rather than the figures inside it:
+                  claude/fmp-provider-attribution-inventory-2026-09-12.md §7
+                  is about exactly this line — "provided by Financial Modeling
+                  Prep when available" — surviving the data it describes and
+                  explaining an absence to a reader who can see nothing there.
+
+                  NOTHING RENDERS IN ITS PLACE. Same reversal as HiddenCard on
+                  the earnings page: no dashed placeholder, no apology. */}
+              {isRetiredBlock("analyst-ratings") ? null : (
+                <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                  <div style={sectionLabelStyle}>Analyst Ratings</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
+                    <h2 style={sectionHeadingStyle}>{symbol} analyst consensus</h2>
+                    {!analystRatingLoading && analystRating?.consensusRating ? (
+                      <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
+                        {analystRating.consensusRating}
+                        {typeof analystRating.totalAnalysts === "number" ? ` · ${analystRating.totalAnalysts} analysts` : ""}
+                      </span>
                     ) : null}
-                    <div className="valuationGrid">
-                      {[
-                        {
-                          label: "Avg Price Target",
-                          value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetConsensus ?? analystRating?.targetMedian),
-                          sub: (() => {
-                            const upside = computeUpsidePct(analystRating?.targetConsensus ?? analystRating?.targetMedian, quote?.price);
-                            return typeof upside === "number" ? `${upside >= 0 ? "+" : ""}${upside.toFixed(1)}% vs price` : null;
-                          })(),
-                        },
-                        { label: "High Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetHigh), sub: null },
-                        { label: "Low Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetLow), sub: null },
-                        { label: "Analyst Coverage", value: analystRatingLoading ? "—" : (typeof analystRating?.totalAnalysts === "number" ? `${analystRating.totalAnalysts}` : "—"), sub: null },
-                      ].map((item) => (
-                        <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                          <div style={miniLabelStyle}>{item.label}</div>
-                          <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
-                          {item.sub ? <div style={{ marginTop: 2, fontSize: 13, opacity: 0.55 }}>{item.sub}</div> : null}
+                  </div>
+                  {!analystRatingLoading && !analystRating?.consensusRating && analystRating?.targetConsensus == null ? (
+                    <p style={{ margin: 0, fontSize: 13, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
+                  ) : (
+                    <>
+                      {!analystRatingLoading ? (
+                        <div style={{ marginBottom: 18 }}>
+                          <AnalystTargetChart
+                            price={quote?.price ?? null}
+                            low={analystRating?.targetLow ?? null}
+                            avg={analystRating?.targetConsensus ?? analystRating?.targetMedian ?? null}
+                            high={analystRating?.targetHigh ?? null}
+                          />
                         </div>
-                      ))}
-                    </div>
-                    {!analystRatingLoading && analystRating && [analystRating.strongBuy, analystRating.buy, analystRating.hold, analystRating.sell, analystRating.strongSell].some((v) => typeof v === "number") ? (
-                      <div style={{ marginTop: 16 }}>
-                        <div style={miniLabelStyle}>Rating breakdown</div>
-                        <div className="ratingBreakdownGrid" style={{ marginTop: 10 }}>
-                          {[
-                            { label: "Strong Buy", value: analystRating.strongBuy, tone: "green" as const },
-                            { label: "Buy", value: analystRating.buy, tone: "green" as const },
-                            { label: "Hold", value: analystRating.hold, tone: "yellow" as const },
-                            { label: "Sell", value: analystRating.sell, tone: "red" as const },
-                            { label: "Strong Sell", value: analystRating.strongSell, tone: "red" as const },
-                          ].map((item) => (
-                            <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: 13, fontWeight: 700 }}>
-                              <span style={{ opacity: 0.85 }}>{item.label}</span>
-                              <span style={{ color: toneColor(item.tone) }}>{item.value ?? 0}</span>
-                            </div>
-                          ))}
-                        </div>
+                      ) : null}
+                      <div className="valuationGrid">
+                        {[
+                          {
+                            label: "Avg Price Target",
+                            value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetConsensus ?? analystRating?.targetMedian),
+                            sub: (() => {
+                              const upside = computeUpsidePct(analystRating?.targetConsensus ?? analystRating?.targetMedian, quote?.price);
+                              return typeof upside === "number" ? `${upside >= 0 ? "+" : ""}${upside.toFixed(1)}% vs price` : null;
+                            })(),
+                          },
+                          { label: "High Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetHigh), sub: null },
+                          { label: "Low Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetLow), sub: null },
+                          { label: "Analyst Coverage", value: analystRatingLoading ? "—" : (typeof analystRating?.totalAnalysts === "number" ? `${analystRating.totalAnalysts}` : "—"), sub: null },
+                        ].map((item) => (
+                          <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                            <div style={miniLabelStyle}>{item.label}</div>
+                            <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
+                            {item.sub ? <div style={{ marginTop: 2, fontSize: 13, opacity: 0.55 }}>{item.sub}</div> : null}
+                          </div>
+                        ))}
                       </div>
-                    ) : null}
-                  </>
-                )}
-                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
-              </section>
+                      {!analystRatingLoading && analystRating && [analystRating.strongBuy, analystRating.buy, analystRating.hold, analystRating.sell, analystRating.strongSell].some((v) => typeof v === "number") ? (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={miniLabelStyle}>Rating breakdown</div>
+                          <div className="ratingBreakdownGrid" style={{ marginTop: 10 }}>
+                            {[
+                              { label: "Strong Buy", value: analystRating.strongBuy, tone: "green" as const },
+                              { label: "Buy", value: analystRating.buy, tone: "green" as const },
+                              { label: "Hold", value: analystRating.hold, tone: "yellow" as const },
+                              { label: "Sell", value: analystRating.sell, tone: "red" as const },
+                              { label: "Strong Sell", value: analystRating.strongSell, tone: "red" as const },
+                            ].map((item) => (
+                              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: 13, fontWeight: 700 }}>
+                                <span style={{ opacity: 0.85 }}>{item.label}</span>
+                                <span style={{ color: toneColor(item.tone) }}>{item.value ?? 0}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                  <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
+                </section>
+              )}
 
 
               {/* -- Chart summaries --------------------------------- */}
