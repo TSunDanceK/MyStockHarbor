@@ -141,8 +141,10 @@ count, up from 1 of 9.**
 
 ## KNOWN, DELIBERATELY DEFERRED
 
-Both are **price**-side, both want their own coverage measurement before anyone
-touches them, and neither is guessed at in this pass.
+None is guessed at in this pass. Each wants its own measurement first — the
+discipline that turned the share count from 29% correct to ~100% was reading
+the filings before writing the pattern, and these are where that has not been
+done yet.
 
 ### 1. The 3× range guard has a blind spot on a single price
 
@@ -155,7 +157,34 @@ so nothing renders it. But the guard has a hole, and the fix is not a tweak
 grafted onto the existing ratio test: it needs a price-coverage measurement
 first, exactly as the share count did.
 
-### 2. `US$`-prefixed prices parse as no price at all
+### 2. JATT III still renders an implausible deal size — the cross-check's known weakness
+
+The arithmetic cross-check accepts **any** count-and-total pair that agrees, and
+a SPAC cover carries more than one. Adding `private placement` / `private
+unit(s)` to the disqualifier list moved this row rather than fixing it:
+
+```
+before  JTTT  JATT III Acquisition Corp  $10.00  234,000  $2.34M   (relay 35588270240)
+after   JTTT  JATT III Acquisition Corp  $10.00  225,000  $2.25M   (relay 35590006334)
+```
+
+A SPAC raising $2.25M does not happen. **JATT III's own cover sentence has not
+been read** — the private-placement fix was written against the shape Three
+Lions shows, and this row evidently has a third agreeing pair of some other
+kind.
+
+**DO NOT GUESS AT A THIRD PATTERN.** Two candidate fixes are available and both
+are inventions until measured: a plausibility floor on the aggregate (an
+arbitrary bound), or preferring the LARGEST agreeing pair over the first (rests
+on "the public offering is always the biggest", which is plausible and
+unverified). The next step is a targeted probe that dumps JATT III's cover
+around every agreeing pair, exactly as `ipo-spac` did for the masthead.
+
+**Scale, so the residual is not read as worse than it is:** 11 of 15 rendered
+rows carry a deal size, and this is the one known to be wrong. Before this work
+27 of 38 share counts were wrong.
+
+### 3. `US$`-prefixed prices parse as no price at all
 
 Lannister writes `"between US$4 and US$6 per Unit"`. The price patterns expect
 `$` straight after the whitespace, so **that cover parses NO price** — which is
