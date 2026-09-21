@@ -496,6 +496,61 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     writes: true,
   },
+  // Read-only, NO credential and NO FMP: measures how well a filer's next
+  // results date can be predicted from its own filing history alone. Asked
+  // before deciding whether the earnings calendar's FORWARD half can come off
+  // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
+  // fallback and nothing had measured it.
+  "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
+  // Read-only, no credential: does a filer ANNOUNCE its next results date in an
+  // 8-K (item 7.01/8.01) ahead of time? The last input to the forward-calendar
+  // decision -- predicting the date from cadence was measured and is weak, so
+  // the question is whether it can be READ instead of predicted. Needs the dump
+  // for the universe and for market caps: "do companies do this" and "do the
+  // companies a calendar is searched for do this" are different questions.
+  "sec-scheduling": {
+    script: "scripts/sec-scheduling-announcements.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, no credential, submissions ONLY (no document fetching): simulates
+  // a "due to report" list over the past 12 months across the FULL analysis
+  // universe and sweeps k. List size scales with the universe, so a sample
+  // cannot answer it. Needs the dump for the analysis universe.
+  "sec-due-sweep": {
+    script: "scripts/sec-due-to-report-sweep.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // NO NETWORK AT ALL. Re-slices the due-to-report simulation from the fact set
+  // the sweep persists (data/sec/due-sweep-facts.json), which the relay's own
+  // artifact carries. Dispatch it with run_id/artifact_name pointing at a
+  // sec-due-sweep run: that artifact holds both the fact set and the step 0
+  // dump's universe.json, so the locate step resolves.
+  "sec-due-reslice": {
+    script: "scripts/sec-due-reslice.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // STAGE 0, BLOCKING. No network, no Redis: distils the analyst-consensus series
+  // out of the frozen Step 0 dump into a compact permanent archive. The estimates
+  // are the only thing on the earnings page that cannot be re-derived from public
+  // filings, and they sit on a 24-hour TTL, so they die within a day of the FMP
+  // key lapsing rather than decaying slowly.
+  "consensus-freeze": {
+    script: "scripts/consensus-freeze.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, NO credential and NO network: ranks the analysis universe by the
+  // frozen pool's market cap and emits the due strip's static top-50 membership.
+  // The strip is a CUT, and this generates the cut. Membership only -- no cap
+  // figure is carried out of the run.
+  "due-strip-universe": {
+    script: "scripts/due-strip-universe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
 };
 
 const argv = process.argv.slice(2);
