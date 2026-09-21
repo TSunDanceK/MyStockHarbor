@@ -49,6 +49,17 @@ const check = (label, ok, detail = "") => {
 // the next reader to convert a page that was converted long ago. A mirrored doc
 // is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
+  // ADDED 2026-09-21 with the dashboard-off-FMP scoping doc, mirrored verbatim
+  // for the whole-market bars migration. That doc cites this one, which is
+  // Project-only and was never mirrored -- the SAME mirroring gap, one level
+  // down, and mirroring the citing doc is what exposed it rather than caused it.
+  //
+  // The body is not edited to remove the citation: a verbatim mirror that drops
+  // an inconvenient reference is no longer verbatim, and the reference is the
+  // only record that the 2026-07-22 measurement exists at all. It is the
+  // evidence behind "crypto is the one place FMP's live data was genuinely
+  // live" (§4), so losing the pointer loses the reason that decision was made.
+  "claude/pickers-earnings-longcache-and-price-pool-2026-07-22.md",
   // ADDED 2026-09-13 with the SEC build brief. The brief and the evidence docs
   // it supersedes landed in the repo together; these seven are cited by
   // earnings-page-free-sources and sec-pipeline-spec and were never mirrored --

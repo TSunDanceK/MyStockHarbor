@@ -60,6 +60,40 @@ export type StoredReportDates = {
   pending?: PendingResults | null;
 };
 
+/**
+ * The latest results event, DERIVED from the stored record rather than copied
+ * into the manifest beside it.
+ *
+ * ── WHY THIS IS A FUNCTION AND NOT THREE MANIFEST FIELDS ──────────────────
+ * The v1 earnings-calendar build briefly added lastResultsDate,
+ * lastResultsPeriod and lastResultsAccn to SecManifestEntry, arguing that one
+ * field in the manifest beat "a parallel store". The manifest's own docblock
+ * fifteen lines below already said the opposite, and it was right: this record
+ * is the single home, and flattening its newest event into strings elsewhere
+ * gives the page two homes for one value that can then disagree
+ * (claude/traps/two-validators-for-one-value.md).
+ *
+ * Nothing is lost by deriving it -- every field those three carried is here,
+ * and reading it costs the round trip the caller was already making.
+ *
+ * FIRST MATCHED EVENT, NOT events[0]. Events are stored newest first and the
+ * writer keeps only period-matched ones, so the two are normally the same
+ * event. `periodEnd` is nullable on the type, and a null one cannot answer
+ * "which period did this report on" -- so it is skipped rather than returned
+ * with a null period a caller would have to re-check.
+ */
+export function latestResults(
+  rec: StoredReportDates | null,
+): { announcedOn: string; periodEnd: string; accession: string; basis: ReportEvent["basis"] } | null {
+  if (!rec || !Array.isArray(rec.events)) return null;
+  for (const e of rec.events) {
+    if (!e || typeof e.announcedOn !== "string" || typeof e.periodEnd !== "string") continue;
+    if (!e.announcedOn || !e.periodEnd) continue;
+    return { announcedOn: e.announcedOn, periodEnd: e.periodEnd, accession: e.accession, basis: e.basis };
+  }
+  return null;
+}
+
 export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
   if (!redis) return null;
   try {
