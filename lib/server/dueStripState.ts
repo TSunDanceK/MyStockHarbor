@@ -14,10 +14,23 @@
 // here at the page, so it gets the same treatment: a distinct flag, threaded
 // into the state, rather than an emptiness test that cannot tell them apart.
 //
-// `lastResultsDate` is null for every symbol until the stage 1 backfill has run
-// over the universe. That is the NORMAL state of this page today, not an edge
-// case, which is why "no results currently outstanding" would currently be
-// false on every render.
+// ── CORRECTED 2026-09-21: THERE IS NO "STAGE 1 BACKFILL" ─────────────────
+// This said `lastResultsDate` is null "until the stage 1 backfill has run over
+// the universe". That sentence predates #484 and describes a mechanism that no
+// longer exists, which makes it actively misleading: it sends a reader looking
+// for a job to run.
+//
+// #484 deleted secResultsDate.ts and the three manifest fields it fed.
+// `lastResultsDate` is not stored anywhere now -- `latestResults()` DERIVES it
+// from secReportDatesStore, which secManifest.ts calls "THE SINGLE HOME". That
+// store is written continuously by app/api/jobs/sec-facts/route.ts, a
+// production cron taking SEC_REPORT_DATES_PER_RUN symbols a run.
+//
+// So the denominator this module guards is not waiting on a one-off backfill.
+// It is whatever that cron has reached, which is a moving figure -- and exactly
+// why `withResultsDate` is passed in beside `universeSize` rather than assumed.
+// A coverage floor is the right shape for a number that fills in over time; a
+// "has the backfill run yet" flag would not have been.
 //
 // ── THE COPY RULE, WHICH IS NOT A STYLE PREFERENCE ────────────────────────
 // lib/server/dueToReport.ts establishes that this strip is NOT a forecast. Two
