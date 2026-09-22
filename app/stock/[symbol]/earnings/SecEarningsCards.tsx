@@ -1267,6 +1267,68 @@ export function SecNoQuartersCard({
  * wants Bank of America's numbers; they just asked with the wrong ticker. The
  * card says so and links there, rather than stopping at a refusal.
  */
+/**
+ * A TICKER THE SEC REGISTRANT DIRECTORY DOES NOT LIST.
+ *
+ * ── WHY THIS IS NOT "PENDING" AND SHOULD NOT HAVE BEEN A 404 ─────────────
+ * /stock/MSTY/earnings returned a bare 404 while /stock/MSTY rendered fine.
+ * The route called notFound() on cold.status === "no-cik", which is set when
+ * cikForSymbol finds no row for the ticker in the committed registrant file.
+ *
+ * TWO DIFFERENT THINGS LAND HERE, and the copy must not guess between them.
+ * Measured through the SHIPPED gate (cikForSymbol -> lookupBySpelling) over
+ * the committed file:
+ *
+ *   MSTY, TSLY, NVDY, CONY, JEPI   funds. A fund that trades as a series of a
+ *                                  trust files under the trust, so the ticker
+ *                                  is never a registrant. Structural: no later
+ *                                  read changes it. SPY and QQQ ARE listed —
+ *                                  they are their own registrants — so "ETF"
+ *                                  is not the predictor.
+ *   BK, EA, EQR, WBS               operating companies that SHOULD resolve and
+ *                                  do not. The committed snapshot is missing
+ *                                  them; refreshing it is the fix, and it is a
+ *                                  separate change.
+ *
+ * SO THE CARD NAMES BOTH AND CLAIMS NEITHER. An earlier draft said "the usual
+ * reason is that the ticker is a fund or ETF share class", which is true of
+ * MSTY and false of BK — and a page that tells a Bank of New York Mellon
+ * visitor it is probably a fund is worse than the 404 it replaced.
+ *
+ * BRK.B IS NOT IN THIS SET, though a naive lookup says it is: the file spells
+ * it BRK-B and lookupBySpelling bridges that. Checking membership directly
+ * instead of through the shipped gate is what made it look broken.
+ */
+export function SecNoRegistrantCard({ symbol }: { symbol: string }) {
+  return (
+    <section className="card">
+      <div className="eyebrow">Earnings</div>
+      <h2>No SEC company filings on file for {symbol}</h2>
+      <p>
+        {symbol} does not appear in the SEC company-ticker directory this page reads, so there
+        are no filings for it to show.
+      </p>
+      <p>There are two reasons a ticker is missing from it, and this page cannot tell which applies:</p>
+      <ul className="bulletList">
+        <li>
+          It is a <strong>fund or ETF share class</strong>. A fund that trades as a series of a
+          trust files under the trust&apos;s name rather than the ticker&apos;s, so the ticker
+          never appears as a registrant and no filings will arrive later. Funds that are their
+          own registrants do appear, and their pages work normally.
+        </li>
+        <li>
+          It is a company the <strong>directory snapshot has not picked up</strong>. In that case
+          the filings exist and this page will show them once the directory is refreshed.
+        </li>
+      </ul>
+      <p>
+        Either way, price history and market data for {symbol} are on{" "}
+        <a href={`/stock/${symbol}`}>its stock page</a>.
+      </p>
+    </section>
+  );
+}
+
 export function SecNotIssuerEquityCard({
   symbol,
   reason,

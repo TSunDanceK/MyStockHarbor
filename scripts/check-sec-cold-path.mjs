@@ -122,8 +122,28 @@ check("the pending copy IS temporary, and only that card says so",
     pendingBody.length > 100 && noXbrlBody.length > 100,
   `pending ${pendingBody.length}b, no-xbrl ${noXbrlBody.length}b — both non-empty, ` +
     `so a mis-sliced body cannot pass this by being blank`);
-check("no-cik 404s the page rather than rendering anything",
-  /status === "no-cik"\) notFound\(\)/.test(pageCode));
+// ── NO-CIK RENDERS, AND THAT REPLACED A 404 THAT WAS WRONG ────────────────
+//
+// This asserted the 404 for good reasons: nothing is fetched or queued for a
+// symbol with no CIK, and the gate bounds which strings can trigger work.
+// THE BOUND WAS NEVER THE 404. cikForSymbol returns null before any network or
+// Redis call, and a static card triggers nothing either — so the work bound is
+// unchanged and only the response changed.
+//
+// What the 404 cost: /stock/MSTY rendered while /stock/MSTY/earnings 404'd, on
+// a symbol the site serves. Measured through the shipped gate, two different
+// populations land here — funds whose ticker is never a registrant (MSTY,
+// TSLY, NVDY, CONY, JEPI) and operating companies the committed snapshot is
+// missing (BK, EA, EQR, WBS) — and a 404 is wrong for both.
+check("no-cik renders a state rather than 404-ing",
+  !/notFound\(\)/.test(pageCode) && /<SecNoRegistrantCard/.test(pageCode),
+  "a symbol whose stock page renders must not 404 on its earnings page");
+check("...and that state is noindex, so not 404-ing cannot create thin content",
+  /index: cikForSymbol\(clean\) !== null/.test(pageCode),
+  "the sibling page's rule, for the sibling page's reason: this route is enumerated");
+check("...and the work bound still sits before any fetch",
+  /const cik = cikForSymbol\(clean\);\s*\n\s*if \(!cik\) return \{ status: "no-cik" \};/.test(code),
+  "the gate, not the response, is what stops an arbitrary string doing work");
 
 console.log("\n3. the timeout");
 
