@@ -132,7 +132,7 @@ console.log(`
   NOT COVERED BY THIS FILE, deliberately:
     The panel in a browser. The sandbox is refused *.vercel.app and the
     production domain with 403 CONNECT, so that is an owner-side step.
-    The LIVE store behind it: relay task "symbol-outlook-render", which runs
+    The LIVE store behind it: relay task "write-symbol-outlook", which runs
     this producer against the production record for real symbols.
     The brief's mutants are a SEPARATE denominator — run
     scripts/check-brief-mutants.mjs. A green run here is not a green brief.

@@ -600,6 +600,17 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX, same as write-due-input-census above:
+  // `write-` is the CREDENTIAL boundary, and the report-dates store lives in
+  // Upstash behind credentials that only the write- half of relay.yml carries.
+  // Renders the ticker search's answer for the cut plus a handful of names a
+  // reader would actually type, against the live record.
+  "write-symbol-outlook": {
+    script: "scripts/symbol-outlook-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],
