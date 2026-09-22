@@ -60,10 +60,16 @@ const send = (method, params = {}) => new Promise((resolve, reject) => {
   pending.set(id, (msg) => (msg.error ? reject(new Error(`${method}: ${msg.error.message}`)) : resolve(msg.result)));
   ws.send(JSON.stringify({ id, method, params }));
 });
-const evaluate = async (expression) => (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
+const evaluate = async (expression) => (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }))?.result?.value;
 
 await send("Page.enable");
 await send("Runtime.enable");
+await send("Network.enable");
+// VERCEL'S SECURITY CHECKPOINT challenges a "HeadlessChrome" user agent
+// (first run, 35790746955). A regular desktop Chrome string, and a wait for
+// the challenge page to hand over (below).
+const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+await send("Network.setUserAgentOverride", { userAgent: UA });
 
 async function load(url) {
   events.length = 0;
@@ -72,6 +78,12 @@ async function load(url) {
   for (let i = 0; i < 150; i++) {
     await sleep(200);
     if (events.some((e) => e.method === "Page.loadEventFired")) break;
+  }
+  // The checkpoint runs its challenge and reloads into the page: wait for it.
+  for (let i = 0; i < 60; i++) {
+    const title = String(await evaluate("document.title").catch(() => ""));
+    if (!/Security Checkpoint/i.test(title)) break;
+    await sleep(500);
   }
   await sleep(2500); // client charts and fonts settle
 }
