@@ -51,10 +51,13 @@ const pure = raw
     /export const DUE_STRIP_CUT_GENERATED_AT: string = cut\.generatedAt;/,
     `export const DUE_STRIP_CUT_GENERATED_AT = ${JSON.stringify(cutDoc.generatedAt)};`
   )
-  // getDueStripState closes over the stripped imports and is not exercised
-  // here; dropping it keeps the lift closed rather than loading a module with
-  // dangling names that would throw only if something called it.
-  .replace(/export async function getDueStripState[\s\S]*?\n\}\n?$/m, "");
+  // The async half closes over the stripped imports and is not exercised here.
+    // NAME CHANGED IN THIS PR: getDueStripState was a thin wrapper and is gone;
+    // getCalendarForwardSections is the one that reads Redis now. The lift gate
+    // caught the stale regex on run 35753946276 -- a strip that no longer
+    // matches leaves the Redis half IN the lift, and it would have thrown
+    // ReferenceError on first call rather than at load.
+    .replace(/export async function getCalendarForwardSections[\s\S]*?\n\}\n/m, "");
 
 const js = ts.transpileModule(pure, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

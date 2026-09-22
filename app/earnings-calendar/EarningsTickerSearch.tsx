@@ -121,8 +121,8 @@ export default function EarningsTickerSearch() {
             setInfo(null);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search a ticker or company for its next earnings date"
-          aria-label="Search ticker for next earnings date"
+          placeholder="Search a ticker or company"
+          aria-label="Search for a ticker or company"
           style={{
             width: "100%",
             // Left padding clears the 17px icon at left: 13.
