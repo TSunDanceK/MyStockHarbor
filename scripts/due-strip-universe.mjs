@@ -43,6 +43,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { emitPayload } from "./lib/relay-capture.mjs";
+import { symbolSpellings } from "../lib/symbolSpellings.mjs";
 
 const DUMP = process.argv[2] || process.env.DUMP_DIR || "";
 const CUT = 50;
@@ -64,6 +65,25 @@ if (analysis.length < 100) {
   console.error(`FATAL: analysis universe read ${analysis.length} symbols — too short to cut a top ${CUT} from.`);
   process.exit(1);
 }
+
+// ── SPELLING, RESOLVED AGAINST THE ANALYSIS UNIVERSE, NOT INVENTED ────────
+//
+// BRK.B (the universe's own spelling) and BRK-B (screener-fundamentals' and
+// fundamentals' spelling) are the same security with two real, current caps
+// sitting under two different keys. capOf() never saw the second one because
+// nothing widened the lookup -- the pipeline just uppercased and compared.
+// lib/symbolSpellings.mjs exists precisely for this (BRK.B/BRK-B, MER-PK/
+// BAC$K, ...) and was already used elsewhere in the repo but not wired in
+// here. canonicalOf resolves any source's spelling back to whichever spelling
+// the analysis universe itself uses, so a cap found under an alternate
+// spelling still lands on the ticker the strip actually ranks.
+const analysisSet = new Set(analysis);
+const canonicalOf = (sym) => {
+  const S = String(sym).toUpperCase();
+  if (analysisSet.has(S)) return S;
+  for (const alt of symbolSpellings(S)) if (analysisSet.has(alt)) return alt;
+  return S;
+};
 
 // ── ONE SOURCE WAS NOT ENOUGH, AND THE COUNTERS DID NOT SAY SO ────────────
 //
@@ -96,11 +116,24 @@ if (analysis.length < 100) {
 //
 // With the reader fixed, fundamentals.json alone prices 699 of 700 universe
 // symbols including NVDA, and screener-fundamentals.json prices 693 of 700.
-// Two smaller, separate issues remain and are NOT fixed here (recorded in the
-// brief above, not silently folded into this change): a handful of price-pool
-// rows carry a real partial-write (null marketCap/volume/OHLC together), and
-// BRK.B/BRK-B is a spelling split across sources that this reader does not
-// reconcile (lib/symbolSpellings.mjs exists for that and isn't wired in here).
+//
+// ── FIXED 2026-09-22: BRK.B/BRK-B, THE SPELLING SPLIT ─────────────────────
+// price-pool.json and stockdata.json spell it BRK.B (the universe's own
+// spelling); screener-fundamentals.json and fundamentals.json spell it
+// BRK-B, with real, current caps sitting under that key. canonicalOf() below
+// now widens every source's symbol through lib/symbolSpellings.mjs and
+// resolves it back to whichever spelling the analysis universe uses, so a
+// cap filed under an alternate spelling still reaches the ticker the strip
+// ranks. This was a one-line class of bug with the helper already written;
+// see the brief for why it wasn't caught earlier.
+//
+// One issue remains and is NOT fixed here: a handful of price-pool rows
+// (BRK.B, INTC, IREN, NOK, NVDA, SPCX in the 2026-09-21 measurement) carry a
+// real partial-write -- null marketCap/volume/OHLC together, some missing
+// failStreak/failAt entirely. Recorded in the brief with a candidate
+// mechanism (seedColdPricePoolRows stamps a fresh ts on an incomplete row,
+// which can hide the gap from the staleness-based warm rotation) that is
+// plausible but unmeasured against production data -- not applied as a fix.
 const CAP_SOURCES = ["price-pool.json", "screener-fundamentals.json", "fundamentals.json", "stockdata.json"];
 
 /**
@@ -142,7 +175,7 @@ for (const name of CAP_SOURCES) {
   const rows = entriesOf(doc);
   let filled = 0, alreadyKnown = 0, noCap = 0;
   for (const [sym, e] of rows) {
-    const S = String(sym).toUpperCase();
+    const S = canonicalOf(sym);
     const mc = capOf(e);
     if (mc == null) { noCap++; continue; }
     if (marketCap.has(S)) { alreadyKnown++; continue; }
