@@ -4,6 +4,7 @@ import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
 import { recordRedisRead, UNATTRIBUTED_CALLER } from "./redisBandwidth";
+import { toDashed } from "../symbolSpellings.mjs";
 import {
   mergeDailyPoints,
   overlapVerdict,
@@ -375,8 +376,21 @@ function normalizeSymbol(symbol: string) {
   return String(symbol).trim().toUpperCase();
 }
 
+// THE PRIVATE COPY IS GONE. This function's `.replace(/\./g, "-")` was the
+// EVIDENCE the rest of the repo cited for "FMP wants the dash" -- including
+// scripts/check-symbol-spelling.mjs, which read this very body to assert the
+// premise before enforcing it. Evidence that lives in one caller is evidence
+// the next caller does not have, and the next caller (fetchFmpQuote) duly
+// shipped without it. It now calls the shared helper, so there is one
+// implementation of the rule and three callers of it rather than three
+// implementations.
+//
+// normalizeSymbol still runs first even though toDashed also trims and
+// upper-cases: it is the function this file uses for its Redis keys, and
+// dropping it here would make the cache key and the vendor symbol derive from
+// different normalisations, which is a different bug wearing this one's clothes.
 function buildFmpSymbol(symbol: string) {
-  return normalizeSymbol(symbol).replace(/\./g, "-");
+  return toDashed(normalizeSymbol(symbol));
 }
 
 function toFiniteNumber(value: unknown) {
