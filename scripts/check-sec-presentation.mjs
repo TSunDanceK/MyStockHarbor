@@ -219,19 +219,21 @@ console.log("\n3b. A LEGEND FOR A MARKER THAT NEVER APPEARS IS NOT SHOWN");
 
 console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter'");
 {
-  const annual = mod.trendSummary(viewOf(
-    [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)],
-    [], { tableBasis: "year", basis: "year" }
-  ));
+  // THE LABELS CARRY NO PERIOD NOUN since the tiles print "Typical · Latest"
+  // (owner review, #522): "Revenue growth", with the noun in the card heading,
+  // which reads t.basis. What the summary still words itself — the exclusion
+  // note — must follow the basis, so that is what is asserted. A skipped row
+  // is included so the note exists.
+  const rows = [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8), growthRow(null, null)];
+  const annual = mod.trendSummary(viewOf(rows, [], { tableBasis: "year", basis: "year" }));
   check("an annual filer's summary says year, not quarter",
-    annual.lines.every((l) => /year/.test(l.label) && !/quarter/.test(l.label)),
-    annual.lines.map((l) => l.label).join(" · "));
-  const quarterly = mod.trendSummary(viewOf(
-    [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)], []
-  ));
+    /year/.test(annual.exclusionNote ?? "") && !/quarter/.test(annual.exclusionNote ?? "") &&
+      annual.lines.every((l) => !/quarter|year/.test(l.label)),
+    `${annual.exclusionNote} | ${annual.lines.map((l) => l.label).join(" · ")}`);
+  const quarterly = mod.trendSummary(viewOf(rows, []));
   check("...and a quarterly filer's says quarter",
-    quarterly.lines.every((l) => /quarter/.test(l.label)),
-    quarterly.lines.map((l) => l.label).join(" · "));
+    /quarter/.test(quarterly.exclusionNote ?? ""),
+    quarterly.exclusionNote);
   check("the summary reports the basis it used",
     annual.basis === "year" && quarterly.basis === "quarter",
     "the chart heading reads this rather than assuming");
@@ -239,8 +241,7 @@ console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter
     "basis noun replaced by a literal",
     "  const w = periodWords(view.tableBasis);",
     '  const w = { one: "quarter", many: "quarters", labelled: "", adjective: "quarterly" };',
-    (m) => m.trendSummary(viewOf([growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)], [],
-      { tableBasis: "year", basis: "year" })).lines.every((l) => /year/.test(l.label))
+    (m) => /year/.test(m.trendSummary(viewOf(rows, [], { tableBasis: "year", basis: "year" })).exclusionNote ?? "")
   );
 }
 

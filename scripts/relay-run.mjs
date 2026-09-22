@@ -499,6 +499,15 @@ const TASKS = {
   },
   // WHY THE POPULATE BACKLOG MOVED AND HOW LONG REWINDOW TAKES, simulated with
   // the shipped populationQueues rather than divided. Credentialled, read-only.
+  // WHETHER A CHAIN EDIT ENLARGES THE RE-READ QUEUE: stored sets already
+  // chain-stale vs current under main's chains (which the edit re-queues).
+  // Credentialled, read-only: one manifest GET.
+  "write-chain-bump-census": {
+    script: "scripts/sec-chain-bump-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-queue-projection": {
     script: "scripts/sec-queue-projection.mjs",
     args: () => [],
