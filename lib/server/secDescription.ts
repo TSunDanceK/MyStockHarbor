@@ -372,14 +372,17 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   let lastLine = "";
   for (const l of raw) {
     const prev = paras[paras.length - 1];
-    const open = Boolean(prev) && !SENTENCE_END.test(prev.t);
+    // THE TAIL ONLY: an end-anchored test on the whole growing paragraph is
+    // quadratic over a long section.
+    const tail = prev ? prev.t.slice(-40) : "";
+    const open = Boolean(prev) && !SENTENCE_END.test(tail);
     // A heading ends on a capitalised word ("Our Strategy", "General"); a line
     // ending on a lower-case word ("…focus is on the") is a wrap (KTOS).
     const wrapped = lastLine.length >= WRAPPED_LINE_CHARS || /(^|\s)[a-z]+,?$/.test(lastLine);
     // A name on its own line, then the sentence it opens: "Bausch Health
     // Companies Inc." / "is a global, diversified …" (BHC, full build). The
     // name ends in a period, so SENTENCE_END alone would split them.
-    const nameLine = Boolean(prev) && /^[a-z]/.test(l) && /\b(Inc|Corp|Ltd|Co|Cos|plc|LLC|L\.P|N\.V|S\.A|S\.E|AG|SE|SA|NV)\.$/.test(prev.t);
+    const nameLine = Boolean(prev) && /^[a-z]/.test(l) && /\b(Inc|Corp|Ltd|Co|Cos|plc|LLC|L\.P|N\.V|S\.A|S\.E|AG|SE|SA|NV)\.$/.test(tail);
     if ((open && (/^[a-z0-9(]/.test(l) || wrapped)) || nameLine) prev.t = `${prev.t} ${l}`;
     else paras.push({ t: l, follows: open && prev.t.length >= 60 });
     lastLine = l;
