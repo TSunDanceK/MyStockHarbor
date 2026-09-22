@@ -285,7 +285,35 @@ function sentences(p: string): string[] {
   return p.split(/(?<=[a-z0-9)”"’][.!?])\s+(?=[A-Z“"])/).map((s) => s.trim()).filter(Boolean);
 }
 
-export function cleanDescription(body: string): Cleaned {
+/** Lower-case words of a name or a paragraph opening, punctuation dropped, a leading "the" removed. */
+function nameWords(s: string): string[] {
+  const w = s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  return w[0] === "the" ? w.slice(1) : w;
+}
+
+/**
+ * Does the paragraph open with a TRAILING FRAGMENT of the company's name —
+ * GS "Group Inc. is a bank holding company…" against "GOLDMAN SACHS GROUP INC"?
+ * The full name, or its leading words ("Bank of America is…"), is not a
+ * fragment; only a proper suffix is, which reads as a defined short name whose
+ * definition was stripped.
+ */
+export function opensWithNameFragment(paragraph: string, companyName: string): boolean {
+  const name = nameWords(companyName);
+  const head = nameWords(paragraph.slice(0, 120));
+  for (let len = name.length - 1; len >= 1; len--) {
+    const suffix = name.slice(name.length - len);
+    if (suffix.every((w, i) => head[i] === w) && head.length > len) return true;
+  }
+  return false;
+}
+
+export type CleanOptions = {
+  /** The registrant's name as SEC holds it (submissions `name`), for the name-fragment rule. */
+  companyName?: string | null;
+};
+
+export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned {
   // Rule 1: JOIN A BROKEN LINE, NOT EVERY LINE. Filings end most paragraphs
   // with a single newline (one </p> or </div>), so joining every newline would
   // glue sub-headings like "Overview" onto the prose. A line is broken when it
@@ -328,7 +356,14 @@ export function cleanDescription(body: string): Cleaned {
   // us)". Two or more quoted names, or two or more of we/us/our, marks one. A
   // single quoted abbreviation — (“OAS”), ("IBD"), (“AI”) — defines a term,
   // not the company, and stays.
-  for (const p of paras) p.t = p.t.replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (isNameList(inner) ? "" : m));
+  let nameDefinitionStripped = false;
+  for (const p of paras) {
+    p.t = p.t.replace(/\s*\(([^()]*)\)/g, (m, inner: string) => {
+      if (!isNameList(inner)) return m;
+      nameDefinitionStripped = true;
+      return "";
+    });
+  }
 
   // Owner, #518: no space before ® or ™ (AAPL "iPhone ®").
   for (const p of paras) p.t = p.t.replace(/\s+([®™])/g, "$1");
@@ -339,10 +374,22 @@ export function cleanDescription(body: string): Cleaned {
   // and so is a pointer to elsewhere in the document.
   let out: Para[] = [];
   for (const p of paras) {
-    const ss = sentences(p.t).filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
+    const all = sentences(p.t);
+    const ss = all.filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
+    if (all.some((s) => DEFINITION.some((re) => re.test(s)))) nameDefinitionStripped = true;
     if (ss.length) out.push({ t: ss.join(" "), follows: p.follows });
   }
   if (!out.length) return { ok: false, why: "only definition text after the heading" };
+
+  // Owner, #518 (render): ONCE A NAME LIST OR DEFINITION WAS STRIPPED, a later
+  // paragraph that opens with a bare fragment of the company's name is dropped:
+  // it leans on the definition that is gone (GS "Group Inc. is a bank holding
+  // company…", after "When we use the terms … we mean The Goldman Sachs Group,
+  // Inc. (Group Inc. …)" was dropped).
+  if (nameDefinitionStripped && opts.companyName) {
+    const name = opts.companyName;
+    out = out.filter((p, i) => i === 0 || !opensWithNameFragment(p.t, name));
+  }
 
   // Owner, #518: A LEADING ONE-LINE SLOGAN is dropped when a longer paragraph
   // follows (RKLB "Our Mission: We Open Access to Space to Improve Life on Earth.").

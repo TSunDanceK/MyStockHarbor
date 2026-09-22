@@ -129,7 +129,7 @@ for (const symbol of LIST) {
     }
   }
   if (!loc.found) { results.push({ ...base, url, found: false, why: loc.why }); continue; }
-  const cleaned = desc.cleanDescription(loc.body);
+  const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null });
   // THE RAW OPENING TOO, so a rejection can be checked against what it rejected.
   const raw = loc.body.slice(0, 700);
   results.push(cleaned.ok
