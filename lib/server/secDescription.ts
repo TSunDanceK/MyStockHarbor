@@ -241,6 +241,9 @@ const REJECT: [RegExp, string][] = [
   [/forward-looking\s+statements|safe\s+harbor/i, "forward-looking statements"],
 ];
 
+/** The REJECT entries that mark a cross-reference (not a mere MD&A mention). */
+const CROSS_REFERENCE = /incorporated\s+(herein\s+)?by\s+reference|set\s+forth\s+under\s+the\s+headings?/i;
+
 /** Rule 3: definition sentences. Dropped wherever they open the text. */
 const DEFINITION: RegExp[] = [
   /^in\s+this\s+(annual\s+)?report\b/i,
@@ -256,6 +259,13 @@ const DEFINITION: RegExp[] = [
   // our towers … collectively as "communications infrastructure"".
   /\breferred\s+to\s+herein\s+(collectively\s+)?as\b/i,
   /\bwe\s+refer\s+to\b.{0,200}\bas\s+[“"]/i,
+  // GBCI "The terms “Company,” “we,” … mean Glacier Bancorp, Inc."; BMI
+  // "Throughout this 2025 Annual Report on Form 10-K, the words “we,” … refer to".
+  // ANCHORED at the sentence start (after at most a short lead-in clause, or
+  // "We use"): the splitter keeps "…Partners LP. The terms …" as ONE sentence
+  // (it never splits after a capital, for "Arthur J. Gallagher"), and an
+  // unanchored rule dropped PII's lede along with its definition.
+  /^(?:[^“".]{0,100},\s*)?(?:we\s+use\s+)?the\s+(words|terms)\s+[“"][^.]{0,160}\b(refers?|means?)\b/i,
   // A reading instruction, not a cross-reference to other text in its place:
   // ONDS opens Item 1 with "This business description should be read in
   // conjunction with our audited Consolidated Financial Statements…", then the
@@ -294,6 +304,12 @@ const POINTER: RegExp[] = [
   // share, is traded on the NYSE under the symbol “VTOL”").
   /\bpar\s+value\b/i,
   /\bunder\s+the\s+(ticker\s+)?symbol\b/i,
+  // HYMC "…Financial Statements and Supplementary Data of this 2025 Form
+  // 10-K." (the tail of a split "See Part II, Item 8" pointer).
+  /\bthis\s+((19|20)\d{2}\s+)?(annual\s+report\s+on\s+)?form\s+(10-K|20-F)\b/i,
+  // Accounting-standard text, not a description (UFPI "ASC 280, Segment
+  // Reporting (“ASC 280”) defines operating segments as…").
+  /\bASC\s+\d{3}\b/,
   // Contact details, not a description (PLAB, BAC).
   /\bprincipal\s+executive\s+offices?\b/i,
   /\b(our\s+)?website\s+(address\s+)?is\b/i,
@@ -515,7 +531,13 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
         // Not the DEFINITION drops: ONDS's leading "should be read in
         // conjunction with…" sentence is dropped, not rejected (owner, #518).
         if (DEFINITION.some((re) => re.test(x))) continue;
-        if (x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;
+        // A POINTER drop that incorporates other text by reference is still a
+        // cross-reference (round-5 build: HMY's 20-F Item 4.B incorporated its
+        // "Operating results" by reference, and dropping that sentence as a
+        // page pointer rendered results discussion). A pointer that merely
+        // mentions MD&A is dropped, not rejected (BOH, ES, ESI, SIRI, UFPI).
+        const crossRef = POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);
+        if (!crossRef && x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;
         for (const [re, label] of REJECT) if (re.test(x)) return { ok: false, why: `rejected: ${label}` };
       }
     }

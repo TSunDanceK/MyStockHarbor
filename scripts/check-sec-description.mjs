@@ -171,7 +171,7 @@ console.log("\n6c. sentences about the report, and a pointer hidden in a run-on"
   const runOn = "The information set forth under the headings " + Array.from({ length: 30 }, (_, i) => `“Strategic Report—Section ${i}” on page ${i + 2}`).join(", ") + " is incorporated herein by reference.";
   const azn = D.cleanDescription([runOn, "For the avoidance of doubt, the assurance report is not included. AstraZeneca is a global, science-led biopharmaceutical company focused on medicines." + long].join("\n"));
   check("a cross-reference dropped as a run-on still rejects the section (AZN)", !azn.ok && /incorporated by reference/.test(azn.why), azn.why ?? "");
-  const noRunOnReject = await load(once("if (x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;", "continue;"));
+  const noRunOnReject = await load(once("if (!crossRef && x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;", "continue;"));
   check("...and CATCHES the pointer let through", noRunOnReject.cleanDescription([runOn, "For the avoidance of doubt, the assurance report is not included. AstraZeneca is a global, science-led biopharmaceutical company focused on medicines." + long].join("\n")).ok);
 }
 
@@ -227,6 +227,26 @@ console.log("\n6e. owner review of the full file (round 5): pointers, page heade
   const ajg = D.cleanDescription("Arthur J. Gallagher & Co. and its subsidiaries, collectively referred to herein as we, our, us or Gallagher, are engaged in providing insurance brokerage and consulting services, and third-party claims settlement and administration services." + long);
   check("an embedded 'collectively referred to herein as' clause is cut, the lede kept (AJG)", ajg.ok && /^Arthur J\. Gallagher & Co\. and its subsidiaries are engaged in/.test(ajg.text), ajg.ok ? ajg.text.slice(0, 80) : ajg.why);
 
+  // Round-5 build follow-ups.
+  const hmyText = "The information set forth in “Operating and financial review” on page 42 is incorporated herein by reference. The profitability of the group’s operations is affected mainly by changes in the market price of gold, and the cash flows those operations generate." + long;
+  const hmy = D.cleanDescription(hmyText);
+  check("a dropped pointer that incorporates by reference still rejects (HMY)", !hmy.ok && /incorporated by reference/.test(hmy.why), hmy.ok ? hmy.text.slice(0, 60) : hmy.why);
+  const noCross = await load(once("const crossRef = POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);", "const crossRef = false;"));
+  check("...and CATCHES the cross-reference let through", noCross.cleanDescription(hmyText).ok);
+  const boh = D.cleanDescription("Bank of Hawaii Corporation is a Delaware corporation and a bank holding company headquartered in Honolulu, providing banking services to consumers and businesses. For more, see Item 7, Management’s Discussion and Analysis." + long);
+  check("a pointer that only mentions MD&A is dropped, not a rejection (BOH)", boh.ok && !/Discussion/.test(boh.text), boh.ok ? "" : boh.why);
+  const gbci = D.cleanDescription("Glacier Bancorp, Inc., headquartered in Kalispell, Montana, is a Montana corporation incorporated in 2004. The terms “Company,” “we,” “us” and “our” mean Glacier Bancorp, Inc. and its subsidiaries, when appropriate. We provide a full range of banking services." + long);
+  check("'the terms “…” mean' is a definition (GBCI, BMI)", gbci.ok && !/The terms/.test(gbci.text), gbci.ok ? "" : gbci.why);
+  const pii = D.cleanDescription("Polaris Inc., formerly known as Polaris Industries Inc., a Delaware corporation, was formed in 1994 and is the successor to Polaris Industries Partners LP. The terms “Polaris,” the “Company,” “we,” “us,” and “our” as used herein refer to the business and operations of Polaris Inc. We design, engineer, manufacture and market powersports vehicles." + long);
+  check("...but a lede the splitter merged with its definition is kept (PII)", pii.ok && pii.text.startsWith("Polaris Inc., formerly"), pii.ok ? pii.text.slice(0, 40) : pii.why);
+  const unanchored = await load(once("/^(?:[^“\".]{0,100},\\s*)?(?:we\\s+use\\s+)?the\\s+(words|terms)", "/(words|terms)"));
+  check("...and CATCHES the rule unanchored", !txt(unanchored.cleanDescription("Polaris Inc., formerly known as Polaris Industries Inc., a Delaware corporation, was formed in 1994 and is the successor to Polaris Industries Partners LP. The terms “Polaris,” the “Company,” “we,” “us,” and “our” as used herein refer to the business and operations of Polaris Inc. We design, engineer, manufacture and market powersports vehicles." + long)).startsWith("Polaris Inc., formerly"));
+  const hpe = D.cleanDescription("We use the terms “Hewlett Packard Enterprise,” “HPE,” “the Company,” “we,” “us,” and “our” to refer to Hewlett Packard Enterprise Company. HPE is a global technology leader focused on developing intelligent solutions that allow customers to capture, analyze and act upon data seamlessly." + long);
+  check("'We use the terms “…” to refer to' is a definition (HPE, LDOS)", hpe.ok && hpe.text.startsWith("HPE is a global"), hpe.ok ? hpe.text.slice(0, 40) : hpe.why);
+  const hymc = D.cleanDescription("We are a U.S.-based gold and silver exploration stage issuer that owns the Hycroft Mine in the prolific mining region of Northern Nevada. Financial Statements and Supplementary Data of this 2025 Form 10-K. Our property has a long operating history and large mineral resources." + long);
+  check("'… of this 2025 Form 10-K.' is a pointer (HYMC)", hymc.ok && !/Form 10-K/.test(hymc.text), hymc.ok ? "" : hymc.why);
+  const ufpi = D.cleanDescription("UFP Industries, Inc. is a holding company whose subsidiaries design, manufacture and supply products made from wood and other materials. ASC 280, Segment Reporting (“ASC 280”) defines operating segments as components of an enterprise." + long);
+  check("accounting-standard text is dropped (UFPI)", ufpi.ok && !/ASC 280/.test(ufpi.text), ufpi.ok ? "" : ufpi.why);
   const W = new Set(["am", "mu", "u", "kappa", "agonist", "receptor", "operates", "page", "see", "management", "insights", "countries", "we", "a", "way", "in", "to", "and", "cafés", "into", "away"]);
   const isWord = (w) => W.has(w);
   const j = D.joinSplitWords("Etsy op erates marketplaces, on pag e 9. S ee our managemen t team.", isWord);
