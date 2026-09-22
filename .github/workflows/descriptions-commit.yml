@@ -3,7 +3,9 @@
 # Same runner-side pattern as description-probe-commit.yml: the artifact host
 # is refused to the sandbox, so the runner downloads and commits.
 #
-# TO REFRESH: re-run the six relay tasks, put their run IDs below, push.
+# THE ROUTINE REFRESH is descriptions-refresh.yml (monthly, opens a PR). This
+# file is for merging hand-dispatched relay runs onto a working branch: put
+# their run IDs below and push.
 name: Commit the filing descriptions
 
 on:
@@ -42,40 +44,7 @@ jobs:
       - name: Merge, verify, commit
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("node:fs");
-            const { execSync } = require("node:child_process");
-            const files = execSync("find art -name \"descriptions-part-*.json\"").toString().trim().split("\n").filter(Boolean);
-            const shards = files.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
-            const got = new Set(shards.map((s) => s.shard));
-            if (got.size !== 6) { console.error(`::error::expected 6 distinct shards, got ${[...got].join(", ")}`); process.exit(1); }
-            const rows = {}, misses = {}, notReached = [];
-            for (const s of shards) { Object.assign(rows, s.rows); Object.assign(misses, s.misses); notReached.push(...s.notReached); }
-            if (notReached.length) { console.error(`::error::${notReached.length} symbols not reached; re-run their shard`); process.exit(1); }
-            const sorted = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
-            const reg = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8"));
-            const total = Object.keys(reg.rows).length;
-            const seen = Object.keys(rows).length + Object.keys(misses).length;
-            if (seen !== total) { console.error(`::error::${seen} symbols accounted for, registrants has ${total}`); process.exit(1); }
-            const out = {
-              asOf: shards.map((s) => s.asOf).sort().at(-1),
-              source: "SEC EDGAR: each registrant’s latest 10-K Item 1 / 20-F Item 4.B, located and cleaned by lib/server/secDescription.ts (scripts/sec-descriptions-build.mjs)",
-              fields: ["form", "filedOn", "accession", "text"],
-              rows: sorted(rows),
-              misses: sorted(misses),
-            };
-            // ONE ROW PER LINE so a refresh diffs per symbol; each line is its own JSON.stringify.
-            const block = (o) => "{\n" + Object.entries(o).map(([k, v]) => `${JSON.stringify(k)}:${JSON.stringify(v)}`).join(",\n") + "\n}";
-            const text = `{"asOf":${JSON.stringify(out.asOf)},"source":${JSON.stringify(out.source)},"fields":${JSON.stringify(out.fields)},\n"rows":${block(out.rows)},\n"misses":${block(out.misses)}}\n`;
-            JSON.parse(text);
-            fs.writeFileSync("data/sec/descriptions.json", text);
-            const why = {};
-            for (const w of Object.values(misses)) { const k = w.replace(/\(\d+ chars\)/, "(n chars)").replace(/\d+x/, "Nx"); why[k] = (why[k] ?? 0) + 1; }
-            console.log(`${total} symbols · described ${Object.keys(rows).length} · no description ${Object.keys(misses).length}`);
-            for (const [w, n] of Object.entries(why).sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(5)}  ${w}`);
-            const jw = shards.reduce((n, s) => n + (s.joined?.words ?? 0), 0), jr = shards.reduce((n, s) => n + (s.joined?.rows ?? 0), 0);
-            console.log(`split words joined: ${jw} in ${jr} rows`);
-          '
+          node scripts/descriptions-merge.mjs art
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/sec/descriptions.json

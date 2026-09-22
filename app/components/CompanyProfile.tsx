@@ -9,7 +9,7 @@ import { sectorNewsPath, sectorSlugFromLabel } from "@/lib/sectors";
 import type { ProfileDividend } from "@/lib/server/secDividend";
 
 // -- Company profile card -----------------------------------------------------
-// Server-rendered "About" block built from the FMP company profile endpoint.
+// Server-rendered "About" block, composed from SEC data by lib/server/stockProfile.ts.
 // Presentational only (no hooks) so it renders into the crawlable initial HTML.
 
 /**
