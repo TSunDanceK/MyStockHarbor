@@ -161,9 +161,22 @@ console.log("\n6c. sentences about the report, and a pointer hidden in a run-on"
   check("...and CATCHES the pointer let through", noRunOnReject.cleanDescription([runOn, "For the avoidance of doubt, the assurance report is not included. AstraZeneca is a global, science-led biopharmaceutical company focused on medicines." + long].join("\n")).ok);
 }
 
+console.log("\n6d. the opening or nothing");
+{
+  const deep = [
+    ...Array.from({ length: 9 }, (_, i) => `We make available free of charge on our website our reports, item number ${i} of many.`),
+    "As described below, these risks could materially affect our business, financial condition or results of operations in the future." + long,
+  ].join("\n");
+  const r = D.cleanDescription(deep);
+  check("text past the section's opening paragraphs is not used (DAL)", !r.ok, r.ok ? r.text.slice(0, 60) : r.why);
+  const noWindow = await load(once("for (const p of paras.slice(0, LEAD_PARAS)) {", "for (const p of paras) {"));
+  check("...and CATCHES a cleaner that reads on into the section", noWindow.cleanDescription(deep).ok);
+}
+
 console.log("\n7. cross-references and MD&A are rejected");
 {
-  const onds = D.cleanDescription(["This business description should be read in conjunction with our audited Consolidated Financial Statements and notes.",
+  // ONDS's real wording (round-3 full build rejected it: the sentence also names "this Annual Report").
+  const onds = D.cleanDescription(["This business description should be read in conjunction with our audited Consolidated Financial Statements and accompanying notes thereto appearing elsewhere in this Annual Report on Form 10-K for the year ended December 31, 2025 (the “Form 10-K”), which are incorporated herein by this reference.",
     "Ondas, Inc. is a defense, security, and critical infrastructure technology company organized around three business units." + long].join("\n"));
   check("ONDS's leading reading instruction is dropped, not a rejection (owner, #518)", onds.ok && onds.text.startsWith("Ondas, Inc. is"));
   const azn = D.cleanDescription("The information set forth under the headings “Strategic Report—AstraZeneca at a Glance” on page 2 and “Business Review” on pages 26 to 46 is incorporated herein by reference into this annual report as a whole.");
