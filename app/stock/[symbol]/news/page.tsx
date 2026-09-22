@@ -26,6 +26,7 @@ import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import { planSymbolCardArt } from "@/lib/server/news/artTags";
 import NewsCardArt from "@/app/components/NewsCardArt";
 import type { NewsItem as StoredNewsItem } from "@/lib/server/news/types";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
@@ -361,7 +362,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // one. This keeps the whole page fast and indexable while still offering an
 // AI read on demand.
 function DetailedNewsSection({
-  symbol, companyName, trend, newsScore, detailedNews, compactNews, artBucket, changePct, sparkPoints,
+  symbol, companyName, trend, newsScore, detailedNews, compactNews, artBucket, industry, changePct, sparkPoints,
 }: {
   symbol: string;
   companyName: string;
@@ -375,6 +376,14 @@ function DetailedNewsSection({
    * fallback the null case falls through to.
    */
   artBucket: string | null;
+  /**
+   * FMP's INDUSTRY LABEL for this symbol, from the same resolveProfile() call
+   * that produced artBucket. Layer 3 of the picker reads it: the sector bucket
+   * alone puts servers and cables on every Technology stock, because
+   * "Consumer Electronics" and "Communication Equipment" both resolve to
+   * sector-software. See lib/server/news/industryArt.ts.
+   */
+  industry: string | null;
   changePct: number | null;
   sparkPoints: number[];
 }) {
@@ -395,13 +404,25 @@ function DetailedNewsSection({
   // every selection after the first. Keyed by bucket, the rule means what it
   // says within each bucket and nothing across them.
   const takenByBucket = new Map<string, Set<number>>();
+  // ── AND A SECOND ONE, KEYED BY IMAGE NAME ────────────────────────────────
+  // The v2 library has no buckets, so its no-repeat state cannot share a map
+  // whose values are v1's numeric indices. Two collections for the same reason
+  // the one above is per bucket: a shared one blocks images it has never used.
+  const takenTagNames = new Set<string>();
   const leadArt: CardArt[] = detailedNews.map((item) =>
-    planCardArt({
+    // THE WHOLE RULE IS IN artTags.ts, layered most-specific-first, and it is
+    // tested by being CALLED — a rule written out here could only be grepped
+    // at, which is how this surface's sibling shipped blank for a step.
+    planSymbolCardArt({
       variant: "lead",
+      title: item.title,
+      description: item.description,
       eventType: item.eventType,
+      industry,
       sectorBucket: artBucket,
       key: item.guid ?? item.link,
-      taken: takenByBucket,
+      takenNames: takenTagNames,
+      takenBuckets: takenByBucket,
       canGenerate: true,
     })
   );
@@ -709,7 +730,7 @@ export default async function StockNewsPage({ params }: Props) {
 
         <section className="newsGrid" style={newsGridStyle}>
           <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
-            <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} artBucket={artBucket} changePct={artChangePct} sparkPoints={sparkPoints} />
+            <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} artBucket={artBucket} industry={profile.industry} changePct={artChangePct} sparkPoints={sparkPoints} />
             <AiInsightCard
               symbol={upper}
               companyName={companyName}

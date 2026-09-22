@@ -26,9 +26,10 @@
 // picture asserts something false about the article, a missing one asserts
 // nothing. /headlines falls through to the event-art path it already had.
 import manifest from "@/public/news-art/manifest-v2.json";
-import { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
-import { articleTopic } from "./articleTopic";
-import { eventTypeFromTitle } from "./eventType";
+import { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
+import { articleTopic, MARKET_WIDE_SUBJECTS } from "./articleTopic";
+import { eventTypeFromTitle, type EventType } from "./eventType";
+import { industryTag } from "./industryArt";
 
 /**
  * One image's tags, as the generator wrote them.
@@ -161,6 +162,16 @@ export function pickTagged(input: {
   key: string;
   /** No-repeat state, keyed BY NAME. Mutated, so pass the same Set per page. */
   taken?: Set<string>;
+  /**
+   * WHAT TO DO WHEN EVERY WINNER IS ALREADY ON THE PAGE. "repeat" matches v1
+   * and is the default; "skip" returns null so the caller can fall through.
+   *
+   * 62 OF THE 67 SUBJECTS HOLD FOUR IMAGES and a stock page draws five lead
+   * cards, so on that surface the fifth card ALWAYS exhausted the pool and
+   * repeated — which is what the preview showed. /headlines has nothing
+   * underneath to fall through to, so it keeps "repeat".
+   */
+  onExhausted?: "repeat" | "skip";
 }): NewsArt | null {
   const subjects = new Set(input.subjectTags.filter((t) => t && t !== ANY));
   const motifs = new Set(input.articleMotifs.filter((t) => t && t !== ANY));
@@ -181,7 +192,7 @@ export function pickTagged(input: {
     }
   }
 
-  return artFor(winners[first]);
+  return input.onExhausted === "skip" ? null : artFor(winners[first]);
 }
 
 /**
@@ -264,5 +275,138 @@ export function planHeadlineArt(input: {
     key: input.key,
     taken: input.takenBuckets,
     canGenerate: false,
+  });
+}
+
+
+/**
+ * THE WHOLE SYMBOL-LED RULE, IN ONE FUNCTION — layered, most specific first.
+ *
+ *   1. THE ARTICLE'S OWN WORDS. articleTopic's subject, market-wide tags
+ *      dropped. Hits 9 of 192 per-symbol headlines (4.7%) after the exclusion.
+ *   2. THE EVENT BUCKET, unchanged from today. See below — this is the layer
+ *      the brief did not mention and it is deliberately ABOVE industry.
+ *   3. THE INDUSTRY. industryArt.ts turns FMP's label into a v2 subject. This
+ *      is the layer that does the work: it reaches 87.7% of the universe and it
+ *      is what stops every Technology stock showing servers and cables.
+ *   4. THE SECTOR BUCKET, today's art, unchanged.
+ *
+ * ── WHY THE EVENT BUCKET STAYS ABOVE THE INDUSTRY, AND IT IS A CHOICE ─────
+ * The brief said "classifier, then industry, then the existing sector art", and
+ * did not say where eventType goes. Putting industry above it would silently
+ * take event-earnings art off every earnings story on a stock page — 7% of
+ * per-symbol headlines reach an event bucket today — and replace it with a
+ * picture of the company's industry.
+ *
+ * That is a behaviour change nobody asked for, and the ordering principle the
+ * whole picker is built on says it would be the wrong one anyway: layer 1 is
+ * first because the ARTICLE is more specific than the company, and an event
+ * type is also a fact about the article. "Apple beats estimates" is an earnings
+ * story that happens to be about a consumer-electronics company.
+ *
+ * It is one line to move if that judgement is wrong, and the check has a case
+ * pinning the current order so moving it is visible rather than accidental.
+ *
+ * COMPACT ROWS NEVER REACH ANY OF THIS. planCardArt gives them the generated
+ * data card, because at 56px a ticker and a move are legible where a shrunk
+ * illustration is not, and that rule is not this function's to revisit.
+ */
+export function planSymbolCardArt(input: {
+  variant: "lead" | "compact";
+  title: string;
+  /** The item's summary or excerpt, when it has one. */
+  description?: string | null;
+  /** §7's event type for this item, or null. */
+  eventType?: EventType | null;
+  /** FMP's industry label from resolveProfile(), or null. */
+  industry: string | null;
+  /** The symbol's sector bucket — layer 4, and what everything falls through to. */
+  sectorBucket: string | null;
+  /** Stable per-article key: a guid where there is one, else the link. */
+  key: string;
+  /** v2 no-repeat state, keyed by image NAME. Mutated; one per page. */
+  takenNames: Set<string>;
+  /** v1 no-repeat state, keyed by BUCKET. Mutated; one per page. */
+  takenBuckets: Map<string, Set<number>>;
+  canGenerate: boolean;
+}): CardArt {
+  const {
+    variant, title, description, eventType, industry, sectorBucket,
+    key, takenNames, takenBuckets, canGenerate,
+  } = input;
+
+  if (variant === "lead") {
+    // ── LAYER 1 ──────────────────────────────────────────────────────────
+    // Subjects only. A motif-only article ("…raises guidance") falls through:
+    // the company's own industry says more about the picture than a generic
+    // podium does, which is the opposite of the trade on /headlines, where
+    // there is no company to say anything about.
+    const { subjects } = articleTopic(title, description ?? null);
+    // ── AND A SUBJECT THE INDUSTRY ALREADY SAYS IS SKIPPED ───────────────
+    // A layer-1 tag equal to this symbol's own industry tag carries NO
+    // information the page does not already have: layer 3 would answer with
+    // the same subject and, because the key is the same, the same image. All
+    // it does is jump the queue ahead of the event bucket.
+    //
+    // MEASURED ON THE DRONE FIXTURE: of candidate C's 16 hits, 9 are on RCAT,
+    // AVAV and KTOS, whose industry is already `aerospace-defence`. Without
+    // this rule one of those 9 — "AeroVironment Stock Jumps After Earnings
+    // Beat. There's Still Growth for Drones." — would take event-earnings art
+    // off an earnings story because its last clause says "drones". With it,
+    // that card keeps the event art and the other 8 are unchanged either way.
+    //
+    // So the rule costs nothing and buys back the event bucket. What survives
+    // is the 6 hits on ONDS and UMAC, the two symbols whose industry does NOT
+    // say aerospace — which is exactly where a headline knows something the
+    // taxonomy does not.
+    const ownTag = industryTag(industry);
+    const specific = subjects.filter(
+      (tag) => !MARKET_WIDE_SUBJECTS.has(tag) && tag !== ownTag
+    );
+    if (specific.length) {
+      const art = pickTagged({
+        subjectTags: specific,
+        articleMotifs: [],
+        key,
+        taken: takenNames,
+        onExhausted: "skip",
+      });
+      if (art) return { kind: "library", art };
+    }
+
+    // ── LAYER 3, REACHED ONLY WHEN LAYER 2 HAS NOTHING TO SAY ────────────
+    // bucketForItem answers art.ts's own question — "does this item have an
+    // event bucket that holds images?" — rather than this file re-deriving it.
+    // A null sector argument makes it answer about the EVENT half alone.
+    if (!bucketForItem(eventType ?? null, null)) {
+      if (ownTag) {
+        const art = pickTagged({
+          subjectTags: [ownTag],
+          articleMotifs: [],
+          key,
+          taken: takenNames,
+          onExhausted: "skip",
+        });
+        if (art) return { kind: "library", art };
+      }
+    }
+  }
+
+  // ── LAYERS 2 AND 4, AND THE COMPACT CARD: TODAY'S RULE, UNTOUCHED ──────
+  return planCardArt({
+    variant,
+    eventType,
+    sectorBucket,
+    key,
+    taken: takenBuckets,
+    canGenerate,
+    // ── AND THE LAST TWO LAYERS SKIP TOO ──────────────────────────────────
+    // A page that has run out of one layer's images has NOT run out of
+    // pictures: the event bucket falls to the sector bucket and the sector
+    // bucket falls to the generated data card, which carries the ticker and
+    // the move and is never a duplicate. A repeated illustration says two
+    // stories are the same one; the generated card says nothing it does not
+    // know. On this surface the second is always the better trade.
+    onExhausted: "skip",
   });
 }
