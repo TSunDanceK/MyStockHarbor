@@ -162,6 +162,16 @@ export function pickTagged(input: {
   key: string;
   /** No-repeat state, keyed BY NAME. Mutated, so pass the same Set per page. */
   taken?: Set<string>;
+  /**
+   * WHAT TO DO WHEN EVERY WINNER IS ALREADY ON THE PAGE. "repeat" matches v1
+   * and is the default; "skip" returns null so the caller can fall through.
+   *
+   * 62 OF THE 67 SUBJECTS HOLD FOUR IMAGES and a stock page draws five lead
+   * cards, so on that surface the fifth card ALWAYS exhausted the pool and
+   * repeated — which is what the preview showed. /headlines has nothing
+   * underneath to fall through to, so it keeps "repeat".
+   */
+  onExhausted?: "repeat" | "skip";
 }): NewsArt | null {
   const subjects = new Set(input.subjectTags.filter((t) => t && t !== ANY));
   const motifs = new Set(input.articleMotifs.filter((t) => t && t !== ANY));
@@ -182,7 +192,7 @@ export function pickTagged(input: {
     }
   }
 
-  return artFor(winners[first]);
+  return input.onExhausted === "skip" ? null : artFor(winners[first]);
 }
 
 /**
@@ -359,6 +369,7 @@ export function planSymbolCardArt(input: {
         articleMotifs: [],
         key,
         taken: takenNames,
+        onExhausted: "skip",
       });
       if (art) return { kind: "library", art };
     }
@@ -374,6 +385,7 @@ export function planSymbolCardArt(input: {
           articleMotifs: [],
           key,
           taken: takenNames,
+          onExhausted: "skip",
         });
         if (art) return { kind: "library", art };
       }
@@ -388,5 +400,13 @@ export function planSymbolCardArt(input: {
     key,
     taken: takenBuckets,
     canGenerate,
+    // ── AND THE LAST TWO LAYERS SKIP TOO ──────────────────────────────────
+    // A page that has run out of one layer's images has NOT run out of
+    // pictures: the event bucket falls to the sector bucket and the sector
+    // bucket falls to the generated data card, which carries the ticker and
+    // the move and is never a duplicate. A repeated illustration says two
+    // stories are the same one; the generated card says nothing it does not
+    // know. On this surface the second is always the better trade.
+    onExhausted: "skip",
   });
 }

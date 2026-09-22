@@ -409,10 +409,25 @@ check(
   "a fresh map per card disables the rule; check-news-art proves what the rule then does with it"
 );
 check(
-  "pickArt itself is unchanged — the selection rule was not rewritten",
-  /export function pickArt\(bucket: string \| null, key: string, taken\?: Set<number>\)/.test(read("lib/server/news/art.ts")) &&
-    /const first = hashKey\(key\) % count;/.test(read("lib/server/news/art.ts")),
-  "re-hash-on-collision and the 0-based walk are untouched; only the bucket handed to it changed"
+  "pickArt's SELECTION rule is unchanged — only what it does when exhausted is now a choice",
+  (() => {
+    const artSrc = read("lib/server/news/art.ts");
+    // THE THREE PARTS THAT ARE THE RULE, asserted individually rather than as
+    // one signature match. The signature gained a fourth parameter on
+    // 2026-09-22 — `onExhausted`, because a stock page draws five lead cards
+    // against four-image pools and the fifth repeated. That is a change to the
+    // LAST LINE of the function, not to how it picks: the hash, the 0-based
+    // walk and the mutation of `taken` are what this check is about, and all
+    // three are still here. Pinning the signature made the check fail on a
+    // change it does not care about while proving nothing extra.
+    return (
+      /export function pickArt\(\n  bucket: string \| null,\n  key: string,\n  taken\?: Set<number>,/.test(artSrc) &&
+      /const first = hashKey\(key\) % count;/.test(artSrc) &&
+      /const index = \(first \+ step\) % count;/.test(artSrc) &&
+      /taken\.add\(index\);/.test(artSrc)
+    );
+  })(),
+  "re-hash-on-collision and the 0-based walk are untouched; the bucket handed to it and the exhausted branch are what changed"
 );
 check(
   "two items with different eventTypes draw from different buckets and do not block each other",

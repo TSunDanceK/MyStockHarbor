@@ -1096,6 +1096,29 @@ const industry = await import(`data:text/javascript;base64,${Buffer.from(
 ).toString("base64")}`);
 globalThis.__newsIndustry = industry;
 
+// ── THE REAL PROFILE LOOKUP, for the spelling case ────────────────────────
+// /stock/BRK.B/news is the page this exists for: the snapshot keys share
+// classes with a DASH and curatedSymbols spells Berkshire with a DOT, so that
+// page reached no row at all and drew the generated card while /stock/BRK-B
+// worked. Testing it against a hand-written map would assert that a bridge
+// exists while testing a different bridge, so the SHIPPED module is loaded,
+// with only its two data imports handed over.
+globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
+const staticProfileSrc = read("lib/server/staticProfile.ts")
+  .replace(/^import snapshotFile from "@\/data\/static-profile\.json";$/m, "const snapshotFile = globalThis.__staticProfile;")
+  .replace(/^import cikMap from "@\/data\/cik-map\.json";$/m, () => `const cikMap = ${read("data/cik-map.json")};`)
+  .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m, "const { lookupSpellingIn } = globalThis.__symbolSpellings;");
+if (/^import /m.test(staticProfileSrc)) {
+  console.error("FAIL: an import survived substitution in staticProfile.ts:\n" +
+    staticProfileSrc.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
+  process.exit(1);
+}
+const staticProfile = await import(`data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(staticProfileSrc, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+).toString("base64")}`);
+
 globalThis.__newsArtV1 = art;
 globalThis.__newsTopic = topic;
 globalThis.__newsEventType = et;
@@ -1671,6 +1694,113 @@ check(
   sym({ industry: "Underwater Basket Weaving" }).art.bucket === "sector-banks" &&
     sym({ industry: null }).art.bucket === "sector-banks"
 );
+// ── NO PAGE REPEATS AN IMAGE ──────────────────────────────────────────────
+// THE DEFECT THE PREVIEW FOUND, and the arithmetic that made it certain: a
+// stock page draws FIVE lead cards (maxDetailedItems: 5) and 62 of the 67 v2
+// subjects hold FOUR images, so the fifth card exhausted the pool and repeated
+// — ONDS 01,04,03,02,04 and AAPL 03,01,02,04,02 on the deployed preview.
+//
+// EIGHT CARDS, not five, so the assertion still bites if the page ever shows
+// more, and run over every live industry label rather than a sample: the
+// failure is arithmetic, so it is not a question of picking the right symbol.
+check(
+  "no symbol page repeats an image across 8 cards — any label, any pool size",
+  (() => {
+    const offenders = [];
+    for (const label of industry.INDUSTRY_TAG_LABELS) {
+      const takenNames = new Set();
+      const takenBuckets = new Map();
+      const seen = new Set();
+      for (let i = 0; i < 8; i += 1) {
+        const p = shippedTags.planSymbolCardArt({
+          variant: "lead",
+          title: "Quiet day for the company",
+          description: null,
+          eventType: null,
+          industry: label,
+          sectorBucket: "sector-banks",
+          key: `card-${i}`,
+          takenNames,
+          takenBuckets,
+          canGenerate: true,
+        });
+        // A generated card is not a repeat: it carries this article's own
+        // ticker and move, so two of them are not the same picture twice.
+        if (p.kind !== "library") continue;
+        if (seen.has(p.art.src)) { offenders.push(`${label} -> ${p.art.src} on card ${i + 1}`); break; }
+        seen.add(p.art.src);
+      }
+      if (offenders.length >= 3) break;
+    }
+    return offenders.length === 0;
+  })(),
+  "a repeated illustration says two stories are the same one; the generated card says nothing it does not know"
+);
+check(
+  "...and the fall-through is ordered: the tag's pool, then the sector bucket, then the generated card",
+  (() => {
+    // COUNTS DERIVED, NOT TYPED. `luxury` holds 4 in the shipped manifest and
+    // sector-banks holds 4 in §5's synthetic one — but the first version of
+    // this check hardcoded 8 for the sector half, which is what the REAL v1
+    // manifest holds, and failed against the harness. An expectation written
+    // from a different manifest than the one under test asserts nothing about
+    // either.
+    const tagPool = v2Names.filter((n) => (v2[n].primary ?? []).includes("luxury")).length;
+    const sectorPool = art.bucketCount("sector-banks");
+    const takenNames = new Set();
+    const takenBuckets = new Map();
+    const kinds = [];
+    for (let i = 0; i < tagPool + sectorPool + 1; i += 1) {
+      const p = shippedTags.planSymbolCardArt({
+        variant: "lead", title: "Quiet day", description: null, eventType: null,
+        industry: "Luxury Goods", sectorBucket: "sector-banks", key: `k${i}`,
+        takenNames, takenBuckets, canGenerate: true,
+      });
+      kinds.push(p.kind === "library" ? (p.art.bucket.startsWith("sector-") ? "sector" : "tag") : p.kind);
+    }
+    return (
+      tagPool > 0 && sectorPool > 0 &&
+      kinds.slice(0, tagPool).every((k) => k === "tag") &&
+      kinds.slice(tagPool, tagPool + sectorPool).every((k) => k === "sector") &&
+      kinds[tagPool + sectorPool] === "generated"
+    );
+  })(),
+  "the tag's pool, then the sector bucket, then the card — and nothing repeated on the way"
+);
+
+// ── /stock/BRK.B/news, THE SPELLING THE PAGE ACTUALLY USES ────────────────
+// Unverifiable on a preview, because BRK.B's feed carried no headlines the day
+// it was checked. It is verifiable here, and it is the whole point of routing
+// staticProfileFor through lookupSpellingIn.
+check(
+  "BRK.B and BRK-B both reach insurance art — the dotted spelling is not a second-class page",
+  (() => {
+    const forSymbol = (sym) => {
+      const profile = staticProfile.resolveProfile(sym, null);
+      return shippedTags.planSymbolCardArt({
+        variant: "lead",
+        title: "Berkshire trims a position and adds to another",
+        description: null,
+        eventType: null,
+        industry: profile.industry,
+        sectorBucket: "sector-insurance",
+        key: "k1",
+        takenNames: new Set(),
+        takenBuckets: new Map(),
+        canGenerate: true,
+      });
+    };
+    const dotted = forSymbol("BRK.B");
+    const dashed = forSymbol("BRK-B");
+    return (
+      dotted.kind === "library" && dashed.kind === "library" &&
+      dotted.art.src.startsWith("/news-art/insurance-any-") &&
+      dotted.art.src === dashed.art.src
+    );
+  })(),
+  "before the spellings fix the dotted page reached NO row, so it drew the generated ticker card while the dashed one drew art"
+);
+
 check(
   "a COMPACT row is untouched by all four layers — still the generated card",
   (() => {
