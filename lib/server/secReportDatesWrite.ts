@@ -90,3 +90,49 @@ export function rewriteQueue(
     .map(({ s }) => s);
 }
 
+
+/**
+ * The report-dates phase's queue, in the order the review set (2026-09-22):
+ *
+ *   1. FILED SINCE THE RECORD WAS WRITTEN -- the daily index saw an 8-K or 6-K
+ *      newer than the symbol's reportDatesAt, or the symbol is queued for a
+ *      re-read because of one (`eventQueued`, captured before the fact-set loop
+ *      clears the flag). This is how MU leaves the due strip the day after it
+ *      files: its fact set does not change until the 10-K.
+ *   2. THE DUE-STRIP CUT, where the record is more than STALE_CUT_DAYS old or
+ *      was never written. Not every run: a cut record only moves on an event
+ *      (tier 1) or when its estimate rolls, and 50 of the 100 slots every day
+ *      would starve tier 3.
+ *   3. Everything else: symbols whose fact set changed this run, then the
+ *      never-written backfill.
+ *
+ * Pure: the manifest entries, the run's changed list and the clock come in.
+ */
+export const STALE_CUT_DAYS = 7;
+
+export function reportDatesQueue(args: {
+  entries: Readonly<Record<string, { cik?: string | null; reportDatesAt?: number | null; lastEventFiled?: string | null }>>;
+  eventQueued: ReadonlySet<string>;
+  cut: readonly string[];
+  changedThisRun: readonly string[];
+  limit: number;
+  now: number;
+}): { queue: string[]; tier1: number; tier2: number; tier3: number } {
+  const { entries, eventQueued, cut, changedThisRun, limit, now } = args;
+  const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, "");
+  const has = (s: string) => Boolean(entries[s]?.cik);
+  const tier1 = Object.keys(entries).filter((s) => {
+    const e = entries[s];
+    if (!e?.cik) return false;
+    if (eventQueued.has(s)) return true;
+    return Boolean(e.lastEventFiled) && (!e.reportDatesAt || (e.lastEventFiled as string) > ymd(e.reportDatesAt));
+  }).sort();
+  const tier2 = cut.filter((s) => {
+    const at = entries[s]?.reportDatesAt;
+    return has(s) && (!at || now - at > STALE_CUT_DAYS * 86_400_000);
+  });
+  const backfill = Object.keys(entries).filter((s) => has(s) && !entries[s].reportDatesAt).sort();
+  const tier3 = [...changedThisRun.filter(has), ...backfill];
+  const queue = [...new Set([...tier1, ...tier2, ...tier3])].slice(0, limit);
+  return { queue, tier1: tier1.length, tier2: tier2.length, tier3: tier3.length };
+}
