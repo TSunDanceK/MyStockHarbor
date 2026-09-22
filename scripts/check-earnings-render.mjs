@@ -17,6 +17,7 @@
 // runner's own hash. Every number in them comes from SEC.
 import fs from "node:fs";
 import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { once } from "./lib/render-snapshot.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -1064,6 +1065,26 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
     /check back|being fetched/i.test(pendingText) &&
       !/check back|being fetched/i.test(visibleText(renderAll(M, vKgc, "KGC"))),
     "KGC renders the annual page; the pending wording appears only in the pending card");
+}
+
+console.log("\n15. EPS is labelled with the standard the filer reports under");
+{
+  // AZN and KGC file IFRS (ifrs-full is their only financial namespace); AAPL
+  // files US GAAP. The label said "GAAP" on all three (owner, #514).
+  const t = (v, sym) => visibleText(renderAll(M, v, sym));
+  const azn = t(vAzn, "AZN"), kgc = t(vKgc, "KGC"), aapl = t(vAapl, "AAPL");
+  check("AZN's EPS labels say IFRS and never GAAP",
+    /Diluted EPS \(IFRS\)/.test(azn) && !/GAAP/.test(azn), (azn.match(/[^.]*GAAP[^.]*/) ?? [""])[0]);
+  check("KGC's EPS labels say IFRS and never GAAP",
+    /EPS \(IFRS\)/.test(kgc) && !/GAAP/.test(kgc), (kgc.match(/[^.]*GAAP[^.]*/) ?? [""])[0]);
+  check("AAPL's still say GAAP, and never IFRS",
+    /Diluted EPS \(GAAP\)/.test(aapl) && /EPS is GAAP, as filed/.test(aapl) && !/IFRS/.test(aapl));
+  const hard = await loadCards(once(
+    'return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";',
+    'return "GAAP";'
+  ));
+  check("...and CATCHES the standard hardcoded back to GAAP",
+    /GAAP/.test(visibleText(renderAll(hard, hard.buildSecEarningsView(AZN), "AZN"))));
 }
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nRendered output holds.\n");

@@ -27,7 +27,7 @@
 // the full report therefore cannot disagree about the same filing, which they
 // would within a week of anyone tuning either copy. See that module's header.
 import {
-  buildSecEarningsView, conversionNote, isPct, periodWords,
+  buildSecEarningsView, conversionNote, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
@@ -39,7 +39,7 @@ import {
 import {
   coverageOf, scoreFromSec, toneLabel, type EarningsTone,
 } from "./secEarningsScore";
-import { partialScoreLabel, partialScoreNote } from "./secPresentation";
+import { partialScoreLabel, partialScoreShortNote } from "./secPresentation";
 
 /**
  * ── FIELDS DROPPED FROM THIS CARD. HIDDEN, NOT REMOVED. ───────────────────
@@ -239,7 +239,10 @@ export type SecEarningsSnapshot = {
    * both surfaces call.
    */
   partial: boolean;
-  /** partialScoreNote's sentence, or null when the score is not partial. */
+  /**
+   * partialScoreShortNote's one sentence, or null when the score is not
+   * partial. The full note with the reachable range stays on the earnings page.
+   */
   partialNote: string | null;
   /** 0-100, or null when the score could not run. NEVER 50-as-a-reading. */
   score: number | null;
@@ -327,7 +330,7 @@ export function buildSecEarningsSnapshot(args: {
       : score.available ? toneLabel(score.tone) : "Unavailable",
     partial: Boolean(coverage?.partial),
     partialNote: coverage?.partial
-      ? partialScoreNote(coverage, score.unavailable, periodWords(score.basis).one)
+      ? partialScoreShortNote(coverage)
       : null,
     reportedOn: reported?.on ?? null,
     reportedVia: reported?.via ?? null,
