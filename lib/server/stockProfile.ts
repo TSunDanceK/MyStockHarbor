@@ -12,7 +12,9 @@
 //   52-week range   high/low of the last 252 daily bars the page already loads
 //   Exchange        SEC's ticker file (data/sec/company-tickers.json)
 //   Country         SEC submissions business address (data/sec/registrants.json)
-//   Description     STILL FMP — the last FMP field on this page, until PR 3
+//   Description     the company's own annual report (10-K Item 1 / 20-F Item
+//                   4.B), committed as data/sec/descriptions.json — PR 3 (#518);
+//                   none means no paragraph, never an FMP fallback
 //
 // IPO date and Website are hidden (HIDDEN_PROFILE_ROWS in CompanyProfile.tsx):
 // no free source for the first, and the second is blank on all 2,609 SEC
@@ -29,6 +31,8 @@ import type { ValuationInputs } from "./secValuation";
 import { marketCap } from "./secValuation";
 import { loadTickerMap } from "./secTickerMap";
 import type { ResolvedProfile } from "./staticProfile";
+import type { FilingDescription } from "./filingDescription";
+import { descriptionAttribution } from "./filingDescription";
 
 export type Registrant = {
   cik: string;
@@ -125,8 +129,12 @@ export type ComposeInputs = {
   snapshotName: string;
   /** The stored SEC set's entityName, or null. */
   entityName: string | null;
-  /** The last FMP field: FMP stable/profile description, or null. */
-  fmpDescription: string | null;
+  /**
+   * The company's own description from its latest annual report
+   * (lib/server/filingDescription.ts), or null — which renders no paragraph.
+   * Replaced FMP's description, the last FMP field on the page (PR 3, #518).
+   */
+  filingDescription: FilingDescription | null;
   taxonomy: ResolvedProfile;
   valuation: ValuationInputs | null;
   price: number | null;
@@ -166,11 +174,14 @@ export function composeCompanyProfile(i: ComposeInputs): CompanyProfile {
   if (range) add("52-week range", "daily price history");
   if (i.exchange) add("Exchange", "SEC EDGAR");
   if (country) add("Country", "SEC EDGAR");
-  if (i.fmpDescription) add("Description", "Financial Modeling Prep");
+  // THE DESCRIPTION CARRIES ITS OWN ATTRIBUTION, under the paragraph, in the
+  // owner's wording ("From Apple Inc.'s 10-K, filed Oct 2025"), so it is not
+  // repeated in the per-row source line.
 
   return {
     companyName: name,
-    description: i.fmpDescription,
+    description: i.filingDescription?.text ?? null,
+    descriptionAttribution: i.filingDescription ? descriptionAttribution(name, i.filingDescription) : null,
     sector: i.taxonomy.sector,
     industry: i.taxonomy.industry,
     ceo: null,
