@@ -81,6 +81,40 @@ for (const t of ["SQ", "XYZ", "BK", "EA", "EQR", "WBS", "MSTY", "JEPI", "SPY", "
   console.log(`  ${t.padEnd(6)} committed ${(c ?? "—").padEnd(12)} live ${(l ?? "—").padEnd(12)} ${verdict}`);
 }
 
+// ── IS IT THE FILE'S AGE, OR THE FILE? ───────────────────────────────────
+//
+// If BK, EA, EQR and WBS are absent from the LIVE company_tickers_exchange
+// file too, then refreshing the snapshot cannot fix them and the problem is
+// WHICH SEC FILE is read, not how old it is. SEC publishes a second one —
+// company_tickers.json, the legacy shape with no exchange column — and
+// parseTickerFile ALREADY handles that shape (see its LegacyRow branch), so
+// the question is worth asking before anyone schedules a refresh.
+const LEGACY_URL = "https://www.sec.gov/files/company_tickers.json";
+let legacy = null;
+try {
+  const lr = await fetch(LEGACY_URL, { headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" } });
+  if (lr.ok) {
+    legacy = parser.parseTickerFile(await lr.text());
+    console.log(`\n  legacy company_tickers.json: ${legacy.map.size} tickers, shape=${legacy.shape}`);
+  } else console.log(`\n  legacy file: HTTP ${lr.status}`);
+} catch (e) { console.log(`\n  legacy file: FAILED — ${e.message}`); }
+
+if (legacy) {
+  console.log(`  ${"symbol".padEnd(7)} ${"exchange-file".padEnd(14)} legacy-file`);
+  for (const t of ["BK", "EA", "EQR", "WBS", "SQ", "XYZ", "QQQ", "SPY", "MSTY", "JEPI", "AAPL"]) {
+    const a = lookupBySpelling(live.map, t)?.value?.cik ?? "—";
+    const b = lookupBySpelling(legacy.map, t)?.value?.cik ?? "—";
+    const note = a === "—" && b !== "—" ? "  <-- LEGACY FILE HAS IT" : "";
+    console.log(`  ${t.padEnd(7)} ${a.padEnd(14)} ${b}${note}`);
+  }
+  const rescued = submitted.filter((s) => !hit(live.map, s) && hit(legacy.map, s));
+  const etfRescued = [...etfs].filter((s) => !hit(live.map, s) && hit(legacy.map, s));
+  console.log(`\n  SUBMITTED symbols the legacy file would rescue: ${rescued.length}${rescued.length ? "  " + rescued.join(" ") : ""}`);
+  console.log(`  ETFs the legacy file would rescue:             ${etfRescued.length}${etfRescued.length ? "  " + etfRescued.join(" ") : ""}`);
+  const wouldLose = submitted.filter((s) => hit(live.map, s) && !hit(legacy.map, s));
+  console.log(`  SUBMITTED symbols the legacy file would LOSE:  ${wouldLose.length}${wouldLose.length ? "  " + wouldLose.join(" ") : ""}`);
+}
+
 // THE WHOLE-FILE DELTA, so "refresh the snapshot" has a size rather than a vibe.
 const cSet = new Set(committed.map.keys()), lSet = new Set(live.map.keys());
 const added = [...lSet].filter((t) => !cSet.has(t));
