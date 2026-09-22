@@ -270,6 +270,9 @@ const POINTER: RegExp[] = [
   /\b(our\s+)?website\s+(address\s+)?is\b/i,
 ];
 
+/** Paragraphs from the section's start that may supply the description. */
+const LEAD_PARAS = 8;
+
 /** A first paragraph shorter than this, with a longer one after it, is a slogan. */
 const SLOGAN_CHARS = 100;
 
@@ -430,8 +433,12 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   // on relay 35781008070 GS carried "When we use the terms…" as its SECOND
   // paragraph, so a definition is dropped wherever it falls in the excerpt,
   // and so is a pointer to elsewhere in the document.
+  // THE OPENING OR NOTHING: only the first LEAD_PARAS paragraphs are
+  // candidates. With every opening sentence dropped, reading on reached deep
+  // into the section (DAL rendered risk-factor text, full build round 3); a
+  // description comes from where the company introduces itself, or not at all.
   let out: Para[] = [];
-  for (const p of paras) {
+  for (const p of paras.slice(0, LEAD_PARAS)) {
     const all = sentences(p.t);
     // A DROPPED SENTENCE STILL COUNTS FOR REJECTION: AZN's cross-reference is a
     // single 1,000+ character sentence, and dropping it as a run-on let the
@@ -444,6 +451,7 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
       for (const x of all) {
         // Not the DEFINITION drops: ONDS's leading "should be read in
         // conjunction with…" sentence is dropped, not rejected (owner, #518).
+        if (DEFINITION.some((re) => re.test(x))) continue;
         if (x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;
         for (const [re, label] of REJECT) if (re.test(x)) return { ok: false, why: `rejected: ${label}` };
       }
