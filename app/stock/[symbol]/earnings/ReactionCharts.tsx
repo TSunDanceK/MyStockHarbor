@@ -37,7 +37,22 @@ export function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, ch
           Y-axis scale column. */}
       <div className="chartRow">
         <div className="chartCategories">
-          {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
+          {/* TWO LINES ON A PHONE. "Q2 FY2025" does not fit an eighth of a
+              375px plot and was ellipsised to "Q2 …" on both charts; it now
+              stacks as "Q2" over "FY25" there. The full label is the title. */}
+          {labels.map((l, i) => {
+            const m = /^(Q\d) FY(\d{2})(\d{2})$/.exec(l);
+            return (
+              <span key={`${l}-${i}`} title={l}>
+                {m ? (
+                  <>
+                    <span className="catLong">{l}</span>
+                    <span className="catShort" aria-hidden="true">{m[1]}<br />FY{m[3]}</span>
+                  </>
+                ) : l}
+              </span>
+            );
+          })}
         </div>
         {hasScale && <div className="chartScaleSpacer" aria-hidden="true" />}
       </div>

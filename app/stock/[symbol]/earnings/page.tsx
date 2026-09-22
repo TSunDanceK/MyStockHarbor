@@ -768,7 +768,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartScale .scaleBottom { bottom: 0; }
         .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
         .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
-        .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        .chartCategories .catShort { display: none; }
+        .chartCategories > span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
         /* ── THE NEW MARKS ──────────────────────────────────────────────────
            Thin bars, 4px rounded data-ends anchored to the baseline, a 2px
            surface gap between adjacent fills, and recessive tracks. Text stays
@@ -859,6 +860,8 @@ export default async function StockEarningsPage({ params }: Props) {
           .chartScaleSpacer { width: 58px; }
           .chartScale span { font-size: 10px; left: 2px; right: 2px; }
           .chartCategories span { font-size: 9.5px; }
+          .chartCategories .catLong { display: none; }
+          .chartCategories .catShort { display: inline; white-space: nowrap; line-height: 1.25; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
           .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
