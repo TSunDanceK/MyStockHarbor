@@ -482,6 +482,17 @@ const TASKS = {
   // READS ONLY, but the bars and the report dates both live in Upstash and the
   // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
   // not a claim about what the script does.
+  // READS ONLY. The stored SEC fact set lives in Upstash and the credentials
+  // live in this job, so the write- prefix is the CREDENTIAL boundary again,
+  // not a claim about what the script does. It reaches data.sec.gov for
+  // CONCEPT NAMES only — never to re-extract, because the whole point is to
+  // read the object the page reads.
+  "write-stored-set": {
+    script: "scripts/sec-stored-set-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-valuation-price": {
     script: "scripts/valuation-price-probe.mjs",
     args: () => [],
