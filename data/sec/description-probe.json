@@ -11,8 +11,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
    "found": true,
    "ok": true,
-   "chars": 427,
-   "description": "The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\niPhone ® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.",
+   "chars": 426,
+   "description": "The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\niPhone® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.",
    "raw": "Company Background\nThe Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\nProducts\niPhone\niPhone ® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.\nMac\nMac ® is the Company’s line of personal computers based on its macOS ® operating system. The Mac line includes laptops MacBook Air ® and MacBook Pro ® , as well as desktops iMac ® , Mac mini ® , Mac Studio ® and Mac Pro ® .\niPad\niPad"
   },
   {
@@ -39,8 +39,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/1646188/000121390026035981/ea0282911-10k_ondas.htm",
    "found": true,
    "ok": true,
-   "chars": 815,
-   "description": "Ondas, Inc. (together with its subsidiaries, the “Company,” “Ondas,” “we,” “us,” or “our”) is a defense, security, and critical infrastructure technology company organized around three business units: Ondas Autonomous Systems Inc. (“OAS”), Ondas Networks Inc. (“Ondas Networks”), and Ondas Capital Inc. (“Ondas Capital”). Through these business units, we develop and commercialize autonomous systems, private wireless networking technologies, and strategic investment and partnership initiatives that support the scaling and adoption of mission-critical solutions for governments and industrial customers.\n\n● OAS focuses on autonomous and unmanned aerial and ground systems and integrated mission solutions for defense, homeland security, public safety, and other critical infrastructure and industrial end markets.",
+   "chars": 526,
+   "description": "Ondas, Inc. is a defense, security, and critical infrastructure technology company organized around three business units: Ondas Autonomous Systems Inc. (“OAS”), Ondas Networks Inc. (“Ondas Networks”), and Ondas Capital Inc. (“Ondas Capital”). Through these business units, we develop and commercialize autonomous systems, private wireless networking technologies, and strategic investment and partnership initiatives that support the scaling and adoption of mission-critical solutions for governments and industrial customers.",
    "raw": "This business description should be read in\nconjunction with our audited Consolidated Financial Statements and accompanying notes thereto appearing elsewhere in this Annual Report\non Form 10-K for the year ended December 31, 2025 (the “Form 10-K”), which are incorporated herein by this reference.\n\nThe use of the words “we,” “our,”\nthe “Company,” and “Ondas” in this Form 10-K refers to Ondas Inc. and its subsidiaries.\n\nCorporate Overview\n\nOndas, Inc. (together with its subsidiaries, the “Company,”\n“Ondas,” “we,” “us,” or “our”) is a defense, security, and critical infrastructure technology\ncompany organized around three business units: Ondas Autonomous Systems Inc. (“OAS”), Ondas Networks Inc"
   },
   {
@@ -79,7 +79,7 @@
    "document": "tmb-20260331x20f.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1038683/000110465926076131/tmb-20260331x20f.htm",
    "found": false,
-   "why": "heading not found"
+   "why": "Item 4 found, but it has no Business Overview heading"
   },
   {
    "symbol": "TSM",
@@ -90,7 +90,7 @@
    "document": "tsm-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/tsm-20251231.htm",
    "found": false,
-   "why": "heading not found"
+   "why": "Item 4 found, but it has no Business Overview heading"
   },
   {
    "symbol": "BRK.B",
@@ -102,8 +102,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/1067983/000119312526083899/brka-20251231.htm",
    "found": true,
    "ok": true,
-   "chars": 895,
-   "description": "Berkshire Hathaway Inc. (“Berkshire,” “Company” or “Registrant”) is a holding company owning subsidiaries engaged in numerous diverse business activities. The most important of these are insurance businesses, conducted on both a primary basis and a reinsurance basis, a freight rail transportation business and a group of utility and energy generation and distribution businesses. Berkshire also owns and operates numerous other businesses engaged in a variety of manufacturing, services and retailing activities. Berkshire is domiciled in the state of Delaware, and its corporate headquarters is in Omaha, Nebraska.\n\nBerkshire’s operating subsidiaries are managed on an unusually decentralized basis. There are few centralized or integrated business functions. Berkshire’s Chief Executive Officer is ultimately responsible for significant capital allocation decisions and investment activities.",
+   "chars": 854,
+   "description": "Berkshire Hathaway Inc. is a holding company owning subsidiaries engaged in numerous diverse business activities. The most important of these are insurance businesses, conducted on both a primary basis and a reinsurance basis, a freight rail transportation business and a group of utility and energy generation and distribution businesses. Berkshire also owns and operates numerous other businesses engaged in a variety of manufacturing, services and retailing activities. Berkshire is domiciled in the state of Delaware, and its corporate headquarters is in Omaha, Nebraska.\n\nBerkshire’s operating subsidiaries are managed on an unusually decentralized basis. There are few centralized or integrated business functions. Berkshire’s Chief Executive Officer is ultimately responsible for significant capital allocation decisions and investment activities.",
    "raw": "Berkshire Hathaway Inc. (“Berkshire,” “Company” or “Registrant”) is a holding company owning subsidiaries engaged in numerous diverse business activities. The most important of these are insurance businesses, conducted on both a primary basis and a reinsurance basis, a freight rail transportation business and a group of utility and energy generation and distribution businesses. Berkshire also owns and operates numerous other businesses engaged in a variety of manufacturing, services and retailing activities. Berkshire is domiciled in the state of Delaware, and its corporate headquarters is in Omaha, Nebraska.\nBerkshire’s operating subsidiaries are managed on an unusually decentralized basis."
   },
   {
@@ -116,8 +116,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/1069258/000106925826000013/ktos-20251228.htm",
    "found": true,
    "ok": true,
-   "chars": 881,
-   "description": "Kratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions.\n\nUnited States and its allies, to address individual and potential collective peer and near peer threats, including Russia, China, North Korea and Iran. The Company currently has record levels of backlog and opportunity pipeline.",
+   "chars": 651,
+   "description": "Kratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions.",
    "raw": "Overview\n\nKratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions. We believe that Kratos is known as the"
   },
   {
@@ -178,8 +178,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/1996810/000199681026000015/gev-20251231.htm",
    "found": true,
    "ok": true,
-   "chars": 799,
-   "description": "GE Vernova Inc. (the Company, GE Vernova, our, we, or us) is a global leader in the electric power industry, with products and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service technologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization, underpinning the progress and prosperity of the communities we serve. We are a purpose-built company, positioned with a unique scope and scale of solutions to help accelerate the energy transition, while servicing and growing our installed base and strengthening our own profitability and stockholder returns. We have a strong history of innovation, which is a key strength enabling us to meet our customers’ needs.",
+   "chars": 757,
+   "description": "GE Vernova Inc. is a global leader in the electric power industry, with products and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service technologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization, underpinning the progress and prosperity of the communities we serve. We are a purpose-built company, positioned with a unique scope and scale of solutions to help accelerate the energy transition, while servicing and growing our installed base and strengthening our own profitability and stockholder returns. We have a strong history of innovation, which is a key strength enabling us to meet our customers’ needs.",
    "raw": "INTRODUCTION. GE Vernova Inc. (the Company, GE Vernova, our, we, or us) is a global leader in the electric power industry, with\nproducts and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service\ntechnologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization,\nunderpinning the progress and prosperity of the communities we serve. We are a purpose-built company, positioned with a unique scope\nand scale of solutions to help accelerate the energy transition, while servicing and growing our installed base and strengthening our own\nprofitability and stockholder r"
   },
   {
@@ -206,8 +206,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026008131/jpm-20251231.htm",
    "found": true,
    "ok": true,
-   "chars": 732,
-   "description": "JPMorgan Chase & Co. (“JPMorganChase” or the “Firm”, NYSE: JPM), a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, institutional and government clients globally.",
+   "chars": 689,
+   "description": "JPMorgan Chase & Co., a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, institutional and government clients globally.",
    "raw": "Overview\nJPMorgan Chase & Co. (“JPMorganChase” or the “Firm”, NYSE: JPM), a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, insti"
   },
   {
@@ -262,8 +262,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/810136/000114036125045801/ef20057458_10k.htm",
    "found": true,
    "ok": true,
-   "chars": 726,
-   "description": "Photronics, Inc. (and its subsidiaries, collectively referred to herein as “Photronics”, the “Company”, “we”, “our”, or “us”) is one of the world’s leading manufacturers of photomasks, which are high precision photographic quartz or glass plates containing microscopic images of electronic circuits. Photomasks are a key element in the manufacture of ICs and FPDs and are used as masters to transfer circuit patterns onto semiconductor wafers and FPD substrates during the fabrication of ICs, a variety of FPDs and, to a lesser extent, other types of electrical and optical components. We have eleven manufacturing facilities, which are located in Taiwan (3), China (2), South Korea (1), the United States (3), and Europe (2).",
+   "chars": 838,
+   "description": "Photronics, Inc. is one of the world’s leading manufacturers of photomasks, which are high precision photographic quartz or glass plates containing microscopic images of electronic circuits. Photomasks are a key element in the manufacture of ICs and FPDs and are used as masters to transfer circuit patterns onto semiconductor wafers and FPD substrates during the fabrication of ICs, a variety of FPDs and, to a lesser extent, other types of electrical and optical components. We have eleven manufacturing facilities, which are located in Taiwan (3), China (2), South Korea (1), the United States (3), and Europe (2).\n\nWe operate as a single reporting segment as a manufacturer of photomasks, which are high precision quartz or glass plates containing microscopic images of electronic circuits for use in the fabrication of IC’s and FPDs.",
    "raw": "Specific industry and technical terms used in this section are defined in the subsection entitled “Glossary of Terms and Acronyms,” found below the Table of Contents.\n\nBusiness Overview\n\nPhotronics, Inc. (and its subsidiaries, collectively referred to herein as “Photronics”, the “Company”, “we”, “our”, or “us”) is one of the world’s leading manufacturers of photomasks, which are high precision\nphotographic quartz or glass plates containing microscopic images of electronic circuits. Photomasks are a key element in the manufacture of ICs and FPDs and are used as masters to transfer circuit patterns onto semiconductor wafers and FPD\nsubstrates during the fabrication of ICs, a variety of FPDs an"
   },
   {
@@ -276,8 +276,8 @@
    "url": "https://www.sec.gov/Archives/edgar/data/1819994/000181999426000013/rklb-20251231.htm",
    "found": true,
    "ok": true,
-   "chars": 684,
-   "description": "Our Mission: We Open Access to Space to Improve Life on Earth.\n\nRocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.",
+   "chars": 827,
+   "description": "Rocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.\n\nAs one of select few commercial companies delivering regular access to orbit, our proven launch vehicle, spacecraft technology and global infrastructure uniquely position us to grow in this dynamic market.",
    "raw": "Who We Are\nOur Mission: We Open Access to Space to Improve Life on Earth.\nRocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.\nAs on"
   },
   {
@@ -358,8 +358,11 @@
    "filedOn": "2026-03-03",
    "document": "abevform20f_2025.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1565025/000129281426000640/abevform20f_2025.htm",
-   "found": false,
-   "why": "heading not found"
+   "found": true,
+   "ok": true,
+   "chars": 320,
+   "description": "We are the largest brewer in Latin America in terms of sales volumes and one of the largest beer producers in the world, according to our estimates. We currently produce, distribute and sell beer, CSDs, other alcoholic beverages and non-alcoholic and non-carbonated products directly in 11 countries across the Americas.",
+   "raw": "Description of\nOur Operations\n\nWe are the largest brewer\nin Latin America in terms of sales volumes and one of the largest beer producers in the world, according to our estimates. We currently\nproduce, distribute and sell beer, CSDs, other alcoholic beverages and non-alcoholic and non-carbonated products directly in 11 countries\nacross the Americas.\n\nWe conduct our operations\nthrough four business segments, as follows:\n\n• Brazil : Beer sales division and NAB sales\ndivision.\n\n• Central America and the Caribbean (“CAC”):\nDominican Republic, Cuba, Guatemala and Panama.\n\n• Latin America South (“LAS”):\nArgentina, Bolivia, Paraguay, Uruguay and Chile.\n\n• Canada : Labatt’s operations in Canada.\n\nTh"
   },
   {
    "symbol": "ARM",
