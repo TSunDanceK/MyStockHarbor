@@ -343,7 +343,7 @@ export function planSymbolCardArt(input: {
       if (art) return { kind: "library", art };
     }
 
-    // ── LAYER 3, ONLY IF LAYER 2 HAS NOTHING TO SAY ──────────────────────
+    // ── LAYER 3, REACHED ONLY WHEN LAYER 2 HAS NOTHING TO SAY ────────────
     // bucketForItem answers art.ts's own question — "does this item have an
     // event bucket that holds images?" — rather than this file re-deriving it.
     // A null sector argument makes it answer about the EVENT half alone.

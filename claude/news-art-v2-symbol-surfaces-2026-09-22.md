@@ -228,13 +228,57 @@ company rather than be forced into a picture.
 | AVAV | Aerospace & Defense | layer 3 → `aerospace-defence` |
 | KTOS | Aerospace & Defense | layer 3 → `aerospace-defence` |
 | ONDS | Communication Equipment | layer 3 → `telecom` |
-| UMAC | **not in the snapshot at all** | layer 4, or the generated card |
+| UMAC | **not in the universe at all** | layer 4, or the generated card |
 
-**UMAC is the finding worth acting on.** `data/static-profile.json` has no row
-for it, so `resolveProfile` logs a miss and both the industry and the sector
-layer have nothing to answer with. That is a data gap, not a picker gap — the
-relay task `static-profile` regenerates the snapshot — and it is invisible from
-the code.
+### UMAC, and a correction
+
+The first reading of this was "a snapshot gap the `static-profile` relay run
+fills". **That was wrong, and the count in §7b is why.** UMAC is not in
+`data/static-profile.json`, and it is also not in `data/cik-map.json`, not in
+`data/logo-manifest.json` and not in `data/company-names.json`. It is not a row
+missing from the snapshot; it is a symbol outside the site's universe entirely.
+Re-running the snapshot would not add it, because the snapshot is built from
+that universe.
+
+Adding UMAC is a universe question — whether the symbol belongs on the site at
+all — and nothing about news art.
+
+### 7b. Every symbol with no snapshot row — and there is no gap
+
+Counted across the union of every symbol any committed data file knows
+(`cik-map.json` 2,609, `logo-manifest.json` 2,621, `company-names.json` 2,610,
+and the snapshot itself 2,619): **2,653 symbols, of which 34 have no row in
+`data/static-profile.json`.**
+
+```
+ARKK ARKW BRK.B DGRO DIA GLD HODL HYG IBIT IWM JEPI JEPQ QQQ SCHD SLV SMH
+SOXX SPY SQ TLT VOO VTI VUG XLB XLC XLE XLF XLI XLK XLP XLRE XLU XLV XLY
+```
+
+**32 of the 34 are ETFs and funds** — SPY, QQQ, the XL* sector funds, GLD, SLV,
+IBIT, the ARK funds, JEPI/JEPQ, TLT, HYG. A fund has no industry, so having no
+row is CORRECT rather than missing. They appear only in `logo-manifest.json`,
+which is a list of things that need a picture, not a list of companies.
+
+The two that are not funds are both explained and neither is a gap:
+
+| symbol | what it actually is |
+|---|---|
+| `BRK.B` | a SPELLING VARIANT. The snapshot has `BRK-A` and `BRK-B`; the logo manifest writes the dot form. |
+| `SQ` | a STALE TICKER. Block renamed SQ → XYZ, and the snapshot has `XYZ`. The logo manifest still carries the old one. |
+
+**So the snapshot is complete for every company in the universe, and the
+proposed relay run has nothing to fill.** What each of the 34 loses:
+
+| surface | what a missing row costs |
+|---|---|
+| news art | layers 3 and 4 both go quiet; the card falls to the generated ticker card. For a fund that is the right outcome — there is no industry to draw. |
+| sector pages | absent from membership, since `sectorUniverse` builds it from the same field. Right for a fund, which is not in a sector. |
+| Pickers | unaffected — they are built from price and fundamentals rows, not from this file. |
+
+The one real consequence is cosmetic and worth a separate look: `BRK.B` and `SQ`
+in `logo-manifest.json` are two entries pointing at spellings the rest of the
+site no longer uses.
 
 ### A defence pattern: proposed, measured, NOT landed
 
@@ -277,7 +321,68 @@ layer 3 already answers `aerospace-defence` for RCAT, AVAV and KTOS. The only
 symbol a layer-1 defence pattern actually moves is ONDS (4 of 14), and only
 because its industry label says telecom.
 
+### Candidate C, read hit by hit
+
+All 16 of C's hits on the drone fixture, with what landing it would actually do:
+
+| | symbol | headline | effect |
+|---|---|---|---|
+| 1 | ONDS | Ondas vs. Red Cat: Which Drone Stock Is the Better Pick Now? | **new** (layer 3 gives telecom) |
+| 2 | ONDS | Ondas Drops 6% as Risk-Off Selling Cascades Through Drone Names | **new** |
+| 3 | RCAT | Red Cat Stock Could Fly On Pentagon's Biggest-Ever Drone Bet | redundant |
+| 4 | RCAT | Red Cat Misses the Cut in Pentagon's Latest Drone Dominance Round | redundant |
+| 5 | RCAT | RCAT Stock Falls… Retail Bets Iran Conflict Could Boost Military Drone Demand | redundant |
+| 6 | RCAT | Why ONDS, RCAT And Other Drone Stocks Are Surging In Overnight Trading | redundant |
+| 7 | RCAT | Red Cat Holdings (RCAT) Stock Is Jumping Today: What's Moving Drone Stocks? | redundant |
+| 8 | UMAC | Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing | **new** (no snapshot row) |
+| 9 | UMAC | 3 Drone Tech Stocks Well-Positioned for Long-Term Growth | **new** |
+| 10 | UMAC | Unusual Machines (UMAC) Stock Is Climbing Today: Is the Whole Drone Group Moving? | **new** |
+| 11 | UMAC | UMAC Stock Eyes Second Weekly Gains: Drone Maker Ties Its CEO's Fortune… | **new** |
+| 12 | AVAV | Drones Stock AeroVironment Is Now a Space Stock, Too | redundant |
+| 13 | AVAV | AeroVironment Stock Jumps After Earnings Beat. There's Still Growth for Drones. | **DISPLACES `event-earnings`** |
+| 14 | KTOS | Kratos' Drone Business Is Just the Beginning for This Defense Stock | redundant |
+| 15 | KTOS | Better Drone Stock: Kratos Defense vs. Northrop Grumman | redundant |
+| 16 | KTOS | Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing | redundant |
+
+**Not one of the 16 is a wrong match.** Every headline is genuinely about drones
+or the drone group. Two are worth a second look and neither is an error:
+
+- **#13 is the only one that changes a card that already had a specific
+  picture.** It is an EARNINGS story whose last clause mentions drones, and
+  layer 1 outranks the event bucket by design, so C would take
+  `event-earnings` off it. That is the cost of the ordering, showing up for the
+  first time on real copy.
+- **#12 says AeroVironment is now a SPACE stock** — Mars helicopters, NASA. The
+  library has `rockets-space` and `satellites`, either of which would be truer
+  than `aerospace-defence`; the picture is not wrong, only broad.
+
+**The arithmetic for the decision: 9 redundant, 6 new, 1 displacement.** All six
+of the new ones are ONDS and UMAC — the two symbols whose industry does not say
+aerospace. For RCAT, AVAV and KTOS, C changes which of four images appears and
+nothing else.
+
 ---
+
+## 7c. Follow-up, NOT this PR: company names that contain subject words
+
+A company name is not a topic, and the classifier cannot tell the difference.
+Two cases are already on record:
+
+**"Bank of America resets Apple stock price target"** scored `banks` and put a
+vault on an Apple analyst note. That one was fixed by narrowing the pattern —
+the bare singular is gone — but the fix works because "Bank of America" happens
+not to contain the plural. **"Kratos Defense & Security Solutions"** is the same
+shape and no narrowing helps: any defence pattern worth having matches the word
+"Defense" inside that company's name, so a headline naming Kratos on someone
+else's page would score `aerospace-defence`. The proposal is to MASK KNOWN
+COMPANY NAMES OUT OF THE TITLE BEFORE LAYER-1 MATCHING, using
+`data/company-names.json`, which already holds the display name for 2,610
+symbols: strip the names it knows, then classify what is left, so "Kratos" and
+"Bank of America" become invisible to the tables while "the banking sector" and
+"drone stocks" stay exactly as visible as they are now. It is a separate change
+because it needs its own measurement — masking can take away a true positive
+(a headline about a bank naming a bank) as easily as a false one — and because
+it touches every surface layer 1 serves, not just this one.
 
 ## 8. Open
 
@@ -289,8 +394,9 @@ because its industry label says telecom.
 - **The 11 with no honest tag.** `Security & Protection Services` is the sharpest:
   guards and alarms, and tagging it `cybersecurity` would be a different
   industry rather than an approximation of one.
-- **UMAC is missing from `data/static-profile.json`.** Regenerating the
-  snapshot (relay task `static-profile`) is the fix; §7 has the detail.
+- **`BRK.B` and `SQ` in `logo-manifest.json`** are a spelling variant and a
+  stale ticker; §7b. Cosmetic, and nothing to do with news art.
+- **Masking company names before layer-1 matching**, §7c.
 - **A defence pattern for layer 1**, per §7 — proposed and measured, not landed,
   and worth little for four of the five symbols.
 - `/sector/[slug]/news` and the dashboard strip, each its own change.
