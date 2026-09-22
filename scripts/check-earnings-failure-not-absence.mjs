@@ -557,5 +557,42 @@ console.log("\n8. F4 — the manual override does not read the flag the bug corr
   check("but still gates on there being candidates", /<BackfillButton[^>]*hasEarnings=/s.test(page));
 }
 
+// ── 9. A lapsed FMP key still serves a month Redis holds ──────────────────
+//
+// fetchMonthRowsDetailed returned on a missing key BEFORE reading the shared
+// reference copy, so a cold lambda (empty monthCache) with no key answered
+// "unknown, no rows" for a month Redis was holding. The finish line for moving
+// the calendar off FMP is the page rendering with FMP_API_KEY unset, and this
+// was the first thing standing in the way.
+console.log("\n9. No key — a month held in Redis is still read, and FMP is not called");
+{
+  const saved = process.env.FMP_API_KEY;
+  delete process.env.FMP_API_KEY;
+  try {
+    const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
+    const monthKey = `${DATE_YEAR}-${pad2(DATE_MONTH)}`;
+    h.reference.set(`earnings-calendar:${monthKey}`, MONTH_ROWS);
+    const m = await loadModule();
+    const got = await m.fetchMonthRowsDetailed(DATE_YEAR, DATE_MONTH);
+    check("key unset + Redis holds the month -> its rows come back", got.rows.length === MONTH_ROWS.length,
+      `${got.rows.length} rows (expected ${MONTH_ROWS.length})`);
+    check("...served from the cache, not claimed as a fetch", got.fromCache === true);
+    check("...and the month is KNOWN, not unknown", m.getMonthVisibility(DATE_YEAR, DATE_MONTH) === "known",
+      m.getMonthVisibility(DATE_YEAR, DATE_MONTH));
+    check("no FMP call was attempted without a key", h.calls.length === 0, `${h.calls.length} call(s)`);
+
+    // THE CONTROL: nothing in either cache and no key is still UNKNOWN, not an
+    // empty month. The fix must not turn "could not read" into "nobody reports".
+    const h2 = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
+    const m2 = await loadModule();
+    const none = await m2.fetchMonthRowsDetailed(DATE_YEAR, DATE_MONTH);
+    check("control: key unset + Redis empty -> no rows, month UNKNOWN",
+      none.rows.length === 0 && m2.getMonthVisibility(DATE_YEAR, DATE_MONTH) === "unknown" && h2.calls.length === 0,
+      `${none.rows.length} rows · ${m2.getMonthVisibility(DATE_YEAR, DATE_MONTH)} · ${h2.calls.length} call(s)`);
+  } finally {
+    process.env.FMP_API_KEY = saved;
+  }
+}
+
 console.log(failures ? `\n${failures} CHECK(S) FAILED\n` : "\nALL CHECKS PASSED\n");
 process.exit(failures ? 1 : 0);

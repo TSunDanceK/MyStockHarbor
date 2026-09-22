@@ -76,6 +76,10 @@ export const JOBS = {
   // so it is done inside four minutes; twenty is comfortably clear of it and
   // still well ahead of the 07:00 warm cluster.
   "ipo-refresh": { label: "IPO filings window (daily 04:40)", instrumented: true, cron: "40 4 * * *" },
+  // 05:10, AFTER ipo-refresh, for the same per-requester SEC pacing reason.
+  // One-off: rewrites data/sec/report-dates-rewrite.json under the paired rule
+  // and then finds nothing to do. Delete it with the list once drained.
+  "sec-report-dates-rewrite": { label: "SEC report dates — pairing rewrite (daily 05:10)", instrumented: true, cron: "10 5 * * *" },
 } as const;
 
 /**
