@@ -551,6 +551,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY: why sec-facts times out -- last runs, next queues, fetch cost.
+  "write-sec-facts-timeout-diagnosis": {
+    script: "scripts/sec-facts-timeout-diagnosis.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],

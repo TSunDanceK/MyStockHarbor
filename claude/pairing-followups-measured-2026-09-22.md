@@ -1,5 +1,37 @@
 # Pairing follow-ups, measured — nothing adopted (review of #515)
 
+## DECISIONS (owner, 2026-09-22)
+
+- **Same-day tie-break: REJECTED.** Too many of the 76 flips go the wrong way. The
+  merged rule (latest original 2.02 on or before the 10-Q/10-K) stands.
+- **General current-period rule: REJECTED** (97 wrong rejections). The guard stays
+  limited to the 84 repeat filers.
+- **FPIs: PARKED.** The breakdown is recorded below. The 8 in the 6-K match-gap group
+  (BMO, BNS, RY, TD, STM, TTE, VIK, SN) are a low-priority later task. Nothing built.
+
+## Known history errors, accepted
+
+These periods probably still carry the wrong pick under the merged rule: a second
+2.02 went out on the 10-K/10-Q's day, and the earlier filing sits at the filer's usual
+lag. They are accepted as known errors in the backward record (reaction bars and
+"results filed" dates for these periods only). No rule changes. Dates are pick → likely
+release.
+
+| symbol | period | stored pick | likely release |
+|---|---|---|---|
+| LUV | 2023-12-31 | 2024-02-06 | 2024-01-25 |
+| H | 2023-12-31 | 2024-02-23 | 2024-02-14 |
+| DAR | 2023-09-30 | 2023-11-07 | 2023-10-26 |
+| TKO | 2023-09-30 | 2023-11-07 | 2023-11-01 |
+| TRU | 2022-12-31 | 2023-02-14 | 2023-02-10 |
+| WMG | 2026-06-30 | 2026-08-05 | 2026-08-03 |
+| FE | 2020-12-31 | 2021-02-18 | 2021-02-16 |
+| JCI | 2024-06-30 | 2024-07-31 | 2024-07-23 |
+| ATHS | 2023-09-30 → 2026-06-30 (9 periods, table T below) | 10-Q day | 1–6 days earlier |
+| APOS | 2023-12-31 | 2024-02-27 | 2024-02-08 |
+
+Accessions for every row are in table T below.
+
 Relay [35772820498](https://github.com/TSunDanceK/MyStockHarbor/actions/runs/35772820498),
 task `write-pairing-followups` (`scripts/pairing-followups-census.mjs`, reads only).
 
