@@ -109,6 +109,16 @@ export type TrendLine = {
   /** The median across the periods that were figures. Null when refused. */
   value: number | null;
   tone: EarningsTone | null;
+  /**
+   * THE NEWEST PERIOD'S OWN FIGURE, beside the typical one — null when it is
+   * not a number (absent, or a crossing). A median can sit a long way from
+   * now: AVAV's typical quarter is +133.3% because its acquisition quarters
+   * dominate, while its latest quarter is +5.7%. Printing only the median
+   * reads as "revenue is growing 133%" (owner review, #522).
+   */
+  latest: number | null;
+  /** The latest figure's tone, by the same rule as `tone`. */
+  latestTone: EarningsTone | null;
   /** Periods that contributed. */
   counted: number;
   /** Periods left out because they were n/m or absent. */
@@ -163,17 +173,21 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const nums = values.filter(isPct) as number[];
     const skipped = values.length - nums.length;
     crossings += values.filter(isCrossing).length;
+    // `values` is oldest first (see GrowthMarginsChart), so the newest is last.
+    const last = values.length ? values[values.length - 1] : null;
+    const latest = isPct(last) ? last : null;
+    const latestTone = toneForGrowth(latest);
     if (nums.length < TREND_MIN_PERIODS) {
-      return { label, kind: "rate", value: null, tone: null, counted: nums.length, skipped };
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), counted: nums.length, skipped };
+    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped };
   };
 
   const growth = view.growth ?? [];
   const lines = [
-    line(`Revenue growth, typical ${w.one}`, growth.map((g) => g.revenueYoY)),
-    line(`EPS growth, typical ${w.one}`, growth.map((g) => g.epsYoY)),
+    line("Revenue growth", growth.map((g) => g.revenueYoY)),
+    line("EPS growth", growth.map((g) => g.epsYoY)),
   ];
 
   // MARGIN IS A LEVEL, NOT A RATE, so it gets its own line rather than being
@@ -182,13 +196,15 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   if (opMargins.length >= TREND_MIN_PERIODS) {
     const m = median(opMargins);
     lines.push({
-      label: `Operating margin, typical ${w.one}`,
+      label: "Operating margin",
       kind: "level",
       value: m,
       // A LEVEL HAS NO TONE HERE. Whether a 6% operating margin is good depends
       // on the industry, and this page has no industry comparison — colouring
       // it would be inventing a judgement. The DIRECTION is toned below.
       tone: null,
+      latest: view.margins.length ? view.margins[view.margins.length - 1].operating : null,
+      latestTone: null,
       counted: opMargins.length,
       skipped: view.margins.length - opMargins.length,
     });
@@ -300,21 +316,42 @@ export function partialScoreLabel(c: ScoreCoverage): string {
 }
 
 /**
- * What the card says under a partial score, in full sentences.
+ * What the card says under a partial score — ONE LINE.
  *
- * IT NAMES THE RANGE, because "partial" alone still invites the reader to
- * treat the number as a reading that happens to be incomplete. "Could only
- * land between 34 and 66" is the fact that stops that.
+ * It names each missing input WITH ITS REAL CAUSE ("EPS growth — loss in both
+ * quarters"), because "not in this company's filings" was false for most of
+ * them: AVAV files EPS every quarter, and EPS growth is missing because both
+ * quarters were losses.
+ *
+ * ── THE RANGE ONLY WHEN IT SAYS SOMETHING ────────────────────────────────
+ * This used to read "the score could only have landed between 0 and 100" on
+ * AVAV. The arithmetic was right — the four inputs that ran reach ±50 around
+ * the seed of 50 — and the sentence was empty: every score on the scale is
+ * between 0 and 100. The range is printed only when it is narrower than the
+ * scale, and the pinned case (ABVX: 32 to 68, inside Mixed whatever the
+ * company did) keeps its consequence, because that is the one a reader must
+ * not miss.
  */
-export function partialScoreNote(c: ScoreCoverage, missing: string[], periodWord: string): string {
-  const what = missing.length
-    ? `${missing.length === 1 ? "One input is" : `${missing.length} inputs are`} not in this company's filings: ${missing.join("; ")}.`
+export function partialScoreNote(
+  c: ScoreCoverage,
+  gaps: { name: string; reason: string }[],
+  pinnedBand: string | null = null
+): string {
+  const why = gaps.length
+    ? ` (${gaps.map((g) => `${g.name} — ${g.reason}`).join("; ")})`
     : "";
-  const range = `With the rest unread, the score could only have landed between ${c.low} and ${c.high}`;
-  const pinned = c.pinned
-    ? ` — entirely inside one band, so the verdict above was decided by what is missing rather than by the ${periodWord}.`
-    : ".";
-  return `${what} ${range}${pinned} It is not comparable with a score where every input was read.`.trim();
+  const head = `Partial: ${c.measured} of ${c.total} inputs measured${why}.`;
+  const informative = c.low > 0 || c.high < 100;
+  const range = !informative ? ""
+    : c.pinned && pinnedBand
+      ? ` With these inputs it could only land between ${c.low} and ${c.high}, inside ${pinnedBand} either way.`
+      : ` With these inputs it could only land between ${c.low} and ${c.high}.`;
+  return `${head}${range} Not directly comparable with a full score.`;
+}
+
+/** True when the reachable range is narrower than the whole scale — worth drawing. */
+export function coverageIsInformative(c: ScoreCoverage): boolean {
+  return c.partial && (c.low > 0 || c.high < 100);
 }
 
 /**
@@ -326,10 +363,15 @@ export function partialScoreNote(c: ScoreCoverage, missing: string[], periodWord
  * keeps partialScoreNote. Both take the ScoreCoverage from coverageOf, so the
  * two surfaces cannot disagree about how much was measured.
  */
-export function partialScoreShortNote(c: ScoreCoverage): string {
+export function partialScoreShortNote(c: ScoreCoverage, gaps: { name: string; reason: string }[] = []): string {
   const missing = c.total - c.measured;
-  const verb = missing === 1 ? "isn't" : "aren't";
-  return `${missing} of ${c.total} score inputs ${verb} in this company's filings, so this score isn't comparable with a fully measured one.`;
+  // "ISN'T IN THIS COMPANY'S FILINGS" WAS FALSE FOR MOST INPUTS — AVAV files
+  // EPS every quarter; EPS growth is missing because both were losses. So the
+  // sentence says "wasn't measured" and names the cause when it has one, the
+  // same cause the full report prints (see partialScoreNote).
+  const verb = missing === 1 ? "wasn't" : "weren't";
+  const why = gaps.length ? ` (${gaps.map((g) => `${g.name} — ${g.reason}`).join("; ")})` : "";
+  return `${missing} of ${c.total} score inputs ${verb} measured${why}, so this score isn't comparable with a fully measured one.`;
 }
 
 // ── how old a price may be and still be called a price ────────────────────
@@ -531,6 +573,18 @@ export function toneBg(tone: EarningsTone | null): string {
 }
 
 /**
+ * A FAINT BACKGROUND for a tone — the snapshot tiles. Low alpha so the text
+ * over it keeps the contrast it had on the plain card, in either scheme; the
+ * hue is the same one toneColor uses, so a green tile and a green chip agree.
+ */
+export function toneTint(tone: EarningsTone | null): string {
+  if (tone === "good") return "rgba(34,197,94,0.08)";
+  if (tone === "weak") return "rgba(239,68,68,0.08)";
+  if (tone === "neutral") return "rgba(250,204,21,0.08)";
+  return "rgba(148,163,184,0.07)";
+}
+
+/**
  * THE WORD THAT GOES WITH THE COLOUR — because colour alone is not a label.
  *
  * ── WHY EVERY CHIP CARRIES TEXT ──────────────────────────────────────────
@@ -581,4 +635,40 @@ export function toneBandNote(crossings: number): string {
     `${bands} Where a comparison crosses between profit and loss no colour is shown, because a ` +
     `percentage there is an artefact of the arithmetic rather than a rate of change.`
   );
+}
+
+// ── when a filer's fiscal years end ────────────────────────────────────────
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"];
+
+/**
+ * ONE SENTENCE FOR THE FIVE-YEAR TABLE'S YEAR-ENDS, or null.
+ *
+ * Every row carried "ended YYYY-MM-DD" under its label (owner review of AVAV,
+ * round 2). The date says one thing per filer, so it is said once:
+ *
+ *   every end on the same month and day   "Fiscal years end 30 April."
+ *   same month, the day moving            "Fiscal years end in late September."
+ *     (52/53-week filers — AAPL's ran 24 to 30 September)
+ *     early 1-10, mid 11-20, late 21-31; a spread across two of those
+ *     names the month alone
+ *   the month itself moving               null — no sentence, rather than one
+ *                                         that is wrong for some rows
+ *
+ * The exact date stays on each label as a tooltip.
+ */
+export function fiscalYearEndNote(ends: string[]): string | null {
+  const md = ends.map((e) => /^\d{4}-(\d{2})-(\d{2})$/.exec(e)).filter((m): m is RegExpExecArray => m !== null);
+  if (!md.length || md.length !== ends.length) return null;
+  const months = new Set(md.map((m) => m[1]));
+  if (months.size !== 1) return null;
+  const month = MONTHS[Number(md[0][1]) - 1];
+  const days = md.map((m) => Number(m[2]));
+  if (new Set(days).size === 1) return `Fiscal years end ${days[0]} ${month}.`;
+  const third = (d: number) => (d <= 10 ? "early" : d <= 20 ? "mid" : "late");
+  const thirds = new Set(days.map(third));
+  return thirds.size === 1
+    ? `Fiscal years end in ${[...thirds][0]} ${month}.`
+    : `Fiscal years end in ${month}.`;
 }
