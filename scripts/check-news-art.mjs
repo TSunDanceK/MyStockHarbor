@@ -335,7 +335,7 @@ check(
   art.ART_WIDTH === 1200 && art.ART_HEIGHT === 675
 );
 
-// ─────────────────────────────────────── 6. THE SURFACES, TREATED THE SAME
+// ────────────────────────────────────── 6. THE SURFACES, TREATED THE SAME
 //
 // STEP 0 STOPPED THE HOTLINK ON FOUR RENDER SITES AND GAVE ART BACK TO ONE.
 // The other three went imageless on main and stayed that way for a whole step,
@@ -769,7 +769,7 @@ check(
   "free adapters put attribution in `tickers`, never `fmpSymbols`; reading only the latter returns null for every item the day the flag flips"
 );
 
-// ─────────────────────────────── 9. THE TAGGED LIBRARY (v2), END TO END
+// ────────────────────────────── 9. THE TAGGED LIBRARY (v2), END TO END
 //
 // A SECOND LIBRARY, A SECOND MANIFEST, AND DELIBERATELY NO SHARED TYPE WITH
 // THE FIRST. §1-§8 above are about `sector-*`/`event-*` and manifest.json's
