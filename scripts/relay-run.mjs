@@ -173,6 +173,8 @@ const TASKS = {
   // FMP's description? Reads submissions and the latest annual primary
   // document for ~30 symbols. Read-only, no credentials; renders nothing.
   "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
+  // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
+  "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
   // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
   // fixture and a live symbol list and touches no network, so it runs locally.
   // Adding it here would imply it needs a runner, which is the kind of drift
