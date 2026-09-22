@@ -195,6 +195,48 @@ console.log("\n3. A5 — the five retired ids render nothing at all");
     "a soft fallback would let an unregistered hide ship");
 }
 
+console.log("\n3y. A SYMBOL WITH NO CIK GETS A PAGE, NOT A 404");
+{
+  // /stock/MSTY/earnings returned a bare 404 while /stock/MSTY rendered. The
+  // sibling page's own rule is 200 + an honest state + noindex, because the
+  // route is enumerated and a 404 on a real symbol — or a 5xx — is worse.
+  const PAGE = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
+  check("the route no longer calls notFound()",
+    !/notFound\(\)/.test(PAGE),
+    "a symbol whose stock page renders must not 404 on its earnings page");
+  check("...and the no-registrant state is rendered instead",
+    /noRegistrant \?\s*\(\s*<SecNoRegistrantCard/.test(PAGE.replace(/\s+/g, " ").replace(/ /g, " ")) ||
+      /<SecNoRegistrantCard symbol=\{clean\} \/>/.test(PAGE),
+    "the branch must mount a card, not fall through to pending");
+  check("...and that state is noindex, like the sibling page's no-data state",
+    /index: cikForSymbol\(clean\) !== null/.test(PAGE),
+    "a 200 that can be indexed as thin content is the cost of not 404-ing");
+
+  // THE COPY MUST NOT GUESS. Measured through the shipped gate: MSTY and JEPI
+  // are funds and structurally absent; BK, EA, EQR and WBS are operating
+  // companies the committed snapshot is simply missing. A card that told a
+  // Bank of New York Mellon visitor it is probably a fund would be worse than
+  // the 404 it replaced.
+  const CARDS = fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8");
+  const card = CARDS.slice(CARDS.indexOf("export function SecNoRegistrantCard"));
+  const body = card.slice(0, card.indexOf("\nexport ", 10));
+  check("the card names BOTH reasons a ticker can be missing",
+    /fund or ETF share class/.test(body) && /directory snapshot has not picked up/.test(body),
+    "one of them is wrong for half the population either way");
+  check("...and asserts neither as the likely one",
+    !/usual reason/i.test(body) && !/most often/i.test(body) && /cannot tell which applies/.test(body),
+    "the page has no way to tell a fund from a missing registrant");
+
+  const markup = html(React.createElement(M.SecNoRegistrantCard, { symbol: "MSTY" }));
+  const text = visibleText(markup);
+  check("it renders, names the symbol, and points at a page that works",
+    /MSTY/.test(text) && /href="\/stock\/MSTY"/.test(markup),
+    text.slice(0, 100));
+  check("...and never says the filings are on their way",
+    !/not been read into the site yet/.test(text) && !/pending/i.test(text),
+    "that is the promise this state exists to stop making");
+}
+
 console.log("\n3z. ONE WORD FOR ONE STATE, ACROSS THE WHOLE PAGE");
 {
   // MEASURED ON ABVX: the growth table's Q4 EPS column rendered "not filed"
