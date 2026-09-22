@@ -191,6 +191,11 @@ const TASKS = {
   "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
   "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
   "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  // PR 3 render (#518): screenshots of the /stock About block on a Vercel
+  // preview. SYMBOLS carries a _vercel_share link (from the owner's Vercel
+  // connector, 23-hour expiry) then the symbols; the link is never committed.
+  // Headless Chrome is on the runner image. Read-only.
+  "preview-screenshots": { script: "scripts/preview-screenshots.mjs", args: () => [] },
   "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
   // Registrant facts (SIC, business address, incorporation, website, fiscal
   // year end, entity type, latest annual form) for every profiled symbol, from

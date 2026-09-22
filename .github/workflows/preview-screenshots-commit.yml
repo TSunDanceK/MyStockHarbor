@@ -1,0 +1,58 @@
+# Decode the relay's preview screenshots (scripts/preview-screenshots.mjs) into
+# PNGs on a THROWAWAY branch, claude/pr518-screenshots, so they can be viewed
+# from the repo without putting images in any PR's diff. The artifact host is
+# refused to the sandbox, so the runner does the download.
+#
+# TO RE-RUN: dispatch relay task preview-screenshots, put its run ID below, push.
+name: Commit the preview screenshots
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/preview-screenshots-commit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  RUN: "0"
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Download, decode, push to the throwaway branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN" = "0" ]; then echo "no run set"; exit 0; fi
+          name=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN}/artifacts" --jq '.artifacts[0].name')
+          gh run download "${RUN}" --repo "${{ github.repository }}" --name "${name}" --dir art
+          f=$(find art -name preview-screenshots.json | head -n 1)
+          [ -n "$f" ] || { echo "::error::no preview-screenshots.json"; exit 1; }
+          mkdir -p /tmp/shots
+          node -e '
+            const fs = require("node:fs");
+            const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const lines = [`Preview screenshots from relay run ${process.env.RUN}, taken ${d.takenAt} on ${d.origin}.`, ""];
+            for (const [k, s] of Object.entries(d.shots)) {
+              if (s.png) { fs.writeFileSync(`/tmp/shots/${k}.png`, Buffer.from(s.png, "base64")); lines.push(`- ${k}.png (${s.height}px)`); }
+              else lines.push(`- ${k}: ${s.error} (${s.title ?? ""})`);
+            }
+            fs.writeFileSync("/tmp/shots/README.md", lines.join("\n") + "\n");
+          ' "$f"
+          cd /tmp/shots
+          git init -q -b shots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Preview screenshots from relay run ${RUN} (throwaway branch, #518)"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/claude/pr518-screenshots
