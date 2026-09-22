@@ -25,7 +25,13 @@ export const coreMegaCaps = [
 
 export const retailInterestStocks = [
   "PLTR", "SOFI", "RIVN", "LCID", "NIO", "HOOD", "COIN", "DKNG", "AFRM",
-  "UPST", "ROKU", "SNAP", "PINS", "U", "SHOP", "SQ", "RDDT", "MSTR", "MARA",
+  // XYZ, NOT SQ. Block renamed its ticker; SEC's registrant directory lists it
+  // as XYZ at cik 0001512673 and carries no row for SQ, so /stock/SQ/earnings
+  // resolved no CIK. Measured (relay 35729553738): SQ is absent from BOTH of
+  // SEC's ticker files, and it was the ONLY symbol in this list that did not
+  // resolve — the gap was ours, not theirs. scripts/check-curated-symbols.mjs
+  // now holds that.
+  "UPST", "ROKU", "SNAP", "PINS", "U", "SHOP", "XYZ", "RDDT", "MSTR", "MARA",
   "RIOT", "HIMS", "CAVA", "DUOL", "CELH", "ARM", "SMCI", "PATH", "CVNA",
   "CHWY", "ETSY",
 ];
