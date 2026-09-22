@@ -81,7 +81,7 @@ const due = await lift(
 );
 const state = await lift(
   strip("lib/server/dueStripState.ts").replace(/export (const|function|type)/g, "$1") +
-    "\nexport { resolveDueStrip, MIN_COVERAGE_TO_CLAIM_EMPTY };",
+    "\nexport { resolveDueStrip, MIN_COVERAGE_TO_CLAIM_EMPTY, dueRowLabel };",
   "", "dueStripState"
 );
 
@@ -251,6 +251,7 @@ if (resolved.kind === "listed") {
 // the pickers symbol key -- the 700-symbol population data/due-strip.json was
 // actually cut from -- and both are printed so the difference is visible rather
 // than corrected silently.
+let shipped;
 console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LIVE STORE");
 {
   const cutJson = fs.readFileSync(CUT_FILE, "utf8");
@@ -300,7 +301,7 @@ console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LI
   console.log(`    beside it because the manifest is what a render path may NOT read: check-sec-daily-index`);
   console.log(`    names the only two routes allowed, and neither is a render.)`);
 
-  const shipped = state.resolveDueStrip({
+  shipped = state.resolveDueStrip({
     universeSize: cov.universeSize,
     withResultsDate: cov.withResultsDate,
     manifestRead: true,
@@ -312,6 +313,67 @@ console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LI
   }
   console.log("   ONLY the branch printed above is verified against real data. none-outstanding");
   console.log("   and unavailable are not reachable from production today; see the check's §6.");
+}
+
+// ── 7. THE SHIPPED COMPONENT, RENDERED, AGAINST THAT SAME LIVE STATE ─────
+//
+// Section 6 proved the producer returns a real DueStripState. This renders the
+// SHIPPED EarningsDueStrip with it and prints the visible text, so "the MU row
+// appears on the page" is a sentence read out of real markup rather than
+// inferred from a state object.
+//
+// THIS IS THE ONLY RENDER VERIFICATION A SESSION CAN DO. The sandbox is refused
+// *.vercel.app and www.mystockharbor.com with 403 CONNECT (CLAUDE.md, retested
+// 2026-08-20), so nobody here can open the preview. What CAN be checked is the
+// markup the server produces -- which is also what a crawler and a screen
+// reader consume -- and that is what this prints.
+console.log("\n7. THE SHIPPED COMPONENT (EarningsDueStrip.tsx), RENDERED WITH THAT STATE");
+{
+  const React = (await import("react")).default;
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const tsMod = (await import("typescript")).default;
+
+  const SHIMS = `
+const Link = ({ href, children, ...rest }) => <a href={href} {...rest}>{children}</a>;
+const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
+`;
+  const noImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+  const unit = [
+    SHIMS,
+    noImports("lib/server/dueStripState.ts"),
+    noImports("app/earnings-calendar/EarningsDueStrip.tsx")
+      .replace(/export default function/, "export function"),
+  ].join("\n");
+  const out = tsMod.transpileModule(unit, {
+    fileName: "strip.tsx",
+    compilerOptions: {
+      target: tsMod.ScriptTarget.ES2022, module: tsMod.ModuleKind.ESNext,
+      jsx: tsMod.JsxEmit.ReactJSX, jsxImportSource: "react",
+    },
+  }).outputText;
+  const tmp = `scripts/.census-strip-${process.pid}.mjs`;
+  fs.writeFileSync(tmp, out);
+  let comp;
+  try { comp = await import(`${process.cwd()}/${tmp}?t=${Date.now()}`); }
+  finally { fs.rmSync(tmp, { force: true }); }
+
+  const markup = renderToStaticMarkup(
+    React.createElement(comp.EarningsDueStrip, { state: shipped })
+  );
+  const text = markup
+    .replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#x27;|&apos;/g, "'")
+    .replace(/&quot;/g, '"').replace(/&mdash;/g, "\u2014")
+    .replace(/\s+/g, " ").trim();
+
+  console.log(`   branch rendered: ${shipped.kind}`);
+  console.log(`   VISIBLE TEXT: ${text}`);
+  for (const e of shipped.kind === "listed" ? shipped.entries : []) {
+    const label = state.dueRowLabel(e);
+    console.log(`   row ${e.symbol}: ${text.includes(label) ? "RENDERS its dueRowLabel verbatim" : "*** LABEL MISSING ***"}`);
+    console.log(`     href present: ${markup.includes(`/stock/${e.symbol}/earnings`) ? "yes" : "*** NO ***"}`);
+    console.log(`     expectedOn (${e.expectedOn}) leaked into the page: ${markup.includes(e.expectedOn) ? "*** YES — IT MUST NOT ***" : "no, correct"}`);
+  }
 }
 
 console.log("\nNo writes were performed.");
