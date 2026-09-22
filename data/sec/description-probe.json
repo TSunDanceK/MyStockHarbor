@@ -10,10 +10,10 @@
    "document": "aapl-20250927.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
    "found": true,
-   "chars": 652,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\niPhone ® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.\n\nMac ® is the Company’s line of personal computers based on its macOS ® operating system. The Mac line includes laptops MacBook Air ® and MacBook Pro ® , as well as desktops iMac ® , Mac mini ® , Mac Studio ® and Mac Pro ® ."
+   "ok": true,
+   "chars": 427,
+   "description": "The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\niPhone ® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.",
+   "raw": "Company Background\nThe Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services. The Company’s fiscal year is the 52- or 53-week period that ends on the last Saturday of September.\n\nProducts\niPhone\niPhone ® is the Company’s line of smartphones based on its iOS operating system. The iPhone line includes iPhone 17 Pro, iPhone Air™, iPhone 17, iPhone 16 and iPhone 16e.\nMac\nMac ® is the Company’s line of personal computers based on its macOS ® operating system. The Mac line includes laptops MacBook Air ® and MacBook Pro ® , as well as desktops iMac ® , Mac mini ® , Mac Studio ® and Mac Pro ® .\niPad\niPad"
   },
   {
    "symbol": "MU",
@@ -24,10 +24,10 @@
    "document": "mu-20250828.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/723125/000072312525000028/mu-20250828.htm",
    "found": true,
-   "chars": 1931,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "We are an industry leader in innovative memory and storage solutions transforming how the world uses information to enrich life for all . With a relentless focus on our customers, technology leadership, and manufacturing and operational excellence, Micron delivers a rich portfolio of high-performance DRAM, NAND, and NOR memory and storage products through our Micron® and Crucial® brands. Every day, the innovations that our people create fuel the data economy, enabling advances in artificial intelligence (AI) and compute-intensive applications that unleash opportunities — from the data center to the intelligent edge and across the client and mobile user experience.\n\nWe manufacture our products at wholly-owned facilities and also utilize subcontractors for certain manufacturing processes. Our global network of manufacturing centers of excellence not only allows us to benefit from scale while streamlining processes and operations, but it also brings together some of the world’s brightest talent to work on the most advanced memory technology. Centers of excellence bring expertise together in one location, providing an efficient support structure for end-to-end manufacturing, with quicker cycle times, in partnership with teams, such as R&D, product development, human resources, procurement, and supply chain. For our locations in Singapore and Taiwan, this is also a combination of bringing fabrication and back-end manufacturing together. We continue to make significant investments to develop proprietary product and process technology, which generally increases bit density per wafer and reduces per-bit manufacturing costs of each generation of product. We continue to introduce new generations of products that offer improved performance characteristics, including higher data transfer rates, advanced packaging solutions, lower power consumption, improved read/write reliability, and increased memory density."
+   "ok": true,
+   "chars": 796,
+   "description": "We are an industry leader in innovative memory and storage solutions transforming how the world uses information to enrich life for all. With a relentless focus on our customers, technology leadership, and manufacturing and operational excellence, Micron delivers a rich portfolio of high-performance DRAM, NAND, and NOR memory and storage products through our Micron® and Crucial® brands. Every day, the innovations that our people create fuel the data economy, enabling advances in artificial intelligence (AI) and compute-intensive applications that unleash opportunities — from the data center to the intelligent edge and across the client and mobile user experience.\n\nWe manufacture our products at wholly-owned facilities and also utilize subcontractors for certain manufacturing processes.",
+   "raw": "Overview\n\nWe are an industry leader in innovative memory and storage solutions transforming how the world uses information to enrich life for all . With a relentless focus on our customers, technology leadership, and manufacturing and operational excellence, Micron delivers a rich portfolio of high-performance DRAM, NAND, and NOR memory and storage products through our Micron® and Crucial® brands. Every day, the innovations that our people create fuel the data economy, enabling advances in artificial intelligence (AI) and compute-intensive applications that unleash opportunities — from the data center to the intelligent edge and across the client and mobile user experience.\n\nWe manufacture o"
   },
   {
    "symbol": "ONDS",
@@ -38,10 +38,10 @@
    "document": "ea0282911-10k_ondas.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1646188/000121390026035981/ea0282911-10k_ondas.htm",
    "found": true,
-   "chars": 343,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "conjunction with our audited Consolidated Financial Statements and accompanying notes thereto appearing elsewhere in this Annual Report\n\non Form 10-K for the year ended December 31, 2025 (the “Form 10-K”), which are incorporated herein by this reference.\n\nthe “Company,” and “Ondas” in this Form 10-K refers to Ondas Inc. and its subsidiaries."
+   "ok": true,
+   "chars": 815,
+   "description": "Ondas, Inc. (together with its subsidiaries, the “Company,” “Ondas,” “we,” “us,” or “our”) is a defense, security, and critical infrastructure technology company organized around three business units: Ondas Autonomous Systems Inc. (“OAS”), Ondas Networks Inc. (“Ondas Networks”), and Ondas Capital Inc. (“Ondas Capital”). Through these business units, we develop and commercialize autonomous systems, private wireless networking technologies, and strategic investment and partnership initiatives that support the scaling and adoption of mission-critical solutions for governments and industrial customers.\n\n● OAS focuses on autonomous and unmanned aerial and ground systems and integrated mission solutions for defense, homeland security, public safety, and other critical infrastructure and industrial end markets.",
+   "raw": "This business description should be read in\nconjunction with our audited Consolidated Financial Statements and accompanying notes thereto appearing elsewhere in this Annual Report\non Form 10-K for the year ended December 31, 2025 (the “Form 10-K”), which are incorporated herein by this reference.\n\nThe use of the words “we,” “our,”\nthe “Company,” and “Ondas” in this Form 10-K refers to Ondas Inc. and its subsidiaries.\n\nCorporate Overview\n\nOndas, Inc. (together with its subsidiaries, the “Company,”\n“Ondas,” “we,” “us,” or “our”) is a defense, security, and critical infrastructure technology\ncompany organized around three business units: Ondas Autonomous Systems Inc. (“OAS”), Ondas Networks Inc"
   },
   {
    "symbol": "ABVX",
@@ -52,10 +52,10 @@
    "document": "abvx-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1956827/000195682726000012/abvx-20251231.htm",
    "found": true,
-   "chars": 337,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "We are a clinical-stage biotechnology company focused on developing therapeutics that harness the body’s\n\nnatural regulatory mechanisms to stabilize the immune response in patients with chronic inflammatory diseases. We\n\nfocus on indications where existing treatments have left patients with significant unmet needs, and where we believe"
+   "ok": true,
+   "chars": 679,
+   "description": "We are a clinical-stage biotechnology company focused on developing therapeutics that harness the body’s natural regulatory mechanisms to stabilize the immune response in patients with chronic inflammatory diseases. We focus on indications where existing treatments have left patients with significant unmet needs, and where we believe our investigational agents have the potential to be meaningfully differentiated from currently available therapies.\n\nOur initial focus is on inflammatory bowel diseases (\"IBD\"), chronic conditions involving inflammation of the gastrointestinal tract, of which the two most common forms are ulcerative colitis (\"UC\") and Crohn’s disease (\"CD\").",
+   "raw": "Overview\nWe are a clinical-stage biotechnology company focused on developing therapeutics that harness the body’s\nnatural regulatory mechanisms to stabilize the immune response in patients with chronic inflammatory diseases. We\nfocus on indications where existing treatments have left patients with significant unmet needs, and where we believe\nour investigational agents have the potential to be meaningfully differentiated from currently available therapies.\nOur initial focus is on inflammatory bowel diseases (\"IBD\"), chronic conditions involving inflammation of the\ngastrointestinal tract, of which the two most common forms are ulcerative colitis (\"UC\") and Crohn’s disease\n(\"CD\").\nWe believe o"
   },
   {
    "symbol": "AZN",
@@ -66,10 +66,9 @@
    "document": "azn-20251231x20f.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/901832/000110465926019130/azn-20251231x20f.htm",
    "found": true,
-   "chars": 1661,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "The information (including graphs and tabular data) set forth under the headings “Strategic Report—AstraZeneca at a Glance” on page 2, “Strategic Report—Chair’s Statement” on page 3, “Strategic Report—Chief Executive Officer’s Review” on pages 4 to 5, “Strategic Report—Financial highlights” on page 1, “Strategic Report—Healthcare in a Changing World” on pages 6 to 7, “Strategic Report—Our Purpose, Values and Business Model” on pages 8 to 9, “Strategic Report—Our Strategy and Key Performance Indicators” on pages 10 to 11, “Strategic Report—Therapy Area Review” on pages 12 to 25, “Strategic Report—Business Review” on pages 26 to 46, “Strategic Report—Risk Overview—Managing risk”, “—Emerging risks”, “—Climate risk”, “—Cybersecurity risk” on page 47, “Corporate Governance—Corporate Governance Report—Compliance with the UK Corporate Governance Code—Further information on risk management and controls—Global Compliance and GIA” on page 73, “Corporate Governance—Corporate Governance Report—Principal Decisions in 2025—Pipeline strengthening transactions” on page 77, “Financial Statements—Notes to the Group Financial Statements—Note 2—Revenue” on page 140 to 141, “Financial Statements—Notes to the Group Financial Statements—Note 7—Segment information” on pages 147 to 148, “Sustainability Statement” on pages 204 to 219, and “Additional Information—Important information for readers of this Annual Report—Statements of competitive position, growth rates and sales” on page 228, in each case of AstraZeneca’s “Annual Report and Form 20-F Information 2025” included as exhibit 15.1 to this Form 20-F dated February 24, 2026 is incorporated by reference."
+   "ok": false,
+   "why": "rejected: incorporated by reference",
+   "raw": "The information (including graphs and tabular data) set forth under the headings “Strategic Report—AstraZeneca at a Glance” on page 2, “Strategic Report—Chair’s Statement” on page 3, “Strategic Report—Chief Executive Officer’s Review” on pages 4 to 5, “Strategic Report—Financial highlights” on page 1, “Strategic Report—Healthcare in a Changing World” on pages 6 to 7, “Strategic Report—Our Purpose, Values and Business Model” on pages 8 to 9, “Strategic Report—Our Strategy and Key Performance Indicators” on pages 10 to 11, “Strategic Report—Therapy Area Review” on pages 12 to 25, “Strategic Report—Business Review” on pages 26 to 46, “Strategic Report—Risk Overview—Managing risk”, “—Emerging ri"
   },
   {
    "symbol": "RYAAY",
@@ -101,8 +100,11 @@
    "filedOn": "2026-03-02",
    "document": "brka-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1067983/000119312526083899/brka-20251231.htm",
-   "found": false,
-   "why": "heading not found"
+   "found": true,
+   "ok": true,
+   "chars": 895,
+   "description": "Berkshire Hathaway Inc. (“Berkshire,” “Company” or “Registrant”) is a holding company owning subsidiaries engaged in numerous diverse business activities. The most important of these are insurance businesses, conducted on both a primary basis and a reinsurance basis, a freight rail transportation business and a group of utility and energy generation and distribution businesses. Berkshire also owns and operates numerous other businesses engaged in a variety of manufacturing, services and retailing activities. Berkshire is domiciled in the state of Delaware, and its corporate headquarters is in Omaha, Nebraska.\n\nBerkshire’s operating subsidiaries are managed on an unusually decentralized basis. There are few centralized or integrated business functions. Berkshire’s Chief Executive Officer is ultimately responsible for significant capital allocation decisions and investment activities.",
+   "raw": "Berkshire Hathaway Inc. (“Berkshire,” “Company” or “Registrant”) is a holding company owning subsidiaries engaged in numerous diverse business activities. The most important of these are insurance businesses, conducted on both a primary basis and a reinsurance basis, a freight rail transportation business and a group of utility and energy generation and distribution businesses. Berkshire also owns and operates numerous other businesses engaged in a variety of manufacturing, services and retailing activities. Berkshire is domiciled in the state of Delaware, and its corporate headquarters is in Omaha, Nebraska.\nBerkshire’s operating subsidiaries are managed on an unusually decentralized basis."
   },
   {
    "symbol": "KTOS",
@@ -113,10 +115,10 @@
    "document": "ktos-20251228.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1069258/000106925826000013/ktos-20251228.htm",
    "found": true,
-   "chars": 2354,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Kratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions. We believe that Kratos is known as the innovative disruptive change agent in the industry, a company that is an expert in designing products and systems up front for successful rapid, large quantity, low cost future manufacturing, which is a value add competitive differentiator for our large traditional prime system integrator partners and also to our government and commercial customers. Kratos intends to pursue program and contract opportunities as the prime or lead contractor when we believe our probability of win is high and any investment required by Kratos is within our capital resource comfort level. We intend to partner and team with a large, traditional system integrator when our assessment of probability of win is greater or required investment is beyond Kratos comfort level. Kratos’ primary business areas include, virtualized ground systems for satellites and space vehicles including software for command & control (C2) and telemetry, tracking and control (TT&C), jet powered unmanned aerial drone systems, hypersonic vehicles and rocket systems, propulsion systems for drones, missiles, loitering munitions, supersonic systems, space craft and launch systems, command, control, communication, computing, combat, intelligence surveillance and reconnaissance (C5ISR) and microwave electronic products for missile, radar, air defense, missile defense, space, satellite, counter unmanned aircraft systems (CUAS), directed energy, communication and other systems, and virtual & augmented reality training systems for the warfighter. We believe that there is a generational recapitalization of weapon systems and related defense industrial bases occurring globally, including with the"
+   "ok": true,
+   "chars": 881,
+   "description": "Kratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions.\n\nUnited States and its allies, to address individual and potential collective peer and near peer threats, including Russia, China, North Korea and Iran. The Company currently has record levels of backlog and opportunity pipeline.",
+   "raw": "Overview\n\nKratos is a technology, hardware, products, system and software company addressing the defense, national security, and commercial markets. Kratos makes true internally funded research, development, capital and other investments, to rapidly develop, produce and field relevant solutions that address our customers’ mission critical needs and requirements. At Kratos, affordability is a technology, and we seek to utilize proven, leading edge approaches and technology, not unproven bleeding edge approaches or technology, with Kratos’ approach designed to reduce cost, schedule and risk, enabling us to be first to market with cost effective solutions. We believe that Kratos is known as the"
   },
   {
    "symbol": "NVDA",
@@ -127,16 +129,16 @@
    "document": "nvda-20260125.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
    "found": true,
+   "ok": true,
    "chars": 891,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "NVIDIA pioneered accelerated computing to help solve the most challenging computational problems. NVIDIA is now a data center scale AI infrastructure company reshaping all industries.\n\nOur technology stack includes the foundational NVIDIA CUDA development platform that runs on all NVIDIA GPUs, as well as hundreds of domain-specific software libraries, frameworks, algorithms, software development kits, or SDKs, and application programming interfaces, or APIs. This deep and broad software stack accelerates the performance and facilitates the deployment of NVIDIA accelerated computing for computationally intensive workloads such as artificial intelligence, or AI, model training and inference, data analytics, scientific computing, robotics, and 3D graphics, with vertical-specific optimizations to address industries ranging from healthcare and telecom to automotive and manufacturing."
+   "description": "NVIDIA pioneered accelerated computing to help solve the most challenging computational problems. NVIDIA is now a data center scale AI infrastructure company reshaping all industries.\n\nOur technology stack includes the foundational NVIDIA CUDA development platform that runs on all NVIDIA GPUs, as well as hundreds of domain-specific software libraries, frameworks, algorithms, software development kits, or SDKs, and application programming interfaces, or APIs. This deep and broad software stack accelerates the performance and facilitates the deployment of NVIDIA accelerated computing for computationally intensive workloads such as artificial intelligence, or AI, model training and inference, data analytics, scientific computing, robotics, and 3D graphics, with vertical-specific optimizations to address industries ranging from healthcare and telecom to automotive and manufacturing.",
+   "raw": "Our Company\nNVIDIA pioneered accelerated computing to help solve the most challenging computational problems. NVIDIA is now a data center scale AI infrastructure company reshaping all industries.\nOur technology stack includes the foundational NVIDIA CUDA development platform that runs on all NVIDIA GPUs, as well as hundreds of domain-specific software libraries, frameworks, algorithms, software development kits, or SDKs, and application programming interfaces, or APIs. This deep and broad software stack accelerates the performance and facilitates the deployment of NVIDIA accelerated computing for computationally intensive workloads such as artificial intelligence, or AI, model training and i"
   },
   {
    "symbol": "XOM",
    "cik": "0002115436",
    "found": false,
-   "why": "no annual filing in recent submissions"
+   "why": "no annual filing in submissions (ExxonMobil Holdings Corp, 30 recent, 0 older pages)"
   },
   {
    "symbol": "KO",
@@ -147,10 +149,10 @@
    "document": "ko-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/21344/000162828026010047/ko-20251231.htm",
    "found": true,
-   "chars": 797,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "In this report, the terms “The Coca-Cola Company,” “Company,” “we,” “us” and “our” mean The Coca-Cola Company and all entities included in our consolidated financial statements.\n\nThe Coca-Cola Company is a total beverage company, and beverage products bearing our trademarks, sold in the United States since 1886, are now sold in more than 200 countries and territories. We own or license and market numerous beverage brands, which we group into the following categories: Trademark Coca-Cola; sparkling flavors; water, sports, coffee and tea; juice, value-added dairy and plant-based beverages; and emerging beverages. We own and market several of the world’s largest nonalcoholic sparkling soft drink brands, including Coca-Cola, Sprite, Coca-Cola Zero Sugar, Fanta and Diet Coke/Coca-Cola Light."
+   "ok": true,
+   "chars": 861,
+   "description": "The Coca-Cola Company is a total beverage company, and beverage products bearing our trademarks, sold in the United States since 1886, are now sold in more than 200 countries and territories. We own or license and market numerous beverage brands, which we group into the following categories: Trademark Coca-Cola; sparkling flavors; water, sports, coffee and tea; juice, value-added dairy and plant-based beverages; and emerging beverages. We own and market several of the world’s largest nonalcoholic sparkling soft drink brands, including Coca-Cola, Sprite, Coca-Cola Zero Sugar, Fanta and Diet Coke/Coca-Cola Light.\n\nWe make our branded beverage products available to consumers throughout the world through our network of independent bottling partners, distributors, wholesalers and retailers as well as our consolidated bottling and distribution operations.",
+   "raw": "In this report, the terms “The Coca-Cola Company,” “Company,” “we,” “us” and “our” mean The Coca-Cola Company and all entities included in our consolidated financial statements.\nGeneral\nThe Coca-Cola Company is a total beverage company, and beverage products bearing our trademarks, sold in the United States since 1886, are now sold in more than 200 countries and territories. We own or license and market numerous beverage brands, which we group into the following categories: Trademark Coca-Cola; sparkling flavors; water, sports, coffee and tea; juice, value-added dairy and plant-based beverages; and emerging beverages. We own and market several of the world’s largest nonalcoholic sparkling so"
   },
   {
    "symbol": "TSLA",
@@ -161,10 +163,10 @@
    "document": "tsla-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm",
    "found": true,
-   "chars": 1142,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "We are focused on bringing artificial intelligence (“AI”) into the real world, through products and services like Full Self-Driving (“FSD”) (Supervised) and Robotaxi, as well as working to develop and commercialize AI robots (“Bots”) (including Optimus). We intend to leverage our current operations, in which we design, develop, manufacture, sell and lease high-performance fully electric vehicles and energy generation and storage systems that increasingly deliver AI-related and enhanced software and services to our customers, to achieve that objective. We generally sell our products directly to customers, and continue to grow our global retail, service and charging footprint to accelerate the widespread adoption of our products. We emphasize performance, attractive styling and the safety of our users and workforce in the design and manufacture of our products and are continuing to develop full self-driving technology for improved safety. We also strive to lower the cost of ownership for our customers through continuous efforts to reduce manufacturing costs and by offering financial and other services tailored to our products."
+   "ok": true,
+   "chars": 737,
+   "description": "We are focused on bringing artificial intelligence (“AI”) into the real world, through products and services like Full Self-Driving (“FSD”) (Supervised) and Robotaxi, as well as working to develop and commercialize AI robots (“Bots”) (including Optimus). We intend to leverage our current operations, in which we design, develop, manufacture, sell and lease high-performance fully electric vehicles and energy generation and storage systems that increasingly deliver AI-related and enhanced software and services to our customers, to achieve that objective. We generally sell our products directly to customers, and continue to grow our global retail, service and charging footprint to accelerate the widespread adoption of our products.",
+   "raw": "Overview\nWe are focused on bringing artificial intelligence (“AI”) into the real world, through products and services like Full Self-Driving (“FSD”) (Supervised) and Robotaxi, as well as working to develop and commercialize AI robots (“Bots”) (including Optimus). We intend to leverage our current operations, in which we design, develop, manufacture, sell and lease high-performance fully electric vehicles and energy generation and storage systems that increasingly deliver AI-related and enhanced software and services to our customers, to achieve that objective. We generally sell our products directly to customers, and continue to grow our global retail, service and charging footprint to accel"
   },
   {
    "symbol": "GEV",
@@ -175,10 +177,10 @@
    "document": "gev-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1996810/000199681026000015/gev-20251231.htm",
    "found": true,
-   "chars": 399,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "INTRODUCTION. GE Vernova Inc. (the Company, GE Vernova, our, we, or us) is a global leader in the electric power industry, with\n\nproducts and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service\n\ntechnologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization,"
+   "ok": true,
+   "chars": 799,
+   "description": "GE Vernova Inc. (the Company, GE Vernova, our, we, or us) is a global leader in the electric power industry, with products and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service technologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization, underpinning the progress and prosperity of the communities we serve. We are a purpose-built company, positioned with a unique scope and scale of solutions to help accelerate the energy transition, while servicing and growing our installed base and strengthening our own profitability and stockholder returns. We have a strong history of innovation, which is a key strength enabling us to meet our customers’ needs.",
+   "raw": "INTRODUCTION. GE Vernova Inc. (the Company, GE Vernova, our, we, or us) is a global leader in the electric power industry, with\nproducts and services that generate, transfer, orchestrate, convert, and store electricity. We design, manufacture, deliver, and service\ntechnologies to create a more reliable, secure, and sustainable electric power system, enabling electrification and decarbonization,\nunderpinning the progress and prosperity of the communities we serve. We are a purpose-built company, positioned with a unique scope\nand scale of solutions to help accelerate the energy transition, while servicing and growing our installed base and strengthening our own\nprofitability and stockholder r"
   },
   {
    "symbol": "V",
@@ -189,10 +191,10 @@
    "document": "v-20250930.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1403161/000140316125000089/v-20250930.htm",
    "found": true,
-   "chars": 1744,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "Visa is one of the world’s leaders in digital payments. Our purpose is to uplift everyone, everywhere by being the best way to pay and be paid. Since Visa’s early days in 1958, we have been in the business of facilitating secure, reliable and efficient global commerce and money movement. We provide transaction processing services (primarily authorization, clearing and settlement) among consumers, issuing and acquiring financial institutions and sellers in a structure we call the “four-party” model. Please see Our Core Business discussion below. As the payments ecosystem continues to evolve, we have broadened this model to include digital banks, digital wallets, a range of financial technology companies (fintechs), governments and non-governmental organizations (NGOs). We are focused on extending, enhancing and investing in our proprietary advanced transaction processing network, VisaNet, to offer a single connection point for facilitating money movement to multiple endpoints through various form factors and innovative technologies across more than 200 countries and territories. Visa is committed to advancing innovation within the payment technology sector. Building upon our track record of industry leadership, including early adoption and integration of artificial intelligence (AI) models in payment systems, Visa continues to invest in the development and deployment of next-generation technologies, such as generative AI (GenAI), stablecoins and agentic commerce. During fiscal 2025, 329 billion payments and cash transactions with Visa’s brand were processed by Visa or other networks, equating to an average of 901 million transactions per day. Of the 329 billion total transactions, 258 billion were processed by Visa."
+   "ok": true,
+   "chars": 731,
+   "description": "Visa is one of the world’s leaders in digital payments. Our purpose is to uplift everyone, everywhere by being the best way to pay and be paid. Since Visa’s early days in 1958, we have been in the business of facilitating secure, reliable and efficient global commerce and money movement. We provide transaction processing services (primarily authorization, clearing and settlement) among consumers, issuing and acquiring financial institutions and sellers in a structure we call the “four-party” model. As the payments ecosystem continues to evolve, we have broadened this model to include digital banks, digital wallets, a range of financial technology companies (fintechs), governments and non-governmental organizations (NGOs).",
+   "raw": "OVERVIEW\nVisa is one of the world’s leaders in digital payments. Our purpose is to uplift everyone, everywhere by being the best way to pay and be paid. Since Visa’s early days in 1958, we have been in the business of facilitating secure, reliable and efficient global commerce and money movement. We provide transaction processing services (primarily authorization, clearing and settlement) among consumers, issuing and acquiring financial institutions and sellers in a structure we call the “four-party” model. Please see Our Core Business discussion below. As the payments ecosystem continues to evolve, we have broadened this model to include digital banks, digital wallets, a range of financial "
   },
   {
    "symbol": "JPM",
@@ -203,10 +205,10 @@
    "document": "jpm-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026008131/jpm-20251231.htm",
    "found": true,
+   "ok": true,
    "chars": 732,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "JPMorgan Chase & Co. (“JPMorganChase” or the “Firm”, NYSE: JPM), a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, institutional and government clients globally."
+   "description": "JPMorgan Chase & Co. (“JPMorganChase” or the “Firm”, NYSE: JPM), a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, institutional and government clients globally.",
+   "raw": "Overview\nJPMorgan Chase & Co. (“JPMorganChase” or the “Firm”, NYSE: JPM), a financial holding company incorporated under Delaware law in 1968, is a leading financial services firm based in the United States of America (“U.S.”), with operations worldwide. JPMorganChase had $4.4 trillion in assets and $362.4 billion in stockholders’ equity as of December 31, 2025. The Firm is a leader in investment banking, financial services for consumers and small businesses, commercial banking, financial transaction processing and asset management. Under the J.P. Morgan and Chase brands, the Firm serves millions of customers, predominantly in the U.S., and many of the world’s most prominent corporate, insti"
   },
   {
    "symbol": "BAC",
@@ -217,10 +219,10 @@
    "document": "bac-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/70858/000007085826000157/bac-20251231.htm",
    "found": true,
-   "chars": 1096,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Bank of America Corporation is a Delaware corporation, a bank holding company (BHC) and a financial holding company. When used in this report, “Bank of America,” “the Corporation,” “we,” “us” and “our” may refer to Bank of America Corporation individually, Bank of America Corporation and its subsidiaries, or certain of Bank of America Corporation’s subsidiaries or affiliates. As part of our efforts to streamline the Corporation’s organizational structure and reduce complexity and costs, the Corporation has reduced and intends to continue to reduce the number of its corporate subsidiaries, including through intercompany mergers.\n\nBank of America is one of the world’s largest financial institutions, serving individual consumers, small- and middle-market businesses, institutional investors, large corporations and governments with a full range of banking, investing, asset management and other financial and risk management products and services. Our principal executive offices are located in the Bank of America Corporate Center, 100 North Tryon Street, Charlotte, North Carolina 28255."
+   "ok": true,
+   "chars": 692,
+   "description": "Bank of America Corporation is a Delaware corporation, a bank holding company (BHC) and a financial holding company. As part of our efforts to streamline the Corporation’s organizational structure and reduce complexity and costs, the Corporation has reduced and intends to continue to reduce the number of its corporate subsidiaries, including through intercompany mergers.\n\nBank of America is one of the world’s largest financial institutions, serving individual consumers, small- and middle-market businesses, institutional investors, large corporations and governments with a full range of banking, investing, asset management and other financial and risk management products and services.",
+   "raw": "Bank of America Corporation is a Delaware corporation, a bank holding company (BHC) and a financial holding company. When used in this report, “Bank of America,” “the Corporation,” “we,” “us” and “our” may refer to Bank of America Corporation individually, Bank of America Corporation and its subsidiaries, or certain of Bank of America Corporation’s subsidiaries or affiliates. As part of our efforts to streamline the Corporation’s organizational structure and reduce complexity and costs, the Corporation has reduced and intends to continue to reduce the number of its corporate subsidiaries, including through intercompany mergers.\nBank of America is one of the world’s largest financial institut"
   },
   {
    "symbol": "GS",
@@ -231,10 +233,10 @@
    "document": "gs-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/886982/000088698226000091/gs-20251231.htm",
    "found": true,
-   "chars": 1120,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Goldman Sachs is a leading global financial institution that delivers a broad range of financial services to a large and diversified client base that includes corporations, financial institutions, governments and individuals. Our purpose is to advance sustainable economic growth and financial opportunity. Our goal, reflected in our One Goldman Sachs initiative, is to deliver the full range of our services and expertise to support our clients in a more accessible, comprehensive and efficient manner, across businesses and product areas.\n\nWhen we use the terms “Goldman Sachs,” “we,” “us,” “our” and “the firm,” we mean The Goldman Sachs Group, Inc. (Group Inc. or parent company), a Delaware corporation, and its consolidated subsidiaries. When we use the term “our subsidiaries,” we mean the consolidated subsidiaries of Group Inc. References to “this Form 10-K” are to our Annual Report on Form 10-K for the year ended December 31, 2025. All references to 2025, 2024 and 2023 refer to our years ended, or the dates, as the context requires, December 31, 2025, December 31, 2024 and December 31, 2023, respectively."
+   "ok": true,
+   "chars": 813,
+   "description": "Goldman Sachs is a leading global financial institution that delivers a broad range of financial services to a large and diversified client base that includes corporations, financial institutions, governments and individuals. Our purpose is to advance sustainable economic growth and financial opportunity. Our goal, reflected in our One Goldman Sachs initiative, is to deliver the full range of our services and expertise to support our clients in a more accessible, comprehensive and efficient manner, across businesses and product areas.\n\nGroup Inc. is a bank holding company (BHC) and a financial holding company (FHC) regulated by the Board of Governors of the Federal Reserve System (FRB). Our U.S. depository institution subsidiary, Goldman Sachs Bank USA (GS Bank USA), is a New York State-chartered bank.",
+   "raw": "Introduction\nGoldman Sachs is a leading global financial institution that delivers a broad range of financial services to a large and diversified client base that includes corporations, financial institutions, governments and individuals. Our purpose is to advance sustainable economic growth and financial opportunity. Our goal, reflected in our One Goldman Sachs initiative, is to deliver the full range of our services and expertise to support our clients in a more accessible, comprehensive and efficient manner, across businesses and product areas.\nWhen we use the terms “Goldman Sachs,” “we,” “us,” “our” and “the firm,” we mean The Goldman Sachs Group, Inc. (Group Inc. or parent company), a D"
   },
   {
    "symbol": "SOFI",
@@ -245,10 +247,10 @@
    "document": "sofi-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1818874/000181887426000013/sofi-20251231.htm",
    "found": true,
-   "chars": 1020,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "We are a mission driven company designed to help our members achieve financial independence in order to realize their ambitions. To us, financial independence does not mean being wealthy, but rather represents the ability of our members to have the financial means to achieve their personal objectives at each stage of life, such as owning a home, having a family, or having a career of their choice — more simply stated, to have enough money to do what they want. We were founded in 2011 and have developed a suite of financial products that offers the speed, selection, content and convenience that only an integrated digital platform can provide. In order for us to achieve our mission, we have to help people get their money right, which means providing them with the ability to borrow better, save better, spend better, invest better and protect better. Everything we do today is geared toward helping our members “Get Your Money Right” and we strive to innovate and build ways for our members to achieve this goal."
+   "ok": true,
+   "chars": 858,
+   "description": "We are a mission driven company designed to help our members achieve financial independence in order to realize their ambitions. To us, financial independence does not mean being wealthy, but rather represents the ability of our members to have the financial means to achieve their personal objectives at each stage of life, such as owning a home, having a family, or having a career of their choice — more simply stated, to have enough money to do what they want. We were founded in 2011 and have developed a suite of financial products that offers the speed, selection, content and convenience that only an integrated digital platform can provide. In order for us to achieve our mission, we have to help people get their money right, which means providing them with the ability to borrow better, save better, spend better, invest better and protect better.",
+   "raw": "Company Overview\n\nWe are a mission driven company designed to help our members achieve financial independence in order to realize their ambitions. To us, financial independence does not mean being wealthy, but rather represents the ability of our members to have the financial means to achieve their personal objectives at each stage of life, such as owning a home, having a family, or having a career of their choice — more simply stated, to have enough money to do what they want. We were founded in 2011 and have developed a suite of financial products that offers the speed, selection, content and convenience that only an integrated digital platform can provide. In order for us to achieve our m"
   },
   {
    "symbol": "PLAB",
@@ -258,8 +260,11 @@
    "filedOn": "2025-12-17",
    "document": "ef20057458_10k.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/810136/000114036125045801/ef20057458_10k.htm",
-   "found": false,
-   "why": "heading found 1x, every hit looked like a table of contents"
+   "found": true,
+   "ok": true,
+   "chars": 726,
+   "description": "Photronics, Inc. (and its subsidiaries, collectively referred to herein as “Photronics”, the “Company”, “we”, “our”, or “us”) is one of the world’s leading manufacturers of photomasks, which are high precision photographic quartz or glass plates containing microscopic images of electronic circuits. Photomasks are a key element in the manufacture of ICs and FPDs and are used as masters to transfer circuit patterns onto semiconductor wafers and FPD substrates during the fabrication of ICs, a variety of FPDs and, to a lesser extent, other types of electrical and optical components. We have eleven manufacturing facilities, which are located in Taiwan (3), China (2), South Korea (1), the United States (3), and Europe (2).",
+   "raw": "Specific industry and technical terms used in this section are defined in the subsection entitled “Glossary of Terms and Acronyms,” found below the Table of Contents.\n\nBusiness Overview\n\nPhotronics, Inc. (and its subsidiaries, collectively referred to herein as “Photronics”, the “Company”, “we”, “our”, or “us”) is one of the world’s leading manufacturers of photomasks, which are high precision\nphotographic quartz or glass plates containing microscopic images of electronic circuits. Photomasks are a key element in the manufacture of ICs and FPDs and are used as masters to transfer circuit patterns onto semiconductor wafers and FPD\nsubstrates during the fabrication of ICs, a variety of FPDs an"
   },
   {
    "symbol": "RKLB",
@@ -270,10 +275,10 @@
    "document": "rklb-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1819994/000181999426000013/rklb-20251231.htm",
    "found": true,
-   "chars": 2043,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Our Mission: We Open Access to Space to Improve Life on Earth.\n\nRocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.\n\nAs one of select few commercial companies delivering regular access to orbit, our proven launch vehicle, spacecraft technology and global infrastructure uniquely position us to grow in this dynamic market. Advances in technologies, materials and components have led to miniaturization of spacecraft and a significant reduction in cost and time-to-market, concurrent with the increase in demand for space applications such as communications, remote sensing, Earth observation, meteorology and navigation. We provide customers with frequent, reliable and cost-effective access to orbit with Electron, a fully carbon composite launch vehicle powered by Rutherford, our electric turbopump 3D printed engines. Since our first Electron launch in 2017 through December 31, 2025, we have delivered over 200 spacecraft to orbit across 75 successful missions for commercial and government customers, including the United States (“U.S.”) Department of War (“DoW”), the National Aeronautics and Space Administration (“NASA”), the Defense Advanced Research Projects Agency (“DARPA”), the National Reconnaissance Office (“NRO”), and a number of domestic and international commercial spacecraft operators including Blacksky Holdings, Canon, Kinéis, Capella Space, Planet, OHB Group and Synspective. In 2025, Electron was the second most frequently launched orbital rocket."
+   "ok": true,
+   "chars": 684,
+   "description": "Our Mission: We Open Access to Space to Improve Life on Earth.\n\nRocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.",
+   "raw": "Who We Are\nOur Mission: We Open Access to Space to Improve Life on Earth.\nRocket Lab is an end-to-end space company with an established track record of mission success. We deliver reliable launch services, spacecraft design services, spacecraft components, spacecraft manufacturing, optical systems and other spacecraft and on-orbit management solutions that make it faster, easier and more affordable to access space. We believe that space has defined some of humanity’s greatest achievements and it continues to shape our future. We are motivated by the impact we can have on Earth by making it easier to get to space and using it as a platform for innovation, exploration and infrastructure.\nAs on"
   },
   {
    "symbol": "ASTS",
@@ -284,10 +289,10 @@
    "document": "asts-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1780312/000178031226000006/asts-20251231.htm",
    "found": true,
-   "chars": 1796,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "We are building the first and only global Cellular Broadband network in space to be accessible directly by everyday smartphones (2G/4G-LTE/5G devices) for commercial use, and for other applications for government use utilizing our extensive intellectual property (“IP”) and patent portfolio. The SpaceMobile Service is being designed to provide cost-effective, high-speed Cellular Broadband services to end-users who are out of terrestrial cellular coverage using existing mobile devices. The SpaceMobile Service currently is planned to be provided by a constellation of high-powered, large phased-array satellites in LEO using low-band and mid-band spectrum controlled by MNOs.\n\nOn March 22, 2025, we and certain of our subsidiaries entered into certain definitive agreements with Ligado Networks LLC (“Ligado LLC”) and its subsidiaries for usage rights for mid-band spectrum, which were approved by the United States Bankruptcy Court for the District of Delaware (the “Bankruptcy Court”) on June 23, 2025. Ligado’s Chapter 11 plan was confirmed by the Bankruptcy Court on or about September 29, 2025. Subject to the completion of certain conditions, including regulatory approval, as a result of the transaction with Ligado, we expect our network will be enhanced by our long-term access to up to 45 MHz of the lower mid-band satellite spectrum in the United States and Canada through our usage agreements. In addition, on September 25, 2025, we completed the acquisition of an entity that holds certain S-Band International Telecommunication Union (“ITU”) priority rights to Mobile Satellite Services frequencies in the range of 1980-2010 MHz and 2170-2200 MHz, for use in LEO. We expect the acquisition will further enhance our network by up to 60 MHz of mid-band satellite spectrum globally."
+   "ok": true,
+   "chars": 678,
+   "description": "We are building the first and only global Cellular Broadband network in space to be accessible directly by everyday smartphones (2G/4G-LTE/5G devices) for commercial use, and for other applications for government use utilizing our extensive intellectual property (“IP”) and patent portfolio. The SpaceMobile Service is being designed to provide cost-effective, high-speed Cellular Broadband services to end-users who are out of terrestrial cellular coverage using existing mobile devices. The SpaceMobile Service currently is planned to be provided by a constellation of high-powered, large phased-array satellites in LEO using low-band and mid-band spectrum controlled by MNOs.",
+   "raw": "Our Company\n\nWe are building the first and only global Cellular Broadband network in space to be accessible directly by everyday smartphones (2G/4G-LTE/5G devices) for commercial use, and for other applications for government use utilizing our extensive intellectual property (“IP”) and patent portfolio. The SpaceMobile Service is being designed to provide cost-effective, high-speed Cellular Broadband services to end-users who are out of terrestrial cellular coverage using existing mobile devices. The SpaceMobile Service currently is planned to be provided by a constellation of high-powered, large phased-array satellites in LEO using low-band and mid-band spectrum controlled by MNOs.\n\nOn Marc"
   },
   {
    "symbol": "IONQ",
@@ -298,10 +303,10 @@
    "document": "ionq-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1824920/000119312526071562/ionq-20251231.htm",
    "found": true,
+   "ok": true,
    "chars": 849,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "IonQ is the world’s first and only quantum platform company. We operate in every theater: in space, in the air, on land and at sea, where we seek to deliver the full promise of quantum, across computing, networking, sensing and security. We believe that we have the clearest path to fault-tolerant quantum computing, and a repertoire of networking, sensing and security products that will form the backbone of a global quantum infrastructure.\n\nWe are developing quantum computers designed to solve some of the world’s most complex problems and transform business, society and the planet for the better. We believe that our proprietary technology, our architecture and the technology exclusively available to us through license agreements will offer us advantages both in research and development and in the commercial value of our product offerings."
+   "description": "IonQ is the world’s first and only quantum platform company. We operate in every theater: in space, in the air, on land and at sea, where we seek to deliver the full promise of quantum, across computing, networking, sensing and security. We believe that we have the clearest path to fault-tolerant quantum computing, and a repertoire of networking, sensing and security products that will form the backbone of a global quantum infrastructure.\n\nWe are developing quantum computers designed to solve some of the world’s most complex problems and transform business, society and the planet for the better. We believe that our proprietary technology, our architecture and the technology exclusively available to us through license agreements will offer us advantages both in research and development and in the commercial value of our product offerings.",
+   "raw": "Overview\nIonQ is the world’s first and only quantum platform company. We operate in every theater: in space, in the air, on land and at sea, where we seek to deliver the full promise of quantum, across computing, networking, sensing and security. We believe that we have the clearest path to fault-tolerant quantum computing, and a repertoire of networking, sensing and security products that will form the backbone of a global quantum infrastructure.\nWe are developing quantum computers designed to solve some of the world’s most complex problems and transform business, society and the planet for the better. We believe that our proprietary technology, our architecture and the technology exclusive"
   },
   {
    "symbol": "OKLO",
@@ -312,10 +317,10 @@
    "document": "oklo-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1849056/000162828026018698/oklo-20251231.htm",
    "found": true,
+   "ok": true,
    "chars": 772,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "We founded Oklo in 2013 with the goal of revolutionizing the energy landscape by developing clean, reliable, affordable energy solutions at scale. According to the International Energy Agency, global electricity production is expected to increase over 75% by 2050 driven by electrification of buildings, transportation, and industry; increased use of air conditioning in the developing world; and increased consumption from data centers and cloud services. Our business addresses this demand by producing electricity and heat from our Aurora powerhouses which can run on fresh, recycled, or down-blended nuclear fuel. We are also commercializing nuclear fuel recycling technology that can convert used nuclear fuel into usable fuel for our powerhouses and those of others."
+   "description": "We founded Oklo in 2013 with the goal of revolutionizing the energy landscape by developing clean, reliable, affordable energy solutions at scale. According to the International Energy Agency, global electricity production is expected to increase over 75% by 2050 driven by electrification of buildings, transportation, and industry; increased use of air conditioning in the developing world; and increased consumption from data centers and cloud services. Our business addresses this demand by producing electricity and heat from our Aurora powerhouses which can run on fresh, recycled, or down-blended nuclear fuel. We are also commercializing nuclear fuel recycling technology that can convert used nuclear fuel into usable fuel for our powerhouses and those of others.",
+   "raw": "Overview\n\nWe founded Oklo in 2013 with the goal of revolutionizing the energy landscape by developing clean, reliable, affordable energy solutions at scale. According to the International Energy Agency, global electricity production is expected to increase over 75% by 2050 driven by electrification of buildings, transportation, and industry; increased use of air conditioning in the developing world; and increased consumption from data centers and cloud services. Our business addresses this demand by producing electricity and heat from our Aurora powerhouses which can run on fresh, recycled, or down-blended nuclear fuel. We are also commercializing nuclear fuel recycling technology that can c"
   },
   {
    "symbol": "UPST",
@@ -326,10 +331,10 @@
    "document": "upst-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1647639/000164763926000027/upst-20251231.htm",
    "found": true,
-   "chars": 1243,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Upstart is the leading artificial intelligence (“AI”) lending marketplace. We aim to radically reduce the cost and complexity of borrowing for all Americans by using our proprietary AI models to remake the entire lending process. Founded in 2012, Upstart’s marketplace supports unsecured and secured credit products, such as personal loans, auto loans, and home equity lines of credit (“HELOCs”). Long-term, our vision is to become the always-on, everything-store for credit, where we can automatically approve borrowers at the right prices – instantly and effortlessly.\n\nWe’re dedicated to providing the best rates and the best process to all consumers. Throughout history, affordable credit has been central to unlocking mobility and opportunity. The FICO score was invented in 1989 and remains the standard for determining who is approved for credit and at what interest rate. While FICO is rarely the only input in a lending decision, most lenders use simple rules-based systems that consider only a limited number of variables. Unfortunately, because these legacy credit systems fail to accurately identify and quantify risk, millions of creditworthy individuals are left out of the system, and millions more pay too much to borrow money."
+   "ok": true,
+   "chars": 879,
+   "description": "Upstart is the leading artificial intelligence (“AI”) lending marketplace. We aim to radically reduce the cost and complexity of borrowing for all Americans by using our proprietary AI models to remake the entire lending process. Founded in 2012, Upstart’s marketplace supports unsecured and secured credit products, such as personal loans, auto loans, and home equity lines of credit (“HELOCs”). Long-term, our vision is to become the always-on, everything-store for credit, where we can automatically approve borrowers at the right prices – instantly and effortlessly.\n\nWe’re dedicated to providing the best rates and the best process to all consumers. Throughout history, affordable credit has been central to unlocking mobility and opportunity. The FICO score was invented in 1989 and remains the standard for determining who is approved for credit and at what interest rate.",
+   "raw": "Overview\n\nUpstart is the leading artificial intelligence (“AI”) lending marketplace. We aim to radically reduce the cost and complexity of borrowing for all Americans by using our proprietary AI models to remake the entire lending process. Founded in 2012, Upstart’s marketplace supports unsecured and secured credit products, such as personal loans, auto loans, and home equity lines of credit (“HELOCs”). Long-term, our vision is to become the always-on, everything-store for credit, where we can automatically approve borrowers at the right prices – instantly and effortlessly.\n\nWe’re dedicated to providing the best rates and the best process to all consumers. Throughout history, affordable cred"
   },
   {
    "symbol": "HOOD",
@@ -340,10 +345,10 @@
    "document": "hood-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1783879/000178387926000023/hood-20251231.htm",
    "found": true,
-   "chars": 1562,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "Robinhood was founded in 2013 on the belief that everyone should be welcome to participate in our financial system. We are creating modern financial services platforms for everyone, regardless of their wealth, income, or background.\n\nOur mission is to democratize finance for all. We use technology to provide access to the financial system in a way that is simple and convenient for our customers. We believe the financial system should be built to work for everyone. That’s why we create products that let our customers start investing at their own pace, on their own terms. We believe investing should be familiar and welcoming, with a simple design and an intuitive interface, so that customers are empowered to achieve their goals. We started with a revolutionary, bold brand and design in the Robinhood app which makes investing approachable for millions. Over the last decade, we have disrupted and changed the industry, becoming the first U.S. retail broker to offer commission-free stock trading with no account minimums, which was subsequently adopted by the rest of the industry. In recent years, we have continued to build relationships with our customers by introducing new products and diversifying our services that further expand access to the financial system, including focusing on products and tools for more seasoned investors. Through these efforts, we believe we have made investing culturally relevant and understandable, and that our platforms enable our customers to become long-term investors and take greater control of their finances."
+   "ok": true,
+   "chars": 861,
+   "description": "Robinhood was founded in 2013 on the belief that everyone should be welcome to participate in our financial system. We are creating modern financial services platforms for everyone, regardless of their wealth, income, or background.\n\nOur mission is to democratize finance for all. We use technology to provide access to the financial system in a way that is simple and convenient for our customers. We believe the financial system should be built to work for everyone. That’s why we create products that let our customers start investing at their own pace, on their own terms. We believe investing should be familiar and welcoming, with a simple design and an intuitive interface, so that customers are empowered to achieve their goals. We started with a revolutionary, bold brand and design in the Robinhood app which makes investing approachable for millions.",
+   "raw": "Company Overview\nRobinhood was founded in 2013 on the belief that everyone should be welcome to participate in our financial system. We are creating modern financial services platforms for everyone, regardless of their wealth, income, or background.\nOur mission is to democratize finance for all. We use technology to provide access to the financial system in a way that is simple and convenient for our customers. We believe the financial system should be built to work for everyone. That’s why we create products that let our customers start investing at their own pace, on their own terms. We believe investing should be familiar and welcoming, with a simple design and an intuitive interface, so "
   },
   {
    "symbol": "ABEV",
@@ -365,10 +370,10 @@
    "document": "arm-20260331.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1973239/000197323926000097/arm-20260331.htm",
    "found": true,
-   "chars": 1608,
-   "class": "overview",
-   "tocHitsSkipped": 0,
-   "excerpt": "Semiconductors are indispensable to everyday life. In today’s technology-driven world, semiconductors are the enablers of the devices and infrastructure that facilitate virtually everything people do. As consumers and enterprises continue to demand more from their devices, we expect the demand for high-performance and energy-efficient semiconductors to continue to expand. We expect a plethora of products to become smart, connected and AI-enabled. AI use cases are emerging across all of our end markets, including smartphones, personal computers (“PCs”), consumer electronics, autonomous solutions, industrial devices and data centers.\n\nThe massive expansion of AI, data, and advanced software applications is driving demand for high-performance and power efficient compute. Mobile devices must manage compute-intensive applications like video streaming, yet are limited by the energy stored in their batteries. Data centers must cope with rising AI training and inference needs while limited by the power available from the grid. The transition to electric vehicles and autonomous driving is increasing pressure on automakers to increase compute power without limiting vehicle range. Collectively, these considerations result in the need for innovation in chip design to address market demands for an optimal balance of performance, efficiency, and cost across end markets. The Arm compute platform enables customers to address increasingly complex workloads with a broad suite of powerful, energy efficient solutions from our CPU IP and CSS offerings to our production silicon product, the Arm AGI CPU."
+   "ok": true,
+   "chars": 778,
+   "description": "Semiconductors are indispensable to everyday life. In today’s technology-driven world, semiconductors are the enablers of the devices and infrastructure that facilitate virtually everything people do. As consumers and enterprises continue to demand more from their devices, we expect the demand for high-performance and energy-efficient semiconductors to continue to expand. We expect a plethora of products to become smart, connected and AI-enabled. AI use cases are emerging across all of our end markets, including smartphones, personal computers (“PCs”), consumer electronics, autonomous solutions, industrial devices and data centers.\n\nThe massive expansion of AI, data, and advanced software applications is driving demand for high-performance and power efficient compute.",
+   "raw": "Industry Background\nSemiconductors are indispensable to everyday life. In today’s technology-driven world, semiconductors are the enablers of the devices and infrastructure that facilitate virtually everything people do. As consumers and enterprises continue to demand more from their devices, we expect the demand for high-performance and energy-efficient semiconductors to continue to expand. We expect a plethora of products to become smart, connected and AI-enabled. AI use cases are emerging across all of our end markets, including smartphones, personal computers (“PCs”), consumer electronics, autonomous solutions, industrial devices and data centers.\nThe massive expansion of AI, data, and a"
   },
   {
    "symbol": "KGC",
@@ -399,10 +404,10 @@
    "document": "shop-20251231.htm",
    "url": "https://www.sec.gov/Archives/edgar/data/1594805/000159480526000007/shop-20251231.htm",
    "found": true,
-   "chars": 1220,
-   "class": "overview",
-   "tocHitsSkipped": 1,
-   "excerpt": "Shopify provides essential internet infrastructure for commerce. Shopify's all-in-one platform makes it easier to start, run and grow a business, powering sales online, in store, and everywhere in between. Shopify's mission is to make commerce better for everyone with a platform and services that are engineered for speed, customization, reliability and security, while delivering a better shopping experience for consumers everywhere.\n\nShopify's business is designed to empower our merchants by offering a comprehensive, multi-channel commerce platform that supports their business as it grows. As owners and operators, merchants set their course, while Shopify offers them the tools to seamlessly manage, market and sell their products across various sales channels, including online storefronts, physical retail spaces, AI platforms, social media and more. Emphasizing merchant-first innovation, Shopify provides an integrated back-end system to streamline operations, from managing inventory and transaction management to building relationships with buyers. With a robust and continuously updated infrastructure, Shopify's goal is to provide merchants with cutting-edge technology to thrive in a competitive market."
+   "ok": true,
+   "chars": 860,
+   "description": "Shopify provides essential internet infrastructure for commerce. Shopify's all-in-one platform makes it easier to start, run and grow a business, powering sales online, in store, and everywhere in between. Shopify's mission is to make commerce better for everyone with a platform and services that are engineered for speed, customization, reliability and security, while delivering a better shopping experience for consumers everywhere.\n\nShopify's business is designed to empower our merchants by offering a comprehensive, multi-channel commerce platform that supports their business as it grows. As owners and operators, merchants set their course, while Shopify offers them the tools to seamlessly manage, market and sell their products across various sales channels, including online storefronts, physical retail spaces, AI platforms, social media and more.",
+   "raw": "Overview\nShopify provides essential internet infrastructure for commerce. Shopify's all-in-one platform makes it easier to start, run and grow a business, powering sales online, in store, and everywhere in between. Shopify's mission is to make commerce better for everyone with a platform and services that are engineered for speed, customization, reliability and security, while delivering a better shopping experience for consumers everywhere.\nShopify's business is designed to empower our merchants by offering a comprehensive, multi-channel commerce platform that supports their business as it grows. As owners and operators, merchants set their course, while Shopify offers them the tools to sea"
   }
  ]
 }
