@@ -101,7 +101,10 @@ for (const symbol of LIST) {
   const sub = await get(`https://data.sec.gov/submissions/CIK${cik}.json`);
   if (sub.status !== 200) { results.push({ symbol, cik, found: false, why: `submissions HTTP ${sub.status}` }); continue; }
   const annual = await latestAnnual(sub.body, cik);
-  if (!annual) { results.push({ symbol, cik, found: false, why: "no annual filing in submissions" }); continue; }
+  if (!annual) {
+    results.push({ symbol, cik, found: false, why: `no annual filing in submissions (${sub.body.name ?? "?"}, ${(sub.body.filings?.recent?.form ?? []).length} recent, ${(sub.body.filings?.files ?? []).length} older pages)` });
+    continue;
+  }
   const { form, accession, filedOn, doc } = annual;
   const base = { symbol, cik, form, accession, filedOn, document: doc };
   if (form === "40-F") {
@@ -113,6 +116,18 @@ for (const symbol of LIST) {
   if (page.status !== 200) { results.push({ ...base, found: false, why: `document HTTP ${page.status}` }); continue; }
   const text = desc.filingText(page.body);
   const loc = desc.locateSection(text, form);
+  // DIAGNOSE=1: every line that looks like an Item heading, with its offset
+  // and what follows it — the evidence for a locator miss, not a guess.
+  if (process.env.DIAGNOSE) {
+    console.log(`\n### ${symbol} ${form} ${url} (${text.length} chars of text)`);
+    let at = 0;
+    for (const l of text.split("\n")) {
+      if (/^\s*(item\s*\d+[a-z]?\b|part\s+i\b|b\.\s*business|business\s*\.?$)/i.test(l) && l.length < 120) {
+        console.log(`  @${String(at).padStart(7)}  ${JSON.stringify(l.slice(0, 90))}  →  ${JSON.stringify(text.slice(at + l.length + 1, at + l.length + 90))}`);
+      }
+      at += l.length + 1;
+    }
+  }
   if (!loc.found) { results.push({ ...base, url, found: false, why: loc.why }); continue; }
   const cleaned = desc.cleanDescription(loc.body);
   // THE RAW OPENING TOO, so a rejection can be checked against what it rejected.
