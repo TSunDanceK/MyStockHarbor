@@ -1,28 +1,43 @@
 // SCREENSHOT THE /stock ABOUT BLOCK ON A VERCEL PREVIEW (PR 3 render, #518).
 //
 // The agent sandbox is refused *.vercel.app, and previews sit behind Vercel
-// SSO. A runner can reach them, and a `_vercel_share` link (minted by the
-// owner's Vercel connector, valid 23 hours) sets the access cookie. The link
-// is passed as the relay's SYMBOLS input — never committed.
+// SSO, so this runs on a GitHub runner: .github/workflows/preview-screenshots.yml.
 //
-//   SYMBOLS="<share url for /stock/X> ONDS AAPL ABVX AZN" node scripts/preview-screenshots.mjs
+// ── CREDENTIALS NEVER ARRIVE AS INPUTS (owner, #518) ─────────────────────
+// The repo is public and workflow logs are readable, and a dispatch input is
+// printed in the log. The first version took a `_vercel_share` link as the
+// relay's SYMBOLS input, which put a live access link in three run logs
+// (35790746955, 35790835526, 35792976694 — logs deleted). Now:
+//   PREVIEW_URL  the deployment's origin only; any query string, and any
+//                `_vercel_share` / token-looking parameter, is refused.
+//   VERCEL_AUTOMATION_BYPASS_SECRET  Vercel's "Protection Bypass for
+//                Automation" secret, from a masked repo secret. Sent as the
+//                x-vercel-protection-bypass header; never logged.
+//
+//   PREVIEW_URL=https://<deployment>.vercel.app SYMBOLS="ONDS AAPL" \
+//     VERCEL_AUTOMATION_BYPASS_SECRET=… node scripts/preview-screenshots.mjs
 //
 // Headless Chrome over the DevTools protocol with Node's built-in WebSocket —
 // no npm install on the runner. For each symbol: the "About …" section,
-// clipped to its box, at desktop (1280) and mobile (390) widths. Written as
-// base64 PNG into data/sec/preview-screenshots.json, which the relay uploads;
-// .github/workflows/preview-screenshots-commit.yml decodes them onto a
-// throwaway branch so the PR's diff carries no images.
+// clipped to its box, at desktop (1280) and mobile (390) widths, written as
+// base64 PNG into data/sec/preview-screenshots.json.
 //
 // Read-only: loads pages, writes one file.
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 
-const args = (process.env.SYMBOLS || "").split(/\s+/).filter(Boolean);
-const share = args.find((a) => /^https?:\/\//.test(a));
-const symbols = args.filter((a) => !/^https?:\/\//.test(a));
-if (!share || !symbols.length) throw new Error("SYMBOLS must be '<share url> SYM SYM …'");
-const origin = new URL(share).origin;
+const raw = (process.env.PREVIEW_URL || "").trim();
+if (!raw) throw new Error("PREVIEW_URL is required (the deployment origin)");
+const url = new URL(raw);
+if (url.search || url.hash || /share|token|bypass|secret/i.test(raw)) {
+  throw new Error("PREVIEW_URL must be a bare origin: no query string, no share link, no token");
+}
+const origin = url.origin;
+const symbols = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+if (!symbols.length) throw new Error("SYMBOLS is required");
+if (symbols.some((s) => !/^[A-Z0-9.\-]{1,10}$/i.test(s))) throw new Error("SYMBOLS takes ticker symbols only");
+const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
+if (!BYPASS) throw new Error("VERCEL_AUTOMATION_BYPASS_SECRET is not set (a masked repo secret)");
 
 const chrome = [process.env.CHROME, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
   .find((c) => c && fs.existsSync(c));
@@ -70,11 +85,17 @@ await send("Network.enable");
 // the challenge page to hand over (below).
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 await send("Network.setUserAgentOverride", { userAgent: UA });
+// The bypass secret as a header on every request; set-bypass-cookie makes the
+// client-side navigations that follow carry it too.
+await send("Network.setExtraHTTPHeaders", { headers: {
+  "x-vercel-protection-bypass": BYPASS,
+  "x-vercel-set-bypass-cookie": "true",
+} });
 
 async function load(url) {
   events.length = 0;
   const nav = await send("Page.navigate", { url });
-  if (nav.errorText) console.log(`  navigate ${url.replace(/_vercel_share=[^&]+/, "_vercel_share=…")}: ${nav.errorText}`);
+  if (nav.errorText) console.log(`  navigate ${url}: ${nav.errorText}`);
   for (let i = 0; i < 150; i++) {
     await sleep(200);
     if (events.some((e) => e.method === "Page.loadEventFired")) break;
@@ -88,9 +109,6 @@ async function load(url) {
   await sleep(2500); // client charts and fonts settle
 }
 
-// THE SHARE LINK FIRST: it sets the SSO-bypass cookie, then redirects.
-await load(share);
-console.log(`share link landed on ${String(await evaluate("location.href")).replace(/_vercel_share=[^&]+/, "_vercel_share=…")}`);
 
 const out = { origin, takenAt: new Date().toISOString(), shots: {} };
 for (const sym of symbols) {

@@ -1,0 +1,63 @@
+# Screenshots of the /stock About block on a Vercel preview, onto the throwaway
+# branch claude/pr518-screenshots (never into a PR's diff).
+#
+# CREDENTIALS COME FROM SECRETS, NEVER INPUTS (owner, #518). The repo is public
+# and a dispatch input is printed in the run log. The only inputs are a bare
+# deployment origin and ticker symbols, both validated by the script; the
+# preview-protection bypass is the masked repo secret
+# VERCEL_AUTOMATION_BYPASS_SECRET (Vercel → Project → Settings → Deployment
+# Protection → Protection Bypass for Automation).
+name: Preview screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: "Deployment origin, e.g. https://mystockharbor-abc123-tsundanceks-projects.vercel.app (no query string)"
+        required: true
+      symbols:
+        description: "Tickers, space-separated"
+        required: true
+        default: "ONDS AAPL ABVX AZN"
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Take the screenshots
+        env:
+          PREVIEW_URL: ${{ inputs.preview_url }}
+          SYMBOLS: ${{ inputs.symbols }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: node scripts/preview-screenshots.mjs
+      - name: Decode and push to the throwaway branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shots
+          node -e '
+            const fs = require("node:fs");
+            const d = JSON.parse(fs.readFileSync("data/sec/preview-screenshots.json", "utf8"));
+            const lines = [`Preview screenshots, run ${process.env.GITHUB_RUN_ID}, taken ${d.takenAt} on ${d.origin}.`, ""];
+            for (const [k, s] of Object.entries(d.shots)) {
+              if (s.png) { fs.writeFileSync(`/tmp/shots/${k}.png`, Buffer.from(s.png, "base64")); lines.push(`- ${k}.png (${s.height}px)`); }
+              else lines.push(`- ${k}: ${s.error}`);
+            }
+            fs.writeFileSync("/tmp/shots/README.md", lines.join("\n") + "\n");
+          '
+          cd /tmp/shots
+          git init -q -b shots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Preview screenshots from run ${GITHUB_RUN_ID} (throwaway branch)"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/claude/pr518-screenshots
