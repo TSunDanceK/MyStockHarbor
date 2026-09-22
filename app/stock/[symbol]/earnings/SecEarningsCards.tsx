@@ -1309,16 +1309,36 @@ export function SecNoRegistrantCard({ symbol }: { symbol: string }) {
         are no filings for it to show.
       </p>
       <p>There are two reasons a ticker is missing from it, and this page cannot tell which applies:</p>
+      {/* ── ONE ELEMENT PER BULLET, NOT LOOSE TEXT AROUND A <strong> ─────────
+          `.bulletList li` is a two-column grid — `12px minmax(0, 1fr)` — with
+          `::before` as the dot in column one and the content in column two.
+          That works for the plain-text bullets elsewhere on this page because
+          a single text run is ONE anonymous grid item.
+
+          A bullet with a <strong> in the middle is not one item: the <strong>
+          is a grid item of its own, and each text run around it becomes an
+          anonymous one. They then flow across the two tracks, so every other
+          fragment lands in the 12px column and wraps a word per line — which
+          is what "fund / or / ETF / share / class" stacked vertically was.
+
+          Wrapping each bullet in a single span restores the two-item shape the
+          CSS is written for. Deliberately NOT a change to `.bulletList`: that
+          rule is shared with bullets that render correctly today, and widening
+          it to fix this card would put every one of them at risk. */}
       <ul className="bulletList">
         <li>
-          It is a <strong>fund or ETF share class</strong>. A fund that trades as a series of a
-          trust files under the trust&apos;s name rather than the ticker&apos;s, so the ticker
-          never appears as a registrant and no filings will arrive later. Funds that are their
-          own registrants do appear, and their pages work normally.
+          <span>
+            It is a <strong>fund or ETF share class</strong>. A fund that trades as a series of a
+            trust files under the trust&apos;s name rather than the ticker&apos;s, so the ticker
+            never appears as a registrant and no filings will arrive later. Funds that are their
+            own registrants do appear, and their pages work normally.
+          </span>
         </li>
         <li>
-          It is a company the <strong>directory snapshot has not picked up</strong>. In that case
-          the filings exist and this page will show them once the directory is refreshed.
+          <span>
+            It is a company the <strong>directory snapshot has not picked up</strong>. In that
+            case the filings exist and this page will show them once the directory is refreshed.
+          </span>
         </li>
       </ul>
       <p>
