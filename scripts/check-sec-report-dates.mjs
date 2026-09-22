@@ -883,21 +883,36 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   check("the rewrite list is committed and names TSLA and ABBV",
     Array.isArray(list.symbols) && list.symbols.includes("TSLA") && list.symbols.includes("ABBV"),
     `${list.symbols?.length} symbols`);
-  check("...and the cron queues it, drained by pairingRewriteDone",
-    /reportDatesRewrite\.symbols/.test(job) && /pairingRewriteDone\(await readReportDates\(sym\)\)/.test(job) &&
-      /\[\.\.\.changedThisRun, \.\.\.rewrite, \.\.\.backfill\]/.test(job));
-  check("...through the same gated writer as every record (no second write path)",
-    (job.match(/writeReportDates\(/g) ?? []).length === 1);
+  const rw = readCodeOnly("app/api/jobs/sec-report-dates-rewrite/route.ts");
+  const builder = readCodeOnly("lib/server/secReportDatesWrite.ts");
+  check("...and its own route queues it, drained by pairingRewriteDone",
+    /reportDatesRewrite\.symbols/.test(rw) && /pairingRewriteDone\(records\[i\]\)/.test(rw) &&
+      /rewriteQueue\(listed, done,/.test(rw));
+  check("...NOT inside sec-facts, whose report-dates block sits behind a 300s timeout",
+    !/reportDatesRewrite/.test(job));
+  check("both routes write through the ONE builder, and it through the one gated writer",
+    /buildAndWriteReportDates\(symbol, cik, set, subs, todayIso\)/.test(job) &&
+      /buildAndWriteReportDates\(symbol, cik, set, subs, todayIso\)/.test(rw) &&
+      (builder.match(/writeReportDates\(/g) ?? []).length === 1 &&
+      !/writeReportDates\(/.test(job) && !/writeReportDates\(/.test(rw));
   check("...and the write passes earlyNonResults straight through, never omitted or coerced",
-    /\n\s*earlyNonResults,\n\s*\}\);/.test(job) &&
-      /const earlyNonResults = earlyNonResultsPattern\(pairing\.periods\);/.test(job));
+    /\n\s*earlyNonResults,\n\s*\}\);/.test(builder) &&
+      /const earlyNonResults = earlyNonResultsPattern\(pairing\.periods\);/.test(builder));
   check("the pending-results guard is handed the pattern at the write site",
-    /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(job));
+    /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(builder));
+  {
+    const q = await lift(readCodeOnly("lib/server/secReportDatesWrite.ts")
+      .slice(readCodeOnly("lib/server/secReportDatesWrite.ts").indexOf("export function rewriteQueue("))
+      .replace(/: readonly string\[\]|: ReadonlySet<string>|: string\[\]/g, "") + "\nexport { rewriteQueue };");
+    const got = q.rewriteQueue(["AA", "TSLA", "BB", "ABBV", "CC"], new Set(["BB"]), new Set(["TSLA", "ABBV"]));
+    check("the rewrite queue is cut-first, drops done records, keeps list order otherwise",
+      JSON.stringify(got) === JSON.stringify(["TSLA", "ABBV", "AA", "CC"]), JSON.stringify(got));
+  }
   check("the cron passes the STORED period ends into the matcher",
-    /resultsPairing\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(job),
+    /resultsPairing\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(builder),
     "period ends must come from the fact set, never from the filing");
   check("...and only stores events whose period was matched",
-    /\.filter\(\(e\) => e\.periodEnd\)/.test(job));
+    /\.filter\(\(e\) => e\.periodEnd\)/.test(builder));
   check("...and stamps the symbol even when it found no events",
     /if \(entry\) entry\.reportDatesAt = Date\.now\(\);/.test(job),
     "or a filer with no Item 2.02 history is re-fetched every day forever");
@@ -918,16 +933,16 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
       !/latestResultsAnnouncement/.test(page),
     "deriving it needs submissions, and a render has no business fetching EDGAR");
   check("the cron computes it from the submissions payload already in hand",
-    /pendingResults\(\s*\n?\s*events, latestResultsAnnouncement\(subs\), cadence, todayIso/.test(job),
+    /pendingResults\(\s*\n?\s*events, latestResultsAnnouncement\(subs\), cadence, todayIso/.test(builder),
     "a second fetch for a notice would double this phase's SEC cost");
 
   check("the cron rolls the estimate past what has already been reported",
-    /const cadence = nextPeriodEndFrom\(quarterEnds, yearEnds\);/.test(job) &&
-      /estimateUpcoming\(\s*\n?\s*events, cadence, subs\.category, todayIso\s*\n?\s*\)/.test(job) &&
-      !/estimateNextReport\(/.test(job),
+    /const cadence = nextPeriodEndFrom\(quarterEnds, yearEnds\);/.test(builder) &&
+      /estimateUpcoming\(\s*\n?\s*events, cadence, subs\.category, todayIso\s*\n?\s*\)/.test(builder) &&
+      !/estimateNextReport\(/.test(builder),
     "estimateNextReport alone would store a date already in the past");
   check("...and the notice reads the SAME cadence, so the two cannot disagree",
-    (job.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
+    (builder.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
     "two derivations would let the estimate and the notice name different quarters");
   check("both SEC fetchers share one rate gate",
     (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&

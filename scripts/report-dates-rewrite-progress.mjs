@@ -1,7 +1,8 @@
 // HOW FAR THE PAIRING REWRITE HAS GOT. Reads only.
 //
 // Two sources, printed side by side so neither is taken on trust: the last
-// sec-facts run's own counters (reportDatesRewrite*) and a direct count over
+// sec-report-dates-rewrite run's own summary (and sec-facts', whose timeout is why the
+// rewrite has its own job) and a direct count over
 // data/sec/report-dates-rewrite.json of which records carry the done marker
 // (pairingRewriteDone: the `earlyNonResults` key, null included).
 //   relay task: write-report-dates-rewrite-progress  (credentialled for the read)
@@ -17,13 +18,11 @@ if (!JOB_RUN_PREFIX || !DATES_PREFIX) { console.error("FATAL: key prefixes not r
 const list = JSON.parse(fs.readFileSync("data/sec/report-dates-rewrite.json", "utf8")).symbols;
 const cut = new Set(JSON.parse(fs.readFileSync("data/due-strip.json", "utf8")).symbols);
 
-const run = await redis.get(`${JOB_RUN_PREFIX}:sec-facts`);
-const s = run?.summary ?? {};
-console.log(`last sec-facts run: ${run ? new Date(run.at).toISOString() : "none recorded"} · ok=${run?.ok}`);
-console.log(`  rewrite queued ${s.reportDatesRewrite ?? "n/a"} · written ${s.reportDatesRewriteWritten ?? "n/a"} · ` +
-  `failed ${s.reportDatesRewriteFailed ?? "n/a"} · left ${s.reportDatesRewriteLeft ?? "n/a"}`);
-console.log(`  report dates attempted ${s.reportDatesAttempted ?? "n/a"} · written ${s.reportDatesWritten ?? "n/a"} · failed ${s.reportDatesFailed ?? "n/a"}`);
-
+for (const job of ["sec-report-dates-rewrite", "sec-facts"]) {
+  const run = await redis.get(`${JOB_RUN_PREFIX}:${job}`);
+  console.log(`last ${job} run: ${run ? new Date(run.at).toISOString() : "none recorded"} · ok=${run?.ok ?? "-"}`);
+  if (run) console.log(`  ${JSON.stringify(run.summary)}`);
+}
 const done = [], left = [];
 for (const sym of list) {
   const rec = await redis.get(`${DATES_PREFIX}:${sym}`);

@@ -12,14 +12,8 @@ import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secCol
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
-import {
-  resultsPairing, earlyNonResultsPattern, estimateUpcoming, nextPeriodEndFrom,
-  latestResultsAnnouncement, pendingResults,
-  type Submissions,
-} from "@/lib/server/secReportDates";
-import { pairingRewriteDone, readReportDates, writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
-import reportDatesRewrite from "@/data/sec/report-dates-rewrite.json";
-import dueStripCut from "@/data/due-strip.json";
+import type { Submissions } from "@/lib/server/secReportDates";
+import { buildAndWriteReportDates } from "@/lib/server/secReportDatesWrite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -672,7 +666,7 @@ export async function GET(req: NextRequest) {
   // is the whole point of the matching in `reportEvents`: an Item 2.02 8-K's
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
-  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, rewrite: 0, rewriteWritten: 0, rewriteFailed: 0, dated: 0, pending: 0 };
+  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
     const changedSet = new Set(changedThisRun);
@@ -680,36 +674,11 @@ export async function GET(req: NextRequest) {
       .filter(([sym, e]) => e.cik && !e.reportDatesAt && !changedSet.has(sym))
       .map(([sym]) => sym);
     reportDates.backlog = backfill.length;
-    // ── THE PAIRING REWRITE: A LISTED, SELF-DRAINING BACKFILL ─────────────
-    // The records the earliest-2.02 rule got wrong are only rewritten when
-    // their fact set next changes -- for TSLA, its Q3 10-Q in late October,
-    // after the due strip has already mislisted it. So the filers the census
-    // measured as mispicked (scripts/early-202-census.mjs, relay task
-    // write-early-202-census) are committed as a list and rewritten here, in
-    // production, through the same write and the same gate as every other
-    // record. Nothing outside the list is touched.
-    //
-    // DRAINED BY THE RECORD ITSELF, not by a stamp elsewhere: a record written
-    // under the paired rule carries `earlyNonResults` (null included), one
-    // written before it has no such key. So a listed symbol is rewritten once
-    // and then costs one GET per run until the list is deleted.
-    const listed = (reportDatesRewrite.symbols as string[]).filter(
-      (sym) => manifest.symbols[sym]?.cik && !changedSet.has(sym)
-    );
-    // The due strip's cut first: those are the records a reader sees in the
-    // forward sections, and a run's allowance is 100 against a list of 209.
-    const cut = new Set<string>(dueStripCut.symbols);
-    listed.sort((a, b) => Number(cut.has(b)) - Number(cut.has(a)));
-    const drained = await Promise.all(
-      listed.map(async (sym) => {
-        return pairingRewriteDone(await readReportDates(sym));
-      })
-    );
-    const rewrite = listed.filter((_, i) => !drained[i]);
-    reportDates.rewrite = rewrite.length;
-    const rewriteSet = new Set(rewrite);
-    const queue = [...new Set([...changedThisRun, ...rewrite, ...backfill])];
-    for (const symbol of queue.slice(0, SEC_REPORT_DATES_PER_RUN)) {
+    // The pairing rewrite (data/sec/report-dates-rewrite.json) is NOT queued
+    // here: this job has been timing out at 300s (production, 2026-09-22
+    // 04:20), and a backfill behind a timeout never reaches its turn. It has
+    // its own route, /api/jobs/sec-report-dates-rewrite.
+    for (const symbol of [...changedThisRun, ...backfill].slice(0, SEC_REPORT_DATES_PER_RUN)) {
       const entry = manifest.symbols[symbol];
       const cik = entry?.cik ?? cikForSymbol(symbol);
       if (!cik) continue;
@@ -722,62 +691,11 @@ export async function GET(req: NextRequest) {
         // estimated from. It waits for populate to reach it.
         if (!set) continue;
         const subs = await fetchSubmissions(cik);
-        const quarterEnds = set.quarters.map((p) => p.e).filter(Boolean);
-        const yearEnds = set.years.map((p) => p.e).filter(Boolean);
-        // ONE PAIRING, TWO OUTPUTS: the events (each period's results 2.02,
-        // chosen against its 10-Q/10-K) and the filer's own history of an
-        // EARLY non-results 2.02, which is what keeps the current period --
-        // no 10-Q yet -- from reading TSLA's delivery 8-K as its results.
-        const pairing = resultsPairing(subs, new Set([...quarterEnds, ...yearEnds]));
-        const events = pairing.events
-          .filter((e) => e.periodEnd)
-          .slice(0, STORED_EVENT_LIMIT);
-        const earlyNonResults = earlyNonResultsPattern(pairing.periods);
-        // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
-        // lags the filings — companyfacts carries a period once it is FILED —
-        // so one cadence step past its newest period can be a date in the
-        // past, rendered under "next expected".
-        const cadence = nextPeriodEndFrom(quarterEnds, yearEnds);
-        const { estimate: next, periodEnd: nextEnd } = estimateUpcoming(
-          events, cadence, subs.category, todayIso
-        );
-        // ── ANNOUNCED BUT NOT YET IN THE FEED ─────────────────────────────
-        // Read from the SAME submissions payload already in hand, so this
-        // costs nothing beyond the arithmetic. See pendingResults for why it
-        // cannot come out of `events`.
-        const pending = pendingResults(
-          events, latestResultsAnnouncement(subs), cadence, todayIso, earlyNonResults
-        );
-        // ── category AND annual: ALREADY IN HAND, PREVIOUSLY DISCARDED ────
-        // Both were live variables three lines up -- `subs.category` goes into
-        // estimateUpcoming and `cadence.annual` decides which deadline column
-        // it uses -- and both were then thrown away. The due strip's overdue
-        // cap needs exactly these two, and nothing persisted them, so a
-        // consumer had to choose between ~50 live SEC fetches per page render
-        // and silently taking DEADLINE_FALLBACK.
-        //
-        // Storing them costs one field each and NO extra request. See the
-        // migration note on StoredReportDates.category.
-        //
-        // `cadence?.annual ?? null` rather than `?? false`: a filer with too
-        // thin a history for nextPeriodEndFrom to find a cadence has no
-        // annual-ness to record, and writing `false` there would assert
-        // "quarterly" about a filer we could not read. Absent means
-        // not-yet-known, which is the whole point of the optionality.
-        const ok = await writeReportDates({
-          symbol, cik,
-          at: new Date().toISOString(),
-          events,
-          nextPeriodEnd: nextEnd,
-          next,
-          pending,
-          category: typeof subs.category === "string" ? subs.category : null,
-          annual: cadence?.annual ?? null,
-          earlyNonResults,
-        });
-        if (!ok) { reportDates.failed++; if (rewriteSet.has(symbol)) reportDates.rewriteFailed++; continue; }
+        // ONE BUILDER, SHARED WITH THE PAIRING REWRITE (lib/server/
+        // secReportDatesWrite.ts), so the two routes cannot write two shapes.
+        const { ok, events, next, pending } = await buildAndWriteReportDates(symbol, cik, set, subs, todayIso);
+        if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
-        if (rewriteSet.has(symbol)) reportDates.rewriteWritten++;
         if (!events.length) reportDates.noEvents++;
         if (next.kind === "date") reportDates.dated++;
         if (pending) reportDates.pending++;
@@ -788,7 +706,6 @@ export async function GET(req: NextRequest) {
         if (entry) entry.reportDatesAt = Date.now();
       } catch (err) {
         reportDates.failed++;
-        if (rewriteSet.has(symbol)) reportDates.rewriteFailed++;
         console.warn("[sec-facts] report dates failed", symbol, String((err as Error)?.message ?? err));
       }
     }
@@ -831,14 +748,6 @@ export async function GET(req: NextRequest) {
     // climbs through earnings season and falls back is the feed catching up;
     // one that only climbs is a bug in the test, not a lag at SEC.
     reportDatesPending: reportDates.pending,
-    // THE PAIRING REWRITE, per run: queued at the start, written, failed, and
-    // what is left for the next run. A listed symbol that is skipped before
-    // the write (no fact set yet) is neither written nor failed, so it shows up
-    // as left rather than vanishing.
-    reportDatesRewrite: reportDates.rewrite,
-    reportDatesRewriteWritten: reportDates.rewriteWritten,
-    reportDatesRewriteFailed: reportDates.rewriteFailed,
-    reportDatesRewriteLeft: reportDates.rewrite - reportDates.rewriteWritten,
     reportDatesBacklog: reportDates.backlog,
     manifestWritten: persisted,
   };
