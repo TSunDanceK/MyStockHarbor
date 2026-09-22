@@ -112,11 +112,14 @@ for (const { symbol, fields } of TARGETS) {
   console.log(`  latest quarter ${latestQ?.end ?? "none"} | latest instant ${latestI?.end ?? "none"}`);
   console.log(`  quarters=${extracted.quarters.length} years=${extracted.years.length} instants=${extracted.instants.length}`);
 
-  for (const field of fields) {
+  for (const spec of fields) {
+    // `revenue@2022-04-30` asks about one named period end rather than the
+    // latest — a blank cell in the five-year table is not in the latest period.
+    const [field, atEnd] = spec.split("@");
     const chain = chainOf(field);
     const pats = PATTERNS[field] ?? [new RegExp(field, "i")];
     const isInstant = ["cash", "shortTermInvestments", "totalDebt", "shortTermDebt", "longTermDebt"].includes(field);
-    const wantEnd = isInstant ? latestI?.end : latestQ?.end;
+    const wantEnd = atEnd || (isInstant ? latestI?.end : latestQ?.end);
     console.log(`\n  --- ${field} (${isInstant ? "instant" : "duration"}, period ending ${wantEnd ?? "?"})`);
     console.log(`      our chain: ${chain.join(" -> ") || "(none)"}`);
 
