@@ -553,6 +553,15 @@ const TASKS = {
   // not a claim about what the script does.
   // READS ONLY (Upstash + data.sec.gov for concept names). Counts the two
   // blast radii the ABVX diagnosis raised before either change is made.
+  // READS ONLY. Counts how many symbols in the SITE's universe have no CIK in
+  // the committed registrant file, which is exactly the set the earnings route
+  // 404s on. Credentialled because the universe lives in Upstash.
+  "write-no-cik-scope": {
+    script: "scripts/no-cik-scope-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-tie-ifrs-census": {
     script: "scripts/sec-tie-and-ifrs-census.mjs",
     args: () => [],
