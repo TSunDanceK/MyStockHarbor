@@ -804,16 +804,16 @@ export async function fetchMonthRowsDetailed(
     return empty(cached.rows, true);
   }
 
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) {
-    // No key means no way to read a month that is not already cached. A cached
-    // copy is still a real read; nothing else is.
-    monthVisibility.set(key, cached ? "known" : "unknown");
-    return empty(cached?.rows ?? [], Boolean(cached));
-  }
-
   // REDIS BETWEEN THE MODULE CACHE AND FMP. The Map above is per-instance, so
   // before this every cold lambda refetched the whole month.
+  //
+  // ── AND IT IS READ BEFORE THE KEY IS ASKED FOR ────────────────────────────
+  // The no-key return below used to sit ABOVE this read. A cold lambda with a
+  // lapsed or unset FMP_API_KEY then answered "unknown, no rows" for a month
+  // Redis was holding — the shared copy is a real read that needs no key, and
+  // the order made it unreachable exactly when FMP is gone, which is the case
+  // it matters for. check-month-rows-without-key asserts the order with the key
+  // unset and the month in Redis.
   if (!options.bypassCache) {
     const shared = await readReference<RawEarningsRow[]>(`earnings-calendar:${key}`);
     // Same refusal as the write side below and as getMonthCandidates: an empty
@@ -825,6 +825,15 @@ export async function fetchMonthRowsDetailed(
       monthVisibility.set(key, "known");
       return empty(shared, true);
     }
+  }
+
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) {
+    // No key means no way to read a month that neither cache holds. A cached
+    // copy — in-process, even past its TTL, or the shared one above — is still
+    // a real read; nothing else is.
+    monthVisibility.set(key, cached ? "known" : "unknown");
+    return empty(cached?.rows ?? [], Boolean(cached));
   }
 
   const from = `${key}-01`;
