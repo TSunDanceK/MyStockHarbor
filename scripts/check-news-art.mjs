@@ -153,7 +153,11 @@ for (const [bucket, count] of Object.entries(manifest)) {
     counted.add(`${bucket}-${nn}-sm.webp`);
   }
 }
-const uncounted = [...files].filter((f) => !counted.has(f));
+// V2 FILES ARE NOT UNCOUNTED V1 FILES. Without this exclusion the note fires on
+// all 660 tagged images and tells the reader to "raise the bucket count" for
+// files that have no bucket and are already reachable through manifest-v2 —
+// advice that is not just noise but wrong to follow. §9 owns those files.
+const uncounted = [...files].filter((f) => !counted.has(f) && /^(?:sector|event)-/.test(f));
 if (uncounted.length) {
   console.log(
     `  NOTE  ${uncounted.length} .webp present but not counted in the manifest — ` +
@@ -570,8 +574,12 @@ for (const surface of SURFACES) {
     );
   }
   check(
-    `${surface.label}: no plan of its own — planCardArt or a server-sent plan`,
-    /planCardArt\(/.test(code) || /plan=\{item\.art/.test(code)
+    `${surface.label}: no plan of its own — planCardArt, planHeadlineArt or a server-sent plan`,
+    /planCardArt\(/.test(code) || /planHeadlineArt\(/.test(code) || /plan=\{item\.art/.test(code),
+    // planHeadlineArt is /headlines' own composition of the two rules and lives
+    // in lib/server/news/artTags.ts, where §9 tests it BY CALLING IT. It still
+    // ends in planCardArt; what it adds in front is the tagged library.
+    "the surface may not decide what a card shows; it delegates and renders"
   );
   check(
     `${surface.label}: does not re-implement selection — nor even import it`,
@@ -628,12 +636,17 @@ check(
   stray.length === 0,
   stray.length ? `stray: ${stray.join(", ")}` : "a renamed page would otherwise leave a passing assertion behind"
 );
-// ── /headlines, WITH THE EXACT INPUTS THE PAGE PASSES ───────────────────
+// ── /headlines, WITH THE EXACT INPUTS ITS RULE PASSES ───────────────────
 // The structural checks above prove the page DELEGATES. They cannot prove the
 // delegation produces a picture, and "wired up but always none" is the failure
-// this whole section exists to stop being invisible. So the page's own two
-// pinned arguments -- sectorBucket null, canGenerate false -- are run here
-// against the real title classifier.
+// this whole section exists to stop being invisible. So the two pinned
+// arguments -- sectorBucket null, canGenerate false -- are run here against the
+// real title classifier.
+//
+// THEY LIVE IN planHeadlineArt NOW, not in the page body, and §9 asserts them
+// there by calling it. What is below is still the half that matters here: that
+// the EVENT bucket, which is what this page falls through to when an article
+// carries no tags, is reachable from a title alone and holds shipped art.
 const etSrc = read("lib/server/news/eventType.ts")
   .split("\n").filter((l) => !/^import /.test(l)).join("\n")
   .replace(/export type EventType = NonNullable<NewsItem\["eventType"\]>;/, "export type EventType = string;");
@@ -754,6 +767,605 @@ check(
     return /item\.fmpSymbols/.test(fn) && /item\.tickers/.test(fn);
   })(),
   "free adapters put attribution in `tickers`, never `fmpSymbols`; reading only the latter returns null for every item the day the flag flips"
+);
+
+// ─────────────────────────────── 9. THE TAGGED LIBRARY (v2), END TO END
+//
+// A SECOND LIBRARY, A SECOND MANIFEST, AND DELIBERATELY NO SHARED TYPE WITH
+// THE FIRST. §1-§8 above are about `sector-*`/`event-*` and manifest.json's
+// bucket counts; nothing in this section may change what any of them assert.
+//
+// The failure this section exists for is SILENCE, in three shapes:
+//   - a manifest name with no file behind it (a broken image on a live page,
+//     which the page renders around and only a visitor sees),
+//   - a pattern that can only ever score 0 (dead code that looks alive — the
+//     same shape as the event-deals/deal plural trap in art.ts),
+//   - "wired up but always none", which is the exact state /headlines shipped
+//     in for a whole step while every check above passed.
+console.log("\n=== 9. The tagged library (v2): manifest, patterns, picker ===\n");
+
+const V2_PATH = "public/news-art/manifest-v2.json";
+const v2 = JSON.parse(read(V2_PATH));
+const v2Names = Object.keys(v2);
+
+check(
+  "manifest-v2 parses as name -> tags, and every entry has the tag arrays",
+  v2 && typeof v2 === "object" && !Array.isArray(v2) &&
+    v2Names.every((n) => {
+      const e = v2[n];
+      if (!e || typeof e !== "object" || Array.isArray(e)) return false;
+      return ["primary", "related", "motif"].every(
+        (k) => e[k] === undefined || (Array.isArray(e[k]) && e[k].every((t) => typeof t === "string"))
+      );
+    }),
+  `${v2Names.length} images`
+);
+
+// §4.1 OF THE BRIEF, AND IT IS THE ONE THAT PROTECTS THE WORKING SURFACES.
+// art.ts reads manifest.json as Record<string, number>. A v2-shaped object at
+// that path would break /stock/*/news, /sector/*/news and the dashboard strip
+// at build time or, worse, silently. Asserted from both ends: v1 holds numbers,
+// and each module imports its own file.
+check(
+  "manifest.json is STILL the v1 count shape — this PR cannot have touched it",
+  Object.values(manifest).every((v) => typeof v === "number"),
+  "the three symbol-led surfaces read it as bucket counts"
+);
+check(
+  "...and the two modules import different files",
+  /import manifest from "@\/public\/news-art\/manifest\.json";/.test(artCode) &&
+    /import manifest from "@\/public\/news-art\/manifest-v2\.json";/.test(read("lib/server/news/artTags.ts")),
+  "one manifest read by both is one shape read two ways"
+);
+
+// A NAME IS A FILENAME. Anything outside [a-z0-9-] either cannot be served or
+// escapes the folder, and both are worth failing on before they are URLs.
+const badNames = v2Names.filter((n) => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(n));
+check(
+  "every name is a safe, lowercase file stem",
+  badNames.length === 0,
+  badNames.slice(0, 3).join(", ") || `${v2Names.length} names`
+);
+
+// BOTH DIRECTIONS, because a one-way check is how a name and a file drift.
+const v2Missing = [];
+for (const name of v2Names) {
+  if (!files.has(`${name}.webp`)) v2Missing.push(`${name}.webp`);
+  if (!files.has(`${name}-sm.webp`)) v2Missing.push(`${name}-sm.webp`);
+}
+check(
+  "every name in manifest-v2 has BOTH files on disk",
+  v2Missing.length === 0,
+  v2Missing.length ? `${v2Missing.length} missing, e.g. ${v2Missing.slice(0, 3).join(", ")}` : "no name is unbacked"
+);
+
+// The other direction is a FAILURE here, not a note as it is for v1. v1 can
+// grow a bucket at a time because a count gates it; v2 has no counts, so a file
+// the manifest does not name is simply unreachable forever and nothing else
+// would ever say so.
+const v2Orphans = [...files].filter(
+  (f) => !/^(?:sector|event)-/.test(f) && !v2Names.includes(f.replace(/(?:-sm)?\.webp$/, ""))
+);
+check(
+  "no v2-shaped .webp on disk is missing from manifest-v2",
+  v2Orphans.length === 0,
+  v2Orphans.length ? `${v2Orphans.length} unreachable, e.g. ${v2Orphans.slice(0, 3).join(", ")}` : "nothing unreachable"
+);
+
+// ── THE CLASSIFIER, BY RUNNING IT ──────────────────────────────────────────
+// articleTopic.ts imports nothing at all, so it transpiles and loads as-is —
+// no substitution, which means this is the shipped module and not a copy of it.
+const topicSrc = read("lib/server/news/articleTopic.ts");
+if (/^import /m.test(topicSrc)) {
+  console.error("FAIL: articleTopic.ts grew an import; this harness loads it unsubstituted.");
+  process.exit(1);
+}
+const topic = await import(`data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(topicSrc, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+).toString("base64")}`);
+
+// EVERY TAG THE TABLE CAN EMIT MUST EXIST IN THE MANIFEST, and the reverse is
+// NOT required: the library holds 67 subjects and 16 motifs, most of which no
+// pattern reaches yet, which is a coverage gap and not a bug. A pattern with no
+// image is the bug, because it looks alive and can only ever score 0.
+if (v2Names.length === 0) {
+  console.log(
+    "  NOTE  manifest-v2.json is EMPTY. The tagged path is INERT: pickTagged returns\n" +
+      "        null for every article and /headlines renders exactly what it renders today.\n" +
+      "        The pattern-reachability assertions below are SKIPPED because there is\n" +
+      "        nothing to reach — they turn back on with the first image. Adding art:\n" +
+      "        files first, manifest second. public/news-art/README.md has the order."
+  );
+} else {
+  const inManifest = (axis, tag) =>
+    v2Names.some((n) => {
+      const e = v2[n];
+      return axis === "subject"
+        ? (e.primary ?? []).includes(tag) || (e.related ?? []).includes(tag)
+        : (e.motif ?? []).includes(tag);
+    });
+  const deadSubjects = topic.SUBJECT_TAGS.filter((t) => !inManifest("subject", t));
+  const deadMotifs = topic.MOTIF_TAGS.filter((t) => !inManifest("motif", t));
+  check(
+    "every subject the table can emit reaches at least one image",
+    deadSubjects.length === 0,
+    deadSubjects.length ? `dead: ${deadSubjects.join(", ")}` : `${topic.SUBJECT_TAGS.length} subjects`
+  );
+  check(
+    "every motif the table can emit reaches at least one image",
+    deadMotifs.length === 0,
+    deadMotifs.length ? `dead: ${deadMotifs.join(", ")}` : `${topic.MOTIF_TAGS.length} motifs`
+  );
+}
+
+// REAL HEADLINES, CAPTURED BEFORE THE TABLE EXISTED. The fixture's own header
+// separates the real rows from the constructed probes; `imprecise` rows are
+// printed rather than asserted, so a later narrowing that fixes one does not
+// fail this suite for fixing it.
+// ── TWO FIXTURES, TWO POPULATIONS, ONE ASSERTION ───────────────────────────
+// article-topic.jsonl's real rows are the PER-SYMBOL feed, where a story about
+// Costco says "Costco" and not "retailers". article-topic-general's are the
+// GENERAL feed, which is what /headlines actually serves and where the subject
+// is usually named outright. They score very differently — 6.8% against 33% —
+// and neither is wrong; what is wrong is quoting one number without its sample.
+//
+// Both are asserted by the same code, so a pattern change has to satisfy both
+// populations at once. That is the point: every defect fixed on this branch so
+// far was invisible on one sample and obvious on the other.
+const TOPIC_FIXTURES = [
+  {
+    file: "scripts/fixtures/article-topic.jsonl",
+    // HAND-PICKED FROM A 192-HEADLINE POLL, deliberately over-weighted towards
+    // matches so the precision read-through had something to read. Its split is
+    // a property of that SELECTION and is not a rate: the measured rate on the
+    // full poll is 6.8%, from scripts/newsart-topic-sample.mjs.
+    composition: "hand-picked from a 192-item poll — NOT a rate (the poll measures 6.8%)",
+  },
+  {
+    file: "scripts/fixtures/article-topic-general-2026-09-21.jsonl",
+    // THE WHOLE CAPTURE, every headline on the grid. Its split IS the rate, and
+    // it is a floor: the excerpts are truncated at ~100 characters by the
+    // capture, so rule 3's two-occurrence description leg under-fires here
+    // relative to production.
+    composition: "the whole capture — this IS the rate, and a floor (excerpts truncated at ~100 chars)",
+  },
+];
+const topicRows = TOPIC_FIXTURES.flatMap(({ file }) =>
+  read(file)
+    .split("\n").filter((l) => l.trim() && !l.startsWith("#"))
+    .map((l) => ({ file, ...JSON.parse(l) }))
+);
+const asserted = topicRows.filter((r) => !r.imprecise);
+const imprecise = topicRows.filter((r) => r.imprecise);
+const wrong = [];
+for (const row of asserted) {
+  const got = topic.articleTopic(row.title, row.description ?? null);
+  if (got.subjects.join(",") !== row.subjects.join(",") || got.motifs.join(",") !== row.motifs.join(",")) {
+    wrong.push(`[${path.basename(row.file)}] "${row.title.slice(0, 44)}" -> ${JSON.stringify(got)} want ${JSON.stringify({ subjects: row.subjects, motifs: row.motifs })}`);
+  }
+}
+check(
+  `the classifier matches the fixture on all ${asserted.length} asserted rows`,
+  wrong.length === 0,
+  wrong.length ? wrong.slice(0, 2).join(" | ") : `${topicRows.length} rows, ${imprecise.length} recorded as imprecise`
+);
+// A FIXTURE OF ALL-POSITIVES WOULD PASS A CLASSIFIER THAT NEVER RETURNS NULL,
+// and a fixture of all-negatives would pass one that never returns anything.
+// Both shapes are asserted present, so neither degenerate module can pass.
+check(
+  "...and neither fixture is degenerate: real positives, real negatives, both feeds, both axes",
+  (() => {
+    const real = asserted.filter((r) => r.src !== "probe");
+    // BOTH POPULATIONS, asserted by name. A per-symbol-only fixture is how the
+    // three dead patterns survived: every one of them was silent on that feed
+    // and the suite was green.
+    const perSymbol = real.filter((r) => /gnews/.test(r.src));
+    const general = real.filter((r) => /headlines/.test(r.src));
+    return (
+      perSymbol.length >= 30 && general.length >= 30 &&
+      real.filter((r) => r.subjects.length || r.motifs.length).length >= 25 &&
+      real.filter((r) => !r.subjects.length && !r.motifs.length).length >= 25 &&
+      asserted.some((r) => r.subjects.length && r.motifs.length) &&
+      asserted.some((r) => r.description)
+    );
+  })(),
+  `${asserted.filter((r) => /gnews/.test(r.src)).length} per-symbol, ${asserted.filter((r) => /headlines/.test(r.src)).length} general, ${asserted.filter((r) => r.src === "probe").length} probes`
+);
+
+// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ───────────────────────────
+// A match RATE moves with the feed, so pinning it to a threshold produces a
+// check that fails for a reason nobody can act on. Printing it here keeps the
+// number the doc quotes computable from the repo instead of remembered, which
+// is the whole reason the general sample was committed.
+for (const { file, composition } of TOPIC_FIXTURES) {
+  const rows = topicRows.filter((r) => r.file === file && r.src !== "probe");
+  if (!rows.length) continue;
+  const subject = rows.filter((r) => r.subjects.length).length;
+  const motifOnly = rows.filter((r) => !r.subjects.length && r.motifs.length).length;
+  const pc = (n) => `${((n / rows.length) * 100).toFixed(0)}%`;
+  console.log(
+    `  NOTE  ${path.basename(file)}: ${rows.length} real rows — ` +
+      `${subject} subject (${pc(subject)}), ${motifOnly} motif-only, ` +
+      `${rows.length - subject - motifOnly} nothing\n` +
+      `        ${composition}`
+  );
+}
+// ── THE CHECK THAT WAS MISSING, AND IT COST THREE DEFECTS ─────────────────
+// "Every tag exists in the manifest" (above) proves a tag has a PICTURE. It
+// cannot prove the tag ever FIRES, and three patterns that never fired shipped
+// in the first cut of articleTopic.ts, each looking perfectly alive in the
+// source:
+//
+//   banks     — fourteen lines of comment explaining the narrowing, and the
+//               pattern line itself deleted by an editing accident.
+//   pipelines — present and correct, and shadowed by `oil-gas-upstream` and
+//               `refining` on every headline that names the commodity, which
+//               is how a pipeline headline is written.
+//   pharma    — `\bpharma\b` cannot match "Pharmaceuticals".
+//
+// None of the three breaks a build, a type, or any assertion above. So every
+// tag must now be PROVEN to fire by a row that produces it, which is a
+// requirement on the fixture as much as on the table: a tag added to the table
+// without a row lands here immediately.
+const emittedSubjects = new Set(asserted.flatMap((r) => r.subjects));
+const emittedMotifs = new Set(asserted.flatMap((r) => r.motifs));
+const neverFires = [
+  ...topic.SUBJECT_TAGS.filter((t) => !emittedSubjects.has(t)).map((t) => `subject:${t}`),
+  ...topic.MOTIF_TAGS.filter((t) => !emittedMotifs.has(t)).map((t) => `motif:${t}`),
+];
+check(
+  "every tag in the table is PROVEN to fire by a fixture row that produces it",
+  neverFires.length === 0,
+  neverFires.length
+    ? `never fires: ${neverFires.join(", ")} — deleted, shadowed by a pattern above it, or unable to match its own word`
+    : `${topic.SUBJECT_TAGS.length} subjects, ${topic.MOTIF_TAGS.length} motifs, all reachable`
+);
+
+for (const row of imprecise) {
+  console.log(`  NOTE  imprecise [${path.basename(row.file).replace(/^article-topic-?/, "").replace(/\.jsonl$/, "") || "per-symbol"}]: "${row.title.slice(0, 52)}" — ${row.imprecise.split(".")[0]}.`);
+}
+
+// ── THE PICKER, AGAINST A SYNTHETIC MANIFEST ───────────────────────────────
+// THE MANIFEST IS SUBSTITUTED, NOT THE MODULE — the same arrangement as §5 and
+// for the same reason: today's shipped manifest is empty, so running the
+// scoring against it would assert that nothing happens, which is a test that
+// passes because the feature is switched off. hashKey and the dimensions come
+// from the REAL art.ts loaded in §5 (neither depends on a manifest), so the
+// "do not write a second hash" rule is asserted by construction here.
+globalThis.__newsArtV1 = art;
+globalThis.__newsTopic = topic;
+globalThis.__newsEventType = et;
+const SYNTHETIC_V2 = {
+  "chips-any-01": { primary: ["chips"], related: ["ai-compute"], motif: ["any"], tone: "flat", palette: "neon wireframe" },
+  "chips-any-02": { primary: ["chips"], related: ["ai-compute"], motif: ["any"], tone: "up", palette: "mono plus accent" },
+  "chips-any-03": { primary: ["chips"], related: [], motif: ["any"], tone: "flat", palette: "neon wireframe" },
+  "chips-any-04": { primary: ["chips"], related: [], motif: ["any"], tone: "down", palette: "mono plus accent" },
+  "refining-any-01": { primary: ["refining"], related: ["oil-gas-upstream"], motif: ["any"], tone: "flat", palette: "neon wireframe" },
+  "any-macro-01": { primary: [], related: ["utilities-grid"], motif: ["macro"], tone: "flat", palette: "mono plus accent" },
+  "any-macro-02": { primary: [], related: [], motif: ["macro"], tone: "flat", palette: "mono plus accent" },
+  "any-macro-03": { primary: [], related: [], motif: ["macro"], tone: "down", palette: "neon wireframe" },
+  "any-legal-01": { primary: [], related: [], motif: ["legal"], tone: "flat", palette: "mono plus accent" },
+};
+const loadTagged = async (manifestObject, label) => {
+  const src = read("lib/server/news/artTags.ts")
+    .replace(
+      /^import manifest from "@\/public\/news-art\/manifest-v2\.json";$/m,
+      () => `const manifest = ${JSON.stringify(manifestObject)};`
+    )
+    // The v1 module is handed over rather than re-imported: a `data:` module
+    // cannot resolve "./art", and inlining art.ts again would put a SECOND copy
+    // of hashKey in this harness, which is the duplication the module header
+    // forbids in the app.
+    .replace(
+      /^import \{ ART_WIDTH, ART_HEIGHT, hashKey, planCardArt, type CardArt, type NewsArt \} from "\.\/art";$/m,
+      "const { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt } = globalThis.__newsArtV1;"
+    )
+    // The classifier and the event-type leg are handed over already loaded, for
+    // the same reason: a `data:` module cannot resolve a relative specifier, and
+    // a second inlined copy of either would be a second thing to keep in
+    // agreement. Both are the SHIPPED modules, loaded above.
+    .replace(
+      /^import \{ articleTopic \} from "\.\/articleTopic";$/m,
+      "const { articleTopic } = globalThis.__newsTopic;"
+    )
+    .replace(
+      /^import \{ eventTypeFromTitle \} from "\.\/eventType";$/m,
+      "const { eventTypeFromTitle } = globalThis.__newsEventType;"
+    );
+  if (/^import /m.test(src)) {
+    console.error(`FAIL: an import survived substitution in artTags.ts (${label}):\n` +
+      src.split("\n").filter((l) => l.startsWith("import ")).join("\n"));
+    process.exit(1);
+  }
+  for (const [marker, why] of [
+    ["const manifest = {", "the manifest was not substituted"],
+    ["const { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
+    ["const { articleTopic } = globalThis.__newsTopic;", "the classifier import was not rewired"],
+    ["const { eventTypeFromTitle } = globalThis.__newsEventType;", "the eventType import was not rewired"],
+  ]) {
+    if (!src.includes(marker)) { console.error(`FAIL: ${why} (${label}).`); process.exit(1); }
+  }
+  return import(`data:text/javascript;base64,${Buffer.from(
+    ts.transpileModule(src, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    }).outputText
+  ).toString("base64")}`);
+};
+const tags = await loadTagged(SYNTHETIC_V2, "synthetic");
+
+const pick = (subjectTags, articleMotifs, key = "k", taken) =>
+  tags.pickTagged({ subjectTags, articleMotifs, key, taken });
+
+check(
+  "a subject (3) outranks a motif (2) — the diesel story gets the refinery",
+  pick(["chips"], ["macro"]).src.startsWith("/news-art/chips-any-"),
+  "the weighting is the whole selection rule; reversed, a merger story about a chipmaker gets a handshake"
+);
+check(
+  "a motif alone still reaches art — most headlines have no subject at all",
+  pick([], ["macro"]).src.startsWith("/news-art/any-macro-"),
+  "this is the half that covers the general feed"
+);
+check(
+  "a RELATED tag (1) is reachable, and loses to a primary (3)",
+  pick(["utilities-grid"], []).src.startsWith("/news-art/any-macro-") &&
+    pick(["chips"], []).src.startsWith("/news-art/chips-any-"),
+  "related scoring 0 would make four fifths of each image's tags decorative"
+);
+check(
+  "a score of 0 returns NULL — never a random image",
+  pick(["steel"], []) === null && pick([], ["ipo"]) === null && pick([], []) === null,
+  "a wrong picture asserts something false; a missing one asserts nothing"
+);
+check(
+  "the 'any' placeholder cannot be scored against",
+  pick(["any"], ["any"]) === null,
+  "'any' is on every image's unused axis: if it ever scored, all 268 subject images would tie and every card would get an arbitrary picture"
+);
+check(
+  "the manifest key IS the file stem — no index arithmetic, no -00, no +1",
+  (() => {
+    const seen = new Set();
+    for (let i = 0; i < 400; i += 1) seen.add(pick(["chips"], [], `key-${i}`).src);
+    return (
+      [...seen].every((s) => /^\/news-art\/chips-any-0[1-4]\.webp$/.test(s)) &&
+      seen.size === 4
+    );
+  })(),
+  "v1's +1 lives at name construction and cost a whole step to find; v2 has no index to shift"
+);
+check(
+  "the srcSet offers both pre-generated sizes and nothing else",
+  (() => {
+    const a = pick(["refining"], []);
+    return a.srcSet === "/news-art/refining-any-01-sm.webp 320w, /news-art/refining-any-01.webp 1200w" &&
+      a.src === "/news-art/refining-any-01.webp";
+  })(),
+  pick(["refining"], []).srcSet
+);
+check(
+  "art dimensions are the policy's 1200x675, from art.ts and not a second copy",
+  pick(["chips"], []).width === art.ART_WIDTH && pick(["chips"], []).height === art.ART_HEIGHT
+);
+check(
+  "the same article always gets the same image",
+  pick(["chips"], [], "guid-abc").src === pick(["chips"], [], "guid-abc").src,
+  "an image that changes between renders defeats the cache and flickers"
+);
+check(
+  "four cards sharing a tag never repeat — for keys that ALL COLLIDE",
+  (() => {
+    // Keys chosen to land on the same slot, then ASSERTED to collide, so this
+    // stays honest if the hash or the winning-set size ever changes. Four
+    // arbitrary keys prove nothing: FNV-1a maps systematic keys to distinct
+    // slots, which is how the v1 version of this check passed with the rule
+    // disabled outright.
+    const colliding = [];
+    for (let i = 0; colliding.length < 4 && i < 5000; i += 1) {
+      if (art.hashKey(`c${i}`) % 4 === 1) colliding.push(`c${i}`);
+    }
+    if (colliding.length < 4) return false;
+    if (new Set(colliding.map((k) => art.hashKey(k) % 4)).size !== 1) return false;
+    const taken = new Set();
+    const picks = colliding.map((k) => pick(["chips"], [], k, taken));
+    return picks.every(Boolean) && new Set(picks.map((p) => p.src)).size === 4;
+  })(),
+  "without the walk the same illustration appears four times down the grid"
+);
+check(
+  "...and a fifth card repeats rather than rendering nothing",
+  (() => {
+    const taken = new Set();
+    const five = [0, 1, 2, 3, 4].map((i) => pick(["chips"], [], `k${i}`, taken));
+    return five.every(Boolean) && new Set(five.map((a) => a.src)).size === 4;
+  })(),
+  "a winning set smaller than the card count must still fill every card"
+);
+check(
+  "...and one page's `taken` does not block a DIFFERENT tag's images",
+  (() => {
+    const taken = new Set();
+    for (let i = 0; i < 4; i += 1) pick(["chips"], [], `k${i}`, taken);
+    const unblocked = pick([], ["legal"], "legal-key");
+    const after = pick([], ["legal"], "legal-key", taken);
+    return after && unblocked && after.src === unblocked.src;
+  })(),
+  "keyed by NAME, so exhausting one subject cannot re-hash another"
+);
+// AWAITED, NOT HANDED TO check() AS A PROMISE. A pending Promise is truthy, so
+// `check("...", somethingAsync())` passes whatever the assertion inside it
+// decides — a check that can only pass. Resolved here first.
+const reversedTags = await loadTagged(Object.fromEntries(Object.entries(SYNTHETIC_V2).reverse()), "reversed");
+check(
+  "the pick does not depend on the manifest's key ORDER",
+  ["a", "b", "c", "d", "e"].every(
+    (k) => reversedTags.pickTagged({ subjectTags: ["chips"], articleMotifs: [], key: k }).src === pick(["chips"], [], k).src
+  ),
+  "NAMES is sorted for exactly this: re-exporting the library in a different order must not silently re-assign every article's picture"
+);
+
+// ── AND AGAINST THE SHIPPED MANIFEST ───────────────────────────────────────
+// #481's tests learned this the expensive way: a mechanism proved on a
+// synthetic fixture says nothing about what ships. Both states are asserted, so
+// this check keeps its meaning on the day the images land rather than needing
+// to be rewritten then.
+const shippedTags = await loadTagged(v2, "shipped");
+const chipsHeadline = topic.articleTopic("Memory chip prices climb as DRAM supply tightens", null);
+const shippedPick = shippedTags.pickTagged({
+  subjectTags: chipsHeadline.subjects,
+  articleMotifs: chipsHeadline.motifs,
+  key: "https://example.com/a",
+});
+check(
+  v2Names.length === 0
+    ? "with an EMPTY shipped manifest the tagged path is inert — /headlines is unchanged"
+    : "with the shipped manifest a classified headline reaches real tagged art",
+  v2Names.length === 0
+    ? shippedPick === null && chipsHeadline.subjects.length > 0
+    : shippedPick !== null && files.has(`${shippedPick.bucket}.webp`),
+  v2Names.length === 0
+    ? "the classifier already answers `chips`; only the images are missing, so the fall-through to event art is what renders"
+    : `${shippedPick?.src}`
+);
+
+// ── /headlines: THE RULE, BY CALLING IT ────────────────────────────────────
+// THE ASSERTION THAT WAS NOT GOOD ENOUGH, AND IS RECORDED BECAUSE IT LOOKED
+// FINE: the first version of this block compared where `pickTagged(` and
+// `planCardArt(` appear in the page source and called that "tagged art first".
+// `if (false && tagged)` passed it cleanly. An index in a string cannot say
+// what a program does — the identical lesson §6 and §8 above each record once
+// already, which is why the rule is a function now.
+//
+// Every case below is planHeadlineArt RUN, against the synthetic v2 manifest
+// and §5's synthetic v1 one (sector-banks 4, sector-semiconductors 6,
+// event-earnings 5), which is what makes both branches observable at once.
+const headlineArt = (title, description = null, over = {}) =>
+  tags.planHeadlineArt({
+    title,
+    description,
+    key: title,
+    takenNames: new Set(),
+    takenBuckets: new Map(),
+    ...over,
+  });
+
+check(
+  "/headlines: a story with a SUBJECT gets tagged art, with no symbol at all",
+  (() => {
+    const p = headlineArt("Memory chip prices climb as DRAM supply tightens");
+    return p.kind === "library" && /^\/news-art\/chips-any-0[1-4]\.webp$/.test(p.art.src);
+  })(),
+  "this is the whole point of the change: 268 subject images that a headline can reach"
+);
+check(
+  "/headlines: a MOTIF-only story still gets art",
+  (() => {
+    const p = headlineArt("The Fed holds rates steady as inflation cools");
+    return p.kind === "library" && p.art.src.startsWith("/news-art/any-macro-");
+  })(),
+  "no subject, no symbol, and still an honest picture"
+);
+check(
+  "/headlines: a story with NEITHER falls through to today's event art",
+  (() => {
+    // No subject and no motif -- `beats estimates` is the earnings motif, so
+    // this one deliberately uses the phrasing only the EVENT leg reads.
+    const p = headlineArt("Acme Corp reports fourth-quarter results above plan");
+    return p.kind === "library" && p.art.bucket === "event-earnings";
+  })(),
+  "the path this page has shipped since #481 is a fall-through, not a casualty"
+);
+check(
+  "/headlines: an ordinary headline plans NONE — never a guessed sector, never a blank ticker card",
+  headlineArt("Stocks drift as investors wait for Friday's data").kind === "none",
+  "with sectorBucket null and canGenerate false the only outcomes are the right art or no art"
+);
+check(
+  "/headlines: the tagged rule is asked FIRST — a story that matches both gets the tagged one",
+  (() => {
+    // Both rules fire on this: `chips` for the tagged library, and the event
+    // leg's `beats estimates` for event-earnings. Order decides which renders,
+    // and a constant-false guard on the tagged branch fails HERE rather than
+    // passing a grep.
+    const p = headlineArt("Semiconductor maker beats estimates as wafer demand climbs");
+    return p.kind === "library" && p.art.src.startsWith("/news-art/chips-any-");
+  })(),
+  "reversed, the three event buckets would keep every headline they match and the library stays unreachable"
+);
+check(
+  "/headlines: the description is read, and is weighted below the title",
+  (() => {
+    const once = headlineArt("Acme slips in afternoon trading", "The move came as oil prices rose.");
+    const twice = headlineArt(
+      "Acme slips in afternoon trading",
+      "Oil prices rose again. Oil markets are pricing in a supply cut."
+    );
+    return once.kind === "none" && twice.kind === "library" && twice.art.bucket === "refining-any-01";
+  })(),
+  "one mention in the body is not what a story is about; two is. 'refining' wins on `related` here, which is the 1-point leg doing its job"
+);
+check(
+  "/headlines: one page's no-repeat state is shared across cards AND across the two libraries",
+  (() => {
+    const takenNames = new Set();
+    const takenBuckets = new Map();
+    const four = ["a", "b", "c", "d"].map((k) =>
+      tags.planHeadlineArt({
+        title: "Memory chip prices climb as DRAM supply tightens",
+        key: k, takenNames, takenBuckets,
+      })
+    );
+    // Four identical headlines, four different pictures: the walk is running.
+    if (new Set(four.map((p) => p.art.src)).size !== 4) return false;
+    // And the v1 half is untouched by it -- an event-bucket card is the same
+    // whether or not four tagged names have been taken.
+    const unblocked = headlineArt("Acme Corp reports fourth-quarter results above plan");
+    const after = tags.planHeadlineArt({
+      title: "Acme Corp reports fourth-quarter results above plan",
+      key: "Acme Corp reports fourth-quarter results above plan",
+      takenNames, takenBuckets: new Map(),
+    });
+    return after.art.src === unblocked.art.src;
+  })(),
+  "one shared collection across two differently-keyed libraries blocks images it has never used"
+);
+check(
+  "/headlines: the page delegates and does not re-implement any of it",
+  (() => {
+    const code = readCodeOnly("app/headlines/page.tsx");
+    return (
+      /planHeadlineArt\(/.test(code) &&
+      !/scoreEntry|topScoring|SUBJECT_PATTERNS|MOTIF_PATTERNS|pickTagged\(|articleTopic\(/.test(code)
+    );
+  })(),
+  "one rule, in lib/server/news/artTags.ts, where it can be run"
+);
+check(
+  "the three symbol-led surfaces are untouched by v2",
+  SURFACES.filter((s) => s.file !== "app/headlines/page.tsx").every(
+    (s) => !/artTags|articleTopic/.test(readCodeOnly(s.file))
+  ) && !/artTags|articleTopic/.test(readCodeOnly("lib/server/internalNews.ts")),
+  "the provider-map is what switches those over, and it is a different change"
+);
+
+// ── SERVING: THE FOLDER'S OWN REQUEST PATH ─────────────────────────────────
+// claude/serving-assets-from-public-2026-09-15.md, written after the logo
+// harvest put the site's first same-origin images into production: middleware
+// runs on public/ assets unless the matcher excludes the folder, and Next
+// serves public/ with `max-age=0, must-revalidate` unless a header says
+// otherwise. `logos/` got both; `news-art/` had neither, which was survivable
+// while three cards a page carried art and is not once a grid of them does.
+check(
+  "news-art/ is excluded from the middleware matcher",
+  /news-art\//.test(read("middleware.ts").match(/matcher: \[[\s\S]*?\]/)?.[0] ?? ""),
+  "otherwise every image is an extra edge invocation AND an extra Upstash call, before the /api/ early-return"
+);
+check(
+  "...and is served with a real Cache-Control",
+  /source: "\/news-art\/:path\*"/.test(read("next.config.ts")),
+  "the default makes a repeat visitor re-request every illustration on the page"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
