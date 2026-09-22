@@ -392,6 +392,28 @@ export const CROSSING_NOTE =
   "rather than a percentage: a change measured against a loss is an artefact " +
   "of the arithmetic, not a rate of growth.";
 
+/**
+ * THE REASONS, AS WORDS THE CARD PRINTS. One place, so the check can assert
+ * which one a tile got without matching prose scattered through a function.
+ *
+ * NOT_CAPTURED is the honest remainder: the stored set has no value for this
+ * period and nothing recorded says the filer lacks the line. It claims only
+ * that WE did not capture it — never "not reported", and never "not in the
+ * filing", both statements about the company.
+ *
+ * ── WHY IT IS NOT "Not in this period's filed figures" ───────────────────
+ * That wording was used for exactly the cases we cannot tell apart: a set
+ * written before the `nt` marker, where "not captured" (a chain gap) and "not
+ * filed" look identical. It was false for AVAV, whose FY2022/FY2023 revenue IS
+ * in its 10-Ks under a concept the chain did not list (owner review, #522).
+ * "No revenue line in this filing" stays, and only where the marker confirms it.
+ */
+export const EMPTY_REASONS = {
+  q4NotFiled: "Q4 is not filed on its own",
+  noRevenueLine: "No revenue line in this filing",
+  needsRevenue: "Needs revenue",
+  notCaptured: "Not captured from this filing",
+} as const;
 /** Is this a figure, as opposed to absent or a crossing? */
 export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
 
