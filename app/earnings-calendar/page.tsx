@@ -21,9 +21,9 @@ import { resolveCalendarDay, dayStateMessage } from "@/lib/server/calendarDaySta
 import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
-import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
 import EarningsDueStrip from "./EarningsDueStrip";
-import { getDueStripState } from "@/lib/server/dueInputs";
+import EarningsExpectedSection from "./EarningsExpectedSection";
+import { getCalendarForwardSections, type CalendarForwardSections } from "@/lib/server/dueInputs";
 import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
@@ -243,24 +243,6 @@ export async function generateMetadata({
   };
 }
 
-// Rows for the "Next up" strip at the top of the page.
-//
-// Walks forward from today and takes the biggest names off each day's cache
-// until it has enough. getCachedDayItems is read-only and never quotes an
-// upstream API -- it returns whatever the background populate job has already
-// materialised -- so this costs a handful of Redis reads and nothing else. A
-// day that has not been filled yet simply contributes nothing rather than
-// triggering a fetch, which keeps the ticker off the critical path of the
-// window-filling logic entirely.
-//
-// Items are already market-cap sorted inside each day (see dedupeAndSortItems),
-// so taking the head of each day gives recognisable companies while the overall
-// order stays chronological -- which is the point of the strip.
-const TICKER_DAYS_AHEAD = 14;
-const TICKER_MAX_ITEMS = 18;
-const TICKER_MAX_PER_DAY = 3;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // WHAT A PAGE VIEW COSTS IN REDIS COMMANDS, and why that is the point.
 //
 // This page is not an FMP problem -- the window self-limits, and the comment on
@@ -273,10 +255,21 @@ const TICKER_MAX_PER_DAY = 3;
 //   getMonthDaysWithEarnings  2   month rows + the stock-list name map
 //   loadDay                   2   day items + the completeness marker
 //   isDateFullyPopulated      1   the SAME completeness marker, read again
-//   getUpcomingTickerItems   14   TICKER_DAYS_AHEAD x readDayItemsCache
+//   forward sections          1   the analysis-universe symbol key
+//                          + 50   the committed cut's report-date records
 //   after(): populate         3   hour usage, fill frontier, frontier re-park
 //                            --
-//                            22
+//                            59
+//
+// ── THE FOURTEEN TICKER READS ARE GONE AND FIFTY TOOK THEIR PLACE ────────
+// EarningsUpcomingTicker was removed (see the section note at its render site),
+// taking TICKER_DAYS_AHEAD x readDayItemsCache with it. The due strip and the
+// expected section replaced it, and they are DEARER: fifty per-symbol records
+// for the committed cut, read ONCE for both (getCalendarForwardSections) rather
+// than once each.
+//
+// So the memo below matters more than it did, not less, and it is pointed at
+// the fifty rather than at the fourteen.
 //
 // THE after() SCAN IS CHEAPER THAN IT LOOKS, corrected rather than assumed:
 // once the frontier is parked past the window end, findNextIncompleteDate's
@@ -301,8 +294,8 @@ const TICKER_MAX_PER_DAY = 3;
 // It also targets the thing this PR is about: a page that costs the same for
 // the thousandth visitor as the first. A warm instance now serves the second
 // and subsequent views from memory.
-const TICKER_MEMO_MS = 5 * 60_000;
-let tickerMemo: { key: string; at: number; items: UpcomingEarningsItem[] } | null = null;
+const FORWARD_MEMO_MS = 5 * 60_000;
+let forwardMemo: { key: string; at: number; value: CalendarForwardSections } | null = null;
 
 /** Read-through memo. Exported shape kept pure so the check can run it. */
 export function readMemo<T>(
@@ -324,95 +317,35 @@ export function readMemo<T>(
   return memo.value;
 }
 
-async function getUpcomingTickerItemsUncached(
-  todayDate: string
-): Promise<UpcomingEarningsItem[]> {
-  try {
-    const dates: string[] = [];
-    const cursor = new Date(`${todayDate}T00:00:00Z`);
-    if (Number.isNaN(cursor.getTime())) return [];
-
-    for (let i = 0; i < TICKER_DAYS_AHEAD; i++) {
-      const iso = cursor.toISOString().slice(0, 10);
-      if (isDateInWindow(iso)) dates.push(iso);
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-    if (!dates.length) return [];
-
-    const perDay = await Promise.all(
-      dates.map(async (date) => {
-        try {
-          return { date, items: await getCachedDayItems(date) };
-        } catch {
-          return { date, items: [] };
-        }
-      })
-    );
-
-    const out: UpcomingEarningsItem[] = [];
-    const seen = new Set<string>();
-
-    for (const { date, items } of perDay) {
-      const label = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      });
-
-      let takenToday = 0;
-      for (const item of items) {
-        if (takenToday >= TICKER_MAX_PER_DAY || out.length >= TICKER_MAX_ITEMS) break;
-        const symbol = String(item.symbol || "").trim().toUpperCase();
-        // A company reporting inside the window twice (a restated or corrected
-        // date) would otherwise appear twice in one short strip.
-        if (!symbol || seen.has(symbol)) continue;
-        seen.add(symbol);
-        out.push({
-          symbol,
-          company: String(item.company || symbol).trim(),
-          date,
-          dayLabel: date === todayDate ? "Today" : label,
-        });
-        takenToday++;
-      }
-      if (out.length >= TICKER_MAX_ITEMS) break;
-    }
-
-    return out;
-  } catch {
-    // The strip is decorative; it must never take the calendar down with it.
-    return [];
-  }
-}
 
 /**
- * The ticker's fourteen day-reads, once per instance per TICKER_MEMO_MS.
+ * The due strip and the expected section, memoised together for one day.
  *
- * THE BIGGEST SINGLE ITEM ON THE PAGE: fourteen Redis GETs for a scrolling
- * strip of upcoming names, identical for every visitor on a given day, paid per
- * request. Five minutes is a staleness budget rather than a performance knob --
- * the underlying days change only as the background fill advances, and a strip
- * of upcoming tickers is the part of this page least sensitive to being five
- * minutes behind.
+ * ONE MEMO, BECAUSE THEY ARE ONE READ. getCalendarForwardSections issues the
+ * fifty record GETs once and derives both answers; memoising them separately
+ * would either double the reads or let the two drift a memo-window apart, and
+ * the expected section EXCLUDES whatever the due strip is listing -- so two
+ * ages of the same data would double-list a symbol.
+ *
+ * AN UNAVAILABLE RESULT IS NOT HELD. Same rule the ticker memo carried: holding
+ * a failed read for five minutes turns one bad read into five minutes of a
+ * page claiming it cannot answer, which is the absence-read-as-an-answer shape
+ * this repo keeps finding.
  */
-async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarningsItem[]> {
+async function getForwardSections(todayDate: string): Promise<CalendarForwardSections> {
   const hit = readMemo(
-    tickerMemo && { key: tickerMemo.key, at: tickerMemo.at, value: tickerMemo.items },
+    forwardMemo && { key: forwardMemo.key, at: forwardMemo.at, value: forwardMemo.value },
     todayDate,
     Date.now(),
-    TICKER_MEMO_MS
+    FORWARD_MEMO_MS
   );
   if (hit) return hit;
-
-  const items = await getUpcomingTickerItemsUncached(todayDate);
-  // NOT CACHED WHEN EMPTY. An empty ticker is what a Redis blip returns, and
-  // holding that for five minutes turns one bad read into five minutes of an
-  // empty strip -- the absence-read-as-an-answer shape this repo keeps finding.
-  if (items.length) tickerMemo = { key: todayDate, at: Date.now(), items };
-  return items;
+  const value = await getCalendarForwardSections(todayDate);
+  if (value.due.kind !== "unavailable") {
+    forwardMemo = { key: todayDate, at: Date.now(), value };
+  }
+  return value;
 }
-
 
 export default async function EarningsCalendarPage({
   searchParams,
@@ -441,13 +374,13 @@ export default async function EarningsCalendarPage({
   const prevDisabled = monthPrefix <= firstYM;
   const nextDisabled = monthPrefix >= lastYM;
 
-  const [daysWithEarnings, dayData, dateComplete, upcomingTickerItems, dueStrip] =
+  const [daysWithEarnings, dayData, dateComplete, forward] =
     await Promise.all([
       getMonthDaysWithEarnings(year, month),
       // Shared with generateMetadata via cache() -- this does not re-fetch.
       loadDay(selectedDate),
       loadDayComplete(selectedDate),
-      getUpcomingTickerItems(todayDate),
+      getForwardSections(todayDate),
       // ── THE DUE STRIP, ALWAYS ON TODAY ─────────────────────────────────
       // `todayDate`, never `selectedDate`. The strip answers "whose period has
       // ended with nothing filed for it AS OF NOW" -- a present-tense fact
@@ -461,7 +394,6 @@ export default async function EarningsCalendarPage({
       // ~417 KB and check-sec-daily-index names the only two job routes
       // allowed to touch it, explicitly excluding render paths. See
       // coverageOfCut in lib/server/dueInputs.ts.
-      getDueStripState(todayDate),
     ]);
 
   // ── WHAT AN EMPTY DAY MEANS, RESOLVED ONCE ───────────────────────────────
@@ -666,15 +598,18 @@ export default async function EarningsCalendarPage({
             <EarningsTickerSearch />
           </section>
 
-          <EarningsUpcomingTicker items={upcomingTickerItems} />
+          {/* ── THE "NEXT UP" TICKER WAS HERE AND IS GONE ──────────────────
+              Not a design preference. The window was inverted to
+              [today-90, today] on 2026-09-15, and the ticker walked FORWARD
+              fourteen days through isDateInWindow -- so only `today` ever
+              passed, and every row it rendered was stamped "Today" under a
+              "Next up" heading. Several different companies, all labelled the
+              same wrong thing.
 
-          {/* NOT the ticker in different clothes -- see EarningsDueStrip's
-              header for why DueEntry structurally cannot feed a marquee. It is
-              rendered UNCONDITIONALLY: the component's three branches include
-              two different ways of being empty, and hiding it when there is
-              nothing to list would collapse "nothing is outstanding" and "we
-              cannot tell you" back into the same silence. */}
-          <EarningsDueStrip state={dueStrip} />
+              Its function -- "who is reporting soon" -- is now served honestly
+              by EarningsExpectedSection below the grid, which is measured,
+              banded and labelled as an estimate. */}
+          <EarningsDueStrip state={forward.due} />
 
           <section
             style={{
@@ -885,6 +820,16 @@ export default async function EarningsCalendarPage({
                 override exactly when it was needed. See BackfillButton. */}
             <BackfillButton date={selectedDate} hasEarnings={dayData.totalCandidates > 0} />
           </div>
+
+          {/* ── THE THIRD AND WEAKEST CLAIM, PLACED LAST ────────────────────
+              The page reads filed -> outstanding -> expected, strongest first.
+              This sits BELOW the grid so the whole confirmed body separates it
+              from the due strip: that strip exists to never look like a
+              forecast, and putting an estimate beside it is the fastest way to
+              undo it. Rendered unconditionally, for the same reason the due
+              strip is -- "nothing clears the bar" and "we cannot read the
+              record" are different sentences and both need saying. */}
+          <EarningsExpectedSection state={forward.expected} />
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
             Data source: financialmodelingprep.com. Estimates can change
