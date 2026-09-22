@@ -14,7 +14,7 @@ const check = (name, ok, detail = "") => {
 const SRC = readCodeOnly("lib/server/secReportDatesWrite.ts");
 const body = SRC.slice(SRC.indexOf("export const STALE_CUT_DAYS"));
 const load = (mutate = (s) => s) => lift(mutate(body).replace(/export (const|function)/g, "$1") +
-  "\nexport { reportDatesQueue, STALE_CUT_DAYS };");
+  "\nexport { reportDatesQueue, carryEventQueued, STALE_CUT_DAYS };");
 const Q = await load();
 
 const NOW = Date.parse("2026-09-24T04:20:00Z");
@@ -58,6 +58,61 @@ check("MUTATION: ignoring the pre-loop re-read capture drops REV out of tier 1",
 const everyCut = await load((s) => s.replace("(!at || now - at > STALE_CUT_DAYS * 86_400_000)", "true"));
 check("MUTATION: rewriting the whole cut every run spends a slot on fresh NVDA",
   run(everyCut).queue.includes("NVDA"));
+
+console.log("\n3. earnings season: tier 1 over the cap");
+{
+  // 150 tier-1 symbols against a cap of 100. Names are chosen so that
+  // alphabetical order would put the cut members and MU LAST: "A…" fillers
+  // sort first, the cut is late-alphabet.
+  const CUT = ["MU", "NVDA", "TSLA", "XOM", "ZTS"];
+  const big = {};
+  const eventQueued = new Set();
+  for (let i = 0; i < 145; i++) {
+    const s = `A${String(i).padStart(3, "0")}`;
+    // Half with a recent record, half never written; 20 are event-queued re-reads.
+    big[s] = { cik: "1", reportDatesAt: i % 2 ? NOW - 2 * day : undefined, lastEventFiled: i < 125 ? "20260923" : null };
+    if (i >= 125) eventQueued.add(s);
+  }
+  for (const s of CUT) big[s] = { cik: "1", reportDatesAt: NOW - 3 * day, lastEventFiled: "20260923" };
+  const args = { entries: big, eventQueued, cut: CUT, changedThisRun: [], limit: 100, now: NOW };
+  const r1 = Q.reportDatesQueue(args);
+  check("tier 1 is 150 before the cap", r1.tier1 === 150, String(r1.tier1));
+  check("every due-strip member is in the 100", CUT.every((s) => r1.queue.includes(s)), JSON.stringify(r1.queue.slice(0, 8)));
+  check("...and they lead it", JSON.stringify(r1.queue.slice(0, 5).sort()) === JSON.stringify([...CUT].sort()));
+  check("MU is present", r1.queue.includes("MU"));
+  check("never-written records come before recently written ones",
+    (() => { const rest = r1.queue.slice(5); const firstWritten = rest.findIndex((s) => big[s].reportDatesAt);
+      return firstWritten > 0 && rest.slice(firstWritten).every((s) => big[s].reportDatesAt); })());
+  check("no alphabetical order: the queue is not sorted by name",
+    JSON.stringify(r1.queue) !== JSON.stringify([...r1.queue].sort()));
+
+  // Run 1 writes its 100 and carries the event-queued symbols it left out.
+  const leftOut = [...eventQueued].filter((s) => !r1.queue.includes(s));
+  check("the cap left some event-queued symbols out (the case under test)", leftOut.length > 0, String(leftOut.length));
+  for (const s of r1.queue) big[s].reportDatesAt = NOW;
+  const carried = Q.carryEventQueued(big, eventQueued, new Set(r1.queue), "20260924");
+  check("carryEventQueued stamps exactly the left-out ones", JSON.stringify(carried.sort()) === JSON.stringify(leftOut.sort()));
+  // Run 2, next day: the needsReverify flag is gone, so eventQueued is empty.
+  const r2 = Q.reportDatesQueue({ ...args, eventQueued: new Set(), now: NOW + day });
+  check("run 2: every left-out event-queued symbol is still in tier 1",
+    leftOut.every((s) => r2.queue.includes(s)), `${leftOut.filter((s) => !r2.queue.includes(s)).length} missing`);
+  check("...and nothing written in run 1 comes back", !r1.queue.some((s) => r2.queue.includes(s)));
+
+  // MUTATIONS OF THE ORDER
+  const alpha = await load((s) => s.replace(".map(({ s }) => s);\n  const tier2", ".map(({ s }) => s).sort();\n  const tier2"));
+  const ra = alpha.reportDatesQueue(args);
+  check("MUTATION: alphabetical tier 1 cuts the late-alphabet due strip (MU)",
+    !ra.queue.includes("MU") && CUT.some((s) => !ra.queue.includes(s)));
+  const noCutFirst = await load((s) => s.replace("Number(onCut.has(b.s)) - Number(onCut.has(a.s)) || ", ""));
+  check("MUTATION: dropping cut-first lets never-written fillers push the strip out",
+    !CUT.every((s) => noCutFirst.reportDatesQueue(args).queue.slice(0, 5).includes(s)));
+  const noCarry = await load((s) => s.replace("if (!e.lastEventFiled || e.lastEventFiled < todayYmd) e.lastEventFiled = todayYmd;", ""));
+  const big2 = JSON.parse(JSON.stringify(big));
+  for (const s of leftOut) big2[s].lastEventFiled = null;
+  noCarry.carryEventQueued(big2, eventQueued, new Set(r1.queue), "20260924");
+  check("MUTATION: without the carry the left-out re-reads vanish on run 2",
+    !leftOut.some((s) => noCarry.reportDatesQueue({ ...args, entries: big2, eventQueued: new Set(), now: NOW + day }).queue.includes(s)));
+}
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED\n` : "\nALL CHECKS PASSED\n");
 process.exit(failures ? 1 : 0);
