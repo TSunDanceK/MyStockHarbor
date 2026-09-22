@@ -21,6 +21,7 @@ import {
 } from "./secEarningsView";
 import type { ColdResult } from "./secColdFetch";
 import type { EarningsTone as PresentationTone } from "./secPresentation";
+import { pinCoverage, scoreCoverage, type ScoreCoverage } from "./secPresentation";
 
 // THE TYPE COMES FROM THE RULES MODULE, so a fourth tone could not be added to
 // one side only.
@@ -404,3 +405,35 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
  * state nobody implements.
  */
 export type SecEarningsScore = ReturnType<typeof scoreFromSec>;
+
+/**
+ * HOW MUCH OF THIS SCORE RAN — the ONE computation both surfaces use.
+ *
+ * It lived inline in app/stock/[symbol]/earnings/page.tsx, which was fine while
+ * that page was the only place a score was drawn. The sidebar card draws the
+ * same score on /stock/[symbol] and /stock/[symbol]/news, and ABVX showed MIXED
+ * there while the full report, one click away, said "Partial · 2 of 5
+ * measured". Two copies of this arithmetic are two answers about one stock the
+ * first time either is tuned, so it moved here and both call it.
+ *
+ * `contributions` holds exactly the components that contributed (see
+ * `contribute`, which writes the set and the record together), so its keys ARE
+ * the ones that ran. profitability's magnitude is 8, not 6: it contributes +6
+ * when profitable and -8 when not, and the reachable LOW has to use the larger.
+ *
+ * Null when the score did not run at all — that case already says
+ * "Unavailable" and has no range to report.
+ */
+export function coverageOf(score: SecEarningsScore): ScoreCoverage | null {
+  if (!score.available) return null;
+  return pinCoverage(
+    scoreCoverage(
+      score.seed,
+      { ...SCORE_MAX_CONTRIBUTION, profitability: 8 },
+      score.unavailable.length,
+      Object.keys(score.contributions)
+    ),
+    SCORE_BANDS.find((b) => b.tone === "neutral")!.from,
+    SCORE_BANDS.find((b) => b.tone === "good")!.from - 1
+  );
+}

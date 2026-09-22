@@ -18,20 +18,18 @@ import { buildSecEarningsView, periodWords } from "@/lib/server/secEarningsView"
 // where they are drawn; re-importing them here would just be a second name for
 // the same rule.
 import {
-  partialScoreLabel, partialScoreNote, pinCoverage, scoreCoverage, toneBg, toneColor,
+  partialScoreLabel, partialScoreNote, toneBg, toneColor,
   type EarningsTone as PresentationTone,
 } from "@/lib/server/secPresentation";
 // THE SCORER, WHICH USED TO BE 340 LINES OF THIS FILE. It moved out whole so
 // the sidebar snapshot card could call the SAME function rather than grow a
 // second one over the same view — see the header of secEarningsScore.ts.
 //
-// SCORE_MAX_CONTRIBUTION comes with it, because the partial-coverage reporting
-// added here needs the per-component weights to say what range a score could
-// actually have reached. Reading them from the scorer rather than restating
-// them is the whole point: a weight that moved on one side only would make the
-// stated range quietly wrong.
+// coverageOf comes with it: the partial-coverage range needs the per-component
+// weights, and it is the SAME function the sidebar card calls, so the two
+// surfaces cannot report different coverage for one stock.
 import {
-  SCORE_BANDS, SCORE_COMPONENTS, SCORE_MAX_CONTRIBUTION, scoreBandNote, scoreFromSec,
+  SCORE_BANDS, SCORE_COMPONENTS, coverageOf, scoreBandNote, scoreFromSec,
 } from "@/lib/server/secEarningsScore";
 import { valuationInputs } from "@/lib/server/secValuation";
 import {
@@ -743,30 +741,8 @@ export default async function StockEarningsPage({ params }: Props) {
 
   const nextReport = data.nextReport;
   const score = data.score;
-  /**
-   * HOW MUCH OF THE SCORE RAN — computed once, here, from the score's own
-   * record of what it did rather than from a second reading of the view.
-   *
-   * `contributions` holds exactly the components that contributed (see
-   * `contribute`, which writes the set and the record together), so its keys
-   * ARE the ones that ran. Deriving the list any other way would be a second
-   * answer to a question the score already answered.
-   *
-   * profitability's magnitude is 8, not 6: it contributes +6 when profitable
-   * and -8 when not, and the reachable LOW has to use the larger of the two.
-   */
-  const coverage = score.available
-    ? pinCoverage(
-        scoreCoverage(
-          score.seed,
-          { ...SCORE_MAX_CONTRIBUTION, profitability: 8 },
-          score.unavailable.length,
-          Object.keys(score.contributions)
-        ),
-        SCORE_BANDS.find((b) => b.tone === "neutral")!.from,
-        SCORE_BANDS.find((b) => b.tone === "good")!.from - 1
-      )
-    : null;
+  // HOW MUCH OF THE SCORE RAN. Shared with the sidebar card — see coverageOf.
+  const coverage = coverageOf(score);
   const secView = data.secView;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
