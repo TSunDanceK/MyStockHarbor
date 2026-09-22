@@ -455,10 +455,13 @@ console.log("\n11. a partial score says so, with no verdict colour, from the sha
   // ONE SENTENCE IN THE SIDEBAR, from the same coverage numbers; the range
   // belongs to the full report (owner, #514).
   check("the sidebar prints the one-sentence note, built from coverageOf's numbers",
-    visibleText(markup).includes(M.partialScoreShortNote(cov)) &&
-      visibleText(markup).includes(`${cov.total - cov.measured} of ${cov.total} score inputs aren't`), "");
+    visibleText(markup).includes(snap.partialNote) &&
+      visibleText(markup).includes(`${cov.total - cov.measured} of ${cov.total} score inputs weren't measured`), "");
   check("...and not the range sentence, which stays on the earnings page",
-    !/could only have landed between/.test(visibleText(markup)));
+    !/could only land between/.test(visibleText(markup)));
+  // AND IT NEVER BLAMES THE FILINGS FOR A MEASUREMENT THAT DID NOT RUN.
+  check("...and it does not claim the inputs are missing from the filings",
+    !/in this company's filings/.test(visibleText(markup)), snap.partialNote);
 
   // MUTATIONS. Paint the pill by availability again, and let the label fall
   // back to the verdict — each must be caught.
