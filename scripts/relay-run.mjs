@@ -174,6 +174,9 @@ const TASKS = {
   // SEC submissions. Read-only, no credentials. Prints the file into its log
   // for the session to reassemble — see the script header.
   "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
+  // EDGAR's own state/country code list, with ISO-3166 codes attached by name
+  // match, for the /stock page's Country row. Read-only, no credentials.
+  "sec-country-codes": { script: "scripts/sec-country-codes.mjs", args: () => [] },
   // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
   // fixture and a live symbol list and touches no network, so it runs locally.
   // Adding it here would imply it needs a runner, which is the kind of drift
