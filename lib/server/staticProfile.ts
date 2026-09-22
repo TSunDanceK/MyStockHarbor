@@ -97,6 +97,25 @@ export type ResolvedProfile = StaticProfileRow & {
 // not match it. That is deliberate: inventing FMP labels from SIC codes is the
 // owner's call, after seeing the list of strings pages filter on.
 type RegistrantRow = { sic?: string | null; sicDescription?: string | null };
+
+/**
+ * SIC CODES WHOSE INDUSTRY IS AN FMP LABEL A PAGE FILTERS ON — the whole table.
+ *
+ * ONE ROW, BY OWNER DECISION (2026-09-22, on #517). The only industry string
+ * any Pickers page presets is "Semiconductors" (/semiconductor-stocks), and a
+ * SIC-only symbol would otherwise carry SEC's "Semiconductors & Related
+ * Devices", which the preset does not match. Every other SIC-only symbol keeps
+ * SEC's own description. A row is added here only by the same kind of decision,
+ * with its source recorded, never inferred.
+ */
+export const SIC_INDUSTRY_LABELS: Record<string, { label: string; source: string }> = {
+  "3674": {
+    label: "Semiconductors",
+    source:
+      "owner decision 2026-09-22 (#517): SIC 3674 \"Semiconductors & Related Devices\" -> the " +
+      "FMP industry label /semiconductor-stocks presets on",
+  },
+};
 const REGISTRANTS = (registrantsFile as unknown as { rows: Record<string, RegistrantRow> }).rows ?? {};
 const SIC_SECTOR = (sicSectorFile as unknown as { codes: Record<string, { sector: string | null }> }).codes ?? {};
 
@@ -108,7 +127,7 @@ export function sicProfileFor(symbol: string): StaticProfileRow | null {
   const reg = REGISTRANTS[upper];
   if (!reg?.sic) return null;
   const sector = clean(SIC_SECTOR[reg.sic]?.sector);
-  const industry = clean(reg.sicDescription);
+  const industry = SIC_INDUSTRY_LABELS[reg.sic]?.label ?? clean(reg.sicDescription);
   return sector || industry ? { sector, industry } : null;
 }
 

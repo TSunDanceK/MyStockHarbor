@@ -382,10 +382,17 @@ console.log("\n=== 7. The SIC leg: third, never over a snapshot row, provenance 
 
   // THE LEG ITSELF, on real rows: NVDA's SIC 3674 maps to Technology by
   // measured majority, and its industry is SEC's own description, not FMP's.
+  // SIC 3674 CARRIES THE ONE OWNER-DECIDED LABEL ("Semiconductors", the string
+  // /semiconductor-stocks presets on); every other code keeps SEC's own words.
   const sic = sp.sicProfileFor("NVDA");
-  check("the SIC leg reads the committed registrant and crosswalk",
-    sic?.sector === "Technology" && sic?.industry === "Semiconductors & Related Devices",
+  check("the SIC leg reads the committed registrant and crosswalk, and 3674 maps to the preset label",
+    sic?.sector === "Technology" && sic?.industry === "Semiconductors",
     JSON.stringify(sic));
+  check("the label table is one row, and records its source",
+    Object.keys(sp.SIC_INDUSTRY_LABELS).length === 1 && /owner decision/.test(sp.SIC_INDUSTRY_LABELS["3674"]?.source ?? ""));
+  const aapl = sp.sicProfileFor("AAPL");
+  check("any other code keeps SEC's own description (AAPL, SIC 3571)",
+    aapl?.industry === "Electronic Computers", JSON.stringify(aapl));
 
   // A SYMBOL IN NO FMP LEG FALLS THROUGH TO SIC. None exists in today's files
   // (registrants covers the snapshot's symbols), so NVDA's snapshot row is
@@ -397,7 +404,8 @@ console.log("\n=== 7. The SIC leg: third, never over a snapshot row, provenance 
   try { orphan = await import(`${pathToFileURL(f2).href}?t=${Date.now()}`); } finally { fs.unlinkSync(f2); }
   const o = orphan.resolveProfile("NVDA", null);
   check("with no FMP row, the SIC leg answers and says so",
-    o.source === "sic" && o.sector === "Technology" && o.sectorSource === "sic" && o.industrySource === "sic",
+    o.source === "sic" && o.sector === "Technology" && o.industry === "Semiconductors" &&
+      o.sectorSource === "sic" && o.industrySource === "sic",
     JSON.stringify(o));
   check("an unclassified SIC code yields no sector — never a guess",
     Object.values(JSON.parse(read("data/sec/sic-sector.json")).codes).some((c) => c.sector === null),

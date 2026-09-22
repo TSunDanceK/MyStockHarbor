@@ -157,10 +157,10 @@ export function composeCompanyProfile(i: ComposeInputs): CompanyProfile {
       // The snapshot is FMP's classification captured 2026-09-13 while the
       // licence was live (data/static-profile.json). Facts, not prose; the
       // owner asked for no FMP attribution but the description's, so it is
-      // credited as the dated snapshot it is.
+      // credited by its date, in the owner's wording (#517).
       i.taxonomy.sectorSource === "sic" ? "SEC EDGAR (SIC code)"
         : i.taxonomy.sectorSource === "fmp-cache" ? "classification cache"
-          : "classification snapshot, 13 Sep 2026");
+          : "Sector classification as of 13 Sep 2026");
   }
   if (cap?.ok) add("Market cap", "shares from SEC EDGAR, price from market data");
   if (range) add("52-week range", "daily price history");
