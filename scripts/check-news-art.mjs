@@ -1034,6 +1034,22 @@ const neverFires = [
   ...topic.SUBJECT_TAGS.filter((t) => !emittedSubjects.has(t)).map((t) => `subject:${t}`),
   ...topic.MOTIF_TAGS.filter((t) => !emittedMotifs.has(t)).map((t) => `motif:${t}`),
 ];
+// ── ONE TAG, ONE ROW ──────────────────────────────────────────────────────
+// A tag appearing twice in the table is two patterns competing under
+// first-match-wins, and the loser is dead code that reads as if it works —
+// the same family as the three dead patterns above, and it happened: candidate
+// C was added as a SECOND `aerospace-defence` row rather than folded into the
+// one that already existed, which would have left the wider of the two
+// permanently unreachable for any headline the narrower matched first.
+const dupSubjects = topic.SUBJECT_TAGS.filter((t, i) => topic.SUBJECT_TAGS.indexOf(t) !== i);
+const dupMotifs = topic.MOTIF_TAGS.filter((t, i) => topic.MOTIF_TAGS.indexOf(t) !== i);
+check(
+  "no tag appears twice in the table — one tag, one row",
+  dupSubjects.length === 0 && dupMotifs.length === 0,
+  [...new Set([...dupSubjects, ...dupMotifs])].join(", ") ||
+    `${topic.SUBJECT_TAGS.length} subjects, ${topic.MOTIF_TAGS.length} motifs, all distinct`
+);
+
 check(
   "every tag in the table is PROVEN to fire by a fixture row that produces it",
   neverFires.length === 0,
@@ -1582,6 +1598,48 @@ check(
   "...and the exclusion is a NAMED SET, not a special case buried in the branch",
   topic.MARKET_WIDE_SUBJECTS instanceof Set && topic.MARKET_WIDE_SUBJECTS.has("exchanges"),
   "it lives beside the SUBJECT TABLE, not beside the picker that applies it: a statement about what these tags MEAN, so anything holding a tag can ask"
+);
+// ── THE SAME-AS-INDUSTRY SKIP ─────────────────────────────────────────────
+// A layer-1 tag equal to the symbol's own industry tag carries no information
+// the page does not already have, and jumping the event bucket with it costs a
+// real picture. Both halves are pinned on REAL headlines from the drone
+// capture, because this rule exists because of them.
+check(
+  "LAYER 1 SKIPS a subject the industry already says — AVAV keeps its event art",
+  (() => {
+    // "AeroVironment Stock Jumps After Earnings Beat. There's Still Growth for
+    // Drones." Both axes fire: `drones` is a real aerospace-defence match and
+    // `earnings beat` is a real event. AVAV's industry is Aerospace & Defense,
+    // so layer 1 adds nothing and the EVENT bucket must answer.
+    const p = sym({
+      title: "AeroVironment Stock Jumps After Earnings Beat. There's Still Growth for Drones.",
+      eventType: "earnings",
+      industry: "Aerospace & Defense",
+    });
+    return p.kind === "library" && p.art.bucket === "event-earnings";
+  })(),
+  "without the skip this card loses event-earnings to a drone picture because its last clause says drones"
+);
+check(
+  "...and does NOT skip it when the industry says something else — ONDS keeps the drone art",
+  (() => {
+    // The same rule from the other side. ONDS is Communication Equipment, so a
+    // drone headline knows something the taxonomy does not, and layer 1 wins.
+    const p = sym({
+      title: "Ondas vs. Red Cat: Which Drone Stock Is the Better Pick Now?",
+      industry: "Communication Equipment",
+    });
+    return p.kind === "library" && p.art.src.startsWith("/news-art/aerospace-defence-any-");
+  })(),
+  "6 of candidate C's 16 hits survive the skip, and every one is ONDS or UMAC"
+);
+check(
+  "...and the skip does not silence the tag everywhere — a NON-aerospace page still gets it",
+  (() => {
+    const p = sym({ title: "Drone stocks climb on a Pentagon order", industry: "Software - Application" });
+    return p.kind === "library" && p.art.src.startsWith("/news-art/aerospace-defence-any-");
+  })(),
+  "the rule is about redundancy with THIS symbol's industry, not about the tag"
 );
 check(
   "LAYER 2 stays above the industry: an earnings story keeps today's event art",
