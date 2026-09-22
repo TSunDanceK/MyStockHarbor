@@ -543,6 +543,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the same-day tie-break flips, a general current-period rule
+  // scored on history, and why the thin FPIs are thin (review of #515).
+  "write-pairing-followups": {
+    script: "scripts/pairing-followups-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],
