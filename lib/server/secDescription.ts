@@ -82,56 +82,135 @@ function lines(text: string): Line[] {
 const ITEM1 = /^item1(business(es)?(description|overview)?)?$/;
 const BUSINESS = /^business(es)?(description|overview)?$/;
 const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)$/;
-const ITEM4B = /^(item4)?bbusinessoverview$/;
-const ITEM4C = /^(item4)?corgani[sz]ationalstructure$/;
+
+// ── 20-F: ITEM 4 "INFORMATION ON THE COMPANY" → 4.B "BUSINESS OVERVIEW" ────
+//
+// Owner, #518: find Item 4 first, then its 4.B inside it. Diagnostic relay
+// 35785563715 read the three misses:
+//   ABEV  — sub-headings are a letter on its own line ("A." / "Selected
+//           Financial Data"), so "B." / "Business Overview" is split too.
+//   TSM   — "ITEM 4. INFORMATION ON THE COMPANY", sub-headings unlettered.
+//   RYAAY — Item 4 has NO Business Overview sub-heading at all (Introduction,
+//           Strategy, Route System, …); "Business Overview" appears only under
+//           Item 5. Inside Item 4 or nowhere, so RYAAY has no description.
+// Inside Item 4 an UNLETTERED "Business Overview" is accepted; outside it
+// (a filing whose Item 4 heading is not found) only a lettered 4.B is, since
+// an unlettered one can be Item 5's (RYAAY).
+const ITEM4 = /^item4(informationonthecompany)?$/;
+const ITEM4_TITLE = /^informationonthecompany$/;
+const ITEM4_END = /^item(4a|5)[a-z]*$/;
+const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;
+const ITEM4B_ANY = /^(item4)?b?businessoverview$/;
+const B_ALONE = /^(item4)?b$/;
+const BUSINESS_OVERVIEW = /^businessoverview$/;
+const ITEM4C = /^(item4)?c?organi[sz]ationalstructure$/;
+const C_ALONE = /^(item4)?c$/;
+const ORG_STRUCTURE = /^organi[sz]ationalstructure$/;
+/** A heading line is short; a long line that happens to fold to a pattern is prose. */
+const HEADING_KEY_MAX = 80;
 
 /** A table-of-contents pair is closer than this; a real section is longer. */
 const MIN_SECTION_CHARS = 1500;
 
 export type Located = { found: true; body: string } | { found: false; why: string };
 
-export function locateSection(text: string, form: string): Located {
-  const L = lines(text);
-  const isStart = (i: number): { ok: boolean; bodyFrom: number } => {
-    const k = L[i].key;
-    if (form === "20-F") return { ok: ITEM4B.test(k), bodyFrom: L[i].end };
-    const m = ITEM1.exec(k);
-    if (!m) return { ok: false, bodyFrom: 0 };
-    if (m[1]) return { ok: true, bodyFrom: L[i].end };
-    // "Item 1." alone: the heading continues on the next non-empty line.
-    let j = i + 1;
-    while (j < L.length && !L[j].text) j++;
-    return j < L.length && BUSINESS.test(L[j].key) ? { ok: true, bodyFrom: L[j].end } : { ok: false, bodyFrom: 0 };
-  };
-  const isEnd = (k: string) => (form === "20-F" ? ITEM4C.test(k) : ITEM1_END.test(k));
+/** Index of the next non-empty line after i, or -1. */
+function nextLine(L: Line[], i: number, hi: number): number {
+  let j = i + 1;
+  while (j < hi && !L[j].text) j++;
+  return j < hi ? j : -1;
+}
 
+/** A heading on line i — whole, or split over two lines ("Item 1." / "Business",
+ * "B." / "Business Overview"). Returns where its body starts, or -1. */
+function headingAt(L: Line[], i: number, hi: number, whole: RegExp, prefix?: RegExp, rest?: RegExp): number {
+  const k = L[i].key;
+  if (k.length > HEADING_KEY_MAX) return -1;
+  if (whole.test(k) && !(prefix && prefix.test(k))) return L[i].end;
+  if (prefix && rest && prefix.test(k)) {
+    const j = nextLine(L, i, hi);
+    return j >= 0 && rest.test(L[j].key) ? L[j].end : -1;
+  }
+  return -1;
+}
+
+type Span = { from: number; to: number };
+
+/** THE LAST START BEFORE EACH END, pairs tried in document order; the first
+ * pair long enough to be a section, not a TOC entry, wins. With no end at all,
+ * the last start runs to `openEnd` (a bound, or the enclosing section's end). */
+function pairSection(
+  L: Line[], lo: number, hi: number,
+  startAt: (i: number) => number, isEnd: (i: number) => boolean,
+  minChars: number, openEnd: (from: number) => number,
+): { span: Span | null; starts: number } {
+  const starts: [number, number][] = [];
+  const ends: number[] = [];
+  for (let i = lo; i < hi; i++) {
+    const b = startAt(i);
+    if (b >= 0) starts.push([i, b]);
+    else if (isEnd(i)) ends.push(i);
+  }
+  if (!starts.length) return { span: null, starts: 0 };
+  for (const e of ends) {
+    const before = starts.filter(([s]) => s < e);
+    if (!before.length) continue;
+    const [, from] = before[before.length - 1];
+    if (L[e].start - from >= minChars) return { span: { from, to: L[e].start }, starts: starts.length };
+  }
+  const [s, from] = starts[starts.length - 1];
+  if (!ends.some((e) => e > s)) {
+    const to = openEnd(from);
+    if (to - from >= minChars) return { span: { from, to }, starts: starts.length };
+  }
+  return { span: null, starts: starts.length };
+}
+
+export function locateSection(text: string, form: string): Located {
   if (!["10-K", "10-K405", "10-KT", "20-F"].includes(form)) {
     return { found: false, why: form === "40-F"
       ? "40-F: the business description is in the AIF exhibit, not the primary document"
       : `no section heading defined for ${form}` };
   }
-  const starts = L.map((_, i) => i).filter((i) => isStart(i).ok);
-  if (!starts.length) return { found: false, why: "heading not found" };
-  const ends = L.map((l, i) => (isEnd(l.key) ? i : -1)).filter((i) => i >= 0);
+  const L = lines(text);
+  const n = L.length;
+  const bounded = (from: number) => Math.min(text.length, from + 8000);
+  const found = (span: Span | null): Located | null => {
+    const body = span ? text.slice(span.from, span.to).trim() : "";
+    return body.length >= MIN_SECTION_CHARS ? { found: true, body } : null;
+  };
 
-  // THE LAST START BEFORE EACH END, pairs tried in document order; the first
-  // pair long enough to be a section, not a TOC entry, wins.
-  for (const e of ends) {
-    const before = starts.filter((s) => s < e);
-    if (!before.length) continue;
-    const s = before[before.length - 1];
-    const from = isStart(s).bodyFrom;
-    const body = text.slice(from, L[e].start).trim();
-    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
+  if (form !== "20-F") {
+    const r = pairSection(L, 0, n, (i) => headingAt(L, i, n, ITEM1, /^item1$/, BUSINESS),
+      (i) => L[i].key.length <= HEADING_KEY_MAX && ITEM1_END.test(L[i].key), MIN_SECTION_CHARS, bounded);
+    return found(r.span) ?? { found: false, why: r.starts
+      ? `heading found ${r.starts}x, every candidate section was a table of contents`
+      : "heading not found" };
   }
-  // No closing heading at all (some 20-F layouts): the last start, bounded.
-  if (!ends.length) {
-    const s = starts[starts.length - 1];
-    const from = isStart(s).bodyFrom;
-    const body = text.slice(from, from + 8000).trim();
-    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
+
+  // 20-F. Item 4 first.
+  const item4 = pairSection(L, 0, n, (i) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE),
+    (i) => L[i].key.length <= HEADING_KEY_MAX && ITEM4_END.test(L[i].key), MIN_SECTION_CHARS, bounded);
+  if (item4.span) {
+    const lo = L.findIndex((l) => l.start >= item4.span!.from);
+    const hiIdx = L.findIndex((l) => l.start >= item4.span!.to);
+    const hi = hiIdx < 0 ? n : hiIdx;
+    const r = pairSection(L, lo, hi,
+      (i) => headingAt(L, i, hi, ITEM4B_ANY, B_ALONE, BUSINESS_OVERVIEW),
+      (i) => headingAt(L, i, hi, ITEM4C, C_ALONE, ORG_STRUCTURE) >= 0,
+      MIN_SECTION_CHARS, () => item4.span!.to);
+    return found(r.span) ?? { found: false, why: r.starts
+      ? "Item 4 found; its Business Overview is shorter than a section"
+      : "Item 4 found, but it has no Business Overview heading" };
   }
-  return { found: false, why: `heading found ${starts.length}x, every candidate section was a table of contents` };
+  // Item 4's own heading not read: a LETTERED 4.B anywhere, as before.
+  const r = pairSection(L, 0, n,
+    (i) => headingAt(L, i, n, ITEM4B_LETTERED, B_ALONE, BUSINESS_OVERVIEW),
+    (i) => headingAt(L, i, n, ITEM4C, C_ALONE, ORG_STRUCTURE) >= 0,
+    MIN_SECTION_CHARS, bounded);
+  return found(r.span) ?? { found: false, why: r.starts
+    ? `heading found ${r.starts}x, every candidate section was a table of contents`
+    : "heading not found" };
 }
 
 // ── CLEANING ──────────────────────────────────────────────────────────────
@@ -179,6 +258,21 @@ const POINTER: RegExp[] = [
   /\b(our\s+)?website\s+(address\s+)?is\b/i,
 ];
 
+/** A first paragraph shorter than this, with a longer one after it, is a slogan. */
+const SLOGAN_CHARS = 100;
+
+/** A capital, optionally inside an opening quote, or a camel-case brand (AAPL "iPhone®"). */
+const STARTS_LIKE_A_SENTENCE = /^([“"‘']?[A-Z]|[a-z]+[A-Z])/;
+
+const QUOTED = /[“"‘][^”"’]{1,60}[”"’]/g;
+
+/** A parenthetical that names the company: ≥2 quoted names, or ≥2 of we/us/our. */
+function isNameList(inner: string): boolean {
+  const quoted = (inner.match(QUOTED) ?? []).length;
+  const pronouns = new Set((inner.toLowerCase().match(/\b(we|us|our)\b/g) ?? [])).size;
+  return quoted >= 2 || pronouns >= 2;
+}
+
 export const DESCRIPTION_MAX_CHARS = 900;
 export const DESCRIPTION_MIN_CHARS = 200;
 
@@ -200,44 +294,70 @@ export function cleanDescription(body: string): Cleaned {
   // GEV / PLAB on relay 35781008070, wraps before capitals too: "…to the" /
   // "United States…"). A sub-heading is short, so it is not joined forward.
   const raw = body.split(/\n+/).map((l) => l.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])(?=\s|$)/g, "$1").trim()).filter(Boolean);
-  let paras: string[] = [];
+  // Each paragraph remembers whether the one before it stopped mid-sentence:
+  // a paragraph that CONTINUES an unfinished one is a fragment, whatever its
+  // first letter (KTOS "…Kratos is known as the" / "United States and its
+  // allies, to address…", relay 35781418181).
+  type Para = { t: string; follows: boolean };
+  let paras: Para[] = [];
   let lastLine = "";
   for (const l of raw) {
     const prev = paras[paras.length - 1];
-    const open = prev && !SENTENCE_END.test(prev);
+    const open = Boolean(prev) && !SENTENCE_END.test(prev.t);
     // A heading ends on a capitalised word ("Our Strategy", "General"); a line
     // ending on a lower-case word ("…focus is on the") is a wrap (KTOS).
     const wrapped = lastLine.length >= WRAPPED_LINE_CHARS || /(^|\s)[a-z]+,?$/.test(lastLine);
-    if (open && (/^[a-z0-9(]/.test(l) || wrapped)) paras[paras.length - 1] = `${prev} ${l}`;
-    else paras.push(l);
+    if (open && (/^[a-z0-9(]/.test(l) || wrapped)) prev.t = `${prev.t} ${l}`;
+    else paras.push({ t: l, follows: open && prev.t.length >= 60 });
     lastLine = l;
   }
   // Sub-headings and fragments ("General", "Overview", a stray ".").
-  paras = paras.filter((p) => p.length >= 60 && /[a-z]/.test(p));
+  paras = paras.filter((p) => p.t.length >= 60 && /[a-z]/.test(p.t));
   if (!paras.length) return { ok: false, why: "no prose after the heading" };
 
   // Rule 2: a leading all-caps heading glued to the first paragraph.
-  paras[0] = paras[0].replace(/^[A-Z][A-Z0-9 &,'’\-]{2,}[.:]\s+(?=[A-Z])/, "");
+  paras[0].t = paras[0].t.replace(/^[A-Z][A-Z0-9 &,'’\-]{2,}[.:]\s+(?=[A-Z])/, "");
   // …and headings glued INSIDE one line, betrayed by the last heading word
   // opening the sentence too: AAPL "Products iPhone iPhone ® is…" → "iPhone ® is…".
-  paras = paras.map((p) => p.replace(/^(?:[A-Z][\w’'&-]*\s+){0,4}?([A-Za-z][\w’'-]*)\s+(?=\1\b)/, ""));
+  for (const p of paras) p.t = p.t.replace(/^(?:[A-Z][\w’'&-]*\s+){0,4}?([A-Za-z][\w’'-]*)\s+(?=\1\b)/, "");
+
+  // Owner, #518: STRIP A BRACKETED NAME LIST — the parenthetical that defines
+  // what the company will be called: ONDS "(together with its subsidiaries,
+  // the “Company,” “Ondas,” “we,” “us,” or “our”)", BRK.B "(“Berkshire,”
+  // “Company” or “Registrant”)", GEV "(the Company, GE Vernova, our, we, or
+  // us)". Two or more quoted names, or two or more of we/us/our, marks one. A
+  // single quoted abbreviation — (“OAS”), ("IBD"), (“AI”) — defines a term,
+  // not the company, and stays.
+  for (const p of paras) p.t = p.t.replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (isNameList(inner) ? "" : m));
+
+  // Owner, #518: no space before ® or ™ (AAPL "iPhone ®").
+  for (const p of paras) p.t = p.t.replace(/\s+([®™])/g, "$1");
 
   // Rule 3: drop definition sentences. Leading ones first (the owner's rule);
   // on relay 35781008070 GS carried "When we use the terms…" as its SECOND
   // paragraph, so a definition is dropped wherever it falls in the excerpt,
   // and so is a pointer to elsewhere in the document.
-  const out: string[] = [];
+  let out: Para[] = [];
   for (const p of paras) {
-    const ss = sentences(p).filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
-    if (ss.length) out.push(ss.join(" "));
+    const ss = sentences(p.t).filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
+    if (ss.length) out.push({ t: ss.join(" "), follows: p.follows });
   }
   if (!out.length) return { ok: false, why: "only definition text after the heading" };
+
+  // Owner, #518: A LEADING ONE-LINE SLOGAN is dropped when a longer paragraph
+  // follows (RKLB "Our Mission: We Open Access to Space to Improve Life on Earth.").
+  if (out.length > 1 && out[0].t.length < SLOGAN_CHARS && out[1].t.length > out[0].t.length) out = out.slice(1);
+
+  // Owner, #518: A SECOND PARAGRAPH ONLY IF IT STARTS LIKE A SENTENCE — a
+  // capital letter (optionally inside an opening quote), not a bullet, and not
+  // the continuation of a paragraph that stopped mid-sentence (KTOS, ONDS "● OAS…").
+  if (out.length > 1 && !(STARTS_LIKE_A_SENTENCE.test(out[1].t) && !out[1].follows)) out = out.slice(0, 1);
 
   // Rule 5: at most two paragraphs and ~900 characters, cut at a sentence end.
   const kept: string[] = [];
   let n = 0;
   for (const p of out.slice(0, 2)) {
-    const ss = sentences(p);
+    const ss = sentences(p.t);
     const take: string[] = [];
     for (const s of ss) {
       if (n + s.length + 1 > DESCRIPTION_MAX_CHARS && (kept.length || take.length)) break;
