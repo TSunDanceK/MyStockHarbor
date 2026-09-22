@@ -239,9 +239,21 @@ const pct = (v: Pct | undefined, digits = 1) => {
  * this page's RULE (it does not derive one), neither of which depends on the
  * filer's reporting frequency.
  */
+//
+// ── AND IT QUOTES THE CONSTANT RATHER THAN SPELLING THE WORDS AGAIN ────────
+// The note said cells read "not filed" while the snapshot and the income
+// statement rendered NOT_REPORTED — two words for one state, on one page, for
+// one filer. ABVX showed both: "not filed" in the growth table's EPS column
+// and "Not reported" against Diluted EPS three cards up.
+//
+// NOT_REPORTED wins because it is the page's established term, used by every
+// other empty cell, and its own docblock already defines it ("the filer
+// published no figure for this line. Not zero."). Interpolating it here, and
+// rendering it in the Q4 cell below, means the note cannot describe a word the
+// page does not show.
 const Q4_EPS_NOTE =
   "Q4 EPS is not filed as a separate period, and this page does not derive it, " +
-  "so those cells read \u201cnot filed\u201d.";
+  `so those cells read \u201c${NOT_REPORTED}\u201d.`;
 
 /** The legend for the crossing wording, rendered wherever a table produces one. */
 function CrossingNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
@@ -648,7 +660,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                 <td data-label="EPS YoY">
                   {view.growth[i]?.epsYoY == null && /^Q4 /.test(m.label) ? (
                     <abbr title={Q4_EPS_NOTE} style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
-                      not filed
+                      {NOT_REPORTED}
                     </abbr>
                   ) : (
                     pct(view.growth[i]?.epsYoY)

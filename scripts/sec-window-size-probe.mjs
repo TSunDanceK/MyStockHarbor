@@ -37,6 +37,11 @@ const strip = (f) =>
 const sec = await lift([
   fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"),
+  // #479 put fxRates and secCurrency in the view's dependency set: it now
+  // computes growth in the filer's reporting currency. Without them the lift
+  // threw ReferenceError on its FIRST CALL, after the header had printed.
+  strip("lib/server/fxRates.ts"),
+  strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
   strip("lib/server/secEarningsView.ts"),
 ].join("\n"));

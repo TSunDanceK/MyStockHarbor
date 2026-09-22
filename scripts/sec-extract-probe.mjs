@@ -54,7 +54,14 @@ const strip = (f) =>
   fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"\.\/[^"]+";$/gm, "")
     .replace(/^export \* from "\.\/[^"]+";$/gm, "");
 const sec = await lift(
-  [fieldsSrc, extractSrc, strip("lib/server/secFactCodec.ts"), strip("lib/server/secEarningsView.ts")].join("\n")
+  // fxRates + secCurrency: #479 made the view read reportingCurrency,
+  // storedInReportingCurrency and unitKeysFor. Absent, the lift threw
+  // ReferenceError on its first CALL rather than at import.
+  [
+    fieldsSrc, extractSrc,
+    strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"),
+    strip("lib/server/secFactCodec.ts"), strip("lib/server/secEarningsView.ts"),
+  ].join("\n")
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(

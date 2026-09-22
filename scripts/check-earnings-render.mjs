@@ -195,6 +195,40 @@ console.log("\n3. A5 — the five retired ids render nothing at all");
     "a soft fallback would let an unregistered hide ship");
 }
 
+console.log("\n3z. ONE WORD FOR ONE STATE, ACROSS THE WHOLE PAGE");
+{
+  // MEASURED ON ABVX: the growth table's Q4 EPS column rendered "not filed"
+  // while Diluted EPS three cards up rendered "Not reported" — the same fact
+  // about the same filer, in two words, and a reader has no way to know they
+  // mean the same thing. NOT_REPORTED is the page's established term and every
+  // other empty cell already uses it.
+  const CARDS = fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8");
+  check("the Q4 cell renders the shared constant, not its own spelling",
+    !/>\s*not filed\s*</.test(CARDS),
+    "a literal here is a second word for a state the page already names");
+  check("...and the note quotes that constant rather than restating it",
+    /\$\{NOT_REPORTED\}/.test(CARDS),
+    "a note that spells the word itself can describe one the page stopped showing");
+
+  // AND IT REACHES A READER THAT WAY. The source assertions above cannot see
+  // what renders, so the rendered text is checked too — on AZN, whose table
+  // carries Q4 rows.
+  const azText = visibleText(html(React.createElement(M.SecGrowthMarginsCard, { view: vAzn })));
+  // NOT a bare /not filed/ search: the note's own sentence — "Q4 EPS is not
+  // filed as a separate period" — is correct English about the FACT, and
+  // banning the phrase outright failed on it. What must not appear is the
+  // page telling the reader a CELL shows a word it does not show.
+  check("the note tells the reader the word the cells actually carry",
+    /read \u201cNot reported\u201d/.test(azText) && !/read \u201cnot filed\u201d/.test(azText),
+    (azText.match(/so those cells read [^.]*\./) ?? ["no such sentence"])[0]);
+  // AND NO CELL CARRIES THE OLD SPELLING. Checked on the markup, where a table
+  // cell is distinguishable from prose.
+  const azMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAzn }));
+  check("...and no table cell renders 'not filed' as its value",
+    !/>\s*not filed\s*</.test(azMarkup),
+    "the Q4 EPS column was the one that did");
+}
+
 console.log("\n4. A6 + A7 — nothing internal reaches the reader");
 
 {
