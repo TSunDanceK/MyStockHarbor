@@ -145,7 +145,14 @@ export type ProfileSource = { field: string; source: string };
 
 export type CompanyProfile = {
   companyName: string | null;
+  /** Paragraphs separated by a blank line ("\n\n"). */
   description: string | null;
+  /**
+   * Where the description came from, shown under it: "From Apple Inc.'s
+   * 10-K, filed Oct 2025" (lib/server/filingDescription.ts). Null or absent
+   * shows no line.
+   */
+  descriptionAttribution?: string | null;
   sector: string | null;
   industry: string | null;
   ceo: string | null;
@@ -334,6 +341,20 @@ export default function CompanyProfile({
   const hasAnything = hasDescription || hasRows;
   if (!hasAnything) return null;
 
+  // THE COMPANY'S OWN WORDS, one <p> per paragraph (the cleaner keeps at most
+  // two), with its attribution line under them. A single wrapper carries the
+  // cp-desc class so the mobile reading order is unchanged.
+  const descriptionBlock = hasDescription ? (
+    <div className="cp-desc">
+      {String(profile.description).split(/\n{2,}/).map((para, i) => (
+        <p key={i} style={i === 0 ? descStyle : { ...descStyle, marginTop: 12 }}>{para}</p>
+      ))}
+      {profile.descriptionAttribution ? (
+        <p style={descAttributionStyle}>{profile.descriptionAttribution}</p>
+      ) : null}
+    </div>
+  ) : null;
+
   const statBoxes = rows.map((r) => (
     <div key={r.label} style={cellStyle}>
       <div style={cellLabelStyle}>{r.label}</div>
@@ -406,13 +427,13 @@ export default function CompanyProfile({
             {statBoxes}
             {belowStats ? <div className="cp-below-stats">{belowStats}</div> : null}
           </div>
-          <p className="cp-desc" style={descStyle}>{profile.description}</p>
+          {descriptionBlock}
           {belowDescription ? <div className="cp-below-desc">{belowDescription}</div> : null}
           <div className="cp-clear" />
         </div>
       ) : hasDescription ? (
         <>
-          <p style={descStyle}>{profile.description}</p>
+          {descriptionBlock}
           {belowDescription}
           {belowStats}
         </>
@@ -425,10 +446,10 @@ export default function CompanyProfile({
       )}
 
       {/* PER-ROW ATTRIBUTION. This said "Company profile data from Financial
-          Modeling Prep" for every row; FMP now supplies the description only,
-          the last FMP field on this page until PR 3. The sources are the ones
-          the composer actually used for THIS symbol, so a row that hid does
-          not get credited. */}
+          Modeling Prep" for every row; no row comes from FMP now (PR 2 moved
+          the rows, PR 3 the description, which carries its own line under
+          the paragraph). The sources are the ones the composer actually used
+          for THIS symbol, so a row that hid does not get credited. */}
       <div style={sourceStyle}>
         {profile.sources?.length
           ? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(" · ")}.`
@@ -503,6 +524,7 @@ export default function CompanyProfile({
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const headingStyle: CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
 const descStyle: CSSProperties = { margin: 0, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
+const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
 const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
