@@ -40,19 +40,72 @@ if (rows.length < 200) { console.error("FATAL: too few rows — the page layout 
 const US_STATES = new Set("AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" "));
 const display = new Intl.DisplayNames(["en"], { type: "region" });
 const norm = (s) => s.toUpperCase().replace(/\(.*?\)/g, "").replace(/[^A-Z]/g, "");
+// FIRST MATCH WINS, AND THAT IS LOAD-BEARING. Intl.DisplayNames also names
+// RETIRED codes — FX "Metropolitan France", UK, YU, DY, HV, TP — and a
+// last-write-wins loop gave France FX and the United Kingdom UK on the first
+// run (relay 35773438440). Walking AA..ZZ and keeping the first code per name
+// keeps FR, GB, RS, BJ, BF, TL, because each current code sorts before the
+// retired one it replaced. Checked below rather than assumed.
 const isoByName = new Map();
 for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
   const iso = String.fromCharCode(a, b);
   const name = display.of(iso);
-  if (name && name !== iso) isoByName.set(norm(name), iso);
+  if (name && name !== iso && !isoByName.has(norm(name))) isoByName.set(norm(name), iso);
 }
+for (const [name, want] of [["France", "FR"], ["United Kingdom", "GB"], ["Serbia", "RS"], ["Benin", "BJ"], ["Burkina Faso", "BF"], ["Timor-Leste", "TL"]]) {
+  if (isoByName.get(norm(name)) !== want) { console.error(`FATAL: ${name} resolved to ${isoByName.get(norm(name))}, not ${want}`); process.exit(1); }
+}
+
+// SEC'S OLDER NAME → THE NAME Intl USES, for the rows the first run could not
+// match. A RENAME LIST, not a code table: every entry still resolves through
+// Intl, so a typo here yields null (and is listed), never a wrong code. Only
+// names that are the same country under a different spelling are here —
+// territories whose status differs (Netherlands Antilles, "UNKNOWN") stay null.
+const RENAMES = {
+  "ANTIGUA AND BARBUDA": "Antigua & Barbuda",
+  "BOSNIA AND HERZEGOVINA": "Bosnia & Herzegovina",
+  "BRUNEI DARUSSALAM": "Brunei",
+  "CONGO": "Congo - Brazzaville",
+  "CONGO, THE DEMOCRATIC REPUBLIC OF THE": "Congo - Kinshasa",
+  "COTE D'IVOIRE": "Côte d’Ivoire",
+  "CZECH REPUBLIC": "Czechia",
+  "HONG KONG": "Hong Kong SAR China",
+  "IRAN, ISLAMIC REPUBLIC OF": "Iran",
+  "KAZAKSTAN": "Kazakhstan",
+  "KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF": "North Korea",
+  "KOREA, REPUBLIC OF": "South Korea",
+  "LAO PEOPLE'S DEMOCRATIC REPUBLIC": "Laos",
+  "LIBYAN ARAB JAMAHIRIYA": "Libya",
+  "MACAU": "Macao SAR China",
+  "MACEDONIA, THE FORMER YUGOSLAV REPUBLIC OF": "North Macedonia",
+  "MICRONESIA, FEDERATED STATES OF": "Micronesia",
+  "MOLDOVA, REPUBLIC OF": "Moldova",
+  "PALESTINIAN TERRITORY, OCCUPIED": "Palestinian Territories",
+  "RUSSIAN FEDERATION": "Russia",
+  "SAINT KITTS AND NEVIS": "St. Kitts & Nevis",
+  "SAINT LUCIA": "St. Lucia",
+  "SAINT VINCENT AND THE GRENADINES": "St. Vincent & Grenadines",
+  "SAO TOME AND PRINCIPE": "São Tomé & Príncipe",
+  "SWAZILAND": "Eswatini",
+  "SYRIAN ARAB REPUBLIC": "Syria",
+  "TANZANIA, UNITED REPUBLIC OF": "Tanzania",
+  "TRINIDAD AND TOBAGO": "Trinidad & Tobago",
+  "TURKEY": "Türkiye",
+  "TURKS AND CAICOS ISLANDS": "Turks & Caicos Islands",
+  "VIRGIN ISLANDS, BRITISH": "British Virgin Islands",
+  "VIRGIN ISLANDS, U.S.": "U.S. Virgin Islands",
+};
 
 const codes = {};
 const unmatched = [];
 for (const [code, name] of rows) {
   if (US_STATES.has(code)) { codes[code] = { name: "United States", iso: "US", region: name }; continue; }
-  const iso = isoByName.get(norm(name)) ?? null;
-  codes[code] = { name, iso, region: null };
+  // A CANADIAN PROVINCE IS CANADA. SEC codes each province separately
+  // ("A6" = "ONTARIO, CANADA"); the country is the part after the comma.
+  const province = /^(.+), CANADA$/.exec(name);
+  const lookup = province ? "Canada" : RENAMES[name] ?? name;
+  const iso = isoByName.get(norm(lookup)) ?? null;
+  codes[code] = { name: province ? "CANADA" : name, iso, region: province ? province[1] : null };
   if (!iso) unmatched.push(`${code}=${name}`);
 }
 const file = {
