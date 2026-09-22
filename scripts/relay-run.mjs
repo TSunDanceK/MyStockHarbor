@@ -439,6 +439,19 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // THE REVENUE CHAIN'S FOURTH ENTRY, measured over the whole frozen universe
+  // rather than the default 120: IncludingAssessedTax was added for AVAV's
+  // FY2022/FY2023 years (earnings-page cleanup brief, A5).
+  "sec-revenue-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "revenue",
+      DROP: "RevenueFromContractWithCustomerIncludingAssessedTax",
+      LIMIT: "5000",
+    },
+  },
   "sec-sti-blast": {
     script: "scripts/sec-capex-blast-probe.mjs",
     args: () => [],
