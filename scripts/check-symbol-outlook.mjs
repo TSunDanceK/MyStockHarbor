@@ -279,8 +279,13 @@ console.log("\n10. THE SEARCH COMPONENT IS WIRED TO THIS AND NOT TO FMP");
   check("the headline, the hedge and the evidence are all rendered",
     src.includes("info.headline") && src.includes("info.hedge") && src.includes("info.evidence"));
   check("the loading line promises no date", !/next earnings date/i.test(src));
-  check("a failed fetch still says something, rather than rendering empty",
-    src.includes("unreachable(result.symbol)"));
+  // COUNTED, NOT PRESENT. There are TWO ways the lookup fails to produce an
+  // answer -- a thrown fetch and a body without a headline -- and asserting
+  // presence let a mutant that emptied one of them pass on the strength of the
+  // other. Same failure source-code.mjs records for marker counts.
+  const fallbacks = src.split("unreachable(result.symbol)").length - 1;
+  check("BOTH failure paths still say something, rather than rendering empty",
+    fallbacks === 2, `${fallbacks} of 2`);
 }
 
 console.log("\n11. THE ROUTE KEEPS THE DISTINCTION ITS SIBLING CANNOT");
