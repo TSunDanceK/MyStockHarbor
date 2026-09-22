@@ -352,7 +352,7 @@ const AMBIENT = new Set([
   "undefined", "NaN", "Infinity", "arguments", "eval",
   // host
   "console", "process", "fetch", "Headers", "Request", "Response", "URL",
-  "URLSearchParams", "TextEncoder", "TextDecoder", "AbortController",
+  "URLSearchParams", "TextEncoder", "TextDecoder", "AbortController", "AbortSignal",
   "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask",
   "Buffer", "performance", "crypto", "atob", "btoa",
   // React, for the card lifts
