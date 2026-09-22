@@ -5,8 +5,14 @@
 // words: 10-K Item 1 "Business", or 20-F Item 4.B "Business Overview".
 //
 // PURE AND NETWORK-FREE. The relay probe (scripts/sec-description-probe.mjs)
-// lifts it to measure; the eventual refresh job will call the same functions,
-// so what the owner reviewed is what renders. Nothing renders from it yet.
+// and the universe build (scripts/sec-descriptions-build.mjs → the committed
+// data/sec/descriptions.json the page reads) both lift these functions, so
+// what the owner reviewed is what renders.
+//
+// THREE LAYERS OF RULES: the owner's filters below (step 2), the owner's
+// round-3 and render decisions on #518 (marked "Owner, #518"), and rules found
+// reading every row of the full build (marked "Full build"). The last layer
+// only ever drops text; none of it changed a row of the approved sample.
 //
 // ── THE OWNER'S FILTERS (step 2, #518), APPLIED TO EVERY FILER ─────────────
 //   1. join broken lines and collapse whitespace                  (ABVX)
@@ -289,6 +295,21 @@ const MAX_SENTENCE_CHARS = 1000;
  * rows that motivated it. They only DROP text — a row they touch keeps fewer
  * sentences or has no description, never new wording.
  */
+/**
+ * Sentences ABOUT THE REPORT, not the company — dropped wherever they fall
+ * (full build: AMR, BKD, CBL, CE, AWR "this Annual Report on Form 10-K …";
+ * DAL, NWL, SPB, T, TBB website and SEC-availability text; ACGL, AXS "amounts
+ * are in millions"; CELH, MTDR, RNR glossary pointers; FLNG a footnote).
+ */
+const META: RegExp[] = [
+  /\bthis\s+(annual\s+)?report\b|\bthis\s+form\s+\d+-[a-z]+\b|\bthis\s+document\b/i,
+  /\bwebsite\b|www\.|https?:\/\/|free\s+of\s+charge|securities\s+and\s+exchange\s+commission|\bthe\s+sec\b/i,
+  /\btabular\b|amounts\s+(are\s+)?in\s+(thousands|millions|billions)|\bin\s+(thousands|millions),\s+except\b|rounding\s+differences/i,
+  /\bglossary\b|\bdefined\s+terms?\b|\bdefinitions?\s+of\b|capitalized\s+terms/i,
+  /^\(\d+\)|^\*/,
+  /^(throughout\s+this\s+document|unless\s+(the\s+)?context\s+(otherwise\s+)?(requires|indicates)|unless\s+otherwise\s+(specified|noted|indicated|stated))/i,
+];
+
 /** A table or roster read as a sentence: FLNG's charter table, DAL's officer list. */
 function isTabular(s: string): boolean {
   const digits = (s.match(/\d/g) ?? []).length;
@@ -389,6 +410,16 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
     });
   }
 
+  // Full build: an embedded ", which we (sometimes) refer to as “Celldex,”
+  // “we,” … or the “Company,”" clause is cut from an otherwise good lede
+  // (CLDX, EBC); the sentence stays.
+  for (const p of paras) {
+    p.t = p.t.replace(/,\s*which\s+we\s+(sometimes\s+)?refer\s+to\s+(herein\s+)?as\s+((the\s+)?[“"][^”"]{1,40}[”"],?\s*((or|and)\s+)?)+/gi, () => {
+      nameDefinitionStripped = true;
+      return ", ";
+    });
+  }
+
   // Owner, #518: no space before ® or ™ (AAPL "iPhone ®").
   for (const p of paras) p.t = p.t.replace(/\s+([®™])/g, "$1");
 
@@ -399,9 +430,25 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   let out: Para[] = [];
   for (const p of paras) {
     const all = sentences(p.t);
+    // A DROPPED SENTENCE STILL COUNTS FOR REJECTION: AZN's cross-reference is a
+    // single 1,000+ character sentence, and dropping it as a run-on let the
+    // text after it render (full build). A section that points elsewhere is
+    // rejected whole, whichever rule would have removed the pointer.
+    // Only in the LEADING paragraphs (before two are kept), and only for the
+    // sentences the length and table rules drop: the section's later pages
+    // mention MD&A as a matter of course.
+    if (out.length < 2) {
+      for (const x of all) {
+        // Not the DEFINITION drops: ONDS's leading "should be read in
+        // conjunction with…" sentence is dropped, not rejected (owner, #518).
+        if (x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;
+        for (const [re, label] of REJECT) if (re.test(x)) return { ok: false, why: `rejected: ${label}` };
+      }
+    }
     // A "sentence" past MAX_SENTENCE_CHARS is a list or a run-on definition, not
     // prose: AFL's executive-officer roster, AXS's subsidiary list (full build).
-    const ss = all.filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)) && s.length <= MAX_SENTENCE_CHARS && !isTabular(s));
+    const ss = all.filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)) &&
+      !META.some((re) => re.test(s)) && s.length <= MAX_SENTENCE_CHARS && !isTabular(s));
     if (all.some((s) => DEFINITION.some((re) => re.test(s)))) nameDefinitionStripped = true;
     if (ss.length) out.push({ t: ss.join(" "), follows: p.follows });
   }
