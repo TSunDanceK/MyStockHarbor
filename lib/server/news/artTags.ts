@@ -332,7 +332,27 @@ export function planSymbolCardArt(input: {
     // podium does, which is the opposite of the trade on /headlines, where
     // there is no company to say anything about.
     const { subjects } = articleTopic(title, description ?? null);
-    const specific = subjects.filter((tag) => !MARKET_WIDE_SUBJECTS.has(tag));
+    // ── AND A SUBJECT THE INDUSTRY ALREADY SAYS IS SKIPPED ───────────────
+    // A layer-1 tag equal to this symbol's own industry tag carries NO
+    // information the page does not already have: layer 3 would answer with
+    // the same subject and, because the key is the same, the same image. All
+    // it does is jump the queue ahead of the event bucket.
+    //
+    // MEASURED ON THE DRONE FIXTURE: of candidate C's 16 hits, 9 are on RCAT,
+    // AVAV and KTOS, whose industry is already `aerospace-defence`. Without
+    // this rule one of those 9 — "AeroVironment Stock Jumps After Earnings
+    // Beat. There's Still Growth for Drones." — would take event-earnings art
+    // off an earnings story because its last clause says "drones". With it,
+    // that card keeps the event art and the other 8 are unchanged either way.
+    //
+    // So the rule costs nothing and buys back the event bucket. What survives
+    // is the 6 hits on ONDS and UMAC, the two symbols whose industry does NOT
+    // say aerospace — which is exactly where a headline knows something the
+    // taxonomy does not.
+    const ownTag = industryTag(industry);
+    const specific = subjects.filter(
+      (tag) => !MARKET_WIDE_SUBJECTS.has(tag) && tag !== ownTag
+    );
     if (specific.length) {
       const art = pickTagged({
         subjectTags: specific,
@@ -348,10 +368,9 @@ export function planSymbolCardArt(input: {
     // event bucket that holds images?" — rather than this file re-deriving it.
     // A null sector argument makes it answer about the EVENT half alone.
     if (!bucketForItem(eventType ?? null, null)) {
-      const tag = industryTag(industry);
-      if (tag) {
+      if (ownTag) {
         const art = pickTagged({
-          subjectTags: [tag],
+          subjectTags: [ownTag],
           articleMotifs: [],
           key,
           taken: takenNames,

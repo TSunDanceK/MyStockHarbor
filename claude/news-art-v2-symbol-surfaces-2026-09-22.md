@@ -33,7 +33,8 @@ utilities, aerospace, telecom). Those symbols gain a v2 image and nothing else.
 ## 2. The layers, most specific first
 
 1. **The article's own words.** `articleTopic()`'s subject, with market-wide
-   tags dropped (§3). Reaches 9 of 192 per-symbol headlines, 4.7%.
+   tags dropped AND with any tag the symbol's own industry already says
+   dropped (§3). Reaches 9 of 192 per-symbol headlines, 4.7%.
 2. **The event bucket**, exactly as today.
 3. **The industry**, `lib/server/news/industryArt.ts`. 88.5% of the universe.
 4. **The sector bucket**, exactly as today.
@@ -81,6 +82,29 @@ joins it deliberately. `exchanges` is the only member today: every one of its
 alternatives (`s&p 500`, `nasdaq composite`, `stock futures`, `market breadth`,
 `wall street`) is about the market, and no other subject's are.
 
+### And a subject the industry already says is skipped
+
+Added on review, 2026-09-22. A layer-1 tag equal to this symbol's own industry
+tag carries **no information the page does not already have**: layer 3 would
+answer with the same subject and, because the key is the same, the same image.
+All it does is jump the queue ahead of the event bucket.
+
+Measured on the drone capture, where it matters. Of the 16 headlines candidate C
+matches, 9 are on RCAT, AVAV and KTOS, whose industry is already
+`aerospace-defence`. One of those nine is:
+
+> AeroVironment Stock Jumps After **Earnings Beat**. There's Still Growth for
+> **Drones**.
+
+Both axes fire and both are correct. Without the skip, layer 1 outranks the
+event bucket and an earnings story loses `event-earnings` art because its last
+clause says "drones". With it, that card keeps the event art and the other eight
+are unchanged either way — layer 3 gives them the same subject.
+
+**So the rule costs nothing and buys back the event bucket.** What survives is
+the 6 hits on ONDS and UMAC, the two symbols whose industry does NOT say
+aerospace — exactly where a headline knows something the taxonomy does not.
+
 ### `macro` was measured before being judged, and is not excluded
 
 Asked for explicitly before deciding. On the same 192 headlines:
@@ -109,24 +133,50 @@ motifs are ever admitted here, this row is the one to re-check first.
 
 ## 4. The industry table
 
-144 labels, 2,619 symbols:
+144 labels, 2,619 snapshot rows, over a universe of 2,652 symbols:
 
 | | labels | symbols | |
 |---|---|---|---|
-| live | 115 | 2,317 | 88.5% |
-| weak, held back | 18 | 201 | 7.7% |
-| no honest tag | 11 | 101 | 3.9% |
+| live | 124 | 2,477 | 93.4% |
+| weak, held back | 9 | 42 | 1.6% |
+| no honest tag | 11 | 101 | 3.8% |
+| no snapshot row (all ETFs) | — | 32 | 1.2% |
 
-The last two groups fall through to layer 4 and render exactly what they render
-today. `WEAK_LABELS` keeps each held-back row WITH its reason, in the module, and
-§10 asserts every one of them is inert — a label in both maps would go live
+**Ten labels have been promoted out of `WEAK_LABELS` on review**: first
+`Communication Equipment` alone, then nine more in one pass —
+Hardware/Equipment/Parts, Computer Hardware, Electrical Equipment,
+Industrial-Distribution, Travel Services, Healthcare Info Services, Real
+Estate-Services, Industrial Materials and Healthcare Plans. Each is still only
+half right and each reason is kept beside its row; a promoted row is a
+judgement someone made, not a row that turned out to be correct.
+
+**Nine remain held back**, not seven: Tobacco, Publishing, Consulting Services,
+Real Estate-Development, Technology Distributors, Medical-Distribution,
+Financial-Mortgages, Financial-Conglomerates and Real Estate-Diversified. §10
+asserts every one of them is inert — a label in both maps would go live
 silently, which is the only way that list can fail.
 
-**`Communication Equipment` was promoted out of the weak list on review.** It is
-the label that started the change: ONDS resolves to it, and it resolved to
-`sector-software`. It is still only half right — ONDS, CSCO and MSI share the
-label, so a drone maker and a router vendor both get radio towers — and it is
-live because that exact trade was looked at and taken.
+### BRK.B and SQ, both resolved
+
+`BRK.B` was a **code** fix, not a data one. The snapshot keys share classes with
+a DASH (`BRK-A`, `BRK-B`); `lib/curatedSymbols.ts` and `data/company-names.json`
+both spell the same company with a DOT. So `/stock/BRK.B/news` asked for a key
+the snapshot does not hold, got no industry and no sector, and fell to the
+generated ticker card — while `/stock/BRK-B/news` worked. `staticProfileFor`
+now goes through `lookupSpellingIn` from `lib/symbolSpellings.mjs`, whose own
+header records that this repo once carried SEVEN copies of the dot/dash dance.
+This is that helper called, not an eighth copy. It fixes news art and sector
+membership together, for every dotted spelling and not just this one.
+
+`SQ` was **removed from `data/logo-manifest.json`**, and its orphaned
+`public/logos/SQ.webp` deleted. Block renamed SQ → XYZ; `XYZ` is in the snapshot
+with a logo of its own, and `SQ` is in none of the three sources
+`scripts/logo-harvest.mjs` builds its universe from (company-names,
+static-profile, curatedSymbols). The next harvest would have dropped it anyway —
+this only does it early. Nothing linked to it.
+
+Together these take the no-snapshot-row count from 34 to **32, every one an
+ETF**, which is the correct state: a fund has no industry.
 
 ### An exact lookup, not a pattern
 
@@ -197,7 +247,7 @@ manifest.**
 
 ---
 
-## 7. The drone/defence capture — measure only
+## 7. The drone/defence capture, and candidate C landed
 
 None of ONDS, RCAT, UMAC, AVAV or KTOS is in the 2026-09-13 fixture, so nothing
 in this repo said what layer 1 does on the copy the whole change was prompted
@@ -280,88 +330,70 @@ The one real consequence is cosmetic and worth a separate look: `BRK.B` and `SQ`
 in `logo-manifest.json` are two entries pointing at spellings the rest of the
 site no longer uses.
 
-### A defence pattern: proposed, measured, NOT landed
+### Candidate C, landed — and the table moved under it
 
-Item 5 was measure-only, so nothing below is in the live table.
+Three candidates were measured; **C, drones only, was the one approved.** The
+two wider ones both added a bare `defen[cs]e`, which matches inside "Kratos
+Defense & Security Solutions" — the company's NAME, the shape that made `banks`
+wrong three times out of three. Both are pinned as negative fixture rows.
 
 ```ts
-// Candidate A
-/\b(defen[cs]e (spending|budget|contract|awards?|stocks?|tech|sector|primes?)|drone (makers?|stocks?|programs?|fleet|swarms?)|drones?\b|pentagon|warfighters?|precision[- ]strike|cruise[- ]missiles?)\b/i
+// folded into the aerospace-defence row that already existed
+/\b(aerospace|defen[cs]e (contractors?|spending|budget|stocks?)|jet engines?|fighter jets?|drones?|drone (makers?|stocks?))\b/i
 ```
 
-| candidate | drone / 70 | per-symbol / 192 | general / 42 | "defensive stocks", "defensive sectors" |
-|---|---|---|---|---|
-| A (narrow) | 25 (36%) | **1 (0.5%)** | 0 | clean |
-| B (bare `defence` too) | 31 (44%) | 1 (0.5%) | 0 | clean |
-| C (drones only) | 16 (23%) | 0 | 0 | clean |
+**It arrived as a SECOND `aerospace-defence` row and that was wrong.** PR #510
+landed on `main` between the measurement and the landing, taking the subject
+table from 26 patterns to 67 — and it had already added an `aerospace-defence`
+row. Two rows for one tag means first-match-wins decides which pattern is live
+and the other is dead code that reads as if it works: the same family as the
+three dead patterns this file already records. Folded into one row, and §10 now
+asserts **no tag appears twice in the table**, which is the check that would
+have caught it.
 
-The guard holds by construction rather than by care: `\bdefense\b` cannot match
-"defensive" — the word boundary needs a non-word character and gets an `i`. All
-three candidates were run against the guard phrases and none fires.
+The guard holds by construction: `\bdefense\b` cannot match "defensive" — the
+boundary needs a non-word character and gets an `i`. 10% rule: 0 of 192 on the
+per-symbol fixture.
 
-**All three pass the 10% rule, and that is the rule's limitation, not its
-endorsement.** The 192-row fixture is tech and consumer copy with no defence
-stories in it, so it cannot bound how broad a defence pattern is. The honest
-limit for one of these is the drone fixture, where 36% is by design because it
-IS a defence feed. A pattern for a sector needs a fixture from that sector.
+### The 70 drone headlines through the finished rule
 
-The single per-symbol hit is worth reading before anyone lands this:
+| layer | headlines | |
+|---|---|---|
+| 1 · the article's own words | **6** | 9% |
+| 2 · the event bucket | 4 | 6% |
+| 3 · the industry | 50 | 71% |
+| 4 · sector, or nothing | 10 | 14% |
 
-> NIO Stock Jumps Overnight: Deutsche Bank's 304% Profit Growth Outlook Drowns
-> Out **Pentagon** Military Tag Concerns
+The six at layer 1 are the four UMAC headlines and two ONDS ones — every symbol
+whose industry does not already say aerospace. The ten at layer 4 are UMAC's
+remaining headlines, which have no snapshot row to fall back to.
 
-Defensible — it is a defence-policy story about NIO — and exactly the shape that
-turned out wrong for `banks`. There is a second and larger risk in the same
-family: "Kratos Defense & Security Solutions" is a COMPANY NAME containing
-"Defense", so a headline naming Kratos on someone else's page would score
-`aerospace-defence` the way "Bank of America" once scored `banks`.
+**Seven more were dropped as market-wide before any of that**, and six of the
+seven are the same shape:
 
-**And for four of the five symbols it would change almost nothing**, because
-layer 3 already answers `aerospace-defence` for RCAT, AVAV and KTOS. The only
-symbol a layer-1 defence pattern actually moves is ONDS (4 of 14), and only
-because its industry label says telecom.
+```
+Ondas Enters The Execution Phase (NASDAQ:ONDS)
+Red Cat (NASDAQ: RCAT) CEO sells stock, lines up multimillion forward deal
+Here's Why You Should Watch Red Cat In H2 2026 (NASDAQ:RCAT)
+Red Cat: Big Order Promises Intact (NASDAQ:RCAT)
+Kratos Defense & Security Solutions (NASDAQ:KTOS) Stock Rating Upgraded
+Insider plans another stock sale at Kratos (NASDAQ: KTOS)
+```
 
-### Candidate C, read hit by hit
+#510's wider `exchanges` pattern matches the **exchange annotation in a ticker
+reference**. On the general feed that is defensible; on a per-symbol page it
+would put a trading floor on a story about one company, and the market-wide
+exclusion built for "Wall Street" catches it without a line of new code. That
+rule is now doing more work than when it was measured.
 
-All 16 of C's hits on the drone fixture, with what landing it would actually do:
+### Round 4 candidate, recorded and not changed
 
-| | symbol | headline | effect |
-|---|---|---|---|
-| 1 | ONDS | Ondas vs. Red Cat: Which Drone Stock Is the Better Pick Now? | **new** (layer 3 gives telecom) |
-| 2 | ONDS | Ondas Drops 6% as Risk-Off Selling Cascades Through Drone Names | **new** |
-| 3 | RCAT | Red Cat Stock Could Fly On Pentagon's Biggest-Ever Drone Bet | redundant |
-| 4 | RCAT | Red Cat Misses the Cut in Pentagon's Latest Drone Dominance Round | redundant |
-| 5 | RCAT | RCAT Stock Falls… Retail Bets Iran Conflict Could Boost Military Drone Demand | redundant |
-| 6 | RCAT | Why ONDS, RCAT And Other Drone Stocks Are Surging In Overnight Trading | redundant |
-| 7 | RCAT | Red Cat Holdings (RCAT) Stock Is Jumping Today: What's Moving Drone Stocks? | redundant |
-| 8 | UMAC | Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing | **new** (no snapshot row) |
-| 9 | UMAC | 3 Drone Tech Stocks Well-Positioned for Long-Term Growth | **new** |
-| 10 | UMAC | Unusual Machines (UMAC) Stock Is Climbing Today: Is the Whole Drone Group Moving? | **new** |
-| 11 | UMAC | UMAC Stock Eyes Second Weekly Gains: Drone Maker Ties Its CEO's Fortune… | **new** |
-| 12 | AVAV | Drones Stock AeroVironment Is Now a Space Stock, Too | redundant |
-| 13 | AVAV | AeroVironment Stock Jumps After Earnings Beat. There's Still Growth for Drones. | **DISPLACES `event-earnings`** |
-| 14 | KTOS | Kratos' Drone Business Is Just the Beginning for This Defense Stock | redundant |
-| 15 | KTOS | Better Drone Stock: Kratos Defense vs. Northrop Grumman | redundant |
-| 16 | KTOS | Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing | redundant |
+> Drones Stock AeroVironment Is Now a **Space** Stock, Too
 
-**Not one of the 16 is a wrong match.** Every headline is genuinely about drones
-or the drone group. Two are worth a second look and neither is an error:
-
-- **#13 is the only one that changes a card that already had a specific
-  picture.** It is an EARNINGS story whose last clause mentions drones, and
-  layer 1 outranks the event bucket by design, so C would take
-  `event-earnings` off it. That is the cost of the ordering, showing up for the
-  first time on real copy.
-- **#12 says AeroVironment is now a SPACE stock** — Mars helicopters, NASA. The
-  library has `rockets-space` and `satellites`, either of which would be truer
-  than `aerospace-defence`; the picture is not wrong, only broad.
-
-**The arithmetic for the decision: 9 redundant, 6 new, 1 displacement.** All six
-of the new ones are ONDS and UMAC — the two symbols whose industry does not say
-aerospace. For RCAT, AVAV and KTOS, C changes which of four images appears and
-nothing else.
-
----
+scores `aerospace-defence` and is really about Mars helicopters and a NASA
+contract. The library holds `rockets-space` and `satellites`, either of which
+would be truer. Not changed here: it needs a pattern that separates a space
+story from an aerospace one, and one headline is not a measurement.
 
 ## 7c. Follow-up, NOT this PR: company names that contain subject words
 
@@ -386,17 +418,21 @@ it touches every surface layer 1 serves, not just this one.
 
 ## 8. Open
 
-- **ONDS gets telecom art, not drone art.** `drones` is not a subject the
-  library holds. A per-symbol override and new art are both out of this change,
-  by decision.
-- **The 18 weak labels**, one approval at a time. Each is in `WEAK_LABELS` with
+- **Round 4: `rockets-space` for the AeroVironment space story**, §7. Recorded,
+  not changed.
+- **Masking company names before layer-1 matching**, §7c — "Kratos Defense" is
+  the case no narrowing can fix.
+- **Nine weak labels**, one approval at a time. Each is in `WEAK_LABELS` with
   the reason it is only half right.
-- **The 11 with no honest tag.** `Security & Protection Services` is the sharpest:
-  guards and alarms, and tagging it `cybersecurity` would be a different
-  industry rather than an approximation of one.
-- **`BRK.B` and `SQ` in `logo-manifest.json`** are a spelling variant and a
-  stale ticker; §7b. Cosmetic, and nothing to do with news art.
-- **Masking company names before layer-1 matching**, §7c.
-- **A defence pattern for layer 1**, per §7 — proposed and measured, not landed,
-  and worth little for four of the five symbols.
+- **The 11 labels with no honest tag.** `Security & Protection Services` is the
+  sharpest: guards and alarms, and tagging it `cybersecurity` would be a
+  different industry rather than an approximation of one.
+- **Twelve subjects unreachable from any industry label**: `ai-compute`,
+  `chip-equipment`, `cruise-lines`, `crypto`, `cybersecurity`, `ecommerce`,
+  `ev`, `phones`, `reit-datacenter`, `rockets-space`, `satellites`, `wind`.
+  AMZN's label is "Specialty Retail", ASML's is "Semiconductors", TSLA's is
+  "Auto - Manufacturers". All stay reachable from layer 1 when an article says
+  so; a megacap override list is deliberately not in this change.
+- **UMAC is outside the universe**, §7. Whether it belongs on the site is a
+  universe question, not a news-art one.
 - `/sector/[slug]/news` and the dashboard strip, each its own change.

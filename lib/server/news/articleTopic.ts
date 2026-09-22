@@ -177,7 +177,21 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // the bare word is NOT, because "defensive stocks" is a different story.
   ["rockets-space",    /\b(rocket launch(es)?|space launch(es)?|spacecraft|launch vehicles?)\b/i],
   ["satellites",       /\b(satellites?|satellite (broadband|constellations?))\b/i],
-  ["aerospace-defence",/\b(aerospace|defen[cs]e (contractors?|spending|budget|stocks?)|jet engines?|fighter jets?)\b/i],
+  // ── `drones?` ADDED 2026-09-22: CANDIDATE C, FOLDED INTO THIS ROW ───────
+  // It arrived as a second `aerospace-defence` entry and that was wrong: two
+  // rows for one tag means first-match-wins decides which pattern is live, and
+  // the loser is dead code that reads as if it works — the shape this file
+  // already records three times. One tag, one row.
+  //
+  // Measured on scripts/fixtures/drone-headlines-2026-09-22.jsonl (70 real
+  // headlines, five drone/defence symbols): 16 hits, NONE a wrong match. Two
+  // wider candidates were rejected, both of which added a bare `defen[cs]e`
+  // that matches inside "Kratos Defense & Security Solutions" — the company's
+  // NAME, and the shape that made `banks` wrong three times out of three. The
+  // existing alternatives already require a following word for that reason.
+  //
+  // 10% rule: 0 of 192 on the per-symbol fixture.
+  ["aerospace-defence",/\b(aerospace|defen[cs]e (contractors?|spending|budget|stocks?)|jet engines?|fighter jets?|drones?|drone (makers?|stocks?))\b/i],
   ["railroads",        /\b(railroads?|rail (freight|traffic|carloads?))\b/i],
   ["trucking-logistics",/\b(trucking|freight (carriers?|brokerages?)|last[- ]mile|logistics (firms?|providers?))\b/i],
   ["shipping",         /\b(tankers?|container ships?|freight rates?|strait of hormuz)\b/i],

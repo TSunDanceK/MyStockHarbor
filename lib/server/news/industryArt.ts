@@ -20,7 +20,7 @@
 //
 // ── WHAT THIS TABLE IS NOT ─────────────────────────────────────────────────
 // It is not a taxonomy and it is not complete. 144 industry labels exist in the
-// snapshot; 115 have a tag here, 18 were judged only half-right and are NOT
+// snapshot; 124 have a tag here, 9 are still judged only half-right and are NOT
 // live (see WEAK_LABELS below), and 11 have no
 // honest tag at all. The last two groups fall through to LAYER 4, which is
 // today's sector art and is exactly what they render now.
@@ -184,6 +184,21 @@ const INDUSTRY_TAGS: Record<string, string> = {
   "REIT - Diversified": "reit-commercial", // 10
   "REIT - Mortgage": "reit-commercial", // 11
   "REIT - Hotel & Motel": "reit-commercial", // 9
+
+  // ── APPROVED ON REVIEW, 2026-09-22 ──────────────────────────────────────
+  // Nine rows promoted out of WEAK_LABELS in one pass. Each is still only
+  // half right and each reason is kept below, struck rather than deleted, so
+  // the trade stays readable: a promoted row is a judgement someone made, not
+  // a row that turned out to be correct after all.
+  "Hardware, Equipment & Parts": "consumer-electronics", // 34 — a catch-all over connectors, sensors and instruments
+  "Electrical Equipment & Parts": "machinery", // 24 — grid gear and motors; `utilities-grid` is the other half-fit
+  "Computer Hardware": "consumer-electronics", // 20 — Dell and HPQ sell servers, not consumer gadgets
+  "Industrial - Distribution": "machinery", // 17 — distributors, not makers
+  "Travel Services": "hotels-resorts", // 14 — BKNG and EXPE are marketplaces, not owners
+  "Medical - Healthcare Information Services": "software", // 13 — true of the delivery, silent about the domain
+  "Real Estate - Services": "reit-commercial", // 13 — brokers and managers, not owners
+  "Industrial Materials": "mining-industrial", // 13 — a catch-all; the image is a mine
+  "Medical - Healthcare Plans": "insurance", // 11 — UNH is an insurer by economics, a healthcare company by story
 };
 
 /**
@@ -196,8 +211,9 @@ const INDUSTRY_TAGS: Record<string, string> = {
  * worth it — which is a judgement about a picture, not a code change anyone
  * should make on a hunch.
  *
- * 18 labels, 201 symbols, 7.7% of the universe, sit here. A nineteenth,
- * "Communication Equipment", was reviewed and promoted into the live map above.
+ * 9 labels, 42 symbols, 1.6% of the universe, sit here. TEN have been reviewed
+ * and promoted into the live map above — "Communication Equipment" on its own,
+ * then nine more in one pass on 2026-09-22.
  *
  * `cybersecurity` is the sharpest example of why the list exists: "Security &
  * Protection Services" is guards, alarms and fences, and tagging it
@@ -205,15 +221,6 @@ const INDUSTRY_TAGS: Record<string, string> = {
  * That one is in the no-tag group below rather than here.
  */
 export const WEAK_LABELS: Record<string, { tag: string; why: string; symbols: number }> = {
-  "Hardware, Equipment & Parts": { tag: "consumer-electronics", why: "a catch-all covering connectors, sensors and instruments; no image is about any of them.", symbols: 34 },
-  "Electrical Equipment & Parts": { tag: "machinery", why: "grid gear and motors; `utilities-grid` is the other half-fit.", symbols: 24 },
-  "Computer Hardware": { tag: "consumer-electronics", why: "Dell/HPQ/servers. The image is a consumer gadget still-life; a server vendor is not that.", symbols: 20 },
-  "Industrial - Distribution": { tag: "machinery", why: "distributors, not makers.", symbols: 17 },
-  "Travel Services": { tag: "hotels-resorts", why: "BKNG/EXPE are marketplaces; the image is a resort they do not own.", symbols: 14 },
-  "Medical - Healthcare Information Services": { tag: "software", why: "health IT. Software art is true of the delivery and silent about the domain.", symbols: 13 },
-  "Real Estate - Services": { tag: "reit-commercial", why: "brokers and managers, not owners. The tower is the asset they do not hold.", symbols: 13 },
-  "Industrial Materials": { tag: "mining-industrial", why: "a catch-all; the image is a mine.", symbols: 13 },
-  "Medical - Healthcare Plans": { tag: "insurance", why: "UNH is an insurer by economics and a healthcare company by story. Both images are defensible and neither is right.", symbols: 11 },
   Tobacco: { tag: "packaged-food", why: "the only consumer-goods image there is.", symbols: 7 },
   Publishing: { tag: "streaming-media", why: "print and books under a streaming image.", symbols: 6 },
   "Consulting Services": { tag: "staffing-services", why: "people-businesses, different work.", symbols: 6 },

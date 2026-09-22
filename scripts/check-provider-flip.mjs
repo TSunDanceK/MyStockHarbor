@@ -287,7 +287,13 @@ const spSrc = read("lib/server/staticProfile.ts")
   // there. Real data rather than a stub, for the same reason as the snapshot:
   // a stubbed map makes a coverage number that describes the stub.
   .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
-    () => `const cikMap = ${read("data/cik-map.json")};`);
+    () => `const cikMap = ${read("data/cik-map.json")};`)
+  // The spellings helper, handed over rather than stubbed — the same choice
+  // check-static-profile.mjs makes, and for the same reason: there is exactly
+  // one implementation of the dot/dash bridge and a stub would test a copy.
+  .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m,
+    "const { lookupSpellingIn } = globalThis.__symbolSpellings;");
+globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
 if (/^import /m.test(spSrc)) {
   // NAME THE SURVIVOR. This used to say "the snapshot JSON was not inlined",
   // which was a guess: the actual cause was a DIFFERENT import being added to
