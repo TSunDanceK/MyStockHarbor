@@ -157,7 +157,10 @@ const DEFINITION: RegExp[] = [
   // real overview. Dropped while leading; anywhere else rule 4 still rejects it.
   /^this\s+(business\s+description|section|item)\s+should\s+be\s+read\s+in\s+conjunction\s+with\b/i,
   /^(the\s+terms?\s+)?[“"][^”"]+[”"][^.]{0,200}\brefers?\s+to\b/i,
-  /\brefers?\s+to\s+[^.]{0,160}\band\s+(all\s+)?(of\s+)?its\s+(consolidated\s+)?subsidiaries\b/i,
+  // ".{0,160}?" not "[^.]": the name inside carries a period (ONDS "Ondas Inc. and its subsidiaries").
+  /\brefers?\s+to\s+.{0,160}?\band\s+(all\s+)?(of\s+)?its\s+(consolidated\s+)?subsidiaries\b/i,
+  /^the\s+use\s+of\s+the\s+(words?|terms?)\b/i,                               // ONDS
+  /^(all\s+)?references\s+(to|in)\b[^.]{0,200}\b(are\s+to|refer\s+to|mean)\b/i,   // GS "References to “this Form 10-K” are to…"
 ];
 
 /** A sentence ends at . ! ? or : , optionally inside a closing quote or bracket.
@@ -171,6 +174,9 @@ const WRAPPED_LINE_CHARS = 40;
 const POINTER: RegExp[] = [
   /^(please\s+)?see\s+/i,                                                   // V "Please see Our Core Business discussion below."
   /\bterms\s+used\s+in\s+this\s+(section|report)\s+are\s+defined\b/i,          // PLAB glossary pointer
+  // Contact details, not a description (PLAB, BAC).
+  /\bprincipal\s+executive\s+offices?\b/i,
+  /\b(our\s+)?website\s+(address\s+)?is\b/i,
 ];
 
 export const DESCRIPTION_MAX_CHARS = 900;
@@ -193,13 +199,16 @@ export function cleanDescription(body: string): Cleaned {
   // or the line itself is prose-length (a hard-wrapped filing, ONDS / KTOS /
   // GEV / PLAB on relay 35781008070, wraps before capitals too: "…to the" /
   // "United States…"). A sub-heading is short, so it is not joined forward.
-  const raw = body.split(/\n+/).map((l) => l.replace(/\s{2,}/g, " ").trim()).filter(Boolean);
+  const raw = body.split(/\n+/).map((l) => l.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])(?=\s|$)/g, "$1").trim()).filter(Boolean);
   let paras: string[] = [];
   let lastLine = "";
   for (const l of raw) {
     const prev = paras[paras.length - 1];
     const open = prev && !SENTENCE_END.test(prev);
-    if (open && (/^[a-z0-9(]/.test(l) || lastLine.length >= WRAPPED_LINE_CHARS)) paras[paras.length - 1] = `${prev} ${l}`;
+    // A heading ends on a capitalised word ("Our Strategy", "General"); a line
+    // ending on a lower-case word ("…focus is on the") is a wrap (KTOS).
+    const wrapped = lastLine.length >= WRAPPED_LINE_CHARS || /(^|\s)[a-z]+,?$/.test(lastLine);
+    if (open && (/^[a-z0-9(]/.test(l) || wrapped)) paras[paras.length - 1] = `${prev} ${l}`;
     else paras.push(l);
     lastLine = l;
   }
@@ -209,6 +218,9 @@ export function cleanDescription(body: string): Cleaned {
 
   // Rule 2: a leading all-caps heading glued to the first paragraph.
   paras[0] = paras[0].replace(/^[A-Z][A-Z0-9 &,'’\-]{2,}[.:]\s+(?=[A-Z])/, "");
+  // …and headings glued INSIDE one line, betrayed by the last heading word
+  // opening the sentence too: AAPL "Products iPhone iPhone ® is…" → "iPhone ® is…".
+  paras = paras.map((p) => p.replace(/^(?:[A-Z][\w’'&-]*\s+){0,4}?([A-Za-z][\w’'-]*)\s+(?=\1\b)/, ""));
 
   // Rule 3: drop definition sentences. Leading ones first (the owner's rule);
   // on relay 35781008070 GS carried "When we use the terms…" as its SECOND
