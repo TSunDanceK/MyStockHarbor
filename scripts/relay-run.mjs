@@ -586,6 +586,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHICH STANDARD A SET IS READ UNDER, and how many sets carry both us-gaap
+  // and ifrs-full. READ-ONLY despite the prefix: credentials for the store,
+  // companyfacts for the mixed sets only. Owner question on #514.
+  "write-accounting-census": {
+    script: "scripts/sec-accounting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-tie-ifrs-census": {
     script: "scripts/sec-tie-and-ifrs-census.mjs",
     args: () => [],
