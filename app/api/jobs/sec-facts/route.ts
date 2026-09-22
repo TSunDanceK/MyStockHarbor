@@ -13,7 +13,8 @@ import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import {
-  reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults,
+  resultsPairing, earlyNonResultsPattern, estimateUpcoming, nextPeriodEndFrom,
+  latestResultsAnnouncement, pendingResults,
   type Submissions,
 } from "@/lib/server/secReportDates";
 import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
@@ -692,9 +693,15 @@ export async function GET(req: NextRequest) {
         const subs = await fetchSubmissions(cik);
         const quarterEnds = set.quarters.map((p) => p.e).filter(Boolean);
         const yearEnds = set.years.map((p) => p.e).filter(Boolean);
-        const events = reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
+        // ONE PAIRING, TWO OUTPUTS: the events (each period's results 2.02,
+        // chosen against its 10-Q/10-K) and the filer's own history of an
+        // EARLY non-results 2.02, which is what keeps the current period --
+        // no 10-Q yet -- from reading TSLA's delivery 8-K as its results.
+        const pairing = resultsPairing(subs, new Set([...quarterEnds, ...yearEnds]));
+        const events = pairing.events
           .filter((e) => e.periodEnd)
           .slice(0, STORED_EVENT_LIMIT);
+        const earlyNonResults = earlyNonResultsPattern(pairing.periods);
         // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
         // lags the filings — companyfacts carries a period once it is FILED —
         // so one cadence step past its newest period can be a date in the
@@ -708,7 +715,7 @@ export async function GET(req: NextRequest) {
         // costs nothing beyond the arithmetic. See pendingResults for why it
         // cannot come out of `events`.
         const pending = pendingResults(
-          events, latestResultsAnnouncement(subs), cadence, todayIso
+          events, latestResultsAnnouncement(subs), cadence, todayIso, earlyNonResults
         );
         // ── category AND annual: ALREADY IN HAND, PREVIOUSLY DISCARDED ────
         // Both were live variables three lines up -- `subs.category` goes into
@@ -735,6 +742,7 @@ export async function GET(req: NextRequest) {
           pending,
           category: typeof subs.category === "string" ? subs.category : null,
           annual: cadence?.annual ?? null,
+          earlyNonResults,
         });
         if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
