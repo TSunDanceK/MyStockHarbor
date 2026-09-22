@@ -311,7 +311,13 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
 // ── Income statement ────────────────────────────────────────────────────────
 // Every line is a DURATION and every one is filed cumulatively within the year.
 const INCOME: FieldDef[] = ([
-  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"], unit: "USD" },
+  // IncludingAssessedTax LAST, so it can never displace a concept a filer
+  // already resolves from: where both are filed for a period, rank keeps the
+  // Excluding figure. It is AVAV's total-revenue line in its FY2022 and FY2023
+  // 10-Ks ($445.7M and $540.5M, relay 35790767741) — the five-year card read
+  // "Not reported" beside a filed cost of revenue and gross profit that sum to
+  // exactly that revenue.
+  { key: "revenue", chain: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"], unit: "USD" },
   { key: "costOfRevenue", chain: ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"], unit: "USD" },
   // THE FILER'S OWN GROSS PROFIT, not revenue - costOfRevenue. Stored precisely
   // so the identity has something to check: a derived figure cannot disagree

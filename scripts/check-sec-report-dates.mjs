@@ -871,9 +871,12 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     /: secEvents\.length\s*\n?\s*\? \{ source: "sec", kind: "none" \}/.test(page));
 
   // ── THE TIMING WORDING RULE REACHES THE EXPLANATORY COPY TOO ───────────
+  // THE COPY MOVED to ReactionCharts.tsx and was cut to one line (owner review
+  // of AVAV, round 2); it still names the filing, never a release time.
+  const reactionSrc = readCodeOnly("app/stock/[symbol]/earnings/ReactionCharts.tsx");
   check("the reaction explanation describes the FILING, not a release",
-    /results filed with the SEC before market open/.test(page) &&
-      !/reports released before market open/.test(page),
+    /Close-to-close move around each results filing\. After-close filings are measured/.test(reactionSrc) &&
+      !/released before market open/.test(page + reactionSrc),
     "'released before market open' asserts a press-release time nothing here observes");
 
   // ── THE CRON WRITES IT, AND MATCHES RATHER THAN READS ──────────────────
