@@ -17,7 +17,9 @@ import {
   latestResultsAnnouncement, pendingResults,
   type Submissions,
 } from "@/lib/server/secReportDates";
-import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
+import { readReportDates, writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
+import reportDatesRewrite from "@/data/sec/report-dates-rewrite.json";
+import dueStripCut from "@/data/due-strip.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -670,7 +672,7 @@ export async function GET(req: NextRequest) {
   // is the whole point of the matching in `reportEvents`: an Item 2.02 8-K's
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
-  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
+  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, rewrite: 0, dated: 0, pending: 0 };
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
     const changedSet = new Set(changedThisRun);
@@ -678,7 +680,36 @@ export async function GET(req: NextRequest) {
       .filter(([sym, e]) => e.cik && !e.reportDatesAt && !changedSet.has(sym))
       .map(([sym]) => sym);
     reportDates.backlog = backfill.length;
-    for (const symbol of [...changedThisRun, ...backfill].slice(0, SEC_REPORT_DATES_PER_RUN)) {
+    // ── THE PAIRING REWRITE: A LISTED, SELF-DRAINING BACKFILL ─────────────
+    // The records the earliest-2.02 rule got wrong are only rewritten when
+    // their fact set next changes -- for TSLA, its Q3 10-Q in late October,
+    // after the due strip has already mislisted it. So the filers the census
+    // measured as mispicked (scripts/early-202-census.mjs, relay task
+    // write-early-202-census) are committed as a list and rewritten here, in
+    // production, through the same write and the same gate as every other
+    // record. Nothing outside the list is touched.
+    //
+    // DRAINED BY THE RECORD ITSELF, not by a stamp elsewhere: a record written
+    // under the paired rule carries `earlyNonResults` (null included), one
+    // written before it has no such key. So a listed symbol is rewritten once
+    // and then costs one GET per run until the list is deleted.
+    const listed = (reportDatesRewrite.symbols as string[]).filter(
+      (sym) => manifest.symbols[sym]?.cik && !changedSet.has(sym)
+    );
+    // The due strip's cut first: those are the records a reader sees in the
+    // forward sections, and a run's allowance is 100 against a list of 209.
+    const cut = new Set<string>(dueStripCut.symbols);
+    listed.sort((a, b) => Number(cut.has(b)) - Number(cut.has(a)));
+    const drained = await Promise.all(
+      listed.map(async (sym) => {
+        const rec = await readReportDates(sym);
+        return rec !== null && "earlyNonResults" in rec;
+      })
+    );
+    const rewrite = listed.filter((_, i) => !drained[i]);
+    reportDates.rewrite = rewrite.length;
+    const queue = [...new Set([...changedThisRun, ...rewrite, ...backfill])];
+    for (const symbol of queue.slice(0, SEC_REPORT_DATES_PER_RUN)) {
       const entry = manifest.symbols[symbol];
       const cik = entry?.cik ?? cikForSymbol(symbol);
       if (!cik) continue;
@@ -798,6 +829,7 @@ export async function GET(req: NextRequest) {
     // climbs through earnings season and falls back is the feed catching up;
     // one that only climbs is a bug in the test, not a lag at SEC.
     reportDatesPending: reportDates.pending,
+    reportDatesRewrite: reportDates.rewrite,
     reportDatesBacklog: reportDates.backlog,
     manifestWritten: persisted,
   };

@@ -5,6 +5,7 @@
 // is left here is what can be decided from the functions alone — and the
 // session mapping is the one that matters most, because it is what makes a
 // timing misclassification harmless instead of wrong.
+import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -826,6 +827,18 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
 
   // ── THE CRON WRITES IT, AND MATCHES RATHER THAN READS ──────────────────
   const job = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+  // ── THE PAIRING REWRITE: LISTED, GATED, SELF-DRAINING ──────────────────
+  const list = JSON.parse(fs.readFileSync("data/sec/report-dates-rewrite.json", "utf8"));
+  check("the rewrite list is committed and names TSLA and ABBV",
+    Array.isArray(list.symbols) && list.symbols.includes("TSLA") && list.symbols.includes("ABBV"),
+    `${list.symbols?.length} symbols`);
+  check("...and the cron queues it, drained by the record carrying earlyNonResults",
+    /reportDatesRewrite\.symbols/.test(job) && /"earlyNonResults" in rec/.test(job) &&
+      /\[\.\.\.changedThisRun, \.\.\.rewrite, \.\.\.backfill\]/.test(job));
+  check("...through the same gated writer as every record (no second write path)",
+    (job.match(/writeReportDates\(/g) ?? []).length === 1);
+  check("the pending-results guard is handed the pattern at the write site",
+    /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(job));
   check("the cron passes the STORED period ends into the matcher",
     /resultsPairing\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(job),
     "period ends must come from the fact set, never from the filing");
