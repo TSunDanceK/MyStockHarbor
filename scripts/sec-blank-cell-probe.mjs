@@ -56,9 +56,20 @@ const strip = (f) =>
 // The view is lifted with the extractor and the codec as ONE unit, the same way
 // scripts/lib/render-cards.mjs builds it, so the numbers printed under VIEW are
 // the numbers the cards are handed — not a second opinion about them.
+//
+// fxRates AND secCurrency ARE IN THE UNIT BECAUSE #479 PUT THEM THERE. The
+// view now computes growth in the filer's reporting currency, so
+// secEarningsView reads reportingCurrency, storedInReportingCurrency and
+// unitKeysFor. Without them this probe lifted a view that threw ReferenceError
+// on its first CALL -- after the header had printed -- which is precisely the
+// failure assertLiftIsClosed was added to catch, and it caught this one at
+// import time instead. scripts/lib/render-cards.mjs took the same two lines
+// for the same reason; a module the view reads has to be added to BOTH.
 const sec = await lift([
   fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"),
+  strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
   strip("lib/server/secEarningsView.ts"),
 ].join("\n"));
@@ -220,6 +231,36 @@ for (const { symbol, fields } of TARGETS) {
   const set = encodeFactSet(extractCompanyFacts(symbol, facts));
   set.at = 0;
   const view = buildSecEarningsView(set);
+
+  // ── A REFUSED VIEW IS AN ANSWER, NOT A CRASH ─────────────────────────────
+  //
+  // buildSecEarningsView returns NULL for a set it will not render, and every
+  // line below dereferences it. On ABVX that was a bare TypeError on
+  // `view.latestLabel` immediately after the symbol header — a probe that
+  // printed the question and then died, which reads as a broken probe rather
+  // than as the refusal it actually is.
+  //
+  // THE NON-USD CASE IS THIS PROBE'S OWN LIMIT, and it has to say so.
+  // extractCompanyFacts leaves `cur` at the filer's reporting currency and
+  // `fx` unset, because rates are fetched separately by the write path; the
+  // view then refuses the set (see its first guard) since those figures are
+  // not dollars. So for a EUR or BRL filer this probe cannot reach the
+  // question it was built to answer, and saying which symbols it skipped and
+  // why is worth more than a stack trace.
+  if (!view) {
+    const cur = set.cur ?? "USD";
+    console.log(`\n  VIEW  REFUSED — buildSecEarningsView returned null`);
+    console.log(
+      cur !== "USD" && !set.fx
+        ? `        Reports in ${cur} and this probe holds no FX rates: extractCompanyFacts sets\n` +
+          `        'cur' but the write path fetches the rates, so the view refuses the set rather\n` +
+          `        than rendering ${cur} figures with a dollar sign. NOT a finding about ${symbol} —\n` +
+          `        a limit of this probe. Read the STORED set from Redis to diagnose this filer.`
+        : `        quarters=${set.quarters?.length ?? 0} years=${set.years?.length ?? 0} cur=${cur}` +
+          ` fx=${set.fx ? "present" : "absent"} — see the guards in buildSecEarningsView.`
+    );
+    continue;
+  }
 
   // ── (3) first, because it is the cheapest to rule out ────────────────────
   // If the view already holds the number, nothing upstream dropped it and the

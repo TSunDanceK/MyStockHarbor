@@ -223,6 +223,18 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   sellingGeneralAndAdministrative: [
     "SellingGeneralAndAdministrativeExpense",
     "AdministrativeExpense",
+    // MEASURED ON ABVX (relay 35698982104): Abivax publishes
+    // ifrs-full:GeneralAndAdministrativeExpense and none of the three tags
+    // above, so its SG&A rendered blank on a page that had the figure in the
+    // payload. The spelling was in the US-GAAP column all along and was never
+    // copied across — the reverse of the OtherOperatingIncomeExpenseNet
+    // mistake this table already records, where a us-gaap spelling WAS copied
+    // and matched nothing.
+    //
+    // RANKED THIRD, BEHIND THE TWO THAT WON CELLS IN THE 20-FILER PROBE, so a
+    // filer that already has a value keeps the tag it already had. This entry
+    // can only fill a blank; it cannot move a cell that is populated.
+    "GeneralAndAdministrativeExpense",
     "DistributionCosts",
   ],
   // OtherOperatingIncomeExpenseNet deleted: it is a us-gaap spelling that was
