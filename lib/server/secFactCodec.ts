@@ -148,6 +148,12 @@ export type StoredFactSet = {
    * re-read, and it moves with the policy.
    */
   cc?: Record<string, string>;
+  /**
+   * Fiscal-year basic shares, every year in the payload: `[yearEnd, shares]`.
+   * See ExtractResult.annualShares. Optional; not in contentHashOf, since it
+   * duplicates a field the hashed years already carry for the retained span.
+   */
+  as?: [string, number][];
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -227,6 +233,7 @@ export function encodeFactSet(
     c: secChainsHash(),
     cu: result.refusedUnits,
     cc: result.conceptChoice,
+    ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,

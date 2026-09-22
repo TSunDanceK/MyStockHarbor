@@ -32,6 +32,8 @@
 // its filings. That is a separate piece of work and is not started here.
 import snapshotFile from "@/data/static-profile.json";
 import cikMap from "@/data/cik-map.json";
+import registrantsFile from "@/data/sec/registrants.json";
+import sicSectorFile from "@/data/sec/sic-sector.json";
 
 export type StaticProfileRow = {
   sector: string | null;
@@ -65,10 +67,69 @@ export function staticProfileFor(symbol: string): StaticProfileRow | null {
   return sector || industry ? { sector, industry } : null;
 }
 
+/**
+ * Where ONE field's value came from (brief 2026-09-22 §2.4 item 2, from
+ * BRIEF-taxonomy-sic-mapping-2026-09-14 §4). Cheap to carry now, costly to
+ * retrofit once rows from three legs are mixed in a store.
+ */
+export type ProfileFieldSource = "fmp-cache" | "fmp-snapshot" | "sic" | "none";
+
 export type ResolvedProfile = StaticProfileRow & {
   /** Which leg answered. For logging and for the check script, not for render. */
-  source: "cache" | "snapshot" | "none";
+  source: "cache" | "snapshot" | "sic" | "none";
+  sectorSource: ProfileFieldSource;
+  industrySource: ProfileFieldSource;
 };
+
+// ── THE SIC LEG: AFTER THE SNAPSHOT, FOR SYMBOLS IT DOES NOT COVER ─────────
+//
+// A symbol that entered the universe after 2026-09-13 has no cached FMP row
+// and no snapshot row, and so no sector page. SEC files every registrant under
+// a SIC code (data/sec/registrants.json), and data/sec/sic-sector.json maps
+// codes to FMP's sector labels by MEASURED majority over the 2,587 symbols that
+// carry both — scripts/build-sic-sector.mjs. A code the evidence does not
+// support maps to null ("unclassified"), and the miss is reported, never
+// guessed.
+//
+// INDUSTRY IS SEC's OWN DESCRIPTION, NOT AN FMP LABEL (taxonomy brief option
+// C). "Semiconductors & Related Devices" is not FMP's "Semiconductors", and the
+// one page that filters on an industry string (/semiconductor-stocks) would
+// not match it. That is deliberate: inventing FMP labels from SIC codes is the
+// owner's call, after seeing the list of strings pages filter on.
+type RegistrantRow = { sic?: string | null; sicDescription?: string | null };
+
+/**
+ * SIC CODES WHOSE INDUSTRY IS AN FMP LABEL A PAGE FILTERS ON — the whole table.
+ *
+ * ONE ROW, BY OWNER DECISION (2026-09-22, on #517). The only industry string
+ * any Pickers page presets is "Semiconductors" (/semiconductor-stocks), and a
+ * SIC-only symbol would otherwise carry SEC's "Semiconductors & Related
+ * Devices", which the preset does not match. Every other SIC-only symbol keeps
+ * SEC's own description. A row is added here only by the same kind of decision,
+ * with its source recorded, never inferred.
+ */
+export const SIC_INDUSTRY_LABELS: Record<string, { label: string; source: string }> = {
+  "3674": {
+    label: "Semiconductors",
+    source:
+      "owner decision 2026-09-22 (#517): SIC 3674 \"Semiconductors & Related Devices\" -> the " +
+      "FMP industry label /semiconductor-stocks presets on",
+  },
+};
+const REGISTRANTS = (registrantsFile as unknown as { rows: Record<string, RegistrantRow> }).rows ?? {};
+const SIC_SECTOR = (sicSectorFile as unknown as { codes: Record<string, { sector: string | null }> }).codes ?? {};
+
+/** The SIC leg for a symbol, or null. No I/O: both files are bundled. */
+export function sicProfileFor(symbol: string): StaticProfileRow | null {
+  const upper = String(symbol ?? "").trim().toUpperCase();
+  // EXACT KEY, like staticProfileFor: registrants.json is keyed by the same
+  // symbols as the snapshot (it is generated from them).
+  const reg = REGISTRANTS[upper];
+  if (!reg?.sic) return null;
+  const sector = clean(SIC_SECTOR[reg.sic]?.sector);
+  const industry = SIC_INDUSTRY_LABELS[reg.sic]?.label ?? clean(reg.sicDescription);
+  return sector || industry ? { sector, industry } : null;
+}
 
 /**
  * Sector and industry for a symbol: cached FMP value, then snapshot, then null.
@@ -114,21 +175,44 @@ function resolveQuiet(
   // still the fresher answer for the sector, and bucketFor degrades from
   // industry to sector on its own.
   if (cachedSector || cachedIndustry) {
-    return { sector: cachedSector, industry: cachedIndustry, source: "cache" };
+    return {
+      sector: cachedSector, industry: cachedIndustry, source: "cache",
+      sectorSource: cachedSector ? "fmp-cache" : "none",
+      industrySource: cachedIndustry ? "fmp-cache" : "none",
+    };
   }
 
   const snap = staticProfileFor(symbol);
-  if (snap) return { ...snap, source: "snapshot" };
+  if (snap) {
+    return {
+      ...snap, source: "snapshot",
+      sectorSource: snap.sector ? "fmp-snapshot" : "none",
+      industrySource: snap.industry ? "fmp-snapshot" : "none",
+    };
+  }
 
-  return { sector: null, industry: null, source: "none" };
+  // THIRD, AND ONLY FOR A SYMBOL NEITHER FMP LEG KNOWS. It never overrides a
+  // snapshot row, so every symbol the snapshot covers resolves exactly as it
+  // did before this leg existed.
+  const sic = sicProfileFor(symbol);
+  if (sic) {
+    return {
+      ...sic, source: "sic",
+      sectorSource: sic.sector ? "sic" : "none",
+      industrySource: sic.industry ? "sic" : "none",
+    };
+  }
+
+  return { sector: null, industry: null, source: "none", sectorSource: "none", industrySource: "none" };
 }
 
 function missLine(symbol: string): string {
   const upper = String(symbol ?? "").trim().toUpperCase();
   return (
-    `[static-profile] ${upper}: no cached sector and none in data/static-profile.json — ` +
-    `regenerate it (relay task "static-profile"). The card falls back to the generated ` +
-    `data card and the symbol will not appear on a sector page until it is there.`
+    `[static-profile] ${upper}: no cached sector, none in data/static-profile.json and no ` +
+    `SIC row in data/sec/registrants.json — regenerate registrants (relay task ` +
+    `"sec-registrants", then node scripts/build-sic-sector.mjs). The card falls back to the ` +
+    `generated data card and the symbol will not appear on a sector page until it is there.`
   );
 }
 
@@ -168,9 +252,9 @@ export function resolveProfileBulk(
   if (missed.length) {
     console.warn(
       `[static-profile] ${context}: ${missed.length} of ${out.size} symbols have no cached ` +
-        `sector and none in data/static-profile.json — regenerate it (relay task ` +
-        `"static-profile"). They will not appear on a sector page and their cards fall back ` +
-        `to the generated data card. First ${Math.min(10, missed.length)}: ` +
+        `sector, none in data/static-profile.json and no SIC row in data/sec/registrants.json — ` +
+        `regenerate registrants (relay task "sec-registrants"). They will not appear on a sector ` +
+        `page and their cards fall back to the generated data card. First ${Math.min(10, missed.length)}: ` +
         `${missed.slice(0, 10).join(", ")}`
     );
   }

@@ -1,0 +1,3597 @@
+{
+ "_comment": "SIC code -> FMP sector label, derived from the symbols carrying both (data/sec/registrants.json x data/static-profile.json). A code maps only with >= 3 known members and >= 70% agreement (basis code), else its 2-digit major group under the same share with >= 5 members (basis major-group); otherwise sector is null (unclassified, reported). Regenerate with node scripts/build-sic-sector.mjs.",
+ "registrantsAsOf": "2026-09-22",
+ "snapshotAsOf": "2026-09-13",
+ "rule": {
+  "minMembers": 3,
+  "minShare": 0.7,
+  "majorGroupMinMembers": 5
+ },
+ "codes": {
+  "1000": {
+   "description": "Metal Mining",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 18,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 18
+   }
+  },
+  "1040": {
+   "description": "Gold and Silver Ores",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 33,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 33
+   }
+  },
+  "1090": {
+   "description": "Miscellaneous Metal Ores",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.962,
+   "split": {
+    "Energy": 2
+   }
+  },
+  "1220": {
+   "description": "Silver Ores",
+   "sector": "Energy",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Energy": 2
+   }
+  },
+  "1221": {
+   "description": "Bituminous Coal & Lignite Surface Mining",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Energy": 4
+   }
+  },
+  "1311": {
+   "description": "Crude Petroleum & Natural Gas",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 47,
+   "agreement": 0.979,
+   "split": {
+    "Energy": 46,
+    "Basic Materials": 1
+   }
+  },
+  "1381": {
+   "description": "Drilling Oil & Gas Wells",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 11,
+   "agreement": 1,
+   "split": {
+    "Energy": 11
+   }
+  },
+  "1382": {
+   "description": "Oil & Gas Field Exploration Services",
+   "sector": "Energy",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.986,
+   "split": {
+    "Energy": 1
+   }
+  },
+  "1389": {
+   "description": "Oil & Gas Field Services, NEC",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 10,
+   "agreement": 1,
+   "split": {
+    "Energy": 10
+   }
+  },
+  "1400": {
+   "description": "Mining & Quarrying of  Nonmetallic Minerals (No Fuels)",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 12,
+   "agreement": 0.833,
+   "split": {
+    "Basic Materials": 10,
+    "Energy": 1,
+    "Utilities": 1
+   }
+  },
+  "1520": {
+   "description": "General Bldg Contractors - Residential Bldgs",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Consumer Cyclical": 3,
+    "Industrials": 1
+   }
+  },
+  "1531": {
+   "description": "Operative Builders",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 12,
+   "agreement": 0.917,
+   "split": {
+    "Consumer Cyclical": 11,
+    "Industrials": 1
+   }
+  },
+  "1540": {
+   "description": "General Bldg Contractors - Nonresidential Bldgs",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.824,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "1600": {
+   "description": "Heavy Construction Other Than Bldg Const - Contractors",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 8,
+   "agreement": 0.875,
+   "split": {
+    "Industrials": 7,
+    "Utilities": 1
+   }
+  },
+  "1623": {
+   "description": "Water, Sewer, Pipeline, Comm & Power Line Construction",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "1700": {
+   "description": "Construction - Special Trade Contractors",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 5,
+   "agreement": 0.8,
+   "split": {
+    "Industrials": 4,
+    "Energy": 1
+   }
+  },
+  "1731": {
+   "description": "Electrical Work",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "2000": {
+   "description": "Food and Kindred Products",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 6
+   }
+  },
+  "2011": {
+   "description": "Meat Packing Plants",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 3
+   }
+  },
+  "2015": {
+   "description": "Poultry Slaughtering and Processing",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 2
+   }
+  },
+  "2024": {
+   "description": "Ice Cream & Frozen Desserts",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 1
+   }
+  },
+  "2030": {
+   "description": "Canned, Frozen & Preservd Fruit, Veg & Food Specialties",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 3
+   }
+  },
+  "2033": {
+   "description": "Canned, Fruits, Veg, Preserves, Jams & Jellies",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 2
+   }
+  },
+  "2040": {
+   "description": "Grain Mill Products",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 4
+   }
+  },
+  "2052": {
+   "description": "Cookies & Crackers",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 1
+   }
+  },
+  "2060": {
+   "description": "Sugar & Confectionery Products",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 2
+   }
+  },
+  "2070": {
+   "description": "Fats & Oils",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 3
+   }
+  },
+  "2080": {
+   "description": "Beverages",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 9,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 9
+   }
+  },
+  "2082": {
+   "description": "Malt Beverages",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 4
+   }
+  },
+  "2086": {
+   "description": "Bottled & Canned Soft Drinks & Carbonated Waters",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 7
+   }
+  },
+  "2090": {
+   "description": "Miscellaneous Food Preparations & Kindred Products",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 3
+   }
+  },
+  "2100": {
+   "description": "Tobacco Products",
+   "sector": "Consumer Defensive",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 2
+   }
+  },
+  "2111": {
+   "description": "Cigarettes",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 4
+   }
+  },
+  "2221": {
+   "description": "Broadwoven Fabric Mills, Man Made Fiber & Silk",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "2273": {
+   "description": "Carpets & Rugs",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "2300": {
+   "description": "Apparel & Other Finishd Prods of  Fabrics & Similar Matl",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 11,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 11
+   }
+  },
+  "2320": {
+   "description": "Men's & Boys' Furnishgs, Work Clothg, & Allied Garments",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 5,
+   "agreement": 0.8,
+   "split": {
+    "Consumer Cyclical": 4,
+    "Industrials": 1
+   }
+  },
+  "2400": {
+   "description": "Lumber & Wood Products (No Furniture)",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.714,
+   "split": {
+    "Basic Materials": 2
+   }
+  },
+  "2421": {
+   "description": "Sawmills & Planting Mills, General",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.714,
+   "split": {
+    "Basic Materials": 2
+   }
+  },
+  "2430": {
+   "description": "Millwood, Veneer, Plywood, & Structural Wood Members",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.714,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "2451": {
+   "description": "Mobile Homes",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.714,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "2510": {
+   "description": "Household Furniture",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "2520": {
+   "description": "Office Furniture",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "2522": {
+   "description": "Office Furniture (No Wood)",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "2621": {
+   "description": "Paper Mills",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 3
+   }
+  },
+  "2650": {
+   "description": "Paperboard Containers & Boxes",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "2670": {
+   "description": "Converted Paper & Paperboard Prods (No Contaners/Boxes)",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Cyclical": 1,
+    "Consumer Defensive": 1
+   }
+  },
+  "2673": {
+   "description": "Plastics, Foil & Coated Paper Bags",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 1
+   }
+  },
+  "2711": {
+   "description": "Newspapers: Publishing or  Publishing & Printing",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 3
+   }
+  },
+  "2731": {
+   "description": "Books: Publishing or  Publishing & Printing",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 3
+   }
+  },
+  "2741": {
+   "description": "Miscellaneous Publishing",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.333,
+   "split": {
+    "Consumer Defensive": 1,
+    "Industrials": 1,
+    "Communication Services": 1
+   }
+  },
+  "2750": {
+   "description": "Commercial Printing",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "2780": {
+   "description": "Blankbooks, Looseleaf Binders & Bookbindg & Relatd Work",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "2800": {
+   "description": "Chemicals & Allied Products",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 10,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 10
+   }
+  },
+  "2810": {
+   "description": "Industrial Inorganic Chemicals",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 4
+   }
+  },
+  "2820": {
+   "description": "Plastic Material, Synth Resin/Rubber, Cellulos (No Glass)",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 3
+   }
+  },
+  "2821": {
+   "description": "Plastic Materials, Synth Resins & Nonvulcan Elastomers",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 8,
+   "agreement": 0.779,
+   "split": {
+    "Basic Materials": 5,
+    "Industrials": 2,
+    "Technology": 1
+   }
+  },
+  "2833": {
+   "description": "Medicinal Chemicals & Botanical Products",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 4
+   }
+  },
+  "2834": {
+   "description": "Pharmaceutical Preparations",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 158,
+   "agreement": 0.994,
+   "split": {
+    "Healthcare": 157,
+    "Technology": 1
+   }
+  },
+  "2835": {
+   "description": "In Vitro & In Vivo Diagnostic Substances",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 5
+   }
+  },
+  "2836": {
+   "description": "Biological Products, (No Diagnostic Substances)",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 51,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 51
+   }
+  },
+  "2840": {
+   "description": "Soap, Detergents, Cleang Preparations, Perfumes, Cosmetics",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 5,
+   "agreement": 0.779,
+   "split": {
+    "Consumer Defensive": 3,
+    "Basic Materials": 2
+   }
+  },
+  "2842": {
+   "description": "Specialty Cleaning, Polishing and Sanitation Preparations",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.779,
+   "split": {
+    "Consumer Defensive": 1
+   }
+  },
+  "2844": {
+   "description": "Perfumes, Cosmetics & Other Toilet Preparations",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.889,
+   "split": {
+    "Consumer Defensive": 8,
+    "Healthcare": 1
+   }
+  },
+  "2851": {
+   "description": "Paints, Varnishes, Lacquers, Enamels & Allied Prods",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 3
+   }
+  },
+  "2860": {
+   "description": "Industrial Organic Chemicals",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 8
+   }
+  },
+  "2870": {
+   "description": "Agricultural Chemicals",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 6
+   }
+  },
+  "2890": {
+   "description": "Miscellaneous Chemical Products",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 3
+   }
+  },
+  "2891": {
+   "description": "Adhesives & Sealants",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.779,
+   "split": {
+    "Industrials": 1,
+    "Basic Materials": 1
+   }
+  },
+  "2911": {
+   "description": "Petroleum Refining",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 17,
+   "agreement": 0.941,
+   "split": {
+    "Energy": 16,
+    "Basic Materials": 1
+   }
+  },
+  "2990": {
+   "description": "Miscellaneous Products of  Petroleum & Coal",
+   "sector": "Energy",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.842,
+   "split": {
+    "Basic Materials": 1,
+    "Consumer Cyclical": 1
+   }
+  },
+  "3011": {
+   "description": "Tires & Inner Tubes",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3021": {
+   "description": "Rubber & Plastics Footwear",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "3050": {
+   "description": "Gaskets, Packg & Sealg Devices & Rubber & Plastics Hose",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3060": {
+   "description": "Fabricated Rubber Products, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3086": {
+   "description": "Plastics Foam Products",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3089": {
+   "description": "Plastics Products, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 5,
+   "agreement": 0.2,
+   "split": {
+    "Healthcare": 1,
+    "Basic Materials": 1,
+    "Technology": 1,
+    "Consumer Cyclical": 1,
+    "Consumer Defensive": 1
+   }
+  },
+  "3100": {
+   "description": "Leather & Leather Products",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "3140": {
+   "description": "Footwear, (No Rubber)",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 3
+   }
+  },
+  "3211": {
+   "description": "Flat Glass",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.9,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3221": {
+   "description": "Glass Containers",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.9,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3241": {
+   "description": "Cement, Hydraulic",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 6
+   }
+  },
+  "3272": {
+   "description": "Concrete Products, Except Block & Brick",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.9,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3290": {
+   "description": "Abrasive, Asbestos & Misc Nonmetallic Mineral Prods",
+   "sector": "Basic Materials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.9,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3310": {
+   "description": "Steel Works, Blast Furnaces & Rolling & Finishing Mills",
+   "sector": null,
+   "basis": null,
+   "members": 5,
+   "agreement": 0.6,
+   "split": {
+    "Basic Materials": 3,
+    "Industrials": 2
+   }
+  },
+  "3312": {
+   "description": "Steel Works, Blast Furnaces & Rolling Mills (Coke Ovens)",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 8,
+   "agreement": 0.875,
+   "split": {
+    "Basic Materials": 7,
+    "Energy": 1
+   }
+  },
+  "3317": {
+   "description": "Steel Pipe & Tubes",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Industrials": 1,
+    "Basic Materials": 1
+   }
+  },
+  "3334": {
+   "description": "Primary Production of  Aluminum",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 2
+   }
+  },
+  "3341": {
+   "description": "Secondary Smelting & Refining of  Nonferrous Metals",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3350": {
+   "description": "Rolling Drawing & Extruding of  Nonferrous Metals",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Industrials": 2,
+    "Basic Materials": 1
+   }
+  },
+  "3357": {
+   "description": "Drawing & Insulating of  Nonferrous Wire",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Technology": 2
+   }
+  },
+  "3360": {
+   "description": "Nonferrous Foundries (Castings)",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3411": {
+   "description": "Metal Cans",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "3412": {
+   "description": "Metal Shipping Barrels, Drums, Kegs & Pails",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3420": {
+   "description": "Cutlery, Handtools & General Hardware",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Industrials": 3,
+    "Basic Materials": 1
+   }
+  },
+  "3430": {
+   "description": "Heating Equip, Except Elec & Warm Air; & Plumbing Fixtures",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3433": {
+   "description": "Heating Equipment, Except Electric & Warm Air Furnaces",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3440": {
+   "description": "Fabricated Structural Metal Products",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Industrials": 2,
+    "Basic Materials": 1
+   }
+  },
+  "3442": {
+   "description": "Metal Doors, Sash, Frames, Moldings & Trim",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 1
+   }
+  },
+  "3443": {
+   "description": "Fabricated Plate Work (Boiler Shops)",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3460": {
+   "description": "Metal Forgings & Stampings",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Basic Materials": 1,
+    "Consumer Cyclical": 1
+   }
+  },
+  "3470": {
+   "description": "Coating, Engraving & Allied Services",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Industrials": 1,
+    "Consumer Cyclical": 1
+   }
+  },
+  "3480": {
+   "description": "Ordnance & Accessories, (No Vehicles/Guided Missiles)",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "3490": {
+   "description": "Miscellaneous Fabricated Metal Products",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "3510": {
+   "description": "Engines & Turbines",
+   "sector": null,
+   "basis": null,
+   "members": 4,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Cyclical": 2,
+    "Industrials": 2
+   }
+  },
+  "3523": {
+   "description": "Farm Machinery & Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "3524": {
+   "description": "Lawn & Garden Tractors & Home Lawn & Gardens Equip",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3530": {
+   "description": "Construction, Mining & Materials Handling Machinery & Equip",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3531": {
+   "description": "Construction Machinery & Equip",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "3533": {
+   "description": "Oil & Gas Field Machinery & Equipment",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.889,
+   "split": {
+    "Energy": 8,
+    "Industrials": 1
+   }
+  },
+  "3537": {
+   "description": "Industrial Trucks, Tractors, Trailors & Stackers",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3540": {
+   "description": "Metalworkg Machinery & Equipment",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Industrials": 1,
+    "Basic Materials": 1
+   }
+  },
+  "3541": {
+   "description": "Machine Tools, Metal Cutting Types",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3550": {
+   "description": "Special Industry Machinery (No Metalworking Machinery)",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "3559": {
+   "description": "Special Industry Machinery, NEC",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 7,
+   "agreement": 0.857,
+   "split": {
+    "Technology": 6,
+    "Healthcare": 1
+   }
+  },
+  "3560": {
+   "description": "General Industrial Machinery & Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 7,
+   "agreement": 0.714,
+   "split": {
+    "Industrials": 5,
+    "Energy": 1,
+    "Technology": 1
+   }
+  },
+  "3561": {
+   "description": "Pumps & Pumping Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "3562": {
+   "description": "Ball & Roller Bearings",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "3564": {
+   "description": "Industrial & Commercial Fans & Blowers & Air Purifing Equip",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "3569": {
+   "description": "General Industrial Machinery & Equipment, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 8,
+   "agreement": 0.625,
+   "split": {
+    "Industrials": 5,
+    "Financial Services": 1,
+    "Consumer Cyclical": 1,
+    "Technology": 1
+   }
+  },
+  "3570": {
+   "description": "Computer & office Equipment",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Technology": 3
+   }
+  },
+  "3571": {
+   "description": "Electronic Computers",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Technology": 3,
+    "Healthcare": 1
+   }
+  },
+  "3572": {
+   "description": "Computer Storage Devices",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Technology": 5
+   }
+  },
+  "3576": {
+   "description": "Computer Communications Equipment",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Technology": 6
+   }
+  },
+  "3577": {
+   "description": "Computer Peripheral Equipment, NEC",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Technology": 4
+   }
+  },
+  "3578": {
+   "description": "Calculating & Accounting Machines (No Electronic Computers)",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Technology": 3
+   }
+  },
+  "3579": {
+   "description": "Office Machines, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3580": {
+   "description": "Refrigeration & Service Industry Machinery",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "3585": {
+   "description": "Air-Cond & Warm Air Heatg Equip & Comm & Indl Refrig Equip",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Industrials": 3,
+    "Basic Materials": 1
+   }
+  },
+  "3590": {
+   "description": "Misc Industrial & Commercial Machinery & Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "3600": {
+   "description": "Electronic & Other Electrical Equipment (No Computer Equip)",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "3613": {
+   "description": "Switchgear & Switchboard Apparatus",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Technology": 1,
+    "Industrials": 1
+   }
+  },
+  "3620": {
+   "description": "Electrical Industrial Apparatus",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "3621": {
+   "description": "Motors & Generators",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "3630": {
+   "description": "Household Appliances",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Consumer Cyclical": 2,
+    "Industrials": 1
+   }
+  },
+  "3640": {
+   "description": "Electric Lighting & Wiring Equipment",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3651": {
+   "description": "Household Audio & Video Equipment",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Technology": 3
+   }
+  },
+  "3661": {
+   "description": "Telephone & Telegraph Apparatus",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Technology": 2
+   }
+  },
+  "3663": {
+   "description": "Radio & Tv Broadcasting & Communications Equipment",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.889,
+   "split": {
+    "Technology": 8,
+    "Industrials": 1
+   }
+  },
+  "3669": {
+   "description": "Communications Equipment, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Technology": 2,
+    "Industrials": 1
+   }
+  },
+  "3670": {
+   "description": "Electronic Components & Accessories",
+   "sector": null,
+   "basis": null,
+   "members": 4,
+   "agreement": 0.5,
+   "split": {
+    "Industrials": 2,
+    "Technology": 2
+   }
+  },
+  "3672": {
+   "description": "Printed Circuit Boards",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Technology": 8
+   }
+  },
+  "3674": {
+   "description": "Semiconductors & Related Devices",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 67,
+   "agreement": 0.91,
+   "split": {
+    "Technology": 61,
+    "Energy": 5,
+    "Industrials": 1
+   }
+  },
+  "3677": {
+   "description": "Electronic Coils, Transformers & Other Inductors",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Technology": 1
+   }
+  },
+  "3678": {
+   "description": "Electronic Connectors",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Technology": 1
+   }
+  },
+  "3679": {
+   "description": "Electronic Components, NEC",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 5,
+   "agreement": 0.8,
+   "split": {
+    "Technology": 4,
+    "Industrials": 1
+   }
+  },
+  "3690": {
+   "description": "Miscellaneous Electrical Machinery, Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 13,
+   "agreement": 0.462,
+   "split": {
+    "Industrials": 6,
+    "Consumer Cyclical": 2,
+    "Technology": 2,
+    "Basic Materials": 1,
+    "Utilities": 1,
+    "Consumer Defensive": 1
+   }
+  },
+  "3711": {
+   "description": "Motor Vehicles & Passenger Car Bodies",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 16,
+   "agreement": 0.813,
+   "split": {
+    "Consumer Cyclical": 13,
+    "Industrials": 3
+   }
+  },
+  "3713": {
+   "description": "Truck & Bus Bodies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3714": {
+   "description": "Motor Vehicle Parts & Accessories",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 21,
+   "agreement": 0.857,
+   "split": {
+    "Consumer Cyclical": 18,
+    "Industrials": 2,
+    "Technology": 1
+   }
+  },
+  "3716": {
+   "description": "Motor Homes",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3720": {
+   "description": "Aircraft & Parts",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "3721": {
+   "description": "Aircraft",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "3724": {
+   "description": "Aircraft Engines & Engine Parts",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Industrials": 5
+   }
+  },
+  "3728": {
+   "description": "Aircraft Parts & Auxiliary Equipment, NEC",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Industrials": 8
+   }
+  },
+  "3730": {
+   "description": "Ship & Boat Building & Repairing",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "3743": {
+   "description": "Railroad Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "3751": {
+   "description": "Motorcycles, Bicycles & Parts",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3760": {
+   "description": "Guided Missiles & Space Vehicles & Parts",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Industrials": 8
+   }
+  },
+  "3790": {
+   "description": "Miscellaneous Transportation Equipment",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "3812": {
+   "description": "Search, Detection, Navigation, Guidance, Aeronautical Sys",
+   "sector": null,
+   "basis": null,
+   "members": 7,
+   "agreement": 0.571,
+   "split": {
+    "Industrials": 4,
+    "Technology": 3
+   }
+  },
+  "3822": {
+   "description": "Auto Controls For Regulating Residential & Comml Environments",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "3823": {
+   "description": "Industrial Instruments For Measurement, Display, and Control",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.778,
+   "split": {
+    "Technology": 7,
+    "Industrials": 1,
+    "Healthcare": 1
+   }
+  },
+  "3824": {
+   "description": "Totalizing Fluid Meters & Counting Devices",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Industrials": 1,
+    "Technology": 1
+   }
+  },
+  "3825": {
+   "description": "Instruments For Meas & Testing of  Electricity & Elec Signals",
+   "sector": null,
+   "basis": null,
+   "members": 6,
+   "agreement": 0.667,
+   "split": {
+    "Technology": 4,
+    "Industrials": 2
+   }
+  },
+  "3826": {
+   "description": "Laboratory Analytical Instruments",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 10,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 10
+   }
+  },
+  "3827": {
+   "description": "Optical Instruments & Lenses",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Technology": 4
+   }
+  },
+  "3829": {
+   "description": "Measuring & Controlling Devices, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 5,
+   "agreement": 0.4,
+   "split": {
+    "Industrials": 2,
+    "Technology": 2,
+    "Healthcare": 1
+   }
+  },
+  "3841": {
+   "description": "Surgical & Medical Instruments & Apparatus",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 36,
+   "agreement": 0.972,
+   "split": {
+    "Healthcare": 35,
+    "Industrials": 1
+   }
+  },
+  "3842": {
+   "description": "Orthopedic, Prosthetic & Surgical Appliances & Supplies",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 10,
+   "agreement": 0.8,
+   "split": {
+    "Healthcare": 8,
+    "Industrials": 2
+   }
+  },
+  "3843": {
+   "description": "Dental Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "3844": {
+   "description": "X-Ray Apparatus & Tubes & Related Irradiation Apparatus",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 3
+   }
+  },
+  "3845": {
+   "description": "Electromedical & Electrotherapeutic Apparatus",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 7
+   }
+  },
+  "3851": {
+   "description": "Ophthalmic Goods",
+   "sector": null,
+   "basis": null,
+   "members": 6,
+   "agreement": 0.667,
+   "split": {
+    "Healthcare": 4,
+    "Consumer Cyclical": 2
+   }
+  },
+  "3861": {
+   "description": "Photographic Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 1
+   }
+  },
+  "3942": {
+   "description": "Dolls & Stuffed Toys",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.778,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3944": {
+   "description": "Games, Toys & Children's Vehicles (No Dolls & Bicycles)",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.778,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "3949": {
+   "description": "Sporting & Athletic Goods, NEC",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "3990": {
+   "description": "Miscellaneous Manufacturing Industries",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 3,
+   "agreement": 0.778,
+   "split": {
+    "Consumer Cyclical": 1,
+    "Industrials": 1,
+    "Basic Materials": 1
+   }
+  },
+  "4011": {
+   "description": "Railroads, Line-Haul Operating",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Industrials": 5
+   }
+  },
+  "4210": {
+   "description": "Trucking & Courier Services (No Air)",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "4213": {
+   "description": "Trucking (No Local)",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 9,
+   "agreement": 1,
+   "split": {
+    "Industrials": 9
+   }
+  },
+  "4400": {
+   "description": "Water Transportation",
+   "sector": null,
+   "basis": null,
+   "members": 16,
+   "agreement": 0.438,
+   "split": {
+    "Industrials": 7,
+    "Consumer Cyclical": 4,
+    "Energy": 3,
+    "Utilities": 1,
+    "Financial Services": 1
+   }
+  },
+  "4412": {
+   "description": "Deep Sea Foreign Transportation of  Freight",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 20,
+   "agreement": 0.85,
+   "split": {
+    "Industrials": 17,
+    "Energy": 3
+   }
+  },
+  "4512": {
+   "description": "Air Transportation, Scheduled",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 13,
+   "agreement": 1,
+   "split": {
+    "Industrials": 13
+   }
+  },
+  "4513": {
+   "description": "Air Courier Services",
+   "sector": "Industrials",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.95,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "4522": {
+   "description": "Air Transportation, Nonscheduled",
+   "sector": "Industrials",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.95,
+   "split": {
+    "Energy": 1
+   }
+  },
+  "4581": {
+   "description": "Airports, Flying Fields & Airport Terminal Services",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "4610": {
+   "description": "Pipe Lines (No Natural Gas)",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Energy": 8
+   }
+  },
+  "4700": {
+   "description": "Transportation Services",
+   "sector": null,
+   "basis": null,
+   "members": 11,
+   "agreement": 0.545,
+   "split": {
+    "Industrials": 6,
+    "Consumer Cyclical": 5
+   }
+  },
+  "4731": {
+   "description": "Arrangement of  Transportation of  Freight & Cargo",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Industrials": 4
+   }
+  },
+  "4812": {
+   "description": "Radiotelephone Communications",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 13,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 13
+   }
+  },
+  "4813": {
+   "description": "Telephone Communications (No Radiotelephone)",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 17,
+   "agreement": 0.941,
+   "split": {
+    "Communication Services": 16,
+    "Real Estate": 1
+   }
+  },
+  "4822": {
+   "description": "Telegraph & Other Message Communications",
+   "sector": "Communication Services",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.932,
+   "split": {
+    "Communication Services": 1
+   }
+  },
+  "4832": {
+   "description": "Radio Broadcasting Stations",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 3
+   }
+  },
+  "4833": {
+   "description": "Television Broadcasting Stations",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 9,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 9
+   }
+  },
+  "4841": {
+   "description": "Cable & Other Pay Television Services",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 10,
+   "agreement": 0.9,
+   "split": {
+    "Communication Services": 9,
+    "Technology": 1
+   }
+  },
+  "4899": {
+   "description": "Communications Services, NEC",
+   "sector": "Communication Services",
+   "basis": "major-group",
+   "members": 6,
+   "agreement": 0.932,
+   "split": {
+    "Communication Services": 4,
+    "Technology": 2
+   }
+  },
+  "4900": {
+   "description": "Electric, Gas & Sanitary Services",
+   "sector": "Utilities",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.748,
+   "split": {
+    "Utilities": 1
+   }
+  },
+  "4911": {
+   "description": "Electric Services",
+   "sector": "Utilities",
+   "basis": "code",
+   "members": 57,
+   "agreement": 0.982,
+   "split": {
+    "Utilities": 56,
+    "Industrials": 1
+   }
+  },
+  "4922": {
+   "description": "Natural Gas Transmission",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 18,
+   "agreement": 0.889,
+   "split": {
+    "Energy": 16,
+    "Financial Services": 1,
+    "Utilities": 1
+   }
+  },
+  "4923": {
+   "description": "Natural Gas Transmisison & Distribution",
+   "sector": "Utilities",
+   "basis": "major-group",
+   "members": 6,
+   "agreement": 0.748,
+   "split": {
+    "Utilities": 4,
+    "Energy": 2
+   }
+  },
+  "4924": {
+   "description": "Natural Gas Distribution",
+   "sector": "Utilities",
+   "basis": "major-group",
+   "members": 11,
+   "agreement": 0.748,
+   "split": {
+    "Energy": 6,
+    "Utilities": 5
+   }
+  },
+  "4931": {
+   "description": "Electric & Other Services Combined",
+   "sector": "Utilities",
+   "basis": "code",
+   "members": 20,
+   "agreement": 1,
+   "split": {
+    "Utilities": 20
+   }
+  },
+  "4932": {
+   "description": "Gas & Other Services Combined",
+   "sector": "Utilities",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Utilities": 3
+   }
+  },
+  "4941": {
+   "description": "Water Supply",
+   "sector": "Utilities",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Utilities": 7
+   }
+  },
+  "4953": {
+   "description": "Refuse Systems",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Industrials": 6
+   }
+  },
+  "4955": {
+   "description": "Hazardous Waste Management",
+   "sector": "Utilities",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.748,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "4991": {
+   "description": "Cogeneration Services & Small Power Producers",
+   "sector": "Utilities",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.748,
+   "split": {
+    "Utilities": 1
+   }
+  },
+  "5000": {
+   "description": "Wholesale-Durable Goods",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5010": {
+   "description": "Wholesale-Motor Vehicles & Motor Vehicle Parts & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5013": {
+   "description": "Wholesale-Motor Vehicle Supplies & New Parts",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5030": {
+   "description": "Wholesale-Lumber & Other Construction Materials",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Basic Materials": 1,
+    "Industrials": 1
+   }
+  },
+  "5040": {
+   "description": "Wholesale-Professional & Commercial Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5045": {
+   "description": "Wholesale-Computers & Peripheral Equipment & Software",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Technology": 5
+   }
+  },
+  "5047": {
+   "description": "Wholesale-Medical, Dental & Hospital Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 1
+   }
+  },
+  "5051": {
+   "description": "Wholesale-Metals Service Centers & of fices",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Basic Materials": 1,
+    "Industrials": 1
+   }
+  },
+  "5063": {
+   "description": "Wholesale-Electrical Apparatus & Equipment, Wiring Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5064": {
+   "description": "Wholesale-Electrical Appliances, Tv & Radio Sets",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5065": {
+   "description": "Wholesale-Electronic Parts & Equipment, NEC",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Technology": 3,
+    "Communication Services": 1
+   }
+  },
+  "5070": {
+   "description": "Wholesale-Hardware & Plumbing & Heating Equipment & Supplies",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Industrials": 2
+   }
+  },
+  "5072": {
+   "description": "Wholesale-Hardware",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5080": {
+   "description": "Wholesale-Machinery, Equipment & Supplies",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "5084": {
+   "description": "Wholesale-Industrial Machinery & Equipment",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "5090": {
+   "description": "Wholesale-Misc Durable Goods",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5094": {
+   "description": "Wholesale-Jewelry, Watches, Precious Stones & Metals",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "5099": {
+   "description": "Wholesale-Durable Goods, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "5122": {
+   "description": "Wholesale-Drugs, Proprietaries & Druggists' Sundries",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Healthcare": 3,
+    "Consumer Defensive": 1
+   }
+  },
+  "5140": {
+   "description": "Wholesale-Groceries & Related Products",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Consumer Defensive": 2,
+    "Consumer Cyclical": 1
+   }
+  },
+  "5141": {
+   "description": "Wholesale-Groceries, General Line",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 3
+   }
+  },
+  "5150": {
+   "description": "Wholesale-Farm Product Raw Materials",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 2
+   }
+  },
+  "5160": {
+   "description": "Wholesale-Chemicals & Allied Products",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 2
+   }
+  },
+  "5171": {
+   "description": "Wholesale-Petroleum Bulk Stations & Terminals",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Energy": 1
+   }
+  },
+  "5172": {
+   "description": "Wholesale-Petroleum & Petroleum Products (No Bulk Stations)",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Energy": 2
+   }
+  },
+  "5190": {
+   "description": "Wholesale-Miscellaneous Nondurable Goods",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Defensive": 1,
+    "Industrials": 1
+   }
+  },
+  "5200": {
+   "description": "Retail-Building Materials, Hardware, Garden Supply",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.333,
+   "split": {
+    "Industrials": 1,
+    "Basic Materials": 1,
+    "Consumer Cyclical": 1
+   }
+  },
+  "5211": {
+   "description": "Retail-Lumber & Other Building Materials Dealers",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Consumer Cyclical": 3,
+    "Basic Materials": 1
+   }
+  },
+  "5311": {
+   "description": "Retail-Department Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "5331": {
+   "description": "Retail-Variety Stores",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 10,
+   "agreement": 0.8,
+   "split": {
+    "Consumer Defensive": 8,
+    "Consumer Cyclical": 2
+   }
+  },
+  "5411": {
+   "description": "Retail-Grocery Stores",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 7
+   }
+  },
+  "5500": {
+   "description": "Retail-Auto Dealers & Gasoline Stations",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 14,
+   "agreement": 0.857,
+   "split": {
+    "Consumer Cyclical": 12,
+    "Industrials": 1,
+    "Energy": 1
+   }
+  },
+  "5531": {
+   "description": "Retail-Auto & Home Supply Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 4
+   }
+  },
+  "5621": {
+   "description": "Retail-Women's Clothing Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5651": {
+   "description": "Retail-Family Clothing Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 7
+   }
+  },
+  "5661": {
+   "description": "Retail-Shoe Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5700": {
+   "description": "Retail-Home Furniture, Furnishings & Equipment Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5712": {
+   "description": "Retail-Furniture Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 3
+   }
+  },
+  "5731": {
+   "description": "Retail-Radio, Tv & Consumer Electronics Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5734": {
+   "description": "Retail-Computer & Computer Software Stores",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5810": {
+   "description": "Retail-Eating & Drinking Places",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 5
+   }
+  },
+  "5812": {
+   "description": "Retail-Eating  Places",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 17,
+   "agreement": 0.941,
+   "split": {
+    "Consumer Cyclical": 16,
+    "Industrials": 1
+   }
+  },
+  "5900": {
+   "description": "Retail-Miscellaneous Retail",
+   "sector": null,
+   "basis": null,
+   "members": 6,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Cyclical": 3,
+    "Financial Services": 2,
+    "Energy": 1
+   }
+  },
+  "5912": {
+   "description": "Retail-Drug Stores and Proprietary Stores",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "5940": {
+   "description": "Retail-Miscellaneous Shopping Goods Stores",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "5944": {
+   "description": "Retail-Jewelry Stores",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "5961": {
+   "description": "Retail-Catalog & Mail-Order Houses",
+   "sector": null,
+   "basis": null,
+   "members": 11,
+   "agreement": 0.636,
+   "split": {
+    "Consumer Cyclical": 7,
+    "Technology": 3,
+    "Communication Services": 1
+   }
+  },
+  "5990": {
+   "description": "Retail-Retail Stores, NEC",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 5
+   }
+  },
+  "6021": {
+   "description": "National Commercial Banks",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 51,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 51
+   }
+  },
+  "6022": {
+   "description": "State Commercial Banks",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 84,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 84
+   }
+  },
+  "6029": {
+   "description": "Commercial Banks, NEC",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 31,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 31
+   }
+  },
+  "6035": {
+   "description": "Savings Institution, Federally Chartered",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 8
+   }
+  },
+  "6036": {
+   "description": "Savings Institutions, Not Federally Chartered",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 3
+   }
+  },
+  "6099": {
+   "description": "Functions Related To Depository Banking, NEC",
+   "sector": "Financial Services",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.994,
+   "split": {
+    "Technology": 1
+   }
+  },
+  "6111": {
+   "description": "Federal & Federally-Sponsored Credit Agencies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "6141": {
+   "description": "Personal Credit Institutions",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 10,
+   "agreement": 0.9,
+   "split": {
+    "Financial Services": 9,
+    "Technology": 1
+   }
+  },
+  "6153": {
+   "description": "Short-Term Business Credit Institutions",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 2
+   }
+  },
+  "6159": {
+   "description": "Miscellaneous Business Credit Institution",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "6162": {
+   "description": "Mortgage Bankers & Loan Correspondents",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 3
+   }
+  },
+  "6163": {
+   "description": "Loan Brokers",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "6199": {
+   "description": "Finance Services",
+   "sector": null,
+   "basis": null,
+   "members": 44,
+   "agreement": 0.568,
+   "split": {
+    "Financial Services": 25,
+    "Technology": 17,
+    "Industrials": 2
+   }
+  },
+  "6200": {
+   "description": "Security & Commodity Brokers, Dealers, Exchanges & Services",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 8,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 8
+   }
+  },
+  "6211": {
+   "description": "Security Brokers, Dealers & Flotation Companies",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 25,
+   "agreement": 0.96,
+   "split": {
+    "Financial Services": 24,
+    "Technology": 1
+   }
+  },
+  "6282": {
+   "description": "Investment Advice",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 45,
+   "agreement": 0.956,
+   "split": {
+    "Financial Services": 43,
+    "Technology": 2
+   }
+  },
+  "6311": {
+   "description": "Life Insurance",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 23,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 23
+   }
+  },
+  "6321": {
+   "description": "Accident & Health Insurance",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 6
+   }
+  },
+  "6324": {
+   "description": "Hospital & Medical Service Plans",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 10,
+   "agreement": 0.9,
+   "split": {
+    "Healthcare": 9,
+    "Financial Services": 1
+   }
+  },
+  "6331": {
+   "description": "Fire, Marine & Casualty Insurance",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 47,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 47
+   }
+  },
+  "6351": {
+   "description": "Surety Insurance",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 6
+   }
+  },
+  "6361": {
+   "description": "Title Insurance",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 3
+   }
+  },
+  "6399": {
+   "description": "Insurance Carriers, NEC",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 4
+   }
+  },
+  "6411": {
+   "description": "Insurance Agents, Brokers & Service",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 16,
+   "agreement": 1,
+   "split": {
+    "Financial Services": 16
+   }
+  },
+  "6500": {
+   "description": "Real Estate",
+   "sector": "Real Estate",
+   "basis": "code",
+   "members": 16,
+   "agreement": 1,
+   "split": {
+    "Real Estate": 16
+   }
+  },
+  "6510": {
+   "description": "Real Estate Operators (No Developers) & Lessors",
+   "sector": "Real Estate",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.867,
+   "split": {
+    "Real Estate": 1
+   }
+  },
+  "6512": {
+   "description": "Opeators of  Nonresidential Buildings",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Financial Services": 3,
+    "Real Estate": 1
+   }
+  },
+  "6531": {
+   "description": "Real Estate Agents & Managers (For Others)",
+   "sector": "Real Estate",
+   "basis": "code",
+   "members": 7,
+   "agreement": 0.857,
+   "split": {
+    "Real Estate": 6,
+    "Consumer Cyclical": 1
+   }
+  },
+  "6552": {
+   "description": "Land Subdividers & Developers (No Cemeteries)",
+   "sector": "Real Estate",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.867,
+   "split": {
+    "Real Estate": 2
+   }
+  },
+  "6770": {
+   "description": "Blank Checks",
+   "sector": "Real Estate",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.863,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "6792": {
+   "description": "Oil Royalty Traders",
+   "sector": "Energy",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Energy": 5
+   }
+  },
+  "6794": {
+   "description": "Patent Owners & Lessors",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Technology": 3
+   }
+  },
+  "6795": {
+   "description": "Mineral Royalty Traders",
+   "sector": "Basic Materials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 1,
+   "split": {
+    "Basic Materials": 4
+   }
+  },
+  "6798": {
+   "description": "Real Estate Investment Trusts",
+   "sector": "Real Estate",
+   "basis": "code",
+   "members": 103,
+   "agreement": 0.981,
+   "split": {
+    "Real Estate": 101,
+    "Industrials": 1,
+    "Financial Services": 1
+   }
+  },
+  "6799": {
+   "description": "Investors, NEC",
+   "sector": "Real Estate",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.863,
+   "split": {
+    "Financial Services": 1
+   }
+  },
+  "7000": {
+   "description": "Hotels, Rooming Houses, Camps & Other Lodging Places",
+   "sector": "Consumer Cyclical",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.75,
+   "split": {
+    "Real Estate": 1,
+    "Industrials": 1
+   }
+  },
+  "7011": {
+   "description": "Hotels & Motels",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 22,
+   "agreement": 0.818,
+   "split": {
+    "Consumer Cyclical": 18,
+    "Real Estate": 4
+   }
+  },
+  "7200": {
+   "description": "Services-Personal Services",
+   "sector": null,
+   "basis": null,
+   "members": 4,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Cyclical": 2,
+    "Industrials": 1,
+    "Communication Services": 1
+   }
+  },
+  "7310": {
+   "description": "Services-Advertising",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Communication Services": 1,
+    "Technology": 1
+   }
+  },
+  "7311": {
+   "description": "Services-Advertising Agencies",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Communication Services": 3
+   }
+  },
+  "7320": {
+   "description": "Services-Consumer Credit Reporting, Collection Agencies",
+   "sector": "Financial Services",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Financial Services": 3,
+    "Industrials": 1
+   }
+  },
+  "7340": {
+   "description": "Services-To Dwellings & Other Buildings",
+   "sector": null,
+   "basis": null,
+   "members": 5,
+   "agreement": 0.6,
+   "split": {
+    "Industrials": 3,
+    "Consumer Cyclical": 2
+   }
+  },
+  "7350": {
+   "description": "Services-Miscellaneous Equipment Rental & Leasing",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Industrials": 3,
+    "Basic Materials": 1
+   }
+  },
+  "7359": {
+   "description": "Services-Equipment Rental & Leasing, NEC",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.778,
+   "split": {
+    "Industrials": 7,
+    "Financial Services": 1,
+    "Technology": 1
+   }
+  },
+  "7361": {
+   "description": "Services-Employment Agencies",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "7363": {
+   "description": "Services-Help Supply Services",
+   "sector": null,
+   "basis": null,
+   "members": 5,
+   "agreement": 0.6,
+   "split": {
+    "Industrials": 3,
+    "Healthcare": 1,
+    "Technology": 1
+   }
+  },
+  "7370": {
+   "description": "Services-Computer Programming, Data Processing, Etc.",
+   "sector": null,
+   "basis": null,
+   "members": 34,
+   "agreement": 0.471,
+   "split": {
+    "Communication Services": 16,
+    "Technology": 13,
+    "Consumer Cyclical": 2,
+    "Financial Services": 1,
+    "Industrials": 1,
+    "Healthcare": 1
+   }
+  },
+  "7371": {
+   "description": "Services-Computer Programming Services",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 11,
+   "agreement": 0.909,
+   "split": {
+    "Technology": 10,
+    "Healthcare": 1
+   }
+  },
+  "7372": {
+   "description": "Services-Prepackaged Software",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 119,
+   "agreement": 0.941,
+   "split": {
+    "Technology": 112,
+    "Consumer Cyclical": 2,
+    "Industrials": 2,
+    "Healthcare": 1,
+    "Communication Services": 1,
+    "Financial Services": 1
+   }
+  },
+  "7373": {
+   "description": "Services-Computer Integrated Systems Design",
+   "sector": "Technology",
+   "basis": "code",
+   "members": 17,
+   "agreement": 0.941,
+   "split": {
+    "Technology": 16,
+    "Healthcare": 1
+   }
+  },
+  "7374": {
+   "description": "Services-Computer Processing & Data Preparation",
+   "sector": null,
+   "basis": null,
+   "members": 32,
+   "agreement": 0.625,
+   "split": {
+    "Technology": 20,
+    "Communication Services": 5,
+    "Industrials": 5,
+    "Healthcare": 2
+   }
+  },
+  "7380": {
+   "description": "Services-Miscellaneous Business Services",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Technology": 1,
+    "Consumer Cyclical": 1
+   }
+  },
+  "7381": {
+   "description": "Services-Detective, Guard & Armored Car Services",
+   "sector": null,
+   "basis": null,
+   "members": 3,
+   "agreement": 0.667,
+   "split": {
+    "Industrials": 2,
+    "Technology": 1
+   }
+  },
+  "7389": {
+   "description": "Services-Business Services, NEC",
+   "sector": null,
+   "basis": null,
+   "members": 56,
+   "agreement": 0.429,
+   "split": {
+    "Technology": 24,
+    "Consumer Cyclical": 9,
+    "Industrials": 9,
+    "Financial Services": 7,
+    "Communication Services": 4,
+    "Healthcare": 2,
+    "Real Estate": 1
+   }
+  },
+  "7500": {
+   "description": "Services-Automotive Repair, Services & Parking",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 2
+   }
+  },
+  "7510": {
+   "description": "Services-Auto Rental & Leasing (No Drivers)",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Industrials": 3
+   }
+  },
+  "7812": {
+   "description": "Services-Motion Picture & Video Tape Production",
+   "sector": "Communication Services",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.8,
+   "split": {
+    "Communication Services": 1,
+    "Technology": 1
+   }
+  },
+  "7830": {
+   "description": "Services-Motion Picture Theaters",
+   "sector": "Communication Services",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 0.8,
+   "split": {
+    "Communication Services": 2
+   }
+  },
+  "7841": {
+   "description": "Services-Video Tape Rental",
+   "sector": "Communication Services",
+   "basis": "major-group",
+   "members": 1,
+   "agreement": 0.8,
+   "split": {
+    "Communication Services": 1
+   }
+  },
+  "7900": {
+   "description": "Services-Amusement & Recreation Services",
+   "sector": "Communication Services",
+   "basis": "code",
+   "members": 9,
+   "agreement": 0.889,
+   "split": {
+    "Communication Services": 8,
+    "Consumer Cyclical": 1
+   }
+  },
+  "7948": {
+   "description": "Services-Racing, Including Track Operation",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 1
+   }
+  },
+  "7990": {
+   "description": "Services-Miscellaneous Amusement & Recreation",
+   "sector": null,
+   "basis": null,
+   "members": 12,
+   "agreement": 0.583,
+   "split": {
+    "Consumer Cyclical": 7,
+    "Communication Services": 5
+   }
+  },
+  "7997": {
+   "description": "Services-Membership Sports & Recreation Clubs",
+   "sector": "Consumer Cyclical",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Consumer Cyclical": 3
+   }
+  },
+  "8000": {
+   "description": "Services-Health Services",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 7,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 7
+   }
+  },
+  "8011": {
+   "description": "Services-Offices & Clinics of  Doctors of  Medicine",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "8050": {
+   "description": "Services-Nursing & Personal Care Facilities",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 3,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 3
+   }
+  },
+  "8051": {
+   "description": "Services-Skilled Nursing Care Facilities",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "8060": {
+   "description": "Services-Hospitals",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "8062": {
+   "description": "Services-General Medical & Surgical Hospitals, NEC",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 5
+   }
+  },
+  "8071": {
+   "description": "Services-Medical Laboratories",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 14,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 14
+   }
+  },
+  "8082": {
+   "description": "Services-Home Health Care Services",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 5
+   }
+  },
+  "8090": {
+   "description": "Services-Misc Health & Allied Services, NEC",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 5
+   }
+  },
+  "8093": {
+   "description": "Services-Specialty Outpatient Facilities, NEC",
+   "sector": "Healthcare",
+   "basis": "major-group",
+   "members": 2,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 2
+   }
+  },
+  "8111": {
+   "description": "Services-Legal Services",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "8200": {
+   "description": "Services-Educational Services",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 12,
+   "agreement": 0.917,
+   "split": {
+    "Consumer Defensive": 11,
+    "Industrials": 1
+   }
+  },
+  "8351": {
+   "description": "Services-Child Day Care Services",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "8700": {
+   "description": "Services-Engineering, Accounting, Research, Management",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "8711": {
+   "description": "Services-Engineering Services",
+   "sector": "Industrials",
+   "basis": "code",
+   "members": 5,
+   "agreement": 1,
+   "split": {
+    "Industrials": 5
+   }
+  },
+  "8731": {
+   "description": "Services-Commercial Physical & Biological Research",
+   "sector": "Healthcare",
+   "basis": "code",
+   "members": 6,
+   "agreement": 1,
+   "split": {
+    "Healthcare": 6
+   }
+  },
+  "8734": {
+   "description": "Services-Testing Laboratories",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "8741": {
+   "description": "Services-Management Services",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Technology": 1,
+    "Industrials": 1
+   }
+  },
+  "8742": {
+   "description": "Services-Management Consulting Services",
+   "sector": null,
+   "basis": null,
+   "members": 8,
+   "agreement": 0.625,
+   "split": {
+    "Industrials": 5,
+    "Technology": 2,
+    "Healthcare": 1
+   }
+  },
+  "8744": {
+   "description": "Services-Facilities Support Management Services",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Industrials": 1
+   }
+  },
+  "0100": {
+   "description": "Agricultural Production-Crops",
+   "sector": "Consumer Defensive",
+   "basis": "code",
+   "members": 4,
+   "agreement": 0.75,
+   "split": {
+    "Consumer Defensive": 3,
+    "Basic Materials": 1
+   }
+  },
+  "0200": {
+   "description": "Agricultural Prod-Livestock & Animal Specialties",
+   "sector": null,
+   "basis": null,
+   "members": 1,
+   "agreement": 1,
+   "split": {
+    "Consumer Defensive": 1
+   }
+  },
+  "0700": {
+   "description": "Agricultural Services",
+   "sector": null,
+   "basis": null,
+   "members": 2,
+   "agreement": 0.5,
+   "split": {
+    "Consumer Defensive": 1,
+    "Industrials": 1
+   }
+  }
+ }
+}
