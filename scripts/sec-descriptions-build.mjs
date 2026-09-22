@@ -72,6 +72,8 @@ let reached = 0;
 for (const symbol of mine) {
   if (Date.now() - started > BUDGET_MS) break;
   reached++;
+  const t0 = Date.now();
+  const slow = (phase) => { const ms = Date.now() - t0; if (ms > 10_000) console.log(`  slow: ${symbol} ${Math.round(ms / 1000)}s at ${phase}`); };
   const reg = REG.rows[symbol];
   if (!reg?.cik) { misses[symbol] = "no CIK"; continue; }
   if (reg.annualForm === "40-F") { misses[symbol] = "40-F: skipped (owner, #518)"; continue; }
@@ -84,9 +86,11 @@ for (const symbol of mine) {
   const url = `https://www.sec.gov/Archives/edgar/data/${Number(reg.cik)}/${annual.accession.replace(/-/g, "")}/${annual.doc}`;
   const page = await get(url, "text");
   if (page.status !== 200) { misses[symbol] = `document ${page.status}`; continue; }
+  slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
   const loc = desc.locateSection(desc.filingText(page.body), annual.form);
   if (!loc.found) { misses[symbol] = loc.why; continue; }
   const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null });
+  slow("clean");
   if (!cleaned.ok) { misses[symbol] = cleaned.why; continue; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
 }

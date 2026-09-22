@@ -466,7 +466,8 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
 
   // Full build: a FIRST paragraph that opens mid-sentence ("is a global …")
   // is a fragment too; the next one that starts like a sentence leads.
-  while (out.length && !STARTS_LIKE_A_SENTENCE.test(out[0].t)) out = out.slice(1);
+  const lead = out.findIndex((p) => STARTS_LIKE_A_SENTENCE.test(p.t));
+  out = lead < 0 ? [] : out.slice(lead);
   if (!out.length) return { ok: false, why: "no paragraph starts like a sentence" };
 
   // Owner, #518: A LEADING ONE-LINE SLOGAN is dropped when a longer paragraph
