@@ -32,6 +32,7 @@
 // name looks like the missing line. That is the evidence, not the inference.
 //
 //   SYMBOLS="ABVX RYAAY" node scripts/sec-stored-set-probe.mjs
+import fsSync from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
@@ -60,6 +61,29 @@ const codec = await lift([
   strip("lib/server/secFactCodec.ts"),
 ].join("\n"));
 const { SEC_FIELDS, valueOf, cell } = codec;
+
+// parseTickerFile is LIFTED, not reimplemented: company-tickers.json has two
+// possible layouts and reading the wrong one reports "no CIK" for filers that
+// have one — a wrong answer that reads as a finding about the company.
+// padCik comes with it — the gate in source-code.mjs named it, which is the
+// whole reason that gate exists: without it this would have thrown
+// ReferenceError on the first symbol with a null CIK and nowhere else.
+const tickerSrc = readCodeOnly("lib/server/secTickerMap.ts");
+const tickerMod = await lift([
+  grabFunction(tickerSrc, "padCik"),
+  grabFunction(tickerSrc, "parseTickerFile"),
+  "export { parseTickerFile };",
+].join("\n"));
+const TICKER_REDIS_KEY = constant("lib/server/secTickerMap.ts", "TICKER_REDIS_KEY");
+const TICKER_FILE = constant("lib/server/secTickerMap.ts", "TICKER_FILE");
+async function loadTickerMap() {
+  const stored = TICKER_REDIS_KEY ? await redis.get(TICKER_REDIS_KEY).catch(() => null) : null;
+  const text = stored
+    ? (typeof stored === "string" ? stored : JSON.stringify(stored))
+    : fsSync.existsSync(TICKER_FILE) ? fsSync.readFileSync(TICKER_FILE, "utf8") : null;
+  if (!text) return new Map();
+  try { return tickerMod.parseTickerFile(text).map; } catch { return new Map(); }
+}
 
 const SYMS = (process.env.SYMBOLS || "ABVX").split(/[,\s]+/).filter(Boolean);
 const money = (v) =>
@@ -128,8 +152,24 @@ for (const symbol of SYMS) {
   // we do not list" from "the filer does not report this line". Only the
   // payload can, so the payload is fetched — ONCE, for the concept NAMES, and
   // nothing here is re-extracted or compared against the stored numbers.
-  if (!set.cik) { console.log("  no CIK stored, cannot fetch the payload for concept names"); continue; }
-  const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(set.cik).padStart(10, "0")}.json`;
+  // ── THE STORED CIK CAN BE NULL, AND ABVX'S IS ──────────────────────────
+  //
+  // MEASURED (relay 35698132753): the stored set carries entityName
+  // "Abivax S.A." and cik=null. So the CIK is resolved from the ticker map
+  // instead — the SAME parser the site uses, lifted, because this file has two
+  // possible layouts and a hand-rolled reader of the legacy one already
+  // reported "no CIK" for three filers that had one.
+  //
+  // A null stored CIK is worth reporting in its own right: it is what a
+  // re-fetch would need.
+  let cik = set.cik;
+  if (!cik) {
+    const map = await loadTickerMap();
+    cik = map.get(symbol.toUpperCase())?.cik ?? null;
+    console.log(`  NOTE  stored cik is null; resolved ${cik ?? "NOTHING"} from the ticker map`);
+  }
+  if (!cik) { console.log("  no CIK anywhere, cannot fetch the payload for concept names"); continue; }
+  const url = `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`;
   const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" } });
   if (!res.ok) { console.log(`  companyfacts HTTP ${res.status} — cannot name the concepts`); continue; }
   const facts = await res.json();
