@@ -710,6 +710,22 @@ export async function GET(req: NextRequest) {
         const pending = pendingResults(
           events, latestResultsAnnouncement(subs), cadence, todayIso
         );
+        // ── category AND annual: ALREADY IN HAND, PREVIOUSLY DISCARDED ────
+        // Both were live variables three lines up -- `subs.category` goes into
+        // estimateUpcoming and `cadence.annual` decides which deadline column
+        // it uses -- and both were then thrown away. The due strip's overdue
+        // cap needs exactly these two, and nothing persisted them, so a
+        // consumer had to choose between ~50 live SEC fetches per page render
+        // and silently taking DEADLINE_FALLBACK.
+        //
+        // Storing them costs one field each and NO extra request. See the
+        // migration note on StoredReportDates.category.
+        //
+        // `cadence?.annual ?? null` rather than `?? false`: a filer with too
+        // thin a history for nextPeriodEndFrom to find a cadence has no
+        // annual-ness to record, and writing `false` there would assert
+        // "quarterly" about a filer we could not read. Absent means
+        // not-yet-known, which is the whole point of the optionality.
         const ok = await writeReportDates({
           symbol, cik,
           at: new Date().toISOString(),
@@ -717,6 +733,8 @@ export async function GET(req: NextRequest) {
           nextPeriodEnd: nextEnd,
           next,
           pending,
+          category: typeof subs.category === "string" ? subs.category : null,
+          annual: cadence?.annual ?? null,
         });
         if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
