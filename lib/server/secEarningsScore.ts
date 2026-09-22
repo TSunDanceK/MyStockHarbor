@@ -285,6 +285,22 @@ function noScoreReason(symbol: string, cold: ColdResult, hasSet: boolean): strin
       ? `${symbol} is debt, preferred stock or a warrant. The financial statements filed under its SEC registrant describe ${parent ?? "another company"}, not this security, so there is nothing here to score.`
       : `${symbol} shares an SEC registrant with other securities and which one it is could not be established, so the filings there cannot be attributed to it.`;
   }
+  // AND THE SAME PROBLEM ONE STATUS EARLIER. A symbol with no CIK has no
+  // filings to read under that ticker, so the fallback's "have not been read
+  // into the site yet" promises a read that cannot happen. MSTY showed this:
+  // /stock/MSTY said its filings were pending while /stock/MSTY/earnings 404'd,
+  // and neither was true — MSTY is a series of a trust, and the trust is the
+  // registrant.
+  //
+  // IT NAMES BOTH REASONS AND CLAIMS NEITHER, matching SecNoRegistrantCard on
+  // the earnings page. Measured through the shipped gate, two populations land
+  // here: funds whose ticker is never a registrant (MSTY, TSLY, JEPI) and
+  // companies SEC's directory simply does not carry (BK, EA, EQR, WBS). A
+  // sentence that guessed would be wrong for one of them on every page that
+  // renders this string — and there are four.
+  if (cold.status === "no-cik") {
+    return `${symbol} does not appear in the SEC company-ticker directory this page reads, so there are no filings to score and none are on the way. Either it is a fund or ETF share class — those file under their trust rather than their ticker — or it is a company the directory does not carry.`;
+  }
   if (cold.status === "no-xbrl") {
     const named = cold.taxonomies.join(", ");
     switch (cold.why) {
