@@ -73,6 +73,8 @@ jobs:
             for (const w of Object.values(misses)) { const k = w.replace(/\(\d+ chars\)/, "(n chars)").replace(/\d+x/, "Nx"); why[k] = (why[k] ?? 0) + 1; }
             console.log(`${total} symbols · described ${Object.keys(rows).length} · no description ${Object.keys(misses).length}`);
             for (const [w, n] of Object.entries(why).sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(5)}  ${w}`);
+            const jw = shards.reduce((n, s) => n + (s.joined?.words ?? 0), 0), jr = shards.reduce((n, s) => n + (s.joined?.rows ?? 0), 0);
+            console.log(`split words joined: ${jw} in ${jr} rows`);
           '
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
