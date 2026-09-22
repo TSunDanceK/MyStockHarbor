@@ -670,6 +670,22 @@ const TASKS = {
   // a "due to report" list over the past 12 months across the FULL analysis
   // universe and sweeps k. List size scales with the universe, so a sample
   // cannot answer it. Needs the dump for the analysis universe.
+  // DOES A 30-DAY WINDOW SURVIVE WHAT AN EXACT DATE DID NOT? The day-level
+  // forward calendar was measured and killed (2 of 48 filers inside their own
+  // p90 band; 0 of 276 8-K scheduling announcements in the needed band). The
+  // coarser claim -- "expected to report in the next 30 days" -- is a different
+  // claim and had never been measured. Same pairing and walk-forward as
+  // sec-results-date-predictability, scored on a ROLLING window, over the FULL
+  // universe rather than a hand-picked sample, and against a computed
+  // list-everyone-every-day baseline.
+  //
+  // Read-only, no credential; needs the dump for the universe and the network
+  // for submissions.
+  "window30": {
+    script: "scripts/sec-window30-predictability.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "sec-due-sweep": {
     script: "scripts/sec-due-to-report-sweep.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
