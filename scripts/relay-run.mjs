@@ -101,6 +101,10 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // SYMBOLS comes from the workflow's `symbols` input and the script defaults
+  // to the five drone/defence names when it is blank, so a dispatch that
+  // forgets it still captures the thing it was added for.
+  "drone-sample": { script: "scripts/drone-headline-sample.mjs", args: () => [] },
   // How much of a symbol's real pool its anchored short-name needle admits, and
   // how much of that is the company rather than the index, the month or the
   // noun. news.google.com is refused from the sandbox; a runner reaches it.

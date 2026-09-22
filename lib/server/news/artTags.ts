@@ -26,9 +26,10 @@
 // picture asserts something false about the article, a missing one asserts
 // nothing. /headlines falls through to the event-art path it already had.
 import manifest from "@/public/news-art/manifest-v2.json";
-import { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
+import { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
 import { articleTopic } from "./articleTopic";
-import { eventTypeFromTitle } from "./eventType";
+import { eventTypeFromTitle, type EventType } from "./eventType";
+import { industryTag } from "./industryArt";
 
 /**
  * One image's tags, as the generator wrote them.
@@ -264,5 +265,136 @@ export function planHeadlineArt(input: {
     key: input.key,
     taken: input.takenBuckets,
     canGenerate: false,
+  });
+}
+
+/**
+ * SUBJECTS THAT DESCRIBE THE MARKET RATHER THAN AN INDUSTRY.
+ *
+ * ── WHY A SYMBOL-LED PAGE MUST IGNORE THESE, MEASURED ─────────────────────
+ * `exchanges` matches `wall street`, and on the per-symbol feed all four of its
+ * hits across 192 real headlines are the metonym for analysts:
+ *
+ *   "Apple Stock Slips … Fail to Wow Wall Street"
+ *   "Meta Stock Scores Wall Street Upgrade"
+ *   "A Wall Street Bull Expects 75% Gains"      (MSFT)
+ *   "Tesla's stock drops 6% as … 'underwhelms' Wall Street"
+ *
+ * On /headlines that pattern is usually right — a general feed saying "Wall
+ * Street" usually IS the market story — and it is deliberately not narrowed
+ * there. On a page about ONE company it is wrong four times out of four, and
+ * worse than wrong: layer 1 outranks the industry, so it replaces a correct
+ * picture of the company's business with a trading floor.
+ *
+ * THE RULE IS NOT "exchanges IS BAD". It is that a market-wide subject is never
+ * more specific than the company whose page it is, so on a symbol-led surface
+ * it loses to the industry. A named set rather than a flag on the tag, so a
+ * future market-wide subject joins it deliberately and the reason stays here.
+ * `exchanges` is the only one today: every one of its alternatives (`s&p 500`,
+ * `nasdaq composite`, `stock futures`, `market breadth`, `wall street`) is
+ * about the market, and no other subject's are.
+ */
+export const MARKET_WIDE_SUBJECTS = new Set(["exchanges"]);
+
+/**
+ * THE WHOLE SYMBOL-LED RULE, IN ONE FUNCTION — layered, most specific first.
+ *
+ *   1. THE ARTICLE'S OWN WORDS. articleTopic's subject, market-wide tags
+ *      dropped. Hits 9 of 192 per-symbol headlines (4.7%) after the exclusion.
+ *   2. THE EVENT BUCKET, unchanged from today. See below — this is the layer
+ *      the brief did not mention and it is deliberately ABOVE industry.
+ *   3. THE INDUSTRY. industryArt.ts turns FMP's label into a v2 subject. This
+ *      is the layer that does the work: it reaches 87.7% of the universe and it
+ *      is what stops every Technology stock showing servers and cables.
+ *   4. THE SECTOR BUCKET, today's art, unchanged.
+ *
+ * ── WHY THE EVENT BUCKET STAYS ABOVE THE INDUSTRY, AND IT IS A CHOICE ─────
+ * The brief said "classifier, then industry, then the existing sector art", and
+ * did not say where eventType goes. Putting industry above it would silently
+ * take event-earnings art off every earnings story on a stock page — 7% of
+ * per-symbol headlines reach an event bucket today — and replace it with a
+ * picture of the company's industry.
+ *
+ * That is a behaviour change nobody asked for, and the ordering principle the
+ * whole picker is built on says it would be the wrong one anyway: layer 1 is
+ * first because the ARTICLE is more specific than the company, and an event
+ * type is also a fact about the article. "Apple beats estimates" is an earnings
+ * story that happens to be about a consumer-electronics company.
+ *
+ * It is one line to move if that judgement is wrong, and the check has a case
+ * pinning the current order so moving it is visible rather than accidental.
+ *
+ * COMPACT ROWS NEVER REACH ANY OF THIS. planCardArt gives them the generated
+ * data card, because at 56px a ticker and a move are legible where a shrunk
+ * illustration is not, and that rule is not this function's to revisit.
+ */
+export function planSymbolCardArt(input: {
+  variant: "lead" | "compact";
+  title: string;
+  /** The item's summary or excerpt, when it has one. */
+  description?: string | null;
+  /** §7's event type for this item, or null. */
+  eventType?: EventType | null;
+  /** FMP's industry label from resolveProfile(), or null. */
+  industry: string | null;
+  /** The symbol's sector bucket — layer 4, and what everything falls through to. */
+  sectorBucket: string | null;
+  /** Stable per-article key: a guid where there is one, else the link. */
+  key: string;
+  /** v2 no-repeat state, keyed by image NAME. Mutated; one per page. */
+  takenNames: Set<string>;
+  /** v1 no-repeat state, keyed by BUCKET. Mutated; one per page. */
+  takenBuckets: Map<string, Set<number>>;
+  canGenerate: boolean;
+}): CardArt {
+  const {
+    variant, title, description, eventType, industry, sectorBucket,
+    key, takenNames, takenBuckets, canGenerate,
+  } = input;
+
+  if (variant === "lead") {
+    // ── LAYER 1 ──────────────────────────────────────────────────────────
+    // Subjects only. A motif-only article ("…raises guidance") falls through:
+    // the company's own industry says more about the picture than a generic
+    // podium does, which is the opposite of the trade on /headlines, where
+    // there is no company to say anything about.
+    const { subjects } = articleTopic(title, description ?? null);
+    const specific = subjects.filter((tag) => !MARKET_WIDE_SUBJECTS.has(tag));
+    if (specific.length) {
+      const art = pickTagged({
+        subjectTags: specific,
+        articleMotifs: [],
+        key,
+        taken: takenNames,
+      });
+      if (art) return { kind: "library", art };
+    }
+
+    // ── LAYER 3, ONLY IF LAYER 2 HAS NOTHING TO SAY ──────────────────────
+    // bucketForItem answers art.ts's own question — "does this item have an
+    // event bucket that holds images?" — rather than this file re-deriving it.
+    // A null sector argument makes it answer about the EVENT half alone.
+    if (!bucketForItem(eventType ?? null, null)) {
+      const tag = industryTag(industry);
+      if (tag) {
+        const art = pickTagged({
+          subjectTags: [tag],
+          articleMotifs: [],
+          key,
+          taken: takenNames,
+        });
+        if (art) return { kind: "library", art };
+      }
+    }
+  }
+
+  // ── LAYERS 2 AND 4, AND THE COMPACT CARD: TODAY'S RULE, UNTOUCHED ──────
+  return planCardArt({
+    variant,
+    eventType,
+    sectorBucket,
+    key,
+    taken: takenBuckets,
+    canGenerate,
   });
 }

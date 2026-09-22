@@ -438,6 +438,21 @@ export const SUBJECT_TAGS: string[] = SUBJECT_PATTERNS.map(([tag]) => tag);
 export const MOTIF_TAGS: string[] = MOTIF_PATTERNS.map(([tag]) => tag);
 
 /**
+ * THE PATTERNS THEMSELVES, exposed for one assertion that cannot be made any
+ * other way: no subject pattern may match more than 10% of the per-symbol
+ * fixture ON ITS OWN.
+ *
+ * ── WHY EACH PATTERN IS TESTED ALONE ──────────────────────────────────────
+ * articleTopic stops at the first match, so a ruinously broad pattern added
+ * BELOW a narrow one is invisible in the output: the narrow one keeps winning
+ * on the headlines anyone looks at. Measured on that fixture, `\bstocks?\b`
+ * would fire on 146 of 192 headlines (76%) — on a per-symbol feed nearly every
+ * headline says "stock" — and a tag that fires on three quarters of a feed is
+ * not a subject, it is a background.
+ */
+export const SUBJECT_PATTERN_ENTRIES: ReadonlyArray<readonly [string, RegExp]> = SUBJECT_PATTERNS;
+
+/**
  * How many times a pattern matches, counted at DISTINCT OFFSETS.
  *
  * Rule 3 needs "two independent matches in the description" to be a number, and
