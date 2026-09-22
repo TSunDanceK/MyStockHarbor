@@ -232,10 +232,17 @@ console.log("\n7. THE EVIDENCE IS FILED FACTS AND SAMPLE SIZES");
   // The sample size counts USABLE lags, not stored events. An announcement
   // dated before its own period end is dropped from the median; quoting it in
   // "over its last N periods" would overstate the evidence behind the number.
-  const withJunk = at(10, { events: [...history(12, 30), ev("2026-03-31", "2026-03-01")] });
-  check("the sample size counts the lags the median used, not the raw events",
-    outlookFrom("X", withJunk, TODAY).evidence.some((l) => /over its last 12 periods/.test(l)),
-    `${withJunk.events.length} events stored`);
+  // BOTH PATHS, because they reach the number by different routes: the
+  // in-window row carries expectedFrom's own count, the beyond-window one is
+  // recomputed by habitOf. An assertion on only one of them leaves the other
+  // free to inflate.
+  const junk = [...history(12, 30), ev("2026-03-31", "2026-03-01")];
+  for (const [where, days] of [["in-window", 10], ["beyond-window", 60]]) {
+    const o = outlookFrom("X", at(days, { events: junk }), TODAY);
+    check(`the ${where} sample size counts the lags the median used, not the raw events`,
+      o.evidence.some((l) => /over its last 12 periods/.test(l)),
+      `${junk.length} events stored — ${o.evidence.join(" | ")}`);
+  }
 }
 
 console.log("\n8. EVERY REFUSAL IS NAMED, AND THE NAMES SAY WHOSE GAP IT IS");
