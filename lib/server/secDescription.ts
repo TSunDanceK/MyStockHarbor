@@ -150,6 +150,7 @@ const DEFINITION: RegExp[] = [
   /^when\s+used\s+in\s+this\s+(annual\s+)?report\b/i,
   /^unless\s+(otherwise\s+indicated|the\s+context)/i,
   /^as\s+used\s+(in\s+this|herein)/i,
+  /^when\s+we\s+use\s+the\s+terms?\b/i,                                       // GS, paragraph 2
   // A reading instruction, not a cross-reference to other text in its place:
   // ONDS opens Item 1 with "This business description should be read in
   // conjunction with our audited Consolidated Financial Statements…", then the
@@ -157,6 +158,19 @@ const DEFINITION: RegExp[] = [
   /^this\s+(business\s+description|section|item)\s+should\s+be\s+read\s+in\s+conjunction\s+with\b/i,
   /^(the\s+terms?\s+)?[“"][^”"]+[”"][^.]{0,200}\brefers?\s+to\b/i,
   /\brefers?\s+to\s+[^.]{0,160}\band\s+(all\s+)?(of\s+)?its\s+(consolidated\s+)?subsidiaries\b/i,
+];
+
+/** A sentence ends at . ! ? or : , optionally inside a closing quote or bracket.
+ * A bare closing quote does not: ONDS wraps after "“our,”". */
+const SENTENCE_END = /[.!?:][”"’)]*$/;
+
+/** A line at least this long that stops mid-sentence is a hard wrap, not a heading. */
+const WRAPPED_LINE_CHARS = 40;
+
+/** Pointers elsewhere in the document — dropped as sentences, wherever they sit. */
+const POINTER: RegExp[] = [
+  /^(please\s+)?see\s+/i,                                                   // V "Please see Our Core Business discussion below."
+  /\bterms\s+used\s+in\s+this\s+(section|report)\s+are\s+defined\b/i,          // PLAB glossary pointer
 ];
 
 export const DESCRIPTION_MAX_CHARS = 900;
@@ -175,13 +189,19 @@ export function cleanDescription(body: string): Cleaned {
   // Rule 1: JOIN A BROKEN LINE, NOT EVERY LINE. Filings end most paragraphs
   // with a single newline (one </p> or </div>), so joining every newline would
   // glue sub-headings like "Overview" onto the prose. A line is broken when it
-  // does not end a sentence and the next begins lower-case or with a digit.
+  // does not end a sentence and either the next begins lower-case or a digit,
+  // or the line itself is prose-length (a hard-wrapped filing, ONDS / KTOS /
+  // GEV / PLAB on relay 35781008070, wraps before capitals too: "…to the" /
+  // "United States…"). A sub-heading is short, so it is not joined forward.
   const raw = body.split(/\n+/).map((l) => l.replace(/\s{2,}/g, " ").trim()).filter(Boolean);
   let paras: string[] = [];
+  let lastLine = "";
   for (const l of raw) {
     const prev = paras[paras.length - 1];
-    if (prev && !/[.!?:”"’)]$/.test(prev) && /^[a-z0-9(]/.test(l)) paras[paras.length - 1] = `${prev} ${l}`;
+    const open = prev && !SENTENCE_END.test(prev);
+    if (open && (/^[a-z0-9(]/.test(l) || lastLine.length >= WRAPPED_LINE_CHARS)) paras[paras.length - 1] = `${prev} ${l}`;
     else paras.push(l);
+    lastLine = l;
   }
   // Sub-headings and fragments ("General", "Overview", a stray ".").
   paras = paras.filter((p) => p.length >= 60 && /[a-z]/.test(p));
@@ -190,16 +210,13 @@ export function cleanDescription(body: string): Cleaned {
   // Rule 2: a leading all-caps heading glued to the first paragraph.
   paras[0] = paras[0].replace(/^[A-Z][A-Z0-9 &,'’\-]{2,}[.:]\s+(?=[A-Z])/, "");
 
-  // Rule 3: drop definition sentences at the start of the text, paragraph by
-  // paragraph, until the first sentence that is not one.
+  // Rule 3: drop definition sentences. Leading ones first (the owner's rule);
+  // on relay 35781008070 GS carried "When we use the terms…" as its SECOND
+  // paragraph, so a definition is dropped wherever it falls in the excerpt,
+  // and so is a pointer to elsewhere in the document.
   const out: string[] = [];
-  let leading = true;
   for (const p of paras) {
-    let ss = sentences(p);
-    if (leading) {
-      ss = ss.filter((s) => !DEFINITION.some((re) => re.test(s)));
-      if (ss.length) leading = false;
-    }
+    const ss = sentences(p).filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
     if (ss.length) out.push(ss.join(" "));
   }
   if (!out.length) return { ok: false, why: "only definition text after the heading" };
@@ -218,7 +235,12 @@ export function cleanDescription(body: string): Cleaned {
     if (take.length) kept.push(take.join(" "));
     if (n >= DESCRIPTION_MAX_CHARS) break;
   }
-  const text = kept.join("\n\n").trim();
+  // A paragraph that stops mid-sentence (a wrap the join could not see, or a
+  // colon introducing a list that was cut) ends at its last full sentence; one with no full sentence is dropped.
+  const whole = kept
+    .map((p) => (/[.!?][”"’)]*$/.test(p) ? p : p.replace(/(^|[.!?][”"’)]*)[^.!?]*$/, "$1").trim()))
+    .filter((p) => p.length >= 60);
+  const text = whole.join("\n\n").trim();
 
   // Rule 4, on what would render.
   for (const [re, label] of REJECT) if (re.test(text)) return { ok: false, why: `rejected: ${label}` };
