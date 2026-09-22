@@ -896,7 +896,8 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
       (builder.match(/writeReportDates\(/g) ?? []).length === 1 &&
       !/writeReportDates\(/.test(job) && !/writeReportDates\(/.test(rw));
   check("...and the write passes earlyNonResults straight through, never omitted or coerced",
-    /\n\s*earlyNonResults,\n\s*\}\);/.test(builder) &&
+    /\n\s*earlyNonResults,\n\s*\};/.test(builder) &&
+      /const ok = await writeReportDates\(rec\);/.test(builder) &&
       /const earlyNonResults = earlyNonResultsPattern\(pairing\.periods\);/.test(builder));
   check("the pending-results guard is handed the pattern at the write site",
     /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(builder));
