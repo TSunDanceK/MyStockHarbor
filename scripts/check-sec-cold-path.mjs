@@ -122,6 +122,38 @@ check("the pending copy IS temporary, and only that card says so",
     pendingBody.length > 100 && noXbrlBody.length > 100,
   `pending ${pendingBody.length}b, no-xbrl ${noXbrlBody.length}b — both non-empty, ` +
     `so a mis-sliced body cannot pass this by being blank`);
+// ── AND THE SCORER SAYS THE SAME THING THE CARD DOES ─────────────────────
+//
+// The earnings page got SecNoRegistrantCard; the SCORE's explanation is a
+// separate string, rendered on four surfaces — /stock/[symbol]/earnings twice
+// (hero and detail), plus LatestEarningsCard on /stock/[symbol] and
+// /stock/[symbol]/news. MSTY showed the gap: the stock page said its filings
+// were pending while the earnings page 404'd, and neither was true.
+{
+  const scoreSrc = readCodeOnly("lib/server/secEarningsScore.ts");
+  const reason = scoreSrc.slice(
+    scoreSrc.indexOf("function noScoreReason"),
+    scoreSrc.indexOf("export function scoreFromSec")
+  );
+  const noCik = reason.slice(reason.indexOf('cold.status === "no-cik"'));
+  const branch = noCik.slice(0, noCik.indexOf("\n  }"));
+
+  check("noScoreReason has a no-cik branch at all",
+    /cold\.status === "no-cik"/.test(reason),
+    "without one it falls through to the bottom line, which promises a read");
+  check("...and it is decided BEFORE the fallback that promises a later read",
+    reason.indexOf('cold.status === "no-cik"') <
+      reason.indexOf("have not been read into the site yet"),
+    "order is the whole mechanism here");
+  check("...and never says the filings are on their way",
+    !/not been read into the site yet|pending|shortly|check back/i.test(branch),
+    "no read is coming for a ticker that is not a registrant");
+  check("...and names BOTH reasons without asserting either",
+    /fund or ETF share class/.test(branch) && /does not carry/.test(branch) &&
+      !/usually|most often|probably/i.test(branch),
+    "funds and uncarried companies both land here and the page cannot tell them apart");
+}
+
 // ── NO-CIK RENDERS, AND THAT REPLACED A 404 THAT WAS WRONG ────────────────
 //
 // This asserted the 404 for good reasons: nothing is fetched or queued for a
