@@ -788,11 +788,34 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         // still does not reach the description — a stub returning null would
         // make this pass for the wrong reason.
         `const computeIndicatorSeed = () => ({ lastClose: 200, trend: ${JSON.stringify(label)} });`,
+        // THE CIK GATE, STUBBED SO BOTH BRANCHES CAN BE EXERCISED. The earnings
+        // page's generateMetadata now reads it to decide `index`, because the
+        // no-registrant state is a 200 rather than a 404 and a 200 that can be
+        // indexed as thin content is the cost of that. "NOCIK" is the symbol
+        // that resolves to nothing; everything else resolves.
+        'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
         grabFunction(src, "generateMetadata"),
       ].join("\n") + "\nexport { generateMetadata };"
     );
     return mod.generateMetadata({ params: Promise.resolve({ symbol }) });
   };
+
+  // ── INDEXABILITY FOLLOWS THE CIK, NOT THE ROUTE ──────────────────────────
+  // A symbol with filings is indexable; one with no registrant is not. The
+  // second is the new state, and the whole reason the 404 could be dropped
+  // safely: this route is enumerated, so a 200 that Google can index as thin
+  // content would be a worse outcome than the 404 it replaced.
+  {
+    const withCik = await runMeta(pageRaw, labels[0], "AAPL");
+    const without = await runMeta(pageRaw, labels[0], "NOCIK");
+    check("a symbol with a CIK stays indexable",
+      withCik.robots?.index === true, JSON.stringify(withCik.robots));
+    check("a symbol with no registrant is noindex",
+      without.robots?.index === false, JSON.stringify(without.robots));
+    check("...and still follow, so a crawler is not stranded",
+      without.robots?.follow === true,
+      "the card links to a stock page that renders");
+  }
 
   const metaSrc = grabFunction(pageRaw, "generateMetadata");
   const leaked = [];
@@ -880,6 +903,9 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       "const getDailyHistory = async () => [{ date: \"2026-09-15\", close: 200 }];",
       "const fetchQuoteForMeta = async () => ({ price: 200, date: \"2026-09-15\" });",
       "const computeIndicatorSeed = () => ({ lastClose: 200, trend: \"Uptrend\" });",
+      // Same stub and same reason as runMeta above — the mutation harness lifts
+      // the SAME function, so it needs the same closure.
+      'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
       restoreLeak(metaSrc),
     ].join("\n") + "\nexport { generateMetadata };"
   );
