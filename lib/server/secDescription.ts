@@ -158,10 +158,20 @@ function pairSection(
     else if (isEnd(i)) ends.push(i);
   }
   if (!starts.length) return { span: null, starts: 0 };
+  let prevEnd = -1;
   for (const e of ends) {
     const before = starts.filter(([s]) => s < e);
+    const between = before.filter(([s]) => s > prevEnd);
+    prevEnd = e;
     if (!before.length) continue;
-    const [, from] = before[before.length - 1];
+    // RUNNING PAGE HEADERS: DAL prints "Item 1. Business" at the top of every
+    // page of Item 1, so the last start before the end is the section's LAST
+    // page (full build: DAL rendered the officer roster, then risk-factor
+    // text). When the same heading repeats three or more times since the
+    // previous end, the section starts at its FIRST occurrence.
+    const keys = between.map(([s]) => L[s].key);
+    const repeated = between.length >= 3 && keys.filter((k) => k === keys[keys.length - 1]).length >= 3;
+    const [, from] = repeated ? between[0] : before[before.length - 1];
     if (L[e].start - from >= minChars) return { span: { from, to: L[e].start }, starts: starts.length };
   }
   const [s, from] = starts[starts.length - 1];
