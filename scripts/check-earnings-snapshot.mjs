@@ -502,7 +502,18 @@ console.log("\n12. a blank tile says why, and only the reason that applies");
   delete unknown.nt;
   const tu = textOfSet(M, unknown);
   check("a set with no untagged marker does NOT claim there is no revenue line",
-    !tu.includes(M.EMPTY_REASONS.noRevenueLine) && tu.includes(`Revenue — ${M.EMPTY_REASONS.notInPeriod}`), "");
+    !tu.includes(M.EMPTY_REASONS.noRevenueLine) && tu.includes(`Revenue — ${M.EMPTY_REASONS.notCaptured}`), "");
+  // THE WORDS THEMSELVES, pinned: the unknown case claims only what we did not
+  // capture, never anything about what the company filed (owner, #522).
+  check("...and says so as 'Not captured from this filing', claiming nothing about the filer",
+    M.EMPTY_REASONS.notCaptured === "Not captured from this filing" &&
+      !/filed figures|not reported|not filed/i.test(M.EMPTY_REASONS.notCaptured), M.EMPTY_REASONS.notCaptured);
+  const alwaysNoLine = await loadSnapshot(once(
+    'const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;',
+    "const revenueReason = EMPTY_REASONS.noRevenueLine;"
+  ));
+  check("...and CATCHES 'no revenue line' claimed without the marker",
+    textOfSet(alwaysNoLine, unknown).includes(alwaysNoLine.EMPTY_REASONS.noRevenueLine));
 
   const noFy = await loadSnapshot(once(
     "fyEpsDiluted: fiscalYearEps(set, latest, epsStd),", "fyEpsDiluted: null,"
