@@ -433,6 +433,38 @@ const FALLBACK_SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   ["exchanges", /\b(stock markets?|equity markets?|the markets?|equities|sell-?offs?|bear market|bull market|blue chips?|indexes|indices)\b/i],
 ];
 
+/**
+ * SUBJECTS THAT DESCRIBE THE MARKET RATHER THAN AN INDUSTRY.
+ *
+ * ── WHY A SYMBOL-LED PAGE MUST IGNORE THESE, MEASURED ─────────────────────
+ * `exchanges` matches `wall street`, and on the per-symbol feed all four of its
+ * hits across 192 real headlines are the metonym for analysts:
+ *
+ *   "Apple Stock Slips … Fail to Wow Wall Street"
+ *   "Meta Stock Scores Wall Street Upgrade"
+ *   "A Wall Street Bull Expects 75% Gains"      (MSFT)
+ *   "Tesla's stock drops 6% as … 'underwhelms' Wall Street"
+ *
+ * On /headlines that pattern is usually right — a general feed saying "Wall
+ * Street" usually IS the market story — and it is deliberately not narrowed
+ * there. On a page about ONE company it is wrong four times out of four, and
+ * worse than wrong: layer 1 outranks the industry, so it replaces a correct
+ * picture of the company's business with a trading floor.
+ *
+ * THE RULE IS NOT "exchanges IS BAD". It is that a market-wide subject is never
+ * more specific than the company whose page it is, so on a symbol-led surface
+ * it loses to the industry. A named set rather than a flag on the tag, so a
+ * future market-wide subject joins it deliberately and the reason stays here.
+ *
+ * IT LIVES BESIDE THE SUBJECT TABLE, not beside the picker that applies it,
+ * because it is a statement about what these tags MEAN — a property of the
+ * vocabulary, not of one surface's rule. Anything holding a tag can ask.
+ * `exchanges` is the only one today: every one of its alternatives (`s&p 500`,
+ * `nasdaq composite`, `stock futures`, `market breadth`, `wall street`) is
+ * about the market, and no other subject's are.
+ */
+export const MARKET_WIDE_SUBJECTS = new Set(["exchanges"]);
+
 /** Exposed for scripts/check-news-art.mjs, which asserts every name is real. */
 export const SUBJECT_TAGS: string[] = SUBJECT_PATTERNS.map(([tag]) => tag);
 export const MOTIF_TAGS: string[] = MOTIF_PATTERNS.map(([tag]) => tag);

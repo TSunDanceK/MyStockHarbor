@@ -27,7 +27,7 @@
 // nothing. /headlines falls through to the event-art path it already had.
 import manifest from "@/public/news-art/manifest-v2.json";
 import { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt } from "./art";
-import { articleTopic } from "./articleTopic";
+import { articleTopic, MARKET_WIDE_SUBJECTS } from "./articleTopic";
 import { eventTypeFromTitle, type EventType } from "./eventType";
 import { industryTag } from "./industryArt";
 
@@ -268,33 +268,6 @@ export function planHeadlineArt(input: {
   });
 }
 
-/**
- * SUBJECTS THAT DESCRIBE THE MARKET RATHER THAN AN INDUSTRY.
- *
- * ── WHY A SYMBOL-LED PAGE MUST IGNORE THESE, MEASURED ─────────────────────
- * `exchanges` matches `wall street`, and on the per-symbol feed all four of its
- * hits across 192 real headlines are the metonym for analysts:
- *
- *   "Apple Stock Slips … Fail to Wow Wall Street"
- *   "Meta Stock Scores Wall Street Upgrade"
- *   "A Wall Street Bull Expects 75% Gains"      (MSFT)
- *   "Tesla's stock drops 6% as … 'underwhelms' Wall Street"
- *
- * On /headlines that pattern is usually right — a general feed saying "Wall
- * Street" usually IS the market story — and it is deliberately not narrowed
- * there. On a page about ONE company it is wrong four times out of four, and
- * worse than wrong: layer 1 outranks the industry, so it replaces a correct
- * picture of the company's business with a trading floor.
- *
- * THE RULE IS NOT "exchanges IS BAD". It is that a market-wide subject is never
- * more specific than the company whose page it is, so on a symbol-led surface
- * it loses to the industry. A named set rather than a flag on the tag, so a
- * future market-wide subject joins it deliberately and the reason stays here.
- * `exchanges` is the only one today: every one of its alternatives (`s&p 500`,
- * `nasdaq composite`, `stock futures`, `market breadth`, `wall street`) is
- * about the market, and no other subject's are.
- */
-export const MARKET_WIDE_SUBJECTS = new Set(["exchanges"]);
 
 /**
  * THE WHOLE SYMBOL-LED RULE, IN ONE FUNCTION — layered, most specific first.

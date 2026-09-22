@@ -1113,8 +1113,8 @@ const loadTagged = async (manifestObject, label) => {
     // a second inlined copy of either would be a second thing to keep in
     // agreement. Both are the SHIPPED modules, loaded above.
     .replace(
-      /^import \{ articleTopic \} from "\.\/articleTopic";$/m,
-      "const { articleTopic } = globalThis.__newsTopic;"
+      /^import \{ articleTopic, MARKET_WIDE_SUBJECTS \} from "\.\/articleTopic";$/m,
+      "const { articleTopic, MARKET_WIDE_SUBJECTS } = globalThis.__newsTopic;"
     )
     .replace(
       /^import \{ eventTypeFromTitle, type EventType \} from "\.\/eventType";$/m,
@@ -1135,7 +1135,7 @@ const loadTagged = async (manifestObject, label) => {
     ["const manifest = {", "the manifest was not substituted"],
     ["const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
     ["const { industryTag } = globalThis.__newsIndustry;", "the industry table import was not rewired"],
-    ["const { articleTopic } = globalThis.__newsTopic;", "the classifier import was not rewired"],
+    ["const { articleTopic, MARKET_WIDE_SUBJECTS } = globalThis.__newsTopic;", "the classifier import was not rewired"],
     ["const { eventTypeFromTitle } = globalThis.__newsEventType;", "the eventType import was not rewired"],
   ]) {
     if (!src.includes(marker)) { console.error(`FAIL: ${why} (${label}).`); process.exit(1); }
@@ -1580,8 +1580,8 @@ check(
 );
 check(
   "...and the exclusion is a NAMED SET, not a special case buried in the branch",
-  shippedTags.MARKET_WIDE_SUBJECTS instanceof Set && shippedTags.MARKET_WIDE_SUBJECTS.has("exchanges"),
-  "a future market-wide subject has to be added deliberately, next to the reason"
+  topic.MARKET_WIDE_SUBJECTS instanceof Set && topic.MARKET_WIDE_SUBJECTS.has("exchanges"),
+  "it lives beside the SUBJECT TABLE, not beside the picker that applies it: a statement about what these tags MEAN, so anything holding a tag can ask"
 );
 check(
   "LAYER 2 stays above the industry: an earnings story keeps today's event art",
