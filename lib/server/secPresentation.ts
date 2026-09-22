@@ -218,6 +218,105 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   };
 }
 
+// ── how much of a score was actually measured ─────────────────────────────
+
+export type ScoreCoverage = {
+  /** Components that ran. */
+  measured: number;
+  /** Components the score has at all. */
+  total: number;
+  /** The lowest score this filer could have reached, given what ran. */
+  low: number;
+  /** The highest. */
+  high: number;
+  /** True when anything at all could not be read. */
+  partial: boolean;
+  /**
+   * True when the reachable band cannot leave the middle verdict — the score
+   * was decided by the missing inputs, not by the company.
+   */
+  pinned: boolean;
+};
+
+/**
+ * WHAT A SCORE COULD POSSIBLY HAVE SAID, given the inputs that ran.
+ *
+ * ── THE DEFECT THIS EXISTS FOR, MEASURED ON ABVX ─────────────────────────
+ * ABVX renders 48/100 with a MIXED pill and a needle just left of centre,
+ * laid out exactly like AAPL's. Three of the five components never ran —
+ * revenue growth, EPS growth and margin direction — and those three carry 52
+ * of the 58 points the score can move by. What remained was profitability (6)
+ * and cash conversion (10), so the arithmetic could only ever land between 34
+ * and 66, and the MIXED band is 40 to 65.
+ *
+ * ABVX COULD NOT HAVE SCORED WEAK OR GOOD. Not "did not" — could not, for any
+ * company, however good or bad. The 48 is a reading of how little the page
+ * could see, and nothing about the number, the pill or the needle said so.
+ *
+ * THE ARITHMETIC IS NOT THE BUG AND IS NOT CHANGED HERE. An absent component
+ * contributing zero is deliberate and right: the alternative, a fixed
+ * denominator, would cap a filer with no cash chain at 80 and punish it for
+ * the page's own limit (see SCORE_SEED's docblock). What was missing is that
+ * the READER was never told the range had collapsed.
+ *
+ * ── WHY THE MAXIMA ARE READ AS MAGNITUDES ────────────────────────────────
+ * Every component is clamped symmetrically — clamp(v * 0.55, -22, 22),
+ * clamp(v * 0.30, -20, 20), and so on — so one table of maxima describes both
+ * directions. The one exception is profitability, which is +6 or -8; passing
+ * its magnitude as 8 keeps `low` honest and costs `high` nothing, because a
+ * band that is slightly too wide understates the problem rather than
+ * inventing one.
+ */
+export function scoreCoverage(
+  seed: number,
+  maxima: Record<string, number>,
+  unavailableCount: number,
+  ranKeys: readonly string[]
+): ScoreCoverage {
+  const total = Object.keys(maxima).length;
+  const measured = total - unavailableCount;
+  const reach = ranKeys.reduce((a, k) => a + (maxima[k] ?? 0), 0);
+  const low = Math.max(0, Math.round(seed - reach));
+  const high = Math.min(100, Math.round(seed + reach));
+  return { measured, total, low, high, partial: unavailableCount > 0, pinned: false };
+}
+
+/**
+ * The same, with `pinned` decided against the page's own band thresholds.
+ *
+ * SEPARATE FROM THE ARITHMETIC because the bands live on the page and the
+ * reachable range does not depend on them. A score is PINNED when its whole
+ * reachable range sits inside one verdict: the verdict was then a property of
+ * the missing data, and calling it "Mixed" without saying so is the claim
+ * this whole module exists to stop.
+ */
+export function pinCoverage(c: ScoreCoverage, bandLow: number, bandHigh: number): ScoreCoverage {
+  return { ...c, pinned: c.partial && c.low >= bandLow && c.high <= bandHigh };
+}
+
+/** The pill's words when not every input ran. Never a bare verdict. */
+export function partialScoreLabel(c: ScoreCoverage): string {
+  return `Partial · ${c.measured} of ${c.total} measured`;
+}
+
+/**
+ * What the card says under a partial score, in full sentences.
+ *
+ * IT NAMES THE RANGE, because "partial" alone still invites the reader to
+ * treat the number as a reading that happens to be incomplete. "Could only
+ * land between 34 and 66" is the fact that stops that.
+ */
+export function partialScoreNote(c: ScoreCoverage, missing: string[], periodWord: string): string {
+  const what = missing.length
+    ? `${missing.length === 1 ? "One input is" : `${missing.length} inputs are`} not in this company's filings: ${missing.join("; ")}.`
+    : "";
+  const range = `With the rest unread, the score could only have landed between ${c.low} and ${c.high}`;
+  const pinned = c.pinned
+    ? ` — entirely inside one band, so the verdict above was decided by what is missing rather than by the ${periodWord}.`
+    : ".";
+  return `${what} ${range}${pinned} It is not comparable with a score where every input was read.`.trim();
+}
+
 // ── how old a price may be and still be called a price ────────────────────
 
 /**

@@ -21,7 +21,10 @@ import {
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
 // where they are drawn; re-importing them here would just be a second name for
 // the same rule.
-import { toneBg, toneColor, type EarningsTone as PresentationTone } from "@/lib/server/secPresentation";
+import {
+  partialScoreLabel, partialScoreNote, pinCoverage, scoreCoverage, toneBg, toneColor,
+  type EarningsTone as PresentationTone,
+} from "@/lib/server/secPresentation";
 import { valuationInputs } from "@/lib/server/secValuation";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
@@ -1054,6 +1057,30 @@ export default async function StockEarningsPage({ params }: Props) {
 
   const nextReport = data.nextReport;
   const score = data.score;
+  /**
+   * HOW MUCH OF THE SCORE RAN — computed once, here, from the score's own
+   * record of what it did rather than from a second reading of the view.
+   *
+   * `contributions` holds exactly the components that contributed (see
+   * `contribute`, which writes the set and the record together), so its keys
+   * ARE the ones that ran. Deriving the list any other way would be a second
+   * answer to a question the score already answered.
+   *
+   * profitability's magnitude is 8, not 6: it contributes +6 when profitable
+   * and -8 when not, and the reachable LOW has to use the larger of the two.
+   */
+  const coverage = score.available
+    ? pinCoverage(
+        scoreCoverage(
+          score.seed,
+          { ...SCORE_MAX_CONTRIBUTION, profitability: 8 },
+          score.unavailable.length,
+          Object.keys(score.contributions)
+        ),
+        SCORE_BANDS.find((b) => b.tone === "neutral")!.from,
+        SCORE_BANDS.find((b) => b.tone === "good")!.from - 1
+      )
+    : null;
   const secView = data.secView;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
@@ -1112,6 +1139,12 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
         .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
+        /* A PARTIAL SCORE READS AS INK, NOT AS A VERDICT — see the card. */
+        .scorePillPartial { background: rgba(148,163,184,0.14); border-color: rgba(148,163,184,0.38); color: #cbd5e1; letter-spacing: 0.01em; }
+        .scoreNumberPartial { color: rgba(226,232,240,0.62); }
+        /* The span the score could actually have landed in, under the needle. */
+        .scoreReach { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.55); border-left: 1px solid rgba(226,232,240,0.45); border-right: 1px solid rgba(226,232,240,0.45); }
+        .scoreReachNote { color: rgba(226,232,240,0.78); }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
@@ -1307,9 +1340,19 @@ export default async function StockEarningsPage({ params }: Props) {
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <aside className="scoreCard">
+              {/* ── HOW MUCH OF THIS SCORE WAS ACTUALLY MEASURED ──────────────
+                  ABVX rendered 48/100 MIXED laid out exactly like AAPL's while
+                  three of five components never ran. Those three carry 52 of
+                  the 58 points the score can move by, so it could only land
+                  between 34 and 66 — inside the MIXED band either way. It
+                  could not have read Weak or Good for any company. The
+                  arithmetic is right and unchanged; what was missing is that
+                  the reader was never told the range had collapsed. */}
               <div className="scoreTop">
                 <div className="smallLabel">Earnings score</div>
-                <div className="scorePill">{score.label}</div>
+                <div className={coverage?.partial ? "scorePill scorePillPartial" : "scorePill"}>
+                  {coverage?.partial ? partialScoreLabel(coverage) : score.label}
+                </div>
               </div>
               {/* No number and no needle when there is nothing to score. The
                   pill already says "Unavailable" and the explanation says why,
@@ -1321,10 +1364,28 @@ export default async function StockEarningsPage({ params }: Props) {
               {score.available ? (
                 <>
                   <div className="scoreNumberRow">
-                    <div className="scoreNumber">{score.score}/100</div>
+                    {/* A PARTIAL SCORE LOSES ITS VERDICT COLOUR. The hue is
+                        the fastest-read part of this card and it asserts a
+                        reading; on a score the missing inputs decided, the
+                        number is ink, not a verdict. */}
+                    <div className={coverage?.partial ? "scoreNumber scoreNumberPartial" : "scoreNumber"}>
+                      {score.score}/100
+                    </div>
                     <EarningsScoreWatermark />
                   </div>
-                  <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
+                  <div className="scoreBar" aria-hidden="true">
+                    {/* THE REACHABLE RANGE, DRAWN. A sentence saying the score
+                        could only land between 34 and 66 is true and easy to
+                        skip; the same fact as a shaded span under the needle
+                        is read at the same glance as the needle itself. */}
+                    {coverage?.partial ? (
+                      <div
+                        className="scoreReach"
+                        style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
+                      />
+                    ) : null}
+                    <div className="scoreNeedle" />
+                  </div>
                   {/* THE AXIS IS LABELLED FROM THE BAND TABLE. It read
                       Weak / Mixed / Strong beside a pill that can only ever say
                       Weak / Mixed / Good, so KGC's 100/100 "Good" looked as
@@ -1337,6 +1398,11 @@ export default async function StockEarningsPage({ params }: Props) {
                   {/* AND THE THRESHOLDS ARE VISIBLE. 100/100 above an unlabelled
                       gauge tells a reader nothing about what 100 had to clear. */}
                   <p className="earningsDataNote" style={{ marginTop: 8 }}>{scoreBandNote()}</p>
+                  {coverage?.partial ? (
+                    <p className="earningsDataNote scoreReachNote" style={{ marginTop: 6 }}>
+                      {partialScoreNote(coverage, score.unavailable, periodWords(score.basis).one)}
+                    </p>
+                  ) : null}
                 </>
               ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>
