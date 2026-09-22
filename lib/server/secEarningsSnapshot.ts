@@ -32,7 +32,9 @@ import {
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
 import { buildProfileDividend, type ProfileDividend } from "./secDividend";
-import { valuationInputs, type ValuationInputs } from "./secValuation";
+import {
+  multipleInputs, valuationInputs, type MultipleInputs, type ValuationInputs,
+} from "./secValuation";
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
 import { registrantFor } from "./stockProfile";
 import { readReportDates, latestResults } from "./secReportDatesStore";
@@ -414,6 +416,9 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
         : null,
       shareHistory: buildShareHistory(set),
       entityName: set?.entityName ?? null,
+      // The Valuation section's filed inputs — revenue, EBITDA and the latest
+      // balance sheet (owner addendum, brief 2026-09-22 PR 2).
+      multiples: set ? multipleInputs(set) : null,
     },
   };
 }
@@ -424,6 +429,7 @@ export type StockPageProfileFacts = {
   valuation: ValuationInputs | null;
   shareHistory: ShareHistory | null;
   entityName: string | null;
+  multiples: MultipleInputs | null;
 };
 
 function snapshotFrom(

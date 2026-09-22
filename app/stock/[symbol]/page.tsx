@@ -14,6 +14,9 @@ import { resolveProfile } from "@/lib/server/staticProfile";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, registrantFor } from "@/lib/server/stockProfile";
+import {
+  REFUSAL_WORDS, valuationMultiples, type MultipleInputs, type ValuationFigure, type ValuationInputs,
+} from "@/lib/server/secValuation";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -327,6 +330,25 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
   return null;
 }
 
+/**
+ * The Valuation section's footer: SEC EDGAR, and which periods the figures
+ * cover. No FMP wording — the section no longer reads FMP.
+ */
+function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null): string {
+  const basis = (b: "four-quarters" | "fiscal-year", end: string) =>
+    b === "four-quarters" ? `the four quarters to ${end}` : `the fiscal year to ${end}`;
+  const parts: string[] = [];
+  if (v?.eps) parts.push(`earnings over ${basis(v.eps.basis, v.eps.periodEnd)}`);
+  if (m?.revenue) parts.push(`revenue over ${basis(m.revenue.basis, m.revenue.periodEnd)}`);
+  if (m?.ebitda) parts.push(`operating income plus D&A over ${basis(m.ebitda.basis, m.ebitda.periodEnd)}`);
+  if (m?.balanceSheet) parts.push(`the balance sheet at ${m.balanceSheet.asOf}`);
+  return (
+    "Computed from the company's own filings on SEC EDGAR and this page's share price" +
+    (parts.length ? `: ${parts.join("; ")}.` : ".") +
+    " A figure the filings cannot support shows —, never an estimate."
+  );
+}
+
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -454,6 +476,31 @@ export default async function StockPage({ params }: Props) {
     registrant: registrantFor(upper),
   });
   const shareHistory = secFacts.profileFacts.shareHistory;
+
+  // ── THE VALUATION SECTION AND THE HERO P/E, FROM THE FILINGS ───────────
+  // Were FMP's ratios-ttm / key-metrics-ttm via /api/stock-valuation, fetched
+  // client-side. Computed here from the same fact-set read and THIS page's
+  // price, so the cap in the About block and the multiples below it are the
+  // same number (owner addendum, brief 2026-09-22 PR 2).
+  const multiples =
+    secFacts.profileFacts.valuation && secFacts.profileFacts.multiples
+      ? valuationMultiples(secFacts.profileFacts.valuation, secFacts.profileFacts.multiples, quote.price)
+      : null;
+  const figure = (f: ValuationFigure | null | undefined) => (f && f.ok ? f.val : null);
+  const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? REFUSAL_WORDS[f.why] : null);
+  const valuation = {
+    peRatio: figure(multiples?.pe),
+    priceToSalesRatio: figure(multiples?.ps),
+    priceToBookRatio: figure(multiples?.pb),
+    evToEbitda: figure(multiples?.evEbitda),
+    reasons: {
+      peRatio: why(multiples?.pe),
+      priceToSalesRatio: why(multiples?.ps),
+      priceToBookRatio: why(multiples?.pb),
+      evToEbitda: why(multiples?.evEbitda),
+    },
+    sourceNote: valuationSourceNote(secFacts.profileFacts.multiples, secFacts.profileFacts.valuation),
+  };
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
   //
@@ -642,6 +689,7 @@ export default async function StockPage({ params }: Props) {
             : null
         }
         shareHistory={shareHistory}
+        valuation={valuation}
         seed={seed}
         // 500, not 300. The chart renders history.slice(-240) and ma200 needs
         // 200 prior bars to be defined across that window, so 440 is the

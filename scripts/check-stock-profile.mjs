@@ -188,5 +188,68 @@ console.log("\n7. IPO date and Website are hidden by the registry");
     withSite === 0, `${withSite} of ${Object.keys(reg).length} carry one`);
 }
 
+console.log("\n8. the valuation multiples are the filings', one period basis each");
+{
+  const set = fixture("AAPL");
+  const inputs = M.valuationInputs(set, TODAY, {});
+  const mi = M.multipleInputs(set);
+  const v = M.valuationMultiples(inputs, mi, 200);
+  const cap = M.marketCap(inputs, 200).val;
+  const rev4 = set.quarters.slice(0, 4).map((q) => M.valueOf(q, "revenue")).reduce((a, b) => a + b, 0);
+  check("AAPL's P/S is cap ÷ four consecutive quarters of revenue",
+    mi.revenue.basis === "four-quarters" && Math.abs(v.ps.val - cap / rev4) < 1e-9, `${v.ps.val?.toFixed(2)}`);
+  check("AAPL's P/B is cap ÷ the latest balance sheet's stockholders' equity",
+    Math.abs(v.pb.val - cap / M.valueOf(set.instants[0], "stockholdersEquity")) < 1e-9, `${v.pb.val?.toFixed(2)}`);
+  check("AAPL's P/E is peRatio(), unchanged", v.pe.val === M.peRatio(inputs, 200).val);
+  const b = mi.balanceSheet, e = mi.ebitda.vals;
+  const ev = cap + b.shortTermDebt + b.longTermDebt - b.cash;
+  check("AAPL's EV/EBITDA is (cap + debt − cash) ÷ (operating income + D&A)",
+    Math.abs(v.evEbitda.val - ev / (e.operatingIncome + e.depreciationAndAmortization)) < 1e-9, `${v.evEbitda.val?.toFixed(2)}`);
+
+  // NEVER MIXED: AZN's stored quarters are all Q2s — not consecutive — so the
+  // fiscal year is the basis for every twelve-month input.
+  const azn = M.multipleInputs(fixture("AZN"));
+  check("a filer with non-consecutive quarters is read on the fiscal year",
+    azn.revenue?.basis === "fiscal-year" && (azn.ebitda === null || azn.ebitda.basis === "fiscal-year"),
+    JSON.stringify({ revenue: azn.revenue?.basis, ebitda: azn.ebitda?.basis ?? null }));
+  const mixed = await loadComposer(once(
+    "four.length === 4 && four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q));",
+    "four.length === 4;"
+  ));
+  check("...and CATCHES four non-consecutive quarters summed as a year",
+    mixed.multipleInputs(fixture("AZN")).revenue?.basis === "four-quarters");
+
+  // NOT APPROXIMATED: one missing debt line refuses EV/EBITDA outright.
+  const noDebt = { ...mi, balanceSheet: { ...mi.balanceSheet, shortTermDebt: null } };
+  check("a missing debt line refuses EV/EBITDA rather than assuming zero",
+    M.valuationMultiples(inputs, noDebt, 200).evEbitda?.why === "enterprise-value-input-missing");
+  const zeroed = await loadComposer(once(
+    "if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {",
+    "if (!bs || !m.ebitda) {"
+  ));
+  check("...and CATCHES a missing debt line treated as zero",
+    zeroed.valuationMultiples(inputs, noDebt, 200).evEbitda?.ok !== false);
+
+  check("non-positive equity refuses P/B",
+    M.valuationMultiples(inputs, { ...mi, balanceSheet: { ...mi.balanceSheet, equity: -5 } }, 200).pb?.why === "equity-is-zero-or-negative");
+  check("no twelve months of revenue refuses P/S",
+    M.valuationMultiples(inputs, { ...mi, revenue: null }, 200).ps?.why === "no-twelve-month-revenue");
+
+  // THE 20-F RULE REFUSES ALL FOUR.
+  const f20 = M.valuationMultiples(M.valuationInputs(set, TODAY, { annualForm: "20-F" }), mi, 200);
+  check("a 20-F filer refuses all four",
+    ["pe", "ps", "pb", "evEbitda"].every((k) => f20[k]?.ok === false), JSON.stringify(Object.fromEntries(Object.entries(f20).map(([k, x]) => [k, x?.why]))));
+
+  // NO FMP WORDING LEFT IN THE SECTION, and no client fetch of the FMP route.
+  const client = read("app/stock/[symbol]/StockSymbolPageClient.tsx");
+  const sec = client.slice(client.indexOf("Valuation multiples (SEC filings, TTM)"), client.indexOf("Analyst ratings & price targets"));
+  check("the section's footer names SEC EDGAR and no FMP",
+    /SEC EDGAR/.test(sec) && !/Financial Modeling Prep|FMP/.test(sec));
+  check("the client no longer fetches /api/stock-valuation",
+    !/await fetch\(`\/api\/stock-valuation/.test(client));
+  check("the page computes the multiples on the server",
+    /valuationMultiples\(/.test(read("app/stock/[symbol]/page.tsx")));
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
 process.exit(failures ? 1 : 0);

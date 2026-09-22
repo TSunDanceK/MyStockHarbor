@@ -182,6 +182,13 @@ export default function DilutionHistory({
         Weighted-average basic shares from {symbol}&apos;s own SEC filings
         {data?.basis === "year" ? ", by fiscal year" : data?.basis === "quarter" ? ", by quarter" : ""} —{" "}
         {points.length} data points from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.
+        {/* FEWER POINTS THAN THE OLD CHART, AND WHY (owner, #517). The store
+            keeps the last 12 quarters, and a fourth quarter has no share count
+            of its own — a weighted average is not derived by subtraction — so
+            it is not plotted. Retention is deliberately not widened. */}
+        {data?.basis === "quarter"
+          ? " Covers the last 12 quarters on file; fourth quarters have no separately filed share count and are not plotted."
+          : data?.basis === "year" ? " Covers the fiscal years on file." : ""}
       </div>
 
       <style>{`

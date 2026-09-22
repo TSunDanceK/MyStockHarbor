@@ -83,7 +83,17 @@ const client = codeOf(
   fs.readFileSync(path.join(ROOT, "app/stock/[symbol]/StockSymbolPageClient.tsx"), "utf8"),
   "app/stock/[symbol]/StockSymbolPageClient.tsx"
 );
-for (const ep of ["stock-valuation", "stock-analyst-rating"]) {
+// stock-valuation IS NO LONGER FETCHED BY THE PAGE (2026-09-22, #517): the
+// multiples are computed server-side from the SEC fact set, so there is no
+// client call site to guard. Asserted as absent, so a fetch put back without
+// its guard cannot pass silently. The route's own status discipline above
+// still holds for any other caller.
+check(
+  "stock-valuation: no longer fetched by the page (server-computed from SEC)",
+  !client.includes("/api/stock-valuation/"),
+  "the page computes the multiples itself; a client fetch here would be FMP again"
+);
+for (const ep of ["stock-analyst-rating"]) {
   const idx = client.indexOf(`/api/${ep}/`);
   check(
     `${ep}: fetched and checked with if (!res.ok)`,
