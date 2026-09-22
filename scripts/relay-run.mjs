@@ -177,6 +177,10 @@ const TASKS = {
   "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
+  // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
+  // carries the recent quarters, and whether 2115436 has filed an annual yet.
+  // Read-only, no credentials.
+  "sec-cik-periods": { script: "scripts/sec-cik-periods-probe.mjs", args: () => [], needsTypescript: true },
   "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
   // Registrant facts (SIC, business address, incorporation, website, fiscal
   // year end, entity type, latest annual form) for every profiled symbol, from
