@@ -1115,6 +1115,35 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
+        /* ── THE COLUMNS MUST BE ALLOWED TO BE NARROWER THAN THEIR CONTENT ───
+           A grid ITEM defaults to 'min-width: auto', which resolves to its
+           content's MIN-CONTENT width. 'minmax(0, …)' above bounds the TRACK
+           and does nothing for the item inside it, so the item grows past its
+           own column and, because '.card' is deliberately 'overflow: visible'
+           for the metric tooltips, paints straight over the sticky aside.
+
+           THAT IS THE ABVX BUG, and the chain is specific: a card holds a
+           'div[overflow-x: auto]' wrapping a seven-column table. The wrapper
+           can only scroll if something forces it narrower than the table, and
+           nothing did — the auto min-width propagated the table's min-content
+           all the way up to the grid item. Measured on the rendered cards, the
+           longest unbreakable text token on this page is 14 characters, so the
+           overflow was never text; it was always the tables.
+
+           WHY IT SHOWS ON ABVX AND NOT OBVIOUSLY ON AAPL: the table's
+           min-content width is its content. A row of "Not reported" is far
+           wider than a row of "$2.03", so a filer whose cells are mostly
+           refusals has the widest tables on the site. The bug is not
+           ABVX-specific; its VISIBILITY is.
+
+           'min-width: 0' restores the intended behaviour: the item shrinks to
+           its track, the wrapper is forced narrower than its table, and the
+           'overflow-x: auto' that was always there finally engages and gives
+           the table a scrollbar instead of the aside. It is a no-op wherever
+           nothing overflows. */
+        .contentGrid > * { min-width: 0; }
+        .hero > * { min-width: 0; }
+        .metricGrid > * { min-width: 0; }
         .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
         .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
         .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
@@ -1197,7 +1226,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
         .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
         .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
-        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; }
+        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; min-width: 0; }
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
         .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }

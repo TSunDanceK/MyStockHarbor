@@ -76,13 +76,46 @@ const tickerMod = await lift([
 ].join("\n"));
 const TICKER_REDIS_KEY = constant("lib/server/secTickerMap.ts", "TICKER_REDIS_KEY");
 const TICKER_FILE = constant("lib/server/secTickerMap.ts", "TICKER_FILE");
+/**
+ * THE MAP, WITH EVERY SOURCE REPORTED — never a silent empty one.
+ *
+ * The first version preferred Redis, wrapped the parse in `catch { return new
+ * Map() }`, and printed "resolved NOTHING from the ticker map" for ABVX. ABVX
+ * is in the committed file, row [1956827, "Abivax S.A.", "ABVX", "Nasdaq"], so
+ * that was not a fact about ABVX — it was a swallowed error wearing the
+ * costume of one, which is the same defect this probe exists to stop the page
+ * committing. An empty map and a map without this symbol are different
+ * answers and must not print the same.
+ *
+ * THE COMMITTED FILE IS TRIED FIRST because its shape is known and versioned;
+ * Redis is the fallback, and whichever answers says so along with its row
+ * count. A parse failure prints the error rather than returning empty.
+ */
 async function loadTickerMap() {
-  const stored = TICKER_REDIS_KEY ? await redis.get(TICKER_REDIS_KEY).catch(() => null) : null;
-  const text = stored
-    ? (typeof stored === "string" ? stored : JSON.stringify(stored))
-    : fsSync.existsSync(TICKER_FILE) ? fsSync.readFileSync(TICKER_FILE, "utf8") : null;
-  if (!text) return new Map();
-  try { return tickerMod.parseTickerFile(text).map; } catch { return new Map(); }
+  const sources = [];
+  if (fsSync.existsSync(TICKER_FILE)) {
+    sources.push([`file ${TICKER_FILE}`, () => fsSync.readFileSync(TICKER_FILE, "utf8")]);
+  }
+  if (TICKER_REDIS_KEY) {
+    sources.push([`redis ${TICKER_REDIS_KEY}`, async () => {
+      const v = await redis.get(TICKER_REDIS_KEY);
+      return v == null ? null : typeof v === "string" ? v : JSON.stringify(v);
+    }]);
+  }
+  for (const [name, read] of sources) {
+    let text;
+    try { text = await read(); } catch (e) { console.log(`  ticker source ${name}: READ FAILED — ${e.message}`); continue; }
+    if (!text) { console.log(`  ticker source ${name}: empty`); continue; }
+    try {
+      const { map, shape } = tickerMod.parseTickerFile(text);
+      console.log(`  ticker source ${name}: ${map.size} symbols, shape=${shape}`);
+      if (map.size) return map;
+    } catch (e) {
+      console.log(`  ticker source ${name}: PARSE FAILED — ${e.message}`);
+    }
+  }
+  console.log("  ticker map: NO SOURCE PRODUCED ONE — a lookup miss below is this, not the filer");
+  return new Map();
 }
 
 const SYMS = (process.env.SYMBOLS || "ABVX").split(/[,\s]+/).filter(Boolean);
