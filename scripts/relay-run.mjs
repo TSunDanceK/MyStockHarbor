@@ -572,6 +572,14 @@ const TASKS = {
   // READS ONLY. Counts how many symbols in the SITE's universe have no CIK in
   // the committed registrant file, which is exactly the set the earnings route
   // 404s on. Credentialled because the universe lives in Upstash.
+  // READS ONLY, NO CREDENTIALS NEEDED — it compares the committed registrant
+  // file against SEC's live one and the curated universe, all of which are
+  // either in the repo or on data.sec.gov. Hence no write- prefix.
+  "ticker-snapshot-scope": {
+    script: "scripts/ticker-snapshot-scope-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+  },
   "write-no-cik-scope": {
     script: "scripts/no-cik-scope-probe.mjs",
     args: () => [],
