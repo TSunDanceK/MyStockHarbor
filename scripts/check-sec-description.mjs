@@ -21,6 +21,8 @@
 //      par-value / ticker-symbol sentences, and words split by a stray space.
 //   7. Cross-references and MD&A are rejected, not rendered.
 //   8. The committed file: every row within the length rules, no FMP text.
+//   9. The monthly refresh workflow: scheduled, opens a PR, takes no inputs
+//      and uses no secret but its own GITHUB_TOKEN (owner, #518 round 5).
 import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
@@ -270,6 +272,27 @@ console.log("\n8. the committed descriptions");
     check("rows name their form and filing date", rows.every(([, r]) => /^(10-K|10-K405|10-KT|20-F)$/.test(r[0]) && /^\d{4}-\d{2}-\d{2}$/.test(r[1])));
     check("no 40-F filer has a row", Object.entries(f.misses ?? {}).filter(([, w]) => /40-F/.test(w)).every(([s]) => !f.rows[s]));
   }
+}
+
+console.log("\n9. the monthly refresh opens a PR, takes no inputs, holds no credential");
+{
+  const wf = fs.readFileSync(".github/workflows/descriptions-refresh.yml", "utf8");
+  const code = wf.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  const rules = (y) => ({
+    scheduled: /\n\s+schedule:\s*\n\s+- cron:/.test(y),
+    // Owner, #518: nothing typed into a run, since the logs are public.
+    noInputs: /workflow_dispatch:\s*\n(?!\s+inputs:)/.test(y) && !/\binputs\s*:/.test(y) && !/github\.event\.inputs|\binputs\./.test(y),
+    onlyJobToken: (y.match(/secrets\.[A-Z_]+/g) ?? []).every((m) => m === "secrets.GITHUB_TOKEN"),
+    noPushToMain: !/push\s+origin\s+[^\n]*\bmain\b/.test(y) && /refs\/heads\/\$\{branch\}/.test(y) && /gh pr create/.test(y),
+  });
+  const r = rules(code);
+  for (const [k, ok] of Object.entries(r)) check(`descriptions-refresh.yml: ${k}`, ok);
+  const withInput = rules(code.replace("workflow_dispatch:", "workflow_dispatch:\n    inputs:\n      share_link:\n        required: false"));
+  check("...and CATCHES an input added", !withInput.noInputs);
+  const withSecret = rules(code.replace("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "GH_TOKEN: ${{ secrets.VERCEL_TOKEN }}"));
+  check("...and CATCHES another secret used", !withSecret.onlyJobToken);
+  const toMain = rules(code.replace('git push origin "HEAD:refs/heads/${branch}"', "git push origin HEAD:main"));
+  check("...and CATCHES a push straight to main", !toMain.noPushToMain);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe owner's description rules hold.");
