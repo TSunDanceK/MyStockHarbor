@@ -335,7 +335,7 @@ check(
   art.ART_WIDTH === 1200 && art.ART_HEIGHT === 675
 );
 
-// ────────────────────────────────────── 6. THE SURFACES, TREATED THE SAME
+// ─────────────────────────────────────── 6. THE SURFACES, TREATED THE SAME
 //
 // STEP 0 STOPPED THE HOTLINK ON FOUR RENDER SITES AND GAVE ART BACK TO ONE.
 // The other three went imageless on main and stayed that way for a whole step,
@@ -604,7 +604,7 @@ for (const { file, why } of IMAGELESS_BY_DESIGN) {
   );
 }
 
-// ── THE GAP THAT LET /headlines SHIP BLANK ────────────────────────────
+// ── THE GAP THAT LET /headlines SHIP BLANK ──────────────────────────────
 // §1 asserted a GUARD at all four render sites; the loop above asserted a
 // FALLBACK only at the three in SURFACES. /headlines was in neither — it sat in
 // IMAGELESS_BY_DESIGN, whose assertion is the INVERSE one, so every check
@@ -769,7 +769,7 @@ check(
   "free adapters put attribution in `tickers`, never `fmpSymbols`; reading only the latter returns null for every item the day the flag flips"
 );
 
-// ────────────────────────────── 9. THE TAGGED LIBRARY (v2), END TO END
+// ─────────────────────────────── 9. THE TAGGED LIBRARY (v2), END TO END
 //
 // A SECOND LIBRARY, A SECOND MANIFEST, AND DELIBERATELY NO SHARED TYPE WITH
 // THE FIRST. §1-§8 above are about `sector-*`/`event-*` and manifest.json's
@@ -852,7 +852,7 @@ check(
   v2Orphans.length ? `${v2Orphans.length} unreachable, e.g. ${v2Orphans.slice(0, 3).join(", ")}` : "nothing unreachable"
 );
 
-// ── THE CLASSIFIER, BY RUNNING IT ────────────────────────────────────────
+// ── THE CLASSIFIER, BY RUNNING IT ──────────────────────────────────────────
 // articleTopic.ts imports nothing at all, so it transpiles and loads as-is —
 // no substitution, which means this is the shipped module and not a copy of it.
 const topicSrc = read("lib/server/news/articleTopic.ts");
@@ -904,7 +904,7 @@ if (v2Names.length === 0) {
 // separates the real rows from the constructed probes; `imprecise` rows are
 // printed rather than asserted, so a later narrowing that fixes one does not
 // fail this suite for fixing it.
-// ── THREE FIXTURES, TWO POPULATIONS, ONE ASSERTION ───────────────────────
+// ── THREE FIXTURES, TWO POPULATIONS, ONE ASSERTION ─────────────────────────
 // article-topic.jsonl's real rows are the PER-SYMBOL feed, where a story about
 // Costco says "Costco" and not "retailers". The two article-topic-general files
 // are the GENERAL feed, which is what /headlines actually serves and where the
@@ -993,7 +993,7 @@ check(
   `${asserted.filter((r) => /gnews/.test(r.src)).length} per-symbol, ${asserted.filter((r) => /headlines/.test(r.src)).length} general, ${asserted.filter((r) => r.src === "probe").length} probes`
 );
 
-// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ─────────────────────────
+// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ───────────────────────────
 // A match RATE moves with the feed, so pinning it to a threshold produces a
 // check that fails for a reason nobody can act on. Printing it here keeps the
 // number the doc quotes computable from the repo instead of remembered, which
@@ -1225,7 +1225,7 @@ check(
   "NAMES is sorted for exactly this: re-exporting the library in a different order must not silently re-assign every article's picture"
 );
 
-// ── AND AGAINST THE SHIPPED MANIFEST ─────────────────────────────────────
+// ── AND AGAINST THE SHIPPED MANIFEST ───────────────────────────────────────
 // #481's tests learned this the expensive way: a mechanism proved on a
 // synthetic fixture says nothing about what ships. Both states are asserted, so
 // this check keeps its meaning on the day the images land rather than needing
@@ -1249,7 +1249,7 @@ check(
     : `${shippedPick?.src}`
 );
 
-// ── /headlines: THE RULE, BY CALLING IT ──────────────────────────────────
+// ── /headlines: THE RULE, BY CALLING IT ────────────────────────────────────
 // THE ASSERTION THAT WAS NOT GOOD ENOUGH, AND IS RECORDED BECAUSE IT LOOKED
 // FINE: the first version of this block compared where `pickTagged(` and
 // `planCardArt(` appear in the page source and called that "tagged art first".
@@ -1369,7 +1369,7 @@ check(
   "the provider-map is what switches those over, and it is a different change"
 );
 
-// ── SERVING: THE FOLDER'S OWN REQUEST PATH ───────────────────────────────
+// ── SERVING: THE FOLDER'S OWN REQUEST PATH ─────────────────────────────────
 // claude/serving-assets-from-public-2026-09-15.md, written after the logo
 // harvest put the site's first same-origin images into production: middleware
 // runs on public/ assets unless the matcher excludes the folder, and Next
