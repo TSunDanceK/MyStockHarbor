@@ -254,8 +254,77 @@ export function reportEvents(
   subs: Submissions,
   periodEnds: ReadonlySet<string> = new Set()
 ): ReportEvent[] {
+  return resultsPairing(subs, periodEnds).events;
+}
+
+/**
+ * Forms that ARE the periodic report for a period, originals only. An
+ * amendment re-files a period already reported and says nothing about when
+ * the results were first out.
+ */
+const PERIODIC_REPORT_FORMS = new Set(["10-Q", "10-K", "10-QT", "10-KT"]);
+
+/**
+ * When each period's 10-Q / 10-K reached EDGAR, keyed by the period it covers.
+ *
+ * ── THE ONE DATE ON A PERIODIC REPORT THAT IS A PERIOD END ───────────────
+ * Unlike the 8-K's (see ReportEvent.eventDate), a 10-Q's `reportDate` IS the
+ * "period of report" -- the fiscal period end. So this pairs by equality with
+ * the period ends the fact set holds, and needs no window to guess with.
+ *
+ * Dated in ET from acceptanceDateTime, the same clock `announcedOn` uses, so
+ * "on or before the 10-Q" compares like with like. filingDate only where there
+ * is no acceptance time: here it bounds a comparison rather than being
+ * reported, and a 10-Q accepted at 17:45 rolling to the next day can only
+ * WIDEN the window by one day, never exclude the release.
+ */
+export function periodicReportDates(subs: Submissions): Map<string, string> {
   const recent = subs?.filings?.recent;
-  if (!recent) return [];
+  const out = new Map<string, string>();
+  if (!recent) return out;
+  const n = Array.isArray(recent.accessionNumber) ? recent.accessionNumber.length : 0;
+  for (let i = 0; i < n; i++) {
+    const form = str(recent.form?.[i]);
+    if (!form || !PERIODIC_REPORT_FORMS.has(form)) continue;
+    const period = str(recent.reportDate?.[i]);
+    if (!period) continue;
+    const filed = parseAcceptanceEt(recent.acceptanceDateTime?.[i])?.date ?? str(recent.filingDate?.[i]);
+    if (!filed) continue;
+    const seen = out.get(period);
+    if (!seen || filed < seen) out.set(period, filed);
+  }
+  return out;
+}
+
+/**
+ * How one period's results event was chosen, kept so the choice can be
+ * audited and so the current period can be judged by the filer's own past.
+ */
+export type PeriodPairing = {
+  periodEnd: string;
+  /** The period's 10-Q/10-K date, or null when none is on file yet. */
+  periodicFiledOn: string | null;
+  /** The event kept for the period. */
+  picked: ReportEvent;
+  /** The EARLIEST qualifying event for the period -- what the old rule kept. */
+  earliest: ReportEvent;
+  /** Every qualifying event for the period, newest first -- for audits only. */
+  candidates: ReportEvent[];
+  /**
+   * "paired"    picked as the latest 2.02 on or before the 10-Q/10-K
+   * "unpaired"  no 10-Q/10-K for this period, or no 2.02 before it: earliest
+   */
+  rule: "paired" | "unpaired";
+};
+
+export type ResultsPairing = { events: ReportEvent[]; periods: PeriodPairing[] };
+
+export function resultsPairing(
+  subs: Submissions,
+  periodEnds: ReadonlySet<string> = new Set()
+): ResultsPairing {
+  const recent = subs?.filings?.recent;
+  if (!recent) return { events: [], periods: [] };
   const n = Array.isArray(recent.accessionNumber) ? recent.accessionNumber.length : 0;
   const out: ReportEvent[] = [];
 
@@ -360,17 +429,135 @@ export function reportEvents(
     return carriesExhibits(candidate.items) && !carriesExhibits(incumbent.items);
   };
 
-  const byPeriod = new Map<string, ReportEvent>();
+  //
+  // ── AND WITHIN A PERIOD THAT HAS ITS 10-Q, THE LATEST ONE BEFORE IT ──────
+  //
+  // Earliest-wins picked the wrong filing for a filer with TWO Item 2.02s a
+  // quarter. Tesla files its production and delivery numbers under 2.02 two
+  // days after quarter end and its results about three weeks later; ABBV files
+  // an early 2.02 on in-process R&D charges. Earliest kept the early one every
+  // quarter, so TSLA's stored lag was 2 days over 14 periods with a spread of
+  // 0 -- a perfectly regular, perfectly wrong habit that no spread test or
+  // precision bar can see (claude/BRIEF-early-2.02-mispick-2026-09-22.md).
+  //
+  // The periodic report settles it, because the results must be out by the
+  // time the 10-Q is filed. So where the period's 10-Q/10-K is on file, the
+  // pick is the LATEST original 8-K 2.02 filed ON OR BEFORE it:
+  //   - later than an early non-results 2.02 (the delivery numbers),
+  //   - never an amendment or restatement filed AFTER the 10-Q, which is the
+  //     failure plain latest-wins would have (option 4 in the brief),
+  //   - never an 8-K/A inside the window while an original is there, for the
+  //     reason the earliest rule exists: the original is what the market read.
+  // Where there is no 10-Q yet -- the current period -- or no 2.02 before it,
+  // nothing can be paired and the earliest rule above still decides. The
+  // current period's early 2.02 is handled by the guard in pendingResults,
+  // not here.
+  const periodic = periodicReportDates(subs);
+  const byPeriod = new Map<string, ReportEvent[]>();
   const undated: ReportEvent[] = [];
   for (const e of out) {
     const key = e.periodEnd ?? e.eventDate;
     if (!key) { undated.push(e); continue; }
-    const seen = byPeriod.get(key);
-    if (!seen || beats(e, seen)) byPeriod.set(key, e);
+    const group = byPeriod.get(key);
+    if (group) group.push(e);
+    else byPeriod.set(key, [e]);
   }
-  const deduped = [...byPeriod.values(), ...undated];
-  deduped.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
-  return deduped;
+
+  const kept: ReportEvent[] = [];
+  const periods: PeriodPairing[] = [];
+  for (const group of byPeriod.values()) {
+    let earliest = group[0];
+    for (const e of group) if (beats(e, earliest)) earliest = e;
+    const periodEnd = earliest.periodEnd;
+    const filedOn = periodEnd ? periodic.get(periodEnd) ?? null : null;
+
+    let picked: ReportEvent | null = null;
+    if (filedOn) {
+      const before = group.filter((e) => e.basis === "8-K item 2.02" && e.announcedOn <= filedOn);
+      const originals = before.filter((e) => e.form === "8-K");
+      for (const e of originals.length ? originals : before) {
+        if (
+          !picked ||
+          e.announcedOn > picked.announcedOn ||
+          (e.announcedOn === picked.announcedOn && carriesExhibits(e.items) && !carriesExhibits(picked.items))
+        ) picked = e;
+      }
+    }
+    kept.push(picked ?? earliest);
+    if (periodEnd) {
+      periods.push({
+        periodEnd,
+        periodicFiledOn: filedOn,
+        picked: picked ?? earliest,
+        earliest,
+        candidates: group,
+        rule: picked ? "paired" : "unpaired",
+      });
+    }
+  }
+
+  const events = [...kept, ...undated];
+  events.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));
+  periods.sort((a, b) => (a.periodEnd < b.periodEnd ? 1 : a.periodEnd > b.periodEnd ? -1 : 0));
+  return { events, periods };
+}
+
+/**
+ * A filer whose past quarters carry an Item 2.02 that is NOT the results.
+ *
+ * DERIVED FROM THE PAIRING, never from a list of symbols: a paired period
+ * whose earliest 2.02 is not the one kept had an earlier 2.02 that the 10-Q
+ * shows was not the results release. TSLA's delivery numbers, ABBV's IPR&D
+ * update.
+ *
+ * A HABIT, NOT AN INCIDENT: at least two such periods. A single early 2.02 --
+ * a one-off pre-announcement -- does not make a filer's next early 2.02
+ * suspect, and flagging on one would suppress a real early release.
+ *
+ * The two lags are the filer's own, so the guard that reads them needs no
+ * fixed day threshold (see pendingResults): the brief's option 2, a global
+ * floor, was rejected because ORCL genuinely reports at around ten days.
+ */
+export type EarlyNonResultsPattern = {
+  /** Paired periods that had an earlier, non-results 2.02. */
+  periods: number;
+  /** Paired periods in total. */
+  ofPaired: number;
+  /** Median lag of the early, non-results 2.02s. */
+  earlyLagDays: number;
+  /** Median lag of the paired results releases. */
+  resultsLagDays: number;
+};
+
+export const EARLY_PATTERN_MIN_PERIODS = 2;
+
+export function earlyNonResultsPattern(periods: readonly PeriodPairing[]): EarlyNonResultsPattern | null {
+  const paired = periods.filter((p) => p.rule === "paired");
+  const early = paired.filter(
+    (p) => p.earliest !== p.picked && p.earliest.announcedOn < p.picked.announcedOn
+  );
+  if (early.length < EARLY_PATTERN_MIN_PERIODS) return null;
+  const earlyLag = median(early.map((p) => daysBetween(p.periodEnd, p.earliest.announcedOn)));
+  const resultsLag = median(paired.map((p) => daysBetween(p.periodEnd, p.picked.announcedOn)));
+  if (earlyLag === null || resultsLag === null || earlyLag >= resultsLag) return null;
+  return { periods: early.length, ofPaired: paired.length, earlyLagDays: earlyLag, resultsLagDays: resultsLag };
+}
+
+/**
+ * Is an announcement this many days after its period end the filer's EARLY,
+ * non-results 2.02 rather than its results?
+ *
+ * Nearer the filer's own early habit than its own results habit: the midpoint
+ * of the two medians. Per filer, from its own history -- TSLA 2 vs ~22 days,
+ * ABBV ~4 vs ~31 -- so nothing here is a threshold a fast filer could trip.
+ * A filer with no pattern is never judged early.
+ */
+export function looksLikeEarlyNonResults(
+  lagDays: number,
+  pattern: EarlyNonResultsPattern | null | undefined
+): boolean {
+  if (!pattern) return false;
+  return lagDays < (pattern.earlyLagDays + pattern.resultsLagDays) / 2;
 }
 
 // ── THE NEXT REPORT DATE ───────────────────────────────────────────────────
@@ -949,6 +1136,11 @@ export type PendingResults = {
  * not announce the same quarter twice on an 8-K. So the comparison is between
  * two announcement dates and needs no plausible-lag window to guess with.
  *
+ * ONE EXCEPTION, AND THE PAIRING IS WHAT FINDS IT: a filer with a second,
+ * EARLY Item 2.02 each quarter (TSLA's deliveries) does file two for one
+ * quarter. For past quarters the 10-Q tells them apart; for the current one
+ * `pattern` does -- see the guard at the bottom.
+ *
  * ── AND THE PERIOD IS NAMED ONLY IF IT CAN BE DERIVED ────────────────────
  * The notice says which quarter, so a quarter has to be known. It comes from
  * the filer's own cadence, snapped to the anniversary of the same quarter a
@@ -965,7 +1157,8 @@ export function pendingResults(
   placed: readonly ReportEvent[],
   latest: ReportEvent | null,
   cadence: { end: string; annual: boolean; stepDays: number } | null,
-  today: string
+  today: string,
+  pattern: EarlyNonResultsPattern | null = null
 ): PendingResults | null {
   if (!latest || !cadence) return null;
   const newestPlaced = placed.find((e) => e.periodEnd && e.basis === "8-K item 2.02");
@@ -980,5 +1173,11 @@ export function pendingResults(
   // must already have ENDED — a quarter that has not finished cannot have been
   // reported, and naming one would be worse than saying nothing.
   if (periodEnd <= newestPlaced.periodEnd! || periodEnd > today) return null;
+  // ── THE CURRENT PERIOD HAS NO 10-Q TO PAIR AGAINST, SO THE PAST DECIDES ─
+  // A filer whose past quarters show an early non-results 2.02 (TSLA's
+  // delivery numbers) files one again two days into this quarter, and without
+  // this it would be announced here as the quarter's results. Judged by the
+  // filer's own two habits, not a day count -- see looksLikeEarlyNonResults.
+  if (looksLikeEarlyNonResults(daysBetween(periodEnd, latest.announcedOn), pattern)) return null;
   return { periodEnd, announcedOn: latest.announcedOn, timing: latest.timing };
 }

@@ -15,7 +15,9 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
-import type { NextReportEstimate, PendingResults, ReportEvent } from "./secReportDates";
+import type {
+  EarlyNonResultsPattern, NextReportEstimate, PendingResults, ReportEvent,
+} from "./secReportDates";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -111,6 +113,20 @@ export type StoredReportDates = {
    * not-yet-backfilled, never "quarterly".
    */
   annual?: boolean | null;
+  /**
+   * The filer's own history of an EARLY Item 2.02 that is not its results
+   * (TSLA's delivery numbers), derived at write time from pairing each past
+   * period's 2.02s against its 10-Q/10-K. Null: no such habit.
+   *
+   * STORED BECAUSE NOTHING ELSE CAN RECOVER IT. The pairing reads the
+   * submissions feed, and a render has only this record; the events kept here
+   * are the winners, so the losers that define the habit are gone from them.
+   * It is the evidence the pending-results guard used, kept beside its output.
+   *
+   * Same optionality as `category`: absent means written before the pairing
+   * existed, never "no pattern".
+   */
+  earlyNonResults?: EarlyNonResultsPattern | null;
 };
 
 /**
@@ -145,6 +161,21 @@ export function latestResults(
     return { announcedOn: e.announcedOn, periodEnd: e.periodEnd, accession: e.accession, basis: e.basis };
   }
   return null;
+}
+
+/**
+ * Has this record been written under the paired rule? The drain condition for
+ * data/sec/report-dates-rewrite.json.
+ *
+ * THE KEY, NOT THE VALUE. Every write from the paired rule sets
+ * `earlyNonResults` -- to the pattern for the 84 repeat filers and to NULL for
+ * everyone else, the 125 one-off filers included -- and JSON keeps a null key
+ * where it drops an undefined one. So presence is the marker and a null is a
+ * finished record, not an unfinished one. Testing the value instead would
+ * requeue every filer without a pattern on every run, forever.
+ */
+export function pairingRewriteDone(rec: StoredReportDates | null): boolean {
+  return rec !== null && typeof rec === "object" && "earlyNonResults" in rec;
 }
 
 export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {

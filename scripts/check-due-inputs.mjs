@@ -305,5 +305,33 @@ console.log("\n7. THE COMMITTED CUT, AND THE RECORD THAT EXPLAINS ITS SHORTFALL"
     FPI.filter((s) => !cutDoc.symbols.includes(s)).join(" "));
 }
 
+console.log("\nR. AN ANNOUNCED PERIOD LEAVES THE STRIP");
+{
+  // MU's shape the day after it reports: the fact set still ends at the prior
+  // quarter, the 8-K is newer than anything placed, and the record's pending
+  // names the period the strip is waiting on.
+  const announced = dated({ nextPeriodEnd: "2026-08-27",
+    pending: { periodEnd: "2026-08-27", announcedOn: "2026-09-23", timing: "after-close" } });
+  const got = m.dueInputFrom("MU", announced);
+  check("pending for the strip's own period -> skip 'results-filed', not an input",
+    got.skip === "results-filed", JSON.stringify(got));
+  check("a pending for an EARLIER period does not hide the current one",
+    "input" in m.dueInputFrom("MU", dated({ nextPeriodEnd: "2026-11-26",
+      pending: { periodEnd: "2026-08-27", announcedOn: "2026-09-23", timing: "after-close" } })));
+  check("no pending (TSLA's delivery 8-K never becomes one) -> still an input",
+    "input" in m.dueInputFrom("TSLA", dated({ nextPeriodEnd: "2026-09-30", pending: null })));
+  check("buildDueInputs names the skip", (() => {
+    const b = m.buildDueInputs(["MU"], new Map([["MU", announced]]));
+    return b.skipped["results-filed"]?.includes("MU") && b.inputs.length === 0;
+  })());
+  // MUTATION: the check removed -- MU would read "results have not yet been filed".
+  const mutJs = ts.transpileModule(pure.replace(
+    'if (rec.pending && typeof rec.pending.periodEnd === "string" && rec.pending.periodEnd >= rec.nextPeriodEnd) {',
+    "if (false) {"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const mut = await import(`data:text/javascript;base64,${Buffer.from(mutJs + "\n//r").toString("base64")}`);
+  check("MUTATION: without the check the announced period stays on the strip",
+    "input" in mut.dueInputFrom("MU", announced));
+}
+
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
