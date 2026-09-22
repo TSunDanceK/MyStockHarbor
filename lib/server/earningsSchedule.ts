@@ -40,7 +40,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const SCHEDULE_KEY = "msh:earnings-schedule:v1";
+export const SCHEDULE_KEY = "msh:earnings-schedule:v1";
 // A day. The calendar itself is on REFERENCE_TTL_DAILY_SECONDS, so a shorter
 // TTL here would rebuild from the same rows.
 const SCHEDULE_TTL_SECONDS = 24 * 60 * 60;

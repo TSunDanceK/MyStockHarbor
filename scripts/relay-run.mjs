@@ -205,6 +205,75 @@ const TASKS = {
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
+  // Read-only, no dump: it fetches public endpoints only. The runner is a
+  // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
+  // residential path NOR Vercel -- the script says so itself rather than
+  // leaving the reader to remember it.
+  "ipo-sources": { script: "scripts/ipo-source-probe.mjs", args: () => [] },
+  // Run 2. Run 1's S-1/A sample turned out to be already-listed issuers filing
+  // resale registrations, so its "price range 0/5" measured the sampling frame
+  // rather than the filings. This one defines the cohort from 8-A12B -- the form
+  // that means a class is being registered on an exchange -- and reports the hit
+  // rate within it.
+  "ipo-sec-cohort": { script: "scripts/ipo-sec-cohort-probe.mjs", args: () => [] },
+  // Phase 0 of the IPO build brief. Measure and stop: the S-1/A extraction rate
+  // with SPACs separated (a SPAC unit is fixed at $10 and has no range, which is
+  // what made the earlier 1/4 meaningless), the price parser against a negative
+  // control, and the age histogram the withdrawal cap needs.
+  "ipo-phase0": { script: "scripts/ipo-phase0-probe.mjs", args: () => [] },
+  // §4.10's three exclusion classes, measured before any is built. Checks the
+  // ticker map for OTC coverage first, because if it carries OTC issuers then
+  // class (a) already catches uplistings and class (c) costs nothing.
+  "ipo-exclusions": { script: "scripts/ipo-exclusions-probe.mjs", args: () => [] },
+  // Build order step 2: seed the 90-day window. Imports the SAME TypeScript
+  // classifier the render calls -- Node 24 strips the types, so no build step
+  // and no npm ci. If this re-implemented the rules, seeded and daily rows would
+  // disagree about what an IPO is and both would look plausible.
+  "ipo-seed": {
+    script: "scripts/ipo-seed.mjs",
+    args: () => [],
+    // Imports the app's TypeScript classifier directly. Node's ESM loader needs
+    // explicit extensions and lib/server/*.ts does not carry them, so a resolve
+    // hook bridges the gap WITHOUT editing any app file or tsconfig. Node 24 on
+    // the runner strips the types itself.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // WHAT A SPAC COVER ACTUALLY SAYS. The share-count fix took correctness from
+  // 29% to ~100% and its cost landed on the SPAC rows that dominate this page:
+  // the one unit-shaped anchor matched 1 of 94 covers, so Deal Size is blank on
+  // almost everything live. This prints the masthead and every dollar amount,
+  // unit count and trust sentence — and deliberately carries NO candidate
+  // patterns, so the output cannot be read as confirmation of a guess.
+  "ipo-spac": {
+    script: "scripts/ipo-spac-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // MEASURE THE SHARE COUNT, which Phase 0 never did -- it gated the PRICE
+  // parser at 5/5 and left sharesOffered untested. The first live ingest run
+  // produced ADARx at 88,250,216 shares (shares outstanding, not an offering)
+  // and Alopexx at a $2.1M NYSE American IPO. Prints every "<n> shares" on each
+  // cover with its sentence, so the rule is chosen by reading the filings
+  // rather than by guessing a tighter regex.
+  "ipo-shares": {
+    script: "scripts/ipo-shares-probe.mjs",
+    args: () => [],
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
+  // THE FIRST LIVE RUN OF THE DAILY INGEST. Steps 3-5 have only ever been
+  // fixture-proven; this calls ingestIpoWindow(), mergeIpoRecords() and
+  // buildSecIpoTables() -- the shipped functions, not copies -- against real
+  // EDGAR and prints both tables. Read-only by construction: the write is
+  // app-side (app/api/jobs/ipo-refresh) because that is where the write token
+  // is, and this job holds none.
+  "ipo-ingest": {
+    script: "scripts/ipo-ingest-probe.mjs",
+    args: () => [],
+    // Same reason as ipo-seed: it imports the app's .ts modules directly, and
+    // Node's ESM loader needs the resolve hook to find their extensionless
+    // relative specifiers.
+    nodeArgs: ["--import", "./scripts/lib/register-ts.mjs"],
+  },
   // Read-only: runs the SHIPPED extraction over five real filers' companyfacts
   // and diffs every extracted number against the frozen FMP ground truth in the
   // dump. Needs the dump for the FMP side and the network for the SEC side, and
@@ -482,11 +551,6 @@ const TASKS = {
   // READS ONLY, but the bars and the report dates both live in Upstash and the
   // credentials live in the write- job. The prefix is the CREDENTIAL boundary,
   // not a claim about what the script does.
-  // READS ONLY. The stored SEC fact set lives in Upstash and the credentials
-  // live in this job, so the write- prefix is the CREDENTIAL boundary again,
-  // not a claim about what the script does. It reaches data.sec.gov for
-  // CONCEPT NAMES only — never to re-extract, because the whole point is to
-  // read the object the page reads.
   // READS ONLY (Upstash + data.sec.gov for concept names). Counts the two
   // blast radii the ABVX diagnosis raised before either change is made.
   "write-tie-ifrs-census": {
@@ -495,10 +559,46 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY. The stored SEC fact set lives in Upstash and the credentials
+  // live in this job, so the write- prefix is the CREDENTIAL boundary again,
+  // not a claim about what the script does. It reaches data.sec.gov for
+  // CONCEPT NAMES only — never to re-extract, because the whole point is to
+  // read the object the page reads.
   "write-stored-set": {
     script: "scripts/sec-stored-set-probe.mjs",
     args: () => [],
     needsTypescript: true,
+    writes: true,
+  },
+  // BETA FROM BARS ALREADY IN REDIS — the worked example the read-only probe
+  // could not produce, because the sandbox has no Upstash credentials and every
+  // bars provider is refused at the gateway.
+  //
+  // READ-ONLY DESPITE THE PREFIX. It issues GETs for two history keys and
+  // nothing else. `write-` here means "needs the credentials", which is the
+  // boundary this file and relay.yml both enforce; it does not mean the task
+  // mutates anything. See the routing docblock at the top of this file.
+  "write-beta-mu": {
+    script: "scripts/beta-worked-example.mjs",
+    args: () => [],
+    // PINNED ON THE TASK, so the task NAME is the record of what was measured.
+    // relay.yml's inputs live on the default branch and have no symbol field;
+    // pinning here is what lets a branch measure a named symbol without a merge.
+    // THE PIN IS THE CANDIDATE LIST, not one symbol. Run 35597733409 scanned
+    // ^GSPC alone and nothing else, because this env PIN WINS over the ambient
+    // environment by design (see the note where `env` is applied below) — so
+    // the script's own multi-candidate default never applied. The router was
+    // right and the pin was wrong.
+    env: { BETA_SYMBOL: "MU", BETA_BENCH: "^GSPC,SPY,VOO,IVV,QQQ,DIA" },
+    // scripts/lib/source-code.mjs imports typescript to strip comments before
+    // the prefix regexes run, and the credentialled job installs only
+    // @upstash/redis. Same flag as every other task that lifts from source.
+    needsTypescript: true,
+    // NEEDS THE CREDENTIALS; PERFORMS NO WRITES. Same declaration and the same
+    // reason as "write-bad-key-earnings" above. The flag is what the router
+    // checks against the name — the two must agree or it fails closed, which is
+    // how this task failed its first dispatch (run 35597058149) rather than
+    // running uncredentialled and reporting "no cached bars".
     writes: true,
   },
   "write-valuation-price": {
@@ -524,10 +624,87 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     writes: true,
   },
+  // Read-only, NO credential and NO FMP: measures how well a filer's next
+  // results date can be predicted from its own filing history alone. Asked
+  // before deciding whether the earnings calendar's FORWARD half can come off
+  // FMP at all -- §4 of the off-FMP brief proposes filing cadence as the
+  // fallback and nothing had measured it.
+  "sec-results-dates": { script: "scripts/sec-results-date-predictability.mjs", args: () => [] },
+  // Read-only, no credential: does a filer ANNOUNCE its next results date in an
+  // 8-K (item 7.01/8.01) ahead of time? The last input to the forward-calendar
+  // decision -- predicting the date from cadence was measured and is weak, so
+  // the question is whether it can be READ instead of predicted. Needs the dump
+  // for the universe and for market caps: "do companies do this" and "do the
+  // companies a calendar is searched for do this" are different questions.
+  "sec-scheduling": {
+    script: "scripts/sec-scheduling-announcements.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, no credential, submissions ONLY (no document fetching): simulates
+  // a "due to report" list over the past 12 months across the FULL analysis
+  // universe and sweeps k. List size scales with the universe, so a sample
+  // cannot answer it. Needs the dump for the analysis universe.
+  "sec-due-sweep": {
+    script: "scripts/sec-due-to-report-sweep.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // NO NETWORK AT ALL. Re-slices the due-to-report simulation from the fact set
+  // the sweep persists (data/sec/due-sweep-facts.json), which the relay's own
+  // artifact carries. Dispatch it with run_id/artifact_name pointing at a
+  // sec-due-sweep run: that artifact holds both the fact set and the step 0
+  // dump's universe.json, so the locate step resolves.
+  "sec-due-reslice": {
+    script: "scripts/sec-due-reslice.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // STAGE 0, BLOCKING. No network, no Redis: distils the analyst-consensus series
+  // out of the frozen Step 0 dump into a compact permanent archive. The estimates
+  // are the only thing on the earnings page that cannot be re-derived from public
+  // filings, and they sit on a 24-hour TTL, so they die within a day of the FMP
+  // key lapsing rather than decaying slowly.
+  "consensus-freeze": {
+    script: "scripts/consensus-freeze.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // Read-only, NO credential and NO network: ranks the analysis universe by the
+  // frozen pool's market cap and emits the due strip's static top-50 membership.
+  // The strip is a CUT, and this generates the cut. Membership only -- no cap
+  // figure is carried out of the run.
+  // WHICH UNIT A FOREIGN PRIVATE ISSUER'S EPS IS FILED IN. #489 suppressed the
+  // market cap for five ADS filers and recorded the P/E beside it as an OPEN
+  // question, explicitly not to be settled by assuming symmetry. This settles
+  // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
+  "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
+  // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
+  // prescribes summing each class's shares x that class's close; secFields.ts
+  // records from measurement that companyfacts carries no class label. Both
+  // cannot be acted on, and guessing produces a plausible wrong market cap.
+  "multiclass-shares": { script: "scripts/multiclass-shares-probe.mjs", args: () => [] },
+  "due-strip-universe": {
+    script: "scripts/due-strip-universe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   // Read-only, NO credential and NO network: reads the frozen Step 0 dump and
   // reports whether the empty-day poisoning has already fired in production.
   // The live read happens in the Step 0 job under Upstash's read-only token;
   // this half only does arithmetic on the result.
+  // MEASUREMENT ONLY, no fix: separates the three states due-strip-universe's
+  // single "source: none" verdict cannot tell apart -- the symbol is ABSENT
+  // from a source, present with a NULL cap, present under a key capOf does not
+  // read, or present under a different SPELLING. Different owners, one verdict
+  // today. Lifts CAP_SOURCES and capOf out of due-strip-universe.mjs so the
+  // probe cannot measure a set the consumer does not use. Read-only, no
+  // credential, NO NETWORK; needs a step 0 dump.
+  "pricepool-cap-gap": {
+    script: "scripts/pricepool-cap-gap-probe.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
   "earnings-poisoning": {
     script: "scripts/earnings-poisoning-scan.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
@@ -689,5 +866,9 @@ if (spec.env) {
   console.log(`relay: ${task} pins ${Object.entries(spec.env).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 }
 console.log(`relay: ${task} -> node ${spec.script} ${args.join(" ")}`);
-const res = spawnSync("node", [spec.script, ...args], { stdio: "inherit", env });
+// nodeArgs are flags for the node PROCESS, not arguments to the task. Only a
+// task that declares them gets them, so nothing else changes behaviour.
+const nodeArgs = spec.nodeArgs ?? [];
+if (nodeArgs.length) console.log(`relay: node flags ${nodeArgs.join(" ")}`);
+const res = spawnSync("node", [...nodeArgs, spec.script, ...args], { stdio: "inherit", env });
 process.exit(res.status ?? 1);

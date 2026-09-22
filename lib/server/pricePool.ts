@@ -90,7 +90,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const PRICE_POOL_KEY = "msh:price-pool:v1";
+export const PRICE_POOL_KEY = "msh:price-pool:v1";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A HEALTH RECORD THE MARKET-HOURS SKIP CANNOT ERASE.

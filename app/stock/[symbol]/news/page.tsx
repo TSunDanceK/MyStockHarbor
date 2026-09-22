@@ -35,9 +35,9 @@ import { beginTiming } from "@/lib/server/timing";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import {
-  getLatestEarningsData,
-  type LatestEarningsData,
-} from "@/lib/latest-earnings-data";
+  getSecEarningsSnapshot,
+  type SecEarningsSnapshot,
+} from "@/lib/server/secEarningsSnapshot";
 import SharedLatestEarningsCard from "@/app/components/LatestEarningsCard";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -124,11 +124,41 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-function earningsToneScore(earnings: LatestEarningsData): number | null {
-  if (!earnings.hasStructuredData) return null;
-  if (earnings.tone === "green") return 78;
-  if (earnings.tone === "red") return 28;
-  return 55;
+/**
+ * The number in the "Earnings Tone" tile.
+ *
+ * ── IT USED TO BE THREE CONSTANTS DRESSED AS A MEASUREMENT ────────────────
+ * This returned 78 for a green tone, 28 for red and 55 for anything else — a
+ * traffic light printed as a two-digit score. Every "Good" stock on the site
+ * showed 78; the tile looked like a gauge and carried one and a half bits.
+ *
+ * The snapshot now arrives with the real 0-100 score from
+ * lib/server/secEarningsScore.ts, the same one /stock/[symbol]/earnings draws
+ * its gauge from, so the tile prints that instead. Null where the scorer
+ * refused — never the 50 seed, which is not a reading (see its docblock).
+ */
+function earningsToneScore(snapshot: SecEarningsSnapshot): number | null {
+  return snapshot.available ? snapshot.score : null;
+}
+
+/**
+ * The tile's border speaks the scorer's vocabulary, not the news scorer's.
+ *
+ * `miniScoreCardStyle` is shared with the Confidence tile beside it, which is
+ * keyed on the NEWS tone ("green" | "yellow" | "red"). The earnings tone is
+ * now "good" | "neutral" | "weak", and the two scales must not be conflated —
+ * so this maps at the one call site rather than widening the style function to
+ * accept both vocabularies, which is how they end up interchangeable.
+ *
+ * AN UNAVAILABLE SCORE PAINTS NEUTRAL, not amber-as-a-verdict: the tone field
+ * is "neutral" on the scorer's refusal branch because its shape needs a value,
+ * and the tile's label says "not scored" beside it.
+ */
+function earningsTileTone(snapshot: SecEarningsSnapshot): ScoreTone {
+  if (!snapshot.available) return "yellow";
+  if (snapshot.tone === "good") return "green";
+  if (snapshot.tone === "weak") return "red";
+  return "yellow";
 }
 
 function compactSource(source: string | null) {
@@ -142,14 +172,34 @@ function buildLeadSummary(args: {
   companyName: string;
   trend: string | null;
   newsScore: LiveNewsScore;
-  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string; };
+  earningsScore: { score: number; tone: ScoreTone; label: string; word: string | null; reason: string; };
 }) {
   const { symbol, companyName, trend, newsScore, earningsScore } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
   // A null trend is not a "mixed backdrop", it is no backdrop. Drop the clause
   // rather than naming a state that was never established.
   const backdrop = trend === null ? "" : ` with a ${trend.toLowerCase()} backdrop`;
-  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
+  // ── THE EARNINGS CLAUSE, AND WHY IT IS NOT `earningsScore.label` ────────
+  //
+  // It was, and it read "Earnings tone is currently mixed earnings tone." on
+  // every symbol and in every band. `label` is a complete noun phrase
+  // ("Mixed earnings tone") built for a standalone chip; this sentence has
+  // already supplied the noun. `word` is the bare adjective for exactly this
+  // position -- see EARNINGS_TONE_BANDS in lib/stock-news-data.ts.
+  //
+  // WHY THE BUG SURVIVED A READING OF THIS LINE: the clause immediately before
+  // it interpolates newsScore.label the same way and is CORRECT, because
+  // scoreToNewsLabel returns a bare adjective ("Bullish"). Two scorers, one
+  // field name, different parts of speech.
+  //
+  // A null word takes a different sentence rather than a blank, for the same
+  // reason the backdrop clause above is dropped entirely: no earnings
+  // headlines is not a tone of "mixed", it is no reading at all, and naming a
+  // state that was never established is the thing to avoid.
+  const earningsClause = earningsScore.word
+    ? `Earnings tone is currently ${earningsScore.word}.`
+    : "There is no clear earnings read in the recent headlines.";
+  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. ${earningsClause}`;
 }
 
 // NOT a duplicate of the lib's isLowValueNewsItem, despite the shared name: the
@@ -499,8 +549,14 @@ export default async function StockNewsPage({ params }: Props) {
     history,
   } = newsData;
 
-  const endEarnings = beginTiming("page", `latestEarnings ${upper}`);
-  const latestEarnings = await getLatestEarningsData(upper, earningsScore.tone);
+  // ON SEC FILINGS SINCE 2026-09-21. This was getLatestEarningsData(), which
+  // reads FMP's stable/earnings rows and carries an analyst estimate and a
+  // surprise beside every actual — fields that left with the FMP licence on
+  // 2026-09-15 and that /stock/[symbol]/earnings already hides. The tile below
+  // and the card in the sidebar both read this one payload, so they cannot
+  // disagree, and neither can disagree with the full report.
+  const endEarnings = beginTiming("page", `earningsSnapshot ${upper}`);
+  const earningsSnapshot = await getSecEarningsSnapshot(upper);
   endEarnings();
 
   // ── News card art (step 0 of claude/news-adapter-spec-2026-09-13.md) ──────
@@ -618,10 +674,19 @@ export default async function StockNewsPage({ params }: Props) {
               <NewsScoreGauge newsScore={newsScore} />
             </div>
             <div style={miniScoreGridStyle}>
-              <div style={miniScoreCardStyle(latestEarnings.tone)}>
+              <div style={miniScoreCardStyle(earningsTileTone(earningsSnapshot))}>
                 <div style={miniScoreTitleStyle}>Earnings Tone</div>
-                <div style={miniScoreNumberStyle}>{earningsToneScore(latestEarnings) ?? "—"}</div>
-                <div style={miniScoreLabelStyle}>{latestEarnings.hasStructuredData ? `${latestEarnings.toneLabel} based on actual EPS/revenue` : "Structured data unavailable"}</div>
+                <div style={miniScoreNumberStyle}>{earningsToneScore(earningsSnapshot) ?? "—"}</div>
+                {/* "based on actual EPS/revenue" WAS NO LONGER TRUE and had to
+                    go with the estimates. The score reads revenue and EPS
+                    growth against the year-ago period, profitability, the
+                    direction of operating margin, and whether reported profit
+                    is turning into cash — see scoreComponents in
+                    lib/server/secEarningsScore.ts. A label naming two inputs
+                    out of five, one of which is not an input at all any more,
+                    is the kind of caption that keeps an old claim alive past
+                    the data behind it. */}
+                <div style={miniScoreLabelStyle}>{earningsSnapshot.available ? `${earningsSnapshot.toneLabel} on the latest filed results` : "Not scored from filings yet"}</div>
               </div>
               <div style={miniScoreCardStyle(newsScore.tone)}>
                 <div style={miniScoreTitleStyle}>Confidence</div>
@@ -701,7 +766,7 @@ export default async function StockNewsPage({ params }: Props) {
                     would be empty far more often than it used to be.
 
                 An empty card beside a full snapshot is worse than no card. */}
-            <SharedLatestEarningsCard earnings={latestEarnings} symbol={upper} />
+            <SharedLatestEarningsCard snapshot={earningsSnapshot} symbol={upper} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>

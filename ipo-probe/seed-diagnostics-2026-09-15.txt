@@ -1,0 +1,164 @@
+DIAGNOSTIC A — the 24 lower candidates, and why each was kept or dropped
+══════════════════════════════════════════════════════════════════════════════
+   ABVC   ABVC BIOPHARMA, INC.                     424B4 2026-08-17 · SIC 2834
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-17 424B4@2026-08-17 424B4@2026-08-17 424B4@2026-08-17 10-Q@2026-08-12
+          424B accessions: 0001213900-26-090775, 0001213900-26-090777, 0001213900-26-090778, 0001213900-26-090779
+   —      Advance JV Group Ltd                     424B4 2026-09-01 · SIC 1540
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-09-01 F-1@2026-07-20 F-1/A@2026-08-13 F-1/A@2026-08-27
+          424B accessions: 0001493152-26-040933
+   ALH    Alliance Laundry Holdings Inc.           424B4 2026-08-19 · SIC 3580
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-19 S-1@2026-08-17 10-Q@2026-08-13
+          424B accessions: 0001104659-26-098828
+   ANDG   Andersen Group Inc.                      424B4 2026-08-20 · SIC 7389
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-20 S-1@2026-08-17 10-Q@2026-08-12
+          424B accessions: 0001193125-26-359181
+   SEV    Aptera Motors Corp                       424B4 2026-08-20 · SIC 3711
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-20 S-1@2026-08-07 S-1/A@2026-08-18 10-Q@2026-08-12
+          424B accessions: 0001493152-26-039508
+   APVO   Aptevo Therapeutics Inc.                 424B4 2026-09-03 · SIC 2834
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-09-03 S-1@2026-08-21 10-Q@2026-08-14
+          424B accessions: 0001193125-26-381149
+   AVAH   Aveanna Healthcare Holdings, Inc.        424B4 2026-08-24 · SIC 8082
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-20 424B4@2026-08-24 10-Q@2026-08-13
+          424B accessions: 0001193125-26-359187, 0001193125-26-361708
+   CBAN   COLONY BANKCORP INC                      424B4 2026-08-27 · SIC 6022
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-27 10-Q@2026-08-05
+          424B accessions: 0001104659-26-102490
+   MBAI   Check-Cap Ltd                            424B4 2026-08-27 · SIC 3844
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-27 F-1@2026-07-24 F-1/A@2026-08-17 6-K@2026-06-29 6-K/A@2026-06-24 6-K@2026-08-06 6-K@2026-08-06 6-K@2026-08-10 6-K@2026-08-19 6-K@2026-08-26 6-K@2026-08-28
+          424B accessions: 0001213900-26-094129
+   FBDT   First Breach, Inc.                       424B4 2026-08-31 · SIC 3480
+          KEPT (8-A12B 2026-08-12, 19d before the 424B)
+          forms: 424B4@2026-08-20 424B4@2026-08-31 8-A12B@2026-08-12 S-1@2026-09-02 S-1/A@2026-08-03 S-1/A@2026-08-07 10-Q@2026-08-28
+          424B accessions: 0001493152-26-039415, 0001493152-26-040850
+   IPHX   Inflection Point Acquisition Corp. VII   424B4 2026-08-31 · SIC 6770
+          KEPT (8-A12B 2026-08-27, 4d before the 424B)
+          forms: 424B4@2026-08-31 8-A12B@2026-08-27 S-1@2026-08-10 S-1/A@2026-08-24
+          424B accessions: 0001213900-26-095396
+   JTTT   JATT III Acquisition Corp                424B4 2026-08-26 · SIC 6770
+          KEPT (8-A12B 2026-08-25, 1d before the 424B)
+          forms: 424B4@2026-08-26 8-A12B@2026-08-25 S-1@2026-08-10
+          424B accessions: 0001213900-26-093949
+   XTER   Karman Line Acquisition Corp.            424B4 2026-08-18 · SIC 6770
+          KEPT (8-A12B 2026-08-17, 1d before the 424B)
+          forms: 424B4@2026-08-18 8-A12B@2026-08-17 S-1@2026-07-27 S-1/A@2026-08-11
+          424B accessions: 0001829126-26-009017
+   LASE   Laser Photonics Corp                     424B4 2026-09-14 · SIC 3690
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-09-14 S-1@2026-07-10 S-1@2026-07-30 S-1@2026-09-04 S-1/A@2026-09-09 S-1/A@2026-09-09 10-Q@2026-08-14
+          424B accessions: 0001493152-26-042518
+   LHSW   Lianhe Sowell International Group Ltd    424B4 2026-09-03 · SIC 7372
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-09-03 F-1@2026-08-19 F-1/A@2026-08-27 6-K@2026-06-26 20-F@2026-08-13 6-K@2026-07-02 6-K@2026-07-08 6-K@2026-09-04
+          424B accessions: 0001213900-26-096975
+   LYNX   Lyntris Inc.                             424B4 2026-08-19 · SIC 3812
+          KEPT (8-A12B 2026-08-17, 2d before the 424B)
+          forms: 424B4@2026-08-19 8-A12B@2026-08-17 S-1@2026-07-23 S-1/A@2026-08-03 S-1/A@2026-08-10 S-1/A@2026-08-12
+          424B accessions: 0001193125-26-356916
+   MI     NFT Ltd                                  424B4 2026-08-24 · SIC 6199
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-24 F-1@2026-08-18 6-K@2026-08-28
+          424B accessions: 0001213900-26-092917
+   NSAI   NorthStrive Acquisition Corp I.          424B4 2026-08-19 · SIC 6770
+          KEPT (8-A12B 2026-08-17, 2d before the 424B)
+          forms: 424B4@2026-08-19 8-A12B@2026-08-17 S-1@2026-07-22 S-1/A@2026-08-11
+          424B accessions: 0001213900-26-091457
+   RNAQ   Rainier Acquisition Corp                 424B4 2026-08-27 · SIC 6770
+          KEPT (8-A12B 2026-08-25, 2d before the 424B)
+          forms: 424B4@2026-08-27 8-A12B@2026-08-25 S-1@2026-08-06 S-1/A@2026-08-24
+          424B accessions: 0001104659-26-102498
+   RPGL   Republic Power Group Ltd                 424B4 2026-08-27 · SIC 7372
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-04 424B4@2026-08-27 F-1@2026-07-23 F-1@2026-08-20 6-K@2026-07-10 6-K@2026-08-04 6-K@2026-08-05 6-K@2026-08-10 6-K@2026-08-25
+          424B accessions: 0001213900-26-085063, 0001213900-26-094237
+   SCAT   Southern Cross Acquisition II Corp.      424B4 2026-08-26 · SIC 6770
+          KEPT (8-A12B 2026-08-11, 15d before the 424B)
+          forms: 424B4@2026-08-26 8-A12B@2026-08-11 S-1@2026-07-09 S-1/A@2026-08-07 S-1/A@2026-08-19
+          424B accessions: 0001929980-26-000507
+   TLAC   Three Lions Acquisition Corp.            424B4 2026-09-01 · SIC 6770
+          KEPT (8-A12B 2026-08-31, 1d before the 424B)
+          forms: 424B4@2026-09-01 8-A12B@2026-08-31 S-1@2026-07-01 S-1/A@2026-08-21
+          424B accessions: 0001193125-26-378248
+   WSHP   WeShop Holdings Ltd                      424B4 2026-09-03 · SIC 5900
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-09-03 6-K@2026-06-17 6-K@2026-07-13 6-K@2026-08-24
+          424B accessions: 0001493152-26-041390
+   WCT    Wellchange Holdings Co Ltd               424B4 2026-08-28 · SIC 7372
+          DROPPED as follow-on — no 8-A12B in the 90d window
+          forms: 424B4@2026-08-28 F-1@2026-07-07 6-K@2026-06-17 6-K@2026-07-06 6-K@2026-07-06 6-K@2026-07-28 6-K@2026-08-20 6-K@2026-08-21 6-K@2026-08-31 6-K@2026-09-03 6-K@2026-09-03
+          424B accessions: 0001213900-26-094944
+
+   dropped as follow-on: 15 of 24
+   8-A12B -> 424B gap, days, for those KEPT: [1, 1, 1, 2, 2, 2, 4, 15, 19]
+   >>> If that gap is always small, a +/-10d proximity test costs nothing
+   >>> and removes the 'listed day -29, 8-A12B at day -31' failure mode.
+
+══════════════════════════════════════════════════════════════════════════════
+DIAGNOSTIC B — upper table composition (SIC 6770 is authoritative)
+══════════════════════════════════════════════════════════════════════════════
+   [OPCO] ADARx Pharmaceuticals, Inc.                    SIC 2834
+   [SPAC] Eaglesky Acquisition Corp                      SIC 6770
+   [OPCO] Little West Holdings Inc.                      SIC 2080
+   [SPAC] Southport Acquisition Corp. II                 SIC 6770
+   [OPCO] CGL Logistics Holdings Ltd                     SIC 4731
+   [OPCO] Sensei Harbor Corp.                            SIC 7371
+   [OPCO] Aura Consolidated Group, Inc.                  SIC 7372
+   [OPCO] Youmi Inc.                                     SIC 5412
+   [OPCO] UDynamics Ltd                                  SIC 7371
+   [SPAC] Dune Acquisition Corp III                      SIC 6770
+   [OPCO] Jaovi Inc.                                     SIC 7372
+   [OPCO] Alopexx, Inc.                                  SIC 2836
+   [OPCO] Student Living EduVation (Holdings) Corp       SIC 7000
+   [SPAC] ARC Group Securities Acquisition II            SIC 6770
+   [SPAC] GX Acquisition Corp. III/Cayman                SIC 6770
+   [OPCO] Ambitious Entertainment, Inc.                  SIC 7812
+   [OPCO] ECST Holdings Ltd                              SIC 7372
+   [OPCO] Matternet, Inc.                                SIC 3721
+   [SPAC] AEI CapForce II Investment Corp                SIC 6770
+
+   SPAC by SIC 6770        6/19
+   SPAC by name only       0/19  (SIC disagrees — trust the SIC)
+   operating companies     13/19
+
+   >>> ENTITY FILTER MATCHED: 2
+
+── UPPER TABLE (19)
+   ADRX   ADARx Pharmaceuticals, Inc.                terms 2026-09-14 · Nasdaq Global Market
+   ESAU   Eaglesky Acquisition Corp                  terms 2026-09-14 · New York Stock Exchange
+   —      Little West Holdings Inc.                  terms 2026-09-14 · Nasdaq Capital Market
+   PORT   Southport Acquisition Corp. II             terms 2026-09-08 · New York Stock Exchange
+   —      CGL Logistics Holdings Ltd                 terms 2026-09-04 · Nasdaq Capital Market
+   —      Sensei Harbor Corp.                        terms 2026-09-02 · —
+   AXQ    Aura Consolidated Group, Inc.              terms 2026-09-02 · —
+   —      Youmi Inc.                                 terms 2026-08-27 · Nasdaq
+   UDUD   UDynamics Ltd                              terms 2026-08-21 · Nasdaq Capital Market
+   CPPGU  Dune Acquisition Corp III                  terms 2026-08-21 · Nasdaq Global Market
+   —      Jaovi Inc.                                 terms 2026-08-18 · —
+   ALPX   Alopexx, Inc.                              terms 2026-08-17 · NYSE American
+   —      Student Living EduVation (Holdings) Corp   terms 2026-08-13 · Nasdaq
+   —      ARC Group Securities Acquisition II        terms 2026-08-13 · New York Stock Exchange
+   GXTRU  GX Acquisition Corp. III/Cayman            terms 2026-08-12 · Nasdaq
+   —      Ambitious Entertainment, Inc.              terms 2026-08-06 · NYSE American
+   —      ECST Holdings Ltd                          terms 2026-08-04 · Nasdaq Capital Market
+   —      Matternet, Inc.                            terms 2026-08-03 · Nasdaq
+   AEIBU  AEI CapForce II Investment Corp            terms 2026-08-03 · NASDAQ
+
+── LOWER TABLE (8)
+   TLAC   Three Lions Acquisition Corp.              listed 2026-09-01 · Nasdaq
+   IPHX   Inflection Point Acquisition Corp. VIII    listed 2026-08-31 · Nasdaq Global Market
+   RNAQ   Rainier Acquisition Corp                   listed 2026-08-27 · Nasdaq Capital Market
+   JTTT   JATT III Acquisition Corp                  listed 2026-08-26 · Nasdaq
+   SCAT   Southern Cross Acquisition II Corp.        listed 2026-08-26 · NASDAQ
+   LYNX   Lyntris Inc.                               listed 2026-08-19 · NYSE
+   NSAI   NorthStrive Acquisition Corp I.            listed 2026-08-19 · Nasdaq
+   XTER   Karman Line Acquisition Corp.              listed 2026-08-18 · Nasdaq
+

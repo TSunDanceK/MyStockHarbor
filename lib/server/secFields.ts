@@ -532,6 +532,72 @@ export const COVER_SHARES_FIELD: FieldDef = {
   singleValued: false,
 };
 
+/**
+ * THE us-gaap FALLBACK, FOR FILERS THAT PUBLISH NO dei COVER TAG.
+ *
+ * MEASURED (relay 35620148960): Alphabet and Under Armour publish no
+ * `dei:EntityCommonStockSharesOutstanding` at all. The cover tag is a cover-PAGE
+ * fact and some filers only tag the balance-sheet line, which is `us-gaap`.
+ *
+ * A DIFFERENT NAMESPACE, SO IT IS A SEPARATE LIST. COVER_SHARES_FIELD.chain is
+ * read under `dei`; this is read under `us-gaap` only if that yielded nothing.
+ * Order is a preference, not a merge: the cover page is the filer's most recent
+ * statement of its own count, and the balance-sheet line is as of the period
+ * end -- weeks earlier. Taking the newer one where both exist is the point of
+ * the cover field existing at all.
+ */
+export const COVER_SHARES_FALLBACK = {
+  taxonomy: "us-gaap",
+  chain: ["CommonStockSharesOutstanding"],
+} as const;
+
+/**
+ * TAGS THAT MUST NEVER SUPPLY A COVER SHARE COUNT, AS AN ENFORCED RULE.
+ *
+ * BUILD-BRIEF §5: the weighted-average diluted tag is "a different number that
+ * looks like the right one". It is not a count of shares outstanding at a date
+ * -- it is an AVERAGE over a period, inflated by options and convertibles that
+ * may never be exercised. Multiplying it by a price gives a diluted-basis
+ * valuation wearing a market cap's label, a few percent off for most filers and
+ * far more for a company with heavy option overhang. Plausible, and wrong.
+ *
+ * WHY A DENYLIST AND NOT SIMPLY LEAVING IT OUT OF THE CHAINS. Absence is not a
+ * rule; it is the current state of two arrays. The failure this guards against
+ * is someone extending a chain to "improve coverage" for filers that have no
+ * cover tag -- which, after the measurement above, is a real and tempting gap
+ * to fill. `assertCoverChainsAreClean` makes that edit fail loudly instead of
+ * shipping a diluted count as a share count.
+ */
+export const FORBIDDEN_COVER_TAGS: readonly string[] = [
+  "WeightedAverageNumberOfDilutedSharesOutstanding",
+  "WeightedAverageNumberOfSharesOutstandingBasic",
+  "WeightedAverageNumberOfShareOutstandingBasicAndDiluted",
+  "AdjustedWeightedAverageShares",
+  "WeightedAverageShares",
+];
+
+/**
+ * Throws if either cover chain names a forbidden tag. Exported so the check
+ * suite can run it, and called at module load so a bad edit cannot reach a
+ * render at all.
+ */
+export function assertCoverChainsAreClean(
+  primary: readonly string[] = COVER_SHARES_FIELD.chain,
+  fallback: readonly string[] = COVER_SHARES_FALLBACK.chain
+): void {
+  const bad = [...primary, ...fallback].filter((t) => FORBIDDEN_COVER_TAGS.includes(t));
+  if (bad.length) {
+    throw new Error(
+      `cover share chain names a weighted-average tag: ${bad.join(", ")}. ` +
+      "That is an average over a period, not a count at a date; multiplying it by " +
+      "a price yields a diluted-basis figure labelled as a market cap. See " +
+      "FORBIDDEN_COVER_TAGS in lib/server/secFields.ts."
+    );
+  }
+}
+
+assertCoverChainsAreClean();
+
 /** The ordered field list. ORDER IS LOAD-BEARING: values are stored positionally. */
 export const SEC_FIELDS: FieldDef[] = [...INCOME, ...CASH_FLOW, ...BALANCE_SHEET];
 

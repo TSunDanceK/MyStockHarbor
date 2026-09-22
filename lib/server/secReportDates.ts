@@ -105,6 +105,16 @@ export const MAX_PERIOD_TO_ANNOUNCEMENT_DAYS = 120;
 /** Item 2.02 — Results of Operations and Financial Condition. */
 const RESULTS_ITEM = "2.02";
 
+/**
+ * Item 9.01 — Financial Statements and Exhibits.
+ *
+ * A results release attaches its figures as an exhibit, so an 8-K carrying BOTH
+ * 2.02 and 9.01 is the better evidence that this filing IS the release rather
+ * than a filing that merely mentions results. Used only as a tie-break — see
+ * the dedup at the bottom of reportEvents.
+ */
+const EXHIBITS_ITEM = "9.01";
+
 /** US regular session, Eastern. */
 const OPEN_MINUTES = 9 * 60 + 30;
 const CLOSE_MINUTES = 16 * 60;
@@ -210,13 +220,25 @@ export function timingFor(minutes: number): ReportTiming {
   return "during-market";
 }
 
-/** Every 2.02 item spelling EDGAR uses, so a filing is not missed on format. */
-function hasResultsItem(raw: unknown): boolean {
+/**
+ * Every item spelling EDGAR uses, so a filing is not missed on format.
+ *
+ * ONE PARSER FOR BOTH ITEM CODES. 2.02 and 9.01 arrive in the same field with
+ * the same spellings, so a second hand-written matcher for 9.01 would be a
+ * second reading of one format — the shape this repo has paid for repeatedly
+ * (claude/traps/two-validators-for-one-value.md). The item code is a parameter.
+ */
+function hasItem(raw: unknown, code: string): boolean {
   if (typeof raw !== "string") return false;
   // EDGAR writes items as a comma-separated list, sometimes with the prose
   // title attached: "2.02,9.01" or "Item 2.02 Results of Operations...".
-  return raw.split(/[,;]/).some((part) => part.trim().replace(/^Item\s+/i, "").startsWith(RESULTS_ITEM));
+  return raw.split(/[,;]/).some((part) => part.trim().replace(/^Item\s+/i, "").startsWith(code));
 }
+
+const hasResultsItem = (raw: unknown): boolean => hasItem(raw, RESULTS_ITEM);
+
+/** Does this filing also attach the statements? The tie-break, nothing more. */
+export const carriesExhibits = (raw: unknown): boolean => hasItem(raw, EXHIBITS_ITEM);
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
@@ -309,13 +331,42 @@ export function reportEvents(
   // KEYED ON THE PERIOD WHERE THERE IS ONE, on the event date otherwise — an
   // announcement with no matched period is still one announcement, and two
   // index entries for it must still collapse to one.
+  // ── THE 9.01 TIE-BREAK, AND WHY IT IS ONLY A TIE-BREAK ───────────────────
+  //
+  // Restored from lib/server/secResultsDate.ts, deleted in the consolidation.
+  // That module preferred a 2.02 filing also carrying 9.01 -- the exhibit that
+  // attaches the statements -- because it is the better evidence that a filing
+  // IS the release rather than one that mentions results.
+  //
+  // NARROWED ON PURPOSE, AND THE NARROWING IS THE POINT. The deleted rule
+  // preferred a 9.01 filing even when an earlier 2.02-only filing existed. Here
+  // that would override "the earliest wins", and earliest is load-bearing for a
+  // different consumer: the ORIGINAL announcement is the one the market reacted
+  // to, and announcedOn feeds the price-reaction card on the stock page. A
+  // later 8-K/A carrying the statements would silently move every reaction
+  // measurement onto the amendment's date.
+  //
+  // SO IT BREAKS TIES ONLY -- and there was a real, arbitrary tie to break.
+  // On equal announcedOn the old test (`e.announcedOn < seen.announcedOn`) is
+  // false, so the incumbent survived and the winner was whichever filing came
+  // first in the submissions array: index order, which is not a rule. Two 8-Ks
+  // filed the same day for the same period is exactly the ambiguous case the
+  // 9.01 preference was measured to resolve, and it is the case where earliest
+  // has nothing to say.
+  const beats = (candidate: ReportEvent, incumbent: ReportEvent): boolean => {
+    if (candidate.announcedOn !== incumbent.announcedOn) {
+      return candidate.announcedOn < incumbent.announcedOn;
+    }
+    return carriesExhibits(candidate.items) && !carriesExhibits(incumbent.items);
+  };
+
   const byPeriod = new Map<string, ReportEvent>();
   const undated: ReportEvent[] = [];
   for (const e of out) {
     const key = e.periodEnd ?? e.eventDate;
     if (!key) { undated.push(e); continue; }
     const seen = byPeriod.get(key);
-    if (!seen || e.announcedOn < seen.announcedOn) byPeriod.set(key, e);
+    if (!seen || beats(e, seen)) byPeriod.set(key, e);
   }
   const deduped = [...byPeriod.values(), ...undated];
   deduped.sort((a, b) => (a.announcedOn < b.announcedOn ? 1 : a.announcedOn > b.announcedOn ? -1 : 0));

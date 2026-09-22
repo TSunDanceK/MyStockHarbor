@@ -21,6 +21,14 @@
 // separately below.
 
 import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
+import { buildSecIpoTables } from "./ipoSecSource";
+import { indexByCik } from "./ipoExclusions";
+import { resolveTickerMap } from "./secTickerMap";
+import { readStoredIpoFilings } from "./ipoSecStore";
+// Re-exported so the cadence/staleness constants stay discoverable from the
+// module that owns the page's data, even though the rule itself lives with the
+// other exclusions.
+export { IPO_TERMS_MAX_AGE_DAYS } from "./ipoExclusions";
 import { fmpFetch } from "./fmpUsage";
 
 // How often the IPO calendar is re-read from FMP.
@@ -43,8 +51,43 @@ import { fmpFetch } from "./fmpUsage";
 // what holds the literal to this value.
 export const IPO_REVALIDATE_SECONDS = 24 * 60 * 60;
 
+
+/**
+ * Which table a row belongs in.
+ *
+ * CARRIED ON THE ROW, NOT RE-DERIVED AT RENDER, and that is the whole point of
+ * the single feed. The two providers decide membership by DIFFERENT RULES:
+ *
+ *   fmp  by date -- its `date` is a FORWARD expected listing date, so a date in
+ *        the future means upcoming. That is what FMP's field actually means.
+ *   sec  by PIPELINE STAGE -- terms filed and no final prospectus yet, versus a
+ *        final prospectus inside the recent window. Its upper-table `date` is
+ *        the AMENDMENT date, always in the past, so a clock comparison would
+ *        file every upcoming row under "recent".
+ *
+ * Merging both into one array and re-splitting it on `date < today` would be
+ * correct for FMP and silently wrong for SEC. The tag is computed once, by the
+ * provider that knows what its own dates mean.
+ */
+export type IpoTable = "upcoming" | "recent";
+
 export type ConfirmedIpo = {
-  symbol: string;
+  table: IpoTable;
+  // ROW IDENTITY, AND IT IS NOT THE SYMBOL. A company that has filed to list but
+  // has not priced has no ticker yet -- the proposed symbol is a claim in a
+  // prospectus, present on roughly half of covers, while the CIK is the
+  // identifier the source is organised BY. It is the first column of every EDGAR
+  // index row and the join key into secTickerMap.
+  //
+  // THE ORDERING MATTERS AND IS DELIBERATE: `cik` became required BEFORE `symbol`
+  // became nullable. Relaxing the symbol first would have left rowKey() in
+  // IpoList.tsx keying on a value that is sometimes absent -- upper-table rows
+  // would collide as "null-<date>", and React would bleed expand/collapse state
+  // between two companies that amended on the same day.
+  cik: string;
+  // NULLABLE SINCE the page began showing companies that have filed but not
+  // priced. Every consumer must render a fallback; none may use it as identity.
+  symbol: string | null;
   company: string;
   date: string;
   exchange: string | null;
@@ -128,7 +171,19 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   const company = firstStr(row, ["company", "companyName", "name"]);
   const date = firstStr(row, ["date", "ipoDate", "expectedDate"]);
 
-  if (!symbol || !company || !date) return null;
+  // FMP'S ROWS ARE NOT KNOWN TO CARRY A CIK -- unverified, and unverifiable from
+  // a sandbox with no FMP_API_KEY. So identity on this branch is SYNTHESISED from
+  // the symbol, which FMP always supplies and which parseRow still requires
+  // below. The `fmp:` prefix is what stops a synthesised id being mistaken for a
+  // real CIK if the two ever meet in one list.
+  //
+  // This is the FMP branch only. The SEC branch has a real CIK and must use it.
+  const cik = firstStr(row, ["cik", "CIK"]) ?? (symbol ? `fmp:${symbol}` : null);
+
+  // Symbol stays REQUIRED here even though the type now allows null: an FMP
+  // "confirmed, priced" row without a ticker is a broken row, not an early-stage
+  // filing. The nullable case belongs to the SEC upper table alone.
+  if (!symbol || !company || !date || !cik) return null;
   if (isWithdrawnOrPostponed(row)) return null;
 
   const { low, high } = parsePriceRange(row);
@@ -144,6 +199,10 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   }
 
   return {
+    // FMP's `date` is the expected listing date, so the clock IS the right rule
+    // on this branch -- and only on this branch. See IpoTable.
+    table: date >= toIsoDate(new Date()) ? "upcoming" : "recent",
+    cik,
     symbol,
     company,
     date,
@@ -165,7 +224,66 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   };
 }
 
+// ── The SEC branch ─────────────────────────────────────────────────────────
+//
+// SAME CONTRACT, SAME THROW-VS-EMPTY DISCIPLINE as the FMP branch below: a read
+// that could not answer THROWS, and a genuinely quiet window returns []. readFeed
+// treats the two completely differently -- a throw serves the last good copy, a []
+// is published as "nothing scheduled" -- so collapsing them is how a broken read
+// becomes a confident empty page.
+//
+// The store is populated out of band (the daily-index refresh path), never by a
+// render: form.idx is 39.3 MB a quarter and the page must not touch it. The
+// render reads what is stored, exactly as the news path does.
+async function fetchSecIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
+  const records = await readStoredIpoFilings();
+  if (records === null) {
+    // NOT []. A missing store is "could not answer", the same category as a
+    // missing FMP_API_KEY -- and the same bug if it is reported as "no IPOs".
+    throw new Error(
+      "IPO_PROVIDER=sec but no stored SEC filing records were found. The " +
+        "daily-index refresh has not run, or its key is wrong. This is a failed " +
+        "read, not a quiet market."
+    );
+  }
+
+  const windowDays = Math.max(
+    1,
+    Math.round(
+      (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
+    )
+  );
+  // The map is resolved HERE, not inside buildSecIpoTables: keeping that
+  // function free of @upstash/redis is what lets the seeding script on the relay
+  // import and call the very same classifier. One path, not two that agree.
+  const { map: tickerMap } = await resolveTickerMap();
+  const { upcoming, recent } = buildSecIpoTables(records, indexByCik(tickerMap), windowDays);
+
+  // BOTH TABLES, ONE ARRAY, EACH ROW TAGGED. The split is already decided by
+  // each filer's own filing history (see ipoSecSource.ts); tagging preserves
+  // that decision through the cache instead of throwing it away and asking the
+  // clock to guess it back.
+  // Already tagged at construction by buildSecIpoTables -- concatenating is all
+  // that is left, and there is no second place where the rule could drift.
+  return [...upcoming, ...recent];
+}
+
+// WHICH SOURCE THE PAGE RUNS ON. Default "fmp" -- unchanged behaviour until the
+// env var is set, which is the owner's standing rule: reversible by a switch,
+// not a rewrite.
+//
+// AN ENV CHANGE NEEDS A PRODUCTION REDEPLOY TO BE SEEN. That is not a guess; it
+// is the correction #453 had to make after the NEWS_PROVIDER flip appeared not
+// to take effect. Setting this in the Vercel dashboard and waiting will not do
+// anything on its own.
+export type IpoProvider = "fmp" | "sec";
+
+export function ipoProvider(): IpoProvider {
+  return process.env.IPO_PROVIDER === "sec" ? "sec" : "fmp";
+}
+
 async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
+  if (ipoProvider() === "sec") return fetchSecIpoRows(from, to);
   const apiKey = process.env.FMP_API_KEY;
   // Throwing (rather than returning []) is deliberate: readFeed treats a throw
   // as "could not answer" and a [] as "genuinely none". A missing key is the
@@ -200,37 +318,84 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function getUpcomingConfirmedIpos(): Promise<Feed<ConfirmedIpo>> {
-  const now = new Date();
-  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  return readFeed(
-    "ipo:upcoming",
-    () => fetchIpoRows(toIsoDate(now), toIsoDate(in30Days)),
-    { freshSeconds: IPO_REVALIDATE_SECONDS }
-  );
+/**
+ * The derived feed's cache key, NAMESPACED BY PROVIDER.
+ *
+ * IT USED TO BE THE BARE STRING "ipo:all", AND THAT IS A FLIP THAT DOES NOT
+ * TAKE EFFECT. The two providers produce different rows from different
+ * upstreams into one cache entry, so for up to IPO_REVALIDATE_SECONDS after
+ * IPO_PROVIDER changes, the page serves the OLD provider's rows wrapped in the
+ * NEW provider's chrome -- the footer, the column labels and the intro copy all
+ * come from the flag and switch instantly, while the table underneath does not.
+ * Every surface a reader would check to confirm the flip says it happened.
+ *
+ * It did not bite on the 2026-09-21 flip only by luck: the fmp entry had
+ * already aged past its freshness window, so the first sec render refetched.
+ * A flip made a few hours after a page view would have shown FMP data under a
+ * "Data source: SEC EDGAR" footer.
+ *
+ * Namespacing costs one cache entry per provider and makes the flip atomic:
+ * there is no entry under the new name, so the first read goes upstream.
+ */
+export function ipoFeedKey(provider: IpoProvider = ipoProvider()): string {
+  return `ipo:all:${provider}`;
 }
 
-// Confirmed IPOs that priced/listed within the last 30 days, most recent
-// first.
-export async function getRecentIpos(): Promise<Feed<ConfirmedIpo>> {
-  const now = new Date();
-  const past30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const feed = await readFeed(
-    "ipo:recent",
-    () => fetchIpoRows(toIsoDate(past30Days), toIsoDate(now)),
-    { freshSeconds: IPO_REVALIDATE_SECONDS }
-  );
+/** Both tables, from ONE cached read. */
+export type IpoTables = {
+  upcoming: ConfirmedIpo[];
+  recent: ConfirmedIpo[];
+  /** False only when the read failed and there was no cached copy. */
+  ok: boolean;
+  source: Feed<ConfirmedIpo>["source"];
+};
 
-  // This window is a free monitor. A month with zero US IPO listings is
-  // essentially unheard of, so a successful-but-empty result here almost
-  // always means the read or the parser is broken in a way that did not
-  // throw -- worth a log line even though `ok` is true.
+/**
+ * The page's data, in one read.
+ *
+ * WAS TWO FEEDS. `ipo:upcoming` and `ipo:recent` each wrapped their own
+ * `fetchIpoRows()` with its own date range, so the page cost TWO upstream calls
+ * a day to render two halves of one dataset -- and a day on which only one of
+ * them refreshed could show a company in neither table, or in both.
+ *
+ * One window (-30d..+30d), one cache entry, one call. Membership travels on the
+ * row (see IpoTable), so a row lands in the right table without a second fetch
+ * and without a clock comparison that is only correct for one of the two
+ * providers.
+ */
+export async function getIpoTables(): Promise<IpoTables> {
+  const now = new Date();
+  const from = toIsoDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+  const to = toIsoDate(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000));
+
+  const feed = await readFeed(ipoFeedKey(), () => fetchIpoRows(from, to), {
+    freshSeconds: IPO_REVALIDATE_SECONDS,
+  });
+
+  // MOVED HERE FROM `ipo:recent`, WHICH NO LONGER EXISTS. The monitor is about
+  // the dataset, not about one half of it: a 60-day window around today with no
+  // US IPO activity at all is the implausible thing, and it stays implausible
+  // now that one read produces both tables.
   warnIfImplausiblyEmpty(
     feed,
-    "ipo:recent",
-    "A 30-day window with no US IPO listings is essentially never true -- " +
-      "suspect a failed read or a parser drift off FMP's field names, not a quiet market."
+    "ipo:all",
+    "A 60-day window spanning today with no US IPO activity is essentially " +
+      "never true -- suspect a failed read, a parser drift off the provider's " +
+      "field names, or an exclusion rule matching everything, not a quiet market."
   );
 
-  return { ...feed, items: [...feed.items].sort((a, b) => b.date.localeCompare(a.date)) };
+  // SORT DIRECTIONS ARE PER TABLE AND FOR DIFFERENT REASONS. Do not merge these
+  // into one comparator: they agree on direction today by coincidence of
+  // meaning, not of purpose. See ipoSecSource.ts's sort block.
+  //
+  // upcoming: most recently amended / soonest listing first.
+  // recent:   most recently listed first.
+  const upcoming = feed.items
+    .filter((row) => row.table === "upcoming")
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const recent = feed.items
+    .filter((row) => row.table === "recent")
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return { upcoming, recent, ok: feed.ok, source: feed.source };
 }

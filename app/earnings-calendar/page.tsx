@@ -15,15 +15,34 @@ import {
   isDateInWindow,
   getCachedDayItems,
   daysInMonth,
+  getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
+import { resolveCalendarDay, dayStateMessage } from "@/lib/server/calendarDayState";
+import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
 import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
+
+// ── THE HOUSE COPY RULE, WHICH IS NOT A STYLE PREFERENCE ──────────────────
+// Present tense about the public record. "have filed", never "will report",
+// and never a date a company is expected to report on. Two routes to a real
+// forward calendar were measured and both failed -- cadence prediction landed
+// 2 of 48 filers inside their own p90 band, and 8-K scheduling announcements
+// put 0 of 276 in the band a calendar would need (lib/server/dueToReport.ts).
+// So the page describes what HAS been filed and what is outstanding; it does
+// not predict.
+//
+// The old description promised "price and market cap" without qualification.
+// That is now conditional -- see lib/server/gridPriceCoverage.ts -- and a meta
+// description is a claim Google quotes, so it says what the page actually
+// offers rather than what it used to.
 const PAGE_DESCRIPTION =
-  "Navigable monthly earnings calendar - see how many companies report each day, then drill into any date for tickers, EPS/revenue estimates, price and market cap.";
+  "Which companies have filed results on each date, taken from their own SEC filings, " +
+  "alongside the largest companies whose results are not yet on file. Based on the " +
+  "public filing record, not a forecast of when a company will report.";
 const PAGE_URL = "https://www.mystockharbor.com/earnings-calendar";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
@@ -428,6 +447,29 @@ export default async function EarningsCalendarPage({
     getUpcomingTickerItems(todayDate),
   ]);
 
+  // ── WHAT AN EMPTY DAY MEANS, RESOLVED ONCE ───────────────────────────────
+  // This page used to ask `dayData.usListedCount > 0` and render one of two
+  // sentences. That is a bare emptiness test, and it is the defect #483 fixed
+  // ONE LAYER DOWN and this page then reintroduced at the top: a date whose
+  // month read FAILED and a genuinely quiet Sunday both produce zero rows, and
+  // both got the quiet-Sunday words.
+  //
+  // #483 shipped the two signals needed to tell them apart -- `complete` and
+  // getMonthVisibility -- and NOTHING IN lib/ OR app/ CONSULTED EITHER. A
+  // distinction nothing reads is not a fix, which is why this is wired here
+  // rather than documented again.
+  //
+  // READ AFTER loadDay, DELIBERATELY. getDayCandidates resolves the whole month
+  // behind the date, so the visibility map is populated by the await above;
+  // reading it before would report "unseen" for every date on every render.
+  const dayState = resolveCalendarDay({
+    items: dayData.items,
+    totalCandidates: dayData.totalCandidates,
+    complete: dateComplete,
+    monthVisibility: getMonthVisibility(year, month),
+  });
+  const dayStateNote = dayStateMessage(dayState);
+
   const selectedDateLabel = formatDateLabel(selectedDate);
 
   // Background auto-populate: after this response is sent, quietly fill in the
@@ -583,21 +625,23 @@ export default async function EarningsCalendarPage({
                 fontWeight: 900,
               }}
             >
-              Earnings Calendar: {selectedDateLabel}
+              {selectedDate === todayDate
+                ? "Earnings filed today"
+                : `Earnings filed on ${selectedDateLabel}`}
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
-              {dayData.usListedCount > 0 ? (
+              {dayState.kind === "listed" ? (
                 <>
-                  <strong>{dayData.usListedCount}</strong> US-listed{" "}
-                  {dayData.usListedCount === 1 ? "company reports" : "companies report"} on{" "}
-                  {selectedDateLabel}. See how many report each day, then drill into any date for
-                  tickers, EPS/revenue estimates, price and market cap.
+                  <strong>{dayState.items.length}</strong> US-listed{" "}
+                  {dayState.items.length === 1 ? "company has" : "companies have"} results on file
+                  for {selectedDateLabel}. See how many have filed on each day, then drill into any
+                  date for tickers, EPS/revenue estimates, price and market cap.
                 </>
               ) : (
                 <>
-                  See how many companies report each day, then drill into any date for tickers,
-                  EPS/revenue estimates, price and market cap.
+                  {dayStateNote} See how many companies have filed on each day, then drill into any
+                  date for tickers, EPS/revenue estimates, price and market cap.
                 </>
               )}
             </p>
@@ -780,8 +824,12 @@ export default async function EarningsCalendarPage({
             <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{formatDateLabel(selectedDate)}</div>
               <div style={{ fontSize: 12.5, opacity: 0.6, marginTop: 3 }}>
-                {dayData.usListedCount} US-listed compan{dayData.usListedCount === 1 ? "y" : "ies"} reporting
-                {!dateComplete && dayData.totalCandidates > 0 ? " · still populating…" : ""}
+                {dayState.kind === "listed"
+                  ? `${dayState.items.length} US-listed compan${dayState.items.length === 1 ? "y has" : "ies have"} results on file`
+                  : dayStateNote}
+                {dayState.kind === "listed" && !dateComplete && dayData.totalCandidates > 0
+                  ? " · still populating…"
+                  : ""}
               </div>
             </div>
 
@@ -792,6 +840,17 @@ export default async function EarningsCalendarPage({
                 initialHasMore={dayData.items.length > 50}
                 complete={dateComplete}
               />
+              {/* ONCE, AND ONLY WHEN A ROW IS ACTUALLY BLANK. Printed under the
+                  table rather than in every cell: fifty rows each saying "not
+                  covered" is noise, and a tooltip is invisible on a phone. The
+                  condition matters as much as the words -- a standing note on a
+                  day where every row IS covered would explain a gap that is not
+                  there, which is its own small lie. */}
+              {dayData.items.some((i) => i.priceCoverage === "outside-bar-universe") ? (
+                <p style={{ fontSize: 12.5, opacity: 0.6, marginTop: 12, marginBottom: 0 }}>
+                  {PRICE_COVERAGE_NOTE}
+                </p>
+              ) : null}
             </div>
           </section>
 

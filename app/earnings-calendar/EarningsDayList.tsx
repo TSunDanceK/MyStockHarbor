@@ -14,6 +14,8 @@ type EarningsListItem = {
   revenueActual: number | null;
   price: number | null;
   marketCap: number | null;
+  /** See lib/server/gridPriceCoverage.ts. Absent on rows cached before it. */
+  priceCoverage?: "covered" | "outside-bar-universe";
 };
 
 type Props = {
@@ -50,11 +52,26 @@ function formatEps(value: number | null) {
   return value !== null ? `$${value.toFixed(2)}` : "-";
 }
 
+// ── HIDDEN, NOT DASHED, FOR ROWS OUTSIDE THE BAR SOURCE ───────────────────
+// A dash says the figure was looked for and not found FOR THIS COMPANY, which
+// is a statement about the company. These figures are not collected for it at
+// all, and nothing is the truthful rendering of that. The house pattern for a
+// column that lost its source (Forward PE, the Analysts tab) is the same:
+// hidden with a comment, not shown empty. See lib/server/gridPriceCoverage.ts,
+// and the note printed once beneath the table rather than in every cell.
+//
+// ABSENT READS AS COVERED. Rows cached before the flag existed carry no
+// coverage, and blanking a whole day's figures on deploy would be a worse
+// error than showing what those rows have always shown.
+function showsPrice(item: EarningsListItem): boolean {
+  return item.priceCoverage !== "outside-bar-universe";
+}
+
 const METRIC_COLUMNS: { key: MetricKey; label: string; fmt: (item: EarningsListItem) => string }[] = [
   { key: "epsEstimated", label: "EPS Est.", fmt: (i) => formatEps(i.epsEstimated) },
   { key: "revenueEstimated", label: "Revenue Est.", fmt: (i) => formatCompact(i.revenueEstimated) },
-  { key: "price", label: "Price", fmt: (i) => formatPrice(i.price) },
-  { key: "marketCap", label: "Market Cap", fmt: (i) => formatCompact(i.marketCap) },
+  { key: "price", label: "Price", fmt: (i) => (showsPrice(i) ? formatPrice(i.price) : "") },
+  { key: "marketCap", label: "Market Cap", fmt: (i) => (showsPrice(i) ? formatCompact(i.marketCap) : "") },
 ];
 
 const COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [

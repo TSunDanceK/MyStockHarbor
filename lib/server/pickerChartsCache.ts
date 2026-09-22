@@ -71,7 +71,7 @@ export const PICKER_CHARTS_MEASURED_SOURCE =
   "/api/debug/pickers-size in production, universe 260: payloadChars 3,382,852, " +
   "signalRecordChars 3,060,650, avgChartChars 11,016";
 
-const PICKER_CHARTS_KEY = "msh:picker-charts:v1";
+export const PICKER_CHARTS_KEY = "msh:picker-charts:v1";
 
 // Must comfortably outlive PICKERS_REDIS_TTL_SECONDS (1h) so the series can
 // never expire out from under a payload that is still being served.
