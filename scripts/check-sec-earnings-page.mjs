@@ -324,27 +324,28 @@ console.log("\n7c. the score cannot claim an input it did not read");
   // text finds the phrase outside the guard and fails on prose. The property is
   // about code.
   const expl = (scoreCode.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0];
-  check("the cash clause is guarded by the cash component having run",
-    /if \(ran\.has\("cashConversion"\)\) \{[\s\S]{0,160}backed by cash/.test(expl),
-    "it used to be emitted from the tone alone");
-  // ── SLICED ON THE GUARD, NOT COUNTED ──────────────────────────────────────
-  // The first version counted occurrences against a hand-built expectation and
-  // broke the moment the clause became a template literal — it was pinned to a
-  // spelling, which is the failure this file keeps re-learning. What matters is
-  // CONTAINMENT: no cash wording anywhere outside the guarded block.
-  const guardAt = expl.indexOf('if (ran.has("cashConversion"))');
-  const guardEnd = expl.indexOf("} else if", guardAt);
-  const outsideGuard = guardAt === -1 ? expl : expl.slice(0, guardAt) + expl.slice(guardEnd);
-  check("no cash wording sits outside that guard",
-    guardAt > -1 && guardEnd > guardAt && !cashClause.test(outsideGuard),
-    `guarded block ${guardEnd - guardAt}b, ${outsideGuard.length}b outside it — ` +
-      "both the good and the weak phrasing must be inside the one branch");
+  // ── NO CASH CLAUSE AT ALL, NOW ─────────────────────────────────────────
+  // The narrative became one hedged sentence built from the page's own
+  // revenue, operating-margin and profit figures (cleanup brief A3/A4). The
+  // cash card states its own figures; a summary of them here was the AZN
+  // defect in the first place, so the property is now the stronger one: the
+  // sentence has no cash wording to guard.
+  check("the narrative carries no cash wording to mis-state",
+    expl.length > 200 && !cashClause.test(expl),
+    `scoreExplanation ${expl.length}b`);
+  check("...and each clause states its own figure with its own sign, never the overall tone",
+    /toneForGrowth\(rev\)/.test(expl) && /toneForMarginDelta\(pp\)/.test(expl) && !/tone === "good"/.test(expl),
+    "the old clauses were chosen by the score's tone — AVAV read 'margins are slipping' beside +13.0pp");
+  check("...and it instructs nobody",
+    !/\b(should|must)\b/i.test(expl) && /may show/.test(expl),
+    "'Investors should focus on…' was the old close");
   check("the score reports WHICH components it could not read",
     /unavailable: scoreGaps\(ran, basis\)/.test(scoreRaw) && /function scoreGaps/.test(scoreRaw),
     "a count would hide the one that mattered");
-  check("...and the page renders that list on the score card itself",
-    /score\.available && score\.unavailable\.length/.test(pageRaw),
-    "the number is only readable next to its own gaps");
+  check("...and the score card renders each one WITH ITS CAUSE",
+    /partialScoreNote\(coverage, score\.unavailableWhy/.test(cardsRaw) &&
+      /unavailableWhy:[\s\S]{0,200}gapReason\(k, view\)/.test(scoreRaw),
+    "the number is only readable next to its own gaps, and 'the filings do not carry it' was false for AVAV's EPS");
   // RUN, not read. The source-level version of this pinned `ran.add(...)` inside
   // the accruals branch and broke when that line became contribute(); the
   // property it was after is that a null chain produces NO entry at all.
@@ -387,6 +388,13 @@ return lift(
     [vocab, scoreComponentsSrc, consts.replace(/: \{ tone: EarningsTone; label: string; from: number \}\[\]/, ""),
    unexport(grabFunction(scoreRaw, "clamp")), unexport(grabFunction(scoreRaw, "toneLabel")),
    unexport(grabFunction(scoreRaw, "bandFor")),
+   // THE NARRATIVE READS THE PAGE'S OWN BANDS AND MARGIN PAIR, and the gap
+   // reasons read the view — lifted from their sources, never pinned.
+   ...["GROWTH_BAND_PCT", "MARGIN_BAND_PP"].map((n) =>
+     (readCodeOnly("lib/server/secPresentation.ts").match(new RegExp(`export const ${n} = [^;]+;`)) ?? [""])[0].replace("export const", "const")),
+   unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForGrowth")),
+   unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForMarginDelta")),
+   unexport(grabFunction(scoreRaw, "anchorMarginDelta")), unexport(grabFunction(scoreRaw, "gapReason")),
    unexport(grabFunction(scoreRaw, "scoreExplanation")), unexport(grabFunction(scoreRaw, "scoreGaps")),
    unexport(grabFunction(scoreRaw, "buildScoreResult")), unexport(grabFunction(scoreRaw, "scoreFromSec")),
    // CALLED BY buildScoreResult AND NOT LIFTED WITH IT. Same shape as the view
@@ -509,9 +517,9 @@ console.log("\n7e. the cash card is ONE period, and says which");
     /c\.basis === "year" \?/.test(cardsRaw) &&
       /does not publish a quarterly cash-flow statement/.test(cardsRaw),
     "a reader must not have to infer that the numbers changed period");
-  check("the score's narrative names the period when the cash leg is annual",
-    /cashBasis === "year" \? ` over \$\{cashPeriod\}`/.test(scoreRaw),
-    "otherwise quarterly growth and annual cash are described as one period");
+  check("the score's narrative cannot describe annual cash as the quarter's",
+    !/cash/i.test((scoreCode.match(/function scoreExplanation[\s\S]*?\n\}/) ?? [""])[0]),
+    "it no longer describes the cash leg at all; the cash card names its own period");
 
   // ── THE 4x TRAP, RUN RATHER THAN DESCRIBED ────────────────────────────────
   // The mixed comparison is not a style problem, it is a number. The SHIPPED
@@ -543,10 +551,9 @@ console.log("\n7e. the cash card is ONE period, and says which");
     `mixed would score ${mixed.score}/100 against ${matched.score}/100 — ` +
       `+${mixed.score - matched.score} points bought by dividing an annual cash flow ` +
       `by a quarterly profit`);
-  check("and the annual narrative names its period while the absent one claims nothing",
-    / over FY2025\./.test(matched.explanation) &&
-      !/backed by cash/.test(absent.explanation) &&
-      /the quarter was profitable/.test(absent.explanation),
+  check("and neither narrative claims cash, whichever period the cash leg read",
+    !/cash/i.test(matched.explanation) && !/cash/i.test(absent.explanation) &&
+      /the quarter was profitable/i.test(absent.explanation),
     `"${matched.explanation.slice(-60)}" | "${absent.explanation.slice(-60)}"`);
 }
 
@@ -676,8 +683,10 @@ console.log("\n7h. the band the number falls in, and the period it was built on"
   // THE AXIS READS THE TABLE. A hardcoded axis is the defect itself, so the
   // assertion is that no band label is written out in the JSX.
   check("the gauge axis is rendered FROM the table, not written out",
-    /scoreLabels[\s\S]{0,200}SCORE_BANDS[\s\S]{0,120}map\(/.test(pageRaw) &&
-      !/<span>Weak<\/span>/.test(pageRaw),
+    // IN THE CARDS FILE: the score card moved there so the render harness can
+    // draw it (cleanup brief C).
+    /scoreLabels[\s\S]{0,200}SCORE_BANDS[\s\S]{0,120}map\(/.test(cardsRaw) &&
+      !/<span>Weak<\/span>/.test(cardsRaw + pageRaw),
     "Weak/Mixed/Strong as literals is how the axis and the pill drifted apart");
 
   // AND NO BAND NAME EXISTS THAT THE PILL CANNOT PRODUCE.
@@ -700,15 +709,17 @@ console.log("\n7h. the band the number falls in, and the period it was built on"
   check("a score that overflows the scale prints 100 and lands in the top band",
     over.score === 100 && over.label === top.label,
     `${over.score}/100 -> "${over.label}"; raw sum was ${(over.seed + Object.values(over.contributions).reduce((a, b) => a + b, 0)).toFixed(2)}`);
+  // BEHIND THE AXIS'S INFO MARK now, focusable so a tap shows it — not a
+  // paragraph under the gauge (cleanup brief B).
   check("...and the thresholds are stated on the card rather than left implicit",
     new RegExp(`${top.label} is ${top.from} and above`).test(scorer2.scoreBandNote()) &&
-      /scoreBandNote\(\)/.test(pageRaw),
+      /<InfoTip text=\{scoreBandNote\(\)\}/.test(cardsRaw) && /tabIndex=\{0\}/.test(cardsRaw),
     scorer2.scoreBandNote());
 
   // ── POINT 5: THE SCORE SAYS WHICH KIND OF PERIOD IT READ ────────────────
   check("an annual filer's score carries its basis, and the card renders it",
-    over.basis === "year" && /score\.basis === "year"/.test(pageRaw) &&
-      /files annually<\/strong>, so this score is built on its fiscal/.test(pageRaw),
+    over.basis === "year" && /score\.basis === "year"/.test(cardsRaw) &&
+      /files annually<\/strong>, so this score is built on its fiscal/.test(cardsRaw),
     "a reader comparing an annual score with a 10-Q filer's has to be told they differ");
   check("...and the component names follow it too",
     /the prior fiscal year/.test(scorer2.scoreComponents("year").revenueGrowth) &&

@@ -439,6 +439,19 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // THE REVENUE CHAIN'S FOURTH ENTRY, measured over the whole frozen universe
+  // rather than the default 120: IncludingAssessedTax was added for AVAV's
+  // FY2022/FY2023 years (earnings-page cleanup brief, A5).
+  "sec-revenue-blast": {
+    script: "scripts/sec-capex-blast-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    env: {
+      FIELD: "revenue",
+      DROP: "RevenueFromContractWithCustomerIncludingAssessedTax",
+      LIMIT: "5000",
+    },
+  },
   "sec-sti-blast": {
     script: "scripts/sec-capex-blast-probe.mjs",
     args: () => [],
@@ -486,6 +499,15 @@ const TASKS = {
   },
   // WHY THE POPULATE BACKLOG MOVED AND HOW LONG REWINDOW TAKES, simulated with
   // the shipped populationQueues rather than divided. Credentialled, read-only.
+  // WHETHER A CHAIN EDIT ENLARGES THE RE-READ QUEUE: stored sets already
+  // chain-stale vs current under main's chains (which the edit re-queues).
+  // Credentialled, read-only: one manifest GET.
+  "write-chain-bump-census": {
+    script: "scripts/sec-chain-bump-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-queue-projection": {
     script: "scripts/sec-queue-projection.mjs",
     args: () => [],
