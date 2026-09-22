@@ -14,6 +14,15 @@
 >
 > The measurement pass is in **"What the measurement found"** at the foot of
 > this doc. Still no fix. Read that section before acting on anything above it.
+>
+> **UPDATE 2026-09-22: causes 1 and 3 are now fixed, cause 2 is not.**
+> `entriesOf()` in `scripts/due-strip-universe.mjs` now checks
+> `.value ?? .values ?? doc` (cause 1), and a new `canonicalOf()` resolves
+> every source's ticker spelling through `lib/symbolSpellings.mjs` before
+> the cap lookup (cause 3, the BRK.B/BRK-B split). Both committed on
+> `claude/pricepool-cap-gap` (f2ab28c, 5bf63b8), PR #505. Cause 2 (the
+> price-pool partial-write pattern) is still open; see its section below
+> for a candidate mechanism found by reading the writer, unverified.
 
 **Finding only. No fix proposed, and none should be attempted from this doc
 alone** — the cause is unknown and sits in Pickers' cap sourcing, a different
@@ -132,8 +141,9 @@ Measured 2026-09-21 by `scripts/pricepool-cap-gap-probe.mjs`, relay task
 `pricepool-cap-gap`, against the same fresh step-0 dump (run `35627342399`).
 Four dispatches: [35631103914], [35631353569], [35631581348], [35631829246].
 
-**Measurement only. No fix applied, and `scripts/due-strip-universe.mjs` is
-deliberately untouched.**
+**Measurement only. No fix applied, and `scripts/due-strip-universe.mjs` was
+deliberately untouched** *(as of the measurement pass — see the 2026-09-22
+update at the top of this doc: causes 1 and 3 have since been fixed)*.
 
 ## The short answer
 
@@ -187,7 +197,7 @@ in the same object the reader was mis-parsing. A reader that compared what it
 extracted against the count the file supplied would have failed loudly on the
 first run instead of reporting a confident zero.
 
-## Cause 2 — a real, separate null-cap pattern inside `price-pool.json`
+## Cause 2 — a real, separate null-cap pattern inside `price-pool.json` — NOT FIXED
 
 Independent of the reader. Of the pool's 841 rows, **6** carry no cap:
 
@@ -225,7 +235,23 @@ NVDA, INTC and NOK also **lack the `failStreak` and `failAt` keys entirely**,
 which all 835 capped rows carry. Two writers, two row shapes, one key space.
 The price is live and correct — this is not a fetch failure.
 
-## Cause 3 — BRK.B is a spelling split, not a missing cap
+**Candidate mechanism, added 2026-09-22, unverified against production
+data.** Reading `lib/server/pricePool.ts` (not a fresh measurement — code
+inspection only): `seedColdPricePoolRows()` writes a cold-start row from
+discovery's own `stable/quote` call and stamps `ts: nowMs` even when that
+quote's `marketCap`/`volume` were themselves null, and never sets
+`failStreak`/`failAt` at all — matching NVDA/INTC/NOK's shape exactly. A
+fresh `ts` on an incomplete row can hide the gap from `warmPricePool`'s
+stalest-first backfill, since the row no longer looks stale. Separately,
+the fail path around line 1152 (`warmPricePool`'s failure branch) carries
+forward `prev?.marketCap ?? null` etc. and does set `failStreak`/`failAt` —
+consistent with BRK.B's full-shape-but-all-null, 23-day-stale row (see
+cause 3). Two different mechanisms, matching the two row shapes observed.
+Not fixed here: this is a hypothesis from reading the writer, not a
+measurement, and the writer's actual behavior in production hasn't been
+probed.
+
+## Cause 3 — BRK.B is a spelling split, not a missing cap — FIXED 2026-09-22
 
 The one universe symbol with no cap under a corrected read:
 
@@ -240,13 +266,21 @@ BRK.B  price-pool           = NULL-CAP
 `fundamentals` spell it `BRK-B`. Both caps are real and current. The consumer
 uppercases and does nothing else, so it matches neither.
 
-`lib/symbolSpellings.mjs` exists for exactly this and is not used here.
+`lib/symbolSpellings.mjs` exists for exactly this and was not used here.
 
 Its pool row is also a **separate** fault from cause 2: it is full-shape
 (carries `failStreak`/`failAt`) but every value is null, and its `ts` is
 `1787983440576` — **2026-08-29, 23 days stale** — while the other uncapped rows
 stamp the current minute. `failStreak: 0` on a row that has been null for three
 weeks is its own claim worth checking.
+
+**Fixed 2026-09-22** on `claude/pricepool-cap-gap` (commit `5bf63b8`): added
+`canonicalOf()` to `due-strip-universe.mjs`, which widens every source's
+symbol through `symbolSpellings()` and resolves it back to whichever
+spelling the analysis universe uses. Verified against a synthetic dump with
+price-pool/stockdata spelling `BRK.B` and fundamentals spelling `BRK-B` —
+it now resolves via `fundamentals.json` and ranks correctly. The pool row's
+own staleness (cause 2's writer question) is unaffected by this fix.
 
 ## Answering the three questions as asked
 
@@ -264,8 +298,10 @@ not per-symbol at all — it hid three entire sources for every symbol.
 
 ## Still not known
 
-- **Why those six rows are written partially.** The writer has not been read;
-  this measurement only characterises its output.
+- **Why those six rows are written partially, confirmed against production.**
+  Reading the writer (2026-09-22) turned up a plausible two-mechanism
+  explanation (see cause 2's update above), but it is unverified against
+  actual production runs.
 - Whether the live site's rendered figures take the same path as these cached
   aggregates, or a different one.
 - Whether `stockdata.json` is *supposed* to carry a cap. It carries none for any
@@ -275,11 +311,12 @@ not per-symbol at all — it hid three entire sources for every symbol.
 
 ## Scope note
 
-Three distinct defects, in two subsystems, one of which invalidates a committed
-roadmap conclusion. **That is more than one PR's worth** and the ordering is a
-decision, not an implementation detail: cause 1 changes what the due strip can
-do, cause 3 is a one-line class of bug with a helper already written for it, and
-cause 2 lives in a writer nobody has read yet.
+Three distinct defects, in two subsystems, one of which invalidated a committed
+roadmap conclusion (now corrected). **This was more than one PR's worth** and
+the ordering was a decision, not an implementation detail: cause 1 changed what
+the due strip could do (fixed first), cause 3 was a one-line class of bug with
+a helper already written for it (fixed alongside it), and cause 2 lives in a
+writer that's now been read but not yet fixed or measured against production.
 
 ## Reproducing it
 
