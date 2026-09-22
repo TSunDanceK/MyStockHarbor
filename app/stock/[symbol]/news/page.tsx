@@ -16,6 +16,7 @@ import {
   buildWhatItMeans,
 } from "@/lib/stock-news-templates";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
   computeIndicatorSeed,
   type Point,
@@ -282,11 +283,17 @@ function structuredNews(news: NewsItem[], summaryByTitle: Record<string, string>
   }));
 }
 
+// CONVERTS FOR THE SAME REASON fetchFmpQuote DOES, and the two are not
+// redundant: this one feeds the <title>, that one feeds the page body. On a
+// dotted share class both failed, and the title still showed a price because
+// computeIndicatorSeed falls back to the last close of getDailyHistory --
+// which converts. So the visible symptom was a title with a price above a body
+// saying the price was unavailable, from two failures and one fallback.
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
     if (!res.ok) return { price: null, date: null };
     const json = await res.json();

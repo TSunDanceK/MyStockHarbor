@@ -118,11 +118,31 @@ if (!buildFmp) {
   console.error("FAIL: could not find buildFmpSymbol — measuring nothing.");
   process.exit(1);
 }
+// THE PREMISE MOVED, AND THE ASSERTION FOLLOWED IT RATHER THAN BEING DELETED.
+//
+// This used to read buildFmpSymbol's body for a literal `.replace(/\./g, "-")`.
+// That body now calls toDashed from lib/symbolSpellings.mjs instead, because
+// the rule having exactly one implementation is the point -- fetchFmpQuote
+// shipped without the conversion precisely because the rule lived inside one
+// caller. Pinning the old text would have failed the fix that improved it.
+//
+// So the premise is asserted in two halves, at the two places it can now break:
+// buildFmpSymbol delegates, and the thing it delegates to maps dot to dash. A
+// check that only asserted the first half would pass if toDashed were reversed.
 check(
-  "buildFmpSymbol maps dot to dash, not the reverse",
-  /replace\(\s*\/\\\.\/g\s*,\s*"-"\s*\)/.test(buildFmp),
+  "buildFmpSymbol delegates to the shared helper rather than re-rolling the rule",
+  /toDashed\(/.test(buildFmp) && !/replace\(/.test(buildFmp),
+  "a private copy is how the rule stayed invisible to fetchFmpQuote; the " +
+    "second clause is what stops a copy coming back beside the call"
+);
+const spellings = readCodeOnly("lib/symbolSpellings.mjs");
+const toDashedSrc = (spellings.match(/export const toDashed\s*=[^\n]*/) ?? [])[0] ?? "";
+check(
+  "and toDashed itself maps dot to dash, not the reverse",
+  /replace\(\s*\/\\\.\/g\s*,\s*"-"\s*\)/.test(toDashedSrc),
   "this is the evidence that FMP wants the dash — corroborated by the screener " +
-    "cache, whose rows come from FMP's own endpoint and are dashed"
+    "cache, whose rows come from FMP's own endpoint and are dashed. Reversing " +
+    "this one line would silently invert every call site below"
 );
 check(
   "and it is applied when building the bars request",
@@ -279,6 +299,239 @@ for (const [sym, files] of [...found].sort()) {
       `${sym}@${path.relative(process.cwd(), f).split(path.sep).join("/")}`)).find(Boolean);
   console.log(`  ${sym} — ${files.size} file(s)${note ? `: ${note}` : ""}`);
   for (const f of [...files].sort()) console.log(`      ${f}`);
+}
+
+console.log("\n4. The vendor call sites convert before they ask");
+
+// SECTION 2 CATCHES A DOTTED TICKER WRITTEN INTO THE SOURCE. This catches the
+// other half of the same bug, which section 2 cannot see: a symbol that arrives
+// at RUNTIME already dotted -- from a route parameter -- and is handed to FMP
+// unconverted. No literal appears anywhere, so nothing above fires, and the
+// page renders LAST PRICE: DATA UNAVAILABLE with no error in any log.
+//
+// It is not hypothetical and it is not one call site. /stock/BRK.B/news had two
+// of them, one feeding the body and one feeding the <title>, while the same
+// page's history went through buildFmpSymbol and converted -- so the title
+// carried a price and the body did not.
+//
+// WHAT IS ASSERTED VS WHAT IS PRINTED. The assertion covers the call sites named
+// below and nothing else, because those are the ones fixed. Every other FMP
+// request that interpolates a symbol is PRINTED instead: whether each can
+// receive a dotted spelling depends on what feeds it, which this check cannot
+// determine and must not pretend to. A census that goes quiet would be worse
+// than no census, so it prints on every run and names its own limit.
+
+// ONE ENTRY PER VENDOR, because the symbol does not sit in the same place in
+// each URL: FMP takes it as a query parameter, Yahoo as a PATH SEGMENT. A
+// checker that only understood `symbol=` would have reported the Yahoo leg as
+// having no symbol at all -- clean by absence, which is the fail-green shape
+// this file keeps guarding against.
+const VENDORS = [
+  {
+    name: "FMP",
+    host: /financialmodelingprep\.com/,
+    // `...?symbol=${x}` puts "?symbol=" in the chunk before the span.
+    slot: /[?&]symbols?=$/,
+  },
+  {
+    name: "Yahoo",
+    host: /query1\.finance\.yahoo\.com/,
+    slot: /\/v8\/finance\/chart\/$/,
+  },
+];
+
+// The interpolated expression is read from the AST, not by regex over the URL
+// text, because the two are different questions: the text tells you a symbol is
+// in the URL, the AST tells you WHAT EXPRESSION produced it -- which is the
+// thing that either converts or does not.
+const symbolExpressionsIn = (file, text) => {
+  const sf = ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  const out = [];
+  const enclosingFunction = (node) => {
+    for (let n = node.parent; n; n = n.parent) {
+      if (ts.isFunctionDeclaration(n) && n.name) return n.name.text;
+      if (
+        (ts.isVariableDeclaration(n) || ts.isPropertyAssignment(n)) &&
+        n.name &&
+        ts.isIdentifier(n.name) &&
+        n.initializer &&
+        (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer))
+      ) {
+        return n.name.text;
+      }
+    }
+    return "(top level)";
+  };
+  const visit = (n) => {
+    if (ts.isTemplateExpression(n)) {
+      const whole = n.getText(sf);
+      const vendor = VENDORS.find((v) => v.host.test(whole));
+      if (vendor) {
+        // The literal chunk BEFORE a span is what names the slot that span
+        // fills, whether that slot is a query parameter or a path segment.
+        let before = n.head.text;
+        for (const span of n.templateSpans) {
+          if (vendor.slot.test(before)) {
+            out.push({
+              file,
+              vendor: vendor.name,
+              fn: enclosingFunction(n),
+              expr: span.expression.getText(sf),
+              line: sf.getLineAndCharacterOfPosition(span.expression.getStart(sf)).line + 1,
+            });
+          }
+          before = span.literal.text;
+        }
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+};
+
+// A conversion is recognised by NAME, and only by the names that actually do it.
+// `encodeURIComponent` wraps every one of these and converts nothing, so the
+// pattern has to be the helper, not "the expression is a call".
+const CONVERTS = /\b(toDashed|buildFmpSymbol|fmpSymbol)\b/;
+
+// ── THE EXTRACTOR IS TESTED BEFORE IT IS TRUSTED ──────────────────────────
+// An earlier assertion in this repo passed against `if (false && tagged)`,
+// because it compared source positions instead of calling the thing. The shape
+// to avoid is an extractor that finds nothing and therefore reports nothing
+// wrong. So it is run against two synthetic sources whose answers are known,
+// and it must separate them.
+const PROBE_RAW = `
+  const bad = async (symbol: string) => {
+    const url = \`https://financialmodelingprep.com/stable/quote?symbol=\${encodeURIComponent(symbol)}&apikey=\${k}\`;
+    return fetch(url);
+  };`;
+const PROBE_CONVERTED = PROBE_RAW.replace("encodeURIComponent(symbol)", "encodeURIComponent(toDashed(symbol))");
+// The SAME control for the path-segment shape. The two slots are read by two
+// different regexes, so a probe of only the query-parameter form would leave
+// the Yahoo half of the extractor untested.
+const PROBE_PATH = `
+  const alsoBad = async (symbol: string) => {
+    const url = \`https://query1.finance.yahoo.com/v8/finance/chart/\${encodeURIComponent(symbol)}?interval=1d\`;
+    return fetch(url);
+  };`;
+const rawFound = symbolExpressionsIn("probe-raw.ts", PROBE_RAW);
+const convFound = symbolExpressionsIn("probe-converted.ts", PROBE_CONVERTED);
+const pathFound = symbolExpressionsIn("probe-path.ts", PROBE_PATH);
+check(
+  "the extractor finds an interpolated symbol at all (positive control)",
+  rawFound.length === 1 && rawFound[0].fn === "bad",
+  rawFound.length === 1
+    ? `found ${rawFound[0].expr} in ${rawFound[0].fn}()`
+    : `found ${rawFound.length}, expected exactly 1 — an extractor that finds ` +
+      `nothing would report every call site as clean`
+);
+check(
+  "and it finds one in a PATH SEGMENT, not just a query parameter",
+  pathFound.length === 1 && pathFound[0].vendor === "Yahoo",
+  pathFound.length === 1
+    ? `found ${pathFound[0].expr} as a ${pathFound[0].vendor} path segment`
+    : `found ${pathFound.length}, expected exactly 1 — Yahoo puts the symbol in ` +
+      `the path, and an extractor blind to that would score the whole leg clean ` +
+      `by finding nothing in it`
+);
+check(
+  "and it tells a converted call site from a raw one",
+  rawFound.length === 1 &&
+    convFound.length === 1 &&
+    !CONVERTS.test(rawFound[0].expr) &&
+    CONVERTS.test(convFound[0].expr),
+  "the two probes differ by exactly the toDashed wrapper, so a pattern that " +
+    "matched both — or neither — would make the assertion below vacuous"
+);
+
+// THE CALL SITES THIS PR FIXED. Named by file and function so a rename fails
+// loudly here rather than quietly removing the site from the check's scope.
+const UNDER_TEST = [
+  ["lib/stock-news-data.ts", "fetchFmpQuote", "the price in the page body"],
+  ["app/stock/[symbol]/news/page.tsx", "fetchQuoteForMeta", "the price in the <title>"],
+  // Yahoo is the LAST fallback for both the quote and the history, and its two
+  // callers share this one request builder. Converting here was measured, not
+  // assumed: BRK.B is a 404 at this endpoint and BRK-B is a 200 (Actions run
+  // 35794824846). Had it gone the other way this entry would not exist.
+  ["lib/stock-news-data.ts", "fetchYahooChart", "the Yahoo fallback, quote and history"],
+];
+
+const allSites = [];
+const collectFrom = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== "node_modules") collectFrom(p);
+      continue;
+    }
+    if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+    const rel = path.relative(process.cwd(), p).split(path.sep).join("/");
+    const text = fs.readFileSync(p, "utf8");
+    // Cheap pre-filter only. It must be derived from VENDORS rather than
+    // hardcoded, or adding a vendor above would silently scan for the old one.
+    if (!VENDORS.some((v) => v.host.test(text))) continue;
+    allSites.push(...symbolExpressionsIn(rel, text));
+  }
+};
+for (const root of ["lib", "app"]) if (fs.existsSync(root)) collectFrom(root);
+
+check(
+  "the vendor scan read a real tree",
+  allSites.length > 5 && VENDORS.every((v) => allSites.some((s) => s.vendor === v.name)),
+  `${allSites.length} symbol-carrying request(s) across lib/ and app/: ` +
+    VENDORS.map((v) => `${v.name} ${allSites.filter((s) => s.vendor === v.name).length}`).join(", ") +
+    " — a vendor with zero sites means its host pattern stopped matching, and " +
+    "every assertion about it below would then pass by finding nothing"
+);
+
+for (const [file, fn, what] of UNDER_TEST) {
+  const sites = allSites.filter((s) => s.file === file && s.fn === fn);
+  check(
+    `${fn}() in ${file} is still there`,
+    sites.length > 0,
+    sites.length
+      ? `${sites.length} ${[...new Set(sites.map((s) => s.vendor))].join("/")} request(s) — ${what}`
+      : "renamed, moved or deleted — this check is now measuring nothing for it, " +
+        "which is how a fixed call site quietly becomes an unfixed one again"
+  );
+  for (const site of sites) {
+    check(
+      `${fn}() converts before asking ${site.vendor} (line ${site.line})`,
+      CONVERTS.test(site.expr),
+      CONVERTS.test(site.expr)
+        ? `\${${site.expr}}`
+        : `\${${site.expr}} sends the spelling it was given. On ` +
+          `/stock/BRK.B/news that is "BRK.B", which ${site.vendor} has no row ` +
+          `for — the page renders DATA UNAVAILABLE and nothing errors. Wrap it ` +
+          `in toDashed`
+    );
+  }
+}
+
+// ── THE CENSUS ─────────────────────────────────────────────────────────────
+// Printed, never asserted. These are outside what was fixed; several are fed
+// from the screener snapshot, which is dashed at source and so cannot carry a
+// dot — but "several" is not "all", and this check cannot tell which is which
+// without tracing every caller. The list is here so the next person fixing one
+// of these starts from a measurement instead of a grep.
+const rest = allSites.filter(
+  (s) => !UNDER_TEST.some(([f, fn]) => s.file === f && s.fn === fn)
+);
+const unconverted = rest.filter((s) => !CONVERTS.test(s.expr));
+console.log(
+  `\n  ${rest.length} other symbol-carrying vendor request(s); ${unconverted.length} ` +
+    `do not convert. NOT a failure list — whether a dotted spelling can reach ` +
+    `each one depends on what feeds it, and that is unmeasured here:`
+);
+for (const s of unconverted.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)) {
+  console.log(`      ${s.file}:${s.line}  ${s.fn}()  ${s.vendor}  \${${s.expr}}`);
 }
 
 console.log(
