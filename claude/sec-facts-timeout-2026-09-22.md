@@ -22,8 +22,18 @@ All 785 populated entries are stale on **both** stamps. The manifest has `lv: 3`
 - **`SEC_LABEL_VERSION` 3 → 4**, in #479 (`301cec36`, merged 2026-09-20 07:39 UTC). This
   landed three hours after the last good run, and the Sep 21 04:20 run was the first
   after it.
-- **`secChainsHash` changed** in #500 (cover-share chain, Sep 21) and #504 (secFields,
-  Sep 22).
+- **`secChainsHash` changed** in #504 (`8541d64a`, Sep 22: 970595cd → c618f4a2).
+  An earlier version of this note also named #500; computed at each commit,
+  #500 left the hash at 970595cd.
+
+**`secFieldsHash` did NOT change.** It is the gate `readFactSet` enforces
+(`raw.h !== secFieldsHash()` → null). Computed at every commit touching
+secFields/secFactCodec/secFactStore since Sep 17 (48a40ea8, 301cec36, b061f674,
+8541d64a): 43989d6e with 46 keys throughout. Live read, relay 35785890573: 817
+stored sets are readable, 0 are discarded by the gate, 1 is absent, and all carry
+h 43989d6e. TSLA, ABBV, MU and AAPL each return a set (12 quarters each, newest
+2026-06-30, 2026-06-30, 2026-05-28 and 2026-06-27). No stock page lost its SEC
+data, so the rewrite job's `noFactSet` path does not apply.
 
 With populate empty, rewindow borrows the unused slack (by design, see
 `populationQueues`) and asks for about 525 companyfacts in one run. On a runner these

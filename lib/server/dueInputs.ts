@@ -59,7 +59,18 @@ export type DueInputSkip =
   /** A record, but no cadence to project a period from. */
   | "no-period-end"
   /** A record and a period, but the estimate is "month" or "none" — no lag. */
-  | "no-median-lag";
+  | "no-median-lag"
+  /**
+   * The record's own `pending` says the period's results were ANNOUNCED (an
+   * 8-K Item 2.02 newer than anything placed, for a quarter that has ended) and
+   * only the SEC feed is behind. "Results have not yet been filed" would be
+   * false. This is what takes MU off the strip the day after it reports, rather
+   * than weeks later when the 10-K moves the fact set.
+   *
+   * The early-2.02 guard lives upstream: a TSLA-style delivery 8-K never becomes
+   * `pending` (secReportDates.pendingResults), so it cannot take TSLA off.
+   */
+  | "results-filed";
 
 export type DueInputBuild = {
   inputs: DueInput[];
@@ -106,6 +117,9 @@ export function dueInputFrom(
   // carries medianLagDays; reading it off the others yields undefined, which
   // selectDue would then drop anyway -- but silently, and counted as though a
   // lag had been offered. Checking the kind is what makes the skip reportable.
+  if (rec.pending && typeof rec.pending.periodEnd === "string" && rec.pending.periodEnd >= rec.nextPeriodEnd) {
+    return { skip: "results-filed" };
+  }
   if (rec.next?.kind !== "date") return { skip: "no-median-lag" };
   const medianLagDays = rec.next.medianLagDays;
   if (!Number.isFinite(medianLagDays)) return { skip: "no-median-lag" };
@@ -132,7 +146,7 @@ export function buildDueInputs(
 ): DueInputBuild {
   const inputs: DueInput[] = [];
   const skipped: Record<DueInputSkip, string[]> = {
-    "no-record": [], "no-period-end": [], "no-median-lag": [],
+    "no-record": [], "no-period-end": [], "no-median-lag": [], "results-filed": [],
   };
   for (const symbol of symbols) {
     const got = dueInputFrom(symbol, records.get(symbol) ?? null);
