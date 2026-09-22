@@ -5,6 +5,7 @@
 // is left here is what can be decided from the functions alone — and the
 // session mapping is the one that matters most, because it is what makes a
 // timing misclassification harmless instead of wrong.
+import fs from "node:fs";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -19,7 +20,8 @@ const load = (mutate = (s) => s, nonce = 0) =>
   lift(
     mutate(SRC).replace(/export (const|function|type)/g, "$1") +
       "\nexport { reportEvents, estimateNextReport, parseAcceptanceEt, timingFor, reactionDate," +
-      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, snapPeriodEnd };" +
+      " TIMING_WORDING, REGULAR_SPREAD_DAYS, REGULARITY_WINDOW, daysBetween, median, deadlineDays, runEstimator, sameQuarterLastYear, PRIMARY_ESTIMATOR, estimateUpcoming, nextPeriodEndFrom, periodAnniversary, reactionBarLabels, reportedLabel, latestResultsAnnouncement, pendingResults, snapPeriodEnd," +
+      " resultsPairing, earlyNonResultsPattern, looksLikeEarlyNonResults, periodicReportDates };" +
       `\n// nonce ${nonce}`
   );
 const m = await load();
@@ -124,12 +126,214 @@ console.log("\n3b. one event per period, earliest wins");
   check("three filings for one period collapse to one event",
     out.filter((e) => e.periodEnd === "2026-06-30").length === 1,
     `${out.filter((e) => e.periodEnd === "2026-06-30").length}`);
-  check("...and it is the EARLIEST, not the amendment",
+  check("...and with no 10-Q on file to pair against, it is the EARLIEST, not the amendment",
     out.find((e) => e.periodEnd === "2026-06-30")?.announcedOn === "2026-07-30",
     `${out.find((e) => e.periodEnd === "2026-06-30")?.announcedOn}`);
   check("the other period survives", out.length === 2, `${out.length} events`);
   check("an 8-K without item 2.02 is not an earnings announcement",
     m.reportEvents(subs([{ form: "8-K", items: "5.02", event: "2026-07-30", accepted: "2026-07-30T20:30:00.000Z" }]), PERIODS).length === 0);
+}
+
+console.log("\n3d. a period's results are the LATEST 2.02 on or before its 10-Q/10-K");
+
+// ── THE MISPICK, AS A FIXTURE ────────────────────────────────────────────
+// Tesla's shape: delivery numbers under Item 2.02 two days after quarter end,
+// results ~three weeks later, the 10-Q a day after that. Earliest-wins stored
+// lag 2 over every period with a spread of 0 -- regular, and wrong.
+// Plus the two things plain latest-wins would get wrong: a 2.02 filed AFTER
+// the 10-Q (a restatement), and an 8-K/A inside the window.
+const TSLA_ROWS = [
+  { form: "8-K", items: "2.02,9.01", event: "2025-10-02", accepted: "2025-10-02T13:05:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2025-10-22", accepted: "2025-10-22T20:10:00.000Z" },
+  { form: "10-Q", event: "2025-09-30", accepted: "2025-10-23T21:00:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-01-02", accepted: "2026-01-02T14:00:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-01-28", accepted: "2026-01-28T21:05:00.000Z" },
+  { form: "10-K", event: "2025-12-31", accepted: "2026-01-29T22:00:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-04-02", accepted: "2026-04-02T13:10:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-04-22", accepted: "2026-04-22T20:10:00.000Z" },
+  { form: "10-Q", event: "2026-03-31", accepted: "2026-04-23T21:00:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-07-02", accepted: "2026-07-02T13:10:00.000Z" },
+  { form: "8-K", items: "2.02,9.01", event: "2026-07-22", accepted: "2026-07-22T20:10:00.000Z" },
+  { form: "8-K/A", items: "2.02,9.01", event: "2026-07-22", accepted: "2026-07-23T13:00:00.000Z" },
+  { form: "10-Q", event: "2026-06-30", accepted: "2026-07-23T21:00:00.000Z" },
+  { form: "8-K", items: "2.02", event: "2026-08-10", accepted: "2026-08-10T20:00:00.000Z" },
+];
+const TSLA_PERIODS = new Set(["2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30"]);
+const lagsFor = (mod, rows, periods) =>
+  mod.reportEvents(subs(rows), periods)
+    .filter((e) => e.periodEnd)
+    .map((e) => mod.daysBetween(e.periodEnd, e.announcedOn));
+{
+  const lags = lagsFor(m, TSLA_ROWS, TSLA_PERIODS);
+  check("every paired period keeps the RESULTS release, not the delivery 8-K",
+    JSON.stringify(lags) === JSON.stringify([22, 22, 28, 22]),
+    `lags ${JSON.stringify(lags)} (earliest-wins stored [2,2,2,2])`);
+  const q2 = m.reportEvents(subs(TSLA_ROWS), TSLA_PERIODS).find((e) => e.periodEnd === "2026-06-30");
+  check("a 2.02 filed AFTER the 10-Q is kept out of the pick",
+    q2?.announcedOn === "2026-07-22", `${q2?.announcedOn} — 2026-08-10 is a restatement, not the release`);
+  check("...and so is an 8-K/A inside the window while the original is there",
+    q2?.form === "8-K", `${q2?.form} ${q2?.announcedOn}`);
+  const pairing = m.resultsPairing(subs(TSLA_ROWS), TSLA_PERIODS);
+  check("every period with a 10-Q/10-K on file is paired",
+    pairing.periods.length === 4 && pairing.periods.every((p) => p.rule === "paired"),
+    pairing.periods.map((p) => `${p.periodEnd}:${p.rule}`).join(" "));
+  check("the 10-K pairs as well as the 10-Q",
+    pairing.periods.find((p) => p.periodEnd === "2025-12-31")?.periodicFiledOn === "2026-01-29");
+
+  // A 10-Q FILED THE SAME DAY AS THE RELEASE: on or before, not strictly before.
+  const sameDay = lagsFor(m, [
+    { form: "8-K", items: "2.02", event: "2026-07-01", accepted: "2026-07-01T13:00:00.000Z" },
+    { form: "8-K", items: "2.02,9.01", event: "2026-07-28", accepted: "2026-07-28T20:05:00.000Z" },
+    { form: "10-Q", event: "2026-06-30", accepted: "2026-07-28T20:30:00.000Z" },
+  ], new Set(["2026-06-30"]));
+  check("a release filed the same day as the 10-Q is inside the window", sameDay[0] === 28, `${sameDay}`);
+
+  // THE FAST FILER, CONTROL: ORCL genuinely reports around ten days after its
+  // quarter. One 2.02 per period, paired, untouched -- and no pattern.
+  const ORCL_ROWS = [
+    { form: "8-K", items: "2.02,9.01", event: "2026-06-10", accepted: "2026-06-10T20:05:00.000Z" },
+    { form: "10-K", event: "2026-05-31", accepted: "2026-06-20T20:00:00.000Z" },
+    { form: "8-K", items: "2.02,9.01", event: "2026-03-10", accepted: "2026-03-10T20:05:00.000Z" },
+    { form: "10-Q", event: "2026-02-28", accepted: "2026-03-12T20:00:00.000Z" },
+    { form: "8-K", items: "2.02,9.01", event: "2025-12-10", accepted: "2025-12-10T21:05:00.000Z" },
+    { form: "10-Q", event: "2025-11-30", accepted: "2025-12-12T21:00:00.000Z" },
+  ];
+  const ORCL_PERIODS = new Set(["2026-05-31", "2026-02-28", "2025-11-30"]);
+  check("control: a genuinely fast filer keeps its ~10-day lags",
+    JSON.stringify(lagsFor(m, ORCL_ROWS, ORCL_PERIODS)) === JSON.stringify([10, 10, 10]),
+    JSON.stringify(lagsFor(m, ORCL_ROWS, ORCL_PERIODS)));
+  check("...and has no early non-results pattern",
+    m.earlyNonResultsPattern(m.resultsPairing(subs(ORCL_ROWS), ORCL_PERIODS).periods) === null);
+
+  const pattern = m.earlyNonResultsPattern(pairing.periods);
+  check("the pattern is DERIVED from the pairing: 4 of 4 periods, early 2d vs results 22d",
+    pattern?.periods === 4 && pattern?.ofPaired === 4 && pattern?.earlyLagDays === 2 && pattern?.resultsLagDays === 22,
+    JSON.stringify(pattern));
+  check("one early 2.02 is an incident, not a habit",
+    m.earlyNonResultsPattern(m.resultsPairing(subs(TSLA_ROWS.filter((r) =>
+      !["2025-10-02", "2026-01-02", "2026-04-02"].includes(r.event))), TSLA_PERIODS).periods) === null);
+
+  // ── MUTATIONS OF THE PAIRING RULE ──────────────────────────────────────
+  const noPair = await load((src) => src.replace(
+    "const filedOn = periodEnd ? periodic.get(periodEnd) ?? null : null;",
+    "const filedOn = null as string | null;"), 31);
+  check("MUTATION: pairing disabled (earliest-wins) stores TSLA's delivery lag",
+    JSON.stringify(lagsFor(noPair, TSLA_ROWS, TSLA_PERIODS)) === JSON.stringify([2, 2, 2, 2]) &&
+      JSON.stringify(lagsFor(noPair, TSLA_ROWS, TSLA_PERIODS)) !== JSON.stringify(lagsFor(m, TSLA_ROWS, TSLA_PERIODS)),
+    `${JSON.stringify(lagsFor(noPair, TSLA_ROWS, TSLA_PERIODS))} — the checks above see it`);
+  const noBound = await load((src) => src.replace(
+    'e.basis === "8-K item 2.02" && e.announcedOn <= filedOn',
+    'e.basis === "8-K item 2.02"'), 32);
+  check("MUTATION: dropping the on-or-before-the-10-Q bound picks the restatement",
+    noBound.reportEvents(subs(TSLA_ROWS), TSLA_PERIODS).find((e) => e.periodEnd === "2026-06-30")?.announcedOn === "2026-08-10",
+    "which is option 4's failure mode, and why the bound is the rule");
+  const withAmend = await load((src) => src.replace(
+    'const originals = before.filter((e) => e.form === "8-K");',
+    'const originals = before;'), 33);
+  check("MUTATION: letting an 8-K/A compete inside the window picks the amendment",
+    withAmend.reportEvents(subs(TSLA_ROWS), TSLA_PERIODS).find((e) => e.periodEnd === "2026-06-30")?.form === "8-K/A");
+}
+
+console.log("\n3e. the CURRENT period, which has no 10-Q yet, is judged by the filer's own past");
+{
+  const events = m.reportEvents(subs(TSLA_ROWS), TSLA_PERIODS);
+  const pattern = m.earlyNonResultsPattern(m.resultsPairing(subs(TSLA_ROWS), TSLA_PERIODS).periods);
+  const cadence = m.nextPeriodEndFrom([...TSLA_PERIODS], []);
+  // latestResultsAnnouncement's shape: unplaced, periodEnd null.
+  const latestOf = (on, timing) => ({
+    periodEnd: null, eventDate: on, announcedOn: on, announcedAt: "08:00", timing,
+    form: "8-K", items: "2.02,9.01", accession: `l${on}`, basis: "8-K item 2.02",
+  });
+  const delivery = latestOf("2026-10-02", "before-open");
+  const results = latestOf("2026-10-21", "after-close");
+
+  check("the Q3 delivery 8-K does NOT mark Q3's results as filed",
+    m.pendingResults(events, delivery, cadence, "2026-10-03", pattern) === null,
+    JSON.stringify(m.pendingResults(events, delivery, cadence, "2026-10-03", pattern)));
+  const real = m.pendingResults(events, results, cadence, "2026-10-22", pattern);
+  check("...while the real Q3 release, three weeks later, does",
+    real?.periodEnd === "2026-09-30" && real?.announcedOn === "2026-10-21", JSON.stringify(real));
+  check("control: with no pattern, an early 2.02 is still a release (ORCL-fast is not suspect)",
+    m.pendingResults(events, delivery, cadence, "2026-10-03", null)?.announcedOn === "2026-10-02");
+  check("the judgement is the filer's own midpoint, not a day count",
+    m.looksLikeEarlyNonResults(11, pattern) && !m.looksLikeEarlyNonResults(12, pattern) &&
+      !m.looksLikeEarlyNonResults(2, { ...pattern, earlyLagDays: 1, resultsLagDays: 3 }),
+    "TSLA 2 vs 22 -> below 12 is early; a filer at 1 vs 3 is judged at 2");
+
+  // ...AND DOES NOT DROP IT FROM THE DUE LIST. estimateUpcoming rolls to the
+  // next period once the estimate has passed; on the old 2-day lag that
+  // happened on Oct 3 and TSLA left the due strip before reporting anything.
+  const up = m.estimateUpcoming(events, cadence, "Large accelerated filer", "2026-10-03");
+  check("on Oct 3 the period estimated for is still Q3, not Q4",
+    up.periodEnd === "2026-09-30" && up.estimate.kind === "date" && up.estimate.medianLagDays === 22,
+    `${up.periodEnd} ${JSON.stringify(up.estimate)}`);
+
+  const noGuard = await load((src) => src.replace(
+    "  if (looksLikeEarlyNonResults(daysBetween(periodEnd, latest.announcedOn), pattern)) return null;\n", ""), 34);
+  check("MUTATION: without the guard the delivery 8-K is announced as Q3's results",
+    noGuard.pendingResults(events, delivery, cadence, "2026-10-03", pattern)?.announcedOn === "2026-10-02");
+  const noPair = await load((src) => src.replace(
+    "const filedOn = periodEnd ? periodic.get(periodEnd) ?? null : null;",
+    "const filedOn = null as string | null;"), 35);
+  const upOld = noPair.estimateUpcoming(noPair.reportEvents(subs(TSLA_ROWS), TSLA_PERIODS), cadence, "Large accelerated filer", "2026-10-03");
+  check("MUTATION: on earliest-wins TSLA has rolled to Q4 by Oct 3 — dropped from the due list",
+    upOld.periodEnd === "2026-12-31", `${upOld.periodEnd}`);
+  const oneIsHabit = await load((src) => src.replace(
+    "export const EARLY_PATTERN_MIN_PERIODS = 2;", "export const EARLY_PATTERN_MIN_PERIODS = 1;"), 36);
+  check("MUTATION: a single incident counted as a habit flags the filer",
+    oneIsHabit.earlyNonResultsPattern(oneIsHabit.resultsPairing(subs(TSLA_ROWS.filter((r) =>
+      !["2025-10-02", "2026-01-02", "2026-04-02"].includes(r.event))), TSLA_PERIODS).periods) !== null);
+}
+
+console.log("\n3f. EVERY rewritten record drains the queue — the one-off filers included");
+{
+  // The predicate, lifted from the store (it is pure; the Redis client is not).
+  const storeSrc = readCodeOnly("lib/server/secReportDatesStore.ts");
+  const start = storeSrc.indexOf("export function pairingRewriteDone(");
+  const body = start === -1 ? "" : storeSrc.slice(start, storeSrc.indexOf("\n}\n", start) + 2);
+  check("pairingRewriteDone is in the store", Boolean(body));
+  const done = (await lift(body.replace(/export function/, "function")
+    .replace(/: StoredReportDates \| null/, "").replace(/: boolean/, "") + "\nexport { pairingRewriteDone };"))
+    .pairingRewriteDone;
+
+  // The record exactly as the cron writes it, through the JSON round trip
+  // Upstash puts it through. ORCL's shape: paired, no early pattern -- one of
+  // the 125. TSLA's shape: the 84.
+  const ORCL_ROWS = [
+    { form: "8-K", items: "2.02,9.01", event: "2026-06-10", accepted: "2026-06-10T20:05:00.000Z" },
+    { form: "10-K", event: "2026-05-31", accepted: "2026-06-20T20:00:00.000Z" },
+    { form: "8-K", items: "2.02,9.01", event: "2026-03-10", accepted: "2026-03-10T20:05:00.000Z" },
+    { form: "10-Q", event: "2026-02-28", accepted: "2026-03-12T20:00:00.000Z" },
+  ];
+  const ONE_OFF = TSLA_ROWS.filter((r) => !["2025-10-02", "2026-01-02", "2026-04-02"].includes(r.event));
+  const written = (mod, rows, periods) => JSON.parse(JSON.stringify({
+    symbol: "X", events: mod.reportEvents(subs(rows), periods),
+    earlyNonResults: mod.earlyNonResultsPattern(mod.resultsPairing(subs(rows), periods).periods),
+  }));
+  const oneOff = written(m, ONE_OFF, TSLA_PERIODS);
+  check("a one-off filer (one mispicked period, no pattern) writes earlyNonResults: null",
+    oneOff.earlyNonResults === null && "earlyNonResults" in oneOff, JSON.stringify(oneOff.earlyNonResults));
+  check("...and that record is DONE — it leaves the queue", done(oneOff) === true);
+  check("a filer with no early 2.02 at all is done too",
+    done(written(m, ORCL_ROWS, new Set(["2026-05-31", "2026-02-28"]))) === true);
+  check("a repeat filer (the 84) is done", done(written(m, TSLA_ROWS, TSLA_PERIODS)) === true);
+  check("a record written BEFORE the pairing (no key) is not done — it is queued",
+    done({ symbol: "X", events: [] }) === false);
+  check("no record (never written, or unreadable) is queued", done(null) === false);
+
+  // MUTATION: the pattern returns undefined instead of null for a filer
+  // without one. JSON drops the key, the record never looks done, and every
+  // one-off filer is rewritten on every run for ever.
+  const undef = await load((src) => src.replace(
+    "  if (early.length < EARLY_PATTERN_MIN_PERIODS) return null;",
+    "  if (early.length < EARLY_PATTERN_MIN_PERIODS) return undefined as unknown as null;"), 37);
+  check("MUTATION: undefined in place of null leaves the one-off filer queued forever",
+    done(written(undef, ONE_OFF, TSLA_PERIODS)) === false,
+    "so the null is load-bearing and asserted above");
+  // MUTATION: the drain tested on the VALUE, not the key.
+  const byValue = (rec) => rec !== null && typeof rec === "object" && Boolean(rec.earlyNonResults);
+  check("MUTATION: a drain on the value requeues every one-off filer",
+    byValue(oneOff) === false && done(oneOff) === true);
 }
 
 console.log("\n3c. THE BUG CLASS: a filing's reported date is never a period end");
@@ -674,11 +878,41 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
 
   // ── THE CRON WRITES IT, AND MATCHES RATHER THAN READS ──────────────────
   const job = readCodeOnly("app/api/jobs/sec-facts/route.ts");
+  // ── THE PAIRING REWRITE: LISTED, GATED, SELF-DRAINING ──────────────────
+  const list = JSON.parse(fs.readFileSync("data/sec/report-dates-rewrite.json", "utf8"));
+  check("the rewrite list is committed and names TSLA and ABBV",
+    Array.isArray(list.symbols) && list.symbols.includes("TSLA") && list.symbols.includes("ABBV"),
+    `${list.symbols?.length} symbols`);
+  const rw = readCodeOnly("app/api/jobs/sec-report-dates-rewrite/route.ts");
+  const builder = readCodeOnly("lib/server/secReportDatesWrite.ts");
+  check("...and its own route queues it, drained by pairingRewriteDone",
+    /reportDatesRewrite\.symbols/.test(rw) && /pairingRewriteDone\(records\[i\]\)/.test(rw) &&
+      /rewriteQueue\(listed, done,/.test(rw));
+  check("...NOT inside sec-facts, whose report-dates block sits behind a 300s timeout",
+    !/reportDatesRewrite/.test(job));
+  check("both routes write through the ONE builder, and it through the one gated writer",
+    /buildAndWriteReportDates\(symbol, cik, set, subs, todayIso\)/.test(job) &&
+      /buildAndWriteReportDates\(symbol, cik, set, subs, todayIso\)/.test(rw) &&
+      (builder.match(/writeReportDates\(/g) ?? []).length === 1 &&
+      !/writeReportDates\(/.test(job) && !/writeReportDates\(/.test(rw));
+  check("...and the write passes earlyNonResults straight through, never omitted or coerced",
+    /\n\s*earlyNonResults,\n\s*\}\);/.test(builder) &&
+      /const earlyNonResults = earlyNonResultsPattern\(pairing\.periods\);/.test(builder));
+  check("the pending-results guard is handed the pattern at the write site",
+    /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(builder));
+  {
+    const q = await lift(readCodeOnly("lib/server/secReportDatesWrite.ts")
+      .slice(readCodeOnly("lib/server/secReportDatesWrite.ts").indexOf("export function rewriteQueue("))
+      .replace(/: readonly string\[\]|: ReadonlySet<string>|: string\[\]/g, "") + "\nexport { rewriteQueue };");
+    const got = q.rewriteQueue(["AA", "TSLA", "BB", "ABBV", "CC"], new Set(["BB"]), new Set(["TSLA", "ABBV"]));
+    check("the rewrite queue is cut-first, drops done records, keeps list order otherwise",
+      JSON.stringify(got) === JSON.stringify(["TSLA", "ABBV", "AA", "CC"]), JSON.stringify(got));
+  }
   check("the cron passes the STORED period ends into the matcher",
-    /reportEvents\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(job),
+    /resultsPairing\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(builder),
     "period ends must come from the fact set, never from the filing");
   check("...and only stores events whose period was matched",
-    /\.filter\(\(e\) => e\.periodEnd\)/.test(job));
+    /\.filter\(\(e\) => e\.periodEnd\)/.test(builder));
   check("...and stamps the symbol even when it found no events",
     /if \(entry\) entry\.reportDatesAt = Date\.now\(\);/.test(job),
     "or a filer with no Item 2.02 history is re-fetched every day forever");
@@ -699,16 +933,16 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
       !/latestResultsAnnouncement/.test(page),
     "deriving it needs submissions, and a render has no business fetching EDGAR");
   check("the cron computes it from the submissions payload already in hand",
-    /pendingResults\(\s*\n?\s*events, latestResultsAnnouncement\(subs\), cadence, todayIso/.test(job),
+    /pendingResults\(\s*\n?\s*events, latestResultsAnnouncement\(subs\), cadence, todayIso/.test(builder),
     "a second fetch for a notice would double this phase's SEC cost");
 
   check("the cron rolls the estimate past what has already been reported",
-    /const cadence = nextPeriodEndFrom\(quarterEnds, yearEnds\);/.test(job) &&
-      /estimateUpcoming\(\s*\n?\s*events, cadence, subs\.category, todayIso\s*\n?\s*\)/.test(job) &&
-      !/estimateNextReport\(/.test(job),
+    /const cadence = nextPeriodEndFrom\(quarterEnds, yearEnds\);/.test(builder) &&
+      /estimateUpcoming\(\s*\n?\s*events, cadence, subs\.category, todayIso\s*\n?\s*\)/.test(builder) &&
+      !/estimateNextReport\(/.test(builder),
     "estimateNextReport alone would store a date already in the past");
   check("...and the notice reads the SAME cadence, so the two cannot disagree",
-    (job.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
+    (builder.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
     "two derivations would let the estimate and the notice name different quarters");
   check("both SEC fetchers share one rate gate",
     (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&

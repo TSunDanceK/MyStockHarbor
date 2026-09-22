@@ -24,7 +24,7 @@ const UA = process.env.SEC_USER_AGENT ??
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const sec = await lift(
   strip("lib/server/secReportDates.ts").replace(/export (const|function|type)/g, "$1") +
-    "\nexport { reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults };"
+    "\nexport { resultsPairing, earlyNonResultsPattern, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults };"
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
 const tick = await lift(
@@ -89,14 +89,16 @@ for (const symbol of targets) {
 
   const quarterEnds = (set.quarters ?? []).map((p) => p.e).filter(Boolean);
   const yearEnds = (set.years ?? []).map((p) => p.e).filter(Boolean);
-  const events = sec.reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
+  const pairing = sec.resultsPairing(subs, new Set([...quarterEnds, ...yearEnds]));
+  const events = pairing.events
     .filter((e) => e.periodEnd)
     .slice(0, LIMIT);
+  const earlyNonResults = sec.earlyNonResultsPattern(pairing.periods);
   const cadence = sec.nextPeriodEndFrom(quarterEnds, yearEnds);
   const { estimate: next, periodEnd: nextEnd } = sec.estimateUpcoming(
     events, cadence, subs.category, TODAY
   );
-  const pending = sec.pendingResults(events, sec.latestResultsAnnouncement(subs), cadence, TODAY);
+  const pending = sec.pendingResults(events, sec.latestResultsAnnouncement(subs), cadence, TODAY, earlyNonResults);
 
   await redis.set(`${DATES_PREFIX}:${symbol}`, {
     symbol, cik,
@@ -105,6 +107,7 @@ for (const symbol of targets) {
     nextPeriodEnd: nextEnd,
     next,
     pending,
+    earlyNonResults,
   });
   tally.written++;
   tally[next.kind]++;

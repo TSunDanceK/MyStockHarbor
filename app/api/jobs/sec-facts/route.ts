@@ -12,11 +12,8 @@ import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secCol
 import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
-import {
-  reportEvents, estimateUpcoming, nextPeriodEndFrom, latestResultsAnnouncement, pendingResults,
-  type Submissions,
-} from "@/lib/server/secReportDates";
-import { writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
+import type { Submissions } from "@/lib/server/secReportDates";
+import { buildAndWriteReportDates } from "@/lib/server/secReportDatesWrite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -677,6 +674,10 @@ export async function GET(req: NextRequest) {
       .filter(([sym, e]) => e.cik && !e.reportDatesAt && !changedSet.has(sym))
       .map(([sym]) => sym);
     reportDates.backlog = backfill.length;
+    // The pairing rewrite (data/sec/report-dates-rewrite.json) is NOT queued
+    // here: this job has been timing out at 300s (production, 2026-09-22
+    // 04:20), and a backfill behind a timeout never reaches its turn. It has
+    // its own route, /api/jobs/sec-report-dates-rewrite.
     for (const symbol of [...changedThisRun, ...backfill].slice(0, SEC_REPORT_DATES_PER_RUN)) {
       const entry = manifest.symbols[symbol];
       const cik = entry?.cik ?? cikForSymbol(symbol);
@@ -690,52 +691,9 @@ export async function GET(req: NextRequest) {
         // estimated from. It waits for populate to reach it.
         if (!set) continue;
         const subs = await fetchSubmissions(cik);
-        const quarterEnds = set.quarters.map((p) => p.e).filter(Boolean);
-        const yearEnds = set.years.map((p) => p.e).filter(Boolean);
-        const events = reportEvents(subs, new Set([...quarterEnds, ...yearEnds]))
-          .filter((e) => e.periodEnd)
-          .slice(0, STORED_EVENT_LIMIT);
-        // ROLLED FORWARD PAST WHAT HAS ALREADY BEEN REPORTED. The fact set
-        // lags the filings — companyfacts carries a period once it is FILED —
-        // so one cadence step past its newest period can be a date in the
-        // past, rendered under "next expected".
-        const cadence = nextPeriodEndFrom(quarterEnds, yearEnds);
-        const { estimate: next, periodEnd: nextEnd } = estimateUpcoming(
-          events, cadence, subs.category, todayIso
-        );
-        // ── ANNOUNCED BUT NOT YET IN THE FEED ─────────────────────────────
-        // Read from the SAME submissions payload already in hand, so this
-        // costs nothing beyond the arithmetic. See pendingResults for why it
-        // cannot come out of `events`.
-        const pending = pendingResults(
-          events, latestResultsAnnouncement(subs), cadence, todayIso
-        );
-        // ── category AND annual: ALREADY IN HAND, PREVIOUSLY DISCARDED ────
-        // Both were live variables three lines up -- `subs.category` goes into
-        // estimateUpcoming and `cadence.annual` decides which deadline column
-        // it uses -- and both were then thrown away. The due strip's overdue
-        // cap needs exactly these two, and nothing persisted them, so a
-        // consumer had to choose between ~50 live SEC fetches per page render
-        // and silently taking DEADLINE_FALLBACK.
-        //
-        // Storing them costs one field each and NO extra request. See the
-        // migration note on StoredReportDates.category.
-        //
-        // `cadence?.annual ?? null` rather than `?? false`: a filer with too
-        // thin a history for nextPeriodEndFrom to find a cadence has no
-        // annual-ness to record, and writing `false` there would assert
-        // "quarterly" about a filer we could not read. Absent means
-        // not-yet-known, which is the whole point of the optionality.
-        const ok = await writeReportDates({
-          symbol, cik,
-          at: new Date().toISOString(),
-          events,
-          nextPeriodEnd: nextEnd,
-          next,
-          pending,
-          category: typeof subs.category === "string" ? subs.category : null,
-          annual: cadence?.annual ?? null,
-        });
+        // ONE BUILDER, SHARED WITH THE PAIRING REWRITE (lib/server/
+        // secReportDatesWrite.ts), so the two routes cannot write two shapes.
+        const { ok, events, next, pending } = await buildAndWriteReportDates(symbol, cik, set, subs, todayIso);
         if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
         if (!events.length) reportDates.noEvents++;
