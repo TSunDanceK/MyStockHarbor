@@ -9,6 +9,7 @@ import {
   type Cell, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
+import { SEC_FIELDS, type Statement } from "./secFields";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -157,9 +158,29 @@ export const GAAP_EPS_NOTE =
  * difference between a figure a reader can check against the 10-Q and one they
  * cannot.
  */
-export function derivationNote(derived: Cell["derived"]): string | null {
+export function derivationNote(
+  derived: Cell["derived"],
+  /**
+   * WHERE THE CELL CAME FROM — only "differenced" reads it.
+   *
+   * ONE SENTENCE WAS DESCRIBING TWO DIFFERENT SUBTRACTIONS. Cash flow is filed
+   * year-to-date, so its Q2 and Q3 are differences; that is what the original
+   * wording said, and it is still true for cash-flow lines. But the same
+   * "differenced" tag lands on INCOME-STATEMENT lines on a Q4, where the
+   * arithmetic is the full year minus the first nine months, and the old note
+   * told ABVX's reader its Q4 net income was a cash-flow figure (brief
+   * 2026-09-22 §1.2 item 4). Omitted context keeps the cash-flow wording, which
+   * is what every caller got before this parameter existed.
+   */
+  context: { statement?: Statement | null; fp?: string | null } = {}
+): string | null {
   switch (derived) {
     case "differenced":
+      if (context.statement === "income") {
+        return context.fp === "Q4"
+          ? "Derived: Q4 is not filed on its own, so this is the full-year figure minus the first nine months."
+          : "Derived: this period minus the previous year-to-date figure, because the filer reports this line year-to-date.";
+      }
       return "Derived: this period minus the previous year-to-date figure, because the filer reports cash flow cumulatively.";
     case "computed":
       return "Derived: net income divided by this quarter's weighted average share count.";
@@ -168,6 +189,22 @@ export function derivationNote(derived: Cell["derived"]): string | null {
     default:
       return null;
   }
+}
+
+/** See SecEarningsView.accounting. */
+export function accountingOf(set: Pick<StoredFactSet, "tx">): "IFRS" | "US GAAP" | null {
+  if (!set.tx) return null;
+  if (set.tx.includes("us-gaap")) return "US GAAP";
+  if (set.tx.includes("ifrs-full")) return "IFRS";
+  return null;
+}
+
+/** See SecEarningsView.snapshot.fyEpsDiluted. */
+function fiscalYearEps(set: StoredFactSet, latest: StoredPeriod): { label: string; cell: ViewCell } | null {
+  if (latest.fp !== "Q4" || valueOf(latest, "epsDiluted") !== null) return null;
+  const year = set.years.find((y) => y.e === latest.e) ?? null;
+  if (!year || valueOf(year, "epsDiluted") === null) return null;
+  return { label: periodLabel(year), cell: view(year, "epsDiluted", "Diluted EPS (GAAP)") };
 }
 
 export const isDerived = (c: Cell) => c.derived === "differenced" || c.derived === "computed";
@@ -361,9 +398,16 @@ export type ViewCell = Cell & {
  */
 const PER_SHARE_KEYS = new Set(["epsBasic", "epsDiluted"]);
 
+/** Which statement each stored field sits on, from the field table itself. */
+const STATEMENT_OF = new Map<string, Statement>(SEC_FIELDS.map((f) => [f.key, f.statement]));
+
 const view = (p: StoredPeriod | null | undefined, key: string, label: string): ViewCell => {
   const c = cell(p, key);
-  return { ...c, key, label, derivedNote: derivationNote(c.derived), perShare: PER_SHARE_KEYS.has(key) };
+  return {
+    ...c, key, label,
+    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null }),
+    perShare: PER_SHARE_KEYS.has(key),
+  };
 };
 
 export type SecEarningsView = {
@@ -382,7 +426,37 @@ export type SecEarningsView = {
     netIncome: ViewCell;
     operatingIncome: ViewCell;
     comparedWith: string | null;
+    /**
+     * THE FISCAL YEAR'S DILUTED EPS, when the anchor is a Q4 with none of its own.
+     *
+     * Q4 EPS is null BY DESIGN: EPS is a ratio and FY minus 9M of a ratio is
+     * not the fourth quarter's ratio (see FieldKind "duration-ratio"). So on a
+     * derived Q4 the EPS tile is always blank, and the filing that produced the
+     * rest of the quarter DID state an EPS — for the year. This carries that
+     * figure, labelled with its own year, for a tile that prints it as a
+     * clearly marked full-year line rather than a quarter's (brief 2026-09-22
+     * §1.2 item 2, flagged there as an owner-veto departure).
+     *
+     * Null unless the anchor is a Q4, its own EPS is null, and a fiscal year
+     * ending on the same date carries one.
+     */
+    fyEpsDiluted: { label: string; cell: ViewCell } | null;
   };
+  /**
+   * WHICH ACCOUNTING STANDARD THE FIGURES WERE READ UNDER, from the payload's
+   * own namespaces. "IFRS" when the set was read from `ifrs-full` alone,
+   * "US GAAP" when `us-gaap` was present (it ranks first in every chain), and
+   * null when the set predates the namespace census — unknown, not either.
+   *
+   * THE SIDEBAR'S FOOTER SAID "US GAAP" ON EVERY STOCK, ABVX and AZN included,
+   * because it was a constant. Both file IFRS.
+   */
+  accounting: "IFRS" | "US GAAP" | null;
+  /**
+   * Fields the filer publishes no chain concept for at all. See
+   * StoredFactSet.nt. Null when the set predates the marker — unknown.
+   */
+  untagged: string[] | null;
   /**
    * WHAT CURRENCY THE FIGURES ON THIS PAGE ARE IN, AND HOW THEY GOT THERE.
    *
@@ -1112,7 +1186,10 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       netIncome: view(latest, "netIncome", "Net income"),
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
+      fyEpsDiluted: fiscalYearEps(set, latest),
     },
+    accounting: accountingOf(set),
+    untagged: set.nt ?? null,
     currency:
       (set.cur ?? "USD") === "USD"
         ? null

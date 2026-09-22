@@ -148,6 +148,15 @@ export type StoredFactSet = {
    * re-read, and it moves with the policy.
    */
   cc?: Record<string, string>;
+  /**
+   * Field keys the payload published NO chain concept for, in any period.
+   * See ExtractResult.untagged. OPTIONAL: absent means "written before the
+   * marker existed", which is UNKNOWN — a reader must never treat it as
+   * "every field is tagged" and must not print a reason it cannot back.
+   *
+   * NOT in contentHashOf, for the reason `tx` is not: it describes the source.
+   */
+  nt?: string[];
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -227,6 +236,7 @@ export function encodeFactSet(
     c: secChainsHash(),
     cu: result.refusedUnits,
     cc: result.conceptChoice,
+    ...(result.untagged ? { nt: result.untagged } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,
