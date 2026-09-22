@@ -19,6 +19,9 @@
 //
 //   SHARD=1/6 node scripts/sec-descriptions-build.mjs   (relay task: sec-descriptions-1 … -6)
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
 
@@ -31,6 +34,29 @@ const BUDGET_MS = Number(process.env.BUDGET_MS || 26 * 60 * 1000);
 const started = Date.now();
 
 const desc = await lift(readCodeOnly("lib/server/secDescription.ts"));
+
+// THE DICTIONARY FOR SPLIT WORDS ("op erates"; owner, #518 round 5). A pinned
+// word list, installed in an EMPTY temp dir (the relay-run.mjs typescript
+// pattern: nothing from package.json comes with it, and --ignore-scripts runs
+// none of its code). Build-time only: the page never loads a word list.
+const WORDS_PKG = "an-array-of-english-words@2.0.0";
+function loadWords() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "desc-words-"));
+  // A package.json of its own, or npm installs into the nearest ANCESTOR that
+  // has one or a node_modules (seen in the sandbox: "removed 2 packages").
+  fs.writeFileSync(path.join(tmp, "package.json"), '{"private":true}\n');
+  const r = spawnSync("npm", ["install", "--no-save", "--no-package-lock", "--no-audit", "--no-fund", "--ignore-scripts", WORDS_PKG], { cwd: tmp, stdio: "inherit" });
+  const file = path.join(tmp, "node_modules", "an-array-of-english-words", "index.json");
+  if (r.status !== 0 || !fs.existsSync(file)) throw new Error(`could not install ${WORDS_PKG} (exit ${r.status})`);
+  const words = new Set(JSON.parse(fs.readFileSync(file, "utf8")));
+  if (words.size < 200_000) throw new Error(`${WORDS_PKG}: ${words.size} words, expected ~275k`);
+  console.log(`dictionary: ${WORDS_PKG}, ${words.size} words`);
+  return words;
+}
+const WORDS = loadWords();
+const isWord = (w) => WORDS.has(w);
+let joinedWords = 0;
+let joinedRows = 0;
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8"));
 const only = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 const all = Object.keys(REG.rows).sort();
@@ -89,9 +115,10 @@ for (const symbol of mine) {
   slow(`fetch (${Math.round(page.body.length / 1e6)} MB)`);
   const loc = desc.locateSection(desc.filingText(page.body), annual.form);
   if (!loc.found) { misses[symbol] = loc.why; continue; }
-  const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null });
+  const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null, isWord });
   slow("clean");
   if (!cleaned.ok) { misses[symbol] = cleaned.why; continue; }
+  if (cleaned.joined) { joinedWords += cleaned.joined; joinedRows++; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
 }
 const notReached = mine.slice(reached);
@@ -100,12 +127,12 @@ fs.mkdirSync("data/sec", { recursive: true });
 const out = `data/sec/descriptions-part-${only.length ? "adhoc" : K}.json`;
 fs.writeFileSync(out, JSON.stringify({
   shard: `${K}/${N}`, asOf: new Date().toISOString().slice(0, 10), symbols: mine.length,
-  rows, misses, notReached,
+  rows, misses, notReached, joined: { words: joinedWords, rows: joinedRows },
 }) + "\n");
 
 // THE LOG IS A SUMMARY: the rows themselves go in the file, reviewed from the repo.
 const why = {};
 for (const w of Object.values(misses)) { const k = w.replace(/\d+x/, "Nx"); why[k] = (why[k] ?? 0) + 1; }
-console.log(`shard ${K}/${N}: ${mine.length} symbols · described ${Object.keys(rows).length} · no description ${Object.keys(misses).length} · not reached ${notReached.length} · ${Math.round((Date.now() - started) / 1000)}s`);
+console.log(`shard ${K}/${N}: ${mine.length} symbols · described ${Object.keys(rows).length} · no description ${Object.keys(misses).length} · not reached ${notReached.length} · split words joined ${joinedWords} in ${joinedRows} rows · ${Math.round((Date.now() - started) / 1000)}s`);
 for (const [w, n] of Object.entries(why).sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(5)}  ${w}`);
 console.log(`wrote ${out}`);

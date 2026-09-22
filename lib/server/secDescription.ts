@@ -251,7 +251,11 @@ const DEFINITION: RegExp[] = [
   /^as\s+used\s+(in\s+this|herein)/i,
   /^when\s+we\s+use\s+the\s+terms?\b/i,
   // Full build: MGM "… is referred to as the “Company,” … and together with its subsidiaries …".
-  /\b(is|are)\s+(collectively\s+)?referred\s+to\s+(herein\s+)?as\b/i,                                       // GS, paragraph 2
+  /\b(is|are)\s+(collectively\s+)?referred\s+to\s+(herein\s+)?(collectively\s+)?as\b/i,        // GS, paragraph 2
+  // AIR "… are referred to herein collectively as “AAR,” …"; CCI "We refer to
+  // our towers … collectively as "communications infrastructure"".
+  /\breferred\s+to\s+herein\s+(collectively\s+)?as\b/i,
+  /\bwe\s+refer\s+to\b.{0,200}\bas\s+[“"]/i,
   // A reading instruction, not a cross-reference to other text in its place:
   // ONDS opens Item 1 with "This business description should be read in
   // conjunction with our audited Consolidated Financial Statements…", then the
@@ -275,10 +279,28 @@ const WRAPPED_LINE_CHARS = 40;
 const POINTER: RegExp[] = [
   /^(please\s+)?see\s+/i,                                                   // V "Please see Our Core Business discussion below."
   /\bterms\s+used\s+in\s+this\s+(section|report)\s+are\s+defined\b/i,          // PLAB glossary pointer
+  // Owner review of the full file (#518, round 5): sentences that point
+  // elsewhere in the filing (MAR, HIG "See Note 14"; COF "See “Part II—Item
+  // 8"; PCG "can be found below in Item 8", "the graphic below"; AES "Item 1.—
+  // Business is an outline…"; ETSY, NVO "on page 9", "Reference is made to").
+  /\bsee\s+note\b/i,
+  /\bsee\s+[“"‘']?part\b/i,
+  /\bitem\s+\d+[a-z]?\b/i,
+  /\bon\s+pages?\s+\d/i,
+  /\breference\s+is\s+made\b/i,
+  /\bcan\s+be\s+found\s+(below|in)\b/i,
+  /\bgraphic\s+below\b/i,
+  // Stock-listing sentences (VTOL "Our common stock, par value $0.01 per
+  // share, is traded on the NYSE under the symbol “VTOL”").
+  /\bpar\s+value\b/i,
+  /\bunder\s+the\s+(ticker\s+)?symbol\b/i,
   // Contact details, not a description (PLAB, BAC).
   /\bprincipal\s+executive\s+offices?\b/i,
   /\b(our\s+)?website\s+(address\s+)?is\b/i,
 ];
+
+/** "Pfizer Inc. 2025 Form 10-K 3": a page header the HTML flattened into the text. */
+const RUNNING_HEADER = /\s*(?:[A-Z][\w&'’.,-]*\s+){0,4}[A-Z][\w&'’.,-]*\s+(?:19|20)\d{2}\s+Form\s+(?:10-K|20-F)\s+\d{1,3}\b/g;
 
 /** Paragraphs from the section's start that may supply the description. */
 const LEAD_PARAS = 8;
@@ -293,6 +315,8 @@ const QUOTED = /[“"‘][^”"’]{1,60}[”"’]/g;
 
 /** A parenthetical that names the company: ≥2 quoted names, or ≥2 of we/us/our. */
 function isNameList(inner: string): boolean {
+  // BDX "(also referred to herein as "BD")", ED "(together referred to herein as O&R)".
+  if (/\breferred\s+to\s+herein\b|\bcollectively\s+as\b/i.test(inner)) return true;
   const quoted = (inner.match(QUOTED) ?? []).length;
   const pronouns = new Set((inner.toLowerCase().match(/\b(we|us|our)\b/g) ?? [])).size;
   return quoted >= 2 || pronouns >= 2;
@@ -330,7 +354,7 @@ function isTabular(s: string): boolean {
 }
 export const DESCRIPTION_MIN_CHARS = 200;
 
-export type Cleaned = { ok: true; text: string } | { ok: false; why: string };
+export type Cleaned = { ok: true; text: string; joined?: number } | { ok: false; why: string };
 
 /** Split into sentences, keeping the terminator. Abbreviations like "Inc." survive
  * because a split needs a following capital or quote AND a preceding lowercase
@@ -365,6 +389,8 @@ export function opensWithNameFragment(paragraph: string, companyName: string): b
 export type CleanOptions = {
   /** The registrant's name as SEC holds it (submissions `name`), for the name-fragment rule. */
   companyName?: string | null;
+  /** A dictionary for joinSplitWords; without one, split words stay as written. */
+  isWord?: (w: string) => boolean;
 };
 
 export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned {
@@ -436,8 +462,35 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
     });
   }
 
+  // Owner review (#518, round 5): an embedded ", collectively referred to
+  // herein as we, our, us or Gallagher," clause is cut from the lede (AJG),
+  // which keeps its verb: "…& Co. and its subsidiaries are engaged in …".
+  for (const p of paras) {
+    p.t = p.t.replace(/,\s*(?:(?:together|collectively)\s+)?referred\s+to\s+herein\s+(?:collectively\s+)?as\s+(?:[^,]{1,40},\s*){1,8}?(?=(?:are|is|was|were|has|have|had)\b)/gi, () => {
+      nameDefinitionStripped = true;
+      return " ";
+    });
+  }
+
+  // Owner review (#518, round 5): a RUNNING PAGE HEADER glued into the prose,
+  // "{name} {year} Form 10-K {page}" (PFE "…distribution of Pfizer Inc. 2025
+  // Form 10-K 3 biopharmaceutical products…"). At most five Title-Case words
+  // before the year, so the match cannot reach back into the sentence.
+  for (const p of paras) p.t = p.t.replace(RUNNING_HEADER, " ").replace(/\s{2,}/g, " ");
+
   // Owner, #518: no space before ® or ™ (AAPL "iPhone ®").
   for (const p of paras) p.t = p.t.replace(/\s+([®™])/g, "$1");
+
+  // Owner review (#518, round 5): words split by a stray space ("op erates").
+  // BEFORE the sentence filters, so "S ee Note 3" is read as the pointer it is.
+  let joined = 0;
+  if (opts.isWord) {
+    for (const p of paras) {
+      const r = joinSplitWords(p.t, opts.isWord);
+      p.t = r.text;
+      joined += r.joined;
+    }
+  }
 
   // Rule 3: drop definition sentences. Leading ones first (the owner's rule);
   // on relay 35781008070 GS carried "When we use the terms…" as its SECOND
@@ -524,5 +577,51 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   // Rule 4, on what would render.
   for (const [re, label] of REJECT) if (re.test(text)) return { ok: false, why: `rejected: ${label}` };
   if (text.length < DESCRIPTION_MIN_CHARS) return { ok: false, why: `too short after cleaning (${text.length} chars)` };
-  return { ok: true, text };
+  return { ok: true, text, joined };
+}
+
+/**
+ * WORDS SPLIT BY A STRAY SPACE ("Etsy op erates", "on pag e 7", "S ee",
+ * "managemen t") — owner review, #518 round 5. Joins two adjacent fragments
+ * only when ALL hold:
+ *   - both are whole tokens of letters only, the right one lower-case;
+ *   - the joined form is a dictionary word;
+ *   - the RIGHT fragment is NOT a word ("erates", "e", "ee", "t") — so "a
+ *     way", "in to", "R and", "s and" stay as written: a real word is never
+ *     absorbed into its neighbour.
+ * The dictionary is injected: the universe build loads a pinned English word
+ * list at build time (scripts/sec-descriptions-build.mjs); nothing here ships
+ * a word list, and the page never runs this.
+ */
+export function joinSplitWords(text: string, isWord: (w: string) => boolean): { text: string; joined: number } {
+  // Fragments are whole space-delimited tokens (an opening quote or bracket may
+  // precede the left one, closing punctuation follow the right one): "cafés
+  // and" must not read as "s"+"and", nor "O&R and" as "R"+"and". A TOKEN WALK,
+  // not a global regex: a regex match consumes its right fragment, so "Etsy op
+  // erates" would try "Etsy"+"op", fail, and never see "op"+"erates".
+  const LEFT = /^([“"‘'(\[]?)([A-Za-z]+)$/;
+  const RIGHT = /^([a-z]+)([.,;:!?)\]”"’']*)$/;
+  const tokens = text.split(" ");
+  const out: string[] = [];
+  let joined = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const l = LEFT.exec(tokens[i]);
+    const r = i + 1 < tokens.length ? RIGHT.exec(tokens[i + 1]) : null;
+    if (l && r) {
+      const j = l[2] + r[1];
+      // "a m u receptor" (TRVI, "a mu receptor"): when the right fragment also
+      // makes a word with the NEXT token, which pair is the split is
+      // ambiguous, so neither is joined ("u" is a word, so "m u" stays too).
+      const n = !r[2] && i + 2 < tokens.length ? RIGHT.exec(tokens[i + 2]) : null;
+      const joinsNext = !!n && isWord((r[1] + n[1]).toLowerCase());
+      if (!joinsNext && isWord(j.toLowerCase()) && !isWord(r[1].toLowerCase())) {
+        out.push(l[1] + j + r[2]);
+        joined++;
+        i++;
+        continue;
+      }
+    }
+    out.push(tokens[i]);
+  }
+  return { text: out.join(" "), joined };
 }

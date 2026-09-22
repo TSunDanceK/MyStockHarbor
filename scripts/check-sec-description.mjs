@@ -16,6 +16,9 @@
 //   5. After a name list or definition is stripped, a later paragraph opening
 //      with a bare fragment of the company name is dropped (GS "Group Inc.").
 //   6. A leading one-line slogan is dropped (RKLB); no space before ®/™.
+//   6e. Owner review of the full file: pointer sentences (See Note, Item 7,
+//      on page 9…), running page headers, "referred to herein as" name lists,
+//      par-value / ticker-symbol sentences, and words split by a stray space.
 //   7. Cross-references and MD&A are rejected, not rendered.
 //   8. The committed file: every row within the length rules, no FMP text.
 import fs from "node:fs";
@@ -180,6 +183,67 @@ console.log("\n6d. the opening or nothing");
   check("text past the section's opening paragraphs is not used (DAL)", !r.ok, r.ok ? r.text.slice(0, 60) : r.why);
   const noWindow = await load(once("for (const p of paras.slice(0, LEAD_PARAS)) {", "for (const p of paras) {"));
   check("...and CATCHES a cleaner that reads on into the section", noWindow.cleanDescription(deep).ok);
+}
+
+console.log("\n6e. owner review of the full file (round 5): pointers, page headers, name lists, listings, split words");
+{
+  const lede = "Marriott International, Inc. is a worldwide operator, franchisor and licensor of hotel, residential, timeshare and other lodging properties.";
+  const pointers = [
+    ["See Note 14 for more information on our segments.", "MAR/HIG"],
+    ["See “Part II—Item 8. Financial Statements” for segment details.", "COF"],
+    ["More information on our reportable segments can be found below in our discussion of each business.", "PCG"],
+    ["Our structure is shown in the graphic below.", "PCG"],
+    ["Item 1.—Business is an outline of our strategic business units.", "AES"],
+    ["Our marketplace metrics are described on page 9 of this report.", "ETSY"],
+    ["Reference is made to the section on risk management in this report.", "NVO"],
+    ["Our common stock, par value $0.01 per share, is traded on the NYSE under the symbol “VTOL”.", "VTOL"],
+  ];
+  for (const [s, who] of pointers) {
+    const r = D.cleanDescription(lede + " " + s + long);
+    check(`"${s.slice(0, 32)}…" is dropped (${who})`, r.ok && !r.text.includes(s.slice(0, 20)), r.ok ? "" : r.why);
+  }
+  const noPointer = await load(once("  /\\bsee\\s+note\\b/i,\n", ""));
+  // Mid-sentence, so the older leading "see" rule cannot mask the removal.
+  const midNote = lede + " For more information on our segments, see Note 14 of the notes to our statements." + long;
+  check("a mid-sentence 'see Note' is dropped (HIG)", !/Note 14/.test(txt(D.cleanDescription(midNote))));
+  check("...and CATCHES the See Note rule removed", /Note 14/.test(txt(noPointer.cleanDescription(midNote))));
+  const noPar = await load(once("  /\\bpar\\s+value\\b/i,\n  /\\bunder\\s+the\\s+(ticker\\s+)?symbol\\b/i,\n", ""));
+  check("...and CATCHES the listing rules removed", /par value/.test(txt(noPar.cleanDescription(lede + " " + pointers[7][0] + long))));
+
+  const pfe = D.cleanDescription("Pfizer Inc. is a research-based, global biopharmaceutical company engaged in the discovery, development, manufacturing, marketing, sale and distribution of Pfizer Inc. 2025 Form 10-K 3 biopharmaceutical products worldwide." + long);
+  check("a running page header is stripped from the prose (PFE)", pfe.ok && /distribution of biopharmaceutical products/.test(pfe.text), pfe.ok ? pfe.text.slice(150, 260) : pfe.why);
+  const noHeader = await load(once('for (const p of paras) p.t = p.t.replace(RUNNING_HEADER, " ").replace(/\\s{2,}/g, " ");', ""));
+  check("...and CATCHES the header rule removed", /Form 10-K 3/.test(txt(noHeader.cleanDescription("Pfizer Inc. is a research-based, global biopharmaceutical company engaged in the discovery, development, manufacturing, marketing, sale and distribution of Pfizer Inc. 2025 Form 10-K 3 biopharmaceutical products worldwide." + long))));
+
+  const air = D.cleanDescription("AAR CORP. and its subsidiaries are referred to herein collectively as “AAR,” “Company,” “we,” “us,” and “our” unless the context indicates otherwise. AAR is a diversified provider of products and services to the worldwide aviation and defense markets." + long);
+  check("'referred to herein collectively as' is a definition (AIR)", air.ok && air.text.startsWith("AAR is a diversified"), air.ok ? air.text.slice(0, 60) : air.why);
+  const bdx = D.cleanDescription("Becton, Dickinson and Company (also referred to herein as “BD”) is a global medical technology company engaged in the development, manufacture and sale of medical supplies, devices and laboratory equipment." + long);
+  check("a bracketed 'referred to herein as' is stripped, even with one name (BDX)", bdx.ok && bdx.text.startsWith("Becton, Dickinson and Company is a global"), bdx.ok ? bdx.text.slice(0, 60) : bdx.why);
+  const noHerein = await load(once("if (/\\breferred\\s+to\\s+herein\\b|\\bcollectively\\s+as\\b/i.test(inner)) return true;", ""));
+  // Without the bracket rule the whole lede goes as a definition sentence.
+  check("...and CATCHES the bracket rule removed", !/^Becton, Dickinson and Company is a global/.test(txt(noHerein.cleanDescription("Becton, Dickinson and Company (also referred to herein as “BD”) is a global medical technology company engaged in the development, manufacture and sale of medical supplies, devices and laboratory equipment." + long))));
+  const ajg = D.cleanDescription("Arthur J. Gallagher & Co. and its subsidiaries, collectively referred to herein as we, our, us or Gallagher, are engaged in providing insurance brokerage and consulting services, and third-party claims settlement and administration services." + long);
+  check("an embedded 'collectively referred to herein as' clause is cut, the lede kept (AJG)", ajg.ok && /^Arthur J\. Gallagher & Co\. and its subsidiaries are engaged in/.test(ajg.text), ajg.ok ? ajg.text.slice(0, 80) : ajg.why);
+
+  const W = new Set(["am", "mu", "u", "kappa", "agonist", "receptor", "operates", "page", "see", "management", "insights", "countries", "we", "a", "way", "in", "to", "and", "cafés", "into", "away"]);
+  const isWord = (w) => W.has(w);
+  const j = D.joinSplitWords("Etsy op erates marketplaces, on pag e 9. S ee our managemen t team.", isWord);
+  check("split words are joined when the join is a word and the right fragment is not", j.text === "Etsy operates marketplaces, on page 9. See our management team." && j.joined === 4, `${j.joined}: ${j.text}`);
+  const keep = D.joinSplitWords("a way in to cafés and O&R and R and s and", isWord);
+  check("a real word is never absorbed ('a way', 'in to', 'cafés and', 'O&R and')", keep.joined === 0 && keep.text === "a way in to cafés and O&R and R and s and", keep.text);
+  const greedy = await load(once("if (!joinsNext && isWord(j.toLowerCase()) && !isWord(r[1].toLowerCase())) {", "if (isWord(j.toLowerCase())) {"));
+  check("...and CATCHES a join that absorbs a real word", greedy.joinSplitWords("a way in to", isWord).joined > 0);
+  // A consumed pair: what a global regex does to "Etsy op" before "op erates".
+  const regexWalk = await load(once("    out.push(tokens[i]);\n  }", "    out.push(tokens[i]);\n    if (l && r) out.push(tokens[++i]);\n  }"));
+  check("...and CATCHES a walk that skips the fragment after a failed pair ('Etsy op erates')", !/Etsy operates/.test(regexWalk.joinSplitWords("Etsy op erates", isWord).text));
+  const trvi = D.joinSplitWords("a k appa receptor a gonist and a m u receptor", isWord);
+  check("an ambiguous run is left as written (TRVI 'a m u' is not made 'am u'); its clear splits still join", /and a m u receptor/.test(trvi.text) && /a kappa receptor agonist/.test(trvi.text), trvi.text);
+  const noNext = await load(once("if (!joinsNext && isWord(j.toLowerCase()) && !isWord(r[1].toLowerCase())) {", "if (isWord(j.toLowerCase()) && !isWord(r[1].toLowerCase())) {"));
+  check("...and CATCHES the look-ahead removed", /am u receptor/.test(noNext.joinSplitWords("a m u receptor", isWord).text));
+  const inClean = D.cleanDescription(lede + " S ee Note 3 for our segments." + long, { isWord });
+  check("joined BEFORE the sentence filters, so 'S ee Note' is dropped as a pointer", inClean.ok && !/Note 3/.test(inClean.text) && inClean.joined >= 1, inClean.ok ? String(inClean.joined) : inClean.why);
+  const noDict = D.cleanDescription("Etsy op erates two-sided online marketplaces that connect millions of passionate and creative buyers and sellers around the world." + long);
+  check("without a dictionary nothing is joined (the page never runs this)", noDict.ok && /op erates/.test(noDict.text));
 }
 
 console.log("\n7. cross-references and MD&A are rejected");
