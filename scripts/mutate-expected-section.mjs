@@ -48,7 +48,7 @@ const MUTANTS = [
   [MOD, "E8", "thin history admitted (a filer scored on two quarters)",
     "export const MIN_USABLE_PERIODS = 8;", "export const MIN_USABLE_PERIODS = 2;"],
   [MOD, "E9", "past-due rows readmitted, colliding with the due strip",
-    '  if (daysAway < 0) return { skip: "outside-window" };', ""],
+    '  if (daysAway < 0) return { skip: "estimate-in-past" };', ""],
   [SEC, "E10", "the estimate rendered as a DATE — the one thing the measurement forbids",
     "<span className=\"expAway\">{awayLabel(row.daysAway)}</span>",
     "<span className=\"expAway\">{new Date(Date.now() + row.daysAway * 86400000).toISOString().slice(0, 10)}</span>"],
