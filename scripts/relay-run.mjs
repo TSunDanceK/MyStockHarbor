@@ -55,6 +55,15 @@ const TASKS = {
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
   "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
+  // DOES YAHOO WANT BRK.B OR BRK-B? The sandbox answers 403 CONNECT for
+  // query1.finance.yahoo.com and stooq.com both, so this is the only place the
+  // question can be asked -- and it has to be asked before the quote path
+  // converts anything on the Yahoo leg, because the dot is what the app sends
+  // today and converting the one vendor that already accepts it would break it.
+  // Re-asks Stooq at the same time, since the proposal to delete that leg rests
+  // on a measurement from 2026-09-12. Read-only and uncredentialled: public
+  // endpoints, no store.
+  "share-class-spelling": { script: "scripts/share-class-spelling-probe.mjs", args: () => [] },
   "nasdaq-refill": {
     script: "scripts/nasdaq-refill-analysis.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
@@ -101,6 +110,10 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // SYMBOLS comes from the workflow's `symbols` input and the script defaults
+  // to the five drone/defence names when it is blank, so a dispatch that
+  // forgets it still captures the thing it was added for.
+  "drone-sample": { script: "scripts/drone-headline-sample.mjs", args: () => [] },
   // How much of a symbol's real pool its anchored short-name needle admits, and
   // how much of that is the company rather than the index, the month or the
   // noun. news.google.com is refused from the sandbox; a runner reaches it.
@@ -546,6 +559,43 @@ const TASKS = {
   // the credentials live in that job.
   "write-due-input-census": {
     script: "scripts/due-input-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX: the early-2.02 mispick measured across the
+  // universe (review of #512/#513 items A, B, E). Reads the stored records,
+  // the fact sets, SEC submissions and the production pages; writes nothing.
+  "write-early-202-census": {
+    script: "scripts/early-202-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  "write-report-dates-rewrite-progress": {
+    script: "scripts/report-dates-rewrite-progress.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the same-day tie-break flips, a general current-period rule
+  // scored on history, and why the thin FPIs are thin (review of #515).
+  "write-pairing-followups": {
+    script: "scripts/pairing-followups-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: why sec-facts times out -- last runs, next queues, fetch cost.
+  "write-sec-facts-timeout-diagnosis": {
+    script: "scripts/sec-facts-timeout-diagnosis.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: every stored fact set's h against secFieldsHash (readFactSet's gate).
+  "write-sec-factset-readability": {
+    script: "scripts/sec-factset-readability.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,
