@@ -109,6 +109,16 @@ export type TrendLine = {
   /** The median across the periods that were figures. Null when refused. */
   value: number | null;
   tone: EarningsTone | null;
+  /**
+   * THE NEWEST PERIOD'S OWN FIGURE, beside the typical one — null when it is
+   * not a number (absent, or a crossing). A median can sit a long way from
+   * now: AVAV's typical quarter is +133.3% because its acquisition quarters
+   * dominate, while its latest quarter is +5.7%. Printing only the median
+   * reads as "revenue is growing 133%" (owner review, #522).
+   */
+  latest: number | null;
+  /** The latest figure's tone, by the same rule as `tone`. */
+  latestTone: EarningsTone | null;
   /** Periods that contributed. */
   counted: number;
   /** Periods left out because they were n/m or absent. */
@@ -163,17 +173,21 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
     const nums = values.filter(isPct) as number[];
     const skipped = values.length - nums.length;
     crossings += values.filter(isCrossing).length;
+    // `values` is oldest first (see GrowthMarginsChart), so the newest is last.
+    const last = values.length ? values[values.length - 1] : null;
+    const latest = isPct(last) ? last : null;
+    const latestTone = toneForGrowth(latest);
     if (nums.length < TREND_MIN_PERIODS) {
-      return { label, kind: "rate", value: null, tone: null, counted: nums.length, skipped };
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), counted: nums.length, skipped };
+    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped };
   };
 
   const growth = view.growth ?? [];
   const lines = [
-    line(`Revenue growth, typical ${w.one}`, growth.map((g) => g.revenueYoY)),
-    line(`EPS growth, typical ${w.one}`, growth.map((g) => g.epsYoY)),
+    line("Revenue growth", growth.map((g) => g.revenueYoY)),
+    line("EPS growth", growth.map((g) => g.epsYoY)),
   ];
 
   // MARGIN IS A LEVEL, NOT A RATE, so it gets its own line rather than being
@@ -182,13 +196,15 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   if (opMargins.length >= TREND_MIN_PERIODS) {
     const m = median(opMargins);
     lines.push({
-      label: `Operating margin, typical ${w.one}`,
+      label: "Operating margin",
       kind: "level",
       value: m,
       // A LEVEL HAS NO TONE HERE. Whether a 6% operating margin is good depends
       // on the industry, and this page has no industry comparison — colouring
       // it would be inventing a judgement. The DIRECTION is toned below.
       tone: null,
+      latest: view.margins.length ? view.margins[view.margins.length - 1].operating : null,
+      latestTone: null,
       counted: opMargins.length,
       skipped: view.margins.length - opMargins.length,
     });

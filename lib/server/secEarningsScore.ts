@@ -234,7 +234,10 @@ function gapReason(key: ScoreComponent, view: SecEarningsView): string {
         : p === "turned-profitable" ? "turned profitable"
           : null;
   const absent = (field: string, what: string) =>
-    untagged.has(field) ? `no ${what} line in the filings` : `${what} not in this ${w.one}'s filed figures`;
+    // "NOT CAPTURED", NOT "NOT IN THE FILING": without the extraction-time
+    // marker we cannot tell a chain gap from a line the filer never had, and
+    // AVAV's FY2022/23 revenue was the former (owner review, #522).
+    untagged.has(field) ? `no ${what} line in the filings` : `${what} not captured from this filing`;
   switch (key) {
     case "revenueGrowth":
       if (s.revenue?.val == null) return absent("revenue", "revenue");
@@ -250,7 +253,7 @@ function gapReason(key: ScoreComponent, view: SecEarningsView): string {
     case "cashConversion": {
       const c = view.cashQuality;
       if (c?.netIncome?.val === 0) return "net income was zero";
-      return c?.accrualsMissing ? `${c.accrualsMissing} not in the filed figures` : "cash-flow figures not in the filed figures";
+      return c?.accrualsMissing ? `${c.accrualsMissing} not captured from this filing` : "cash-flow figures not captured from this filing";
     }
   }
 }

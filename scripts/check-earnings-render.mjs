@@ -1147,6 +1147,18 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
     /Market cap \$8\.4B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
       /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
     val);
+  // TREND: the median beside the newest period (owner review, #522). AVAV's
+  // typical quarter is dominated by its acquisition year; the latest is not.
+  const trend = visibleText(html(React.createElement(M.SecTrendSummaryCard, { view: vAvav })));
+  check("the trend card prints Typical beside Latest",
+    /Revenue growth Typical \+133\.3% Latest \+5\.7%/.test(trend) && /Operating margin Typical -2\.1% Latest -2\.3%/.test(trend),
+    trend);
+  const firstNotLast = await loadCards(once(
+    "const last = values.length ? values[values.length - 1] : null;",
+    "const last = values.length ? values[0] : null;"
+  ));
+  check("...and CATCHES the oldest period passed off as the latest",
+    !/Latest \+5\.7%/.test(visibleText(html(React.createElement(firstNotLast.SecTrendSummaryCard, { view: firstNotLast.buildSecEarningsView(AVAV) })))));
   // A7 + B: the crossing footnote is printed once on the page, however many
   // cards carry a crossing.
   const whole = visibleText(renderAll(M, vAvav, "AVAV"));

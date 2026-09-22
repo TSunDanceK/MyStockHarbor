@@ -1579,6 +1579,9 @@ export function SecNoXbrlCard({
  * over eight rows means something different from the same figure over three,
  * and the card shows the denominator either way.
  */
+const fmtTrend = (kind: "rate" | "level", v: number) =>
+  `${kind === "rate" && v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+
 export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
   const t = trendSummary(view);
   const w = periodWords(t.basis);
@@ -1600,12 +1603,23 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
           return (
             <div className="trendCell" key={l.label}>
               <span className="metricLabel">{l.label}</span>
+              {/* TYPICAL · LATEST, when both are figures. The median alone can
+                  sit a long way from now (AVAV: +133.3% typical, +5.7% latest),
+                  so the newest period is printed beside it in smaller type, by
+                  the same colour rule. NO SIGN ON A LEVEL: 32% is not "+32%". */}
               <span className="metricValue" style={{ color: toneColor(l.tone) }}>
-                {/* NO SIGN ON A LEVEL. A margin of 32% is not "+32%". */}
-                {l.value === null
-                  ? "—"
-                  : `${l.kind === "rate" && l.value >= 0 ? "+" : ""}${l.value.toFixed(1)}%`}
+                {l.value === null ? "—" : (
+                  <>
+                    <span className="trendTag">Typical </span>
+                    {fmtTrend(l.kind, l.value)}
+                  </>
+                )}
               </span>
+              {l.value !== null && l.latest !== null ? (
+                <span className="trendLatest" style={{ color: toneColor(l.latestTone) }}>
+                  <span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}
+                </span>
+              ) : null}
               <div className="trendChipRow">
                 {/* A LEVEL GETS NO VERDICT CHIP. trendSummary leaves the
                     operating-margin line untoned on purpose: whether 6% is good

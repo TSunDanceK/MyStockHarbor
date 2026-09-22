@@ -810,6 +810,9 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .metricCard { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); }
+        .trendTag { font-size: 0.55em; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
+        .trendLatest { display: block; margin-top: 4px; font-size: 15px; font-weight: 900; letter-spacing: -0.02em; }
+        .trendLatest .trendTag { font-size: 10px; }
         .crossTip { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.6); }
         .hero p.heroNote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(148,163,184,0.85); }
         .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: 10px; font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
