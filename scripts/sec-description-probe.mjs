@@ -11,9 +11,12 @@
 //   or a cross-reference ("incorporated by reference").
 //
 // NOTHING RENDERS FROM THIS. The owner reviews the sample first. It writes
-// data/sec/description-probe.json (for the artifact) and prints every excerpt
-// in full, because the judgement "is this a usable overview" is a human one and
-// a classifier's label is only a hint.
+// data/sec/description-probe.json (for the artifact) and prints every cleaned
+// description in full, and the raw opening of every one a filter rejected, so
+// the judgement stays a human one.
+//
+// STEP 2 (#518): the locator and the owner's six filters live in
+// lib/server/secDescription.ts and are lifted here.
 //
 // Read-only, no credentials. ≤8 requests/s, under SEC's 10/s.
 //
@@ -67,85 +70,28 @@ async function get(url, as = "json") {
   return { status: 200, body: as === "json" ? await res.json() : await res.text() };
 }
 
-// ── HTML TO TEXT, KEEPING PARAGRAPH BREAKS ───────────────────────────────
-// iXBRL filings carry a hidden <ix:header> full of tagged facts and many
-// display:none blocks; both are removed before anything is read, or the
-// "text" begins with a thousand lines of XBRL context.
-const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", mdash: "—", ndash: "–", bull: "•", reg: "®", trade: "™", copy: "©" };
-function toText(html) {
-  return html
-    .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<([a-z]+)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&([a-z]+);/gi, (m, n) => ENT[n.toLowerCase()] ?? m)
-    .replace(/[ \t ]+/g, " ")
-    .replace(/ *\n */g, "\n")
-    .replace(/\n{2,}/g, "\n\n")
-    .trim();
-}
+// ── THE SHIPPED LOCATOR AND CLEANER, LIFTED ────────────────────────────────
+// Step 2 (#518): the owner's filters live in lib/server/secDescription.ts, the
+// module a render path will call. The probe runs THAT code, so the sample the
+// owner reads is exactly what would render.
+const desc = await lift(readCodeOnly("lib/server/secDescription.ts"));
 
-// ── WHERE THE SECTION STARTS ─────────────────────────────────────────────
-// The heading appears at least twice: once in the table of contents and once
-// at the section itself. A TOC hit is followed within a few hundred
-// characters by the NEXT item's heading; the real one is followed by prose.
-//
-// HEADINGS STAND ON THEIR OWN LINE. The first run (relay 35775513697) matched
-// "B. Business Overview" INSIDE sentences — risk factors cross-referencing
-// "see Item 4.B. Business Overview" — and returned ABEV's and ARM's risk text
-// as their overview. A heading is a line that is nothing but the heading.
-const K = /(?:^|\n)[ \t]*item[ \t]*1[ \t]*[.:\-–—]?[ \t]*business[ \t]*\.?[ \t]*(?=\n)/gi;
-const HEADINGS = {
-  "10-K": { start: K, next: /item\s*1a\b/i },
-  "10-K405": { start: K, next: /item\s*1a\b|item\s*2\b/i },
-  "10-KT": { start: K, next: /item\s*1a\b/i },
-  "20-F": {
-    start: /(?:^|\n)[ \t]*(?:item[ \t]*4[ \t]*[.:\-–—]?[ \t]*)?b[ \t]*[.:\-–—][ \t]*business[ \t]+overview[ \t]*\.?[ \t]*(?=\n)/gi,
-    next: /\bc\s*[.:\-–—]?\s*organi[sz]ational\s+structure\b/i,
-  },
-};
-
-function locate(text, form) {
-  const h = HEADINGS[form];
-  if (!h) return { found: false, why: `no section heading defined for ${form}` };
-  const hits = [...text.matchAll(h.start)];
-  if (!hits.length) return { found: false, why: "heading not found" };
-  for (const m of hits) {
-    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 600);
-    if (h.next.test(after)) continue; // a table-of-contents entry
-    const body = text.slice(m.index + m[0].length, m.index + m[0].length + 6000).trim();
-    return { found: true, hitsSkipped: hits.indexOf(m), body };
+/** The newest annual filing, reading older submission pages if needed (XOM). */
+async function latestAnnual(sub, cik) {
+  const ANNUAL = ["10-K", "10-K405", "10-KT", "20-F", "40-F"];
+  const pick = (r) => {
+    const i = (r.form ?? []).findIndex((f) => ANNUAL.includes(f));
+    return i < 0 ? null : { form: r.form[i], accession: r.accessionNumber[i], filedOn: r.filingDate[i], doc: r.primaryDocument[i] };
+  };
+  const found = pick(sub.filings?.recent ?? {});
+  if (found) return found;
+  // A heavy filer's recent page can hold ~1,000 filings with no annual among
+  // them; the older pages are listed in filings.files.
+  for (const f of sub.filings?.files ?? []) {
+    const page = await get(`https://data.sec.gov/submissions/${f.name}`);
+    if (page.status === 200) { const hit = pick(page.body); if (hit) return hit; }
   }
-  return { found: false, why: `heading found ${hits.length}x, every hit looked like a table of contents` };
-}
-
-/** The opening paragraph(s): up to ~1,200 characters, whole paragraphs only. */
-function opening(body) {
-  const paras = body.split(/\n\n|\n/).map((p) => p.trim()).filter((p) => p.length > 0);
-  const out = [];
-  let n = 0;
-  for (const p of paras) {
-    // Sub-headings ("General", "Overview") and fragments shorter than a
-    // sentence — IonQ's excerpt opened with a stray "." on the first run.
-    if (p.length < 60) continue;
-    out.push(p);
-    n += p.length;
-    if (n >= 700 || out.length >= 3) break;
-  }
-  return out.join("\n\n");
-}
-
-function classify(text) {
-  if (!text) return "empty";
-  const head = text.slice(0, 600);
-  if (/incorporated\s+(herein\s+)?by\s+reference/i.test(head)) return "cross-reference";
-  if (/forward[-\s]looking\s+statements?/i.test(head)) return "forward-looking-boilerplate";
-  if ((head.match(/\bitem\s*\d/gi) ?? []).length >= 3 || /\.{5,}\s*\d+/.test(head)) return "table-of-contents";
-  return "overview";
+  return null;
 }
 
 const results = [];
@@ -154,44 +100,43 @@ for (const symbol of LIST) {
   if (!cik) { results.push({ symbol, found: false, why: "no CIK" }); continue; }
   const sub = await get(`https://data.sec.gov/submissions/CIK${cik}.json`);
   if (sub.status !== 200) { results.push({ symbol, cik, found: false, why: `submissions HTTP ${sub.status}` }); continue; }
-  const r = sub.body.filings?.recent ?? {};
-  const forms = r.form ?? [];
-  const i = forms.findIndex((f) => ["10-K", "10-K405", "10-KT", "20-F", "40-F"].includes(f));
-  if (i < 0) { results.push({ symbol, cik, found: false, why: "no annual filing in recent submissions" }); continue; }
-  const form = forms[i];
-  const accession = r.accessionNumber[i];
-  const filedOn = r.filingDate[i];
-  const doc = r.primaryDocument[i];
+  const annual = await latestAnnual(sub.body, cik);
+  if (!annual) { results.push({ symbol, cik, found: false, why: "no annual filing in submissions" }); continue; }
+  const { form, accession, filedOn, doc } = annual;
   const base = { symbol, cik, form, accession, filedOn, document: doc };
   if (form === "40-F") {
-    // A 40-F's business description is in the Annual Information Form, filed
-    // as an EXHIBIT, not in the primary document. Reported as such rather
-    // than searched for in the wrong file.
-    results.push({ ...base, found: false, why: "40-F: the business description is in the AIF exhibit, not the primary document" });
+    results.push({ ...base, found: false, why: desc.locateSection("", form).why });
     continue;
   }
   const url = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, "")}/${doc}`;
   const page = await get(url, "text");
   if (page.status !== 200) { results.push({ ...base, found: false, why: `document HTTP ${page.status}` }); continue; }
-  const text = toText(page.body);
-  const loc = locate(text, form);
+  const text = desc.filingText(page.body);
+  const loc = desc.locateSection(text, form);
   if (!loc.found) { results.push({ ...base, url, found: false, why: loc.why }); continue; }
-  const excerpt = opening(loc.body);
-  results.push({ ...base, url, found: true, chars: excerpt.length, class: classify(excerpt), tocHitsSkipped: loc.hitsSkipped, excerpt });
+  const cleaned = desc.cleanDescription(loc.body);
+  // THE RAW OPENING TOO, so a rejection can be checked against what it rejected.
+  const raw = loc.body.slice(0, 700);
+  results.push(cleaned.ok
+    ? { ...base, url, found: true, ok: true, chars: cleaned.text.length, description: cleaned.text, raw }
+    : { ...base, url, found: true, ok: false, why: cleaned.why, raw });
 }
 
 fs.mkdirSync("data/sec", { recursive: true });
 fs.writeFileSync("data/sec/description-probe.json", JSON.stringify({ asOf: new Date().toISOString().slice(0, 10), results }, null, 1) + "\n");
 
-console.log("\n===EXCERPTS===");
-for (const x of results.filter((r) => r.found)) {
-  console.log(`\n--- ${x.symbol} (${x.form}, filed ${x.filedOn}, ${x.chars} chars, ${x.class}) ${x.url}\n${x.excerpt}`);
+console.log("\n===DESCRIPTIONS (what would render)===");
+for (const x of results.filter((r) => r.ok)) {
+  console.log(`\n--- ${x.symbol} (${x.form}, filed ${x.filedOn}, ${x.chars} chars) ${x.url}\n${x.description}`);
+}
+console.log("\n===REJECTED (found, then refused by a filter) — raw opening shown===");
+for (const x of results.filter((r) => r.found && !r.ok)) {
+  console.log(`\n--- ${x.symbol} (${x.form}): ${x.why}\n${x.raw}`);
 }
 
 // THE TABLE LAST, so it is in the log's tail where a reader looks first.
-console.log(`\n${"symbol".padEnd(7)} ${"form".padEnd(6)} ${"filed".padEnd(10)} ${"found".padEnd(5)} ${"chars".padStart(5)}  class / why`);
+console.log(`\n${"symbol".padEnd(7)} ${"form".padEnd(6)} ${"filed".padEnd(10)} ${"renders".padEnd(7)} ${"chars".padStart(5)}  why not`);
 for (const x of results) {
-  console.log(`${x.symbol.padEnd(7)} ${(x.form ?? "-").padEnd(6)} ${(x.filedOn ?? "-").padEnd(10)} ${String(x.found).padEnd(5)} ${String(x.chars ?? "-").padStart(5)}  ${x.found ? x.class : x.why}`);
+  console.log(`${x.symbol.padEnd(7)} ${(x.form ?? "-").padEnd(6)} ${(x.filedOn ?? "-").padEnd(10)} ${String(Boolean(x.ok)).padEnd(7)} ${String(x.chars ?? "-").padStart(5)}  ${x.ok ? "" : x.why}`);
 }
-const by = (k) => results.filter((x) => x.found && x.class === k).length;
-console.log(`\nfound ${results.filter((x) => x.found).length} of ${results.length} · overview ${by("overview")} · toc ${by("table-of-contents")} · boilerplate ${by("forward-looking-boilerplate")} · cross-ref ${by("cross-reference")}`);
+console.log(`\nrenders ${results.filter((x) => x.ok).length} of ${results.length} · found-but-rejected ${results.filter((x) => x.found && !x.ok).length} · not found ${results.filter((x) => !x.found).length}`);

@@ -1,0 +1,215 @@
+// The company's own description, from its annual filing — locate and clean.
+//
+// Brief 2026-09-22 PR 3. FMP's description is their authored prose and the
+// last FMP field on /stock/[symbol]. This replaces it with the company's own
+// words: 10-K Item 1 "Business", or 20-F Item 4.B "Business Overview".
+//
+// PURE AND NETWORK-FREE. The relay probe (scripts/sec-description-probe.mjs)
+// lifts it to measure; the eventual refresh job will call the same functions,
+// so what the owner reviewed is what renders. Nothing renders from it yet.
+//
+// ── THE OWNER'S FILTERS (step 2, #518), APPLIED TO EVERY FILER ─────────────
+//   1. join broken lines and collapse whitespace                  (ABVX)
+//   2. strip a leading all-caps heading                           (GEV "INTRODUCTION.")
+//   3. drop leading definition text — "In this report, the terms…",
+//      "When used in this report…", "…refers to X and its subsidiaries"
+//                                                                 (KO, BAC, ONDS)
+//   4. REJECT a cross-reference or the financial discussion outright —
+//      "incorporated herein by reference", "set forth under the headings",
+//      "in conjunction with our … financial statements",
+//      "Management's Discussion"                                  (ONDS, AZN)
+//   5. keep ≤ ~2 paragraphs / ~900 characters, cut at a sentence end;
+//      require ≥ ~200 characters after cleaning
+//   6. not found or rejected → NO description, and no FMP fallback
+
+const ENT: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘",
+  rdquo: "”", ldquo: "“", mdash: "—", ndash: "–", bull: "•", reg: "®", trade: "™", copy: "©",
+};
+
+/** Filing HTML to text with paragraph breaks. Drops the iXBRL header and hidden blocks. */
+export function filingText(html: string): string {
+  return html
+    .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<([a-z]+)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (m, n) => ENT[n.toLowerCase()] ?? m)
+    .replace(/[ \t ]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{2,}/g, "\n\n")
+    .trim();
+}
+
+// ── LOCATING THE SECTION ──────────────────────────────────────────────────
+//
+// HEADINGS ARE WHOLE LINES. An inline "see Item 4.B. Business Overview" in a
+// risk factor is a cross-reference, not the section (ABEV and ARM, relay
+// 35775513697). A heading may also be split over two lines — "Item 1." then
+// "Business" — which a single-line pattern misses.
+//
+// THE SECTION RUNS FROM ITS HEADING TO THE NEXT ITEM'S. For a 10-K that is
+// Item 1 → Item 1A. The table of contents carries the same pair a few lines
+// apart, so a pair whose body is a few hundred characters is the TOC and is
+// skipped. This is the fix for ONDS (owner, #518): its first run's "Item 1"
+// hit was not the section's own heading, and the text after it was MD&A. The
+// Item 1 taken now is the one IMMEDIATELY before a real Item 1A.
+
+type Line = { text: string; start: number; end: number };
+
+function lines(text: string): Line[] {
+  const out: Line[] = [];
+  let at = 0;
+  for (const t of text.split("\n")) {
+    out.push({ text: t.trim(), start: at, end: at + t.length });
+    at += t.length + 1;
+  }
+  return out;
+}
+
+const DASH = "[.:\\-–—]?";
+const ITEM1 = new RegExp(`^item\\s*1\\s*${DASH}\\s*(business)?\\s*\\.?$`, "i");
+const BUSINESS = /^business\s*\.?$/i;
+const ITEM1A = new RegExp(`^item\\s*1a\\b`, "i");
+const ITEM4B = new RegExp(`^(item\\s*4\\s*${DASH}\\s*)?b\\s*[.:\\-–—]\\s*business\\s+overview\\s*\\.?$`, "i");
+const ITEM4C = new RegExp(`^(item\\s*4\\s*${DASH}\\s*)?c\\s*[.:\\-–—]\\s*organi[sz]ational\\s+structure`, "i");
+
+/** A table-of-contents pair is closer than this; a real section is longer. */
+const MIN_SECTION_CHARS = 1500;
+
+export type Located = { found: true; body: string } | { found: false; why: string };
+
+export function locateSection(text: string, form: string): Located {
+  const L = lines(text);
+  const isStart = (i: number): { ok: boolean; bodyFrom: number } => {
+    const t = L[i].text;
+    if (form === "20-F") return { ok: ITEM4B.test(t), bodyFrom: L[i].end };
+    const m = ITEM1.exec(t);
+    if (!m) return { ok: false, bodyFrom: 0 };
+    if (m[1]) return { ok: true, bodyFrom: L[i].end };
+    // "Item 1." alone: the heading continues on the next non-empty line.
+    let j = i + 1;
+    while (j < L.length && !L[j].text) j++;
+    return j < L.length && BUSINESS.test(L[j].text) ? { ok: true, bodyFrom: L[j].end } : { ok: false, bodyFrom: 0 };
+  };
+  const isEnd = (t: string) => (form === "20-F" ? ITEM4C.test(t) : ITEM1A.test(t));
+
+  if (!["10-K", "10-K405", "10-KT", "20-F"].includes(form)) {
+    return { found: false, why: form === "40-F"
+      ? "40-F: the business description is in the AIF exhibit, not the primary document"
+      : `no section heading defined for ${form}` };
+  }
+  const starts = L.map((_, i) => i).filter((i) => isStart(i).ok);
+  if (!starts.length) return { found: false, why: "heading not found" };
+  const ends = L.map((l, i) => (isEnd(l.text) ? i : -1)).filter((i) => i >= 0);
+
+  // THE LAST START BEFORE EACH END, pairs tried in document order; the first
+  // pair long enough to be a section, not a TOC entry, wins.
+  for (const e of ends) {
+    const before = starts.filter((s) => s < e);
+    if (!before.length) continue;
+    const s = before[before.length - 1];
+    const from = isStart(s).bodyFrom;
+    const body = text.slice(from, L[e].start).trim();
+    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
+  }
+  // No closing heading at all (some 20-F layouts): the last start, bounded.
+  if (!ends.length) {
+    const s = starts[starts.length - 1];
+    const from = isStart(s).bodyFrom;
+    const body = text.slice(from, from + 8000).trim();
+    if (body.length >= MIN_SECTION_CHARS) return { found: true, body };
+  }
+  return { found: false, why: `heading found ${starts.length}x, every candidate section was a table of contents` };
+}
+
+// ── CLEANING ──────────────────────────────────────────────────────────────
+
+/** Rule 4: text that is a cross-reference or the financial discussion. */
+const REJECT: [RegExp, string][] = [
+  [/incorporated\s+(herein\s+)?by\s+reference/i, "incorporated by reference"],
+  [/set\s+forth\s+under\s+the\s+headings?/i, "set forth under the headings"],
+  [/in\s+conjunction\s+with\s+(our|the)\s+[^.]{0,80}financial\s+statements/i, "in conjunction with the financial statements"],
+  [/management['’]s\s+discussion/i, "Management's Discussion"],
+];
+
+/** Rule 3: definition sentences. Dropped wherever they open the text. */
+const DEFINITION: RegExp[] = [
+  /^in\s+this\s+(annual\s+)?report\b/i,
+  /^when\s+used\s+in\s+this\s+(annual\s+)?report\b/i,
+  /^unless\s+(otherwise\s+indicated|the\s+context)/i,
+  /^as\s+used\s+(in\s+this|herein)/i,
+  /^(the\s+terms?\s+)?[“"][^”"]+[”"][^.]{0,200}\brefers?\s+to\b/i,
+  /\brefers?\s+to\s+[^.]{0,160}\band\s+(all\s+)?(of\s+)?its\s+(consolidated\s+)?subsidiaries\b/i,
+];
+
+export const DESCRIPTION_MAX_CHARS = 900;
+export const DESCRIPTION_MIN_CHARS = 200;
+
+export type Cleaned = { ok: true; text: string } | { ok: false; why: string };
+
+/** Split into sentences, keeping the terminator. Abbreviations like "Inc." survive
+ * because a split needs a following capital or quote AND a preceding lowercase
+ * letter, digit or closing bracket. */
+function sentences(p: string): string[] {
+  return p.split(/(?<=[a-z0-9)”"’][.!?])\s+(?=[A-Z“"])/).map((s) => s.trim()).filter(Boolean);
+}
+
+export function cleanDescription(body: string): Cleaned {
+  // Rule 1: JOIN A BROKEN LINE, NOT EVERY LINE. Filings end most paragraphs
+  // with a single newline (one </p> or </div>), so joining every newline would
+  // glue sub-headings like "Overview" onto the prose. A line is broken when it
+  // does not end a sentence and the next begins lower-case or with a digit.
+  const raw = body.split(/\n+/).map((l) => l.replace(/\s{2,}/g, " ").trim()).filter(Boolean);
+  let paras: string[] = [];
+  for (const l of raw) {
+    const prev = paras[paras.length - 1];
+    if (prev && !/[.!?:”"’)]$/.test(prev) && /^[a-z0-9(]/.test(l)) paras[paras.length - 1] = `${prev} ${l}`;
+    else paras.push(l);
+  }
+  // Sub-headings and fragments ("General", "Overview", a stray ".").
+  paras = paras.filter((p) => p.length >= 60 && /[a-z]/.test(p));
+  if (!paras.length) return { ok: false, why: "no prose after the heading" };
+
+  // Rule 2: a leading all-caps heading glued to the first paragraph.
+  paras[0] = paras[0].replace(/^[A-Z][A-Z0-9 &,'’\-]{2,}[.:]\s+(?=[A-Z])/, "");
+
+  // Rule 3: drop definition sentences at the start of the text, paragraph by
+  // paragraph, until the first sentence that is not one.
+  const out: string[] = [];
+  let leading = true;
+  for (const p of paras) {
+    let ss = sentences(p);
+    if (leading) {
+      ss = ss.filter((s) => !DEFINITION.some((re) => re.test(s)));
+      if (ss.length) leading = false;
+    }
+    if (ss.length) out.push(ss.join(" "));
+  }
+  if (!out.length) return { ok: false, why: "only definition text after the heading" };
+
+  // Rule 5: at most two paragraphs and ~900 characters, cut at a sentence end.
+  const kept: string[] = [];
+  let n = 0;
+  for (const p of out.slice(0, 2)) {
+    const ss = sentences(p);
+    const take: string[] = [];
+    for (const s of ss) {
+      if (n + s.length + 1 > DESCRIPTION_MAX_CHARS && (kept.length || take.length)) break;
+      take.push(s);
+      n += s.length + 1;
+    }
+    if (take.length) kept.push(take.join(" "));
+    if (n >= DESCRIPTION_MAX_CHARS) break;
+  }
+  const text = kept.join("\n\n").trim();
+
+  // Rule 4, on what would render.
+  for (const [re, label] of REJECT) if (re.test(text)) return { ok: false, why: `rejected: ${label}` };
+  if (text.length < DESCRIPTION_MIN_CHARS) return { ok: false, why: `too short after cleaning (${text.length} chars)` };
+  return { ok: true, text };
+}
