@@ -939,14 +939,19 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // table together with no row separator, so the pattern matched every time and
   // the assertion was testing nothing. The claim is about ONE CELL, so it is
   // read out of the markup by the data-label the card gives it.
+  // THE COLUMN IS GONE from the five-year table (owner review of #523: the
+  // intro says "compared with the year before"), so the comparator is read
+  // from the view that computes the YoY cells, and the rendered row labels are
+  // checked to be the same rows in the same order.
   const hMarkup = html(React.createElement(M.SecAnnualCard, { view: hView, sole: false }));
-  const comparedCells = [...hMarkup.matchAll(/data-label="Compared with"[^>]*>([\s\S]*?)<\/td>/g)]
-    .map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><abbr[^>]*>([^<]+)<\/abbr>/g)].map((m) => m[1]);
+  const comparedCells = hView.annual.map((r) => r.comparedWith);
   // DROPPING A ROW MUST NOT RE-BASE THE NEXT ONE. The risk in removing rows is
   // that the survivors quietly shift onto whatever is now below them; every
   // remaining row still names its OWN fiscal year minus one.
   check("...and no surviving row is re-based onto a neighbour",
     comparedCells.length === hView.annual.length &&
+      rowLabels.join(" ") === hView.annual.map((r) => r.label).join(" ") &&
       hView.annual.every((r, i) =>
         comparedCells[i] === r.comparedWith &&
         Number(String(r.label).slice(2)) - 1 === Number(String(r.comparedWith).slice(2))),
@@ -1196,6 +1201,19 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
       /Each fiscal year as filed, compared with the year before\. Fiscal years end 30 April\./.test(annualText),
     annualText.slice(0, 160));
 
+  // ── NO "COMPARED WITH" ON THE FIVE-YEAR TABLE; THE QUARTERLY TABLE KEEPS IT
+  // (owner review of #523). The FY label is the mobile card's header.
+  check("the five-year table has no 'Compared with' column, header or card row",
+    !/<th>Compared with<\/th>/.test(annualMarkup) && !/data-label="Compared with"/.test(annualMarkup) &&
+      /<th>Fiscal year<\/th><th>Revenue<\/th>/.test(annualMarkup),
+    `${(annualMarkup.match(/<th>/g) ?? []).length} columns`);
+  check("...and each row's FY label is the card header, with the date tooltip",
+    (annualMarkup.match(/class="rowHead"/g) ?? []).length === vAvav2.annual.length &&
+      /<td data-label="Fiscal year" class="rowHead"><abbr class="cellShort" title="Ended /.test(annualMarkup), "");
+  const growthMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAapl }));
+  check("...while the quarterly table keeps its 'Compared with' column",
+    /<th>Compared with<\/th>/.test(growthMarkup) && /data-label="Compared with"/.test(growthMarkup), "");
+
   // ── SHORT CELLS IN NARROW COLUMNS ───────────────────────────────────────
   const blank = { ...vAvav2, untagged: [], annual: vAvav2.annual.map((r) => ({ ...r, revenue: { ...r.revenue, val: null } })) };
   const bMarkup = html(React.createElement(M.SecAnnualCard, { view: blank }));
@@ -1238,7 +1256,10 @@ console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached
       /Most recent reaction \(Q1 FY2027\): \+4\.5% on 5\.9x average volume\./.test(card) &&
       /Price vs\. the pre-earnings close, after 1, 5 and 20 trading days\./.test(card) &&
       /Includes broader market moves, not only the earnings news\./.test(card) &&
-      !/Each bar is keyed/.test(card) && !/clean read of earnings reaction/.test(card),
+      !/Each bar is keyed/.test(card) && !/clean read of earnings reaction/.test(card) &&
+      // THE PER-BAR "Not yet" MARKER SAYS THIS NOW (owner review of #523).
+      !/may not have a full 20 trading days/.test(card) &&
+      /Day 1 \+5 days \+20 days/.test(card),
     card);
 }
 

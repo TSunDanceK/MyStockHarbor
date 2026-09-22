@@ -131,9 +131,9 @@ export type DriftQuarter = {
  * the group and the legend carry identity as well as the hue.
  */
 export const DRIFT_HORIZONS = [
-  { key: "reactionPct", pending: null, label: "Day of reaction", days: 1, color: "#60a5fa" },
-  { key: "drift5Pct", pending: "drift5Pending", label: "+5 trading days", days: 5, color: "#facc15" },
-  { key: "drift20Pct", pending: "drift20Pending", label: "+20 trading days", days: 20, color: "#22c55e" },
+  { key: "reactionPct", pending: null, label: "Day of reaction", short: "Day 1", days: 1, color: "#60a5fa" },
+  { key: "drift5Pct", pending: "drift5Pending", label: "+5 trading days", short: "+5 days", days: 5, color: "#facc15" },
+  { key: "drift20Pct", pending: "drift20Pending", label: "+20 trading days", short: "+20 days", days: 20, color: "#22c55e" },
 ] as const;
 
 const pctText = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
@@ -289,8 +289,9 @@ export function PriceReactionCard({
           <div className="chartBlockTitle">Did the move hold?</div>
           <div className="chartBlockSub">Price vs. the pre-earnings close, after 1, 5 and 20 trading days.</div>
           <DriftBarChart quarters={drift} />
-          <SeriesLegend items={DRIFT_HORIZONS.map((h) => ({ label: h.label, color: h.color }))} />
-          <p className="earningsDataNote">The most recent quarters may not have a full 20 trading days of data yet.</p>
+          {/* SHORT KEY LABELS so the three fit one line at 375px; the full
+              horizon name is in every bar's tooltip. */}
+          <SeriesLegend items={DRIFT_HORIZONS.map((h) => ({ label: h.short, color: h.color }))} />
         </div>
       ) : null}
       <p className="earningsDataNote">Includes broader market moves, not only the earnings news.</p>

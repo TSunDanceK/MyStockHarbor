@@ -846,30 +846,34 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </>
         ) : null}
       </p>
-      <div style={{ overflowX: "auto" }}>
-        <table className="historyTable">
+      <div className="annualBox" style={{ overflowX: "auto" }}>
+        <table className="historyTable annualTable">
           <thead>
             <tr>
-              <th>Fiscal year</th><th>Compared with</th><th>Revenue</th><th>Revenue YoY</th>
-              <th>Diluted EPS</th><th>EPS YoY</th>
+              <th>Fiscal year</th><th>Revenue</th><th>Revenue YoY</th>
+              <th>Diluted EPS</th><th className="colCross">EPS YoY</th>
               <th>Gross margin</th><th>Operating margin</th><th>Net margin</th>
             </tr>
           </thead>
           <tbody>
             {view.annual.map((r) => (
               <tr key={r.label}>
-                <td data-label="Fiscal year">
+                <td data-label="Fiscal year" className="rowHead">
                   {/* THE PERIOD END ON THE LABEL, AS A TOOLTIP. It was a second
                       line under every label; the intro now says it once
                       (fiscalYearEndNote) and the exact date is one hover or
                       tap away — two filers' "FY2025" can be nine months apart. */}
                   <abbr className="cellShort" title={`Ended ${r.end}`} tabIndex={0}>{r.label}</abbr>
                 </td>
-                <td data-label="Compared with">{r.comparedWith ?? "not on file"}</td>
+                {/* NO "COMPARED WITH" COLUMN. The intro says each year is
+                    compared with the year before, so the column only repeated
+                    the previous row's label and pushed the last column off a
+                    768px card (owner review of #523). The quarterly table keeps
+                    it, where a gap row makes the comparator informative. */}
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
                 <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short /></td>
-                <td data-label="EPS YoY"><PctCell v={r.epsYoY} /></td>
+                <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
                 <td data-label="Gross margin">{pctLevel(r.gross)}</td>
                 <td data-label="Operating margin">{pctLevel(r.operating)}</td>
                 <td data-label="Net margin">{pctLevel(r.net)}</td>

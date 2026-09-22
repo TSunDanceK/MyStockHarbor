@@ -822,6 +822,22 @@ export default async function StockEarningsPage({ params }: Props) {
         .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
         .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
         .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
+        /* THE FIVE-YEAR TABLE, TIGHTER. Eight columns in a 571px main column
+           (1024px, beside the side column) overflowed at the shared padding;
+           these fit it without forcing nowrap on anything. */
+        .annualTable th { padding: 0 6px; letter-spacing: 0.04em; font-size: 10.5px; }
+        .annualTable td { padding: 11px 6px; font-size: 12.5px; }
+        /* THE COLUMN A CROSSING LANDS IN gets room for its longest phrase
+           ("Loss both periods"), so the headers wrap before it does. */
+        .annualTable .colCross { min-width: 112px; }
+        /* A NARROW MAIN COLUMN (about 570px at 1024, beside the side column):
+           tighter still, so all eight columns and the crossing phrase fit. */
+        .annualBox { container-type: inline-size; }
+        @container (max-width: 640px) {
+          .annualTable th { padding: 0 3px; font-size: 10px; letter-spacing: 0.02em; }
+          .annualTable td { padding: 10px 3px; font-size: 12px; }
+          .annualTable .colCross { min-width: 108px; }
+        }
         .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; min-width: 0; }
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
         .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
@@ -877,6 +893,11 @@ export default async function StockEarningsPage({ params }: Props) {
              silently relabel one of them. Each <td> carries its own
              data-label. */
           .historyTable td::before { content: attr(data-label); }
+          /* THE FY LABEL IS THE CARD'S HEADER on the five-year table, not a
+             "Fiscal year" row (owner review of #523). */
+          .annualTable td.rowHead { justify-content: flex-start; font-size: 15px; font-weight: 950; background: rgba(255,255,255,0.03); }
+          .annualTable td.rowHead::before { content: none; }
+          .annualTable .colCross { min-width: 0; }
         }
         @media (max-width: 374px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
         @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
