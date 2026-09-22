@@ -4,8 +4,8 @@ import Link from "next/link";
 import { getGeneralMarketHeadlines, type GeneralHeadline } from "@/lib/general-market-news";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import NewsCardArt from "@/app/components/NewsCardArt";
-import { planCardArt, type CardArt } from "@/lib/server/news/art";
-import { eventTypeFromTitle } from "@/lib/server/news/eventType";
+import type { CardArt } from "@/lib/server/news/art";
+import { planHeadlineArt } from "@/lib/server/news/artTags";
 
 const PAGE_TITLE = "Market Headlines | Latest Stock Market News | MyStockHarbor";
 // NO LONGER PROMISES IMAGES. This said "with images and article excerpts" and
@@ -76,42 +76,36 @@ export default async function HeadlinesPage() {
   const headlines = await getGeneralMarketHeadlines();
 
   // ── THE ART PLAN, COMPUTED ONCE FOR THE WHOLE PAGE ──────────────────────
-  // This page was the fourth call site guarded by SHOW_PUBLISHER_IMAGES and the
-  // only one that never got a fallback when the guard went false, so every card
-  // fell through to nothing. The other three took NewsCardArt + planCardArt;
-  // this is that same pair, with the two inputs a general headline cannot
-  // supply pinned to their honest values.
+  // ONE CALL PER CARD, AND THE RULE ITSELF LIVES IN artTags.ts. It used to be
+  // written out here; it is a function now for the reason that module's header
+  // gives at length — a rule in a page body can only be grepped at, and this
+  // page is the one that shipped blank for a whole step with every grep-shaped
+  // assertion passing. planHeadlineArt is tested by being called.
   //
-  // sectorBucket: null — a GeneralHeadline carries title/image/date/source/
-  // excerpt/url and NO symbol and NO sector. The stock and sector pages can
-  // name a bucket because the route tells them which company or sector they are
-  // about; there is nothing here to derive one from, and guessing a sector from
-  // free text would put an oil rig next to a story about semiconductors.
+  // WHAT IT DOES, in order: the article's own words -> tagged v2 art; failing
+  // that, the title's event type -> the event bucket this page has shown since
+  // #481; failing that, nothing. It never guesses a sector and never draws a
+  // ticker card with no ticker.
   //
-  // canGenerate: false — the generated card's entire content is a ticker and a
-  // sparkline. With no symbol there is nothing to draw, and art.ts already
-  // states the rule: a ticker card with no ticker is worse than a blank slot.
+  // UNTIL THE TAGGED IMAGES LAND this page is byte-for-byte what it is today:
+  // manifest-v2.json ships empty, so the first rule returns null for every
+  // article and the second one decides every card.
   //
-  // Together those two make the plan exactly: event-bucket library art when the
-  // title matches a pattern, and `none` otherwise. Nothing is ever guessed.
-  //
-  // PER BUCKET AND COMPUTED HERE, not inside the card, for the same reason as
-  // the other two pages: `taken` is mutated to stop one bucket's art repeating
-  // down the grid, so every card has to consult the same map in render order.
+  // BOTH `taken` COLLECTIONS ARE PER PAGE AND LIVE HERE, not inside the card:
+  // they are mutated to stop one image repeating down the grid, so every card
+  // has to consult the same ones in render order. Two of them because the two
+  // libraries are keyed differently — v2 by image NAME, v1 by BUCKET plus a
+  // numeric index — and one shared collection would block images it has never
+  // used.
+  const takenTagNames = new Set<string>();
   const takenByBucket = new Map<string, Set<number>>();
   const headlineArt: CardArt[] = headlines.map((item) =>
-    planCardArt({
-      variant: "lead",
-      // Leg 3 of §7's cascade, and the only leg reachable from this feed: legs
-      // 1 and 2 read an SEC form and a wire subject, neither of which a general
-      // headline has. So this returns earnings, analyst or deal — never macro
-      // or filing, which eventType.ts documents as deliberately unreachable
-      // from a title — or null, which is the expected answer for most.
-      eventType: eventTypeFromTitle(item.title),
-      sectorBucket: null,
+    planHeadlineArt({
+      title: item.title,
+      description: item.excerpt,
       key: item.url,
-      taken: takenByBucket,
-      canGenerate: false,
+      takenNames: takenTagNames,
+      takenBuckets: takenByBucket,
     })
   );
 
