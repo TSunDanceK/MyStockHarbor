@@ -1,4 +1,4 @@
-// FMP's industry label -> a v2 art tag. Layer 2 of the symbol-led picker.
+// FMP's industry label -> a v2 art tag. Layer 3 of the symbol-led picker.
 //
 // claude/news-art-v2-symbol-surfaces-2026-09-22.md has the measurement this
 // table was built from. Pure lookup: no I/O, no network.
@@ -22,7 +22,7 @@
 // It is not a taxonomy and it is not complete. 144 industry labels exist in the
 // snapshot; 115 have a tag here, 18 were judged only half-right and are NOT
 // live (see WEAK_LABELS below), and 11 have no
-// honest tag at all. The last two groups fall through to layer 3, which is
+// honest tag at all. The last two groups fall through to LAYER 4, which is
 // today's sector art and is exactly what they render now.
 //
 // ── ONE LABEL, ONE TAG, AND NO REGEXES ─────────────────────────────────────
@@ -191,7 +191,7 @@ const INDUSTRY_TAGS: Record<string, string> = {
  *
  * Every one of these has a tag that is arguable and a reason it is not simply
  * true. They are recorded here, WITH the reason and NOT in the live map, so
- * they fall through to layer 3 and render exactly what they render today. A row
+ * they fall through to layer 4 and render exactly what they render today. A row
  * moves up into INDUSTRY_TAGS one at a time, when someone decides the trade is
  * worth it — which is a judgement about a picture, not a code change anyone
  * should make on a hunch.
