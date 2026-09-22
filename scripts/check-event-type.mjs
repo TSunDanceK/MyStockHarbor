@@ -359,27 +359,51 @@ const pageSrc = readCodeOnly("app/stock/[symbol]/news/page.tsx");
 // greps that used to live here passed happily while a page rendered nothing.
 // scripts/check-news-art.mjs owns the per-bucket and per-item behaviour now;
 // what belongs HERE is only that the page feeds eventType into the plan at all.
+// ── THE LEAD CARDS MOVED TO planSymbolCardArt ON 2026-09-22 ──────────────
+// The page now picks art in layers (article words -> event bucket -> industry
+// -> sector), so its lead cards call planSymbolCardArt and its compact rows
+// still call planCardArt. NOTHING these three assertions are about has changed:
+// eventType is still per item, the plan is still built per item, and both
+// callers still thread the same maps. The call name did, so the patterns do.
+//
+// scripts/check-news-art.mjs §10 owns what the LAYERS do; what belongs here is
+// still only that the page feeds each item's own eventType into whatever plans
+// its art — including that the new layer did not quietly drop it, which is the
+// one way this change could have taken event art off the page.
+const PLAN_CALL = "(?:planSymbolCardArt|planCardArt)";
 check(
   "the page passes each item's OWN eventType into the plan",
-  /planCardArt\(\{[\s\S]{0,200}?eventType: item\.eventType/.test(pageSrc),
+  new RegExp(`${PLAN_CALL}\\(\\{[\\s\\S]{0,400}?eventType: item\\.eventType`).test(pageSrc),
   "a section-wide eventType, or none, would send every card to one bucket"
 );
 check(
   "the plan is built per item, not once per section",
-  /detailedNews\.map\(\(item\) =>[\s\S]{0,120}planCardArt\(/.test(pageSrc),
+  // 400, not 120: readCodeOnly BLANKS comments in place rather than deleting
+  // lines, so a comment between the map and the call is that many spaces of
+  // gap. The window still has to be bounded — an unbounded scan would satisfy
+  // itself on the compact rows' call further down the file.
+  new RegExp(`detailedNews\\.map\\(\\(item\\) =>[\\s\\S]{0,400}${PLAN_CALL}\\(`).test(pageSrc),
   "step 0 chose one bucket for the whole section; step 6 chooses per item"
 );
 check(
-  "EVERY plan on the page threads the same no-repeat map",
+  "EVERY plan on the page threads the same no-repeat state",
   (() => {
     // Not "it appears somewhere": the lead cards and the compact rows each
-    // build a plan, and one of them reverting to a fresh Map per card disables
+    // build a plan, and one of them reverting to fresh state per card disables
     // the rule for that half while the other keeps the check passing.
-    const uses = pageSrc.match(/taken: [^,\n]+/g) ?? [];
+    //
+    // TWO COLLECTIONS SINCE THE LAYERED PICKER: the v1 buckets are keyed by
+    // bucket plus a numeric index and the v2 library by image name, so they
+    // cannot share one — but each must still be threaded, not rebuilt.
+    const bucketUses = pageSrc.match(/taken(?:Buckets)?: [^,\n]+/g) ?? [];
+    const nameUses = pageSrc.match(/takenNames: [^,\n]+/g) ?? [];
     return (
-      uses.length >= 2 &&
-      uses.every((u) => u.trim() === "taken: takenByBucket") &&
-      /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc)
+      bucketUses.length >= 2 &&
+      bucketUses.every((u) => /: takenByBucket$/.test(u.trim())) &&
+      nameUses.length >= 1 &&
+      nameUses.every((u) => u.trim() === "takenNames: takenTagNames") &&
+      /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc) &&
+      /takenTagNames\s*=\s*new Set<string>\(\)/.test(pageSrc)
     );
   })(),
   "a fresh map per card disables the rule; check-news-art proves what the rule then does with it"

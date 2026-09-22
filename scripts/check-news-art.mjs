@@ -1053,6 +1053,33 @@ for (const row of imprecise) {
 // passes because the feature is switched off. hashKey and the dimensions come
 // from the REAL art.ts loaded in §5 (neither depends on a manifest), so the
 // "do not write a second hash" rule is asserted by construction here.
+const profileRows = JSON.parse(read("data/static-profile.json")).rows;
+const labelCounts = new Map();
+for (const row of Object.values(profileRows)) {
+  const label = String(row?.industry ?? "").trim();
+  if (label) labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+}
+
+// industryArt.ts imports the snapshot; the harness hands over the parsed copy
+// it already has rather than inlining 226 KB of JSON into a data: URL.
+globalThis.__staticProfile = { rows: profileRows };
+const industrySrc = read("lib/server/news/industryArt.ts")
+  .replace(/^import profile from "@\/data\/static-profile\.json";$/m, "const profile = globalThis.__staticProfile;");
+if (/^import /m.test(industrySrc)) {
+  console.error("FAIL: an import survived substitution in industryArt.ts.");
+  process.exit(1);
+}
+if (!industrySrc.includes("const profile = globalThis.__staticProfile;")) {
+  console.error("FAIL: the static-profile import was not rewired.");
+  process.exit(1);
+}
+const industry = await import(`data:text/javascript;base64,${Buffer.from(
+  ts.transpileModule(industrySrc, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText
+).toString("base64")}`);
+globalThis.__newsIndustry = industry;
+
 globalThis.__newsArtV1 = art;
 globalThis.__newsTopic = topic;
 globalThis.__newsEventType = et;
@@ -1078,8 +1105,8 @@ const loadTagged = async (manifestObject, label) => {
     // of hashKey in this harness, which is the duplication the module header
     // forbids in the app.
     .replace(
-      /^import \{ ART_WIDTH, ART_HEIGHT, hashKey, planCardArt, type CardArt, type NewsArt \} from "\.\/art";$/m,
-      "const { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt } = globalThis.__newsArtV1;"
+      /^import \{ ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt, type CardArt, type NewsArt \} from "\.\/art";$/m,
+      "const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt } = globalThis.__newsArtV1;"
     )
     // The classifier and the event-type leg are handed over already loaded, for
     // the same reason: a `data:` module cannot resolve a relative specifier, and
@@ -1090,8 +1117,14 @@ const loadTagged = async (manifestObject, label) => {
       "const { articleTopic } = globalThis.__newsTopic;"
     )
     .replace(
-      /^import \{ eventTypeFromTitle \} from "\.\/eventType";$/m,
+      /^import \{ eventTypeFromTitle, type EventType \} from "\.\/eventType";$/m,
       "const { eventTypeFromTitle } = globalThis.__newsEventType;"
+    )
+    // The industry table, loaded above against the real snapshot. Handed over
+    // rather than re-imported for the same reason as the other three.
+    .replace(
+      /^import \{ industryTag \} from "\.\/industryArt";$/m,
+      "const { industryTag } = globalThis.__newsIndustry;"
     );
   if (/^import /m.test(src)) {
     console.error(`FAIL: an import survived substitution in artTags.ts (${label}):\n` +
@@ -1100,7 +1133,8 @@ const loadTagged = async (manifestObject, label) => {
   }
   for (const [marker, why] of [
     ["const manifest = {", "the manifest was not substituted"],
-    ["const { ART_WIDTH, ART_HEIGHT, hashKey, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
+    ["const { ART_WIDTH, ART_HEIGHT, bucketForItem, hashKey, planCardArt } = globalThis.__newsArtV1;", "the art.ts import was not rewired"],
+    ["const { industryTag } = globalThis.__newsIndustry;", "the industry table import was not rewired"],
     ["const { articleTopic } = globalThis.__newsTopic;", "the classifier import was not rewired"],
     ["const { eventTypeFromTitle } = globalThis.__newsEventType;", "the eventType import was not rewired"],
   ]) {
@@ -1361,12 +1395,18 @@ check(
   })(),
   "one rule, in lib/server/news/artTags.ts, where it can be run"
 );
+// ── SCOPE, AND IT MOVED ON PURPOSE ────────────────────────────────────────
+// This said "the three symbol-led surfaces are untouched by v2" and was right
+// when /headlines was the only surface switched over. /stock/[symbol]/news is
+// now switched too — §10 owns that — so the assertion is narrowed to the TWO
+// that are still on v1 rather than deleted. A narrowed assertion is the point:
+// the sector page and the dashboard strip going quietly onto tag scoring is
+// exactly what it still exists to catch.
 check(
-  "the three symbol-led surfaces are untouched by v2",
-  SURFACES.filter((s) => s.file !== "app/headlines/page.tsx").every(
-    (s) => !/artTags|articleTopic/.test(readCodeOnly(s.file))
-  ) && !/artTags|articleTopic/.test(readCodeOnly("lib/server/internalNews.ts")),
-  "the provider-map is what switches those over, and it is a different change"
+  "the two remaining v1 surfaces are untouched: /sector/*/news and the dashboard strip",
+  !/artTags|articleTopic|industryArt/.test(readCodeOnly("app/sector/[slug]/news/page.tsx")) &&
+    !/artTags|articleTopic|industryArt/.test(readCodeOnly("lib/server/internalNews.ts")),
+  "the sector page has a slug and no industry; the strip is a server-built payload. Each is its own change"
 );
 
 // ── SERVING: THE FOLDER'S OWN REQUEST PATH ─────────────────────────────────
@@ -1385,6 +1425,242 @@ check(
   "...and is served with a real Cache-Control",
   /source: "\/news-art\/:path\*"/.test(read("next.config.ts")),
   "the default makes a repeat visitor re-request every illustration on the page"
+);
+
+// ──────────────────────── 10. THE SYMBOL-LED PICKER: INDUSTRY, AND ORDER
+//
+// /stock/[symbol]/news chose art from the SECTOR alone, and nineteen sector
+// buckets cannot say what 67 subjects can: 317 symbols resolve to
+// sector-software, and `software`, `cloud`, `consumer-electronics` and
+// `telecom` are all underneath it. Apple and Ondas both showed servers.
+//
+// The layering is most-specific-first and §10 asserts the ORDER, not just that
+// each layer works — an order is the only thing a layered picker can get wrong
+// without any single layer being wrong.
+console.log("\n=== 10. The symbol-led picker: industry table, layer order, the 10% rule ===\n");
+
+// A KEY THAT IS NOT A REAL LABEL IS A DEAD ROW, and it looks exactly like a
+// live one. The snapshot is a closed set of 144 strings, so this is checkable
+// rather than a matter of care: a typo, a renamed label upstream, or a row
+// copied from a different taxonomy all land here.
+const strayKeys = industry.INDUSTRY_TAG_LABELS.filter((l) => !labelCounts.has(l));
+check(
+  "every industry label in the table is one the snapshot actually contains",
+  strayKeys.length === 0,
+  strayKeys.length ? `not in data/static-profile.json: ${strayKeys.join(", ")}` : `${industry.INDUSTRY_TAG_LABELS.length} labels`
+);
+const strayTags = [...new Set(industry.INDUSTRY_TAG_VALUES)].filter((t) => !v2Names.some((n) => (v2[n].primary ?? []).includes(t)));
+check(
+  "every tag it can emit is a PRIMARY subject some image carries",
+  strayTags.length === 0,
+  strayTags.length ? `no image: ${strayTags.join(", ")}` : `${new Set(industry.INDUSTRY_TAG_VALUES).size} distinct tags`
+);
+// `related` IS NOT ENOUGH HERE and the distinction is the difference between a
+// picture of the industry and a picture that merely mentions it. pickTagged
+// scores primary at 3 and related at 1; a tag that only ever appears in
+// `related` would still return an image, and it would be an image of something
+// else that happens to list this industry as adjacent.
+check(
+  "...PRIMARY, not merely `related` — checked by excluding related from the search",
+  industry.INDUSTRY_TAG_VALUES.every((t) => v2Names.some((n) => (v2[n].primary ?? []).includes(t))),
+  "a related-only tag returns an image of something adjacent, which is a different promise"
+);
+
+// THE WEAK LIST IS ONLY WORTH ANYTHING IF IT IS INERT. Its whole purpose is
+// that those 19 labels render exactly what they render today until someone
+// approves each row, so a label appearing in both maps would silently go live.
+const weakKeys = Object.keys(industry.WEAK_LABELS);
+const weakLive = weakKeys.filter((l) => industry.industryTag(l) !== null);
+check(
+  "every WEAK label is INERT — present in neither the live map nor the output",
+  weakLive.length === 0,
+  weakLive.length ? `LIVE but marked weak: ${weakLive.join(", ")}` : `${weakKeys.length} labels, ${weakKeys.reduce((a, l) => a + industry.WEAK_LABELS[l].symbols, 0)} symbols held back`
+);
+check(
+  "...and each carries a real reason and a count that matches the snapshot",
+  weakKeys.every((l) => {
+    const w = industry.WEAK_LABELS[l];
+    return typeof w.why === "string" && w.why.trim().length > 20 && labelCounts.get(l) === w.symbols;
+  }),
+  "a count that drifts from the snapshot is a review note about a universe that no longer exists"
+);
+
+const strong = industry.INDUSTRY_TAG_LABELS.reduce((a, l) => a + (labelCounts.get(l) ?? 0), 0);
+const weakN = weakKeys.reduce((a, l) => a + (labelCounts.get(l) ?? 0), 0);
+const total = [...labelCounts.values()].reduce((a, b) => a + b, 0);
+console.log(
+  `  NOTE  industry coverage: ${labelCounts.size} labels, ${total} symbols — ` +
+    `${strong} tagged (${((strong / total) * 100).toFixed(1)}%), ` +
+    `${weakN} weak and held back (${((weakN / total) * 100).toFixed(1)}%), ` +
+    `${total - strong - weakN} no tag (${(((total - strong - weakN) / total) * 100).toFixed(1)}%)\n` +
+    `        the last two groups fall through to the sector art they render today`
+);
+
+// ── THE 10% RULE ───────────────────────────────────────────────────────────
+// A STANDING LIMIT ON HOW BROAD A SUBJECT PATTERN MAY BE, measured against 192
+// real per-symbol headlines. It exists because the per-symbol feed is where a
+// lazy fallback is most tempting and least visible: nearly every headline on it
+// says "stock", so `\bstocks?\b` would fire on 76% of the feed and look like
+// excellent coverage right up until someone read the pictures.
+//
+// EACH PATTERN IS TESTED ALONE, not through articleTopic. First-match-wins
+// hides a broad pattern placed below a narrow one — the narrow one keeps
+// winning on the headlines anyone would spot-check.
+// THE ADAPTER STRIPS THE PUBLISHER SUFFIX before anything downstream sees a
+// title, so measuring the raw fixture string would measure a string production
+// never classifies. Lifted from the shipped adapter rather than reimplemented.
+const stripSrc = read("lib/server/news/gnewsProvider.ts")
+  .match(/export function stripPublisherSuffix\(title: string\): string \{[\s\S]*?\n\}/)[0]
+  .replace("export function stripPublisherSuffix(title: string): string {", "export function stripPublisherSuffix(title) {");
+const { stripPublisherSuffix } = await import(
+  `data:text/javascript;base64,${Buffer.from(stripSrc).toString("base64")}`
+);
+const perSymbolTitles = read("scripts/fixtures/eventtype-gnews.jsonl")
+  .split("\n").filter((l) => l.trim() && !l.startsWith("#"))
+  .map((l) => stripPublisherSuffix(JSON.parse(l).title));
+const BROAD_LIMIT = 0.10;
+const tooBroad = topic.SUBJECT_PATTERN_ENTRIES
+  .map(([tag, re]) => [tag, perSymbolTitles.filter((t) => re.test(t)).length])
+  .filter(([, n]) => n / perSymbolTitles.length > BROAD_LIMIT);
+check(
+  `no subject pattern matches more than ${BROAD_LIMIT * 100}% of the ${perSymbolTitles.length}-headline per-symbol fixture`,
+  tooBroad.length === 0,
+  tooBroad.length
+    ? tooBroad.map(([t, n]) => `${t} ${n}/${perSymbolTitles.length}`).join(", ")
+    : `widest is ${topic.SUBJECT_PATTERN_ENTRIES
+        .map(([tag, re]) => [tag, perSymbolTitles.filter((t) => re.test(t)).length])
+        .sort((a, b) => b[1] - a[1])[0].join(" at ")}/${perSymbolTitles.length}`
+);
+check(
+  "...and the rule has teeth: the fallback shapes it exists to stop are all over the limit",
+  [/\bstocks?\b/i, /\bshares?\b/i, /\binvestors?\b/i].some(
+    (re) => perSymbolTitles.filter((t) => re.test(t)).length / perSymbolTitles.length > BROAD_LIMIT
+  ),
+  `\\bstocks?\\b alone: ${perSymbolTitles.filter((t) => /\bstocks?\b/i.test(t)).length}/${perSymbolTitles.length} — a limit no candidate could exceed would assert nothing`
+);
+
+// ── THE LAYERS, BY CALLING THEM ──────────────────────────────────────────
+// AGAINST THE SHIPPED MANIFEST, not §9's synthetic one. The synthetic manifest
+// exists to make SCORING observable and holds four tags; these cases are about
+// whether the real industry table reaches real images, which only the shipped
+// 330 can answer. The v1 half stays synthetic (sector-banks 4, event-earnings
+// 5), which is what makes the event-vs-industry ordering observable at all.──
+const sym = (over = {}) =>
+  shippedTags.planSymbolCardArt({
+    variant: "lead",
+    title: "Acme Corp names a new chief financial officer",
+    description: null,
+    eventType: null,
+    industry: "Consumer Electronics",
+    sectorBucket: "sector-banks",
+    key: "k1",
+    takenNames: new Set(),
+    takenBuckets: new Map(),
+    canGenerate: true,
+    ...over,
+  });
+
+check(
+  "LAYER 1 wins: an article whose own words name a subject beats the industry",
+  (() => {
+    const p = sym({ title: "Memory chip prices climb as DRAM supply tightens" });
+    return p.kind === "library" && p.art.src.startsWith("/news-art/chips-any-");
+  })(),
+  "the article is more specific than the company"
+);
+check(
+  "LAYER 1 DROPS MARKET-WIDE TAGS — `wall street` must not beat the industry",
+  (() => {
+    // The exact headline from the fixture, which scores `exchanges` on
+    // /headlines and must not here.
+    const p = sym({ title: "Apple Stock Slips After $1,999 Foldable Duo, iPhone 18 Fail to Wow Wall Street" });
+    return p.kind === "library" && p.art.src.startsWith("/news-art/consumer-electronics-any-");
+  })(),
+  "4 of 4 `exchanges` hits on the per-symbol fixture are this metonym; a trading floor is not a picture of Apple"
+);
+check(
+  "...and the exclusion is a NAMED SET, not a special case buried in the branch",
+  shippedTags.MARKET_WIDE_SUBJECTS instanceof Set && shippedTags.MARKET_WIDE_SUBJECTS.has("exchanges"),
+  "a future market-wide subject has to be added deliberately, next to the reason"
+);
+check(
+  "LAYER 2 stays above the industry: an earnings story keeps today's event art",
+  (() => {
+    const p = sym({ eventType: "earnings" });
+    return p.kind === "library" && p.art.bucket === "event-earnings";
+  })(),
+  "PINNED ON PURPOSE. The brief did not say where eventType goes, and putting industry above it would silently take event art off every earnings story on a stock page. Moving it must fail here, not pass quietly"
+);
+check(
+  "LAYER 3 is the one doing the work: no subject in the words, no event, so the INDUSTRY answers",
+  (() => {
+    const p = sym();
+    return p.kind === "library" && p.art.src.startsWith("/news-art/consumer-electronics-any-");
+  })(),
+  "this is the ONDS/AAPL case — sector-software for both, until now"
+);
+check(
+  "LAYER 4: an industry with no tag falls through to today's sector art",
+  (() => {
+    const weakLabel = Object.keys(industry.WEAK_LABELS)[0];
+    const p = sym({ industry: weakLabel });
+    return p.kind === "library" && p.art.bucket === "sector-banks";
+  })(),
+  "the 19 weak and 11 untagged labels must render exactly what they render today"
+);
+check(
+  "...and so does a label the snapshot has never heard of",
+  sym({ industry: "Underwater Basket Weaving" }).art.bucket === "sector-banks" &&
+    sym({ industry: null }).art.bucket === "sector-banks"
+);
+check(
+  "a COMPACT row is untouched by all four layers — still the generated card",
+  (() => {
+    const p = sym({ variant: "compact", title: "Memory chip prices climb as DRAM supply tightens" });
+    return p.kind === "generated" && p.variant === "compact";
+  })(),
+  "at 56px a ticker and a move are legible where a shrunk illustration is not"
+);
+check(
+  "the no-repeat rule holds across the tagged layers and does not leak into the buckets",
+  (() => {
+    const takenNames = new Set();
+    const takenBuckets = new Map();
+    const four = ["a", "b", "c", "d"].map((k) =>
+      shippedTags.planSymbolCardArt({
+        variant: "lead", title: "Quiet day for the company", description: null, eventType: null,
+        industry: "Consumer Electronics", sectorBucket: "sector-banks", key: k,
+        takenNames, takenBuckets, canGenerate: true,
+      })
+    );
+    if (new Set(four.map((p) => p.art.src)).size !== 4) return false;
+    const unblocked = sym({ eventType: "earnings", key: "e1" });
+    const after = shippedTags.planSymbolCardArt({
+      variant: "lead", title: "Acme Corp names a new chief financial officer", description: null,
+      eventType: "earnings", industry: "Consumer Electronics", sectorBucket: "sector-banks",
+      key: "e1", takenNames, takenBuckets: new Map(), canGenerate: true,
+    });
+    return after.art.src === unblocked.art.src;
+  })(),
+  "four cards of one industry must not repeat, and exhausting them must not re-hash an event bucket"
+);
+check(
+  "the stock news page delegates and keeps its compact rows on planCardArt",
+  (() => {
+    const code = readCodeOnly("app/stock/[symbol]/news/page.tsx");
+    return (
+      /planSymbolCardArt\(/.test(code) &&
+      /variant: "compact"/.test(code) &&
+      !/INDUSTRY_TAGS|MARKET_WIDE|articleTopic\(|pickTagged\(/.test(code)
+    );
+  })(),
+  "one rule, in lib/server/news/artTags.ts, where §10 can run it"
+);
+check(
+  "/sector/*/news and the dashboard strip are NOT switched over in this change",
+  !/planSymbolCardArt|industryArt/.test(readCodeOnly("app/sector/[slug]/news/page.tsx")) &&
+    !/planSymbolCardArt|industryArt/.test(readCodeOnly("lib/server/internalNews.ts")),
+  "the sector page has a slug and no industry, and the strip is a different payload; both are their own change"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
