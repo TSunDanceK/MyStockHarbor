@@ -169,6 +169,11 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Registrant facts (SIC, business address, incorporation, website, fiscal
+  // year end, entity type, latest annual form) for every profiled symbol, from
+  // SEC submissions. Read-only, no credentials. Prints the file into its log
+  // for the session to reassemble — see the script header.
+  "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
   // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
   // fixture and a live symbol list and touches no network, so it runs locally.
   // Adding it here would imply it needs a runner, which is the kind of drift
