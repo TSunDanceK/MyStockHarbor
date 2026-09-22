@@ -43,6 +43,24 @@ const REAL = [
   "symbolOutlook",
 ];
 
+const transpile = (src, fileName) =>
+  ts.transpileModule(src, {
+    fileName,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+    },
+  }).outputText;
+
+/** One exported function's source, verbatim (found by the TS parser), or a loud failure. */
+function realFunction(file, name) {
+  const src = fs.readFileSync(path.join(ROOT, file), "utf8");
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ES2022, true);
+  const fn = sf.statements.find((n) => ts.isFunctionDeclaration(n) && n.name?.text === name);
+  if (!fn) throw new Error(`outlook-module: ${name} is not declared in ${file} any more`);
+  return fn.getText(sf);
+}
+
 /**
  * The Redis edge, and the ONLY two things replaced.
  *
@@ -55,19 +73,15 @@ const STUBS = {
   "pickersBuilder.mjs":
     `export const readPickersSymbolsIfCached = async () =>\n` +
     `  (globalThis.__OUTLOOK_UNIVERSE__ === undefined ? ["AAPL"] : globalThis.__OUTLOOK_UNIVERSE__);\n`,
+  // ONLY THE READ IS STUBBED. latestResults is pure and is the one home for
+  // "the latest results event", so it is carried across from the real file:
+  // a stub that re-implemented it would be a second home inside the harness.
   "secReportDatesStore.mjs":
     `export const readReportDates = async (symbol) =>\n` +
-    `  (globalThis.__OUTLOOK_RECORDS__?.get(symbol) ?? null);\n`,
+    `  (globalThis.__OUTLOOK_RECORDS__?.get(symbol) ?? null);\n` +
+    transpile(realFunction("lib/server/secReportDatesStore.ts", "latestResults"), "latestResults.ts"),
 };
 
-const transpile = (src, fileName) =>
-  ts.transpileModule(src, {
-    fileName,
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-    },
-  }).outputText;
 
 /**
  * Rewrite the specifiers Node cannot resolve, and NOTHING ELSE.
