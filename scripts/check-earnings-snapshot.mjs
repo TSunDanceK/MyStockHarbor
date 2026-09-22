@@ -185,8 +185,8 @@ console.log("\n5. an unavailable verdict is not painted as a neutral one");
   // was rewriting only the first, and this assertion covers both. Composing
   // two unique anchors breaks the property the assertion actually reads.
   const unpaint = (fn) => once(
-    `function ${fn}(tone: ToneKey, available: boolean): CSSProperties {\n  const rgb = available ? TONE_RGB[tone] : "148,163,184";`,
-    `function ${fn}(tone: ToneKey, available: boolean): CSSProperties {\n  const rgb = TONE_RGB[tone];`
+    `function ${fn}(tone: ToneKey, verdict: boolean): CSSProperties {\n  const rgb = verdict ? TONE_RGB[tone] : "148,163,184";`,
+    `function ${fn}(tone: ToneKey, verdict: boolean): CSSProperties {\n  const rgb = TONE_RGB[tone];`
   );
   const painted = await loadSnapshot((s) =>
     unpaint("earningsTonePillStyle")(unpaint("earningsCardStyle")(s)));
@@ -401,6 +401,217 @@ console.log("\n10. the Analyst Ratings block is decided by its registry");
   check("the fetch is gated on the same flag",
     /if \(isRetiredBlock\("analyst-ratings"\)\) \{/.test(page),
     "the effect would otherwise spend an FMP call per page view on nothing");
+}
+
+// ── THE ABVX SHAPE, BUILT FROM A REAL FIXTURE ─────────────────────────────
+// There is no ABVX fixture (it is a EUR filer; the fixtures are USD captures),
+// so the SHAPE is reproduced on AAPL's real filings: anchored on a derived Q4,
+// with the revenue lines removed from every period and recorded as untagged,
+// and read as an IFRS set. Every remaining number is SEC's. What ABVX's live
+// set looks like was measured on relay 35764672279: revenue, cost of revenue
+// and gross profit have no chain concept in the payload at all; EPS is null on
+// the derived Q4; net income is differenced.
+const abvxShaped = (M) => {
+  const set = fixture("AAPL");
+  const idx = M.SEC_FIELD_INDEX;
+  const gone = ["revenue", "costOfRevenue", "grossProfit"];
+  const blank = (p) => {
+    const v = [...p.v];
+    const d = p.d.split("");
+    for (const k of gone) { v[idx[k]] = null; d[idx[k]] = "-"; }
+    return { ...p, v, d: d.join("") };
+  };
+  const q4 = set.quarters.findIndex((q) => q.fp === "Q4");
+  return {
+    ...set,
+    quarters: set.quarters.slice(q4).map(blank),
+    years: set.years.map(blank),
+    tx: ["dei", "ifrs-full"],
+    nt: gone,
+  };
+};
+const snapshotOfSet = (M, set, sym = "ZZAB") => {
+  const view = M.buildSecEarningsView(set);
+  const score = M.scoreFromSec(view, sym, { status: "ready", set, cold: false });
+  return { view, score, snap: M.buildSecEarningsSnapshot({
+    symbol: sym, view, score, reported: null, nextReport: { kind: "none" },
+  }) };
+};
+const textOfSet = (M, set, sym = "ZZAB") =>
+  visibleText(html(React.createElement(M.default, { snapshot: snapshotOfSet(M, set, sym).snap, symbol: sym })));
+
+console.log("\n11. a partial score says so, with no verdict colour, from the shared helper");
+{
+  const { score, snap } = snapshotOfSet(M, abvxShaped(M));
+  const cov = M.coverageOf(score);
+  check("the ABVX-shaped score is partial", Boolean(cov?.partial), JSON.stringify(cov));
+  check("the pill reads the full report's own label, not a verdict",
+    snap.toneLabel === M.partialScoreLabel(cov) && !/^(Good|Mixed|Weak)$/.test(snap.toneLabel),
+    snap.toneLabel);
+  const markup = html(React.createElement(M.default, { snapshot: snap, symbol: "ZZAB" }));
+  const tones = ["34,197,94", "250,204,21", "239,68,68"];
+  check("no verdict rgb appears anywhere on a partial card",
+    !tones.some((t) => markup.includes(`rgba(${t},`)), "");
+  // ONE SENTENCE IN THE SIDEBAR, from the same coverage numbers; the range
+  // belongs to the full report (owner, #514).
+  check("the sidebar prints the one-sentence note, built from coverageOf's numbers",
+    visibleText(markup).includes(snap.partialNote) &&
+      visibleText(markup).includes(`${cov.total - cov.measured} of ${cov.total} score inputs weren't measured`), "");
+  check("...and not the range sentence, which stays on the earnings page",
+    !/could only land between/.test(visibleText(markup)));
+  // AND IT NEVER BLAMES THE FILINGS FOR A MEASUREMENT THAT DID NOT RUN.
+  check("...and it does not claim the inputs are missing from the filings",
+    !/in this company's filings/.test(visibleText(markup)), snap.partialNote);
+
+  // MUTATIONS. Paint the pill by availability again, and let the label fall
+  // back to the verdict — each must be caught.
+  const repainted = await loadSnapshot(once(
+    "const verdict = snapshot.available && !snapshot.partial;",
+    "const verdict = snapshot.available;"
+  ));
+  const rm = html(React.createElement(repainted.default, { snapshot: snapshotOfSet(repainted, abvxShaped(repainted)).snap, symbol: "ZZAB" }));
+  check("...and CATCHES a partial card painted with its verdict",
+    tones.some((t) => rm.includes(`rgba(${t},`)));
+  const relabelled = await loadSnapshot(once(
+    "toneLabel: coverage?.partial\n      ? partialScoreLabel(coverage)\n      : score.available",
+    "toneLabel: false\n      ? partialScoreLabel(coverage)\n      : score.available"
+  ));
+  check("...and CATCHES the verdict word put back on a partial score",
+    /^(Good|Mixed|Weak)$/.test(snapshotOfSet(relabelled, abvxShaped(relabelled)).snap.toneLabel));
+
+  // AAPL IS NOT PARTIAL AND MUST RENDER AS BEFORE: a verdict word, painted.
+  const aapl = snapshotFor(M, "AAPL");
+  check("AAPL keeps its verdict pill and colour",
+    !aapl.partial && /^(Good|Mixed|Weak)$/.test(aapl.toneLabel) &&
+      tones.some((t) => renderFor(M, "AAPL").includes(`rgba(${t},`)),
+    aapl.toneLabel);
+}
+
+console.log("\n12. a blank tile says why, and only the reason that applies");
+{
+  const t = textOfSet(M, abvxShaped(M));
+  check("EPS on a derived Q4 says Q4 is not filed on its own",
+    t.includes(`EPS (diluted) — ${M.EMPTY_REASONS.q4NotFiled}`), "");
+  check("...followed by the fiscal year's EPS, labelled as the year",
+    /Q4 is not filed on its own FY\d{4}: -?\$\d+\.\d{2}/.test(t), "");
+  check("revenue with no chain concept says there is no revenue line",
+    t.includes(`Revenue — ${M.EMPTY_REASONS.noRevenueLine}`));
+  check("every margin says it needs revenue",
+    ["Gross margin", "Operating margin", "Net margin"].every((l) => t.includes(`${l} — ${M.EMPTY_REASONS.needsRevenue}`)));
+
+  // THE MARKER DECIDES "no revenue line" — a set without it (written before
+  // the marker existed) must not claim it.
+  const unknown = { ...abvxShaped(M) };
+  delete unknown.nt;
+  const tu = textOfSet(M, unknown);
+  check("a set with no untagged marker does NOT claim there is no revenue line",
+    !tu.includes(M.EMPTY_REASONS.noRevenueLine) && tu.includes(`Revenue — ${M.EMPTY_REASONS.notCaptured}`), "");
+  // THE WORDS THEMSELVES, pinned: the unknown case claims only what we did not
+  // capture, never anything about what the company filed (owner, #522).
+  check("...and says so as 'Not captured from this filing', claiming nothing about the filer",
+    M.EMPTY_REASONS.notCaptured === "Not captured from this filing" &&
+      !/filed figures|not reported|not filed/i.test(M.EMPTY_REASONS.notCaptured), M.EMPTY_REASONS.notCaptured);
+  const alwaysNoLine = await loadSnapshot(once(
+    'const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;',
+    "const revenueReason = EMPTY_REASONS.noRevenueLine;"
+  ));
+  check("...and CATCHES 'no revenue line' claimed without the marker",
+    textOfSet(alwaysNoLine, unknown).includes(alwaysNoLine.EMPTY_REASONS.noRevenueLine));
+
+  const noFy = await loadSnapshot(once(
+    "fyEpsDiluted: fiscalYearEps(set, latest, epsStd),", "fyEpsDiluted: null,"
+  ));
+  check("...and CATCHES the full-year EPS line removed",
+    !/FY\d{4}: -?\$\d+\.\d{2}/.test(textOfSet(noFy, abvxShaped(noFy))));
+
+  // AAPL: no tile is blank, so no reason prints.
+  const ta = textFor(M, "AAPL");
+  check("AAPL prints none of the empty reasons",
+    Object.values(M.EMPTY_REASONS).every((r) => !ta.includes(r)), "");
+}
+
+console.log("\n13. the footer names the standard the set was read under");
+{
+  check("an IFRS set's footer says IFRS", textOfSet(M, abvxShaped(M)).includes("(IFRS, as filed)"));
+  check("AAPL's footer still says US GAAP", textFor(M, "AAPL").includes("(US GAAP, as filed)"));
+  check("AZN's footer says IFRS (ifrs-full is its only financial namespace)",
+    textFor(M, "AZN").includes("(IFRS, as filed)"), "");
+  const constant = await loadSnapshot(once(
+    "sourceNote: snapshotSourceNote(view.accounting),",
+    "sourceNote: SNAPSHOT_SOURCE_NOTE,"
+  ));
+  check("...and CATCHES the constant put back",
+    !textFor(constant, "AZN").includes("(IFRS, as filed)"));
+
+  // ── A SET CARRYING BOTH NAMESPACES ─────────────────────────────────────
+  // 48 of 903 stored sets do (relay 35771324089); 31 of those measured read
+  // every field from ifrs-full. Presence of us-gaap decides nothing.
+  const both = ["dei", "ifrs-full", "us-gaap"];
+  check("both namespaces and no read count → no standard named",
+    M.accountingOf({ tx: both }) === null);
+  check("both namespaces, cells read from ifrs-full → IFRS",
+    M.accountingOf({ tx: both, rns: { "ifrs-full": 300, "us-gaap": 2 } }) === "IFRS");
+  check("both namespaces, cells read from us-gaap → US GAAP",
+    M.accountingOf({ tx: both, rns: { "us-gaap": 250 } }) === "US GAAP");
+  check("a single namespace still decides without a read count",
+    M.accountingOf({ tx: ["dei", "us-gaap"] }) === "US GAAP" && M.accountingOf({ tx: ["ifrs-full"] }) === "IFRS");
+  const mixedIfrs = { ...fixture("AZN"), tx: both, rns: { "ifrs-full": 400, "us-gaap": 3 } };
+  check("an IFRS filer with stray us-gaap tags renders the IFRS footer",
+    textOfSet(M, mixedIfrs, "ZZMX").includes("(IFRS, as filed)"), "");
+  check("...and with no read count it names no standard, rather than US GAAP",
+    textOfSet(M, { ...fixture("AZN"), tx: both }, "ZZMX").includes("(as filed)"), "");
+  const presence = await loadSnapshot(once(
+    "  if (set.rns) {\n    const us = set.rns",
+    "  if (set.tx?.includes(\"us-gaap\")) return \"US GAAP\";\n  if (set.rns) {\n    const us = set.rns"
+  ));
+  check("...and CATCHES the presence rule put back",
+    presence.accountingOf({ tx: both, rns: { "ifrs-full": 400, "us-gaap": 3 } }) === "US GAAP");
+}
+
+console.log("\n14. a differenced P&L line is not described as cash flow");
+{
+  const t = textOfSet(M, abvxShaped(M));
+  check("net income on a derived Q4 says full year minus nine months",
+    /Net income [^]*?full-year figure minus the first nine months/.test(t) && !/Net income \S+ Derived[^.]*cash flow/.test(t), "");
+  check("a differenced cash-flow line keeps the cash-flow sentence",
+    /cash flow cumulatively/.test(M.derivationNote("differenced", { statement: "cash-flow", fp: "Q2" })) &&
+      /cash flow cumulatively/.test(M.derivationNote("differenced")), "");
+  const merged = await loadSnapshot(once(
+    'if (context.statement === "income") {',
+    'if (false) {'
+  ));
+  check("...and CATCHES the single cash-flow sentence put back",
+    /cash flow cumulatively/.test(textOfSet(merged, abvxShaped(merged))));
+}
+
+console.log("\n15. the untagged marker is written by the extractor, from the payload");
+{
+  // A PAYLOAD CARRYING NET INCOME AND NOTHING NAMED REVENUE — the ABVX shape at
+  // the level the extractor sees it. A EUR-only EPS still counts as TAGGED:
+  // the line exists, it is the currency that was refused.
+  const row = (val, start, end) => ({ val, start, end, fy: 2025, fp: "FY", form: "10-K", filed: "2026-02-01", accn: "0000000000-26-000001" });
+  const facts = {
+    cik: 1, entityName: "Synthetic",
+    facts: { "us-gaap": {
+      NetIncomeLoss: { units: { USD: [row(-5, "2025-01-01", "2025-12-31")] } },
+      EarningsPerShareDiluted: { units: { "EUR/shares": [row(-1, "2025-01-01", "2025-12-31")] } },
+    } },
+  };
+  const r = M.extractCompanyFacts("SYN", facts);
+  check("revenue is recorded untagged", r.untagged.includes("revenue"), r.untagged.slice(0, 6).join(","));
+  check("net income is NOT recorded untagged", !r.untagged.includes("netIncome"));
+  check("a line published only in a refused currency is NOT untagged", !r.untagged.includes("epsDiluted"));
+  check("the codec stores it as nt", JSON.stringify(M.encodeFactSet(r).nt) === JSON.stringify(r.untagged));
+  check("the extractor counts the namespace each stored cell was read from, and the codec stores it as rns",
+    (r.readNamespaces?.["us-gaap"] ?? 0) > 0 && !r.readNamespaces?.["ifrs-full"] &&
+      JSON.stringify(M.encodeFactSet(r).rns) === JSON.stringify(r.readNamespaces),
+    JSON.stringify(r.readNamespaces));
+  const blind = await loadSnapshot(once(
+    "untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),",
+    "untagged: [],"
+  ));
+  check("...and CATCHES an extractor that stops recording it",
+    !blind.extractCompanyFacts("SYN", facts).untagged.includes("revenue"));
 }
 
 console.log(

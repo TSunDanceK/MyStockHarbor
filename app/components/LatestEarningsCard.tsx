@@ -155,8 +155,13 @@ export default function LatestEarningsCard({
   symbol: string;
 }) {
   const tone = snapshot.tone;
+  // A PARTIAL SCORE CARRIES NO VERDICT COLOUR — the full report's rule, applied
+  // here from the same coverageOf. The card and the pill both go grey, as they
+  // do when the score did not run at all, because in both cases the hue would
+  // be a claim the filings did not support.
+  const verdict = snapshot.available && !snapshot.partial;
   return (
-    <section style={earningsCardStyle(tone, snapshot.available)}>
+    <section style={earningsCardStyle(tone, verdict)}>
       <div style={sectionEyebrowStyle}>Latest earnings</div>
       <div
         style={{
@@ -169,8 +174,9 @@ export default function LatestEarningsCard({
         }}
       >
         <h2 style={{ ...sectionTitleSmallStyle, margin: 0 }}>Earnings snapshot</h2>
-        <div style={earningsTonePillStyle(tone, snapshot.available)}>{snapshot.toneLabel}</div>
+        <div style={earningsTonePillStyle(tone, verdict)}>{snapshot.toneLabel}</div>
       </div>
+      {snapshot.partialNote ? <div style={earningsFootnoteStyle}>{snapshot.partialNote}</div> : null}
 
       {!snapshot.available ? (
         // THE REASON, NOT A GRID OF EM DASHES. `unavailableReason` is the same
@@ -221,28 +227,38 @@ export default function LatestEarningsCard({
           </div>
 
           <div style={earningsMetricGridStyle}>
+            {/* A BLANK TILE SAYS WHY, in the meta slot where growth would sit.
+                The reason is the payload's (emptyReason / marginReasons) —
+                the card never guesses one. */}
             <EarningsMetric
               label={snapshot.basis === "year" ? "EPS (diluted, FY)" : "EPS (diluted)"}
               value={formatFigure(snapshot.eps)}
-              meta={growthText(snapshot.epsYoY)}
-              tone={growthTone(snapshot.epsYoY)}
-              note={snapshot.eps.derivedNote}
+              meta={snapshot.eps.emptyReason ?? growthText(snapshot.epsYoY)}
+              tone={snapshot.eps.emptyReason ? undefined : growthTone(snapshot.epsYoY)}
+              note={
+                // THE FULL YEAR, LABELLED AS THE FULL YEAR. Only ever set under
+                // a blank derived-Q4 tile; never presented as the quarter's.
+                snapshot.epsFullYear
+                  ? `${snapshot.epsFullYear.label}: ${formatFigure({ value: snapshot.epsFullYear.value, perShare: true, derivedNote: null, emptyReason: null })}`
+                  : snapshot.eps.derivedNote
+              }
             />
             <EarningsMetric
               label="Revenue"
               value={formatFigure(snapshot.revenue)}
-              meta={growthText(snapshot.revenueYoY)}
-              tone={growthTone(snapshot.revenueYoY)}
+              meta={snapshot.revenue.emptyReason ?? growthText(snapshot.revenueYoY)}
+              tone={snapshot.revenue.emptyReason ? undefined : growthTone(snapshot.revenueYoY)}
               note={snapshot.revenue.derivedNote}
             />
             <EarningsMetric
               label="Net income"
               value={formatFigure(snapshot.netIncome)}
+              meta={snapshot.netIncome.emptyReason}
               note={snapshot.netIncome.derivedNote}
             />
-            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} />
-            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} />
-            <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} />
+            <EarningsMetric label="Gross margin" value={formatLevel(snapshot.margins.gross)} meta={snapshot.marginReasons.gross} />
+            <EarningsMetric label="Operating margin" value={formatLevel(snapshot.margins.operating)} meta={snapshot.marginReasons.operating} />
+            <EarningsMetric label="Net margin" value={formatLevel(snapshot.margins.net)} meta={snapshot.marginReasons.net} />
           </div>
 
           {/* WHAT THE PERCENTAGES ARE MEASURED AGAINST. A "+12.4%" with no
@@ -250,7 +266,11 @@ export default function LatestEarningsCard({
               always the obvious one — a filer with a gap in its filings is
               compared against the nearest prior-year period on file, which may
               not be four quarters back. */}
-          {snapshot.comparedWith ? (
+          {/* Only when a growth figure actually prints: on a card whose two
+              growth slots both carry an empty reason, the sentence describes
+              a comparison nothing on screen makes. */}
+          {snapshot.comparedWith &&
+          (snapshot.epsYoY.kind !== "none" || snapshot.revenueYoY.kind !== "none") ? (
             <div style={earningsFootnoteStyle}>
               Growth is measured against {snapshot.comparedWith}.
             </div>
@@ -316,8 +336,8 @@ const bodyCopyStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 15, lineH
  * than none: a reader scanning for the amber-bordered cards finds the ones
  * with no data among them.
  */
-function earningsCardStyle(tone: ToneKey, available: boolean): CSSProperties {
-  const rgb = available ? TONE_RGB[tone] : "148,163,184";
+function earningsCardStyle(tone: ToneKey, verdict: boolean): CSSProperties {
+  const rgb = verdict ? TONE_RGB[tone] : "148,163,184";
   return {
     border: `1px solid rgba(${rgb},0.25)`,
     borderRadius: 20,
@@ -334,10 +354,14 @@ function earningsCardStyle(tone: ToneKey, available: boolean): CSSProperties {
  * scorer's unavailable branch because its shape requires a tone, and painting
  * that pill the same amber as a genuine Mixed reading would present "we could
  * not measure this" as "we measured it and it was middling". It renders grey.
+ *
+ * `verdict` IS "available AND not partial". A partial score is the same shape of
+ * problem one step removed: ABVX's reach was 34 to 66, wholly inside MIXED, so
+ * an amber pill reported the missing inputs, not the company.
  */
-function earningsTonePillStyle(tone: ToneKey, available: boolean): CSSProperties {
-  const rgb = available ? TONE_RGB[tone] : "148,163,184";
-  const color = available ? TONE_TEXT[tone] : "rgba(226,232,240,0.78)";
+function earningsTonePillStyle(tone: ToneKey, verdict: boolean): CSSProperties {
+  const rgb = verdict ? TONE_RGB[tone] : "148,163,184";
+  const color = verdict ? TONE_TEXT[tone] : "rgba(226,232,240,0.78)";
   return { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 999, border: `1px solid rgba(${rgb},0.34)`, background: `rgba(${rgb},0.12)`, color, fontSize: 12, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.06em" };
 }
 
