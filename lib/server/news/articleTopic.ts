@@ -37,7 +37,7 @@
 //   4. FIRST MATCH WINS, ORDER IS MEANINGFUL, NARROW BEFORE BROAD — the same
 //      discipline INDUSTRY_BUCKETS uses in art.ts.
 //
-// ── WHAT THIS DOES NOT DO ──────────────────────────────────────────────────
+// ── WHAT THIS DOES NOT DO ────────────────────────────────────────────────
 // It does not read a symbol, a sector, an industry or a provider label. The
 // provider-map (FMP labels + SIC -> concepts) is a separate change for the
 // three symbol-led surfaces and is deliberately not in this one.
@@ -79,7 +79,16 @@ export type ArticleTopic = {
  */
 const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   ["chips",            /\b(semiconductors?|semis|chipmakers?|chip[- ]industry|memory[- ]chips?|dram|wafers?|foundry)\b/i],
-  ["ai-compute",       /\b(ai (buildout|infrastructure|capex|compute|chips?)|data ?cent(er|re)s?)\b/i],
+  // WIDENED TO THE TRADE, NOT ONLY THE BUILDOUT. On the 2026-09-22 general
+  // capture FIVE headlines were about AI or chips as a MARKET story -- "Nasdaq
+  // posts record close driven by AI trade", "AI and Chip Stocks Race Ahead",
+  // "Why Today's Nasdaq Doesn't Look Like 2000, Even With AI Fears Rising" --
+  // and every one reached nothing, while `ai-compute` fired twice on the same
+  // page for COMPANY stories. The pattern reached the buildout and missed the
+  // trade. Five instances in one capture is above the bar the rest of this
+  // table was held to; a bare `\bai\b` is not here, because half the feed
+  // mentions AI in passing.
+  ["ai-compute",       /\b(ai (buildout|infrastructure|capex|compute|chips?|trade|stocks?|boom|bubble)|chip stocks?|semiconductor stocks?|data ?cent(er|re)s?)\b/i],
   ["crypto",           /\b(bitcoin|crypto|ethereum|stablecoins?|digital assets?)\b/i],
   // ── MOVED ABOVE THE TWO COMMODITY PATTERNS, AND MEASURED ────────────────
   // `pipelines` sat below `refining` and `oil-gas-upstream` and was shadowed by
@@ -114,11 +123,38 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // on the first alternative and the second, "Crude pipeline outage" on both.
   ["pipelines",        /\b(?:oil|gas|crude|natural gas|lng|fuel|energy|midstream)\s+pipelines?\b|\bpipelines?\s+(?:operator|network|shutdown|outage|capacity|rupture|system)\b/i],
   ["refining",         /\b(refiner(y|ies)|diesel|jet fuel|gasoline|refining margins?)\b/i],
-  ["oil-gas-upstream", /\b(crude|opec|barrels?|natural gas|lng|oil (price|export|forecast|market)s?)\b/i],
+  // ── COMPLETED, NOT WIDENED, AND THE REASON IS A WRONG PICTURE ──────────
+  // "Oil rises amid worries of growing Iran-U.S. tensions after Bessent issues
+  // Iranian airline shutdown warning" rendered an AIRLINER on the live page:
+  // `airlines` matched "airline" -- the sanctions instrument, not the story --
+  // and NOTHING ELSE MATCHED AT ALL, because `oil (price|export|forecast|
+  // market)s?` reaches oil as a noun phrase and misses oil as the SUBJECT OF A
+  // PRICE VERB, which is how half of oil coverage is written.
+  //
+  // THE TIE-BREAK PROPOSED FOR THIS DOES NOT FIX IT. The review suggested
+  // preferring the earliest match in the title, on the reading that two
+  // patterns both matched truly and table order picked the wrong one. Measured,
+  // that is not what happened: `oil-gas-upstream` did not match this title at
+  // all, so there was no tie to break. `oil-gas-upstream` already sits ABOVE
+  // `airlines`, so making it reach the sentence is the whole fix and firstTag
+  // is left alone.
+  //
+  // FLAGGED AS A DEPARTURE: the table's own rule is that one instance is not a
+  // measurement. This is one instance. It is here anyway because the verbs
+  // COMPLETE an alternative the table already has rather than adding a new
+  // concept -- "Oil Prices Drop" and "Oil Prices Gain" matched on the same
+  // capture and "Oil rises" did not -- and because the cost of leaving it is a
+  // picture that asserts something the article does not say. Veto-able.
+  ["oil-gas-upstream", /\b(crude|opec|barrels?|natural gas|lng|oil (price|export|forecast|market)s?|oil (rises?|rose|falls?|fell|climbs?|slides?|jumps?|gains?|drops?|tumbles?|rallies|surges?|sinks?|steadies))\b/i],
   ["utilities-grid",   /\b(utilit(y|ies)|power grid|electricity|electrification)\b/i],
   ["nuclear",          /\b(nuclear|reactors?|uranium)\b/i],
   ["solar",            /\bsolar\b/i],
   ["wind",             /\bwind (farms?|turbines?|power)\b/i],
+  // FOUR IMAGES AND NO PATTERN AT ALL until now, so "Aerospace suppliers test
+  // rare-earth alternatives" -- the word in the first position of the headline
+  // -- reached nothing. `defence` is spelled both ways and both are here;
+  // the bare word is NOT, because "defensive stocks" is a different story.
+  ["aerospace-defence",/\b(aerospace|defen[cs]e (contractors?|spending|budget|stocks?)|jet engines?|fighter jets?)\b/i],
   ["shipping",         /\b(tankers?|container ships?|freight rates?|strait of hormuz)\b/i],
   ["airlines",         /\b(airlines?|air travel)\b/i],
   // ── NARROWED FROM THE DRAFT, AND THE MEASUREMENT IS WHY ─────────────────
@@ -140,8 +176,19 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // record sum at auction" scored a bank vault. The narrowing itself is
   // unaffected — "Bank of America resets Apple stock price target" still
   // reaches nothing here.
+  // DELIBERATELY NARROW, AND IT COSTS A ROW ON PURPOSE. `investment-banks` has
+  // four images and had no pattern, but "Goldman Sachs Sinks Toward Bear-Market
+  // Territory" cannot be told from "Bank of America resets Apple price target"
+  // by the NAME alone -- which is exactly what `banks` one line below was
+  // narrowed to stop doing. So this reaches the phrase and never the name, and
+  // the Goldman row stays a recorded miss rather than a guessed picture.
+  ["investment-banks", /\b(investment bank(?:s|ing|ers?)?|wall street banks?|bulge bracket)\b/i],
   ["banks",            /\b(?:banks|lenders|banking (?:sector|industry|stocks)|regional bank)\b/i],
-  ["asset-management", /\b(etfs?|fund managers?|asset managers?|investment managers?|private equity)\b/i],
+  // `asset managers?` DOES NOT MATCH THE COMPANY NAME "Asset Management", which
+  // is how the feed writes it, and a sovereign wealth fund is an asset manager
+  // by any reading. Both Qatar/JPMorgan headlines in the 2026-09-21 capture
+  // reached nothing on this.
+  ["asset-management", /\b(etfs?|fund managers?|asset manage(?:rs?|ment)|investment managers?|private equity|sovereign wealth fund|wealth fund|pension funds?)\b/i],
   ["exchanges",        /\b(s&p 500|nasdaq composite|stock futures|market breadth|wall street)\b/i],
   // `pharma` ALONE CANNOT MATCH "Pharmaceuticals", which is how the word
   // appears in most headlines — \b after `pharma` needs a non-word character
@@ -149,7 +196,12 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   // `biopharma` stays spelled out because there is no word boundary in front of
   // its `pharma` for the first alternative to anchor to.
   ["pharma",           /\b(drugs?|pharma(?:ceuticals?)?|biopharma(?:ceuticals?)?|vaccines?)\b/i],
-  ["biotech",          /\bbiotech\b/i],
+  // THE TRIAL VOCABULARY, from the one recorded miss: "Beacon's gene therapy
+  // for vision loss condition meets main trial goal" reached nothing. `pharma`
+  // sits ABOVE this, so a headline that says drug or pharma as well is still a
+  // pharma headline -- these alternatives only pick up the ones that say
+  // neither.
+  ["biotech",          /\bbiotech\b|\b(gene therapy|clinical trials?|phase [123ivx]+ trials?|trial (readout|results?|goal)|fda (approval|clearance))\b/i],
   ["autos",            /\b(carmakers?|automakers?|auto industry)\b/i],
   // ── LEFT AS THE DRAFT, ON PURPOSE, AND THE ONE HIT IS RECORDED ─────────
   // `evs?` fired once on the held-out sample, on "China's 'Hottest' Memory-Chip
@@ -165,6 +217,11 @@ const SUBJECT_PATTERNS: Array<[string, RegExp]> = [
   ["retail-stores",    /\b(retailers?|consumer spending|holiday shopping)\b/i],
   ["software",         /\b(software|saas)\b/i],
   ["homebuilders",     /\b(housing starts|homebuilders?|home sales)\b/i],
+  // "rare earth" carries one meaning in a financial headline, and the two
+  // captures held three of them. Sits below `aerospace-defence` deliberately:
+  // "Aerospace suppliers test rare-earth alternatives" is a story about
+  // aerospace suppliers, and the word order says so.
+  ["mining-industrial",/\b(rare[-\s]earths?|copper (prices?|miners?)|lithium|iron ore|ore grades?)\b/i],
   ["mining-precious",  /\b(gold|silver|bullion)\b/i],
   ["steel",            /\bsteel\b/i],
   ["agriculture",      /\b(wheat|corn|soybeans?|crops?|farmers?)\b/i],
@@ -198,9 +255,38 @@ const MOTIF_PATTERNS: Array<[string, RegExp]> = [
   //   is not, and is deliberately absent — an AI summit and a developer summit
   //   are not macro, and there is no phrase that separates them from a G20 one
   //   without naming it.
-  ["macro",      /\b(fed|federal reserve|rate (hike|cut)|interest rates?|inflation|(treasury|bond) yields?|bond market|tariffs?|trade (war|truce|talks|negotiations)|g7|g20|gdp|central bank)\b/i],
+  // TWO MORE WIDENINGS, each from a CLUSTER rather than an instance:
+  //
+  //   SUMMIT / GEOPOLITICS. Five of 42 on the 2026-09-21 capture reached
+  //   nothing. A bare `summit` is STILL not here and still for the same reason
+  //   -- an AI summit and a developer summit are not macro. What is here is the
+  //   pair of names and the pair of countries, which carry one meaning in a
+  //   financial headline. `u\.?s\.?` spells out because the feed writes
+  //   "U.S-China" as often as "US-China" and \b cannot see through the stops.
+  //   NOTE THE DATEDNESS: `trump[\s&-]+xi` is two proper nouns and will age
+  //   out. It earns its place on three instances in 42 today and should be
+  //   re-read, not renewed by default, on a capture a year from now.
+  //
+  //   BONDS, THE BARE WORD. `(treasury|bond) yields?` and `bond market`
+  //   matched and `bonds` alone did not, and three bond stories in 42 fell
+  //   through. This is the one alternative the round-1 brief flagged as
+  //   risky in the DESCRIPTION leg -- "bond" appears in passing in market
+  //   round-ups constantly -- so it ships under the existing two-occurrence
+  //   rule rather than a restructure, and the measurement is what decided it.
+  ["macro",      /\b(fed|federal reserve|rate (hike|cut)|interest rates?|inflation|(treasury|bond) yields?|bonds?|bond market|tariffs?|trade (war|truce|talks|negotiations)|trump[\s&-]+xi|u\.?s\.?[-–]china|geopolitic\w+|g7|g20|gdp|central bank)\b/i],
   ["deal",       /\b(takeover|mergers?|acquisitions?|to acquire|funding round|bid for)\b/i],
-  ["legal",      /\b(lawsuits?|sues?|court|settlements?|antitrust)\b/i],
+  // THE NINTH MOTIF. Seven of the sixteen still have no pattern and that is
+  // still deliberate; this one is added because the feed kept asking -- two
+  // Qatar/JPMorgan headlines in the 2026-09-21 capture, "Versace partners with
+  // REVOLVE" live, and "On Holding signs Kylian Mbappe in a 10-year
+  // partnership" on the 09-22 one. Every alternative names the arrangement;
+  // none of them is a word that means something else in a financial headline.
+  ["partnership",/\b(partners? with|partnership|joint ventures?|teams? up with|strategic alliance)\b/i],
+  // WIDENED TO REGULATION. `legal` art is a gavel and a courthouse, which fits
+  // a regulatory story as well as a courtroom one. The AI-policy cluster is
+  // what asked for it; `macro` sits above, so a summit-framed story still gets
+  // the globe and only a regulation-framed one gets the gavel.
+  ["legal",      /\b(lawsuits?|sues?|court|settlements?|antitrust|regulators?|regulation|oversight|investigation)\b/i],
   ["jobs",       /\b(layoffs?|hiring|labor unions?|workforce)\b/i],
   ["earnings",   /\b(earnings|quarterly results|beats? estimates)\b/i],
   ["guidance",   /\b(forecasts?|outlook|guidance)\b/i],
@@ -242,8 +328,8 @@ function countMatches(pattern: RegExp, text: string): number {
 }
 
 /**
- * First match over the title, then — only if the title said nothing — first
- * match over the description with two occurrences required.
+ * EARLIEST match over the title, then — only if the title said nothing —
+ * first match over the description with two occurrences required.
  *
  * THE TWO PASSES ARE WHOLE PASSES, not one pass over both strings. A title
  * match on the fourth pattern must beat a description match on the first, or
@@ -251,9 +337,35 @@ function countMatches(pattern: RegExp, text: string): number {
  * table, and rule 3 stops meaning anything.
  */
 function firstTag(patterns: Array<[string, RegExp]>, title: string, description: string): string[] {
+  // ── THE TITLE LEG IS EARLIEST-MATCH, NOT FIRST-PATTERN ──────────────────
+  // Rule 4 (narrow before broad) settles which of two patterns is the more
+  // specific DESCRIPTION OF A SUBJECT. It has nothing to say about which of two
+  // TRUE matches in one headline is what the story is about, and on the live
+  // page that gap produced a wrong picture in both directions:
+  //
+  //   "Oil rises ... after Bessent issues Iranian airline shutdown warning"
+  //      oil at 0, airline at 78          -> the story is oil
+  //   "Stock Market Today: Stock Futures Tick Up as Oil Falls"
+  //      stock futures at 20, oil at 44   -> the story is the market
+  //
+  // Table order gives the first one an airliner and the second one an oil rig.
+  // A headline names its subject before its qualifier, so the earliest match in
+  // the title is the better answer, and it is the same answer table order gives
+  // on every other row in both fixtures -- MEASURED, not assumed: this change
+  // moves exactly those two and nothing else.
+  //
+  // TIES GO TO TABLE ORDER, which is what keeps rule 4 intact where it applies.
+  // "Crude pipeline outage lifts diesel prices" matches `pipelines` and
+  // `oil-gas-upstream` at the SAME offset 0, and `pipelines` must still win.
+  let best: { tag: string; at: number } | null = null;
   for (const [tag, pattern] of patterns) {
-    if (pattern.test(title)) return [tag];
+    const m = pattern.exec(title);
+    if (m && (best === null || m.index < best.at)) best = { tag, at: m.index };
   }
+  if (best) return [best.tag];
+  // THE DESCRIPTION LEG IS UNCHANGED AND STAYS FIRST-PATTERN. Position in a
+  // body paragraph carries none of the meaning it carries in a headline, and
+  // rule 3's two-occurrence bar is already doing the discriminating there.
   for (const [tag, pattern] of patterns) {
     if (countMatches(pattern, description) >= 2) return [tag];
   }
