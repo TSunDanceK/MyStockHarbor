@@ -636,3 +636,39 @@ export function toneBandNote(crossings: number): string {
     `percentage there is an artefact of the arithmetic rather than a rate of change.`
   );
 }
+
+// ── when a filer's fiscal years end ────────────────────────────────────────
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"];
+
+/**
+ * ONE SENTENCE FOR THE FIVE-YEAR TABLE'S YEAR-ENDS, or null.
+ *
+ * Every row carried "ended YYYY-MM-DD" under its label (owner review of AVAV,
+ * round 2). The date says one thing per filer, so it is said once:
+ *
+ *   every end on the same month and day   "Fiscal years end 30 April."
+ *   same month, the day moving            "Fiscal years end in late September."
+ *     (52/53-week filers — AAPL's ran 24 to 30 September)
+ *     early 1-10, mid 11-20, late 21-31; a spread across two of those
+ *     names the month alone
+ *   the month itself moving               null — no sentence, rather than one
+ *                                         that is wrong for some rows
+ *
+ * The exact date stays on each label as a tooltip.
+ */
+export function fiscalYearEndNote(ends: string[]): string | null {
+  const md = ends.map((e) => /^\d{4}-(\d{2})-(\d{2})$/.exec(e)).filter((m): m is RegExpExecArray => m !== null);
+  if (!md.length || md.length !== ends.length) return null;
+  const months = new Set(md.map((m) => m[1]));
+  if (months.size !== 1) return null;
+  const month = MONTHS[Number(md[0][1]) - 1];
+  const days = md.map((m) => Number(m[2]));
+  if (new Set(days).size === 1) return `Fiscal years end ${days[0]} ${month}.`;
+  const third = (d: number) => (d <= 10 ? "early" : d <= 20 ? "mid" : "late");
+  const thirds = new Set(days.map(third));
+  return thirds.size === 1
+    ? `Fiscal years end in ${[...thirds][0]} ${month}.`
+    : `Fiscal years end in ${month}.`;
+}

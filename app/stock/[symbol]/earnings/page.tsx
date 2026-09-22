@@ -44,6 +44,7 @@ import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDates } from "@/lib/server/secReportDatesStore";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { NO_PRICE_HISTORY_NOTE, TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
+import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
 
 // No segment config here on purpose -- it cascades from
 // app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
@@ -89,6 +90,9 @@ type EarningsReactionPoint = {
   volumeMultiple: number | null;
   drift5Pct: number | null;
   drift20Pct: number | null;
+  /** Fewer than 5 / 20 trading days have passed since the reaction session. */
+  drift5Pending: boolean;
+  drift20Pending: boolean;
   /**
    * WHY there are no figures, when there are none. Null means the figures are
    * present, or absent for an ordinary reason the card already explains.
@@ -133,10 +137,6 @@ function asNumber(value: unknown): number | null {
 
 
 
-function formatPercent(value: number | null | undefined, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
-}
 
 
 /**
@@ -149,8 +149,8 @@ function formatPercent(value: number | null | undefined, digits = 1) {
  */
 const REACTION_SESSION_GAP_DAYS = 7;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null; reason: "uncovered" | null } {
-  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, reason: null as "uncovered" | null };
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null } {
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null };
   /** The series does not reach this report — a fact about the bars, not the filing. */
   const uncovered = { ...empty, reason: "uncovered" as const };
   if (!row.date || !points.length) return empty;
@@ -222,7 +222,11 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
     if (typeof close20 === "number" && Number.isFinite(close20)) drift20Pct = ((close20 - base) / Math.abs(base)) * 100;
   }
 
-  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct, reason: null };
+  // NOT YET, AS OPPOSED TO NOT THERE. The series simply ends before the
+  // horizon: the chart draws a "not yet" marker rather than a bar or a gap.
+  const drift5Pending = drift5Pct === null && reactionPct !== null && reactIdx + 4 > points.length - 1;
+  const drift20Pending = drift20Pct === null && reactionPct !== null && reactIdx + 19 > points.length - 1;
+  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null };
 }
 
 
@@ -525,136 +529,6 @@ async function getEarningsData(symbol: string) {
 }
 
 
-// Nominal width (in "user units") for the chart SVGs below. Choosing a
-// realistic pixel-scale number here -- rather than an abstract 0-100 -- and
-// then letting the SVG scale uniformly (width: 100%, height: auto, no
-// preserveAspectRatio="none") keeps x and y scaled by very nearly the same
-// factor. That's what keeps circles round and strokes a consistent thin
-// line instead of the squashed-ellipse / stretched-line look you get from
-// forcing a near-square viewBox to fill a wide card non-uniformly.
-const CHART_VIEW_W = 640;
-
-function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children }: { height: number; labels: string[]; scaleTop?: string; scaleMid?: string; scaleBottom?: string; children: import("react").ReactNode; }) {
-  const hasScale = scaleTop != null || scaleMid != null || scaleBottom != null;
-  return (
-    <div>
-      <div className="chartRow">
-        <div className="chartPlot">{children}</div>
-        {hasScale && (
-          <div className="chartScale">
-            {scaleTop != null && <span className="scaleTop">{scaleTop}</span>}
-            {scaleMid != null && <span className="scaleMid">{scaleMid}</span>}
-            {scaleBottom != null && <span className="scaleBottom">{scaleBottom}</span>}
-          </div>
-        )}
-      </div>
-      {/* Mirrors the row above (same flex structure + spacer) so the quarter
-          labels line up under the actual bars/dots instead of being centered
-          across the full card width while the plot itself is narrower by the
-          Y-axis scale column. */}
-      <div className="chartRow">
-        <div className="chartCategories">
-          {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
-        </div>
-        {hasScale && <div className="chartScaleSpacer" aria-hidden="true" />}
-      </div>
-    </div>
-  );
-}
-
-
-
-type LineSeries = { name: string; color: string; values: (number | null)[] };
-
-function MultiLineChart({ labels, series, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { labels: string[]; series: LineSeries[]; height?: number; formatValue?: (v: number) => string; }) {
-  const allValues = series.flatMap((s) => s.values).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
-  const zeroY = height / 2;
-  const usable = zeroY - 10;
-  const groupW = CHART_VIEW_W / Math.max(labels.length, 1);
-
-  function yFor(v: number) {
-    return zeroY - (v / maxAbs) * usable;
-  }
-
-  function pathFor(values: (number | null)[]) {
-    let d = "";
-    let started = false;
-    values.forEach((v, i) => {
-      if (v == null || !Number.isFinite(v)) { started = false; return; }
-      const x = i * groupW + groupW / 2;
-      const y = yFor(v);
-      d += `${started ? "L" : "M"}${x},${y} `;
-      started = true;
-    });
-    return d.trim();
-  }
-
-  return (
-    <ChartFrame
-      height={height}
-      labels={labels}
-      scaleTop={allValues.length ? formatValue(maxAbs) : undefined}
-      scaleMid={allValues.length ? formatValue(0) : undefined}
-      scaleBottom={allValues.length ? formatValue(-maxAbs) : undefined}
-    >
-      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Trend chart">
-        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-        {series.map((s) => (
-          <g key={s.name}>
-            <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-            {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * groupW + groupW / 2} cy={yFor(v)} r="3.5" fill={s.color} /> : null))}
-          </g>
-        ))}
-      </svg>
-    </ChartFrame>
-  );
-}
-
-function SeriesLegend({ items }: { items: { label: string; color: string }[] }) {
-  return (
-    <div className="chartLegend">
-      {items.map((item) => (
-        <span key={item.label}><i style={{ background: item.color }} /> {item.label}</span>
-      ))}
-    </div>
-  );
-}
-
-type SingleBarPoint = { label: string; value: number | null };
-
-function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { data: SingleBarPoint[]; height?: number; formatValue?: (v: number) => string; }) {
-  const values = data.map((d) => d.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
-  const zeroY = height / 2;
-  const usable = zeroY - 10;
-  const groupW = CHART_VIEW_W / Math.max(data.length, 1);
-
-  return (
-    <ChartFrame
-      height={height}
-      labels={data.map((d) => d.label)}
-      scaleTop={values.length ? formatValue(maxAbs) : undefined}
-      scaleMid={values.length ? formatValue(0) : undefined}
-      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
-    >
-      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Price reaction chart">
-        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-        {data.map((d, i) => {
-          const cx = i * groupW + groupW / 2;
-          const barW = Math.min(groupW * 0.42, 38);
-          const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
-          const up = (d.value ?? 0) >= 0;
-          const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
-          return d.value != null ? (
-            <rect key={`${d.label}-${i}`} x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 2)} fill={color} rx="3" />
-          ) : null;
-        })}
-      </svg>
-    </ChartFrame>
-  );
-}
-
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
@@ -746,14 +620,10 @@ export default async function StockEarningsPage({ params }: Props) {
   const secView = data.secView;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
-  const hasAnyReaction = reactionData.some((d) => d.value != null);
-  const driftLabels = data.priceReactionQuarters.map((q) => q.label);
-  const driftSeries: LineSeries[] = [
-    { name: "Day of reaction", color: "#60a5fa", values: data.priceReactionQuarters.map((q) => q.reactionPct) },
-    { name: "+5 trading days", color: "#facc15", values: data.priceReactionQuarters.map((q) => q.drift5Pct) },
-    { name: "+20 trading days", color: "#22c55e", values: data.priceReactionQuarters.map((q) => q.drift20Pct) },
-  ];
-  const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
+  const driftQuarters: DriftQuarter[] = data.priceReactionQuarters.map((q) => ({
+    label: q.label, reactionPct: q.reactionPct, drift5Pct: q.drift5Pct, drift20Pct: q.drift20Pct,
+    drift5Pending: q.drift5Pending, drift20Pending: q.drift20Pending,
+  }));
   // NAMED, NOT COUNTED. The reader is looking at labelled bars; a count tells
   // them a number is missing without telling them which.
   const uncoveredLabels = data.priceReactionQuarters
@@ -813,6 +683,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendTag { font-size: 0.55em; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; opacity: 0.75; margin-right: 2px; }
         .trendLatest { display: block; margin-top: 4px; font-size: 15px; font-weight: 900; letter-spacing: -0.02em; }
         .trendLatest .trendTag { font-size: 10px; }
+        .cellShort { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.55); white-space: nowrap; }
         .crossTip { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.6); }
         .hero p.heroNote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(148,163,184,0.85); }
         .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: 10px; font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
@@ -941,6 +812,7 @@ export default async function StockEarningsPage({ params }: Props) {
         @media (max-width: 520px) { .gmChart { height: 120px; } .wfRow { grid-template-columns: minmax(74px, 30%) 1fr minmax(56px, auto); } }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
+        .chartBlockSub { font-size: 12px; color: rgba(148,163,184,0.85); margin-bottom: 8px; }
         .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
         .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
         .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
@@ -1180,57 +1052,15 @@ export default async function StockEarningsPage({ params }: Props) {
                 </>
               )}
 
-              <section className="card">
-                <div className="eyebrow">Price reaction</div>
-                <h2>How has {clean} actually traded around its last reports?</h2>
-                <p>This shows the stock&apos;s closing-price move around each report: for results filed with the SEC before market open, it&apos;s the move from the prior close into the filing-day close; for results filed after market close, it&apos;s the move from the filing-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
-                {latestReaction && (latestReaction.reactionPct != null || latestReaction.volumeMultiple != null) && (
-                  <p><strong>Most recent reaction ({latestReaction.label}):</strong> {formatPercent(latestReaction.reactionPct)}{latestReaction.volumeMultiple != null ? ` on ${latestReaction.volumeMultiple.toFixed(1)}x average volume` : ""}.</p>
-                )}
-                {hasAnyReaction ? (
-                  <>
-                    <div className="chartBlock">
-                      <SingleValueBarChart data={reactionData} />
-                    </div>
-                    <SeriesLegend items={[{ label: "Rose after report", color: "#22c55e" }, { label: "Fell after report", color: "#ef4444" }]} />
-                    <p className="earningsDataNote">This reflects the stock&apos;s actual price move, which can be driven by broader market moves as well as the earnings report itself &mdash; it isn&apos;t a clean read of earnings reaction alone.</p>
-                    {/* PROVENANCE ON THE CARD, because the two sources measure
-                        different sessions. A filing timestamp is when the
-                        document reached EDGAR; a calendar date is a third
-                        party's record of the announcement. Which one keyed
-                        these bars changes what they mean. */}
-                    <p className="earningsDataNote">
-                      {data.datesFromSec
-                        ? `Each bar is keyed to the date ${clean} filed its results with the SEC, and to the session that filing landed in: a filing after the close is measured against the next day's close.`
-                        : `Each bar is keyed to an earnings-calendar date, not to ${clean}'s own filings — its filing history has not been read yet.`}
-                    </p>
-                    {/* ── A MISSING BAR IS EXPLAINED, NOT LEFT TO INFERENCE ──
-                        A gap in this chart reads as "the market shrugged" or
-                        "they did not file". Neither is true: the price series
-                        simply starts later than the report. Naming the periods
-                        is the point — "some are missing" is not checkable by a
-                        reader looking at the chart. */}
-                    {uncoveredLabels.length > 0 && (
-                      <p className="earningsDataNote">
-                        <strong>{uncoveredLabels.join(", ")}</strong>{" "}
-                        {uncoveredLabels.length === 1 ? "has" : "have"} no bar above. {NO_PRICE_HISTORY_NOTE}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p>Not enough price history is available yet to chart the reaction around earnings.</p>
-                )}
-                {hasAnyDrift && (
-                  <>
-                    <div className="chartBlock">
-                      <div className="chartBlockTitle">Did the move hold? Price vs. pre-earnings close, over time</div>
-                      <MultiLineChart labels={driftLabels} series={driftSeries} />
-                      <SeriesLegend items={[{ label: "Day of reaction", color: "#60a5fa" }, { label: "+5 trading days", color: "#facc15" }, { label: "+20 trading days", color: "#22c55e" }]} />
-                    </div>
-                    <p className="earningsDataNote">This tracks the stock from just before each report through the following weeks, to show whether the initial reaction stuck, faded, or reversed. The most recent quarters may not have a full 20 trading days of data yet.</p>
-                  </>
-                )}
-              </section>
+              <PriceReactionCard
+                symbol={clean}
+                latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple } : null}
+                reaction={reactionData}
+                drift={driftQuarters}
+                datesFromSec={data.datesFromSec}
+                uncoveredLabels={uncoveredLabels}
+                noPriceHistoryNote={NO_PRICE_HISTORY_NOTE}
+              />
 
               {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>

@@ -11,7 +11,7 @@ import {
 } from "@/lib/server/secEarningsView";
 import {
   STALE_PRICE_WORDS, barValue, growthToneWord, marginToneWord, priceIsCurrent,
-  GROWTH_BAND_PCT, MARGIN_BAND_PP, stalePriceNote, toneBg, toneColor, toneTint,
+  GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate,
   TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote,
   type EarningsTone, type ScoreCoverage,
@@ -186,6 +186,24 @@ const NOT_REPORTED_NOTE =
   "\u201cNot reported\u201d means the company\u2019s SEC filing has no figure for that line. " +
   "It may be zero, or included under another heading.";
 
+/**
+ * SHORT LABELS FOR NARROW TABLE CELLS, with the full reason as the tooltip.
+ *
+ * "Not captured from this filing" wrapped to three lines in the five-year
+ * table's revenue column on AVAV (owner review, round 2). Tables print the
+ * short form; the snapshot tiles, which have room, keep the full sentence.
+ */
+const EMPTY_SHORT: Record<string, string> = {
+  [EMPTY_REASONS.notCaptured]: "Not captured",
+  [EMPTY_REASONS.noRevenueLine]: "No revenue line",
+  [NOT_REPORTED]: NOT_REPORTED,
+};
+const EMPTY_FULL: Record<string, string> = {
+  [EMPTY_REASONS.notCaptured]: `${EMPTY_REASONS.notCaptured}: the figure may be filed under a concept this page does not read yet.`,
+  [EMPTY_REASONS.noRevenueLine]: `${EMPTY_REASONS.noRevenueLine}: the company publishes no revenue figure this page reads.`,
+  [NOT_REPORTED]: "The company\u2019s SEC filing has no figure for that line. It may be zero, or included under another heading.",
+};
+
 /** A derived figure that cannot be computed, naming the input that is missing. */
 const cantCalculate = (missing: string) => `Can't calculate — ${missing} not reported`;
 
@@ -340,14 +358,28 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
 export function CellValue(
-  { cell, compact = false, currency = true, empty = NOT_REPORTED }:
-  { cell: ViewCell; compact?: boolean; currency?: boolean; empty?: string }
+  { cell, compact = false, currency = true, empty = NOT_REPORTED, short = false, emptyTitle }:
+  {
+    cell: ViewCell; compact?: boolean; currency?: boolean; empty?: string;
+    /** A narrow table column: print the short label, the full reason on hover/tap. */
+    short?: boolean;
+    /** The full reason for `short`, when it says more than `empty` (Q4 EPS). */
+    emptyTitle?: string;
+  }
 ) {
   // NOT A DASH. A null here means the filer published no figure for this line,
   // and that is a fact about the filing worth stating. A filed ZERO still
   // renders as $0 — money() is only reached when there is a value. `empty`
   // lets a caller that KNOWS the reason say it (see revenueEmpty).
   if (cell.val == null) {
+    if (short) {
+      return (
+        <abbr className="cellShort" title={emptyTitle ?? EMPTY_FULL[empty] ?? empty} tabIndex={0}
+          style={{ color: "#94a3b8", fontWeight: 600 }}>
+          {EMPTY_SHORT[empty] ?? empty}
+        </abbr>
+      );
+    }
     return <span style={{ color: "#94a3b8", fontWeight: 600 }}>{empty}</span>;
   }
   return (
@@ -805,6 +837,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
       </h2>
       <p>
         Each fiscal year as filed, compared with the year before.
+        {fiscalYearEndNote(view.annual.map((r) => r.end)) ? <> {fiscalYearEndNote(view.annual.map((r) => r.end))}</> : null}
         {sole ? (
           <>
             {" "}
@@ -826,17 +859,16 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
             {view.annual.map((r) => (
               <tr key={r.label}>
                 <td data-label="Fiscal year">
-                  {r.label}
-                  {/* EVERY FIGURE NAMES ITS PERIOD END, not just its label —
-                      two filers' "FY2025" can be nine months apart. */}
-                  <span style={{ display: "block", fontSize: 11, color: "#94a3b8" }}>
-                    ended {r.end}
-                  </span>
+                  {/* THE PERIOD END ON THE LABEL, AS A TOOLTIP. It was a second
+                      line under every label; the intro now says it once
+                      (fiscalYearEndNote) and the exact date is one hover or
+                      tap away — two filers' "FY2025" can be nine months apart. */}
+                  <abbr className="cellShort" title={`Ended ${r.end}`} tabIndex={0}>{r.label}</abbr>
                 </td>
                 <td data-label="Compared with">{r.comparedWith ?? "not on file"}</td>
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact empty={revenueEmpty(view)} /></td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
                 <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
-                <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} /></td>
+                <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short /></td>
                 <td data-label="EPS YoY"><PctCell v={r.epsYoY} /></td>
                 <td data-label="Gross margin">{pctLevel(r.gross)}</td>
                 <td data-label="Operating margin">{pctLevel(r.operating)}</td>
@@ -1208,9 +1240,11 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
               <tr key={r.end}>
                 <td data-label={w.One}>{r.label}</td>
                 <td data-label="Period ending">{r.end}</td>
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact empty={revenueEmpty(view)} /></td>
-                <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}><CellValue cell={r.epsDiluted} /></td>
-                <td data-label="Net income"><CellValue cell={r.netIncome} compact /></td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
+                <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}>
+                  <CellValue cell={r.epsDiluted} short emptyTitle={/^Q4 /.test(r.label) ? Q4_EPS_NOTE : undefined} />
+                </td>
+                <td data-label="Net income"><CellValue cell={r.netIncome} compact short /></td>
               </tr>
             ))}
           </tbody>

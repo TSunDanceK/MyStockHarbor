@@ -122,4 +122,11 @@ for (const symbol of SYMS) {
       JSON.stringify(mod.computeEarningsReactionDetail(row, bounded));
   });
   console.log(`  VERDICT: the window ${anyDiff ? "CHANGES" : "changes NOTHING"} for ${symbol}`);
+  // ONE MACHINE-READABLE LINE per symbol, oldest report first, from the
+  // shipped function over the full series: what the price-reaction card is
+  // handed, so it can be rendered from real bars in the sandbox.
+  console.log(`REACTION_JSON ${symbol} ${JSON.stringify(barEvents.slice().reverse().map((e) => ({
+    periodEnd: e.periodEnd, announcedOn: e.announcedOn,
+    ...mod.computeEarningsReactionDetail({ symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" }, bars),
+  })))}`);
 }
