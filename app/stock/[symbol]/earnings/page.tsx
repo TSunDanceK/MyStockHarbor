@@ -1177,6 +1177,24 @@ export default async function StockEarningsPage({ params }: Props) {
         .contentGrid > * { min-width: 0; }
         .hero > * { min-width: 0; }
         .metricGrid > * { min-width: 0; }
+        /* ── AND THE CARDS THEMSELVES, WHICH IS WHERE THE FIRST FIX STOPPED ──
+           Guarding only the two .contentGrid children was not enough and the
+           preview still overlapped. MEASURED in Chromium against this page's
+           real stylesheet and real rendered cards: the main column's own box
+           sized correctly to its track at 26..786, and a .card INSIDE it
+           reached 815 — 7px past the aside's left edge at 808.
+
+           The column is a nested grid, so its cards are grid items too and
+           carry their own 'min-width: auto'. Fixing the outer item moved the
+           overflow down one level rather than removing it; the chain has to be
+           unbroken from the track to the scroll wrapper or the wrapper is
+           never forced narrow enough for its 'overflow-x: auto' to engage.
+
+           Same measurement with this rule: scrollWidth 789 -> 760, equal to
+           clientWidth, so the column no longer overflows at all; the widest
+           card edge lands exactly on the column edge at 786; painted content
+           stops 22px short of the aside, which is the grid gap. */
+        .card, .scoreCard { min-width: 0; }
         .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
         .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
         .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
