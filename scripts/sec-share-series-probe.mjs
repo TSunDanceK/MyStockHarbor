@@ -20,6 +20,8 @@ const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm
 const sec = await lift([
   readCodeOnly("lib/server/secFields.ts"),
   strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"),
+  strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
   strip("lib/server/secShareHistory.ts"),
   "export { extractCompanyFacts, encodeFactSet, buildShareHistory };",
