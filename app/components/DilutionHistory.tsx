@@ -20,7 +20,7 @@ export type DilutionHistoryData = {
    * Optional so a payload built the old way still renders; the footer then
    * names no basis.
    */
-  basis?: "quarter" | "year";
+  basis?: "annual+quarters" | "quarter" | "year";
 };
 
 function fmtShares(value: number | null) {
@@ -179,9 +179,15 @@ export default function DilutionHistory({
       </div>
 
       <div style={sourceStyle}>
-        Weighted-average basic shares from {symbol}&apos;s own SEC filings
-        {data?.basis === "year" ? ", by fiscal year" : data?.basis === "quarter" ? ", by quarter" : ""} —{" "}
-        {points.length} data points from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.
+        {data?.basis === "annual+quarters" ? (
+          // THE OWNER'S WORDING (#517).
+          <>Annual share counts from SEC filings, latest quarters appended. {symbol} — {points.length} data points
+          from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.</>
+        ) : (
+          <>Weighted-average basic shares from {symbol}&apos;s own SEC filings
+          {data?.basis === "year" ? ", by fiscal year" : data?.basis === "quarter" ? ", by quarter" : ""} —{" "}
+          {points.length} data points from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.</>
+        )}
         {/* FEWER POINTS THAN THE OLD CHART, AND WHY (owner, #517). The store
             keeps the last 12 quarters, and a fourth quarter has no share count
             of its own — a weighted average is not derived by subtraction — so

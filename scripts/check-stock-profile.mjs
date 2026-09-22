@@ -251,5 +251,47 @@ console.log("\n8. the valuation multiples are the filings', one period basis eac
     /valuationMultiples\(/.test(read("app/stock/[symbol]/page.tsx")));
 }
 
+console.log("\n9. the long share history: fiscal years from the payload, then recent quarters");
+{
+  // A payload with fifteen fiscal years of basic shares and one 10-Q
+  // trailing-twelve-month comparative that must NOT count as a year.
+  const row = (val, start, end, fp = "FY", form = "10-K") =>
+    ({ val, start, end, fy: Number(end.slice(0, 4)), fp, form, filed: `${Number(end.slice(0, 4)) + 1}-02-01`, accn: `0000000000-${end}` });
+  const years = Array.from({ length: 15 }, (_, i) => 2010 + i);
+  const facts = { cik: 1, entityName: "Synthetic", facts: { "us-gaap": {
+    WeightedAverageNumberOfSharesOutstandingBasic: { units: { shares: [
+      ...years.map((y) => row(1000 + y, `${y}-01-01`, `${y}-12-31`)),
+      row(9999, "2024-07-01", "2025-06-30", "Q2", "10-Q"),
+    ] } },
+    NetIncomeLoss: { units: { USD: years.map((y) => row(5, `${y}-01-01`, `${y}-12-31`)) } },
+  } } };
+  const r = M.extractCompanyFacts("SYN", facts);
+  check("every fiscal year in the payload is kept, beyond the retained window",
+    r.annualShares?.length === 15 && r.annualShares[0][0] === "2010-12-31", `${r.annualShares?.length} years`);
+  check("a trailing-twelve-month comparative is not a fiscal year",
+    !r.annualShares.some(([e]) => e === "2025-06-30"));
+  const enc = M.encodeFactSet(r);
+  check("the codec stores it as `as`, about 20 bytes a year",
+    enc.as?.length === 15 && JSON.stringify(enc.as).length < 15 * 25, `${JSON.stringify(enc.as).length} bytes`);
+
+  // THE CHART: years first, then quarters after the last fiscal year-end.
+  const set = fixture("AAPL");
+  const lastFy = set.years[0].e;
+  const withAs = { ...set, as: [["2012-09-29", 26e9], ["2018-09-29", 19e9], [lastFy, 15e9]] };
+  const h = M.buildShareHistory(withAs);
+  check("the chart draws the yearly points, then the quarters since the last year-end",
+    h.basis === "annual+quarters" && h.points[0].date === "2012-09-29" &&
+      h.points.slice(3).every((p) => p.date > lastFy), `${h.points.length} points`);
+  check("a set without `as` keeps the quarterly fallback", M.buildShareHistory(set).basis === "quarter");
+  const dil = read("app/components/DilutionHistory.tsx");
+  check("the footer uses the owner's wording", /Annual share counts from SEC filings, latest quarters appended/.test(dil));
+  const noRecent = await loadComposer(once(
+    "const recent = seriesOf(set.quarters ?? []).filter((p) => p.date > lastYear);",
+    "const recent = seriesOf(set.quarters ?? []);"
+  ));
+  check("...and CATCHES quarters inside a fiscal year plotted beside its yearly point",
+    noRecent.buildShareHistory(withAs).points.slice(3).some((p) => p.date <= lastFy));
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
 process.exit(failures ? 1 : 0);

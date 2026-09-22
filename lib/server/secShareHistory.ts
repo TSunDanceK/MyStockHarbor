@@ -13,8 +13,10 @@
 // (12) and SEC_YEAR_WINDOW years (6), and a derived Q4 carries NO share count:
 // a weighted average is never differenced (FieldKind "duration-average"), so
 // every fourth quarter is a gap rather than a point. A 10-Q filer therefore
-// yields about nine quarterly points. That is reported in the PR rather than
-// papered over; widening retention is a separate decision.
+// yields about nine quarterly points. So the extractor now stores ONE extra
+// series, fiscal-year basic shares for every year in the payload
+// (StoredFactSet.as), and the chart draws those years and then the quarters
+// since — retention itself is not widened (owner, #517).
 //
 // PURE — no I/O — so the check suite can run it on committed fixtures.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
@@ -24,8 +26,13 @@ export type ShareHistoryPoint = { date: string; shares: number };
 
 export type ShareHistory = {
   points: ShareHistoryPoint[];
-  /** Which series the points are: quarters, or fiscal years as the fallback. */
-  basis: "quarter" | "year";
+  /**
+   * Which series the points are. "annual+quarters" is the long history: every
+   * fiscal year in the payload (StoredFactSet.as), then the stored quarters
+   * after the last fiscal year-end. "quarter" / "year" are the fallback for a
+   * set written before `as` existed.
+   */
+  basis: "annual+quarters" | "quarter" | "year";
 };
 
 /** The chart needs a spread to draw a trend; fewer than this is no chart. */
@@ -43,6 +50,19 @@ const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
  */
 export function buildShareHistory(set: StoredFactSet | null): ShareHistory | null {
   if (!set) return null;
+  // ── THE LONG HISTORY, WHERE THE SET CARRIES IT ────────────────────────────
+  // Yearly points back as far as companyfacts goes, then the quarters filed
+  // since the last fiscal year-end — the owner's shape (2026-09-22, #517),
+  // chosen over widening retention.
+  if (set.as?.length) {
+    const years = set.as
+      .filter(([, v]) => typeof v === "number" && v > 0)
+      .map(([date, shares]) => ({ date, shares }));
+    const lastYear = years.at(-1)?.date ?? "";
+    const recent = seriesOf(set.quarters ?? []).filter((p) => p.date > lastYear);
+    const points = [...years, ...recent];
+    if (points.length >= MIN_SHARE_POINTS) return { points, basis: "annual+quarters" };
+  }
   const quarters = seriesOf(set.quarters ?? []);
   if (quarters.length >= MIN_SHARE_POINTS) return { points: quarters, basis: "quarter" };
   const years = seriesOf(set.years ?? []);

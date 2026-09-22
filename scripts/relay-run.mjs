@@ -169,6 +169,9 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
+  // symbol, from the shipped extractor on the live payload. Read-only.
+  "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
   // Registrant facts (SIC, business address, incorporation, website, fiscal
   // year end, entity type, latest annual form) for every profiled symbol, from
   // SEC submissions. Read-only, no credentials. Prints the file into its log
