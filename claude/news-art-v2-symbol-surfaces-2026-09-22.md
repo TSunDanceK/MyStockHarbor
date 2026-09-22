@@ -197,7 +197,89 @@ manifest.**
 
 ---
 
-## 7. Open
+## 7. The drone/defence capture — measure only
+
+None of ONDS, RCAT, UMAC, AVAV or KTOS is in the 2026-09-13 fixture, so nothing
+in this repo said what layer 1 does on the copy the whole change was prompted
+by. Captured 2026-09-22 by the `drone-sample` relay task (run 35780548638, the
+read-only job), 14 headlines each, committed verbatim as
+`scripts/fixtures/drone-headlines-2026-09-22.jsonl`. `node
+scripts/newsart-drone-measure.mjs` reproduces everything below.
+
+### Layer 1 reaches nothing. Zero of seventy.
+
+| | |
+|---|---|
+| subject after the market-wide exclusion | **0 (0%)** |
+| dropped as market-wide | 0 |
+| nothing, falls to the layers below | **70 (100%)** |
+
+Not one drone or defence headline scores a subject, and none was dropped by the
+exclusion either — there is simply no defence vocabulary in the subject table.
+**This is the designed outcome, not a failure:** the picker has three more
+layers, and a headline that says nothing specific should fall through to the
+company rather than be forced into a picture.
+
+### What each symbol actually gets
+
+| symbol | industry | what decides the picture |
+|---|---|---|
+| RCAT | Aerospace & Defense | layer 3 → `aerospace-defence` |
+| AVAV | Aerospace & Defense | layer 3 → `aerospace-defence` |
+| KTOS | Aerospace & Defense | layer 3 → `aerospace-defence` |
+| ONDS | Communication Equipment | layer 3 → `telecom` |
+| UMAC | **not in the snapshot at all** | layer 4, or the generated card |
+
+**UMAC is the finding worth acting on.** `data/static-profile.json` has no row
+for it, so `resolveProfile` logs a miss and both the industry and the sector
+layer have nothing to answer with. That is a data gap, not a picker gap — the
+relay task `static-profile` regenerates the snapshot — and it is invisible from
+the code.
+
+### A defence pattern: proposed, measured, NOT landed
+
+Item 5 was measure-only, so nothing below is in the live table.
+
+```ts
+// Candidate A
+/\b(defen[cs]e (spending|budget|contract|awards?|stocks?|tech|sector|primes?)|drone (makers?|stocks?|programs?|fleet|swarms?)|drones?\b|pentagon|warfighters?|precision[- ]strike|cruise[- ]missiles?)\b/i
+```
+
+| candidate | drone / 70 | per-symbol / 192 | general / 42 | "defensive stocks", "defensive sectors" |
+|---|---|---|---|---|
+| A (narrow) | 25 (36%) | **1 (0.5%)** | 0 | clean |
+| B (bare `defence` too) | 31 (44%) | 1 (0.5%) | 0 | clean |
+| C (drones only) | 16 (23%) | 0 | 0 | clean |
+
+The guard holds by construction rather than by care: `\bdefense\b` cannot match
+"defensive" — the word boundary needs a non-word character and gets an `i`. All
+three candidates were run against the guard phrases and none fires.
+
+**All three pass the 10% rule, and that is the rule's limitation, not its
+endorsement.** The 192-row fixture is tech and consumer copy with no defence
+stories in it, so it cannot bound how broad a defence pattern is. The honest
+limit for one of these is the drone fixture, where 36% is by design because it
+IS a defence feed. A pattern for a sector needs a fixture from that sector.
+
+The single per-symbol hit is worth reading before anyone lands this:
+
+> NIO Stock Jumps Overnight: Deutsche Bank's 304% Profit Growth Outlook Drowns
+> Out **Pentagon** Military Tag Concerns
+
+Defensible — it is a defence-policy story about NIO — and exactly the shape that
+turned out wrong for `banks`. There is a second and larger risk in the same
+family: "Kratos Defense & Security Solutions" is a COMPANY NAME containing
+"Defense", so a headline naming Kratos on someone else's page would score
+`aerospace-defence` the way "Bank of America" once scored `banks`.
+
+**And for four of the five symbols it would change almost nothing**, because
+layer 3 already answers `aerospace-defence` for RCAT, AVAV and KTOS. The only
+symbol a layer-1 defence pattern actually moves is ONDS (4 of 14), and only
+because its industry label says telecom.
+
+---
+
+## 8. Open
 
 - **ONDS gets telecom art, not drone art.** `drones` is not a subject the
   library holds. A per-symbol override and new art are both out of this change,
@@ -207,7 +289,8 @@ manifest.**
 - **The 11 with no honest tag.** `Security & Protection Services` is the sharpest:
   guards and alarms, and tagging it `cybersecurity` would be a different
   industry rather than an approximation of one.
-- **A drone/defence headline capture** for the five symbols, via the
-  `drone-sample` relay task — none of them is in the 2026-09-13 fixture, so
-  layer 1's behaviour on that copy is unmeasured.
+- **UMAC is missing from `data/static-profile.json`.** Regenerating the
+  snapshot (relay task `static-profile`) is the fix; §7 has the detail.
+- **A defence pattern for layer 1**, per §7 — proposed and measured, not landed,
+  and worth little for four of the five symbols.
 - `/sector/[slug]/news` and the dashboard strip, each its own change.
