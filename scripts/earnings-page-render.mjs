@@ -14,7 +14,7 @@
 // NOT IN check-all: it asserts nothing. The checks that do assert on this
 // output are check-earnings-render and check-sec-earnings-page.
 import fs from "node:fs";
-import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { loadCards, loadReactionCharts, html, visibleText, React } from "./lib/render-cards.mjs";
 
 const SYM = (process.env.FIXTURE || "AVAV").toUpperCase();
 const PAGE = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
@@ -51,6 +51,26 @@ const sections = [
   ["cash", el(M.SecCashQualityCard, { view })],
   ["balance", el(M.SecBalanceSheetCard, { view })],
 ];
+// THE PRICE-REACTION CARD, when REACTION=<json> is given: rows as
+// scripts/reaction-window-diagnosis.mjs prints them (REACTION_JSON), oldest
+// first, from the shipped computeEarningsReactionDetail over the cached bars.
+// Labels come from the fixture's own quarters by period end.
+if (process.env.REACTION) {
+  const R = await loadReactionCharts();
+  const rows = JSON.parse(fs.readFileSync(process.env.REACTION, "utf8"));
+  const byEnd = new Map((set.quarters ?? []).map((q) => [q.e, q]));
+  const label = (r) => {
+    const q = byEnd.get(r.periodEnd);
+    const hit = view.recentPeriods?.find((p) => p.end === r.periodEnd)?.label;
+    return hit ?? (q ? `${q.fp} FY${q.fy}` : r.periodEnd);
+  };
+  const qs = rows.map((r) => ({ ...r, label: label(r) }));
+  const latest = [...qs].reverse().find((q) => q.reactionPct != null) ?? null;
+  sections.push(["reaction", el(R.PriceReactionCard, {
+    symbol: SYM, latest, reaction: qs.map((q) => ({ label: q.label, value: q.reactionPct })), drift: qs,
+    datesFromSec: true, uncoveredLabels: qs.filter((q) => q.reason === "uncovered").map((q) => q.label), noPriceHistoryNote: "",
+  })]);
+}
 const side = [
   ["income", el(M.SecIncomeStatementCard, { view })],
   ["recent", el(M.SecRecentPeriodsCard, { view })],

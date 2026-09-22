@@ -108,6 +108,16 @@ export async function loadCards(mutate = (src) => src) {
   return importTsxSource(mutate(`${view}\n${cards}`));
 }
 
+/**
+ * The price-reaction charts (app/stock/[symbol]/earnings/ReactionCharts.tsx).
+ * Self-contained — its only import is React's types — so it transpiles alone.
+ */
+export async function loadReactionCharts(mutate = (src) => src) {
+  const src = fs.readFileSync("app/stock/[symbol]/earnings/ReactionCharts.tsx", "utf8")
+    .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+  return importTsxSource(mutate(src));
+}
+
 /** Render one element to markup. */
 export const html = (el) => renderToStaticMarkup(el);
 
