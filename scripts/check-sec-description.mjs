@@ -59,6 +59,15 @@ console.log("\n1. 10-K Item 1: the section, not the TOC or a cautionary-note lin
   const bad = prefix.locateSection(doc, "10-K");
   check("...and CATCHES a prefix match that pairs the TOC with the cautionary note",
     !bad.found || !bad.body.startsWith("Ondas Holdings"));
+  // DAL: "Item 1. Business" is a running header on every page of Item 1.
+  const pages = ["Item 1. Business", "Item 1A. Risk Factors", "PART I", "Item 1. Business", "Delta Air Lines is a major airline serving customers worldwide. " + filler("Delta"),
+    "Item 1. Business", "More about routes and alliances. " + filler("Routes"), "Item 1. Business", "Executive officers: Snell, Age 49. " + filler("Officers"),
+    "Item 1A. Risk Factors", "As described below, these risks could materially affect our business.", "Item 1A. Risk Factors", "x"].join("\n");
+  const dal = D.locateSection(pages, "10-K");
+  check("running page headers: the section starts at its first page (DAL)", dal.found && dal.body.startsWith("Delta Air Lines is a major airline"));
+  const lastOnly = await load(once("const [, from] = repeated ? between[0] : before[before.length - 1];", "const [, from] = before[before.length - 1];"));
+  const bad2 = lastOnly.locateSection(pages, "10-K");
+  check("...and CATCHES the last page taken as the section", !bad2.found || !bad2.body.startsWith("Delta Air Lines"));
   const split = ["Item 1. Busines s Description", "Berkshire Hathaway Inc. is a holding company. " + filler("Berkshire"), "Item 1A. Ris k Factors", "x"].join("\n");
   check("a heading with words split mid-way is read letters-only (BRK.B)", D.locateSection(split, "10-K").found);
 }
