@@ -46,9 +46,19 @@ const norm = (s) => s.toUpperCase().replace(/\(.*?\)/g, "").replace(/[^A-Z]/g, "
 // run (relay 35773438440). Walking AA..ZZ and keeping the first code per name
 // keeps FR, GB, RS, BJ, BF, TL, because each current code sorts before the
 // retired one it replaced. Checked below rather than assumed.
+// AND THE WITHDRAWN CODES ARE EXCLUDED OUTRIGHT, because order alone was not
+// enough: on the runner's ICU, CS (withdrawn Serbia and Montenegro) is named
+// plain "Serbia" and sorts BEFORE RS, and the assertion below caught it on relay
+// 35773713228. The list is ISO 3166-3's withdrawn alpha-2 codes, plus UK
+// (exceptionally reserved for GB) and the non-country region codes.
+const NOT_CURRENT = new Set([
+  "AN", "BU", "CS", "DD", "DY", "FX", "HV", "NH", "NT", "RH", "SU", "TP", "UK", "YD", "YU", "ZR",
+  "EU", "EZ", "UN", "QO", "ZZ",
+]);
 const isoByName = new Map();
 for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
   const iso = String.fromCharCode(a, b);
+  if (NOT_CURRENT.has(iso)) continue;
   const name = display.of(iso);
   if (name && name !== iso && !isoByName.has(norm(name))) isoByName.set(norm(name), iso);
 }
