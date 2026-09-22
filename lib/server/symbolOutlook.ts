@@ -32,7 +32,7 @@
 // part. A symbol the cron has never reached answers "no-record", which is the
 // correct answer and a different one from "unavailable".
 import { readPickersSymbolsIfCached } from "./pickersBuilder";
-import { readReportDates, type StoredReportDates } from "./secReportDatesStore";
+import { latestResults, readReportDates, type StoredReportDates } from "./secReportDatesStore";
 import { dueInputFrom } from "./dueInputs";
 import { selectDue } from "./dueToReport";
 import { dueRowLabel } from "./dueStripState";
@@ -163,15 +163,14 @@ export function outlookFrom(
 const compact = (xs: (string | null)[]): string[] => xs.filter((x): x is string => Boolean(x));
 
 /** The last results filing on record, as a line. A dated public document. */
+// ONE HOME FOR "THE LATEST RESULTS EVENT": secReportDatesStore.latestResults.
+// This briefly carried its own walk over rec.events, which is the second
+// reader of one value the store's docblock warns against
+// (claude/traps/two-validators-for-one-value.md). Only the sentence is built
+// here.
 function lastFiled(rec: StoredReportDates | null): string | null {
-  const events = rec?.events;
-  if (!Array.isArray(events)) return null;
-  for (const e of events) {
-    if (e && typeof e.announcedOn === "string" && e.announcedOn) {
-      return lastReportedLabel(e.announcedOn, typeof e.periodEnd === "string" ? e.periodEnd : null);
-    }
-  }
-  return null;
+  const last = latestResults(rec);
+  return last ? lastReportedLabel(last.announcedOn, last.periodEnd) : null;
 }
 
 /**
