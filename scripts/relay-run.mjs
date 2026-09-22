@@ -181,6 +181,16 @@ const TASKS = {
   // carries the recent quarters, and whether 2115436 has filed an annual yet.
   // Read-only, no credentials.
   "sec-cik-periods": { script: "scripts/sec-cik-periods-probe.mjs", args: () => [], needsTypescript: true },
+  // PR 3 render (#518): the company's own description for every profiled
+  // symbol, in six shards so each fits the read-only job's 30 minutes. Each
+  // writes data/sec/descriptions-part-k.json; descriptions-commit.yml merges
+  // them into data/sec/descriptions.json. Read-only, no credentials.
+  "sec-descriptions-1": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-descriptions-2": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-descriptions-3": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
   "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
   // Registrant facts (SIC, business address, incorporation, website, fiscal
   // year end, entity type, latest annual form) for every profiled symbol, from
