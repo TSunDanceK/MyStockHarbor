@@ -90,6 +90,30 @@ if (!records.size || [...records.values()].every((r) => !r)) {
   problems.push("EVERY record read back empty — this measured the store being unreachable, not the producer.");
 }
 
+// ── RAW EVENTS, ON REQUEST ────────────────────────────────────────────────
+// The sweep prints the SENTENCE; this prints the filings underneath it. It
+// exists because two of the six in-window estimates in relay 35763454309 quote
+// medians a reader would not believe -- TSLA "usually reports 2 days after a
+// period ends", ABBV "4 days" -- and the hypothesis (an Item 2.02 that is not
+// the results release, kept because reportEvents takes the EARLIEST 2.02 per
+// period) is checkable against the stored accessions rather than arguable.
+//   dispatch with symbols=TSLA,ABBV,GE
+const dump = (process.env.SYMBOLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+if (dump.length) {
+  console.log("\n── RAW EVENTS ────────────────────────────────────────────────");
+  for (const symbol of dump) {
+    const rec = records.get(symbol) ?? (await redis.get(`${PREFIX}:${symbol}`));
+    console.log(`\n  ${symbol}  next=${JSON.stringify(rec?.next ?? null)}  nextPeriodEnd=${rec?.nextPeriodEnd ?? null}`);
+    for (const e of (rec?.events ?? []).slice(0, 8)) {
+      const lag = Math.round(
+        (Date.parse(`${e.announcedOn}T00:00:00Z`) - Date.parse(`${e.periodEnd}T00:00:00Z`)) / 86_400_000,
+      );
+      console.log(`      period ${e.periodEnd}  announced ${e.announcedOn}  lag ${String(lag).padStart(3)}  ` +
+        `${e.form ?? "?"} items=${e.items ?? "?"}  ${e.basis ?? "?"}  ${e.accession ?? "?"}`);
+    }
+  }
+}
+
 console.log("\n── CANARY ────────────────────────────────────────────────────");
 if (problems.length) {
   for (const p of problems) console.log(`  PROBLEM  ${p}`);
