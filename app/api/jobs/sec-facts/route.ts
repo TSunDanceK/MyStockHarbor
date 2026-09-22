@@ -13,7 +13,8 @@ import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import type { Submissions } from "@/lib/server/secReportDates";
-import { buildAndWriteReportDates } from "@/lib/server/secReportDatesWrite";
+import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue } from "@/lib/server/secReportDatesWrite";
+import dueStripCut from "@/data/due-strip.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
 
 export const runtime = "nodejs";
@@ -467,6 +468,14 @@ export async function GET(req: NextRequest) {
   }
 
   const q = populationQueues(manifest);
+  // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
+  // by an 8-K or 6-K ("unconfirmed") filed since Sep 20 has no lastEventFiled
+  // yet (the field is new), and the loop sets needsReverify false as it goes.
+  const eventQueued = new Set(
+    Object.entries(manifest.symbols)
+      .filter(([, e]) => e.cik && e.needsReverify && e.reverifyReason === "unconfirmed")
+      .map(([s]) => s)
+  );
   const url = new URL(req.url);
   // One symbol, on demand — for checking a single page after a deploy without
   // waiting a day for the cron. Still goes through the same code path.
@@ -686,19 +695,29 @@ export async function GET(req: NextRequest) {
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
   lap("facts");
-  const reportDates = { deferred: 0, attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
+  const reportDates = { carried: 0, tierFiled: 0, tierCut: 0, tierRest: 0, deferred: 0, attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, dated: 0, pending: 0 };
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
-    const changedSet = new Set(changedThisRun);
-    const backfill = Object.entries(manifest.symbols)
-      .filter(([sym, e]) => e.cik && !e.reportDatesAt && !changedSet.has(sym))
-      .map(([sym]) => sym);
-    reportDates.backlog = backfill.length;
+    // TIERED, NOT FIFO: new 8-K/6-K filers first, then stale due-strip
+    // records, then changed sets and the never-written backfill. See
+    // reportDatesQueue for the order and why.
+    const { queue: datesQueue, tier1, tier2, tier3 } = reportDatesQueue({
+      entries: manifest.symbols,
+      eventQueued,
+      cut: dueStripCut.symbols,
+      changedThisRun,
+      limit: SEC_REPORT_DATES_PER_RUN,
+      now: Date.now(),
+    });
+    reportDates.backlog = Object.values(manifest.symbols).filter((e) => e.cik && !e.reportDatesAt).length;
+    reportDates.tierFiled = tier1;
+    reportDates.tierCut = tier2;
+    reportDates.tierRest = tier3;
     // The pairing rewrite (data/sec/report-dates-rewrite.json) is NOT queued
     // here: this job has been timing out at 300s (production, 2026-09-22
     // 04:20), and a backfill behind a timeout never reaches its turn. It has
     // its own route, /api/jobs/sec-report-dates-rewrite.
-    const datesQueue = [...changedThisRun, ...backfill].slice(0, SEC_REPORT_DATES_PER_RUN);
+    const datesWritten = new Set<string>();
     for (const [i, symbol] of datesQueue.entries()) {
       if (!budget.datesOpen()) { reportDates.deferred = datesQueue.length - i; break; }
       const entry = manifest.symbols[symbol];
@@ -718,6 +737,7 @@ export async function GET(req: NextRequest) {
         const { ok, events, next, pending } = await buildAndWriteReportDates(symbol, cik, set, subs, todayIso);
         if (!ok) { reportDates.failed++; continue; }
         reportDates.written++;
+        datesWritten.add(symbol);
         if (!events.length) reportDates.noEvents++;
         if (next.kind === "date") reportDates.dated++;
         if (pending) reportDates.pending++;
@@ -731,6 +751,11 @@ export async function GET(req: NextRequest) {
         console.warn("[sec-facts] report dates failed", symbol, String((err as Error)?.message ?? err));
       }
     }
+    // KEPT IN TIER 1 IF LEFT OUT: see carryEventQueued. Stamped on the manifest,
+    // which is written below whatever happened.
+    reportDates.carried = carryEventQueued(
+      manifest.symbols, eventQueued, datesWritten, todayIso.replace(/-/g, "")
+    ).length;
   }
 
   // CLEARED WHETHER OR NOT IT POPULATED. A symbol that fetched to nothing --
@@ -773,6 +798,12 @@ export async function GET(req: NextRequest) {
     // one that only climbs is a bug in the test, not a lag at SEC.
     reportDatesPending: reportDates.pending,
     reportDatesBacklog: reportDates.backlog,
+    // The queue's tiers before the 100 cap: filed since the record, stale
+    // due-strip records, and the rest (changed sets + never-written backfill).
+    reportDatesTierFiled: reportDates.tierFiled,
+    reportDatesTierCut: reportDates.tierCut,
+    reportDatesTierRest: reportDates.tierRest,
+    reportDatesCarried: reportDates.carried,
     manifestWritten: persisted,
     // ── THE BUDGET, per run ─────────────────────────────────────────────
     // Where the time went, and what was left for tomorrow. A run that defers
