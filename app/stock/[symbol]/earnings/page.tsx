@@ -11,8 +11,7 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { resolveFactSetForRender } from "@/lib/server/secColdFetch";
-import { notFound } from "next/navigation";
+import { cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
 import { buildSecEarningsView, periodWords } from "@/lib/server/secEarningsView";
 // ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
@@ -40,6 +39,7 @@ import {
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecTrendSummaryCard, SecValuationCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard,
+  SecNoRegistrantCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -702,7 +702,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title, description,
     robots: {
-      index: true,
+      // NOINDEX WHEN THERE ARE NO FILINGS TO SHOW, the same rule and the same
+      // reason as /stock/[symbol]: this route is enumerated, the no-registrant
+      // state is now a 200 rather than a 404, and a 200 that can be indexed as
+      // thin content is the cost of having stopped 404-ing. `follow` stays
+      // true — the card links to a real stock page, and there is no reason to
+      // strand a crawler that has arrived here.
+      //
+      // cikForSymbol is the CHEAP gate by design: the committed file, no
+      // network and no Redis (see its docblock), so generateMetadata can ask
+      // it without adding a round trip.
+      index: cikForSymbol(clean) !== null,
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
@@ -716,11 +726,20 @@ export default async function StockEarningsPage({ params }: Props) {
   const clean = cleanSymbol(symbol);
   const data = await getEarningsData(clean);
 
-  // THE CIK GATE, AS A 404. A symbol SEC has never heard of gets no page at
-  // all: nothing was fetched for it and nothing was queued. This is what bounds
-  // an endpoint anyone can hit -- the set of strings that can trigger work is
-  // the ~10,400 registrants in the committed ticker file, not any string.
-  if (data.cold.status === "no-cik") notFound();
+  // THE CIK GATE IS NO LONGER A 404 — see SecNoRegistrantCard.
+  //
+  // WHAT THE 404 GOT RIGHT AND KEPT: nothing is fetched or queued for a symbol
+  // with no CIK. The work bound is `cikForSymbol` returning null BEFORE any
+  // network or Redis call, and that is unchanged. Rendering a static card costs
+  // nothing and triggers nothing, so the bound never depended on the 404.
+  //
+  // WHAT IT GOT WRONG: /stock/MSTY renders while /stock/MSTY/earnings 404s, for
+  // a symbol the site serves. And this route is enumerated — the sibling page's
+  // own note records ~1,519 distinct request paths in the runtime logs — so the
+  // house answer already exists one directory up: 200 with an honest state,
+  // marked noindex, rather than a 404 on a real symbol or a 5xx that throttles
+  // crawl rate site-wide. This follows it.
+  const noRegistrant = data.cold.status === "no-cik";
 
   const nextReport = data.nextReport;
   const score = data.score;
@@ -1170,7 +1189,13 @@ export default async function StockEarningsPage({ params }: Props) {
                   card. "Pending" promises figures that are never coming, and
                   the figures it would eventually show belong to another
                   company. See lib/server/securityKind.ts. */}
-              {data.cold.status === "not-issuer-equity" ? (
+              {/* NO CIK AT ALL — FIRST, because every branch below assumes a
+                  registrant was found. This is the state that used to be a
+                  bare 404 on a symbol whose stock page renders fine. */}
+              {noRegistrant ? (
+                <SecNoRegistrantCard symbol={clean} />
+              ) :
+               data.cold.status === "not-issuer-equity" ? (
                 <SecNotIssuerEquityCard
                   symbol={clean}
                   reason={data.cold.reason}
