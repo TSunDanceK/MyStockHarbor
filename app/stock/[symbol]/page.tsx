@@ -8,6 +8,13 @@ import {
   type SecEarningsSnapshot,
 } from "@/lib/server/secEarningsSnapshot";
 import type { ProfileDividend } from "@/lib/server/secDividend";
+import type { StockPageProfileFacts } from "@/lib/server/secEarningsSnapshot";
+import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import { resolveProfile } from "@/lib/server/staticProfile";
+import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import { composeCompanyProfile, exchangeFor, registrantFor } from "@/lib/server/stockProfile";
+import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
 import {
@@ -151,6 +158,7 @@ async function fetchCompanyName(symbol: string): Promise<string> {
 async function fetchStockPageSecFacts(symbol: string): Promise<{
   snapshot: SecEarningsSnapshot;
   dividend: ProfileDividend;
+  profileFacts: StockPageProfileFacts;
 }> {
   return getStockPageSecFacts(symbol);
 }
@@ -172,6 +180,14 @@ function str(value: unknown): string | null {
 // render into the crawlable initial HTML (real per-company content = strong
 // "information gain" for indexing). Tries the stable endpoint first, then the
 // legacy v3 profile; maps both field-name variants defensively.
+//
+// ── SINCE 2026-09-22 ONLY `description` IS READ FROM THIS ────────────────
+// Every other row is composed from free sources in lib/server/stockProfile.ts
+// (brief 2026-09-22 PR 2). The function still maps every field — hidden, not
+// removed — so the record of what FMP used to supply survives, and PR 3
+// replaces the description with the company's own 10-K/20-F wording, after
+// which this is not called at all. The description is the LAST FMP field on
+// the page, and the attribution line says so.
 async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
@@ -234,6 +250,12 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
   return null;
 }
 
+// ── RETIRED 2026-09-22: NOT CALLED. Kept, per the hidden-not-removed rule. ──
+// The share-dilution chart reads the stored SEC set now (buildShareHistory in
+// lib/server/secShareHistory.ts, via getStockPageSecFacts): same concept —
+// weighted-average basic shares — and it does not stop when FMP does. The
+// body below is the record of the FMP read it replaced.
+//
 // Fetch historical shares-outstanding data on the SERVER for the "share
 // dilution" chart (DilutionHistory.tsx), same SSR pattern as the company
 // profile above — real data in the crawlable initial HTML, no client loading
@@ -253,6 +275,7 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
 // a real per-quarter (and per-year, as a fallback for sparse quarterly
 // coverage) shares-outstanding series. Field names are still mapped
 // defensively in case FMP changes the shape.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
@@ -380,7 +403,7 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, secFacts, profile, shareHistory] =
+  const [historyResult, quoteResult, companyName, secFacts, fmpProfile, fundamentals, directory] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -396,14 +419,41 @@ export default async function StockPage({ params }: Props) {
       // secColdFetch dedupes an in-flight read per symbol the way
       // getDailyHistory does. It does not — see getStockPageSecFacts.
       fetchStockPageSecFacts(upper),
+      // THE DESCRIPTION ONLY — see the note on fetchCompanyProfile.
       fetchCompanyProfile(upper).catch(() => null),
-      fetchShareHistory(upper).catch(() => null),
+      // A cached Redis mget that never fetches on a miss: the FMP-cache leg of
+      // resolveProfile, exactly as the news page reads it.
+      readCachedFundamentalsBulk([upper]).then((m) => m.get(upper) ?? null, () => null),
+      // Nasdaq Trader's directory for the heading, memoised per process.
+      getCompanyNameMap().catch(() => new Map<string, string>()),
     ]);
 
   const quote = quoteResult.quote;
   const points: Point[] = historyResult.points.filter(
     (p) => p.date && Number.isFinite(p.close)
   );
+
+  // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
+  // Composed rather than fetched: FMP supplies the description and nothing
+  // else. Market cap is the SEC cover-page share count times THIS page's
+  // price, so it moves to Tiingo with the quote and needs no change of its
+  // own; the 52-week range is computed from the same bars the chart draws.
+  const directoryName =
+    symbolSpellings(upper).map((s) => directory.get(s)).find(Boolean) ?? "";
+  const composed = composeCompanyProfile({
+    symbol: upper,
+    directoryName,
+    snapshotName: snapshotCompanyName(upper),
+    entityName: secFacts.profileFacts.entityName,
+    fmpDescription: fmpProfile?.description ?? null,
+    taxonomy: resolveProfile(upper, fundamentals),
+    valuation: secFacts.profileFacts.valuation,
+    price: quote.price,
+    points,
+    exchange: exchangeFor(upper),
+    registrant: registrantFor(upper),
+  });
+  const shareHistory = secFacts.profileFacts.shareHistory;
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
   //
@@ -580,7 +630,17 @@ export default async function StockPage({ params }: Props) {
         symbol={upper}
         earningsSnapshot={secFacts.snapshot}
         dividend={secFacts.dividend}
-        profile={profile}
+        // NULL WHEN NOTHING RESOLVED, not an empty object. The client renders
+        // the standalone dilution chart and "Learn the indicators" section only
+        // when `profile` is null; CompanyProfile returns null on an empty
+        // profile, so passing an empty one would drop both.
+        profile={
+          composed.description || composed.sector || composed.industry ||
+          composed.marketCap != null || composed.rangeLow != null ||
+          composed.exchange || composed.country
+            ? composed
+            : null
+        }
         shareHistory={shareHistory}
         seed={seed}
         // 500, not 300. The chart renders history.slice(-240) and ma200 needs

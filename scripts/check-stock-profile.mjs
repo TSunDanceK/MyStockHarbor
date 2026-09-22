@@ -1,0 +1,192 @@
+// THE /stock "ABOUT" BLOCK IS COMPOSED FROM FREE SOURCES — asserted by running it.
+//
+// Brief 2026-09-22 PR 2. What must hold, each paired with a mutation that
+// breaks it (a check that cannot fail reports PASS and proves nothing):
+//
+//   1. No FMP attribution reaches a reader except the description's.
+//   2. A market-cap refusal HIDES the row; it is never printed in the card.
+//   3. Every 20-F filer's cap is refused — AZN and ABVX included, which the
+//      five-name list missed (§2.6).
+//   4. The 52-week range is the high/low of the last 252 bars, not all bars.
+//   5. Country is the headquarters' country, via EDGAR's own code table.
+//   6. The share-dilution series comes from the stored set's sharesBasic, and
+//      the chart's footer names SEC, not FMP.
+//   7. IPO date and Website are hidden by the registry, not by a missing value.
+//
+// NO FIXTURE SUPPLIES AN EXPECTED VALUE: data/sec/factset-fixture-*.json and
+// data/sec/registrants.json come from SEC via the shipped code.
+import fs from "node:fs";
+import ts from "typescript";
+import { grabConst } from "./lib/source-code.mjs";
+import { loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
+
+let failures = 0;
+const check = (name, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+const read = (f) => fs.readFileSync(f, "utf8");
+const strip = (f) =>
+  read(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "").replace(/^export \* from "\.\/[^"]+";$/gm, "");
+
+/** The composer and its pure dependencies, as one transpiled unit. */
+async function loadComposer(mutate = (s) => s) {
+  const unit = [
+    read("lib/server/secFields.ts"),
+    strip("lib/server/secExtract.ts"),
+    strip("lib/server/fxRates.ts"),
+    strip("lib/server/secCurrency.ts"),
+    strip("lib/server/secFactCodec.ts"),
+    strip("lib/server/secEarningsView.ts"),
+    grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
+    strip("lib/server/secValuation.ts"),
+    strip("lib/server/secShareHistory.ts"),
+    read("lib/symbolSpellings.mjs").replace(/^export /gm, ""),
+    `const registrantsFile = ${read("data/sec/registrants.json")};`,
+    `const locationFile = ${read("data/sec/edgar-location-codes.json")};`,
+    // exchangeFor is not exercised here (the test passes `exchange` in); a stub
+    // keeps the unit loadable without the ticker file's fs/Redis path.
+    "const loadTickerMap = () => ({ map: new Map() });",
+    strip("lib/server/stockProfile.ts"),
+  ].join("\n");
+  const js = ts.transpileModule(mutate(unit), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const tmp = `scripts/.check-stock-profile-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`;
+  fs.writeFileSync(tmp, js);
+  try { return await import(`${process.cwd()}/${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+}
+
+const fixture = (sym) => JSON.parse(read(`data/sec/factset-fixture-${sym}.json`));
+const TODAY = "2026-09-22";
+const bars = (n, fn) => Array.from({ length: n }, (_, i) => ({ date: `d${i}`, close: fn(i) }));
+const taxonomy = { sector: "Technology", industry: "Consumer Electronics", source: "snapshot", sectorSource: "fmp-snapshot", industrySource: "fmp-snapshot" };
+
+const M = await loadComposer();
+const compose = (mod, sym, over = {}) => {
+  const set = fixture(sym);
+  return mod.composeCompanyProfile({
+    symbol: sym, directoryName: "", snapshotName: "", entityName: set.entityName,
+    fmpDescription: "A description.", taxonomy,
+    valuation: mod.valuationInputs(set, TODAY, { annualForm: mod.registrantFor(sym)?.annualForm ?? null }),
+    price: 200, points: bars(300, (i) => 100 + i), exchange: "NASDAQ",
+    registrant: mod.registrantFor(sym), ...over,
+  });
+};
+
+const P = await loadProfile();
+const noDividend = { state: "none", perShare: null, periodLabel: null, why: "test" };
+const render = (mod, profile, sym) =>
+  visibleText(html(React.createElement(mod.default, { profile, symbol: sym, dividend: noDividend })));
+
+console.log("\n1. only the description is attributed to FMP");
+{
+  const aapl = compose(M, "AAPL");
+  const t = render(P, aapl, "AAPL");
+  const fmpMentions = (t.match(/Financial Modeling Prep/g) ?? []).length;
+  check("exactly one FMP mention, and it is the description's",
+    fmpMentions === 1 && /Description: Financial Modeling Prep/.test(t), `${fmpMentions} mention(s)`);
+  check("the other rows credit SEC EDGAR and market data",
+    /Market cap: shares from SEC EDGAR/.test(t) && /Exchange: SEC EDGAR/.test(t) && /Country: SEC EDGAR/.test(t), "");
+  const noDesc = render(P, compose(M, "AAPL", { fmpDescription: null }), "AAPL");
+  check("with no FMP description, no FMP string at all", !/Financial Modeling Prep|FMP/.test(noDesc));
+  const old = await loadProfile(once(
+    "? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(\" · \")}.`",
+    "? `Company profile data from Financial Modeling Prep.`"
+  ));
+  check("...and CATCHES the blanket FMP line put back",
+    (render(old, compose(M, "AAPL", { fmpDescription: null }), "AAPL").match(/Financial Modeling Prep/g) ?? []).length > 0);
+}
+
+console.log("\n2. market cap: shares x the page's price, and a refusal hides the row");
+{
+  const aapl = compose(M, "AAPL");
+  const shares = fixture("AAPL").cover?.val;
+  check("AAPL's cap is its cover-page shares times the price given",
+    aapl.marketCap === shares * 200, `${aapl.marketCap} vs ${shares} x 200`);
+  const refused = compose(M, "AAPL", { valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
+  check("a refusal yields no Market cap row", !/Market cap/.test(render(P, refused, "AAPL")));
+  const printed = await loadComposer(once("marketCap: cap?.ok ? cap.val : null,", "marketCap: cap?.ok ? cap.val : 0,"));
+  const m2 = printed.composeCompanyProfile({ ...{ symbol: "AAPL", directoryName: "", snapshotName: "", entityName: null, fmpDescription: null, taxonomy, price: 200, points: [], exchange: null, registrant: null }, valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
+  check("...and CATCHES a refusal rendered as a figure", m2.marketCap !== null);
+}
+
+console.log("\n3. every 20-F filer's cap is refused (the §2.6 ADS guard)");
+{
+  const reg = JSON.parse(read("data/sec/registrants.json")).rows;
+  const twentyF = Object.entries(reg).filter(([, r]) => r.annualForm === "20-F").map(([s]) => s);
+  check("the registrant file names the 20-F filers", twentyF.length > 300, `${twentyF.length}`);
+  check("AZN and ABVX are among them — neither was on the five-name list",
+    reg.AZN?.annualForm === "20-F" && reg.ABVX?.annualForm === "20-F");
+  const azn = compose(M, "AZN");
+  check("AZN's cap is refused, not printed at the ordinary-share count", azn.marketCap === null);
+  check("AZN's P/E is refused too",
+    M.peRatio(M.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }), 70)?.ok === false);
+  check("a 10-K filer is unaffected", compose(M, "AAPL").marketCap !== null);
+  const blind = await loadComposer(once(
+    'if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {',
+    "if (sharesAreIncomparableToPrice(set.symbol)) {"
+  ));
+  // On the REFUSAL, not the cap: AZN's fixture carries no cover-page count, so
+  // its cap is null either way and would not distinguish the two rules.
+  check("...and CATCHES the five-name list alone",
+    !blind.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }).refusals.includes("ads-ratio-makes-shares-incomparable"));
+  check("the refusal is the ADS one, not a missing share count",
+    M.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }).refusals.includes("ads-ratio-makes-shares-incomparable"));
+}
+
+console.log("\n4. the 52-week range is the last 252 bars");
+{
+  // 300 rising bars: all-time low is 100, the 252-bar low is 148.
+  const r = M.fiftyTwoWeekRange(bars(300, (i) => 100 + i));
+  check("low and high over the last 252 bars only", r?.low === 148 && r?.high === 399, JSON.stringify(r));
+  check("high/low fields win over the close when present",
+    M.fiftyTwoWeekRange([...bars(30, () => 10), { close: 10, high: 15, low: 5 }])?.low === 5);
+  check("too few bars hides the row", M.fiftyTwoWeekRange(bars(5, () => 1)) === null);
+  const all = await loadComposer(once("const window = points.slice(-RANGE_BARS)", "const window = points"));
+  check("...and CATCHES a range over every bar", all.fiftyTwoWeekRange(bars(300, (i) => 100 + i))?.low === 100);
+}
+
+console.log("\n5. country: the headquarters, via EDGAR's code table");
+{
+  check("ABVX → FR (business address in France)", M.countryFor(M.registrantFor("ABVX")) === "FR", String(M.countryFor(M.registrantFor("ABVX"))));
+  check("AZN → GB", M.countryFor(M.registrantFor("AZN")) === "GB", String(M.countryFor(M.registrantFor("AZN"))));
+  check("AAPL → US", M.countryFor(M.registrantFor("AAPL")) === "US");
+  check("an unknown code yields null, never a guess",
+    M.countryFor({ stateOrCountry: "Q!", stateOfIncorporation: null }) === null);
+  check("incorporation is the fallback only when no business address was filed",
+    M.countryFor({ stateOrCountry: null, stateOfIncorporation: "DE" }) === "US" &&
+      M.countryFor({ stateOrCountry: "L3", stateOfIncorporation: "DE" }) === "IL");
+}
+
+console.log("\n6. the share-dilution series is SEC's");
+{
+  const counts = {};
+  for (const sym of ["AAPL", "AZN", "TSLA", "GEV", "KTOS", "KGC"]) {
+    const h = M.buildShareHistory(fixture(sym));
+    counts[sym] = h ? `${h.points.length} ${h.basis}` : "none";
+  }
+  check("AAPL gets a quarterly series from sharesBasic", /^\d+ quarter$/.test(counts.AAPL), JSON.stringify(counts));
+  const s = M.buildShareHistory(fixture("AAPL"));
+  check("ascending by date", s.points.every((p, i, a) => i === 0 || a[i - 1].date < p.date));
+  const dil = read("app/components/DilutionHistory.tsx");
+  check("the chart's footer names SEC filings, not FMP",
+    /own SEC filings/.test(dil) && !/data from Financial Modeling Prep/.test(dil));
+  const page = read("app/stock/[symbol]/page.tsx");
+  check("the page no longer calls the FMP share-history read",
+    !/fetchShareHistory\(upper\)/.test(page) && /secFacts\.profileFacts\.shareHistory/.test(page));
+}
+
+console.log("\n7. IPO date and Website are hidden by the registry");
+{
+  const withBoth = { ...compose(M, "AAPL"), ipoDate: "1980-12-12", website: "https://www.apple.com" };
+  const t = render(P, withBoth, "AAPL");
+  check("neither renders even when a value is present", !/IPO date/.test(t) && !/Website/.test(t));
+  const reg = JSON.parse(read("data/sec/registrants.json")).rows;
+  const withSite = Object.values(reg).filter((r) => r.website).length;
+  check("SEC's website field is blank across the registrant file (why Website stays hidden)",
+    withSite === 0, `${withSite} of ${Object.keys(reg).length} carry one`);
+}
+
+console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
+process.exit(failures ? 1 : 0);

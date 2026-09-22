@@ -327,8 +327,12 @@ console.log("\n9. the hidden CompanyProfile rows are decided by the registry");
   const t = render(P);
 
   const hidden = P.HIDDEN_PROFILE_ROWS.map((r) => r.label);
-  check("the registry names exactly the five rows with no free successor",
-    hidden.length === 5 && ["CEO", "Employees", "Beta", "ISIN", "CUSIP"].every((l) => hidden.includes(l)),
+  // FIVE ON 2026-09-21 (no free successor), PLUS TWO ON 2026-09-22: IPO date
+  // (no free source) and Website (blank on every one of 2,609 SEC registrant
+  // records, sec-registrants run 35773028028). Brief 2026-09-22 §2.1.
+  const EXPECTED_HIDDEN = ["CEO", "Employees", "Beta", "ISIN", "CUSIP", "IPO date", "Website"];
+  check("the registry names exactly the rows with no free successor",
+    hidden.length === EXPECTED_HIDDEN.length && EXPECTED_HIDDEN.every((l) => hidden.includes(l)),
     hidden.join(", "));
   check("every entry names its source, its date and a reason",
     P.HIDDEN_PROFILE_ROWS.every((r) =>
@@ -339,7 +343,7 @@ console.log("\n9. the hidden CompanyProfile rows are decided by the registry");
 
   // THE ROWS THAT STAY MUST STILL RENDER, or the filter is hiding the grid
   // rather than five rows of it.
-  const kept = ["Sector", "Industry", "Market cap", "Exchange", "Country", "Website"];
+  const kept = ["Sector", "Industry", "Market cap", "Exchange", "Country"];
   const lost = kept.filter((l) => !new RegExp(l).test(t));
   check("the rest of the stat grid is untouched", lost.length === 0, lost.join(", "));
 

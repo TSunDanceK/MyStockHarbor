@@ -1,18 +1,26 @@
 import type { CSSProperties } from "react";
 
 // -- Share dilution history ---------------------------------------------------
-// Server-rendered "shares outstanding over time" chart built from FMP's
-// historical share-float data. Presentational only (no hooks, no "use client"),
+// Server-rendered "shares outstanding over time" chart. Since 2026-09-22 the
+// series is the weighted-average basic share count from the company's own SEC
+// filings (lib/server/secShareHistory.ts); it was FMP's income statement.
+// Presentational only (no hooks, no "use client"),
 // same pattern as CompanyProfile.tsx, so it renders into the crawlable initial
 // HTML rather than behind a client fetch.
 
 export type SharePoint = { date: string; shares: number };
 
 export type DilutionHistoryData = {
-  // Ascending by date, already downsampled server-side (see fetchShareHistory
-  // in page.tsx) to roughly one point per quarter so the chart reads as a
-  // trend rather than thousands of daily wiggles.
+  // Ascending by date, one point per reported period (see buildShareHistory in
+  // lib/server/secShareHistory.ts; fetchShareHistory in page.tsx is retired),
+  // so the chart reads as a trend rather than thousands of daily wiggles.
   points: SharePoint[];
+  /**
+   * Quarters, or fiscal years when too few quarters carry a share count.
+   * Optional so a payload built the old way still renders; the footer then
+   * names no basis.
+   */
+  basis?: "quarter" | "year";
 };
 
 function fmtShares(value: number | null) {
@@ -171,8 +179,9 @@ export default function DilutionHistory({
       </div>
 
       <div style={sourceStyle}>
-        Historical shares-outstanding data from Financial Modeling Prep. {symbol} — {points.length} data points
-        from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.
+        Weighted-average basic shares from {symbol}&apos;s own SEC filings
+        {data?.basis === "year" ? ", by fiscal year" : data?.basis === "quarter" ? ", by quarter" : ""} —{" "}
+        {points.length} data points from {fmtDateShort(first.date)} to {fmtDateShort(last.date)}.
       </div>
 
       <style>{`
