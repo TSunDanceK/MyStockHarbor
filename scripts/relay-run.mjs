@@ -558,6 +558,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY: every stored fact set's h against secFieldsHash (readFactSet's gate).
+  "write-sec-factset-readability": {
+    script: "scripts/sec-factset-readability.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],
