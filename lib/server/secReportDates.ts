@@ -308,6 +308,8 @@ export type PeriodPairing = {
   picked: ReportEvent;
   /** The EARLIEST qualifying event for the period -- what the old rule kept. */
   earliest: ReportEvent;
+  /** Every qualifying event for the period, newest first -- for audits only. */
+  candidates: ReportEvent[];
   /**
    * "paired"    picked as the latest 2.02 on or before the 10-Q/10-K
    * "unpaired"  no 10-Q/10-K for this period, or no 2.02 before it: earliest
@@ -488,6 +490,7 @@ export function resultsPairing(
         periodicFiledOn: filedOn,
         picked: picked ?? earliest,
         earliest,
+        candidates: group,
         rule: picked ? "paired" : "unpaired",
       });
     }
