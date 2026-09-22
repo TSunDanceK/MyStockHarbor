@@ -79,9 +79,19 @@ export const SEED_PERIODS = 3;
 export const PRECISION_BAR_DOMESTIC = 0.7;
 export const PRECISION_BAR_FPI = 0.8;
 
+/**
+ * ── "OUTSIDE THE WINDOW" IS TWO DIFFERENT ANSWERS, AND IT USED TO BE ONE ──
+ * Both were folded into "outside-window" while the only consumer was the
+ * section, which drops either the same way. The per-symbol consumer
+ * (symbolOutlook.ts) cannot: "this filer reports in about seven weeks" is a
+ * real, useful answer to a reader who searched for it, and "our estimate for
+ * this filer already passed and nothing landed" is a refusal. Collapsing them
+ * would have made the search say the same thing to both, and the wrong thing
+ * to one.
+ */
 export type ExpectedSkip =
   | "no-record" | "no-period-end" | "thin-history"
-  | "below-precision-bar" | "outside-window" | "already-due";
+  | "below-precision-bar" | "beyond-window" | "estimate-in-past" | "already-due";
 
 export type ExpectedRow = {
   symbol: string;
@@ -229,9 +239,9 @@ export function expectedFrom(
   const daysAway = daysBetween(today, rec.nextPeriodEnd) + lag;
   // Past-due is the due strip's business, not this section's, and a band is
   // forward-looking by construction.
-  if (daysAway < 0) return { skip: "outside-window" };
+  if (daysAway < 0) return { skip: "estimate-in-past" };
   const band = bandFor(daysAway);
-  if (!band) return { skip: "outside-window" };
+  if (!band) return { skip: "beyond-window" };
 
   const last = lastReported(rec.events);
   return {
@@ -264,7 +274,8 @@ export function buildExpected(
   const rows: ExpectedRow[] = [];
   const skipped: Record<ExpectedSkip, string[]> = {
     "no-record": [], "no-period-end": [], "thin-history": [],
-    "below-precision-bar": [], "outside-window": [], "already-due": [],
+    "below-precision-bar": [], "beyond-window": [], "estimate-in-past": [],
+    "already-due": [],
   };
   for (const symbol of symbols) {
     const got = expectedFrom(symbol, records.get(symbol) ?? null, today, alreadyDue);
