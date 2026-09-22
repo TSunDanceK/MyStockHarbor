@@ -280,8 +280,74 @@ export type ExtractResult = {
    * filer, and a per-cell copy would be the same string 12 times.
    */
   conceptChoice: Record<string, string>;
+  /**
+   * FIELDS NO CONCEPT IN OUR CHAIN WAS PUBLISHED FOR, IN ANY PERIOD, IN ANY UNIT.
+   *
+   * ── WHY THIS IS RECORDED AT EXTRACTION AND NOT INFERRED AT RENDER ────────
+   * A null cell has two causes that read identically in the stored set: the
+   * filer tags the line under a concept we do not map (a coverage gap, fixed by
+   * widening the chain), or the filer publishes nothing like it at all (a true
+   * fact — ABVX is a clinical-stage biotech with no revenue line, measured on
+   * relay 35764672279). Only the payload can tell them apart, and the payload
+   * is gone once the set is encoded. So the extractor, which is holding it,
+   * writes the answer down.
+   *
+   * WHAT IT DOES NOT CLAIM. "Untagged" is relative to OUR chains, not to the
+   * company's accounts: a filer tagging revenue under a concept the table does
+   * not list lands here too. That is why a blank is diagnosed with
+   * scripts/sec-stored-set-probe.mjs before a chain is judged complete, and
+   * why widening a chain removes the field from this list on the next read by
+   * construction rather than by anyone remembering to.
+   *
+   * Optional so hand-built results in checks and probes stay valid; absent is
+   * "unknown", exactly as on the stored set.
+   */
+  untagged?: string[];
+  /**
+   * HOW MANY STORED CELLS WERE READ FROM EACH NAMESPACE, keyed `us-gaap` /
+   * `ifrs-full`. What `accountingOf` decides the filer's standard from.
+   *
+   * ── WHY NOT `tx`, AND WHY NOT `cc` ───────────────────────────────────────
+   * `tx` lists every namespace the payload CARRIES, and 48 of 903 stored sets
+   * carry both (relay 35771324089). Of those measured, 31 read every field
+   * from ifrs-full — BBVA, SAN, SONY, TM, VALE, VOD among them — and 6 read
+   * every field from us-gaap (TEAM, CLS, VS, ...). "us-gaap present" called
+   * all 48 US GAAP. `cc` records ONE field's concept (capex), is empty for
+   * filers with no capex line, and disagreed with the fields actually read on
+   * SHG, TM, VS and AEM. The cells themselves carry `ns`; this counts them.
+   *
+   * Optional; absent on older sets and in hand-built results.
+   */
+  readNamespaces?: Record<string, number>;
   notes: string[];
 };
+
+/** Stored cells per namespace. See ExtractResult.readNamespaces. */
+export function countReadNamespaces(periods: PeriodRecord[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of periods) {
+    for (const c of p.values) {
+      if (c?.ns && c.val !== null) out[c.ns] = (out[c.ns] ?? 0) + 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * True when the payload publishes ANY concept in this field's chains, in any
+ * unit and any period. A refused currency still counts as tagged: the line
+ * exists, we just could not read it.
+ */
+export function fieldIsTagged(facts: CompanyFacts, field: FieldDef): boolean {
+  const sources: { ns: string; chain: string[] }[] = [{ ns: field.taxonomy, chain: field.chain }];
+  if (field.ifrsChain?.length) sources.push({ ns: "ifrs-full", chain: field.ifrsChain });
+  return sources.some(({ ns, chain }) =>
+    chain.some((tag) => {
+      const units = facts.facts?.[ns]?.[tag]?.units;
+      return Boolean(units && Object.values(units).some((rows) => (rows?.length ?? 0) > 0));
+    })
+  );
+}
 
 /**
  * Namespaces that are not financial statements, so their presence alone never
@@ -1237,6 +1303,8 @@ export function extractCompanyFacts(
         .map((f) => [f.key, preferred.get(f.key) ?? null])
         .filter((e): e is [string, string] => e[1] !== null)
     ),
+    untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
+    readNamespaces: countReadNamespaces([...quarters, ...years, ...instants]),
     notes,
   };
 }

@@ -88,6 +88,10 @@ export async function loadSnapshot(mutate = (src) => src) {
     stripImports("lib/server/secCurrency.ts"),
     stripImports("lib/server/secFactCodec.ts"),
     stripImports("lib/server/secEarningsView.ts"),
+    // The coverage helpers (scoreCoverage / pinCoverage / partialScoreLabel /
+    // partialScoreNote). The scorer's coverageOf and the snapshot both call
+    // them, so the card's "Partial · N of 5" is the full report's arithmetic.
+    stripImports("lib/server/secPresentation.ts"),
     // ── TIMING_WORDING ONLY, NOT THE WHOLE MODULE ────────────────────────
     // The first draft inlined lib/server/secReportDates.ts entire, for this
     // one table. It declares `const DAY = 86400000` at top level and so does

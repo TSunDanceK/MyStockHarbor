@@ -62,6 +62,8 @@ const strip = (f) =>
 const sec = await lift([
   fs.readFileSync("lib/server/secFields.ts", "utf8"),
   strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"),
+  strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts"),
 ].join("\n"));
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
