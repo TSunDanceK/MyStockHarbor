@@ -43,6 +43,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { emitPayload } from "./lib/relay-capture.mjs";
+import { symbolSpellings } from "../lib/symbolSpellings.mjs";
 
 const DUMP = process.argv[2] || process.env.DUMP_DIR || "";
 const CUT = 50;
@@ -65,6 +66,25 @@ if (analysis.length < 100) {
   process.exit(1);
 }
 
+// ── SPELLING, RESOLVED AGAINST THE ANALYSIS UNIVERSE, NOT INVENTED ────────
+//
+// BRK.B (the universe's own spelling) and BRK-B (screener-fundamentals' and
+// fundamentals' spelling) are the same security with two real, current caps
+// sitting under two different keys. capOf() never saw the second one because
+// nothing widened the lookup -- the pipeline just uppercased and compared.
+// lib/symbolSpellings.mjs exists precisely for this (BRK.B/BRK-B, MER-PK/
+// BAC$K, ...) and was already used elsewhere in the repo but not wired in
+// here. canonicalOf resolves any source's spelling back to whichever spelling
+// the analysis universe itself uses, so a cap found under an alternate
+// spelling still lands on the ticker the strip actually ranks.
+const analysisSet = new Set(analysis);
+const canonicalOf = (sym) => {
+  const S = String(sym).toUpperCase();
+  if (analysisSet.has(S)) return S;
+  for (const alt of symbolSpellings(S)) if (analysisSet.has(alt)) return alt;
+  return S;
+};
+
 // ── ONE SOURCE WAS NOT ENOUGH, AND THE COUNTERS DID NOT SAY SO ────────────
 //
 // The first run read market caps from price-pool.json alone and reported 840
@@ -79,25 +99,55 @@ if (analysis.length < 100) {
 // static-profile-build.mjs uses for sector and industry. Per-source counts are
 // reported because "the pool answered for it" and "something answered for it"
 // are different facts and only one of them was being measured.
-// ── MEASURED 2026-09-15, AND IT DID NOT WORK: 834 -> 834 ──────────────────
-// Adding the other three sources contributed ZERO new caps. price-pool alone
-// gives 834 symbols; all four together give 834. stockdata.json holds 5 entries
-// and prices none of them; screener-fundamentals and fundamentals carry no
-// marketCap field at all, which is consistent with data/static-profile.json's
-// own note that marketCap is a READING and was deliberately left out of the
-// frozen taxonomy.
 //
-// So the conclusion is about the dump, not about this script: NOTHING IN THE
-// STEP 0 DUMP PRICES NVDA. The fallback chain is kept because it costs nothing
-// and states the search that was actually made -- but a top-50 by market cap
-// cannot be generated from this input, and widening the chain further is not
-// the fix. The fix is a cap source that covers the whole market, which is the
-// whole-market bars migration, which is off the roadmap. See the canary block below.
+// ── CORRECTED 2026-09-21: THE 2026-09-15 "834 -> 834" CONCLUSION WAS WRONG,
+// AND IT WAS WRONG BECAUSE OF THIS FILE, NOT BECAUSE OF THE DUMP ───────────
+// The dump does not wrap every dataset the same way: price-pool.json carries
+// its rows under `.value`, but screener-fundamentals.json, fundamentals.json
+// and stockdata.json carry theirs under `.values` (plural). entriesOf() below
+// only ever unwrapped `.value`, so for the other three it fell through to the
+// bare wrapper object and enumerated ITS five keys (dumpedAt, dataset, key,
+// present, values) as if they were ticker symbols -- which is exactly why
+// three files of 176 KB, 650 KB and 680 KB each reported "5 entries" and
+// contributed nothing. The sources were never actually read, so "nothing in
+// the step 0 dump prices NVDA" was a claim about a reader, not about the data.
+// See claude/BRIEF-price-pool-missing-market-cap-2026-09-21.md for the full
+// measurement (probe: scripts/pricepool-cap-gap-probe.mjs).
+//
+// With the reader fixed, fundamentals.json alone prices 699 of 700 universe
+// symbols including NVDA, and screener-fundamentals.json prices 693 of 700.
+//
+// ── FIXED 2026-09-22: BRK.B/BRK-B, THE SPELLING SPLIT ─────────────────────
+// price-pool.json and stockdata.json spell it BRK.B (the universe's own
+// spelling); screener-fundamentals.json and fundamentals.json spell it
+// BRK-B, with real, current caps sitting under that key. canonicalOf() below
+// now widens every source's symbol through lib/symbolSpellings.mjs and
+// resolves it back to whichever spelling the analysis universe uses, so a
+// cap filed under an alternate spelling still reaches the ticker the strip
+// ranks. This was a one-line class of bug with the helper already written;
+// see the brief for why it wasn't caught earlier.
+//
+// One issue remains and is NOT fixed here: a handful of price-pool rows
+// (BRK.B, INTC, IREN, NOK, NVDA, SPCX in the 2026-09-21 measurement) carry a
+// real partial-write -- null marketCap/volume/OHLC together, some missing
+// failStreak/failAt entirely. Recorded in the brief with a candidate
+// mechanism (seedColdPricePoolRows stamps a fresh ts on an incomplete row,
+// which can hide the gap from the staleness-based warm rotation) that is
+// plausible but unmeasured against production data -- not applied as a fix.
 const CAP_SOURCES = ["price-pool.json", "screener-fundamentals.json", "fundamentals.json", "stockdata.json"];
 
-/** Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}. */
+/**
+ * Symbol -> entry, from either a {SYM: entry} map or an array of {symbol,...}.
+ *
+ * The step 0 dump wraps datasets in two different shapes: price-pool.json as
+ * `{ ..., value }` and the other three as `{ ..., values }` (plural). Both
+ * must be checked -- `.value ?? .values ?? doc` -- or the plural-wrapped
+ * sources silently fall through to the wrapper object itself and get read as
+ * five bogus "symbols" (dumpedAt/dataset/key/present/values). See the header
+ * comment above for what that cost.
+ */
 function entriesOf(doc) {
-  const v = doc?.value ?? doc;
+  const v = doc?.value ?? doc?.values ?? doc;
   if (Array.isArray(v)) {
     const out = [];
     for (const e of v) { const sym = e?.symbol ?? e?.ticker; if (sym) out.push([String(sym), e]); }
@@ -125,7 +175,7 @@ for (const name of CAP_SOURCES) {
   const rows = entriesOf(doc);
   let filled = 0, alreadyKnown = 0, noCap = 0;
   for (const [sym, e] of rows) {
-    const S = String(sym).toUpperCase();
+    const S = canonicalOf(sym);
     const mc = capOf(e);
     if (mc == null) { noCap++; continue; }
     if (marketCap.has(S)) { alreadyKnown++; continue; }
