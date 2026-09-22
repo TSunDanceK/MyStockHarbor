@@ -214,11 +214,23 @@ for (const symbol of SYMS) {
     const tagged = [];
     for (const ns of namespaces) {
       for (const concept of Object.keys(facts.facts[ns] ?? {})) {
-        if (chain.includes(concept)) tagged.push(`${ns}:${concept} [IN CHAIN]`);
-        else if (LOOKS_LIKE[key]?.test(concept)) tagged.push(`${ns}:${concept}`);
+        // THE UNIT KEY IS PART OF THE EVIDENCE, not decoration. A concept that
+        // is tagged AND in chain and still stored null is not a coverage gap —
+        // it is a lookup miss, and the unit is where those happen: a EUR filer
+        // publishes per-share figures under "EUR/shares", and the field table
+        // declares "USD/shares". See unitKeysFor. ABVX's EPS is exactly this
+        // shape, so printing the concept without its units stops one question
+        // short of the answer.
+        const units = Object.keys(facts.facts[ns]?.[concept]?.units ?? {});
+        const u = units.length ? ` {${units.join(", ")}}` : "";
+        const ifrsChain = SEC_FIELDS.find((f) => f.key === key)?.ifrsChain ?? [];
+        const inChain = chain.includes(concept) || ifrsChain.includes(concept);
+        if (inChain) tagged.push(`${ns}:${concept}${u} [IN CHAIN — ${ifrsChain.includes(concept) ? "ifrs" : "us-gaap"}]`);
+        else if (LOOKS_LIKE[key]?.test(concept)) tagged.push(`${ns}:${concept}${u}`);
       }
     }
-    console.log(`\n  ${key} — stored null`);
+    const declared = SEC_FIELDS.find((f) => f.key === key)?.unit ?? "?";
+    console.log(`\n  ${key} — stored null (field declares unit "${declared}", set reports in ${set.cur ?? "USD"})`);
     if (!tagged.length) {
       console.log(`    THE FILER TAGS NOTHING THAT LOOKS LIKE THIS LINE.`);
       console.log(`    Not a coverage gap: there is no concept to add. Either the company does not`);
