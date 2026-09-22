@@ -12,6 +12,7 @@ import {
 import type { NewsItem } from "@/lib/server/news/types";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { beginTiming } from "./server/timing";
 import {
   getAiNewsBriefs,
@@ -174,12 +175,32 @@ async function fetchQuote(symbol: string): Promise<Quote | null> {
   return fetchYahooQuote(symbol);
 }
 
+// THE SPELLING THE VENDOR WANTS IS NOT THE SPELLING THE URL CARRIES.
+//
+// /stock/BRK.B/news passes its route parameter down here untouched, so this
+// asked FMP for "BRK.B" and FMP has no such row: its own screener spells share
+// classes with a DASH, which is why lib/server/historyCache.ts has converted
+// since it was written. The page showed LAST PRICE: DATA UNAVAILABLE beside a
+// title reading $502.01 -- the title's number comes through getDailyHistory,
+// which goes via buildFmpSymbol and therefore converts. One page, two paths,
+// one of them converting.
+//
+// CONVERTED HERE, AT THE VENDOR BOUNDARY, rather than at the top of the page.
+// Normalising the route parameter would rewrite what the reader typed and what
+// the page displays, and it would decide for EVERY vendor at once -- and the
+// vendors disagree: FMP wants the dash (measured), Yahoo's answer is a separate
+// question with its own probe. Each leg converting for itself keeps the symbol
+// the page shows equal to the symbol the reader asked for.
+//
+// toDashed rather than a local .replace: this repo found seven copies of the
+// dot/dash dance in one sweep, and lib/symbolSpellings.mjs exists to be the
+// eighth's replacement rather than its sibling.
 async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
 
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, {
       next: { revalidate: 3600 },
       headers: { accept: "application/json" },
@@ -252,12 +273,26 @@ const YAHOO_FETCH_HEADERS = {
   accept: "application/json",
 };
 
+// CONVERTED ON EVIDENCE, NOT BY SYMMETRY WITH FMP. The dot is what this leg
+// received before today, so if Yahoo had been the vendor that accepts it, a
+// conversion applied "for consistency" would have broken the one leg that
+// worked. Measured on a runner 2026-09-22 (Actions run 35794824846), since the
+// sandbox answers 403 CONNECT for this host:
+//
+//   AAPL    HTTP 200, $339.75          <- control: the endpoint is up
+//   BRK.B   HTTP 404, "No data found, symbol may be delisted"
+//   BRK-B   HTTP 200, $503.49, meta.symbol=BRK-B
+//
+// CONVERTED HERE RATHER THAN IN ITS TWO CALLERS because fetchYahooQuote and
+// fetchYahooHistory are the same endpoint asked for different ranges. One
+// conversion covers the quote and the history; two would be two places to
+// forget.
 async function fetchYahooChart(
   symbol: string,
   range: string
 ): Promise<any | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-    symbol
+    toDashed(symbol)
   )}?interval=1d&range=${range}`;
 
   try {
