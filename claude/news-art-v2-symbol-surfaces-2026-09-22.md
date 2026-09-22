@@ -416,10 +416,122 @@ because it needs its own measurement — masking can take away a true positive
 (a headline about a bank naming a bank) as easily as a false one — and because
 it touches every surface layer 1 serves, not just this one.
 
+## 7d. The 5th card repeated, and why it was certain
+
+The preview showed it: ONDS 01,04,03,02,**04** · AAPL 03,01,02,04,**02** ·
+JPM 04,02,03,01,**04** · AVAV 02,04,01,03,**01**.
+
+Arithmetic, not chance. `getStockNewsBaseData(upper, { maxDetailedItems: 5 })`
+draws **five** lead cards, and **62 of the 67 subject tags hold four images**
+(the other five hold eight). So the fifth card always exhausted the pool, and
+`pickArt`'s last line was "repeat rather than drop" — correct when the bucket is
+the only source of art, which is the world it was written for, and wrong once
+three more layers sit underneath.
+
+| pool | holds | pages that exhaust it at 5 cards |
+|---|---|---|
+| 62 subject tags | 4 | all of them |
+| 5 subject tags | 8 | none |
+| 14 of 16 motifs | 4 | all |
+| `sector-*` buckets | 6–10 | none |
+
+**Fixed with an `onExhausted` option, defaulting to `"repeat"`** so `/headlines`,
+the sector news page and the dashboard strip are untouched. The symbol picker
+passes `"skip"` and the chain falls through: the tag's pool → the sector bucket
+→ the generated data card, which carries this article's own ticker and move and
+is therefore never a duplicate. `planCardArt` gained one extra step under
+`"skip"` — an exhausted EVENT bucket now tries the sector bucket rather than
+dropping straight to the generated card, which would have wasted eight sector
+images.
+
+§10 asserts no page repeats an image across **eight** cards, for every live
+industry label, and that the fall-through is ordered. Reverting to `"repeat"`
+fails both.
+
+---
+
+## 7e. `/stock/BRK.B/news` shows DATA UNAVAILABLE beside a $502.01 title — report only
+
+**Yes, it is the same class of gap, and the repo already contains the fix in a
+different module.**
+
+| path | what it sends | result |
+|---|---|---|
+| the TITLE — `generateMetadata` → `getDailyHistory` | `lib/server/historyCache.ts` has **`buildFmpSymbol`**, which does `.replace(/\./g, "-")` | asks FMP for `BRK-B`, gets bars, renders **$502.01** |
+| the BODY — `fetchQuote` / `fetchHistory` in `lib/stock-news-data.ts` | the raw symbol, no conversion anywhere in the file | FMP `?symbol=BRK.B`, Stooq `brk.b.us`, Yahoo `BRK.B` — all want the dash |
+
+`hasNoQuote && hasNoHistory` is then true and the page says DATA UNAVAILABLE
+while its own title carries a price. **Not one of the three vendor calls in
+`stock-news-data.ts` converts the spelling** (`grep` for a dot-to-dash replace
+in that file: zero hits).
+
+It is NOT the same call as the `staticProfileFor` fix — that was a lookup in a
+local map, this is an outbound request to vendors that each want the dash — but
+it is the same shape, and `lib/symbolSpellings.mjs` already exports the rule for
+it: `toDashed`, documented as "the vendor/SEC spelling" and deliberately
+ONE-WAY. `buildFmpSymbol` is itself another private copy of the dance that
+module's header says this repo once had seven of.
+
+Not fixed here, as asked. The fix is one helper at three call sites, and it
+needs its own verification: Stooq's spelling for a share class is not
+necessarily FMP's.
+
+---
+
+## 7f. §7c masking, planned and measured — and the simple version does not work
+
+Prototyped against `data/company-names.json` (2,586 usable display names) on all
+three fixtures, so the plan below rests on numbers rather than on the idea.
+
+**Masking whole display names changes nothing at all.**
+
+| candidate | fixture | raw | full-name mask | + two-word prefixes |
+|---|---|---|---|---|
+| A | drone/70 | 25 | **25** | 24 |
+| A | per-symbol/192 | 1 | **1** | 1 |
+| B | drone/70 | 31 | **31** | 28 |
+| B | per-symbol/192 | 1 | **1** | 1 |
+
+The reason is the Kratos case itself: the registered name is "Kratos Defense &
+Security Solutions", and headlines write **"Kratos Defense"**. Masking the full
+name removes the one headline that spells it out and leaves the two that do not.
+
+```
+raw          B=HIT  Kratos Defense & Security Solutions (NASDAQ:KTOS) Stock Rating…
++prefix-mask B=-    ( :KTOS) Stock Rating Upgraded
+raw          B=HIT  Why Is Kratos Defense Stock Down 63% From Its All-Time High
++prefix-mask B=-    Why Is Stock Down 63% From Its All-Time High
+```
+
+**So the plan is a PREFIX rule, not name equality**: mask each known name AND
+its leading two words, skipping names whose first word is in `COMMON_WORDS`
+(`companyName.ts` already keeps that list, for the same reason — "Post" and
+"Strategy" are not companies on their own). That version kills two of the three
+Kratos cases; the third, "Better Drone Stock: Kratos Defense vs. Northrop
+Grumman", still matches — correctly, on `Drone`, because it IS a drone story.
+
+**The collateral is real and is what to measure next.** Masking removes text
+before the subject table ever sees it, so a name whose prefix is also an
+industry word takes the industry word with it — a headline about bank stocks
+can lose the word "bank". Before building:
+
+1. Use `normaliseCompanyName` from `lib/server/news/companyName.ts` as the
+   vocabulary rather than raw display names; it already strips instrument
+   clauses and corporate suffixes and has the common-word guard.
+2. Measure precision AND recall on all three fixtures: how many false positives
+   masking removes, and how many true positives it destroys. The table above
+   only has the first half.
+3. Only then reconsider candidate B, which is the one masking was proposed to
+   unlock. Candidate A does not need it.
+
+---
+
 ## 8. Open
 
 - **Round 4: `rockets-space` for the AeroVironment space story**, §7. Recorded,
   not changed.
+- **The quote path's dot/dash gap**, §7e. Report only; not in this PR.
+- **§7c masking needs a prefix rule and a recall measurement**, §7f.
 - **Masking company names before layer-1 matching**, §7c — "Kratos Defense" is
   the case no narrowing can fix.
 - **Nine weak labels**, one approval at a time. Each is in `WEAK_LABELS` with
