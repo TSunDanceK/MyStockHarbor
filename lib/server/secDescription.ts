@@ -53,30 +53,37 @@ export function filingText(html: string): string {
 // "Business" — which a single-line pattern misses.
 //
 // THE SECTION RUNS FROM ITS HEADING TO THE NEXT ITEM'S. For a 10-K that is
-// Item 1 → Item 1A. The table of contents carries the same pair a few lines
-// apart, so a pair whose body is a few hundred characters is the TOC and is
-// skipped. This is the fix for ONDS (owner, #518): its first run's "Item 1"
-// hit was not the section's own heading, and the text after it was MD&A. The
-// Item 1 taken now is the one IMMEDIATELY before a real Item 1A.
+// Item 1 → Item 1A (or 1B / 2 where a smaller filer omits 1A). The table of
+// contents carries the same pair a few lines apart, so a pair whose body is a
+// few hundred characters is the TOC and is skipped.
+//
+// A HEADING IS COMPARED BY ITS LETTERS AND DIGITS ONLY, and the whole line must
+// be the heading. Two misses in relay 35780665288 fixed by that:
+//   ONDS  — its forward-looking-statements note has a wrapped line beginning
+//           "Item 1A “Risk Factors,” and Item 7 …". A prefix match took that as
+//           the end of Item 1, so the TOC's Item 1 paired with it and the
+//           "section" was the TOC and the cautionary note (MD&A wording). The
+//           real pair is "Item 1. Business" @15k → "Item 1A. Risk Factors" @83k.
+//   BRK.B — its filing splits words mid-way: "Item 1. Busines s Description",
+//           "Item 1A. Ris k Factors". Letters-only, those are exact headings.
 
-type Line = { text: string; start: number; end: number };
+type Line = { text: string; key: string; start: number; end: number };
 
 function lines(text: string): Line[] {
   const out: Line[] = [];
   let at = 0;
   for (const t of text.split("\n")) {
-    out.push({ text: t.trim(), start: at, end: at + t.length });
+    out.push({ text: t.trim(), key: t.toLowerCase().replace(/[^a-z0-9]/g, ""), start: at, end: at + t.length });
     at += t.length + 1;
   }
   return out;
 }
 
-const DASH = "[.:\\-–—]?";
-const ITEM1 = new RegExp(`^item\\s*1\\s*${DASH}\\s*(business)?\\s*\\.?$`, "i");
-const BUSINESS = /^business\s*\.?$/i;
-const ITEM1A = new RegExp(`^item\\s*1a\\b`, "i");
-const ITEM4B = new RegExp(`^(item\\s*4\\s*${DASH}\\s*)?b\\s*[.:\\-–—]\\s*business\\s+overview\\s*\\.?$`, "i");
-const ITEM4C = new RegExp(`^(item\\s*4\\s*${DASH}\\s*)?c\\s*[.:\\-–—]\\s*organi[sz]ational\\s+structure`, "i");
+const ITEM1 = /^item1(business(es)?(description|overview)?)?$/;
+const BUSINESS = /^business(es)?(description|overview)?$/;
+const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)$/;
+const ITEM4B = /^(item4)?bbusinessoverview$/;
+const ITEM4C = /^(item4)?corgani[sz]ationalstructure$/;
 
 /** A table-of-contents pair is closer than this; a real section is longer. */
 const MIN_SECTION_CHARS = 1500;
@@ -86,17 +93,17 @@ export type Located = { found: true; body: string } | { found: false; why: strin
 export function locateSection(text: string, form: string): Located {
   const L = lines(text);
   const isStart = (i: number): { ok: boolean; bodyFrom: number } => {
-    const t = L[i].text;
-    if (form === "20-F") return { ok: ITEM4B.test(t), bodyFrom: L[i].end };
-    const m = ITEM1.exec(t);
+    const k = L[i].key;
+    if (form === "20-F") return { ok: ITEM4B.test(k), bodyFrom: L[i].end };
+    const m = ITEM1.exec(k);
     if (!m) return { ok: false, bodyFrom: 0 };
     if (m[1]) return { ok: true, bodyFrom: L[i].end };
     // "Item 1." alone: the heading continues on the next non-empty line.
     let j = i + 1;
     while (j < L.length && !L[j].text) j++;
-    return j < L.length && BUSINESS.test(L[j].text) ? { ok: true, bodyFrom: L[j].end } : { ok: false, bodyFrom: 0 };
+    return j < L.length && BUSINESS.test(L[j].key) ? { ok: true, bodyFrom: L[j].end } : { ok: false, bodyFrom: 0 };
   };
-  const isEnd = (t: string) => (form === "20-F" ? ITEM4C.test(t) : ITEM1A.test(t));
+  const isEnd = (k: string) => (form === "20-F" ? ITEM4C.test(k) : ITEM1_END.test(k));
 
   if (!["10-K", "10-K405", "10-KT", "20-F"].includes(form)) {
     return { found: false, why: form === "40-F"
@@ -105,7 +112,7 @@ export function locateSection(text: string, form: string): Located {
   }
   const starts = L.map((_, i) => i).filter((i) => isStart(i).ok);
   if (!starts.length) return { found: false, why: "heading not found" };
-  const ends = L.map((l, i) => (isEnd(l.text) ? i : -1)).filter((i) => i >= 0);
+  const ends = L.map((l, i) => (isEnd(l.key) ? i : -1)).filter((i) => i >= 0);
 
   // THE LAST START BEFORE EACH END, pairs tried in document order; the first
   // pair long enough to be a section, not a TOC entry, wins.
@@ -143,6 +150,11 @@ const DEFINITION: RegExp[] = [
   /^when\s+used\s+in\s+this\s+(annual\s+)?report\b/i,
   /^unless\s+(otherwise\s+indicated|the\s+context)/i,
   /^as\s+used\s+(in\s+this|herein)/i,
+  // A reading instruction, not a cross-reference to other text in its place:
+  // ONDS opens Item 1 with "This business description should be read in
+  // conjunction with our audited Consolidated Financial Statements…", then the
+  // real overview. Dropped while leading; anywhere else rule 4 still rejects it.
+  /^this\s+(business\s+description|section|item)\s+should\s+be\s+read\s+in\s+conjunction\s+with\b/i,
   /^(the\s+terms?\s+)?[“"][^”"]+[”"][^.]{0,200}\brefers?\s+to\b/i,
   /\brefers?\s+to\s+[^.]{0,160}\band\s+(all\s+)?(of\s+)?its\s+(consolidated\s+)?subsidiaries\b/i,
 ];
