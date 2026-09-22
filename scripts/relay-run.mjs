@@ -512,6 +512,22 @@ const TASKS = {
   // WHY A STORED SET'S NEWEST PERIOD IS OLDER THAN THE FILER'S NEWEST FILING.
   // Credentialled to read the store and the report-date records; fetches
   // submissions. No writes.
+  // CAN THE DUE STRIP RENDER A ROW AT ALL? Measured before the DueInput
+  // producer is written, because three of DueInput's five fields cannot be
+  // read from the store as it stands and whether that matters is a question
+  // about production data. Also prices the filerCategory decision by running
+  // the SHIPPED selectDue twice, one field apart, rather than arguing it.
+  //
+  // READ-ONLY DESPITE THE PREFIX -- same as write-beta-mu and
+  // write-queue-projection. `write-` is the CREDENTIAL boundary, not a claim
+  // that the task mutates anything; the report-dates store lives in Upstash and
+  // the credentials live in that job.
+  "write-due-input-census": {
+    script: "scripts/due-input-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],

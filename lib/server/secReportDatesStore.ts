@@ -58,6 +58,59 @@ export type StoredReportDates = {
    * way, but a later reader must not be able to mistake one for the other.
    */
   pending?: PendingResults | null;
+  /**
+   * The filer's SEC category, verbatim from `submissions.category`.
+   *
+   * ── WHY THIS IS STORED RATHER THAN FETCHED ────────────────────────────
+   * `secReportDates.deadlineDays(category, annual)` needs it, and the due
+   * strip's overdue cap is the only thing that reads it. Before this field
+   * existed, NOTHING persisted it — so a consumer had two options: fetch
+   * data/sec/submissions per symbol at render time, or pass null and take
+   * DEADLINE_FALLBACK.
+   *
+   * Neither was acceptable. A live fetch would put ~50 SEC round trips on a
+   * page render, in a subsystem where everything else reads the store; and
+   * null silently widens the cap, by 5 days on a quarter and by up to 30 on a
+   * year (see `annual` below).
+   *
+   * IT COSTS NOTHING TO STORE. `subs.category` is already a live variable at
+   * the writeReportDates() call site in app/api/jobs/sec-facts/route.ts — it is
+   * passed to estimateUpcoming() on the line above and then discarded. No extra
+   * request, no extra rate-limit exposure.
+   *
+   * ── MIGRATION, ON THE #484 TEMPLATE ───────────────────────────────────
+   * OPTIONAL, and absent means NOT-YET-BACKFILLED — never "this filer has no
+   * category". The same convention and the same reason as `pending?` above:
+   * records written before the field existed are still valid records, and a
+   * reader must not be able to mistake "we have not looked yet" for "we looked
+   * and there is nothing". There is NO migration job and none is needed: the
+   * sec-facts cron rewrites every record on its own rotation, so the field
+   * fills in as that rotation comes round, exactly as #484's reconciliation
+   * did. A consumer reading a record without it MUST fall back to
+   * deadlineDays(null, …) rather than assuming a category.
+   */
+  category?: string | null;
+  /**
+   * Whether `nextPeriodEnd` is an ANNUAL period.
+   *
+   * ── NOT A DETAIL, AND THE SCOPING MISSED IT ───────────────────────────
+   * deadlineDays takes BOTH arguments, and the annual cells are 60/75/90
+   * against 40/45 for a quarter. The filer category is worth 5 days on a
+   * quarter; getting THIS wrong is worth 15 to 45. It was not stored either,
+   * and the question that asked for `category` did not raise it — measured and
+   * recorded in claude/due-input-census-2026-09-22.md.
+   *
+   * SOURCE: `cadence.annual` from nextPeriodEndFrom(), which is also already in
+   * hand at the write site. It is the correct pairing for the stored
+   * `nextPeriodEnd`: estimateUpcoming() may roll the period forward up to eight
+   * cadence steps, but it passes `cadence.annual` UNCHANGED on every iteration,
+   * so the annual-ness of the period it returns never differs from the
+   * cadence's.
+   *
+   * Same optionality and same migration as `category` above: absent means
+   * not-yet-backfilled, never "quarterly".
+   */
+  annual?: boolean | null;
 };
 
 /**
