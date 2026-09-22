@@ -16,7 +16,7 @@
 // (scripts/sec-fixture-capture.mjs) and verified by SHA-256 against the
 // runner's own hash. Every number in them comes from SEC.
 import fs from "node:fs";
-import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
+import { loadCards, loadReactionCharts, html, visibleText, React } from "./lib/render-cards.mjs";
 import { once } from "./lib/render-snapshot.mjs";
 
 let failures = 0;
@@ -336,9 +336,11 @@ console.log("\n6. KGC renders a real page, and never a pending one");
   check("the quarterly table is not rendered for an annual-only filer",
     vKgc.basis === "year" && !/Revenue YoY.*Gross margin.*gap/s.test(t),
     "a quarterly table with no quarters is an empty table");
+  // ON THE LABEL, as its tooltip, since round 2: the intro states the
+  // year-end once and the exact date sits on each FY label.
   check("every annual row names its period end, not only its label",
     vKgc.annual.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.end)) &&
-      /ended 2025-12-31/.test(t),
+      /title="Ended 2025-12-31"/.test(html(React.createElement(M.SecAnnualCard, { view: vKgc, sole: true }))),
     "two filers' FY2025 can be nine months apart");
   check("the cash card is labelled as annual, not as a quarter",
     vKgc.cashQuality.basis === "year" && vKgc.cashQuality.period === "FY2025",
@@ -791,8 +793,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // "EPS surprise: 0.00", which read as "came in exactly in line".
   const coalesceCell = (src) =>
     src.replace(
-      "  if (cell.val == null) {\n    return <span style={{ color: \"#94a3b8\", fontWeight: 600 }}>{empty}</span>;\n  }",
-      ""
+      "  if (cell.val == null) {\n    if (short) {",
+      "  if (false) {\n    if (short) {"
     ).replace(
       "? money(cell.val, compact && !cell.perShare, cell.perShare)",
       "? money(cell.val ?? 0, compact && !cell.perShare, cell.perShare)"
@@ -937,14 +939,19 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // table together with no row separator, so the pattern matched every time and
   // the assertion was testing nothing. The claim is about ONE CELL, so it is
   // read out of the markup by the data-label the card gives it.
+  // THE COLUMN IS GONE from the five-year table (owner review of #523: the
+  // intro says "compared with the year before"), so the comparator is read
+  // from the view that computes the YoY cells, and the rendered row labels are
+  // checked to be the same rows in the same order.
   const hMarkup = html(React.createElement(M.SecAnnualCard, { view: hView, sole: false }));
-  const comparedCells = [...hMarkup.matchAll(/data-label="Compared with"[^>]*>([\s\S]*?)<\/td>/g)]
-    .map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+  const rowLabels = [...hMarkup.matchAll(/class="rowHead"><abbr[^>]*>([^<]+)<\/abbr>/g)].map((m) => m[1]);
+  const comparedCells = hView.annual.map((r) => r.comparedWith);
   // DROPPING A ROW MUST NOT RE-BASE THE NEXT ONE. The risk in removing rows is
   // that the survivors quietly shift onto whatever is now below them; every
   // remaining row still names its OWN fiscal year minus one.
   check("...and no surviving row is re-based onto a neighbour",
     comparedCells.length === hView.annual.length &&
+      rowLabels.join(" ") === hView.annual.map((r) => r.label).join(" ") &&
       hView.annual.every((r, i) =>
         comparedCells[i] === r.comparedWith &&
         Number(String(r.label).slice(2)) - 1 === Number(String(r.comparedWith).slice(2))),
@@ -1135,8 +1142,11 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
   // A blank revenue cell says which kind of blank it is, never "Not reported".
   const noLine = { ...vAvav, untagged: ["revenue"], annual: vAvav.annual.map((r) => ({ ...r, revenue: { ...r.revenue, val: null } })) };
   const annualText = visibleText(html(React.createElement(M.SecAnnualCard, { view: noLine })));
-  check("...and a revenue cell with no line reads 'No revenue line in this filing', not 'Not reported'",
-    annualText.includes(M.EMPTY_REASONS.noRevenueLine) && !/Revenue[^|]{0,40}Not reported/.test(annualText.slice(0, 400)),
+  // SHORT IN THE TABLE since round 2, with the full reason as the tooltip.
+  const annualMarkup16 = html(React.createElement(M.SecAnnualCard, { view: noLine }));
+  check("...and a revenue cell with no line reads 'No revenue line', not 'Not reported'",
+    />No revenue line</.test(annualMarkup16) && annualMarkup16.includes(`title="${M.EMPTY_REASONS.noRevenueLine}:`) &&
+      !/Revenue[^|]{0,40}Not reported/.test(annualText.slice(0, 400)),
     annualText.slice(0, 200));
 
   // B: the valuation card is two tiles, with no paragraph under them.
@@ -1165,6 +1175,92 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
   const crossingCopies = (whole.match(/Where a period crosses between profit and loss/g) ?? []).length;
   check("the crossing footnote is printed exactly once",
     crossingCopies === 1, `${crossingCopies} copies`);
+}
+
+console.log("\n17. round 2 — fiscal-year ends said once, a horizon not reached draws no bar");
+{
+  // ── THE DATE RULE: same day / varying day / varying month ───────────────
+  const note = M.fiscalYearEndNote;
+  const vAvav2 = M.buildSecEarningsView(fixture("AVAV"));
+  check("same month and day on every row: 'Fiscal years end 30 April.' (AVAV)",
+    note(vAvav2.annual.map((r) => r.end)) === "Fiscal years end 30 April.", note(vAvav2.annual.map((r) => r.end)));
+  check("the day moving inside one month: 'late September' (AAPL, a 52/53-week filer)",
+    note(vAapl.annual.map((r) => r.end)) === "Fiscal years end in late September.",
+    `${vAapl.annual.map((r) => r.end).join(" ")} -> ${note(vAapl.annual.map((r) => r.end))}`);
+  check("...a day spread across two thirds of the month names the month alone",
+    note(["2024-09-08", "2025-09-14"]) === "Fiscal years end in September.", note(["2024-09-08", "2025-09-14"]));
+  check("the month moving: no sentence at all",
+    note(["2023-12-30", "2025-01-02"]) === null && note([]) === null, String(note(["2023-12-30", "2025-01-02"])));
+  const noMonthRule = await loadCards(once("  if (months.size !== 1) return null;", ""));
+  check("...and CATCHES the month rule removed",
+    noMonthRule.fiscalYearEndNote(["2023-12-30", "2025-01-02"]) !== null);
+  const annualText = visibleText(html(React.createElement(M.SecAnnualCard, { view: vAvav2 })));
+  const annualMarkup = html(React.createElement(M.SecAnnualCard, { view: vAvav2 }));
+  check("the five-year table drops the 'ended' line and keeps the date as the label's tooltip",
+    !/ended \d{4}-\d{2}-\d{2}/.test(annualText) && /title="Ended 2026-04-30"/.test(annualMarkup) &&
+      /Each fiscal year as filed, compared with the year before\. Fiscal years end 30 April\./.test(annualText),
+    annualText.slice(0, 160));
+
+  // ── NO "COMPARED WITH" ON THE FIVE-YEAR TABLE; THE QUARTERLY TABLE KEEPS IT
+  // (owner review of #523). The FY label is the mobile card's header.
+  check("the five-year table has no 'Compared with' column, header or card row",
+    !/<th>Compared with<\/th>/.test(annualMarkup) && !/data-label="Compared with"/.test(annualMarkup) &&
+      /<th>Fiscal year<\/th><th>Revenue<\/th>/.test(annualMarkup),
+    `${(annualMarkup.match(/<th>/g) ?? []).length} columns`);
+  check("...and each row's FY label is the card header, with the date tooltip",
+    (annualMarkup.match(/class="rowHead"/g) ?? []).length === vAvav2.annual.length &&
+      /<td data-label="Fiscal year" class="rowHead"><abbr class="cellShort" title="Ended /.test(annualMarkup), "");
+  const growthMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAapl }));
+  check("...while the quarterly table keeps its 'Compared with' column",
+    /<th>Compared with<\/th>/.test(growthMarkup) && /data-label="Compared with"/.test(growthMarkup), "");
+
+  // ── SHORT CELLS IN NARROW COLUMNS ───────────────────────────────────────
+  const blank = { ...vAvav2, untagged: [], annual: vAvav2.annual.map((r) => ({ ...r, revenue: { ...r.revenue, val: null } })) };
+  const bMarkup = html(React.createElement(M.SecAnnualCard, { view: blank }));
+  check("a table cell prints 'Not captured' with the full reason as its tooltip",
+    />Not captured</.test(bMarkup) && /title="Not captured from this filing: /.test(bMarkup) &&
+      !/>Not captured from this filing</.test(bMarkup), "");
+
+  // ── A HORIZON NOT REACHED YET: NO BAR, A MARKER, A TOOLTIP ──────────────
+  const R = await loadReactionCharts();
+  const qs = [
+    { label: "Q4 FY2026", reactionPct: 3.1, drift5Pct: -1.2, drift20Pct: 6.4, drift5Pending: false, drift20Pending: false },
+    { label: "Q1 FY2027", reactionPct: 4.5, drift5Pct: 2.0, drift20Pct: null, drift5Pending: false, drift20Pending: true },
+  ];
+  const chart = html(React.createElement(R.DriftBarChart, { quarters: qs }));
+  const bars = (chart.match(/class="driftBar"/g) ?? []).length;
+  const heights = [...chart.matchAll(/<path d="M[\d.]+,([\d.]+) V([\d.]+)/g)].map((m) => Math.abs(Number(m[1]) - Number(m[2])));
+  check("a missing +20d horizon draws no bar: 5 bars for 6 slots, none of zero height",
+    bars === 5 && heights.length === 5 && heights.every((h) => h > 0), `${bars} bars, heights ${heights.map((h) => h.toFixed(1)).join(",")}`);
+  check("...but a marker whose tooltip says why",
+    /data-pending="drift20Pct"/.test(chart) && /<title>Q1 FY2027 · \+20 trading days: Not yet 20 trading days<\/title>/.test(chart), "");
+  check("every bar's tooltip carries its exact figure",
+    /<title>Q4 FY2026 · \+5 trading days: -1\.2%<\/title>/.test(chart) && /<title>Q1 FY2027 · Day of reaction: \+4\.5%<\/title>/.test(chart), "");
+  const zeroBar = await loadReactionCharts(once(
+    "                if (v == null || !Number.isFinite(v)) {",
+    "                if (false) {"
+  ));
+  let caught;
+  try {
+    const m = html(React.createElement(zeroBar.DriftBarChart, { quarters: qs }));
+    caught = (m.match(/class="driftBar"/g) ?? []).length !== 5 || /NaN/.test(m);
+  } catch { caught = true; }
+  check("...and CATCHES a missing horizon drawn as a bar", caught);
+  const card = visibleText(html(React.createElement(R.PriceReactionCard, {
+    symbol: "AVAV", latest: { label: "Q1 FY2027", reactionPct: 4.5, volumeMultiple: 5.9 },
+    reaction: qs.map((q) => ({ label: q.label, value: q.reactionPct })), drift: qs, datesFromSec: true,
+    uncoveredLabels: [], noPriceHistoryNote: "",
+  })));
+  check("the price-reaction card carries the round-2 copy and nothing it replaced",
+    /Close-to-close move around each results filing\. After-close filings are measured to the next day's close\./.test(card) &&
+      /Most recent reaction \(Q1 FY2027\): \+4\.5% on 5\.9x average volume\./.test(card) &&
+      /Price vs\. the pre-earnings close, after 1, 5 and 20 trading days\./.test(card) &&
+      /Includes broader market moves, not only the earnings news\./.test(card) &&
+      !/Each bar is keyed/.test(card) && !/clean read of earnings reaction/.test(card) &&
+      // THE PER-BAR "Not yet" MARKER SAYS THIS NOW (owner review of #523).
+      !/may not have a full 20 trading days/.test(card) &&
+      /Day 1 \+5 days \+20 days/.test(card),
+    card);
 }
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nRendered output holds.\n");
