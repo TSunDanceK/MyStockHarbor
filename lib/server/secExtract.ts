@@ -280,6 +280,22 @@ export type ExtractResult = {
    * filer, and a per-cell copy would be the same string 12 times.
    */
   conceptChoice: Record<string, string>;
+  /**
+   * FISCAL-YEAR WEIGHTED-AVERAGE BASIC SHARES, EVERY YEAR IN THE PAYLOAD —
+   * `[yearEnd, shares]`, oldest first.
+   *
+   * ── WHY A SEPARATE SERIES AND NOT A WIDER WINDOW ────────────────────────
+   * The share-dilution chart had ~9 points from the stored quarters, against
+   * FMP's 28. Widening SEC_YEAR_WINDOW would widen EVERY field's history (46
+   * values a year) to buy one line. The owner's call (2026-09-22, #517): keep
+   * retention as it is and store this one field on its own, back as far as
+   * companyfacts goes (typically 2009–2011). About 20 bytes a year.
+   *
+   * Only twelve-month frames ending on the filer's own fiscal year-end are
+   * kept, so a trailing-twelve-month comparative in a 10-Q is never mistaken
+   * for a year. Optional: absent on older sets and hand-built results.
+   */
+  annualShares?: [string, number][];
   notes: string[];
 };
 
@@ -1237,8 +1253,31 @@ export function extractCompanyFacts(
         .map((f) => [f.key, preferred.get(f.key) ?? null])
         .filter((e): e is [string, string] => e[1] !== null)
     ),
+    annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
     notes,
   };
+}
+
+/**
+ * See ExtractResult.annualShares. Resolved with the SAME resolve() and the
+ * same preferred concept the stored years use, so a year that appears in both
+ * reads the same number in both.
+ */
+function annualShareSeries(
+  bucket: Bucket | undefined,
+  preferred: string | null,
+  yearEnd: string | null
+): [string, number][] {
+  if (!bucket) return [];
+  const out = new Map<string, number>();
+  for (const [, cands] of bucket) {
+    const best = resolve(cands, preferred);
+    if (!best?.row.start || !best.row.end || typeof best.row.val !== "number" || best.row.val <= 0) continue;
+    if (quartersCovered(spanDays(best.row.start, best.row.end)) !== 4) continue;
+    if (!onFiscalYearEnd(best.row.end, yearEnd)) continue;
+    out.set(best.row.end, best.row.val);
+  }
+  return [...out].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
 /**

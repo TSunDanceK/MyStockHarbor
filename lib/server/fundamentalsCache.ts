@@ -13,6 +13,7 @@ import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { claimStalest, deferSymbol, markRefreshed, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
+import { resolveProfileBulk } from "./staticProfile";
 
 // Cron-warmed, Redis-cached fundamentals (market cap, PE ratio, industry) for
 // the analyzed picker universe. Mirrors the earnings-warmup pattern already
@@ -821,6 +822,28 @@ export async function warmFundamentals(symbols: string[]) {
     }
   }
 
+  // ── SECTOR AND INDUSTRY THROUGH THE SHARED RESOLVER ───────────────────
+  //
+  // This read `p?.industry ?? sc?.industry ?? null` — two FMP caches (profile,
+  // 30 d; screener, 30 h) and NOTHING under them. Once FMP stops refilling
+  // both, every row loses its taxonomy, and /semiconductor-stocks and
+  // /cheap-tech-stocks select ON those fields, so the rows do not render with
+  // a dash: they vanish from the page (brief 2026-09-22 §2.4 item 1).
+  // sectorUniverse.ts already fell back to the committed snapshot; this warm
+  // did not. The FMP value still wins where there is one — resolveProfileBulk
+  // puts the cache first — so a live row is unchanged.
+  const resolvedTaxonomy = resolveProfileBulk(
+    cleanSymbols.map((sym) => {
+      const p = cachedProfiles.get(sym);
+      const sc = screenerFund.get(sym);
+      return {
+        symbol: sym,
+        cached: { sector: p?.sector ?? sc?.sector ?? null, industry: p?.industry ?? sc?.industry ?? null },
+      };
+    }),
+    "pickers fundamentals warm"
+  );
+
   // 3) write combined records for every symbol we have any data for.
   const now = new Date().toISOString();
   let written = 0;
@@ -830,12 +853,13 @@ export async function warmFundamentals(symbols: string[]) {
     const p = cachedProfiles.get(sym);
     const sc = screenerFund.get(sym);
     if (!q && !p && !sc) continue;
+    const tax = resolvedTaxonomy.get(sym);
     const row: FundamentalsRow = {
       symbol: sym,
       marketCap: q?.marketCap ?? p?.marketCap ?? sc?.marketCap ?? null,
       peRatio: q?.peRatio ?? null,
-      industry: p?.industry ?? sc?.industry ?? null,
-      sector: p?.sector ?? sc?.sector ?? null,
+      industry: tax?.industry ?? null,
+      sector: tax?.sector ?? null,
       updatedAt: now,
     };
     writePipeline.set(`${FUND_KEY_PREFIX}${sym}`, row, { ex: FUND_TTL_SECONDS });
@@ -864,15 +888,19 @@ export async function warmFundamentals(symbols: string[]) {
   // backlog drains and then settle at roughly `emptyMarked` -- the symbols FMP
   // genuinely has nothing for. If it does not move at all, the cron is not
   // running; check for the log line before assuming the fix failed.
+  // COUNTED FROM THE RESOLVED VALUE, which is what the write above stores and
+  // so what the pages select on. Counting the FMP caches alone would report the
+  // snapshot's rescue as a loss (brief §2.4 item 1).
   let industryKnown = 0;
   let sectorKnown = 0;
   for (const sym of cleanSymbols) {
-    if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
+    const tax = resolvedTaxonomy.get(sym);
+    if (tax?.industry) industryKnown++;
     // Counted separately, because the two genuinely diverge -- that divergence
     // IS the bug this change fixes, and a single "profile known" figure would
     // have hidden it. Reported so the incidence is a number rather than an
     // assumption (claude/traps/measuring-the-wrong-layer.md).
-    if (cachedProfiles.get(sym)?.sector || screenerFund.get(sym)?.sector) sectorKnown++;
+    if (tax?.sector) sectorKnown++;
   }
 
   // Staleness bookkeeping for the health page and for future stalest-first

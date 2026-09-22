@@ -287,7 +287,12 @@ const spSrc = read("lib/server/staticProfile.ts")
   // there. Real data rather than a stub, for the same reason as the snapshot:
   // a stubbed map makes a coverage number that describes the stub.
   .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
-    () => `const cikMap = ${read("data/cik-map.json")};`);
+    () => `const cikMap = ${read("data/cik-map.json")};`)
+  // The SIC leg's two files (brief 2026-09-22 §2.4), real data again.
+  .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
+    () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
+  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
+    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`);
 if (/^import /m.test(spSrc)) {
   // NAME THE SURVIVOR. This used to say "the snapshot JSON was not inlined",
   // which was a guess: the actual cause was a DIFFERENT import being added to
