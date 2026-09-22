@@ -36,7 +36,7 @@ import { readReportDates, type StoredReportDates } from "./secReportDatesStore";
 import { dueInputFrom } from "./dueInputs";
 import { selectDue } from "./dueToReport";
 import { dueRowLabel } from "./dueStripState";
-import { expectedFrom, type ExpectedBandId } from "./expectedToReport";
+import { expectedFrom, lagsFrom, median, type ExpectedBandId } from "./expectedToReport";
 import {
   OUTLOOK_HEDGE, OUTLOOK_UNAVAILABLE, outlookBandLabel, outlookBeyondWindowLabel,
   outlookNoEstimateLabel, outlookReasonLabel, habitLabel, lastReportedLabel,
@@ -135,12 +135,15 @@ export function outlookFrom(
   }
 
   if (got.skip === "beyond-window") {
-    const lag = medianLagOf(rec);
+    const habit = habitOf(rec);
     return {
       symbol, kind: "beyond-window",
       headline: outlookBeyondWindowLabel(symbol),
       hedge: OUTLOOK_HEDGE,
-      evidence: lag ? evidenceFor(lag.medianLagDays, lag.fromPeriods, null, rec) : compact([lastFiled(rec)]),
+      // NO periodEnd on this branch. "For the period ending 2026-12-31" beside
+      // "not in the next 30 days" invites the reader to do the arithmetic the
+      // sentence just refused to do for them.
+      evidence: habit ? evidenceFor(habit.medianLagDays, habit.fromPeriods, null, rec) : compact([lastFiled(rec)]),
     };
   }
 
@@ -171,11 +174,27 @@ function lastFiled(rec: StoredReportDates | null): string | null {
   return null;
 }
 
-/** This filer's own habit, when the store carries a dated estimate for it. */
-function medianLagOf(rec: StoredReportDates | null): { medianLagDays: number; fromPeriods: number } | null {
-  const events = Array.isArray(rec?.events) ? rec.events : [];
-  if (rec?.next?.kind !== "date" || !Number.isFinite(rec.next.medianLagDays)) return null;
-  return { medianLagDays: rec.next.medianLagDays, fromPeriods: events.length };
+/**
+ * This filer's own habit, FROM THE SAME FUNCTIONS THE DECISION USED.
+ *
+ * ── THE FIRST VERSION READ IT OFF THE STORE, AND THAT WAS TWO HOMES ───────
+ * It took `rec.next.medianLagDays` — the shared estimator's number, computed
+ * from 8-K events only and refused outright for an irregular filer. Relay
+ * 35763134385 printed the consequence: ANET earned a beyond-window answer from
+ * ITS OWN lags while the evidence line under it silently vanished, because the
+ * store's estimate for the same filer was not a dated one. One sentence's
+ * decision and the sentence explaining it were coming from two different
+ * medians over two different event sets.
+ *
+ * Now both come from lagsFrom/median, which is what expectedFrom already uses.
+ * `fromPeriods` counts the USABLE lags, not the stored events: an event whose
+ * announcement predates its own period end is dropped from the median, and
+ * quoting it in the sample size would overstate the evidence behind the number.
+ */
+function habitOf(rec: StoredReportDates | null): { medianLagDays: number; fromPeriods: number } | null {
+  const { lags } = lagsFrom(rec?.events);
+  const m = median(lags);
+  return m == null ? null : { medianLagDays: m, fromPeriods: lags.length };
 }
 
 function evidenceFor(
