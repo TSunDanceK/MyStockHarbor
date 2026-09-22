@@ -274,23 +274,38 @@ console.log("\n9. the long share history: fiscal years from the payload, then re
   check("the codec stores it as `as`, about 20 bytes a year",
     enc.as?.length === 15 && JSON.stringify(enc.as).length < 15 * 25, `${JSON.stringify(enc.as).length} bytes`);
 
-  // THE CHART: years first, then quarters after the last fiscal year-end.
+  // THE CHART: years up to the first stored quarter, then every stored quarter.
   const set = fixture("AAPL");
   const lastFy = set.years[0].e;
+  const qs = set.quarters.filter((q) => q.v && M.buildShareHistory({ ...set, as: undefined }).points.some((p) => p.date === q.e)).map((q) => q.e).sort();
+  const firstQ = qs[0];
   const withAs = { ...set, as: [["2012-09-29", 26e9], ["2018-09-29", 19e9], [lastFy, 15e9]] };
   const h = M.buildShareHistory(withAs);
-  check("the chart draws the yearly points, then the quarters since the last year-end",
+  const quarterOnly = M.buildShareHistory(set);
+  check("the chart draws the yearly points before the first stored quarter, then EVERY stored quarter",
     h.basis === "annual+quarters" && h.points[0].date === "2012-09-29" &&
-      h.points.slice(3).every((p) => p.date > lastFy), `${h.points.length} points`);
+      h.points.length === 2 + quarterOnly.points.length &&
+      h.points.slice(2).every((p, i) => p.date === quarterOnly.points[i].date),
+    `${h.points.length} points, first quarter ${firstQ}`);
+  check("a year ending inside the stored quarters is left to the quarters",
+    !h.points.some((p) => p.date === lastFy && p.shares === 15e9));
   check("a set without `as` keeps the quarterly fallback", M.buildShareHistory(set).basis === "quarter");
   const dil = read("app/components/DilutionHistory.tsx");
   check("the footer uses the owner's wording", /Annual share counts from SEC filings, latest quarters appended/.test(dil));
-  const noRecent = await loadComposer(once(
-    "const recent = seriesOf(set.quarters ?? []).filter((p) => p.date > lastYear);",
-    "const recent = seriesOf(set.quarters ?? []);"
+  const overlap = await loadComposer(once(
+    ".filter(([date, v]) => typeof v === \"number\" && v > 0 && date < firstQuarter)",
+    ".filter(([, v]) => typeof v === \"number\" && v > 0)"
   ));
-  check("...and CATCHES quarters inside a fiscal year plotted beside its yearly point",
-    noRecent.buildShareHistory(withAs).points.slice(3).some((p) => p.date <= lastFy));
+  check("...and CATCHES a yearly point plotted inside the quarters' span",
+    overlap.buildShareHistory(withAs).points.some((p) => p.date === lastFy && p.shares === 15e9));
+  const dropQuarters = await loadComposer(once(
+    "const points = [...years, ...quarters];",
+    "const points = [...years, ...quarters.filter((p) => p.date > (set.as?.at(-1)?.[0] ?? \"\"))];"
+  ));
+  // The first shape (#517 round 1): quarters only after the last fiscal year.
+  check("...and CATCHES quarters dropped from the combined series",
+    dropQuarters.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length <
+      M.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");

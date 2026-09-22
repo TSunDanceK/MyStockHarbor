@@ -15,8 +15,11 @@
 // every fourth quarter is a gap rather than a point. A 10-Q filer therefore
 // yields about nine quarterly points. So the extractor now stores ONE extra
 // series, fiscal-year basic shares for every year in the payload
-// (StoredFactSet.as), and the chart draws those years and then the quarters
-// since — retention itself is not widened (owner, #517).
+// (StoredFactSet.as). The chart COMBINES the two: yearly points up to the
+// first stored quarter, then every stored quarter — retention itself is not
+// widened (owner, #517, second decision; the first shape — years, then only
+// the quarters after the last fiscal year-end — gave ONDS and ABVX fewer
+// points than quarters alone, relay 35780595913).
 //
 // PURE — no I/O — so the check suite can run it on committed fixtures.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
@@ -27,9 +30,9 @@ export type ShareHistoryPoint = { date: string; shares: number };
 export type ShareHistory = {
   points: ShareHistoryPoint[];
   /**
-   * Which series the points are. "annual+quarters" is the long history: every
-   * fiscal year in the payload (StoredFactSet.as), then the stored quarters
-   * after the last fiscal year-end. "quarter" / "year" are the fallback for a
+   * Which series the points are. "annual+quarters" is the long history: the
+   * fiscal years in the payload (StoredFactSet.as) that end before the first
+   * stored quarter, then every stored quarter. "quarter" / "year" are the fallback for a
    * set written before `as` existed.
    */
   basis: "annual+quarters" | "quarter" | "year";
@@ -51,16 +54,17 @@ const seriesOf = (periods: StoredPeriod[]): ShareHistoryPoint[] =>
 export function buildShareHistory(set: StoredFactSet | null): ShareHistory | null {
   if (!set) return null;
   // ── THE LONG HISTORY, WHERE THE SET CARRIES IT ────────────────────────────
-  // Yearly points back as far as companyfacts goes, then the quarters filed
-  // since the last fiscal year-end — the owner's shape (2026-09-22, #517),
-  // chosen over widening retention.
+  // Yearly points back as far as companyfacts goes UP TO THE FIRST STORED
+  // QUARTER, then every stored quarter — the owner's shape (2026-09-22, #517),
+  // chosen over widening retention. A year that ends on or after the first
+  // quarter is left to the quarters, so no stretch is drawn twice.
   if (set.as?.length) {
+    const quarters = seriesOf(set.quarters ?? []);
+    const firstQuarter = quarters[0]?.date ?? "9999-12-31";
     const years = set.as
-      .filter(([, v]) => typeof v === "number" && v > 0)
+      .filter(([date, v]) => typeof v === "number" && v > 0 && date < firstQuarter)
       .map(([date, shares]) => ({ date, shares }));
-    const lastYear = years.at(-1)?.date ?? "";
-    const recent = seriesOf(set.quarters ?? []).filter((p) => p.date > lastYear);
-    const points = [...years, ...recent];
+    const points = [...years, ...quarters];
     if (points.length >= MIN_SHARE_POINTS) return { points, basis: "annual+quarters" };
   }
   const quarters = seriesOf(set.quarters ?? []);

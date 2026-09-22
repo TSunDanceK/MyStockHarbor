@@ -39,7 +39,7 @@ const cikFor = (s) => {
 };
 
 const SYMBOLS = (process.env.SYMBOLS || "ONDS AAPL ABVX").split(/[,\s]+/).filter(Boolean);
-console.log(`symbol  years  first..last            quarters-after  chart-points  was(quarters-only)  as-bytes  set-bytes`);
+console.log(`symbol  years  first..last            years-drawn  quarters-drawn  chart-points  was(quarters-only)  as-bytes  set-bytes`);
 for (const symbol of SYMBOLS) {
   const cik = cikFor(symbol);
   if (!cik) { console.log(`${symbol.padEnd(7)} no CIK`); continue; }
@@ -50,10 +50,11 @@ for (const symbol of SYMBOLS) {
   const withAs = sec.buildShareHistory(set);
   const without = sec.buildShareHistory({ ...set, as: undefined });
   const asBytes = as.length ? JSON.stringify(as).length + 6 : 0; // + `,"as":`
-  const after = withAs?.basis === "annual+quarters" ? withAs.points.length - as.length : 0;
+  const quartersDrawn = without?.basis === "quarter" ? without.points.length : 0;
+  const yearsDrawn = withAs?.basis === "annual+quarters" ? withAs.points.length - quartersDrawn : 0;
   console.log(
     `${symbol.padEnd(7)} ${String(as.length).padStart(5)}  ${(as[0]?.[0] ?? "-")}..${(as.at(-1)?.[0] ?? "-")}  ` +
-      `${String(after).padStart(14)}  ${String(withAs?.points.length ?? 0).padStart(12)}  ${String(without?.points.length ?? 0).padStart(18)}  ` +
+      `${String(yearsDrawn).padStart(11)}  ${String(quartersDrawn).padStart(14)}  ${String(withAs?.points.length ?? 0).padStart(12)}  ${String(without?.points.length ?? 0).padStart(18)}  ` +
       `${String(asBytes).padStart(8)}  ${String(JSON.stringify(set).length).padStart(9)}`
   );
   await new Promise((r) => setTimeout(r, 150));
