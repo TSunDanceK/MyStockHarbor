@@ -13,7 +13,6 @@ import {
   getWindowStartDate,
   getWindowEndDate,
   isDateInWindow,
-  getCachedDayItems,
   daysInMonth,
   getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
