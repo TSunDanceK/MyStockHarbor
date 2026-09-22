@@ -95,7 +95,7 @@ const long = " It sells these products to industrial customers and government ag
   const aapl = D.cleanDescription(["The Company designs, manufactures and markets smartphones, personal computers and tablets." + long, "Products", "Products iPhone iPhone ® is the Company’s line of smartphones based on its iOS operating system."].join("\n"));
   check("a camel-case second paragraph is kept, heading stripped, no space before ®",
     aapl.ok && aapl.text.includes("\n\niPhone® is the Company’s line"));
-  const capsOnly = await load(once("const STARTS_LIKE_A_SENTENCE = /^([“\"‘']?[A-Z]|[a-z]+[A-Z])/;", "const STARTS_LIKE_A_SENTENCE = /^[“\"‘']?[A-Z]/;"));
+  const capsOnly = await load(once("const STARTS_LIKE_A_SENTENCE = /^([“\"‘']?[A-Z0-9]|[a-z]+[A-Z])/;", "const STARTS_LIKE_A_SENTENCE = /^[“\"‘']?[A-Z]/;"));
   check("...and CATCHES the capital-only rule that would drop iPhone",
     !txt(capsOnly.cleanDescription(["The Company designs, manufactures and markets smartphones, personal computers and tablets." + long, "iPhone® is the Company’s line of smartphones based on its iOS operating system."].join("\n"))).includes("iPhone"));
 
@@ -117,6 +117,29 @@ const long = " It sells these products to industrial customers and government ag
 
   const rklb = D.cleanDescription(["Who We Are", "Our Mission: We Open Access to Space to Improve Life on Earth.", "Rocket Lab is an end-to-end space company with an established track record of mission success." + long + long].join("\n"));
   check("a leading one-line slogan is dropped (RKLB)", rklb.ok && rklb.text.startsWith("Rocket Lab is"));
+}
+
+console.log("\n6b. full-build rules: rosters, tables, run-ons, name-on-its-own-line");
+{
+  const dal = D.cleanDescription(["Delta Air Lines is a major United States airline providing scheduled air transportation for passengers and cargo." + long,
+    "Snell, Age 49: Executive Vice President - Chief Customer Experience Officer of Delta since January 2025; Senior Vice President since 2019."].join("\n"));
+  check("an officer roster line is dropped (DAL)", dal.ok && !/Age 49/.test(dal.text));
+  const flng = D.cleanDescription(["FLEX LNG owns a fleet of modern LNG carriers chartered to energy majors and trading houses around the world today." + long,
+    "Flex Endeavour 2018 HO 173,400 MEGI+PRS Q1 2032 Q1 2033 Flex Enterprise 2018 HO 173,400 MEGI+PRS Q2 2029 NA Flex Ranger 2018 173,400."].join("\n"));
+  check("a table read as a sentence is dropped (FLNG)", flng.ok && !/173,400/.test(flng.text));
+  const noTab = await load(once("&& s.length <= MAX_SENTENCE_CHARS && !isTabular(s));", "&& s.length <= MAX_SENTENCE_CHARS);"));
+  check("...and CATCHES the table kept", /173,400/.test(txt(noTab.cleanDescription(["FLEX LNG owns a fleet of modern LNG carriers chartered to energy majors and trading houses around the world today." + long,
+    "Flex Endeavour 2018 HO 173,400 MEGI+PRS Q1 2032 Q1 2033 Flex Enterprise 2018 HO 173,400 MEGI+PRS Q2 2029 NA Flex Ranger 2018 173,400."].join("\n")))));
+  const axs = D.cleanDescription("In this Form 10-K, references to “AXIS Capital” refer to AXIS Capital Holdings Limited. AXIS Capital is a global specialty underwriter and provider of insurance and reinsurance solutions with operations in Bermuda, the United States and Europe." + long);
+  check("'In this Form 10-K, references to …' is a definition (AXS)", axs.ok && axs.text.startsWith("AXIS Capital is a global"));
+  const bhc = D.cleanDescription(["Bausch Health Companies Inc.", "is a global, diversified specialty pharmaceutical and medical device company that develops and markets products." + long].join("\n"));
+  check("a company name on its own line joins the sentence it opens (BHC)", bhc.ok && bhc.text.startsWith("Bausch Health Companies Inc. is a global"));
+  const frag = D.cleanDescription(["is a global company that nobody named here, which is a fragment of something longer than this line.", "The Company makes products for industrial and government customers around the world." + long + long].join("\n"));
+  check("a first paragraph that opens mid-sentence is dropped", frag.ok && frag.text.startsWith("The Company makes"));
+  const threeD = D.cleanDescription("3D Systems Corporation is a leading provider of additive manufacturing solutions for industrial and healthcare customers." + long);
+  check("...but a name starting with a digit leads (3D Systems)", threeD.ok && threeD.text.startsWith("3D Systems"));
+  const psa = D.cleanDescription("Forward-looking statements include statements relating to our guidance and all underlying assumptions, our expected acquisitions and developments over the coming year." + long);
+  check("forward-looking-statement boilerplate is rejected (PSA)", !psa.ok);
 }
 
 console.log("\n7. cross-references and MD&A are rejected");
