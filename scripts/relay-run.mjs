@@ -55,6 +55,15 @@ const TASKS = {
   // no merge -- which is the whole reason routing lives here instead of in a
   // case statement inside relay.yml.
   "bars-providers": { script: "scripts/bars-provider-probe.mjs", args: () => [] },
+  // DOES YAHOO WANT BRK.B OR BRK-B? The sandbox answers 403 CONNECT for
+  // query1.finance.yahoo.com and stooq.com both, so this is the only place the
+  // question can be asked -- and it has to be asked before the quote path
+  // converts anything on the Yahoo leg, because the dot is what the app sends
+  // today and converting the one vendor that already accepts it would break it.
+  // Re-asks Stooq at the same time, since the proposal to delete that leg rests
+  // on a measurement from 2026-09-12. Read-only and uncredentialled: public
+  // endpoints, no store.
+  "share-class-spelling": { script: "scripts/share-class-spelling-probe.mjs", args: () => [] },
   "nasdaq-refill": {
     script: "scripts/nasdaq-refill-analysis.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
