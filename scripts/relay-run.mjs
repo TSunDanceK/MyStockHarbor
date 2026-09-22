@@ -537,6 +537,12 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  "write-report-dates-rewrite-progress": {
+    script: "scripts/report-dates-rewrite-progress.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],

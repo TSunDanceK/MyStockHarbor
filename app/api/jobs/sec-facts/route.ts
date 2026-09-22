@@ -17,7 +17,7 @@ import {
   latestResultsAnnouncement, pendingResults,
   type Submissions,
 } from "@/lib/server/secReportDates";
-import { readReportDates, writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
+import { pairingRewriteDone, readReportDates, writeReportDates, STORED_EVENT_LIMIT } from "@/lib/server/secReportDatesStore";
 import reportDatesRewrite from "@/data/sec/report-dates-rewrite.json";
 import dueStripCut from "@/data/due-strip.json";
 
@@ -672,7 +672,7 @@ export async function GET(req: NextRequest) {
   // is the whole point of the matching in `reportEvents`: an Item 2.02 8-K's
   // "date of report" is the day results were released, and reading it as a
   // fiscal period end makes every reporting lag zero by construction.
-  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, rewrite: 0, dated: 0, pending: 0 };
+  const reportDates = { attempted: 0, written: 0, failed: 0, noEvents: 0, backlog: 0, rewrite: 0, rewriteWritten: 0, rewriteFailed: 0, dated: 0, pending: 0 };
   const todayIso = new Date().toISOString().slice(0, 10);
   if (!only) {
     const changedSet = new Set(changedThisRun);
@@ -702,12 +702,12 @@ export async function GET(req: NextRequest) {
     listed.sort((a, b) => Number(cut.has(b)) - Number(cut.has(a)));
     const drained = await Promise.all(
       listed.map(async (sym) => {
-        const rec = await readReportDates(sym);
-        return rec !== null && "earlyNonResults" in rec;
+        return pairingRewriteDone(await readReportDates(sym));
       })
     );
     const rewrite = listed.filter((_, i) => !drained[i]);
     reportDates.rewrite = rewrite.length;
+    const rewriteSet = new Set(rewrite);
     const queue = [...new Set([...changedThisRun, ...rewrite, ...backfill])];
     for (const symbol of queue.slice(0, SEC_REPORT_DATES_PER_RUN)) {
       const entry = manifest.symbols[symbol];
@@ -775,8 +775,9 @@ export async function GET(req: NextRequest) {
           annual: cadence?.annual ?? null,
           earlyNonResults,
         });
-        if (!ok) { reportDates.failed++; continue; }
+        if (!ok) { reportDates.failed++; if (rewriteSet.has(symbol)) reportDates.rewriteFailed++; continue; }
         reportDates.written++;
+        if (rewriteSet.has(symbol)) reportDates.rewriteWritten++;
         if (!events.length) reportDates.noEvents++;
         if (next.kind === "date") reportDates.dated++;
         if (pending) reportDates.pending++;
@@ -787,6 +788,7 @@ export async function GET(req: NextRequest) {
         if (entry) entry.reportDatesAt = Date.now();
       } catch (err) {
         reportDates.failed++;
+        if (rewriteSet.has(symbol)) reportDates.rewriteFailed++;
         console.warn("[sec-facts] report dates failed", symbol, String((err as Error)?.message ?? err));
       }
     }
@@ -829,7 +831,14 @@ export async function GET(req: NextRequest) {
     // climbs through earnings season and falls back is the feed catching up;
     // one that only climbs is a bug in the test, not a lag at SEC.
     reportDatesPending: reportDates.pending,
+    // THE PAIRING REWRITE, per run: queued at the start, written, failed, and
+    // what is left for the next run. A listed symbol that is skipped before
+    // the write (no fact set yet) is neither written nor failed, so it shows up
+    // as left rather than vanishing.
     reportDatesRewrite: reportDates.rewrite,
+    reportDatesRewriteWritten: reportDates.rewriteWritten,
+    reportDatesRewriteFailed: reportDates.rewriteFailed,
+    reportDatesRewriteLeft: reportDates.rewrite - reportDates.rewriteWritten,
     reportDatesBacklog: reportDates.backlog,
     manifestWritten: persisted,
   };

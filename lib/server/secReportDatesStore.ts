@@ -163,6 +163,21 @@ export function latestResults(
   return null;
 }
 
+/**
+ * Has this record been written under the paired rule? The drain condition for
+ * data/sec/report-dates-rewrite.json.
+ *
+ * THE KEY, NOT THE VALUE. Every write from the paired rule sets
+ * `earlyNonResults` -- to the pattern for the 84 repeat filers and to NULL for
+ * everyone else, the 125 one-off filers included -- and JSON keeps a null key
+ * where it drops an undefined one. So presence is the marker and a null is a
+ * finished record, not an unfinished one. Testing the value instead would
+ * requeue every filer without a pattern on every run, forever.
+ */
+export function pairingRewriteDone(rec: StoredReportDates | null): boolean {
+  return rec !== null && typeof rec === "object" && "earlyNonResults" in rec;
+}
+
 export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
   if (!redis) return null;
   try {

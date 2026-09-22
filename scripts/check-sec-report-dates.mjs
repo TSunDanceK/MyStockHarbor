@@ -285,6 +285,57 @@ console.log("\n3e. the CURRENT period, which has no 10-Q yet, is judged by the f
       !["2025-10-02", "2026-01-02", "2026-04-02"].includes(r.event))), TSLA_PERIODS).periods) !== null);
 }
 
+console.log("\n3f. EVERY rewritten record drains the queue — the one-off filers included");
+{
+  // The predicate, lifted from the store (it is pure; the Redis client is not).
+  const storeSrc = readCodeOnly("lib/server/secReportDatesStore.ts");
+  const start = storeSrc.indexOf("export function pairingRewriteDone(");
+  const body = start === -1 ? "" : storeSrc.slice(start, storeSrc.indexOf("\n}\n", start) + 2);
+  check("pairingRewriteDone is in the store", Boolean(body));
+  const done = (await lift(body.replace(/export function/, "function")
+    .replace(/: StoredReportDates \| null/, "").replace(/: boolean/, "") + "\nexport { pairingRewriteDone };"))
+    .pairingRewriteDone;
+
+  // The record exactly as the cron writes it, through the JSON round trip
+  // Upstash puts it through. ORCL's shape: paired, no early pattern -- one of
+  // the 125. TSLA's shape: the 84.
+  const ORCL_ROWS = [
+    { form: "8-K", items: "2.02,9.01", event: "2026-06-10", accepted: "2026-06-10T20:05:00.000Z" },
+    { form: "10-K", event: "2026-05-31", accepted: "2026-06-20T20:00:00.000Z" },
+    { form: "8-K", items: "2.02,9.01", event: "2026-03-10", accepted: "2026-03-10T20:05:00.000Z" },
+    { form: "10-Q", event: "2026-02-28", accepted: "2026-03-12T20:00:00.000Z" },
+  ];
+  const ONE_OFF = TSLA_ROWS.filter((r) => !["2025-10-02", "2026-01-02", "2026-04-02"].includes(r.event));
+  const written = (mod, rows, periods) => JSON.parse(JSON.stringify({
+    symbol: "X", events: mod.reportEvents(subs(rows), periods),
+    earlyNonResults: mod.earlyNonResultsPattern(mod.resultsPairing(subs(rows), periods).periods),
+  }));
+  const oneOff = written(m, ONE_OFF, TSLA_PERIODS);
+  check("a one-off filer (one mispicked period, no pattern) writes earlyNonResults: null",
+    oneOff.earlyNonResults === null && "earlyNonResults" in oneOff, JSON.stringify(oneOff.earlyNonResults));
+  check("...and that record is DONE — it leaves the queue", done(oneOff) === true);
+  check("a filer with no early 2.02 at all is done too",
+    done(written(m, ORCL_ROWS, new Set(["2026-05-31", "2026-02-28"]))) === true);
+  check("a repeat filer (the 84) is done", done(written(m, TSLA_ROWS, TSLA_PERIODS)) === true);
+  check("a record written BEFORE the pairing (no key) is not done — it is queued",
+    done({ symbol: "X", events: [] }) === false);
+  check("no record (never written, or unreadable) is queued", done(null) === false);
+
+  // MUTATION: the pattern returns undefined instead of null for a filer
+  // without one. JSON drops the key, the record never looks done, and every
+  // one-off filer is rewritten on every run for ever.
+  const undef = await load((src) => src.replace(
+    "  if (early.length < EARLY_PATTERN_MIN_PERIODS) return null;",
+    "  if (early.length < EARLY_PATTERN_MIN_PERIODS) return undefined as unknown as null;"), 37);
+  check("MUTATION: undefined in place of null leaves the one-off filer queued forever",
+    done(written(undef, ONE_OFF, TSLA_PERIODS)) === false,
+    "so the null is load-bearing and asserted above");
+  // MUTATION: the drain tested on the VALUE, not the key.
+  const byValue = (rec) => rec !== null && typeof rec === "object" && Boolean(rec.earlyNonResults);
+  check("MUTATION: a drain on the value requeues every one-off filer",
+    byValue(oneOff) === false && done(oneOff) === true);
+}
+
 console.log("\n3c. THE BUG CLASS: a filing's reported date is never a period end");
 
 // ── WHY THIS HAS ITS OWN SECTION ─────────────────────────────────────────
@@ -832,11 +883,14 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   check("the rewrite list is committed and names TSLA and ABBV",
     Array.isArray(list.symbols) && list.symbols.includes("TSLA") && list.symbols.includes("ABBV"),
     `${list.symbols?.length} symbols`);
-  check("...and the cron queues it, drained by the record carrying earlyNonResults",
-    /reportDatesRewrite\.symbols/.test(job) && /"earlyNonResults" in rec/.test(job) &&
+  check("...and the cron queues it, drained by pairingRewriteDone",
+    /reportDatesRewrite\.symbols/.test(job) && /pairingRewriteDone\(await readReportDates\(sym\)\)/.test(job) &&
       /\[\.\.\.changedThisRun, \.\.\.rewrite, \.\.\.backfill\]/.test(job));
   check("...through the same gated writer as every record (no second write path)",
     (job.match(/writeReportDates\(/g) ?? []).length === 1);
+  check("...and the write passes earlyNonResults straight through, never omitted or coerced",
+    /\n\s*earlyNonResults,\n\s*\}\);/.test(job) &&
+      /const earlyNonResults = earlyNonResultsPattern\(pairing\.periods\);/.test(job));
   check("the pending-results guard is handed the pattern at the write site",
     /latestResultsAnnouncement\(subs\), cadence, todayIso, earlyNonResults/.test(job));
   check("the cron passes the STORED period ends into the matcher",
