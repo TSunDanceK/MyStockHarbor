@@ -604,7 +604,7 @@ for (const { file, why } of IMAGELESS_BY_DESIGN) {
   );
 }
 
-// ── THE GAP THAT LET /headlines SHIP BLANK ──────────────────────────────
+// ── THE GAP THAT LET /headlines SHIP BLANK ────────────────────────────
 // §1 asserted a GUARD at all four render sites; the loop above asserted a
 // FALLBACK only at the three in SURFACES. /headlines was in neither — it sat in
 // IMAGELESS_BY_DESIGN, whose assertion is the INVERSE one, so every check
@@ -852,7 +852,7 @@ check(
   v2Orphans.length ? `${v2Orphans.length} unreachable, e.g. ${v2Orphans.slice(0, 3).join(", ")}` : "nothing unreachable"
 );
 
-// ── THE CLASSIFIER, BY RUNNING IT ──────────────────────────────────────────
+// ── THE CLASSIFIER, BY RUNNING IT ────────────────────────────────────────
 // articleTopic.ts imports nothing at all, so it transpiles and loads as-is —
 // no substitution, which means this is the shipped module and not a copy of it.
 const topicSrc = read("lib/server/news/articleTopic.ts");
@@ -904,12 +904,21 @@ if (v2Names.length === 0) {
 // separates the real rows from the constructed probes; `imprecise` rows are
 // printed rather than asserted, so a later narrowing that fixes one does not
 // fail this suite for fixing it.
-// ── TWO FIXTURES, TWO POPULATIONS, ONE ASSERTION ───────────────────────────
+// ── THREE FIXTURES, TWO POPULATIONS, ONE ASSERTION ───────────────────────
 // article-topic.jsonl's real rows are the PER-SYMBOL feed, where a story about
-// Costco says "Costco" and not "retailers". article-topic-general's are the
-// GENERAL feed, which is what /headlines actually serves and where the subject
-// is usually named outright. They score very differently — 6.8% against 33% —
-// and neither is wrong; what is wrong is quoting one number without its sample.
+// Costco says "Costco" and not "retailers". The two article-topic-general files
+// are the GENERAL feed, which is what /headlines actually serves and where the
+// subject is usually named outright. They score very differently and neither is
+// wrong; what is wrong is quoting one number without its sample.
+//
+// THE THIRD FILE EXISTS BECAUSE THE SECOND STOPPED BEING HELD OUT. Twelve rows
+// of the 09-21 capture were recorded misses, and resolving them turned that
+// capture into the thing the patterns were fitted to. A rate needs a sample
+// nobody tuned against, so 09-22 was captured after the work was finished:
+//
+//   6.8% per-symbol, 192 headlines, held out (scripts/newsart-topic-sample.mjs)
+//    40% general 09-21 — FITTED, do not quote as a rate
+//    36% general 09-22 — held out by timing, and a floor
 //
 // Both are asserted by the same code, so a pattern change has to satisfy both
 // populations at once. That is the point: every defect fixed on this branch so
@@ -925,11 +934,21 @@ const TOPIC_FIXTURES = [
   },
   {
     file: "scripts/fixtures/article-topic-general-2026-09-21.jsonl",
-    // THE WHOLE CAPTURE, every headline on the grid. Its split IS the rate, and
-    // it is a floor: the excerpts are truncated at ~100 characters by the
-    // capture, so rule 3's two-occurrence description leg under-fires here
-    // relative to production.
-    composition: "the whole capture — this IS the rate, and a floor (excerpts truncated at ~100 chars)",
+    // THE WHOLE CAPTURE, every headline on the grid — BUT NO LONGER HELD OUT.
+    // Twelve of its rows were `note`d recall misses that the round-1 pattern
+    // work resolves, so its split is now FITTED and must not be quoted as a
+    // rate. It stays because those twelve rows are the evidence that asked for
+    // each pattern, and because a fitted sample still catches a regression.
+    composition: "FITTED — 12 rows resolved by the patterns measured against it; not a rate",
+  },
+  {
+    file: "scripts/fixtures/article-topic-general-2026-09-22.jsonl",
+    // THE HELD-OUT ONE, and the reason there are three files instead of two.
+    // Captured a full news cycle after the patterns were written, measured and
+    // mutation-tested; one headline overlaps with the 09-21 capture. Its split
+    // IS the rate. Excerpts truncated at 200 characters, so still a floor, and
+    // every label in it was computed from the text the file stores.
+    composition: "the whole capture, held out by timing — this IS the rate, and a floor (excerpts at 200 chars)",
   },
 ];
 const topicRows = TOPIC_FIXTURES.flatMap(({ file }) =>
@@ -974,7 +993,7 @@ check(
   `${asserted.filter((r) => /gnews/.test(r.src)).length} per-symbol, ${asserted.filter((r) => /headlines/.test(r.src)).length} general, ${asserted.filter((r) => r.src === "probe").length} probes`
 );
 
-// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ───────────────────────────
+// ── THE SPLIT, PRINTED PER FEED AND NOT ASSERTED ─────────────────────────
 // A match RATE moves with the feed, so pinning it to a threshold produces a
 // check that fails for a reason nobody can act on. Printing it here keeps the
 // number the doc quotes computable from the repo instead of remembered, which
@@ -1206,7 +1225,7 @@ check(
   "NAMES is sorted for exactly this: re-exporting the library in a different order must not silently re-assign every article's picture"
 );
 
-// ── AND AGAINST THE SHIPPED MANIFEST ───────────────────────────────────────
+// ── AND AGAINST THE SHIPPED MANIFEST ─────────────────────────────────────
 // #481's tests learned this the expensive way: a mechanism proved on a
 // synthetic fixture says nothing about what ships. Both states are asserted, so
 // this check keeps its meaning on the day the images land rather than needing
@@ -1230,7 +1249,7 @@ check(
     : `${shippedPick?.src}`
 );
 
-// ── /headlines: THE RULE, BY CALLING IT ────────────────────────────────────
+// ── /headlines: THE RULE, BY CALLING IT ──────────────────────────────────
 // THE ASSERTION THAT WAS NOT GOOD ENOUGH, AND IS RECORDED BECAUSE IT LOOKED
 // FINE: the first version of this block compared where `pickTagged(` and
 // `planCardArt(` appear in the page source and called that "tagged art first".
@@ -1350,7 +1369,7 @@ check(
   "the provider-map is what switches those over, and it is a different change"
 );
 
-// ── SERVING: THE FOLDER'S OWN REQUEST PATH ─────────────────────────────────
+// ── SERVING: THE FOLDER'S OWN REQUEST PATH ───────────────────────────────
 // claude/serving-assets-from-public-2026-09-15.md, written after the logo
 // harvest put the site's first same-origin images into production: middleware
 // runs on public/ assets unless the matcher excludes the folder, and Next
