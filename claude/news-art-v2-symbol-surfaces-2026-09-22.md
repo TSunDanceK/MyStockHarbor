@@ -416,6 +416,35 @@ because it needs its own measurement — masking can take away a true positive
 (a headline about a bank naming a bank) as easily as a false one — and because
 it touches every surface layer 1 serves, not just this one.
 
+**RECORDED 2026-09-22: the third case is LIVE, in shipped code, not in a
+candidate.** The two above were arguments about patterns that might be added.
+This one is the pattern that landed. The `defen[cs]e stocks?` alternative of the
+`aerospace-defence` row matches **"Why Is Kratos Defense Stock Down 63% From Its
+All-Time High"** on the words *Defense Stock* — which are the second word of the
+company's name followed by an ordinary noun, not a topic. Verified by calling
+the shipped classifier, not by reading the regex:
+
+```
+articleTopic("Why Is Kratos Defense Stock Down 63% From Its All-Time High")
+  -> subjects ["aerospace-defence"], motifs []
+MARKET_WIDE_SUBJECTS.has("aerospace-defence")  -> false
+```
+
+**Nothing catches it on purpose.** The market-wide exclusion does not cover this
+tag, so what neutralises it on KTOS's own page is §5's same-as-industry skip —
+`industryTag("Aerospace & Defense")` is `aerospace-defence`, equal to the layer-1
+subject, so the subject is dropped and the event bucket is used instead. That is
+an accident of which company the headline names. The skip is keyed on the page's
+symbol, not on the headline, so the same title on a page whose industry is
+anything else keeps the match, and on `/headlines` there is no industry to
+compare against at all. For this particular headline the picture is arguably
+right — it IS a story about a defence company — but it is right for the wrong
+reason, and the next name of this shape will not be so lucky.
+
+The consequence for §7f: the prefix rule is measured against this exact
+headline, and it is one of the two Kratos cases the rule kills. So the masking
+work now has a live defect to fix and not only a hypothetical one.
+
 ## 7d. The 5th card repeated, and why it was certain
 
 The preview showed it: ONDS 01,04,03,02,**04** · AAPL 03,01,02,04,**02** ·
@@ -533,7 +562,10 @@ can lose the word "bank". Before building:
 - **The quote path's dot/dash gap**, §7e. Report only; not in this PR.
 - **§7c masking needs a prefix rule and a recall measurement**, §7f.
 - **Masking company names before layer-1 matching**, §7c — "Kratos Defense" is
-  the case no narrowing can fix.
+  the case no narrowing can fix, and as of 2026-09-22 it is LIVE: the landed
+  `defen[cs]e stocks?` alternative matches "Kratos Defense Stock", neutralised
+  on KTOS's own page only by the same-as-industry skip and by nothing at all
+  elsewhere.
 - **Nine weak labels**, one approval at a time. Each is in `WEAK_LABELS` with
   the reason it is only half right.
 - **The 11 labels with no honest tag.** `Security & Protection Services` is the
