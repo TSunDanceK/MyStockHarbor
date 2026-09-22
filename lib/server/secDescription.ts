@@ -221,15 +221,21 @@ const REJECT: [RegExp, string][] = [
   [/set\s+forth\s+under\s+the\s+headings?/i, "set forth under the headings"],
   [/in\s+conjunction\s+with\s+(our|the)\s+[^.]{0,80}financial\s+statements/i, "in conjunction with the financial statements"],
   [/management['’]s\s+discussion/i, "Management's Discussion"],
+  // Full build: PSA and SAFE opened Item 1 with safe-harbor boilerplate.
+  [/forward-looking\s+statements|safe\s+harbor/i, "forward-looking statements"],
 ];
 
 /** Rule 3: definition sentences. Dropped wherever they open the text. */
 const DEFINITION: RegExp[] = [
   /^in\s+this\s+(annual\s+)?report\b/i,
+  // "In this Form 10-K, references to …" (AXS, MXL, RNR on the full build).
+  /^(in|as\s+used\s+in)\s+this\s+(annual\s+report\s+on\s+)?form\s+\d+-[a-z]+\b/i,
   /^when\s+used\s+in\s+this\s+(annual\s+)?report\b/i,
   /^unless\s+(otherwise\s+indicated|the\s+context)/i,
   /^as\s+used\s+(in\s+this|herein)/i,
-  /^when\s+we\s+use\s+the\s+terms?\b/i,                                       // GS, paragraph 2
+  /^when\s+we\s+use\s+the\s+terms?\b/i,
+  // Full build: MGM "… is referred to as the “Company,” … and together with its subsidiaries …".
+  /\b(is|are)\s+(collectively\s+)?referred\s+to\s+(herein\s+)?as\b/i,                                       // GS, paragraph 2
   // A reading instruction, not a cross-reference to other text in its place:
   // ONDS opens Item 1 with "This business description should be read in
   // conjunction with our audited Consolidated Financial Statements…", then the
@@ -261,8 +267,8 @@ const POINTER: RegExp[] = [
 /** A first paragraph shorter than this, with a longer one after it, is a slogan. */
 const SLOGAN_CHARS = 100;
 
-/** A capital, optionally inside an opening quote, or a camel-case brand (AAPL "iPhone®"). */
-const STARTS_LIKE_A_SENTENCE = /^([“"‘']?[A-Z]|[a-z]+[A-Z])/;
+/** A capital or digit ("3D Systems"), optionally inside an opening quote, or a camel-case brand (AAPL "iPhone®"). */
+const STARTS_LIKE_A_SENTENCE = /^([“"‘']?[A-Z0-9]|[a-z]+[A-Z])/;
 
 const QUOTED = /[“"‘][^”"’]{1,60}[”"’]/g;
 
@@ -274,6 +280,20 @@ function isNameList(inner: string): boolean {
 }
 
 export const DESCRIPTION_MAX_CHARS = 900;
+/** No single sentence of an overview runs this long; one that does is a list. */
+const MAX_SENTENCE_CHARS = 1000;
+
+/**
+ * FULL-BUILD RULES (a975c007 → the render commit). Found reading every row of
+ * the first universe build, not on the owner's 31-symbol sample; each names the
+ * rows that motivated it. They only DROP text — a row they touch keeps fewer
+ * sentences or has no description, never new wording.
+ */
+/** A table or roster read as a sentence: FLNG's charter table, DAL's officer list. */
+function isTabular(s: string): boolean {
+  const digits = (s.match(/\d/g) ?? []).length;
+  return digits / s.length > 0.12 || /\bAge:?\s*\d{2}\b/.test(s);
+}
 export const DESCRIPTION_MIN_CHARS = 200;
 
 export type Cleaned = { ok: true; text: string } | { ok: false; why: string };
@@ -335,7 +355,11 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
     // A heading ends on a capitalised word ("Our Strategy", "General"); a line
     // ending on a lower-case word ("…focus is on the") is a wrap (KTOS).
     const wrapped = lastLine.length >= WRAPPED_LINE_CHARS || /(^|\s)[a-z]+,?$/.test(lastLine);
-    if (open && (/^[a-z0-9(]/.test(l) || wrapped)) prev.t = `${prev.t} ${l}`;
+    // A name on its own line, then the sentence it opens: "Bausch Health
+    // Companies Inc." / "is a global, diversified …" (BHC, full build). The
+    // name ends in a period, so SENTENCE_END alone would split them.
+    const nameLine = Boolean(prev) && /^[a-z]/.test(l) && /\b(Inc|Corp|Ltd|Co|Cos|plc|LLC|L\.P|N\.V|S\.A|S\.E|AG|SE|SA|NV)\.$/.test(prev.t);
+    if ((open && (/^[a-z0-9(]/.test(l) || wrapped)) || nameLine) prev.t = `${prev.t} ${l}`;
     else paras.push({ t: l, follows: open && prev.t.length >= 60 });
     lastLine = l;
   }
@@ -375,7 +399,9 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   let out: Para[] = [];
   for (const p of paras) {
     const all = sentences(p.t);
-    const ss = all.filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)));
+    // A "sentence" past MAX_SENTENCE_CHARS is a list or a run-on definition, not
+    // prose: AFL's executive-officer roster, AXS's subsidiary list (full build).
+    const ss = all.filter((s) => !DEFINITION.some((re) => re.test(s)) && !POINTER.some((re) => re.test(s)) && s.length <= MAX_SENTENCE_CHARS && !isTabular(s));
     if (all.some((s) => DEFINITION.some((re) => re.test(s)))) nameDefinitionStripped = true;
     if (ss.length) out.push({ t: ss.join(" "), follows: p.follows });
   }
@@ -390,6 +416,11 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
     const name = opts.companyName;
     out = out.filter((p, i) => i === 0 || !opensWithNameFragment(p.t, name));
   }
+
+  // Full build: a FIRST paragraph that opens mid-sentence ("is a global …")
+  // is a fragment too; the next one that starts like a sentence leads.
+  while (out.length && !STARTS_LIKE_A_SENTENCE.test(out[0].t)) out = out.slice(1);
+  if (!out.length) return { ok: false, why: "no paragraph starts like a sentence" };
 
   // Owner, #518: A LEADING ONE-LINE SLOGAN is dropped when a longer paragraph
   // follows (RKLB "Our Mission: We Open Access to Space to Improve Life on Earth.").
