@@ -528,6 +528,21 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX: the early-2.02 mispick measured across the
+  // universe (review of #512/#513 items A, B, E). Reads the stored records,
+  // the fact sets, SEC submissions and the production pages; writes nothing.
+  "write-early-202-census": {
+    script: "scripts/early-202-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  "write-report-dates-rewrite-progress": {
+    script: "scripts/report-dates-rewrite-progress.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],

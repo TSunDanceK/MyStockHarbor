@@ -129,6 +129,15 @@ const MUTANTS = [
     from: `  if (!hasEarnings) {`,
     to: `  if (arguments.length === -1) {\n    return (\n      <button type="button" disabled>\n        Backfill (this date is fully populated)\n      </button>\n    );\n  }\n\n  if (!hasEarnings) {`,
   },
+  {
+    // The pre-fix order: the no-key return ABOVE the shared-copy read. The
+    // anchor is the start of the Redis block, and the mutant re-inserts the
+    // early return in front of it.
+    id: "M1   no-key early return moved back above the Redis read",
+    file: CAL,
+    from: `  if (!options.bypassCache) {\n    const shared = await readReference<RawEarningsRow[]>(`,
+    to: `  if (!process.env.FMP_API_KEY) {\n    monthVisibility.set(key, cached ? "known" : "unknown");\n    return empty(cached?.rows ?? [], Boolean(cached));\n  }\n  if (!options.bypassCache) {\n    const shared = await readReference<RawEarningsRow[]>(`,
+  },
 ];
 
 const results = [];
