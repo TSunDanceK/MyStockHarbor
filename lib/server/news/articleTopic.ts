@@ -37,7 +37,7 @@
 //   4. FIRST MATCH WINS, ORDER IS MEANINGFUL, NARROW BEFORE BROAD — the same
 //      discipline INDUSTRY_BUCKETS uses in art.ts.
 //
-// ── WHAT THIS DOES NOT DO ────────────────────────────────────────────────
+// ── WHAT THIS DOES NOT DO ──────────────────────────────────────────────────
 // It does not read a symbol, a sector, an industry or a provider label. The
 // provider-map (FMP labels + SIC -> concepts) is a separate change for the
 // three symbol-led surfaces and is deliberately not in this one.
