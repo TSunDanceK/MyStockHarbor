@@ -1,0 +1,49 @@
+# Commit data/sec/description-probe.json from relay run 35775676241 so the
+# owner can review every excerpt from the repo (brief 2026-09-22 PR 3: "owner
+# reviews the sample before anything renders"). Same runner-side pattern as
+# registrant-data-commit.yml: the artifact host is refused to the sandbox.
+name: Commit the description probe sample
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/description-probe-commit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: relay-sec-description-probe-35775676241
+          path: art
+          run-id: "35775676241"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and commit
+        run: |
+          set -euo pipefail
+          f=$(find art -name 'description-probe.json' | head -n 1)
+          [ -n "$f" ] || { echo "::error::no description-probe.json"; exit 1; }
+          node -e '
+            const d = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+            const found = d.results.filter((r) => r.found).length;
+            if (d.results.length !== 31 || found !== 23) { console.error(`::error::expected 31 results, 23 found; got ${d.results.length}, ${found}`); process.exit(1); }
+            console.log(`${d.results.length} results, ${found} found`);
+          ' "$f"
+          cp "$f" data/sec/description-probe.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sec/description-probe.json
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Commit the description probe sample from relay 35775676241" -m "31 symbols, 23 sections found. For owner review before anything renders (brief 2026-09-22 PR 3 step 1)."
+          git push origin "HEAD:${{ github.ref_name }}"
