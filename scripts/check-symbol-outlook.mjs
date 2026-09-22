@@ -212,6 +212,30 @@ console.log("\n7. THE EVIDENCE IS FILED FACTS AND SAMPLE SIZES");
     o.evidence.some((l) => /^Last reported \d{4}-\d{2}-\d{2}/.test(l)));
   check("a record with no events offers no invented evidence",
     outlookFrom("X", at(10, { events: [] }), TODAY).evidence.every((l) => !/Last reported/.test(l)));
+
+  // ── THE HABIT LINE COMES FROM THE SAME MEDIAN THE DECISION USED ─────────
+  // Relay 35763134385 printed ANET with a beyond-window answer and NO habit
+  // line: the decision used the filer's own lags while the evidence read the
+  // store's `next.medianLagDays`, which is refused for an irregular filer. Two
+  // medians over two event sets, one of which could be absent while the other
+  // was not.
+  const far = outlookFrom("X", at(60), TODAY);
+  check("a beyond-window answer explains itself with the SAME habit",
+    far.evidence.some((l) => /Usually reports 30 days after a period ends, over its last 12 periods/.test(l)),
+    far.evidence.join(" | "));
+  check("...even when the store's own estimate is not a dated one",
+    outlookFrom("X", at(60, { next: { kind: "month", month: "2026-12" } }), TODAY)
+      .evidence.some((l) => /Usually reports 30 days/.test(l)));
+  check("and it prints no period end — that would hand back the arithmetic",
+    far.evidence.every((l) => !/For the period ending/.test(l)));
+
+  // The sample size counts USABLE lags, not stored events. An announcement
+  // dated before its own period end is dropped from the median; quoting it in
+  // "over its last N periods" would overstate the evidence behind the number.
+  const withJunk = at(10, { events: [...history(12, 30), ev("2026-03-31", "2026-03-01")] });
+  check("the sample size counts the lags the median used, not the raw events",
+    outlookFrom("X", withJunk, TODAY).evidence.some((l) => /over its last 12 periods/.test(l)),
+    `${withJunk.events.length} events stored`);
 }
 
 console.log("\n8. EVERY REFUSAL IS NAMED, AND THE NAMES SAY WHOSE GAP IT IS");
