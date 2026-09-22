@@ -487,6 +487,14 @@ const TASKS = {
   // not a claim about what the script does. It reaches data.sec.gov for
   // CONCEPT NAMES only — never to re-extract, because the whole point is to
   // read the object the page reads.
+  // READS ONLY (Upstash + data.sec.gov for concept names). Counts the two
+  // blast radii the ABVX diagnosis raised before either change is made.
+  "write-tie-ifrs-census": {
+    script: "scripts/sec-tie-and-ifrs-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stored-set": {
     script: "scripts/sec-stored-set-probe.mjs",
     args: () => [],
