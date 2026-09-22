@@ -303,8 +303,35 @@ export type ExtractResult = {
    * "unknown", exactly as on the stored set.
    */
   untagged?: string[];
+  /**
+   * HOW MANY STORED CELLS WERE READ FROM EACH NAMESPACE, keyed `us-gaap` /
+   * `ifrs-full`. What `accountingOf` decides the filer's standard from.
+   *
+   * ── WHY NOT `tx`, AND WHY NOT `cc` ───────────────────────────────────────
+   * `tx` lists every namespace the payload CARRIES, and 48 of 903 stored sets
+   * carry both (relay 35771324089). Of those measured, 31 read every field
+   * from ifrs-full — BBVA, SAN, SONY, TM, VALE, VOD among them — and 6 read
+   * every field from us-gaap (TEAM, CLS, VS, ...). "us-gaap present" called
+   * all 48 US GAAP. `cc` records ONE field's concept (capex), is empty for
+   * filers with no capex line, and disagreed with the fields actually read on
+   * SHG, TM, VS and AEM. The cells themselves carry `ns`; this counts them.
+   *
+   * Optional; absent on older sets and in hand-built results.
+   */
+  readNamespaces?: Record<string, number>;
   notes: string[];
 };
+
+/** Stored cells per namespace. See ExtractResult.readNamespaces. */
+export function countReadNamespaces(periods: PeriodRecord[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of periods) {
+    for (const c of p.values) {
+      if (c?.ns && c.val !== null) out[c.ns] = (out[c.ns] ?? 0) + 1;
+    }
+  }
+  return out;
+}
 
 /**
  * True when the payload publishes ANY concept in this field's chains, in any
@@ -1277,6 +1304,7 @@ export function extractCompanyFacts(
         .filter((e): e is [string, string] => e[1] !== null)
     ),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
+    readNamespaces: countReadNamespaces([...quarters, ...years, ...instants]),
     notes,
   };
 }

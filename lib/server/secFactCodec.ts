@@ -157,6 +157,11 @@ export type StoredFactSet = {
    * NOT in contentHashOf, for the reason `tx` is not: it describes the source.
    */
   nt?: string[];
+  /**
+   * Stored cells per namespace read. See ExtractResult.readNamespaces.
+   * Optional; absent is unknown. Not in contentHashOf: provenance, not a value.
+   */
+  rns?: Record<string, number>;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
@@ -237,6 +242,7 @@ export function encodeFactSet(
     cu: result.refusedUnits,
     cc: result.conceptChoice,
     ...(result.untagged ? { nt: result.untagged } : {}),
+    ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,

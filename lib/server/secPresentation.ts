@@ -317,6 +317,21 @@ export function partialScoreNote(c: ScoreCoverage, missing: string[], periodWord
   return `${what} ${range}${pinned} It is not comparable with a score where every input was read.`.trim();
 }
 
+/**
+ * The same fact in one sentence, for the sidebar card.
+ *
+ * SAME NUMBERS, SHORTER WORDS. The sidebar has no room for the list of missing
+ * inputs and the reachable range — the owner's call on #514 — so it states the
+ * count and the consequence and leaves the range to the full report, which
+ * keeps partialScoreNote. Both take the ScoreCoverage from coverageOf, so the
+ * two surfaces cannot disagree about how much was measured.
+ */
+export function partialScoreShortNote(c: ScoreCoverage): string {
+  const missing = c.total - c.measured;
+  const verb = missing === 1 ? "isn't" : "aren't";
+  return `${missing} of ${c.total} score inputs ${verb} in this company's filings, so this score isn't comparable with a fully measured one.`;
+}
+
 // ── how old a price may be and still be called a price ────────────────────
 
 /**

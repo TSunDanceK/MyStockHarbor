@@ -5,7 +5,7 @@
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import Link from "next/link";
 import {
-  CROSSING_NOTE, CROSSING_WORDS, GAAP_EPS_NOTE, SEC_ATTRIBUTION, conversionNote,
+  CROSSING_NOTE, CROSSING_WORDS, SEC_ATTRIBUTION, conversionNote, epsBasisNote, epsStandardWord,
   isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
@@ -434,7 +434,7 @@ export function SecSnapshotCard({
         >
           {pct(s.revenueYoY)}
         </Metric>
-        <Metric label="Diluted EPS (GAAP)"><CellValue cell={s.epsDiluted} /></Metric>
+        <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`}><CellValue cell={s.epsDiluted} /></Metric>
         <Metric
           label="YoY EPS growth"
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
@@ -444,7 +444,7 @@ export function SecSnapshotCard({
         <Metric label="Operating income"><CellValue cell={s.operatingIncome} compact /></Metric>
         <Metric label="Net income"><CellValue cell={s.netIncome} compact /></Metric>
       </div>
-      <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
+      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
       {/* ON THE SNAPSHOT, WHICH IS THE CARD EVERY READER SEES. A conversion
           note further down the page is a note most readers never reach, and
           the figures it explains are the ones at the top. */}
@@ -772,7 +772,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
         </table>
       </div>
       <CrossingNote rows={view.annual} />
-      <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
+      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -1088,7 +1088,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           reports costs that these categories do not cover. Operating income is as filed.
         </p>
       ) : null}
-      <p className="earningsDataNote">{GAAP_EPS_NOTE} Source: {SEC_ATTRIBUTION}.</p>
+      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -1122,14 +1122,14 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
       </p>
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
-          <thead><tr><th>{w.One}</th><th>Period ending</th><th>Revenue</th><th>Diluted EPS (GAAP)</th><th>Net income</th></tr></thead>
+          <thead><tr><th>{w.One}</th><th>Period ending</th><th>Revenue</th><th>Diluted EPS ({epsStandardWord(view.accounting)})</th><th>Net income</th></tr></thead>
           <tbody>
             {view.recentPeriods.map((r) => (
               <tr key={r.end}>
                 <td data-label={w.One}>{r.label}</td>
                 <td data-label="Period ending">{r.end}</td>
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact /></td>
-                <td data-label="Diluted EPS (GAAP)"><CellValue cell={r.epsDiluted} /></td>
+                <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}><CellValue cell={r.epsDiluted} /></td>
                 <td data-label="Net income"><CellValue cell={r.netIncome} compact /></td>
               </tr>
             ))}
@@ -1608,7 +1608,7 @@ export function SecValuationCard({
           ) : null}
         </div>
         <div>
-          <span className="metricLabel">P/E (GAAP, trailing)</span>
+          <span className="metricLabel">P/E ({epsStandardWord(view.accounting)}, trailing)</span>
           <span className="metricValue" style={{ fontSize: isRefusal(pe) ? 14 : undefined }}>
             {figure(pe, (n) => n.toFixed(1))}
           </span>
@@ -1627,7 +1627,7 @@ export function SecValuationCard({
         {current
           ? `Price ${price.toFixed(2)}${priceAsOf ? ` at the close on ${priceAsOf}` : ""}.`
           : stalePriceNote(price, priceAsOf ?? "an unknown date")}{" "}
-        Earnings are GAAP as filed, never an adjusted figure. {GAAP_EPS_NOTE} Source:{" "}
+        Earnings are {view.accounting ? `${epsStandardWord(view.accounting)} as filed` : "as filed"}, never an adjusted figure. {epsBasisNote(view.accounting)} Source:{" "}
         {SEC_ATTRIBUTION}, with the share price from market data.
       </p>
       {view.currency ? (

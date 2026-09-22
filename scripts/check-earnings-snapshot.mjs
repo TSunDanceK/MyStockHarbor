@@ -452,8 +452,13 @@ console.log("\n11. a partial score says so, with no verdict colour, from the sha
   const tones = ["34,197,94", "250,204,21", "239,68,68"];
   check("no verdict rgb appears anywhere on a partial card",
     !tones.some((t) => markup.includes(`rgba(${t},`)), "");
-  check("the range sentence renders under the pill",
-    /could only have landed between \d+ and \d+/.test(visibleText(markup)));
+  // ONE SENTENCE IN THE SIDEBAR, from the same coverage numbers; the range
+  // belongs to the full report (owner, #514).
+  check("the sidebar prints the one-sentence note, built from coverageOf's numbers",
+    visibleText(markup).includes(M.partialScoreShortNote(cov)) &&
+      visibleText(markup).includes(`${cov.total - cov.measured} of ${cov.total} score inputs aren't`), "");
+  check("...and not the range sentence, which stays on the earnings page",
+    !/could only have landed between/.test(visibleText(markup)));
 
   // MUTATIONS. Paint the pill by availability again, and let the label fall
   // back to the verdict — each must be caught.
@@ -500,7 +505,7 @@ console.log("\n12. a blank tile says why, and only the reason that applies");
     !tu.includes(M.EMPTY_REASONS.noRevenueLine) && tu.includes(`Revenue — ${M.EMPTY_REASONS.notInPeriod}`), "");
 
   const noFy = await loadSnapshot(once(
-    "fyEpsDiluted: fiscalYearEps(set, latest),", "fyEpsDiluted: null,"
+    "fyEpsDiluted: fiscalYearEps(set, latest, epsStd),", "fyEpsDiluted: null,"
   ));
   check("...and CATCHES the full-year EPS line removed",
     !/FY\d{4}: -?\$\d+\.\d{2}/.test(textOfSet(noFy, abvxShaped(noFy))));
@@ -523,6 +528,30 @@ console.log("\n13. the footer names the standard the set was read under");
   ));
   check("...and CATCHES the constant put back",
     !textFor(constant, "AZN").includes("(IFRS, as filed)"));
+
+  // ── A SET CARRYING BOTH NAMESPACES ─────────────────────────────────────
+  // 48 of 903 stored sets do (relay 35771324089); 31 of those measured read
+  // every field from ifrs-full. Presence of us-gaap decides nothing.
+  const both = ["dei", "ifrs-full", "us-gaap"];
+  check("both namespaces and no read count → no standard named",
+    M.accountingOf({ tx: both }) === null);
+  check("both namespaces, cells read from ifrs-full → IFRS",
+    M.accountingOf({ tx: both, rns: { "ifrs-full": 300, "us-gaap": 2 } }) === "IFRS");
+  check("both namespaces, cells read from us-gaap → US GAAP",
+    M.accountingOf({ tx: both, rns: { "us-gaap": 250 } }) === "US GAAP");
+  check("a single namespace still decides without a read count",
+    M.accountingOf({ tx: ["dei", "us-gaap"] }) === "US GAAP" && M.accountingOf({ tx: ["ifrs-full"] }) === "IFRS");
+  const mixedIfrs = { ...fixture("AZN"), tx: both, rns: { "ifrs-full": 400, "us-gaap": 3 } };
+  check("an IFRS filer with stray us-gaap tags renders the IFRS footer",
+    textOfSet(M, mixedIfrs, "ZZMX").includes("(IFRS, as filed)"), "");
+  check("...and with no read count it names no standard, rather than US GAAP",
+    textOfSet(M, { ...fixture("AZN"), tx: both }, "ZZMX").includes("(as filed)"), "");
+  const presence = await loadSnapshot(once(
+    "  if (set.rns) {\n    const us = set.rns",
+    "  if (set.tx?.includes(\"us-gaap\")) return \"US GAAP\";\n  if (set.rns) {\n    const us = set.rns"
+  ));
+  check("...and CATCHES the presence rule put back",
+    presence.accountingOf({ tx: both, rns: { "ifrs-full": 400, "us-gaap": 3 } }) === "US GAAP");
 }
 
 console.log("\n14. a differenced P&L line is not described as cash flow");
@@ -559,6 +588,10 @@ console.log("\n15. the untagged marker is written by the extractor, from the pay
   check("net income is NOT recorded untagged", !r.untagged.includes("netIncome"));
   check("a line published only in a refused currency is NOT untagged", !r.untagged.includes("epsDiluted"));
   check("the codec stores it as nt", JSON.stringify(M.encodeFactSet(r).nt) === JSON.stringify(r.untagged));
+  check("the extractor counts the namespace each stored cell was read from, and the codec stores it as rns",
+    (r.readNamespaces?.["us-gaap"] ?? 0) > 0 && !r.readNamespaces?.["ifrs-full"] &&
+      JSON.stringify(M.encodeFactSet(r).rns) === JSON.stringify(r.readNamespaces),
+    JSON.stringify(r.readNamespaces));
   const blind = await loadSnapshot(once(
     "untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),",
     "untagged: [],"

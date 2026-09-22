@@ -148,9 +148,12 @@ check("/earnings IS still called — the announcement date is not in SEC filings
 
 console.log("\n5. labels");
 
-check("EPS is labelled GAAP wherever it is named",
-  (cardsRaw.match(/EPS \(GAAP\)/g) ?? []).length >= 3,
-  `${(cardsRaw.match(/EPS \(GAAP\)/g) ?? []).length} occurrences`);
+// THE STANDARD IS THE FILER'S, NOT A LITERAL. Rendered on AZN / KGC / AAPL in
+// check-earnings-render.mjs §15; here, that no card hardcodes it back.
+check("EPS labels name the filer's standard wherever EPS is named",
+  (cardsRaw.match(/EPS \(\$?\{epsStandardWord\(view\.accounting\)\}\)/g) ?? []).length >= 3 &&
+    !/EPS \(GAAP\)/.test(cardsRaw),
+  `${(cardsRaw.match(/epsStandardWord\(view\.accounting\)/g) ?? []).length} occurrences`);
 // The constant is a concatenation, so the sentence spans a `" +` — matched on
 // the two halves rather than on a phrase that only exists once rendered.
 check("the GAAP note explains that adjusted figures differ",

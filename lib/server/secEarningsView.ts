@@ -145,9 +145,29 @@ export function conversionNote(c: NonNullable<SecEarningsView["currency"]>): str
  * income tax line at 14,874.0M against ~5,000M either side. Labelling it is
  * accurate whichever way the adjusted question later goes.
  */
-export const GAAP_EPS_NOTE =
-  "EPS is GAAP, as filed with the SEC. Companies often headline an adjusted " +
-  "figure that excludes one-off charges; the two can differ substantially.";
+export function epsBasisNote(accounting: "IFRS" | "US GAAP" | null): string {
+  const lead = accounting === "IFRS"
+    ? "EPS is IFRS, as filed with the SEC."
+    : accounting === "US GAAP"
+      ? "EPS is GAAP, as filed with the SEC."
+      : "EPS is as filed with the SEC.";
+  return `${lead} Companies often headline an adjusted ` +
+    "figure that excludes one-off charges; the two can differ substantially.";
+}
+
+/** The US GAAP wording — what every stock used to get, IFRS filers included. */
+export const GAAP_EPS_NOTE = epsBasisNote("US GAAP");
+
+/**
+ * The standard's word inside an EPS label: "Diluted EPS (GAAP)", "(IFRS)".
+ *
+ * THE LABEL SAID GAAP ON EVERY STOCK, including AZN, KGC and ABVX, which file
+ * under IFRS (owner, #514). Null — a set that predates the namespace census —
+ * names no standard rather than guess one.
+ */
+export function epsStandardWord(accounting: "IFRS" | "US GAAP" | null): string {
+  return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";
+}
 
 /**
  * The label for a figure the filer did not publish for that period.
@@ -192,19 +212,41 @@ export function derivationNote(
 }
 
 /** See SecEarningsView.accounting. */
-export function accountingOf(set: Pick<StoredFactSet, "tx">): "IFRS" | "US GAAP" | null {
+/**
+ * See SecEarningsView.accounting.
+ *
+ * THE NAMESPACE THE CELLS WERE READ FROM, NOT THE ONES THE PAYLOAD CARRIES.
+ * The first version said "US GAAP" whenever `us-gaap` was in `tx`, and 48
+ * stored sets carry both namespaces — most of them IFRS filers with a handful
+ * of stray us-gaap tags (relay 35771324089; see ExtractResult.readNamespaces).
+ *
+ *   1. `rns` present → whichever namespace supplied more stored cells.
+ *   2. otherwise `tx` carrying exactly one of the two → that one.
+ *   3. otherwise (both, neither, or no census) → null. The page then names no
+ *      standard at all rather than guess; a re-read writes `rns` and settles it.
+ */
+export function accountingOf(set: Pick<StoredFactSet, "tx" | "rns">): "IFRS" | "US GAAP" | null {
+  if (set.rns) {
+    const us = set.rns["us-gaap"] ?? 0;
+    const ifrs = set.rns["ifrs-full"] ?? 0;
+    if (us > ifrs) return "US GAAP";
+    if (ifrs > us) return "IFRS";
+    return null;
+  }
   if (!set.tx) return null;
-  if (set.tx.includes("us-gaap")) return "US GAAP";
-  if (set.tx.includes("ifrs-full")) return "IFRS";
+  const us = set.tx.includes("us-gaap");
+  const ifrs = set.tx.includes("ifrs-full");
+  if (us && !ifrs) return "US GAAP";
+  if (ifrs && !us) return "IFRS";
   return null;
 }
 
 /** See SecEarningsView.snapshot.fyEpsDiluted. */
-function fiscalYearEps(set: StoredFactSet, latest: StoredPeriod): { label: string; cell: ViewCell } | null {
+function fiscalYearEps(set: StoredFactSet, latest: StoredPeriod, epsStd: string): { label: string; cell: ViewCell } | null {
   if (latest.fp !== "Q4" || valueOf(latest, "epsDiluted") !== null) return null;
   const year = set.years.find((y) => y.e === latest.e) ?? null;
   if (!year || valueOf(year, "epsDiluted") === null) return null;
-  return { label: periodLabel(year), cell: view(year, "epsDiluted", "Diluted EPS (GAAP)") };
+  return { label: periodLabel(year), cell: view(year, "epsDiluted", `Diluted EPS (${epsStd})`) };
 }
 
 export const isDerived = (c: Cell) => c.derived === "differenced" || c.derived === "computed";
@@ -443,10 +485,8 @@ export type SecEarningsView = {
     fyEpsDiluted: { label: string; cell: ViewCell } | null;
   };
   /**
-   * WHICH ACCOUNTING STANDARD THE FIGURES WERE READ UNDER, from the payload's
-   * own namespaces. "IFRS" when the set was read from `ifrs-full` alone,
-   * "US GAAP" when `us-gaap` was present (it ranks first in every chain), and
-   * null when the set predates the namespace census — unknown, not either.
+   * WHICH ACCOUNTING STANDARD THE FIGURES WERE READ UNDER — see accountingOf
+   * for the rule. Null is "unknown": the page then names no standard.
    *
    * THE SIDEBAR'S FOOTER SAID "US GAAP" ON EVERY STOCK, ABVX and AZN included,
    * because it was a constant. Both file IFRS.
@@ -779,6 +819,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // printing euros as dollars, which is the single worst outcome available
   // here and the one nobody would catch by looking.
   if ((set.cur ?? "USD") !== "USD" && !set.fx) return null;
+  const epsStd = epsStandardWord(accountingOf(set));
 
   // ── TWO ANCHORS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS ──────────────────
   //
@@ -1038,7 +1079,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       comparedWith: prior ? periodLabel(prior) : null,
       revenue: view(p, "revenue", "Revenue"),
       revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
-      epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
       gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
       operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
@@ -1128,8 +1169,8 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     ["incomeTaxExpense", "Income tax"],
     ["netIncomeToNoncontrollingInterest", "Less: noncontrolling interest"],
     ["netIncome", "Net income"],
-    ["epsBasic", "Basic EPS (GAAP)"],
-    ["epsDiluted", "Diluted EPS (GAAP)"],
+    ["epsBasic", `Basic EPS (${epsStd})`],
+    ["epsDiluted", `Diluted EPS (${epsStd})`],
     ["sharesDiluted", "Diluted shares"],
   ];
 
@@ -1181,12 +1222,12 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       // them on converted values would put the FX move in the headline while
       // the table below it read correctly.
       revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
-      epsDiluted: view(latest, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
-      fyEpsDiluted: fiscalYearEps(set, latest),
+      fyEpsDiluted: fiscalYearEps(set, latest, epsStd),
     },
     accounting: accountingOf(set),
     untagged: set.nt ?? null,
@@ -1303,7 +1344,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
         label: periodLabel(p),
         end: p.e,
         revenue: view(p, "revenue", "Revenue"),
-        epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+        epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
         netIncome: view(p, "netIncome", "Net income"),
       })),
     ttmRevenue: ttm(q, "revenue"),
