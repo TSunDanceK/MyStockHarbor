@@ -142,8 +142,30 @@ console.log("\n6b. full-build rules: rosters, tables, run-ons, name-on-its-own-l
   check("forward-looking-statement boilerplate is rejected (PSA)", !psa.ok);
 }
 
+console.log("\n6c. sentences about the report, and a pointer hidden in a run-on");
+{
+  const dal = D.cleanDescription(["Delta Air Lines is a major United States airline providing scheduled air transportation for passengers and cargo worldwide." + long,
+    "We make available free of charge on our investor relations website our Annual Report on Form 10-K and other reports."].join("\n"));
+  check("website / SEC-availability text is dropped (DAL)", dal.ok && !/free of charge/.test(dal.text));
+  const acgl = D.cleanDescription("All amounts are in millions, except per share amounts, unless otherwise noted. Arch Capital Group Ltd. is a publicly listed Bermuda exempted company providing insurance, reinsurance and mortgage insurance on a worldwide basis." + long);
+  check("'amounts are in millions' is dropped (ACGL)", acgl.ok && acgl.text.startsWith("Arch Capital Group"));
+  const noMeta = await load(once("!META.some((re) => re.test(s)) && ", ""));
+  check("...and CATCHES the report-about-the-report rule removed", /in millions/.test(txt(noMeta.cleanDescription("All amounts are in millions, except per share amounts, unless otherwise noted. Arch Capital Group Ltd. is a publicly listed Bermuda exempted company providing insurance, reinsurance and mortgage insurance on a worldwide basis." + long))));
+  const cldx = D.cleanDescription("Celldex Therapeutics, Inc., which we refer to as “Celldex,” “we,” “us,” “our” or the “Company,” is a biopharmaceutical company dedicated to the development of therapeutic monoclonal and bispecific antibodies." + long);
+  check("an embedded 'which we refer to as' clause is cut, the lede kept (CLDX)", cldx.ok && /^Celldex Therapeutics, Inc\., is a biopharmaceutical/.test(cldx.text));
+  // AZN on the full build: the cross-reference is one 1,000+ character sentence.
+  const runOn = "The information set forth under the headings " + Array.from({ length: 30 }, (_, i) => `“Strategic Report—Section ${i}” on page ${i + 2}`).join(", ") + " is incorporated herein by reference.";
+  const azn = D.cleanDescription([runOn, "For the avoidance of doubt, the assurance report is not included. AstraZeneca is a global, science-led biopharmaceutical company focused on medicines." + long].join("\n"));
+  check("a cross-reference dropped as a run-on still rejects the section (AZN)", !azn.ok && /incorporated by reference/.test(azn.why), azn.why ?? "");
+  const noRunOnReject = await load(once("if (x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;", "continue;"));
+  check("...and CATCHES the pointer let through", noRunOnReject.cleanDescription([runOn, "For the avoidance of doubt, the assurance report is not included. AstraZeneca is a global, science-led biopharmaceutical company focused on medicines." + long].join("\n")).ok);
+}
+
 console.log("\n7. cross-references and MD&A are rejected");
 {
+  const onds = D.cleanDescription(["This business description should be read in conjunction with our audited Consolidated Financial Statements and notes.",
+    "Ondas, Inc. is a defense, security, and critical infrastructure technology company organized around three business units." + long].join("\n"));
+  check("ONDS's leading reading instruction is dropped, not a rejection (owner, #518)", onds.ok && onds.text.startsWith("Ondas, Inc. is"));
   const azn = D.cleanDescription("The information set forth under the headings “Strategic Report—AstraZeneca at a Glance” on page 2 and “Business Review” on pages 26 to 46 is incorporated herein by reference into this annual report as a whole.");
   check("AZN's cross-reference is rejected", !azn.ok && /rejected/.test(azn.why));
   const mdna = D.cleanDescription("You should read this in the context of Management’s Discussion and Analysis of Financial Condition and Results of Operations, which explains our results for the year in detail and much more.");
