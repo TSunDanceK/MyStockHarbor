@@ -262,14 +262,37 @@ export function sharesAreIncomparableToPrice(symbol: string): boolean {
   return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());
 }
 
-export function valuationInputs(set: StoredFactSet, today: string): ValuationInputs {
+/**
+ * WHAT THE REGISTRANT FILES ANNUALLY, from data/sec/registrants.json.
+ *
+ * ── THE LIST ABOVE WAS FIVE NAMES; THE RULE IT STATES COVERS 342 ─────────
+ * "Any 20-F filer admitted to the universe belongs here" was a rule nobody
+ * could apply, because nothing recorded who files a 20-F. The sec-registrants
+ * run (2026-09-22) does: 342 of 2,609 profiled symbols. ABVX and AZN were not
+ * on the list — AZN's ADS is half an ordinary share, so its cap was HALF the
+ * true figure and its P/E twice it (brief 2026-09-22 §2.6).
+ *
+ * NOT DETECTED FROM THE SECURITY NAME. Measured against the Nasdaq Trader
+ * names: TSM (1 ADS = 5 shares) is listed with no instrument word at all, and
+ * HDB, IBN and NVS as "Common Stock". A name test would have passed all four.
+ *
+ * Optional, so every existing caller reads exactly as before; absent means
+ * "not known", and only the named list then applies.
+ */
+export type FilerFacts = { annualForm?: string | null };
+
+export function valuationInputs(
+  set: StoredFactSet,
+  today: string,
+  filer: FilerFacts = {}
+): ValuationInputs {
   const refusals: ValuationRefusal[] = [];
 
   // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
   // count is in, so it holds whatever the cover page turns out to say -- a
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
-  if (sharesAreIncomparableToPrice(set.symbol)) {
+  if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {
     // TWO REFUSALS, NOT ONE, because they are two different claims about two
     // different figures and only one of them was ever assumed. The share-count
     // one is true by definition: a cover-page count is a count of ordinary

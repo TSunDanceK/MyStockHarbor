@@ -29,6 +29,7 @@ import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { symbolSpellings } from "../lib/symbolSpellings.mjs";
 
 const UA = process.env.SEC_USER_AGENT ||
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; registrant facts)";
@@ -45,9 +46,8 @@ const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
 const snapshot = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8"));
 
 const symbols = [...new Set([...Object.keys(snapshot.rows ?? {}), ...Object.keys(cikMap)])].sort();
-const spellings = (s) => [...new Set([s, s.replace(/\./g, "-"), s.replace(/-/g, "."), s.replace(/[.-]/g, "")])];
 const cikFor = (s) => {
-  for (const v of spellings(s)) {
+  for (const v of symbolSpellings(s)) {
     if (cikMap[v]) return tick.padCik(cikMap[v]);
     const t = tickerMap.get(v);
     if (t?.cik) return t.cik;

@@ -90,6 +90,23 @@ export const HIDDEN_PROFILE_ROWS: HiddenProfileRow[] = [
     hiddenOn: "2026-09-21",
     reason: "CUSIP assignment is licensed; neither SEC, Tiingo nor Nasdaq Trader carries it.",
   },
+  {
+    label: "IPO date",
+    source: "FMP /stable/profile ipoDate",
+    hiddenOn: "2026-09-22",
+    reason:
+      "No free source states a listing date: SEC records filings, not first trades, and " +
+      "neither Tiingo's plan nor Nasdaq Trader carries it.",
+  },
+  {
+    label: "Website",
+    source: "FMP /stable/profile website",
+    hiddenOn: "2026-09-22",
+    reason:
+      "SEC submissions has a website field but it is blank on most registrants; the " +
+      "sec-registrants run reports its coverage, and the owner decides whether it is " +
+      "worth showing where present.",
+  },
 ];
 
 const HIDDEN_PROFILE_LABELS = new Set(HIDDEN_PROFILE_ROWS.map((r) => r.label));
@@ -123,6 +140,9 @@ function applyHiddenRows<T extends { label: string }>(rows: T[]): T[] {
   return rows.filter((r) => !HIDDEN_PROFILE_LABELS.has(r.label));
 }
 
+/** Where one part of the block came from, for the attribution line. */
+export type ProfileSource = { field: string; source: string };
+
 export type CompanyProfile = {
   companyName: string | null;
   description: string | null;
@@ -143,6 +163,11 @@ export type CompanyProfile = {
   rangeHigh: number | null;
   lastDividend: number | null;
   currency: string | null;
+  /**
+   * Per-field attribution, composed server-side (lib/server/stockProfile.ts).
+   * Absent on a profile built the old way; the line then names no source.
+   */
+  sources?: ProfileSource[];
 };
 
 function fmtLargeMoney(value: number | null) {
@@ -205,8 +230,8 @@ export default function CompanyProfile({
   // (after the description) when there are no stat rows.
   belowDescription?: ReactNode;
   // Optional extra content (e.g. the "Learn the indicators" links) rendered
-  // after `belowDescription`, still in the flowing column. Sits last in the
-  // reading order on every breakpoint.
+  // as the LAST item inside the stat sidebar (since 2026-09-22). Sits last in
+  // the reading order on every breakpoint.
   belowStats?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
@@ -340,10 +365,10 @@ export default function CompanyProfile({
       <h2 style={headingStyle}>About {name}</h2>
 
       {/* Desktop: the stat boxes are FLOATED to the right (fixed 260px) and
-          everything else — description, belowDescription (share-dilution
-          chart), belowStats ("Learn the indicators") — runs down the page in
-          normal flow beside them, continuing full-width underneath once it
-          outruns the sidebar.
+          everything else — description and belowDescription (share-dilution
+          chart) — runs down the page in normal flow beside them, continuing
+          full-width underneath once it outruns the sidebar. belowStats
+          ("Learn the indicators") is inside the sidebar; see below.
 
           This used to be a `1fr 260px` grid, but the two columns can't be
           balanced by any static content split: FMP descriptions range from
@@ -354,8 +379,8 @@ export default function CompanyProfile({
           flow simply wraps under the sidebar when it's longer and the
           leftover gap collapses to <100px at both ends of that range.
 
-          `belowDescription` / `belowStats` get `display: flow-root` so they
-          form their own block formatting contexts: block boxes don't shrink
+          `belowDescription` gets `display: flow-root` so it forms its own
+          block formatting context: block boxes don't shrink
           around floats on their own (only line boxes do), so without a BFC a
           full-width chart would render *underneath* the sidebar instead of
           beside it.
@@ -368,12 +393,21 @@ export default function CompanyProfile({
           NB: the CSS block at the bottom of this file is a template literal —
           no backticks in its comments, or the literal closes early and the
           build fails to parse. */}
+      {/* "LEARN THE INDICATORS" SITS INSIDE THE STAT SIDEBAR NOW (brief
+          2026-09-22 §2.5). It used to follow the dilution chart in the
+          FLOWING column, so with IPO date and Website hidden the sidebar got
+          shorter and the gap under it grew. Inside .cp-stats it is the last
+          thing in the sidebar on desktop; on mobile .cp-stats is order 3,
+          so the reading order is still description → dilution → stats →
+          learn links, with the links spanning both grid columns. */}
       {hasDescription && hasRows ? (
         <div className="cp-flow">
-          <div className="cp-stats">{statBoxes}</div>
+          <div className="cp-stats">
+            {statBoxes}
+            {belowStats ? <div className="cp-below-stats">{belowStats}</div> : null}
+          </div>
           <p className="cp-desc" style={descStyle}>{profile.description}</p>
           {belowDescription ? <div className="cp-below-desc">{belowDescription}</div> : null}
-          {belowStats ? <div className="cp-below-stats">{belowStats}</div> : null}
           <div className="cp-clear" />
         </div>
       ) : hasDescription ? (
@@ -390,9 +424,16 @@ export default function CompanyProfile({
         </>
       )}
 
+      {/* PER-ROW ATTRIBUTION. This said "Company profile data from Financial
+          Modeling Prep" for every row; FMP now supplies the description only,
+          the last FMP field on this page until PR 3. The sources are the ones
+          the composer actually used for THIS symbol, so a row that hid does
+          not get credited. */}
       <div style={sourceStyle}>
-        Company profile data from Financial Modeling Prep. {symbol} listed on{" "}
-        {profile.exchange ?? "its exchange"}.
+        {profile.sources?.length
+          ? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(" · ")}.`
+          : null}
+        {profile.exchange ? ` ${symbol} is listed on ${profile.exchange}.` : null}
       </div>
 
       <style>{`
@@ -407,20 +448,17 @@ export default function CompanyProfile({
         }
         /* New block formatting contexts so these sit BESIDE the floated
            sidebar (narrowed) rather than sliding underneath it. */
-        .cp-below-desc, .cp-below-stats { display: flow-root; }
+        .cp-below-desc { display: flow-root; }
         /* 284px = the sidebar's 260px + its 24px margin. A block that starts
            beside the float is already narrowed to exactly this; the cap only
            bites for a description long enough to push the chart past the
            bottom of the sidebar, and keeps the chart the same width on every
-           ticker rather than jumping to full-bleed on the wordiest ones.
-           belowStats is deliberately uncapped — it's a link list, so
-           letting it use the full width when it lands below the sidebar
-           fills space instead of leaving a gutter. */
+           ticker rather than jumping to full-bleed on the wordiest ones. */
         .cp-below-desc { max-width: calc(100% - 284px); }
-        /* belowStats used to sit under the stat cards with only its own 4px
-           top margin before its divider rule, which is too tight now that it
-           follows the dilution chart's source line instead. */
-        .cp-below-stats { margin-top: 20px; }
+        /* belowStats is the last item in the stat sidebar (see the render
+           block). It inherits the sidebar's 260px width and 10px gap; the
+           extra top margin separates the link list from the last stat card. */
+        .cp-below-stats { margin-top: 8px; }
         /* Keeps the data-source line (and anything after the section) below
            the sidebar when the flow column is the shorter of the two. */
         .cp-clear { clear: both; }
@@ -436,7 +474,9 @@ export default function CompanyProfile({
           .cp-desc { order: 1; }
           .cp-below-desc { order: 2; }
           .cp-stats { order: 3; }
-          .cp-below-stats { order: 4; }
+          /* Inside the 2-up stat grid on mobile, so it spans both columns
+             and still reads last. */
+          .cp-below-stats { grid-column: 1 / -1; margin-top: 8px; }
           .cp-clear { display: none !important; }
           .cp-below-desc { max-width: none !important; }
           .cp-stats {
