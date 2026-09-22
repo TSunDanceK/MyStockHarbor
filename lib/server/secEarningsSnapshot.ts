@@ -318,7 +318,7 @@ export function buildSecEarningsSnapshot(args: {
       : score.available ? toneLabel(score.tone) : "Unavailable",
     partial: Boolean(coverage?.partial),
     partialNote: coverage?.partial
-      ? partialScoreShortNote(coverage)
+      ? partialScoreShortNote(coverage, score.available ? score.unavailableWhy : [])
       : null,
     reportedOn: reported?.on ?? null,
     reportedVia: reported?.via ?? null,

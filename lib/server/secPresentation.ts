@@ -347,10 +347,15 @@ export function coverageIsInformative(c: ScoreCoverage): boolean {
  * keeps partialScoreNote. Both take the ScoreCoverage from coverageOf, so the
  * two surfaces cannot disagree about how much was measured.
  */
-export function partialScoreShortNote(c: ScoreCoverage): string {
+export function partialScoreShortNote(c: ScoreCoverage, gaps: { name: string; reason: string }[] = []): string {
   const missing = c.total - c.measured;
-  const verb = missing === 1 ? "isn't" : "aren't";
-  return `${missing} of ${c.total} score inputs ${verb} in this company's filings, so this score isn't comparable with a fully measured one.`;
+  // "ISN'T IN THIS COMPANY'S FILINGS" WAS FALSE FOR MOST INPUTS — AVAV files
+  // EPS every quarter; EPS growth is missing because both were losses. So the
+  // sentence says "wasn't measured" and names the cause when it has one, the
+  // same cause the full report prints (see partialScoreNote).
+  const verb = missing === 1 ? "wasn't" : "weren't";
+  const why = gaps.length ? ` (${gaps.map((g) => `${g.name} — ${g.reason}`).join("; ")})` : "";
+  return `${missing} of ${c.total} score inputs ${verb} measured${why}, so this score isn't comparable with a fully measured one.`;
 }
 
 // ── how old a price may be and still be called a price ────────────────────
