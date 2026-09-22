@@ -93,11 +93,20 @@ function toText(html) {
 // The heading appears at least twice: once in the table of contents and once
 // at the section itself. A TOC hit is followed within a few hundred
 // characters by the NEXT item's heading; the real one is followed by prose.
+//
+// HEADINGS STAND ON THEIR OWN LINE. The first run (relay 35775513697) matched
+// "B. Business Overview" INSIDE sentences — risk factors cross-referencing
+// "see Item 4.B. Business Overview" — and returned ABEV's and ARM's risk text
+// as their overview. A heading is a line that is nothing but the heading.
+const K = /(?:^|\n)[ \t]*item[ \t]*1[ \t]*[.:\-–—]?[ \t]*business[ \t]*\.?[ \t]*(?=\n)/gi;
 const HEADINGS = {
-  "10-K": { start: /item\s*1\s*[.:\-–—]?\s*business\b/gi, next: /item\s*1a\b/i },
-  "10-K405": { start: /item\s*1\s*[.:\-–—]?\s*business\b/gi, next: /item\s*1a\b|item\s*2\b/i },
-  "10-KT": { start: /item\s*1\s*[.:\-–—]?\s*business\b/gi, next: /item\s*1a\b/i },
-  "20-F": { start: /\bb\s*[.:\-–—]?\s*business\s+overview\b/gi, next: /\bc\s*[.:\-–—]?\s*organi[sz]ational\s+structure\b/i },
+  "10-K": { start: K, next: /item\s*1a\b/i },
+  "10-K405": { start: K, next: /item\s*1a\b|item\s*2\b/i },
+  "10-KT": { start: K, next: /item\s*1a\b/i },
+  "20-F": {
+    start: /(?:^|\n)[ \t]*(?:item[ \t]*4[ \t]*[.:\-–—]?[ \t]*)?b[ \t]*[.:\-–—][ \t]*business[ \t]+overview[ \t]*\.?[ \t]*(?=\n)/gi,
+    next: /\bc\s*[.:\-–—]?\s*organi[sz]ational\s+structure\b/i,
+  },
 };
 
 function locate(text, form) {
@@ -120,9 +129,9 @@ function opening(body) {
   const out = [];
   let n = 0;
   for (const p of paras) {
-    // Sub-headings ("General", "Overview", "Company Background") are skipped,
-    // not counted as the overview.
-    if (p.length < 60 && !/[.!?]$/.test(p)) continue;
+    // Sub-headings ("General", "Overview") and fragments shorter than a
+    // sentence — IonQ's excerpt opened with a stray "." on the first run.
+    if (p.length < 60) continue;
     out.push(p);
     n += p.length;
     if (n >= 700 || out.length >= 3) break;
@@ -174,13 +183,15 @@ for (const symbol of LIST) {
 fs.mkdirSync("data/sec", { recursive: true });
 fs.writeFileSync("data/sec/description-probe.json", JSON.stringify({ asOf: new Date().toISOString().slice(0, 10), results }, null, 1) + "\n");
 
+console.log("\n===EXCERPTS===");
+for (const x of results.filter((r) => r.found)) {
+  console.log(`\n--- ${x.symbol} (${x.form}, filed ${x.filedOn}, ${x.chars} chars, ${x.class}) ${x.url}\n${x.excerpt}`);
+}
+
+// THE TABLE LAST, so it is in the log's tail where a reader looks first.
 console.log(`\n${"symbol".padEnd(7)} ${"form".padEnd(6)} ${"filed".padEnd(10)} ${"found".padEnd(5)} ${"chars".padStart(5)}  class / why`);
 for (const x of results) {
   console.log(`${x.symbol.padEnd(7)} ${(x.form ?? "-").padEnd(6)} ${(x.filedOn ?? "-").padEnd(10)} ${String(x.found).padEnd(5)} ${String(x.chars ?? "-").padStart(5)}  ${x.found ? x.class : x.why}`);
 }
 const by = (k) => results.filter((x) => x.found && x.class === k).length;
 console.log(`\nfound ${results.filter((x) => x.found).length} of ${results.length} · overview ${by("overview")} · toc ${by("table-of-contents")} · boilerplate ${by("forward-looking-boilerplate")} · cross-ref ${by("cross-reference")}`);
-console.log("\n===EXCERPTS===");
-for (const x of results.filter((r) => r.found)) {
-  console.log(`\n--- ${x.symbol} (${x.form}, filed ${x.filedOn}, ${x.chars} chars, ${x.class}) ${x.url}\n${x.excerpt}`);
-}
