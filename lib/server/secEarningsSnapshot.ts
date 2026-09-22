@@ -173,24 +173,32 @@ const figure = (c: ViewCell, emptyReason: string | null = null): SnapshotFigure 
   value: c.val,
   perShare: c.perShare,
   derivedNote: c.derivedNote,
-  emptyReason: c.val === null ? emptyReason ?? NOT_IN_PERIOD : null,
+  emptyReason: c.val === null ? emptyReason ?? NOT_CAPTURED : null,
 });
 
 /**
  * THE REASONS, AS WORDS THE CARD PRINTS. One place, so the check can assert
  * which one a tile got without matching prose scattered through a function.
  *
- * NOT_IN_PERIOD is the honest remainder: the stored set has no value for this
- * period and nothing recorded says why. It claims no more than that — never
- * "not reported", which is a statement about the company.
+ * NOT_CAPTURED is the honest remainder: the stored set has no value for this
+ * period and nothing recorded says the filer lacks the line. It claims only
+ * that WE did not capture it — never "not reported", and never "not in the
+ * filing", both statements about the company.
+ *
+ * ── WHY IT IS NOT "Not in this period's filed figures" ───────────────────
+ * That wording was used for exactly the cases we cannot tell apart: a set
+ * written before the `nt` marker, where "not captured" (a chain gap) and "not
+ * filed" look identical. It was false for AVAV, whose FY2022/FY2023 revenue IS
+ * in its 10-Ks under a concept the chain did not list (owner review, #522).
+ * "No revenue line in this filing" stays, and only where the marker confirms it.
  */
 export const EMPTY_REASONS = {
   q4NotFiled: "Q4 is not filed on its own",
   noRevenueLine: "No revenue line in this filing",
   needsRevenue: "Needs revenue",
-  notInPeriod: "Not in this period's filed figures",
+  notCaptured: "Not captured from this filing",
 } as const;
-const NOT_IN_PERIOD = EMPTY_REASONS.notInPeriod;
+const NOT_CAPTURED = EMPTY_REASONS.notCaptured;
 
 /**
  * A percentage the card can print, or the reason it cannot.
@@ -383,7 +391,7 @@ export function buildSecEarningsSnapshot(args: {
   const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;
   const noRevenue = s.revenue.val === null;
   const marginReason = (v: number | null) =>
-    v !== null ? null : noRevenue ? EMPTY_REASONS.needsRevenue : NOT_IN_PERIOD;
+    v !== null ? null : noRevenue ? EMPTY_REASONS.needsRevenue : NOT_CAPTURED;
   const fy = s.fyEpsDiluted;
 
   return {
