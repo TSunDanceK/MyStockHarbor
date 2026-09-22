@@ -49,6 +49,21 @@ const check = (label, ok, detail = "") => {
 // the next reader to convert a page that was converted long ago. A mirrored doc
 // is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
+  // ADDED 2026-09-21, and it is the SAME MIRRORING GAP ONE LEVEL DOWN that the
+  // dashboard-off-FMP entry below records — mirroring the citing doc is what
+  // exposed it rather than what caused it.
+  //
+  // REVIEW-news-art-v2-held-out-2026-09-21.md was written from Cowork and
+  // mirrored here on the same day, and its header cites this handoff for the
+  // reason it had to be mirrored at all: project_write does not commit to git,
+  // so a doc that only exists Project-side is a doc the branch cites and nobody
+  // can read. That citation is the mirror explaining its own existence, and a
+  // verbatim mirror that deletes an inconvenient reference is no longer
+  // verbatim — the argument already made for the two entries below.
+  //
+  // Strike this line when the handoff is mirrored; the stale-entry assertion
+  // will force it out on the next run, as it just did for the review itself.
+  "claude/HANDOFF-news-production-verification-2026-09-20.md",
   // ADDED 2026-09-21 with the dashboard-off-FMP scoping doc, mirrored verbatim
   // for the whole-market bars migration. That doc cites this one, which is
   // Project-only and was never mirrored -- the SAME mirroring gap, one level
