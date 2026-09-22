@@ -18,12 +18,21 @@ import { buildSecEarningsView, periodWords } from "@/lib/server/secEarningsView"
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
 // where they are drawn; re-importing them here would just be a second name for
 // the same rule.
-import { toneBg, toneColor } from "@/lib/server/secPresentation";
+import {
+  partialScoreLabel, partialScoreNote, pinCoverage, scoreCoverage, toneBg, toneColor,
+  type EarningsTone as PresentationTone,
+} from "@/lib/server/secPresentation";
 // THE SCORER, WHICH USED TO BE 340 LINES OF THIS FILE. It moved out whole so
 // the sidebar snapshot card could call the SAME function rather than grow a
 // second one over the same view — see the header of secEarningsScore.ts.
+//
+// SCORE_MAX_CONTRIBUTION comes with it, because the partial-coverage reporting
+// added here needs the per-component weights to say what range a score could
+// actually have reached. Reading them from the scorer rather than restating
+// them is the whole point: a weight that moved on one side only would make the
+// stated range quietly wrong.
 import {
-  SCORE_BANDS, SCORE_COMPONENTS, scoreBandNote, scoreFromSec,
+  SCORE_BANDS, SCORE_COMPONENTS, SCORE_MAX_CONTRIBUTION, scoreBandNote, scoreFromSec,
 } from "@/lib/server/secEarningsScore";
 import { valuationInputs } from "@/lib/server/secValuation";
 import {
@@ -715,6 +724,30 @@ export default async function StockEarningsPage({ params }: Props) {
 
   const nextReport = data.nextReport;
   const score = data.score;
+  /**
+   * HOW MUCH OF THE SCORE RAN — computed once, here, from the score's own
+   * record of what it did rather than from a second reading of the view.
+   *
+   * `contributions` holds exactly the components that contributed (see
+   * `contribute`, which writes the set and the record together), so its keys
+   * ARE the ones that ran. Deriving the list any other way would be a second
+   * answer to a question the score already answered.
+   *
+   * profitability's magnitude is 8, not 6: it contributes +6 when profitable
+   * and -8 when not, and the reachable LOW has to use the larger of the two.
+   */
+  const coverage = score.available
+    ? pinCoverage(
+        scoreCoverage(
+          score.seed,
+          { ...SCORE_MAX_CONTRIBUTION, profitability: 8 },
+          score.unavailable.length,
+          Object.keys(score.contributions)
+        ),
+        SCORE_BANDS.find((b) => b.tone === "neutral")!.from,
+        SCORE_BANDS.find((b) => b.tone === "good")!.from - 1
+      )
+    : null;
   const secView = data.secView;
 
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
@@ -773,9 +806,62 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
         .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
+        /* A PARTIAL SCORE READS AS INK, NOT AS A VERDICT — see the card. */
+        .scorePillPartial { background: rgba(148,163,184,0.14); border-color: rgba(148,163,184,0.38); color: #cbd5e1; letter-spacing: 0.01em; }
+        .scoreNumberPartial { color: rgba(226,232,240,0.62); }
+        /* The span the score could actually have landed in, under the needle. */
+        .scoreReach { position: absolute; top: 0; bottom: 0; background: rgba(2,6,23,0.55); border-left: 1px solid rgba(226,232,240,0.45); border-right: 1px solid rgba(226,232,240,0.45); }
+        .scoreReachNote { color: rgba(226,232,240,0.78); }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
+        /* ── THE COLUMNS MUST BE ALLOWED TO BE NARROWER THAN THEIR CONTENT ───
+           A grid ITEM defaults to 'min-width: auto', which resolves to its
+           content's MIN-CONTENT width. 'minmax(0, …)' above bounds the TRACK
+           and does nothing for the item inside it, so the item grows past its
+           own column and, because '.card' is deliberately 'overflow: visible'
+           for the metric tooltips, paints straight over the sticky aside.
+
+           THAT IS THE ABVX BUG, and the chain is specific: a card holds a
+           'div[overflow-x: auto]' wrapping a seven-column table. The wrapper
+           can only scroll if something forces it narrower than the table, and
+           nothing did — the auto min-width propagated the table's min-content
+           all the way up to the grid item. Measured on the rendered cards, the
+           longest unbreakable text token on this page is 14 characters, so the
+           overflow was never text; it was always the tables.
+
+           WHY IT SHOWS ON ABVX AND NOT OBVIOUSLY ON AAPL: the table's
+           min-content width is its content. A row of "Not reported" is far
+           wider than a row of "$2.03", so a filer whose cells are mostly
+           refusals has the widest tables on the site. The bug is not
+           ABVX-specific; its VISIBILITY is.
+
+           'min-width: 0' restores the intended behaviour: the item shrinks to
+           its track, the wrapper is forced narrower than its table, and the
+           'overflow-x: auto' that was always there finally engages and gives
+           the table a scrollbar instead of the aside. It is a no-op wherever
+           nothing overflows. */
+        .contentGrid > * { min-width: 0; }
+        .hero > * { min-width: 0; }
+        .metricGrid > * { min-width: 0; }
+        /* ── AND THE CARDS THEMSELVES, WHICH IS WHERE THE FIRST FIX STOPPED ──
+           Guarding only the two .contentGrid children was not enough and the
+           preview still overlapped. MEASURED in Chromium against this page's
+           real stylesheet and real rendered cards: the main column's own box
+           sized correctly to its track at 26..786, and a .card INSIDE it
+           reached 815 — 7px past the aside's left edge at 808.
+
+           The column is a nested grid, so its cards are grid items too and
+           carry their own 'min-width: auto'. Fixing the outer item moved the
+           overflow down one level rather than removing it; the chain has to be
+           unbroken from the track to the scroll wrapper or the wrapper is
+           never forced narrow enough for its 'overflow-x: auto' to engage.
+
+           Same measurement with this rule: scrollWidth 789 -> 760, equal to
+           clientWidth, so the column no longer overflows at all; the widest
+           card edge lands exactly on the column edge at 786; painted content
+           stops 22px short of the aside, which is the grid gap. */
+        .card, .scoreCard { min-width: 0; }
         .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
         .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
         .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
@@ -858,7 +944,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
         .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
         .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
-        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; }
+        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; min-width: 0; }
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
         .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
@@ -939,9 +1025,19 @@ export default async function StockEarningsPage({ params }: Props) {
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <aside className="scoreCard">
+              {/* ── HOW MUCH OF THIS SCORE WAS ACTUALLY MEASURED ──────────────
+                  ABVX rendered 48/100 MIXED laid out exactly like AAPL's while
+                  three of five components never ran. Those three carry 52 of
+                  the 58 points the score can move by, so it could only land
+                  between 34 and 66 — inside the MIXED band either way. It
+                  could not have read Weak or Good for any company. The
+                  arithmetic is right and unchanged; what was missing is that
+                  the reader was never told the range had collapsed. */}
               <div className="scoreTop">
                 <div className="smallLabel">Earnings score</div>
-                <div className="scorePill">{score.label}</div>
+                <div className={coverage?.partial ? "scorePill scorePillPartial" : "scorePill"}>
+                  {coverage?.partial ? partialScoreLabel(coverage) : score.label}
+                </div>
               </div>
               {/* No number and no needle when there is nothing to score. The
                   pill already says "Unavailable" and the explanation says why,
@@ -953,10 +1049,28 @@ export default async function StockEarningsPage({ params }: Props) {
               {score.available ? (
                 <>
                   <div className="scoreNumberRow">
-                    <div className="scoreNumber">{score.score}/100</div>
+                    {/* A PARTIAL SCORE LOSES ITS VERDICT COLOUR. The hue is
+                        the fastest-read part of this card and it asserts a
+                        reading; on a score the missing inputs decided, the
+                        number is ink, not a verdict. */}
+                    <div className={coverage?.partial ? "scoreNumber scoreNumberPartial" : "scoreNumber"}>
+                      {score.score}/100
+                    </div>
                     <EarningsScoreWatermark />
                   </div>
-                  <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
+                  <div className="scoreBar" aria-hidden="true">
+                    {/* THE REACHABLE RANGE, DRAWN. A sentence saying the score
+                        could only land between 34 and 66 is true and easy to
+                        skip; the same fact as a shaded span under the needle
+                        is read at the same glance as the needle itself. */}
+                    {coverage?.partial ? (
+                      <div
+                        className="scoreReach"
+                        style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
+                      />
+                    ) : null}
+                    <div className="scoreNeedle" />
+                  </div>
                   {/* THE AXIS IS LABELLED FROM THE BAND TABLE. It read
                       Weak / Mixed / Strong beside a pill that can only ever say
                       Weak / Mixed / Good, so KGC's 100/100 "Good" looked as
@@ -969,6 +1083,11 @@ export default async function StockEarningsPage({ params }: Props) {
                   {/* AND THE THRESHOLDS ARE VISIBLE. 100/100 above an unlabelled
                       gauge tells a reader nothing about what 100 had to clear. */}
                   <p className="earningsDataNote" style={{ marginTop: 8 }}>{scoreBandNote()}</p>
+                  {coverage?.partial ? (
+                    <p className="earningsDataNote scoreReachNote" style={{ marginTop: 6 }}>
+                      {partialScoreNote(coverage, score.unavailable, periodWords(score.basis).one)}
+                    </p>
+                  ) : null}
                 </>
               ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>

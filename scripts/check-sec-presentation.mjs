@@ -306,6 +306,96 @@ console.log("\n4b. A MARKET CAP IS A CLAIM ABOUT TODAY, SO THE PRICE MUST BE");
     "a card calling the clock itself is untestable and can differ from its own server render");
 }
 
+console.log("\n4c. A SCORE THAT COULD NOT HAVE SAID ANYTHING ELSE SAYS SO");
+{
+  // ── THE ABVX SHAPE, MEASURED ─────────────────────────────────────────────
+  // 48/100 with a MIXED pill and a needle, laid out exactly like AAPL's, while
+  // revenue growth, EPS growth and margin direction never ran. Those three
+  // carry 52 of the 58 points the score can move by, so the arithmetic could
+  // only land between 34 and 66 — and the MIXED band is 40 to 65. ABVX could
+  // not have read Weak or Good FOR ANY COMPANY. That is a fact about the
+  // page's blindness and the card presented it as a reading.
+  const MAXIMA = { revenueGrowth: 22, epsGrowth: 20, profitability: 8, marginTrend: 10, cashConversion: 10 };
+  const BAND_LOW = 40, BAND_HIGH = 65;
+
+  const abvx = mod.pinCoverage(
+    mod.scoreCoverage(50, MAXIMA, 3, ["profitability", "cashConversion"]),
+    BAND_LOW, BAND_HIGH
+  );
+  check("2 of 5 measured is reported as partial",
+    abvx.partial && abvx.measured === 2 && abvx.total === 5,
+    `measured ${abvx.measured} of ${abvx.total}`);
+  check("...and the reachable range is the sum of what ran, either side of the seed",
+    abvx.low === 32 && abvx.high === 68,
+    `${abvx.low}..${abvx.high} — profitability 8 + cash 10 = 18 around a seed of 50`);
+  // THE CORRECTION THAT MATTERS, and it is against my own earlier reading.
+  // "ABVX could not have read Weak or Good" was WRONG: 32 is below the Weak
+  // boundary and 68 is above the Good one, so both verdicts were reachable in
+  // principle. What is true is narrower and still worth saying — 2 of 5 inputs
+  // and a reachable span of 36 points on a 100-point scale, compressed hard
+  // toward the seed. `pinned` is reserved for the case where the range really
+  // cannot leave one band, and it must NOT fire merely because coverage is
+  // thin, or it would be the same overclaim in the opposite direction.
+  check("a partial score whose range still straddles a boundary is NOT pinned",
+    abvx.pinned === false,
+    `32..68 crosses both ${BAND_LOW} and ${BAND_HIGH} — thin coverage alone is not a pinned verdict`);
+
+  // THE PINNED CASE, which is the one worth a sentence on the card.
+  const pinned = mod.pinCoverage(
+    mod.scoreCoverage(50, MAXIMA, 4, ["profitability"]), BAND_LOW, BAND_HIGH
+  );
+  check("a score whose whole range sits in one band is pinned",
+    pinned.pinned && pinned.low === 42 && pinned.high === 58,
+    `${pinned.low}..${pinned.high} inside ${BAND_LOW}..${BAND_HIGH}`);
+  check("...and its note says the verdict was decided by what is missing",
+    /decided by what is missing/.test(mod.partialScoreNote(pinned, ["revenue growth"], "quarter")),
+    mod.partialScoreNote(pinned, ["revenue growth"], "quarter"));
+
+  // A FULLY MEASURED SCORE IS UNTOUCHED — the whole point is that this changes
+  // nothing for AAPL.
+  const full = mod.pinCoverage(
+    mod.scoreCoverage(50, MAXIMA, 0, Object.keys(MAXIMA)), BAND_LOW, BAND_HIGH
+  );
+  check("a fully measured score is not partial and not pinned",
+    !full.partial && !full.pinned && full.measured === 5,
+    `measured ${full.measured}, reach ${full.low}..${full.high}`);
+  check("...and its reachable range is clamped to the scale, not 50 +/- 70",
+    full.low === 0 && full.high === 100,
+    `${full.low}..${full.high} — 50 +/- 70 would render off the bar`);
+
+  await underMutation(
+    "partial flag ignores the unmeasured count",
+    "  return { measured, total, low, high, partial: unavailableCount > 0, pinned: false };",
+    "  return { measured, total, low, high, partial: false, pinned: false };",
+    (m) => m.pinCoverage(m.scoreCoverage(50, MAXIMA, 3, ["profitability", "cashConversion"]), BAND_LOW, BAND_HIGH).partial
+  );
+  await underMutation(
+    "reach computed from ALL components rather than the ones that ran",
+    "  const reach = ranKeys.reduce((a, k) => a + (maxima[k] ?? 0), 0);",
+    "  const reach = Object.values(maxima).reduce((a, b) => a + b, 0);",
+    (m) => {
+      const c = m.scoreCoverage(50, MAXIMA, 3, ["profitability", "cashConversion"]);
+      return c.low === 32 && c.high === 68;
+    }
+  );
+  await underMutation(
+    "pinned decided without the band bounds",
+    "  return { ...c, pinned: c.partial && c.low >= bandLow && c.high <= bandHigh };",
+    "  return { ...c, pinned: c.partial };",
+    (m) => !m.pinCoverage(m.scoreCoverage(50, MAXIMA, 3, ["profitability", "cashConversion"]), BAND_LOW, BAND_HIGH).pinned
+  );
+
+  // THE PILL NEVER SHOWS A BARE VERDICT ON A PARTIAL SCORE.
+  check("the partial pill counts what was measured instead of naming a band",
+    mod.partialScoreLabel(abvx) === "Partial · 2 of 5 measured" &&
+      !/Mixed|Good|Weak/.test(mod.partialScoreLabel(abvx)),
+    mod.partialScoreLabel(abvx));
+  check("the note always states the range and the non-comparability",
+    /between 32 and 68/.test(mod.partialScoreNote(abvx, [], "quarter")) &&
+      /not comparable/.test(mod.partialScoreNote(abvx, [], "quarter")),
+    mod.partialScoreNote(abvx, [], "quarter"));
+}
+
 console.log("\n5. THE WATERFALL IS DRAWN ONLY WHERE IT ADDS UP");
 {
   const cell = (key, label, val) => ({ key, label, val, derived: null, derivedNote: null, perShare: false, tag: null, ns: null });
