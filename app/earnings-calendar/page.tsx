@@ -22,6 +22,8 @@ import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
+import EarningsDueStrip from "./EarningsDueStrip";
+import { getDueStripState } from "@/lib/server/dueInputs";
 import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
@@ -439,13 +441,28 @@ export default async function EarningsCalendarPage({
   const prevDisabled = monthPrefix <= firstYM;
   const nextDisabled = monthPrefix >= lastYM;
 
-  const [daysWithEarnings, dayData, dateComplete, upcomingTickerItems] = await Promise.all([
-    getMonthDaysWithEarnings(year, month),
-    // Shared with generateMetadata via cache() -- this does not re-fetch.
-    loadDay(selectedDate),
-    loadDayComplete(selectedDate),
-    getUpcomingTickerItems(todayDate),
-  ]);
+  const [daysWithEarnings, dayData, dateComplete, upcomingTickerItems, dueStrip] =
+    await Promise.all([
+      getMonthDaysWithEarnings(year, month),
+      // Shared with generateMetadata via cache() -- this does not re-fetch.
+      loadDay(selectedDate),
+      loadDayComplete(selectedDate),
+      getUpcomingTickerItems(todayDate),
+      // ── THE DUE STRIP, ALWAYS ON TODAY ─────────────────────────────────
+      // `todayDate`, never `selectedDate`. The strip answers "whose period has
+      // ended with nothing filed for it AS OF NOW" -- a present-tense fact
+      // about the public record. Passing the date the visitor happens to be
+      // browsing would turn it into "who was outstanding on 3 August", which
+      // is a different claim, and on a FUTURE date it would be a forecast --
+      // the one thing lib/server/dueToReport.ts's header exists to forbid.
+      //
+      // It reads the analysis-universe key plus the 50 records of the
+      // committed cut. It does NOT read the SEC manifest: that value is
+      // ~417 KB and check-sec-daily-index names the only two job routes
+      // allowed to touch it, explicitly excluding render paths. See
+      // coverageOfCut in lib/server/dueInputs.ts.
+      getDueStripState(todayDate),
+    ]);
 
   // ── WHAT AN EMPTY DAY MEANS, RESOLVED ONCE ───────────────────────────────
   // This page used to ask `dayData.usListedCount > 0` and render one of two
@@ -650,6 +667,14 @@ export default async function EarningsCalendarPage({
           </section>
 
           <EarningsUpcomingTicker items={upcomingTickerItems} />
+
+          {/* NOT the ticker in different clothes -- see EarningsDueStrip's
+              header for why DueEntry structurally cannot feed a marquee. It is
+              rendered UNCONDITIONALLY: the component's three branches include
+              two different ways of being empty, and hiding it when there is
+              nothing to list would collapse "nothing is outstanding" and "we
+              cannot tell you" back into the same silence. */}
+          <EarningsDueStrip state={dueStrip} />
 
           <section
             style={{
