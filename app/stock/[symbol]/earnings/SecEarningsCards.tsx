@@ -5,17 +5,18 @@
 // asserted by scripts/check-sec-earnings-page.mjs. This file only draws.
 import Link from "next/link";
 import {
-  CROSSING_NOTE, CROSSING_WORDS, SEC_ATTRIBUTION, conversionNote, epsBasisNote, epsStandardWord,
+  CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
   isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
   STALE_PRICE_WORDS, barValue, growthToneWord, marginToneWord, priceIsCurrent,
-  stalePriceNote, toneBandNote, toneBg, toneColor,
+  GROWTH_BAND_PCT, MARGIN_BAND_PP, stalePriceNote, toneBg, toneColor, toneTint,
   toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate,
-  TREND_MIN_PERIODS,
-  type EarningsTone,
+  TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote,
+  type EarningsTone, type ScoreCoverage,
 } from "@/lib/server/secPresentation";
+import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import {
   REFUSAL_WORDS, marketCap, peRatio, type ValuationInputs,
 } from "@/lib/server/secValuation";
@@ -251,19 +252,64 @@ const pct = (v: Pct | undefined, digits = 1) => {
 // published no figure for this line. Not zero."). Interpolating it here, and
 // rendering it in the Q4 cell below, means the note cannot describe a word the
 // page does not show.
+/** The one-line version the growth card's intro carries. */
+const Q4_EPS_SHORT = `Q4 EPS isn\u2019t filed separately, so it reads ${NOT_REPORTED}.`;
+
 const Q4_EPS_NOTE =
   "Q4 EPS is not filed as a separate period, and this page does not derive it, " +
   `so those cells read \u201c${NOT_REPORTED}\u201d.`;
 
-/** The legend for the crossing wording, rendered wherever a table produces one. */
-function CrossingNote({ rows }: { rows: { revenueYoY: Pct; epsYoY: Pct }[] }) {
-  // ONLY WHEN THE TABLE ACTUALLY HAS ONE. A standing legend for wording that
-  // never appears is noise on every other page; AAPL crosses zero in neither
-  // table and should not carry the sentence.
-  const present = rows.some((r) => isCrossing(r.revenueYoY) || isCrossing(r.epsYoY));
-  if (!present) return null;
-  return <p className="earningsDataNote">{CROSSING_NOTE}</p>;
+/**
+ * A growth figure as rendered — and a CROSSING CARRIES ITS OWN EXPLANATION.
+ *
+ * The sentence explaining "Loss both periods" is printed once per page (see
+ * crossingNoteHome); every cell that shows one of the words also carries it
+ * on the element, so a reader who meets the word far from the footnote is
+ * one hover or one tap away from why there is no percentage.
+ */
+function PctCell({ v }: { v: Pct | undefined }) {
+  if (v != null && isCrossing(v)) {
+    return (
+      <abbr className="crossTip" title={CROSSING_NOTE} tabIndex={0}>
+        {CROSSING_WORDS[v]}
+      </abbr>
+    );
+  }
+  return <>{pct(v)}</>;
 }
+
+/**
+ * WHICH CARD PRINTS THE CROSSING FOOTNOTE — exactly one per page.
+ *
+ * It was printed under the snapshot, the growth table AND the five-year table
+ * on AVAV, the same paragraph three times. It now goes on the FIRST card, in
+ * page order, whose figures actually contain a crossing, and nowhere if none
+ * do. Decided from the view alone, so each card can ask without the page
+ * wiring a flag through.
+ */
+export function crossingNoteHome(view: SecEarningsView): "snapshot" | "growth" | "annual" | null {
+  const has = (rows: { revenueYoY: Pct | undefined; epsYoY: Pct | undefined }[]) =>
+    rows.some((r) => (r.revenueYoY != null && isCrossing(r.revenueYoY)) || (r.epsYoY != null && isCrossing(r.epsYoY)));
+  if (has([view.snapshot])) return "snapshot";
+  if (view.tableBasis !== "year" && has(view.growth)) return "growth";
+  if (has(view.annual)) return "annual";
+  return null;
+}
+
+/**
+ * WHAT A BLANK REVENUE CELL SAYS — the reason, never a bare "Not reported".
+ *
+ * "Not reported" is a claim about the company. Where no revenue concept in our
+ * chains is published at all (the extraction-time marker, view.untagged) the
+ * company has no revenue line; otherwise the figure is simply not in that
+ * filing as we read it ("Not captured from this filing"). Same words as the sidebar card.
+ */
+const revenueEmpty = (view: SecEarningsView) =>
+  (view.untagged ?? []).includes("revenue") ? EMPTY_REASONS.noRevenueLine : EMPTY_REASONS.notCaptured;
+
+/** The sign of a level, as a tone: profit green, loss red, nothing grey. */
+const signTone = (v: number | null | undefined): EarningsTone | null =>
+  v == null || !Number.isFinite(v) ? null : v > 0 ? "good" : v < 0 ? "weak" : "neutral";
 
 /**
  * A LEVEL, unsigned. Margins are a share of revenue, not a change in one, and
@@ -293,12 +339,16 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 }
 
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
-export function CellValue({ cell, compact = false, currency = true }: { cell: ViewCell; compact?: boolean; currency?: boolean }) {
+export function CellValue(
+  { cell, compact = false, currency = true, empty = NOT_REPORTED }:
+  { cell: ViewCell; compact?: boolean; currency?: boolean; empty?: string }
+) {
   // NOT A DASH. A null here means the filer published no figure for this line,
   // and that is a fact about the filing worth stating. A filed ZERO still
-  // renders as $0 — money() is only reached when there is a value.
+  // renders as $0 — money() is only reached when there is a value. `empty`
+  // lets a caller that KNOWS the reason say it (see revenueEmpty).
   if (cell.val == null) {
-    return <span style={{ color: "#94a3b8", fontWeight: 600 }}>{NOT_REPORTED}</span>;
+    return <span style={{ color: "#94a3b8", fontWeight: 600 }}>{empty}</span>;
   }
   return (
     <>
@@ -358,9 +408,18 @@ export function HiddenCard({ id }: { id: string; stacked?: boolean }) {
   return null;
 }
 
-function Metric({ label, children, sub }: { label: string; children: React.ReactNode; sub?: React.ReactNode }) {
+/**
+ * A snapshot tile. `tone` is a FAINT background, never the text colour: the
+ * figure keeps the page's ink so contrast is what it was, and the tint is the
+ * glance. Undefined is "no claim at all" (revenue, a level with no direction);
+ * null is the grey of a state that is not a number — missing, or a crossing.
+ */
+function Metric(
+  { label, children, sub, tone }:
+  { label: string; children: React.ReactNode; sub?: React.ReactNode; tone?: EarningsTone | null }
+) {
   return (
-    <div className="metricCard">
+    <div className="metricCard" style={tone === undefined ? undefined : { background: toneTint(tone) }}>
       <div className="metricLabel">{label}</div>
       <div className="metricValue">{children}</div>
       {sub ? <div className="metricSub">{sub}</div> : null}
@@ -423,28 +482,41 @@ export function SecSnapshotCard({
           </a>
         </p>
       ) : null}
-      <div className="metricGrid">
-        <Metric label="Revenue"><CellValue cell={s.revenue} compact /></Metric>
+      {/* SIX TILES, 3×2 (2 columns on a phone). The tint is the direction at
+          a glance and follows the page's own bands: growth by GROWTH_BAND_PCT,
+          the three profit lines by sign, revenue untinted because a level has
+          no direction, and grey wherever there is no number to judge. */}
+      <div className="metricGrid snapshotGrid">
+        <Metric label="Revenue" tone={s.revenue.val == null ? null : undefined}>
+          <CellValue cell={s.revenue} compact empty={revenueEmpty(view)} />
+        </Metric>
         {/* NO COMPARATOR MEANS NO FIGURE, AND THE CARD SAYS WHY. It used to
             take the fourth row back whatever that was, which on a half-yearly
             filer was a four-year-old quarter labelled "year over year". */}
         <Metric
           label="YoY revenue growth"
+          tone={toneForGrowth(s.revenueYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
         >
-          {pct(s.revenueYoY)}
+          <PctCell v={s.revenueYoY} />
         </Metric>
-        <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`}><CellValue cell={s.epsDiluted} /></Metric>
+        <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
+          <CellValue cell={s.epsDiluted} />
+        </Metric>
         <Metric
           label="YoY EPS growth"
+          tone={toneForGrowth(s.epsYoY)}
           sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
         >
-          {pct(s.epsYoY)}
+          <PctCell v={s.epsYoY} />
         </Metric>
-        <Metric label="Operating income"><CellValue cell={s.operatingIncome} compact /></Metric>
-        <Metric label="Net income"><CellValue cell={s.netIncome} compact /></Metric>
+        <Metric label="Operating income" tone={signTone(s.operatingIncome.val)}>
+          <CellValue cell={s.operatingIncome} compact />
+        </Metric>
+        <Metric label="Net income" tone={signTone(s.netIncome.val)}>
+          <CellValue cell={s.netIncome} compact />
+        </Metric>
       </div>
-      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
       {/* ON THE SNAPSHOT, WHICH IS THE CARD EVERY READER SEES. A conversion
           note further down the page is a note most readers never reach, and
           the figures it explains are the ones at the top. */}
@@ -453,10 +525,9 @@ export function SecSnapshotCard({
           probe set's year-ends are 31 Mar, 26 Sep, 3 Sep, 31 Oct and 31 Dec, so
           two companies' "2026" can be nine months apart. */}
       <p className="earningsDataNote">{w.labelled}</p>
-      {/* THE SNAPSHOT TILES CARRY THE MARKER TOO, so they carry its legend. A
-          tile reading "n/m" with the explanation only in a table further down
-          is the same hover-only failure as the gap badge. */}
-      <CrossingNote rows={[{ revenueYoY: s.revenueYoY, epsYoY: s.epsYoY }]} />
+      {crossingNoteHome(view) === "snapshot" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
+      {/* THE GAAP/IFRS NOTE IS STATED ONCE, IN THE HERO — see EpsBasisLine. */}
+      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -475,6 +546,13 @@ export function SecSnapshotCard({
  * drawn — see its docblock: a zero-height bar sits on the axis and reads as
  * "no change".
  */
+/** The chart's footnote. Exported for the check, which asserts its clauses. */
+export function chartFootnote(blankBars: boolean, one: string, crossings: boolean): string {
+  const bands = `Growing/declining: beyond ±${GROWTH_BAND_PCT}%. Margin moves: beyond ±${MARGIN_BAND_PP}pp.`;
+  if (!blankBars) return bands;
+  return `${bands} Blank bars: ${crossings ? `no year-earlier ${one} on file, or a crossing between profit and loss` : `no year-earlier ${one} on file`}.`;
+}
+
 function GrowthMarginsChart({ view }: { view: SecEarningsView }) {
   const w = periodWords(view.tableBasis);
   const rows = view.margins.map((m, i) => ({
@@ -535,15 +613,11 @@ function GrowthMarginsChart({ view }: { view: SecEarningsView }) {
           ? <span><i style={{ background: toneColor(null) }} />Not measured</span>
           : null}
       </div>
-      <p className="earningsDataNote">
-        {toneBandNote(crossings)}
-        {crossings > 0
-          ? ` ${crossings} ${crossings === 1 ? `${w.one} has` : `${w.many} have`} no bar for that reason.`
-          : ""}
-        {absent > 0
-          ? ` ${absent} ${absent === 1 ? `${w.one} has` : `${w.many} have`} no bar because the period it would be compared with is not on file.`
-          : ""}
-      </p>
+      {/* ONE LINE OF THRESHOLDS, NOT A PARAGRAPH. The bands are the same
+          GROWTH_BAND_PCT and MARGIN_BAND_PP every tint on the page uses, and
+          the blank-bar clause appears only where a bar is blank. A crossing
+          is a blank bar too, and says so in its own table cell. */}
+      <p className="earningsDataNote">{chartFootnote(crossings + absent > 0, w.one, crossings > 0)}</p>
     </div>
   );
 }
@@ -567,7 +641,6 @@ function GrowthMarginsChart({ view }: { view: SecEarningsView }) {
  * point is a real move and revenue that moves half a percent is noise.
  */
 function MarginDelta({ view }: { view: SecEarningsView }) {
-  const w = periodWords(view.tableBasis);
   const latest = view.margins[view.margins.length - 1];
   const base = view.growth[view.growth.length - 1]?.comparedWith ?? null;
   if (!latest || base === null) return null;
@@ -575,15 +648,14 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
   if (!prior || latest.operating === null || prior.operating === null) return null;
   const pp = latest.operating - prior.operating;
   const tone = toneForMarginDelta(pp);
+  // ONE LINE: the two margins, the move, the word. The sentence that followed
+  // it explaining the half-point band now lives once, in the chart footnote.
   return (
     <p className="earningsDataNote">
-      Operating margin, <strong>{latest.label}</strong> against <strong>{base}</strong>:{" "}
-      <strong>{`${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`}</strong>{" "}
-      ({latest.operating.toFixed(1)}% from {prior.operating.toFixed(1)}%).{" "}
-      <ToneChip tone={tone} word={marginToneWord(tone)} />{" "}
-      A move of half a percentage point or more is counted; anything smaller is
-      called flat, because a margin that size moves on rounding alone from one{" "}
-      {w.one} to the next.
+      Operating margin vs <strong>{base}</strong>:{" "}
+      <strong>{latest.operating.toFixed(1)}%</strong> from {prior.operating.toFixed(1)}%{" "}
+      (<strong>{`${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`}</strong>){" "}
+      <ToneChip tone={tone} word={marginToneWord(tone)} />
     </p>
   );
 }
@@ -608,14 +680,20 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           The badge stays as a per-row marker — it now points at an explanation
           the reader can actually read. */}
       <p>
-        The periods this company has filed, newest last. Year-over-year growth compares each period
-        with the <strong>same fiscal {w.one} one year earlier</strong>, named in the row; where that
-        period is not on file the figure is blank rather than measured against something else.
-        Margins are gross profit, operating income and net income as a share of that period&apos;s
-        revenue. A row marked <strong>gap</strong> has no filing on file for the period immediately
-        before it — these are the periods the company published, not a consecutive run of {w.many}.
-        {/* VISIBLE, not hover-only — the same lesson as the gap badge. */}{" "}
-        <strong>{Q4_EPS_NOTE}</strong>
+        Each {w.one} as filed, compared with the same fiscal {w.one} a year earlier.
+        {/* ONLY WHERE THERE IS A Q4 ROW WITHOUT EPS. Visible, not hover-only —
+            the same lesson as the gap badge. */}
+        {view.margins.some((m, i) => /^Q4 /.test(m.label) && view.growth[i]?.epsYoY == null)
+          ? <> {Q4_EPS_SHORT}</>
+          : null}
+        {/* THE GAP SENTENCE ONLY WHEN A ROW IS MARKED gap. It explains a
+            badge, and on a filer with no gap it explained nothing. */}
+        {view.margins.some((m) => m.gapAfter) ? (
+          <>
+            {" "}A row marked <strong>gap</strong> has no filing on file for the period immediately
+            before it — these are the periods the company published, not a consecutive run of {w.many}.
+          </>
+        ) : null}
       </p>
       {/* ── THE CHART IS KEYED TO tableBasis, LIKE THE NOUNS ABOVE ───────────
           Same list, same order, same basis. A chart headed "by quarter" over a
@@ -651,7 +729,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     comparator and this table did not, so the same wrong base
                     was visible in one place and silent in the other. */}
                 <td data-label="Compared with">{view.growth[i]?.comparedWith ?? "not on file"}</td>
-                <td data-label="Revenue YoY">{pct(view.growth[i]?.revenueYoY)}</td>
+                <td data-label="Revenue YoY"><PctCell v={view.growth[i]?.revenueYoY} /></td>
                 {/* A BLANK Q4 EPS IS NOT A GAP IN THE DATA. Q4 is never filed
                     as a standalone three-month frame, and this page refuses to
                     invent one (no 4·FY − 3·9M, no ratio against another
@@ -663,7 +741,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                       {NOT_REPORTED}
                     </abbr>
                   ) : (
-                    pct(view.growth[i]?.epsYoY)
+                    <PctCell v={view.growth[i]?.epsYoY} />
                   )}
                 </td>
                 <td data-label="Gross margin">{pctLevel(m.gross)}</td>
@@ -674,7 +752,7 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
           </tbody>
         </table>
       </div>
-      <CrossingNote rows={view.growth} />
+      {crossingNoteHome(view) === "growth" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
@@ -726,10 +804,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
         {sole ? "" : " — the longer view"}
       </h2>
       <p>
-        Each fiscal year as filed, oldest first, with the year it is measured against named in the
-        row. Year-over-year compares a fiscal year with the one before it; where that year is not on
-        file the figure is blank rather than measured against something else. Margins are gross
-        profit, operating income and net income as a share of that year&apos;s revenue.
+        Each fiscal year as filed, compared with the year before.
         {sole ? (
           <>
             {" "}
@@ -759,10 +834,10 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                   </span>
                 </td>
                 <td data-label="Compared with">{r.comparedWith ?? "not on file"}</td>
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact /></td>
-                <td data-label="Revenue YoY">{pct(r.revenueYoY)}</td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact empty={revenueEmpty(view)} /></td>
+                <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} /></td>
-                <td data-label="EPS YoY">{pct(r.epsYoY)}</td>
+                <td data-label="EPS YoY"><PctCell v={r.epsYoY} /></td>
                 <td data-label="Gross margin">{pctLevel(r.gross)}</td>
                 <td data-label="Operating margin">{pctLevel(r.operating)}</td>
                 <td data-label="Net margin">{pctLevel(r.net)}</td>
@@ -771,8 +846,8 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
           </tbody>
         </table>
       </div>
-      <CrossingNote rows={view.annual} />
-      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
+      {crossingNoteHome(view) === "annual" ? <p className="earningsDataNote">{CROSSING_NOTE}</p> : null}
+      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -1072,7 +1147,12 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
           <Row key={c.label} label={c.label}>
-            <CellValue cell={c} compact currency={!c.label.includes("shares")} />
+            <CellValue
+              cell={c}
+              compact
+              currency={!c.label.includes("shares")}
+              empty={c.key === "revenue" ? revenueEmpty(view) : NOT_REPORTED}
+            />
           </Row>
         ))}
       </div>
@@ -1088,7 +1168,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
           reports costs that these categories do not cover. Operating income is as filed.
         </p>
       ) : null}
-      <p className="earningsDataNote">{epsBasisNote(view.accounting)} Source: {SEC_ATTRIBUTION}.</p>
+      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -1128,7 +1208,7 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
               <tr key={r.end}>
                 <td data-label={w.One}>{r.label}</td>
                 <td data-label="Period ending">{r.end}</td>
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact /></td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact empty={revenueEmpty(view)} /></td>
                 <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}><CellValue cell={r.epsDiluted} /></td>
                 <td data-label="Net income"><CellValue cell={r.netIncome} compact /></td>
               </tr>
@@ -1510,10 +1590,7 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
     <section className="card">
       <div className="eyebrow">Trend</div>
       <h3>What does a typical {w.one} look like?</h3>
-      <p>
-        The middle value across the {w.many} on file — not an average, which one unusual{" "}
-        {w.one} can dominate. Figures are the same ones in the table above.
-      </p>
+      <p>Middle value across the {w.many} on file.</p>
       <div className="trendGrid">
         {t.lines.map((l) => {
           // THE KIND, NOT THE LABEL'S SPELLING. trendSummary says which lines
@@ -1544,8 +1621,11 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
           );
         })}
       </div>
-      {t.exclusionNote ? <p className="earningsDataNote">{t.exclusionNote}</p> : null}
-      <p className="earningsDataNote">{toneBandNote(t.crossings)} Source: {SEC_ATTRIBUTION}.</p>
+      {/* NO EXCLUSION PARAGRAPH AND NO SECOND COPY OF THE BANDS. Each line's
+          "N of M" already says how many periods it counted, the thresholds
+          are in the growth chart's footnote, and the crossing sentence is
+          printed once per page. */}
+      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
 }
@@ -1587,55 +1667,166 @@ export function SecValuationCard({
   // NO PRICE IS NOT A FILING REFUSAL. Both figures need one, and saying the
   // cover page is at fault for a bars outage would misname the gap.
   if (price === null) return null;
-  const figure = (f: ReturnType<typeof marketCap>, fmt: (n: number) => string) =>
-    !current ? STALE_PRICE_WORDS : f === null ? NOT_REPORTED : f.ok ? fmt(f.val) : REFUSAL_WORDS[f.why];
-  const isRefusal = (f: ReturnType<typeof marketCap>) => !current || (f !== null && !f.ok);
+  // ── TWO STAT TILES, THE SNAPSHOT'S STYLE ─────────────────────────────────
+  // The value is a figure or a SHORT state; the caption carries the inputs or
+  // the reason. The long refusal sentences used to sit in the value slot at
+  // 14px, and the price, the GAAP note and the source ran on underneath as one
+  // paragraph — the layout the owner flagged as broken on AVAV.
+  const sentence = (t: string) => `${t[0].toUpperCase()}${t.slice(1)}.`;
+  const capValue = !current ? STALE_PRICE_WORDS : cap === null ? NOT_REPORTED : cap.ok ? shortMoney(cap.val) : "Not available";
+  const capSub = !current
+    ? stalePriceNote(price, priceAsOf ?? "an unknown date")
+    : cap !== null && !cap.ok
+      ? sentence(REFUSAL_WORDS[cap.why])
+      : inputs.shares
+        ? `${(inputs.shares.val / 1e6).toFixed(1)}M shares × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
+        : null;
+  const peValue = !current ? STALE_PRICE_WORDS
+    : pe === null ? NOT_REPORTED
+      : pe.ok ? pe.val.toFixed(1)
+        : pe.why === "eps-is-zero-or-negative" ? "Not meaningful" : "Not available";
+  const epsSpan = inputs.eps?.basis === "four-quarters"
+    ? "the last four quarters"
+    : `the latest fiscal year, to ${inputs.eps?.periodEnd}`;
+  const peSub = !current ? null
+    : pe !== null && !pe.ok
+      ? pe.why === "eps-is-zero-or-negative"
+        ? `${inputs.eps && inputs.eps.val < 0 ? "Loss" : "No earnings"} over ${epsSpan}`
+        : sentence(REFUSAL_WORDS[pe.why])
+      : inputs.eps
+        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} diluted EPS over ${epsSpan}`
+        : null;
   return (
     <section className="card">
       <div className="eyebrow">Valuation</div>
       <h3>What the market is paying for these earnings</h3>
       <div className="metricGrid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-        <div>
-          <span className="metricLabel">Market cap</span>
-          <span className="metricValue" style={{ fontSize: isRefusal(cap) ? 14 : undefined }}>
-            {figure(cap, shortMoney)}
-          </span>
-          {inputs.shares ? (
-            <span className="metricSub">
-              {(inputs.shares.val / 1e6).toFixed(1)}M shares, as stated on the cover page of the
-              filing dated {inputs.shares.asOf}
-            </span>
-          ) : null}
-        </div>
-        <div>
-          <span className="metricLabel">P/E ({epsStandardWord(view.accounting)}, trailing)</span>
-          <span className="metricValue" style={{ fontSize: isRefusal(pe) ? 14 : undefined }}>
-            {figure(pe, (n) => n.toFixed(1))}
-          </span>
-          {inputs.eps ? (
-            <span className="metricSub">
-              ${inputs.eps.val.toFixed(2)} diluted EPS over{" "}
-              {inputs.eps.basis === "four-quarters"
-                ? "the last four quarters"
-                : "the latest full fiscal year"}
-              , to {inputs.eps.periodEnd}
-            </span>
-          ) : null}
-        </div>
+        <Metric label="Market cap" sub={capSub}>{capValue}</Metric>
+        <Metric label={`P/E (${epsStandardWord(view.accounting)}, trailing)`} sub={peSub}>{peValue}</Metric>
       </div>
-      <p className="earningsDataNote">
-        {current
-          ? `Price ${price.toFixed(2)}${priceAsOf ? ` at the close on ${priceAsOf}` : ""}.`
-          : stalePriceNote(price, priceAsOf ?? "an unknown date")}{" "}
-        Earnings are {view.accounting ? `${epsStandardWord(view.accounting)} as filed` : "as filed"}, never an adjusted figure. {epsBasisNote(view.accounting)} Source:{" "}
-        {SEC_ATTRIBUTION}, with the share price from market data.
-      </p>
       {view.currency ? (
         <p className="earningsDataNote">
           Earnings are converted from {view.currency.reporting}; the share price is already in US
           dollars, so both sides of these figures are dollars.
         </p>
       ) : null}
+      <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}; share price from market data.</p>
     </section>
+  );
+}
+
+/**
+ * THE SCORE CARD, moved out of page.tsx so the render harness can draw it
+ * beside the cards it sits above. The watermark is a client component, so the
+ * page passes it in as a slot rather than this file importing it.
+ */
+export function SecScoreCard({
+  symbol, score, coverage, watermark = null,
+}: {
+  symbol: string;
+  score: SecEarningsScore;
+  coverage: ScoreCoverage | null;
+  watermark?: React.ReactNode;
+}) {
+  return (
+    <aside className="scoreCard">
+      {/* ── HOW MUCH OF THIS SCORE WAS ACTUALLY MEASURED ──────────────
+          ABVX rendered 48/100 MIXED laid out exactly like AAPL's while
+          three of five components never ran. Those three carry 52 of
+          the 58 points the score can move by, so it could only land
+          between 34 and 66 — inside the MIXED band either way. It
+          could not have read Weak or Good for any company. The
+          arithmetic is right and unchanged; what was missing is that
+          the reader was never told the range had collapsed. */}
+      <div className="scoreTop">
+        <div className="smallLabel">Earnings score</div>
+        <div className={coverage?.partial ? "scorePill scorePillPartial" : "scorePill"}>
+          {coverage?.partial ? partialScoreLabel(coverage) : score.label}
+        </div>
+      </div>
+      {/* No number and no needle when there is nothing to score. The
+          pill already says "Unavailable" and the explanation says why,
+          but a 48px "50/100" over a Weak-Mixed-Strong gradient with the
+          needle at dead centre is the visually dominant half of this
+          card -- it reads as a real neutral reading, and the honest
+          part is the easiest to miss. Verified rendering exactly that
+          way before this change. */}
+      {score.available ? (
+        <>
+          <div className="scoreNumberRow">
+            {/* A PARTIAL SCORE LOSES ITS VERDICT COLOUR. The hue is
+                the fastest-read part of this card and it asserts a
+                reading; on a score the missing inputs decided, the
+                number is ink, not a verdict. */}
+            <div className={coverage?.partial ? "scoreNumber scoreNumberPartial" : "scoreNumber"}>
+              {score.score}/100
+            </div>
+            {watermark}
+          </div>
+          <div className="scoreBar" aria-hidden="true">
+            {/* THE REACHABLE RANGE, DRAWN — ONLY WHEN IT IS A RANGE. A
+                shaded span across the whole bar (AVAV: 0 to 100) says
+                nothing and looks like a highlight, so it is drawn only
+                when it is narrower than the scale. */}
+            {coverage && coverageIsInformative(coverage) ? (
+              <div
+                className="scoreReach"
+                style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
+              />
+            ) : null}
+            <div className="scoreNeedle" />
+          </div>
+          {/* THE AXIS IS LABELLED FROM THE BAND TABLE, and the thresholds
+              sit behind the info mark beside it rather than in a paragraph
+              under it. A tooltip that only hovers is invisible on a phone, so
+              the mark is focusable and the text shows on focus as well —
+              tapping it is enough. */}
+          <div className="scoreLabels">
+            {/* SCORE_BANDS is ordered high-to-low (the lookup wants that);
+                the axis reads low-to-high left to right. */}
+            {[...SCORE_BANDS].reverse().map((b, i, all) => (
+              <span key={b.tone}>
+                {b.label}
+                {i === all.length - 1 ? <InfoTip text={scoreBandNote()} /> : null}
+              </span>
+            ))}
+          </div>
+          {coverage?.partial ? (
+            <p className="earningsDataNote scoreReachNote" style={{ marginTop: 8 }}>
+              {partialScoreNote(coverage, score.unavailableWhy, coverage.pinned ? toneLabel("neutral") : null)}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      <p style={{ marginTop: 14 }}>{score.explanation}</p>
+      {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
+          Every term of this score is measured over the anchor period,
+          and a reader comparing an annual filer's score with a 10-Q
+          filer's has to be told they are not the same measurement. */}
+      {score.available && score.basis === "year" ? (
+        <p className="earningsDataNote" style={{ marginTop: 10 }}>
+          <strong>{symbol} files annually</strong>, so this score is built on its fiscal
+          years — growth is year against prior year, and there are no quarterly figures
+          behind it.
+        </p>
+      ) : null}
+    </aside>
+  );
+}
+
+/**
+ * AN "i" THAT EXPLAINS ITSELF ON HOVER *AND* ON TAP.
+ *
+ * A bare `title=` is hover-only, and this page has already paid for that
+ * lesson once (the gap badge). The mark is focusable, so a tap focuses it, and
+ * the page's CSS shows the text on :hover and :focus alike. The text is also
+ * the accessible name, so a screen reader gets it without either.
+ */
+export function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="infoTip" tabIndex={0} role="note" aria-label={text}>
+      <span aria-hidden="true">i</span>
+      <span className="infoTipText" aria-hidden="true">{text}</span>
+    </span>
   );
 }

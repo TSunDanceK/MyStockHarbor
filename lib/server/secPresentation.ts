@@ -300,21 +300,42 @@ export function partialScoreLabel(c: ScoreCoverage): string {
 }
 
 /**
- * What the card says under a partial score, in full sentences.
+ * What the card says under a partial score — ONE LINE.
  *
- * IT NAMES THE RANGE, because "partial" alone still invites the reader to
- * treat the number as a reading that happens to be incomplete. "Could only
- * land between 34 and 66" is the fact that stops that.
+ * It names each missing input WITH ITS REAL CAUSE ("EPS growth — loss in both
+ * quarters"), because "not in this company's filings" was false for most of
+ * them: AVAV files EPS every quarter, and EPS growth is missing because both
+ * quarters were losses.
+ *
+ * ── THE RANGE ONLY WHEN IT SAYS SOMETHING ────────────────────────────────
+ * This used to read "the score could only have landed between 0 and 100" on
+ * AVAV. The arithmetic was right — the four inputs that ran reach ±50 around
+ * the seed of 50 — and the sentence was empty: every score on the scale is
+ * between 0 and 100. The range is printed only when it is narrower than the
+ * scale, and the pinned case (ABVX: 32 to 68, inside Mixed whatever the
+ * company did) keeps its consequence, because that is the one a reader must
+ * not miss.
  */
-export function partialScoreNote(c: ScoreCoverage, missing: string[], periodWord: string): string {
-  const what = missing.length
-    ? `${missing.length === 1 ? "One input is" : `${missing.length} inputs are`} not in this company's filings: ${missing.join("; ")}.`
+export function partialScoreNote(
+  c: ScoreCoverage,
+  gaps: { name: string; reason: string }[],
+  pinnedBand: string | null = null
+): string {
+  const why = gaps.length
+    ? ` (${gaps.map((g) => `${g.name} — ${g.reason}`).join("; ")})`
     : "";
-  const range = `With the rest unread, the score could only have landed between ${c.low} and ${c.high}`;
-  const pinned = c.pinned
-    ? ` — entirely inside one band, so the verdict above was decided by what is missing rather than by the ${periodWord}.`
-    : ".";
-  return `${what} ${range}${pinned} It is not comparable with a score where every input was read.`.trim();
+  const head = `Partial: ${c.measured} of ${c.total} inputs measured${why}.`;
+  const informative = c.low > 0 || c.high < 100;
+  const range = !informative ? ""
+    : c.pinned && pinnedBand
+      ? ` With these inputs it could only land between ${c.low} and ${c.high}, inside ${pinnedBand} either way.`
+      : ` With these inputs it could only land between ${c.low} and ${c.high}.`;
+  return `${head}${range} Not directly comparable with a full score.`;
+}
+
+/** True when the reachable range is narrower than the whole scale — worth drawing. */
+export function coverageIsInformative(c: ScoreCoverage): boolean {
+  return c.partial && (c.low > 0 || c.high < 100);
 }
 
 /**
@@ -528,6 +549,18 @@ export function toneBg(tone: EarningsTone | null): string {
   if (tone === "weak") return "rgba(239,68,68,0.10)";
   if (tone === "neutral") return "rgba(250,204,21,0.10)";
   return "rgba(148,163,184,0.08)";
+}
+
+/**
+ * A FAINT BACKGROUND for a tone — the snapshot tiles. Low alpha so the text
+ * over it keeps the contrast it had on the plain card, in either scheme; the
+ * hue is the same one toneColor uses, so a green tile and a green chip agree.
+ */
+export function toneTint(tone: EarningsTone | null): string {
+  if (tone === "good") return "rgba(34,197,94,0.08)";
+  if (tone === "weak") return "rgba(239,68,68,0.08)";
+  if (tone === "neutral") return "rgba(250,204,21,0.08)";
+  return "rgba(148,163,184,0.07)";
 }
 
 /**

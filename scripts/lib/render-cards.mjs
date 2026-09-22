@@ -88,6 +88,9 @@ export async function loadCards(mutate = (src) => src) {
     // that calls barValue throws ReferenceError mid-tree, which is how this
     // was found. Anything the cards import has to be added here too.
     stripImports("lib/server/secPresentation.ts"),
+    // THE SCORER, for SecScoreCard. After secPresentation, whose coverage
+    // arithmetic it calls.
+    stripImports("lib/server/secEarningsScore.ts"),
     // THE STATUTORY TABLE, AHEAD OF secValuation THAT READS IT.
     // COVER_SHARES_MAX_AGE_DAYS is DERIVED from DEADLINE_FALLBACK rather than
     // written as a number, so the concatenated unit needs the declaration or

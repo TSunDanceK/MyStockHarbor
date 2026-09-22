@@ -254,16 +254,17 @@ console.log("\n3z. ONE WORD FOR ONE STATE, ACROSS THE WHOLE PAGE");
     "a note that spells the word itself can describe one the page stopped showing");
 
   // AND IT REACHES A READER THAT WAY. The source assertions above cannot see
-  // what renders, so the rendered text is checked too — on AZN, whose table
-  // carries Q4 rows.
-  const azText = visibleText(html(React.createElement(M.SecGrowthMarginsCard, { view: vAzn })));
+  // what renders, so the rendered text is checked too — on AAPL, whose table
+  // carries Q4 rows. (It was AZN; AZN's current window is Q2 rows only, and
+  // the Q4 sentence is now printed only where a Q4 row without EPS exists.)
+  const azText = visibleText(html(React.createElement(M.SecGrowthMarginsCard, { view: vAapl })));
   // NOT a bare /not filed/ search: the note's own sentence — "Q4 EPS is not
   // filed as a separate period" — is correct English about the FACT, and
   // banning the phrase outright failed on it. What must not appear is the
   // page telling the reader a CELL shows a word it does not show.
   check("the note tells the reader the word the cells actually carry",
-    /read \u201cNot reported\u201d/.test(azText) && !/read \u201cnot filed\u201d/.test(azText),
-    (azText.match(/so those cells read [^.]*\./) ?? ["no such sentence"])[0]);
+    /so it reads Not reported\./.test(azText) && !/reads? \u201c?not filed/.test(azText),
+    (azText.match(/so it reads [^.]*\./) ?? ["no such sentence"])[0]);
   // AND NO CELL CARRIES THE OLD SPELLING. Checked on the markup, where a table
   // cell is distinguishable from prose.
   const azMarkup = html(React.createElement(M.SecGrowthMarginsCard, { view: vAzn }));
@@ -307,11 +308,11 @@ console.log("\n5. A3 — a blank Q4 EPS says why");
   const q4 = vAapl.growth.filter((g) => /^Q4 /.test(g.label));
   check("AAPL's window contains a Q4 row to test", q4.length > 0,
     q4.map((g) => g.label).join(" "));
-  check("Q4 EPS reads 'not filed' rather than a bare dash",
-    q4.every((g) => g.epsYoY === null) ? /not filed/.test(t) : true,
+  check("Q4 EPS reads 'Not reported' rather than a bare dash",
+    q4.every((g) => g.epsYoY === null) ? /Not reported/.test(t) : true,
     "Q4 is never filed as a standalone quarter and nothing is derived to fill it");
   check("...and the reason is in visible text, not only a title attribute",
-    /Q4 EPS is not filed as a separate period/.test(t),
+    /Q4 EPS isn\u2019t filed separately/.test(t),
     "hover-only is invisible on a touch screen");
   // THE REASON MUST NOT DESCRIBE A CALENDAR THE FILER DOES NOT KEEP. The old
   // wording said "companies file nine-month and full-year figures", which is a
@@ -790,7 +791,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // "EPS surprise: 0.00", which read as "came in exactly in line".
   const coalesceCell = (src) =>
     src.replace(
-      "  if (cell.val == null) {\n    return <span style={{ color: \"#94a3b8\", fontWeight: 600 }}>{NOT_REPORTED}</span>;\n  }",
+      "  if (cell.val == null) {\n    return <span style={{ color: \"#94a3b8\", fontWeight: 600 }}>{empty}</span>;\n  }",
       ""
     ).replace(
       "? money(cell.val, compact && !cell.perShare, cell.perShare)",
@@ -1078,13 +1079,80 @@ console.log("\n15. EPS is labelled with the standard the filer reports under");
   check("KGC's EPS labels say IFRS and never GAAP",
     /EPS \(IFRS\)/.test(kgc) && !/GAAP/.test(kgc), (kgc.match(/[^.]*GAAP[^.]*/) ?? [""])[0]);
   check("AAPL's still say GAAP, and never IFRS",
-    /Diluted EPS \(GAAP\)/.test(aapl) && /EPS is GAAP, as filed/.test(aapl) && !/IFRS/.test(aapl));
+    /Diluted EPS \(GAAP\)/.test(aapl) && /EPS is GAAP, as filed/.test(M.epsBasisNote(vAapl.accounting)) && !/IFRS/.test(aapl));
+  // ── THE BASIS NOTE IS STATED ONCE, IN THE HERO ─────────────────────────
+  // It was printed under the snapshot, the five-year table, the valuation
+  // card and the income statement — four times on AVAV (cleanup brief A7).
+  const pageRaw = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
+  const onCards = (aapl.match(/Companies often headline an adjusted/g) ?? []).length;
+  check("the EPS-basis note is not repeated on the cards",
+    onCards === 0, `${onCards} copies across the rendered cards`);
+  check("...and the page states it once, in the hero, from the filer's own standard",
+    (pageRaw.match(/epsBasisNote\(/g) ?? []).length === 1 && /heroNote">\{epsBasisNote\(secView\.accounting\)\}/.test(pageRaw),
+    "one call, in the hero");
   const hard = await loadCards(once(
     'return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";',
     'return "GAAP";'
   ));
   check("...and CATCHES the standard hardcoded back to GAAP",
     /GAAP/.test(visibleText(renderAll(hard, hard.buildSecEarningsView(AZN), "AZN"))));
+}
+
+console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was written about");
+{
+  // AVAV Q1 FY2027: revenue +5.7% and operating margin -2.3% from -15.2%
+  // against Q1 FY2026, a loss in both quarters. Every assertion below is a
+  // sentence the page used to print about exactly these figures.
+  const AVAV = fixture("AVAV");
+  const vAvav = M.buildSecEarningsView(AVAV);
+  const sc = M.scoreFromSec(vAvav, "AVAV", { status: "ready" });
+  const cov = M.coverageOf(sc);
+  const card = visibleText(html(React.createElement(M.SecScoreCard, { symbol: "AVAV", score: sc, coverage: cov })));
+  check("A1: a reach as wide as the scale is not printed as a range",
+    cov.low === 0 && cov.high === 100 && !/between 0 and 100/.test(card), card.slice(0, 160));
+  check("A2: EPS growth is missing because both quarters were losses — and the card says that",
+    sc.unavailableWhy.length === 1 && sc.unavailableWhy[0].key === "epsGrowth" &&
+      /EPS growth — loss in both quarters/.test(card) && !/do not carry it/.test(card),
+    JSON.stringify(sc.unavailableWhy));
+  check("A3: the narrative agrees with the page — margin widened, revenue grew, quarter loss-making",
+    /revenue grew 5\.7% against Q1 FY2026/i.test(sc.explanation) && /operating margin widened 13\.0pp/.test(sc.explanation) &&
+      /loss-making/.test(sc.explanation) && !/slipping|under pressure/.test(sc.explanation),
+    sc.explanation);
+  check("A4: and it instructs nobody",
+    !/\b(should|must)\b/i.test(card), sc.explanation);
+  const flipped = await loadCards(once(
+    "const mTone = toneForMarginDelta(pp);",
+    'const mTone = toneForMarginDelta(pp) === "good" ? "weak" : "good";'
+  ));
+  check("...and CATCHES a margin clause that ignores the margin's own sign",
+    /narrowed/.test(flipped.scoreFromSec(flipped.buildSecEarningsView(AVAV), "AVAV", { status: "ready" }).explanation));
+
+  // A5: the FY2022/FY2023 revenue AVAV filed as IncludingAssessedTax.
+  const years = Object.fromEntries(vAvav.annual.map((r) => [r.label, r.revenue.val]));
+  check("A5: FY2022 and FY2023 revenue read from the widened chain",
+    years.FY2022 === 445732000 && years.FY2023 === 540536000,
+    JSON.stringify(years));
+  // A blank revenue cell says which kind of blank it is, never "Not reported".
+  const noLine = { ...vAvav, untagged: ["revenue"], annual: vAvav.annual.map((r) => ({ ...r, revenue: { ...r.revenue, val: null } })) };
+  const annualText = visibleText(html(React.createElement(M.SecAnnualCard, { view: noLine })));
+  check("...and a revenue cell with no line reads 'No revenue line in this filing', not 'Not reported'",
+    annualText.includes(M.EMPTY_REASONS.noRevenueLine) && !/Revenue[^|]{0,40}Not reported/.test(annualText.slice(0, 400)),
+    annualText.slice(0, 200));
+
+  // B: the valuation card is two tiles, with no paragraph under them.
+  const val = visibleText(html(React.createElement(M.SecValuationCard, {
+    view: vAvav, inputs: M.valuationInputs(AVAV, "2026-09-22"), price: 164.31, priceAsOf: "2026-09-21", today: "2026-09-22",
+  })));
+  check("B: valuation reads Market cap $8.4B and P/E Not meaningful, each with a one-line caption",
+    /Market cap \$8\.4B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
+      /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
+    val);
+  // A7 + B: the crossing footnote is printed once on the page, however many
+  // cards carry a crossing.
+  const whole = visibleText(renderAll(M, vAvav, "AVAV"));
+  const crossingCopies = (whole.match(/Where a period crosses between profit and loss/g) ?? []).length;
+  check("the crossing footnote is printed exactly once",
+    crossingCopies === 1, `${crossingCopies} copies`);
 }
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nRendered output holds.\n");

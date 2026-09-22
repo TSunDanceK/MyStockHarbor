@@ -27,7 +27,7 @@
 // the full report therefore cannot disagree about the same filing, which they
 // would within a week of anyone tuning either copy. See that module's header.
 import {
-  buildSecEarningsView, conversionNote, isPct,
+  EMPTY_REASONS, buildSecEarningsView, conversionNote, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
@@ -176,28 +176,8 @@ const figure = (c: ViewCell, emptyReason: string | null = null): SnapshotFigure 
   emptyReason: c.val === null ? emptyReason ?? NOT_CAPTURED : null,
 });
 
-/**
- * THE REASONS, AS WORDS THE CARD PRINTS. One place, so the check can assert
- * which one a tile got without matching prose scattered through a function.
- *
- * NOT_CAPTURED is the honest remainder: the stored set has no value for this
- * period and nothing recorded says the filer lacks the line. It claims only
- * that WE did not capture it — never "not reported", and never "not in the
- * filing", both statements about the company.
- *
- * ── WHY IT IS NOT "Not in this period's filed figures" ───────────────────
- * That wording was used for exactly the cases we cannot tell apart: a set
- * written before the `nt` marker, where "not captured" (a chain gap) and "not
- * filed" look identical. It was false for AVAV, whose FY2022/FY2023 revenue IS
- * in its 10-Ks under a concept the chain did not list (owner review, #522).
- * "No revenue line in this filing" stays, and only where the marker confirms it.
- */
-export const EMPTY_REASONS = {
-  q4NotFiled: "Q4 is not filed on its own",
-  noRevenueLine: "No revenue line in this filing",
-  needsRevenue: "Needs revenue",
-  notCaptured: "Not captured from this filing",
-} as const;
+// EMPTY_REASONS lives in secEarningsView now, so the earnings page's cards
+// print the same words for the same blanks. See its docblock there.
 const NOT_CAPTURED = EMPTY_REASONS.notCaptured;
 
 /**

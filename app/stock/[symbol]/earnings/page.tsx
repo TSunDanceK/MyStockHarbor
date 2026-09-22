@@ -12,13 +12,13 @@ import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import { cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
-import { buildSecEarningsView, periodWords } from "@/lib/server/secEarningsView";
+import { buildSecEarningsView, epsBasisNote, periodWords } from "@/lib/server/secEarningsView";
 // ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
 // where they are drawn; re-importing them here would just be a second name for
 // the same rule.
 import {
-  partialScoreLabel, partialScoreNote, toneBg, toneColor,
+  toneBg, toneColor,
   type EarningsTone as PresentationTone,
 } from "@/lib/server/secPresentation";
 // THE SCORER, WHICH USED TO BE 340 LINES OF THIS FILE. It moved out whole so
@@ -29,7 +29,7 @@ import {
 // weights, and it is the SAME function the sidebar card calls, so the two
 // surfaces cannot report different coverage for one stock.
 import {
-  SCORE_BANDS, SCORE_COMPONENTS, coverageOf, scoreBandNote, scoreFromSec,
+  SCORE_COMPONENTS, coverageOf, scoreFromSec,
 } from "@/lib/server/secEarningsScore";
 import { valuationInputs } from "@/lib/server/secValuation";
 import {
@@ -37,7 +37,7 @@ import {
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
   SecTrendSummaryCard, SecValuationCard,
   SecPendingCard, SecNoXbrlCard, SecNoQuartersCard, SecNotIssuerEquityCard,
-  SecNoRegistrantCard,
+  SecNoRegistrantCard, SecScoreCard,
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -809,6 +809,13 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreReachNote { color: rgba(226,232,240,0.78); }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
+        .metricCard { padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.02); }
+        .crossTip { text-decoration: none; cursor: help; border-bottom: 1px dotted rgba(148,163,184,0.6); }
+        .hero p.heroNote { margin-top: 10px; font-size: 12px; line-height: 1.5; color: rgba(148,163,184,0.85); }
+        .infoTip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.45); color: rgba(226,232,240,0.85); font-size: 10px; font-weight: 900; font-style: normal; text-transform: none; letter-spacing: 0; cursor: help; vertical-align: 1px; }
+        .infoTip:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
+        .infoTipText { display: none; position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 5; width: min(260px, 72vw); padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.35); background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: left; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+        .infoTip:hover .infoTipText, .infoTip:focus .infoTipText { display: block; }
         .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
         /* ── THE COLUMNS MUST BE ALLOWED TO BE NARROWER THAN THEIR CONTENT ───
            A grid ITEM defaults to 'min-width: auto', which resolves to its
@@ -993,6 +1000,7 @@ export default async function StockEarningsPage({ params }: Props) {
              data-label. */
           .historyTable td::before { content: attr(data-label); }
         }
+        @media (max-width: 374px) { .snapshotGrid { grid-template-columns: 1fr !important; } }
         @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
       `}</style>
 
@@ -1017,98 +1025,20 @@ export default async function StockEarningsPage({ params }: Props) {
                   quarterly wording is right for that: the page is about a
                   quarter until a filer's own filings say otherwise. */}
               <p>Review {clean}&apos;s latest reported {periodWords(secView?.basis ?? "quarter").one} as filed with the SEC — GAAP EPS, revenue, margins, cash flow and the balance sheet, with year-over-year context and a simple earnings score.</p>
+              {/* THE EPS-BASIS NOTE, ONCE, AT THE TOP. It was printed under the
+                  snapshot, the five-year table, the valuation card and the
+                  income statement — the same two sentences four times on
+                  AVAV. It applies to every EPS on the page, so it sits where
+                  the page introduces them; each card keeps a one-line source. */}
+              {secView ? <p className="earningsDataNote heroNote">{epsBasisNote(secView.accounting)}</p> : null}
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
-            <aside className="scoreCard">
-              {/* ── HOW MUCH OF THIS SCORE WAS ACTUALLY MEASURED ──────────────
-                  ABVX rendered 48/100 MIXED laid out exactly like AAPL's while
-                  three of five components never ran. Those three carry 52 of
-                  the 58 points the score can move by, so it could only land
-                  between 34 and 66 — inside the MIXED band either way. It
-                  could not have read Weak or Good for any company. The
-                  arithmetic is right and unchanged; what was missing is that
-                  the reader was never told the range had collapsed. */}
-              <div className="scoreTop">
-                <div className="smallLabel">Earnings score</div>
-                <div className={coverage?.partial ? "scorePill scorePillPartial" : "scorePill"}>
-                  {coverage?.partial ? partialScoreLabel(coverage) : score.label}
-                </div>
-              </div>
-              {/* No number and no needle when there is nothing to score. The
-                  pill already says "Unavailable" and the explanation says why,
-                  but a 48px "50/100" over a Weak-Mixed-Strong gradient with the
-                  needle at dead centre is the visually dominant half of this
-                  card -- it reads as a real neutral reading, and the honest
-                  part is the easiest to miss. Verified rendering exactly that
-                  way before this change. */}
-              {score.available ? (
-                <>
-                  <div className="scoreNumberRow">
-                    {/* A PARTIAL SCORE LOSES ITS VERDICT COLOUR. The hue is
-                        the fastest-read part of this card and it asserts a
-                        reading; on a score the missing inputs decided, the
-                        number is ink, not a verdict. */}
-                    <div className={coverage?.partial ? "scoreNumber scoreNumberPartial" : "scoreNumber"}>
-                      {score.score}/100
-                    </div>
-                    <EarningsScoreWatermark />
-                  </div>
-                  <div className="scoreBar" aria-hidden="true">
-                    {/* THE REACHABLE RANGE, DRAWN. A sentence saying the score
-                        could only land between 34 and 66 is true and easy to
-                        skip; the same fact as a shaded span under the needle
-                        is read at the same glance as the needle itself. */}
-                    {coverage?.partial ? (
-                      <div
-                        className="scoreReach"
-                        style={{ left: `${coverage.low}%`, width: `${Math.max(coverage.high - coverage.low, 1)}%` }}
-                      />
-                    ) : null}
-                    <div className="scoreNeedle" />
-                  </div>
-                  {/* THE AXIS IS LABELLED FROM THE BAND TABLE. It read
-                      Weak / Mixed / Strong beside a pill that can only ever say
-                      Weak / Mixed / Good, so KGC's 100/100 "Good" looked as
-                      though it had missed a higher band that does not exist. */}
-                  <div className="scoreLabels">
-                    {/* SCORE_BANDS is ordered high-to-low (the lookup wants that);
-                        the axis reads low-to-high left to right. */}
-                    {[...SCORE_BANDS].reverse().map((b) => <span key={b.tone}>{b.label}</span>)}
-                  </div>
-                  {/* AND THE THRESHOLDS ARE VISIBLE. 100/100 above an unlabelled
-                      gauge tells a reader nothing about what 100 had to clear. */}
-                  <p className="earningsDataNote" style={{ marginTop: 8 }}>{scoreBandNote()}</p>
-                  {coverage?.partial ? (
-                    <p className="earningsDataNote scoreReachNote" style={{ marginTop: 6 }}>
-                      {partialScoreNote(coverage, score.unavailable, periodWords(score.basis).one)}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-              <p style={{ marginTop: 16 }}>{score.explanation}</p>
-              {/* WHICH KIND OF PERIOD THE SCORE READ — point 5 of the scope.
-                  Every term of this score is measured over the anchor period,
-                  and a reader comparing an annual filer's score with a 10-Q
-                  filer's has to be told they are not the same measurement. */}
-              {score.available && score.basis === "year" ? (
-                <p className="earningsDataNote" style={{ marginTop: 10 }}>
-                  <strong>{clean} files annually</strong>, so this score is built on its fiscal
-                  years — growth is year against prior year, and there are no quarterly figures
-                  behind it.
-                </p>
-              ) : null}
-              {/* WHAT THE SCORE COULD NOT SEE, ON THE SCORE ITSELF.
-                  /stock/AZN/earnings rendered GOOD 100/100 above a Quality of
-                  Earnings card whose every field was "—". The number is only
-                  readable next to its own gaps, so they sit here rather than
-                  being inferable from a card further down the page. */}
-              {score.available && score.unavailable.length ? (
-                <p className="earningsDataNote" style={{ marginTop: 10 }}>
-                  Not measured, because {clean}&apos;s filings do not carry it:{" "}
-                  {score.unavailable.join("; ")}.
-                </p>
-              ) : null}
-            </aside>
+            <SecScoreCard
+              symbol={clean}
+              score={score}
+              coverage={coverage}
+              watermark={<EarningsScoreWatermark />}
+            />
           </section>
 
           <section className="contentGrid">

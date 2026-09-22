@@ -347,9 +347,13 @@ console.log("\n4c. A SCORE THAT COULD NOT HAVE SAID ANYTHING ELSE SAYS SO");
   check("a score whose whole range sits in one band is pinned",
     pinned.pinned && pinned.low === 42 && pinned.high === 58,
     `${pinned.low}..${pinned.high} inside ${BAND_LOW}..${BAND_HIGH}`);
-  check("...and its note says the verdict was decided by what is missing",
-    /decided by what is missing/.test(mod.partialScoreNote(pinned, ["revenue growth"], "quarter")),
-    mod.partialScoreNote(pinned, ["revenue growth"], "quarter"));
+  // THE PINNED CONSEQUENCE, IN ONE LINE. The note names each missing input
+  // with its cause and, when pinned, the band it could not leave.
+  const pinnedNote = mod.partialScoreNote(pinned, [{ name: "Revenue growth", reason: "no year-earlier quarter on file" }], "Mixed");
+  check("...and its note says the score could not leave that band",
+    /between 42 and 58, inside Mixed either way/.test(pinnedNote) &&
+      /Revenue growth — no year-earlier quarter on file/.test(pinnedNote),
+    pinnedNote);
 
   // A FULLY MEASURED SCORE IS UNTOUCHED — the whole point is that this changes
   // nothing for AAPL.
@@ -390,10 +394,27 @@ console.log("\n4c. A SCORE THAT COULD NOT HAVE SAID ANYTHING ELSE SAYS SO");
     mod.partialScoreLabel(abvx) === "Partial · 2 of 5 measured" &&
       !/Mixed|Good|Weak/.test(mod.partialScoreLabel(abvx)),
     mod.partialScoreLabel(abvx));
-  check("the note always states the range and the non-comparability",
-    /between 32 and 68/.test(mod.partialScoreNote(abvx, [], "quarter")) &&
-      /not comparable/.test(mod.partialScoreNote(abvx, [], "quarter")),
-    mod.partialScoreNote(abvx, [], "quarter"));
+  check("the note states a narrowed range and the non-comparability",
+    /between 32 and 68\./.test(mod.partialScoreNote(abvx, [])) &&
+      /Not directly comparable with a full score/.test(mod.partialScoreNote(abvx, [])),
+    mod.partialScoreNote(abvx, []));
+  // ── A RANGE AS WIDE AS THE SCALE IS NOT PRINTED (brief A1) ──────────────
+  // AVAV ran four inputs reaching ±50 around the seed, and the card said the
+  // score "could only have landed between 0 and 100" — true of every score.
+  const avav = mod.pinCoverage(
+    mod.scoreCoverage(50, MAXIMA, 1, ["revenueGrowth", "profitability", "marginTrend", "cashConversion"]), BAND_LOW, BAND_HIGH
+  );
+  const avavNote = mod.partialScoreNote(avav, [{ name: "EPS growth", reason: "loss in both quarters" }]);
+  check("a reach spanning the whole scale prints no range, and draws none",
+    avav.low === 0 && avav.high === 100 && !/between/.test(avavNote) && !mod.coverageIsInformative(avav) &&
+      mod.coverageIsInformative(abvx),
+    avavNote);
+  await underMutation(
+    "the range sentence printed whatever its width",
+    "  const informative = c.low > 0 || c.high < 100;",
+    "  const informative = true;",
+    (m) => !/between/.test(m.partialScoreNote(m.pinCoverage(m.scoreCoverage(50, MAXIMA, 1, ["revenueGrowth", "profitability", "marginTrend", "cashConversion"]), BAND_LOW, BAND_HIGH), []))
+  );
 }
 
 console.log("\n5. THE WATERFALL IS DRAWN ONLY WHERE IT ADDS UP");
