@@ -1513,6 +1513,10 @@ const ALLOWED_MANIFEST_READERS = [
   // once with the contentHash and verifiedAt it filled. Still a job, still once
   // a day, still nowhere near a render.
   "app/api/jobs/sec-facts/route.ts",
+  // #535 COWORK #10/#12: the filing job reads it for each filer's CIK and the
+  // daily index's lastFiled. READ-ONLY: its own state is a separate hash, so
+  // it never writes the manifest sec-facts writes.
+  "app/api/jobs/sec-filings/route.ts",
 ];
 check("...and they are exactly the two job routes that are supposed to",
   valueReaders.length === ALLOWED_MANIFEST_READERS.length &&
