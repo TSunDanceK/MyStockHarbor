@@ -10,6 +10,7 @@ import {
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
+import type { AnnualForm } from "./annualOnly";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -570,6 +571,11 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
 export type SecEarningsView = {
   symbol: string;
   /**
+   * "20-F" / "40-F" when the page is in the annual-only layout (#535 COWORK
+   * #15): anchored on fiscal years, quarterly-only cards hidden. Null otherwise.
+   */
+  annualFiler: AnnualForm | null;
+  /**
    * Why EPS is blank for this filer when it is, where the filing says more than
    * "not captured" (epsBlankReason). Null keeps each cell's own default.
    */
@@ -960,7 +966,17 @@ export const STALE_QUARTER_DAYS = 548;
  * `fp: "FY"` and a real `fy`, so "same fiscal period, one year earlier" is
  * FY vs FY-1 by label, with no new code and no array offset.
  */
-export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null {
+export function buildSecEarningsView(
+  set: StoredFactSet,
+  opts: {
+    /**
+     * A 20-F/40-F filer with no recent structured quarter (annualOnly.
+     * annualOnlyForm, #535 COWORK #15): the page is about fiscal years only.
+     */
+    annualForm?: AnnualForm | null;
+  } = {},
+): SecEarningsView | null {
+  const annualFiler = opts.annualForm ?? null;
   // ── A SET THAT IS NOT IN DOLLARS DOES NOT RENDER ─────────────────────────
   //
   // `cur` non-USD with `fx` absent means the filer reports in a currency the
@@ -999,8 +1015,10 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const newestQuarter = set.quarters[0] ?? null;
   const newestYear = set.years[0] ?? null;
   if (!newestQuarter && !newestYear) return null;
+  // AN ANNUAL-ONLY FILER IS ANCHORED ON ITS FISCAL YEAR whatever old quarters
+  // the set still holds: "latest reported" is the latest year (COWORK #15).
   const yearIsNewer =
-    !!newestYear && (!newestQuarter || newestYear.e > newestQuarter.e);
+    !!newestYear && (annualFiler !== null || !newestQuarter || newestYear.e > newestQuarter.e);
   const latest = (yearIsNewer ? newestYear : newestQuarter)!;
   const basis: PeriodBasis = yearIsNewer ? "year" : "quarter";
 
@@ -1019,7 +1037,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       ? Math.round((Date.parse(latest.e) - Date.parse(newestQuarter.e)) / 86400000)
       : null;
   const quartersAreCurrent =
-    !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;
+    annualFiler === null && !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;
 
   // The kind of period the TABLES walk, which is not always the anchor's kind.
   const tableBasis: PeriodBasis = quartersAreCurrent ? "quarter" : "year";
@@ -1372,6 +1390,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
 
   return {
     symbol: set.symbol,
+    annualFiler,
     epsReason: epsBlankReason(set.symbol),
     entityName: set.entityName,
     latestLabel: periodLabel(latest),

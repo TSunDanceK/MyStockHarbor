@@ -187,6 +187,11 @@ export default function LatestEarningsCard({
         <div style={earningsTonePillStyle(tone, verdict)}>{snapshot.toneLabel}</div>
       </div>
       {snapshot.partialNote ? <div style={earningsFootnoteStyle}>{snapshot.partialNote}</div> : null}
+      {/* THE ANNUAL-ONLY LAYOUT (#535 COWORK #15): one short, true note, and the
+          score says what it is based on. */}
+      {snapshot.annualNote ? (
+        <div style={earningsFootnoteStyle}>{snapshot.annualNote} The score is based on full fiscal years.</div>
+      ) : null}
 
       {!snapshot.available ? (
         // THE REASON, NOT A GRID OF EM DASHES. `unavailableReason` is the same

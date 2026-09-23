@@ -36,6 +36,7 @@ import {
 } from "@/lib/server/secEarningsScore";
 import { valuationInputs } from "@/lib/server/secValuation";
 import { registrantFor } from "@/lib/server/stockProfile";
+import { ANNUAL_REACTION_MIN, annualNextReportOutlook, annualOnlyForm, annualOnlyNote, annualReactionEvents } from "@/lib/server/annualOnly";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
@@ -362,7 +363,13 @@ async function getEarningsData(symbol: string) {
       ? Promise.resolve(null)
       : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(toDashed(symbol))}`),
   ]);
-  const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
+  // ── THE ANNUAL-ONLY LAYOUT (#535 COWORK #15) ─────────────────────────────
+  // A 20-F/40-F filer whose newest stored quarter is over 6 months old: the page is about
+  // fiscal years. Decided by rule from its annual form and its own set.
+  const annualForm = cold.status === "ready"
+    ? annualOnlyForm(registrantFor(symbol)?.annualForm, cold.set, new Date().toISOString().slice(0, 10))
+    : null;
+  const secView = cold.status === "ready" ? buildSecEarningsView(cold.set, { annualForm }) : null;
 
   // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
   // off these rows any more, even though they are present: two sources for one
@@ -433,9 +440,16 @@ async function getEarningsData(symbol: string) {
     ? reactionPeriodLabels(cold.set)
     : new Map<string, string>();
 
+  // ANNUAL-ONLY: the reaction is measured around annual-report events only
+  // (the matched period is a stored fiscal year), and hidden below three.
+  // HIDDEN, NOT REMOVED, 2026-09-23: the quarterly reaction series is not
+  // shown for annual-only filers — their quarterly results are not in SEC
+  // structured data for 20-F/40-F filers.
+  const reactionEvents = annualForm && cold.status === "ready" ? annualReactionEvents(barEvents, cold.set) : barEvents;
+  const hidePriceReaction = annualForm !== null && reactionEvents.length < ANNUAL_REACTION_MIN;
   const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
     secEvents.length
-      ? barEvents.slice().reverse().map((e) => ({
+      ? reactionEvents.slice().reverse().map((e) => ({
           periodEnd: e.periodEnd,
           announcedOn: e.announcedOn,
           row: { symbol, date: e.announcedOn, time: e.timing === "after-close" ? "amc" : "bmo" },
@@ -464,9 +478,10 @@ async function getEarningsData(symbol: string) {
   // FMP's entry decides only whether the card renders: with no SEC record
   // behind it the card says so ("no-record") rather than printing the date.
   // outlookForEarningsCard is handed a boolean, not the date, on purpose.
-  const nextReport = outlookForEarningsCard(
-    symbol.trim().toUpperCase(), secRead, Boolean(next?.date), todayIso,
-  );
+  // ANNUAL-ONLY: the next report is the next ANNUAL report, as a month.
+  const nextReport = annualForm && cold.status === "ready"
+    ? annualNextReportOutlook(symbol.trim().toUpperCase(), cold.set, annualForm)
+    : outlookForEarningsCard(symbol.trim().toUpperCase(), secRead, Boolean(next?.date), todayIso);
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
@@ -495,7 +510,7 @@ async function getEarningsData(symbol: string) {
 
   return {
     earningsRows, completedRows, latest, next, nextReport,
-    priceReactionQuarters, score, secView, cold,
+    priceReactionQuarters, score, secView, cold, annualForm, hidePriceReaction,
     valuation, latestClose, latestCloseOn,
     /**
      * THE DATE THIS RENDER RAN, read once here rather than inside a component.
@@ -928,6 +943,8 @@ export default async function StockEarningsPage({ params }: Props) {
                   AVAV. It applies to every EPS on the page, so it sits where
                   the page introduces them; each card keeps a one-line source. */}
               {secView ? <p className="earningsDataNote heroNote">{epsBasisNote(secView.accounting)}</p> : null}
+              {/* THE ANNUAL-ONLY NOTE (#535 COWORK #15), once, at the top. */}
+              {data.annualForm ? <p className="earningsDataNote heroNote">{annualOnlyNote(data.annualForm)}</p> : null}
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
             <SecScoreCard
@@ -935,6 +952,7 @@ export default async function StockEarningsPage({ params }: Props) {
               score={score}
               coverage={coverage}
               watermark={<EarningsScoreWatermark />}
+              basisNote={data.annualForm ? "Based on full fiscal years." : null}
             />
           </section>
 
@@ -1012,6 +1030,10 @@ export default async function StockEarningsPage({ params }: Props) {
                   {/* GATED ON tableBasis, NOT basis. AZN's anchor is a fiscal
                       year (its FY2025 ends after its newest quarter) and it
                       still has twelve quarters to tabulate. */}
+                  {/* HIDDEN, NOT REMOVED, 2026-09-23, for annual-only filers
+                      (tableBasis "year"): quarterly results are not in SEC
+                      structured data for 20-F/40-F filers; the five-year
+                      card below is the main table. */}
                   {secView.tableBasis === "year" ? null : <SecGrowthMarginsCard view={secView} />}
                   {/* ON EVERY STOCK, not only annual filers: five fiscal years
                       is the longer view a quarterly table cannot give. Same
@@ -1042,7 +1064,10 @@ export default async function StockEarningsPage({ params }: Props) {
                 </>
               )}
 
-              <PriceReactionCard
+              {/* HIDDEN, NOT REMOVED, 2026-09-23, for annual-only filers with
+                  fewer than three annual-report reactions: quarterly results
+                  are not in SEC structured data for 20-F/40-F filers. */}
+              {data.hidePriceReaction ? null : <PriceReactionCard
                 symbol={clean}
                 latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple } : null}
                 reaction={reactionData}
@@ -1050,7 +1075,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 datesFromSec={data.datesFromSec}
                 uncoveredLabels={uncoveredLabels}
                 noPriceHistoryNote={NO_PRICE_HISTORY_NOTE}
-              />
+              />}
 
               {secView ? <SecRecentPeriodsCard view={secView} /> : null}
             </div>

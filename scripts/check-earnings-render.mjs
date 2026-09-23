@@ -1004,7 +1004,7 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // ── (j) "ALWAYS PREFER QUARTERS" — the rule that shipped the stale snapshot ─
   const preferQuarters = (src) =>
     src.replace(
-      "    !!newestYear && (!newestQuarter || newestYear.e > newestQuarter.e);",
+      "    !!newestYear && (annualFiler !== null || !newestQuarter || newestYear.e > newestQuarter.e);",
       "    !!newestYear && !newestQuarter;"
     );
   check("the prefer-quarters mutation actually applied", preferQuarters(cardsSrc) !== cardsSrc);
@@ -1023,8 +1023,8 @@ console.log("\n7. the three mutations, each re-rendered from broken source");
   // ── (k) THE STALENESS TEST IS REMOVED ───────────────────────────────────
   const dropStaleTest = (src) =>
     src.replace(
-      "    !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;",
-      "    !annualOnly;"
+      "    annualFiler === null && !annualOnly && quarterAgeDays !== null && quarterAgeDays <= STALE_QUARTER_DAYS;",
+      "    annualFiler === null && !annualOnly;"
     );
   check("the staleness mutation actually applied", dropStaleTest(cardsSrc) !== cardsSrc);
   const kMod = await loadCards(dropStaleTest);
