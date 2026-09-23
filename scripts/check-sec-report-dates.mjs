@@ -949,8 +949,10 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   check("...and the notice reads the SAME cadence, so the two cannot disagree",
     (builder.match(/const cadence = nextPeriodEndFrom/g) ?? []).length === 1,
     "two derivations would let the estimate and the notice name different quarters");
-  check("both SEC fetchers share one rate gate",
-    (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&
+  // THREE FETCHERS, ONE GATE since 2026-09-23 (#535 COWORK #6): the filing-
+  // folder read joined companyfacts and submissions on the same `lastAt`.
+  check("every SEC fetcher shares one rate gate",
+    (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 3 &&
       !/let lastAt2|const lastAt2/.test(job),
     "a second gate would let the two endpoints double the request rate");
 }

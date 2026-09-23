@@ -6,7 +6,7 @@
 // asserts against this file, not against the markup.
 import {
   cell, periodLabel, ttm, valueOf,
-  type Cell, type StoredFactSet, type StoredPeriod,
+  type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, type Statement } from "./secFields";
@@ -414,6 +414,37 @@ export const EMPTY_REASONS = {
   needsRevenue: "Needs revenue",
   notCaptured: "Not captured from this filing",
 } as const;
+/** "3 Jul 2026" — the same format the stock page's earnings card prints. */
+export function plainDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+}
+
+const ANNUAL_FORMS = new Set(["10-K", "20-F", "40-F"]);
+
+/**
+ * THE CREDIT, when the newest period came from the filing rather than the
+ * feed. Filed facts only: which form, filed when. One sentence, shared by the
+ * stock page tile and the earnings card so the two cannot drift.
+ */
+export function filingCreditText(ref: FilingRef): string {
+  return `From the ${ref.form} filed ${plainDate(ref.filed)}. SEC's data feed has not published ` +
+    `these figures yet, so they were read from the filing itself.`;
+}
+
+/**
+ * THE NOTICE, when a newer filing exists that neither source could read.
+ * Dated from the filing's own period (EDGAR's reportDate), never from a
+ * cadence guess — the guess named 26 Jun for KO's quarter to 3 Jul.
+ */
+export function filingNoticeText(ref: FilingRef): string {
+  const what = ANNUAL_FORMS.has(ref.form) ? "fiscal year" : "quarter";
+  return `Results for the ${what} ended ${plainDate(ref.reportDate)} were filed with the SEC on ` +
+    `${plainDate(ref.filed)} (${ref.form}); the figures are not in SEC's data feed yet, so this ` +
+    `page still shows the previous period.`;
+}
+
 /** Is this a figure, as opposed to absent or a crossing? */
 export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -482,6 +513,17 @@ export type SecEarningsView = {
   latestEnd: string;
   latestAccession: string | null;
   latestFiled: string | null;
+  /**
+   * SET WHEN THE NEWEST PERIOD WAS READ FROM THE FILING ITSELF because SEC's
+   * data feed had not published it (StoredFactSet.ff). Null otherwise —
+   * including after companyfacts catches up, when the period is its own.
+   */
+  latestFromFiling: FilingRef | null;
+  /**
+   * A NEWER FILING NEITHER SOURCE COULD READ (StoredFactSet.lg), and only
+   * while it is newer than what the page shows. Null otherwise.
+   */
+  filedNotInFeed: FilingRef | null;
   snapshot: {
     revenue: ViewCell;
     revenueYoY: Pct;
@@ -1257,6 +1299,11 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     latestEnd: latest.e,
     latestAccession: latest.a,
     latestFiled: latest.f,
+    // BY ACCESSION, NOT BY "ff IS PRESENT": the credit belongs to the period
+    // that filing supplied, and a later companyfacts re-read that published it
+    // leaves no ff at all.
+    latestFromFiling: set.ff && latest.a === set.ff.accn ? set.ff : null,
+    filedNotInFeed: set.lg && set.lg.reportDate > latest.e ? set.lg : null,
     snapshot: {
       revenue: view(latest, "revenue", "Revenue"),
       // SAME REPORTING-CURRENCY RULE AS THE GROWTH TABLE. The snapshot's two
