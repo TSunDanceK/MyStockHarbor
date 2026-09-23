@@ -187,8 +187,9 @@ const job = readCodeOnly("app/api/jobs/warm-pickers-sec/route.ts");
 const vercel = JSON.parse(read("vercel.json"));
 checks.push(
   ["the page layers the filings LAST, after the stored FMP values",
-    page.indexOf("readSecPickerRows(") > page.indexOf("readCachedStockDataBulk(") &&
-      page.indexOf("readSecPickerRows(") > page.indexOf("readPricePoolBulk(")],
+    page.indexOf("await readSecPickerRows(") > page.indexOf("await readCachedStockDataBulk(") &&
+      page.indexOf("await readSecPickerRows(") > page.indexOf("await readPricePoolBulk(") &&
+      page.indexOf("await readCachedStockDataBulk(") > 0],
   ["a refusal CLEARS the field instead of leaving FMP's figure", /if \(v === null\) delete rec\[field\];\s*else rec\[field\] = v;/.test(page)],
   ["the division uses the price the row shows", /const shown = valueForPredicateField\(entry, "price"\);/.test(page)],
   ["Payout Ratio stays on its stored figure on a filings row", /if \(e\.fundamentalsFrom === "sec"\) return num\(e\.payoutRatio\);/.test(grid)],
