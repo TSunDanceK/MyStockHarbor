@@ -99,41 +99,27 @@ console.log("\n1. a populated stored set is returned without a SEC fetch");
 // because running it would need a render scope, a network and a store — and
 // the thing being asserted is that a particular line is NOT there, which a
 // successful run can never demonstrate.
+// ── 2026-09-23 (#535 COWORK #13): THE WHOLE RENDER FUNCTION, NOT A BRANCH ──
+// The render no longer fetches at all: the empty-set retry and the cold fetch
+// moved to fillColdSymbol, which only the human-gated action calls. So the
+// property is now the stronger one — nothing in resolveFactSetForRender reaches
+// SEC or queues work, on any branch.
+const RENDER_END = "export type ColdFillOutcome";
 const populated = COLD_SRC.slice(
   COLD_SRC.indexOf("export async function resolveFactSetForRender"),
-  COLD_SRC.indexOf("if (!SEC_UA) {", COLD_SRC.indexOf("export async function resolveFactSetForRender"))
+  COLD_SRC.indexOf(RENDER_END)
 );
 check("resolveFactSetForRender was found and sliced",
-  populated.length > 200 && populated.includes("hasUsableData(stored)"),
+  populated.length > 200 && populated.includes("hasUsableData(stored)") && COLD_SRC.indexOf(RENDER_END) > 0,
   `${populated.length} chars — a slice that missed would pass every assertion below`);
 
-// EVERYTHING THAT REACHES SEC FROM THIS MODULE, by name. fetchAndStore and
-// retryEmpty both fetch; retryEmpty is ALLOWED, and only on an empty set.
-const FETCHERS = ["fetchAndStore", "fetchCompanyFacts", "retryEmpty"];
-// ── THE END MARKER IS ASSERTED, NOT ASSUMED ──────────────────────────────
-// This sliced to `if (SEC_UA && stored.c !== secChainsHash())`. That line was
-// replaced by a needsReread() call when the cold path stopped hand-rolling a
-// staleness rule, indexOf returned -1, and `slice(start, -1)` quietly ran to
-// the end of the function — swallowing the retryEmpty call into the branch
-// that is asserted to contain no fetch. The assertion failed, which was the
-// lucky direction; a marker that moved the other way would have shrunk the
-// slice and passed. So the marker is now checked before it is used, exactly as
-// the slice above it already is.
-const RETRY_GUARD = "if (SEC_UA && needsReread(stored))";
-const retryAt = populated.indexOf(RETRY_GUARD);
-check("the empty-set retry guard was found",
-  retryAt > 0,
-  retryAt > 0 ? "" : `source no longer contains: ${RETRY_GUARD} — every assertion below is slicing blind`);
-const usableBranch = populated.slice(
-  populated.indexOf("if (hasUsableData(stored))"),
-  retryAt > 0 ? retryAt : undefined
-);
+// EVERYTHING THAT REACHES SEC OR QUEUES WORK FROM THIS MODULE, by name.
+const FETCHERS = ["fetchAndStore", "fetchCompanyFacts", "retryEmpty", "fillColdSymbol", "enqueue", "claimColdFetch"];
+const usableBranch = populated;
 check("the populated branch is a bare return",
   /if \(hasUsableData\(stored\)\) return \{ status: "ready", set: stored, cold: false \};/.test(usableBranch),
-  // COLD_SRC comes from readCodeOnly, so this is already comment-free — the
-  // detail is the branch itself, collapsed onto one line.
   usableBranch.split("\n").map((l) => l.trim()).filter(Boolean).join(" ⏎ ").slice(0, 200));
-check("...and it calls nothing that reaches SEC",
+check("...and NOTHING in the render function reaches SEC or queues work",
   FETCHERS.every((f) => !usableBranch.includes(`${f}(`)),
   FETCHERS.filter((f) => usableBranch.includes(`${f}(`)).join(", ") || "none");
 check("the render path schedules no background work at all",
@@ -142,10 +128,8 @@ check("the render path schedules no background work at all",
 check("...and the render path never calls revalidatePath",
   !COLD_SRC.includes("revalidatePath"),
   "production refuses it from a render scope: Dynamic server usage");
-check("the retry that IS allowed is scoped to an EMPTY set",
-  populated.indexOf("const retried = await retryEmpty(clean, cik);") >
-    populated.indexOf("if (SEC_UA && stored.c !== secChainsHash())"),
-  "a populated set is never re-fetched on a render; an empty one is worth one try");
+check("a cold symbol with no set renders 'not yet read', not a fetch",
+  /return \{ status: "pending", reason: NOT_YET_READ \};/.test(populated));
 
 {
   // MUTATION: the refresh put back the way it was — the populated branch
@@ -159,13 +143,9 @@ check("the retry that IS allowed is scoped to an EMPTY set",
       '    }'
   );
   check("the re-add mutation actually applied", readded !== COLD_SRC);
-  const mutPopulated = readded.slice(
+  const mutBranch = readded.slice(
     readded.indexOf("export async function resolveFactSetForRender"),
-    readded.indexOf("if (!SEC_UA) {", readded.indexOf("export async function resolveFactSetForRender"))
-  );
-  const mutBranch = mutPopulated.slice(
-    mutPopulated.indexOf("if (hasUsableData(stored))"),
-    mutPopulated.indexOf("if (SEC_UA && stored.c !== secChainsHash())")
+    readded.indexOf(RENDER_END)
   );
   check("MUTATION: re-adding the refresh breaks the bare-return assertion",
     !/if \(hasUsableData\(stored\)\) return \{ status: "ready", set: stored, cold: false \};/.test(mutBranch),

@@ -64,6 +64,20 @@ export async function readFactSet(symbol: string): Promise<StoredFactSet | null>
  * symbolEviction's job -- SEC_FACTS_PREFIX is registered in PER_SYMBOL_KEYS, so
  * a delisted symbol's fact set goes with the rest of its state.
  */
+/**
+ * Whether ANY set is stored for this symbol — one EXISTS, no payload read.
+ * For page metadata (`noindex` while a cold symbol is not yet read), where the
+ * set itself is not needed. Null when Redis cannot answer.
+ */
+export async function factSetExists(symbol: string): Promise<boolean | null> {
+  if (!redis) return null;
+  try {
+    return (await redis.exists(factKey(symbol))) > 0;
+  } catch {
+    return null;
+  }
+}
+
 export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!redis) return false;
   // A PREVIEW RENDERS FROM THE SET IT HOLDS AND KEEPS NOTHING. See secWriteGate.

@@ -224,6 +224,11 @@ export type SecEarningsSnapshot = {
   available: boolean;
   /** Why not, in the same words /stock/[symbol]/earnings uses. Null when available. */
   unavailableReason: string | null;
+  /**
+   * True when the symbol has a CIK and no stored set yet ("not yet read"): the
+   * card then offers the human-gated fill (app/stock/[symbol]/ColdFill.tsx).
+   */
+  awaitingRead?: boolean;
 
   /** The score's band. "neutral" is the seed, not a reading, when unavailable. */
   tone: EarningsTone;
@@ -585,5 +590,8 @@ function snapshotFrom(
   const today = new Date().toISOString().slice(0, 10);
   const next: SnapshotNextReport = compactOutlook(outlookFromRead(clean, read, today));
 
-  return buildSecEarningsSnapshot({ symbol: clean, view, score, reported, nextReport: next });
+  // NOT YET READ (#535 COWORK #13): the render fetched nothing, and the stock
+  // page's card offers the human-gated fill instead of a fixed sentence.
+  const snap = buildSecEarningsSnapshot({ symbol: clean, view, score, reported, nextReport: next });
+  return cold.status === "pending" ? { ...snap, awaitingRead: true } : snap;
 }

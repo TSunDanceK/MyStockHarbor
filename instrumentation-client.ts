@@ -158,6 +158,13 @@ initBotId({
       advancedOptions: { checkLevel: "deepAnalysis" },
     },
     { path: "/api/ticker-lookup", method: "GET" },
+    // THE HUMAN-GATED COLD FILL (#535 COWORK #13). A server action POSTs to
+    // the page's own URL, so the page paths are listed: BotID then attaches
+    // its signal to that POST and coldFillAction's checkBotId() can classify
+    // it. Deep analysis, as on /api/quote.
+    { path: "/stock/*", method: "POST", advancedOptions: { checkLevel: "deepAnalysis" } },
+    { path: "/stock/*/earnings", method: "POST", advancedOptions: { checkLevel: "deepAnalysis" } },
+    { path: "/stock/*/news", method: "POST", advancedOptions: { checkLevel: "deepAnalysis" } },
     {
       path: "/api/internal/verify-human",
       method: "POST",

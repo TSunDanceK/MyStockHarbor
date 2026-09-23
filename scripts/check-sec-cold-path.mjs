@@ -25,7 +25,22 @@ console.log("\n1. the four guards, in order");
 
 // THE ORDER IS THE WHOLE PROPERTY. A CIK gate that runs after the fetch is not
 // a gate; a store check after the fetch is a fetch on every render.
-const body = code.slice(code.indexOf("export async function resolveFactSetForRender"));
+// SINCE #535 COWORK #13 THE GUARDS LIVE IN fillColdSymbol, the human-gated
+// fill; the render (resolveFactSetForRender) reaches none of them — asserted
+// right below.
+const body = code.slice(code.indexOf("export async function fillColdSymbol"));
+const render = code.slice(code.indexOf("export async function resolveFactSetForRender"), code.indexOf("export type ColdFillOutcome"));
+check("the render function was found and sliced", render.length > 200 && render.includes("readFactSet(clean)"));
+check("the RENDER reaches no guard past the store: no budget, no fetch, no queue",
+  !/claimColdFetch\(|fetchAndStore\(|enqueue\(|withTimeout\(|fillColdSymbol\(/.test(render),
+  "a crawler walking /stock/<ticker> must cost SEC nothing and queue nothing");
+check("fillColdSymbol's only caller is the human-gated server action",
+  (() => {
+    const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(`${d}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${d}/${e.name}`] : []);
+    const callers = [...walk("app"), ...walk("lib")].filter((f) => f !== COLD && /fillColdSymbol\(/.test(fs.readFileSync(f, "utf8")));
+    return JSON.stringify(callers) === JSON.stringify(["app/stock/[symbol]/coldFillAction.ts"]);
+  })());
 const at = (needle) => body.indexOf(needle);
 const iCik = at("cikForSymbol(clean)");
 const iStore = at("readFactSet(clean)");
@@ -55,9 +70,9 @@ for (const status of ["no-cik", "ready", "no-xbrl", "pending"]) {
 // THE ONE THAT WOULD BE WRONG FOREVER. A successful fetch of nothing usable
 // must not render as pending: the cron would re-read it daily and get the same
 // nothing, so the page would promise data that never arrives.
-check("an empty-but-successful fetch returns no-xbrl, NOT pending",
-  /hasUsableData\(set\)\s*\?[\s\S]{0,80}"ready"[\s\S]{0,80}emptyResult\(/.test(code),
-  "an IFRS filer would otherwise be permanently 'coming soon'");
+check("an empty-but-successful fetch is 'no-data' (remembered a day), NOT queued",
+  /if \(hasUsableData\(set\)\) return "filled";[\s\S]{0,300}coldNoneKey\(clean\)[\s\S]{0,300}return "no-data";/.test(body),
+  "an IFRS filer would otherwise be permanently 'coming soon'; the render then shows no-xbrl from the stored set");
 // THE BRANCH GAINED A BODY ONCE and this pattern was pinned to the one-line
 // form: `if (hasUsableData(stored)) return { status: "ready" ...`. A
 // refresh-on-view added a call before that return, so the regex stopped
@@ -188,8 +203,8 @@ const ms = Number((code.match(/SEC_COLD_TIMEOUT_MS = ([\d_]+)/) ?? [])[1]?.repla
 check("and it is between 3s and 8s", ms >= 3000 && ms <= 8000, `${ms}ms`);
 check("the timer is unref'd so it cannot hold the invocation open",
   /unref\?\.\(\)/.test(code));
-check("a timeout enqueues and returns pending — it never rethrows",
-  /catch \(err\)[\s\S]{0,400}enqueue\(clean\)[\s\S]{0,300}status: "pending"/.test(code));
+check("a timeout enqueues and returns queued — it never rethrows",
+  /catch \(err\)[\s\S]{0,400}enqueue\(clean\)[\s\S]{0,300}return "queued";/.test(body));
 
 console.log("\n4. the budget counts FETCHES, not requests");
 
@@ -273,8 +288,8 @@ check("the bucket outlives its window so a burst cannot roll into a fresh one",
 // `await` a CALL site has and a declaration does not — check-assertion-anchors
 // rejected the bare spellings, and it was right to.
 const overBudget = body.slice(body.indexOf("await claimColdFetch(clean)"), body.indexOf("await withTimeout("));
-check("over budget degrades to queued-and-pending, never to a refusal",
-  /enqueue\(clean\)/.test(overBudget) && /status: "pending"/.test(overBudget) &&
+check("over budget degrades to queued ('busy'), never to a refusal",
+  /enqueue\(clean\)/.test(overBudget) && /return "busy";/.test(overBudget) &&
     !/40[13]|notFound|throw/.test(overBudget),
   `branch ${overBudget.length}b`);
 // THE LOSS IS RECORDED, NOT SILENT. The brief asked for per-IP; this is not it,
@@ -350,14 +365,18 @@ check("...and it is not shorter than the segment's own revalidate",
 // timeouts while Next failed the route underneath. FIRST STATEMENT IN THE
 // CATCH, not merely present: a rethrow after `await enqueue(clean)` would have
 // already lengthened the cron's queue with a symbol that never had a problem.
-check("the catch rethrows a DynamicServerError before doing anything else",
-  /\} catch \(err\) \{\s*rethrowIfDynamic\(err\);/.test(body),
-  "a swallowed DynamicServerError is not a handled error");
+// THE DynamicServerError GUARD WENT WITH THE RENDER-TIME FETCH: the fill runs
+// in a server action, where headers() and revalidatePath are permitted, so
+// there is no static/dynamic contract for it to break. What must stay true is
+// that the render never regains a dynamic API.
+check("the render still calls no dynamic API",
+  !/headers\(\)|cookies\(\)|revalidatePath|no-store/.test(render),
+  "a dynamic API inside this ISR render is a 500, measured");
 // READ FROM RAW: readCodeOnly strips comments, so asserting the reasoning is
 // written down has to look at the source a human reads.
-check("the once-per-window property is stated in the code",
-  /paid ONCE PER SYMBOL PER REVALIDATION WINDOW/.test(raw),
-  "it is the reason this is affordable and it is not obvious");
+check("the move off the render is stated in the code",
+  /THE RENDER NO LONGER FETCHES/.test(raw),
+  "the next person to put a fetch back in a render should meet the reason");
 check("and the measured 500 that forced all of this is recorded with it",
   /Page changed from static to dynamic at runtime/.test(raw),
   "the next person to reach for headers() here should meet the measurement");
@@ -410,30 +429,6 @@ check("a sparse period does not become usable by being repeated",
 check("one dense period among sparse ones IS usable",
   usable.hasUsableData(set("years", period(1), period(MIN + 4), period(1))) === true,
   "a filer with one fully-tagged year has a page worth rendering");
-
-console.log("\n8. rethrowIfDynamic, run rather than read");
-
-// RUN, because section 6 can only see that the call is there. What it must do
-// is let an ordinary failure through and refuse a dynamic-usage one, and the
-// two messages below are the real ones Next emits -- the second is verbatim
-// from the /stock/ALSN/earnings runtime log.
-// GRABBED BY NAME AND EXPORTED FOR THE LIFT: it is deliberately not exported
-// from the module -- nothing outside the cold path should be able to call it --
-// so the section-7 lift does not carry it.
-const guard = (await lift(`export ${grabFunction(raw, "rethrowIfDynamic")}`)).rethrowIfDynamic;
-const passesThrough = (err) => {
-  try { guard(err); return true; } catch { return false; }
-};
-check("an ordinary failure passes through to the pending path",
-  passesThrough(new Error("HTTP 503")) &&
-    passesThrough(new Error("[sec-cold] ALSN exceeded 5000ms")));
-check("a DynamicServerError does not",
-  !passesThrough(new Error("Dynamic server usage: Route /stock/[symbol]/earnings " +
-    "couldn't be rendered statically because it used no-store fetch " +
-    "https://data.sec.gov/api/xbrl/companyfacts/CIK0001411207.json")));
-check("...and neither does the shorter Next phrasing",
-  !passesThrough(new Error("Route /x couldn't be rendered statically because it used headers")));
-check("a non-Error rejection does not crash the guard", passesThrough(undefined));
 
 console.log(failures ? `\n${failures} assertion(s) failed.\n` : "\nCold-path guards hold.\n");
 process.exit(failures ? 1 : 0);
