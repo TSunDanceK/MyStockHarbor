@@ -231,11 +231,18 @@ console.log("\n5. THE PAGE WIRES IT, AND ON TODAY RATHER THAN THE BROWSED DATE")
 {
   const page = fs.readFileSync(PAGE, "utf8");
   check("the page renders EarningsDueStrip", /<EarningsDueStrip\s/.test(page));
-  check("fed from getDueStripState", page.includes("getDueStripState("));
+  // THE NAME MOVED, THE PROPERTY DID NOT. getDueStripState was a thin wrapper
+  // over getCalendarForwardSections and is gone: the due strip and the expected
+  // section read the SAME fifty records, so they are produced by one call and
+  // the page memoises that one result. Asserting the old name here would fail
+  // for a rename while a page that had stopped rendering the strip entirely
+  // would still pass -- so the assertion is on the producer that actually runs.
+  check("fed from the combined forward producer",
+    page.includes("getCalendarForwardSections") && /state=\{forward\.due\}/.test(page));
   // `selectedDate` would make the strip answer "who was outstanding on the day
   // you are browsing" -- and on a future date, a forecast.
   check("called with todayDate, never selectedDate",
-    /getDueStripState\(todayDate\)/.test(page) && !/getDueStripState\(selectedDate\)/.test(page));
+    /getForwardSections\(todayDate\)/.test(page) && !/getForwardSections\(selectedDate\)/.test(page));
   check("rendered unconditionally, not behind an entries-length test",
     !/entries\.length\s*[>&]/.test(page.slice(page.indexOf("<EarningsDueStrip") - 200,
       page.indexOf("<EarningsDueStrip") + 80)));
