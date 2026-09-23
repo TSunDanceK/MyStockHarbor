@@ -913,9 +913,18 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     check("the rewrite queue is cut-first, drops done records, keeps list order otherwise",
       JSON.stringify(got) === JSON.stringify(["TSLA", "ABBV", "AA", "CC"]), JSON.stringify(got));
   }
-  check("the cron passes the STORED period ends into the matcher",
-    /resultsPairing\(subs, new Set\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\)\)/.test(builder),
-    "period ends must come from the fact set, never from the filing");
+  // THE STORED PERIOD ENDS, PLUS THE 10-Q/10-K PERIOD ENDS (#535 COWORK #18
+  // §3 reader fix V1) — and never an 8-K's or 6-K's own date, which is the
+  // announcement and would make every lag zero.
+  const rd = readCodeOnly("lib/server/secReportDates.ts");
+  const ppe = rd.slice(rd.indexOf("export function pairingPeriodEnds("), rd.indexOf("export function pairingPeriodEnds(") + 600);
+  check("the cron passes the STORED period ends, plus the 10-Q/10-K period ends, into the matcher",
+    /resultsPairing\(subs, pairingPeriodEnds\(quarterEnds, yearEnds, subs\)\)/.test(builder) &&
+      /new Set<string>\(\[\.\.\.quarterEnds, \.\.\.yearEnds\]\.filter\(Boolean\)\)/.test(ppe) &&
+      /for \(const end of periodicReportDates\(subs\)\.keys\(\)\) ends\.add\(end\);/.test(ppe) &&
+      !/recent\.reportDate/.test(ppe),
+    "period ends come from the fact set and the periodic reports, never from an 8-K/6-K");
+  check("...and periodicReportDates reads only periodic forms", /const PERIODIC_REPORT_FORMS = new Set\(\["10-Q", "10-K", "10-QT", "10-KT"\]\);/.test(rd));
   check("...and only stores events whose period was matched",
     /\.filter\(\(e\) => e\.periodEnd\)/.test(builder));
   check("...and stamps the symbol even when it found no events",

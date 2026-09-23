@@ -93,6 +93,15 @@ console.log("\n4. the next report is a month, never a day");
   check("a month in the headline", /around (January|February|March|April|May|June|July|August|September|October|November|December)\./.test(o.headline) || o.kind === "no-estimate", o.headline);
   check("no day in the headline or hedge", !/\d{4}-\d{2}-\d{2}|\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/.test(`${o.headline} ${o.hedge ?? ""}`));
   check("hedged", /may differ/.test(o.hedge ?? "") || o.kind === "no-estimate");
+  // THE CARD VALUE AND ITS GREY LINE (#535 COWORK #22 §5).
+  check("the card value is 'Est. <Month>'", o.kind === "no-estimate" || /^Est\. (January|February|March|April|May|June|July|August|September|October|November|December)$/.test(o.value ?? ""), o.value);
+  check("...with the owner's grey line", o.kind === "no-estimate" || o.hedge === "Based on when the latest Form 40-F was filed; timing may differ.", o.hedge);
+  const card = readCodeOnly("app/stock/[symbol]/earnings/NextReportCard.tsx");
+  check("the earnings card prints the value in the value style when there is one",
+    /outlook\.value \? \([\s\S]*?<div className="metricValue">\{outlook\.value\}<\/div>/.test(card));
+  const tile = readCodeOnly("app/components/LatestEarningsCard.tsx");
+  check("...and so does the stock page's tile", /return n\.value \|\| n\.headline \|\| "—";/.test(tile) &&
+    /snapshot\.nextReport\.value \? earningsMiniValueStyle : earningsMiniSentenceStyle/.test(tile));
 }
 
 if (failures) {
