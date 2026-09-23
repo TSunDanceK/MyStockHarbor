@@ -744,6 +744,8 @@ const TASKS = {
   "sec-current-feed": { script: "scripts/sec-current-feed-probe.mjs", args: () => [] },
   // #535 COWORK #12 item 3: history-bulk per hour and per caller. Read-only.
   "write-redis-meter-hourly": { script: "scripts/redis-meter-hourly.mjs", args: () => [], writes: true },
+  // #535 COWORK #12 item 2: picker P/S census on msh:stockdata:v1. Read-only.
+  "write-picker-ps-census": { script: "scripts/picker-ps-census.mjs", args: () => [], writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
   // volume, per-filer timing through the shipped filing path. Read-only.
   "write-sec-cache-budget": {
