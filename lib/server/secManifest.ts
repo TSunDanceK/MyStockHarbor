@@ -204,6 +204,19 @@ export type SecManifestEntry = {
    */
   lastEventFiled?: string | null;
   verifiedAt: number | null;
+  /**
+   * WHEN sec-facts LAST CHECKED THIS FILER'S NEWEST PERIODIC FILING against
+   * its stored set (ms). Absent = never; see secFilingFill. The check re-runs
+   * when `lastFiled` moves past it.
+   */
+  filingCheckAt?: number | null;
+  /**
+   * THE FILING companyfacts LAGS, while it lags: the set's newest period was
+   * read from it (StoredFactSet.ff) or could not be (StoredFactSet.lg). Kept so
+   * a companyfacts-only re-read that drops the filled period is refilled in the
+   * same run. Cleared once companyfacts publishes the period.
+   */
+  filingLag?: { accn: string; reportDate: string; kind?: "filled" | "notice" } | null;
   needsReverify: boolean;
   scoreVersion: number;
   /**
