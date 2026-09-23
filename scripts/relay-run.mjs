@@ -619,6 +619,16 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY IN PRACTICE, credentialled for the READ, same as
+  // write-symbol-outlook. The next-report tile and card, BEFORE and AFTER the
+  // 30-day-band change (owner decision 2026-09-23), rendered against the live
+  // record. SYMBOLS overrides the default six.
+  "write-next-report-band": {
+    script: "scripts/next-report-band-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-stale-period-census": {
     script: "scripts/sec-stale-period-census.mjs",
     args: () => [],
