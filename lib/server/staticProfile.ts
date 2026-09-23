@@ -34,6 +34,7 @@ import snapshotFile from "@/data/static-profile.json";
 import cikMap from "@/data/cik-map.json";
 import registrantsFile from "@/data/sec/registrants.json";
 import sicSectorFile from "@/data/sec/sic-sector.json";
+import { lookupSpellingIn } from "@/lib/symbolSpellings.mjs";
 
 export type StaticProfileRow = {
   sector: string | null;
@@ -60,7 +61,20 @@ const clean = (v: unknown): string | null =>
 export function staticProfileFor(symbol: string): StaticProfileRow | null {
   const upper = String(symbol ?? "").trim().toUpperCase();
   if (!upper) return null;
-  const row = SNAPSHOT.rows?.[upper];
+  // ── THE DOT/DASH BRIDGE, AND BRK.B IS WHY ────────────────────────────────
+  // The snapshot is keyed the way FMP spells a share class, with a DASH:
+  // `BRK-A`, `BRK-B`. lib/curatedSymbols.ts spells the same company with a DOT
+  // — "BRK.B" is in the megacap list — and so does data/company-names.json. So
+  // /stock/BRK.B/news asked for a key the snapshot does not hold, got no
+  // industry and no sector, and fell to the generated ticker card, while
+  // /stock/BRK-B/news worked. Nothing failed; one spelling of one company was
+  // quietly worse than the other.
+  //
+  // lookupSpellingIn is the module that already owns this, and the header of
+  // lib/symbolSpellings.mjs records that this repo once had SEVEN copies of the
+  // dot/dash dance. This is not an eighth: it is that helper, called.
+  const found = lookupSpellingIn(SNAPSHOT.rows ?? {}, upper);
+  const row = found?.value;
   if (!row) return null;
   const sector = clean(row.sector);
   const industry = clean(row.industry);

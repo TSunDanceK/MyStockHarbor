@@ -292,7 +292,13 @@ const spSrc = read("lib/server/staticProfile.ts")
   .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
     () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
   .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
-    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`);
+    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
+  // The spellings helper, handed over rather than stubbed — the same choice
+  // check-static-profile.mjs makes, and for the same reason: there is exactly
+  // one implementation of the dot/dash bridge and a stub would test a copy.
+  .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m,
+    "const { lookupSpellingIn } = globalThis.__symbolSpellings;");
+globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
 if (/^import /m.test(spSrc)) {
   // NAME THE SURVIVOR. This used to say "the snapshot JSON was not inlined",
   // which was a guess: the actual cause was a DIFFERENT import being added to

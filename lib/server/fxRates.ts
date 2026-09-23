@@ -36,6 +36,14 @@
 // finance page that nobody can trace.
 
 /** USD per ONE unit of the currency, on one day. Never a raw upstream quote. */
+/**
+ * No rate fetch may hang the job that asked for it. sec-facts calls this
+ * inside its fact-set loop, and a socket with no timeout outlives the job's
+ * wall-clock budget (lib/server/jobBudget.ts). Local rather than imported so
+ * the module stays self-contained for the checks that lift it.
+ */
+const FX_FETCH_TIMEOUT_MS = 20_000;
+
 export type FxObservation = { date: string; usdPerUnit: number };
 
 /**
@@ -223,7 +231,7 @@ export function fredSource(fetchImpl: typeof fetch = fetch): FxSource {
       const url =
         `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${spec.id}` +
         `&cosd=${fromISO}&coed=${toISO}`;
-      const res = await fetchImpl(url, { headers: { Accept: "text/csv" } });
+      const res = await fetchImpl(url, { headers: { Accept: "text/csv" }, signal: AbortSignal.timeout(FX_FETCH_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`FRED ${spec.id}: HTTP ${res.status}`);
       const rows = csvRowsOrNull(await res.text());
       if (!rows) throw new Error(`FRED ${spec.id}: response was not CSV`);
@@ -270,7 +278,7 @@ export function ecbSource(fetchImpl: typeof fetch = fetch): FxSource {
     const url =
       `https://data-api.ecb.europa.eu/service/data/EXR/D.${ccy}.EUR.SP00.A` +
       `?startPeriod=${fromISO}&endPeriod=${toISO}&format=csvdata`;
-    const res = await fetchImpl(url, { headers: { Accept: "text/csv" } });
+    const res = await fetchImpl(url, { headers: { Accept: "text/csv" }, signal: AbortSignal.timeout(FX_FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`ECB ${ccy}: HTTP ${res.status}`);
     const text = (await res.text()).trim();
     if (!text || /^<!DOCTYPE|^<html/i.test(text)) throw new Error(`ECB ${ccy}: response was not CSV`);

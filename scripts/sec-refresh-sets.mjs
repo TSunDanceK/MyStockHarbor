@@ -24,12 +24,23 @@ const UA = process.env.SEC_USER_AGENT ??
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; label refresh)";
 
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+// ── THROUGH toStoredSet, THE PATH THE CRON AND THE COLD FETCH BOTH TAKE ──
+// This used to call encodeFactSet(extractCompanyFacts(...)) directly, which
+// skips currency conversion. Harmless on the USD filers it was written for;
+// on a EUR/GBP/CAD filer it writes the filer's own figures with `cur` set and
+// no `fx`, and buildSecEarningsView REFUSES exactly that shape — so a refresh
+// meant to add a marker to ABVX would have blanked ABVX's page. The shipped
+// orchestration converts, or stores the set empty-and-labelled when no rates
+// exist, which is what the cron would have written.
 const sec = await lift(
   [
     readCodeOnly("lib/server/secFields.ts"),
     strip("lib/server/secExtract.ts"),
+    strip("lib/server/fxRates.ts"),
+    strip("lib/server/secCurrency.ts"),
     strip("lib/server/secFactCodec.ts"),
-    "export { extractCompanyFacts, encodeFactSet, SEC_LABEL_VERSION };",
+    strip("lib/server/secFactBuild.ts"),
+    "export { extractCompanyFacts, toStoredSet, SEC_LABEL_VERSION };",
   ].join("\n")
 );
 const tickSrc = readCodeOnly("lib/server/secTickerMap.ts");
@@ -66,6 +77,7 @@ const fetchJson = async (url) => {
   return res.json();
 };
 
+const fxCache = new Map();
 console.log(`${SYMBOLS.length} SYMBOLS · SEC_LABEL_VERSION ${sec.SEC_LABEL_VERSION}\n`);
 for (const symbol of SYMBOLS) {
   const cik = manifest.symbols[symbol]?.cik ?? tickerMap.get(symbol)?.cik;
@@ -73,7 +85,14 @@ for (const symbol of SYMBOLS) {
   const before = await redis.get(`${SEC_FACTS_PREFIX}:${symbol}`);
   const facts = await fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
   if (!facts) { console.log(`  ${symbol.padEnd(6)} companyfacts fetch failed`); continue; }
-  const set = sec.encodeFactSet(sec.extractCompanyFacts(symbol, facts));
+  const set = await sec.toStoredSet(sec.extractCompanyFacts(symbol, facts), undefined, fxCache);
+  // A NON-USD FILER WITH NO RATES WOULD NOW BE WRITTEN EMPTY. That is the
+  // cron's behaviour too, but a refresh is run to IMPROVE a named set, so it
+  // refuses to replace a populated one with an empty one.
+  if (set.cur && set.cur !== "USD" && !set.fx && (before?.quarters?.length ?? 0) > 0) {
+    console.log(`  ${symbol.padEnd(6)} ${set.cur} rates unavailable — NOT written (would blank a populated set)`);
+    continue;
+  }
   await redis.set(`${SEC_FACTS_PREFIX}:${symbol}`, set);
   // THE MANIFEST STAMP TOO, or the rewindow queue re-reads what was just
   // written — the same symbol, every day, for a migration already done.
@@ -82,7 +101,10 @@ for (const symbol of SYMBOLS) {
   const lab = (p) => (p ? `${p.fp} FY${p.fy} (${p.e})` : "—");
   console.log(
     `  ${symbol.padEnd(6)} lv ${before?.lv ?? 1} -> ${set.lv}  newest quarter ` +
-      `${lab(before?.quarters?.[0])} -> ${lab(set.quarters?.[0])}`
+      `${lab(before?.quarters?.[0])} -> ${lab(set.quarters?.[0])}  cur=${set.cur ?? "USD"} ` +
+      `fx=${set.fx ? `${set.fx.source} (${set.fx.applied.length} rates)` : "none"}  ` +
+      `nt=${set.nt ? `[${set.nt.slice(0, 6).join(", ")}${set.nt.length > 6 ? ", ..." : ""}]` : "absent"}  ` +
+      `rns=${JSON.stringify(set.rns ?? null)}`
   );
 }
 await redis.set(SEC_MANIFEST_KEY, manifest);

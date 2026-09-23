@@ -27,7 +27,7 @@
 // the full report therefore cannot disagree about the same filing, which they
 // would within a week of anyone tuning either copy. See that module's header.
 import {
-  buildSecEarningsView, conversionNote, isPct,
+  EMPTY_REASONS, buildSecEarningsView, conversionNote, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
@@ -42,8 +42,9 @@ import {
   TIMING_WORDING, type ReportTiming,
 } from "./secReportDates";
 import {
-  scoreFromSec, toneLabel, type EarningsTone,
+  coverageOf, scoreFromSec, toneLabel, type EarningsTone,
 } from "./secEarningsScore";
+import { partialScoreLabel, partialScoreShortNote } from "./secPresentation";
 
 /**
  * ── FIELDS DROPPED FROM THIS CARD. HIDDEN, NOT REMOVED. ───────────────────
@@ -161,13 +162,28 @@ export type SnapshotFigure = {
   perShare: boolean;
   /** "Derived by differencing…" or null. Rendered as a footnote, not a badge. */
   derivedNote: string | null;
+  /**
+   * WHY THERE IS NO VALUE, in a few words — set exactly when `value` is null.
+   *
+   * ABVX's card was five em dashes and one number. A dash says "we don't
+   * know", and for most of those tiles the page DOES know: Q4 EPS is never
+   * filed on its own, the company has no revenue line, and a margin cannot be
+   * taken without revenue. Each of those is a different fact and a reader is
+   * owed the one that applies (brief 2026-09-22 §1.2 item 2).
+   */
+  emptyReason: string | null;
 };
 
-const figure = (c: ViewCell): SnapshotFigure => ({
+const figure = (c: ViewCell, emptyReason: string | null = null): SnapshotFigure => ({
   value: c.val,
   perShare: c.perShare,
   derivedNote: c.derivedNote,
+  emptyReason: c.val === null ? emptyReason ?? NOT_CAPTURED : null,
 });
+
+// EMPTY_REASONS lives in secEarningsView now, so the earnings page's cards
+// print the same words for the same blanks. See its docblock there.
+const NOT_CAPTURED = EMPTY_REASONS.notCaptured;
 
 /**
  * A percentage the card can print, or the reason it cannot.
@@ -203,8 +219,24 @@ export type SecEarningsSnapshot = {
 
   /** The score's band. "neutral" is the seed, not a reading, when unavailable. */
   tone: EarningsTone;
-  /** "Good" / "Mixed" / "Weak", or "Unavailable". */
+  /**
+   * "Good" / "Mixed" / "Weak", or "Unavailable" — or, when not every input
+   * ran, "Partial · N of 5 measured". Never a bare verdict on a partial score.
+   */
   toneLabel: string;
+  /**
+   * TRUE WHEN THE SCORE RAN ON SOME INPUTS ONLY. The card then drops the
+   * verdict colour, the same rule the full report applies: on ABVX the reach
+   * was 34 to 66, entirely inside MIXED, so the amber was decided by what is
+   * missing rather than by the company. From coverageOf, the ONE computation
+   * both surfaces call.
+   */
+  partial: boolean;
+  /**
+   * partialScoreShortNote's one sentence, or null when the score is not
+   * partial. The full note with the reachable range stays on the earnings page.
+   */
+  partialNote: string | null;
   /** 0-100, or null when the score could not run. NEVER 50-as-a-reading. */
   score: number | null;
 
@@ -231,12 +263,19 @@ export type SecEarningsSnapshot = {
   nextReport: SnapshotNextReport;
 
   eps: SnapshotFigure;
+  /**
+   * The fiscal year's diluted EPS under a blank derived-Q4 tile, labelled with
+   * its year. See SecEarningsView.snapshot.fyEpsDiluted. Owner may veto.
+   */
+  epsFullYear: { label: string; value: number } | null;
   epsYoY: SnapshotPct;
   revenue: SnapshotFigure;
   revenueYoY: SnapshotPct;
   netIncome: SnapshotFigure;
   /** Percentages, already computed by the view. Null where the inputs are absent. */
   margins: { gross: number | null; operating: number | null; net: number | null };
+  /** Per margin, why it is blank. Null where the margin has a value. */
+  marginReasons: { gross: string | null; operating: string | null; net: string | null };
 
   /** Set only for a filer that reports in another currency. */
   currencyNote: string | null;
@@ -249,7 +288,7 @@ const pct = (p: Pct, crossingWords: (p: Pct) => string | null): SnapshotPct => {
   return words ? { kind: "crossing", words } : { kind: "none" };
 };
 
-const EMPTY_FIGURE: SnapshotFigure = { value: null, perShare: false, derivedNote: null };
+const EMPTY_FIGURE: SnapshotFigure = { value: null, perShare: false, derivedNote: null, emptyReason: null };
 
 /**
  * THE SNAPSHOT, FROM A VIEW AND A SCORE — pure, so a check can mutate it.
@@ -268,6 +307,7 @@ export function buildSecEarningsSnapshot(args: {
   nextReport: SnapshotNextReport;
 }): SecEarningsSnapshot {
   const { symbol, view, score, reported, nextReport } = args;
+  const coverage = coverageOf(score);
 
   const base = {
     symbol,
@@ -278,7 +318,13 @@ export function buildSecEarningsSnapshot(args: {
     // is a measurement the filings never supplied.
     score: score.available ? score.score : null,
     tone: score.tone,
-    toneLabel: score.available ? toneLabel(score.tone) : "Unavailable",
+    toneLabel: coverage?.partial
+      ? partialScoreLabel(coverage)
+      : score.available ? toneLabel(score.tone) : "Unavailable",
+    partial: Boolean(coverage?.partial),
+    partialNote: coverage?.partial
+      ? partialScoreShortNote(coverage, score.available ? score.unavailableWhy : [])
+      : null,
     reportedOn: reported?.on ?? null,
     reportedVia: reported?.via ?? null,
     reportedTimingNote:
@@ -298,13 +344,15 @@ export function buildSecEarningsSnapshot(args: {
       periodEnd: null,
       comparedWith: null,
       eps: EMPTY_FIGURE,
+      epsFullYear: null,
       epsYoY: { kind: "none" },
       revenue: EMPTY_FIGURE,
       revenueYoY: { kind: "none" },
       netIncome: EMPTY_FIGURE,
       margins: { gross: null, operating: null, net: null },
+      marginReasons: { gross: null, operating: null, net: null },
       currencyNote: null,
-      sourceNote: SNAPSHOT_SOURCE_NOTE,
+      sourceNote: snapshotSourceNote(null),
     };
   }
 
@@ -314,6 +362,22 @@ export function buildSecEarningsSnapshot(args: {
   // the first row would caption the oldest quarter's margins with the newest
   // quarter's label, and both are plausible percentages.
   const m = view.margins.at(-1) ?? null;
+  const margins = m
+    ? { gross: m.gross, operating: m.operating, net: m.net }
+    : { gross: null, operating: null, net: null };
+
+  // ── WHY A TILE IS BLANK, decided from what the set records ──────────────
+  // A derived Q4 never carries EPS: EPS is a ratio and is not differenced
+  // (FieldKind "duration-ratio"). `untagged` is the extraction-time marker —
+  // null on a set written before it existed, and then no tile claims it.
+  const untagged = new Set(view.untagged ?? []);
+  const derivedQ4 = view.basis === "quarter" && /^Q4 /.test(view.latestLabel);
+  const epsReason = derivedQ4 ? EMPTY_REASONS.q4NotFiled : null;
+  const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;
+  const noRevenue = s.revenue.val === null;
+  const marginReason = (v: number | null) =>
+    v !== null ? null : noRevenue ? EMPTY_REASONS.needsRevenue : NOT_CAPTURED;
+  const fy = s.fyEpsDiluted;
 
   return {
     ...base,
@@ -323,22 +387,41 @@ export function buildSecEarningsSnapshot(args: {
     periodLabel: view.latestLabel,
     periodEnd: view.latestEnd,
     comparedWith: s.comparedWith,
-    eps: figure(s.epsDiluted),
+    eps: figure(s.epsDiluted, epsReason),
+    epsFullYear: fy && fy.cell.val !== null ? { label: fy.label, value: fy.cell.val } : null,
     epsYoY: pct(s.epsYoY, crossingWords),
-    revenue: figure(s.revenue),
+    revenue: figure(s.revenue, revenueReason),
     revenueYoY: pct(s.revenueYoY, crossingWords),
     netIncome: figure(s.netIncome),
-    margins: m
-      ? { gross: m.gross, operating: m.operating, net: m.net }
-      : { gross: null, operating: null, net: null },
+    margins,
+    marginReasons: {
+      gross: marginReason(margins.gross),
+      operating: marginReason(margins.operating),
+      net: marginReason(margins.net),
+    },
     currencyNote: view.currency ? conversionNote(view.currency) : null,
-    sourceNote: SNAPSHOT_SOURCE_NOTE,
+    sourceNote: snapshotSourceNote(view.accounting),
   };
 }
 
-export const SNAPSHOT_SOURCE_NOTE =
-  "Reported figures from the company's own SEC filings (US GAAP, as filed). " +
-  "Analyst estimates and beat-or-miss are not shown — no free source publishes them.";
+/**
+ * The footer, naming the standard the figures were actually read under.
+ *
+ * IT WAS A CONSTANT, AND IT SAID "US GAAP" ON IFRS FILERS. ABVX and AZN file
+ * under IFRS (`ifrs-full` is the only financial namespace in either payload,
+ * relay 35764672279), and the card told their readers otherwise. Null — a set
+ * written before the namespace census — names no standard rather than guess.
+ */
+export function snapshotSourceNote(accounting: "IFRS" | "US GAAP" | null): string {
+  const basis = accounting ? `${accounting}, as filed` : "as filed";
+  return (
+    `Reported figures from the company's own SEC filings (${basis}). ` +
+    "Analyst estimates and beat-or-miss are not shown — no free source publishes them."
+  );
+}
+
+/** The footer for a US GAAP filer — what the constant used to say everywhere. */
+export const SNAPSHOT_SOURCE_NOTE = snapshotSourceNote("US GAAP");
 
 /**
  * The crossing words, spelled out for a card that has no room for a footnote.

@@ -207,18 +207,33 @@ export function planCardArt(input: {
    * ticker is worse than a blank slot.
    */
   canGenerate: boolean;
+  /** See pickArt. Default "repeat", which is what three surfaces were built on. */
+  onExhausted?: "repeat" | "skip";
 }): CardArt {
   const { variant, eventType, sectorBucket, key, taken, canGenerate } = input;
+  const onExhausted = input.onExhausted ?? "repeat";
 
   if (variant === "lead") {
-    const bucket = bucketForItem(eventType, sectorBucket);
-    if (bucket) {
+    // ── TWO BUCKETS TO TRY UNDER "skip", NOT ONE ──────────────────────────
+    // bucketForItem picks the event bucket INSTEAD of the sector one, which is
+    // right while a bucket can always answer. Once a bucket can come back
+    // empty, an exhausted event bucket must not skip the sector art sitting
+    // underneath it — that would drop a page from event art to the generated
+    // card while eight sector images went unused. The chain is only as long as
+    // it needs to be, and de-duplicated so the sector bucket is not tried twice
+    // when it IS the one bucketForItem chose.
+    const chosen = bucketForItem(eventType, sectorBucket);
+    const chain = onExhausted === "skip" && chosen && chosen !== sectorBucket
+      ? [chosen, sectorBucket]
+      : [chosen];
+    for (const bucket of chain) {
+      if (!bucket) continue;
       let used = taken.get(bucket);
       if (!used) {
         used = new Set<number>();
         taken.set(bucket, used);
       }
-      const art = pickArt(bucket, key, used);
+      const art = pickArt(bucket, key, used, onExhausted);
       if (art) return { kind: "library", art };
     }
   }
@@ -281,7 +296,29 @@ function artAt(bucket: string, index: number): NewsArt {
  * order; when the bucket is smaller than the number of cards a repeat is
  * unavoidable and the first choice is used rather than returning nothing.
  */
-export function pickArt(bucket: string | null, key: string, taken?: Set<number>): NewsArt | null {
+export function pickArt(
+  bucket: string | null,
+  key: string,
+  taken?: Set<number>,
+  /**
+   * WHAT TO DO WHEN THE BUCKET IS EXHAUSTED, and "repeat" is still the default
+   * because three surfaces were built on it.
+   *
+   * ── WHY "skip" EXISTS ────────────────────────────────────────────────────
+   * A stock page draws FIVE lead cards and 62 of the 67 v2 subjects hold FOUR
+   * images, so the fifth card always repeated one of the first four — seen on
+   * the preview as ONDS 01,04,03,02,**04** and AAPL 03,01,02,04,**02**. A
+   * repeat is the least-bad answer when the bucket is the only source of art,
+   * which is the world pickArt was written for. It is the WRONG answer when
+   * another layer is waiting underneath, because the page has a truthful
+   * picture available and shows a duplicate instead.
+   *
+   * So the caller says which world it is in. /headlines, the sector news page
+   * and the dashboard strip keep "repeat"; the layered symbol picker passes
+   * "skip" and falls through.
+   */
+  onExhausted: "repeat" | "skip" = "repeat"
+): NewsArt | null {
   const count = bucketCount(bucket);
   if (!bucket || count <= 0) return null;
 
@@ -296,6 +333,6 @@ export function pickArt(bucket: string | null, key: string, taken?: Set<number>)
     }
   }
 
-  // Every image in the bucket is already on the page. Repeat rather than drop.
-  return artAt(bucket, first);
+  // Every image in the bucket is already on the page.
+  return onExhausted === "skip" ? null : artAt(bucket, first);
 }

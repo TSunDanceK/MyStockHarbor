@@ -17,10 +17,13 @@
 // assertions against the same arithmetic.
 import {
   isPct, periodWords,
-  type PeriodBasis, type SecEarningsView,
+  type PeriodBasis, type Pct, type SecEarningsView,
 } from "./secEarningsView";
 import type { ColdResult } from "./secColdFetch";
 import type { EarningsTone as PresentationTone } from "./secPresentation";
+import {
+  pinCoverage, scoreCoverage, toneForGrowth, toneForMarginDelta, type ScoreCoverage,
+} from "./secPresentation";
 
 // THE TYPE COMES FROM THE RULES MODULE, so a fourth tone could not be added to
 // one side only.
@@ -103,57 +106,95 @@ export const scoreComponents = (basis: PeriodBasis) => {
 export const SCORE_COMPONENTS = scoreComponents("quarter");
 export type ScoreComponent = keyof ReturnType<typeof scoreComponents>;
 
+/** The five inputs, as a reader would name them in a list. */
+export const SCORE_SHORT_NAMES: Record<ScoreComponent, string> = {
+  revenueGrowth: "Revenue growth",
+  epsGrowth: "EPS growth",
+  profitability: "Profitability",
+  marginTrend: "Margin trend",
+  cashConversion: "Cash conversion",
+};
+
 /**
- * THE NARRATIVE IS BUILT FROM WHAT ACTUALLY RAN, not from the tone alone.
+ * THE OPERATING-MARGIN MOVE THE PAGE ITSELF SHOWS, in percentage points.
  *
- * ── WHAT THE TONE-ONLY VERSION CLAIMED ────────────────────────────────────
- * Measured on the #464 preview, /stock/AZN/earnings: every field of the
- * Quality of Earnings card rendered "—" — operating cash flow, capital
- * expenditure, free cash flow, cash-flow-less-net-income, share-based
- * compensation — and the score directly above it read GOOD, 100/100, with
- * "reported profit is backed by cash."
+ * The anchor period against the period its growth is measured against — the
+ * same pair the snapshot's "Compared with" caption names and the growth card's
+ * operating-margin line prints. Looked up BY LABEL in the rows of the anchor's
+ * own kind (fiscal years for an annual anchor), never by offset; null when
+ * either side is not on file.
  *
- * The scorer had not awarded points for the missing chain; the sentence was
- * canned per tone and asserted the claim regardless. That is the same failure
- * shape as a check that supplies its own expected value: the component that
- * could not be measured still spoke.
- *
- * So the clauses are assembled from the components that RAN, and a component
- * that did not run contributes no clause and is listed as unavailable.
+ * NOT THE SCORE'S marginTrend INPUT. That one reads the last four quarters'
+ * direction, first against last, which is a different question and can have
+ * the opposite sign: on AVAV it ran Q2 FY2026 -6.4% to Q1 FY2027 -2.3% (up)
+ * while the old sentence said "margins are slipping". The narrative describes
+ * what the reader can see on the page, so it uses the page's comparison.
  */
-function scoreExplanation(
-  tone: EarningsTone,
-  ran: Set<ScoreComponent>,
-  /** The period the cash component actually read. See SecCashQualityCard. */
-  cashBasis: "quarter" | "year",
-  cashPeriod: string,
-  /** The page's own anchor. NOT cashBasis: those differ on a half-yearly filer. */
-  basis: PeriodBasis = "quarter"
-) {
+export function anchorMarginDelta(view: SecEarningsView): number | null {
+  const base = view.snapshot?.comparedWith ?? null;
+  if (!base) return null;
+  const rows: { label: string; operating: number | null }[] =
+    view.basis === "year" ? view.annual ?? [] : view.margins ?? [];
+  const latest = rows.find((r) => r.label === view.latestLabel);
+  const prior = rows.find((r) => r.label === base);
+  if (latest?.operating == null || prior?.operating == null) return null;
+  return latest.operating - prior.operating;
+}
+
+/**
+ * ONE HEDGED SENTENCE, BUILT FROM THE FIGURES ON THE PAGE.
+ *
+ * ── WHAT IT REPLACED, AND WHY IT WAS WRONG ────────────────────────────────
+ * The old narrative picked each clause by the OVERALL tone: any score below
+ * Good said "growth is under pressure, margins are slipping". AVAV scored
+ * Mixed with revenue +5.7% and operating margin +13.0pp against Q1 FY2026 —
+ * both on the page directly below — and was told its margins were slipping.
+ * It then closed with "Investors should focus on…", an instruction to the
+ * reader the page has no standing to give.
+ *
+ * So each clause now states its own figure with its own sign, using the same
+ * bands the cards colour by (GROWTH_BAND_PCT, MARGIN_BAND_PP), and the close
+ * is a "may", never a "should". No cash clause: the cash card states its own
+ * figures, and a sentence here summarising them was the AZN defect.
+ */
+function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter") {
   const w = periodWords(basis);
+  const s = view.snapshot;
+  const base = s?.comparedWith ?? null;
   const clauses: string[] = [];
-  const up = tone === "good";
-  if (ran.has("revenueGrowth") || ran.has("epsGrowth")) {
-    clauses.push(up ? "revenue and profit are growing year over year" : "growth is under pressure");
+  const rev = s?.revenueYoY ?? null;
+  const revTone = toneForGrowth(rev);
+  if (isPct(rev) && base) {
+    clauses.push(
+      revTone === "good" ? `revenue grew ${rev.toFixed(1)}% against ${base}`
+        : revTone === "weak" ? `revenue fell ${Math.abs(rev).toFixed(1)}% against ${base}`
+          : `revenue was roughly flat against ${base}`
+    );
   }
-  if (ran.has("marginTrend")) clauses.push(up ? "margins are holding" : "margins are slipping");
-  // THE CLAUSE THAT WAS WRONG. It appears only when the cash component ran —
-  // AND IT NAMES ITS PERIOD when that period is not the quarter the rest of the
-  // sentence is about. A half-yearly filer's cash component reads the full
-  // year, and a sentence that said "backed by cash" beside quarterly growth
-  // would be describing two different periods as one.
-  if (ran.has("cashConversion")) {
-    const over = cashBasis === "year" ? ` over ${cashPeriod}` : "";
-    clauses.push(up ? `reported profit is backed by cash${over}` : `cash conversion is weak${over}`);
-  } else if (ran.has("profitability")) {
-    clauses.push(up ? `the ${w.one} was profitable` : `the ${w.one} was loss-making`);
+  const pp = anchorMarginDelta(view);
+  const mTone = toneForMarginDelta(pp);
+  if (pp !== null) {
+    clauses.push(
+      mTone === "good" ? `operating margin widened ${pp.toFixed(1)}pp`
+        : mTone === "weak" ? `operating margin narrowed ${Math.abs(pp).toFixed(1)}pp`
+          : "operating margin held steady"
+    );
   }
-  const body = clauses.length
-    ? clauses.join(", ").replace(/, ([^,]*)$/, " and $1")
-    : "the filing carries few of the figures this score reads";
-  if (tone === "good") return `The latest filed ${w.one} reads constructive: ${body}.`;
-  if (tone === "weak") return `The latest filed ${w.one} reads weak: ${body}.`;
-  return `The latest earnings read is mixed: ${body}. Investors should focus on whether future reports confirm improvement or reveal more pressure.`;
+  const ni = s?.netIncome?.val ?? null;
+  const profit = ni === null ? null : ni > 0 ? `the ${w.one} was profitable` : `the ${w.one} was loss-making`;
+  if (!clauses.length) {
+    return profit
+      ? `${profit[0].toUpperCase()}${profit.slice(1)}; later filings may show more.`
+      : "The latest filing carries few of the figures this score reads.";
+  }
+  const head = clauses.join(" and ");
+  // "THOUGH" WHERE THE PROFIT LINE CUTS AGAINST THE REST, so a loss beside
+  // growing revenue does not read as one more piece of good news.
+  const up = revTone === "good" || mTone === "good";
+  const down = revTone === "weak" || mTone === "weak";
+  const against = ni !== null && ((ni <= 0 && up && !down) || (ni > 0 && down && !up));
+  const body = profit ? `${head}, ${against ? "though" : "and"} ${profit}` : head;
+  return `${body[0].toUpperCase()}${body.slice(1)}; later filings may show whether that continues.`;
 }
 
 /** What the score could NOT read, in the page's own words and its own period. */
@@ -162,6 +203,59 @@ function scoreGaps(ran: Set<ScoreComponent>, basis: PeriodBasis = "quarter"): st
   return (Object.keys(names) as ScoreComponent[])
     .filter((k) => !ran.has(k))
     .map((k) => names[k]);
+}
+
+/**
+ * WHY EACH MISSING INPUT IS MISSING — the real cause, from the view.
+ *
+ * ── THE SENTENCE THIS REPLACES WAS FALSE ─────────────────────────────────
+ * "Not measured, because AVAV's filings do not carry it: EPS growth". AVAV's
+ * filings carry EPS for both quarters: -$0.10 and -$1.44. EPS growth did not
+ * run because both are losses, and a growth rate between two losses is not a
+ * rate of anything (see Pct). "The filings do not carry it" was the one cause
+ * it was not. Each input now says which of its causes applies:
+ *
+ *   a crossing          loss in both periods / swung to a loss / turned profitable
+ *   Q4                  Q4 EPS is not filed as a separate period
+ *   no comparator       no year-earlier period on file
+ *   genuinely absent    no revenue line in the filings (the extraction-time
+ *                       marker, StoredFactSet.nt) or not in this period's
+ *                       filed figures
+ */
+function gapReason(key: ScoreComponent, view: SecEarningsView): string {
+  const w = periodWords(view.basis ?? "quarter");
+  const s = view.snapshot;
+  const untagged = new Set(view.untagged ?? []);
+  const derivedQ4 = view.basis === "quarter" && /^Q4 /.test(view.latestLabel ?? "");
+  const noPrior = `no year-earlier ${w.one} on file`;
+  const crossing = (p: Pct) =>
+    p === "loss-both" ? `loss in both ${w.many}`
+      : p === "swung-to-loss" ? "swung to a loss"
+        : p === "turned-profitable" ? "turned profitable"
+          : null;
+  const absent = (field: string, what: string) =>
+    // "NOT CAPTURED", NOT "NOT IN THE FILING": without the extraction-time
+    // marker we cannot tell a chain gap from a line the filer never had, and
+    // AVAV's FY2022/23 revenue was the former (owner review, #522).
+    untagged.has(field) ? `no ${what} line in the filings` : `${what} not captured from this filing`;
+  switch (key) {
+    case "revenueGrowth":
+      if (s.revenue?.val == null) return absent("revenue", "revenue");
+      return crossing(s.revenueYoY) ?? (s.comparedWith ? `no revenue on file for ${s.comparedWith}` : noPrior);
+    case "epsGrowth":
+      if (crossing(s.epsYoY)) return crossing(s.epsYoY)!;
+      if (s.epsDiluted?.val == null) return derivedQ4 ? "Q4 EPS isn't filed separately" : absent("epsDiluted", "EPS");
+      return s.comparedWith ? `no EPS on file for ${s.comparedWith}` : noPrior;
+    case "profitability":
+      return absent("netIncome", "net income");
+    case "marginTrend":
+      return `fewer than two ${w.many} with an operating margin`;
+    case "cashConversion": {
+      const c = view.cashQuality;
+      if (c?.netIncome?.val === 0) return "net income was zero";
+      return c?.accrualsMissing ? `${c.accrualsMissing} not captured from this filing` : "cash-flow figures not captured from this filing";
+    }
+  }
 }
 
 /**
@@ -194,8 +288,7 @@ function buildScoreResult(
   tone: EarningsTone,
   ran: Set<ScoreComponent>,
   contributions: Partial<Record<ScoreComponent, number>>,
-  cashBasis: "quarter" | "year",
-  cashPeriod: string,
+  view: SecEarningsView,
   basis: PeriodBasis = "quarter"
 ) {
   return {
@@ -203,7 +296,7 @@ function buildScoreResult(
     score,
     tone,
     label: toneLabel(tone),
-    explanation: scoreExplanation(tone, ran, cashBasis, cashPeriod, basis),
+    explanation: scoreExplanation(view, basis),
     // THE SCORE SAYS WHICH KIND OF PERIOD IT READ. Point 5 of the approved
     // scope: an annual-only filer's score is built on fiscal years, and a
     // reader comparing it with a 10-Q filer's score has to be told that.
@@ -212,6 +305,12 @@ function buildScoreResult(
     // number; "4 of 5 signals" is the kind of summary that hides the one that
     // mattered.
     unavailable: scoreGaps(ran, basis),
+    // AND WHY, per input, in the same order — the short name and the real
+    // cause. The card prints these; `unavailable` stays for the checks and
+    // the sidebar that read the long names.
+    unavailableWhy: (Object.keys(SCORE_SHORT_NAMES) as ScoreComponent[])
+      .filter((k) => !ran.has(k))
+      .map((k) => ({ key: k, name: SCORE_SHORT_NAMES[k], reason: gapReason(k, view) })),
     // THE ARITHMETIC, NOT A DESCRIPTION OF IT. Carried so a probe and a check
     // can read the points each component actually added, rather than inferring
     // them from the total -- which is how "80 is four fifths of 100, so the
@@ -329,6 +428,7 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
       label: "Unavailable",
       explanation: noScoreReason(symbol, cold, cold.status === "ready"),
       unavailable: Object.values(SCORE_COMPONENTS) as string[],
+      unavailableWhy: [] as { key: ScoreComponent; name: string; reason: string }[],
       basis: "quarter" as PeriodBasis,
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
@@ -381,6 +481,7 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
       label: "Unavailable",
       explanation: `${symbol}'s latest filing carries no figures that can be scored yet — there is no prior-year ${periodWords(view.basis).one} to measure growth from.`,
       unavailable: Object.values(scoreComponents(view.basis)) as string[],
+      unavailableWhy: [] as { key: ScoreComponent; name: string; reason: string }[],
       basis: view.basis,
       seed: SCORE_SEED,
       contributions: {} as Partial<Record<ScoreComponent, number>>,
@@ -391,7 +492,7 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
   // FROM THE SAME TABLE THE AXIS IS LABELLED FROM, and from the CLAMPED value
   // the card prints — so the number, the pill and the gauge cannot disagree.
   const tone = bandFor(rounded);
-  return buildScoreResult(rounded, tone, ran, contributions, view.cashQuality.basis, view.cashQuality.period, view.basis);
+  return buildScoreResult(rounded, tone, ran, contributions, view, view.basis);
 }
 
 /**
@@ -404,3 +505,35 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
  * state nobody implements.
  */
 export type SecEarningsScore = ReturnType<typeof scoreFromSec>;
+
+/**
+ * HOW MUCH OF THIS SCORE RAN — the ONE computation both surfaces use.
+ *
+ * It lived inline in app/stock/[symbol]/earnings/page.tsx, which was fine while
+ * that page was the only place a score was drawn. The sidebar card draws the
+ * same score on /stock/[symbol] and /stock/[symbol]/news, and ABVX showed MIXED
+ * there while the full report, one click away, said "Partial · 2 of 5
+ * measured". Two copies of this arithmetic are two answers about one stock the
+ * first time either is tuned, so it moved here and both call it.
+ *
+ * `contributions` holds exactly the components that contributed (see
+ * `contribute`, which writes the set and the record together), so its keys ARE
+ * the ones that ran. profitability's magnitude is 8, not 6: it contributes +6
+ * when profitable and -8 when not, and the reachable LOW has to use the larger.
+ *
+ * Null when the score did not run at all — that case already says
+ * "Unavailable" and has no range to report.
+ */
+export function coverageOf(score: SecEarningsScore): ScoreCoverage | null {
+  if (!score.available) return null;
+  return pinCoverage(
+    scoreCoverage(
+      score.seed,
+      { ...SCORE_MAX_CONTRIBUTION, profitability: 8 },
+      score.unavailable.length,
+      Object.keys(score.contributions)
+    ),
+    SCORE_BANDS.find((b) => b.tone === "neutral")!.from,
+    SCORE_BANDS.find((b) => b.tone === "good")!.from - 1
+  );
+}
