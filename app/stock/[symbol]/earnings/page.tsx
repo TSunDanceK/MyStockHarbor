@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
@@ -42,9 +43,11 @@ import {
 } from "./SecEarningsCards";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
-import { readReportDates } from "@/lib/server/secReportDatesStore";
+import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
+import { outlookForEarningsCard } from "@/lib/server/symbolOutlook";
+import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
-import { NO_PRICE_HISTORY_NOTE, TIMING_WORDING, reactionBarLabels, type ReportTiming } from "@/lib/server/secReportDates";
+import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
 import { PriceReactionCard, type DriftQuarter, type SingleBarPoint } from "./ReactionCharts";
 
 // No segment config here on purpose -- it cascades from
@@ -71,19 +74,11 @@ type Props = {
  * release; a calendar date is a third party's record of the announcement. The
  * wording differs accordingly — see TIMING_WORDING, which describes the FILING
  * and never claims a release time nobody here observed.
+ *
+ * THE NEXT REPORT CARRIES NO DATE FROM EITHER SOURCE. Past announcements are
+ * filed facts; the next one is an estimate, and it renders as the 30-day band
+ * (see NextReportCard and lib/server/symbolOutlook.ts).
  */
-type NextReportView =
-  | { source: "sec"; kind: "date"; date: string; timing: ReportTiming | null; clamped: boolean; fromEvents: number }
-  | { source: "sec"; kind: "month"; month: string; fromEvents: number }
-  // ── "NOTHING" IS AN OUTCOME, NOT AN ABSENCE ─────────────────────────────
-  // The gate refuses a specific date for half the filers it sees, and on AAP
-  // the card simply did not render — the same blank a symbol with no SEC data
-  // at all gets. A reader cannot tell "we looked, and its history is too
-  // irregular to promise a date" from "we never looked", so the refusal is
-  // rendered rather than left as a gap.
-  | { source: "sec"; kind: "none" }
-  | { source: "fmp"; date: string; time: string | null }
-  | null;
 
 type EarningsReactionPoint = {
   label: string;
@@ -231,16 +226,6 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
 }
 
 
-/** "2026-11" -> "November 2026". Rendered, so it must not say "2026-11". */
-function monthName(ym: string) {
-  const [y, m] = ym.split("-");
-  const idx = Number(m) - 1;
-  const names = ["January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"];
-  return names[idx] ? `${names[idx]} ${y}` : ym;
-}
-
-
 // Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
 // self-fetching this deployment's own /api/stock-earnings/[symbol] route over
 // HTTP. That route is BotID-protected (instrumentation-client.ts), and BotID
@@ -293,7 +278,11 @@ async function getEarningsData(symbol: string) {
   // nothing left to supply and is skipped entirely. Putting it in the group
   // below would save a round trip and keep paying FMP for an answer already in
   // Redis, which is the call this step exists to remove.
-  const secDates = await readReportDates(symbol);
+  // CHECKED, so an unreadable store is not mistaken for "no record": the
+  // next-report card says "cannot be shown right now" for the first and names
+  // the missing record for the second. Everything else here wants only `rec`.
+  const secRead = await readReportDatesChecked(symbol);
+  const secDates = secRead.ok ? secRead.rec : null;
   const secEvents = (secDates?.events ?? []).filter((e) => e.periodEnd);
   /**
    * THE EIGHT REPORTS THE REACTION CHART WALKS — ONE LIST, TWO READERS.
@@ -369,7 +358,7 @@ async function getEarningsData(symbol: string) {
     // thing the owner has said not to spend.
     secEvents.length
       ? Promise.resolve(null)
-      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
+      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(toDashed(symbol))}`),
   ]);
   const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
 
@@ -465,26 +454,17 @@ async function getEarningsData(symbol: string) {
 
   // ── THE NEXT REPORT ──────────────────────────────────────────────────────
   //
-  // THE ESTIMATE IS NOT A FORECAST and the card says so. It is the filer's own
-  // habit — the same quarter a year ago, measured from the matched period end —
-  // and it is only offered as a specific DATE where that habit is regular
-  // enough to have earned one. Where it is not, the card offers the month or
-  // says nothing at all, which is the honest end of the same scale.
-  const nextReport: NextReportView = secDates && secDates.next.kind === "date"
-    ? {
-        source: "sec", kind: "date",
-        date: secDates.next.date,
-        timing: secDates.next.timing,
-        clamped: secDates.next.clamped,
-        fromEvents: secDates.next.fromEvents,
-      }
-    : secDates && secDates.next.kind === "month"
-      ? { source: "sec", kind: "month", month: secDates.next.month, fromEvents: secDates.next.fromEvents }
-      : next?.date
-        ? { source: "fmp", date: next.date, time: next.time ?? null }
-        : secEvents.length
-          ? { source: "sec", kind: "none" }
-          : null;
+  // THE 30-DAY BAND, NEVER A DAY (owner decision, 2026-09-23). This used to
+  // print estimateNextReport's date or month, or FMP's calendar date when the
+  // filer's own record had not been read. It is now the /earnings-calendar
+  // search's answer, from the same function (lib/server/symbolOutlook.ts).
+  //
+  // FMP's entry decides only whether the card renders: with no SEC record
+  // behind it the card says so ("no-record") rather than printing the date.
+  // outlookForEarningsCard is handed a boolean, not the date, on purpose.
+  const nextReport = outlookForEarningsCard(
+    symbol.trim().toUpperCase(), secRead, Boolean(next?.date), todayIso,
+  );
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
@@ -534,11 +514,19 @@ async function getEarningsData(symbol: string) {
 }
 
 
+// CONVERTS FOR THE SAME REASON /stock/[symbol]/news's fetchQuoteForMeta does:
+// the route parameter arrives as the reader typed it, "BRK.B", and FMP files
+// Berkshire's B class as BRK-B.
+//
+// WHAT THIS DOES NOT CHANGE, so nobody verifies the wrong thing: the <title>
+// price. generateMetadata prints seed.lastClose, which is the newest bar of
+// getDailyHistory (already dashed via buildFmpSymbol). The price returned here
+// lands in seed.price and the title never reads it.
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
     if (!res.ok) return { price: null, date: null };
     const json = await res.json();
@@ -950,44 +938,7 @@ export default async function StockEarningsPage({ params }: Props) {
               {/* EVERY FINANCIAL CARD BELOW READS THE SEC FACT SET. When the
                   symbol has none yet, one honest card says so rather than six
                   cards of dashes. */}
-              {nextReport ? (
-                <section className="card">
-                  <div className="eyebrow">Next report</div>
-                  <h3>Next expected earnings date</h3>
-                  {nextReport.source === "fmp" ? (
-                    <p style={{ marginBottom: 0 }}>
-                      <strong>{nextReport.date}</strong>{nextReport.time ? ` (${nextReport.time === "bmo" ? "before market open" : nextReport.time === "amc" ? "after market close" : nextReport.time})` : ""}.
-                      {" "}This one comes from the earnings calendar — {clean}&apos;s own filing
-                      history has not been read yet.
-                    </p>
-                  ) : nextReport.kind === "date" ? (
-                    <p style={{ marginBottom: 0 }}>
-                      <strong>{nextReport.date}</strong>
-                      {nextReport.timing ? `, ${TIMING_WORDING[nextReport.timing].replace("Results filed", "results filed")} if it follows its usual pattern` : ""}.
-                      {" "}Estimated from {clean}&apos;s own past reporting pattern — the gap between
-                      the end of its financial quarter and the 8-K it files with the results,
-                      over its last {nextReport.fromEvents} reports. It is not a company
-                      announcement and the company is free to break the pattern.
-                      {nextReport.clamped
-                        ? " Pulled back to the SEC's filing deadline for this period, which the pattern would have run past."
-                        : ""}
-                    </p>
-                  ) : nextReport.kind === "none" ? (
-                    <p style={{ marginBottom: 0 }}>
-                      Not enough regular reporting history to estimate the next report date.
-                      {" "}{clean}&apos;s past results filings are spread too widely, or too few
-                      of them are on file, for a date or even a month to mean anything here.
-                    </p>
-                  ) : (
-                    <p style={{ marginBottom: 0 }}>
-                      Expected in <strong>{monthName(nextReport.month)}</strong>.
-                      {" "}{clean} has reported within the same month each year but not on a
-                      settled day of it, so no specific date is offered here. Based on its last{" "}
-                      {nextReport.fromEvents} reports.
-                    </p>
-                  )}
-                </section>
-              ) : null}
+              {nextReport ? <NextReportCard outlook={nextReport} /> : null}
 
               {/* THREE OUTCOMES, NOT TWO. "no readable XBRL" is a successful
                   fetch of nothing usable -- an IFRS filer, or a company with no
@@ -1098,14 +1049,20 @@ export default async function StockEarningsPage({ params }: Props) {
               <section className="card">
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>
-                <p>{score.explanation}</p>
+                {/* NO score.explanation HERE. The score card at the top prints
+                    that exact paragraph, so this card repeated it word for word
+                    a screen further down (TSLA, ABBV, AVAV). The bullets are
+                    what this card adds; the narrative has one home. */}
                 {/* The generic bullets describe what the score reads WHEN it
                     can. A component that did not run must not be described
                     here as if it had -- the cash bullet is the one that read
                     as a claim on AZN, where the cash chain is empty. */}
                 <ul className="bulletList">
                   <li>Year-over-year growth separates one-{periodWords(secView?.basis ?? "quarter").one} noise from a real earnings trend.</li>
-                  <li>Margins show whether the company is keeping more of each pound of revenue.</li>
+                  {/* "UNIT", NOT A CURRENCY. This said "pound" on every US
+                      filer's page; the figures are dollars, or a converted
+                      home currency, and the point holds in any of them. */}
+                  <li>Margins show whether the company is keeping more of each unit of revenue.</li>
                   {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
                     <li>
                       Cash flow against net income would show whether reported profit is turning into

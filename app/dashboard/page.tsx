@@ -116,7 +116,19 @@ async function getInitialEarningsSummary(
   symbol: string
 ): Promise<StockEarningsSummary | null> {
   try {
-    return (await getLatestEarningsData(symbol, "yellow")) as unknown as StockEarningsSummary;
+    // ONLY THE FIELDS THE CLIENT READS. The whole object used to be passed as
+    // a prop, which serialises it into the page's RSC payload -- including
+    // FMP's `nextEarningsDate`, an exact next-report day that nothing on this
+    // page renders and that the owner's 2026-09-23 ruling keeps off the site.
+    const d = await getLatestEarningsData(symbol, "yellow");
+    return {
+      hasStructuredData: d.hasStructuredData,
+      tone: d.tone,
+      toneLabel: d.toneLabel,
+      reportDate: d.reportDate,
+      epsSurprisePercent: d.epsSurprisePercent,
+      revenueSurprisePercent: d.revenueSurprisePercent,
+    };
   } catch {
     return null;
   }

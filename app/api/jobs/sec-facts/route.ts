@@ -772,6 +772,16 @@ export async function GET(req: NextRequest) {
     ok: failed === 0 || failed < work.length,
     attempted: work.length,
     written, unchanged, failed, revalidated,
+    // NAMED, not just counted. The per-symbol errors used to live only in the
+    // response body, which the cron discards, so "failed: 4" could not be
+    // traced to a symbol without re-running the fetches by hand. Capped so a
+    // bad day cannot bloat the run record. One string: the run record's
+    // summary holds scalars only.
+    failedSymbols: results
+      .filter((r) => "error" in r)
+      .slice(0, 20)
+      .map((r) => `${String(r.symbol)}: ${String(r.error).slice(0, 120)}`)
+      .join(" | "),
     coldTaken: coldSymbols.length,
     coldCleared,
     coldCikSeen: coldCiks.seen,
