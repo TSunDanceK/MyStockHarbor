@@ -42,7 +42,6 @@ const check = (label, ok, detail = "") => {
 const IMPORT_BLOCK = `import { Redis } from "@upstash/redis";
 import {
   REFERENCE_TTL_DAILY_SECONDS,
-  REFERENCE_TTL_MONTHLY_SECONDS,
   readReference,
   writeReference,
 } from "./referenceCache";
@@ -50,7 +49,9 @@ import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
 import { readPricePoolBulk } from "./pricePool";
-import { priceCoverage, type PriceCoverage } from "./gridPriceCoverage";`;
+import { priceCoverage, type PriceCoverage } from "./gridPriceCoverage";
+import { readResultsDays, symbolsByDay } from "./secResultsDays";
+import { gridAdmits, gridCompanyName } from "./secTickerNames";`;
 
 const STUBS = `
 // THE REAL RULE, NOT A STUB. gridPriceCoverage is pure, imports nothing, and
@@ -60,7 +61,19 @@ const STUBS = `
 // under test honest.
 const priceCoverage = (i) => (i.fromPricePool ? "covered" : "outside-bar-universe");
 const REFERENCE_TTL_DAILY_SECONDS = 86400;
-const REFERENCE_TTL_MONTHLY_SECONDS = 2592000;
+// THE GRID'S CANDIDATES ARE SEC'S NOW (#535 COWORK #18 §3): the scenario's
+// month rows become the day index (symbol -> announcement days), and its name
+// map the committed-name lookup. symbolsByDay is the real inversion.
+const readResultsDays = async () => {
+  __h.calls.push("sec:results-days");
+  if (__h.indexThrows) return null;
+  const m = new Map();
+  for (const r of __h.monthRows ?? []) { if (!r.symbol || !r.date) continue; m.set(r.symbol, [...(m.get(r.symbol) ?? []), r.date]); }
+  return m;
+};
+const symbolsByDay = (index, admit) => { const out = new Map(); for (const [s, days] of index) { if (!admit(s)) continue; for (const d of days) out.set(d, [...(out.get(d) ?? []), s]); } return out; };
+const gridAdmits = () => true;
+const gridCompanyName = (s) => __h.names?.[s] ?? __h.names?.[String(s).toUpperCase()] ?? "";
 const PAGE_READ_CACHE = {};
 const __h = globalThis.__EARNINGS_HARNESS__;
 const readReference = async (k) => __h.reference.get(k) ?? null;
@@ -122,6 +135,10 @@ function harness({ mode, monthRows = [], names = {}, store = new Map() }) {
     cmd: [],
     calls: [],
     mgetThrows: false,
+    // SEC's day index and the committed names stand in for the FMP month feed
+    // and stock-list since the grid moved (see the stubs above).
+    monthRows,
+    names,
     fmpFetch: async (url) => {
       h.calls.push(url);
       if (mode === "licence-401") {
@@ -228,7 +245,11 @@ for (const [label, mode] of [["401 + JSON body", "licence-401"], ["402 + JSON bo
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
   check(`${label}: the date is NOT marked complete`, r.complete === false, `complete=${r.complete}`);
   check(`${label}: no complete flag is written`, !wroteComplete(h));
-  check(`${label}: the empty result is NOT cached`, !wroteItems(h));
+  // SINCE THE GRID MOVED TO SEC (#535 COWORK #18 §3) A ROW EXISTS BEFORE ANY
+  // QUOTE: SEC's own file admitted it. A dead provider leaves the rows standing,
+  // unpriced ("—"), and the date unsettled so a later pass prices them.
+  check(`${label}: the rows stand, unpriced — SEC admitted them, not the quote`,
+    r.items.length === 3 && r.items.every((i) => i.price === null), `got ${r.items.length}`);
   check(`${label}: the candidate count is still reported`, r.totalCandidates === 3, `got ${r.totalCandidates}`);
 }
 
@@ -268,7 +289,8 @@ for (const [label, fail] of [
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
 
-  check(`${label}: the one good quote still produces a row`, r.items.length === 1, `got ${r.items.length}`);
+  check(`${label}: the one good quote prices one row; the others stand unpriced`,
+    r.items.length === 3 && r.items.filter((i) => i.price !== null).length === 1, `got ${r.items.length}`);
   check(`${label}: nothing contradicts itself, so F2's guard does not fire`, r.totalCandidates === 3 && r.items.length > 0);
   check(
     `${label}: and the date is STILL not complete — only !anyFailed can catch this`,
@@ -291,54 +313,43 @@ console.log("\n3. F3 — an empty stored blob is rebuilt, not served");
 }
 
 // ── 4. F2 — an empty day we could not SEE is poison; one we could is not ───
-console.log("\n4. F2 — the guard is on unverifiability, not on the candidate count");
+console.log("\n4. Admission is SEC's — a quote no longer decides whether a row exists");
 {
-  // 4a. THE LEGITIMATE TERMINAL STATE. Every quote succeeds and every company is
-  // off-exchange, so the day is genuinely empty and we know it. Under the old
-  // candidate-count form this could never settle and was re-quoted on every
-  // render forever; that cost is what this refinement removes.
+  // 4a USED TO BE "every company is off-exchange, so the day is genuinely
+  // empty". The exchange is now read from SEC's own ticker file before any
+  // quote (gridAdmits), so a quote reporting "LSE" prices the row and nothing
+  // more: three rows, and the day settles because nothing failed.
   const store = new Map();
   const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
-  const offExchange = async (url) => {
+  h.fmpFetch = async (url) => {
     h.calls.push(url);
     if (url.includes("/stable/quote")) {
       const sym = new URL(url).searchParams.get("symbol");
       return jsonResponse([{ symbol: sym, price: 1, marketCap: 1, exchange: "LSE" }], 200);
     }
-    if (url.includes("/stable/stock-list")) return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
-    return jsonResponse(MONTH_ROWS, 200);
+    return jsonResponse([], 200);
   };
-  h.fmpFetch = offExchange;
   const m = await loadModule();
-
   const r = await m.getFullDayEarnings(DATE, { bypassCap: true });
-  check("4a: zero US-listed rows against three candidates", r.items.length === 0 && r.totalCandidates === 3);
-  check("4a: nothing failed, so the day SETTLES", r.complete === true, `complete=${r.complete}`);
-  check("4a: the empty day IS cached", wroteItems(h));
-  check("4a: and IS marked complete", wroteComplete(h));
-
-  // The second render must serve it, not re-quote it. This is the cost the
-  // refinement exists to remove, so it is asserted rather than assumed.
+  check("4a: a quote's exchange does not remove a row", r.items.length === 3 && r.totalCandidates === 3);
+  check("4a: nothing failed, so the day SETTLES", r.complete === true && wroteComplete(h), `complete=${r.complete}`);
   const quotesBefore = h.calls.filter((u) => u.includes("/stable/quote")).length;
   const r2 = await m.getFullDayEarnings(DATE, { bypassCap: true });
   const quotesAfter = h.calls.filter((u) => u.includes("/stable/quote")).length;
   check("4a: a second render spends no quote calls", quotesAfter === quotesBefore, `${quotesBefore} then ${quotesAfter}`);
-  check("4a: and still reports the settled empty day", r2.items.length === 0 && r2.complete === true);
+  check("4a: and serves the settled day", r2.items.length === 3 && r2.complete === true);
 }
 {
-  // 4b. THE POISON. Same empty result, but reached through a failure. Must not
-  // be written and must not settle.
+  // 4b. EVERY QUOTE FAILS: the rows stand, and the day must not settle.
   const h = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES });
   h.fmpFetch = async (url) => {
     h.calls.push(url);
     if (url.includes("/stable/quote")) return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
-    if (url.includes("/stable/stock-list")) return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
-    return jsonResponse(MONTH_ROWS, 200);
+    return jsonResponse([], 200);
   };
   const m = await loadModule();
   const r = await m.getFullDayEarnings(DATE, { forceRefresh: true, bypassCap: true });
-  check("4b: zero rows against three candidates", r.items.length === 0 && r.totalCandidates === 3);
-  check("4b: is NOT written", !wroteItems(h));
+  check("4b: three unpriced rows", r.items.length === 3 && r.items.every((i) => i.price === null));
   check("4b: and is NOT marked complete", !wroteComplete(h) && r.complete === false);
 }
 
@@ -405,71 +416,25 @@ console.log("\n6. F6 — an all-empty window is an outage, not a finished window
 // record, and the dates in it are filled in full once the feed comes back. That
 // is asserted in two phases -- cold, then recovered -- because the first phase
 // alone is indistinguishable from a scan that is simply broken.
-console.log("\n6b. The production case — a cold month leaves no record and recovers whole");
+console.log("\n6b. An unreadable day index leaves no record and recovers whole");
 {
-  const readableMonth = DATE.slice(0, 7);
-  // A reporting date in a month far enough back to be a DIFFERENT month from
-  // DATE's, and still inside a 90-day window.
-  const coldDate = daysAgo(70);
-  const coldMonth = coldDate.slice(0, 7);
-  const readableRows = [{ symbol: "AAA", date: DATE, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null }];
-  const coldRows = [{ symbol: "BBB", date: coldDate, epsEstimated: 2, epsActual: null, revenueEstimated: 2e9, revenueActual: null }];
-
-  const makeStore = () => new Map([
-    // The readable month's date is already complete, so the walk passes over it
-    // rather than returning it and stopping there.
-    [`${DAY_COMPLETE_PREFIX}:${DATE}`, 1],
-    [`${DAY_ITEMS_PREFIX}:${DATE}`, [{ symbol: "AAA", company: "Alpha Inc", date: DATE, epsEstimated: 1, epsActual: null, revenueEstimated: 1e9, revenueActual: null, price: 1, marketCap: 1 }]],
-  ]);
-
-  // MATCHED ON `to`, NOT `from`. fetchCalendarRange requests a SAFETY DAY before
-  // the range, so `from` for a month lands in the PREVIOUS month -- matching on
-  // it starves the month this scenario needs readable, which turns it into the
-  // all-empty case §6 already covers and it passes for the wrong reason.
-  const feed = (warmMonths) => async (url) => {
-    if (url.includes("/stable/stock-list")) {
-      return jsonResponse(Object.entries(NAMES).map(([symbol, companyName]) => ({ symbol, companyName })), 200);
-    }
-    if (url.includes("/stable/earnings-calendar")) {
-      const to = (new URL(url).searchParams.get("to") ?? "").slice(0, 7);
-      if (to === readableMonth) return jsonResponse(readableRows, 200);
-      if (warmMonths.includes(to)) return jsonResponse(coldRows, 200);
-      return jsonResponse({ "Error Message": "Invalid API KEY." }, 401);
-    }
-    if (url.includes("/stable/quote")) {
-      const sym = new URL(url).searchParams.get("symbol");
-      return jsonResponse([{ symbol: sym, price: 10, marketCap: 1e9, exchange: "NASDAQ" }], 200);
-    }
-    return jsonResponse([], 200);
-  };
-
-  // Phase 1: the older month is cold.
-  const coldStore = makeStore();
-  const h1 = harness({ mode: "ok", monthRows: readableRows, names: NAMES, store: coldStore });
-  h1.fmpFetch = async (url) => { h1.calls.push(url); return feed([])(url); };
+  // REWRITTEN FOR THE SEC INDEX (#535 COWORK #18 §3). The FMP-era case was a
+  // cold MONTH of the feed; the index is one hash, so the outage is the whole
+  // read. Same two phases: unreadable leaves nothing recorded, and once it
+  // reads the date is filled in full.
+  const store = new Map();
+  const h1 = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
+  h1.indexThrows = true;
   const m1 = await loadModule();
   const r1 = await m1.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
-
-  check(
-    "the readable month answered, so the all-empty guard is inapplicable",
-    h1.calls.some((u) => u.includes("earnings-calendar")),
-    "this is what makes 6b a different scenario from 6"
-  );
-  check("the cold month's date is NOT populated", !r1.populated.includes(coldDate), JSON.stringify(r1.populated));
-  check(
-    "and nothing records it as done, so it is not lost",
-    coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`) == null,
-    `complete=${JSON.stringify(coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`))}`
-  );
-
-  // Phase 2: the feed recovers. The SAME store carries forward, so this is the
-  // real question -- did phase 1 leave anything behind that skips this date?
-  const h2 = harness({ mode: "ok", monthRows: readableRows, names: NAMES, store: coldStore });
-  h2.fmpFetch = async (url) => { h2.calls.push(url); return feed([coldMonth])(url); };
+  check("the index was asked", h1.calls.includes("sec:results-days"));
+  check("an unreadable index populates nothing", r1.populated.length === 0, JSON.stringify(r1.populated));
+  check("and records nothing as done", store.get(`${DAY_COMPLETE_PREFIX}:${DATE}`) == null);
+  const h2 = harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
   const m2 = await loadModule();
   const r2 = await m2.populateNextMissingDate({ bypassCap: true, maxDates: 1 });
-  check("once the feed recovers the cold date IS filled", r2.populated.includes(coldDate), JSON.stringify(r2.populated));
-  check("and only then is it marked complete", coldStore.get(`${DAY_COMPLETE_PREFIX}:${coldDate}`) != null);
+  check("once the index reads the date IS filled", r2.populated.includes(DATE), JSON.stringify(r2.populated));
+  check("and only then is it marked complete", store.get(`${DAY_COMPLETE_PREFIX}:${DATE}`) != null);
 }
 
 // ── 6c. THE WALK RUNS NEWEST FIRST ────────────────────────────────────────

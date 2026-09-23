@@ -830,10 +830,14 @@ export default async function EarningsCalendarPage({
               record" are different sentences and both need saying. */}
           <EarningsExpectedSection state={forward.expected} />
 
+          {/* SEC, NOT FMP (#535 COWORK #18 §3). The grid lists announcements
+              filed with the SEC; a 6-K carries no item code, and the text rule
+              measured too many false positives to list as results (COWORK #23,
+              rule C), so those filers are named as absent rather than guessed. */}
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
-            Data source: financialmodelingprep.com. Estimates can change
-            before the report date — treat this as a starting point for
-            further research, not investment advice.
+            Dates are the day each company filed its results announcement with the SEC
+            (Form 8-K, Item 2.02). Companies filing results only as Form 6-K are not
+            listed here. This is a starting point for further research, not investment advice.
           </p>
 
           {/* Continue exploring — server-rendered internal links into other
