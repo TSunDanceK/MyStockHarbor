@@ -336,6 +336,54 @@ console.log(`  bucket-1 pairs R4 misses at ±3d (${missR4.length}): ${ex(missR4.
   return `${p.symbol} ${p.date} [${n.map((x) => `${x.on} ${(x.docs ?? []).map((d) => d.desc || d.file).slice(0, 2).join("/")}`).join("; ") || "no 6-K ±3d"}]`;
 }), 40)}`);
 
+// ── R7 + CADENCE FILTER (#535 COWORK #23) ──────────────────────────────────
+// A production-viable rule, no FMP: an R7-flagged 6-K counts only if the same
+// filer filed an R7-flagged 6-K about a year earlier (C1: d-365 ±15d), or one
+// period earlier (C2: d-91 or d-182 ±15d). The analogue 6-Ks are outside the
+// window, so their main documents are fetched here (index + doc each).
+{
+  const docOf = async (x) => {
+    if (x.docText !== undefined) return x.docText;
+    const cikInt = String(Number(M[x.symbol].cik));
+    const html = await fetchSec(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${x.acc.replace(/-/g, "")}/${x.acc}-index.htm`, "index", true);
+    const docs = html ? [...html.matchAll(idxRe)].map((m) => ({ desc: m[2].trim(), file: m[4].trim(), type: m[5].trim() })) : [];
+    const ex99 = docs.find((d) => /^EX-99/i.test(d.type) && /\.(htm|html|txt)$/i.test(d.file));
+    const file = ex99?.file ?? (/\.(htm|html|txt)$/i.test(x.primaryDocument ?? "") ? x.primaryDocument : null);
+    if (!file) { x.docText = ""; return ""; }
+    const body = await fetchSec(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${x.acc.replace(/-/g, "")}/${file}`, "doc", true);
+    x.docText = body ? body.replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ").slice(0, 20000) : "";
+    return x.docText;
+  };
+  const isR7Text = (t) => DOC_RE.test((t ?? "").slice(0, 3000));
+  const shift = (d, days) => new Date(Date.parse(`${d}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  const analogueFlagged = async (x, offsets) => {
+    const all = (filings.get(x.symbol) ?? []).filter((f) => f.form?.startsWith("6-K"));
+    for (const off of offsets) {
+      const c = shift(x.on, -off);
+      const near = all.filter((f) => Math.abs(diffDays(f.on, c)) <= 15);
+      for (const f of near) {
+        const fx = { ...f, symbol: x.symbol };
+        if (isR7Text(await docOf(fx))) return true;
+      }
+    }
+    return false;
+  };
+  const flagged = sixKs.filter((x) => isR7Text(x.docText));
+  const c1 = [], c12 = [];
+  for (const x of flagged) {
+    const y = await analogueFlagged(x, [365]);
+    if (y) c1.push(x);
+    if (y || (await analogueFlagged(x, [91, 182]))) c12.push(x);
+  }
+  for (const [name, set] of [["R7 ∧ C1 (year-ago analogue)", c1], ["R7 ∧ (C1 ∨ C2) (year-ago or prior period)", c12]]) {
+    const fp = set.filter((x) => !nearFmp(x, 10));
+    const hit1 = b1.filter((p) => set.some((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 1));
+    const hit3 = b1.filter((p) => set.some((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 3));
+    console.log(`  ${name}\n    flags ${set.length}/${sixKs.length} · near NO FMP date (±10d) ${fp.length} = FP ${pct(fp.length, set.length)}\n    bucket-1 pairs hit: ±1d ${hit1.length}/${b1.length} (${pct(hit1.length, b1.length)}) · ±3d ${hit3.length}/${b1.length} (${pct(hit3.length, b1.length)})`);
+    console.log(`    FP sample: ${fp.slice(0, 15).map((x) => `${x.symbol} ${x.on}: ${snip(x)}`).join("\n      ")}`);
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // BUCKET 2 — 2.02 ON EDGAR, NO RECORD
 // ════════════════════════════════════════════════════════════════════════════
