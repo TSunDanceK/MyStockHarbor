@@ -129,6 +129,17 @@ export type CompanyFacts = {
   facts?: Record<string, Record<string, { units?: Record<string, FactRow[]> }>>;
 };
 
+/**
+ * WHAT A companyfacts 404 MEANS: SEC publishes no XBRL company facts for this
+ * CIK — a unit investment trust (SPY, QQQ, DIA) or a filer that has never
+ * filed XBRL. A permanent answer, not a failure: measured 2026-09-23, those
+ * three return 404 while every operating filer returns 200. Read as an EMPTY
+ * payload, so an empty set is stored and the pages render "no financial
+ * taxonomy" with `index`, instead of "not yet read" and `noindex` forever
+ * (#535 COWORK #21). Only 404: a 403, 429 or 5xx stays a failure and retries.
+ */
+export const companyFactsAbsent = (status: number): boolean => status === 404;
+
 /** Why a stored number is the number it is. Carried so a diff can be explained. */
 export type Derivation =
   /** The filer published this exact period. */

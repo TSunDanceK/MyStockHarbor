@@ -125,9 +125,12 @@ const cf = fs.readFileSync("app/stock/[symbol]/ColdFill.tsx", "utf8");
 check("the server-rendered state is 'not yet read'; only a hydrated page moves to 'reading'",
   /useSyncExternalStore\(noSubscribe, \(\) => true, \(\) => false\)/.test(cf) &&
     /const phase: Phase = settled \?\? \(hydrated \? "reading" : "waiting"\);/.test(cf));
+// The words moved to coldFillSettle.ts with the settle rule (#535 COWORK #19);
+// the fallback sentence is the one that ruling named.
+const words = fs.readFileSync("app/stock/[symbol]/coldFillSettle.ts", "utf8");
 check("the reading words are the ruled ones",
-  cf.includes("Reading this company's SEC filings — this can take a few seconds.") &&
-    cf.includes("This is taking longer than usual; figures will appear shortly"));
+  words.includes("Reading this company's SEC filings — this can take a few seconds.") &&
+    words.includes("This is taking longer than usual; figures will appear once the company's filings are read."));
 check("the stock page is noindex while a cold symbol is not yet read",
   /index: hasData && !\(await awaitingSecRead\(upper\)\)/.test(readCodeOnly("app/stock/[symbol]/page.tsx")));
 check("the earnings page likewise",
