@@ -724,6 +724,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #7: #6-B chain alterations, #2 newest-reading vote, EPS concepts.
+  "write-spotcheck-census-3": {
+    script: "scripts/spotcheck-census-3.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
