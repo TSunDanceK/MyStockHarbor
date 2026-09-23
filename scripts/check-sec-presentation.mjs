@@ -219,19 +219,21 @@ console.log("\n3b. A LEGEND FOR A MARKER THAT NEVER APPEARS IS NOT SHOWN");
 
 console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter'");
 {
-  const annual = mod.trendSummary(viewOf(
-    [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)],
-    [], { tableBasis: "year", basis: "year" }
-  ));
+  // THE LABELS CARRY NO PERIOD NOUN since the tiles print "Typical · Latest"
+  // (owner review, #522): "Revenue growth", with the noun in the card heading,
+  // which reads t.basis. What the summary still words itself — the exclusion
+  // note — must follow the basis, so that is what is asserted. A skipped row
+  // is included so the note exists.
+  const rows = [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8), growthRow(null, null)];
+  const annual = mod.trendSummary(viewOf(rows, [], { tableBasis: "year", basis: "year" }));
   check("an annual filer's summary says year, not quarter",
-    annual.lines.every((l) => /year/.test(l.label) && !/quarter/.test(l.label)),
-    annual.lines.map((l) => l.label).join(" · "));
-  const quarterly = mod.trendSummary(viewOf(
-    [growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)], []
-  ));
+    /year/.test(annual.exclusionNote ?? "") && !/quarter/.test(annual.exclusionNote ?? "") &&
+      annual.lines.every((l) => !/quarter|year/.test(l.label)),
+    `${annual.exclusionNote} | ${annual.lines.map((l) => l.label).join(" · ")}`);
+  const quarterly = mod.trendSummary(viewOf(rows, []));
   check("...and a quarterly filer's says quarter",
-    quarterly.lines.every((l) => /quarter/.test(l.label)),
-    quarterly.lines.map((l) => l.label).join(" · "));
+    /quarter/.test(quarterly.exclusionNote ?? ""),
+    quarterly.exclusionNote);
   check("the summary reports the basis it used",
     annual.basis === "year" && quarterly.basis === "quarter",
     "the chart heading reads this rather than assuming");
@@ -239,8 +241,7 @@ console.log("\n4. WORDING IS KEYED TO THE BASIS NOUN, NEVER THE LITERAL 'quarter
     "basis noun replaced by a literal",
     "  const w = periodWords(view.tableBasis);",
     '  const w = { one: "quarter", many: "quarters", labelled: "", adjective: "quarterly" };',
-    (m) => m.trendSummary(viewOf([growthRow(10, 10), growthRow(12, 12), growthRow(8, 8)], [],
-      { tableBasis: "year", basis: "year" })).lines.every((l) => /year/.test(l.label))
+    (m) => /year/.test(m.trendSummary(viewOf(rows, [], { tableBasis: "year", basis: "year" })).exclusionNote ?? "")
   );
 }
 
@@ -347,9 +348,13 @@ console.log("\n4c. A SCORE THAT COULD NOT HAVE SAID ANYTHING ELSE SAYS SO");
   check("a score whose whole range sits in one band is pinned",
     pinned.pinned && pinned.low === 42 && pinned.high === 58,
     `${pinned.low}..${pinned.high} inside ${BAND_LOW}..${BAND_HIGH}`);
-  check("...and its note says the verdict was decided by what is missing",
-    /decided by what is missing/.test(mod.partialScoreNote(pinned, ["revenue growth"], "quarter")),
-    mod.partialScoreNote(pinned, ["revenue growth"], "quarter"));
+  // THE PINNED CONSEQUENCE, IN ONE LINE. The note names each missing input
+  // with its cause and, when pinned, the band it could not leave.
+  const pinnedNote = mod.partialScoreNote(pinned, [{ name: "Revenue growth", reason: "no year-earlier quarter on file" }], "Mixed");
+  check("...and its note says the score could not leave that band",
+    /between 42 and 58, inside Mixed either way/.test(pinnedNote) &&
+      /Revenue growth — no year-earlier quarter on file/.test(pinnedNote),
+    pinnedNote);
 
   // A FULLY MEASURED SCORE IS UNTOUCHED — the whole point is that this changes
   // nothing for AAPL.
@@ -390,10 +395,27 @@ console.log("\n4c. A SCORE THAT COULD NOT HAVE SAID ANYTHING ELSE SAYS SO");
     mod.partialScoreLabel(abvx) === "Partial · 2 of 5 measured" &&
       !/Mixed|Good|Weak/.test(mod.partialScoreLabel(abvx)),
     mod.partialScoreLabel(abvx));
-  check("the note always states the range and the non-comparability",
-    /between 32 and 68/.test(mod.partialScoreNote(abvx, [], "quarter")) &&
-      /not comparable/.test(mod.partialScoreNote(abvx, [], "quarter")),
-    mod.partialScoreNote(abvx, [], "quarter"));
+  check("the note states a narrowed range and the non-comparability",
+    /between 32 and 68\./.test(mod.partialScoreNote(abvx, [])) &&
+      /Not directly comparable with a full score/.test(mod.partialScoreNote(abvx, [])),
+    mod.partialScoreNote(abvx, []));
+  // ── A RANGE AS WIDE AS THE SCALE IS NOT PRINTED (brief A1) ──────────────
+  // AVAV ran four inputs reaching ±50 around the seed, and the card said the
+  // score "could only have landed between 0 and 100" — true of every score.
+  const avav = mod.pinCoverage(
+    mod.scoreCoverage(50, MAXIMA, 1, ["revenueGrowth", "profitability", "marginTrend", "cashConversion"]), BAND_LOW, BAND_HIGH
+  );
+  const avavNote = mod.partialScoreNote(avav, [{ name: "EPS growth", reason: "loss in both quarters" }]);
+  check("a reach spanning the whole scale prints no range, and draws none",
+    avav.low === 0 && avav.high === 100 && !/between/.test(avavNote) && !mod.coverageIsInformative(avav) &&
+      mod.coverageIsInformative(abvx),
+    avavNote);
+  await underMutation(
+    "the range sentence printed whatever its width",
+    "  const informative = c.low > 0 || c.high < 100;",
+    "  const informative = true;",
+    (m) => !/between/.test(m.partialScoreNote(m.pinCoverage(m.scoreCoverage(50, MAXIMA, 1, ["revenueGrowth", "profitability", "marginTrend", "cashConversion"]), BAND_LOW, BAND_HIGH), []))
+  );
 }
 
 console.log("\n5. THE WATERFALL IS DRAWN ONLY WHERE IT ADDS UP");

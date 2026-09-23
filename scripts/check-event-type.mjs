@@ -359,36 +359,75 @@ const pageSrc = readCodeOnly("app/stock/[symbol]/news/page.tsx");
 // greps that used to live here passed happily while a page rendered nothing.
 // scripts/check-news-art.mjs owns the per-bucket and per-item behaviour now;
 // what belongs HERE is only that the page feeds eventType into the plan at all.
+// ── THE LEAD CARDS MOVED TO planSymbolCardArt ON 2026-09-22 ──────────────
+// The page now picks art in layers (article words -> event bucket -> industry
+// -> sector), so its lead cards call planSymbolCardArt and its compact rows
+// still call planCardArt. NOTHING these three assertions are about has changed:
+// eventType is still per item, the plan is still built per item, and both
+// callers still thread the same maps. The call name did, so the patterns do.
+//
+// scripts/check-news-art.mjs §10 owns what the LAYERS do; what belongs here is
+// still only that the page feeds each item's own eventType into whatever plans
+// its art — including that the new layer did not quietly drop it, which is the
+// one way this change could have taken event art off the page.
+const PLAN_CALL = "(?:planSymbolCardArt|planCardArt)";
 check(
   "the page passes each item's OWN eventType into the plan",
-  /planCardArt\(\{[\s\S]{0,200}?eventType: item\.eventType/.test(pageSrc),
+  new RegExp(`${PLAN_CALL}\\(\\{[\\s\\S]{0,400}?eventType: item\\.eventType`).test(pageSrc),
   "a section-wide eventType, or none, would send every card to one bucket"
 );
 check(
   "the plan is built per item, not once per section",
-  /detailedNews\.map\(\(item\) =>[\s\S]{0,120}planCardArt\(/.test(pageSrc),
+  // 400, not 120: readCodeOnly BLANKS comments in place rather than deleting
+  // lines, so a comment between the map and the call is that many spaces of
+  // gap. The window still has to be bounded — an unbounded scan would satisfy
+  // itself on the compact rows' call further down the file.
+  new RegExp(`detailedNews\\.map\\(\\(item\\) =>[\\s\\S]{0,400}${PLAN_CALL}\\(`).test(pageSrc),
   "step 0 chose one bucket for the whole section; step 6 chooses per item"
 );
 check(
-  "EVERY plan on the page threads the same no-repeat map",
+  "EVERY plan on the page threads the same no-repeat state",
   (() => {
     // Not "it appears somewhere": the lead cards and the compact rows each
-    // build a plan, and one of them reverting to a fresh Map per card disables
+    // build a plan, and one of them reverting to fresh state per card disables
     // the rule for that half while the other keeps the check passing.
-    const uses = pageSrc.match(/taken: [^,\n]+/g) ?? [];
+    //
+    // TWO COLLECTIONS SINCE THE LAYERED PICKER: the v1 buckets are keyed by
+    // bucket plus a numeric index and the v2 library by image name, so they
+    // cannot share one — but each must still be threaded, not rebuilt.
+    const bucketUses = pageSrc.match(/taken(?:Buckets)?: [^,\n]+/g) ?? [];
+    const nameUses = pageSrc.match(/takenNames: [^,\n]+/g) ?? [];
     return (
-      uses.length >= 2 &&
-      uses.every((u) => u.trim() === "taken: takenByBucket") &&
-      /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc)
+      bucketUses.length >= 2 &&
+      bucketUses.every((u) => /: takenByBucket$/.test(u.trim())) &&
+      nameUses.length >= 1 &&
+      nameUses.every((u) => u.trim() === "takenNames: takenTagNames") &&
+      /takenByBucket\s*=\s*new Map<string, Set<number>>\(\)/.test(pageSrc) &&
+      /takenTagNames\s*=\s*new Set<string>\(\)/.test(pageSrc)
     );
   })(),
   "a fresh map per card disables the rule; check-news-art proves what the rule then does with it"
 );
 check(
-  "pickArt itself is unchanged — the selection rule was not rewritten",
-  /export function pickArt\(bucket: string \| null, key: string, taken\?: Set<number>\)/.test(read("lib/server/news/art.ts")) &&
-    /const first = hashKey\(key\) % count;/.test(read("lib/server/news/art.ts")),
-  "re-hash-on-collision and the 0-based walk are untouched; only the bucket handed to it changed"
+  "pickArt's SELECTION rule is unchanged — only what it does when exhausted is now a choice",
+  (() => {
+    const artSrc = read("lib/server/news/art.ts");
+    // THE THREE PARTS THAT ARE THE RULE, asserted individually rather than as
+    // one signature match. The signature gained a fourth parameter on
+    // 2026-09-22 — `onExhausted`, because a stock page draws five lead cards
+    // against four-image pools and the fifth repeated. That is a change to the
+    // LAST LINE of the function, not to how it picks: the hash, the 0-based
+    // walk and the mutation of `taken` are what this check is about, and all
+    // three are still here. Pinning the signature made the check fail on a
+    // change it does not care about while proving nothing extra.
+    return (
+      /export function pickArt\(\n  bucket: string \| null,\n  key: string,\n  taken\?: Set<number>,/.test(artSrc) &&
+      /const first = hashKey\(key\) % count;/.test(artSrc) &&
+      /const index = \(first \+ step\) % count;/.test(artSrc) &&
+      /taken\.add\(index\);/.test(artSrc)
+    );
+  })(),
+  "re-hash-on-collision and the 0-based walk are untouched; the bucket handed to it and the exhausted branch are what changed"
 );
 check(
   "two items with different eventTypes draw from different buckets and do not block each other",

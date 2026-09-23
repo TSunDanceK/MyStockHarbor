@@ -31,6 +31,7 @@ const check = (label, ok, detail = "") => {
 };
 
 // ─────────────────────────────────────────────────────────── the module
+globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
 const src = read("lib/server/staticProfile.ts")
   .replace(/^import snapshotFile from "@\/data\/static-profile.json";$/m,
     () => `const snapshotFile = ${read("data/static-profile.json")};`)
@@ -45,6 +46,15 @@ const src = read("lib/server/staticProfile.ts")
     () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
   .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
     () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
+  // ── THE SPELLINGS HELPER IS REAL, NOT STUBBED ────────────────────────────
+  // staticProfileFor goes through lookupSpellingIn so /stock/BRK.B reaches the
+  // snapshot's BRK-B row. A stub here would assert that the bridge exists while
+  // testing a different bridge, and the whole point of the helper is that there
+  // is exactly ONE implementation — its own header records seven copies of the
+  // dot/dash dance found in this repo once. So the real module is imported and
+  // handed over, the same way the two data files are inlined rather than faked.
+  .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m,
+    "const { lookupSpellingIn } = globalThis.__symbolSpellings;")
   .replace(/^export type StaticProfileRow = \{[\s\S]*?^\};$/m, "")
   .replace(/^type SnapshotFile = \{[\s\S]*?^\};$/m, "")
   .replace("const SNAPSHOT = snapshotFile as unknown as SnapshotFile;", "const SNAPSHOT = snapshotFile;")
