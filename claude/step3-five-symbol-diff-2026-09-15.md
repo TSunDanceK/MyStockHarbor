@@ -1,5 +1,8 @@
 # Step 3, step 2 — the five-symbol extraction, diffed against the frozen FMP dump
 
+> **2026-09-23 (#552, COWORK #4):** FMP values in this doc are redacted as
+> "[removed 2026-09-23]". The SEC values and the findings are kept.
+
 **Run:** relay `sec-extract`, workflow run
 [34931769452](https://github.com/TSunDanceK/MyStockHarbor/actions/runs/34931769452),
 head `d3dd7e5`, 2026-09-15 05:12 UTC.
@@ -39,19 +42,19 @@ dollar. **Including the derived Q4s**, which is the trap the whole design is abo
 
 | symbol | quarter | derivation | SEC | FMP |
 |---|---|---|---|---|
-| ARM | 2026-03-31 | **differenced** (FY − 9M) | 1,490.0M | 1,490.0M |
-| AAPL | 2025-09-27 | **differenced** | 102,466.0M | 102,466.0M |
-| MU | 2025-08-28 | **differenced** | 11,315.0M | 11,315.0M |
+| ARM | 2026-03-31 | **differenced** (FY − 9M) | 1,490.0M | [removed 2026-09-23] (matched) |
+| AAPL | 2025-09-27 | **differenced** | 102,466.0M | [removed 2026-09-23] (matched) |
+| MU | 2025-08-28 | **differenced** | 11,315.0M | [removed 2026-09-23] (matched) |
 
 ### AAPL's TTM aggregates agree exactly, free cash flow included
 
 ```
-revenue (TTM)          SEC 466,823.0M   FMP 466,823.0M   0.00%
-operatingIncome (TTM)  SEC 154,859.0M   FMP 154,859.0M   0.00%
-netIncome (TTM)        SEC 128,930.0M   FMP 128,930.0M   0.00%
-freeCashFlow (TTM)     SEC 136,683.0M   FMP 136,683.0M   0.00%
-epsTtm                 SEC       8.71   FMP       8.7752 0.74%
-divPerShare (TTM)      SEC       1.05   FMP       1.06   0.94%
+revenue (TTM)          SEC 466,823.0M   FMP [removed 2026-09-23]   0.00%
+operatingIncome (TTM)  SEC 154,859.0M   FMP [removed 2026-09-23]   0.00%
+netIncome (TTM)        SEC 128,930.0M   FMP [removed 2026-09-23]   0.00%
+freeCashFlow (TTM)     SEC 136,683.0M   FMP [removed 2026-09-23]   0.00%
+epsTtm                 SEC       8.71   FMP [removed 2026-09-23] 0.74%
+divPerShare (TTM)      SEC       1.05   FMP [removed 2026-09-23] 0.94%
 ```
 
 `freeCashFlow` matching to the dollar is the strongest single result in the run:
@@ -68,16 +71,16 @@ exactly where a large GAAP charge sits. The clearest case:
 
 ```
 AAPL  report 2024-10-31 -> quarter 2024-09-28
-      epsDiluted  SEC 0.97   FMP 1.64   DIFFER 40.85%
+      epsDiluted  SEC 0.97   FMP [removed 2026-09-23]   DIFFER 40.85%
 ```
 
 That is the €10.2B EU State Aid charge, and the extraction **corroborates it from
 its own output**: `incomeTaxExpense` for that quarter reads 14,874.0M against
-~5,000M in every neighbouring quarter. $0.97 is AAPL's GAAP diluted EPS; $1.64 is
+~5,000M in every neighbouring quarter. $0.97 is AAPL's GAAP diluted EPS; FMP's figure ([removed 2026-09-23]) is
 the ex-charge figure. **The largest single disagreement in the whole run is a case
 where the SEC extraction is correct and the FMP number is not GAAP.**
 
-ARM (GAAP 0.25 vs FMP 0.45) and MU (0.80 vs 1.18) are the same story — both report
+ARM (GAAP 0.25 vs FMP [removed 2026-09-23]) and MU (GAAP 0.80 vs FMP [removed 2026-09-23]) are the same story — both report
 heavy non-GAAP adjustments. AAPL, which barely adjusts, agrees on 7 of 8 quarters.
 
 ---
@@ -130,7 +133,7 @@ lives there because it is an instant.
 ### D3 — EPS is differenced too, and it is a ratio, not a sum
 
 This one is *approximately* right and the diff proves it: AAPL's differenced Q4
-reads 1.84 against FMP's 1.85 (0.54%), and the residual is the within-year drift of
+reads 1.84 against FMP's [removed 2026-09-23] (0.54%), and the residual is the within-year drift of
 the weighted share count. It is not wrong enough to show as a defect and not right
 enough to leave undeclared. Either mark it `duration-ratio` and keep the
 approximation with the caveat recorded, or recompute it as `netIncome / sharesDiluted`

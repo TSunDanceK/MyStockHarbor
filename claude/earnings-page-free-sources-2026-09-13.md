@@ -1,5 +1,8 @@
 # Getting `/stock/[symbol]/earnings` off FMP — free-source map (2026-09-13)
 
+> **2026-09-23 (#552, COWORK #4/#5):** FMP values in this doc are redacted as
+> "[removed 2026-09-23]", and so is text describing keeping FMP data after the key lapses. The findings are kept.
+
 Audited against the **live ARM page**, read in full today, not against the July build docs.
 Same method as the Pickers work: map every rendered card to the data class behind it, then
 ask what that class costs.
@@ -57,12 +60,12 @@ FMP endpoints this page currently pulls, all replaceable except the last: `earni
 On the ARM page today:
 
 ```
-LATEST REPORT   →  EPS $0.45   (FMP "earnings" — the adjusted/analyst-basis number)
+LATEST REPORT   →  EPS [removed 2026-09-23]   (FMP "earnings" — the adjusted/analyst-basis number)
 FULL P&L        →  Diluted EPS $0.25   (as-reported GAAP, from income-statement)
 ```
 
 Both are on the same page, 1,000 pixels apart, and they disagree by 80%. That is not a bug
-— $0.45 is the figure the $0.40 consensus was set against, and $0.25 is what ARM filed.
+— FMP's figure is the one the consensus ([removed 2026-09-23]) was set against, and $0.25 is what ARM filed.
 
 **SEC EDGAR can only ever give the $0.25.** So a naive "swap FMP for SEC" does not just lose
 the estimate column — it silently rewrites the headline EPS on every stock page to a
@@ -197,19 +200,9 @@ here would mean solving the hardest, most expensive question on the project twic
 Until that lands, the card renders from the bars already in Redis and degrades per quarter
 rather than disappearing. Which makes the point below urgent.
 
-### The thing that is actually time-critical
+### The thing that was called time-critical
 
-**The 8-quarter estimate and surprise history now sitting in Redis is irreplaceable, and it
-dies with the FMP key.** Every other number on this page can be re-derived from public
-filings forever. The consensus series cannot — it is a snapshot of what analysts expected
-at a moment that has passed, and no free source backfills it. Alpha Vantage *might*, which
-is a probe result nobody has yet.
-
-Step 0 in `claude/stooq-sec-probe-INSTRUCTIONS-2026-09-12.md` is still recorded as the most
-urgent unfinished item on the project, and it already lists earnings rows. This adds one
-line to its justification: **dump the estimate/actual/surprise series for the full universe
-before the key lapses, not after the probe.** It is read-only, needs the two Upstash
-variables, and its cost of delay is permanent.
+[removed 2026-09-23] (#552, COWORK #5): this section proposed preserving FMP's estimate/surprise series beyond the key. The owner has ruled that no FMP data is stored; the text is removed.
 
 ## 5. What ships hidden
 
