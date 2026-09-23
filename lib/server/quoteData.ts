@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "./fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { timingCache, beginTiming } from "./timing";
 import { tryReserveFmpCallSlot } from "./historyCache";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -170,7 +171,10 @@ async function fetchQuoteFromFmpUncached(symbol: string): Promise<Quote> {
   }
 
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    // toDashed: /api/quote?symbol= and /dashboard?symbol= deliver the reader's
+    // spelling, and StockSymbolPageClient's live refetch is /stock/BRK.B's own
+    // route symbol. The Redis key and the returned Quote keep `symbol` as asked.
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
 
     // NO LONGER THE BLOCKER FOR RENDER PATHS, but still a literal no-store call,
     // so read fetchQuoteFromFmpCached below before adding a caller. This
