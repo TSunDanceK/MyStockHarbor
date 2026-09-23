@@ -3,7 +3,8 @@ import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readFactSet } from "@/lib/server/secFactStore";
 import { cikForSymbol } from "@/lib/server/secColdFetch";
-import { pairingRewriteDone, readReportDates } from "@/lib/server/secReportDatesStore";
+import { SEC_REPORT_DATES_PREFIX, pairingRewriteDone, readReportDates } from "@/lib/server/secReportDatesStore";
+import { RESULTS_DAYS_BACKFILL_BELOW, backfillResultsDays, resultsDaysCount } from "@/lib/server/secResultsDays";
 import { buildAndWriteReportDates, rewriteQueue } from "@/lib/server/secReportDatesWrite";
 import type { Submissions } from "@/lib/server/secReportDates";
 import reportDatesRewrite from "@/data/sec/report-dates-rewrite.json";
@@ -105,8 +106,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // THE GRID'S DAY INDEX, BACKFILLED ONCE from the records written before it
+  // existed (lib/server/secResultsDays.ts). Every later record write keeps it.
+  const indexed = await resultsDaysCount();
+  const indexBackfill = indexed !== null && indexed < RESULTS_DAYS_BACKFILL_BELOW
+    ? await backfillResultsDays(SEC_REPORT_DATES_PREFIX)
+    : null;
+
   const summary = {
     ok: tally.failed === 0,
+    resultsDaysIndexed: indexed ?? -1,
+    resultsDaysBackfilled: indexBackfill?.written ?? 0,
     listed: listed.length,
     doneBefore: done.size,
     queued: queue.length,
