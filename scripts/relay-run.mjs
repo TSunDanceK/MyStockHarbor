@@ -624,6 +624,13 @@ const TASKS = {
     writes: true,
   },
   // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  // READS ONLY: HLEN of the grid's day index and the rewrite job's last
+  // summary (#552). 3 commands.
+  "write-results-days-status": {
+    script: "scripts/results-days-status.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-report-dates-rewrite-progress": {
     script: "scripts/report-dates-rewrite-progress.mjs",
     args: () => [],
