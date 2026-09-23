@@ -364,7 +364,7 @@ async function getEarningsData(symbol: string) {
       : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(toDashed(symbol))}`),
   ]);
   // ── THE ANNUAL-ONLY LAYOUT (#535 COWORK #15) ─────────────────────────────
-  // A 20-F/40-F filer with no stored quarter in 18 months: the page is about
+  // A 20-F/40-F filer whose newest stored quarter is over 6 months old: the page is about
   // fiscal years. Decided by rule from its annual form and its own set.
   const annualForm = cold.status === "ready"
     ? annualOnlyForm(registrantFor(symbol)?.annualForm, cold.set, new Date().toISOString().slice(0, 10))

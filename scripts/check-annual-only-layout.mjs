@@ -1,6 +1,6 @@
 // THE ANNUAL-ONLY LAYOUT FOR 20-F / 40-F FILERS (#535 COWORK #15).
 //
-//   1. THE RULE, BY FILER TYPE: 20-F/40-F AND no stored quarter in 18 months.
+//   1. THE RULE, BY FILER TYPE: 20-F/40-F AND newest stored quarter over 6 months old.
 //      Run on fixtures, plus a MUTATION that adds a recent quarter and must
 //      switch the filer back to the quarterly layout (the ONON case), and a
 //      source scan that no symbol list decides it.
@@ -31,12 +31,19 @@ const AAPL = fixture("AAPL");
 const newestQuarterEnd = AZN.quarters[0]?.e;
 
 console.log("1. the rule, by filer type");
-// AZN files 20-F and still stores quarters; 18 months past its newest one, it is annual-only.
-const late = (() => { const d = new Date(`${newestQuarterEnd}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 19); return d.toISOString().slice(0, 10); })();
-check("a 20-F filer with no quarter in 18 months is annual-only", A.annualOnlyForm("20-F", AZN, late) === "20-F", `newest quarter ${newestQuarterEnd}, today ${late}`);
+// AZN files 20-F and still stores quarters; 7 months past its newest one, it is annual-only.
+const plusMonths = (n) => { const d = new Date(`${newestQuarterEnd}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+const late = plusMonths(7);
+check("a 20-F filer whose newest quarter is over 6 months old is annual-only", A.annualOnlyForm("20-F", AZN, late) === "20-F", `newest quarter ${newestQuarterEnd}, today ${late}`);
+check("...and at 5 months it is still quarterly (the boundary is 6)", A.annualOnlyForm("20-F", AZN, plusMonths(5)) === null);
+// THE OWNER'S TWO CASES (#535 COWORK #19 §2): BMO's newest quarter 2025-10-31
+// and ONON's 2025-06-30, seen from 2026-09-23 — both annual now.
+const withNewest = (e) => ({ ...AZN, quarters: [{ ...AZN.quarters[0], e }] });
+check("BMO's shape (40-F, newest quarter 2025-10-31) is annual-only on 2026-09-23", A.annualOnlyForm("40-F", withNewest("2025-10-31"), "2026-09-23") === "40-F");
+check("ONON's shape (20-F, newest quarter 2025-06-30) likewise", A.annualOnlyForm("20-F", withNewest("2025-06-30"), "2026-09-23") === "20-F");
 check("...a 40-F filer with no quarters at all likewise (KGC)", A.annualOnlyForm("40-F", KGC, "2026-09-23") === "40-F");
 check("a 10-K filer never is (AAPL)", A.annualOnlyForm("10-K", AAPL, late) === null);
-check("a 20-F filer with a quarter inside 18 months is NOT (the ONON case)", A.annualOnlyForm("20-F", AZN, newestQuarterEnd) === null);
+check("a 20-F filer with a quarter inside 6 months is NOT (ARM, ICLR)", A.annualOnlyForm("20-F", AZN, newestQuarterEnd) === null);
 {
   // MUTATION: a recent 10-Q quarter arrives; the same filer must switch back.
   const withQuarter = structuredClone(KGC);
@@ -45,7 +52,7 @@ check("a 20-F filer with a quarter inside 18 months is NOT (the ONON case)", A.a
 }
 check("no symbol list decides it: the module names no ticker",
   !/"(ASML|NVO|SAP|SONY|BABA|TSM|BMO|ONON|AZN|KGC)"/.test(readCodeOnly("lib/server/annualOnly.ts")));
-check("the 18-month window is the ruled one", A.ANNUAL_ONLY_QUARTER_MONTHS === 18);
+check("the 6-month window is the ruled one", A.ANNUAL_ONLY_QUARTER_MONTHS === 6);
 
 console.log("\n2. annual mode renders no quarterly-only element");
 {

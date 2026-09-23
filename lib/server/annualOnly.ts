@@ -11,11 +11,19 @@
 // Annual-only when BOTH hold:
 //   1. its annual form (data/sec/registrants.json `annualForm`) is 20-F or
 //      40-F; and
-//   2. its stored set has no quarter ending within the last 18 months.
+//   2. its newest stored quarter ended MORE THAN 6 MONTHS ago (or it has none).
 // A stored quarter can only come from a filing with XBRL financial statements
 // (a 10-Q, or a 6-K that carries them), so (2) is "no structured quarter
-// lately". A filer that starts filing 10-Qs, or still has recent ones (ONON),
-// keeps or regains the quarterly layout automatically — nothing is listed.
+// lately". A filer that files quarters would always have a newer one; one
+// that starts filing 10-Qs keeps or regains the quarterly layout
+// automatically — nothing is listed.
+//
+// 6 MONTHS, NOT 18 (owner, #535 COWORK #19 §2, 2026-09-23): under 18, BMO
+// (newest quarter 2025-10-31) and ONON (2025-06-30) kept a quarterly page a
+// year out of date, because their newer results sit only in 6-Ks. Measured on
+// the live sets that day: of 156 stored 20-F/40-F sets, 148 are annual-only
+// under 6 months (111 under 18); ARM and ICLR (newest 2026-06-30) stay
+// quarterly; none has a half-yearly cadence that would flip within a year.
 //
 // PURE throughout: the pages pass in the form, the set and today.
 import type { StoredFactSet } from "./secFactCodec";
@@ -24,7 +32,7 @@ import type { SymbolOutlook } from "./symbolOutlook";
 export type AnnualForm = "20-F" | "40-F";
 
 /** How far back a stored quarter still counts as "the filer publishes quarters". */
-export const ANNUAL_ONLY_QUARTER_MONTHS = 18;
+export const ANNUAL_ONLY_QUARTER_MONTHS = 6;
 
 export function annualOnlyForm(
   annualForm: string | null | undefined,
