@@ -8,10 +8,11 @@
 // writeReportDates, which is behind the production write gate.
 import {
   resultsPairing, earlyNonResultsPattern, estimateUpcoming, nextPeriodEndFrom,
-  latestResultsAnnouncement, pendingResults,
+  latestResultsAnnouncement, pairingPeriodEnds, pendingResults,
   type NextReportEstimate, type PendingResults, type ReportEvent, type Submissions,
 } from "./secReportDates";
 import { writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
+import { recordResultsDays } from "./secResultsDays";
 import type { StoredFactSet } from "./secFactCodec";
 
 /**
@@ -33,7 +34,10 @@ export function buildReportDatesRecord(
   // chosen against its 10-Q/10-K) and the filer's own history of an
   // EARLY non-results 2.02, which is what keeps the current period --
   // no 10-Q yet -- from reading TSLA's delivery 8-K as its results.
-  const pairing = resultsPairing(subs, new Set([...quarterEnds, ...yearEnds]));
+  // MATCHED AGAINST THE FILER'S 10-Q/10-K PERIOD ENDS TOO (see
+  // pairingPeriodEnds): the set lags its filings, and a 2.02 must not be
+  // grouped into last quarter or dropped past the 120-day window.
+  const pairing = resultsPairing(subs, pairingPeriodEnds(quarterEnds, yearEnds, subs));
   const events = pairing.events
     .filter((e) => e.periodEnd)
     .slice(0, STORED_EVENT_LIMIT);
@@ -93,6 +97,8 @@ export async function buildAndWriteReportDates(
 ): Promise<{ ok: boolean; events: ReportEvent[]; next: NextReportEstimate; pending: PendingResults | null }> {
   const rec = buildReportDatesRecord(symbol, cik, set, subs, todayIso, new Date().toISOString());
   const ok = await writeReportDates(rec);
+  // THE GRID'S DAY INDEX FOLLOWS THE RECORD (lib/server/secResultsDays.ts).
+  if (ok) await recordResultsDays(symbol, rec);
   return { ok, events: rec.events, next: rec.next, pending: rec.pending ?? null };
 }
 
@@ -136,8 +142,10 @@ export function reportDatesQueue(args: {
   changedThisRun: readonly string[];
   limit: number;
   now: number;
+  /** Slots held for the never-written backfill. Default 0 keeps the old order. */
+  backfillSlice?: number;
 }): { queue: string[]; tier1: number; tier2: number; tier3: number } {
-  const { entries, eventQueued, cut, changedThisRun, limit, now } = args;
+  const { entries, eventQueued, cut, changedThisRun, limit, now, backfillSlice = 0 } = args;
   const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, "");
   const has = (s: string) => Boolean(entries[s]?.cik);
   const onCut = new Set(cut);
@@ -164,7 +172,13 @@ export function reportDatesQueue(args: {
   });
   const backfill = Object.keys(entries).filter((s) => has(s) && !entries[s].reportDatesAt);
   const tier3 = [...changedThisRun.filter(has), ...backfill];
-  const queue = [...new Set([...tier1, ...tier2, ...tier3])].slice(0, limit);
+  // THE NEVER-WRITTEN BACKFILL GETS ITS OWN SLICE (#535 COWORK #18 §3). In
+  // season tiers 1-2 filled the run (64 + 33 of 100 on 2026-09-23) and the
+  // backfill drained at ~3 a run: 101 filers with a 2.02 on EDGAR had no record
+  // at all. Up to `backfillSlice` slots are held for it; unused slots go back.
+  const ahead = [...new Set([...tier1, ...tier2, ...changedThisRun.filter(has)])];
+  const held = Math.min(backfillSlice, backfill.filter((s) => !ahead.includes(s)).length);
+  const queue = [...new Set([...ahead.slice(0, limit - held), ...backfill, ...ahead])].slice(0, limit);
   return { queue, tier1: tier1.length, tier2: tier2.length, tier3: tier3.length };
 }
 
