@@ -1677,6 +1677,7 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
           "N of M" already says how many periods it counted, the thresholds
           are in the growth chart's footnote, and the crossing sentence is
           printed once per page. */}
+      {t.skewNote ? <p className="earningsDataNote">{t.skewNote}</p> : null}
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
