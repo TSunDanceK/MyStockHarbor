@@ -758,6 +758,8 @@ const TASKS = {
   "write-score-rules": { script: "scripts/score-rules-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #19 §3: IFRS field coverage and staleness across annual-only filers. Read-only (Redis GETs + companyfacts).
   "write-ifrs-gap": { script: "scripts/ifrs-gap-probe.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Exports stored sets as gzip+base64 lines, for check fixtures. Read-only.
+  "write-export-fixtures": { script: "scripts/export-fixtures-probe.mjs", args: (env) => [], writes: true },
   "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
