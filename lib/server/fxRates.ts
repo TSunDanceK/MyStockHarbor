@@ -58,6 +58,13 @@ export type FxSeries = {
   /** Which adapter produced it, carried so a stored conversion can name it. */
   source: string;
   observations: FxObservation[];
+  /**
+   * THE WINDOW THIS SERIES WAS FETCHED FOR — not the span of its observations,
+   * which ends at the source's last publication. A per-run cache reuses a
+   * series only for a filer whose span this window covers (see toStoredSet).
+   * Optional: a series built elsewhere carries none and is never reused.
+   */
+  window?: { from: string; to: string };
 };
 
 /**
