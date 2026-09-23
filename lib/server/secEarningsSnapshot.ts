@@ -32,12 +32,13 @@ import {
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
 import { buildProfileDividend, type ProfileDividend } from "./secDividend";
+import { readReportDatesChecked, latestResults, type ReportDatesRead } from "./secReportDatesStore";
+import { compactOutlook, outlookFromRead, type CompactOutlook } from "./symbolOutlook";
 import {
   multipleInputs, valuationInputs, type MultipleInputs, type ValuationInputs,
 } from "./secValuation";
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
 import { registrantFor } from "./stockProfile";
-import { readReportDates, latestResults } from "./secReportDatesStore";
 import {
   TIMING_WORDING, type ReportTiming,
 } from "./secReportDates";
@@ -200,11 +201,18 @@ export type SnapshotPct =
   | { kind: "crossing"; words: string }
   | { kind: "none" };
 
-/** The next report, in the three shapes the filer's own habit can support. */
-export type SnapshotNextReport =
-  | { kind: "date"; date: string; timingNote: string | null; fromEvents: number }
-  | { kind: "month"; month: string; fromEvents: number }
-  | { kind: "none" };
+/**
+ * The next report: the SAME answer the /earnings-calendar search and the
+ * earnings page's card give, cut to its headline and hedge.
+ *
+ * This was `{ kind: "date"; date } | { kind: "month"; month } | { kind: "none" }`
+ * off estimateNextReport, and the tile printed "22 Oct 2026 · Estimated from
+ * its last 15 reports" (TSLA, live). Owner decision 2026-09-23: the 30-day band
+ * is the only forward claim anywhere on the site. The sentences are composed in
+ * lib/server/symbolOutlook.ts and arrive finished; there is no date field left
+ * on this type for a component to format.
+ */
+export type SnapshotNextReport = CompactOutlook;
 
 export type SecEarningsSnapshot = {
   symbol: string;
@@ -449,7 +457,7 @@ export async function getSecEarningsSnapshot(symbol: string): Promise<SecEarning
   const clean = symbol.trim().toUpperCase();
   const [cold, dates] = await Promise.all([
     resolveFactSetForRender(clean),
-    readReportDates(clean).catch(() => null),
+    readReportDatesChecked(clean).catch((): ReportDatesRead => ({ ok: false })),
   ]);
   return snapshotFrom(clean, cold, dates);
 }
@@ -480,7 +488,7 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
   const clean = symbol.trim().toUpperCase();
   const [cold, dates] = await Promise.all([
     resolveFactSetForRender(clean),
-    readReportDates(clean).catch(() => null),
+    readReportDatesChecked(clean).catch((): ReportDatesRead => ({ ok: false })),
   ]);
   const set = cold.status === "ready" ? cold.set : null;
   return {
@@ -518,8 +526,9 @@ export type StockPageProfileFacts = {
 function snapshotFrom(
   clean: string,
   cold: ColdResult,
-  dates: Awaited<ReturnType<typeof readReportDates>>
+  read: ReportDatesRead
 ): SecEarningsSnapshot {
+  const dates = read.ok ? read.rec : null;
   const view = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
   const score = scoreFromSec(view, clean, cold);
 
@@ -548,17 +557,12 @@ function snapshotFrom(
         ? { on: view.latestFiled, via: "filing", timing: null }
         : null;
 
-  const next: SnapshotNextReport =
-    dates?.next.kind === "date"
-      ? {
-          kind: "date",
-          date: dates.next.date,
-          timingNote: dates.next.timing ? TIMING_WORDING[dates.next.timing] : null,
-          fromEvents: dates.next.fromEvents,
-        }
-      : dates?.next.kind === "month"
-        ? { kind: "month", month: dates.next.month, fromEvents: dates.next.fromEvents }
-        : { kind: "none" };
+  // THE 30-DAY BAND, NOT `dates.next`. `dates.next` is estimateNextReport's
+  // day or month and must not reach this tile; see SnapshotNextReport. UTC
+  // "today", the day boundary every stored date is measured against -- the
+  // same one app/api/earnings-outlook uses.
+  const today = new Date().toISOString().slice(0, 10);
+  const next: SnapshotNextReport = compactOutlook(outlookFromRead(clean, read, today));
 
   return buildSecEarningsSnapshot({ symbol: clean, view, score, reported, nextReport: next });
 }

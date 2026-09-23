@@ -1,6 +1,7 @@
 // app/stock/[symbol]/page.tsx
 import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { searchSymbols } from "@/lib/server/symbolSearch";
 import {
@@ -59,6 +60,11 @@ type Props = {
 // the no-data branch in the page component.
 type QuoteOutcome = "ok" | "no-data" | "unavailable";
 
+// toDashed AT THE VENDOR BOUNDARY, as in lib/stock-news-data.ts's fetchFmpQuote.
+// The route parameter is the reader's spelling; FMP's is the dash. Without it
+// /stock/BRK.B asked FMP for "BRK.B", got the empty row, and scored the page
+// "no-data" -- which reads as "this symbol has no data", the one outcome above
+// that is supposed to be legitimate. The displayed symbol is left alone.
 async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcome: QuoteOutcome }> {
   const apiKey = process.env.FMP_API_KEY;
   const empty: InitialQuote = {
@@ -78,7 +84,7 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
   if (!apiKey) return { quote: empty, outcome: "unavailable" };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
-      symbol
+      toDashed(symbol)
     )}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, {
       next: { revalidate: 3600 },
@@ -194,7 +200,9 @@ function str(value: unknown): string | null {
 async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
-  const enc = encodeURIComponent(symbol);
+  // Route parameter in, FMP's dashed spelling out -- same rule as fetchQuote.
+  // Both URLs below share `enc`, so the legacy v3 path segment converts too.
+  const enc = encodeURIComponent(toDashed(symbol));
   const key = encodeURIComponent(apiKey);
   const urls = [
     `https://financialmodelingprep.com/stable/profile?symbol=${enc}&apikey=${key}`,
@@ -282,7 +290,7 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
 async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
-  const enc = encodeURIComponent(symbol);
+  const enc = encodeURIComponent(toDashed(symbol)); // route parameter; see fetchQuote
   const key = encodeURIComponent(apiKey);
   const sources = [
     // Prefer quarterly: more datapoints, a finer-grained trend line.

@@ -138,7 +138,23 @@ export type TrendSummary = {
    * See toneBandNote.
    */
   crossings: number;
+  /**
+   * ONE HEDGED LINE when a growth median sits far above the newest figure —
+   * null otherwise. See TREND_SKEW_PP.
+   */
+  skewNote: string | null;
 };
+
+/**
+ * HOW FAR APART "TYPICAL" AND "LATEST" MAY SIT BEFORE THE CARD SAYS WHY.
+ *
+ * AVAV printed "Typical +133.3% · Latest +5.7%": the median is lifted by the
+ * quarters that compare against its pre-acquisition base, and a reader takes
+ * the big number as the current pace. Past 50 percentage points on a growth
+ * line, and only where the typical figure is the HIGHER one, the card adds
+ * one sentence. It states what the numbers show and gives no instruction.
+ */
+export const TREND_SKEW_PP = 50;
 
 /**
  * THE MEDIAN, NOT THE MEAN.
@@ -223,9 +239,17 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           `of the arithmetic rather than a rate of change`
         : `either the ${w.one} is not on file, or the comparison crosses between profit and loss, ` +
           `where a percentage would be an artefact of the arithmetic rather than a rate of change`;
+  // RATES ONLY: a margin is a level, and "pace" is not a word for a level.
+  const skewed = lines.some((l) =>
+    l.kind === "rate" && l.value !== null && l.latest !== null && l.value - l.latest > TREND_SKEW_PP);
+  const skewNote = skewed
+    ? `The typical figure is lifted by a run of unusually large ${w.many}; ` +
+      `the latest may be the better guide to the current pace.`
+    : null;
   return {
     basis: view.tableBasis,
     lines,
+    skewNote,
     exclusionNote: totalSkipped
       ? `${totalSkipped} ${totalSkipped === 1 ? `${w.one} is` : `${w.many} are`} left out of these ` +
         `figures: ${why}.`
@@ -671,4 +695,62 @@ export function fiscalYearEndNote(ends: string[]): string | null {
   return thirds.size === 1
     ? `Fiscal years end in ${[...thirds][0]} ${month}.`
     : `Fiscal years end in ${month}.`;
+}
+
+/**
+ * ── ONE WAY TO WRITE A LARGE AMOUNT, DECIDED PER ROW ─────────────────────
+ *
+ * Owner decision (PR #531): an amount of $1B or more reads in B at two
+ * decimals, as the tables already did ("$1.98B"); EVERYTHING below reads in M
+ * at one decimal — "$480.5M", "$12.0M", "-$0.4M", and a filed zero "$0.0M".
+ * It replaces two rules that disagreed on one page: money() fell back to the
+ * full figure under $1M (AVAV income tax "-$397,000", a zero "$0"), and the
+ * bars and waterfall used a second formatter that dropped the decimal past
+ * 100 ("$480M" beside a table saying "$480.5M").
+ *
+ * PER ROW, NOT PER TABLE. A table-wide scale put the small lines of a B table
+ * in B ("$0.01B" for TSLA's noncontrolling interest) — precision thrown away
+ * to look tidy.
+ *
+ * T ONLY FROM $1T UP, which in practice is a market cap: "$1,452.30B" is the
+ * rule followed off a cliff. No filed statement line reaches it.
+ *
+ * `currency: false` is a share count — the same scale without the $, so
+ * "49.8M" rather than "49,822,595".
+ */
+export function scaledAmount(v: number, currency = true): string {
+  const abs = Math.abs(v);
+  // THE TIER IS PICKED FROM THE ROUNDED VALUE, not the raw one. 999,960,000 is
+  // under $1B but rounds to 1000.0 in M, and "$1000.0M" is the unit change the
+  // rule exists to prevent — so anything that rounds to 1000.0M reads in B,
+  // and anything that rounds to 1000.00B reads in T.
+  const [div, unit, dp] =
+    Number((abs / 1e9).toFixed(2)) >= 1000 ? [1e12, "T", 2]
+      : Number((abs / 1e6).toFixed(1)) >= 1000 ? [1e9, "B", 2]
+        : [1e6, "M", 1];
+  const s = (abs / div).toFixed(dp);
+  // No sign on a figure that rounds to zero: "-$0.0M" is a minus on nothing.
+  return `${v < 0 && Number(s) !== 0 ? "-" : ""}${currency ? "$" : ""}${s}${unit}`;
+}
+
+/**
+ * THE ORDER FOR AMOUNTS, ON THE RAW NUMBER — never on scaledAmount's text.
+ *
+ * Compared as strings, "$480.5M" sorts above "$1.98B" ("4" > "1") and "-$0.4M"
+ * lands wherever "-" falls. Nothing on the earnings page sorts today; this is
+ * the comparator any sortable amount column must use, and
+ * scripts/check-amount-sort.mjs pins it.
+ *
+ * NO FIGURE IS LAST IN BOTH DIRECTIONS. "Not reported" is neither the smallest
+ * amount nor the largest — it is not an amount — so flipping the sort must not
+ * float it to the top.
+ */
+export function compareAmounts(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: "asc" | "desc" = "desc",
+): number {
+  const ok = (v: number | null | undefined): v is number => v != null && Number.isFinite(v);
+  if (!ok(a) || !ok(b)) return ok(a) === ok(b) ? 0 : ok(a) ? -1 : 1;
+  return dir === "asc" ? a - b : b - a;
 }

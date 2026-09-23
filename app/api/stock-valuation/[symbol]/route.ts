@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
@@ -194,7 +195,13 @@ export async function GET(_request: Request, { params }: Props) {
     );
   }
 
-  const encoded = encodeURIComponent(clean);
+  // DASHED FOR FMP, and only for FMP: `clean` is the route parameter, the
+  // reader's spelling, and StockSymbolPageClient passes /stock/BRK.B's symbol
+  // through unchanged. FMP files the B class as BRK-B, so the dotted form
+  // came back as the empty state -- indistinguishable from a symbol FMP has
+  // no coverage for, which is the one reading this route is built to keep
+  // separate from a failure.
+  const encoded = encodeURIComponent(toDashed(clean));
   const key = encodeURIComponent(apiKey);
 
   const [

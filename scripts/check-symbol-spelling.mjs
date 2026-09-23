@@ -368,10 +368,59 @@ const symbolExpressionsIn = (file, text) => {
     }
     return "(top level)";
   };
+  // A SPAN THAT IS A BARE IDENTIFIER IS READ THROUGH ITS DECLARATION. Four of
+  // the route-fed call sites build `const encoded = encodeURIComponent(...)`
+  // once and interpolate `${encoded}` into several URLs, so the text in the span
+  // says nothing about conversion either way -- scored as-is, a converted site
+  // would read unconverted, and a check that can only be satisfied by inlining
+  // is a check that dictates style instead of measuring behaviour. The lookup is
+  // confined to the enclosing function, one hop, `const` only: a `let` can be
+  // reassigned after its initialiser, and following a chain further would be
+  // reasoning about dataflow this extractor cannot do honestly.
+  const enclosingBody = (node) => {
+    for (let n = node.parent; n; n = n.parent) {
+      if (ts.isFunctionLike(n) && n.body) return n.body;
+    }
+    return sf;
+  };
+  const resolve = (expr) => {
+    if (!ts.isIdentifier(expr)) return expr.getText(sf);
+    let init = null;
+    const find = (n) => {
+      if (
+        !init &&
+        ts.isVariableDeclaration(n) &&
+        ts.isIdentifier(n.name) &&
+        n.name.text === expr.text &&
+        n.initializer &&
+        ts.isVariableDeclarationList(n.parent) &&
+        (n.parent.flags & ts.NodeFlags.Const)
+      ) {
+        init = n.initializer;
+      }
+      ts.forEachChild(n, find);
+    };
+    find(enclosingBody(expr));
+    return init ? `${expr.text} = ${init.getText(sf)}` : expr.getText(sf);
+  };
+  // A PATH HANDED TO AN FMP HELPER IS AN FMP REQUEST WITH NO HOST IN IT.
+  // app/stock/[symbol]/earnings/page.tsx builds `/earnings?symbol=${...}` and
+  // its fetchFmpJson prepends FMP_BASE, so a host-only match scored that
+  // route-fed request as not a vendor call at all -- absent from both the
+  // assertion and the census, which is worse than being listed as unconverted.
+  // Recognised by the helper's NAME (fetchFmp*) and a leading "/", nothing
+  // looser: a relative "/api/..." path to this app's own routes is not FMP.
+  const FMP_VENDOR = VENDORS.find((v) => v.name === "FMP");
+  const fmpHelperPath = (t) =>
+    t.head.text.startsWith("/") &&
+    ts.isCallExpression(t.parent) &&
+    t.parent.arguments[0] === t &&
+    ts.isIdentifier(t.parent.expression) &&
+    /^fetchFmp/.test(t.parent.expression.text);
   const visit = (n) => {
     if (ts.isTemplateExpression(n)) {
       const whole = n.getText(sf);
-      const vendor = VENDORS.find((v) => v.host.test(whole));
+      const vendor = VENDORS.find((v) => v.host.test(whole)) ?? (fmpHelperPath(n) ? FMP_VENDOR : undefined);
       if (vendor) {
         // The literal chunk BEFORE a span is what names the slot that span
         // fills, whether that slot is a query parameter or a path segment.
@@ -382,7 +431,7 @@ const symbolExpressionsIn = (file, text) => {
               file,
               vendor: vendor.name,
               fn: enclosingFunction(n),
-              expr: span.expression.getText(sf),
+              expr: resolve(span.expression),
               line: sf.getLineAndCharacterOfPosition(span.expression.getStart(sf)).line + 1,
             });
           }
@@ -421,6 +470,34 @@ const PROBE_PATH = `
     const url = \`https://query1.finance.yahoo.com/v8/finance/chart/\${encodeURIComponent(symbol)}?interval=1d\`;
     return fetch(url);
   };`;
+// And the SAME control for the indirect shape, `const encoded = ...` then
+// `${encoded}`. Without it, the resolver above could return the bare name for
+// every identifier and every assertion routed through it would go red on a
+// correct site -- or, if it resolved to the wrong declaration, green on a raw one.
+//
+// The namesake comes FIRST on purpose. A lookup that searched the whole file
+// would take the first `encoded` it met, so with the namesake second the scope
+// escape found the right one by source order and the mutant survived.
+const PROBE_INDIRECT = `
+  const shadow = () => {
+    const encoded = encodeURIComponent(toDashed("unrelated"));
+    return encoded;
+  };
+  const viaConst = async (symbol: string) => {
+    const encoded = encodeURIComponent(symbol);
+    return fetch(\`https://financialmodelingprep.com/stable/profile?symbol=\${encoded}&apikey=\${k}\`);
+  };`;
+const PROBE_INDIRECT_CONVERTED = PROBE_INDIRECT.replace(
+  "const encoded = encodeURIComponent(symbol);",
+  "const encoded = encodeURIComponent(toDashed(symbol));"
+);
+// The helper-path shape gets a control too: one relative path into fetchFmpJson
+// (FMP) and one into fetch (this app's own API), which must NOT be counted.
+const PROBE_HELPER = `
+  const viaHelper = async (symbol: string) =>
+    fetchFmpJson(\`/earnings?symbol=\${encodeURIComponent(symbol)}\`);
+  const ownApi = async (symbol: string) =>
+    fetch(\`/api/quote?symbol=\${encodeURIComponent(symbol)}\`);`;
 const rawFound = symbolExpressionsIn("probe-raw.ts", PROBE_RAW);
 const convFound = symbolExpressionsIn("probe-converted.ts", PROBE_CONVERTED);
 const pathFound = symbolExpressionsIn("probe-path.ts", PROBE_PATH);
@@ -440,6 +517,30 @@ check(
     : `found ${pathFound.length}, expected exactly 1 — Yahoo puts the symbol in ` +
       `the path, and an extractor blind to that would score the whole leg clean ` +
       `by finding nothing in it`
+);
+const indirectRaw = symbolExpressionsIn("probe-indirect.ts", PROBE_INDIRECT);
+const indirectConv = symbolExpressionsIn("probe-indirect-conv.ts", PROBE_INDIRECT_CONVERTED);
+check(
+  "and it reads `${encoded}` through its own function's declaration, not a namesake",
+  indirectRaw.length === 1 &&
+    indirectConv.length === 1 &&
+    !CONVERTS.test(indirectRaw[0].expr) &&
+    CONVERTS.test(indirectConv[0].expr),
+  indirectRaw.length === 1 && indirectConv.length === 1
+    ? `raw: ${indirectRaw[0].expr} | converted: ${indirectConv[0].expr} — the ` +
+      `probe carries a converted \`encoded\` in ANOTHER function, so a lookup ` +
+      `that escaped its scope would score the raw one clean`
+    : `found ${indirectRaw.length}/${indirectConv.length}, expected 1/1`
+);
+const helperFound = symbolExpressionsIn("probe-helper.ts", PROBE_HELPER);
+check(
+  "and it counts a relative path handed to an FMP helper, but not one to this app's API",
+  helperFound.length === 1 && helperFound[0].fn === "viaHelper" && helperFound[0].vendor === "FMP",
+  helperFound.length === 1
+    ? `found ${helperFound[0].expr} in ${helperFound[0].fn}()`
+    : `found ${helperFound.length}, expected exactly 1 — zero means the earnings ` +
+      `page's /earnings request is invisible again; two means /api/* paths are ` +
+      `being scored as FMP`
 );
 check(
   "and it tells a converted call site from a raw one",
@@ -461,6 +562,30 @@ const UNDER_TEST = [
   // assumed: BRK.B is a 404 at this endpoint and BRK-B is a 200 (Actions run
   // 35794824846). Had it gone the other way this entry would not exist.
   ["lib/stock-news-data.ts", "fetchYahooChart", "the Yahoo fallback, quote and history"],
+  // The two #524 named as the same bug and left: both fed by the same route
+  // parameter, both FMP's quote endpoint, so the evidence for the dash is the
+  // same measurement as fetchFmpQuote's rather than a new one.
+  ["app/stock/[symbol]/earnings/page.tsx", "fetchQuoteForMeta", "the price in the earnings page <title>"],
+  ["app/stock/[symbol]/page.tsx", "fetchQuote", "the server-rendered price and quote outcome on /stock/[symbol]"],
+  // Traced, not assumed: every one of these takes the route parameter. The two
+  // page.tsx helpers get `upper` from params in the page component; the two API
+  // routes clean their own [symbol] segment (keeping the dot on purpose) and are
+  // called by StockSymbolPageClient with the page's symbol unchanged.
+  ["app/stock/[symbol]/page.tsx", "fetchCompanyProfile", "the profile panel on /stock/[symbol]"],
+  ["app/stock/[symbol]/page.tsx", "fetchShareHistory", "the share-count history on /stock/[symbol]"],
+  ["app/api/stock-analyst-rating/[symbol]/route.ts", "GET", "the analyst rating panel"],
+  ["app/api/stock-valuation/[symbol]/route.ts", "GET", "the valuation panel"],
+  // Visible only since the helper-path rule above; route parameter via the
+  // page's own cleanSymbol, which keeps the dot.
+  ["app/stock/[symbol]/earnings/page.tsx", "getEarningsData", "the FMP earnings-date fallback on /stock/[symbol]/earnings"],
+  // Route-fed one layer down: /api/stock-earnings/[symbol] and /dashboard?symbol=
+  // reach getLatestEarningsData with dots kept by their cleaners.
+  ["lib/latest-earnings-data.ts", "getLatestEarningsDataInner", "the dashboard / earnings-API income, estimates and surprises"],
+  ["lib/latest-earnings-data.ts", "earningsRowsFromStoreOrFmp", "the earnings rows on a store miss"],
+  // /api/quote?symbol=, /dashboard?symbol= and StockSymbolPageClient's live refetch.
+  ["lib/server/quoteData.ts", "fetchQuoteFromFmpUncached", "the live quote behind /api/quote"],
+  // /stock/[symbol]/news and /api/internal-news, when NEWS_PROVIDER=fmp.
+  ["lib/server/news/fmpProvider.ts", "fetchForSymbol", "per-symbol news under the FMP provider"],
 ];
 
 const allSites = [];
@@ -508,7 +633,7 @@ for (const [file, fn, what] of UNDER_TEST) {
       CONVERTS.test(site.expr)
         ? `\${${site.expr}}`
         : `\${${site.expr}} sends the spelling it was given. On ` +
-          `/stock/BRK.B/news that is "BRK.B", which ${site.vendor} has no row ` +
+          `a dotted route such as /stock/BRK.B that is "BRK.B", which ${site.vendor} has no row ` +
           `for — the page renders DATA UNAVAILABLE and nothing errors. Wrap it ` +
           `in toDashed`
     );
@@ -521,6 +646,35 @@ for (const [file, fn, what] of UNDER_TEST) {
 // dot — but "several" is not "all", and this check cannot tell which is which
 // without tracing every caller. The list is here so the next person fixing one
 // of these starts from a measurement instead of a grep.
+// TRACED 2026-09-23, one note per function still in the census. Printed beside
+// each line, NOT asserted: a trace is true of the callers as they were read, and
+// a new caller can falsify it without touching this file. What it saves is the
+// next person re-deriving the same chains from nothing. Two kinds:
+//
+//   no dot  -- traced to sources that cannot carry one; converting would change
+//              nothing today.
+//   PRESET  -- receives "BRK.B" TODAY, from lib/server/presetUniverse.ts via
+//              the pickers universe or the warm targets, and any dotted ticker
+//              promoted by /api/track/ticker-interest (whose normaliser keeps the
+//              dot and rejects the dash). Deliberately NOT converted here: this is
+//              the fundamentals path the BRK.B allowlist entry above is waiting
+//              on, where results are keyed by symbol and a batch response comes
+//              back under FMP's spelling -- converting only the URL there is the
+//              half-fix that entry warns against.
+const TRACED = new Map([
+  ["app/api/market/route.ts#fetchSingleQuote", "no dot: CURATED_UNIVERSE (holds BRK.B) is skipped by getNextDiscoveryBatch; the rest is FMP screener rows"],
+  ["lib/server/benchmarksBuilder.ts#fetchFmpQuote", "no dot: fixed SPY/QQQ/DIA/IWM and BTCUSD-style lists only"],
+  ["lib/server/earningsCalendar.ts#quoteOne", "no dot: FMP earnings-calendar rows, and looksNonUsOrDerivative drops any symbol with '.' or '-'"],
+  ["lib/server/indexChanges.ts#fetchRecentIndexAdditions", "no dot, by FMP convention not measurement: FMP constituent endpoints, 402 on this plan so unreached today"],
+  ["app/api/debug/static-profile/route.ts#fetchStatic", "PRESET: readPickersSymbolsIfCached"],
+  ["app/api/jobs/warm-earnings/route.ts#fetchFmpEarnings", "PRESET: the earnings warm queue, filled from the pickers universe and the dynamic universe"],
+  ["lib/sector-news-data.ts#fetchFmpSectorNewsWindow", "PRESET: getSectorConstituents, if BRK.B survives the top-40 market-cap cut"],
+  ["lib/server/fundamentalsCache.ts#fetchQuoteFundamentals", "PRESET: warm-fundamentals over the warm targets"],
+  ["lib/server/fundamentalsCache.ts#fetchProfile", "PRESET: warm-fundamentals; a null profile is never parked, so it refetches every run"],
+  ["lib/server/pricePool.ts#fetchStableQuote", "PRESET: warm-price-pool over the warm targets, tier 1"],
+  ["lib/server/pricePool.ts#fetchPeTtm", "PRESET: warm-price-pool; peSlice does not consult the deferred set"],
+]);
+
 const rest = allSites.filter(
   (s) => !UNDER_TEST.some(([f, fn]) => s.file === f && s.fn === fn)
 );
@@ -532,6 +686,7 @@ console.log(
 );
 for (const s of unconverted.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)) {
   console.log(`      ${s.file}:${s.line}  ${s.fn}()  ${s.vendor}  \${${s.expr}}`);
+  console.log(`          ${TRACED.get(`${s.file}#${s.fn}`) ?? "UNTRACED — nobody has followed this one's callers yet"}`);
 }
 
 console.log(

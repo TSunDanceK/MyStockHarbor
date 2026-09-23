@@ -54,7 +54,7 @@
     },
     {
       "path": "/api/jobs/sec-facts",
-      "schedule": "20 4 * * *"
+      "schedule": "20 4,16 * * *"
     },
     {
       "path": "/api/jobs/ipo-refresh",

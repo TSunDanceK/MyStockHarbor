@@ -6,28 +6,47 @@ import TickerLogo from "@/app/components/TickerLogo";
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
-type NextEarningsInfo = {
+/**
+ * What the server hands back, already worded.
+ *
+ * ── THIS COMPONENT NO LONGER FORMATS A DATE, AND THAT IS THE POINT ────────
+ * It used to hold `nextEarningsDate` and a `formatDate` helper, and rendered
+ * "NVDA next reports on Nov 18, 2026" from FMP's calendar as a flat fact. Both
+ * are gone. The answer now arrives as finished sentences from
+ * lib/server/symbolOutlook.ts, composed beside the copy the "Expected to
+ * report" section uses, so the hedge cannot be dropped in a JSX tidy-up and a
+ * band cannot be quietly turned back into a day by a helper living here.
+ *
+ * If a future change needs a date formatter in this file, that is the signal
+ * to stop and re-read lib/server/dueToReport.ts's header first.
+ */
+type Outlook = {
   symbol: string;
-  nextEarningsDate: string | null;
+  kind: "due" | "expected" | "beyond-window" | "no-estimate" | "unavailable";
+  headline: string;
+  hedge: string | null;
+  evidence: string[];
 };
 
-function formatDate(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
+/**
+ * The client's own fallback. NOT a silent empty state: a fetch that never
+ * landed is a gap on our side, and saying nothing here would read to a reader
+ * exactly like "this company has nothing coming up".
+ */
+const unreachable = (symbol: string): Outlook => ({
+  symbol,
+  kind: "unavailable",
+  headline: "Report estimates cannot be shown right now — that is a gap on our side.",
+  hedge: null,
+  evidence: [],
+});
 
 export default function EarningsTickerSearch() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
-  const [info, setInfo] = useState<NextEarningsInfo | null>(null);
+  const [info, setInfo] = useState<Outlook | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -68,11 +87,25 @@ export default function EarningsTickerSearch() {
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/stock-earnings/${encodeURIComponent(result.symbol)}`);
-      const data = (await res.json()) as { nextEarningsDate?: string | null };
-      setInfo({ symbol: result.symbol, nextEarningsDate: data.nextEarningsDate ?? null });
+      // 503 is a real answer here, not a failure to handle: the route returns
+      // it for an unreadable filing record and the body still carries the
+      // sentence that says so. Parsing it is what keeps "we are broken" from
+      // being rendered as "nothing is coming".
+      const res = await fetch(`/api/earnings-outlook/${encodeURIComponent(result.symbol)}`);
+      const data = (await res.json()) as Partial<Outlook>;
+      if (typeof data.headline === "string" && data.headline) {
+        setInfo({
+          symbol: result.symbol,
+          kind: data.kind ?? "unavailable",
+          headline: data.headline,
+          hedge: typeof data.hedge === "string" ? data.hedge : null,
+          evidence: Array.isArray(data.evidence) ? data.evidence : [],
+        });
+      } else {
+        setInfo(unreachable(result.symbol));
+      }
     } catch {
-      setInfo({ symbol: result.symbol, nextEarningsDate: null });
+      setInfo(unreachable(result.symbol));
     } finally {
       setLoading(false);
     }
@@ -121,8 +154,8 @@ export default function EarningsTickerSearch() {
             setInfo(null);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search a ticker or company for its next earnings date"
-          aria-label="Search ticker for next earnings date"
+          placeholder="Search a ticker or company"
+          aria-label="Search for a ticker or company"
           style={{
             width: "100%",
             // Left padding clears the 17px icon at left: 13.
@@ -187,7 +220,7 @@ export default function EarningsTickerSearch() {
       ) : null}
 
       {loading ? (
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.7 }}>Looking up next earnings date…</div>
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.7 }}>Reading its filing history…</div>
       ) : info ? (
         <div
           style={{
@@ -198,17 +231,30 @@ export default function EarningsTickerSearch() {
             background: "rgba(255,255,255,0.03)",
           }}
         >
-          <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-            {info.nextEarningsDate ? (
-              <>
-                <strong>{info.symbol}</strong> next reports on <strong>{formatDate(info.nextEarningsDate)}</strong>.
-              </>
-            ) : (
-              <>
-                No confirmed upcoming earnings date for <strong>{info.symbol}</strong> yet.
-              </>
-            )}
-          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.6, fontWeight: 700 }}>{info.headline}</div>
+          {info.hedge ? (
+            <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.55, color: "rgba(226,232,240,0.7)" }}>
+              {info.hedge}
+            </div>
+          ) : null}
+          {info.evidence.length ? (
+            <ul
+              style={{
+                margin: "9px 0 0",
+                padding: 0,
+                listStyle: "none",
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+              }}
+            >
+              {info.evidence.map((line) => (
+                <li key={line} style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.62)" }}>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link
               href={`/stock/${encodeURIComponent(info.symbol)}/earnings`}
