@@ -4,9 +4,15 @@ PR: https://github.com/TSunDanceK/MyStockHarbor/pull/526 (not merged).
 It follows #524 (9d0c1b9e), which converted three quote-path call sites and
 printed 27 others without asserting them.
 
-Note: `claude/HANDOVER-stock-page-art-and-quote-path-2026-09-23.md` is not in
+Note: the handover `HANDOVER-stock-page-art-and-quote-path-2026-09-23.md` is not in
 the repo. It exists only in the Claude Project, which this session can't read.
 This work was scoped from #524's commit body and `scripts/check-symbol-spelling.mjs`.
+
+> **Its name is deliberately written without the `claude/` prefix.**
+> `check-doc-citations` treats `claude/<name>.md` in prose as a citation of a
+> file in this tree; this doc lives outside it (Project-only), so the full path
+> would file a dangling citation. Same pattern as
+> `claude/news-feed-divergence-found-2026-09-14.md` §8b. Don't "correct" it back.
 
 ---
 
