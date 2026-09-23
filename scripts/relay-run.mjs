@@ -960,6 +960,14 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #5): which Redis keys in
+  // B's area still hold FMP payloads, and how many news records carry FMP-era
+  // items. SCAN + sampled TTL + MGET only.
+  "write-fmp-residue-census": {
+    script: "scripts/fmp-residue-census.mjs",
+    args: () => [],
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
