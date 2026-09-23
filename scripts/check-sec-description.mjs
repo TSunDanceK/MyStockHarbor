@@ -231,8 +231,14 @@ console.log("\n6e. owner review of the full file (round 5): pointers, page heade
   const hmyText = "The information set forth in “Operating and financial review” on page 42 is incorporated herein by reference. The profitability of the group’s operations is affected mainly by changes in the market price of gold, and the cash flows those operations generate." + long;
   const hmy = D.cleanDescription(hmyText);
   check("a dropped pointer that incorporates by reference still rejects (HMY)", !hmy.ok && /incorporated by reference/.test(hmy.why), hmy.ok ? hmy.text.slice(0, 60) : hmy.why);
-  const noCross = await load(once("const crossRef = POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);", "const crossRef = false;"));
+  const noCross = await load(once("const crossRef = out.length === 0 && POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);", "const crossRef = false;"));
   check("...and CATCHES the cross-reference let through", noCross.cleanDescription(hmyText).ok);
+  const amatText = ["Applied Materials, Inc. is the leader in the materials engineering solutions used to produce virtually every semiconductor in the world." + long,
+    "Incorporated in 1967, we are a Delaware corporation. The information in Item 7 is incorporated herein by reference into this section."].join("\n");
+  const amat = D.cleanDescription(amatText);
+  check("...but a cross-reference AFTER the lede is only dropped (AMAT, ODC)", amat.ok && amat.text.startsWith("Applied Materials") && !/Item 7/.test(amat.text), amat.ok ? "" : amat.why);
+  const anywhere = await load(once("const crossRef = out.length === 0 && POINTER", "const crossRef = POINTER"));
+  check("...and CATCHES the rule applied anywhere", !anywhere.cleanDescription(amatText).ok);
   const boh = D.cleanDescription("Bank of Hawaii Corporation is a Delaware corporation and a bank holding company headquartered in Honolulu, providing banking services to consumers and businesses. For more, see Item 7, Management’s Discussion and Analysis." + long);
   check("a pointer that only mentions MD&A is dropped, not a rejection (BOH)", boh.ok && !/Discussion/.test(boh.text), boh.ok ? "" : boh.why);
   const gbci = D.cleanDescription("Glacier Bancorp, Inc., headquartered in Kalispell, Montana, is a Montana corporation incorporated in 2004. The terms “Company,” “we,” “us” and “our” mean Glacier Bancorp, Inc. and its subsidiaries, when appropriate. We provide a full range of banking services." + long);
