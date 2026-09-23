@@ -6,7 +6,7 @@
 import Link from "next/link";
 import {
   CROSSING_NOTE, CROSSING_WORDS, EMPTY_REASONS, SEC_ATTRIBUTION, conversionNote, epsStandardWord,
-  isCrossing, periodWords, retiredSource,
+  filingCreditText, filingNoticeText, isCrossing, periodWords, retiredSource,
   type Pct, type SecEarningsView, type ViewCell,
 } from "@/lib/server/secEarningsView";
 import {
@@ -476,6 +476,18 @@ export function SecSnapshotCard({
   const s = view.snapshot;
   // EVERY PERIOD NOUN ON THIS CARD COMES FROM HERE. See SecEarningsView.basis.
   const w = periodWords(view.basis);
+  // ── ONE EXPLANATION FOR A LAGGING FEED, NOT TWO ─────────────────────────
+  // The announced-but-not-filed note (`pending`, from the report-date record)
+  // is about the window BEFORE the 10-Q. Once the filing exists, the filing's
+  // own notice (or the period read from it) is the truer statement, and the
+  // record's cadence-snapped date can be a week off (KO: 26 Jun vs 3 Jul). So
+  // `pending` shows only when neither filing line does, and never for a period
+  // the card already shows (within the 10 days a 52/53-week end moves).
+  const pendingShown =
+    pending && !view.filedNotInFeed && !view.latestFromFiling &&
+    Date.parse(pending.periodEnd) - Date.parse(view.latestEnd) > 10 * 86400000
+      ? pending
+      : null;
   return (
     <section className="card">
       <div className="eyebrow">{w.latest}</div>
@@ -496,10 +508,16 @@ export function SecSnapshotCard({
           that an Item 2.02 8-K was filed and that the figures are not in the
           data feed yet. No estimate, no third-party number, nothing about what
           the results were. */}
-      {pending ? (
+      {view.latestFromFiling ? (
+        <p className="earningsDataNote" style={{ marginTop: -4 }}>{filingCreditText(view.latestFromFiling)}</p>
+      ) : null}
+      {view.filedNotInFeed ? (
+        <p className="earningsDataNote" style={{ marginTop: -4 }}>{filingNoticeText(view.filedNotInFeed)}</p>
+      ) : null}
+      {pendingShown ? (
         <p className="earningsDataNote" style={{ marginTop: -4 }}>
-          Results for the quarter ended <strong>{pending.periodEnd}</strong> were announced on{" "}
-          <strong>{pending.announcedOn}</strong>. The SEC has not yet published the figures in its
+          Results for the quarter ended <strong>{pendingShown.periodEnd}</strong> were announced on{" "}
+          <strong>{pendingShown.announcedOn}</strong>. The SEC has not yet published the figures in its
           data feed, so this page still shows the previous quarter.
         </p>
       ) : null}
