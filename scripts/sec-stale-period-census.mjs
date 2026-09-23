@@ -71,6 +71,43 @@ const fetchJson = async (url) => {
 
 const PERIODIC = /^(10-K|10-Q|20-F|40-F)/;
 const stale = [];
+// ── POPULATION MODE: WHICH LINK IS MISSING, PER STALE SYMBOL ───────────────
+// Added 2026-09-23 (#535 COWORK #2 defect #1). The count alone cannot say
+// whether to fix the source, the queue or the extraction, so every symbol in
+// the stale list also gets one companyfacts read and one of three verdicts:
+//   SOURCE_BEHIND   companyfacts has no row at all ending on the filed period
+//   NOT_RE_READ     companyfacts has it, and the stored set was written before
+//                   that filing — the store never re-read after the filing
+//   READ_BUT_DROPPED companyfacts has it, and the set was written after the
+//                   filing — extraction (or the FX step) dropped the period
+// plus the manifest's own view (needsReverify / reason / verifiedAt), because
+// "the set is old" and "the queue does not know it is old" are separate bugs.
+const verdicts = { SOURCE_BEHIND: [], NOT_RE_READ: [], READ_BUT_DROPPED: [], NO_FACTS: [] };
+const classify = async (symbol, cik, set, periodic) => {
+  const facts = await fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
+  if (!facts) return { verdict: "NO_FACTS", detail: "companyfacts unreadable" };
+  let rowsOnPeriod = 0, newestEnd = "";
+  for (const tags of Object.values(facts.facts ?? {})) {
+    for (const def of Object.values(tags)) {
+      for (const rows of Object.values(def.units ?? {})) {
+        for (const r of rows) {
+          if (!r.end) continue;
+          if (r.end > newestEnd) newestEnd = r.end;
+          if (r.end === periodic.period) rowsOnPeriod++;
+        }
+      }
+    }
+  }
+  const e = manifest.symbols[symbol] ?? {};
+  const setAt = set.at ? new Date(set.at).toISOString().slice(0, 10) : "?";
+  const mf = `manifest needsReverify=${!!e.needsReverify}${e.reverifyReason ? `(${e.reverifyReason})` : ""} ` +
+    `verifiedAt=${e.verifiedAt ? new Date(e.verifiedAt).toISOString().slice(0, 10) : "—"} ` +
+    `contentHash=${e.contentHash ? "set" : "null"}`;
+  const detail = `cf newest end ${newestEnd || "—"}, rows ending ${periodic.period}: ${rowsOnPeriod}; set written ${setAt}; ${mf}`;
+  if (!rowsOnPeriod) return { verdict: "SOURCE_BEHIND", detail };
+  if (setAt !== "?" && setAt < periodic.filed) return { verdict: "NOT_RE_READ", detail };
+  return { verdict: "READ_BUT_DROPPED", detail };
+};
 let read = 0, noSet = 0, noSubs = 0, current = 0;
 
 for (const symbol of targets) {
@@ -121,6 +158,10 @@ for (const symbol of targets) {
   // and companyfacts follows the 10-Q.
   const missing = newestPeriodic && newestPeriodic.period && newestPeriodic.period > newestStored;
   if (missing) stale.push(line);
+  if (missing && !NAMED.length) {
+    const { verdict, detail } = await classify(symbol, cik, set, newestPeriodic);
+    verdicts[verdict].push(`${symbol} (${newestPeriodic.form} filed ${newestPeriodic.filed} for ${newestPeriodic.period}; stored ${newestStored}) — ${detail}`);
+  }
   // NAMED MODE PRINTS EVERY SYMBOL. The first version pushed the interesting
   // ones onto `stale` and printed only the others, so the one symbol the run
   // was dispatched for — the one that WAS stale — produced no output at all.
@@ -199,5 +240,11 @@ if (!NAMED.length) {
   if (stale.length > 25) console.log(`  ... and ${stale.length - 25} more\n`);
   console.log("=".repeat(78));
   console.log(`READ ${read} SYMBOLS from EDGAR (${current} skipped as current, ${noSet} no set, ${noSubs} no submissions)`);
+  console.log("\nWHY, per stale symbol:");
+  for (const [v, list] of Object.entries(verdicts)) {
+    console.log(`\n${v}: ${list.length}`);
+    for (const l of list) console.log(`  ${l}`);
+  }
+  console.log(`\nVERDICTS: ${Object.entries(verdicts).map(([v, l]) => `${v} ${l.length}`).join(" · ")}`);
   console.log(`STORED PERIOD MORE THAN ${STALE_DAYS} DAYS OLD *AND* A NEWER PERIODIC FILING EXISTS: ${stale.length} of ${targets.length} SYMBOLS`);
 }
