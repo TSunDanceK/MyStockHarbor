@@ -746,6 +746,8 @@ const TASKS = {
   "write-redis-meter-hourly": { script: "scripts/redis-meter-hourly.mjs", args: () => [], writes: true },
   // #535 COWORK #12 item 2: picker P/S census on msh:stockdata:v1. Read-only.
   "write-picker-ps-census": { script: "scripts/picker-ps-census.mjs", args: () => [], writes: true },
+  // #535 COWORK #14: re-read queue after #546/#547. Read-only.
+  "write-reread-queue": { script: "scripts/reread-queue-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
   // volume, per-filer timing through the shipped filing path. Read-only.
   "write-sec-cache-budget": {
