@@ -970,6 +970,16 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
+  // once so the PR preview shows the filings figures. A key nothing on main
+  // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
+  // the script's own gate holds even if it is ever invoked outside this router.
+  "write-pickers-sec-seed": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
