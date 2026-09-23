@@ -161,6 +161,42 @@ console.log("\n3. THE TREND SUMMARY NEVER AVERAGES ACROSS AN n/m");
   );
 }
 
+console.log("\n3a. A TYPICAL FIGURE FAR ABOVE THE LATEST ONE IS EXPLAINED, ONCE");
+{
+  // AVAV's shape: acquisition-year quarters lift the median (+133.3%) while the
+  // newest quarter is +5.7%. Oldest first, so the latest is the last row.
+  const avav = [
+    growthRow(140, 140), growthRow(150, 150), growthRow(133.3, 133.3),
+    growthRow(120, 120), growthRow(5.7, 5.7),
+  ];
+  const tA = mod.trendSummary(viewOf(avav, []));
+  check("typical more than 50 points above latest gets the hedged line",
+    tA.skewNote === "The typical figure is lifted by a run of unusually large quarters; " +
+      "the latest may be the better guide to the current pace.",
+    tA.skewNote ?? "null");
+  check("...and it gives the reader no instruction",
+    !/\b(you|should|consider|buy|sell)\b/i.test(tA.skewNote ?? ""));
+  check("the threshold is the briefed 50 points", mod.TREND_SKEW_PP === 50, `got ${mod.TREND_SKEW_PP}`);
+  const near = [growthRow(55, 55), growthRow(60, 60), growthRow(65, 65), growthRow(70, 70), growthRow(10, 10)];
+  const tN = mod.trendSummary(viewOf(near, []));
+  check("a gap of exactly 50 points says nothing", tN.skewNote === null,
+    `typical ${tN.lines[0].value}, latest ${tN.lines[0].latest}`);
+  const below = [growthRow(2, 2), growthRow(3, 3), growthRow(4, 4), growthRow(200, 200)];
+  check("a latest figure far ABOVE typical is not 'lifted by large quarters'",
+    mod.trendSummary(viewOf(below, [])).skewNote === null);
+  const margins = [marginRow(90), marginRow(91), marginRow(92), marginRow(10)];
+  check("a margin (a level) never triggers it",
+    mod.trendSummary(viewOf([growthRow(1, 1), growthRow(1, 1), growthRow(1, 1)], margins)).skewNote === null);
+  const annual = mod.trendSummary(viewOf(avav, [], { tableBasis: "year", basis: "year" }));
+  check("an annual filer's line says years", /unusually large years;/.test(annual.skewNote ?? ""), annual.skewNote ?? "null");
+  await underMutation(
+    "skew threshold removed",
+    "l.value - l.latest > TREND_SKEW_PP",
+    "true",
+    (m) => m.trendSummary(viewOf(near, [])).skewNote === null
+  );
+}
+
 console.log("\n3b. A LEGEND FOR A MARKER THAT NEVER APPEARS IS NOT SHOWN");
 {
   // ── THE RULE THIS SHARES WITH THE n/m LEGEND ─────────────────────────────

@@ -138,7 +138,23 @@ export type TrendSummary = {
    * See toneBandNote.
    */
   crossings: number;
+  /**
+   * ONE HEDGED LINE when a growth median sits far above the newest figure —
+   * null otherwise. See TREND_SKEW_PP.
+   */
+  skewNote: string | null;
 };
+
+/**
+ * HOW FAR APART "TYPICAL" AND "LATEST" MAY SIT BEFORE THE CARD SAYS WHY.
+ *
+ * AVAV printed "Typical +133.3% · Latest +5.7%": the median is lifted by the
+ * quarters that compare against its pre-acquisition base, and a reader takes
+ * the big number as the current pace. Past 50 percentage points on a growth
+ * line, and only where the typical figure is the HIGHER one, the card adds
+ * one sentence. It states what the numbers show and gives no instruction.
+ */
+export const TREND_SKEW_PP = 50;
 
 /**
  * THE MEDIAN, NOT THE MEAN.
@@ -223,9 +239,17 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
           `of the arithmetic rather than a rate of change`
         : `either the ${w.one} is not on file, or the comparison crosses between profit and loss, ` +
           `where a percentage would be an artefact of the arithmetic rather than a rate of change`;
+  // RATES ONLY: a margin is a level, and "pace" is not a word for a level.
+  const skewed = lines.some((l) =>
+    l.kind === "rate" && l.value !== null && l.latest !== null && l.value - l.latest > TREND_SKEW_PP);
+  const skewNote = skewed
+    ? `The typical figure is lifted by a run of unusually large ${w.many}; ` +
+      `the latest may be the better guide to the current pace.`
+    : null;
   return {
     basis: view.tableBasis,
     lines,
+    skewNote,
     exclusionNote: totalSkipped
       ? `${totalSkipped} ${totalSkipped === 1 ? `${w.one} is` : `${w.many} are`} left out of these ` +
         `figures: ${why}.`

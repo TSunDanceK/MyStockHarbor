@@ -527,6 +527,16 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX: earnings page round 2's four gaps counted
+  // over the manifest with the shipped extraction, before/after the chain
+  // edits, plus the re-read backlog the edit causes. GETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-round2-gap-census": {
+    script: "scripts/sec-round2-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-queue-projection": {
     script: "scripts/sec-queue-projection.mjs",
     args: () => [],
