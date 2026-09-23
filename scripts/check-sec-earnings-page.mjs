@@ -394,6 +394,12 @@ return lift(
      (readCodeOnly("lib/server/secPresentation.ts").match(new RegExp(`export const ${n} = [^;]+;`)) ?? [""])[0].replace("export const", "const")),
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForGrowth")),
    unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), "toneForMarginDelta")),
+   // THE SMALL-BASE / NOT-MEANINGFUL RULES (#535 COWORK #20), from their source.
+   ...["MARGIN_MEANINGFUL_FLOOR_PCT", "MARGIN_MEANINGFUL_MOVE_PP", "MARGIN_NOT_MEANINGFUL", "REVENUE_BASE_FLOOR_USD", "SMALL_REVENUE_BASE"].map((n) =>
+     (readCodeOnly("lib/server/secPresentation.ts").match(new RegExp(`export const ${n} = [^;]+;`)) ?? [""])[0].replace("export const", "const")),
+   ...["marginMoveMeaningful", "priorRevenueFrom", "revenueBaseTooSmall", "marginMoveVerb"].map((n) =>
+     unexport(grabFunction(readCodeOnly("lib/server/secPresentation.ts"), n))),
+   unexport(grabFunction(scoreRaw, "anchorMarginPair")), unexport(grabFunction(scoreRaw, "scoreMarginPair")),
    unexport(grabFunction(scoreRaw, "anchorMarginDelta")), unexport(grabFunction(scoreRaw, "gapReason")),
    unexport(grabFunction(scoreRaw, "scoreExplanation")), unexport(grabFunction(scoreRaw, "scoreGaps")),
    unexport(grabFunction(scoreRaw, "buildScoreResult")), unexport(grabFunction(scoreRaw, "scoreFromSec")),
@@ -466,10 +472,10 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
       JSON.stringify(reachable));
   check("...and an absent component contributes exactly zero, not a default",
     /const pts = sc/.test("") ||
-      /if \(isPct\(s\.revenueYoY\)\) contribute\(/.test(scoreRaw) &&
+      /if \(isPct\(s\.revenueYoY\) && !revenueBaseTooSmall\(s\.revenue\?\.val \?\? null, s\.revenueYoY\)\) \{\s*contribute\(/.test(scoreRaw) &&
       /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(scoreRaw) &&
       /if \(s\.netIncome\.val != null\) contribute\(/.test(scoreRaw) &&
-      /if \(opMargins\.length >= 2\) \{\s*contribute\(/.test(scoreRaw) &&
+      /if \(marginPair && marginMoveMeaningful\(marginPair\.first, marginPair\.last\)\) \{\s*contribute\(/.test(scoreRaw) &&
       /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(scoreRaw),
     "every contribute() sits behind a guard on its own input, with no else");
   check("points, membership and the recorded amount are ONE act",

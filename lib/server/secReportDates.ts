@@ -901,6 +901,35 @@ export function nextPeriodEndFrom(
 }
 
 /**
+ * THE PERIOD ENDS A RESULTS ANNOUNCEMENT MAY BE MATCHED TO — reader fix V1
+ * (#535 COWORK #18 §3, measured in claude/grid-sec-gaps-measured-2026-09-23.md).
+ *
+ * The stored fact set LAGS: companyfacts carries a quarter once it is filed,
+ * and the fact-set re-read queue can run weeks behind. Matched only against
+ * the set, a July 2.02 was grouped into Q1 (30 records) or fell outside the
+ * 120-day window (19 records) — 49 of 54 stale records. The same submissions
+ * payload already names every 10-Q/10-K's period end (`reportDate`), exactly
+ * and in the filer's own calendar, so those are added — no extra fetch.
+ * Measured: recovers 48 of the 54.
+ *
+ * V2 (cadence-projected ends) IS DELIBERATELY NOT HERE, though it measured
+ * 50 of 54. Its only extra reach is the day a 2.02 lands before its 10-Q, and
+ * that day is already `pending` (pendingResults: announced, not yet in the
+ * figures), which is what takes MU off the due strip the day after it files.
+ * A projected end turned that announcement into an event instead, and MU stayed
+ * on the strip (check-due-strip-end-to-end). The grid reads `pending` for it.
+ */
+export function pairingPeriodEnds(
+  quarterEnds: readonly string[],
+  yearEnds: readonly string[],
+  subs: Submissions,
+): Set<string> {
+  const ends = new Set<string>([...quarterEnds, ...yearEnds].filter(Boolean));
+  for (const end of periodicReportDates(subs).keys()) ends.add(end);
+  return ends;
+}
+
+/**
  * The same period end, one year on.
  *
  * ── TWO KINDS OF FILER, AND +365 IS WRONG FOR BOTH SOMETIMES ─────────────

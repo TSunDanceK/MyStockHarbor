@@ -116,7 +116,7 @@ function growthTone(p: SnapshotPct): ToneKey | undefined {
  * same words the /earnings-calendar search and the earnings page's card use.
  */
 function nextReportText(n: SnapshotNextReport): string {
-  return n.headline || "—";
+  return n.value || n.headline || "—";
 }
 
 // ── Tone ─────────────────────────────────────────────────────────────────────
@@ -224,7 +224,8 @@ export default function LatestEarningsCard({
             </div>
             <div>
               <div style={earningsMiniLabelStyle}>Next earnings</div>
-              <div style={earningsMiniSentenceStyle}>{nextReportText(snapshot.nextReport)}</div>
+              {/* A SHORT VALUE ("Est. April") IN THE VALUE STYLE; a sentence in the sentence style. */}
+              <div style={snapshot.nextReport.value ? earningsMiniValueStyle : earningsMiniSentenceStyle}>{nextReportText(snapshot.nextReport)}</div>
               {/* NOT A FORECAST, AND THE CARD SAYS SO. The hedge (or, for a
                   refusal, its named reason) is the search's own line. Null
                   only for the filed-fact "due" answer and the outage one,
