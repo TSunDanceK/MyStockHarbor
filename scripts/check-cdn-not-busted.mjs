@@ -144,42 +144,9 @@ check(
 
 console.log("\n3. A cache window may not outlive the data behind it");
 
-for (const rel of [
-  "app/api/stock-valuation/[symbol]/route.ts",
-  "app/api/stock-analyst-rating/[symbol]/route.ts",
-]) {
-  const src = readCodeOnly(rel);
-  const header = Number(
-    Function(
-      `"use strict"; return (${
-        (src.match(/_CACHE_SECONDS = ([0-9 *]+);/) ?? [])[1] ?? "0"
-      });`
-    )()
-  );
-  const revalidate = Number(
-    Function(
-      `"use strict"; return (${
-        (src.match(/revalidate: ([0-9 *]+) \}/) ?? [])[1] ?? "0"
-      });`
-    )()
-  );
-  const name = rel.split("/")[2];
-  check(
-    `${name}: the CDN window equals the FMP revalidate`,
-    header > 0 && header === revalidate,
-    `s-maxage ${header / 3600}h against revalidate ${revalidate / 3600}h — a longer ` +
-      `window serves bytes nothing will refresh; a shorter one spends a Lambda to ` +
-      `re-serve what the Data Cache hands back unchanged`
-  );
-  check(
-    `${name}: only the answer is cached, not the failures`,
-    !/status: 400[\s\S]{0,120}Cache-Control/.test(src) &&
-      !/status: 503[\s\S]{0,120}Cache-Control/.test(src) &&
-      !/status: 403[\s\S]{0,120}Cache-Control/.test(src),
-    "a bad symbol is 400, a missing key is 503 and a refused bot is 403 — storing " +
-      "any of those would pin the wrong answer onto every stock page for hours"
-  );
-}
+// stock-valuation and stock-analyst-rating, the two routes this section held
+// to "the CDN window equals the FMP revalidate", were deleted 2026-09-23 (#552
+// COWORK #1); check-retired-routes keeps them gone.
 
 // THE ROUTE THAT DID NOT QUALIFY, asserted so it is not quietly cached later.
 const earnings = readCodeOnly("app/api/stock-earnings/[symbol]/route.ts");
