@@ -151,16 +151,15 @@ function parseRss(xml: string): NewsItem[] {
 
 // Live quote: FMP is the primary source (same endpoint/key already used
 // elsewhere on the site for metadata + company profile - reliable, and a
-// real API key is configured). Stooq is the next fallback for when
-// FMP_API_KEY is missing or the FMP call fails outright. Yahoo Finance's
-// unofficial chart endpoint (no key required) is the final fallback -- it
-// tends to pick up freshly-listed/thin-coverage tickers (new IPOs, SPAC
-// units) days before Stooq does, so a ticker that would otherwise show
-// "DATA UNAVAILABLE" right after listing often gets a real price/history
-// from here instead.
+// real API key is configured). Yahoo Finance's unofficial chart endpoint
+// (no key required) is the fallback for when FMP_API_KEY is missing or the
+// FMP call fails outright -- it also tends to pick up freshly-listed/
+// thin-coverage tickers (new IPOs, SPAC units) early, so a ticker that would
+// otherwise show "DATA UNAVAILABLE" right after listing often gets a real
+// price/history from here instead.
 //
-// All three paths require price > 0, not just a finite number: Stooq's CSV
-// feed is known to return a literal "0" (not "N/D"/blank) for some tickers
+// Both paths require price > 0, not just a finite number: Stooq, an earlier
+// fallback, returned a literal "0" (not "N/D"/blank) for some tickers
 // instead of failing cleanly, which previously rendered as a real "$0.00"
 // price on the page (formatMoney only shows "-" for null/undefined, not
 // for an actual zero). Treating a non-positive price as "no data" avoids
@@ -168,9 +167,6 @@ function parseRss(xml: string): NewsItem[] {
 async function fetchQuote(symbol: string): Promise<Quote | null> {
   const fmpQuote = await fetchFmpQuote(symbol);
   if (fmpQuote) return fmpQuote;
-
-  const stooqQuote = await fetchStooqQuote(symbol);
-  if (stooqQuote) return stooqQuote;
 
   return fetchYahooQuote(symbol);
 }
@@ -228,45 +224,13 @@ async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
   }
 }
 
-async function fetchStooqQuote(symbol: string): Promise<Quote | null> {
-  const stooqSymbol = `${symbol.toLowerCase()}.us`;
-  const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
-
-  try {
-    const res = await fetch(url, {
-      next: { revalidate: 3600 },
-    });
-
-    if (!res.ok) return null;
-
-    const text = await res.text();
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) return null;
-
-    const row = lines[1].split(",");
-    const price = Number(row[3] ?? "");
-    if (!Number.isFinite(price) || price <= 0) return null;
-
-    return {
-      symbol,
-      price,
-      date: row[1] ?? null,
-      time: row[2] ?? null,
-      source: "Stooq",
-    };
-  } catch {
-    return null;
-  }
-}
-
 // Yahoo Finance's unofficial "v8 chart" endpoint. No API key, widely used
 // (it's what the `yfinance` Python library and many other unofficial
 // integrations call under the hood). A realistic desktop-browser User-Agent
 // avoids the occasional 429 Yahoo returns to bare/no-UA requests. Kept as
-// the last-resort fallback (after FMP and Stooq) specifically because it
-// tends to have quote/history for freshly-listed tickers sooner than Stooq
-// does -- it's not more authoritative than FMP, just faster to pick up new
-// listings including SPAC unit/warrant tickers.
+// the fallback after FMP; it tends to have quote/history for freshly-listed
+// tickers early -- it's not more authoritative than FMP, just quick to pick
+// up new listings including SPAC unit/warrant tickers.
 const YAHOO_FETCH_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -335,59 +299,10 @@ async function fetchYahooQuote(symbol: string): Promise<Quote | null> {
   };
 }
 
-// Daily history: Stooq first (existing behavior, unchanged), then Yahoo
-// Finance's chart endpoint as a fallback for tickers Stooq has nothing for
-// yet -- same freshly-listed-ticker rationale as fetchYahooQuote above.
+// Daily history: Yahoo Finance's chart endpoint, the same one fetchYahooQuote
+// reads with a shorter range.
 async function fetchHistory(symbol: string): Promise<Point[]> {
-  const stooqPoints = await fetchStooqHistory(symbol);
-  if (stooqPoints.length) return stooqPoints;
-
   return fetchYahooHistory(symbol);
-}
-
-async function fetchStooqHistory(symbol: string): Promise<Point[]> {
-  const stooqSymbol = `${symbol.toLowerCase()}.us`;
-  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
-
-  try {
-    const res = await fetch(url, {
-      next: { revalidate: 1800 },
-    });
-
-    if (!res.ok) return [];
-
-    const text = await res.text();
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) return [];
-
-    const points: Point[] = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
-      const date = String(cols[0] ?? "").replace(/\r/g, "").trim();
-      const high = Number(String(cols[2] ?? "").replace(/\r/g, ""));
-      const low = Number(String(cols[3] ?? "").replace(/\r/g, ""));
-      const close = Number(String(cols[4] ?? "").replace(/\r/g, ""));
-      const volume = Number(String(cols[5] ?? "").replace(/\r/g, ""));
-
-      // Same zero-price guard as fetchStooqQuote above: a finite-but-zero
-      // close from Stooq's daily feed would otherwise corrupt lastClose /
-      // moving averages / RSI for this symbol.
-      if (!date || !Number.isFinite(close) || close <= 0) continue;
-
-      points.push({
-        date,
-        close,
-        high: Number.isFinite(high) ? high : undefined,
-        low: Number.isFinite(low) ? low : undefined,
-        volume: Number.isFinite(volume) ? volume : undefined,
-      });
-    }
-
-    return points.slice(-320);
-  } catch {
-    return [];
-  }
 }
 
 async function fetchYahooHistory(symbol: string): Promise<Point[]> {
