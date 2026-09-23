@@ -1,5 +1,12 @@
 import { unstable_cache } from "next/cache";
-import { readOrRefreshSectorNews } from "@/lib/server/newsStore";
+import { readOrRefreshSectorNews, readStoredSymbolNews } from "@/lib/server/newsStore";
+import { activeNewsProviders, newsProviderMode } from "@/lib/server/news";
+import { wireProvider } from "@/lib/server/news/wireProvider";
+import {
+  attributedSymbols,
+  composeFreeSectorPools,
+  isFromActiveProvider,
+} from "@/lib/server/news/sectorWindow";
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getSectorBySlug, type SectorDef } from "@/lib/sectors";
@@ -36,6 +43,16 @@ import {
 // ---------------------------------------------------------------------------
 // Sector news: the per-stock news engine, pointed at a basket instead of a
 // ticker.
+//
+// ── 2026-09-23: OFF FMP ON THE FREE STACK (#553 COWORK #1) ─────────────────
+// Everything below about "the fetch" describes the NEWS_PROVIDER=fmp ROLLBACK
+// path only. This file called FMP's stock-news endpoint directly, outside
+// NEWS_PROVIDER, so the step-7 flip never reached sector pages. On the free
+// stack (the default) the window is now spec §4's design: "the union of the
+// sector's constituent per-symbol stores, deduped" -- one MGET of the
+// constituents' msh:news:v1:<SYM> records -- plus the shared wire poll filtered
+// to constituents. No FMP call and no per-constituent upstream call on a render.
+// See fetchFreeSectorNewsWindow below.
 //
 // The scoring, filtering and feed-shaping are NOT reimplemented here -- they
 // are imported from lib/news-scoring.ts, which re-exports the live
@@ -96,7 +113,7 @@ export type SectorNewsBaseData = {
   earningsScore: EarningsScoreResult;
   /** Most-mentioned constituents across the ranked feed, busiest first. */
   mentions: SectorMention[];
-  /** True when FMP returned nothing usable for the whole basket. */
+  /** True when no source returned anything usable for the whole basket. */
   isDataUnavailable: boolean;
   /** Universe classification counts, so the page can be honest about coverage. */
   coverage: { classified: number; total: number };
@@ -282,6 +299,37 @@ async function fetchFmpSectorNewsWindow(
 }
 
 /**
+ * The free stack's sector window: spec §4, "union of the sector's constituent
+ * per-symbol stores, deduped", plus the wire poll filtered to constituents.
+ * What is kept is decided in lib/server/news/sectorWindow.ts (pure, checked);
+ * this is only the I/O.
+ *
+ * COST: one Redis MGET for all constituents (1 command, however many symbols)
+ * and the wire poll, which is one shared fetch per hour for the whole site
+ * (Next's data cache). No Google News or SEC call is made here, and no FMP call.
+ *
+ * `from` is not used: the store's merge keys by link, so re-offering a held
+ * item adds nothing.
+ */
+async function fetchFreeSectorNewsWindow(symbols: string[]): Promise<NewsItem[]> {
+  const activeIds = new Set<string>(activeNewsProviders().map((p) => p.id));
+
+  const [stored, wire] = await Promise.all([
+    readStoredSymbolNews<NewsItem>(symbols),
+    wireProvider.fetchMarket().catch(() => [] as NewsItem[]),
+  ]);
+
+  const pools = composeFreeSectorPools(symbols, stored, wire, activeIds);
+  const pool = mergeNewsPools(pools)
+    .filter((row) => !isVideoOrLowQualitySource(row))
+    .slice(0, MAX_POOL_ITEMS);
+  console.log(
+    `[news-depth] sector free stores=${stored.size}/${symbols.length} wire=${pools[pools.length - 1].length} pool=${pool.length}`
+  );
+  return pool;
+}
+
+/**
  * Quality-then-recency ranking with the per-company relevance gate removed
  * (see the header note). dedupeNews still collapses the same story reported by
  * several outlets, which matters far more here than on a single-ticker page --
@@ -301,7 +349,7 @@ function rankSectorNews(news: NewsItem[]): NewsItem[] {
 }
 
 function primarySymbol(item: NewsItem, constituentSet: Set<string>): string | null {
-  for (const symbol of item.fmpSymbols ?? []) {
+  for (const symbol of attributedSymbols(item)) {
     if (constituentSet.has(symbol)) return symbol;
   }
   return null;
@@ -351,7 +399,7 @@ function countMentions(items: NewsItem[], constituentSet: Set<string>): SectorMe
   for (const item of items) {
     // Count each constituent once per article, not once per mention.
     const seen = new Set<string>();
-    for (const symbol of item.fmpSymbols ?? []) {
+    for (const symbol of attributedSymbols(item)) {
       if (!constituentSet.has(symbol) || seen.has(symbol)) continue;
       seen.add(symbol);
       counts.set(symbol, (counts.get(symbol) ?? 0) + 1);
@@ -381,10 +429,23 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
   // arrives many times over, which is both where dedup matters most and where
   // the threshold is least tested. Persisting the pool makes that measurable
   // for the first time; it does not make it measured.
-  const { items: news } = await readOrRefreshSectorNews<NewsItem>(sector.slug, {
-    fetchWindow: (from) => fetchFmpSectorNewsWindow(constituents, from),
-    dedupe: dedupeNews,
+  const onFmp = newsProviderMode() === "fmp";
+  const mode = onFmp ? "fmp" : "free";
+  const activeIds = new Set<string>(activeNewsProviders().map((p) => p.id));
+  const fromActive = (item: NewsItem) => isFromActiveProvider(item, activeIds, mode);
+  const { items: stored } = await readOrRefreshSectorNews<NewsItem>(sector.slug, {
+    fetchWindow: (from) =>
+      onFmp ? fetchFmpSectorNewsWindow(constituents, from) : fetchFreeSectorNewsWindow(constituents),
+    // PURGED AT THE FIRST REFRESH, not just hidden. The store runs the merged
+    // (held + fetched) list through this before capping at 40, so FMP-era items
+    // held in msh:sector-news:v1:<slug> leave the record on the first refresh
+    // after deploy instead of occupying cap slots, invisibly, for days.
+    // Under the fmp rollback the filter passes everything, as before.
+    dedupe: (items) => dedupeNews(items.filter(fromActive)),
   });
+  // AND FILTERED ON READ, for the up-to-an-hour a record is served from cache
+  // before its first refresh under this code.
+  const news = stored.filter(fromActive);
 
   const rankedNews = rankSectorNews(news);
   const earningsNews = news.filter(isEarningsNewsItem);
@@ -411,7 +472,7 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
     label: scoreToNewsLabel(newsScoreValue),
     reason: news.length
       ? keywordNewsScore.reason
-      : `FMP did not return recent headlines for the largest ${sector.name} names.`,
+      : `No recent headlines are stored yet for the largest ${sector.name} names.`,
   };
 
   const earningsScore: EarningsScoreResult = {
@@ -493,7 +554,9 @@ const getCachedSectorNewsBaseData = unstable_cache(
     if (!sector) return null;
     return buildSectorNewsBaseData(sector);
   },
-  ["msh-sector-news-base-data-v1"],
+  // v2: v1 entries were built from FMP; a new key stops them being served for
+  // up to an hour after deploy.
+  ["msh-sector-news-base-data-v2"],
   { revalidate: 3600 }
 );
 
