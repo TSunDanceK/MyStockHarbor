@@ -32,7 +32,9 @@
 // part. A symbol the cron has never reached answers "no-record", which is the
 // correct answer and a different one from "unavailable".
 import { readPickersSymbolsIfCached } from "./pickersBuilder";
-import { latestResults, readReportDates, type StoredReportDates } from "./secReportDatesStore";
+import {
+  latestResults, readReportDates, type ReportDatesRead, type StoredReportDates,
+} from "./secReportDatesStore";
 import { dueInputFrom } from "./dueInputs";
 import { selectDue } from "./dueToReport";
 import { dueRowLabel } from "./dueStripState";
@@ -229,13 +231,75 @@ export async function getSymbolOutlook(symbol: string, today: string): Promise<S
     readPickersSymbolsIfCached(),
     readReportDates(symbol),
   ]);
-  if (!Array.isArray(universe) || !universe.length) {
-    return {
-      symbol, kind: "unavailable",
-      headline: OUTLOOK_UNAVAILABLE,
-      hedge: null,
-      evidence: [],
-    };
-  }
+  if (!Array.isArray(universe) || !universe.length) return unavailableOutlook(symbol);
   return outlookFrom(symbol, rec, today);
+}
+
+/** "We are broken", said once. The search, the card and the tile all use it. */
+export function unavailableOutlook(symbol: string): SymbolOutlook {
+  return {
+    symbol, kind: "unavailable",
+    headline: OUTLOOK_UNAVAILABLE,
+    hedge: null,
+    evidence: [],
+  };
+}
+
+// ── THE SAME ANSWER ON THE STOCK PAGES (owner decision, 2026-09-23) ───────
+// /stock/[symbol]/earnings's "Next expected report" card and /stock/[symbol]'s
+// Earnings snapshot tile used to print estimateNextReport's day ("22 Oct 2026")
+// or month ("Expected in December 2026") straight off the stored record. The
+// owner's ruling is that the 30-day band is the ONLY forward claim anywhere on
+// the site, so both now answer through outlookFrom -- the same function, the
+// same bars and the same sentences as the search. There is deliberately no
+// third copy of the wording: a page that wants to say something different
+// about "when does X report" has to change it HERE, for all three at once.
+
+/**
+ * The answer for a record the page has ALREADY read.
+ *
+ * Both pages read the record for other reasons (the reaction chart, the
+ * "Latest report" date), so re-reading it through getSymbolOutlook would be a
+ * second GET of the same key. The read's own failure flag stands in for the
+ * universe probe: `ok: false` is an unreadable store, and it gets the outage
+ * sentence rather than "we have no SEC filing record for it".
+ */
+export function outlookFromRead(symbol: string, read: ReportDatesRead, today: string): SymbolOutlook {
+  return read.ok ? outlookFrom(symbol, read.rec, today) : unavailableOutlook(symbol);
+}
+
+/**
+ * The earnings page's card, or null when the page has nothing to say at all.
+ *
+ * ── THE CALENDAR ENTRY IS A BOOLEAN, AND THAT IS THE WHOLE DESIGN ─────────
+ * The card used to fall back to FMP's calendar date when the filer's own
+ * record had not been read ("This one comes from the earnings calendar").
+ * That is an exact day with nothing measured behind it -- the sentence the
+ * search stopped saying. The fallback now only decides whether the card
+ * RENDERS; what it says is outlookFrom(null), the named "no-record" refusal.
+ * This function is never handed the date, so no later edit to it can print one.
+ *
+ * Null (no card) only when the read succeeded, there is no record, AND no
+ * calendar entry -- the same blank the card had before for a symbol nobody
+ * has any schedule for.
+ */
+export function outlookForEarningsCard(
+  symbol: string,
+  read: ReportDatesRead,
+  hasCalendarEntry: boolean,
+  today: string,
+): SymbolOutlook | null {
+  if (read.ok && !read.rec && !hasCalendarEntry) return null;
+  return outlookFromRead(symbol, read, today);
+}
+
+/**
+ * The sidebar tile's cut of the answer: the headline and the hedge, nothing
+ * else. The tile is two short cells wide, so the evidence lines stay on the
+ * earnings page; the hedge rides in the tile's existing small line.
+ */
+export type CompactOutlook = Pick<SymbolOutlook, "kind" | "headline" | "hedge">;
+
+export function compactOutlook(o: SymbolOutlook): CompactOutlook {
+  return { kind: o.kind, headline: o.headline, hedge: o.hedge };
 }

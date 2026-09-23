@@ -105,11 +105,17 @@ function growthTone(p: SnapshotPct): ToneKey | undefined {
   return "neutral";
 }
 
-/** How the next report reads, or null when the filer's habit does not support one. */
+/**
+ * The next report, as the finished sentence the server composed.
+ *
+ * NO FORMATTING HAPPENS HERE, and that is the point. This used to format
+ * estimateNextReport's day ("22 Oct 2026") or print its month; the owner's
+ * 2026-09-23 ruling is that the 30-day band is the only forward claim on the
+ * site, so the headline and hedge come from lib/server/symbolOutlook.ts — the
+ * same words the /earnings-calendar search and the earnings page's card use.
+ */
 function nextReportText(n: SnapshotNextReport): string {
-  if (n.kind === "date") return formatPlainDate(n.date);
-  if (n.kind === "month") return n.month;
-  return "—";
+  return n.headline || "—";
 }
 
 // ── Tone ─────────────────────────────────────────────────────────────────────
@@ -204,16 +210,14 @@ export default function LatestEarningsCard({
             </div>
             <div>
               <div style={earningsMiniLabelStyle}>Next earnings</div>
-              <div style={earningsMiniValueStyle}>{nextReportText(snapshot.nextReport)}</div>
-              {/* NOT A FORECAST, AND THE CARD SAYS SO. The date is the filer's
-                  own habit measured over its last N reports, and offering it
-                  unqualified beside a filed figure lends it the same standing.
-                  Same wording as the full report's next-report card. */}
-              <div style={earningsMiniSubStyle}>
-                {snapshot.nextReport.kind === "none"
-                  ? "No regular pattern yet"
-                  : `Estimated from its last ${snapshot.nextReport.fromEvents} reports`}
-              </div>
+              <div style={earningsMiniSentenceStyle}>{nextReportText(snapshot.nextReport)}</div>
+              {/* NOT A FORECAST, AND THE CARD SAYS SO. The hedge (or, for a
+                  refusal, its named reason) is the search's own line. Null
+                  only for the filed-fact "due" answer and the outage one,
+                  which are not estimates. */}
+              {snapshot.nextReport.hedge ? (
+                <div style={earningsMiniSubStyle}>{snapshot.nextReport.hedge}</div>
+              ) : null}
             </div>
           </div>
 
@@ -375,6 +379,8 @@ function earningsMetricStyle(tone?: ToneKey): CSSProperties {
 
 const earningsMiniLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
 const earningsMiniValueStyle: CSSProperties = { marginTop: 5, fontSize: 14, fontWeight: 900, color: "#f8fafc" };
+/** A sentence, not a date, so it wraps and sits a notch lighter than a value. */
+const earningsMiniSentenceStyle: CSSProperties = { marginTop: 5, fontSize: 13, lineHeight: 1.35, fontWeight: 800, color: "#f8fafc" };
 const earningsMiniSubStyle: CSSProperties = { marginTop: 3, fontSize: 11, lineHeight: 1.4, color: "rgba(203,213,225,0.58)" };
 const earningsMetricValueStyle: CSSProperties = { marginTop: 6, fontSize: 18, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-0.035em", color: "#f8fafc" };
 const earningsMetricNoteStyle: CSSProperties = { marginTop: 4, fontSize: 10, lineHeight: 1.4, color: "rgba(203,213,225,0.55)" };
