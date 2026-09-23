@@ -703,6 +703,13 @@ const TASKS = {
     writes: true,
     env: { STALE_DAYS: "0" },
   },
+  // #535 COWORK #2 items 2, 3 and 6, across the manifest. Read-only.
+  "write-spotcheck-census": {
+    script: "scripts/spotcheck-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
