@@ -393,7 +393,9 @@ export function buildSecEarningsSnapshot(args: {
   // null on a set written before it existed, and then no tile claims it.
   const untagged = new Set(view.untagged ?? []);
   const derivedQ4 = view.basis === "quarter" && /^Q4 /.test(view.latestLabel);
-  const epsReason = derivedQ4 ? EMPTY_REASONS.q4NotFiled : null;
+  // A NAMED REASON ONLY OUTSIDE A DERIVED Q4, where "not filed on its own" is
+  // the truer statement for every filer (see epsBlankReason).
+  const epsReason = derivedQ4 ? EMPTY_REASONS.q4NotFiled : view.epsReason;
   const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;
   const noRevenue = s.revenue.val === null;
   // A REVENUE LINE THE FILINGS TAG ONLY IN PART refuses every margin by name
