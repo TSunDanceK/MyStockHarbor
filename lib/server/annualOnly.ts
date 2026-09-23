@@ -85,7 +85,10 @@ export function annualNextReportOutlook(
   return {
     symbol, kind: "beyond-window",
     headline: `The next annual report is typically filed around ${month}.`,
-    hedge: `Based on when the latest Form ${form} was filed; the timing may differ.`,
+    // THE CARD VALUE AND THE GREY LINE UNDER IT, in the owner's words (#535
+    // COWORK #22 §5). A month, never a day.
+    value: `Est. ${month}`,
+    hedge: `Based on when the latest Form ${form} was filed; timing may differ.`,
     evidence: [`${label} (year ending ${y.e}): Form ${form} filed ${filed}.`],
   };
 }
