@@ -578,6 +578,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: a stored report-date record beside the live page's
+  // "Next expected earnings date" card, for the symbols in SYMBOLS.
+  "write-report-date-live-check": {
+    script: "scripts/report-date-live-check.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    writes: true,
+  },
   // READS ONLY: the same-day tie-break flips, a general current-period rule
   // scored on history, and why the thin FPIs are thin (review of #515).
   "write-pairing-followups": {
