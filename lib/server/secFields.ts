@@ -607,6 +607,34 @@ assertCoverChainsAreClean();
 /** The ordered field list. ORDER IS LOAD-BEARING: values are stored positionally. */
 export const SEC_FIELDS: FieldDef[] = [...INCOME, ...CASH_FLOW, ...BALANCE_SHEET];
 
+/**
+ * A REVENUE LINE THE FILINGS TAG ONLY IN PART (#535 COWORK #8 ruling 4): the
+ * period's own operating income exceeds it — or, where operating income is
+ * not tagged, its pre-tax income. ONE PREDICATE on raw values, so the
+ * extractor's fallback, the pages' refusal (secEarningsView) and any future
+ * picker guard cannot disagree about which periods it covers.
+ */
+export function revenueLineIncompleteValues(
+  rev: number | null | undefined,
+  op: number | null | undefined,
+  pre: number | null | undefined,
+): boolean {
+  if (rev == null || rev <= 0) return false;
+  if (op != null) return op > rev;
+  return pre != null && pre > rev;
+}
+
+/**
+ * WHERE THAT PREDICATE FIRES, AND ONLY THERE, revenue is re-read from these
+ * tags for the same period (#535 COWORK #16 / #12 ruling A). A REIT's
+ * `RevenueFromContractWithCustomer…` excludes rent and a bank's excludes net
+ * interest income; its `Revenues` (a bank's `RevenuesNetOfInterestExpense`)
+ * is the filing's own total. Measured: 254 of 313 flagged periods resolved,
+ * 0 periods changed outside them, and every rescued newest quarter equal to
+ * the 10-Q's own total-revenue line (relay write-spotcheck-census-5).
+ */
+export const REVENUE_FALLBACK_CHAIN: readonly string[] = ["Revenues", "RevenuesNetOfInterestExpense"];
+
 export const SEC_FIELD_KEYS: string[] = SEC_FIELDS.map((f) => f.key);
 
 /** Field index by key, for the positional encoding. */
@@ -686,6 +714,10 @@ export function secChainsHash(): string {
   // shipped code would no longer write. Bumping this string is what re-reads
   // the universe; leaving it alone is what makes a resolution change invisible.
   feed(`policy|${CHAIN_RESOLUTION_POLICY}`);
+  // THE REVENUE FALLBACK IS A CHAIN TOO (#6-B): it changes stored revenue on
+  // flagged periods, so a set written without it must read as stale and be
+  // re-read — the same migration any chain edit gets.
+  feed(`revenue-fallback|${REVENUE_FALLBACK_CHAIN.join(",")}`);
   return h.toString(16).padStart(8, "0");
 }
 
