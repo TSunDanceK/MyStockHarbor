@@ -46,7 +46,6 @@ const TODAY = process.env.TODAY || new Date().toISOString().slice(0, 10);
 const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
 // The symbols sit under `rows`; the top level is metadata (run 35916509860 read
 // the top level and found no industry for anyone -- fixed here).
-const STATIC_PROFILE = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8")).rows ?? {};
 const SIC_SECTOR = JSON.parse(fs.readFileSync("data/sec/sic-sector.json", "utf8")).codes ?? {};
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -204,14 +203,14 @@ function secRow(sym, set, price) {
   };
 }
 
-// Sector/industry without FMP's live profile: the committed snapshot, then SIC.
+// Sector without FMP: SIC only. The FMP snapshot (data/static-profile.json) was
+// removed by #561 under the no-stored-FMP-data ruling, so there is no industry.
 function taxonomy(sym) {
-  const snap = STATIC_PROFILE[sym];
   const sic = REGISTRANTS[sym]?.sic ?? null;
   return {
-    sector: snap?.sector ?? (sic ? SIC_SECTOR[sic]?.sector ?? null : null),
-    industry: snap?.industry ?? null,
-    sectorFrom: snap?.sector ? "snapshot" : sic && SIC_SECTOR[sic]?.sector ? "sic" : null,
+    sector: sic ? SIC_SECTOR[sic]?.sector ?? null : null,
+    industry: null,
+    sectorFrom: sic && SIC_SECTOR[sic]?.sector ? "sic" : null,
     semiconductorSic: sic === "3674",
   };
 }
@@ -289,8 +288,8 @@ for (const [key, label] of COLS) {
 
 // Taxonomy.
 const secCount = (fn) => rows.filter(fn).length;
-console.log(`\nSector:   FMP ${secCount((r) => r.fmp.sector)} · snapshot/SIC ${secCount((r) => r.tax.sector)} (SIC-only ${secCount((r) => r.tax.sectorFrom === "sic")}) · agree ${secCount((r) => r.fmp.sector && r.fmp.sector === r.tax.sector)}`);
-console.log(`Industry: FMP ${secCount((r) => r.fmp.industry)} · snapshot ${secCount((r) => r.tax.industry)} · agree ${secCount((r) => r.fmp.industry && r.fmp.industry === r.tax.industry)}`);
+console.log(`\nSector:   FMP ${secCount((r) => r.fmp.sector)} · SIC ${secCount((r) => r.tax.sector)} (SIC-only ${secCount((r) => r.tax.sectorFrom === "sic")}) · agree ${secCount((r) => r.fmp.sector && r.fmp.sector === r.tax.sector)}`);
+console.log(`Industry: FMP ${secCount((r) => r.fmp.industry)} · SEC none · agree ${secCount((r) => r.fmp.industry && r.fmp.industry === r.tax.industry)}`);
 
 // Hidden columns: what hiding them removes.
 console.log(
