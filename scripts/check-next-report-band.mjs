@@ -232,7 +232,10 @@ function wiringProblems(page, snap) {
   if (!/outlookForEarningsCard\(/.test(page)) p.push("earnings page does not call outlookForEarningsCard");
   if (!/<NextReportCard outlook=\{nextReport\} \/>/.test(page)) p.push("earnings page does not render NextReportCard");
   if (/secDates\.next\b|secDates\?\.next\b|next\.date\s*,\s*time|nextReport\.date|monthName\(/.test(page)) p.push("earnings page reads rec.next / FMP's date");
-  if (!/compactOutlook\(outlookFromRead\(clean, read, today\)\)/.test(snap)) p.push("snapshot does not use compactOutlook(outlookFromRead(...))");
+  // The annual-only layout (#535 COWORK #15) routes 20-F/40-F filers to the
+  // annual-cadence month; every other filer still takes the band.
+  if (!/compactOutlook\(\s*annualForm && cold\.status === "ready"\s*\? annualNextReportOutlook\(clean, cold\.set, annualForm\)\s*: outlookFromRead\(clean, read, today\),?\s*\)/.test(snap)
+    && !/compactOutlook\(outlookFromRead\(clean, read, today\)\)/.test(snap)) p.push("snapshot does not use compactOutlook(outlookFromRead(...))");
   if (/dates\??\.next\b/.test(snap)) p.push("snapshot reads dates.next");
   return p;
 }
@@ -306,7 +309,9 @@ const bit = (label, problems) =>
 {
   const oldPage = PAGE.replace("outlookForEarningsCard(", "legacyNext(") + "\nconst d = secDates.next.date;";
   bit("M5a earnings page reading secDates.next", wiringProblems(oldPage, SNAP));
-  const oldSnap = SNAP.replace("compactOutlook(outlookFromRead(clean, read, today))", "(dates?.next.kind === \"date\" ? dates.next : null)");
+  // Replaces the band call wherever it sits (since #535 COWORK #15 it is the
+  // non-annual branch of a conditional).
+  const oldSnap = SNAP.replace(/compactOutlook\([\s\S]*?outlookFromRead\(clean, read, today\),?\s*\)/, "(dates?.next.kind === \"date\" ? dates.next : null)");
   bit("M5b snapshot reading dates.next", wiringProblems(PAGE, oldSnap));
 }
 
