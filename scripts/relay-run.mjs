@@ -384,6 +384,12 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // Read-only: every balance-sheet-total and non-operating concept a filer
+  // publishes for its newest periods, with values (earnings page round 2).
+  "sec-concept-list": {
+    script: "scripts/sec-concept-list-probe.mjs",
+    args: () => [],
+  },
   // Read-only: the NEXT question after sec-missing-fields. That probe says
   // whether the filer tagged the concept; this one says why a concept it DID
   // tag, and our chain DOES list, still renders blank — extraction, period
@@ -517,6 +523,16 @@ const TASKS = {
   // Credentialled, read-only: one manifest GET.
   "write-chain-bump-census": {
     script: "scripts/sec-chain-bump-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX: earnings page round 2's four gaps counted
+  // over the manifest with the shipped extraction, before/after the chain
+  // edits, plus the re-read backlog the edit causes. GETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-round2-gap-census": {
+    script: "scripts/sec-round2-gap-census.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,
