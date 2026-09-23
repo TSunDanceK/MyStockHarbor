@@ -461,7 +461,12 @@ function supportQualityTone(support: MacroSupportResult | null): "green" | "yell
 function buildLongSummary(args: { symbol: string; companyName: string; quote: Quote | null; lastClose: number | null; ma50: number | null; ma200: number | null; trend: string | null; trendScore: { passed: number; total: number; known: boolean }; rsi: number | null }) {
   const { symbol, companyName, quote, lastClose, ma50, ma200, trend, trendScore, rsi } = args;
   const companyLead = companyName ? `${companyName} (${symbol})` : symbol;
-  const priceText = typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "an unavailable latest price";
+  // NO PRICE IS SAID AS SUCH. It used to read "The latest available price is an
+  // unavailable latest price" (BRK.B, COWORK #2 item 5, 2026-09-23); a symbol
+  // with no quote now gets a plain statement instead of a price-shaped phrase.
+  const priceLead = typeof quote?.price === "number"
+    ? `The latest available price is $${quote.price.toFixed(2)}`
+    : "No current price is available";
   const ma50Pct = pctFromBase(lastClose, ma50), ma200Pct = pctFromBase(lastClose, ma200);
   // trend === null means the trend is not computable yet (under ~200 bars), NOT
   // that it is mixed. Say so rather than describing the stock as uncertain.
@@ -491,8 +496,8 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
   // checks. When !known the checks did not run at all, so the clause is dropped
   // rather than reported as a score.
   const checksSentence = trendScore.known
-    ? ` The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`
-    : ` The latest available price is ${priceText}, and there is not yet enough price history to run the core trend checks.`;
+    ? ` ${priceLead}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`
+    : ` ${priceLead}, and there is not yet enough price history to run the core trend checks.`;
   const trendParagraph = `${trendLead}${checksSentence}` + movingAverageText;
   let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
   if (typeof rsi === "number") {
