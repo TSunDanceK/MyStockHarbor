@@ -225,10 +225,9 @@ for (const group of chunks(poolSymbols, 25)) {
   group.forEach((sym, i) => {
     if (got[i]) sets++;
     const fmp = fmpRow(sym);
-    const shipped = got[i]
-      ? P.applySecPickerRow(P.buildSecPickerRow(got[i], TODAY, { annualForm: REGISTRANTS[sym]?.annualForm ?? null }, Date.now()), fmp.price)
-      : null;
-    rows.push({ sym, fmp, sec: secRow(sym, got[i], fmp.price), shipped, tax: taxonomy(sym) });
+    const built = got[i] ? P.buildSecPickerRow(got[i], TODAY, { annualForm: REGISTRANTS[sym]?.annualForm ?? null }, Date.now()) : null;
+    const shipped = built ? P.applySecPickerRow(built, fmp.price) : null;
+    rows.push({ sym, fmp, sec: secRow(sym, got[i], fmp.price), shipped, unit: built?.unit ?? null, tax: taxonomy(sym) });
   });
 }
 console.log(`fact sets readable: ${sets}/${poolSymbols.length}; pool price present: ${rows.filter((r) => r.fmp.price).length}`);
@@ -345,6 +344,13 @@ for (const [href, pass] of PRESETS) {
   const shipped = rows.filter((r) => pass(pageValues(r))).length;
   console.log(`  ${href.padEnd(29)} today ${String(today).padStart(4)} → shipped ${String(shipped).padStart(4)}${shipped === 0 ? "   *** ZERO ***" : ""}`);
 }
+// COWORK #11: name the cash-rich rows so the page's count can be reconciled
+// row by row, and count the sets refused for currency (non-USD, unconverted).
+const cashRich = PRESETS.find(([h]) => h === "/cash-rich-value-stocks")[1];
+console.log(`cash-rich rows as shipped: ${rows.filter((r) => cashRich(pageValues(r))).map((r) => r.sym).join(" ")}`);
+console.log(`  of which have NO SEC row (keep stored values): ${rows.filter((r) => !r.shipped && cashRich(pageValues(r))).map((r) => r.sym).join(" ") || "none"}`);
+console.log(`sets refused for currency (non-USD, unconverted): ${rows.filter((r) => r.unit && r.unit.reporting !== "USD" && !r.unit.converted).map((r) => `${r.sym}:${r.unit.reporting}`).join(" ") || "none"}`);
+console.log(`sets converted by A's FX module: ${rows.filter((r) => r.unit?.converted).length}`);
 const cov = (k) => rows.filter((r) => r.shipped && typeof r.shipped[k] === "number").length;
 console.log(`shipped coverage: ${P.SEC_PICKER_FIELDS.map((k) => `${k} ${cov(k)}`).join(" · ")}`);
 
