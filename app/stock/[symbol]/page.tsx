@@ -10,7 +10,7 @@ import {
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import type { StockPageProfileFacts } from "@/lib/server/secEarningsSnapshot";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
-import { resolveProfile } from "@/lib/server/staticProfile";
+import { classificationAsOf, resolveProfile } from "@/lib/server/staticProfile";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, registrantFor } from "@/lib/server/stockProfile";
@@ -461,13 +461,15 @@ export default async function StockPage({ params }: Props) {
   // own; the 52-week range is computed from the same bars the chart draws.
   const directoryName =
     symbolSpellings(upper).map((s) => directory.get(s)).find(Boolean) ?? "";
+  const taxonomy = resolveProfile(upper, fundamentals);
   const composed = composeCompanyProfile({
     symbol: upper,
     directoryName,
     snapshotName: snapshotCompanyName(upper),
     entityName: secFacts.profileFacts.entityName,
     filingDescription: filingDescriptionFor(upper),
-    taxonomy: resolveProfile(upper, fundamentals),
+    taxonomy,
+    classificationAsOf: classificationAsOf(taxonomy, fundamentals?.updatedAt),
     valuation: secFacts.profileFacts.valuation,
     price: quote.price,
     points,
