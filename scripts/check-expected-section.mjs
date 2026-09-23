@@ -163,9 +163,15 @@ console.log("\n5. BANDING, AND NOTHING OUTSIDE THE WINDOW");
   check("21 is the second band's last day", at(21).row?.band === "d8_21");
   check("22 crosses into the third", at(22).row?.band === "d22_30");
   check("30 is the last day in the window", at(30).row?.band === "d22_30");
-  check("31 days away is OUTSIDE the window", at(31).skip === "outside-window");
-  check("a date already past is outside too — that is the due strip's business",
-    at(-1).skip === "outside-window");
+  // THE TWO OUT-OF-WINDOW ANSWERS ARE NAMED SEPARATELY, and the section drops
+  // both identically -- which is exactly why they were one skip until a
+  // per-symbol reader needed to tell "reports in seven weeks" from "our
+  // estimate already passed". Asserted here so a later merge cannot quietly
+  // put them back together.
+  check("31 days away is BEYOND the window", at(31).skip === "beyond-window");
+  check("a date already past is a different skip — that is the due strip's business",
+    at(-1).skip === "estimate-in-past");
+  check("and the two are not the same name", at(31).skip !== at(-1).skip);
   check("the bands cover 0..30 with no gap",
     m.EXPECTED_BANDS.map((b) => b.maxDays).join() === "7,21,30");
 }
