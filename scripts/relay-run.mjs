@@ -748,6 +748,8 @@ const TASKS = {
   "write-picker-ps-census": { script: "scripts/picker-ps-census.mjs", args: () => [], writes: true },
   // #535 COWORK #14: re-read queue after #546/#547. Read-only.
   "write-reread-queue": { script: "scripts/reread-queue-probe.mjs", args: () => [], needsTypescript: true, writes: true },
+  // #535 COWORK #15: annual-only layout render text from live sets. Read-only.
+  "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
   // volume, per-filer timing through the shipped filing path. Read-only.
   "write-sec-cache-budget": {
