@@ -35,6 +35,11 @@ import { buildProfileDividend, type ProfileDividend } from "./secDividend";
 import { readReportDatesChecked, latestResults, type ReportDatesRead } from "./secReportDatesStore";
 import { compactOutlook, outlookFromRead, type CompactOutlook } from "./symbolOutlook";
 import {
+  multipleInputs, valuationInputs, type MultipleInputs, type ValuationInputs,
+} from "./secValuation";
+import { buildShareHistory, type ShareHistory } from "./secShareHistory";
+import { registrantFor } from "./stockProfile";
+import {
   TIMING_WORDING, type ReportTiming,
 } from "./secReportDates";
 import {
@@ -478,17 +483,45 @@ export async function getSecEarningsSnapshot(symbol: string): Promise<SecEarning
 export async function getStockPageSecFacts(symbol: string): Promise<{
   snapshot: SecEarningsSnapshot;
   dividend: ProfileDividend;
+  profileFacts: StockPageProfileFacts;
 }> {
   const clean = symbol.trim().toUpperCase();
   const [cold, dates] = await Promise.all([
     resolveFactSetForRender(clean),
     readReportDatesChecked(clean).catch((): ReportDatesRead => ({ ok: false })),
   ]);
+  const set = cold.status === "ready" ? cold.set : null;
   return {
     snapshot: snapshotFrom(clean, cold, dates),
-    dividend: buildProfileDividend(cold.status === "ready" ? cold.set : null),
+    dividend: buildProfileDividend(set),
+    // ── AND NOW THE PROFILE BLOCK'S FILED HALF, FROM THE SAME READ ─────────
+    // "One fact-set read, two answers" became three (brief 2026-09-22 §2.1):
+    // the market-cap numerator, the share-dilution series and the filer's own
+    // name all come out of the object already in hand. A second read for them
+    // would be the double-read this function exists to prevent.
+    profileFacts: {
+      valuation: set
+        ? valuationInputs(set, new Date().toISOString().slice(0, 10), {
+            annualForm: registrantFor(clean)?.annualForm ?? null,
+          })
+        : null,
+      shareHistory: buildShareHistory(set),
+      entityName: set?.entityName ?? null,
+      // The Valuation section's filed inputs — revenue, EBITDA and the latest
+      // balance sheet (owner addendum, brief 2026-09-22 PR 2).
+      multiples: set ? multipleInputs(set) : null,
+    },
   };
 }
+
+/** The /stock profile block's inputs that come from the stored SEC set. */
+export type StockPageProfileFacts = {
+  /** Cover-page shares and twelve-month EPS; the page multiplies by its own price. */
+  valuation: ValuationInputs | null;
+  shareHistory: ShareHistory | null;
+  entityName: string | null;
+  multiples: MultipleInputs | null;
+};
 
 function snapshotFrom(
   clean: string,

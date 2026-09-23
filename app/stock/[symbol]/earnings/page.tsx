@@ -33,6 +33,7 @@ import {
   SCORE_COMPONENTS, coverageOf, scoreFromSec,
 } from "@/lib/server/secEarningsScore";
 import { valuationInputs } from "@/lib/server/secValuation";
+import { registrantFor } from "@/lib/server/stockProfile";
 import {
   HiddenCard, SecSnapshotCard, SecGrowthMarginsCard, SecAnnualCard, SecCashQualityCard,
   SecBalanceSheetCard, SecIncomeStatementCard, SecRecentPeriodsCard,
@@ -481,7 +482,11 @@ async function getEarningsData(symbol: string) {
   // VALUATION_PRICE_MAX_AGE_DAYS: a market cap is a claim about today, and one
   // built on a year-old close is confidently wrong with nothing on screen to
   // say so.
-  const valuation = cold.status === "ready" ? valuationInputs(cold.set, todayIso) : { shares: null, eps: null, refusals: [] };
+  // THE SAME 20-F RULE THE /stock PROFILE APPLIES, from the same registrant
+  // file, so the two pages cannot disagree about whether a cap is computable.
+  const valuation = cold.status === "ready"
+    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null })
+    : { shares: null, eps: null, refusals: [] };
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
   const latestCloseOn = lastBar?.date ?? null;

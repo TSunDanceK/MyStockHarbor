@@ -1107,6 +1107,9 @@ globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
 const staticProfileSrc = read("lib/server/staticProfile.ts")
   .replace(/^import snapshotFile from "@\/data\/static-profile\.json";$/m, "const snapshotFile = globalThis.__staticProfile;")
   .replace(/^import cikMap from "@\/data\/cik-map\.json";$/m, () => `const cikMap = ${read("data/cik-map.json")};`)
+  // The SIC leg's two files (#517), real data like the CIK map.
+  .replace(/^import registrantsFile from "@\/data\/sec\/registrants\.json";$/m, () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
+  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector\.json";$/m, () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
   .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m, "const { lookupSpellingIn } = globalThis.__symbolSpellings;");
 if (/^import /m.test(staticProfileSrc)) {
   console.error("FAIL: an import survived substitution in staticProfile.ts:\n" +

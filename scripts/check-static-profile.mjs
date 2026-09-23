@@ -40,6 +40,12 @@ const src = read("lib/server/staticProfile.ts")
   // number describe the stub. Real data or no assertion.
   .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
     () => `const cikMap = ${read("data/cik-map.json")};`)
+  // The SIC leg's two files, inlined for the same reason: real data or no
+  // assertion.
+  .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
+    () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
+  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
+    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
   // ── THE SPELLINGS HELPER IS REAL, NOT STUBBED ────────────────────────────
   // staticProfileFor goes through lookupSpellingIn so /stock/BRK.B reaches the
   // snapshot's BRK-B row. A stub here would assert that the bridge exists while
@@ -371,6 +377,53 @@ check(
   /process\.env\.NEWS_PROVIDER === "fmp" \? "fmp" : "free"/.test(readCodeOnly("lib/server/news/index.ts")),
   "which is what makes this snapshot the only floor under sector and industry"
 );
+
+console.log("\n=== 7. The SIC leg: third, never over a snapshot row, provenance per field ===\n");
+{
+  // A SNAPSHOT SYMBOL NEVER RESOLVES THROUGH SIC, so every symbol the snapshot
+  // covers reads exactly as it did before the leg existed.
+  const nv = sp.resolveProfile("NVDA", null);
+  check("NVDA (in the snapshot) resolves from the snapshot, not SIC",
+    nv.source === "snapshot" && nv.sectorSource === "fmp-snapshot" && nv.industrySource === "fmp-snapshot",
+    JSON.stringify(nv));
+  check("a cached FMP row reports fmp-cache per field, and none for a field it lacks",
+    (() => { const r = sp.resolveProfile("NVDA", { sector: "Technology", industry: null });
+      return r.sectorSource === "fmp-cache" && r.industrySource === "none"; })());
+
+  // THE LEG ITSELF, on real rows: NVDA's SIC 3674 maps to Technology by
+  // measured majority, and its industry is SEC's own description, not FMP's.
+  // SIC 3674 CARRIES THE ONE OWNER-DECIDED LABEL ("Semiconductors", the string
+  // /semiconductor-stocks presets on); every other code keeps SEC's own words.
+  const sic = sp.sicProfileFor("NVDA");
+  check("the SIC leg reads the committed registrant and crosswalk, and 3674 maps to the preset label",
+    sic?.sector === "Technology" && sic?.industry === "Semiconductors",
+    JSON.stringify(sic));
+  check("the label table is one row, and records its source",
+    Object.keys(sp.SIC_INDUSTRY_LABELS).length === 1 && /owner decision/.test(sp.SIC_INDUSTRY_LABELS["3674"]?.source ?? ""));
+  const aapl = sp.sicProfileFor("AAPL");
+  check("any other code keeps SEC's own description (AAPL, SIC 3571)",
+    aapl?.industry === "Electronic Computers", JSON.stringify(aapl));
+
+  // A SYMBOL IN NO FMP LEG FALLS THROUGH TO SIC. None exists in today's files
+  // (registrants covers the snapshot's symbols), so NVDA's snapshot row is
+  // removed in a mutated copy of the module to reach the leg.
+  const orphanSrc = src.replace("const snap = staticProfileFor(symbol);", "const snap = null;");
+  const f2 = path.join(ROOT, ".check-staticprofile-sic.mjs");
+  fs.writeFileSync(f2, ts.transpileModule(orphanSrc, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
+  let orphan;
+  try { orphan = await import(`${pathToFileURL(f2).href}?t=${Date.now()}`); } finally { fs.unlinkSync(f2); }
+  const o = orphan.resolveProfile("NVDA", null);
+  check("with no FMP row, the SIC leg answers and says so",
+    o.source === "sic" && o.sector === "Technology" && o.industry === "Semiconductors" &&
+      o.sectorSource === "sic" && o.industrySource === "sic",
+    JSON.stringify(o));
+  check("an unclassified SIC code yields no sector — never a guess",
+    Object.values(JSON.parse(read("data/sec/sic-sector.json")).codes).some((c) => c.sector === null),
+    "unclassified codes exist and map to null");
+  check("the crosswalk is regenerated, not hand-edited",
+    (() => { try { execFileSync("node", ["scripts/build-sic-sector.mjs", "--check"], { cwd: ROOT, stdio: "pipe" }); return true; } catch { return false; } })(),
+    "node scripts/build-sic-sector.mjs");
+}
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

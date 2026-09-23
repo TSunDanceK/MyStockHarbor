@@ -149,6 +149,12 @@ export type StoredFactSet = {
    */
   cc?: Record<string, string>;
   /**
+   * Fiscal-year basic shares, every year in the payload: `[yearEnd, shares]`.
+   * See ExtractResult.annualShares. Optional; not in contentHashOf, since it
+   * duplicates a field the hashed years already carry for the retained span.
+   */
+  as?: [string, number][];
+  /**
    * Field keys the payload published NO chain concept for, in any period.
    * See ExtractResult.untagged. OPTIONAL: absent means "written before the
    * marker existed", which is UNKNOWN — a reader must never treat it as
@@ -241,6 +247,7 @@ export function encodeFactSet(
     c: secChainsHash(),
     cu: result.refusedUnits,
     cc: result.conceptChoice,
+    ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
     w: SEC_QUARTER_WINDOW,
