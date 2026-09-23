@@ -6,6 +6,13 @@ import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
+import { sitemapSecState } from "@/lib/server/secColdFetch";
+
+// REGENERATED AT MOST DAILY (#535 COWORK #21): the stock entries below depend
+// on which symbols have a stored SEC set, and that changes as the jobs fill
+// them. Per regeneration: one pipelined round trip — an EXISTS per curated
+// symbol (~161) and one HMGET of the figures-changed hash.
+export const revalidate = 86400;
 
 const baseUrl = "https://www.mystockharbor.com";
 
@@ -149,7 +156,7 @@ function toAbsoluteUrl(path: string) {
   return `${baseUrl}${path}`;
 }
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // NO `const now` here, deliberately.
   //
   // Every block below used to stamp `lastModified: now`, so the sitemap told
@@ -282,7 +289,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // pickers/plays/screener pages, just without a sitemap entry of their own.
   const stockSymbols = Array.from(new Set([...priorityStocks, ...uniqueEtfs]));
 
-  const stockPageEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
+  // ── ONLY PAGES THAT RENDER WITH DATA AND `index` (#535 COWORK #21 §1) ────
+  // Googlebot runs no cold fill (BotID refuses every bot), so a symbol whose
+  // SEC set is not stored renders "not yet read" and `noindex` on BOTH pages,
+  // and a sitemap that lists it earns "Submitted URL marked noindex". The
+  // test is the pages' own (awaitingSecRead), asked for all symbols at once.
+  // Unanswerable (null) keeps everything, as before this rule: a Redis blip
+  // must not empty the sitemap. Measured 2026-09-23: SPY, QQQ and DIA were
+  // the three; companyfacts 404s for them, now stored as the empty answer.
+  const sec = await sitemapSecState(stockSymbols);
+  const renderable = (symbol: string) => !sec?.awaiting.has(symbol);
+  // lastmod only where a truthful one exists: when the stored figures last
+  // changed (stamped by writeFactSet, which runs only on a change). Never a
+  // re-read time, which moves daily; absent stays absent.
+  const figuresChangedAt = (symbol: string) => {
+    const at = sec?.changedAt.get(symbol);
+    return at ? { lastModified: new Date(at) } : {};
+  };
+
+  const stockPageEntries: MetadataRoute.Sitemap = stockSymbols.filter(renderable).map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${symbol}`),
     changeFrequency: "daily" as const,
     priority: 0.78,
@@ -304,9 +329,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const etfSymbols = new Set<string>(uniqueEtfs);
 
   const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols
-    .filter((symbol) => !etfSymbols.has(symbol))
+    .filter((symbol) => !etfSymbols.has(symbol) && renderable(symbol))
     .map((symbol) => ({
       url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
+      ...figuresChangedAt(symbol),
       changeFrequency: "weekly" as const,
       priority: 0.68,
     }));

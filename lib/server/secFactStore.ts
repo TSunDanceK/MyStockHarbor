@@ -78,12 +78,56 @@ export async function factSetExists(symbol: string): Promise<boolean | null> {
   }
 }
 
+/**
+ * For the sitemap's daily regeneration, in ONE pipelined round trip: whether
+ * each symbol has a stored set, and when its figures last changed. Null when
+ * Redis cannot answer — the caller must treat that as "unknown", never as
+ * "none stored".
+ */
+export async function factSetPresence(
+  symbols: string[],
+): Promise<{ exists: Map<string, boolean>; changedAt: Map<string, number> } | null> {
+  if (!redis) return null;
+  const syms = symbols.map((s) => s.toUpperCase());
+  if (!syms.length) return { exists: new Map(), changedAt: new Map() };
+  try {
+    const p = redis.pipeline();
+    for (const s of syms) p.exists(factKey(s));
+    p.hmget(SEC_FIGURES_CHANGED_KEY, ...syms);
+    const out = (await p.exec()) as unknown[];
+    const stamps = (out[syms.length] ?? {}) as Record<string, unknown> | null;
+    const changedAt = new Map<string, number>();
+    for (const s of syms) {
+      const v = Number(stamps?.[s]);
+      if (Number.isFinite(v) && v > 0) changedAt.set(s, v);
+    }
+    return { exists: new Map(syms.map((s, i) => [s, Number(out[i]) > 0])), changedAt };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * WHEN EACH SYMBOL'S STORED FIGURES LAST CHANGED (ms), one small hash — the
+ * sitemap's `lastmod` for /stock/X/earnings (#535 COWORK #21 §3). Stamped by
+ * writeFactSet, and every caller writes only on a change (sec-facts' `changed`
+ * branch, the filing job's fill, a cold fill's first read), so a re-read that
+ * finds nothing new never moves it. NOT the manifest: that 0.5 MB value is
+ * kept off everything but the job routes (check-sec-daily-index).
+ */
+export const SEC_FIGURES_CHANGED_KEY = "msh:sec:figures-changed:v1";
+
 export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!redis) return false;
   // A PREVIEW RENDERS FROM THE SET IT HOLDS AND KEEPS NOTHING. See secWriteGate.
   if (!canWriteSecState()) { noteSecWriteBlocked("writeFactSet"); return false; }
   try {
     await redis.set(factKey(set.symbol), set);
+    try {
+      await redis.hset(SEC_FIGURES_CHANGED_KEY, { [set.symbol.toUpperCase()]: Date.now() });
+    } catch {
+      // The sitemap then omits lastmod for this symbol; the set is stored.
+    }
     return true;
   } catch (err) {
     console.error("[sec-facts] write failed", set.symbol, err);
