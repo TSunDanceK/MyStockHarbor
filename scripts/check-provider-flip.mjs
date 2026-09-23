@@ -288,6 +288,11 @@ const spSrc = read("lib/server/staticProfile.ts")
   // a stubbed map makes a coverage number that describes the stub.
   .replace(/^import cikMap from "@\/data\/cik-map.json";$/m,
     () => `const cikMap = ${read("data/cik-map.json")};`)
+  // The SIC leg's two files (brief 2026-09-22 §2.4), real data again.
+  .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
+    () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
+  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
+    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
   // The spellings helper, handed over rather than stubbed — the same choice
   // check-static-profile.mjs makes, and for the same reason: there is exactly
   // one implementation of the dot/dash bridge and a stub would test a copy.
