@@ -254,7 +254,6 @@ const COLS = [
 ];
 const pct = (a, b) => (b ? `${((a / b) * 100).toFixed(1)}%` : "—");
 const close = (a, b, tol) => Math.abs(a - b) <= tol * Math.max(Math.abs(a), Math.abs(b));
-const N = rows.length;
 
 console.log("column        | FMP shows | SEC computes | both | agree ±5% | agree ±20% | FMP-only (SEC refusal: top 3)");
 console.log("--------------|-----------|--------------|------|-----------|------------|------------------------------");
