@@ -686,6 +686,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // Every symbol, not only those >100 days old: a quarter-behind page is 30-90
+  // days stale, under the default threshold (#535 COWORK #2 defect #1).
+  "write-stale-period-census-all": {
+    script: "scripts/sec-stale-period-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+    env: { STALE_DAYS: "0" },
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
