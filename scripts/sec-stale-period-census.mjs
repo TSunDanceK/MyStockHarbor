@@ -91,7 +91,10 @@ const classify = async (symbol, cik, set, periodic) => {
     for (const def of Object.values(tags)) {
       for (const rows of Object.values(def.units ?? {})) {
         for (const r of rows) {
-          if (!r.end) continue;
+          // DURATION ROWS ONLY. A period's figures are flows; an instant row
+          // on the same date (C: 120 balance-sheet rows, zero income-statement
+          // rows) or a lone dei row (most 20-F filers: 1) is not the quarter.
+          if (!r.end || !r.start) continue;
           if (r.end > newestEnd) newestEnd = r.end;
           if (r.end === periodic.period) rowsOnPeriod++;
         }
@@ -105,7 +108,7 @@ const classify = async (symbol, cik, set, periodic) => {
     `contentHash=${e.contentHash ? "set" : "null"}`;
   const rec = await redis.get(`${DATES_PREFIX}:${symbol}`);
   const recPart = rec ? `record next=${rec.next?.kind ?? "—"} pending=${rec.pending ? rec.pending.periodEnd : "none"}` : "record none";
-  const detail = `${recPart}; cf newest end ${newestEnd || "—"}, rows ending ${periodic.period}: ${rowsOnPeriod}; set written ${setAt}; ${mf}`;
+  const detail = `${recPart}; cf newest duration end ${newestEnd || "—"}, duration rows ending ${periodic.period}: ${rowsOnPeriod}; set written ${setAt}; ${mf}`;
   if (!rowsOnPeriod) return { verdict: "SOURCE_BEHIND", detail };
   if (setAt !== "?" && setAt < periodic.filed) return { verdict: "NOT_RE_READ", detail };
   return { verdict: "READ_BUT_DROPPED", detail };
