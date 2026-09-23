@@ -27,6 +27,8 @@ import {
   asFiledOnlyFields,
   cumulativeFields,
   instantFields,
+  revenueLineIncompleteValues,
+  REVENUE_FALLBACK_CHAIN,
   secFieldsHash,
   type FieldDef,
 } from "./secFields";
@@ -1042,7 +1044,21 @@ export function extractCompanyFacts(
   const quarterMeta = new Map<string, { start: string; row: FactRow }>();
   const yearMeta = new Map<string, { start: string; row: FactRow }>();
 
-  for (const field of cumulativeFields()) {
+  // ONE DIFFERENCING ROUTINE, RUN TWICE: for the real fields, and for the
+  // revenue fallback chain into cells of its own (see REVENUE_FALLBACK_CHAIN).
+  // The parameters shadow the outer names on purpose, so the loop below reads
+  // exactly as it did before it was wrapped.
+  const runCumulative = (
+    fields: FieldDef[],
+    buckets: Map<string, Bucket>,
+    preferred: Map<string, string | null>,
+    quarterCells: Map<string, Map<string, FieldValue>>,
+    yearCells: Map<string, Map<string, FieldValue>>,
+    quarterMeta: Map<string, { start: string; row: FactRow }>,
+    yearMeta: Map<string, { start: string; row: FactRow }>,
+    notes: string[],
+  ) => {
+  for (const field of fields) {
     const bucket = buckets.get(field.key)!;
 
     // Cumulative frames grouped by the fiscal year they start: a 3M, 6M, 9M and
@@ -1131,6 +1147,46 @@ export function extractCompanyFacts(
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
         });
+      }
+    }
+  }
+
+  };
+  runCumulative(cumulativeFields(), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes);
+
+  // ── THE REVENUE FALLBACK, ONLY WHERE THE LINE IS INCOMPLETE ──────────────
+  // Same rows, same differencing, a different chain, and its own cells: a
+  // period the predicate does not flag cannot be touched, by construction. A
+  // fallback that still sits below operating (or pre-tax) income resolves
+  // nothing, so the period keeps its own figure and the pages keep refusing it.
+  {
+    const revenueField = SEC_FIELDS.find((f) => f.key === "revenue")!;
+    const fbField: FieldDef = { ...revenueField, chain: [...REVENUE_FALLBACK_CHAIN], ifrsChain: undefined };
+    const fbRows = rowsForField(facts, fbField, new Set<string>(), currency);
+    const fbBucket: Bucket = new Map();
+    for (const c of fbRows) {
+      const k = periodKey(c.row);
+      const list = fbBucket.get(k);
+      if (list) list.push(c);
+      else fbBucket.set(k, [c]);
+    }
+    const fbQuarter = new Map<string, Map<string, FieldValue>>();
+    const fbYear = new Map<string, Map<string, FieldValue>>();
+    runCumulative(
+      [fbField], new Map([["revenue", fbBucket]]), new Map([["revenue", preferredTag(fbRows)]]),
+      fbQuarter, fbYear, new Map(), new Map(), [],
+    );
+    for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+      for (const [end, m] of cells) {
+        const rev = m.get("revenue")?.val ?? null;
+        const op = m.get("operatingIncome")?.val ?? null;
+        const pre = m.get("preTaxIncome")?.val ?? null;
+        if (!revenueLineIncompleteValues(rev, op, pre)) continue;
+        const fb = fbCells.get(end)?.get("revenue");
+        const bar = op ?? pre;
+        if (!fb || fb.val == null || bar == null || fb.val < bar) continue;
+        m.set("revenue", fb);
+        notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
     }
   }

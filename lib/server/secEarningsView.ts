@@ -9,7 +9,7 @@ import {
   type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
-import { SEC_FIELDS, type Statement } from "./secFields";
+import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -473,12 +473,8 @@ export function epsBlankReason(symbol: string): string | null {
  * operating income stays under revenue and its margins stand.
  */
 export function revenueLineIncomplete(p: StoredPeriod | null | undefined): boolean {
-  const rev = valueOf(p, "revenue");
-  if (rev === null || rev <= 0) return false;
-  const op = valueOf(p, "operatingIncome");
-  if (op !== null) return op > rev;
-  const pre = valueOf(p, "preTaxIncome");
-  return pre !== null && pre > rev;
+  // THE ONE PREDICATE, shared with the extractor's fallback (secFields).
+  return revenueLineIncompleteValues(valueOf(p, "revenue"), valueOf(p, "operatingIncome"), valueOf(p, "preTaxIncome"));
 }
 /** "3 Jul 2026" — the same format the stock page's earnings card prints. */
 export function plainDate(iso: string): string {
