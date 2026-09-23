@@ -22,7 +22,8 @@ import {
 import type { ColdResult } from "./secColdFetch";
 import type { EarningsTone as PresentationTone } from "./secPresentation";
 import {
-  pinCoverage, scoreCoverage, toneForGrowth, toneForMarginDelta, type ScoreCoverage,
+  MARGIN_NOT_MEANINGFUL, SMALL_REVENUE_BASE, marginMoveMeaningful, marginMoveVerb,
+  pinCoverage, revenueBaseTooSmall, scoreCoverage, toneForGrowth, toneForMarginDelta, type ScoreCoverage,
 } from "./secPresentation";
 
 // THE TYPE COMES FROM THE RULES MODULE, so a fourth tone could not be added to
@@ -131,6 +132,12 @@ export const SCORE_SHORT_NAMES: Record<ScoreComponent, string> = {
  * what the reader can see on the page, so it uses the page's comparison.
  */
 export function anchorMarginDelta(view: SecEarningsView): number | null {
+  const pair = anchorMarginPair(view);
+  return pair ? pair.latest - pair.prior : null;
+}
+
+/** The two operating margins anchorMarginDelta subtracts, for the words and the meaningfulness rule. */
+export function anchorMarginPair(view: SecEarningsView): { prior: number; latest: number } | null {
   const base = view.snapshot?.comparedWith ?? null;
   if (!base) return null;
   const rows: { label: string; operating: number | null }[] =
@@ -138,7 +145,17 @@ export function anchorMarginDelta(view: SecEarningsView): number | null {
   const latest = rows.find((r) => r.label === view.latestLabel);
   const prior = rows.find((r) => r.label === base);
   if (latest?.operating == null || prior?.operating == null) return null;
-  return latest.operating - prior.operating;
+  return { prior: prior.operating, latest: latest.operating };
+}
+
+/**
+ * THE PAIR THE SCORE'S marginTrend READS: the oldest and newest of the four most
+ * recent periods with an operating margin. Exported so the rule and the score
+ * cannot pick different pairs.
+ */
+export function scoreMarginPair(view: SecEarningsView): { first: number; last: number } | null {
+  const op = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
+  return op.length >= 2 ? { first: op[0], last: op[op.length - 1] } : null;
 }
 
 /**
@@ -163,25 +180,43 @@ function scoreExplanation(view: SecEarningsView, basis: PeriodBasis = "quarter")
   const base = s?.comparedWith ?? null;
   const clauses: string[] = [];
   const rev = s?.revenueYoY ?? null;
-  const revTone = toneForGrowth(rev);
+  // OFF A VERY SMALL BASE (#535 COWORK #20 rule 2): the figure is stated, with
+  // why it is not a signal, and it carries no tone into the "though" below.
+  const smallBase = revenueBaseTooSmall(s?.revenue?.val ?? null, rev);
+  const revTone = smallBase ? null : toneForGrowth(rev);
   if (isPct(rev) && base) {
+    const verb = rev >= 0 ? `revenue grew ${rev.toFixed(1)}%` : `revenue fell ${Math.abs(rev).toFixed(1)}%`;
     clauses.push(
-      revTone === "good" ? `revenue grew ${rev.toFixed(1)}% against ${base}`
-        : revTone === "weak" ? `revenue fell ${Math.abs(rev).toFixed(1)}% against ${base}`
-          : `revenue was roughly flat against ${base}`
+      smallBase ? `${verb} against ${base}, ${SMALL_REVENUE_BASE}`
+        : revTone === "good" ? `revenue grew ${rev.toFixed(1)}% against ${base}`
+          : revTone === "weak" ? `revenue fell ${Math.abs(rev).toFixed(1)}% against ${base}`
+            : `revenue was roughly flat against ${base}`
     );
   }
-  const pp = anchorMarginDelta(view);
-  const mTone = toneForMarginDelta(pp);
-  if (pp !== null) {
+  const pair = anchorMarginPair(view);
+  const pp = pair ? pair.latest - pair.prior : null;
+  // NOT A MOVE AT ALL below -100% or beyond ±100pp (rule 1): WKHS's "widened
+  // 658.1pp" was that. The words say so and the tone stays out of "though".
+  const meaningful = pair !== null && marginMoveMeaningful(pair.prior, pair.latest);
+  const mTone = meaningful ? toneForMarginDelta(pp) : null;
+  if (pair && pp !== null) {
+    // "Widened"/"narrowed" only where both margins are positive; a negative
+    // margin moving towards zero "improved" (rule 3).
+    const verb = meaningful ? marginMoveVerb(pair.prior, pair.latest, mTone) : null;
     clauses.push(
-      mTone === "good" ? `operating margin widened ${pp.toFixed(1)}pp`
-        : mTone === "weak" ? `operating margin narrowed ${Math.abs(pp).toFixed(1)}pp`
+      !meaningful ? `operating margin is ${MARGIN_NOT_MEANINGFUL}`
+        : verb ? `operating margin ${verb} ${Math.abs(pp).toFixed(1)}pp`
           : "operating margin held steady"
     );
   }
   const ni = s?.netIncome?.val ?? null;
-  const profit = ni === null ? null : ni > 0 ? `the ${w.one} was profitable` : `the ${w.one} was loss-making`;
+  const opInc = s?.operatingIncome?.val ?? null;
+  // BYND Q2 FY2026: net income +$16.4M from a non-operating gain on an
+  // operating loss of $30.8M. "Profitable" alone read against the rest of the
+  // page; the words now say where the profit came from.
+  const profit = ni === null ? null
+    : ni > 0 ? (opInc !== null && opInc < 0 ? `the ${w.one} was profitable after non-operating items` : `the ${w.one} was profitable`)
+      : `the ${w.one} was loss-making`;
   if (!clauses.length) {
     return profit
       ? `${profit[0].toUpperCase()}${profit.slice(1)}; later filings may show more.`
@@ -233,6 +268,14 @@ function gapReason(key: ScoreComponent, view: SecEarningsView): string {
       : p === "swung-to-loss" ? "swung to a loss"
         : p === "turned-profitable" ? "turned profitable"
           : null;
+  // EPS NAMES ITS MEASURE: BYND's diluted EPS was negative in both quarters
+  // while its net income was positive, and "loss in both quarters" beside "the
+  // quarter was profitable" read as a contradiction (#535 COWORK #20).
+  const epsCrossing = (p: Pct) =>
+    p === "loss-both" ? `diluted EPS negative in both ${w.many}`
+      : p === "swung-to-loss" ? "diluted EPS turned negative"
+        : p === "turned-profitable" ? "diluted EPS turned positive"
+          : null;
   const absent = (field: string, what: string) =>
     // "NOT CAPTURED", NOT "NOT IN THE FILING": without the extraction-time
     // marker we cannot tell a chain gap from a line the filer never had, and
@@ -241,15 +284,19 @@ function gapReason(key: ScoreComponent, view: SecEarningsView): string {
   switch (key) {
     case "revenueGrowth":
       if (s.revenue?.val == null) return absent("revenue", "revenue");
+      if (revenueBaseTooSmall(s.revenue.val, s.revenueYoY)) return SMALL_REVENUE_BASE;
       return crossing(s.revenueYoY) ?? (s.comparedWith ? `no revenue on file for ${s.comparedWith}` : noPrior);
     case "epsGrowth":
-      if (crossing(s.epsYoY)) return crossing(s.epsYoY)!;
+      if (epsCrossing(s.epsYoY)) return epsCrossing(s.epsYoY)!;
       if (s.epsDiluted?.val == null) return derivedQ4 ? "Q4 EPS isn't filed separately" : absent("epsDiluted", "EPS");
       return s.comparedWith ? `no EPS on file for ${s.comparedWith}` : noPrior;
     case "profitability":
       return absent("netIncome", "net income");
-    case "marginTrend":
+    case "marginTrend": {
+      const pair = scoreMarginPair(view);
+      if (pair && !marginMoveMeaningful(pair.first, pair.last)) return MARGIN_NOT_MEANINGFUL;
       return `fewer than two ${w.many} with an operating margin`;
+    }
     case "cashConversion": {
       const c = view.cashQuality;
       if (c?.netIncome?.val === 0) return "net income was zero";
@@ -456,15 +503,21 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
   // worth a full +20, the largest contribution any component can make, for an
   // artefact of dividing by a negative. A figure that cannot be RENDERED must
   // not be SCORED; see Pct in secEarningsView.
-  if (isPct(s.revenueYoY)) contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
+  // NOT SCORED OFF A VERY SMALL BASE (rule 2, prior-period revenue < $5M): the
+  // growth prints, with why, and contributes nothing.
+  if (isPct(s.revenueYoY) && !revenueBaseTooSmall(s.revenue?.val ?? null, s.revenueYoY)) {
+    contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
+  }
   if (isPct(s.epsYoY)) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
   if (s.netIncome.val != null) contribute("profitability", s.netIncome.val > 0 ? 6 : -8);
 
   // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
   // single-quarter reading: one quarter's margin move is as often mix as trend.
-  const opMargins = view.margins.filter((m) => m.operating != null).slice(-4).map((m) => m.operating!);
-  if (opMargins.length >= 2) {
-    contribute("marginTrend", clamp((opMargins[opMargins.length - 1] - opMargins[0]) * 0.8, -10, 10));
+  // AND NOT AT ALL where the pair is not a move (rule 1): below -100% at either
+  // end, or beyond ±100pp.
+  const marginPair = scoreMarginPair(view);
+  if (marginPair && marginMoveMeaningful(marginPair.first, marginPair.last)) {
+    contribute("marginTrend", clamp((marginPair.last - marginPair.first) * 0.8, -10, 10));
   }
 
   // CASH AGAINST PROFIT. Positive accruals mean cash is running ahead of

@@ -1119,20 +1119,22 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
     cov.low === 0 && cov.high === 100 && !/between 0 and 100/.test(card), card.slice(0, 160));
   check("A2: EPS growth is missing because both quarters were losses — and the card says that",
     sc.unavailableWhy.length === 1 && sc.unavailableWhy[0].key === "epsGrowth" &&
-      /EPS growth — loss in both quarters/.test(card) && !/do not carry it/.test(card),
+      /EPS growth — diluted EPS negative in both quarters/.test(card) && !/do not carry it/.test(card),
     JSON.stringify(sc.unavailableWhy));
-  check("A3: the narrative agrees with the page — margin widened, revenue grew, quarter loss-making",
-    /revenue grew 5\.7% against Q1 FY2026/i.test(sc.explanation) && /operating margin widened 13\.0pp/.test(sc.explanation) &&
+  // "IMPROVED", NOT "WIDENED" (#535 COWORK #20 rule 3): AVAV's margin went
+  // -15.2% to -2.3%, a negative margin moving towards zero.
+  check("A3: the narrative agrees with the page — margin improved, revenue grew, quarter loss-making",
+    /revenue grew 5\.7% against Q1 FY2026/i.test(sc.explanation) && /operating margin improved 13\.0pp/.test(sc.explanation) &&
       /loss-making/.test(sc.explanation) && !/slipping|under pressure/.test(sc.explanation),
     sc.explanation);
   check("A4: and it instructs nobody",
     !/\b(should|must)\b/i.test(card), sc.explanation);
   const flipped = await loadCards(once(
-    "const mTone = toneForMarginDelta(pp);",
-    'const mTone = toneForMarginDelta(pp) === "good" ? "weak" : "good";'
+    "const mTone = meaningful ? toneForMarginDelta(pp) : null;",
+    'const mTone = meaningful ? (toneForMarginDelta(pp) === "good" ? "weak" : "good") : null;'
   ));
   check("...and CATCHES a margin clause that ignores the margin's own sign",
-    /narrowed/.test(flipped.scoreFromSec(flipped.buildSecEarningsView(AVAV), "AVAV", { status: "ready" }).explanation));
+    /worsened/.test(flipped.scoreFromSec(flipped.buildSecEarningsView(AVAV), "AVAV", { status: "ready" }).explanation));
 
   // A5: the FY2022/FY2023 revenue AVAV filed as IncludingAssessedTax.
   const years = Object.fromEntries(vAvav.annual.map((r) => [r.label, r.revenue.val]));

@@ -48,11 +48,22 @@ check("a symbol in two tiers appears once (MU is filed-since AND on the cut)",
   got.queue.filter((s) => s === "MU").length === 1);
 check("the cap applies after the tiers", JSON.stringify(run(Q, { limit: 2 }).queue) === JSON.stringify(["MU", "REV"]));
 
+// THE BACKFILL SLICE (#535 COWORK #18 §3): with tiers 1-2 filling the run,
+// the never-written backfill still gets its held slots; unused slots go back.
+check("the backfill slice holds a slot for a never-written record (NEW1) on a full 2-slot run",
+  JSON.stringify(run(Q, { limit: 2, backfillSlice: 1 }).queue) === JSON.stringify(["MU", "NEW1"]),
+  JSON.stringify(run(Q, { limit: 2, backfillSlice: 1 }).queue));
+check("...and with no slice the order is exactly as before", JSON.stringify(run(Q, { limit: 2 }).queue) === JSON.stringify(["MU", "REV"]));
+check("...and an unused slice gives its slots back", JSON.stringify(run(Q, { limit: 100, backfillSlice: 50 }).queue) === JSON.stringify(got.queue));
+
 console.log("\n2. mutations are seen");
-const flat = await load((s) => s.replace("[...new Set([...tier1, ...tier2, ...tier3])]", "[...new Set([...tier3, ...tier1, ...tier2])]"));
+const flat = await load((s) => s.replace("[...ahead.slice(0, limit - held), ...backfill, ...ahead]", "[...tier3, ...tier1, ...tier2]"));
 check("MUTATION: FIFO order (changed sets first) pushes MU off a 2-slot run",
   !run(flat, { limit: 2 }).queue.includes("MU"));
 const noEvent = await load((s) => s.replace("if (eventQueued.has(s)) return true;", ""));
+const noSlice = await load((s) => s.replace("const held = Math.min(backfillSlice,", "const held = 0 * Math.min(backfillSlice,"));
+check("MUTATION: without the held slots NEW1 waits behind the tiers again",
+  !run(noSlice, { limit: 2, backfillSlice: 1 }).queue.includes("NEW1"));
 check("MUTATION: ignoring the pre-loop re-read capture drops REV out of tier 1",
   run(noEvent).queue.indexOf("REV") !== 1, JSON.stringify(run(noEvent).queue));
 const everyCut = await load((s) => s.replace("(!at || now - at > STALE_CUT_DAYS * 86_400_000)", "true"));
