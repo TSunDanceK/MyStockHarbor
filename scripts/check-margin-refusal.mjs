@@ -78,7 +78,9 @@ for (const [sym, c] of Object.entries(CASES)) {
   check("…and its words are the margin's words", /"revenue-line-incomplete":\s*\n\s*"not meaningful — this filer's revenue line is incomplete in its tagged data"/.test(src));
   void cap;
 }
-const mut = await loadCards((s) => s.replace("if (op !== null) return op > rev;", "if (op !== null) return false;"));
+// The predicate lives in secFields since #6-B (one rule for the extractor's
+// fallback and the pages' refusal).
+const mut = await loadCards((s) => s.replace("if (op != null) return op > rev;", "if (op != null) return false;"));
 check("MUTATION \"operating-line test removed\" breaks the UDR refusal",
   mut.buildSecEarningsView(withFigures(mut, CASES.UDR)).margins.at(-1).marginsRefused === false);
 
