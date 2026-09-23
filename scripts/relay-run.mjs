@@ -740,6 +740,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
+  // volume, per-filer timing through the shipped filing path. Read-only.
+  "write-sec-cache-budget": {
+    script: "scripts/sec-cache-budget-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // #535 COWORK #8: Q4_SPLIT before/after on live records. Read-only.
   "write-q4-split-render": {
     script: "scripts/q4-split-render.mjs",
