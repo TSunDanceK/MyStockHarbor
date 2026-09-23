@@ -178,16 +178,35 @@ export function pairingRewriteDone(rec: StoredReportDates | null): boolean {
   return rec !== null && typeof rec === "object" && "earlyNonResults" in rec;
 }
 
-export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
-  if (!redis) return null;
+/**
+ * One read, with "we could not read it" kept apart from "there is nothing".
+ *
+ * readReportDates below folds a failed GET into null, which is right for the
+ * callers that only want the record, and wrong for a page that TELLS a reader
+ * whether we have a filing record for a company: "we have no SEC filing record
+ * for it yet" during a Redis outage is the failure-vs-absence confusion
+ * dueStripState exists to prevent. The stock page and its earnings page read
+ * through this, and symbolOutlook.outlookFromRead turns `ok: false` into the
+ * same "unavailable" answer the search gives -- at no extra round trip, unlike
+ * the universe probe getSymbolOutlook uses.
+ */
+export type ReportDatesRead = { ok: true; rec: StoredReportDates | null } | { ok: false };
+
+export async function readReportDatesChecked(symbol: string): Promise<ReportDatesRead> {
+  if (!redis) return { ok: false };
   try {
     const raw = await redis.get<StoredReportDates>(reportDatesKey(symbol));
-    if (!raw || typeof raw !== "object" || !Array.isArray(raw.events)) return null;
-    return raw;
+    if (!raw || typeof raw !== "object" || !Array.isArray(raw.events)) return { ok: true, rec: null };
+    return { ok: true, rec: raw };
   } catch (err) {
     console.error("[sec-report-dates] read failed", symbol, err);
-    return null;
+    return { ok: false };
   }
+}
+
+export async function readReportDates(symbol: string): Promise<StoredReportDates | null> {
+  const got = await readReportDatesChecked(symbol);
+  return got.ok ? got.rec : null;
 }
 
 export async function writeReportDates(rec: StoredReportDates): Promise<boolean> {
