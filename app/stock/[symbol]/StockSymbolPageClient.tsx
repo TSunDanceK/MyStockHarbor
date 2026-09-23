@@ -886,6 +886,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
       setAnalystRating(null);
       return;
     }
+    // UNREACHABLE WHILE RETIRED: the route below was deleted 2026-09-23 (#552
+    // COWORK #1). Un-retiring the block needs a new source first; until then
+    // this fetch would 404 and draw the block's "unavailable" state.
     let cancelled = false;
     async function loadAnalystRating() {
       setAnalystRatingLoading(true);
@@ -1155,8 +1158,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   The whole block below still compiles and still knows how to
                   draw itself; RETIRED_BLOCKS["analyst-ratings"] in
                   ./retiredBlocks.ts is what stops it reaching a reader, and
-                  names the source (FMP /stable/grades-consensus and
-                  /price-target-summary, via /api/stock-analyst-rating), the
+                  names the source (FMP /stable/price-target-consensus and
+                  /grades-consensus, via /api/stock-analyst-rating, a route
+                  deleted 2026-09-23), the
                   date, and why there is no successor to move it to.
 
                   THE SOURCE NOTE GOES DARK WITH IT, which is the point of
