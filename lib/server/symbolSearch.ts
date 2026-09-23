@@ -1,20 +1,15 @@
-import { fmpFetch } from "./fmpUsage";
+import { getSearchIndex, normalise, type IndexRow, type SymbolRow } from "./searchIndex";
 
-export type SymbolRow = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
+export type { SymbolRow };
 
-// Symbol/company search, backed by FMP's two /stable search endpoints.
+// Symbol/company search.
 //
-// Both are needed and neither is sufficient alone (verified against live data
-// via app/api/debug/symbol-search/route.ts):
-//   - /stable/search-symbol  matches TICKERS. "arm" -> ARM (Arm Holdings),
-//     but "microsoft" -> 0 results.
-//   - /stable/search-name    matches COMPANY NAMES. "microsoft" -> MSFT,
-//     but "arm" -> mostly OTC/crypto noise and no ARM.
-// So we query both in parallel, merge, filter, and rank.
+// OFF FMP SINCE 2026-09-23 (Relay B, #553). This used FMP's /stable/search-symbol
+// and /stable/search-name -- two metered calls per uncached query -- and now
+// searches a local index of the Nasdaq Trader symbol directory (stocks AND
+// ETFs) with the committed SEC ticker file as its fallback; see
+// lib/server/searchIndex.ts for the sources and for how the three bugs below
+// are kept out. The ranking in this file is unchanged.
 //
 // History / gotcha: this route previously downloaded Nasdaq Trader's
 // nasdaqlisted.txt + otherlisted.txt on every uncached request and searched
@@ -39,14 +34,11 @@ export type SymbolRow = {
 // /route.ts's GET handler calls this function too, so the public endpoint and
 // any in-process caller always return identically-ranked results.
 
-const FMP_BASE = "https://financialmodelingprep.com/stable";
-
-// The Starter plan's *market data* (quotes/history) is US-only, even though the
-// search endpoints return global listings. Searching "microsoft" returns the
-// Hong Kong, Frankfurt and Brussels listings ahead of MSFT, and picking one of
-// those would open a chart page with no data behind it. Restrict to the US
-// exchanges the rest of the site can actually chart.
-const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX"]);
+// US exchanges only: a result is a promise that the page behind it can chart.
+// The directory lists every US venue; IEX-only listings are left out, as they
+// were under FMP. "NYSE ARCA" and "CBOE" are where most ETFs list -- FMP filed
+// them under "AMEX", so they were always in this set under another name.
+const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "CBOE"]);
 
 // Widely-searched large caps + index ETFs. Used only as a tiebreak *within* a
 // relevance tier, never to override it. Without this, "micro" put MicroAlgo,
@@ -64,18 +56,6 @@ const POPULAR_SYMBOLS = new Set([
   "TSLA", "TSM", "TXN", "UBER", "UNH", "V", "VZ", "WFC", "WMT", "XOM",
 ]);
 
-function getFmpApiKey() {
-  return (
-    process.env.FMP_API_KEY ||
-    process.env.FINANCIAL_MODELING_PREP_API_KEY ||
-    process.env.NEXT_PUBLIC_FMP_API_KEY
-  );
-}
-
-function normalise(value: string) {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
 // Preferred series (ARR-PC), warrants, units and rights. These share their
 // parent company's name, so they match name queries exactly as well as the
 // common stock does and can outrank it -- a warrant (VENAW, "MicroAlgo Inc.")
@@ -87,54 +67,23 @@ function isDerivativeSymbol(symbol: string) {
   return false;
 }
 
-type FmpSearchRow = {
-  symbol?: string;
-  name?: string;
-  exchange?: string;
-  exchangeShortName?: string;
-  exchangeFullName?: string;
-};
-
-async function fetchFmpSearch(path: string, query: string): Promise<SymbolRow[]> {
-  const apiKey = getFmpApiKey();
-  if (!apiKey || !query) return [];
-
-  try {
-    const res = await fmpFetch(
-      `${FMP_BASE}/${path}?query=${encodeURIComponent(query)}&limit=50&apikey=${apiKey}`,
-      { next: { revalidate: 86400 } }
-    );
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as unknown;
-    if (!Array.isArray(data)) return [];
-
-    return (data as FmpSearchRow[])
-      .map((row) => ({
-        symbol: String(row.symbol ?? "").toUpperCase().trim(),
-        name: String(row.name ?? "").trim(),
-        exchange: String(row.exchange ?? row.exchangeShortName ?? "").toUpperCase().trim(),
-      }))
-      .filter((row) => row.symbol && row.name);
-  } catch {
-    return [];
-  }
-}
-
 // Structural relevance, lower = better. Deliberately has no "name contains
 // query anywhere" tier -- that's what produced the Pharmaceuticals-for-"arm"
 // results. A word inside the name starting with the query (e.g. "Advanced
 // Micro Devices" for "micro") is a real match and is ranked, just below a name
 // that leads with it (e.g. "Microsoft Corporation").
-function rankResult(item: SymbolRow, query: string) {
+/** Returned for "no structural match"; such rows are not returned (rankIndex). */
+export const NO_MATCH = 1000;
+
+// NO MATCH is not returned (see rankIndex). The name fields are
+// precomputed on the index row (searchIndex.toIndexRow), not per query.
+export function rankResult(item: IndexRow, query: string) {
   const q = normalise(query);
   if (!q) return 99;
 
   const symbol = item.symbol.toUpperCase();
-  const symbolNorm = normalise(item.symbol);
-  const nameUpper = item.name.toUpperCase();
-  const nameNorm = normalise(item.name);
+  const symbolNorm = item.symbolNorm;
+  const nameNorm = item.nameNorm;
 
   let base: number;
 
@@ -142,7 +91,7 @@ function rankResult(item: SymbolRow, query: string) {
   else if (symbolNorm.startsWith(q)) base = 10;
   else if (nameNorm.startsWith(q)) base = 20;
   else {
-    const words = nameUpper.split(/[^A-Z0-9]+/).filter(Boolean);
+    const words = item.nameWords;
     if (words.some((word) => word.startsWith(q))) base = 30;
     else if (symbolNorm.includes(q)) base = 40;
     else base = 50;
@@ -150,6 +99,12 @@ function rankResult(item: SymbolRow, query: string) {
 
   // An exact ticker match is always the top hit -- typing "ARM" means ARM.
   if (base === 0) return 0;
+  // NO MATCH AT ALL. Under FMP every row had come back from a search, so 50 was
+  // "matched by FMP, not by our tiers" and still ranked last. Against the whole
+  // index it means no match, and it is decided on the BASE tier, before the
+  // popularity bonus -- otherwise a popular ticker (50 - 5 = 45) would appear in
+  // every search.
+  if (base === 50) return NO_MATCH;
 
   let score = base;
   if (POPULAR_SYMBOLS.has(symbol)) score -= 5;
@@ -176,42 +131,33 @@ function searchCryptoPairs(q: string) {
   );
 }
 
+
+/**
+ * Rank the index for `q`. PURE, so the check can run it on fixture rows.
+ *
+ * TIEBREAK: FMP's own result order used to break ties within a tier. With no
+ * vendor order, a tie goes to the SHORTER symbol, then alphabetical -- a
+ * shorter ticker for the same name is almost always the common stock ahead of a
+ * class, unit or series.
+ */
+export function rankIndex(rows: IndexRow[], q: string, limit = 20): SymbolRow[] {
+  const scored: { row: IndexRow; rank: number }[] = [];
+  for (const row of rows) {
+    if (!ALLOWED_EXCHANGES.has(row.exchange)) continue;
+    const rank = rankResult(row, q);
+    if (rank < NO_MATCH) scored.push({ row, rank });
+  }
+  return scored
+    .sort((a, b) => a.rank - b.rank || a.row.symbol.length - b.row.symbol.length || a.row.symbol.localeCompare(b.row.symbol))
+    .slice(0, limit)
+    .map(({ row }) => ({ symbol: row.symbol, name: row.name, exchange: row.exchange }));
+}
+
 // `q` should already be trimmed/uppercased by the caller (matches the
 // convention app/api/symbols/route.ts used before this was extracted). `type`
-// of "crypto" returns the static crypto pairs instead of hitting FMP.
+// of "crypto" returns the static crypto pairs.
 export async function searchSymbols(q: string, type: string): Promise<SymbolRow[]> {
   if (type === "crypto") return searchCryptoPairs(q);
-
   if (!q) return [];
-
-  // search-symbol first so that, where two sources return the same ticker, the
-  // ticker-match copy wins deduplication and the merge order below already
-  // reflects "symbol match beats name match" before ranking is applied.
-  const [symbolMatches, nameMatches] = await Promise.all([
-    fetchFmpSearch("search-symbol", q),
-    fetchFmpSearch("search-name", q),
-  ]);
-
-  const seen = new Set<string>();
-
-  const merged = [...symbolMatches, ...nameMatches]
-    .filter((row) => {
-      if (!ALLOWED_EXCHANGES.has(row.exchange)) return false;
-      if (seen.has(row.symbol)) return false;
-      seen.add(row.symbol);
-      return true;
-    })
-    // Keep each row's position in the merged list: FMP returns its own
-    // relevance ordering, which is a better tiebreak within a rank tier than
-    // sorting alphabetically (alphabetical is precisely what used to bury
-    // MSFT below MBOT/MCHP for the query "micro").
-    .map((row, index) => ({ row, index, rank: rankResult(row, q) }));
-
-  return merged
-    .sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank;
-      return a.index - b.index;
-    })
-    .map((entry) => entry.row)
-    .slice(0, 20);
+  return rankIndex(await getSearchIndex(), q);
 }
