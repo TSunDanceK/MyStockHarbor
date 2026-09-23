@@ -63,6 +63,10 @@
     {
       "path": "/api/jobs/sec-report-dates-rewrite",
       "schedule": "10 5 * * *"
+    },
+    {
+      "path": "/api/jobs/sec-filings",
+      "schedule": "40 * * * *"
     }
   ]
 }
