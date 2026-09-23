@@ -4,25 +4,20 @@
 //
 // The server rendered "not yet read" (and `noindex`). For a person, this asks
 // the human-gated server action to read the filings, waits, and refreshes so
-// the server re-renders from the stored set. A crawler that runs no script, or
-// one BotID refuses, keeps the "not yet read" note; the scheduled jobs fill it.
+// the server re-renders from the stored set. A crawler that runs no script
+// keeps the "not yet read" note; one BotID refuses, or whose challenge never
+// answers, settles on the fallback sentence. The scheduled jobs fill either.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { requestColdFill } from "./coldFillAction";
-
-type Phase = "reading" | "slow" | "none" | "waiting";
-
-const WORDS: Record<Phase, string> = {
-  reading: "Reading this company's SEC filings — this can take a few seconds.",
-  slow: "This is taking longer than usual; figures will appear shortly.",
-  none: "SEC's data for this company has nothing this page can show yet.",
-  waiting: "This company's SEC filings have not been read yet. They are read on a schedule, so figures may appear later.",
-};
+import {
+  COLD_FILL_WORDS as WORDS,
+  REFRESH_GRACE_MS,
+  settleColdFill,
+  type ColdFillPhase as Phase,
+} from "./coldFillSettle";
 
 const noSubscribe = () => () => {};
-
-/** A second visitor while the first one's fill is running: look again after this. */
-const IN_FLIGHT_RETRY_MS = 6000;
 
 export default function ColdFill(
   { symbol, token, headline, bare = false, textStyle }:
@@ -36,7 +31,7 @@ export default function ColdFill(
   const router = useRouter();
   // "waiting" IS THE SERVER-RENDERED STATE, so a crawler that runs no script
   // reads "not yet read"; only a hydrated page shows "reading" until the
-  // action answers.
+  // sequence settles.
   const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const [settled, setPhase] = useState<Phase | null>(null);
   const phase: Phase = settled ?? (hydrated ? "reading" : "waiting");
@@ -46,26 +41,21 @@ export default function ColdFill(
     if (asked.current) return;
     asked.current = true;
     let cancelled = false;
-    const ask = async (retry: boolean) => {
-      try {
-        const reply = await requestColdFill(symbol, token);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // ALWAYS SETTLES (coldFillSettle.ts): a hang in BotID's challenge, a throw
+    // or a bot refusal all end on the fallback sentence within the ceiling.
+    void settleColdFill(() => requestColdFill(symbol, token)).then((step) => {
+      if (cancelled) return;
+      if (step.kind === "phase") { setPhase(step.phase); return; }
+      timers.push(setTimeout(() => {
         if (cancelled) return;
-        if (reply.ok) {
-          if (reply.outcome === "filled") router.refresh();
-          else if (reply.outcome === "no-data") setPhase("none");
-          else if (reply.outcome === "queued" || reply.outcome === "busy") setPhase("slow");
-          else setPhase("waiting");
-        } else if (reply.refused === "in-flight" && !retry) {
-          setTimeout(() => { if (!cancelled) router.refresh(); }, IN_FLIGHT_RETRY_MS);
-        } else {
-          setPhase("waiting");
-        }
-      } catch {
-        if (!cancelled) setPhase("slow");
-      }
-    };
-    void ask(false);
-    return () => { cancelled = true; };
+        router.refresh();
+        // A filled page re-renders without this component; one still cold
+        // after the refresh settles on the fallback rather than "Reading…".
+        timers.push(setTimeout(() => { if (!cancelled) setPhase("slow"); }, REFRESH_GRACE_MS));
+      }, step.afterMs));
+    });
+    return () => { cancelled = true; timers.forEach(clearTimeout); };
   }, [symbol, token, router]);
 
   if (bare) return <p style={textStyle} aria-live="polite">{WORDS[phase]}</p>;
