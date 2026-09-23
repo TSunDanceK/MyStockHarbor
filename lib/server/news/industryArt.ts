@@ -34,7 +34,10 @@
 // lands in the miss list instead of quietly matching something adjacent.
 // scripts/check-news-art.mjs asserts every key here is a label the snapshot
 // actually contains, and every value a subject the manifest actually holds.
-import profile from "@/data/static-profile.json";
+// 2026-09-23 (#552, COWORK #4): no longer imports data/static-profile.json
+// (FMP data, removed). The labels below are category names, not per-ticker
+// data; which symbols carry them now depends on the cached value (COWORK #3
+// maps SIC codes onto these labels).
 
 /**
  * 114 labels whose tag is not in dispute. Sorted by the symbol count each
@@ -247,17 +250,6 @@ export function industryTag(industry: string | null | undefined): string | null 
   const label = String(industry ?? "").trim();
   if (!label) return null;
   return INDUSTRY_TAGS[label] ?? null;
-}
-
-/** Exposed for the check: every label the snapshot holds, with its count. */
-export function snapshotIndustryCounts(): Map<string, number> {
-  const counts = new Map<string, number>();
-  const rows = (profile as { rows?: Record<string, { industry?: string | null }> }).rows ?? {};
-  for (const row of Object.values(rows)) {
-    const label = String(row?.industry ?? "").trim();
-    if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return counts;
 }
 
 /** Exposed for the check and the measurement scripts. */

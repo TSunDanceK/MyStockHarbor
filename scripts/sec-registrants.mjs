@@ -19,7 +19,8 @@
 // mismatched hash. The file is also written to data/sec/ for the artifact.
 //
 // ── SCOPE ────────────────────────────────────────────────────────────────
-// data/static-profile.json rows ∪ data/cik-map.json. CIKs from the CIK map,
+// data/sec/registrants.json's own rows ∪ data/cik-map.json (the FMP snapshot
+// that seeded the first run was removed 2026-09-23, #552). CIKs from the CIK map,
 // then the committed ticker file (spellings BRK.B → BRK-B tried). One request
 // per symbol at ≤8/s, under SEC's 10/s fair-access limit.
 //
@@ -43,9 +44,9 @@ const tick = await lift([
 ].join("\n"));
 const { map: tickerMap } = tick.parseTickerFile(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
-const snapshot = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8"));
+const previous = JSON.parse(fs.readFileSync(OUT, "utf8"));
 
-const symbols = [...new Set([...Object.keys(snapshot.rows ?? {}), ...Object.keys(cikMap)])].sort();
+const symbols = [...new Set([...Object.keys(previous.rows ?? {}), ...Object.keys(cikMap)])].sort();
 const cikFor = (s) => {
   for (const v of symbolSpellings(s)) {
     if (cikMap[v]) return tick.padCik(cikMap[v]);

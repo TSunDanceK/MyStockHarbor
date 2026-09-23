@@ -169,14 +169,8 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
-  // Read-only, NO NETWORK: builds the static profile snapshot from the taxonomy
-  // already in the frozen dump, captured while the FMP licence was live. See the
-  // script header for why there are no FMP calls in it.
-  "static-profile": {
-    script: "scripts/static-profile-build.mjs",
-    args: (env) => [env.DUMP_DIR ?? ""],
-    needsDump: true,
-  },
+  // "static-profile" RETIRED 2026-09-23 (#552, COWORK #4): it built
+  // data/static-profile.json from the FMP dump; the file and script are removed.
   // Fetches SEC's ticker file on a runner, because the agent sandbox is refused
   // www.sec.gov with 403 CONNECT. Read-only by name and by nature: it writes a
   // file into the workspace, which the workflow uploads as an artifact, and
@@ -624,6 +618,13 @@ const TASKS = {
     writes: true,
   },
   // READS ONLY: the pairing rewrite's per-run counters and the drained count.
+  // READS ONLY: HLEN of the grid's day index and the rewrite job's last
+  // summary (#552). 3 commands.
+  "write-results-days-status": {
+    script: "scripts/results-days-status.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-report-dates-rewrite-progress": {
     script: "scripts/report-dates-rewrite-progress.mjs",
     args: () => [],
@@ -910,16 +911,8 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
-  // STAGE 0, BLOCKING. No network, no Redis: distils the analyst-consensus series
-  // out of the frozen Step 0 dump into a compact permanent archive. The estimates
-  // are the only thing on the earnings page that cannot be re-derived from public
-  // filings, and they sit on a 24-hour TTL, so they die within a day of the FMP
-  // key lapsing rather than decaying slowly.
-  "consensus-freeze": {
-    script: "scripts/consensus-freeze.mjs",
-    args: (env) => [env.DUMP_DIR ?? ""],
-    needsDump: true,
-  },
+  // "consensus-freeze" RETIRED 2026-09-23 (#552, COWORK #4/#5): it distilled
+  // FMP analyst consensus out of the dump; the script and its data are removed.
   // Read-only, NO credential and NO network: ranks the analysis universe by the
   // frozen pool's market cap and emits the due strip's static top-50 membership.
   // The strip is a CUT, and this generates the cut. Membership only -- no cap
@@ -959,6 +952,23 @@ const TASKS = {
     script: "scripts/earnings-poisoning-scan.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #5): which Redis keys in
+  // B's area still hold FMP payloads, and how many news records carry FMP-era
+  // items. SCAN + sampled TTL + MGET only.
+  "write-fmp-residue-census": {
+    script: "scripts/fmp-residue-census.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // A REAL DELETE when SYMBOLS carries mode=delete confirm=<surface> (Relay B,
+  // #553 COWORK #8 §3). Dry run by default. One FMP key family per run, each
+  // on the owner's GO in chat; see the script header for what must be true
+  // before each surface is run.
+  "write-fmp-cache-delete": {
+    script: "scripts/fmp-cache-delete.mjs",
+    args: () => [],
+    writes: true,
   },
   // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #1 item 4): Pickers SEC
   // coverage vs the FMP values production shows, per column and per preset,

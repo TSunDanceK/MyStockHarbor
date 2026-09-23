@@ -23,6 +23,8 @@ would inflate coverage while covering nothing new.
 
 ## 2. Consensus freeze — COMMIT (DONE 2026-09-21)
 
+> **Superseded 2026-09-23 (#552, COWORK #4/#5):** the owner ruled that no FMP data is stored, the repo included. The consensus freeze was deleted from main and its workflow and script are removed.
+
 Committed at `data/consensus/fmp-consensus-freeze.json`, 5,519,554 bytes,
 recovered from relay artifact `relay-consensus-freeze-34941546535` (run
 34941546535, 2026-09-15) by `.github/workflows/consensus-freeze-commit.yml`,

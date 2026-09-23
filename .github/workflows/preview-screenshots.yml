@@ -1,5 +1,8 @@
-# Screenshots of the /stock About block on a Vercel preview, onto the throwaway
-# branch claude/pr518-screenshots (never into a PR's diff).
+# Screenshots of a /stock block on a Vercel preview, onto a throwaway branch
+# (never into a PR's diff): claude/pr518-screenshots, or claude/b-shots when
+# dispatched from a Relay B branch (claude/b-*), so the two relays never
+# overwrite each other's shots. The block defaults to "About"; a
+# "section=returns" token in `symbols` picks the returns cards instead.
 #
 # CREDENTIALS COME FROM SECRETS, NEVER INPUTS (owner, #518). The repo is public
 # and a dispatch input is printed in the run log. The only inputs are a bare
@@ -60,4 +63,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -qm "Preview screenshots from run ${GITHUB_RUN_ID} (throwaway branch)"
-          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/claude/pr518-screenshots
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/${{ startsWith(github.ref_name, 'claude/b-') && 'claude/b-shots' || 'claude/pr518-screenshots' }}

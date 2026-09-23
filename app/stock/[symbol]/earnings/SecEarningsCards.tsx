@@ -12,7 +12,7 @@ import {
 import {
   STALE_PRICE_WORDS, barValue, growthToneWord, marginToneWord, priceIsCurrent,
   GROWTH_BAND_PCT, MARGIN_BAND_PP, fiscalYearEndNote, stalePriceNote, toneBg, toneColor, toneTint,
-  toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate,
+  toneForGrowth, toneForMarginDelta, trendSummary, waterfallGate, waterfallGeometry,
   TREND_MIN_PERIODS, coverageIsInformative, partialScoreLabel, partialScoreNote, scaledAmount,
   type EarningsTone, type ScoreCoverage,
 } from "@/lib/server/secPresentation";
@@ -138,34 +138,29 @@ function Waterfall({
   totalLabel: string;
   format: (n: number) => string;
 }) {
-  // A PLAIN LOOP, NOT A map() OVER A MUTATED CLOSURE. The running total has to
-  // be carried from one step to the next — that is what a waterfall is — and
-  // `let running` reassigned inside a `.map` callback is exactly the shape the
-  // React compiler rejects (react-hooks/immutability), because a callback that
-  // outlives the render would then read a moving value. The loop says the same
-  // thing with the accumulator where it belongs.
-  const points: { key: string; label: string; delta: number; from: number; to: number }[] = [];
-  for (const s of steps) {
-    const from = points.length ? points[points.length - 1].to : 0;
-    points.push({ ...s, from, to: from + s.delta });
-  }
-  const span = Math.max(...points.map((p) => Math.max(p.from, p.to)), total, 0);
-  if (!(span > 0)) return null;
-  const pc = (n: number) => `${(Math.abs(n) / span) * 100}%`;
+  // THE GEOMETRY IS waterfallGeometry's (secPresentation), so the axis rule
+  // is testable without a renderer: the axis spans every running total, a
+  // cost that crosses zero floats across it, and a loss sits left of zero in
+  // the loss colour (#552 A-queue 1, WKHS Q2 FY2026).
+  const g = waterfallGeometry(steps, total);
+  if (!g) return null;
+  const pc = (n: number) => `${n}%`;
+  const zero = g.zeroPct === null ? null : <span className="wfZero" style={{ left: pc(g.zeroPct) }} />;
   return (
     <div className="waterfall">
-      {points.map((p) => (
+      {g.bars.map((p) => (
         <div className="wfRow" key={p.key}>
           <span className="wfLabel">{p.label}</span>
           <div className="wfTrack">
             <span
               className="wfBar"
               style={{
-                marginLeft: pc(Math.min(p.from, p.to)),
-                width: pc(p.delta),
+                marginLeft: pc(p.leftPct),
+                width: pc(p.widthPct),
                 background: p.delta >= 0 ? toneColor("good") : toneColor("weak"),
               }}
             />
+            {zero}
           </div>
           <span className="wfValue">{format(p.delta)}</span>
         </div>
@@ -173,7 +168,15 @@ function Waterfall({
       <div className="wfRow wfTotal">
         <span className="wfLabel">{totalLabel}</span>
         <div className="wfTrack">
-          <span className="wfBar" style={{ width: pc(total), background: "rgba(147,197,253,0.85)" }} />
+          <span
+            className="wfBar"
+            style={{
+              marginLeft: pc(g.totalBar.leftPct),
+              width: pc(g.totalBar.widthPct),
+              background: g.totalBar.loss ? toneColor("weak") : "rgba(147,197,253,0.85)",
+            }}
+          />
+          {zero}
         </div>
         <span className="wfValue">{format(total)}</span>
       </div>
@@ -735,7 +738,7 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
       Operating margin vs <strong>{base}</strong>:{" "}
       <strong>{latest.operating.toFixed(1)}%</strong> from {prior.operating.toFixed(1)}%{" "}
       (<strong>{`${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`}</strong>){" "}
-      <ToneChip tone={tone} word={marginToneWord(tone)} />
+      <ToneChip tone={tone} word={marginToneWord(tone, { older: prior.operating, newer: latest.operating })} />
     </p>
   );
 }

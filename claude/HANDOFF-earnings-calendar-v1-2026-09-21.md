@@ -10,7 +10,8 @@ stale — this replaces both. Build spec
 
 ## Decisions made since the 09-17 handoff (all owner-confirmed)
 
-1. **Consensus freeze: committed.** `data/consensus/fmp-consensus-freeze.json` (5,519,554
+1. (**Superseded 2026-09-23 (#552, COWORK #4/#5):** the owner ruled that no FMP data is stored, the repo included. The consensus freeze was deleted from main and its workflow and script are removed.)
+   **Consensus freeze: committed.** `data/consensus/fmp-consensus-freeze.json` (5,519,554
    bytes) landed via `.github/workflows/consensus-freeze-commit.yml`, since the sandbox
    cannot reach the relay artifact blob host directly. This was the one irreversible item
    in the build — done, no longer time-sensitive.

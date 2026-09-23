@@ -39,7 +39,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // the SEC leg permanently -- by construction, on every render, visible only as
 // a console.warn nobody reads.
 //
-// So: the UNION of the pickers universe and data/static-profile.json's rows.
+// So: the UNION of the pickers universe and data/sec/registrants.json's rows.
+// (2026-09-23 (#552, COWORK #4): data/static-profile.json (FMP data) is removed; its symbol list is replaced by data/sec/registrants.json's rows, which were generated from that list ∪ the CIK map.)
 // The union rather than the snapshot alone because a universe symbol missing
 // from the snapshot must not be dropped by the widening -- widening a
 // denominator should never lose a member of the old one.
@@ -53,13 +54,13 @@ if (DUMP_DIR) {
 }
 // Committed, so this half works with no dump dir and no credentials at all.
 const profileRows = Object.keys(
-  JSON.parse(fs.readFileSync(path.join(process.cwd(), "data/static-profile.json"), "utf8"))?.rows ?? {}
+  JSON.parse(fs.readFileSync(path.join(process.cwd(), "data/sec/registrants.json"), "utf8"))?.rows ?? {}
 ).map((s) => s.toUpperCase());
 
 const universe = [...new Set([...pickers, ...profileRows])].sort();
 console.log(
   `[sec] universe symbols: ${universe.length} ` +
-    `(pickers ${new Set(pickers).size} ∪ static-profile ${new Set(profileRows).size})`
+    `(pickers ${new Set(pickers).size} ∪ registrants ${new Set(profileRows).size})`
 );
 console.log(`[sec] user-agent: ${JSON.stringify(UA)}`);
 
