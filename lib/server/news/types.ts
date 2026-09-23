@@ -106,7 +106,10 @@ export type FmpStockNewsItem = {
   link?: string;
 };
 
-export type NewsProviderId = "gnews" | "wire" | "sec" | "fmp";
+// "marketwatch" | "cnbc" (2026-09-23): the /headlines-only feeds in
+// ./headlineFeeds.ts. They are not NewsProviders -- no per-symbol leg -- but
+// their items still say where they came from.
+export type NewsProviderId = "gnews" | "wire" | "sec" | "fmp" | "marketwatch" | "cnbc";
 
 /**
  * A news source, behind one interface.

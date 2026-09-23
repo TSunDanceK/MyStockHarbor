@@ -21,7 +21,6 @@
 // data and is likewise left for the step that needs it.
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
-import { fetchFmpGeneralNews } from "@/lib/general-market-news";
 import { cleanRssDescription, containsHtmlMarkup, stripHtmlTags } from "./text";
 import { logResponseWindow } from "./responseWindow";
 import type { FmpStockNewsItem, NewsItem, NewsProvider } from "./types";
@@ -196,34 +195,76 @@ async function fetchForSymbol(
   return [];
 }
 
+/** FMP's general-news row. Same field family as FmpStockNewsItem. */
+type FmpGeneralNewsItem = {
+  title?: string;
+  publishedDate?: string;
+  date?: string;
+  publisher?: string;
+  site?: string;
+  image?: string;
+  text?: string;
+  content?: string;
+  description?: string;
+  url?: string;
+  link?: string;
+};
+
 /**
- * Market-wide headlines, as NewsItem.
+ * Market-wide headlines, as NewsItem: the rollback leg for /headlines.
  *
- * REUSES THE SHIPPING GENERAL-NEWS FETCH rather than restating its endpoint
- * pair and its parsing: lib/general-market-news.ts already owns both, and a
- * second copy is how the two come to disagree about which endpoint is tried
- * first. The only thing added here is the mapping from that module's
- * display-shaped GeneralHeadline onto NewsItem.
- *
- * NOTHING CALLS THIS YET, and that is the point of it shipping now. The
- * interface requires it, so the FMP adapter implements it and keeps compiling;
- * /headlines still reads getGeneralMarketHeadlines directly and is untouched.
- * Spec §4 is what moves the headlines and sector pages onto this, and it is a
- * later step -- rewiring them here would change the excerpt they render, since
- * GeneralHeadline truncates at 400 characters and NewsItem carries 650.
+ * MOVED HERE 2026-09-23 from lib/general-market-news.ts, where it was the page's
+ * only source and sat outside NEWS_PROVIDER (#553 COWORK #1). /headlines now
+ * reads lib/server/news/index.ts → fetchMarketHeadlines(), which calls this only
+ * under NEWS_PROVIDER=fmp. The endpoint pair, the stable-then-v4 order and the
+ * field fallbacks are unchanged; the 400-character excerpt trim is applied by
+ * the page's composer to every source alike, so it no longer lives here.
  */
 async function fetchMarket(): Promise<NewsItem[]> {
-  const headlines = await fetchFmpGeneralNews();
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return [];
 
-  return headlines.map((headline) => ({
-    title: headline.title,
-    link: headline.url,
-    pubDate: headline.publishedDate,
-    source: headline.source,
-    description: headline.excerpt,
-    image: headline.image,
-    provider: "fmp" as const,
-  }));
+  const key = encodeURIComponent(apiKey);
+  const endpoints = [
+    `https://financialmodelingprep.com/stable/news/general-latest?limit=50&apikey=${key}`,
+    `https://financialmodelingprep.com/api/v4/general_news?page=0&apikey=${key}`,
+  ];
+
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+  for (const url of endpoints) {
+    try {
+      const res = await fmpFetch(url, { next: { revalidate: 900 } });
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) continue;
+
+      const items = (data as FmpGeneralNewsItem[])
+        .map((item): NewsItem | null => {
+          const title = str(item.title);
+          const link = str(item.url) || str(item.link);
+          if (!title || !link || containsHtmlMarkup(title)) return null;
+          const excerpt = str(item.text) || str(item.content) || str(item.description);
+          return {
+            title: stripHtmlTags(title),
+            link,
+            pubDate: str(item.publishedDate) || str(item.date) || null,
+            source: str(item.site) || str(item.publisher) || "News",
+            description: excerpt ? cleanRssDescription(excerpt) : null,
+            image: str(item.image) || null,
+            provider: "fmp" as const,
+          };
+        })
+        .filter((item): item is NewsItem => Boolean(item));
+
+      if (items.length) return items;
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
 }
 
 export const fmpNewsProvider: NewsProvider = {
