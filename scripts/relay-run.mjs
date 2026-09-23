@@ -752,6 +752,8 @@ const TASKS = {
   // #535 COWORK #21 §1 / #19 §1c: sitemap stock URLs without a stored set, and the cold-fill day counters. Read-only.
   // #535 COWORK #21 §5: the server render Googlebot is served, and companyfacts for the CIK-bearing ETFs. Read-only, uncredentialled.
   "googlebot-render": { script: "scripts/googlebot-render-probe.mjs", args: () => [] },
+  // #535 COWORK #19 §2: newest structured quarter age for 20-F/40-F filers. Read-only.
+  "write-fpi-quarter-age": { script: "scripts/fpi-quarter-age-probe.mjs", args: () => [], writes: true },
   "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
