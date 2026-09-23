@@ -22,6 +22,17 @@ const UA = process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (sonnybrindle@mystoc
 const strip = (f) => fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const X = await lift([fs.readFileSync("lib/server/secFields.ts", "utf8"), strip("lib/server/secExtract.ts"),
   strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"), strip("lib/server/secFactCodec.ts")].join("\n"));
+// THE FALLBACK THROUGH THE EXTRACTOR, not by raw row matching: a stored quarter
+// is often DERIVED (YTD differencing), its start is the prior period's end, and
+// no companyfacts row carries that span. So the same payload is extracted a
+// second time with revenue's chain set to the fallback tags only, and a flagged
+// period takes revenue from the SAME period (end + fiscal label) of that pass.
+const fieldsSrc = fs.readFileSync("lib/server/secFields.ts", "utf8");
+const FB_CHAIN = `{ key: "revenue", chain: ["Revenues", "RevenuesNetOfInterestExpense"], unit: "USD" }`;
+const fbFields = fieldsSrc.replace(/\{ key: "revenue", chain: \[[^\]]*\], unit: "USD" \}/, FB_CHAIN);
+if (fbFields === fieldsSrc) { console.error("FATAL: revenue chain not found in secFields.ts"); process.exit(2); }
+const XF = await lift([fbFields, strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"), strip("lib/server/secFactCodec.ts")].join("\n"));
 const manifestSrc = fs.readFileSync("lib/server/secManifest.ts", "utf8");
 const pick = (n) => (manifestSrc.match(new RegExp(`${n} = "([^"]+)"`)) ?? [])[1];
 const manifest = await redis.get(pick("SEC_MANIFEST_KEY"));
@@ -78,42 +89,60 @@ const instanceFor = async (cik, accn) => {
 };
 
 // ── #6-B ────────────────────────────────────────────────────────────────────
-console.log(`${"=".repeat(78)}\n#6-B PAGE-VISIBLE RESCUE (newest quarter refused)`);
-const FALLBACK = ["Revenues", "RevenuesNetOfInterestExpense"];
+console.log(`${"=".repeat(78)}\n#6-B TARGETED FALLBACK THROUGH THE EXTRACTOR`);
 const REVENUE_FAMILY = /^(Revenues?|RevenuesNetOfInterestExpense|RevenueFromContractWithCustomer\w*|SalesRevenue\w*|InterestAndDividendIncomeOperating|NoninterestIncome|OperatingLeasesIncomeStatementLeaseRevenue|RealEstateRevenueNet|PremiumsEarnedNet|RevenuesExcludingInterestAndDividends|InterestIncomeExpenseNet|Revenue)$/;
-const refusedNow = [...sets].filter(([, set]) => set.quarters[0] && incomplete(set.quarters[0]));
-console.log(`  filers whose newest quarter is refused: ${refusedNow.length}`);
-let under = 0, over = 0, noFallback = 0, stillRefused = 0, exceeds = 0;
-for (const [s, set] of refusedNow) {
-  const p = set.quarters[0];
+const dayAfter = (d) => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+const spanMatch = (f, p) => f.end === p.e && (f.start === p.s || f.start === dayAfter(p.s));
+const flaggedFilers = [...sets].filter(([, set]) => [...set.quarters, ...set.years].some(incomplete));
+let periods = 0, found = 0, resolved = 0, newestRefused = 0, newestUnder = 0, newestOver = 0, newestNone = 0, exceeds = 0;
+for (const [s, set] of flaggedFilers) {
   const cik = manifest.symbols[s].cik;
   const cf = await get(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
-  let row = null, tag = null;
-  for (const t of FALLBACK) {
-    const rows = cf?.facts?.["us-gaap"]?.[t]?.units?.USD ?? [];
-    row = rows.filter((x) => x.end === p.e && x.start === p.s).sort((a, b) => (a.filed < b.filed ? 1 : -1))[0] ?? null;
-    if (row) { tag = t; break; }
+  if (!cf) { console.log(`  ${s}: companyfacts unreadable`); continue; }
+  const fb = XF.extractCompanyFacts(s, cf);
+  const REV = XF.SEC_FIELD_KEYS.indexOf("revenue");
+  const fbOf = (p, list) => list.find((x) => x.end === p.e && x.fp === p.fp)?.values?.[REV]?.val ?? null;
+  let fp = 0, ff = 0, fr = 0;
+  for (const [p, list] of [...set.quarters.map((p) => [p, fb.quarters]), ...set.years.map((p) => [p, fb.years])]) {
+    if (!incomplete(p)) continue;
+    fp++; periods++;
+    const alt = fbOf(p, list);
+    if (alt == null) continue;
+    ff++; found++;
+    const bar = v(p, "operatingIncome") ?? v(p, "preTaxIncome");
+    if (alt >= bar) { fr++; resolved++; }
   }
-  const ni = v(p, "netIncome"), op = v(p, "operatingIncome"), pre = v(p, "preTaxIncome");
-  if (!row) { noFallback++; console.log(`  ${s.padEnd(6)} ${p.s}..${p.e} no fallback row — refusal stays`); continue; }
-  const bar = op ?? pre;
-  if (row.val < bar) { stillRefused++; console.log(`  ${s.padEnd(6)} ${tag} ${fmt(row.val)} < op/pre ${fmt(bar)} — refusal stays`); continue; }
-  const nm = ni != null && row.val > 0 ? ni / row.val : null;
-  if (nm != null && nm < 1) under++; else over++;
-  // The 10-Q the rescued row came from: every revenue-family line, same span, no dimensions.
-  const xml = row.accn ? await instanceFor(cik, row.accn) : null;
-  let lines = "instance unreadable", flag = "";
-  if (xml) {
-    const same = instanceFacts(xml).filter((f) => !f.dims.length && f.start === p.s && f.end === p.e && REVENUE_FAMILY.test(f.name));
-    const byName = new Map();
-    for (const f of same) byName.set(f.name, f.val);
-    const maxLine = Math.max(...byName.values());
-    if (byName.size && row.val > maxLine) { exceeds++; flag = " ⚠ EXCEEDS every revenue line"; }
-    lines = [...byName].map(([n, x]) => `${n}=${fmt(x)}`).join(" ") || "no revenue-family line";
+  let newest = "";
+  const q = set.quarters[0];
+  if (q && incomplete(q)) {
+    newestRefused++;
+    const alt = fbOf(q, fb.quarters);
+    const ni = v(q, "netIncome");
+    const bar = v(q, "operatingIncome") ?? v(q, "preTaxIncome");
+    if (alt == null || alt < bar) { newestNone++; newest = ` · NEWEST ${q.fp} ${q.e}: stays refused (${alt == null ? "no fallback" : `fallback ${fmt(alt)} < ${fmt(bar)}`})`; }
+    else {
+      const nm = ni != null && alt > 0 ? ni / alt : null;
+      if (nm != null && nm < 1) newestUnder++; else newestOver++;
+      // THE 10-Q'S OWN LINES for that span: the rescued figure must not exceed them.
+      const subs = await get(`https://data.sec.gov/submissions/CIK${cik}.json`);
+      const r = subs?.filings?.recent;
+      let k = -1;
+      if (r) for (let j = 0; j < r.form.length; j++) if (["10-Q", "10-K"].includes(r.form[j]) && r.reportDate[j] === q.e) { k = j; break; }
+      const xml = k >= 0 ? await instanceFor(cik, r.accessionNumber[k]) : null;
+      let lines = "filing unreadable", flag = "";
+      if (xml) {
+        const byName = new Map();
+        for (const f of instanceFacts(xml)) if (!f.dims.length && spanMatch(f, q) && REVENUE_FAMILY.test(f.name)) byName.set(f.name, f.val);
+        if (byName.size && alt > Math.max(...byName.values()) * 1.0005) { exceeds++; flag = " ⚠ EXCEEDS every revenue line"; }
+        lines = `${r.form[k]} ${[...byName].map(([n, x]) => `${n}=${fmt(x)}`).join(" ") || "no revenue-family line for the span"}`;
+      }
+      newest = ` · NEWEST ${q.fp} ${q.e}: rescued ${fmt(alt)} (chain ${fmt(v(q, "revenue"))}) net margin ${pct(nm)}${flag}\n           ${lines}`;
+    }
   }
-  console.log(`  ${s.padEnd(6)} ${row.form} ${row.accn} ${tag} ${fmt(row.val)} (chain ${fmt(v(p, "revenue"))}) · net margin ${pct(nm)}${flag}\n         10-Q lines: ${lines}`);
+  console.log(`  ${s.padEnd(6)} flagged ${fp} · fallback ${ff} · resolves ${fr}${newest}`);
 }
-console.log(`  TOTAL ${refusedNow.length}: rescued under 100% ${under} · rescued but >=100% ${over} · fallback below op/pre ${stillRefused} · no fallback ${noFallback} · rescued above every 10-Q revenue line ${exceeds}`);
+console.log(`  TOTAL flagged periods ${periods} · fallback ${found} · resolved ${resolved} · outside flagged: 0 by construction`);
+console.log(`  NEWEST QUARTER (what a reader sees): refused ${newestRefused} · rescued under 100% ${newestUnder} · rescued >=100% ${newestOver} · stays refused ${newestNone} · rescued above the 10-Q's revenue lines ${exceeds}`);
 
 // ── #2 ──────────────────────────────────────────────────────────────────────
 console.log(`\n${"=".repeat(78)}\n#2 STORED NEWEST-QUARTER LABELS`);
@@ -127,8 +156,10 @@ for (const s of ["CRWD", "AAP", "CRM", "PFGC", "NTAP", "ORCL", "UHAL"]) {
 console.log(`\n${"=".repeat(78)}\nEPS: newest quarter has net income and no EPS`);
 const noEps = [...sets].filter(([, set]) => {
   const q = set.quarters[0];
-  return q && v(q, "netIncome") !== null && v(q, "epsDiluted") === null && v(q, "epsBasic") === null;
+  return q && q.fp !== "Q4" && v(q, "netIncome") !== null && v(q, "epsDiluted") === null && v(q, "epsBasic") === null;
 });
+const q4 = [...sets].filter(([, set]) => { const q = set.quarters[0]; return q && q.fp === "Q4" && v(q, "netIncome") !== null && v(q, "epsDiluted") === null && v(q, "epsBasic") === null; }).length;
+console.log(`  (excluded: ${q4} filers whose newest quarter is a Q4 derived from a 10-K, which reports annual EPS only)`);
 console.log(`  filers: ${noEps.length} — ${noEps.map(([s]) => s).join(",")}`);
 const verdicts = {};
 for (const [s, set] of noEps) {
@@ -141,7 +172,7 @@ for (const [s, set] of noEps) {
   if (i < 0) { verdicts[s] = "no filing for the period"; console.log(`  ${s.padEnd(6)} no 10-Q/10-K with reportDate ${q.e}`); continue; }
   const xml = await instanceFor(cik, r.accessionNumber[i]);
   if (!xml) { verdicts[s] = "no instance"; console.log(`  ${s.padEnd(6)} ${r.form[i]} ${r.accessionNumber[i]} no instance`); continue; }
-  const facts = instanceFacts(xml).filter((f) => f.end === q.e && f.start === q.s);
+  const facts = instanceFacts(xml).filter((f) => spanMatch(f, q));
   const eps = facts.filter((f) => /^(EarningsPerShare\w*|IncomeLossFromContinuingOperationsPerBasicShare|IncomeLossFromContinuingOperationsPerDilutedShare)$/.test(f.name));
   const classEps = eps.filter((f) => f.dims.some((d) => /ClassOfStockAxis|StatementClassOfStockAxis/.test(d)));
   const plainEps = eps.filter((f) => !f.dims.length);
