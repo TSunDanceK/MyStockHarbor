@@ -32,14 +32,17 @@ check(
   /readReference<RawEarningsRow\[\]>\(`earnings-calendar:/.test(cal),
   "the module Map is per-instance, so without this every cold lambda refetches the whole month"
 );
+// THE NAME MAP IS GONE (#535 COWORK #18 §3, 2026-09-23): the grid names come
+// from SEC's committed ticker file and the directory snapshot
+// (lib/server/secTickerNames.ts), so FMP's 3 MB /stable/stock-list is not
+// fetched, cached or read. Asserted gone, so it cannot quietly come back.
 check(
-  "the name map reads Redis before FMP",
-  /readReference<Record<string, string>>\("stock-list-names"\)/.test(cal),
-  "3.04 MB per cold instance is the largest of the two, and the one that changes least"
+  "the FMP name map is not fetched, cached or read",
+  !/stock-list/.test(cal) && !/getNameMap|nameMapCache/.test(cal) && /gridCompanyName\(symbol\)/.test(cal)
 );
 check(
-  "the in-process cache is still in front",
-  /monthCache\.set/.test(cal) && /nameMapCache = \{/.test(cal),
+  "the in-process month cache is still in front of Redis",
+  /monthCache\.set/.test(cal),
   "Redis is a third layer under the module cache, not a replacement -- a warm instance should not pay a round-trip"
 );
 
@@ -60,11 +63,6 @@ check(
     ? "could not find the guard to slice"
     : "a failed or restricted response parses to [], and a day of that blanks every consumer"
 );
-check(
-  "the name map guards on map.size before writing",
-  /if \(map\.size\) \{[\s\S]{0,220}writeReference\(\s*"stock-list-names"/.test(cal),
-  "thirty days of an empty dictionary would show a ticker where every company name should be"
-);
 
 console.log("\n=== 3. The cadences are the ones that were argued for ===\n");
 
@@ -82,12 +80,9 @@ check(
   "FMP's own rows carry a daily lastUpdated, so a shorter TTL buys refreshes nothing downstream can see"
 );
 check(
-  "the calendar uses the DAILY ttl and the name map the MONTHLY one",
-  /writeReference\(`earnings-calendar:\$\{key\}`, result\.rows, REFERENCE_TTL_DAILY_SECONDS\)/.test(
-    cal
-  ) &&
-    /REFERENCE_TTL_MONTHLY_SECONDS\s*\)/.test(cal),
-  "swapping them would either refetch 3 MB daily or hold a stale trigger for a month"
+  "the calendar uses the DAILY ttl",
+  /writeReference\(`earnings-calendar:\$\{key\}`, result\.rows, REFERENCE_TTL_DAILY_SECONDS\)/.test(cal),
+  "a monthly TTL would hold a stale trigger for a month"
 );
 
 console.log("\n=== 4. The store's own rules ===\n");

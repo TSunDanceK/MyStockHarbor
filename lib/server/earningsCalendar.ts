@@ -82,7 +82,6 @@
 import { Redis } from "@upstash/redis";
 import {
   REFERENCE_TTL_DAILY_SECONDS,
-  REFERENCE_TTL_MONTHLY_SECONDS,
   readReference,
   writeReference,
 } from "./referenceCache";
@@ -91,6 +90,8 @@ import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
 import { readPricePoolBulk } from "./pricePool";
 import { priceCoverage, type PriceCoverage } from "./gridPriceCoverage";
+import { readResultsDays, symbolsByDay } from "./secResultsDays";
+import { gridAdmits, gridCompanyName } from "./secTickerNames";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -122,8 +123,12 @@ const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
 // PRECEDENT, SAME FILE, SAME TWO KEYS: #378 (91f2cf1) bumped both from v1 to v2
 // when the rolling window changed what "complete" meant. A flag whose meaning
 // has changed is a new key, not an old key with new semantics.
-const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v3";
-const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
+// v3 -> v4 and v1 -> v2 (2026-09-23): THE GRID'S SOURCE CHANGED, from FMP's
+// earnings calendar to SEC's own announcements (#535 COWORK #18 §3). A blob
+// materialised from FMP's rows carries FMP's names, estimates and candidates;
+// a new key is the migration, as at #378 and v2 -> v3 above.
+const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v4";
+const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v2";
 
 // Rolling window bounds. There is no future bound: the window ENDS today.
 //
@@ -390,7 +395,6 @@ export type RawEarningsRow = {
 };
 
 const MONTH_CACHE_MS = 6 * 60 * 60_000; // 6 hours -- FMP's own lastUpdated field is daily
-const NAME_MAP_CACHE_MS = 24 * 60 * 60_000; // 24 hours
 const QUOTE_CONCURRENCY = 10;
 const QUOTE_REVALIDATE_SECONDS = 30 * 24 * 60 * 60; // ~1 month, per site owner's request
 
@@ -407,7 +411,6 @@ const AUTO_POPULATE_MAX_DATES = 2;
 // the bound that stops a busy day blocking the page on hundreds of quotes.
 const RENDER_SEED_LIMIT = 80;
 
-const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX"]);
 
 // Same curated list used for search-result ranking in
 // app/api/symbols/route.ts (POPULAR_SYMBOLS). Duplicated rather than
@@ -436,18 +439,6 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// Guess at "is this even worth showing" without any paid lookup: a "." or
-// "-" in the symbol is usually a preferred share or foreign-exchange
-// listing (BRK.B is a deliberate exception -- it's in POPULAR_SYMBOLS,
-// which is only used as a sort tiebreak, not a filter). A 5+ letter symbol
-// ending in Y or F is almost always the OTC/ADR representation of a foreign
-// company already reporting under its primary listing elsewhere.
-function looksNonUsOrDerivative(symbol: string): boolean {
-  if (symbol.includes(".") || symbol.includes("-")) return true;
-  if (symbol.length >= 5 && /[YF]$/.test(symbol)) return true;
-  return false;
-}
-
 export function daysInMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
@@ -461,7 +452,6 @@ function popularRank(symbol: string) {
 }
 
 const monthCache = new Map<string, { at: number; rows: RawEarningsRow[] }>();
-let nameMapCache: { at: number; map: Map<string, string> } | null = null;
 const candidatesCache = new Map<string, { at: number; byDate: Map<string, EarningsCandidate[]> }>();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -863,153 +853,39 @@ export async function fetchMonthRows(
   return (await fetchMonthRowsDetailed(year, month, options)).rows;
 }
 
-async function getNameMap(): Promise<Map<string, string>> {
-  if (nameMapCache && Date.now() - nameMapCache.at < NAME_MAP_CACHE_MS) {
-    return nameMapCache.map;
-  }
-
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return nameMapCache?.map ?? new Map();
-
-  // REDIS FIRST, and stored as a plain object because a Map does not survive
-  // JSON. ~38,829 symbol -> name pairs, which is a fraction of the 3.04 MB raw
-  // payload it is derived from: only the two fields the consumer reads are
-  // kept, so the shared copy is far smaller than the fetch it replaces.
-  const sharedNames = await readReference<Record<string, string>>("stock-list-names");
-  if (sharedNames && typeof sharedNames === "object") {
-    const map = new Map(Object.entries(sharedNames));
-    if (map.size) {
-      nameMapCache = { at: Date.now(), map };
-      return map;
-    }
-  }
-
-  try {
-    const res = await fmpFetch(`https://financialmodelingprep.com/stable/stock-list?apikey=${apiKey}`, {
-      next: { revalidate: NAME_MAP_CACHE_MS / 1000 },
-    });
-    if (!res.ok) throw new Error(`stock-list failed: ${res.status}`);
-    const json = await res.json();
-    const rows = Array.isArray(json)
-      ? (json as Array<{ symbol?: string; companyName?: string }>)
-      : [];
-
-    const map = new Map<string, string>();
-    for (const row of rows) {
-      const symbol = str(row.symbol);
-      const name = str(row.companyName);
-      if (symbol && name) map.set(symbol.toUpperCase(), name);
-    }
-
-    nameMapCache = { at: Date.now(), map };
-    // Monthly, per probe Q8: staleness costs a ticker where a company name
-    // should be -- cosmetic and self-correcting. Empty is not written, for the
-    // same reason as the calendar above.
-    if (map.size) {
-      await writeReference(
-        "stock-list-names",
-        Object.fromEntries(map),
-        REFERENCE_TTL_MONTHLY_SECONDS
-      );
-    }
-    return map;
-  } catch {
-    return nameMapCache?.map ?? new Map();
-  }
-}
-
-// How complete an FMP earnings row is -- used to pick the best entry when the
-// feed lists the same symbol more than once (same date, or across dates). A row
-// carrying real estimates/actuals wins over an empty placeholder; ties break to
-// the earlier date.
-function candidateDataScore(c: EarningsCandidate): number {
-  let n = 0;
-  if (c.epsEstimated !== null) n++;
-  if (c.epsActual !== null) n++;
-  if (c.revenueEstimated !== null) n++;
-  if (c.revenueActual !== null) n++;
-  return n;
-}
-
-// Builds, per date-in-month, the full candidate list (name-resolved,
-// heuristically US-filtered, coarse-sorted) -- but does NOT quote anything.
-// This is the free part: two bulk calls total per month (both cached), no
-// per-symbol cost regardless of how many dates in the month get viewed.
+// Builds, per date-in-month, the full candidate list (SEC announcements,
+// SEC-admitted, named, coarse-sorted) -- but does NOT quote anything. One
+// HGETALL per month build (cached), no per-symbol cost.
 async function getMonthCandidates(year: number, month: number): Promise<Map<string, EarningsCandidate[]>> {
   const key = monthKey(year, month);
   const cached = candidatesCache.get(key);
   if (cached && Date.now() - cached.at < MONTH_CACHE_MS) return cached.byDate;
 
-  const [rows, nameMap] = await Promise.all([fetchMonthRows(year, month), getNameMap()]);
-
+  // ── SEC'S OWN ANNOUNCEMENTS, NOT FMP'S CALENDAR (#535 COWORK #18 §3) ─────
+  // Candidates: the day index the report-dates job writes (an Item 2.02 8-K,
+  // or today's pending announcement), one HGETALL. Admission: a Nasdaq or NYSE
+  // listing in SEC's own ticker file — the record itself exists only for a
+  // tracked filer, so "in the manifest AND on an SEC exchange". Names: the
+  // committed directory snapshot, else SEC's. No estimates: SEC publishes
+  // none, and the columns are hidden (EarningsDayList).
+  const index = await readResultsDays();
   const byDate = new Map<string, EarningsCandidate[]>();
-
-  // Collapse the feed to ONE entry per symbol for the whole month. FMP's
-  // earnings-calendar routinely repeats a symbol -- several rows on the same
-  // date, and/or the same symbol across nearby dates -- which surfaced as
-  // duplicate table rows (e.g. JOE listed 2-4x on 29-31 Jul). A company reports
-  // once per period, so keep the single best entry: most data, ties to the
-  // earliest date.
-  const bySymbol = new Map<string, EarningsCandidate>();
-  for (const row of rows) {
-    const symbol = str(row.symbol);
-    const date = str(row.date);
-    if (!symbol || !date) continue;
-
-    const key = symbol.toUpperCase();
-    const company = nameMap.get(key);
-    if (!company) continue; // no name match -- rare given stock-list's ~38k coverage, skip rather than show a blank name
-
-    if (looksNonUsOrDerivative(symbol)) continue;
-
-    const candidate: EarningsCandidate = {
-      symbol,
-      company,
-      date,
-      epsEstimated: num(row.epsEstimated),
-      epsActual: num(row.epsActual),
-      revenueEstimated: num(row.revenueEstimated),
-      revenueActual: num(row.revenueActual),
-    };
-
-    const existing = bySymbol.get(key);
-    if (
-      !existing ||
-      candidateDataScore(candidate) > candidateDataScore(existing) ||
-      (candidateDataScore(candidate) === candidateDataScore(existing) && candidate.date < existing.date)
-    ) {
-      bySymbol.set(key, candidate);
+  if (!index) return byDate; // unreadable is not "nobody reported": not cached below
+  const prefix = `${year}-${pad2(month)}-`;
+  for (const [date, symbols] of symbolsByDay(index, gridAdmits)) {
+    if (!date.startsWith(prefix)) continue;
+    const list: EarningsCandidate[] = [];
+    for (const symbol of symbols) {
+      const company = gridCompanyName(symbol);
+      if (!company) continue;
+      list.push({ symbol, company, date, epsEstimated: null, epsActual: null, revenueEstimated: null, revenueActual: null });
     }
-  }
-
-  for (const candidate of bySymbol.values()) {
-    const list = byDate.get(candidate.date) ?? [];
-    list.push(candidate);
-    byDate.set(candidate.date, list);
-  }
-
-  // Coarse sort within each date: known mega-caps first, ties keep insertion
-  // order (Array.sort is stable). The final market-cap ordering happens once
-  // quotes are in (dedupeAndSortItems).
-  for (const list of byDate.values()) {
     list.sort((a, b) => popularRank(a.symbol) - popularRank(b.symbol));
+    if (list.length) byDate.set(date, list);
   }
 
-  // EMPTY IS NOT CACHED HERE EITHER, and that is the whole point of this line.
-  // fetchMonthRowsDetailed already refuses to store an empty month in Redis, with
-  // a comment saying why: "A failed or restricted response parses to [] here, and
-  // storing that for a day would blank every calendar consumer until it expired --
-  // an absence held as though it were an answer."
-  //
-  // This cache then did exactly that one layer up, in process, for MONTH_CACHE_MS
-  // -- six hours. The Redis refusal was defeated by the layer in front of it, and
-  // because the poisoning was per-instance it did not even show up in a dump.
-  // Found by accident: a seeded test read as empty because an earlier request in
-  // the same process had cached the empty month.
-  //
-  // A month with no reporting companies anywhere is not a real state, so refusing
-  // to cache it costs nothing in normal operation and only re-reads during the
-  // outage that produced it.
+  // EMPTY IS NOT CACHED, as before: a month with no reporters anywhere is not
+  // a real state, and a per-instance cache of it would outlive the outage.
   if (byDate.size > 0) {
     candidatesCache.set(key, { at: Date.now(), byDate });
   }
@@ -1077,10 +953,14 @@ type QuoteResult = {
 
 async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult> {
   const apiKey = process.env.FMP_API_KEY;
-  // NO KEY IS A FAILURE TO QUOTE, not a company without an exchange. Without it
-  // nothing can be known about this symbol's listing, so the date must not be
-  // allowed to settle as "complete and empty".
-  if (!apiKey) return { price: null, marketCap: null, exchange: null, capped: false, failed: true };
+  // NO KEY IS NO PRICE, NOT A FAILURE — since the grid moved to SEC's own
+  // announcements (#535 COWORK #18 §3). A row is admitted by SEC's ticker file
+  // before any quote, so a missing quote no longer hides whether the company
+  // is US-listed; it only leaves price and market cap as "—" (owner ruling,
+  // COWORK #23: off-pool shows "—"). With FMP_API_KEY unset the page renders
+  // and every date can settle. A key that is SET and answers badly is still a
+  // failure below, and still keeps its date from settling.
+  if (!apiKey) return { price: null, marketCap: null, exchange: null, capped: false, failed: false };
 
   // Symbols already quoted within the fetch-cache window don't spend an
   // hourly slot -- only genuinely new symbols compete for the cap.
@@ -1256,12 +1136,9 @@ export async function getFullDayEarnings(
       // A candidate whose quote never came back cannot be judged US-listed or
       // not, so the date it belongs to is not finished being built.
       if (quote?.failed) anyFailed = true;
-      // Only US-listed common stock survives -- the pre-sort filter is
-      // symbol-shape only; the exchange isn't known until the quote comes back.
-      const exchangeOk =
-        Boolean(quote?.usOk) ||
-        Boolean(quote?.exchange && ALLOWED_EXCHANGES.has(quote.exchange));
-      if (!exchangeOk) return null;
+      // ADMITTED UPSTREAM, BY SEC'S OWN TICKER FILE (gridAdmits: Nasdaq or
+      // NYSE), before any quote. The quote only prices the row now; it no
+      // longer decides whether the row exists.
       return {
         ...candidate,
         price: quote?.price ?? null,
