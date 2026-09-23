@@ -1093,14 +1093,20 @@ export default async function StockEarningsPage({ params }: Props) {
               <section className="card">
                 <div className="eyebrow">What it means</div>
                 <h3>Investor read</h3>
-                <p>{score.explanation}</p>
+                {/* NO score.explanation HERE. The score card at the top prints
+                    that exact paragraph, so this card repeated it word for word
+                    a screen further down (TSLA, ABBV, AVAV). The bullets are
+                    what this card adds; the narrative has one home. */}
                 {/* The generic bullets describe what the score reads WHEN it
                     can. A component that did not run must not be described
                     here as if it had -- the cash bullet is the one that read
                     as a claim on AZN, where the cash chain is empty. */}
                 <ul className="bulletList">
                   <li>Year-over-year growth separates one-{periodWords(secView?.basis ?? "quarter").one} noise from a real earnings trend.</li>
-                  <li>Margins show whether the company is keeping more of each pound of revenue.</li>
+                  {/* "UNIT", NOT A CURRENCY. This said "pound" on every US
+                      filer's page; the figures are dollars, or a converted
+                      home currency, and the point holds in any of them. */}
+                  <li>Margins show whether the company is keeping more of each unit of revenue.</li>
                   {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
                     <li>
                       Cash flow against net income would show whether reported profit is turning into
