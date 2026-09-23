@@ -23,7 +23,7 @@ import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { FilingRef, StoredFactSet, StoredPeriod } from "./secFactCodec";
 import type { Submissions } from "./secReportDates";
 import type { CompanyFacts } from "./secExtract";
-import { extractCompanyFacts } from "./secExtract";
+import { extractForSymbol } from "./secExtractFor";
 import { toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
@@ -188,7 +188,7 @@ export async function checkAndFill(
   }
   const f = filing!;
   const cf = await fetch.companyFacts(cik);
-  const base = extractCompanyFacts(symbol, cf);
+  const base = extractForSymbol(symbol, cf);
   const baseNewest = newestStoredEnd({
     quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
     years: base.years.map((p) => ({ e: p.end })) as StoredPeriod[],
@@ -201,7 +201,7 @@ export async function checkAndFill(
   const { merged, added } = xml
     ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
     : { merged: cf, added: 0 };
-  const next = await toStoredSet(added ? extractCompanyFacts(symbol, merged) : base, defaultSources(), fxSeries);
+  const next = await toStoredSet(added ? extractForSymbol(symbol, merged) : base, defaultSources(), fxSeries);
   const noticeOnly = isLagging(next, f);
   const lag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };
   return noticeOnly
