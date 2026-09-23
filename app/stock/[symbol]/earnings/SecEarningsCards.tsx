@@ -218,9 +218,30 @@ const cantCalculate = (missing: string) => `Can't calculate — ${missing} not r
  * Only per-share values are pinned. A revenue of $416,161,000,000 does not want
  * ".00" on the end, and the compact forms (B/M) have their own precision.
  */
-function money(v: number | null | undefined, compact = false, perShare = false): string {
+/**
+ * ONE SCALE PER TABLE, chosen from the table's largest magnitude.
+ *
+ * money() used to pick B, M or the full figure per VALUE, so AVAV's income
+ * statement printed "-$397,000" for income tax between "-$7.3M" and "-$5.1M",
+ * and a filed zero printed "$0" among M lines — a unit change mid-column that
+ * reads as a different kind of number. A table computes its scale once with
+ * moneyScale and passes it to every money cell; `null` (nothing reaches $1M)
+ * keeps the full figures, which is right for a table of small amounts.
+ */
+export type MoneyScale = "B" | "M" | null;
+export function moneyScale(values: Array<number | null | undefined>): MoneyScale {
+  const max = Math.max(0, ...values.filter((v): v is number => v != null && Number.isFinite(v)).map(Math.abs));
+  return max >= 1e9 ? "B" : max >= 1e6 ? "M" : null;
+}
+
+function money(v: number | null | undefined, compact = false, perShare = false, scale?: MoneyScale): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
+  if (compact && scale) {
+    const s = scale === "B" ? (abs / 1e9).toFixed(2) : (abs / 1e6).toFixed(1);
+    // No sign on a figure that rounds to zero: "-$0.0M" is a minus on nothing.
+    return `${v < 0 && Number(s) !== 0 ? "-" : ""}$${s}${scale}`;
+  }
   if (compact && abs >= 1e9) return `${v < 0 ? "-" : ""}$${(abs / 1e9).toFixed(2)}B`;
   if (compact && abs >= 1e6) return `${v < 0 ? "-" : ""}$${(abs / 1e6).toFixed(1)}M`;
   const digits = perShare
@@ -358,9 +379,11 @@ export function DerivedMark({ cell }: { cell: ViewCell }) {
 
 /** A cell's value, with its derived mark. `—` when the filer did not publish it. */
 export function CellValue(
-  { cell, compact = false, currency = true, empty = NOT_REPORTED, short = false, emptyTitle }:
+  { cell, compact = false, currency = true, empty = NOT_REPORTED, short = false, emptyTitle, scale }:
   {
     cell: ViewCell; compact?: boolean; currency?: boolean; empty?: string;
+    /** The table's one scale (see moneyScale). Omitted: B/M/full per value. */
+    scale?: MoneyScale;
     /** A narrow table column: print the short label, the full reason on hover/tap. */
     short?: boolean;
     /** The full reason for `short`, when it says more than `empty` (Q4 EPS). */
@@ -388,7 +411,7 @@ export function CellValue(
           EPS renders in four places and one of them is a loop over field keys
           that no one writes out by hand. See ViewCell.perShare. */}
       {currency
-        ? money(cell.val, compact && !cell.perShare, cell.perShare)
+        ? money(cell.val, compact && !cell.perShare, cell.perShare, scale)
         : cell.val.toLocaleString("en-US")}
       <DerivedMark cell={cell} />
     </>
@@ -397,9 +420,10 @@ export function CellValue(
 
 /** A derived dollar figure: the value, or which input stopped it. */
 export function DerivedValue(
-  { value, missing, compact = true }: { value: number | null; missing: string | null; compact?: boolean }
+  { value, missing, compact = true, scale }:
+  { value: number | null; missing: string | null; compact?: boolean; scale?: MoneyScale }
 ) {
-  if (value !== null) return <>{money(value, compact)}</>;
+  if (value !== null) return <>{money(value, compact, false, scale)}</>;
   return (
     <span style={{ color: "#94a3b8", fontWeight: 600 }}>
       {missing ? cantCalculate(missing) : NOT_REPORTED}
@@ -828,6 +852,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
       </section>
     );
   }
+  const scale = moneyScale(view.annual.map((r) => r.revenue.val));
   return (
     <section className="card">
       <div className="eyebrow">Five-year history</div>
@@ -870,7 +895,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                     the previous row's label and pushed the last column off a
                     768px card (owner review of #523). The quarterly table keeps
                     it, where a gap row makes the comparator informative. */}
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact short scale={scale} empty={revenueEmpty(view)} /></td>
                 <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short /></td>
                 <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
@@ -976,6 +1001,9 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   // the year — and it implied the rest of the page was quarterly when nothing
   // about KGC is. The condition is the MISMATCH, not the cash basis alone.
   const cashIsOtherPeriod = view.basis === "quarter" && c.basis === "year";
+  const scale = moneyScale([
+    c.operatingCashFlow.val, c.capex.val, c.freeCashFlow, c.netIncome.val, c.accruals, c.shareBasedCompensation.val,
+  ]);
   return (
     <section className="card">
       <div className="eyebrow">Quality of earnings</div>
@@ -1004,16 +1032,16 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           second encoding, which is what makes them safe to ignore. */}
       <CashQualityBars view={view} />
       <div style={{ marginTop: 12 }}>
-        <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact /></Row>
+        <Row label="Operating cash flow"><CellValue cell={c.operatingCashFlow} compact scale={scale} /></Row>
         {/* THE LABEL COMES FROM THE CELL, not from this line. capex resolves
             from one concept per filer and the broader productive-assets one is
             a different measure, so the heading has to say which it is — see
             secEarningsView's capexConcept. Hardcoding "Capital expenditure"
             here put one heading over both and was a false equivalence on every
             filer that publishes only the broader concept. */}
-        <Row label={c.capex.label}><CellValue cell={c.capex} compact /></Row>
+        <Row label={c.capex.label}><CellValue cell={c.capex} compact scale={scale} /></Row>
         <Row label="Free cash flow" strong>
-          <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} />
+          <DerivedValue value={c.freeCashFlow} missing={c.freeCashFlowMissing} scale={scale} />
           {c.freeCashFlowDerived ? (
             <abbr
               title={`Derived: operating cash flow minus capital expenditure, both of which the filer reports year-to-date, so this ${w.one} is the difference between two cumulative figures.`}
@@ -1022,7 +1050,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           ) : null}
         </Row>
         <Row label={c.basis === "year" ? "Net income (same period)" : "Net income"}>
-          <CellValue cell={c.netIncome} compact />
+          <CellValue cell={c.netIncome} compact scale={scale} />
         </Row>
         {/* BOTH LEGS ARE THE SAME PERIOD. Annual operating cash flow against a
             quarterly net income reads as roughly 4x cash conversion and would
@@ -1032,25 +1060,27 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           label="Cash flow less net income"
           sub={`Positive means cash is running ahead of reported profit. Both figures are ${c.period}.`}
         >
-          <DerivedValue value={c.accruals} missing={c.accrualsMissing} />
+          <DerivedValue value={c.accruals} missing={c.accrualsMissing} scale={scale} />
         </Row>
-        <Row label="Share-based compensation"><CellValue cell={c.shareBasedCompensation} compact /></Row>
+        <Row label="Share-based compensation"><CellValue cell={c.shareBasedCompensation} compact scale={scale} /></Row>
       </div>
       {/* TRAP 1, AND IT IS WHY EVERY CASH LINE HERE CAN CARRY A DERIVED MARK.
           US filers report cash flow YEAR-TO-DATE: Q1 covers three months, Q2
           six, Q3 nine, the 10-K twelve. Read straight, a Q3 figure is roughly
-          three times too large and looks entirely plausible. */}
+          three times too large and looks entirely plausible.
+          ── ONE LINE, THE ONE THAT EXPLAINS A MARK ON THIS CARD ──────────────
+          This ran to three sentences under a card that is already mostly
+          sentences (owner review, TSLA/AVAV). The year-to-date sentence stays
+          because it is why a figure here says "derived"; the Not-reported
+          sentence is carried by the income statement and balance sheet. */}
       <p className="earningsDataNote">
         {c.basis === "year" ? (
-          <>
-            Annual cash-flow figures as filed, for {c.period}. {NOT_REPORTED_NOTE} Source:{" "}
-            {SEC_ATTRIBUTION}.
-          </>
+          <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
         ) : (
           <>
             Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
             difference between two cumulative figures — those are marked <em>derived</em>.{" "}
-            {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
+            Source: {SEC_ATTRIBUTION}.
           </>
         )}
       </p>
@@ -1070,6 +1100,10 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   if (!b) return null;
   const spread = view.balanceSheetSpreadDays;
   const apart = spread !== null && Math.abs(spread) > BALANCE_SHEET_SPREAD_DAYS;
+  const scale = moneyScale([
+    b.cash.val, b.shortTermInvestments.val, b.totalDebt, b.netCash,
+    b.totalAssets.val, b.totalLiabilities.val, b.stockholdersEquity.val,
+  ]);
   return (
     <section className="card">
       <div className="eyebrow">Balance sheet</div>
@@ -1102,10 +1136,10 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
             ? "This filer reports cash only including restricted cash, which it cannot freely spend."
             : undefined}
         >
-          <CellValue cell={b.cash} compact />
+          <CellValue cell={b.cash} compact scale={scale} />
         </Row>
-        <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact /></Row>
-        <Row label="Total debt"><DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} /></Row>
+        <Row label="Short-term investments"><CellValue cell={b.shortTermInvestments} compact scale={scale} /></Row>
+        <Row label="Total debt"><DerivedValue value={b.totalDebt} missing={b.totalDebtMissing} scale={scale} /></Row>
         <Row
           label="Net cash"
           strong
@@ -1113,7 +1147,7 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
             b.cashIncludesRestricted ? " The cash leg includes restricted cash — see above." : ""
           }`}
         >
-          <DerivedValue value={b.netCash} missing={b.netCashMissing} />
+          <DerivedValue value={b.netCash} missing={b.netCashMissing} scale={scale} />
         </Row>
         <Row label="Current ratio">
           {b.currentRatio !== null ? ratio(b.currentRatio) : (
@@ -1122,13 +1156,16 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
             </span>
           )}
         </Row>
-        <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
-        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact /></Row>
-        <Row label="Shareholders&apos; equity" strong><CellValue cell={b.stockholdersEquity} compact /></Row>
+        <Row label="Total assets"><CellValue cell={b.totalAssets} compact scale={scale} /></Row>
+        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact scale={scale} /></Row>
+        <Row label="Shareholders&apos; equity" strong><CellValue cell={b.stockholdersEquity} compact scale={scale} /></Row>
       </div>
+      {/* ONE LINE. "A position at a date, so none of them are derived" explained
+          the ABSENCE of a mark, which no reader goes looking for; the sentence
+          kept is the one that explains words on this card — AVAV shows "Not
+          reported" against total liabilities and equity. */}
       <p className="earningsDataNote">
-        Balance-sheet figures are a position at a date, not a period total, so none of them are
-        derived. {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
+        {NOT_REPORTED_NOTE} Source: {SEC_ATTRIBUTION}.
       </p>
     </section>
   );
@@ -1167,6 +1204,10 @@ function PlWaterfall({ view }: { view: SecEarningsView }) {
 
 export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
   const w = periodWords(view.basis);
+  // Money lines only: EPS is per share and the share count is not money.
+  const scale = moneyScale(
+    view.incomeStatement.filter((c) => !c.perShare && !c.label.includes("shares")).map((c) => c.val),
+  );
   return (
     <section className="card">
       <div className="eyebrow">Income statement</div>
@@ -1186,6 +1227,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
             <CellValue
               cell={c}
               compact
+              scale={scale}
               currency={!c.label.includes("shares")}
               empty={c.key === "revenue" ? revenueEmpty(view) : NOT_REPORTED}
             />
@@ -1224,18 +1266,30 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
  * same periods, same source, fewer columns. So on a year anchor it renders
  * nothing and the five-year card is the history.
  */
+/**
+ * A Q4 row whose Diluted EPS cell renders NOT_REPORTED. CellValue prints the
+ * empty word exactly when `val` is null, so this is that test plus the Q4
+ * label — one function, read by the cell's hover text AND by the footnote.
+ */
+const q4EpsNotReported = (r: SecEarningsView["recentPeriods"][number]) =>
+  /^Q4 /.test(r.label) && r.epsDiluted.val == null;
+
 export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
   // tableBasis: this table IS the rows, so it follows what the rows are.
   if (view.tableBasis === "year") return null;
   const w = periodWords(view.tableBasis);
+  const scale = moneyScale(view.recentPeriods.flatMap((r) => [r.revenue.val, r.netIncome.val]));
   return (
     <section className="card">
       <div className="eyebrow">Earnings history</div>
       <h2>Recent reported {w.many}</h2>
-      <p>
-        As filed with the SEC. Estimate and surprise columns are no longer shown —{" "}
-        {retiredSource("quarter-estimate-columns").reason}
-      </p>
+      {/* JUST THE SOURCE. This went on to quote the retired column's reason,
+          "Same source as the estimate cards above" — and those cards no longer
+          render, so the sentence pointed at nothing. The retired columns are
+          hidden the way every other retired source is: a HiddenCard, which
+          renders nothing and keeps the id validated against RETIRED_SOURCES. */}
+      <p>As filed with the SEC.</p>
+      <HiddenCard id="quarter-estimate-columns" />
       <div style={{ overflowX: "auto" }}>
         <table className="historyTable">
           <thead><tr><th>{w.One}</th><th>Period ending</th><th>Revenue</th><th>Diluted EPS ({epsStandardWord(view.accounting)})</th><th>Net income</th></tr></thead>
@@ -1244,11 +1298,11 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
               <tr key={r.end}>
                 <td data-label={w.One}>{r.label}</td>
                 <td data-label="Period ending">{r.end}</td>
-                <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
+                <td data-label="Revenue"><CellValue cell={r.revenue} compact short scale={scale} empty={revenueEmpty(view)} /></td>
                 <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}>
-                  <CellValue cell={r.epsDiluted} short emptyTitle={/^Q4 /.test(r.label) ? Q4_EPS_NOTE : undefined} />
+                  <CellValue cell={r.epsDiluted} short emptyTitle={q4EpsNotReported(r) ? Q4_EPS_NOTE : undefined} />
                 </td>
-                <td data-label="Net income"><CellValue cell={r.netIncome} compact short /></td>
+                <td data-label="Net income"><CellValue cell={r.netIncome} compact short scale={scale} /></td>
               </tr>
             ))}
           </tbody>
@@ -1256,9 +1310,14 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
       </div>
       {/* Q4 IS NEVER FILED AS A STANDALONE QUARTER, and a weighted-average share
           count is not additive, so EPS cannot be derived for it either. One row
-          in four shows a dash where the filer published nothing. */}
+          in four shows a dash where the filer published nothing.
+          ── BUT ONLY WHEN A Q4 CELL ACTUALLY SAYS SO ────────────────────────
+          ABBV's Q4 EPS cells all carry figures, and this note still told the
+          reader "those cells read Not reported" under a table where none did.
+          It is gated on q4EpsNotReported, the same test the cell uses, so the
+          note and the cells cannot disagree. */}
       <p className="earningsDataNote">
-        {Q4_EPS_NOTE} Source: {SEC_ATTRIBUTION}.
+        {view.recentPeriods.some(q4EpsNotReported) ? <>{Q4_EPS_NOTE} </> : null}Source: {SEC_ATTRIBUTION}.
       </p>
     </section>
   );
