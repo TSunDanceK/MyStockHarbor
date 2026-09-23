@@ -65,7 +65,10 @@ export const RETIRED_BLOCKS: RetiredBlock[] = [
   {
     id: "analyst-ratings",
     label: "Analyst consensus, price targets and rating breakdown",
-    source: "FMP /stable/grades-consensus + /price-target-summary, via /api/stock-analyst-rating",
+    // Corrected 2026-09-23 (#552 COWORK #1): the route called price-target-consensus,
+    // not price-target-summary. The route itself is deleted (it was still publicly
+    // reachable and metered); un-retiring this block needs a new source anyway.
+    source: "FMP /stable/price-target-consensus + /grades-consensus, via /api/stock-analyst-rating (route deleted 2026-09-23)",
     retiredOn: "2026-09-21",
     reason:
       "Analyst ratings and price targets are a vendor consensus, not a filed figure. " +
