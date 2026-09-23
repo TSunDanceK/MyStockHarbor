@@ -20,6 +20,7 @@
 // list twice under two names. `provider` is adapter identity rather than FMP
 // data and is likewise left for the step that needs it.
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import { fetchFmpGeneralNews } from "@/lib/general-market-news";
 import { cleanRssDescription, containsHtmlMarkup, stripHtmlTags } from "./text";
 import { logResponseWindow } from "./responseWindow";
@@ -90,7 +91,10 @@ async function fetchForSymbol(
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return [];
 
-  const encoded = encodeURIComponent(symbol.toUpperCase());
+  // Dashed for the request only. /stock/BRK.B/news and /api/internal-news
+  // pass the dotted route spelling; extractFmpSymbols still gets `symbol`, so
+  // the requested-symbol relevance signal keeps the reader's spelling.
+  const encoded = encodeURIComponent(toDashed(symbol.toUpperCase()));
   const key = encodeURIComponent(apiKey);
 
   const fromParam = sinceIso ? `&from=${encodeURIComponent(sinceIso)}` : "";
