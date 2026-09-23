@@ -710,6 +710,20 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #7 ruling 2: same-quarter lag backtest (+ why O has no record).
+  "write-outlook-samequarter": {
+    script: "scripts/outlook-samequarter-backtest.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // #535 COWORK #7: #6 one-offs, #2 CRWD per accession, FX drops, class EPS.
+  "write-spotcheck-census-2": {
+    script: "scripts/spotcheck-census-2.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
