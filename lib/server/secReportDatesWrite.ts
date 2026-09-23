@@ -78,6 +78,8 @@ export function buildReportDatesRecord(
     pending,
     category: typeof subs.category === "string" ? subs.category : null,
     annual: cadence?.annual ?? null,
+    // "MM-DD" of the newest annual period end — see StoredReportDates.fye.
+    fye: [...yearEnds].sort().at(-1)?.slice(5) ?? null,
     earlyNonResults,
   };
 }
