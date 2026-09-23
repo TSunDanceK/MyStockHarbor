@@ -31,6 +31,7 @@ import cikMap from "@/data/cik-map.json";
 import { eventTypeFromForm } from "./eventType";
 import { stripHtmlTags } from "./text";
 import { secUserAgent } from "./userAgent";
+import { readSecFilingItems } from "./secFilingsStore";
 import type { NewsItem, NewsProvider } from "./types";
 import { lookupOneWay, toDashed } from "@/lib/symbolSpellings.mjs";
 
@@ -345,15 +346,36 @@ async function fetchForSymbol(
     return [];
   }
 
+  // ── READ FROM THE STORE, NEVER FROM SEC (#535 COWORK #12/#13) ────────────
+  // This runs on a view-triggered news refresh, so a fetch here was SEC traffic
+  // a crawler could drive. sec-daily-index writes the parsed items; see
+  // lib/server/news/secFilingsStore.ts. Re-windowed on read, so an item that
+  // aged out since the job wrote it is not served.
+  const cutoff = Date.now() - SEC_STORE_MAX_AGE_DAYS * 86_400_000;
+  return (await readSecFilingItems(upper)).filter((item) => {
+    const t = item.pubDate ? Date.parse(item.pubDate) : NaN;
+    return Number.isFinite(t) && t >= cutoff;
+  });
+}
+
+/**
+ * THE ONE SEC CALL IN THE NEWS LEG, for the scheduled job only
+ * (app/api/jobs/sec-daily-index). Never reached from a render.
+ * Returns null on any failure, so the job keeps the previously stored items.
+ */
+export async function fetchSubmissionsItems(symbol: string): Promise<NewsItem[] | null> {
+  const upper = symbol.trim().toUpperCase();
+  const cik = cikFor(upper);
+  if (!cik) return null;
   try {
     const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
       headers: { "user-agent": secUserAgent(), accept: "application/json" },
-      next: { revalidate: 3600 },
+      cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     return parseSubmissions((await res.json()) as SubmissionsShape, upper);
   } catch {
-    return [];
+    return null;
   }
 }
 
