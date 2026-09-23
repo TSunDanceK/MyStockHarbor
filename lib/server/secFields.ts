@@ -328,23 +328,8 @@ const INCOME: FieldDef[] = ([
   { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense"], unit: "USD" },
   { key: "otherOperatingExpense", chain: ["OtherOperatingIncomeExpenseNet"], unit: "USD" },
   { key: "operatingIncome", chain: ["OperatingIncomeLoss"], unit: "USD" },
-  // THE TWO APPENDED ENTRIES ARE THE 2024-TAXONOMY SPELLINGS of the two lines
-  // already here: InterestExpenseNonoperating is InterestExpense placed below
-  // operating income, and InterestIncomeExpenseNonoperatingNet is the
-  // non-operating twin of InterestIncomeExpenseNet, which this chain already
-  // takes. AVAV files only the second on its 10-Qs (Q1 FY2027: 4,136,000,
-  // relay 35838601488). LAST, so a period a current entry covers keeps it.
-  { key: "interestExpense", chain: [
-      "InterestExpense", "InterestExpenseDebt", "InterestIncomeExpenseNet",
-      "InterestExpenseNonoperating", "InterestIncomeExpenseNonoperatingNet",
-    ], unit: "USD" },
-  // OtherNonoperatingIncomeExpense is the "other" residual below operating
-  // income, where NonoperatingIncomeExpense is the subtotal. A filer that
-  // publishes no subtotal files the residual: AVAV's Q1 FY2027 is -595,000, and
-  // operating income -10,871,000 + net interest 4,136,000 + that -595,000 is its
-  // filed pre-tax -7,330,000 to the dollar (relay 35838601488). Ranked BELOW
-  // the subtotal, so a filer that files both keeps the subtotal.
-  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD" },
+  { key: "interestExpense", chain: ["InterestExpense", "InterestExpenseDebt", "InterestIncomeExpenseNet"], unit: "USD" },
+  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense"], unit: "USD" },
   // THE TWO TAGS DIFFER PRECISELY ON MINORITY INTEREST -- which is why
   // netIncomeToNoncontrollingInterest is stored: without it the two cannot be
   // reconciled and the chain's own ambiguity is unresolvable after the fact.
