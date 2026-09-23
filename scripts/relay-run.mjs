@@ -578,6 +578,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the grid's three FMP calls against secReportDatesStore, the SEC
+  // ticker file and the price pool, before any cutover (brief item 4).
+  "write-grid-off-fmp-coverage": {
+    script: "scripts/grid-off-fmp-coverage.mjs",
+    args: () => [],
+    writes: true,
+  },
   // READS ONLY: a stored report-date record beside the live page's
   // "Next expected earnings date" card, for the symbols in SYMBOLS.
   "write-report-date-live-check": {
