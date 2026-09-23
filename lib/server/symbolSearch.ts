@@ -135,6 +135,8 @@ function searchCryptoPairs(q: string) {
 /**
  * Rank the index for `q`. PURE, so the check can run it on fixture rows.
  *
+ * GEARED ETFs sort after every other match (see the band below).
+ *
  * TIEBREAK: FMP's own result order used to break ties within a tier. With no
  * vendor order, a tie goes to the SHORTER symbol, then alphabetical -- a
  * shorter ticker for the same name is almost always the common stock ahead of a
@@ -147,8 +149,18 @@ export function rankIndex(rows: IndexRow[], q: string, limit = 20): SymbolRow[] 
     const rank = rankResult(row, q);
     if (rank < NO_MATCH) scored.push({ row, rank });
   }
+  // GEARED ETFs (leveraged / inverse / option-income) after every other match,
+  // EXCEPT an exact ticker hit, which stays first whatever it is -- typing
+  // "NVDX" still means NVDX (#553 COWORK #11).
+  const band = (e: { row: IndexRow; rank: number }) => (e.rank === 0 ? 0 : e.row.etfKind === "geared" ? 2 : 1);
   return scored
-    .sort((a, b) => a.rank - b.rank || a.row.symbol.length - b.row.symbol.length || a.row.symbol.localeCompare(b.row.symbol))
+    .sort(
+      (a, b) =>
+        band(a) - band(b) ||
+        a.rank - b.rank ||
+        a.row.symbol.length - b.row.symbol.length ||
+        a.row.symbol.localeCompare(b.row.symbol)
+    )
     .slice(0, limit)
     .map(({ row }) => ({ symbol: row.symbol, name: row.name, exchange: row.exchange }));
 }

@@ -88,6 +88,34 @@ function suite({ idx, search }) {
   ok("4. a non-matching popular ticker is NEVER returned", !find("ZZZZ").length && !find("PHARMING").includes("MSFT"), find("ZZZZ").join(","));
   ok("ETFs are found: SPY, IWM, QQQ", find("SPY")[0] === "SPY" && find("IWM")[0] === "IWM" && find("QQQ")[0] === "QQQ");
   ok("IEX-only listings are not offered (no chart behind them)", !find("IEXQ").includes("IEXQ"));
+  // #553 COWORK #11 (2026-09-23): geared ETFs below the company and plain ETFs.
+  const nvidia = find("NVIDIA");
+  ok("GEARED: 'nvidia' puts the company first, its 2x/inverse ETFs after it", nvidia[0] === "NVDA" && nvidia.includes("NVDX") && nvidia.includes("NVDQ"), nvidia.join(","));
+  // THE CASE THE DEMOTION DECIDES: ARMG is a TICKER-prefix match (tier 10) and
+  // Armstrong World a NAME-prefix one (tier 20), so without the band ARMG wins.
+  const arm = find("ARM");
+  ok("GEARED: for 'ARM', an operating company (AWI) ranks above ARM's leveraged ETF (ARMG)",
+    arm.includes("AWI") && arm.includes("ARMG") && arm.indexOf("AWI") < arm.indexOf("ARMG"), arm.join(","));
+  ok("GEARED: every geared match sorts after every non-geared one (exact hit aside)",
+    arm.slice(1).every((s, i, rest) => bySym.get(s)?.etfKind !== "geared" || rest.slice(i).every((t) => bySym.get(t)?.etfKind === "geared")), arm.join(","));
+  // Needs a NON-geared rival for the same query, or the rule decides nothing:
+  // TQQQ (geared, exact) vs TQQQA (plain, ticker-prefix). Constructed rows.
+  const rival = idx.buildIndex([
+    { symbol: "TQQQ", name: "ProShares UltraPro QQQ", exchange: "NASDAQ", etfKind: "geared" },
+    { symbol: "TQQQA", name: "Constructed Operating Co", exchange: "NASDAQ", etfKind: null },
+  ], []);
+  ok("GEARED: an exact ticker hit on a geared ETF is still first ('TQQQ' means TQQQ)",
+    search.rankIndex(rival, "TQQQ")[0]?.symbol === "TQQQ", search.rankIndex(rival, "TQQQ").map((r) => r.symbol).join(","));
+  ok("GEARED: classified from the directory's ETF flag + raw name",
+    bySym.get("NVDX")?.etfKind === "geared" && bySym.get("SQQQ")?.etfKind === "geared" && bySym.get("QYLD")?.etfKind === "geared" &&
+      bySym.get("SPY")?.etfKind === "plain" && bySym.get("SHV")?.etfKind === "plain" && bySym.get("MSFT")?.etfKind === null,
+    ["NVDX", "SQQQ", "QYLD", "SPY", "SHV", "MSFT"].map((s) => `${s}:${bySym.get(s)?.etfKind}`).join(" "));
+
+  // #553 COWORK #11: the directory is not always UTF-8.
+  const cp1252 = Uint8Array.from(Buffer.from("MicroSectors -3\xD7 Short", "latin1"));
+  ok("ENCODING: a Windows-1252 × is decoded, not mangled", idx.decodeDirectory(cp1252) === "MicroSectors -3× Short", idx.decodeDirectory(cp1252));
+  ok("ENCODING: valid UTF-8 is read as UTF-8", idx.decodeDirectory(new TextEncoder().encode("Nestlé − S.A.")) === "Nestlé − S.A.");
+
   ok("results carry only symbol, name and exchange", Object.keys(search.rankIndex(rows, "AAPL")[0] ?? {}).sort().join() === "exchange,name,symbol");
   return fails;
 }
@@ -108,6 +136,10 @@ try {
     ["index", "test issues kept", `if (iTest >= 0 && (cols[iTest] || "").trim().toUpperCase() === "Y") continue;`, ""],
     ["index", "ETF venue (Arca) unmapped", 'P: "NYSE ARCA",', ""],
     ["index", "preferred marker not converted", '.replace(/\\$/g, "-")', ""],
+    ["search", "geared ETFs not demoted", '(e.rank === 0 ? 0 : e.row.etfKind === "geared" ? 2 : 1)', "(e.rank === 0 ? 0 : 1)"],
+    ["search", "exact hit on a geared ETF demoted too", '(e.rank === 0 ? 0 : e.row.etfKind === "geared" ? 2 : 1)', '(e.row.etfKind === "geared" ? 2 : e.rank === 0 ? 0 : 1)'],
+    ["index", "directory decoded as UTF-8 only", 'return new TextDecoder("windows-1252").decode(bytes);', 'return new TextDecoder("utf-8").decode(bytes);'],
+    ["index", "Treasury 'short' duration funds classed as geared", "(?!\\s*-?\\s*(?:term|treasury|duration|maturity|dated|bond))", ""],
   ];
   console.log("\n=== mutants ===");
   for (const [which, label, from, to] of MUTANTS) {
