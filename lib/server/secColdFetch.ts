@@ -77,7 +77,8 @@ import { canWriteSecState, noteSecWriteBlocked, secCounterPrefix } from "./secWr
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
-import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
+import { unreadableReason, type CompanyFacts } from "./secExtract";
+import { extractForSymbol } from "./secExtractFor";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
@@ -514,7 +515,7 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
   // here is the shape where one path gains a condition and the other does not.
   const set = await toStoredSet(
-    extractCompanyFacts(symbol, (await res.json()) as CompanyFacts)
+    extractForSymbol(symbol, (await res.json()) as CompanyFacts)
   );
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same

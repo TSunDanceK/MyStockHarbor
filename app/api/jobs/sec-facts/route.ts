@@ -4,7 +4,8 @@ import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
 import { drainColdCiks } from "@/lib/server/secColdCik";
-import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
@@ -624,7 +625,7 @@ export async function GET(req: NextRequest) {
         filingFill.lagging++;
         const f = filing!;
         const cf = await fetchCompanyFacts(cik);
-        const base = extractCompanyFacts(symbol, cf);
+        const base = extractForSymbol(symbol, cf);
         let next: StoredFactSet;
         const baseNewest = newestStoredEnd({
           quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
@@ -644,7 +645,7 @@ export async function GET(req: NextRequest) {
           const { merged, added } = xml
             ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
             : { merged: cf, added: 0 };
-          next = await toStoredSet(added ? extractCompanyFacts(symbol, merged) : base, defaultSources(), fxSeriesThisRun);
+          next = await toStoredSet(added ? extractForSymbol(symbol, merged) : base, defaultSources(), fxSeriesThisRun);
           const noticeOnly = isLagging(next, f);
           if (noticeOnly) {
             next = { ...next, lg: f };
@@ -694,7 +695,7 @@ export async function GET(req: NextRequest) {
     }
     try {
       const facts = await fetchCompanyFacts(cik);
-      const extracted = extractCompanyFacts(symbol, facts);
+      const extracted = extractForSymbol(symbol, facts);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is
       // also what keeps the conversion after differencing, which happens
