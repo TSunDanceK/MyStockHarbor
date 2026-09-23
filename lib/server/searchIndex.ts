@@ -37,7 +37,29 @@ export type SymbolRow = {
   exchange: string;
 };
 
+/**
+ * What kind of ETF a row is, or null for anything that is not one.
+ *   "geared"  leveraged, inverse or option-income products (2x/3x, -1x, Ultra,
+ *             Bear/Bull, covered call, YieldMax...). Real, tradable, and almost
+ *             never what a search for a company or an index means -- so they
+ *             rank BELOW every operating company and plain ETF that matches
+ *             (#553 COWORK #11: ARMA/ARMG and NVDQ/NVDX were outranking the
+ *             companies' own listings). Demoted, never dropped.
+ *   "plain"   every other ETF (SPY, IWM, QQQ).
+ */
+export type EtfKind = "plain" | "geared" | null;
+
+/**
+ * DEMOTION ONLY, read off the directory's RAW security name and only for rows
+ * the directory itself flags ETF=Y -- so an operating company whose name holds
+ * one of these words ("Bull Run Inc.") is never touched. This is not the
+ * name-based EXCLUSION symbolSearch.ts warns about: nothing is removed.
+ */
+export const GEARED_ETF_RE =
+  /(?:\b\d+(?:\.\d+)?\s?[xX]\b|\bultra(?:pro|short)?\b|\bleveraged\b|\binverse\b|\bshort\b(?!\s*-?\s*(?:term|treasury|duration|maturity|dated|bond))|\bbear\b|\bbull\b|\bdaily target\b|\boption income\b|\bcovered call\b|\byieldmax\b|\bpremium income\b|\boption strategy\b|\bbuffer\b)/i;
+
 export type IndexRow = SymbolRow & {
+  etfKind: EtfKind;
   /** Precomputed for rankResult: upper-cased, non-alphanumerics removed. */
   symbolNorm: string;
   nameNorm: string;
@@ -58,9 +80,10 @@ const OTHER_EXCHANGE: Record<string, string> = {
 
 export const normalise = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-export function toIndexRow(row: SymbolRow): IndexRow {
+export function toIndexRow(row: SymbolRow & { etfKind?: EtfKind }): IndexRow {
   return {
     ...row,
+    etfKind: row.etfKind ?? null,
     symbolNorm: normalise(row.symbol),
     nameNorm: normalise(row.name),
     nameWords: row.name.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean),
@@ -74,7 +97,10 @@ export function toIndexRow(row: SymbolRow): IndexRow {
  * `-`, the form symbolSearch's isDerivativeSymbol already demotes; `.` class
  * shares (BRK.B) are kept as the site spells them.
  */
-export function parseDirectory(text: string, file: "nasdaqlisted" | "otherlisted"): SymbolRow[] {
+export function parseDirectory(
+  text: string,
+  file: "nasdaqlisted" | "otherlisted"
+): (SymbolRow & { etfKind: EtfKind })[] {
   const lines = text.split(/\r?\n/).filter((l) => l.includes("|"));
   if (lines.length < 2) return [];
   const header = lines[0].split("|").map((h) => h.trim());
@@ -83,9 +109,10 @@ export function parseDirectory(text: string, file: "nasdaqlisted" | "otherlisted
   const iName = col("Security Name");
   const iTest = col("Test Issue");
   const iExch = col("Exchange");
+  const iEtf = col("ETF");
   if (iSym < 0 || iName < 0) return [];
 
-  const out: SymbolRow[] = [];
+  const out: (SymbolRow & { etfKind: EtfKind })[] = [];
   for (const line of lines.slice(1)) {
     if (/^File Creation Time/i.test(line)) continue;
     const cols = line.split("|");
@@ -95,7 +122,9 @@ export function parseDirectory(text: string, file: "nasdaqlisted" | "otherlisted
     if (!symbol || !name || !/^[A-Z][A-Z0-9.\-]*$/.test(symbol)) continue;
     const exchange = file === "nasdaqlisted" ? "NASDAQ" : OTHER_EXCHANGE[(cols[iExch] || "").trim()] ?? "";
     if (!exchange) continue;
-    out.push({ symbol, name, exchange });
+    const isEtf = iEtf >= 0 && (cols[iEtf] || "").trim().toUpperCase() === "Y";
+    const etfKind: EtfKind = !isEtf ? null : GEARED_ETF_RE.test(cols[iName] || "") ? "geared" : "plain";
+    out.push({ symbol, name, exchange, etfKind });
   }
   return out;
 }
@@ -120,7 +149,7 @@ export function secRows(file: SecTickerFile): SymbolRow[] {
 }
 
 /** Directory rows first (they carry ETFs and cleaner names); SEC fills the rest. */
-export function buildIndex(directory: SymbolRow[], sec: SymbolRow[]): IndexRow[] {
+export function buildIndex(directory: (SymbolRow & { etfKind?: EtfKind })[], sec: SymbolRow[]): IndexRow[] {
   const seen = new Set<string>();
   const out: IndexRow[] = [];
   for (const row of [...directory, ...sec]) {
@@ -131,12 +160,26 @@ export function buildIndex(directory: SymbolRow[], sec: SymbolRow[]): IndexRow[]
   return out;
 }
 
+/**
+ * The directory's bytes as text. NOT ALWAYS UTF-8 (#553 COWORK #11): a name
+ * rendered "MicroSectors -3? Short" because the file's single-byte `×` was
+ * read as UTF-8. Strict UTF-8 first; if the bytes are not valid UTF-8, they
+ * are Windows-1252, which is a superset of Latin-1 for every printable byte.
+ */
+export function decodeDirectory(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 async function fetchDirectory(url: string): Promise<string> {
   try {
     // The same 24 h fetch cache companyNames.ts uses for these two files, so
     // the two readers share one fetch per URL per day.
     const res = await fetch(url, { next: { revalidate: 86400 } });
-    return res.ok ? await res.text() : "";
+    return res.ok ? decodeDirectory(new Uint8Array(await res.arrayBuffer())) : "";
   } catch {
     return "";
   }
