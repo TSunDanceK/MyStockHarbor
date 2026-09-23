@@ -536,7 +536,9 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
         // "Operating results" by reference, and dropping that sentence as a
         // page pointer rendered results discussion). A pointer that merely
         // mentions MD&A is dropped, not rejected (BOH, ES, ESI, SIRI, UFPI).
-        const crossRef = POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);
+        // Only BEFORE anything is kept: AMAT and ODC state their business
+        // first and point elsewhere after it, and keep their description.
+        const crossRef = out.length === 0 && POINTER.some((re) => re.test(x)) && CROSS_REFERENCE.test(x);
         if (!crossRef && x.length <= MAX_SENTENCE_CHARS && !isTabular(x) && !META.some((re) => re.test(x))) continue;
         for (const [re, label] of REJECT) if (re.test(x)) return { ok: false, why: `rejected: ${label}` };
       }
