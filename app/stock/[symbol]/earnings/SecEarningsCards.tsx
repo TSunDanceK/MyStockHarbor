@@ -334,6 +334,20 @@ const signTone = (v: number | null | undefined): EarningsTone | null =>
  * A LEVEL, unsigned. Margins are a share of revenue, not a change in one, and
  * rendering a 82.9% gross margin as "+82.9%" reads as growth of 82.9%.
  */
+/**
+ * A MARGIN REFUSED BY NAME (secEarningsView.revenueLineIncomplete): the short
+ * form in the narrow table cell, the full reason as its tooltip — the same
+ * pattern as EMPTY_SHORT.
+ */
+function NotMeaningful() {
+  return (
+    <abbr className="cellShort" title={EMPTY_REASONS.revenueIncomplete} tabIndex={0}
+      style={{ textDecoration: "none", cursor: "help", color: "#94a3b8" }}>
+      Not meaningful
+    </abbr>
+  );
+}
+
 const pctLevel = (v: number | null | undefined, digits = 1) =>
   v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(digits)}%`;
 const ratio = (v: number | null | undefined) =>
@@ -797,9 +811,9 @@ export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
                     <PctCell v={view.growth[i]?.epsYoY} />
                   )}
                 </td>
-                <td data-label="Gross margin">{pctLevel(m.gross)}</td>
-                <td data-label="Operating margin">{pctLevel(m.operating)}</td>
-                <td data-label="Net margin">{pctLevel(m.net)}</td>
+                <td data-label="Gross margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.gross)}</td>
+                <td data-label="Operating margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.operating)}</td>
+                <td data-label="Net margin">{m.marginsRefused ? <NotMeaningful /> : pctLevel(m.net)}</td>
               </tr>
             ))}
           </tbody>
@@ -895,9 +909,9 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                 <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
                 <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short /></td>
                 <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
-                <td data-label="Gross margin">{pctLevel(r.gross)}</td>
-                <td data-label="Operating margin">{pctLevel(r.operating)}</td>
-                <td data-label="Net margin">{pctLevel(r.net)}</td>
+                <td data-label="Gross margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.gross)}</td>
+                <td data-label="Operating margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.operating)}</td>
+                <td data-label="Net margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.net)}</td>
               </tr>
             ))}
           </tbody>
