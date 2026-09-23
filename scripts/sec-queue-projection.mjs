@@ -60,17 +60,25 @@ const EXTRACT = readCodeOnly("lib/server/secExtract.ts");
 const num = (src, name) => Number((src.match(new RegExp(`${name} = (\\d+)`)) ?? [])[1]);
 const WINDOW = num(EXTRACT, "SEC_QUARTER_WINDOW");
 const YEARS = num(EXTRACT, "SEC_YEAR_WINDOW");
+// needsReread compares against it; without it the lifted function throws
+// ReferenceError on the first entry that reaches the `lv` test.
+const LABEL_VERSION = num(EXTRACT, "SEC_LABEL_VERSION");
 const LIMITS = {
   reverify: num(ROUTE, "SEC_REVERIFY_PER_RUN"),
   populate: num(ROUTE, "SEC_POPULATE_PER_RUN"),
   rewindow: num(ROUTE, "SEC_REWINDOW_PER_RUN"),
 };
 const CEILING = num(ROUTE, "SEC_POPULATE_SLACK_CEILING");
+for (const [n, v] of [["SEC_QUARTER_WINDOW", WINDOW], ["SEC_YEAR_WINDOW", YEARS],
+  ["SEC_LABEL_VERSION", LABEL_VERSION], ["SEC_POPULATE_SLACK_CEILING", CEILING]]) {
+  if (!Number.isFinite(v)) { console.error(`FATAL: could not read ${n}`); process.exit(2); }
+}
 const mod = await lift(
   [
     readCodeOnly("lib/server/secFields.ts"),
     `const SEC_QUARTER_WINDOW = ${WINDOW};`,
     `const SEC_YEAR_WINDOW = ${YEARS};`,
+    `const SEC_LABEL_VERSION = ${LABEL_VERSION};`,
     `const SEC_REVERIFY_PER_RUN = ${LIMITS.reverify};`,
     `const SEC_POPULATE_PER_RUN = ${LIMITS.populate};`,
     `const SEC_REWINDOW_PER_RUN = ${LIMITS.rewindow};`,

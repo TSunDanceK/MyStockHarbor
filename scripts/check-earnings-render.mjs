@@ -1153,8 +1153,10 @@ console.log("\n16. AVAV — the earnings-page cleanup brief, on the filer it was
   const val = visibleText(html(React.createElement(M.SecValuationCard, {
     view: vAvav, inputs: M.valuationInputs(AVAV, "2026-09-22"), price: 164.31, priceAsOf: "2026-09-21", today: "2026-09-22",
   })));
-  check("B: valuation reads Market cap $8.4B and P/E Not meaningful, each with a one-line caption",
-    /Market cap \$8\.4B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
+  // $8.35B, not $8.4B: the market cap now uses the page's one amount rule
+  // (scaledAmount, 2dp in B) rather than a second 1dp formatter (PR #531).
+  check("B: valuation reads Market cap $8.35B and P/E Not meaningful, each with a one-line caption",
+    /Market cap \$8\.35B 50\.8M shares × \$164\.31 close, 2026-09-21/.test(val) &&
       /P\/E \(GAAP, trailing\) Not meaningful Loss over/.test(val) && !/never an adjusted figure/.test(val),
     val);
   // TREND: the median beside the newest period (owner review, #522). AVAV's

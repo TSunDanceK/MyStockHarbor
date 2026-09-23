@@ -419,6 +419,12 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
   },
+  // Read-only: every balance-sheet-total and non-operating concept a filer
+  // publishes for its newest periods, with values (earnings page round 2).
+  "sec-concept-list": {
+    script: "scripts/sec-concept-list-probe.mjs",
+    args: () => [],
+  },
   // Read-only: the NEXT question after sec-missing-fields. That probe says
   // whether the filer tagged the concept; this one says why a concept it DID
   // tag, and our chain DOES list, still renders blank — extraction, period
@@ -556,6 +562,16 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX: earnings page round 2's four gaps counted
+  // over the manifest with the shipped extraction, before/after the chain
+  // edits, plus the re-read backlog the edit causes. GETs only.
+  // SYMBOLS="SHARD i/n" splits the manifest across parallel runners.
+  "write-round2-gap-census": {
+    script: "scripts/sec-round2-gap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-queue-projection": {
     script: "scripts/sec-queue-projection.mjs",
     args: () => [],
@@ -621,6 +637,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY: which fact sets sec-facts failed on, reproduced with the
+  // shipped fetch rule and extraction over the queues failures stay in.
+  "write-sec-facts-failures": {
+    script: "scripts/sec-facts-failures.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // READS ONLY: why sec-facts times out -- last runs, next queues, fetch cost.
   "write-sec-facts-timeout-diagnosis": {
     script: "scripts/sec-facts-timeout-diagnosis.mjs",
@@ -631,6 +655,27 @@ const TASKS = {
   // READS ONLY: every stored fact set's h against secFieldsHash (readFactSet's gate).
   "write-sec-factset-readability": {
     script: "scripts/sec-factset-readability.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX, same as write-due-input-census above:
+  // `write-` is the CREDENTIAL boundary, and the report-dates store lives in
+  // Upstash behind credentials that only the write- half of relay.yml carries.
+  // Renders the ticker search's answer for the cut plus a handful of names a
+  // reader would actually type, against the live record.
+  "write-symbol-outlook": {
+    script: "scripts/symbol-outlook-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY IN PRACTICE, credentialled for the READ, same as
+  // write-symbol-outlook. The next-report tile and card, BEFORE and AFTER the
+  // 30-day-band change (owner decision 2026-09-23), rendered against the live
+  // record. SYMBOLS overrides the default six.
+  "write-next-report-band": {
+    script: "scripts/next-report-band-render.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,
@@ -794,6 +839,33 @@ const TASKS = {
   // a "due to report" list over the past 12 months across the FULL analysis
   // universe and sweeps k. List size scales with the universe, so a sample
   // cannot answer it. Needs the dump for the analysis universe.
+  // DOES A 30-DAY WINDOW SURVIVE WHAT AN EXACT DATE DID NOT? The day-level
+  // forward calendar was measured and killed (2 of 48 filers inside their own
+  // p90 band; 0 of 276 8-K scheduling announcements in the needed band). The
+  // coarser claim -- "expected to report in the next 30 days" -- is a different
+  // claim and had never been measured. Same pairing and walk-forward as
+  // sec-results-date-predictability, scored on a ROLLING window, over the FULL
+  // universe rather than a hand-picked sample, and against a computed
+  // list-everyone-every-day baseline.
+  //
+  // Read-only, no credential; needs the dump for the universe and the network
+  // for submissions.
+  "window30": {
+    script: "scripts/sec-window30-predictability.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+  },
+  // THE SAME PROBE WITH THE PAGING CAP LIFTED. 81 filers were excluded for
+  // thin history and 5 of them hit this script's own 2-page budget, so their
+  // thinness is OUR limit or THEIRS and the first run could not say which.
+  // A separate task rather than an input, because relay.yml's inputs live on
+  // the default branch -- the task name is the record of what was measured.
+  "window30-recheck": {
+    script: "scripts/sec-window30-predictability.mjs",
+    args: (env) => [env.DUMP_DIR ?? ""],
+    needsDump: true,
+    env: { RECHECK_THIN: "1" },
+  },
   "sec-due-sweep": {
     script: "scripts/sec-due-to-report-sweep.mjs",
     args: (env) => [env.DUMP_DIR ?? ""],

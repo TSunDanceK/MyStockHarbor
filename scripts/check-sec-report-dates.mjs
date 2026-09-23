@@ -832,14 +832,15 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     /e\.timing === "after-close" \? "amc" : "bmo"/.test(page),
     "after-close is the only timing that advances the session");
 
-  // ── THE PAGE NEVER CLAIMS THE COMPANY ANNOUNCED IT ─────────────────────
-  check("the estimated date is labelled as an estimate from past pattern",
-    /Estimated from \{clean\}&apos;s own past reporting pattern/.test(page));
-  check("...and says the company may break it",
-    /free to break the pattern/.test(page));
-  // A MONTH IS RENDERED AS A MONTH. "Expected in 2026-11" is a machine talking.
-  check("a month-only estimate renders a month name, not YYYY-MM",
-    /monthName\(nextReport\.month\)/.test(page) && /names\[idx\]/.test(page));
+  // ── THE NEXT REPORT IS THE 30-DAY BAND, NOT estimateNextReport's DAY ───
+  // SUPERSEDED 2026-09-23 (owner decision): the card used to print the day
+  // ("Estimated from {clean}'s own past reporting pattern ... free to break
+  // the pattern") or the month ("Expected in November 2026"). It now renders
+  // the /earnings-calendar search's answer; the rendered-output proof, with
+  // mutants, is scripts/check-next-report-band.mjs. What stays here is only
+  // that the old day/month path is gone from the page source.
+  check("the next-report card is the search's outlook, not estimateNextReport's day",
+    /outlookForEarningsCard\(/.test(page) && !/secDates\??\.next\b/.test(page) && !/monthName\(/.test(page));
 
   // ── ONE VOCABULARY FOR THE WHOLE PAGE ──────────────────────────────────
   // The bars were labelled by the CALENDAR quarter of a date while every other
@@ -861,14 +862,14 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     !/function quarterLabel/.test(page) && !/function displayQuarterLabel/.test(page),
     "leaving it in leaves the defect one call site away");
 
-  // ── THE GATE'S REFUSAL IS RENDERED, NOT LEFT BLANK ─────────────────────
+  // ── THE REFUSAL IS RENDERED, NOT LEFT BLANK ────────────────────────────
   // On AAP the card did not render at all — indistinguishable from a symbol
-  // with no SEC data.
-  check("a filer too irregular for a date still gets the card, with the reason",
-    /Not enough regular reporting history to estimate the next report date\./.test(page),
+  // with no SEC data. The refusal is now the outlook's NAMED one (thin
+  // history, below the accuracy bar, no record...), rendered by NextReportCard
+  // whenever the record was read; check-next-report-band.mjs renders it.
+  check("the card renders whatever the outlook says, refusals included",
+    /\{nextReport \? <NextReportCard outlook=\{nextReport\} \/> : null\}/.test(page),
     "a blank cannot be told from 'we never looked'");
-  check("...and the refusal only shows where filings were actually read",
-    /: secEvents\.length\s*\n?\s*\? \{ source: "sec", kind: "none" \}/.test(page));
 
   // ── THE TIMING WORDING RULE REACHES THE EXPLANATORY COPY TOO ───────────
   // THE COPY MOVED to ReactionCharts.tsx and was cut to one line (owner review

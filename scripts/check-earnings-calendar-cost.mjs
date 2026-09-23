@@ -40,17 +40,17 @@ const check = (label, ok, detail = "") => {
 const page = readCodeOnly("app/earnings-calendar/page.tsx");
 const cal = readCodeOnly("lib/server/earningsCalendar.ts");
 
-console.log("\n1. The fourteen ticker reads happen once per instance, not per view");
+console.log("\n1. The fifty forward-section reads happen once per instance, not per view");
 
 const memoFn = grabFunction(page, "readMemo");
 const ttl = Number(
   Function(
-    `"use strict"; return (${(page.match(/TICKER_MEMO_MS = ([0-9 *_]+);/) ?? [])[1] ?? "0"});`
+    `"use strict"; return (${(page.match(/FORWARD_MEMO_MS = ([0-9 *_]+);/) ?? [])[1] ?? "0"});`
   )()
 );
 if (!memoFn || !ttl) {
   console.error(
-    `FAIL: could not extract readMemo (${!!memoFn}) or TICKER_MEMO_MS (${ttl}) — ` +
+    `FAIL: could not extract readMemo (${!!memoFn}) or FORWARD_MEMO_MS (${ttl}) — ` +
       `this script would otherwise pass by measuring nothing.`
   );
   process.exit(1);
@@ -62,8 +62,10 @@ const held = { key: "2026-09-04", at: NOW, value: [{ symbol: "AAPL" }] };
 check(
   "a hit inside the window returns the held value",
   memo.readMemo(held, "2026-09-04", NOW + ttl - 1, ttl)?.length === 1,
-  `${ttl / 60_000} minutes — fourteen Redis GETs for a strip of upcoming names, ` +
-    `identical for every visitor on a given day, was paid per request`
+  `${ttl / 60_000} minutes — FIFTY Redis GETs for the committed cut's report-date ` +
+    `records, identical for every visitor on a given day, would otherwise be paid ` +
+    `per request. The ticker this memo used to guard cost fourteen; the due strip ` +
+    `and the expected section that replaced it cost fifty, read once for both.`
 );
 check(
   "a DIFFERENT day misses, rather than serving the wrong day",
@@ -90,10 +92,14 @@ check(
     "arguments instead of four, which is how the fail-open surfaced at all"
 );
 check(
-  "an empty result is not memoised",
-  /if \(items\.length\) tickerMemo =/.test(page),
-  "an empty ticker is what a Redis blip returns, and holding it for five " +
-    "minutes turns one bad read into five minutes of an empty strip"
+  "a FAILED result is not memoised",
+  /if \(value\.due\.kind !== "unavailable"\) \{\s*\n\s*forwardMemo =/.test(page),
+  "the same rule the ticker memo carried, against a stronger test. The ticker " +
+    "guarded on `items.length`, which cannot tell an empty read from a failed " +
+    "one; the forward sections carry that distinction in the state itself, so " +
+    "the guard now checks the thing that actually means 'we could not answer'. " +
+    "Holding THAT for five minutes turns one bad read into five minutes of a " +
+    "page telling every visitor it cannot answer"
 );
 
 console.log("\n2. The completeness marker is read once, not twice");
@@ -179,7 +185,7 @@ check(
 
 console.log(
   failures === 0
-    ? "\nThe fourteen reads are memoised, the marker is read once, and the scan is gated.\n"
+    ? "\nThe fifty forward reads are memoised, the marker is read once, and the scan is gated.\n"
     : `\n${failures} assertion(s) failed.\n`
 );
 process.exit(failures === 0 ? 0 : 1);
