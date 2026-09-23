@@ -445,7 +445,22 @@ async function buildSectorNewsBaseData(sector: SectorDef): Promise<SectorNewsBas
   });
   // AND FILTERED ON READ, for the up-to-an-hour a record is served from cache
   // before its first refresh under this code.
-  const news = stored.filter(fromActive);
+  let news = stored.filter(fromActive);
+
+  // ── A RECORD THAT HELD FMP ITEMS IS REBUILT NOW, NOT IN AN HOUR ─────────
+  // Found on the #558 preview (COWORK #11): every sector page was EMPTY. The
+  // store is shared Redis, and production -- still on the FMP path until this
+  // merges -- kept rewriting msh:sector-news:v1:<slug> with FMP items on each
+  // view. The preview read that record inside its one-hour window (no refresh),
+  // the filter above correctly removed every item, and nothing was left. The
+  // same would happen for up to an hour after deploy. So: if the read had to
+  // drop anything, compose the free window immediately (one MGET + the shared
+  // wire poll) and merge it in. The store is still rewritten, without FMP
+  // items, at its next refresh.
+  if (!onFmp && news.length < stored.length) {
+    const fresh = await fetchFreeSectorNewsWindow(constituents).catch(() => [] as NewsItem[]);
+    news = dedupeNews(mergeNewsPools([news, fresh]));
+  }
 
   const rankedNews = rankSectorNews(news);
   const earningsNews = news.filter(isEarningsNewsItem);

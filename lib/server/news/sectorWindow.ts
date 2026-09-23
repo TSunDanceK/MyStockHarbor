@@ -76,6 +76,8 @@ export function composeFreeSectorPools(
     wire.filter(
       (item) =>
         isFromActiveProvider(item, activeIds, "free") &&
+        // English only, by the wire's own dc:language tag (#553 COWORK #11).
+        !(item.language && !/^en(-|$)/i.test(item.language.trim())) &&
         (item.tickers ?? []).some((t) => constituentSet.has(t))
     )
   );

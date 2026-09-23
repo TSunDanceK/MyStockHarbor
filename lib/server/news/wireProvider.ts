@@ -196,6 +196,8 @@ export function parseWireFeed(xml: string, source: WireSource, nowMs = Date.now(
       categories: [...industries, ...subjects],
       eventType,
       provider: "wire",
+      language: clean(tag1(block, "dc:language")) || null,
+      issuer: clean(tag1(block, "dc:contributor")) || null,
     });
   }
 
