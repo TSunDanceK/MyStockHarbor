@@ -16,6 +16,13 @@ import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { isRegularSessionOpen } from "@/lib/server/marketHours";
 import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
+import {
+  applySecPickerRow,
+  pickersFundamentalsSource,
+  readSecPickerRows,
+  SEC_PICKER_FIELDS,
+} from "@/lib/server/pickersSecFundamentals";
+import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
@@ -321,6 +328,13 @@ export type ResultEntry = ResultEntryFlags & {
   perf6m?: number;
   perfYtd?: number;
   perf1y?: number;
+  /**
+   * "sec" when this row's Market Cap / PS / PB / EV / P/FCF / Revenue /
+   * Op. Income / Net Income / FCF / Div ($) / Div Yield / Div Growth came from
+   * the filings (lib/server/pickersSecFundamentals.ts). The grid reads it to
+   * keep Payout Ratio on its stored figure until the TTM EPS fix (COWORK #5 Q1).
+   */
+  fundamentalsFrom?: "sec";
 };
 
 // Deliberately typed as FilterKey (the exact 18-key union from
@@ -1190,6 +1204,42 @@ async function getPickerData(config: PickerResultConfig) {
       }
     } catch {
       // extended data is optional
+    }
+
+    // HIDDEN FIELDS ARE NOT SHIPPED (lib/pickerHiddenFields.ts, 2026-09-23).
+    // The grid no longer renders them; dropping them here also keeps them out
+    // of the page payload and out of the filter bar's category value lists.
+    for (const entry of entries) {
+      const rec = entry as unknown as Record<string, unknown>;
+      for (const field of HIDDEN_FIELD_KEYS) delete rec[field];
+    }
+
+    // THE FILINGS, LAYERED LAST (Relay B, #553 COWORK #5). Twelve fields from
+    // the SEC fact sets via the shipped secValuation functions, divided by the
+    // price this row shows. ONE HMGET for the whole page. A REFUSAL CLEARS the
+    // field rather than leaving FMP's figure behind it -- see the header of
+    // lib/server/pickersSecFundamentals.ts. P/E, EPS and Payout Ratio are
+    // untouched until the TTM EPS fix; sector and industry are a separate PR.
+    // PICKERS_FUNDAMENTALS=fmp (plus a redeploy) skips this block entirely.
+    if (pickersFundamentalsSource() === "sec") {
+      try {
+        const secRows = await readSecPickerRows(entries.map((e) => e.symbol));
+        for (const entry of entries) {
+          const row = secRows.get(entry.symbol);
+          if (!row) continue;
+          const shown = valueForPredicateField(entry, "price");
+          const figures = applySecPickerRow(row, typeof shown === "number" ? shown : null);
+          const rec = entry as unknown as Record<string, unknown>;
+          for (const field of SEC_PICKER_FIELDS) {
+            const v = figures[field];
+            if (v === null) delete rec[field];
+            else rec[field] = v;
+          }
+          entry.fundamentalsFrom = "sec";
+        }
+      } catch {
+        // A failed read leaves the stored values, as before this block existed.
+      }
     }
 
     // Order by this page's declared key, now that the fundamentals it reads are
