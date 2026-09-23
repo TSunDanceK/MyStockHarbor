@@ -1092,6 +1092,28 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
  */
 const BALANCE_SHEET_SPREAD_DAYS = 95;
 
+/**
+ * FOUR LINES WHOSE ABSENCE IS ABOUT THE TAGS, NOT THE COMPANY.
+ *
+ * Every 10-Q carries equity and liabilities, and a filer whose pre-tax income
+ * differs from its operating income has non-operating lines. "Not reported"
+ * would be a claim about the company that is false; each gets the words that
+ * are true of it. NOT_REPORTED itself is unchanged — it is shared with lines
+ * (Q4 EPS) where it is the right claim.
+ *
+ * - Liabilities and equity: "Not found in the filing's tagged data" — only
+ *   where the concept really is absent from the filing (AVAV total
+ *   liabilities: no liabilities total tagged at all).
+ * - Interest expense and other income: "Not captured from this filing", the
+ *   site's existing words (EMPTY_REASONS.notCaptured). The filer may tag
+ *   these under concepts this page does not read — AVAV tags
+ *   InterestIncomeExpenseNonoperatingNet (+$4.1M) and
+ *   OtherNonoperatingIncomeExpense (-$0.6M), outside our chains — so "not
+ *   found in the tagged data" would be untrue there (#535 COWORK #1, 2026-09-23).
+ */
+const NOT_IN_TAGGED_DATA = "Not found in the filing\u2019s tagged data";
+const TAG_GAP_LINES = new Set(["interestExpense", "nonOperatingIncomeExpense"]);
+
 export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   const b = view.balance;
   if (!b) return null;
@@ -1132,8 +1154,18 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           )}
         </Row>
         <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
-        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact /></Row>
-        <Row label="Shareholders&apos; equity" strong><CellValue cell={b.stockholdersEquity} compact /></Row>
+        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact empty={NOT_IN_TAGGED_DATA} /></Row>
+        {/* THE LABEL FOLLOWS THE FIGURE, as the cash row does: a filer that
+            tags only total equity shows that total under its own name. */}
+        <Row
+          label={b.equityIncludesNci ? "Total equity (incl. noncontrolling interests)" : "Shareholders' equity"}
+          strong
+          sub={b.equityIncludesNci
+            ? "This filer tags equity only including any noncontrolling interests, not the parent\u2019s share alone."
+            : undefined}
+        >
+          <CellValue cell={b.stockholdersEquity} compact empty={NOT_IN_TAGGED_DATA} />
+        </Row>
       </div>
       {/* ONE LINE. "A position at a date, so none of them are derived" explained
           the ABSENCE of a mark, which no reader goes looking for; the sentence
@@ -1200,7 +1232,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               compact
              
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : NOT_REPORTED}
+              empty={c.key === "revenue" ? revenueEmpty(view) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
             />
           </Row>
         ))}
@@ -1706,6 +1738,7 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
           "N of M" already says how many periods it counted, the thresholds
           are in the growth chart's footnote, and the crossing sentence is
           printed once per page. */}
+      {t.skewNote ? <p className="earningsDataNote">{t.skewNote}</p> : null}
       <p className="earningsDataNote">Source: {SEC_ATTRIBUTION}.</p>
     </section>
   );
