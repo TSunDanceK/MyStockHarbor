@@ -229,6 +229,16 @@ export default function LatestEarningsCard({
             {snapshot.periodLabel}
             {snapshot.periodEnd ? ` · period ending ${formatPlainDate(snapshot.periodEnd)}` : ""}
           </div>
+          {/* WHERE THE NEWEST PERIOD CAME FROM, OR WHY IT IS NOT HERE. Both are
+              filed facts about SEC's data feed, not about the company; the
+              words are built once in secEarningsView so this tile and the
+              earnings card cannot say different things. */}
+          {snapshot.filingCredit ? (
+            <div style={earningsMiniSubStyle}>{snapshot.filingCredit}</div>
+          ) : null}
+          {snapshot.filingNotice ? (
+            <div style={earningsMiniSubStyle}>{snapshot.filingNotice}</div>
+          ) : null}
 
           <div style={earningsMetricGridStyle}>
             {/* A BLANK TILE SAYS WHY, in the meta slot where growth would sit.

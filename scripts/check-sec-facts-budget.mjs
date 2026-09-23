@@ -63,8 +63,10 @@ check("a stopped loop BREAKS to the manifest write, never returns early",
 check("the budget starts before the manifest read",
   route.indexOf("const budget = makeJobBudget();") !== -1 &&
     route.indexOf("const budget = makeJobBudget();") < route.indexOf("await readManifest()"));
-check("both SEC fetches are bounded",
-  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 2);
+// THREE since 2026-09-23 (#535 COWORK #6): companyfacts, submissions, and the
+// filing-folder read (index.json + XBRL instance) for a filer the feed lags.
+check("all three SEC fetches are bounded",
+  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 3);
 check("both FX fetches (FRED, ECB) are bounded",
   (fx.match(/signal: AbortSignal\.timeout\(FX_FETCH_TIMEOUT_MS\)/g) ?? []).length === 2 &&
     Number((fx.match(/const FX_FETCH_TIMEOUT_MS = ([\d_]+);/) ?? [])[1]?.replace(/_/g, "")) <= B.FETCH_TIMEOUT_MS);
@@ -81,7 +83,7 @@ console.log("\n4. mutations of the route text are seen");
     ["report dates sharing the facts deadline", route.replace("if (!budget.datesOpen())", "if (!budget.factsOpen())"),
       (r) => /for \(const \[i, symbol\] of datesQueue\.entries\(\)\) \{\s*if \(!budget\.datesOpen\(\)\)/.test(r)],
     ["a fetch left unbounded", route.replace(", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)", ""),
-      (r) => (r.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 2],
+      (r) => (r.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 3],
   ];
   for (const [name, mutated, assertion] of mutants) {
     check(`MUTATION caught: ${name}`, mutated !== route && !assertion(mutated));

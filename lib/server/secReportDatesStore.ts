@@ -127,6 +127,17 @@ export type StoredReportDates = {
    * existed, never "no pattern".
    */
   earlyNonResults?: EarlyNonResultsPattern | null;
+  /**
+   * THE FISCAL YEAR'S END, month and day ("01-31"), from the stored fact set's
+   * newest annual period — so the 30-day band can keep the fiscal-year-end
+   * quarter's lags apart from the other three (Q4_SPLIT, #535 COWORK #8). A
+   * 10-K reports later than a 10-Q (KO: ~42 days against ~25), and one median
+   * over both refused 115 regular filers.
+   *
+   * Optional: absent on records written before it, and on filers with no annual
+   * period; readers then use one pool, exactly as before.
+   */
+  fye?: string | null;
 };
 
 /**

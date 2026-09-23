@@ -19,6 +19,17 @@ import { SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, SEC_LABEL_VERSION } from "./secExt
 import type { CoverShares, ExtractResult, PeriodRecord } from "./secExtract";
 import type { FxConversion } from "./secCurrency";
 
+/** A periodic filing, identified the way EDGAR's submissions list does. */
+export type FilingRef = {
+  /** "10-Q", "10-K", "20-F", "40-F". */
+  form: string;
+  accn: string;
+  /** Filing date, YYYY-MM-DD. */
+  filed: string;
+  /** The period the filing reports on (EDGAR's reportDate), YYYY-MM-DD. */
+  reportDate: string;
+};
+
 /** One period as stored. Arrays are positional over SEC_FIELD_KEYS. */
 export type StoredPeriod = {
   e: string;                       // end
@@ -168,6 +179,24 @@ export type StoredFactSet = {
    * Optional; absent is unknown. Not in contentHashOf: provenance, not a value.
    */
   rns?: Record<string, number>;
+  /**
+   * THE FILING THE NEWEST PERIOD WAS READ FROM, when SEC's companyfacts had
+   * not published it yet (#535 COWORK #6, option C). The period's figures come
+   * from that filing's own XBRL instance, merged fill-only and run through the
+   * same extraction; the page credits it by form and date. Absent on every set
+   * whose periods all came from companyfacts.
+   *
+   * NOT in contentHashOf: provenance, not a value. When companyfacts publishes
+   * the period the next re-read drops this and the values stand on their own.
+   */
+  ff?: FilingRef;
+  /**
+   * A NEWER PERIODIC FILING THAT NEITHER SOURCE COULD READ — companyfacts has
+   * not published it and the filing's own XBRL gave no period this set could
+   * use (a currency the set does not report in, or no instance). The page says
+   * so, dated from the filing itself. Not in contentHashOf.
+   */
+  lg?: FilingRef;
   /** Content hash of the values only — the restatement tripwire (spec §3 L2). */
   contentHash: string;
   notes: string[];
