@@ -666,7 +666,6 @@ const TRACED = new Map([
   ["lib/server/benchmarksBuilder.ts#fetchFmpQuote", "no dot: fixed SPY/QQQ/DIA/IWM and BTCUSD-style lists only"],
   ["lib/server/earningsCalendar.ts#quoteOne", "no dot: FMP earnings-calendar rows, and looksNonUsOrDerivative drops any symbol with '.' or '-'"],
   ["lib/server/indexChanges.ts#fetchRecentIndexAdditions", "no dot, by FMP convention not measurement: FMP constituent endpoints, 402 on this plan so unreached today"],
-  ["app/api/debug/static-profile/route.ts#fetchStatic", "PRESET: readPickersSymbolsIfCached"],
   ["app/api/jobs/warm-earnings/route.ts#fetchFmpEarnings", "PRESET: the earnings warm queue, filled from the pickers universe and the dynamic universe"],
   ["lib/sector-news-data.ts#fetchFmpSectorNewsWindow", "PRESET: getSectorConstituents, if BRK.B survives the top-40 market-cap cut"],
   ["lib/server/fundamentalsCache.ts#fetchQuoteFundamentals", "PRESET: warm-fundamentals over the warm targets"],

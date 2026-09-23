@@ -1,5 +1,8 @@
 # Step 3, step 2 — the five-symbol extraction, diffed against the frozen FMP dump
 
+> **2026-09-23 (#552, COWORK #4):** FMP values in this doc are redacted as
+> "[removed 2026-09-23]". The SEC values and the findings are kept.
+
 **Run:** relay `sec-extract`, workflow run
 [34931769452](https://github.com/TSunDanceK/MyStockHarbor/actions/runs/34931769452),
 head `d3dd7e5`, 2026-09-15 05:12 UTC.
@@ -51,7 +54,7 @@ operatingIncome (TTM)  SEC 154,859.0M   FMP [removed 2026-09-23]   0.00%
 netIncome (TTM)        SEC 128,930.0M   FMP [removed 2026-09-23]   0.00%
 freeCashFlow (TTM)     SEC 136,683.0M   FMP [removed 2026-09-23]   0.00%
 epsTtm                 SEC       8.71   FMP [removed 2026-09-23] 0.74%
-divPerShare (TTM)      SEC       1.05   FMP [removed 2026-09-23]   0.94%
+divPerShare (TTM)      SEC       1.05   FMP [removed 2026-09-23] 0.94%
 ```
 
 `freeCashFlow` matching to the dollar is the strongest single result in the run:
