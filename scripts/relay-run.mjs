@@ -740,6 +740,8 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #10: EDGAR current-filings feed as an intraday trigger. Read-only.
+  "sec-current-feed": { script: "scripts/sec-current-feed-probe.mjs", args: () => [] },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
   // volume, per-filer timing through the shipped filing path. Read-only.
   "write-sec-cache-budget": {
