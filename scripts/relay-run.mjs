@@ -740,6 +740,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #8: Q4_SPLIT before/after on live records. Read-only.
+  "write-q4-split-render": {
+    script: "scripts/q4-split-render.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],

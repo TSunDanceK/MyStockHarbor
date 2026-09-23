@@ -94,17 +94,30 @@ export async function toStoredSet(
   // No periods at all, so there is nothing to convert and nothing to mislabel.
   if (!span) return encodeFactSet(extracted);
 
+  // THE FETCH REACHES BACK PAST THE EARLIEST PERIOD, because a balance-sheet
+  // date on a Monday holiday needs the previous week's observation and a
+  // window that starts exactly at the earliest date has nothing behind it.
+  const want = { from: isoDaysBefore(span.from, FX_SPOT_BACKFILL_DAYS + 7), to: span.to };
   let series = seriesCache?.get(currency);
-  if (series === undefined) {
-    // THE FETCH REACHES BACK PAST THE EARLIEST PERIOD, because a balance-sheet
-    // date on a Monday holiday needs the previous week's observation and a
-    // window that starts exactly at the earliest date has nothing behind it.
-    series = await loadSeries(
-      currency,
-      isoDaysBefore(span.from, FX_SPOT_BACKFILL_DAYS + 7),
-      span.to,
-      sources
-    );
+  // ── A CACHED SERIES SERVES ONLY A SPAN ITS FETCH WINDOW COVERS ─────────
+  // It used to be reused for every later filer in the currency, whatever that
+  // filer's span. Replayed on live data (relay 35865921726): ENB converted
+  // through Q2 2026 on its own, but behind BMO's series (fetched to 31 Jan
+  // 2026) its two newest quarters were refused for want of a rate; VOD lost
+  // its 2022 periods at the other edge behind MICC's. A span outside the
+  // window refetches the UNION, so the cache only ever widens. A remembered
+  // failure (null) is still not retried within the run.
+  if (series && !(series.window && series.window.from <= want.from && series.window.to >= want.to)) {
+    const union = series.window
+      ? { from: series.window.from < want.from ? series.window.from : want.from,
+          to: series.window.to > want.to ? series.window.to : want.to }
+      : want;
+    series = await loadSeries(currency, union.from, union.to, sources);
+    if (series) series = { ...series, window: union };
+    seriesCache?.set(currency, series);
+  } else if (series === undefined) {
+    series = await loadSeries(currency, want.from, want.to, sources);
+    if (series) series = { ...series, window: want };
     seriesCache?.set(currency, series);
   }
   if (!series) return encodeFactSet(withoutPeriods(extracted));

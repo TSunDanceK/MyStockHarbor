@@ -39,7 +39,7 @@
 // true claim is almost always about the filing.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
 import { valueOf } from "./secFactCodec";
-import { isConsecutive } from "./secEarningsView";
+import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
@@ -52,6 +52,7 @@ export type ValuationRefusal =
   | "no-twelve-month-eps"
   | "eps-is-zero-or-negative"
   | "no-twelve-month-revenue"
+  | "revenue-line-incomplete"
   | "no-balance-sheet-equity"
   | "equity-is-zero-or-negative"
   | "enterprise-value-input-missing"
@@ -74,6 +75,8 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
   "no-twelve-month-revenue":
     "twelve months of revenue are not on file",
+  "revenue-line-incomplete":
+    "not meaningful — this filer's revenue line is incomplete in its tagged data",
   "no-balance-sheet-equity":
     "the latest balance sheet on file states no shareholders' equity",
   "equity-is-zero-or-negative":
@@ -509,6 +512,12 @@ export function twelveMonthsOf(set: StoredFactSet, keys: string[]): TwelveMonths
 /** The filed inputs the three new multiples need, read once from the set. */
 export type MultipleInputs = {
   revenue: TwelveMonths | null;
+  /**
+   * TRUE when any period inside the revenue's twelve months fails
+   * revenueLineIncomplete — P/S is then refused by name, the same guard as the
+   * margins (#535 COWORK #8). Optional: absent reads as false.
+   */
+  revenueIncomplete?: boolean;
   ebitda: TwelveMonths | null;
   balanceSheet: {
     asOf: string;
@@ -521,8 +530,11 @@ export type MultipleInputs = {
 
 export function multipleInputs(set: StoredFactSet): MultipleInputs {
   const b = set.instants[0] ?? null;
+  const revenue = twelveMonthsOf(set, ["revenue"]);
+  const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {
-    revenue: twelveMonthsOf(set, ["revenue"]),
+    revenue,
+    revenueIncomplete: Boolean(revenue && periods.some((p) => revenueLineIncomplete(p))),
     ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
     balanceSheet: b
       ? {
@@ -561,8 +573,9 @@ export function valuationMultiples(
     return { pe, ps: same, pb: same, evEbitda: same };
   }
 
-  const ps: ValuationFigure =
-    m.revenue && m.revenue.vals.revenue > 0
+  const ps: ValuationFigure = m.revenueIncomplete
+    ? { ok: false, why: "revenue-line-incomplete" }
+    : m.revenue && m.revenue.vals.revenue > 0
       ? { ok: true, val: cap.val / m.revenue.vals.revenue }
       : { ok: false, why: "no-twelve-month-revenue" };
 

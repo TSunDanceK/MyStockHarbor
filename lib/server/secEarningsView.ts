@@ -6,7 +6,7 @@
 // asserts against this file, not against the markup.
 import {
   cell, periodLabel, ttm, valueOf,
-  type Cell, type StoredFactSet, type StoredPeriod,
+  type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
 import { SEC_FIELDS, type Statement } from "./secFields";
@@ -413,7 +413,60 @@ export const EMPTY_REASONS = {
   noRevenueLine: "No revenue line in this filing",
   needsRevenue: "Needs revenue",
   notCaptured: "Not captured from this filing",
+  revenueIncomplete: "Not meaningful — this filer's revenue line is incomplete in its tagged data",
 } as const;
+
+/**
+ * THE REVENUE LINE IS INCOMPLETE WHEN THE PERIOD'S OWN OPERATING INCOME
+ * EXCEEDS IT — or, where operating income is not tagged, its pre-tax income.
+ *
+ * 2026-09-23 (#535 COWORK #8): 25 filers showed net margins of 102% to 7,509%.
+ * 21 were banks, insurers and REITs whose tagged revenue is a slice (a REIT's
+ * `RevenueFromContractWithCustomer...` excludes its rent); every ratio built on
+ * that revenue is then not meaningful and is refused by name. Decided BY RULE,
+ * not by list: a genuine one-off sits BELOW the operating line (NTNX, AFRM and
+ * BLFS: a tax valuation-allowance release; ZM: a non-operating gain), so its
+ * operating income stays under revenue and its margins stand.
+ */
+export function revenueLineIncomplete(p: StoredPeriod | null | undefined): boolean {
+  const rev = valueOf(p, "revenue");
+  if (rev === null || rev <= 0) return false;
+  const op = valueOf(p, "operatingIncome");
+  if (op !== null) return op > rev;
+  const pre = valueOf(p, "preTaxIncome");
+  return pre !== null && pre > rev;
+}
+/** "3 Jul 2026" — the same format the stock page's earnings card prints. */
+export function plainDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+}
+
+const ANNUAL_FORMS = new Set(["10-K", "20-F", "40-F"]);
+
+/**
+ * THE CREDIT, when the newest period came from the filing rather than the
+ * feed. Filed facts only: which form, filed when. One sentence, shared by the
+ * stock page tile and the earnings card so the two cannot drift.
+ */
+export function filingCreditText(ref: FilingRef): string {
+  return `From the ${ref.form} filed ${plainDate(ref.filed)}. SEC's data feed has not published ` +
+    `these figures yet, so they were read from the filing itself.`;
+}
+
+/**
+ * THE NOTICE, when a newer filing exists that neither source could read.
+ * Dated from the filing's own period (EDGAR's reportDate), never from a
+ * cadence guess — the guess named 26 Jun for KO's quarter to 3 Jul.
+ */
+export function filingNoticeText(ref: FilingRef): string {
+  const what = ANNUAL_FORMS.has(ref.form) ? "fiscal year" : "quarter";
+  return `Results for the ${what} ended ${plainDate(ref.reportDate)} were filed with the SEC on ` +
+    `${plainDate(ref.filed)} (${ref.form}); the figures are not in SEC's data feed yet, so this ` +
+    `page still shows the previous period.`;
+}
+
 /** Is this a figure, as opposed to absent or a crossing? */
 export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -482,6 +535,17 @@ export type SecEarningsView = {
   latestEnd: string;
   latestAccession: string | null;
   latestFiled: string | null;
+  /**
+   * SET WHEN THE NEWEST PERIOD WAS READ FROM THE FILING ITSELF because SEC's
+   * data feed had not published it (StoredFactSet.ff). Null otherwise —
+   * including after companyfacts catches up, when the period is its own.
+   */
+  latestFromFiling: FilingRef | null;
+  /**
+   * A NEWER FILING NEITHER SOURCE COULD READ (StoredFactSet.lg), and only
+   * while it is newer than what the page shows. Null otherwise.
+   */
+  filedNotInFeed: FilingRef | null;
   snapshot: {
     revenue: ViewCell;
     revenueYoY: Pct;
@@ -550,6 +614,8 @@ export type SecEarningsView = {
     gross: number | null;
     operating: number | null;
     net: number | null;
+    /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
+    marginsRefused: boolean;
   }[];
   /**
    * THE ANCHOR'S OWN KIND: "quarter" normally, "year" for a filer that
@@ -593,6 +659,8 @@ export type SecEarningsView = {
     gross: number | null;
     operating: number | null;
     net: number | null;
+    /** TRUE when revenueLineIncomplete: the three margins are refused, by name. */
+    marginsRefused: boolean;
   }[];
   growth: {
     label: string;
@@ -770,6 +838,17 @@ export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean
 
 const pctOf = (part: number | null, whole: number | null) =>
   part === null || whole === null || whole === 0 ? null : (part / whole) * 100;
+
+/** The three margins of one period, or all three refused when its revenue line is incomplete. */
+const marginsOf = (p: StoredPeriod) => {
+  if (revenueLineIncomplete(p)) return { gross: null, operating: null, net: null, marginsRefused: true };
+  return {
+    gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
+    operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
+    net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+    marginsRefused: false,
+  };
+};
 
 /**
  * How many of the stored periods the tables render.
@@ -949,9 +1028,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       prior,
       revenueYoY: yoy(valueOf(home(p), "revenue"), valueOf(home(prior), "revenue")),
       epsYoY: yoy(valueOf(home(p), "epsDiluted"), valueOf(home(prior), "epsDiluted")),
-      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
-      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
-      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+      ...marginsOf(p),
     };
   });
 
@@ -982,7 +1059,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
    */
   const hasSomething = (r: typeof measured[number]) =>
     r.epsYoY !== null ||
-    r.gross !== null || r.operating !== null || r.net !== null;
+    r.gross !== null || r.operating !== null || r.net !== null || r.marginsRefused;
 
   /**
    * A ROW WITHOUT A COMPARATOR DOES NOT RENDER — AND STILL SERVES AS ONE.
@@ -1012,7 +1089,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const rows = measured.filter((r) => hasSomething(r) && hasComparator(r)).slice(0, renderLimit);
   const shown = rows.map((r) => r.p);
 
-  const margins = rows.map(({ p, gross, operating, net }, i) => ({
+  const margins = rows.map(({ p, gross, operating, net, marginsRefused }, i) => ({
     label: periodLabel(p),
     // TRUE when the row OLDER than this one is not the immediately preceding
     // fiscal quarter. `shown` is newest-first, so the older neighbour is i + 1.
@@ -1025,7 +1102,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     // row below is not the period immediately before this one, whether the
     // filing is absent from the store or present with nothing in it.
     gapAfter: annualOnly ? false : shown[i + 1] ? !isConsecutive(p, shown[i + 1]) : false,
-    gross, operating, net,
+    gross, operating, net, marginsRefused,
   })).reverse();
 
   const growth = rows.map(({ p, prior, revenueYoY, epsYoY }) => ({
@@ -1109,9 +1186,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
       epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
-      gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
-      operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
-      net: pctOf(valueOf(p, "netIncome"), valueOf(p, "revenue")),
+      ...marginsOf(p),
     };
   }).reverse();
 
@@ -1257,6 +1332,11 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     latestEnd: latest.e,
     latestAccession: latest.a,
     latestFiled: latest.f,
+    // BY ACCESSION, NOT BY "ff IS PRESENT": the credit belongs to the period
+    // that filing supplied, and a later companyfacts re-read that published it
+    // leaves no ff at all.
+    latestFromFiling: set.ff && latest.a === set.ff.accn ? set.ff : null,
+    filedNotInFeed: set.lg && set.lg.reportDate > latest.e ? set.lg : null,
     snapshot: {
       revenue: view(latest, "revenue", "Revenue"),
       // SAME REPORTING-CURRENCY RULE AS THE GROWTH TABLE. The snapshot's two

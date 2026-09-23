@@ -38,7 +38,7 @@ import {
 import { dueInputFrom } from "./dueInputs";
 import { selectDue } from "./dueToReport";
 import { dueRowLabel } from "./dueStripState";
-import { expectedFrom, lagsFrom, median, type ExpectedBandId } from "./expectedToReport";
+import { expectedFrom, lagHabit, type ExpectedBandId } from "./expectedToReport";
 import {
   OUTLOOK_HEDGE, OUTLOOK_UNAVAILABLE, outlookBandLabel, outlookBeyondWindowLabel,
   outlookNoEstimateLabel, outlookReasonLabel, habitLabel, lastReportedLabel,
@@ -193,9 +193,10 @@ function lastFiled(rec: StoredReportDates | null): string | null {
  * quoting it in the sample size would overstate the evidence behind the number.
  */
 function habitOf(rec: StoredReportDates | null): { medianLagDays: number; fromPeriods: number } | null {
-  const { lags } = lagsFrom(rec?.events);
-  const m = median(lags);
-  return m == null ? null : { medianLagDays: m, fromPeriods: lags.length };
+  // lagHabit is expectedFrom's own reading (Q4_SPLIT pool included), so the
+  // evidence line and the decision cannot come from two medians.
+  const h = lagHabit(rec);
+  return h.medianLagDays == null ? null : { medianLagDays: h.medianLagDays, fromPeriods: h.fromPeriods };
 }
 
 function evidenceFor(
