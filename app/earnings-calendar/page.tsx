@@ -579,17 +579,22 @@ export default async function EarningsCalendarPage({
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
+              {/* 2026-09-23 (#552, COWORK #26 items 2-3): "EPS/revenue
+                  estimates" dropped -- the grid no longer shows estimates. The
+                  day-state note (e.g. the "cannot be listed right now" gap
+                  message) is no longer repeated here; it is shown once, in the
+                  day panel below. */}
               {dayState.kind === "listed" ? (
                 <>
                   <strong>{dayState.items.length}</strong> US-listed{" "}
                   {dayState.items.length === 1 ? "company has" : "companies have"} results on file
                   for {selectedDateLabel}. See how many have filed on each day, then drill into any
-                  date for tickers, EPS/revenue estimates, price and market cap.
+                  date for tickers, price and market cap.
                 </>
               ) : (
                 <>
-                  {dayStateNote} See how many companies have filed on each day, then drill into any
-                  date for tickers, EPS/revenue estimates, price and market cap.
+                  See how many companies have filed on each day, then drill into any date for
+                  tickers, price and market cap.
                 </>
               )}
             </p>
