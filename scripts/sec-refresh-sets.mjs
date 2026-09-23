@@ -18,6 +18,7 @@ import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { grabFunction, lift } from "./lib/earnings-plan.mjs";
+import { loadCards } from "./lib/render-cards.mjs";
 
 const redis = Redis.fromEnv();
 const UA = process.env.SEC_USER_AGENT ??
@@ -78,6 +79,22 @@ const fetchJson = async (url) => {
 };
 
 const fxCache = new Map();
+
+// WHAT A READER WOULD SEE CHANGE: annual revenue and the score band, before and
+// after, through the shipped view and scorer (the same unit the earnings-page
+// render harness uses). Printed only; a failure here never blocks the write.
+const cards = await loadCards().catch((e) => { console.log(`(report unavailable: ${e.message})`); return null; });
+const readerView = (symbol, set) => {
+  if (!cards || !set) return null;
+  try {
+    const view = cards.buildSecEarningsView(set);
+    const score = cards.scoreFromSec(view, symbol, { status: "ready" });
+    const rev = (view?.annual ?? []).map((a) => `${a.label} ${a.revenue?.val == null ? "—" : `$${(a.revenue.val / 1e6).toFixed(1)}M`}`);
+    return { rev, band: score.available ? `${score.score} ${cards.toneLabel(score.tone)}` : "not scored" };
+  } catch (e) {
+    return { rev: [], band: `view threw: ${e.message}` };
+  }
+};
 console.log(`${SYMBOLS.length} SYMBOLS · SEC_LABEL_VERSION ${sec.SEC_LABEL_VERSION}\n`);
 for (const symbol of SYMBOLS) {
   const cik = manifest.symbols[symbol]?.cik ?? tickerMap.get(symbol)?.cik;
@@ -106,6 +123,13 @@ for (const symbol of SYMBOLS) {
       `nt=${set.nt ? `[${set.nt.slice(0, 6).join(", ")}${set.nt.length > 6 ? ", ..." : ""}]` : "absent"}  ` +
       `rns=${JSON.stringify(set.rns ?? null)}`
   );
+  const b = readerView(symbol, before);
+  const a = readerView(symbol, set);
+  if (a) {
+    console.log(`         score ${b?.band ?? "—"} -> ${a.band}${b && b.band.split(" ")[1] !== a.band.split(" ")[1] ? "   <-- BAND CHANGED" : ""}`);
+    console.log(`         annual revenue before: ${b?.rev.join(" · ") || "—"}`);
+    console.log(`         annual revenue after:  ${a.rev.join(" · ") || "—"}`);
+  }
 }
 await redis.set(SEC_MANIFEST_KEY, manifest);
 console.log("\nmanifest stamped");
