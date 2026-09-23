@@ -696,7 +696,14 @@ export function fiscalYearEndNote(ends: string[]): string | null {
  */
 export function scaledAmount(v: number, currency = true): string {
   const abs = Math.abs(v);
-  const [div, unit, dp] = abs >= 1e12 ? [1e12, "T", 2] : abs >= 1e9 ? [1e9, "B", 2] : [1e6, "M", 1];
+  // THE TIER IS PICKED FROM THE ROUNDED VALUE, not the raw one. 999,960,000 is
+  // under $1B but rounds to 1000.0 in M, and "$1000.0M" is the unit change the
+  // rule exists to prevent — so anything that rounds to 1000.0M reads in B,
+  // and anything that rounds to 1000.00B reads in T.
+  const [div, unit, dp] =
+    Number((abs / 1e9).toFixed(2)) >= 1000 ? [1e12, "T", 2]
+      : Number((abs / 1e6).toFixed(1)) >= 1000 ? [1e9, "B", 2]
+        : [1e6, "M", 1];
   const s = (abs / div).toFixed(dp);
   // No sign on a figure that rounds to zero: "-$0.0M" is a minus on nothing.
   return `${v < 0 && Number(s) !== 0 ? "-" : ""}${currency ? "$" : ""}${s}${unit}`;
