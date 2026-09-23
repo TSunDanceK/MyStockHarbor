@@ -78,11 +78,18 @@ check("past the cap it returns false",
 check("it fails OPEN on a Redis error",
   /catch \{\s*return true;\s*\}/.test(claim),
   "refusing here would cost a reader their page over a bookkeeping outage");
-// THE BUCKET EXISTING IS NOT THE BUCKET BEING USED. Both fetch paths must go
-// through it, or the cap is decoration.
-check("every SEC fetch path claims the budget first",
-  (COLD.match(/await claimColdFetch\(/g) ?? []).length >= 2,
-  `${(COLD.match(/await claimColdFetch\(/g) ?? []).length} call site(s)`);
+// THE BUCKET EXISTING IS NOT THE BUCKET BEING USED. The one fetch path —
+// fillColdSymbol, the human-gated fill since #535 COWORK #13 (the render and
+// its empty-set retry no longer fetch) — must claim it before fetching.
+{
+  const fill = COLD.slice(COLD.indexOf("export async function fillColdSymbol"));
+  const claimAt = fill.indexOf("await claimColdFetch(");
+  const fetchAt = fill.indexOf("withTimeout(fetchAndStore(clean, cik)");
+  check("the one SEC fetch path claims the budget before it fetches",
+    COLD.indexOf("export async function fillColdSymbol") > 0 && claimAt > 0 && fetchAt > claimAt &&
+      (COLD.match(/fetchAndStore\(/g) ?? []).length === 2, // the definition and the one call
+    `claim at ${claimAt}, fetch at ${fetchAt}, fetchAndStore( sites ${(COLD.match(/fetchAndStore\(/g) ?? []).length}`);
+}
 
 {
   // MUTATION: the cap check removed, so the bucket counts and never refuses.

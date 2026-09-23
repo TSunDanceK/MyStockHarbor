@@ -63,10 +63,13 @@ check("a stopped loop BREAKS to the manifest write, never returns early",
 check("the budget starts before the manifest read",
   route.indexOf("const budget = makeJobBudget();") !== -1 &&
     route.indexOf("const budget = makeJobBudget();") < route.indexOf("await readManifest()"));
-// THREE since 2026-09-23 (#535 COWORK #6): companyfacts, submissions, and the
-// filing-folder read (index.json + XBRL instance) for a filer the feed lags.
-check("all three SEC fetches are bounded",
-  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 3);
+// TWO again since the filing-folder read moved to its own job (#535 COWORK
+// #10/#12): companyfacts and submissions. The filing job's one gate is bounded
+// the same way, asserted below.
+check("both SEC fetches are bounded",
+  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 2);
+check("the filing job's SEC fetch is bounded too, through its one rate gate",
+  (fs.readFileSync("app/api/jobs/sec-filings/route.ts", "utf8").match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 1);
 check("both FX fetches (FRED, ECB) are bounded",
   (fx.match(/signal: AbortSignal\.timeout\(FX_FETCH_TIMEOUT_MS\)/g) ?? []).length === 2 &&
     Number((fx.match(/const FX_FETCH_TIMEOUT_MS = ([\d_]+);/) ?? [])[1]?.replace(/_/g, "")) <= B.FETCH_TIMEOUT_MS);

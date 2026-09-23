@@ -1053,7 +1053,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
 
               {/* Earnings snapshot — sidebar */}
-              <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} />
+              <LatestEarningsCard snapshot={earningsSnapshot} symbol={symbol} pageToken={pageToken} />
 
             </aside>
 
