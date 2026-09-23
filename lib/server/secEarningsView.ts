@@ -640,6 +640,12 @@ export type SecEarningsView = {
     totalAssets: ViewCell;
     totalLiabilities: ViewCell;
     stockholdersEquity: ViewCell;
+    /**
+     * TRUE when `stockholdersEquity` is the filer's TOTAL equity, including
+     * noncontrolling interests, because it published no parent-only figure.
+     * Same pattern as cashIncludesRestricted: the label follows the figure.
+     */
+    equityIncludesNci: boolean;
   } | null;
   /** Days between the balance-sheet instant and the income-statement period end. */
   balanceSheetSpreadDays: number | null;
@@ -1173,6 +1179,20 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   const usingRestricted = plainCash.val === null && inclRestricted.val !== null;
   const cashCell = usingRestricted ? inclRestricted : plainCash;
 
+  // ── SHAREHOLDERS' EQUITY, ON THE SAME RULE AS CASH ────────────────────────
+  // The parent-only figure is what the row means, and it wins wherever it is
+  // filed. A filer that tags only the total (AVAV: StockholdersEquityIncluding-
+  // PortionAttributableToNoncontrollingInterest, 4,396,055,000 at 2026-08-01,
+  // no parent-only tag — relay 35838601488) read "Not reported" beside a filed
+  // equity figure. That total is already stored as `totalEquity`; the row shows
+  // it UNDER ITS OWN LABEL rather than calling it the parent's equity.
+  const equityCell = (at: StoredPeriod | null | undefined) => {
+    const parent = view(at, "stockholdersEquity", "Shareholders' equity");
+    const total = view(at, "totalEquity", "Total equity (incl. noncontrolling interests)");
+    const useTotal = parent.val === null && total.val !== null;
+    return { stockholdersEquity: useTotal ? total : parent, equityIncludesNci: useTotal };
+  };
+
   const cashVal = cashCell.val;
   const sti = valueOf(bsAt, "shortTermInvestments");
   const liquid = cashVal === null && sti === null ? null : (cashVal ?? 0) + (sti ?? 0);
@@ -1333,7 +1353,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
           ]),
           totalAssets: view(bsAt, "totalAssets", "Total assets"),
           totalLiabilities: view(bsAt, "totalLiabilities", "Total liabilities"),
-          stockholdersEquity: view(bsAt, "stockholdersEquity", "Shareholders' equity"),
+          ...equityCell(bsAt),
         }
       : null,
     incomeStatement: PL.map(([k, label]) => view(latest, k, label)),

@@ -1065,6 +1065,18 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
  */
 const BALANCE_SHEET_SPREAD_DAYS = 95;
 
+/**
+ * FOUR LINES WHOSE ABSENCE IS ABOUT THE TAGS, NOT THE COMPANY.
+ *
+ * Every 10-Q carries equity and liabilities, and a filer whose pre-tax income
+ * differs from its operating income has non-operating lines. Where none of the
+ * concepts this page reads is tagged, "Not reported" would be a claim about
+ * the company that is false; this says what is true. NOT_REPORTED itself is
+ * unchanged — it is shared with lines (Q4 EPS) where it is the right claim.
+ */
+const NOT_IN_TAGGED_DATA = "Not found in the filing\u2019s tagged data";
+const TAG_GAP_LINES = new Set(["interestExpense", "nonOperatingIncomeExpense"]);
+
 export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   const b = view.balance;
   if (!b) return null;
@@ -1123,8 +1135,18 @@ export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
           )}
         </Row>
         <Row label="Total assets"><CellValue cell={b.totalAssets} compact /></Row>
-        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact /></Row>
-        <Row label="Shareholders&apos; equity" strong><CellValue cell={b.stockholdersEquity} compact /></Row>
+        <Row label="Total liabilities"><CellValue cell={b.totalLiabilities} compact empty={NOT_IN_TAGGED_DATA} /></Row>
+        {/* THE LABEL FOLLOWS THE FIGURE, as the cash row does: a filer that
+            tags only total equity shows that total under its own name. */}
+        <Row
+          label={b.equityIncludesNci ? "Total equity (incl. noncontrolling interests)" : "Shareholders' equity"}
+          strong
+          sub={b.equityIncludesNci
+            ? "This filer tags equity only including any noncontrolling interests, not the parent\u2019s share alone."
+            : undefined}
+        >
+          <CellValue cell={b.stockholdersEquity} compact empty={NOT_IN_TAGGED_DATA} />
+        </Row>
       </div>
       <p className="earningsDataNote">
         Balance-sheet figures are a position at a date, not a period total, so none of them are
@@ -1187,7 +1209,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               cell={c}
               compact
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : NOT_REPORTED}
+              empty={c.key === "revenue" ? revenueEmpty(view) : TAG_GAP_LINES.has(c.key) ? NOT_IN_TAGGED_DATA : NOT_REPORTED}
             />
           </Row>
         ))}

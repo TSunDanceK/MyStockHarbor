@@ -8,11 +8,16 @@
 //   stored    the fact set in the store TODAY — is the line null on the
 //             period the card shows (newest quarter, else newest year, for the
 //             income lines; newest balance-sheet date for the two balances)?
-//   before    companyfacts through the shipped extractor with the chains MINUS
-//             the entries this branch added (ADDED below) — i.e. main's chains
-//   after     the same payload, the chains as this branch ships them
-//   + one run per added concept with ONLY that concept removed, so each
+//   before    companyfacts through the shipped extractor, chains as shipped
+//   after     the same payload with the PROPOSED concepts (below) appended
+//   + one run per proposed concept with ONLY that concept appended, so each
 //     concept's own fills and alterations are attributed to it
+//
+// THE PROPOSAL IS APPLIED HERE, AT RUNTIME, not read from secFields.ts: the
+// first run (35839022318, commit 960a0eb) measured the edit IN the source,
+// found it altered existing figures, and the edit was withdrawn. Keeping the
+// proposal in this file lets the measurement be re-run against the shipped
+// chains without re-landing an edit that fails the zero-alteration bar.
 //
 // ALTERED is the headline: any period (quarter, year or balance date) whose
 // value was a number before and is a different number — or nothing — after.
@@ -33,14 +38,13 @@
 // Credentialled (Upstash) and READ-ONLY: GETs only. Fetches companyfacts at
 // 125ms spacing. SYMBOLS="SHARD i/n" splits the manifest across runners.
 //   relay task: write-round2-gap-census
-import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
 
 const UA = process.env.SEC_USER_AGENT ??
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; round 2 gap census)";
-const ADDED = {
+const PROPOSED = {
   interestExpense: ["InterestExpenseNonoperating", "InterestIncomeExpenseNonoperatingNet"],
   nonOperatingIncomeExpense: ["OtherNonoperatingIncomeExpense"],
 };
@@ -58,25 +62,27 @@ const sec = await lift([
 const { SEC_FIELDS, extractCompanyFacts, encodeFactSet, valueOf, secChainsHash } = sec;
 
 const shipped = {};
-for (const [key, tags] of Object.entries(ADDED)) {
+for (const [key, tags] of Object.entries(PROPOSED)) {
   const f = SEC_FIELDS.find((x) => x.key === key);
-  if (!f || !tags.every((t) => f.chain.includes(t))) {
-    console.error(`FATAL: ${key}'s chain does not contain ${tags.join(", ")}`); process.exit(2);
+  if (!f || tags.some((t) => f.chain.includes(t))) {
+    console.error(`FATAL: ${key}'s chain already contains one of ${tags.join(", ")} — nothing to measure`); process.exit(2);
   }
   shipped[key] = [...f.chain];
 }
-const setChains = (drop) => {
-  for (const key of Object.keys(ADDED)) {
+// Appends exactly `add` (a subset of the proposal) to the shipped chains.
+const setChains = (add) => {
+  for (const key of Object.keys(PROPOSED)) {
     const f = SEC_FIELDS.find((x) => x.key === key);
     f.chain.length = 0;
-    f.chain.push(...shipped[key].filter((t) => !drop.includes(t)));
+    f.chain.push(...shipped[key], ...PROPOSED[key].filter((t) => add.includes(t)));
   }
 };
-const ALL_ADDED = Object.values(ADDED).flat();
-setChains(ALL_ADDED);
-const mainHash = secChainsHash();
+const ALL_ADDED = Object.values(PROPOSED).flat();
 setChains([]);
+const mainHash = secChainsHash();
+setChains(ALL_ADDED);
 const branchHash = secChainsHash();
+setChains([]);
 console.log(`main chains hash ${mainHash} · branch chains hash ${branchHash}`);
 
 const redis = Redis.fromEnv();
@@ -129,9 +135,9 @@ const newestInstantHas = (facts, tag) => {
 };
 
 const FIELDS = ["totalLiabilities", "stockholdersEquity", "interestExpense", "nonOperatingIncomeExpense"];
-const blank = () => ({ storedGap: 0, gapBefore: 0, filledAfter: 0, stillMissing: 0, altered: [], cellsFilled: 0, recGapBefore: 0, recFilled: 0 });
+const blank = () => ({ storedGap: 0, gapBefore: 0, filledAfter: 0, stillMissing: 0, altered: [], alteredSymbols: 0, cellsFilled: 0, recGapBefore: 0, recFilled: 0 });
 const T = Object.fromEntries(FIELDS.map((k) => [k, blank()]));
-const perConcept = Object.fromEntries(ALL_ADDED.map((t) => [t, { filledShown: 0, cellsFilled: 0, altered: [] }]));
+const perConcept = Object.fromEntries(ALL_ADDED.map((t) => [t, { filledShown: 0, cellsFilled: 0, altered: [], alteredSymbols: [] }]));
 const extra = { liabWithLSE: 0, liabGapSamples: [], equityNciDiffers: [], fetchFailed: 0, extractFailed: 0, read: 0, records: hasRecord.size };
 const samples = Object.fromEntries(FIELDS.map((k) => [k, []]));
 
@@ -153,14 +159,15 @@ for (const [symbol, cik] of targets) {
   const facts = await fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
   if (!facts) { extra.fetchFailed++; continue; }
   let before, after;
-  const without = {};
+  const alone = {};
   try {
-    setChains(ALL_ADDED); before = encodeFactSet(extractCompanyFacts(symbol, facts));
+    setChains([]); before = encodeFactSet(extractCompanyFacts(symbol, facts));
     for (const t of ALL_ADDED) {
-      setChains(ALL_ADDED.filter((x) => x !== t));
-      without[t] = encodeFactSet(extractCompanyFacts(symbol, facts));
+      setChains([t]);
+      alone[t] = encodeFactSet(extractCompanyFacts(symbol, facts));
     }
-    setChains([]); after = encodeFactSet(extractCompanyFacts(symbol, facts));
+    setChains(ALL_ADDED); after = encodeFactSet(extractCompanyFacts(symbol, facts));
+    setChains([]);
   } catch (e) { extra.extractFailed++; setChains([]); console.log(`  ${symbol} extract threw: ${e.message}`); continue; }
   extra.read++;
   const rec = hasRecord.has(symbol);
@@ -188,18 +195,23 @@ for (const [symbol, cik] of targets) {
       const nci = newestInstantHas(facts, "MinorityInterest").find((r) => r.end === pb.e && r.val);
       if (nci) extra.equityNciDiffers.push(`${symbol} NCI ${nci.val}`);
     }
-    if (ADDED[key]) {
+    if (PROPOSED[key]) {
       const cb = allCells(before, key), ca = allCells(after, key);
+      let movedAny = false;
       for (const [k, v] of cb) {
-        if (v != null && ca.get(k) !== v) t.altered.push(`${symbol} ${k} ${v} -> ${ca.get(k) ?? "GONE"}`);
+        if (v != null && ca.get(k) !== v) { t.altered.push(`${symbol} ${k} ${v} -> ${ca.get(k) ?? "GONE"}`); movedAny = true; }
       }
+      if (movedAny) t.alteredSymbols++;
       for (const [k, v] of ca) if (v != null && cb.get(k) == null) t.cellsFilled++;
-      for (const tag of ADDED[key]) {
-        const cw = allCells(without[tag], key);
+      // EACH CONCEPT ALONE against the shipped chains.
+      for (const tag of PROPOSED[key]) {
+        const c1 = allCells(alone[tag], key);
         const pc = perConcept[tag];
-        for (const [k, v] of cw) if (v != null && ca.get(k) !== v) pc.altered.push(`${symbol} ${k} ${v} -> ${ca.get(k) ?? "GONE"}`);
-        for (const [k, v] of ca) if (v != null && cw.get(k) == null) pc.cellsFilled++;
-        if (valueOf(shown(without[tag]), key) == null && va != null) pc.filledShown++;
+        const moved = [...cb].filter(([k, v]) => v != null && c1.get(k) !== v);
+        for (const [k, v] of moved) pc.altered.push(`${symbol} ${k} ${v} -> ${c1.get(k) ?? "GONE"}`);
+        if (moved.length) pc.alteredSymbols.push(symbol);
+        for (const [k, v] of c1) if (v != null && cb.get(k) == null) pc.cellsFilled++;
+        if (vb == null && valueOf(shown(alone[tag]), key) != null) pc.filledShown++;
       }
     }
   }
@@ -207,16 +219,16 @@ for (const [symbol, cik] of targets) {
 
 console.log(`\nREAD ${extra.read} of ${targets.length} (fetch failed ${extra.fetchFailed}, extract threw ${extra.extractFailed}); ` +
   `with a report-date record: ${extra.records}; ${((Date.now() - started) / 60000).toFixed(1)} min`);
-console.log(`\nfield                       storedGap  gapBefore  filledAfter  stillMissing  altered  cellsFilled  | rec:gapBefore rec:filled`);
+console.log(`\nfield                       storedGap  gapBefore  filledAfter  stillMissing  altered(symbols)  cellsFilled  | rec:gapBefore rec:filled`);
 for (const k of FIELDS) {
   const t = T[k];
   console.log(`${k.padEnd(28)}${String(t.storedGap).padStart(9)}${String(t.gapBefore).padStart(11)}${String(t.filledAfter).padStart(13)}` +
-    `${String(t.stillMissing).padStart(14)}${String(t.altered.length).padStart(9)}${String(t.cellsFilled).padStart(13)}  | ` +
+    `${String(t.stillMissing).padStart(14)}${String(t.altered.length).padStart(9)}(${t.alteredSymbols})${String(t.cellsFilled).padStart(13)}  | ` +
     `${String(t.recGapBefore).padStart(13)}${String(t.recFilled).padStart(11)}`);
 }
-console.log(`\nPER ADDED CONCEPT (each removed alone): shown-period fills · all cells filled · cells altered`);
+console.log(`\nPER PROPOSED CONCEPT (each appended alone): shown-period fills · all cells filled · cells altered · symbols altered`);
 for (const [tag, pc] of Object.entries(perConcept)) {
-  console.log(`  ${tag.padEnd(40)} ${pc.filledShown}  ${pc.cellsFilled}  ${pc.altered.length}`);
+  console.log(`  ${tag.padEnd(40)} ${pc.filledShown}  ${pc.cellsFilled}  ${pc.altered.length}  ${pc.alteredSymbols.length}`);
   for (const l of pc.altered.slice(0, 15)) console.log(`      ALTERED ${l}`);
 }
 for (const k of FIELDS) {
@@ -231,5 +243,5 @@ for (const l of extra.equityNciDiffers.slice(0, 20)) console.log(`  ${l}`);
 for (const k of FIELDS) if (samples[k].length) console.log(`\nfilled ${k} (sample): ${samples[k].join(" ")}`);
 console.log(`\nJSON ${JSON.stringify({ shard, shards, read: extra.read, targets: targets.length, records: extra.records,
   fields: Object.fromEntries(FIELDS.map((k) => [k, { ...T[k], altered: T[k].altered.length }])),
-  perConcept: Object.fromEntries(Object.entries(perConcept).map(([t, p]) => [t, { ...p, altered: p.altered.length }])),
+  perConcept: Object.fromEntries(Object.entries(perConcept).map(([t, p]) => [t, { ...p, altered: p.altered.length, alteredSymbols: p.alteredSymbols.length }])),
   liabWithLSE: extra.liabWithLSE, equityNci: extra.equityNciDiffers.length })}`);
