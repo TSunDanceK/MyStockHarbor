@@ -12,7 +12,9 @@ import {
 import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { awaitingSecRead, cikForSymbol, resolveFactSetForRender } from "@/lib/server/secColdFetch";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
+import ColdFill from "../ColdFill";
 import { buildSecEarningsView, epsBasisNote, periodWords } from "@/lib/server/secEarningsView";
 // ONLY WHAT THIS FILE RENDERS. The tone words, the band note, the trend
 // median and the waterfall gate are imported by SecEarningsCards.tsx, which is
@@ -577,7 +579,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       // cikForSymbol is the CHEAP gate by design: the committed file, no
       // network and no Redis (see its docblock), so generateMetadata can ask
       // it without adding a round trip.
-      index: cikForSymbol(clean) !== null,
+      //
+      // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): the
+      // page says "not yet read" until a set is stored, and that is thin too.
+      index: cikForSymbol(clean) !== null && !(await awaitingSecRead(clean)),
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
@@ -980,6 +985,11 @@ export default async function StockEarningsPage({ params }: Props) {
                   years={data.cold.set.years.length}
                   instants={data.cold.set.instants.length}
                 />
+              ) :
+               // NOT YET READ: the render fetched nothing. For a person the card
+               // asks the human-gated fill and refreshes; a crawler keeps the note.
+               !secView && data.cold.status === "pending" ? (
+                <ColdFill symbol={clean} token={mintQuoteToken()} headline={`${clean} financials`} />
               ) :
                !secView ? <SecPendingCard symbol={clean} /> : (
                 <>

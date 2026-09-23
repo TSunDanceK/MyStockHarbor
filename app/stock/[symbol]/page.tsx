@@ -30,6 +30,7 @@ import {
   type Point,
 } from "@/lib/indicators";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
+import { awaitingSecRead } from "@/lib/server/secColdFetch";
 import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
@@ -397,7 +398,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       // This route is hit with a lot of junk and delisted tickers -- runtime
       // logs show ~1,519 distinct request paths, i.e. something is enumerating
       // symbols -- so this state is common, not exceptional.
-      index: hasData,
+      //
+      // AND NOINDEX WHILE A COLD SYMBOL IS NOT YET READ (#535 COWORK #13): its
+      // figures section says "not yet read" until a set is stored.
+      index: hasData && !(await awaitingSecRead(upper)),
       follow: true,
     },
     alternates: {
