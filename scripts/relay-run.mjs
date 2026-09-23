@@ -960,6 +960,15 @@ const TASKS = {
     args: (env) => [env.DUMP_DIR ?? ""],
     needsDump: true,
   },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #1 item 4): Pickers SEC
+  // coverage vs the FMP values production shows, per column and per preset.
+  // HKEYS/HMGET/MGET/GET only; ~750 commands once.
+  "write-pickers-sec-coverage": {
+    script: "scripts/pickers-sec-coverage.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
