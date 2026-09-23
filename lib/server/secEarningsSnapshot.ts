@@ -31,6 +31,7 @@ import {
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
+import { annualNextReportOutlook, annualOnlyForm, annualOnlyNote } from "./annualOnly";
 import { buildProfileDividend, type ProfileDividend } from "./secDividend";
 import { readReportDatesChecked, latestResults, type ReportDatesRead } from "./secReportDatesStore";
 import { compactOutlook, outlookFromRead, type CompactOutlook } from "./symbolOutlook";
@@ -229,6 +230,8 @@ export type SecEarningsSnapshot = {
    * card then offers the human-gated fill (app/stock/[symbol]/ColdFill.tsx).
    */
   awaitingRead?: boolean;
+  /** The annual-only note (#535 COWORK #15); present only in that layout. */
+  annualNote?: string;
 
   /** The score's band. "neutral" is the seed, not a reading, when unavailable. */
   tone: EarningsTone;
@@ -555,7 +558,12 @@ function snapshotFrom(
   read: ReportDatesRead
 ): SecEarningsSnapshot {
   const dates = read.ok ? read.rec : null;
-  const view = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
+  // THE ANNUAL-ONLY LAYOUT (#535 COWORK #15): the same rule the earnings page
+  // applies, so the tile and the page cannot disagree about the basis.
+  const annualForm = cold.status === "ready"
+    ? annualOnlyForm(registrantFor(clean)?.annualForm, cold.set, new Date().toISOString().slice(0, 10))
+    : null;
+  const view = cold.status === "ready" ? buildSecEarningsView(cold.set, { annualForm }) : null;
   const score = scoreFromSec(view, clean, cold);
 
   // ── WHICH DATE THE CARD CALLS "REPORTED" ────────────────────────────────
@@ -588,10 +596,15 @@ function snapshotFrom(
   // "today", the day boundary every stored date is measured against -- the
   // same one app/api/earnings-outlook uses.
   const today = new Date().toISOString().slice(0, 10);
-  const next: SnapshotNextReport = compactOutlook(outlookFromRead(clean, read, today));
+  const next: SnapshotNextReport = compactOutlook(
+    annualForm && cold.status === "ready"
+      ? annualNextReportOutlook(clean, cold.set, annualForm)
+      : outlookFromRead(clean, read, today),
+  );
 
   // NOT YET READ (#535 COWORK #13): the render fetched nothing, and the stock
   // page's card offers the human-gated fill instead of a fixed sentence.
   const snap = buildSecEarningsSnapshot({ symbol: clean, view, score, reported, nextReport: next });
-  return cold.status === "pending" ? { ...snap, awaitingRead: true } : snap;
+  if (cold.status === "pending") return { ...snap, awaitingRead: true };
+  return annualForm ? { ...snap, annualNote: annualOnlyNote(annualForm) } : snap;
 }
