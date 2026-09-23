@@ -32,7 +32,7 @@ import { marketCap } from "./secValuation";
 import { loadTickerMap } from "./secTickerMap";
 import type { ResolvedProfile } from "./staticProfile";
 import type { FilingDescription } from "./filingDescription";
-import { descriptionAttribution } from "./filingDescription";
+import { descriptionAttribution, MONTHS } from "./filingDescription";
 
 export type Registrant = {
   cik: string;
@@ -136,12 +136,25 @@ export type ComposeInputs = {
    */
   filingDescription: FilingDescription | null;
   taxonomy: ResolvedProfile;
+  /**
+   * When the answering taxonomy leg's classification was captured
+   * (classificationAsOf in staticProfile.ts), YYYY-MM-DD, or null.
+   */
+  classificationAsOf: string | null;
   valuation: ValuationInputs | null;
   price: number | null;
   points: { close: number; high?: number; low?: number }[];
   exchange: string | null;
   registrant: Registrant | null;
 };
+
+/** "2026-09-13" → "13 Sep 2026". Parsed by hand: no time zone can move the day. */
+export function dayMonthYear(isoDate: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate ?? ""));
+  if (!m) return null;
+  const month = MONTHS[Number(m[2]) - 1];
+  return month ? `${Number(m[3])} ${month} ${m[1]}` : null;
+}
 
 /**
  * The profile the component renders, with where each row came from.
@@ -161,14 +174,13 @@ export function composeCompanyProfile(i: ComposeInputs): CompanyProfile {
   const add = (field: string, source: string) => sources.push({ field, source });
   if (name) add("Name", i.directoryName || i.snapshotName ? "Nasdaq Trader symbol directory" : "SEC EDGAR");
   if (i.taxonomy.sector || i.taxonomy.industry) {
-    add("Sector and industry",
-      // The snapshot is FMP's classification captured 2026-09-13 while the
-      // licence was live (data/static-profile.json). Facts, not prose; the
-      // owner asked for no FMP attribution but the description's, so it is
-      // credited by its date, in the owner's wording (#517).
-      i.taxonomy.sectorSource === "sic" ? "SEC EDGAR (SIC code)"
-        : i.taxonomy.sectorSource === "fmp-cache" ? "classification cache"
-          : "Sector classification as of 13 Sep 2026");
+    // ONE WORDING WHICHEVER LEG ANSWERED — the FMP cache, the 2026-09-13
+    // snapshot, or the SIC leg — dated by that leg's own capture date
+    // (classificationAsOf). Facts, not prose; the owner asked for no FMP
+    // attribution but the description's, so it is credited by its date, in
+    // the owner's wording. No date means no credit, never a borrowed date.
+    const asOf = dayMonthYear(i.classificationAsOf);
+    if (asOf) add("Sector and industry", `classification as of ${asOf}`);
   }
   if (cap?.ok) add("Market cap", "shares from SEC EDGAR, price from market data");
   if (range) add("52-week range", "daily price history");
