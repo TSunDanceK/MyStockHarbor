@@ -103,7 +103,9 @@ const classify = async (symbol, cik, set, periodic) => {
   const mf = `manifest needsReverify=${!!e.needsReverify}${e.reverifyReason ? `(${e.reverifyReason})` : ""} ` +
     `verifiedAt=${e.verifiedAt ? new Date(e.verifiedAt).toISOString().slice(0, 10) : "—"} ` +
     `contentHash=${e.contentHash ? "set" : "null"}`;
-  const detail = `cf newest end ${newestEnd || "—"}, rows ending ${periodic.period}: ${rowsOnPeriod}; set written ${setAt}; ${mf}`;
+  const rec = await redis.get(`${DATES_PREFIX}:${symbol}`);
+  const recPart = rec ? `record next=${rec.next?.kind ?? "—"} pending=${rec.pending ? rec.pending.periodEnd : "none"}` : "record none";
+  const detail = `${recPart}; cf newest end ${newestEnd || "—"}, rows ending ${periodic.period}: ${rowsOnPeriod}; set written ${setAt}; ${mf}`;
   if (!rowsOnPeriod) return { verdict: "SOURCE_BEHIND", detail };
   if (setAt !== "?" && setAt < periodic.filed) return { verdict: "NOT_RE_READ", detail };
   return { verdict: "READ_BUT_DROPPED", detail };
@@ -151,7 +153,8 @@ for (const symbol of targets) {
     `${set.at ? new Date(set.at).toISOString().slice(0, 16).replace("T", " ") : "?"})\n` +
     `         newest periodic filing ${newestPeriodic ? `${newestPeriodic.form} filed ${newestPeriodic.filed} for period ${newestPeriodic.period}` : "none"}\n` +
     `         newest item 2.02 8-K   ${newest202 ? `filed ${newest202.filed}, event ${newest202.period}` : "none"}\n` +
-    `         report-date record     ${rec ? `${rec.events.length} events, newest period ${recNewest?.periodEnd ?? "—"} announced ${recNewest?.announcedOn ?? "—"}, next ${rec.next?.kind}` : "none"}`;
+    `         report-date record     ${rec ? `${rec.events.length} events, newest period ${recNewest?.periodEnd ?? "—"} announced ${recNewest?.announcedOn ?? "—"}, next ${rec.next?.kind}, ` +
+      `pending notice ${rec.pending ? `${rec.pending.periodEnd} announced ${rec.pending.announcedOn}` : "none"}` : "none"}`;
 
   // THE POPULATION: a newer PERIODIC filing exists for a period the store does
   // not hold. A newer 8-K alone is not it — a results 8-K precedes the 10-Q,
