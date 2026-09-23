@@ -49,10 +49,10 @@ const MUTANTS = [
     "export default function EarningsDueStrip({ state }: { state: DueStripState }) {\n  return (",
     "export default function EarningsDueStrip({ state }: { state: DueStripState }) {\n  if (state.kind !== \"listed\") return null;\n  return ("],
   [PAGE, "R8", "the strip fed the BROWSED date rather than today (a forecast on any future date)",
-    "getDueStripState(todayDate)",
-    "getDueStripState(selectedDate)"],
+    "getForwardSections(todayDate)",
+    "getForwardSections(selectedDate)"],
   [PAGE, "R9", "the strip removed from the page while the meta description still promises it",
-    "<EarningsDueStrip state={dueStrip} />",
+    "<EarningsDueStrip state={forward.due} />",
     ""],
 ];
 
