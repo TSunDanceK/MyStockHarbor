@@ -384,6 +384,14 @@ const TASKS = {
   // beside the new one so "unchanged for a dense filer" is checked rather than
   // asserted. Also diagnoses an empty cash-flow chain against the payload.
   // No dump, no credential; needs the network and the TypeScript compiler.
+  // Read-only: reads a lagging filer's newest period from the filing's own
+  // XBRL instance, merged fill-only into companyfacts and run through the
+  // shipped extraction, beside the press release (#535 COWORK #6, option C).
+  "sec-filing-xbrl": {
+    script: "scripts/sec-filing-xbrl-probe.mjs",
+    args: (env) => [env.SYMBOLS ?? ""],
+    needsTypescript: true,
+  },
   "sec-period-match": {
     script: "scripts/sec-period-match-probe.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
