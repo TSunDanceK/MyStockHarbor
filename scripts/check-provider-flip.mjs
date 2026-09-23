@@ -277,12 +277,12 @@ check(
   "free is the default now, so an empty list would blank the news on EVERY page"
 );
 
-console.log("\n=== 6. THE SNAPSHOT IS READ BY RUNNING CODE, NOT JUST IMPORTED ===\n");
+console.log("\n=== 6. THE SIC LEG IS READ BY RUNNING CODE, NOT JUST IMPORTED ===\n");
+// 2026-09-23 (#552, COWORK #4): the FMP snapshot leg this section used to
+// exercise is removed; a cache miss now resolves through SEC SIC.
 
 // The lookup, loaded the same way check-static-profile.mjs loads it.
 const spSrc = read("lib/server/staticProfile.ts")
-  .replace(/^import snapshotFile from "@\/data\/static-profile.json";$/m,
-    () => `const snapshotFile = ${read("data/static-profile.json")};`)
   // The CIK map, which staticProfile gained when the coverage figures moved
   // there. Real data rather than a stub, for the same reason as the snapshot:
   // a stubbed map makes a coverage number that describes the stub.
@@ -363,12 +363,12 @@ const quiet = (fn) => {
   try { return { value: fn(), lines }; } finally { console.warn = warn; }
 };
 
-// A symbol that is IN the snapshot, so the interesting case is a cache miss.
-const snapshotSymbol = Object.keys(JSON.parse(read("data/static-profile.json")).rows)[0];
+// A symbol with a SIC row, so the interesting case is a cache miss.
+const snapshotSymbol = "AAPL";
 
 check(
-  `an empty cache row still resolves ${snapshotSymbol} from the snapshot`,
-  quiet(() => sp.resolveProfile(snapshotSymbol, null)).value.source === "snapshot",
+  `an empty cache row still resolves ${snapshotSymbol}, through SEC SIC`,
+  quiet(() => sp.resolveProfile(snapshotSymbol, null)).value.source === "sic",
   "before step 7 the cache always refilled itself from FMP; there is no such call left"
 );
 // END TO END, because this is the actual claim of the step: a symbol whose FMP
@@ -377,13 +377,13 @@ check(
 // hardcoded slug, since the bucket names are art.ts's business, not this file's.
 const resolvedSnap = quiet(() => sp.resolveProfile(snapshotSymbol, null)).value;
 check(
-  `...and ${snapshotSymbol}'s snapshot sector reaches a real art bucket`,
+  `...and ${snapshotSymbol}'s SIC sector reaches a real art bucket`,
   Boolean(art.bucketFor(sectorSlugFromLabel(resolvedSnap.sector), resolvedSnap.industry)),
   `sector=${resolvedSnap.sector} industry=${resolvedSnap.industry} -> ` +
     `${art.bucketFor(sectorSlugFromLabel(resolvedSnap.sector), resolvedSnap.industry)}`
 );
 check(
-  "...but a cached sector still WINS over the snapshot",
+  "...but a cached sector still WINS over SIC",
   sp.resolveProfile(snapshotSymbol, { sector: "Utilities" }).sector === "Utilities",
   "the snapshot is a floor, not an override — a reclassification must land without a redeploy"
 );
@@ -426,7 +426,7 @@ const single = quiet(() => sp.resolveProfile("ZZZZNOTREAL1", null));
 check(
   "one miss on the per-symbol path logs once, and names the symbol",
   single.lines.length === 1 && single.lines[0].includes("ZZZZNOTREAL1") &&
-    single.lines[0].includes("static-profile"),
+    single.lines[0].includes("[static-profile]"),
   `${single.lines.length} line(s)`
 );
 check(
