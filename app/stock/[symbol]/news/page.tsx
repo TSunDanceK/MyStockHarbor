@@ -41,6 +41,7 @@ import {
   type SecEarningsSnapshot,
 } from "@/lib/server/secEarningsSnapshot";
 import SharedLatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 
@@ -794,7 +795,7 @@ export default async function StockNewsPage({ params }: Props) {
                     would be empty far more often than it used to be.
 
                 An empty card beside a full snapshot is worse than no card. */}
-            <SharedLatestEarningsCard snapshot={earningsSnapshot} symbol={upper} />
+            <SharedLatestEarningsCard snapshot={earningsSnapshot} symbol={upper} pageToken={mintQuoteToken()} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
