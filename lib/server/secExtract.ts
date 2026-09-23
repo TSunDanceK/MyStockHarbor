@@ -102,8 +102,12 @@ export const SEC_YEAR_WINDOW = 6;
  *     no tag moved and no field order moved, so neither `c` nor `h` can see
  *     it, and a stored set written under 3 would keep its empty tables
  *     forever with nothing selecting it.
+ * 5 — a cited per-filer naming exception (data/sec/fiscal-year-naming-
+ *     overrides.json, via secExtractFor) replaces the vote where the two
+ *     disagree. CRWD's quarters move a fiscal year; the same payload labels
+ *     differently, so its stored set must be re-read.
  */
-export const SEC_LABEL_VERSION = 4;
+export const SEC_LABEL_VERSION = 5;
 
 export type FactRow = {
   start?: string;
@@ -810,6 +814,8 @@ export function fiscalMidYear(fiscalYearEndMs: number): number {
  */
 export type FiscalYearNaming = {
   offset: number;
+  /** True when a cited override replaced the vote (applyNamingOverride). */
+  overridden?: boolean;
   /** "annual" is a 10-K, 20-F or 40-F — the filing that states the year outright. */
   basis: "annual" | "10-Q" | null;
   /**
@@ -961,6 +967,20 @@ export function fiscalYearOffset(
   };
 }
 
+/**
+ * A CITED EXCEPTION TO THE VOTE, applied only where the two disagree (#535
+ * COWORK #12 on #2). Every automatic source was measured and each breaks more
+ * filers than it fixes — SEC's fy vote is wrong on CRWD alone, the newest
+ * reading on 3, the filer's own DEI on 2 (AAP, CRM) — so the one remaining
+ * error is corrected by a reviewed, cited entry rather than by a fourth rule.
+ * PURE; the list lives in data/sec/fiscal-year-naming-overrides.json and
+ * reaches here through secExtractFor, so this module stays import-free.
+ */
+export function applyNamingOverride(vote: FiscalYearNaming, override: number | undefined): FiscalYearNaming {
+  if (override === undefined || (override !== 0 && override !== 1) || override === vote.offset) return vote;
+  return { ...vote, offset: override, overridden: true };
+}
+
 // ── extraction ──────────────────────────────────────────────────────────────
 
 type Bucket = Map<string, { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]>;
@@ -976,7 +996,11 @@ const periodKey = (r: FactRow) => `${r.start ?? ""}..${r.end}`;
 export function extractCompanyFacts(
   symbol: string,
   facts: CompanyFacts,
-  opts: { quarters?: number; years?: number; instants?: number } = {}
+  opts: {
+    quarters?: number; years?: number; instants?: number;
+    /** A cited naming exception (data/sec/fiscal-year-naming-overrides.json), via secExtractFor. */
+    namingOffset?: number;
+  } = {}
 ): ExtractResult {
   const keepQuarters = opts.quarters ?? SEC_QUARTER_WINDOW;
   const keepYears = opts.years ?? SEC_YEAR_WINDOW;
@@ -1240,7 +1264,7 @@ export function extractCompanyFacts(
   const yearEnds = [...yearCells.keys()].sort();
   const yearEndAnchor = yearEnds[yearEnds.length - 1] ?? null;
   // READ ONCE PER FILER, from its own filings. Not a convention, not a guess.
-  const naming = fiscalYearOffset(facts, yearEndAnchor);
+  const naming = applyNamingOverride(fiscalYearOffset(facts, yearEndAnchor), opts.namingOffset);
   // ── AND THE ANNUAL FILING'S OWN PERIOD END BEATS THE FRAME-DERIVED ONE ──
   // `yearEndAnchor` is the newest twelve-month frame, and a trailing-twelve-
   // month comparative in a 10-Q is twelve months long without being a fiscal
