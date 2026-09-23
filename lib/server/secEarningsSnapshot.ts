@@ -396,8 +396,12 @@ export function buildSecEarningsSnapshot(args: {
   const epsReason = derivedQ4 ? EMPTY_REASONS.q4NotFiled : null;
   const revenueReason = untagged.has("revenue") ? EMPTY_REASONS.noRevenueLine : null;
   const noRevenue = s.revenue.val === null;
+  // A REVENUE LINE THE FILINGS TAG ONLY IN PART refuses every margin by name
+  // (secEarningsView.revenueLineIncomplete) rather than printing 420%.
+  const refused = Boolean(m?.marginsRefused);
   const marginReason = (v: number | null) =>
-    v !== null ? null : noRevenue ? EMPTY_REASONS.needsRevenue : NOT_CAPTURED;
+    refused ? EMPTY_REASONS.revenueIncomplete
+      : v !== null ? null : noRevenue ? EMPTY_REASONS.needsRevenue : NOT_CAPTURED;
   const fy = s.fyEpsDiluted;
 
   return {
