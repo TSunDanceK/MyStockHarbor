@@ -39,6 +39,38 @@ function fmtDateShort(value: string | null) {
   return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(d);
 }
 
+/**
+ * THE Y-AXIS, WITH A FLOOR ON ITS SPAN (#535 COWORK #22 §3).
+ *
+ * TSM's share count has sat at about 25.93bn since 2019. Autoscaled to
+ * min..max, rounding noise filled the whole plot and drew a five-year
+ * "decline" with no labels — implying buybacks that never happened, on every
+ * stable-share large cap. The axis now spans at least ±2.5% around the mean,
+ * widened to take in the data; it is NOT anchored at zero, so real dilution
+ * (a 15% rise) still fills the chart.
+ */
+export const SHARE_AXIS_MIN_HALF_SPAN = 0.025;
+
+export function shareAxis(values: number[]): { lo: number; hi: number } {
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const lo = Math.min(minV, mean * (1 - SHARE_AXIS_MIN_HALF_SPAN));
+  const hi = Math.max(maxV, mean * (1 + SHARE_AXIS_MIN_HALF_SPAN));
+  return hi > lo ? { lo, hi } : { lo: lo - 1, hi: hi + 1 };
+}
+
+/**
+ * THE CHANGE SINCE THE FIRST POINT, TO TWO DECIMALS (#535 COWORK #22 §4).
+ * One decimal printed TSM's -0.02% as "-0.0%"; under 0.01% either way it is
+ * "Unchanged". The Trend cell keeps its own "Roughly flat" band.
+ */
+export function formatShareChange(changePercent: number | null): string {
+  if (typeof changePercent !== "number" || !Number.isFinite(changePercent)) return "—";
+  if (Math.abs(changePercent) < 0.01) return "Unchanged";
+  return `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`;
+}
+
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const BLUE = "#60a5fa";
@@ -83,15 +115,17 @@ export default function DilutionHistory({
   const width = 900;
   const height = 220;
   const padX = 6;
+  // ROOM FOR THE THREE RIGHT-HAND AXIS LABELS.
+  const padRight = 70;
   const padTop = 14;
   const padBottom = 26;
-  const plotW = width - padX * 2;
+  const plotW = width - padX - padRight;
   const plotH = height - padTop - padBottom;
 
   const values = points.map((p) => p.shares);
-  const minV = Math.min(...values);
-  const maxV = Math.max(...values);
-  const span = maxV - minV || 1;
+  const { lo: minV, hi: maxV } = shareAxis(values);
+  const span = maxV - minV;
+  const axisTicks = [maxV, (maxV + minV) / 2, minV].map((v, i) => ({ v, y: padTop + (i / 2) * plotH }));
   const denom = points.length > 1 ? points.length - 1 : 1;
 
   const coords = points.map((p, i) => {
@@ -145,15 +179,19 @@ export default function DilutionHistory({
           />
           {coords.map((c, i) => (
             <circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 3.5 : 2} fill={trendColor}>
-              <title>
-                {fmtDateShort(c.p.date)}: {fmtShares(c.p.shares)} shares outstanding
-              </title>
+              {/* ONE STRING: React renders an array child of <title> with a warning. */}
+              <title>{`${fmtDateShort(c.p.date)}: ${fmtShares(c.p.shares)} shares outstanding`}</title>
             </circle>
+          ))}
+          {axisTicks.map((t, i) => (
+            <text key={`axis-${i}`} x={width - 2} y={t.y + 4} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+              {fmtShares(t.v)}
+            </text>
           ))}
           <text x={padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)">
             {fmtDateShort(first.date)}
           </text>
-          <text x={width - padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+          <text x={padX + plotW} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
             {fmtDateShort(last.date)}
           </text>
         </svg>
@@ -167,9 +205,7 @@ export default function DilutionHistory({
         <div style={cellStyle}>
           <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
           <div style={{ ...cellValueStyle, color: trendColor }}>
-            {typeof changePercent === "number"
-              ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%`
-              : "—"}
+            {formatShareChange(changePercent)}
           </div>
         </div>
         <div style={cellStyle}>
