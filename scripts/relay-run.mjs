@@ -749,6 +749,8 @@ const TASKS = {
   // #535 COWORK #14: re-read queue after #546/#547. Read-only.
   "write-reread-queue": { script: "scripts/reread-queue-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #15: annual-only layout render text from live sets. Read-only.
+  // #535 COWORK #21 §1 / #19 §1c: sitemap stock URLs without a stored set, and the cold-fill day counters. Read-only.
+  "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
   // volume, per-filer timing through the shipped filing path. Read-only.
