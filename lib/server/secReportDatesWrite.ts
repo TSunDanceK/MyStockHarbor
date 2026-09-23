@@ -12,6 +12,7 @@ import {
   type NextReportEstimate, type PendingResults, type ReportEvent, type Submissions,
 } from "./secReportDates";
 import { writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
+import { recordResultsDays } from "./secResultsDays";
 import type { StoredFactSet } from "./secFactCodec";
 
 /**
@@ -96,6 +97,8 @@ export async function buildAndWriteReportDates(
 ): Promise<{ ok: boolean; events: ReportEvent[]; next: NextReportEstimate; pending: PendingResults | null }> {
   const rec = buildReportDatesRecord(symbol, cik, set, subs, todayIso, new Date().toISOString());
   const ok = await writeReportDates(rec);
+  // THE GRID'S DAY INDEX FOLLOWS THE RECORD (lib/server/secResultsDays.ts).
+  if (ok) await recordResultsDays(symbol, rec);
   return { ok, events: rec.events, next: rec.next, pending: rec.pending ?? null };
 }
 
