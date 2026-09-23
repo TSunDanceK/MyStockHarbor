@@ -1438,7 +1438,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
         .learn-grid { display: grid; gap: 0; }
         .explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .returns-charts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        /* STACKED AT EVERY WIDTH (owner, #553 COWORK #6, 2026-09-23): the Daily
+           and Weekly returns cards sit one above the other at full width, so the
+           bars and their labels get the room a half-width card squeezed out.
+           Layout only -- the returns themselves are computed as before. */
+        .returns-charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 
         a:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
@@ -1448,7 +1452,6 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           .explore-grid { grid-template-columns: 1fr !important; }
           .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .valuationGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .returns-charts-grid { grid-template-columns: 1fr !important; }
         }
 
         @media (max-width: 640px) {
