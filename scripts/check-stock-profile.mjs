@@ -3,7 +3,9 @@
 // Brief 2026-09-22 PR 2. What must hold, each paired with a mutation that
 // breaks it (a check that cannot fail reports PASS and proves nothing):
 //
-//   1. No FMP attribution reaches a reader except the description's.
+//   1. No FMP attribution reaches a reader at all: the description is the
+//      company's own annual-report wording with its filing named under it,
+//      and no description means no paragraph (PR 3, #518).
 //   2. A market-cap refusal HIDES the row; it is never printed in the card.
 //   3. Every 20-F filer's cap is refused — AZN and ABVX included, which the
 //      five-name list missed (§2.6).
@@ -47,6 +49,9 @@ async function loadComposer(mutate = (s) => s) {
     // exchangeFor is not exercised here (the test passes `exchange` in); a stub
     // keeps the unit loadable without the ticker file's fs/Redis path.
     "const loadTickerMap = () => ({ map: new Map() });",
+    // The composer's attribution helper; the committed rows are not read here.
+    "const descriptionsFile = { rows: {}, misses: {} };",
+    strip("lib/server/filingDescription.ts"),
     strip("lib/server/stockProfile.ts"),
   ].join("\n");
   const js = ts.transpileModule(mutate(unit), {
@@ -62,12 +67,16 @@ const TODAY = "2026-09-22";
 const bars = (n, fn) => Array.from({ length: n }, (_, i) => ({ date: `d${i}`, close: fn(i) }));
 const taxonomy = { sector: "Technology", industry: "Consumer Electronics", source: "snapshot", sectorSource: "fmp-snapshot", industrySource: "fmp-snapshot" };
 
+const FILED = {
+  text: "Apple designs, manufactures and markets smartphones and personal computers.\n\niPhone® is the Company’s line of smartphones.",
+  form: "10-K", filedOn: "2025-10-31", accession: "0000320193-25-000079",
+};
 const M = await loadComposer();
 const compose = (mod, sym, over = {}) => {
   const set = fixture(sym);
   return mod.composeCompanyProfile({
     symbol: sym, directoryName: "", snapshotName: "", entityName: set.entityName,
-    fmpDescription: "A description.", taxonomy,
+    filingDescription: FILED, taxonomy, classificationAsOf: "2026-09-13",
     valuation: mod.valuationInputs(set, TODAY, { annualForm: mod.registrantFor(sym)?.annualForm ?? null }),
     price: 200, points: bars(300, (i) => 100 + i), exchange: "NASDAQ",
     registrant: mod.registrantFor(sym), ...over,
@@ -79,23 +88,42 @@ const noDividend = { state: "none", perShare: null, periodLabel: null, why: "tes
 const render = (mod, profile, sym) =>
   visibleText(html(React.createElement(mod.default, { profile, symbol: sym, dividend: noDividend })));
 
-console.log("\n1. only the description is attributed to FMP");
+console.log("\n1. no FMP attribution; the description is the company's own, with its filing named");
 {
-  const aapl = compose(M, "AAPL");
+  const aapl = compose(M, "AAPL", { directoryName: "Apple Inc." });
   const t = render(P, aapl, "AAPL");
-  const fmpMentions = (t.match(/Financial Modeling Prep/g) ?? []).length;
-  check("exactly one FMP mention, and it is the description's",
-    fmpMentions === 1 && /Description: Financial Modeling Prep/.test(t), `${fmpMentions} mention(s)`);
+  check("no FMP mention anywhere in the block", !/Financial Modeling Prep|FMP/.test(t));
+  check("the attribution is the owner's wording", /From Apple Inc\.'s 10-K, filed Oct 2025/.test(t));
+  const h = html(React.createElement(P.default, { profile: aapl, symbol: "AAPL", dividend: noDividend }));
+  check("each paragraph is its own <p>, camel-case start kept",
+    /<p[^>]*>Apple designs[^<]*<\/p><p[^>]*>iPhone® is the Company’s line of smartphones\.<\/p>/.test(h));
   check("the other rows credit SEC EDGAR and market data",
     /Market cap: shares from SEC EDGAR/.test(t) && /Exchange: SEC EDGAR/.test(t) && /Country: SEC EDGAR/.test(t), "");
-  const noDesc = render(P, compose(M, "AAPL", { fmpDescription: null }), "AAPL");
-  check("with no FMP description, no FMP string at all", !/Financial Modeling Prep|FMP/.test(noDesc));
+  const none = compose(M, "AAPL", { filingDescription: null });
+  const noDesc = render(P, none, "AAPL");
+  check("no filing description → no paragraph, no attribution, no FMP",
+    none.description === null && none.descriptionAttribution === null &&
+      !/From .*'s (10-K|20-F)/.test(noDesc) && !/Financial Modeling Prep|FMP/.test(noDesc) && !/Apple designs/.test(noDesc));
+  check("dates are month-year, parsed without a time zone",
+    M.monthYear("2026-01-01") === "Jan 2026" && M.monthYear("2025-12-31") === "Dec 2025" && M.monthYear("bad") === null);
   const old = await loadProfile(once(
     "? `${profile.sources.map((s) => `${s.field}: ${s.source}`).join(\" · \")}.`",
     "? `Company profile data from Financial Modeling Prep.`"
   ));
   check("...and CATCHES the blanket FMP line put back",
-    (render(old, compose(M, "AAPL", { fmpDescription: null }), "AAPL").match(/Financial Modeling Prep/g) ?? []).length > 0);
+    (render(old, none, "AAPL").match(/Financial Modeling Prep/g) ?? []).length > 0);
+  const unattributed = await loadComposer(once(
+    "descriptionAttribution: i.filingDescription ? descriptionAttribution(name, i.filingDescription) : null,",
+    "descriptionAttribution: null,"
+  ));
+  check("...and CATCHES a description shown without its filing",
+    !/From Apple Inc\.'s 10-K/.test(render(P, compose(unattributed, "AAPL", { directoryName: "Apple Inc." }), "AAPL")));
+  // THE LAST FMP PROFILE CALL IS GONE from the page, and nothing replaced it
+  // with a fallback: the description is read from the committed file only.
+  const page = read("app/stock/[symbol]/page.tsx");
+  check("the page no longer calls FMP's profile, and reads the committed description",
+    !/fetchCompanyProfile\(upper\)/.test(page) && /filingDescription: filingDescriptionFor\(upper\)/.test(page) &&
+      !/fmpDescription|fmpProfile/.test(page));
 }
 
 console.log("\n2. market cap: shares x the page's price, and a refusal hides the row");
@@ -107,7 +135,7 @@ console.log("\n2. market cap: shares x the page's price, and a refusal hides the
   const refused = compose(M, "AAPL", { valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
   check("a refusal yields no Market cap row", !/Market cap/.test(render(P, refused, "AAPL")));
   const printed = await loadComposer(once("marketCap: cap?.ok ? cap.val : null,", "marketCap: cap?.ok ? cap.val : 0,"));
-  const m2 = printed.composeCompanyProfile({ ...{ symbol: "AAPL", directoryName: "", snapshotName: "", entityName: null, fmpDescription: null, taxonomy, price: 200, points: [], exchange: null, registrant: null }, valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
+  const m2 = printed.composeCompanyProfile({ ...{ symbol: "AAPL", directoryName: "", snapshotName: "", entityName: null, filingDescription: null, taxonomy, price: 200, points: [], exchange: null, registrant: null }, valuation: { shares: null, eps: null, refusals: ["no-cover-share-count"] } });
   check("...and CATCHES a refusal rendered as a figure", m2.marketCap !== null);
 }
 
@@ -306,6 +334,45 @@ console.log("\n9. the long share history: fiscal years from the payload, then re
   check("...and CATCHES quarters dropped from the combined series",
     dropQuarters.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length <
       M.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length);
+}
+
+console.log("\n10. the sector/industry credit reads the same whichever leg answered");
+{
+  // The owner's wording: "Sector and industry: classification as of {date}",
+  // dated by the answering leg's own capture (classificationAsOf in
+  // staticProfile.ts, asserted per leg in check-static-profile §8). ONDS and
+  // AAPL resolve from the snapshot or the cache; ALAB stands in for a SIC-only
+  // company, since none exists in today's files.
+  const leg = (source) => ({
+    source,
+    sectorSource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+    industrySource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+  });
+  const cases = [
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["ALAB", "AAPL", { sector: "Technology", industry: "Semiconductors", ...leg("sic") }, "2026-09-22", "22 Sep 2026"],
+  ];
+  for (const [sym, fx, tax, asOf, shown] of cases) {
+    const t = render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym);
+    const got = /Sector and industry: [^·.]*/.exec(t)?.[0]?.trim() ?? "(none)";
+    check(`${sym} via ${tax.source}: "${got}"`, got === `Sector and industry: classification as of ${shown}`);
+  }
+  const noDate = render(P, compose(M, "AAPL", { classificationAsOf: null }), "AAPL");
+  check("no date → no sector credit, never an undated or borrowed one", !/Sector and industry:/.test(noDate));
+  check("no leg name reaches the reader (cache / SIC / snapshot)",
+    cases.every(([sym, fx, tax, asOf]) =>
+      !/classification cache|SIC code|Sector classification/.test(render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym))));
+  const legacy = await loadComposer(once(
+    "if (asOf) add(\"Sector and industry\", `classification as of ${asOf}`);",
+    "add(\"Sector and industry\", i.taxonomy.sectorSource === \"fmp-cache\" ? \"classification cache\" : `classification as of ${asOf}`);"
+  ));
+  check("...and CATCHES the cache leg going back to \"classification cache\"",
+    /classification cache/.test(render(P, compose(legacy, "AAPL", { taxonomy: { ...taxonomy, ...leg("cache") } }), "AAPL")));
+  check("dates are day-month-year, parsed without a time zone",
+    M.dayMonthYear("2026-09-13") === "13 Sep 2026" && M.dayMonthYear("2026-01-01") === "1 Jan 2026" && M.dayMonthYear("2026-09-21T04:10:00Z") === null);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
