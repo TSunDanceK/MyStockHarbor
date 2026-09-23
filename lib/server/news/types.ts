@@ -80,6 +80,14 @@ export type NewsItem = {
   imageVerdict?: "allow" | "deny" | null;
   /** Which adapter produced the item. Set by the adapter, not inferred. */
   provider?: NewsProviderId;
+  /**
+   * The feed's own language tag (dc:language), wires only; null when the feed
+   * sends none. /headlines and sector pages keep English items only (#553
+   * COWORK #11: FEMSA's Spanish release sat beside its English one).
+   */
+  language?: string | null;
+  /** The issuing company as the wire names it (dc:contributor). Wires only. */
+  issuer?: string | null;
 };
 
 /**

@@ -970,6 +970,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #11): items per sector
+  // news page on the free stack, from the shipped sectorWindow + the stores.
+  "write-sector-news-count": {
+    script: "scripts/sector-news-free-count.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);

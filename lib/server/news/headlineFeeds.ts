@@ -150,8 +150,41 @@ export async function fetchHeadlineFeeds(): Promise<NewsItem[]> {
  * financial-services feed carries no tickers and is kept whole.
  */
 export function keepForHeadlines(item: NewsItem): boolean {
+  if (!isEnglish(item)) return false;
   return !(item.provider === "wire" && item.source === "GlobeNewswire" && !item.tickers?.length);
 }
+
+/**
+ * ENGLISH ONLY, by the feed's own dc:language tag (#553 COWORK #11). An item
+ * with no tag passes: MarketWatch and CNBC send none and are English feeds.
+ */
+export function isEnglish(item: Pick<NewsItem, "language">): boolean {
+  const lang = (item.language ?? "").trim().toLowerCase();
+  return !lang || lang === "en" || lang.startsWith("en-");
+}
+
+/** Same-issuer wire releases this close together are one announcement in two versions. */
+export const SAME_ISSUER_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Drops a wire release when the SAME issuer already has one within
+ * SAME_ISSUER_WINDOW_MS (input newest first; the first seen is kept). Items
+ * without an issuer are never collapsed -- a missing name is not a match.
+ */
+export function collapseSameIssuer(items: NewsItem[]): NewsItem[] {
+  const kept: NewsItem[] = [];
+  for (const item of items) {
+    const issuer = (item.issuer ?? "").trim().toLowerCase();
+    const t = timeOf(item.pubDate);
+    const dup = issuer && kept.some((k) =>
+      (k.issuer ?? "").trim().toLowerCase() === issuer && Math.abs(timeOf(k.pubDate) - t) <= SAME_ISSUER_WINDOW_MS);
+    if (!dup) kept.push(item);
+  }
+  return kept;
+}
+
+/** Numeric entities (&#233; &#160;) the wires send; see decodeFeedEntities. */
+const tidy = (text: string) => decodeFeedEntities(text).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 
 /** A single card on /headlines. */
 export type GeneralHeadline = {
@@ -203,14 +236,16 @@ export function composeHeadlines(
 ): GeneralHeadline[] {
   const newestFirst = (list: NewsItem[]) =>
     [...list].sort((a, b) => timeOf(b.pubDate) - timeOf(a.pubDate));
-  return newestFirst(dedupe(newestFirst(items.filter(keepForHeadlines))))
+  return collapseSameIssuer(newestFirst(dedupe(newestFirst(items.filter(keepForHeadlines)))))
     .slice(0, MAX_HEADLINES)
     .map((item) => ({
-      title: item.title,
+      // DECODED FOR EVERY SOURCE (#553 COWORK #11: "M&#233;xico", "&#160;" came
+      // through from the wires, whose parser decodes named entities only).
+      title: tidy(item.title),
       image: item.image ?? null,
       publishedDate: item.pubDate,
       source: item.source?.trim() || "News",
-      excerpt: item.description?.trim() ? truncateExcerpt(item.description) : null,
+      excerpt: item.description?.trim() ? truncateExcerpt(tidy(item.description)) : null,
       url: item.link,
     }));
 }

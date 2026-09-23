@@ -139,11 +139,32 @@ async function suiteFeeds(mod) {
   const composed = mod.composeHeadlines([...many].reverse().concat(dup, gnwForeign), byTitle);
   ok("compose: the page's dedup is applied", dedupeCalls === 1 && composed.filter((h) => h.title === "h3").length === 1);
   ok("compose: capped at 50", composed.length === 50, `got ${composed.length}`);
-  ok("compose: newest first", composed[0].title === "h0" && composed[49].title === "h49");
+  ok("compose: newest first", composed[0]?.title === "h0" && composed[49]?.title === "h49");
   ok("compose: the GlobeNewswire rule is applied", !composed.some((h) => h.url === "l1"));
   const wireItem = { ...prn, link: "https://w/1", pubDate: new Date(NOW).toUTCString(), description: "A wire release excerpt." };
   const [w] = mod.composeHeadlines([wireItem], byTitle);
   ok("compose: a wire description becomes the excerpt", w.excerpt === "A wire release excerpt.");
+
+  // ── COWORK #11 fixes on #558 ─────────────────────────────────────────────
+  const at = (min) => new Date(NOW - min * 60_000).toUTCString();
+  const wireBase = { link: "", source: "PR Newswire", description: null, provider: "wire" };
+  const [dec] = mod.composeHeadlines([{ ...wireBase, title: "FEMSA M&#233;xico&#160;results", link: "d1", pubDate: at(1), description: "Ventas&#160;en M&#233;xico" }], (x) => x);
+  ok("DECIMAL entities decoded on every source (M&#233;xico, &#160;)", dec?.title === "FEMSA México results" && dec?.excerpt === "Ventas en México", `${dec?.title} | ${dec?.excerpt}`);
+  const es = { ...wireBase, title: "FEMSA anuncia resultados", link: "es1", pubDate: at(2), language: "es", issuer: "FEMSA" };
+  const en = { ...wireBase, title: "FEMSA announces results", link: "en1", pubDate: at(3), language: "en", issuer: "FEMSA" };
+  ok("a non-English wire item is not a headline (dc:language)", !mod.keepForHeadlines(es) && mod.keepForHeadlines(en));
+  ok("an item with no language tag passes (MarketWatch/CNBC send none)", mod.keepForHeadlines({ ...en, language: null }));
+  const twins = mod.composeHeadlines([
+    { ...en, link: "a", title: "FEMSA third quarter release", pubDate: at(1) },
+    { ...en, link: "b", title: "FEMSA quarterly earnings materials posted", pubDate: at(9) },
+    { ...en, link: "c", title: "FEMSA investor day announced", pubDate: at(40) },
+    { ...en, link: "d", title: "Another release entirely", pubDate: at(2), issuer: "Acme Corp" },
+    { ...en, link: "e", title: "No issuer named one", pubDate: at(1), issuer: null },
+    { ...en, link: "f", title: "No issuer named two", pubDate: at(2), issuer: null },
+  ], (x) => x).map((h) => h.url);
+  ok("same-issuer releases within 15 minutes collapse to one; later ones and other issuers stay",
+    twins.includes("a") && !twins.includes("b") && twins.includes("c") && twins.includes("d"), twins.join(","));
+  ok("items with no issuer are never collapsed together", twins.includes("e") && twins.includes("f"));
   return fails;
 }
 
@@ -234,6 +255,9 @@ async function suiteSector(mod) {
   ok("isFromActiveProvider: free drops unstamped and fmp items, keeps active ones",
     !mod.isFromActiveProvider(legacyFmp, active, "free") && !mod.isFromActiveProvider(stampedFmp, active, "free") &&
       mod.isFromActiveProvider(gnews, active, "free"));
+  const spanish = { ...wireIn, link: "w3", language: "es" };
+  const flat2 = mod.composeFreeSectorPools(["MSFT"], new Map(), [spanish, wireIn], active).flat().map((i) => i.link);
+  ok("a non-English wire release is not added to a sector feed", !flat2.includes("w3") && flat2.includes("w1"));
   ok("attributedSymbols reads BOTH fields", mod.attributedSymbols({ ...legacyFmp, tickers: ["MSFT"] }).join() === "AAPL,MSFT");
   return fails;
 }
@@ -289,11 +313,21 @@ for (const [label, from, to] of SEAM_MUTANTS) {
   ]);
   reportMutant(label, fails);
 }
+FEED_MUTANTS.push(
+  ["non-English kept", "  if (!isEnglish(item)) return false;\n", ""],
+  ["decimal entities left raw", "      title: tidy(item.title),", "      title: item.title,"],
+  ["same-issuer collapse removed", "return collapseSameIssuer(newestFirst(", "return ((x) => x)(newestFirst("],
+  ["issuer-less items collapsed together", "const dup = issuer && kept.some(", "const dup = kept.some("],
+);
+for (const [label, from, to] of FEED_MUTANTS.slice(-4)) {
+  reportMutant(label, await suiteFeeds(await loadSibling(FEEDS_FILE, mutate(feedsSrc, from, to, label))));
+}
 const SECTOR_MUTANTS = [
   ["unstamped (FMP-era) items pass the provider filter",
     `return typeof item.provider === "string" && activeIds.has(item.provider);`, `return !item.provider || activeIds.has(item.provider);`],
   ["attribution reads fmpSymbols only", `return [...(item.fmpSymbols ?? []), ...(item.tickers ?? [])];`, `return [...(item.fmpSymbols ?? [])];`],
   ["wire items not filtered to constituents", `(item.tickers ?? []).some((t) => constituentSet.has(t))`, `true`],
+  ["non-English wire kept on sector pages", `!(item.language && !/^en(-|$)/i.test(item.language.trim())) &&`, ``],
 ];
 for (const [label, from, to] of SECTOR_MUTANTS) {
   reportMutant(label, await suiteSector(await loadSibling(SECTOR_FILE, mutate(sectorSrc, from, to, label))));
@@ -302,6 +336,22 @@ for (const [label, from, to] of SECTOR_MUTANTS) {
 // ─────────────────────────────────────────────── 4. the wiring, in code only
 console.log("\n=== 4. wiring (comments stripped) ===");
 const code = (p) => readCodeOnly(p);
+// ── the sector hero copy with no headlines (COWORK #11) ────────────────
+const tpl = await loadSibling("lib/sector-news-templates.ts", read("lib/sector-news-templates.ts"));
+const techSector = { slug: "technology", name: "Technology" };
+const leadEmpty = tpl.buildSectorLead({ sector: techSector, newsScore: { tone: "yellow" }, articleCount: 0, constituentCount: 40, dayMove: null, rank: null });
+const readEmpty = tpl.buildSectorRead({ sector: techSector, newsScore: { tone: "yellow" }, earningsLabel: "", breadth: null, performance: { day: 0, week: 0, month: 2, ytd: 0 }, topMentions: [], earningsCount: 0, articleCount: 0 }).join(" ");
+const leadFull = tpl.buildSectorLead({ sector: techSector, newsScore: { tone: "yellow" }, articleCount: 12, constituentCount: 40, dayMove: null, rank: null });
+console.log("\n=== sector hero copy ===");
+for (const [label, pass] of [
+  ["no headlines: the lead claims no tone ('reading mixed' is gone)", !/reading (mixed|constructive|pressured)/.test(leadEmpty) && /No recent headlines/.test(leadEmpty)],
+  ["no headlines: the read claims no lean and no price-vs-headlines comparison", !/leaning|headlines read/.test(readEmpty) && /no recent technology headlines/i.test(readEmpty)],
+  ["with headlines: the tone sentence is unchanged", /headlines are currently reading mixed/.test(leadFull)],
+]) {
+  console.log(`  ${pass ? "PASS" : "FAIL"}  ${label}`);
+  if (!pass) failures++;
+}
+
 const wiring = [
   ["lib/general-market-news.ts builds no FMP URL and makes no metered FMP call",
     !/financialmodelingprep|fmpFetch/.test(code("lib/general-market-news.ts"))],
@@ -315,8 +365,11 @@ const wiring = [
   ["sector news: FMP-era items are PURGED from the sector record at its next refresh (the store's dedupe step)",
     /dedupe: \(items\) => dedupeNews\(items\.filter\(fromActive\)\)/.test(code("lib/sector-news-data.ts"))],
   ["sector news: and filtered on read while a pre-change record is still cached",
-    /const news = stored\.filter\(fromActive\)/.test(code("lib/sector-news-data.ts")) &&
+    /(?:const|let) news = stored\.filter\(fromActive\)/.test(code("lib/sector-news-data.ts")) &&
       /const fromActive = \(item: NewsItem\) => isFromActiveProvider\(item, activeIds, mode\)/.test(code("lib/sector-news-data.ts"))],
+  ["sector news: a record the filter had to thin is REBUILT now, not after the hour (the empty-preview cause)",
+    /if \(!onFmp && news\.length < stored\.length\) \{\s*const fresh = await fetchFreeSectorNewsWindow\(constituents\)/.test(code("lib/sector-news-data.ts"))],
+  ["sector news: the page passes the article count to the read", /articleCount: data\.rankedNews\.length,/.test(code("app/sector/[slug]/news/page.tsx"))],
   ["sector news: no reader-visible 'FMP did not return' copy", !/FMP did not return/.test(code("lib/sector-news-data.ts"))],
   ["sector news: the constituents' stores are read in ONE command (MGET), not one GET each",
     /redis\.mget</.test(code("lib/server/newsStore.ts")) && /readStoredSymbolNews<NewsItem>\(symbols\)/.test(code("lib/sector-news-data.ts"))],
