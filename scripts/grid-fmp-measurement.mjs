@@ -404,7 +404,14 @@ const withAnySec = gridSyms.filter((s) => tick(s)?.title || entityName.get(s) ||
 console.log(`  ANY SEC name (title ∪ entityName ∪ submissions.name): ${withAnySec.length} (${pct(withAnySec.length, gridSyms.length)})`);
 
 const SUFFIX = /\b(incorporated|inc|corporation|corp|company|co|limited|ltd|plc|holdings?|group|sa|s a|nv|n v|ag|se|lp|l p|llc|the|trust|bancorp|de|new|class [a-z]|ordinary shares|common stock|adr|ads)\b/g;
-const norm = (s) => String(s ?? "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
+// Run 35832283212 showed the first form splitting "Casey's" into "casey s"
+// against SEC's "CASEYS", and keeping SEC's state-of-incorporation tags
+// (/CAN/, /SD/, /MD/) as words -- so apostrophes and dots are DELETED, not
+// spaced, accents are folded, and a trailing /XX/ tag is dropped before
+// comparing.
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/\s*\/[a-z]{2,4}\/\s*$/, "").replace(/['’.]/g, "").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ")
+  .replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
 const cmp = gridSyms.filter((s) => tick(s)?.title).map((s) => {
   const f = fmpName.get(s), t = tick(s).title;
   const kind = f === t ? "identical" : f.toLowerCase() === t.toLowerCase() ? "case only"
