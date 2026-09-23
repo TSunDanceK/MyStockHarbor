@@ -251,7 +251,7 @@ if (resolved.kind === "listed") {
 // the pickers symbol key -- the 700-symbol population data/due-strip.json was
 // actually cut from -- and both are printed so the difference is visible rather
 // than corrected silently.
-let shipped;
+let shipped, prod, records;
 console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LIVE STORE");
 {
   const cutJson = fs.readFileSync(CUT_FILE, "utf8");
@@ -261,15 +261,21 @@ console.log("\n6. THE SHIPPED PRODUCER (lib/server/dueInputs.ts), AGAINST THE LI
       `export const DUE_STRIP_CUT = ${JSON.stringify(cutDoc.symbols)};`)
     .replace(/export const DUE_STRIP_CUT_GENERATED_AT: string = cut\.generatedAt;/,
       `export const DUE_STRIP_CUT_GENERATED_AT = ${JSON.stringify(cutDoc.generatedAt)};`)
-    .replace(/export async function getDueStripState[\s\S]*?\n\}\n?$/m, "");
+    // The async half closes over the stripped imports and is not exercised here.
+    // NAME CHANGED IN THIS PR: getDueStripState was a thin wrapper and is gone;
+    // getCalendarForwardSections is the one that reads Redis now. The lift gate
+    // caught the stale regex on run 35753946276 -- a strip that no longer
+    // matches leaves the Redis half IN the lift, and it would have thrown
+    // ReferenceError on first call rather than at load.
+    .replace(/export async function getCalendarForwardSections[\s\S]*?\n\}\n/m, "");
   void cutJson;
-  const prod = await lift(
+  prod = await lift(
     prodSrc.replace(/export (const|function|type)/g, "$1") +
       "\nexport { dueInputFrom, buildDueInputs, coverageOfCut, cutDrift, DUE_STRIP_CUT, ANNUAL_WHEN_UNKNOWN };",
     "", "dueInputs"
   );
 
-  const records = new Map();
+  records = new Map();
   for (const symbol of prod.DUE_STRIP_CUT) {
     records.set(symbol, await redis.get(`${DATES_PREFIX}:${symbol.toUpperCase()}`));
   }
@@ -374,6 +380,118 @@ const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
     console.log(`     href present: ${markup.includes(`/stock/${e.symbol}/earnings`) ? "yes" : "*** NO ***"}`);
     console.log(`     expectedOn (${e.expectedOn}) leaked into the page: ${markup.includes(e.expectedOn) ? "*** YES — IT MUST NOT ***" : "no, correct"}`);
   }
+}
+
+// ── 8. THE EXPECTED SECTION, BUILT AND RENDERED FROM THE SAME LIVE RECORDS ─
+//
+// The same standard #507 and #508 were held to: run the SHIPPED module over the
+// SHIPPED store and print what a reader would read. Four things have to be true
+// and each is printed rather than asserted in prose:
+//
+//   the coverage denominator is the CUT's size, not the row count
+//   no estimated DAY appears anywhere in the markup
+//   the FPI bar is APPLIED -- foreign filers refused by it are named
+//   nothing appears in both this section and the due strip
+console.log("\n8. THE EXPECTED SECTION (expectedToReport + EarningsExpectedSection), LIVE");
+{
+  const React = (await import("react")).default;
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const tsMod = (await import("typescript")).default;
+  const noImports = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
+
+  const exp = await lift(
+    noImports("lib/server/expectedToReport.ts").replace(/export (const|function|type)/g, "$1") +
+      "\nexport { buildExpected, expectedFrom, lagsFrom, filerPrecision, PRECISION_BAR_DOMESTIC, PRECISION_BAR_FPI, EXPECTED_BANDS };",
+    "", "expectedToReport"
+  );
+
+  const alreadyDue = new Set(shipped.kind === "listed" ? shipped.entries.map((e) => e.symbol) : []);
+  const built = exp.buildExpected(prod.DUE_STRIP_CUT, records, TODAY, alreadyDue);
+  const accounted = built.rows.length +
+    Object.values(built.skipped).reduce((n, xs) => n + xs.length, 0);
+  console.log(`   rows ${built.rows.length}/${built.considered} · accounted ${accounted}/${prod.DUE_STRIP_CUT.length}${accounted === prod.DUE_STRIP_CUT.length ? "" : "   <-- A SYMBOL IS UNACCOUNTED FOR"}`);
+  for (const [why, syms] of Object.entries(built.skipped)) {
+    if (syms.length) console.log(`   skipped ${String(syms.length).padStart(2)}  ${why.padEnd(20)} ${syms.join(" ")}`);
+  }
+
+  // ── IS THE FPI BAR ACTUALLY DOING ANYTHING? ────────────────────────────
+  // "FPIs are held to a higher bar" is a docblock sentence until a run shows a
+  // foreign filer that WOULD pass the domestic bar and does not pass its own.
+  const fpiReport = [];
+  for (const symbol of prod.DUE_STRIP_CUT) {
+    const r = records.get(symbol);
+    if (!r) continue;
+    const { lags, isFpi } = exp.lagsFrom(r.events);
+    if (!isFpi) continue;
+    const sc = exp.filerPrecision(lags);
+    fpiReport.push({
+      symbol, periods: lags.length,
+      precision: sc ? sc.precision : null,
+      verdict: !sc ? "thin-history"
+        : sc.precision >= exp.PRECISION_BAR_FPI ? "ADMITTED"
+        : sc.precision >= exp.PRECISION_BAR_DOMESTIC ? "REFUSED BY THE FPI BAR (would pass domestic)"
+        : "below both bars",
+    });
+  }
+  console.log(`   FPI filers in the cut (6-K basis): ${fpiReport.length}`);
+  for (const f of fpiReport) {
+    console.log(`     ${f.symbol.padEnd(6)} periods=${String(f.periods).padStart(2)} precision=${f.precision == null ? "n/a" : f.precision.toFixed(3)} -> ${f.verdict}`);
+  }
+  const bitten = fpiReport.filter((f) => f.verdict.startsWith("REFUSED BY THE FPI BAR"));
+  console.log(`   the FPI bar changed the verdict for ${bitten.length} filer(s)${bitten.length ? `: ${bitten.map((f) => f.symbol).join(" ")}` : " today (it is applied; nothing sat between the two bars)"}`);
+
+  // ── NOTHING IS IN BOTH SECTIONS ────────────────────────────────────────
+  const both = built.rows.filter((r) => alreadyDue.has(r.symbol)).map((r) => r.symbol);
+  console.log(`   overlap with the due strip: ${both.length}${both.length ? ` *** ${both.join(" ")} APPEARS TWICE ***` : " (none — the due strip wins, as designed)"}`);
+
+  // ── RENDER IT ──────────────────────────────────────────────────────────
+  const SHIMS = `
+const Link = ({ href, children, ...rest }) => <a href={href} {...rest}>{children}</a>;
+const TickerLogo = ({ symbol }) => <span data-logo={symbol} />;
+`;
+  const unit = [
+    SHIMS,
+    noImports("lib/server/expectedToReport.ts"),
+    noImports("lib/server/expectedCopy.ts"),
+    noImports("app/earnings-calendar/EarningsExpectedSection.tsx").replace(/export default function/, "export function"),
+  ].join("\n");
+  const out = tsMod.transpileModule(unit, {
+    fileName: "exp.tsx",
+    compilerOptions: {
+      target: tsMod.ScriptTarget.ES2022, module: tsMod.ModuleKind.ESNext,
+      jsx: tsMod.JsxEmit.ReactJSX, jsxImportSource: "react",
+    },
+  }).outputText;
+  const tmp2 = `scripts/.census-exp-${process.pid}.mjs`;
+  fs.writeFileSync(tmp2, out);
+  let comp2;
+  try { comp2 = await import(`${process.cwd()}/${tmp2}?t=${Date.now()}`); }
+  finally { fs.rmSync(tmp2, { force: true }); }
+
+  const state = built.rows.length
+    ? { kind: "listed", rows: built.rows, considered: built.considered }
+    : { kind: "none" };
+  const markup = renderToStaticMarkup(React.createElement(comp2.EarningsExpectedSection, { state }));
+  const text = markup
+    .replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#x27;|&apos;/g, "'")
+    .replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;/g, '"').replace(/&mdash;/g, "\u2014")
+    .replace(/\s+/g, " ").trim();
+  console.log(`\n   VISIBLE TEXT:\n   ${text}`);
+
+  // EVERY DATE IN THE MARKUP, ENUMERATED AND ATTRIBUTED. A date that is not a
+  // period end or a filed announcement is an estimate that escaped.
+  const allowed = new Set();
+  for (const r of built.rows) {
+    allowed.add(r.periodEnd);
+    if (r.lastReportedOn) allowed.add(r.lastReportedOn);
+    if (r.lastReportedPeriodEnd) allowed.add(r.lastReportedPeriodEnd);
+  }
+  const dates = [...new Set(markup.match(/\d{4}-\d{2}-\d{2}/g) ?? [])];
+  const rogue = dates.filter((d) => !allowed.has(d));
+  console.log(`\n   dates in the markup: ${dates.length ? dates.join(" ") : "(none)"}`);
+  console.log(`   unexplained (would be an estimated DAY): ${rogue.length ? `*** ${rogue.join(" ")} ***` : "none — every date is a filed fact"}`);
+  console.log(`   coverage line present: ${/Showing \d+ of the \d+/.test(text) ? "yes" : "*** NO ***"}`);
 }
 
 console.log("\nNo writes were performed.");
