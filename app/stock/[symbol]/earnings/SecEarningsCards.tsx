@@ -195,14 +195,27 @@ const NOT_REPORTED_NOTE =
  */
 const EMPTY_SHORT: Record<string, string> = {
   [EMPTY_REASONS.notCaptured]: "Not captured",
+  [EMPTY_REASONS.epsPerClass]: "Per share class",
+  [EMPTY_REASONS.epsPerUnit]: "Per unit",
   [EMPTY_REASONS.noRevenueLine]: "No revenue line",
   [NOT_REPORTED]: NOT_REPORTED,
 };
 const EMPTY_FULL: Record<string, string> = {
   [EMPTY_REASONS.notCaptured]: `${EMPTY_REASONS.notCaptured}: the figure may be filed under a concept this page does not read yet.`,
+  [EMPTY_REASONS.epsPerClass]: `${EMPTY_REASONS.epsPerClass}: the company files a separate EPS for each class of its shares, so there is no single figure to show here.`,
+  [EMPTY_REASONS.epsPerUnit]: `${EMPTY_REASONS.epsPerUnit}: the partnership files its earnings per unit rather than per share.`,
   [EMPTY_REASONS.noRevenueLine]: `${EMPTY_REASONS.noRevenueLine}: the company publishes no revenue figure this page reads.`,
   [NOT_REPORTED]: "The company\u2019s SEC filing has no figure for that line. It may be zero, or included under another heading.",
 };
+
+/**
+ * WHAT A BLANK EPS CELL SAYS for this filer (#535 COWORK #11). A filer whose
+ * filing carries EPS per share class or per unit gets that reason, everywhere
+ * EPS renders; a Q4 row keeps its own "not filed on its own" story, which is
+ * true of every filer; everyone else keeps NOT_REPORTED as before.
+ */
+const epsEmpty = (view: SecEarningsView, label: string) =>
+  view.epsReason && !/^Q4 /.test(label) ? view.epsReason : NOT_REPORTED;
 
 /** A derived figure that cannot be computed, naming the input that is missing. */
 const cantCalculate = (missing: string) => `Can't calculate — ${missing} not reported`;
@@ -568,7 +581,7 @@ export function SecSnapshotCard({
           <PctCell v={s.revenueYoY} />
         </Metric>
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
-          <CellValue cell={s.epsDiluted} />
+          <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
         </Metric>
         <Metric
           label="YoY EPS growth"
@@ -907,7 +920,7 @@ export function SecAnnualCard({ view, sole = false }: { view: SecEarningsView; s
                     it, where a gap row makes the comparator informative. */}
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
                 <td data-label="Revenue YoY"><PctCell v={r.revenueYoY} /></td>
-                <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short /></td>
+                <td data-label="Diluted EPS"><CellValue cell={r.epsDiluted} short empty={epsEmpty(view, r.label)} /></td>
                 <td data-label="EPS YoY" className="colCross"><PctCell v={r.epsYoY} /></td>
                 <td data-label="Gross margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.gross)}</td>
                 <td data-label="Operating margin">{r.marginsRefused ? <NotMeaningful /> : pctLevel(r.operating)}</td>
@@ -1145,6 +1158,7 @@ const BALANCE_SHEET_SPREAD_DAYS = 95;
  */
 const NOT_IN_TAGGED_DATA = "Not found in the filing\u2019s tagged data";
 const TAG_GAP_LINES = new Set(["interestExpense", "nonOperatingIncomeExpense"]);
+const EPS_LINES = new Set(["epsBasic", "epsDiluted"]);
 
 export function SecBalanceSheetCard({ view }: { view: SecEarningsView }) {
   const b = view.balance;
@@ -1264,7 +1278,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               compact
              
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
+              empty={c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
             />
           </Row>
         ))}
@@ -1334,7 +1348,7 @@ export function SecRecentPeriodsCard({ view }: { view: SecEarningsView }) {
                 <td data-label="Period ending">{r.end}</td>
                 <td data-label="Revenue"><CellValue cell={r.revenue} compact short empty={revenueEmpty(view)} /></td>
                 <td data-label={`Diluted EPS (${epsStandardWord(view.accounting)})`}>
-                  <CellValue cell={r.epsDiluted} short emptyTitle={q4EpsNotReported(r) ? Q4_EPS_NOTE : undefined} />
+                  <CellValue cell={r.epsDiluted} short empty={epsEmpty(view, r.label)} emptyTitle={q4EpsNotReported(r) ? Q4_EPS_NOTE : undefined} />
                 </td>
                 <td data-label="Net income"><CellValue cell={r.netIncome} compact short /></td>
               </tr>

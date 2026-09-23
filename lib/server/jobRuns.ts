@@ -68,6 +68,11 @@ export const JOBS = {
   // own request to latestProcessableDate() regardless, so an early fire asks for
   // a date that exists rather than 403ing on one that does not.
   "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
+  // HOURLY AT :40, BUT IT ACTS ONLY WHEN runMode SAYS SO: every firing during
+  // the one-off catch-up, 04:40 and 16:40 daily, and every 2 hours in
+  // reporting season. :40 keeps it clear of sec-facts' :20 runs, so the two
+  // never split SEC's rate between them. See lib/server/secFilingJob.ts.
+  "sec-filings": { label: "SEC filings read from the filing (hourly :40, acts per schedule)", instrumented: true, cron: "40 * * * *" },
   // TEMPORARY SECOND RUN AT 16:20 (added 2026-09-23). The re-read backlog
   // stood at 751 after a label-version bump and one run a day drains ~64 of
   // it, so a second pass halves the wait. 16:20 is clear of every other SEC

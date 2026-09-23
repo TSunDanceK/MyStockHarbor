@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ColdFill from "@/app/stock/[symbol]/ColdFill";
 import type { CSSProperties } from "react";
 
 import type {
@@ -156,9 +157,12 @@ const TONE_TEXT: Record<ToneKey, string> = {
 export default function LatestEarningsCard({
   snapshot,
   symbol,
+  pageToken = "",
 }: {
   snapshot: SecEarningsSnapshot;
   symbol: string;
+  /** The page's signed token; the human-gated cold fill requires it. */
+  pageToken?: string;
 }) {
   const tone = snapshot.tone;
   // A PARTIAL SCORE CARRIES NO VERDICT COLOUR — the full report's rule, applied
@@ -189,7 +193,12 @@ export default function LatestEarningsCard({
         // sentence /stock/[symbol]/earnings prints for the same symbol, which
         // is the point of taking it from the scorer rather than writing a
         // second one here: a reader who clicks through gets the same answer.
-        <p style={bodyCopyStyle}>{snapshot.unavailableReason}</p>
+        snapshot.awaitingRead ? (
+          // NOT YET READ: a person gets the gated fill; a crawler, the note.
+          <ColdFill symbol={symbol} token={pageToken} headline="" bare textStyle={bodyCopyStyle} />
+        ) : (
+          <p style={bodyCopyStyle}>{snapshot.unavailableReason}</p>
+        )
       ) : (
         <>
           <div style={earningsDateRowStyle}>

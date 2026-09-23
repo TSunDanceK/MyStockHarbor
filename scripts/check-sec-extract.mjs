@@ -167,7 +167,12 @@ check("the FX leg is present and cumulative",
 // cumulativeFields(), and the other two loops must come after it.
 const extractCode = readCodeOnly("lib/server/secExtract.ts");
 const diffSites = [...extractCode.matchAll(/derived:\s*"differenced"/g)].map((m) => m.index);
-const cumLoopAt = extractCode.indexOf("for (const field of cumulativeFields())");
+// THE LOOP IS WRAPPED since #6-B (#535 COWORK #12): runCumulative holds it,
+// and is called for cumulativeFields() and once more for the revenue
+// fallback chain. The site must still sit inside that one routine.
+const cumLoopAt = extractCode.indexOf("const runCumulative = (");
+check("the differencing routine is run for cumulativeFields()",
+  /runCumulative\(cumulativeFields\(\), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes\);/.test(extractCode));
 const asFiledAt = extractCode.indexOf("for (const field of asFiledOnlyFields())");
 const instLoopAt = extractCode.indexOf("for (const field of instantFields())");
 check("the extractor emits `differenced` in exactly one place", diffSites.length === 1,
