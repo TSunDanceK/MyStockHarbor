@@ -795,6 +795,28 @@ const TASKS = {
     // running uncredentialled and reporting "no cached bars".
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX. The /earnings-calendar grid's three FMP calls
+  // (candidates, names, quote exchange) measured against the SEC record and the
+  // price pool. The FMP side is read out of what production already cached in
+  // Redis -- no FMP key exists in this environment -- and the SEC side from the
+  // report-dates store plus live submissions. GETs only; `write-` is the
+  // CREDENTIAL boundary. claude/grid-fmp-measurement-2026-09-23.md
+  "write-grid-fmp-measurement": {
+    script: "scripts/grid-fmp-measurement.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX. What closes the grid's in-universe SEC gaps
+  // (6-K results, missing records, stale records), projected coverage, job-time
+  // cost, and SEC-only market-cap floor counts. GETs only; `write-` is the
+  // CREDENTIAL boundary. claude/grid-sec-gaps-measured-2026-09-23.md
+  "write-grid-sec-gaps": {
+    script: "scripts/grid-sec-gaps.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-valuation-price": {
     script: "scripts/valuation-price-probe.mjs",
     args: () => [],
