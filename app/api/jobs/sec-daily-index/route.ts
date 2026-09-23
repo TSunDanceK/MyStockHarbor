@@ -27,6 +27,7 @@ import {
   type SymbolFiling,
 } from "@/lib/server/secDailyIndex";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
+import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -503,7 +504,23 @@ export async function GET(req: NextRequest) {
     !(cikChanges?.suspectedMapShapeChange ?? false) &&
     !(delistings?.suspectedPartialMap ?? false);
 
+  // ── THE NEWS FEED'S SEC LEG (#535 COWORK #12/#13) ────────────────────────
+  // Moved here from the view-triggered news refresh, so no visitor or bot can
+  // cause SEC traffic. See lib/server/news/secFilingsJob.ts.
+  const secNews = dryRun || inspectionOnly
+    ? null
+    : await refreshSecFilingNews(
+        Object.keys(filingsBySymbol),
+        Object.entries(manifest.symbols).filter(([, e]) => e.cik && !e.delisted).map(([s]) => s)
+      );
+
   const summary = {
+    secNewsFiled: secNews?.filed ?? 0,
+    secNewsBackfill: secNews?.backfill ?? 0,
+    secNewsRequests: secNews?.requests ?? 0,
+    secNewsWritten: secNews?.written ?? 0,
+    secNewsFailed: secNews?.failed ?? 0,
+    secNewsDeferred: secNews?.deferred ?? 0,
     datesConsidered: dates.length,
     parsed: days.filter((d) => d.outcome === "parsed").length,
     absent: days.filter((d) => d.outcome === "absent").length,
