@@ -69,7 +69,7 @@ console.log("\n2. annual mode renders no quarterly-only element");
   const page = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
   check("the page gates the quarterly growth card on tableBasis", /secView\.tableBasis === "year" \? null : <SecGrowthMarginsCard/.test(page));
   check("the page hides the reaction card below three annual reactions",
-    /const hidePriceReaction = annualForm !== null && reactionEvents\.length < ANNUAL_REACTION_MIN;/.test(page) && /data\.hidePriceReaction \? null : <PriceReactionCard/.test(page));
+    /const hidePriceReaction = secEvents\.length === 0 \|\| \(annualForm !== null && reactionEvents\.length < ANNUAL_REACTION_MIN\);/.test(page) && /data\.hidePriceReaction \? null : <PriceReactionCard/.test(page));
   check("the page prints the note and labels the score", /annualOnlyNote\(data\.annualForm\)/.test(page) && /basisNote=\{data\.annualForm \? "Based on full fiscal years\." : null\}/.test(page));
   const raw = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
   check("each hidden element carries the dated comment", (raw.match(/HIDDEN, NOT REMOVED, 2026-09-23/g) ?? []).length >= 2);

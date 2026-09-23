@@ -139,12 +139,13 @@ const DEAD_ENDPOINTS = [
 for (const ep of DEAD_ENDPOINTS) {
   check(`no call to ${ep}`, !pageCode.includes(ep));
 }
-// /earnings STAYS, and on purpose: the announcement date and its bmo/amc timing
-// are not in SEC filings, and the price-reaction card needs the session the
-// market reacted in. Asserted so a later tidy-up does not remove it silently.
-check("/earnings IS still called — the announcement date is not in SEC filings",
-  pageCode.includes("`/earnings?symbol="),
-  "price-derived, and this pass does not touch price-derived data");
+// /earnings IS GONE (#535 COWORK #18 §3, 2026-09-23). The announcement date and
+// its session now come from the stored SEC report-dates record (the filing's
+// acceptance time), and with no record the reaction card is hidden. Asserted
+// gone, so an FMP call cannot quietly come back to this page.
+check("/earnings is no longer called — every date on the page is from the filings",
+  !pageCode.includes("`/earnings?symbol=") && !/financialmodelingprep|fmpFetch/.test(pageCode),
+  "the FMP-calendar fallback is what printed 'Dates here come from an earnings calendar'");
 
 console.log("\n5. labels");
 
