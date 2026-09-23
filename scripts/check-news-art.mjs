@@ -1069,24 +1069,13 @@ for (const row of imprecise) {
 // passes because the feature is switched off. hashKey and the dimensions come
 // from the REAL art.ts loaded in §5 (neither depends on a manifest), so the
 // "do not write a second hash" rule is asserted by construction here.
-const profileRows = JSON.parse(read("data/static-profile.json")).rows;
-const labelCounts = new Map();
-for (const row of Object.values(profileRows)) {
-  const label = String(row?.industry ?? "").trim();
-  if (label) labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-}
-
-// industryArt.ts imports the snapshot; the harness hands over the parsed copy
-// it already has rather than inlining 226 KB of JSON into a data: URL.
-globalThis.__staticProfile = { rows: profileRows };
-const industrySrc = read("lib/server/news/industryArt.ts")
-  .replace(/^import profile from "@\/data\/static-profile\.json";$/m, "const profile = globalThis.__staticProfile;");
+// 2026-09-23 (#552, COWORK #4): data/static-profile.json (FMP's per-symbol
+// sector/industry) is removed, so there is no per-symbol label census to count
+// against any more. industryArt.ts no longer imports it; the table's KEYS are
+// category names, checked below only for what they emit.
+const industrySrc = read("lib/server/news/industryArt.ts");
 if (/^import /m.test(industrySrc)) {
-  console.error("FAIL: an import survived substitution in industryArt.ts.");
-  process.exit(1);
-}
-if (!industrySrc.includes("const profile = globalThis.__staticProfile;")) {
-  console.error("FAIL: the static-profile import was not rewired.");
+  console.error("FAIL: industryArt.ts gained an import this harness does not inline.");
   process.exit(1);
 }
 const industry = await import(`data:text/javascript;base64,${Buffer.from(
@@ -1105,7 +1094,6 @@ globalThis.__newsIndustry = industry;
 // with only its two data imports handed over.
 globalThis.__symbolSpellings = await import("../lib/symbolSpellings.mjs");
 const staticProfileSrc = read("lib/server/staticProfile.ts")
-  .replace(/^import snapshotFile from "@\/data\/static-profile\.json";$/m, "const snapshotFile = globalThis.__staticProfile;")
   .replace(/^import cikMap from "@\/data\/cik-map\.json";$/m, () => `const cikMap = ${read("data/cik-map.json")};`)
   // The SIC leg's two files (#517), real data like the CIK map.
   .replace(/^import registrantsFile from "@\/data\/sec\/registrants\.json";$/m, () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
@@ -1481,16 +1469,9 @@ check(
 // without any single layer being wrong.
 console.log("\n=== 10. The symbol-led picker: industry table, layer order, the 10% rule ===\n");
 
-// A KEY THAT IS NOT A REAL LABEL IS A DEAD ROW, and it looks exactly like a
-// live one. The snapshot is a closed set of 144 strings, so this is checkable
-// rather than a matter of care: a typo, a renamed label upstream, or a row
-// copied from a different taxonomy all land here.
-const strayKeys = industry.INDUSTRY_TAG_LABELS.filter((l) => !labelCounts.has(l));
-check(
-  "every industry label in the table is one the snapshot actually contains",
-  strayKeys.length === 0,
-  strayKeys.length ? `not in data/static-profile.json: ${strayKeys.join(", ")}` : `${industry.INDUSTRY_TAG_LABELS.length} labels`
-);
+// "every label is one the snapshot contains" RETIRED 2026-09-23 (#552): the
+// snapshot was FMP data and is removed; there is no committed label census left
+// to check the keys against. COWORK #3's SIC table brings one back.
 const strayTags = [...new Set(industry.INDUSTRY_TAG_VALUES)].filter((t) => !v2Names.some((n) => (v2[n].primary ?? []).includes(t)));
 check(
   "every tag it can emit is a PRIMARY subject some image carries",
@@ -1519,23 +1500,12 @@ check(
   weakLive.length ? `LIVE but marked weak: ${weakLive.join(", ")}` : `${weakKeys.length} labels, ${weakKeys.reduce((a, l) => a + industry.WEAK_LABELS[l].symbols, 0)} symbols held back`
 );
 check(
-  "...and each carries a real reason and a count that matches the snapshot",
+  "...and each carries a real reason",
   weakKeys.every((l) => {
     const w = industry.WEAK_LABELS[l];
-    return typeof w.why === "string" && w.why.trim().length > 20 && labelCounts.get(l) === w.symbols;
+    return typeof w.why === "string" && w.why.trim().length > 20;
   }),
-  "a count that drifts from the snapshot is a review note about a universe that no longer exists"
-);
-
-const strong = industry.INDUSTRY_TAG_LABELS.reduce((a, l) => a + (labelCounts.get(l) ?? 0), 0);
-const weakN = weakKeys.reduce((a, l) => a + (labelCounts.get(l) ?? 0), 0);
-const total = [...labelCounts.values()].reduce((a, b) => a + b, 0);
-console.log(
-  `  NOTE  industry coverage: ${labelCounts.size} labels, ${total} symbols — ` +
-    `${strong} tagged (${((strong / total) * 100).toFixed(1)}%), ` +
-    `${weakN} weak and held back (${((weakN / total) * 100).toFixed(1)}%), ` +
-    `${total - strong - weakN} no tag (${(((total - strong - weakN) / total) * 100).toFixed(1)}%)\n` +
-    `        the last two groups fall through to the sector art they render today`
+  "the per-label counts were checked against the FMP snapshot, removed 2026-09-23 (#552)"
 );
 
 // ── THE 10% RULE ───────────────────────────────────────────────────────────
@@ -1776,7 +1746,7 @@ check(
 // it was checked. It is verifiable here, and it is the whole point of routing
 // staticProfileFor through lookupSpellingIn.
 check(
-  "BRK.B and BRK-B both reach insurance art — the dotted spelling is not a second-class page",
+  "BRK.B and BRK-B reach the same row and the same plan — the dotted spelling is not a second-class page",
   (() => {
     const forSymbol = (sym) => {
       const profile = staticProfile.resolveProfile(sym, null);
@@ -1795,11 +1765,15 @@ check(
     };
     const dotted = forSymbol("BRK.B");
     const dashed = forSymbol("BRK-B");
-    return (
-      dotted.kind === "library" && dashed.kind === "library" &&
-      dotted.art.src.startsWith("/news-art/insurance-any-") &&
-      dotted.art.src === dashed.art.src
-    );
+    // 2026-09-23 (#552): with the FMP snapshot gone, Berkshire's industry is
+    // SEC's "Fire, Marine & Casualty Insurance", which has no industry tag, so
+    // both spellings now draw the generated card until COWORK #3 maps SIC 6331
+    // onto an insurance label. What this pins is the bridge: the two spellings
+    // reach the SAME row and the SAME plan.
+    const a = staticProfile.resolveProfile("BRK.B", null);
+    const b = staticProfile.resolveProfile("BRK-B", null);
+    return a.industry !== null && a.industry === b.industry && a.sector === b.sector &&
+      JSON.stringify(dotted) === JSON.stringify(dashed);
   })(),
   "before the spellings fix the dotted page reached NO row, so it drew the generated ticker card while the dashed one drew art"
 );

@@ -1,6 +1,7 @@
 import { keywordHits } from "@/lib/keywordMatch";
 import { readOrRefreshSymbolNews } from "@/lib/server/newsStore";
-import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders } from "@/lib/server/news";
+import { fetchSymbolNewsWindow, feedMaxAgeDays, activeNewsProviders, newsProviderMode } from "@/lib/server/news";
+import { isFromActiveProvider } from "@/lib/server/news/provenance";
 import { isFilingChurn } from "@/lib/server/news/filingChurn";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import {
@@ -402,12 +403,24 @@ function articleMatchesRequestedSymbol(item: NewsItem, symbol: string) {
  * implementation of a rule, not two that can disagree.
  */
 async function fetchStoredSymbolNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  // FMP-ERA ITEMS ARE PURGED, NOT LEFT TO AGE OUT (2026-09-23, #553 COWORK #5).
+  // lib/server/news/provenance.ts has the rule. Two places, both needed:
+  //   - the store's dedupe step runs over held + fetched before the record is
+  //     capped and rewritten, so filtering there DELETES FMP-era items from
+  //     msh:news:v1:<SYM> at the symbol's next refresh;
+  //   - the read below filters them for the up-to-an-hour a record is served
+  //     from cache before that refresh. A record nobody views is never
+  //     refreshed; it expires on the store's 8-day TTL instead.
+  const mode = newsProviderMode();
+  const activeIds = new Set<string>(activeNewsProviders().map((provider) => provider.id));
+  const fromActive = (item: NewsItem) => isFromActiveProvider(item, activeIds, mode);
+
   const { items } = await readOrRefreshSymbolNews<NewsItem>(symbol, {
     // WHICH PROVIDER THIS IS rests on NEWS_PROVIDER, not on this call site --
     // see lib/server/news/index.ts. In step 1 it is always the FMP adapter, and
     // the adapter is the code that used to sit inline here.
     fetchWindow: (from) => fetchSymbolNewsWindow(symbol, companyName, from),
-    dedupe: dedupeNews,
+    dedupe: (list) => dedupeNews(list.filter(fromActive)),
     // The earnings pin. Once an article qualifies it survives eviction until a
     // newer qualifying one replaces it, or 7 days pass -- which is the part
     // only persistence makes possible. Today an earnings article vanishes the
@@ -424,7 +437,7 @@ async function fetchStoredSymbolNews(symbol: string, companyName: string): Promi
     },
   });
 
-  return items;
+  return items.filter(fromActive);
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
@@ -2852,7 +2865,9 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v28-main-feed-backfill"],
+  // v29 (2026-09-23): v28 entries may hold FMP-era items; a new key means none
+  // is served for up to an hour after deploy.
+  ["msh-stock-news-base-data-v29-no-fmp-era-items"],
   {
     revalidate: 3600,
   }

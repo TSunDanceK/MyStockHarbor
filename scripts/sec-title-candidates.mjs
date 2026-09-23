@@ -58,7 +58,9 @@ const readJson = (p, fallback) => {
 
 // ─────────────────────────────────────────── who is unresolved, and what we call them
 const cikMap = readJson(path.join(ROOT, "data/cik-map.json"), {});
-const profile = readJson(path.join(ROOT, "data/static-profile.json"), { rows: {} });
+// 2026-09-23 (#552, COWORK #4): data/static-profile.json (FMP data) is removed; its symbol list is
+// replaced by data/sec/registrants.json's rows, which were generated from that list ∪ the CIK map.
+const profile = readJson(path.join(ROOT, "data/sec/registrants.json"), { rows: {} });
 
 // THE DUMP IS OPTIONAL NOW. It contributed nothing this task needs -- run 48
 // established its rows carry no company name -- so it is no longer required.

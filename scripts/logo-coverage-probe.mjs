@@ -203,7 +203,9 @@ for (const r of [...nasdaqRows, ...otherRows]) if (!meta.has(r.symbol)) meta.set
 
 const companyNames = JSON.parse(fs.readFileSync("data/company-names.json", "utf8"));
 const cnSymbols = Object.keys(companyNames.rows);
-const staticProfile = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8"));
+// 2026-09-23 (#552, COWORK #4): data/static-profile.json (FMP data) is removed; its symbol list is
+// replaced by data/sec/registrants.json's rows, which were generated from that list ∪ the CIK map.
+const staticProfile = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8"));
 const spSymbols = Object.keys(staticProfile.rows);
 const curatedSrc = fs.readFileSync("lib/curatedSymbols.ts", "utf8");
 const curated = [...new Set([...curatedSrc.matchAll(/"([A-Z][A-Z0-9.\-]{0,6})"/g)].map((m) => m[1]))];
@@ -215,7 +217,7 @@ const curated = [...new Set([...curatedSrc.matchAll(/"([A-Z][A-Z0-9.\-]{0,6})"/g
 const origin = new Map();
 const note = (sym, src) => { if (!origin.has(sym)) origin.set(sym, src); };
 for (const s of cnSymbols) note(s, "company-names");
-for (const s of spSymbols) note(s, "static-profile");
+for (const s of spSymbols) note(s, "registrants");
 for (const s of curated) note(s, "curated-only");
 
 let symbols = [...origin.keys()].sort();
@@ -223,7 +225,7 @@ if (LIMIT > 0) symbols = symbols.slice(0, LIMIT);
 
 console.log("UNIVERSE (constraint 6)");
 console.log(`  data/company-names.json : ${cnSymbols.length}`);
-console.log(`  data/static-profile.json: ${spSymbols.length}`);
+console.log(`  data/sec/registrants.json: ${spSymbols.length}`);
 console.log(`  lib/curatedSymbols.ts   : ${curated.length}  (${curated.filter((s) => !cnSymbols.includes(s) && !spSymbols.includes(s)).length} in neither file)`);
 console.log(`  symdir nasdaqlisted     : ${nasdaqRows.length}   (live, for Exchange + ETF flags)`);
 console.log(`  symdir otherlisted      : ${otherRows.length}`);
