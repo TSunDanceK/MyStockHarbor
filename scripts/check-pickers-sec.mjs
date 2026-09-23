@@ -93,6 +93,43 @@ async function suite(mod) {
   ok("P/E, EPS and Payout Ratio are NOT owned by the filings yet (COWORK #5 Q1)",
     !["peRatio", "epsTtm", "payoutRatio"].some((k) => mod.SEC_PICKER_FIELDS.includes(k)));
 
+  // ── CURRENCY (#553 COWORK #11: EC revenue 123.86T COP, HMY 179.91B ZAR) ──
+  // EC-like: a 20-F filer in a currency A's FX sources do not serve -> `cur`
+  // non-USD, no `fx`. Built from the AAPL fixture so the only change is the unit.
+  const ec = JSON.parse(JSON.stringify(aapl));
+  ec.cur = "COP";
+  delete ec.fx;
+  const ecRow = mod.buildSecPickerRow(ec, TODAY, {}, NOW);
+  ok("UNIT: an unconverted non-USD set writes NO money figure (build side)",
+    ecRow.m.revenue === null && ecRow.m.balanceSheet === null && ecRow.operatingIncome === null && ecRow.netIncome === null &&
+      ecRow.freeCashFlow === null && ecRow.divPerShare === null && ecRow.divGrowth === null && ecRow.unit.reporting === "COP" && !ecRow.unit.converted);
+  const ecFigs = mod.applySecPickerRow(JSON.parse(JSON.stringify(ecRow)), PRICE);
+  ok("UNIT: ...so every money column is a dash, while market cap (price × shares) stands",
+    ["psRatio", "pbRatio", "enterpriseValue", "pfcfRatio", "revenue", "operatingIncome", "netIncome", "freeCashFlow", "divPerShare", "divYield", "divGrowth"]
+      .every((k) => ecFigs[k] === null) && ecFigs.marketCap !== null);
+  // Apply side on its own: a hand-made row claiming COP but carrying numbers.
+  const smuggled = { ...JSON.parse(JSON.stringify(rows.AAPL)), unit: { reporting: "ZAR", converted: false } };
+  const sm = mod.applySecPickerRow(smuggled, PRICE);
+  ok("UNIT: the read side refuses too (a row whose money is not USD yields no money figure)",
+    sm.revenue === null && sm.freeCashFlow === null && sm.divYield === null && sm.psRatio === null && sm.marketCap !== null);
+
+  // CONVERTED (cur non-USD WITH fx): stored values are already USD; growth is
+  // taken in the reporting currency with the per-period rates A recorded.
+  const eu = JSON.parse(JSON.stringify(aapl));
+  eu.cur = "EUR";
+  const ends = [...eu.quarters, ...eu.years, ...eu.instants].map((p) => p.e);
+  eu.fx = { from: "EUR", source: "fixture", applied: ends.map((e, i) => ({ end: e, usdPerUnit: 1 + (i % 7) / 20, basis: "average" })), refused: [] };
+  const euRow = mod.buildSecPickerRow(eu, TODAY, {}, NOW);
+  const euFigs = mod.applySecPickerRow(JSON.parse(JSON.stringify(euRow)), PRICE);
+  ok("UNIT: a CONVERTED set's figures are used as stored (already USD)",
+    euRow.unit.converted && euFigs.revenue === figs.AAPL.revenue && euFigs.freeCashFlow === figs.AAPL.freeCashFlow);
+  const rate = (e) => eu.fx.applied.find((a) => a.end === e).usdPerUnit;
+  const dpsHome = (off) => eu.quarters.slice(off, off + 4).reduce((a, q) => a + valueOf(q, "dividendsDeclaredPerShare") / rate(q.e), 0);
+  const growthHome = ((dpsHome(0) - dpsHome(4)) / dpsHome(4)) * 100;
+  ok("UNIT: a converted set's dividend growth is in the REPORTING currency (an FX move is not growth)",
+    euFigs.divGrowth !== null && Math.abs(euFigs.divGrowth - growthHome) < 1e-9 && Math.abs(euFigs.divGrowth - figs.AAPL.divGrowth) > 1e-6,
+    `${euFigs.divGrowth} vs ${growthHome} (USD-based ${figs.AAPL.divGrowth})`);
+
   process.env.PICKERS_FUNDAMENTALS = "fmp";
   const rollback = mod.pickersFundamentalsSource();
   process.env.PICKERS_FUNDAMENTALS = "anything-else";
@@ -121,6 +158,10 @@ const MUTANTS = [
     "cap !== null && bs\n      ? cap + (bs.shortTermDebt ?? 0) + (bs.longTermDebt ?? 0) - (bs.cash ?? 0)"],
   ["the rollback spelling broken", 'process.env.PICKERS_FUNDAMENTALS === "fmp"', 'process.env.PICKERS_FUNDAMENTALS === "FMP"'],
   ["P/E moved before the EPS fix", '"marketCap", "psRatio"', '"peRatio", "marketCap", "psRatio"'],
+  ["UNIT: build-side currency gate removed", "  if (!moneyIsUsd(unit)) {", "  if (false) {"],
+  ["UNIT: read-side currency gate removed", "  const usd = moneyIsUsd(row.unit);", "  const usd = true;"],
+  ["UNIT: an unconverted set treated as converted", 'converted: reporting !== "USD" && Boolean(set.fx)', 'converted: reporting !== "USD"'],
+  ["UNIT: growth taken on converted (USD) values", "  return set.fx ? storedInReportingCurrency(p, set.fx) : p;", "  return p;"],
 ];
 for (const [label, from, to] of MUTANTS) {
   if (!src.includes(from)) {

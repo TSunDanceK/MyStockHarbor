@@ -42,7 +42,8 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { readFactSet } from "./secFactStore";
-import { valueOf, type StoredFactSet } from "./secFactCodec";
+import { valueOf, type StoredFactSet, type StoredPeriod } from "./secFactCodec";
+import { storedInReportingCurrency } from "./secCurrency";
 import {
   marketCap,
   multipleInputs,
@@ -68,9 +69,38 @@ export function pickersFundamentalsSource(): "sec" | "fmp" {
   return process.env.PICKERS_FUNDAMENTALS === "fmp" ? "fmp" : "sec";
 }
 
+/**
+ * THE UNIT EVERY MONEY FIGURE IN A ROW IS IN (#553 COWORK #11, 2026-09-23).
+ *
+ * The #559 preview showed EC (Ecopetrol) revenue 123.86T and HMY 179.91B:
+ * Colombian pesos and rand, filed on a 20-F, printed against a USD price. A
+ * fact set records its reporting currency (`cur`, absent = USD) and, when
+ * Relay A's FX module could convert it, how (`fx`, period-matched rates applied
+ * at extraction -- lib/server/secCurrency.ts). So:
+ *   USD                        figures as stored
+ *   non-USD WITH fx            figures as stored (already USD, per period);
+ *                              growth taken in the REPORTING currency, as A's
+ *                              module requires, so an FX move is not growth
+ *   non-USD WITHOUT fx         every money figure REFUSED ("–"), never shown raw
+ * Market cap is price × share count -- no reporting-currency figure in it -- so
+ * it is unaffected (the ADS/20-F share rule still applies to it separately).
+ * The same rule as secEarningsView's "a set that is not in dollars does not
+ * render".
+ */
+export type SecPickerUnit = { reporting: string; converted: boolean };
+
+export function unitOf(set: Pick<StoredFactSet, "cur" | "fx">): SecPickerUnit {
+  const reporting = (set.cur ?? "USD").toUpperCase();
+  return { reporting, converted: reporting !== "USD" && Boolean(set.fx) };
+}
+
+/** Whether a set's stored money figures are in US dollars. */
+export const moneyIsUsd = (u: SecPickerUnit) => u.reporting === "USD" || u.converted;
+
 /** Everything price-independent that the eleven columns need. JSON-safe. */
 export type SecPickerRow = {
   v: 1;
+  unit: SecPickerUnit;
   /** When the job built it (ms). */
   at: number;
   inputs: Pick<ValuationInputs, "shares" | "refusals">;
@@ -104,10 +134,20 @@ export const SEC_PICKER_FIELDS: (keyof SecPickerFigures)[] = [
   "operatingIncome", "netIncome", "freeCashFlow", "divPerShare", "divYield", "divGrowth",
 ];
 
+/**
+ * A stored period in the filer's REPORTING currency, for growth. Identity for a
+ * USD or unconverted set; for a converted one, A's storedInReportingCurrency
+ * (null when no rate was recorded for that period -- then there is no growth).
+ */
+function home(set: StoredFactSet, p: StoredPeriod | undefined): StoredPeriod | null {
+  if (!p) return null;
+  return set.fx ? storedInReportingCurrency(p, set.fx) : p;
+}
+
 /** The four consecutive quarters `offset` back, summed, or null. secValuation's period rule. */
 function fourQuartersFrom(set: StoredFactSet, key: string, offset: number): number | null {
-  const four = set.quarters.slice(offset, offset + 4);
-  if (four.length < 4) return null;
+  const four = set.quarters.slice(offset, offset + 4).map((q) => home(set, q));
+  if (four.length < 4 || four.some((q) => q === null)) return null;
   const parts = four.map((q) => valueOf(q, key));
   if (parts.some((v) => v === null)) return null;
   return (parts as number[]).reduce((a, b) => a + b, 0);
@@ -122,8 +162,8 @@ function dividendGrowth(set: StoredFactSet): number | null {
   const now = fourQuartersFrom(set, "dividendsDeclaredPerShare", 0);
   const prior = fourQuartersFrom(set, "dividendsDeclaredPerShare", 4);
   if (now !== null && prior !== null && prior > 0) return ((now - prior) / prior) * 100;
-  const a = valueOf(set.years[0], "dividendsDeclaredPerShare");
-  const b = valueOf(set.years[1], "dividendsDeclaredPerShare");
+  const a = valueOf(home(set, set.years[0]), "dividendsDeclaredPerShare");
+  const b = valueOf(home(set, set.years[1]), "dividendsDeclaredPerShare");
   return a !== null && b !== null && b > 0 ? ((a - b) / b) * 100 : null;
 }
 
@@ -135,6 +175,23 @@ export function buildSecPickerRow(
   nowMs: number
 ): SecPickerRow {
   const inputs = valuationInputs(set, today, filer);
+  const unit = unitOf(set);
+  if (!moneyIsUsd(unit)) {
+    // NOT IN DOLLARS AND NOT CONVERTIBLE: nothing money-denominated leaves this
+    // function. The share count stays (market cap is price × shares).
+    return {
+      v: 1,
+      at: nowMs,
+      unit,
+      inputs: { shares: inputs.shares, refusals: inputs.refusals },
+      m: { revenue: null, revenueIncomplete: false, ebitda: null, balanceSheet: null },
+      operatingIncome: null,
+      netIncome: null,
+      freeCashFlow: null,
+      divPerShare: null,
+      divGrowth: null,
+    };
+  }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
   const ni = twelveMonthsOf(set, ["netIncome"]);
   const cf = twelveMonthsOf(set, ["operatingCashFlow", "capex"]);
@@ -142,6 +199,7 @@ export function buildSecPickerRow(
   return {
     v: 1,
     at: nowMs,
+    unit,
     inputs: { shares: inputs.shares, refusals: inputs.refusals },
     m: multipleInputs(set),
     operatingIncome: oi ? oi.vals.operatingIncome : null,
@@ -159,6 +217,9 @@ const ok = (f: { ok: true; val: number } | { ok: false } | null): number | null 
 
 /** READ half. Pure. `price` is the price the page shows for the row. */
 export function applySecPickerRow(row: SecPickerRow, price: number | null): SecPickerFigures {
+  // BELT AND BRACES: a row whose money is not in dollars yields no money
+  // figure here either, whatever its fields hold.
+  const usd = moneyIsUsd(row.unit);
   const inputs: ValuationInputs = { shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals };
   const cap = ok(marketCap(inputs, price));
   const mult = valuationMultiples(inputs, row.m, price);
@@ -182,19 +243,20 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
       ? (row.divPerShare / price) * 100
       : null;
 
+  const money = <T,>(v: T | null): T | null => (usd ? v : null);
   return {
     marketCap: cap,
-    psRatio: ok(mult.ps),
-    pbRatio: ok(mult.pb),
-    enterpriseValue,
-    pfcfRatio,
-    revenue,
-    operatingIncome: row.operatingIncome,
-    netIncome: row.netIncome,
-    freeCashFlow: row.freeCashFlow,
-    divPerShare: row.divPerShare,
-    divYield,
-    divGrowth: row.divGrowth,
+    psRatio: money(ok(mult.ps)),
+    pbRatio: money(ok(mult.pb)),
+    enterpriseValue: money(enterpriseValue),
+    pfcfRatio: money(pfcfRatio),
+    revenue: money(revenue),
+    operatingIncome: money(row.operatingIncome),
+    netIncome: money(row.netIncome),
+    freeCashFlow: money(row.freeCashFlow),
+    divPerShare: money(row.divPerShare),
+    divYield: money(divYield),
+    divGrowth: money(row.divGrowth),
   };
 }
 
@@ -205,8 +267,12 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
+// A ROW WITHOUT `unit` predates the currency rule (the preview seed of
+// 2026-09-23) and may hold local-currency figures; it reads as absent, and the
+// next job run rewrites it.
 function isRow(v: unknown): v is SecPickerRow {
-  return Boolean(v && typeof v === "object" && (v as SecPickerRow).v === 1 && (v as SecPickerRow).m);
+  const r = v as SecPickerRow;
+  return Boolean(v && typeof v === "object" && r.v === 1 && r.m && r.unit && typeof r.unit.reporting === "string");
 }
 
 /**
