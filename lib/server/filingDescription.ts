@@ -50,7 +50,7 @@ export function filingDescriptionFor(symbol: string): FilingDescription | null {
   return null;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "2025-10-31" → "Oct 2025". Parsed by hand: no time zone can move the month. */
 export function monthYear(isoDate: string): string | null {

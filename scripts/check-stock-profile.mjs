@@ -76,7 +76,7 @@ const compose = (mod, sym, over = {}) => {
   const set = fixture(sym);
   return mod.composeCompanyProfile({
     symbol: sym, directoryName: "", snapshotName: "", entityName: set.entityName,
-    filingDescription: FILED, taxonomy,
+    filingDescription: FILED, taxonomy, classificationAsOf: "2026-09-13",
     valuation: mod.valuationInputs(set, TODAY, { annualForm: mod.registrantFor(sym)?.annualForm ?? null }),
     price: 200, points: bars(300, (i) => 100 + i), exchange: "NASDAQ",
     registrant: mod.registrantFor(sym), ...over,
@@ -334,6 +334,45 @@ console.log("\n9. the long share history: fiscal years from the payload, then re
   check("...and CATCHES quarters dropped from the combined series",
     dropQuarters.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length <
       M.buildShareHistory({ ...withAs, as: [["2012-09-29", 26e9], [qs[2], 15e9]] }).points.length);
+}
+
+console.log("\n10. the sector/industry credit reads the same whichever leg answered");
+{
+  // The owner's wording: "Sector and industry: classification as of {date}",
+  // dated by the answering leg's own capture (classificationAsOf in
+  // staticProfile.ts, asserted per leg in check-static-profile §8). ONDS and
+  // AAPL resolve from the snapshot or the cache; ALAB stands in for a SIC-only
+  // company, since none exists in today's files.
+  const leg = (source) => ({
+    source,
+    sectorSource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+    industrySource: source === "cache" ? "fmp-cache" : source === "snapshot" ? "fmp-snapshot" : "sic",
+  });
+  const cases = [
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["ONDS", "AAPL", { sector: "Technology", industry: "Communication Equipment", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("snapshot") }, "2026-09-13", "13 Sep 2026"],
+    ["AAPL", "AAPL", { sector: "Technology", industry: "Consumer Electronics", ...leg("cache") }, "2026-09-21", "21 Sep 2026"],
+    ["ALAB", "AAPL", { sector: "Technology", industry: "Semiconductors", ...leg("sic") }, "2026-09-22", "22 Sep 2026"],
+  ];
+  for (const [sym, fx, tax, asOf, shown] of cases) {
+    const t = render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym);
+    const got = /Sector and industry: [^·.]*/.exec(t)?.[0]?.trim() ?? "(none)";
+    check(`${sym} via ${tax.source}: "${got}"`, got === `Sector and industry: classification as of ${shown}`);
+  }
+  const noDate = render(P, compose(M, "AAPL", { classificationAsOf: null }), "AAPL");
+  check("no date → no sector credit, never an undated or borrowed one", !/Sector and industry:/.test(noDate));
+  check("no leg name reaches the reader (cache / SIC / snapshot)",
+    cases.every(([sym, fx, tax, asOf]) =>
+      !/classification cache|SIC code|Sector classification/.test(render(P, compose(M, fx, { taxonomy: tax, classificationAsOf: asOf }), sym))));
+  const legacy = await loadComposer(once(
+    "if (asOf) add(\"Sector and industry\", `classification as of ${asOf}`);",
+    "add(\"Sector and industry\", i.taxonomy.sectorSource === \"fmp-cache\" ? \"classification cache\" : `classification as of ${asOf}`);"
+  ));
+  check("...and CATCHES the cache leg going back to \"classification cache\"",
+    /classification cache/.test(render(P, compose(legacy, "AAPL", { taxonomy: { ...taxonomy, ...leg("cache") } }), "AAPL")));
+  check("dates are day-month-year, parsed without a time zone",
+    M.dayMonthYear("2026-09-13") === "13 Sep 2026" && M.dayMonthYear("2026-01-01") === "1 Jan 2026" && M.dayMonthYear("2026-09-21T04:10:00Z") === null);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
