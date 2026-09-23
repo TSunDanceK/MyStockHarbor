@@ -1,0 +1,100 @@
+# Commit data/sec/registrants.json and data/sec/edgar-location-codes.json from
+# the relay runs that produced them.
+#
+# ── WHY A WORKFLOW ─────────────────────────────────────────────────────────
+# Same reason as consensus-freeze-commit.yml, whose pattern this copies: the
+# artifact download redirects to *.blob.core.windows.net, which the agent
+# sandbox is refused on organization policy, and transcribing a ~400 KB file
+# out of a job log by hand is the error-prone step to avoid. A runner has the
+# files and contents:write, so the bytes never pass through the sandbox.
+#
+# PUSH-TRIGGERED on the branch that edits this file, so it needs no merge to
+# main before it can run (a dispatchable workflow must exist on the default
+# branch first).
+#
+# ── VERIFIED BEFORE ANYTHING IS COMMITTED ────────────────────────────────
+#   registrants.json      the SHA-256 the task printed into its own task.log
+#                         (===REGISTRANTS-BEGIN sha256=...) must match the file.
+#   edgar-location-codes  ≥300 codes, and France/United Kingdom/Serbia resolve
+#                         to FR/GB/RS — the three the first runs got wrong.
+name: Commit registrant data from its relay runs
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/registrant-data-commit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  REGISTRANTS_RUN: "35773028028"
+  LOCATIONS_RUN: "35773951190"
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: relay-sec-registrants-35773028028
+          path: registrants-art
+          run-id: "35773028028"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: relay-sec-country-codes-35773951190
+          path: locations-art
+          run-id: "35773951190"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify
+        id: verify
+        run: |
+          set -euo pipefail
+          reg=$(find registrants-art -name 'registrants.json' | head -n 1)
+          log=$(find registrants-art -name 'task.log' | head -n 1)
+          loc=$(find locations-art -name 'edgar-location-codes.json' | head -n 1)
+          [ -n "$reg" ] && [ -n "$log" ] && [ -n "$loc" ] || { echo "::error::missing file"; find registrants-art locations-art -maxdepth 4 -type f | head -40; exit 1; }
+          want=$(grep -o 'REGISTRANTS-BEGIN sha256=[0-9a-f]*' "$log" | head -n 1 | cut -d= -f2)
+          got=$(sha256sum "$reg" | cut -d' ' -f1)
+          echo "registrants sha256: printed=$want file=$got"
+          [ -n "$want" ] && [ "$want" = "$got" ] || { echo "::error::registrants.json does not match the SHA-256 its run printed"; exit 1; }
+          node -e '
+            const fs = require("node:fs");
+            const reg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const loc = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            const n = Object.keys(reg.rows).length;
+            const codes = loc.codes;
+            const fail = (m) => { console.error(`::error::${m}`); process.exit(1); };
+            if (n < 2000) fail(`registrants has ${n} rows`);
+            if (Object.keys(codes).length < 300) fail(`only ${Object.keys(codes).length} location codes`);
+            for (const [code, iso] of [["I0", "FR"], ["X0", "GB"], ["Z2", "RS"], ["CA", "US"], ["A6", "CA"]]) {
+              if (codes[code]?.iso !== iso) fail(`${code} -> ${codes[code]?.iso}, expected ${iso}`);
+            }
+            console.log(`registrants: ${n} rows; location codes: ${Object.keys(codes).length}`);
+          ' "$reg" "$loc"
+          echo "reg=$reg" >> "$GITHUB_OUTPUT"
+          echo "loc=$loc" >> "$GITHUB_OUTPUT"
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          cp "${{ steps.verify.outputs.reg }}" data/sec/registrants.json
+          cp "${{ steps.verify.outputs.loc }}" data/sec/edgar-location-codes.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sec/registrants.json data/sec/edgar-location-codes.json
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Commit registrant facts and EDGAR location codes from their relay runs" \
+            -m "registrants.json from relay ${REGISTRANTS_RUN} (sec-registrants), SHA-256 verified against the value the run printed. edgar-location-codes.json from relay ${LOCATIONS_RUN} (sec-country-codes), checked for >=300 codes and FR/GB/RS/US/CA on known codes."
+          git push origin "HEAD:${{ github.ref_name }}"

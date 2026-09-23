@@ -182,6 +182,17 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
+  // symbol, from the shipped extractor on the live payload. Read-only.
+  "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
+  // Registrant facts (SIC, business address, incorporation, website, fiscal
+  // year end, entity type, latest annual form) for every profiled symbol, from
+  // SEC submissions. Read-only, no credentials. Prints the file into its log
+  // for the session to reassemble — see the script header.
+  "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
+  // EDGAR's own state/country code list, with ISO-3166 codes attached by name
+  // match, for the /stock page's Country row. Read-only, no credentials.
+  "sec-country-codes": { script: "scripts/sec-country-codes.mjs", args: () => [] },
   // NOT A TASK, DELIBERATELY: scripts/window-fixture-diff.mjs reads the committed
   // fixture and a live symbol list and touches no network, so it runs locally.
   // Adding it here would imply it needs a runner, which is the kind of drift

@@ -61,6 +61,8 @@ type StockValuationData = {
   priceToSalesRatio: number | null;
   priceToBookRatio: number | null;
   evToEbitda: number | null;
+  /** Why a figure is blank, in words; null where it has a value. From SEC. */
+  reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
   sourceNote: string;
 };
 
@@ -120,6 +122,12 @@ type StockSymbolPageClientProps = {
   /** The Dividend row, resolved server-side from the filings. */
   dividend: ProfileDividend;
   shareHistory: DilutionHistoryData | null;
+  /**
+   * The Valuation section and the hero P/E, computed server-side from the SEC
+   * fact set (owner addendum, brief 2026-09-22 PR 2). Replaces the client fetch
+   * of /api/stock-valuation, which read FMP.
+   */
+  valuation: StockValuationData | null;
   seed?: IndicatorSeed | null;
   // Recent daily history computed on the server. Seeds `history` so the page
   // renders real chart/indicator content on the server (crawlable), not behind
@@ -709,7 +717,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, earningsSnapshot, profile, dividend, shareHistory, valuation: serverValuation, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
@@ -746,8 +754,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
   // the effect below still refreshes data in the background.
   const [priceLoading, setPriceLoading] = useState(!seededHistory);
   const [err, setErr] = useState<string | null>(null);
-  const [valuation, setValuation] = useState<StockValuationData | null>(null);
-  const [valuationLoading, setValuationLoading] = useState(true);
+  // SERVER-RESOLVED since 2026-09-22 — no loading state, it is in the HTML.
+  const valuation = serverValuation;
+  const valuationLoading = false;
   const [analystRating, setAnalystRating] = useState<AnalystRatingData | null>(null);
   const [analystRatingLoading, setAnalystRatingLoading] = useState(true);
 
@@ -842,20 +851,13 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
     // so including it satisfies exhaustive-deps without causing a refetch.
   }, [symbol, pageToken]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadValuation() {
-      setValuationLoading(true);
-      // NO BUSTER, NO no-store: the route now answers `public, s-maxage=6h`
-      // matching the FMP revalidate behind it, so this is a CDN hit on every
-      // view after the first instead of a Lambda plus a BotID check.
-      try { const res = await fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error("Valuation fetch failed"); const data = (await res.json()) as StockValuationData; if (!cancelled) setValuation(data); }
-      catch { if (!cancelled) setValuation(null); }
-      finally { if (!cancelled) setValuationLoading(false); }
-    }
-    loadValuation();
-    return () => { cancelled = true; };
-  }, [symbol]);
+  // ── RETIRED 2026-09-22: the client fetch of /api/stock-valuation ─────────
+  // That route reads FMP ratios-ttm / key-metrics-ttm / quote / income-
+  // statement. The four multiples and the hero P/E are now computed on the
+  // server from the SEC fact set and arrive as the `valuation` prop, so this
+  // effect no longer runs. Kept as a record, per the hidden-not-removed rule:
+  //
+  //   fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}`) → setValuation
 
   useEffect(() => {
     // HIDING THE BLOCK HAS TO STOP THE FETCH, or the hide costs what it saved.
@@ -1115,26 +1117,32 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 </div>
               </section>
 
-              {/* -- Valuation multiples (FMP TTM) -------------------- */}
+              {/* -- Valuation multiples (SEC filings, TTM) ----------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Valuation</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
                   {[
-                    { label: "P/E Ratio", value: valuation?.peRatio },
-                    { label: "P/S Ratio", value: valuation?.priceToSalesRatio },
-                    { label: "P/B Ratio", value: valuation?.priceToBookRatio },
-                    { label: "EV/EBITDA", value: valuation?.evToEbitda },
+                    { label: "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio },
+                    { label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
+                    { label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
+                    { label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
                   ].map((item) => (
                     <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={miniLabelStyle}>{item.label}</div>
                       <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
                         {valuationLoading ? "—" : formatValuationMultiple(item.value)}
                       </div>
+                      {/* WHY IT IS BLANK, where the filings say why. A missing
+                          input stays a bare "—" (owner: no approximation), but a
+                          refusal with a reason names it. */}
+                      {item.reason ? (
+                        <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.4, opacity: 0.55 }}>{item.reason}</div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{valuation?.sourceNote ?? "Valuation multiples are provided by Financial Modeling Prep when available."}</div>
+                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{valuation?.sourceNote ?? "Computed from the company's own filings on SEC EDGAR; none are on file for this symbol."}</div>
               </section>
 
               {/* -- Analyst ratings & price targets (FMP) ------------ */}

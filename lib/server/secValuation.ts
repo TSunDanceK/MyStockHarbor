@@ -50,7 +50,12 @@ export type ValuationRefusal =
   | "ads-ratio-makes-eps-incomparable"
   | "share-count-is-stale"
   | "no-twelve-month-eps"
-  | "eps-is-zero-or-negative";
+  | "eps-is-zero-or-negative"
+  | "no-twelve-month-revenue"
+  | "no-balance-sheet-equity"
+  | "equity-is-zero-or-negative"
+  | "enterprise-value-input-missing"
+  | "ebitda-is-zero-or-negative";
 
 export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
   "no-cover-share-count":
@@ -67,6 +72,16 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "twelve months of diluted EPS are not on file",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
+  "no-twelve-month-revenue":
+    "twelve months of revenue are not on file",
+  "no-balance-sheet-equity":
+    "the latest balance sheet on file states no shareholders' equity",
+  "equity-is-zero-or-negative":
+    "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
+  "enterprise-value-input-missing":
+    "one of the enterprise-value or EBITDA inputs is not on file, and it is not approximated",
+  "ebitda-is-zero-or-negative":
+    "operating income plus depreciation over the last twelve months is not positive, so EV/EBITDA is not meaningful",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,14 +277,37 @@ export function sharesAreIncomparableToPrice(symbol: string): boolean {
   return ADS_FILERS_WITHOUT_A_STATED_RATIO.has(String(symbol).trim().toUpperCase());
 }
 
-export function valuationInputs(set: StoredFactSet, today: string): ValuationInputs {
+/**
+ * WHAT THE REGISTRANT FILES ANNUALLY, from data/sec/registrants.json.
+ *
+ * ── THE LIST ABOVE WAS FIVE NAMES; THE RULE IT STATES COVERS 342 ─────────
+ * "Any 20-F filer admitted to the universe belongs here" was a rule nobody
+ * could apply, because nothing recorded who files a 20-F. The sec-registrants
+ * run (2026-09-22) does: 342 of 2,609 profiled symbols. ABVX and AZN were not
+ * on the list — AZN's ADS is half an ordinary share, so its cap was HALF the
+ * true figure and its P/E twice it (brief 2026-09-22 §2.6).
+ *
+ * NOT DETECTED FROM THE SECURITY NAME. Measured against the Nasdaq Trader
+ * names: TSM (1 ADS = 5 shares) is listed with no instrument word at all, and
+ * HDB, IBN and NVS as "Common Stock". A name test would have passed all four.
+ *
+ * Optional, so every existing caller reads exactly as before; absent means
+ * "not known", and only the named list then applies.
+ */
+export type FilerFacts = { annualForm?: string | null };
+
+export function valuationInputs(
+  set: StoredFactSet,
+  today: string,
+  filer: FilerFacts = {}
+): ValuationInputs {
   const refusals: ValuationRefusal[] = [];
 
   // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
   // count is in, so it holds whatever the cover page turns out to say -- a
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
-  if (sharesAreIncomparableToPrice(set.symbol)) {
+  if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {
     // TWO REFUSALS, NOT ONE, because they are two different claims about two
     // different figures and only one of them was ever assumed. The share-count
     // one is true by definition: a cover-page count is a count of ordinary
@@ -404,4 +442,148 @@ export function peRatio(
   if (inputs.eps.val <= 0) return { ok: false, why: "eps-is-zero-or-negative" };
   if (price === null || !Number.isFinite(price) || price <= 0) return null;
   return { ok: true, val: price / inputs.eps.val };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FOUR MULTIPLES ON /stock/[symbol], FROM THE FILINGS
+//
+// The "Valuation multiples (TTM)" section and the hero P/E tile read
+// /api/stock-valuation, which called FMP's ratios-ttm, key-metrics-ttm, quote
+// and income-statement. Owner addendum to brief 2026-09-22 PR 2 moves them here:
+//
+//   P/E        peRatio() above — unchanged, so the earnings page and this one
+//              cannot disagree.
+//   P/S        market cap ÷ twelve months of revenue
+//   P/B        market cap ÷ the latest balance sheet's stockholders' equity
+//   EV/EBITDA  (cap + short-term debt + long-term debt − cash)
+//              ÷ twelve months of (operating income + D&A)
+//
+// THE PERIOD RULE IS EPS'S RULE: four CONSECUTIVE quarters with every input
+// present, else the newest fiscal year with every input present — never a mix.
+// A multiple whose inputs span two bases is a number describing no period.
+//
+// EV/EBITDA IS NOT APPROXIMATED. A missing debt line is not assumed to be
+// zero, and a missing D&A is not assumed to be small: any missing input is a
+// refusal and the section prints "—". EBITDA here is operating income plus
+// D&A as filed — the conventional construction, stated rather than implied.
+//
+// THE 20-F RULE APPLIES TO ALL FOUR. Every one of them divides a market cap or
+// a price by a filed per-share or company figure; for a depositary-share filer
+// the cap is in the wrong unit, so the cap's refusal carries through, and P/E
+// refuses on its own ADS rule.
+
+/** A twelve-month sum of several fields, from ONE basis. */
+export type TwelveMonths = {
+  vals: Record<string, number>;
+  basis: "four-quarters" | "fiscal-year";
+  periodEnd: string;
+};
+
+/** All of `keys` over four consecutive quarters, else the newest year, else null. */
+export function twelveMonthsOf(set: StoredFactSet, keys: string[]): TwelveMonths | null {
+  const four = set.quarters.slice(0, 4);
+  const consecutive =
+    four.length === 4 && four.every((q, i) => i === 0 || isConsecutive(four[i - 1], q));
+  if (consecutive) {
+    const vals: Record<string, number> = {};
+    let complete = true;
+    for (const k of keys) {
+      const parts = four.map((q) => valueOf(q, k));
+      if (parts.some((v) => v === null)) { complete = false; break; }
+      vals[k] = (parts as number[]).reduce((a, b) => a + b, 0);
+    }
+    if (complete) return { vals, basis: "four-quarters", periodEnd: four[0].e };
+  }
+  const y = set.years[0];
+  if (!y) return null;
+  const vals: Record<string, number> = {};
+  for (const k of keys) {
+    const v = valueOf(y, k);
+    if (v === null) return null;
+    vals[k] = v;
+  }
+  return { vals, basis: "fiscal-year", periodEnd: y.e };
+}
+
+/** The filed inputs the three new multiples need, read once from the set. */
+export type MultipleInputs = {
+  revenue: TwelveMonths | null;
+  ebitda: TwelveMonths | null;
+  balanceSheet: {
+    asOf: string;
+    equity: number | null;
+    shortTermDebt: number | null;
+    longTermDebt: number | null;
+    cash: number | null;
+  } | null;
+};
+
+export function multipleInputs(set: StoredFactSet): MultipleInputs {
+  const b = set.instants[0] ?? null;
+  return {
+    revenue: twelveMonthsOf(set, ["revenue"]),
+    ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
+    balanceSheet: b
+      ? {
+          asOf: b.e,
+          equity: valueOf(b, "stockholdersEquity"),
+          shortTermDebt: valueOf(b, "shortTermDebt"),
+          longTermDebt: valueOf(b, "longTermDebt"),
+          cash: valueOf(b, "cash"),
+        }
+      : null,
+  };
+}
+
+export type ValuationMultiples = {
+  pe: ValuationFigure | null;
+  ps: ValuationFigure | null;
+  pb: ValuationFigure | null;
+  evEbitda: ValuationFigure | null;
+};
+
+/**
+ * All four, or each one's refusal. `null` for a figure means the PRICE was
+ * missing — not this module's reason to name (see marketCap).
+ */
+export function valuationMultiples(
+  inputs: ValuationInputs,
+  m: MultipleInputs,
+  price: number | null
+): ValuationMultiples {
+  const cap = marketCap(inputs, price);
+  const pe = peRatio(inputs, price);
+  if (!cap || !cap.ok) {
+    // THE CAP'S REFUSAL IS EACH MULTIPLE'S REFUSAL — including the ADS one —
+    // because every one of them has the cap as its numerator.
+    const same = cap ?? null;
+    return { pe, ps: same, pb: same, evEbitda: same };
+  }
+
+  const ps: ValuationFigure =
+    m.revenue && m.revenue.vals.revenue > 0
+      ? { ok: true, val: cap.val / m.revenue.vals.revenue }
+      : { ok: false, why: "no-twelve-month-revenue" };
+
+  const equity = m.balanceSheet?.equity ?? null;
+  const pb: ValuationFigure =
+    equity === null
+      ? { ok: false, why: "no-balance-sheet-equity" }
+      : equity <= 0
+        ? { ok: false, why: "equity-is-zero-or-negative" }
+        : { ok: true, val: cap.val / equity };
+
+  const bs = m.balanceSheet;
+  let evEbitda: ValuationFigure;
+  if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {
+    evEbitda = { ok: false, why: "enterprise-value-input-missing" };
+  } else {
+    const ebitda = m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization;
+    const ev = cap.val + bs.shortTermDebt + bs.longTermDebt - bs.cash;
+    evEbitda = ebitda <= 0
+      ? { ok: false, why: "ebitda-is-zero-or-negative" }
+      : { ok: true, val: ev / ebitda };
+  }
+  return { pe, ps, pb, evEbitda };
 }
