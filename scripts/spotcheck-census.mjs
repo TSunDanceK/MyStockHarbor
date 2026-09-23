@@ -24,6 +24,7 @@ const UA = process.env.SEC_USER_AGENT ??
   "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; spot-check census)";
 const strip = (f) => fs.readFileSync(f, "utf8").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 const X = await lift([fs.readFileSync("lib/server/secFields.ts", "utf8"), strip("lib/server/secExtract.ts"),
+  strip("lib/server/fxRates.ts"), strip("lib/server/secCurrency.ts"),
   strip("lib/server/secFactCodec.ts")].join("\n"));
 
 const manifestSrc = fs.readFileSync("lib/server/secManifest.ts", "utf8");
