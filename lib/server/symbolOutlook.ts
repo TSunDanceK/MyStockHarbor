@@ -84,6 +84,13 @@ export type SymbolOutlook = {
   reason?: OutlookReason;
   /** Present on "expected" only. */
   band?: ExpectedBandId;
+  /**
+   * A SHORT CARD VALUE, where the answer has one ("Est. April" for an
+   * annual-only filer, #535 COWORK #22 §5). A card that has room for a value
+   * prints this in the value style with the hedge beneath; absent, it prints
+   * the headline sentence as before.
+   */
+  value?: string;
 };
 
 /**
@@ -299,8 +306,8 @@ export function outlookForEarningsCard(
  * else. The tile is two short cells wide, so the evidence lines stay on the
  * earnings page; the hedge rides in the tile's existing small line.
  */
-export type CompactOutlook = Pick<SymbolOutlook, "kind" | "headline" | "hedge">;
+export type CompactOutlook = Pick<SymbolOutlook, "kind" | "headline" | "hedge" | "value">;
 
 export function compactOutlook(o: SymbolOutlook): CompactOutlook {
-  return { kind: o.kind, headline: o.headline, hedge: o.hedge };
+  return { kind: o.kind, headline: o.headline, hedge: o.hedge, ...(o.value ? { value: o.value } : {}) };
 }
