@@ -1881,12 +1881,14 @@ export function SecValuationCard({
  * page passes it in as a slot rather than this file importing it.
  */
 export function SecScoreCard({
-  symbol, score, coverage, watermark = null,
+  symbol, score, coverage, watermark = null, basisNote = null,
 }: {
   symbol: string;
   score: SecEarningsScore;
   coverage: ScoreCoverage | null;
   watermark?: React.ReactNode;
+  /** "Based on full fiscal years." on the annual-only layout (#535 COWORK #15). */
+  basisNote?: string | null;
 }) {
   return (
     <aside className="scoreCard">
@@ -1904,6 +1906,7 @@ export function SecScoreCard({
           {coverage?.partial ? partialScoreLabel(coverage) : score.label}
         </div>
       </div>
+      {basisNote ? <div className="smallLabel" style={{ marginTop: 4 }}>{basisNote}</div> : null}
       {/* No number and no needle when there is nothing to score. The
           pill already says "Unavailable" and the explanation says why,
           but a 48px "50/100" over a Weak-Mixed-Strong gradient with the
