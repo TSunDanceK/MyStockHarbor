@@ -126,7 +126,20 @@ export const SEC_POPULATE_PER_RUN = 300;
  * is only what filed — an 8-K is the only thing that moves these dates, so the
  * steady state is the daily filing count, not the universe.
  */
-export const SEC_REPORT_DATES_PER_RUN = 100;
+export const SEC_REPORT_DATES_PER_RUN = 400;
+
+/**
+ * Of those, slots held for the never-written backfill (#535 COWORK #18 §3).
+ *
+ * 400, NOT 100 (2026-09-23): the measured cost is ~132 ms a record (one
+ * submissions fetch paced at MIN_GAP_MS), so 400 is ~53 s against the 60 s
+ * REPORT_DATES_RESERVE_MS — and `datesOpen()` defers the rest rather than
+ * overrun. Redis: two commands a record (the fact-set GET when this run did
+ * not already hold it, and the record SET), so the ceiling moves from ~400 to
+ * ~1,600 commands a day at two runs; the steady state is the filing count,
+ * well under both.
+ */
+export const SEC_REPORT_DATES_BACKFILL_SLICE = 100;
 
 /**
  * Sets re-read per run because they were written under an older quarter window.
@@ -735,6 +748,7 @@ export async function GET(req: NextRequest) {
       cut: dueStripCut.symbols,
       changedThisRun,
       limit: SEC_REPORT_DATES_PER_RUN,
+      backfillSlice: SEC_REPORT_DATES_BACKFILL_SLICE,
       now: Date.now(),
     });
     reportDates.backlog = Object.values(manifest.symbols).filter((e) => e.cik && !e.reportDatesAt).length;
