@@ -171,8 +171,11 @@ console.log("\nTHE PAGE'S WINDOW AND ITS CHART READ THE SAME LIST");
   check("the bar window is derived from barEvents",
     /const dates = barEvents\.map\(/.test(PAGE),
     "so widening the chart widens the fetch with it");
+  // Through the annual-only filter since #535 COWORK #15: reactionEvents is
+  // barEvents itself unless the filer is annual-only.
   check("the chart is derived from barEvents",
-    /barEvents\.slice\(\)\.reverse\(\)/.test(PAGE),
+    /const reactionEvents = [^;]*annualReactionEvents\(barEvents, cold\.set\) : barEvents;/.test(PAGE) &&
+      /reactionEvents\.slice\(\)\.reverse\(\)/.test(PAGE),
     "and copies before reversing — an in-place reverse on a shared array is a latent corruption");
 }
 
