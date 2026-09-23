@@ -27,6 +27,7 @@ import {
   type SymbolFiling,
 } from "@/lib/server/secDailyIndex";
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
+import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
 import {
   readDynamicUniverse,
@@ -372,8 +373,18 @@ export async function GET(req: NextRequest) {
   // is missing changes week to week. Order is irrelevant to the manifest, which
   // is a set; readDynamicUniverse's own ordering still governs every consumer
   // that cares about rank.
+  //
+  // AND EVERY CURATED STOCK THE SITEMAP SUBMITS (#535 COWORK #21 §1). Google
+  // is sent to /stock/X and /stock/X/earnings for these; a symbol outside the
+  // manifest is in no cron queue, so its set is never re-read after the first
+  // fill. Measured 2026-09-23: 13 of 129 (COIN, SNAP, PINS, U, CAVA, DUOL,
+  // CHWY, ETSY, LYFT, DAL, RCL, HLT, EBAY) had a stored set from the old
+  // render path and no manifest entry. The ETFs too: /stock/SPY, QQQ and DIA
+  // rendered `noindex` because their CIK has no companyfacts (a 404, now
+  // stored as the empty answer — see companyFactsAbsent), and only a manifest
+  // entry puts them in the job's populate queue to have it stored.
   const universe = [
-    ...new Set([...PRESET_UNIVERSE, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
   ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 

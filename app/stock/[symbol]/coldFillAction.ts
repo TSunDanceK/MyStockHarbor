@@ -17,6 +17,7 @@ import {
   coldFillPreGate,
   countColdFillAttempt,
   countColdFillDay,
+  countColdFillOutcome,
   releaseColdFillLock,
   takeColdFillLock,
   type ColdFillRefusal,
@@ -41,10 +42,17 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
   });
   if (early) return { ok: false, refused: early };
 
+  // Every refusal past the attempt counter is counted by reason and logged.
+  const refuse = async (reason: ColdFillRefusal): Promise<ColdFillReply> => {
+    await countColdFillOutcome(reason);
+    console.log("[cold-fill]", JSON.stringify({ symbol: clean, refused: reason }));
+    return { ok: false, refused: reason };
+  };
+
   const ip = clientIpFrom(await headers());
   const counts = await countColdFillAttempt(ip);
   const limited = coldFillPreGate({ tokenOk, symbolOk, hasCik: true, ...counts });
-  if (limited) return { ok: false, refused: limited };
+  if (limited) return refuse(limited);
 
   // THE PAID CHECK, only for a request every free gate has let through.
   let bot: { isBot: boolean; isVerifiedBot: boolean } | null = null;
@@ -55,13 +63,13 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
     bot = null;
   }
   const botRefusal = coldFillBotGate(bot);
-  if (botRefusal) return { ok: false, refused: botRefusal };
+  if (botRefusal) return refuse(botRefusal);
 
   // THE DAY'S FILLS, counted only for a request BotID called human.
   const dayRefusal = coldFillDayGate(await countColdFillDay());
-  if (dayRefusal) return { ok: false, refused: dayRefusal };
+  if (dayRefusal) return refuse(dayRefusal);
 
-  if (!(await takeColdFillLock(clean))) return { ok: false, refused: "in-flight" };
+  if (!(await takeColdFillLock(clean))) return refuse("in-flight");
   try {
     const outcome = await fillColdSymbol(clean);
     if (outcome === "filled" || outcome === "no-data") {
@@ -69,6 +77,8 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
       revalidatePath(`/stock/${clean}`);
       revalidatePath(`/stock/${clean}/earnings`);
     }
+    await countColdFillOutcome(outcome);
+    console.log("[cold-fill]", JSON.stringify({ symbol: clean, outcome }));
     return { ok: true, outcome };
   } finally {
     await releaseColdFillLock(clean);

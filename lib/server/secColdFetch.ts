@@ -81,13 +81,13 @@ import { canWriteSecState, noteSecWriteBlocked, secCounterPrefix } from "./secWr
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
-import { unreadableReason, type CompanyFacts } from "./secExtract";
+import { companyFactsAbsent, unreadableReason, type CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
 import { admitSymbolForExtraction } from "./securityKind";
-import { factSetExists, readFactSet, writeFactSet } from "./secFactStore";
+import { factSetExists, factSetPresence, readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
@@ -495,15 +495,17 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
     // shorten every stock page's window, not just this one's.
     next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // A 404 IS "SEC HAS NO COMPANY FACTS FOR THIS CIK" — stored as the empty
+  // answer it is (see companyFactsAbsent), the same rule as the cron's fetch.
+  const absent = companyFactsAbsent(res.status);
+  if (!absent && !res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get("content-type") ?? "";
   // A 200 carrying HTML is not data. Same strictness that caught Stooq.
-  if (!ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
+  if (!absent && !ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
+  const facts: CompanyFacts = absent ? { cik: Number(cik), facts: {} } : ((await res.json()) as CompanyFacts);
   // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
   // here is the shape where one path gains a condition and the other does not.
-  const set = await toStoredSet(
-    extractForSymbol(symbol, (await res.json()) as CompanyFacts)
-  );
+  const set = await toStoredSet(extractForSymbol(symbol, facts));
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.
@@ -726,4 +728,23 @@ export async function awaitingSecRead(symbol: string): Promise<boolean> {
   const cik = cikForSymbol(clean);
   if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;
   return (await factSetExists(clean)) === false;
+}
+
+/**
+ * What the sitemap needs about its stock symbols (#535 COWORK #21), in one
+ * pipelined read: which render "not yet read" and `noindex` right now (the
+ * same rule as awaitingSecRead), and when each one's figures last changed.
+ * Null when Redis cannot answer: the caller keeps its list as it was.
+ */
+export async function sitemapSecState(
+  symbols: string[],
+): Promise<{ awaiting: Set<string>; changedAt: Map<string, number> } | null> {
+  const clean = symbols.map((s) => s.trim().toUpperCase());
+  const presence = await factSetPresence(clean);
+  if (!presence) return null;
+  const awaiting = new Set(clean.filter((s) => {
+    const cik = cikForSymbol(s);
+    return Boolean(cik && admitSymbolForExtraction(s, cik).admit) && presence.exists.get(s) === false;
+  }));
+  return { awaiting, changedAt: presence.changedAt };
 }

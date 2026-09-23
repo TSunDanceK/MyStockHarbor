@@ -150,6 +150,28 @@ export async function countColdFillDay(): Promise<number> {
   return (await bump(coldFillDayKey(), 2 * 86400)) ?? COLD_FILL_PER_DAY + 1;
 }
 
+export const coldFillOutcomeKey = (d = new Date()) =>
+  `${secCounterPrefix("msh:sec:cold-fill-outcome:v1")}:${d.toISOString().slice(0, 10)}`;
+
+/**
+ * WHAT EACH COUNTED ATTEMPT ENDED AS, by word (#535 COWORK #19 §1c): a refusal
+ * reason (ip-limit, attempt-limit, bot, day-limit, in-flight) or a fill
+ * outcome (filled, no-data, queued, busy, …). One HINCRBY on a day hash.
+ *
+ * ONLY AFTER countColdFillAttempt: the free refusals (token, symbol,
+ * not-eligible) are never counted, so this is bounded by the same daily
+ * attempt cap and a flood of junk requests costs it nothing. Best-effort:
+ * a failure here never changes the reply.
+ */
+export async function countColdFillOutcome(word: string): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.hincrby(coldFillOutcomeKey(), word, 1);
+  } catch {
+    // Reporting only.
+  }
+}
+
 /** One fill per symbol at a time: ten visitors at once cause one SEC request. */
 export async function takeColdFillLock(symbol: string): Promise<boolean> {
   if (!redis) return false;

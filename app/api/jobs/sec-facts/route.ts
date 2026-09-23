@@ -4,7 +4,7 @@ import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
 import { drainColdCiks } from "@/lib/server/secColdCik";
-import { checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
@@ -389,6 +389,7 @@ async function fetchCompanyFacts(cik: string): Promise<CompanyFacts> {
     `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
     { headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" }, cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
   );
+  if (companyFactsAbsent(res.status)) return { cik: Number(cik), facts: {} };
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get("content-type") ?? "";
   // A 200 CARRYING HTML IS NOT DATA. Parsing one as data is how this site got
@@ -624,8 +625,14 @@ export async function GET(req: NextRequest) {
         // FLUSHING A PAGE IS A WRITE TO WHAT EVERY VISITOR SEES. A preview
         // deployment invalidating a production route is the same defect as a
         // preview storing a fact set, one layer up.
-        if (canWriteSecState()) revalidatePath(`/stock/${symbol}/earnings`);
-        else noteSecWriteBlocked("revalidatePath");
+        //
+        // BOTH PAGES (#535 COWORK #21 §2): the stock page's snapshot and its
+        // `noindex` while no set exists come from the same set, and a crawler
+        // is served the cached copy — so it flips to the full page now, not
+        // at the next ISR expiry.
+        if (canWriteSecState()) {
+          for (const path of [`/stock/${symbol}/earnings`, `/stock/${symbol}`]) revalidatePath(path);
+        } else noteSecWriteBlocked("revalidatePath");
         // COUNTED, so "changed-only" is a number rather than a claim about the
         // shape of the code. The cache-health panel shows it against
         // `attempted`: if those two ever converge, the flush has escaped this
