@@ -1,36 +1,20 @@
-// The committed static-profile snapshot, and the lookup that reads it.
+// Sector and industry for a symbol: the lookup, and the SEC SIC leg it falls to.
 //
-// ── WHY A COMMITTED FILE AT ALL ────────────────────────────────────────────
-// Sector and industry are not decoration: bucketFor() turns them into a news
-// card's illustration, and lib/server/sectorUniverse.ts turns them into a
-// sector page's membership. Today they come from FMP, cached in Redis for 30
-// days. After step 7 there is no free source with FMP's taxonomy, so a symbol
-// whose cache has expired — or a symbol that enters the universe later — would
-// have no sector at all and no way to get one.
+// ── 2026-09-23 (#552, COWORK #4): THE FMP SNAPSHOT LEG IS GONE ─────────────
+// This file used to import data/static-profile.json, a snapshot of FMP's
+// sector and industry for 2,619 symbols taken while the licence was live. The
+// owner's ruling is that no FMP data is stored, the repo included, so the file
+// is deleted and the lookup falls straight from the cached value to the SEC
+// SIC leg. COWORK #3 replaces the SIC leg's labels with our own mapping.
 //
-// So the facts are snapshotted while the licence is live. They are facts, not
-// readings: a company's sector does not move.
-//
-// ── LOOKUP ORDER: CACHE, THEN SNAPSHOT, THEN NULL ──────────────────────────
-// The cached FMP value wins because it is newer and because a reclassification
-// should take effect without a redeploy. The snapshot is the floor under it.
-// A symbol in neither yields NULL — never a guess, never a default sector.
+// ── LOOKUP ORDER: CACHE, THEN SIC, THEN NULL ───────────────────────────────
+// The cached value wins because it is newer (its FMP source is Relay B's to
+// remove). A symbol in neither yields NULL — never a guess, never a default
+// sector.
 //
 // ── WHAT IS DELIBERATELY NOT IN HERE ───────────────────────────────────────
-// No marketCap, no beta, no 52-week range, no dividend. Those are readings,
-// not facts, and freezing a reading puts a stale number on a live page — worse
-// than an absent row, because a reader cannot tell it is stale. They keep
-// coming from the price pipeline. scripts/check-static-profile.mjs asserts the
-// snapshot file contains none of them.
-//
-// NO DESCRIPTION EITHER, and the reason is not staleness. Every other field
-// here is a fact; FMP's description is their authored prose, and shipping it
-// in our repo is taking their writing rather than their data. The candidate
-// replacement is the 10-K Item 1 business section, which is the company's own
-// filing and public domain as a government record — reachable through the SEC
-// adapter built in step 5, which already resolves a symbol to a CIK and lists
-// its filings. That is a separate piece of work and is not started here.
-import snapshotFile from "@/data/static-profile.json";
+// No marketCap, no beta, no 52-week range, no dividend, no description. Those
+// are readings, or another party's prose, and come from elsewhere.
 import cikMap from "@/data/cik-map.json";
 import registrantsFile from "@/data/sec/registrants.json";
 import sicSectorFile from "@/data/sec/sic-sector.json";
@@ -41,67 +25,31 @@ export type StaticProfileRow = {
   industry: string | null;
 };
 
-type SnapshotFile = {
-  asOf: string;
-  rows: Record<string, { sector?: string | null; industry?: string | null }>;
-};
-
-const SNAPSHOT = snapshotFile as unknown as SnapshotFile;
-
-/** When the snapshot was taken. Every row shares it; nothing here decays fast. */
-export const SNAPSHOT_AS_OF: string = SNAPSHOT.asOf;
-
-/** How many symbols the snapshot covers. Exported for the check script. */
-export const SNAPSHOT_SIZE: number = Object.keys(SNAPSHOT.rows ?? {}).length;
-
 const clean = (v: unknown): string | null =>
   typeof v === "string" && v.trim() ? v.trim() : null;
-
-/** The snapshot's row for a symbol, or null. No I/O: the file is bundled. */
-export function staticProfileFor(symbol: string): StaticProfileRow | null {
-  const upper = String(symbol ?? "").trim().toUpperCase();
-  if (!upper) return null;
-  // ── THE DOT/DASH BRIDGE, AND BRK.B IS WHY ────────────────────────────────
-  // The snapshot is keyed the way FMP spells a share class, with a DASH:
-  // `BRK-A`, `BRK-B`. lib/curatedSymbols.ts spells the same company with a DOT
-  // — "BRK.B" is in the megacap list — and so does data/company-names.json. So
-  // /stock/BRK.B/news asked for a key the snapshot does not hold, got no
-  // industry and no sector, and fell to the generated ticker card, while
-  // /stock/BRK-B/news worked. Nothing failed; one spelling of one company was
-  // quietly worse than the other.
-  //
-  // lookupSpellingIn is the module that already owns this, and the header of
-  // lib/symbolSpellings.mjs records that this repo once had SEVEN copies of the
-  // dot/dash dance. This is not an eighth: it is that helper, called.
-  const found = lookupSpellingIn(SNAPSHOT.rows ?? {}, upper);
-  const row = found?.value;
-  if (!row) return null;
-  const sector = clean(row.sector);
-  const industry = clean(row.industry);
-  return sector || industry ? { sector, industry } : null;
-}
 
 /**
  * Where ONE field's value came from (brief 2026-09-22 §2.4 item 2, from
  * BRIEF-taxonomy-sic-mapping-2026-09-14 §4). Cheap to carry now, costly to
  * retrofit once rows from three legs are mixed in a store.
  */
-export type ProfileFieldSource = "fmp-cache" | "fmp-snapshot" | "sic" | "none";
+export type ProfileFieldSource = "fmp-cache" | "sic" | "none";
 
 export type ResolvedProfile = StaticProfileRow & {
   /** Which leg answered. For logging and for the check script, not for render. */
-  source: "cache" | "snapshot" | "sic" | "none";
+  source: "cache" | "sic" | "none";
   sectorSource: ProfileFieldSource;
   industrySource: ProfileFieldSource;
 };
 
-// ── THE SIC LEG: AFTER THE SNAPSHOT, FOR SYMBOLS IT DOES NOT COVER ─────────
+// ── THE SIC LEG: FOR EVERY SYMBOL WITH NO CACHED ROW ────────────────────────
 //
-// A symbol that entered the universe after 2026-09-13 has no cached FMP row
-// and no snapshot row, and so no sector page. SEC files every registrant under
+// A symbol with no cached row has no other source (the FMP snapshot leg was
+// removed 2026-09-23), and so no sector page without this. SEC files every registrant under
 // a SIC code (data/sec/registrants.json), and data/sec/sic-sector.json maps
 // codes to FMP's sector labels by MEASURED majority over the 2,587 symbols that
-// carry both — scripts/build-sic-sector.mjs. A code the evidence does not
+// carried both (built by scripts/build-sic-sector.mjs, removed 2026-09-23 with
+// the FMP snapshot it read; COWORK #3 replaces this table). A code the evidence does not
 // support maps to null ("unclassified"), and the miss is reported, never
 // guessed.
 //
@@ -136,9 +84,12 @@ const SIC_SECTOR = (sicSectorFile as unknown as { codes: Record<string, { sector
 /** The SIC leg for a symbol, or null. No I/O: both files are bundled. */
 export function sicProfileFor(symbol: string): StaticProfileRow | null {
   const upper = String(symbol ?? "").trim().toUpperCase();
-  // EXACT KEY, like staticProfileFor: registrants.json is keyed by the same
-  // symbols as the snapshot (it is generated from them).
-  const reg = REGISTRANTS[upper];
+  if (!upper) return null;
+  // THE DOT/DASH BRIDGE (moved here from the removed snapshot leg, 2026-09-23):
+  // registrants.json spells a share class with a dash (BRK-B) while
+  // lib/curatedSymbols.ts and /stock/BRK.B use a dot. lookupSpellingIn is the
+  // one owner of that rule (lib/symbolSpellings.mjs); this calls it.
+  const reg = lookupSpellingIn(REGISTRANTS, upper)?.value;
   if (!reg?.sic) return null;
   const sector = clean(SIC_SECTOR[reg.sic]?.sector);
   const industry = SIC_INDUSTRY_LABELS[reg.sic]?.label ?? clean(reg.sicDescription);
@@ -146,12 +97,11 @@ export function sicProfileFor(symbol: string): StaticProfileRow | null {
 }
 
 /**
- * Sector and industry for a symbol: cached FMP value, then snapshot, then null.
+ * Sector and industry for a symbol: cached value, then SEC SIC, then null.
  *
  * ── THE REFRESH TRIGGER IS A LOG LINE, exactly as the CIK map's is ─────────
- * A symbol in neither leg is the event that says the snapshot needs
- * regenerating — it means something entered the universe after the snapshot was
- * taken. There is no calendar reminder and no polling, because there is nothing
+ * A symbol in neither leg is the event that says registrants.json needs
+ * regenerating — it means something entered the universe after it was read. There is no calendar reminder and no polling, because there is nothing
  * to poll: the answer only changes when the universe does, and a miss IS that
  * change announcing itself.
  *
@@ -196,18 +146,7 @@ function resolveQuiet(
     };
   }
 
-  const snap = staticProfileFor(symbol);
-  if (snap) {
-    return {
-      ...snap, source: "snapshot",
-      sectorSource: snap.sector ? "fmp-snapshot" : "none",
-      industrySource: snap.industry ? "fmp-snapshot" : "none",
-    };
-  }
-
-  // THIRD, AND ONLY FOR A SYMBOL NEITHER FMP LEG KNOWS. It never overrides a
-  // snapshot row, so every symbol the snapshot covers resolves exactly as it
-  // did before this leg existed.
+  // 2026-09-23 (#552): the FMP snapshot leg that sat here is removed.
   const sic = sicProfileFor(symbol);
   if (sic) {
     return {
@@ -229,7 +168,6 @@ function resolveQuiet(
  *   cache     the fundamentals row's updatedAt — when the warm wrote it. The
  *             row does not record which leg the warm itself resolved from, so
  *             this is when the value was last confirmed, not first taken.
- *   snapshot  SNAPSHOT_AS_OF, the day data/static-profile.json was captured.
  *   sic       data/sec/registrants.json's asOf, the day the SIC code was read.
  *
  * A cache row with no parseable updatedAt yields null — never another leg's
@@ -247,7 +185,6 @@ export function classificationAsOf(
     return m ? m[1] : null;
   };
   if (resolved.source === "cache") return day(cachedUpdatedAt);
-  if (resolved.source === "snapshot") return day(SNAPSHOT_AS_OF);
   if (resolved.source === "sic") return day(REGISTRANTS_SIC_AS_OF);
   return null;
 }
@@ -255,9 +192,9 @@ export function classificationAsOf(
 function missLine(symbol: string): string {
   const upper = String(symbol ?? "").trim().toUpperCase();
   return (
-    `[static-profile] ${upper}: no cached sector, none in data/static-profile.json and no ` +
+    `[static-profile] ${upper}: no cached sector and no ` +
     `SIC row in data/sec/registrants.json — regenerate registrants (relay task ` +
-    `"sec-registrants", then node scripts/build-sic-sector.mjs). The card falls back to the ` +
+    `"sec-registrants"). The card falls back to the ` +
     `generated data card and the symbol will not appear on a sector page until it is there.`
   );
 }
@@ -298,7 +235,7 @@ export function resolveProfileBulk(
   if (missed.length) {
     console.warn(
       `[static-profile] ${context}: ${missed.length} of ${out.size} symbols have no cached ` +
-        `sector, none in data/static-profile.json and no SIC row in data/sec/registrants.json — ` +
+        `sector and no SIC row in data/sec/registrants.json — ` +
         `regenerate registrants (relay task "sec-registrants"). They will not appear on a sector ` +
         `page and their cards fall back to the generated data card. First ${Math.min(10, missed.length)}: ` +
         `${missed.slice(0, 10).join(", ")}`
@@ -355,7 +292,12 @@ export function cikCoverage(
   };
 }
 
-const COVERAGE = cikCoverage(SNAPSHOT.rows ?? {}, CIK_BY_SYMBOL);
+// PROFILED = the symbols registrants.json holds (the FMP snapshot's rows were
+// the denominator until 2026-09-23, #552).
+const COVERAGE = cikCoverage(REGISTRANTS, CIK_BY_SYMBOL);
+
+/** How many symbols carry a registrant row — the CIK coverage denominator. */
+export const PROFILED_SIZE: number = COVERAGE.profiled;
 
 export const CIK_MAP_SIZE: number = COVERAGE.mapSize;
 export const CIK_COVERED: number = COVERAGE.covered;

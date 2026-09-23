@@ -215,7 +215,7 @@ reader what to expect or what to do about it.
 
 | stage | needs | notes |
 |---|---|---|
-| **0** Consensus freeze | nothing | **irreversible, do first** |
+| **0** Consensus freeze | nothing | **irreversible, do first** — superseded 2026-09-23 (#552): no FMP data is stored; removed |
 | **1** Results date in the manifest (§3) | step 2 (merged, #454) | unblocks both halves |
 | **2** Window inversion + strip shell | stage 1 | page works without FMP |
 | **3** Year-ago columns (§4) | **step 3 fact sets** | see `BRIEF-step3-extraction-and-retention` |

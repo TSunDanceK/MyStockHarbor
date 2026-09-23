@@ -84,7 +84,9 @@ const pad = (s, n) => String(s).padEnd(n);
 
 function universe() {
   const cn = Object.keys(JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows);
-  const sp = Object.keys(JSON.parse(fs.readFileSync("data/static-profile.json", "utf8")).rows);
+  // 2026-09-23 (#552, COWORK #4): data/static-profile.json (FMP data) is removed; its symbol list is
+  // replaced by data/sec/registrants.json's rows, which were generated from that list ∪ the CIK map.
+  const sp = Object.keys(JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows);
   const src = fs.readFileSync("lib/curatedSymbols.ts", "utf8");
   const curated = [...new Set([...src.matchAll(/"([A-Z][A-Z0-9.\-]{0,6})"/g)].map((m) => m[1]))];
   return [...new Set([...cn, ...sp, ...curated])].sort();

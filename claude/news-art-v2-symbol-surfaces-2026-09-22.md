@@ -1,5 +1,8 @@
 # News art v2 on the symbol-led surfaces: the industry layer (2026-09-22)
 
+> **2026-09-23 (#552, COWORK #4/#5):** FMP values in this doc are redacted as
+> "[removed 2026-09-23]", and so is text describing keeping FMP data after the key lapses. The findings are kept.
+
 `/stock/[symbol]/news` chose its illustration from the SECTOR alone. Nineteen
 `sector-*` buckets cannot say what 67 v2 subjects can, so every Technology stock
 showed servers, cables and abstract network diagrams — Apple and a drone company
@@ -486,7 +489,7 @@ different module.**
 
 | path | what it sends | result |
 |---|---|---|
-| the TITLE — `generateMetadata` → `getDailyHistory` | `lib/server/historyCache.ts` has **`buildFmpSymbol`**, which does `.replace(/\./g, "-")` | asks FMP for `BRK-B`, gets bars, renders **$502.01** |
+| the TITLE — `generateMetadata` → `getDailyHistory` | `lib/server/historyCache.ts` has **`buildFmpSymbol`**, which does `.replace(/\./g, "-")` | asks FMP for `BRK-B`, gets bars, renders a price ([removed 2026-09-23]) |
 | the BODY — `fetchQuote` / `fetchHistory` in `lib/stock-news-data.ts` | the raw symbol, no conversion anywhere in the file | FMP `?symbol=BRK.B`, Stooq `brk.b.us`, Yahoo `BRK.B` — all want the dash |
 
 `hasNoQuote && hasNoHistory` is then true and the page says DATA UNAVAILABLE
