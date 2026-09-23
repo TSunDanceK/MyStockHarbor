@@ -92,7 +92,7 @@ const EC = await lift(parts.map(([, b]) => b.replace(/^export /, "")).join("\n")
 
 // ── SEC FETCH, paced like the job ─────────────────────────────────────────
 let lastAt = 0;
-const timing = { submissions: [], index: [], facts: [], frames: [] };
+const timing = { submissions: [], index: [], doc: [], facts: [], frames: [] };
 const fetchSec = async (url, kind, asText = false) => {
   const wait = Math.max(0, lastAt + N.MIN_GAP_MS - Date.now());
   if (wait) await new Promise((r) => setTimeout(r, wait));
@@ -278,6 +278,25 @@ for (const x of sixKs.slice(0, SIXK_INDEX_CAP)) {
   x.docs = [...html.matchAll(idxRe)].map((m) => ({ desc: m[2].trim(), file: m[4].trim(), type: m[5].trim() }));
 }
 console.log(`  filing indexes fetched ${idxFetched}/${sixKs.length} · median ${median(timing.index.map((t) => t.ms))}ms`);
+// THE DOCUMENT ITSELF. Run 35838912504 showed exhibit descriptions are almost
+// always the generic "EX-99.1" / "EXHIBIT 99.1", so neither the submissions
+// fields nor the index can tell a results release from a buyback notice. The
+// release says what it is in its first paragraphs, so the probe reads the
+// main exhibit (first EX-99*, else the primary document) and keeps the opening
+// text. One extra fetch per 6-K.
+const DOC_RE = /\b((first|second|third|fourth|1st|2nd|3rd|4th)[- ]quarter|(q[1-4]|[1-4]q)\s?'?(20)?2\d|half[- ]year(ly)?|(three|six|nine|twelve)[- ]months ended|interim (results|report|financial)|(quarterly|half[- ]yearly|interim|annual) results|financial results|results (of operations )?for the (quarter|period|first|second|third|fourth|six|three|nine)|earnings release)\b/i;
+let docFetched = 0;
+for (const x of sixKs.slice(0, SIXK_INDEX_CAP)) {
+  const ex99 = (x.docs ?? []).find((d) => /^EX-99/i.test(d.type) && /\.(htm|html|txt)$/i.test(d.file));
+  const file = ex99?.file ?? (/\.(htm|html|txt)$/i.test(x.primaryDocument) ? x.primaryDocument : null);
+  if (!file) continue;
+  const cikInt = String(Number(M[x.symbol].cik));
+  const body = await fetchSec(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${x.acc.replace(/-/g, "")}/${file}`, "doc", true);
+  if (!body) continue;
+  docFetched++;
+  x.docText = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ").slice(0, 20000);
+}
+console.log(`  main documents fetched ${docFetched}/${sixKs.length} · median ${median(timing.doc.map((t) => t.ms))}ms`);
 const RESULTS_RE = /\b(results?|earnings|quarter(ly)?|interim|half[- ]?year(ly)?|semi[- ]?annual|first half|1h|2h|h1|h2|[1-4]q\s?'?\d{2,4}|q[1-4](\s?'?\d{2,4})?|financial (statements|report|information)|management'?s discussion|md&a|press release on .*(results|performance))\b/i;
 const NOISE_RE = /\b(annual general meeting|agm|extraordinary general|proxy|voting|notice of meeting|transaction in own shares|share buy[- ]?back|repurchase|director.?s? dealing|pdmr|total voting rights|block listing|form 8\.3|holding\(s\) in company|change of auditor)\b/i;
 const text = (x) => [x.primaryDocDescription, x.primaryDocument, ...(x.docs ?? []).flatMap((d) => [d.desc, d.file])].join(" | ");
@@ -288,6 +307,9 @@ const RULES = {
   "R3 submissions text only (primaryDocDescription + primaryDocument)": (x) => RESULTS_RE.test(`${x.primaryDocDescription} ${x.primaryDocument}`) && !NOISE_RE.test(`${x.primaryDocDescription} ${x.primaryDocument}`),
   "R4 index text (exhibit descriptions + file names)": (x) => RESULTS_RE.test(text(x)) && !NOISE_RE.test(text(x)),
   "R5 R4 or isXBRL": (x) => (RESULTS_RE.test(text(x)) && !NOISE_RE.test(text(x))) || x.isXBRL === 1,
+  "R6 main-document text (first 20k chars)": (x) => DOC_RE.test(x.docText ?? ""),
+  "R7 R6 on the first 3k chars only": (x) => DOC_RE.test((x.docText ?? "").slice(0, 3000)),
+  "R8 R7 or isXBRL": (x) => DOC_RE.test((x.docText ?? "").slice(0, 3000)) || x.isXBRL === 1,
 };
 for (const [name, rule] of Object.entries(RULES)) {
   const flagged = sixKs.filter(rule);
@@ -301,6 +323,13 @@ const show = (xs) => xs.slice(0, 12).map((x) => `${x.symbol} ${x.on} "${x.primar
 console.log(`  near an FMP date (±1d), sample:\n    ${show(sixKs.filter((x) => nearFmp(x, 1))).join("\n    ")}`);
 console.log(`  near NO FMP date (±10d), sample:\n    ${show(sixKs.filter((x) => !nearFmp(x, 10))).join("\n    ")}`);
 console.log(`  primaryDocDescription values: ${fmtTally(tally(sixKs.map((x) => x.primaryDocDescription || "(blank)")))}`.slice(0, 1500));
+const snip = (x) => { const t = x.docText ?? ""; const m = t.match(DOC_RE); return m ? `…${t.slice(Math.max(0, m.index - 60), m.index + 80)}…` : t.slice(0, 140); };
+const r7 = RULES["R7 R6 on the first 3k chars only"];
+console.log(`  R7 flagged but near NO FMP date (FP candidates):\n    ${sixKs.filter((x) => r7(x) && !nearFmp(x, 10)).slice(0, 25).map((x) => `${x.symbol} ${x.on}: ${snip(x)}`).join("\n    ")}`);
+console.log(`  bucket-1 pairs R7 misses at ±3d:\n    ${b1.filter((p) => !sixKs.some((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 3 && r7(x))).map((p) => {
+  const n = sixKs.filter((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 3);
+  return `${p.symbol} ${p.date}: ${n.length ? n.slice(0, 2).map((x) => `${x.on} ${(x.docText ?? "(no doc)").slice(0, 110)}`).join(" || ") : "no 6-K ±3d"}`;
+}).slice(0, 40).join("\n    ")}`);
 const missR4 = b1.filter((p) => !sixKs.some((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 3 && RULES["R4 index text (exhibit descriptions + file names)"](x)));
 console.log(`  bucket-1 pairs R4 misses at ±3d (${missR4.length}): ${ex(missR4.map((p) => {
   const n = sixKs.filter((x) => x.symbol === p.symbol && Math.abs(diffDays(x.on, p.date)) <= 3);
@@ -386,6 +415,10 @@ for (const [cls, n] of [...tally(b3Diag.map((d) => d.cause.replace(/grouped into
 }
 console.log(`  record read AFTER the 8-K (so the queue DID select it): ${b3Diag.filter((d) => d.recAt && d.recAt >= d.ev).length}/${b3Diag.length}`);
 for (const v of Object.keys(VARIANTS)) console.log(`  ${v}: recovers ${b3Diag.filter((d) => d.v[v]).length}/${b3Diag.length}`);
+console.log(`  not recovered by V3: ${ex(b3Diag.filter((d) => !d.v["V3 V1 + V2"]).map((d) => `${d.symbol} 2.02 ${d.ev} (newest Q ${d.newestQ}; ${d.cause})`), 20)}`);
+// Bucket 2 under the reader fix: of its 101 symbols' events, how many does the
+// FIXED reader produce once the queue reaches them?
+console.log(`  bucket 2 once re-read — shipped reader recovers ${b2.filter((p) => simulate(p.symbol, "V0 shipped (fact-set periods)").some((e) => Math.abs(diffDays(e.announcedOn, p.date)) <= MATCH_TOL)).length}/${b2.length} · with V3 ${b2.filter((p) => simulate(p.symbol, "V3 V1 + V2").some((e) => Math.abs(diffDays(e.announcedOn, p.date)) <= MATCH_TOL)).length}/${b2.length}`);
 
 // Does the reader fix disturb records that are right today? Across the whole
 // universe, compare in-window events V0 vs V3.
@@ -428,10 +461,13 @@ const scen = [
 const s3 = scen[3][1];
 scen.push(["S4 S3 + 6-K rule R4 (index text)", [...s3, ...sixKEvents(RULES["R4 index text (exhibit descriptions + file names)"])]]);
 scen.push(["S5 S3 + 6-K rule R3 (submissions text only, no extra fetch)", [...s3, ...sixKEvents(RULES["R3 submissions text only (primaryDocDescription + primaryDocument)"])]]);
+for (const r of ["R6 main-document text (first 20k chars)", "R7 R6 on the first 3k chars only", "R8 R7 or isXBRL"]) {
+  scen.push([`S6 S3 + 6-K rule ${r}`, [...s3, ...sixKEvents(RULES[r])]]);
+}
 for (const [name, ev] of scen) {
   const r = pairUp(cand, ev);
   console.log(`  ${name}\n    SEC ${ev.length} · OVERLAP ${r.matched}/${cand.length} (${pct(r.matched, cand.length)}) · FMP-only ${r.fOnly.length} · SEC-only ${r.sOnly.length} · dates ${agree(r.diffs)}`);
-  if (name.startsWith("S4") || name.startsWith("S5")) {
+  if (/^S[4-6]/.test(name)) {
     const left = r.fOnly.map((f) => ({ ...f, b: bucketOf(f) }));
     console.log(`    FMP-only left by #532 bucket: ${fmtTally(tally(left.map((x) => x.b)))}`);
     console.log(`    e.g. ${ex(left.map((x) => `${x.symbol} ${x.date} [${x.b}]`), 25)}`);
