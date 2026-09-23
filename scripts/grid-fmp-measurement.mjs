@@ -40,6 +40,7 @@ import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { readCodeOnly } from "./lib/source-code.mjs";
 import { lift, grabFunction } from "./lib/earnings-plan.mjs";
+import { lookupBySpelling } from "./lib/symbol-spellings.mjs";
 
 const redis = Redis.fromEnv();
 const UA = process.env.SEC_USER_AGENT ??
@@ -170,9 +171,8 @@ const liveTickers = parseTickers(await fetchSec("https://www.sec.gov/files/compa
 const committedTickers = parseTickers(JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8").replace(/^[^{]*/, "")));
 const tickers = liveTickers.size >= 5000 ? liveTickers : committedTickers;
 console.log(`  SEC company_tickers_exchange: live ${liveTickers.size} · committed ${committedTickers.size} · using ${tickers === liveTickers ? "LIVE" : "COMMITTED"}`);
-// SEC spells share classes with a dash (BRK-B); FMP with a dash too. A dot is
-// tried as a fallback so a spelling difference is not reported as "no CIK".
-const tick = (s) => tickers.get(s) ?? tickers.get(s.replace(/\./g, "-")) ?? tickers.get(s.replace(/-/g, ".")) ?? null;
+// The shared spelling helper, so a dot/dash difference is not reported as "no CIK".
+const tick = (s) => lookupBySpelling(tickers, s)?.value ?? null;
 
 // ════════════════════════════════════════════════════════════════════════════
 // FMP SIDE — raw rows, candidates (shipped builder), grid rows (materialised)
