@@ -54,6 +54,10 @@ let src = read("lib/server/news/secProvider.ts")
   .replace(/^import \{ secUserAgent \} from ".\/userAgent";$/m,
     () => read("lib/server/news/userAgent.ts").replace(/^export /gm, ""))
   .replace(/^import type \{ NewsItem, NewsProvider \} from ".\/types";$/m, "")
+  // THE STORE THE JOB WRITES (#535 COWORK #13), stubbed: its own module owns
+  // Redis. The harness sets globalThis.__secFilingItems to what the key holds.
+  .replace(/^import \{ readSecFilingItems \} from ".\/secFilingsStore";$/m,
+    () => "const readSecFilingItems = async () => globalThis.__secFilingItems ?? [];")
   // The spelling helper, INLINED FROM ITS REAL SOURCE rather than stubbed. It
   // is a .mjs in lib/ precisely so both the app and the scripts run one
   // implementation; a stub here would be a second one, and this harness's
@@ -300,7 +304,7 @@ check(
     "and so is scripts/check-news-relevance-scope.mjs, which asserts the inertness"
 );
 
-console.log("\n=== 6. Lazy only — no universe sweep, no cron ===\n");
+console.log("\n=== 6. The render reads the store; only the job reaches SEC ===\n");
 const secSrc = readCodeOnly("lib/server/news/secProvider.ts");
 check(
   "the adapter never reads the symbol universe",
@@ -317,7 +321,29 @@ check(
   (secSrc.match(/await fetch\(/g) ?? []).length === 1 &&
     /data\.sec\.gov\/submissions\/CIK\$\{cik\}\.json/.test(secSrc)
 );
-check("revalidate 3600 is kept", /next: \{ revalidate: 3600 \}/.test(secSrc));
+check(
+  "fetchForSymbol makes NO fetch — it reads the store the job writes (#535 COWORK #13)",
+  (() => {
+    const at = secSrc.indexOf("async function fetchForSymbol");
+    const end = secSrc.indexOf("export async function fetchSubmissionsItems");
+    return at > -1 && end > at && !/fetch\(/.test(secSrc.slice(at, end).replace(/async function fetchForSymbol/, ""))
+      && /readSecFilingItems\(upper\)/.test(secSrc.slice(at, end));
+  })(),
+  "a view-triggered refresh reaching SEC is SEC traffic a crawler can drive"
+);
+check(
+  "the one fetch lives in fetchSubmissionsItems, and only the job imports it",
+  (() => {
+    const at = secSrc.indexOf("export async function fetchSubmissionsItems");
+    const importers = ["app", "lib"].flatMap(function walk(d) {
+      return fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(`${d}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${d}/${e.name}`] : []);
+    }).filter((f) => f !== "lib/server/news/secProvider.ts" && /\bfetchSubmissionsItems\b/.test(fs.readFileSync(f, "utf8")));
+    return at > -1 && /await fetch\(/.test(secSrc.slice(at)) &&
+      JSON.stringify(importers) === JSON.stringify(["lib/server/news/secFilingsJob.ts"]);
+  })(),
+  "a second importer is a second place a render could reach SEC"
+);
 // WIRING ONLY. This used to pin the literal `process.env.SEC_USER_AGENT || "..."`
 // shape inline, which broke the moment the default was moved into a shared
 // module -- and would have kept passing had the module returned "". The VALUE

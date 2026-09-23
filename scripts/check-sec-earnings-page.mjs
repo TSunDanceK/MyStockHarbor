@@ -808,6 +808,8 @@ console.log("\n7i. the meta description describes the page, not the price chart"
         // indexed as thin content is the cost of that. "NOCIK" is the symbol
         // that resolves to nothing; everything else resolves.
         'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+        // NOT YET READ (#535 COWORK #13): "COLDX" has a CIK and no stored set.
+        'const awaitingSecRead = async (s) => String(s).toUpperCase() === "COLDX";',
         grabFunction(src, "generateMetadata"),
       ].join("\n") + "\nexport { generateMetadata };"
     );
@@ -829,6 +831,10 @@ console.log("\n7i. the meta description describes the page, not the price chart"
     check("...and still follow, so a crawler is not stranded",
       without.robots?.follow === true,
       "the card links to a stock page that renders");
+    // #535 COWORK #13: noindex exactly while a cold symbol has no stored set.
+    const cold = await runMeta(pageRaw, labels[0], "COLDX");
+    check("a cold symbol not yet read is noindex (#535 COWORK #13)",
+      cold.robots?.index === false && cold.robots?.follow === true, JSON.stringify(cold.robots));
   }
 
   const metaSrc = grabFunction(pageRaw, "generateMetadata");
@@ -920,6 +926,7 @@ console.log("\n7i. the meta description describes the page, not the price chart"
       // Same stub and same reason as runMeta above — the mutation harness lifts
       // the SAME function, so it needs the same closure.
       'const cikForSymbol = (s) => (String(s).toUpperCase() === "NOCIK" ? null : "0000320193");',
+      'const awaitingSecRead = async () => false;',
       restoreLeak(metaSrc),
     ].join("\n") + "\nexport { generateMetadata };"
   );

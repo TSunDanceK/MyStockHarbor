@@ -1,16 +1,20 @@
-// THE COLD PATH: an earnings page for a symbol outside the universe fetches its
-// own data, synchronously, on first render.
+// THE COLD PATH: a symbol with a CIK but no stored fact set.
 //
-// WHY NOT A QUEUE. Enqueue-and-drain gives the FIRST VISITOR a pending state,
-// and a page with no data is the thing being ruled out. A queue is the fallback
-// here, never the primary: it catches the timeout case and nothing else.
+// ── 2026-09-23 (#535 COWORK #13): THE RENDER NO LONGER FETCHES ─────────────
+// resolveFactSetForRender reads the store and nothing else. It used to fetch
+// companyfacts on a cold render, and that was reachable by any crawler that can
+// request a URL. The fetch moved to fillColdSymbol, called ONLY by the
+// human-gated server action (app/stock/[symbol]/coldFillAction.ts: quote
+// token, per-IP and daily limits, BotID deep analysis, a per-symbol lock). A
+// crawler gets "not yet read", `noindex`, and the scheduled jobs' data.
 //
-// WHY THIS IS AFFORDABLE, AND IT IS NOT OBVIOUS. The earnings page inherits
-// `revalidate = 3600` from app/stock/[symbol]/layout.tsx, so the fetch below is
-// paid ONCE PER SYMBOL PER REVALIDATION WINDOW -- not once per visitor. A
-// thousand people opening /stock/XYZ/earnings in the same hour cost
-// one companyfacts request between them. Remove the ISR config and this becomes
-// one external fetch per request, which is a different and much worse thing.
+// The history below describes the old render-time fetch. It is kept because
+// its measurements (the ISR 500, the per-IP trade-off) still bind: the fill
+// must never move back into a render.
+//
+// WHY NOT A QUEUE (original design). Enqueue-and-drain gives the FIRST VISITOR
+// a pending state. The gated fill keeps that property for a person — a ~5 s
+// wait on the page — without letting a bot trigger it.
 //
 // FOUR GUARDS, IN THIS ORDER, AND THE FIRST IS THE ONE THAT BOUNDS THE ENDPOINT:
 //
@@ -77,13 +81,13 @@ import { canWriteSecState, noteSecWriteBlocked, secCounterPrefix } from "./secWr
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
-import { extractCompanyFacts, unreadableReason, type CompanyFacts } from "./secExtract";
+import { unreadableReason, type CompanyFacts } from "./secExtract";
+import { extractForSymbol } from "./secExtractFor";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
-import { secChainsHash } from "./secFields";
 import { admitSymbolForExtraction } from "./securityKind";
-import { readFactSet, writeFactSet } from "./secFactStore";
+import { factSetExists, readFactSet, writeFactSet } from "./secFactStore";
 import { recordColdCik } from "./secColdCik";
 
 // PAGE_READ_CACHE IS NOT OPTIONAL HERE, AND check-page-read-cache CAUGHT ITS
@@ -261,22 +265,6 @@ export function cikForSymbol(symbol: string): string | null {
   const { present, map } = loadTickerMap();
   if (!present) return null;
   return lookupBySpelling(map, symbol)?.value?.cik ?? null;
-}
-
-/**
- * A DynamicServerError is NOT a handled error, and swallowing one is exactly how
- * the 500 above stayed invisible: it read as a timeout in the logs
- * ("-- queued") while Next failed the route underneath.
- *
- * So it is rethrown rather than turned into a pending page. That still fails the
- * request, but it fails it LOUDLY and with the offending API named, which is the
- * difference between one measurement finding it and nobody finding it. Matched
- * on the message rather than by importing Next's internal error class, which is
- * not part of its public surface.
- */
-function rethrowIfDynamic(err: unknown): void {
-  const msg = String((err as Error)?.message ?? "");
-  if (/Dynamic server usage|couldn't be rendered statically/.test(msg)) throw err;
 }
 
 function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
@@ -514,7 +502,7 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
   // here is the shape where one path gains a condition and the other does not.
   const set = await toStoredSet(
-    extractCompanyFacts(symbol, (await res.json()) as CompanyFacts)
+    extractForSymbol(symbol, (await res.json()) as CompanyFacts)
   );
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same
@@ -583,36 +571,18 @@ function emptyResult(
 }
 
 /**
- * One re-fetch of a symbol whose stored set is empty under an older chain set.
+ * "Not yet read": a symbol with a CIK, admitted, and no stored set.
  *
- * Returns null on ANY failure, so the caller falls back to the stored answer
- * rather than to a pending page: the symbol already has a real, if empty,
- * reading, and downgrading it to "being fetched" on a slow network would be the
- * permanent-pending failure again. Budgeted and timed out exactly like a cold
- * fetch, because that is what it is.
+ * The render says so and does nothing else — no SEC call, no queue entry. The
+ * figures arrive by one of two routes, neither of which a crawler can drive:
+ * a human-gated fill from the page (coldFillAction → fillColdSymbol), or the
+ * scheduled jobs. See the header of lib/server/secColdFill.ts.
  */
-async function retryEmpty(symbol: string, cik: string): Promise<ColdResult | null> {
-  if (!(await claimColdFetch(symbol))) return null;
-  try {
-    const set = await withTimeout(
-      fetchAndStore(symbol, cik),
-      SEC_COLD_TIMEOUT_MS,
-      `[sec-cold] ${symbol} empty-set retry`
-    );
-    console.warn(
-      `[sec-cold] ${symbol}: empty set re-read under chains ${secChainsHash()} — ` +
-        `${hasUsableData(set) ? "now has data" : "still empty"}`
-    );
-    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(symbol, set.tx, set.cu);
-  } catch (err) {
-    rethrowIfDynamic(err);
-    return null;
-  }
-}
+export const NOT_YET_READ = "not yet read";
 
 /**
- * Resolve one symbol's fact set for a render, fetching it if this is the first
- * time anyone has asked.
+ * Resolve one symbol's fact set for a render. READ-ONLY: never calls SEC and
+ * never queues work (#535 COWORK #10 constraints 1 and 2, COWORK #13).
  *
  * Never throws: every failure path returns a status the page can render.
  */
@@ -646,97 +616,114 @@ export async function resolveFactSetForRender(symbol: string): Promise<ColdResul
     };
   }
 
-  // 2. THE STORE.
+  // 2. THE STORE, AND NOTHING AFTER IT.
+  //
+  // ── THE RENDER NO LONGER FETCHES (2026-09-23, #535 COWORK #13) ──────────
+  // It used to fetch companyfacts here on a cold render, rate-bucketed and
+  // timed out, and re-fetch an empty set stored under an older chain set. Both
+  // were reachable by anything that can request a URL: a crawler walking
+  // /stock/<ticker> spent the site's SEC budget and queued work for the cron.
+  // Both moved to fillColdSymbol, which only a human-gated server action calls.
+  // A render reads the store and reports what it found.
   const stored = await readFactSet(clean);
   if (stored) {
-    // ── A POPULATED SET IS RETURNED AS IT STANDS. THE CRON OWNS REFRESHING ──
-    //
-    // A refresh-on-view was built here and REMOVED, and the reason is worth
-    // keeping because the idea will come back. It scheduled the re-read in
-    // `after()`, which works, and then called `revalidatePath` to flush the
-    // page it had just corrected — and production refused that call:
-    //
-    //   Dynamic server usage: Route /stock/[symbol]/earnings couldn't be
-    //   rendered statically because it used `revalidatePath`
-    //
-    // `revalidatePath` is not permitted from a page RENDER's after(); the cron
-    // gets away with it because it calls from a route handler. Without the
-    // flush the corrected set sat behind the ISR window for up to an hour, so
-    // the mechanism delivered nothing on the view that paid for it. Worse, the
-    // trigger could only fire on a render: the reload twenty seconds later was
-    // served from the ISR cache, so the one visitor who triggered a refresh was
-    // also the only one who could, and they saw the old figures anyway.
-    //
-    // Moving the trigger to a route handler would work and was declined: with
-    // the CIK recorded on cold writes (secColdCik) every stored symbol is in a
-    // cron queue, the daily index lands nightly, and the cron revalidates the
-    // sets that CHANGED from a route handler where the call is permitted. A
-    // visitor-driven trigger cannot beat that by more than about a day, which
-    // does not justify a public endpoint that causes writes.
     if (hasUsableData(stored)) return { status: "ready", set: stored, cold: false };
-    // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
-    //
-    // secFieldsHash gates on field ORDER and MEMBERSHIP, deliberately: a
-    // corrected tag chain does not invalidate stored VALUES. But it does
-    // invalidate stored NOTHING. Every IFRS filer has an empty set written
-    // before ifrs-full was read, and without this they stay empty forever --
-    // the page would keep saying it cannot read them while the chains that can
-    // sit right there.
-    //
-    // Scoped to EMPTY sets only, so it is not a mass re-populate: a set with
-    // values is never re-fetched by this, and a set that re-fetches to nothing
-    // again stores the current stamps and stops retrying.
-    //
-    // ── needsReread, NOT A HAND-ROLLED CHAIN COMPARISON ─────────────────────
-    //
-    // This read `stored.c !== secChainsHash()` and nothing else, which is a
-    // SECOND COPY of a staleness rule that already lives in secStaleness — the
-    // exact shape that module's docblock warns about, where one copy gains a
-    // condition and the other does not.
-    //
-    // It did. `lv` (SEC_LABEL_VERSION) covers LABELLING AND ADMISSION, and
-    // currency admission bumped it to 4 while touching no tag chain — so
-    // `secChainsHash()` was unchanged and every cached empty set for a
-    // non-USD filer compared equal and never retried. MEASURED: RYAAY and ABEV
-    // kept serving the "reports in EUR/BRL" block across reloads on a
-    // deployment whose code could read them, because the render path never
-    // asked SEC again. These filers are cold-only — not in the manifest — so
-    // the cron's needsReread never reaches them and this is the ONLY thing
-    // that can.
-    if (SEC_UA && needsReread(stored)) {
-      const retried = await retryEmpty(clean, cik);
-      if (retried) return retried;
-    }
     return emptyResult(clean, stored.tx, stored.cu);
   }
+  return { status: "pending", reason: NOT_YET_READ };
+}
 
-  if (!SEC_UA) {
-    // SEC's fair-access policy requires a declared, contactable agent. Fetching
-    // without one risks a block on the whole account, so this refuses rather
-    // than fetching anonymously -- and says so, rather than 404ing a real
-    // company over a configuration problem.
-    return { status: "pending", reason: "SEC_USER_AGENT is not configured" };
+/** What a cold fill did. Carries no figures: the page re-renders from the store. */
+export type ColdFillOutcome =
+  /** A usable set is stored (now, or already). */
+  | "filled"
+  /** Read, and SEC has nothing this page can use; remembered for a day. */
+  | "no-data"
+  /** Timed out or failed; the symbol is queued for the scheduled job. */
+  | "queued"
+  /** The site-wide minute budget is spent; queued instead. */
+  | "busy"
+  /** Not a symbol this path serves (no CIK, not the issuer's equity). */
+  | "not-eligible"
+  /** A preview deployment, or no User-Agent configured: nothing may be fetched. */
+  | "unavailable";
+
+/**
+ * How long "SEC has nothing usable for this CIK" is remembered, so a repeat
+ * visitor does not refetch 3 MB to learn the same nothing.
+ */
+export const COLD_NONE_TTL_S = 24 * 3600;
+export const coldNoneKey = (symbol: string) =>
+  `${secCounterPrefix("msh:sec:cold-none:v1")}:${symbol.toUpperCase()}`;
+
+/**
+ * Fill one cold symbol. CALLED ONLY FROM THE HUMAN-GATED SERVER ACTION
+ * (app/stock/[symbol]/coldFillAction.ts), after its token, per-IP, daily and
+ * BotID gates. Never from a render.
+ *
+ * The four guards of the old render path, in the same order: CIK, store,
+ * site-wide budget, timeout. The CIK gate still bounds what can trigger work to
+ * the ~10,400 registrants in the committed ticker file.
+ */
+export async function fillColdSymbol(symbol: string): Promise<ColdFillOutcome> {
+  const clean = symbol.trim().toUpperCase();
+  const cik = cikForSymbol(clean);
+  if (!cik) return "not-eligible";
+  if (!admitSymbolForExtraction(clean, cik).admit) return "not-eligible";
+  if (!SEC_UA || !canWriteSecState()) return "unavailable";
+
+  const stored = await readFactSet(clean);
+  if (stored && hasUsableData(stored)) return "filled";
+  // ── AN EMPTY SET FROM AN OLDER CHAIN SET IS WORTH ONE RETRY ─────────────
+  // secFieldsHash gates on field ORDER and MEMBERSHIP, deliberately: a
+  // corrected tag chain does not invalidate stored VALUES. But it does
+  // invalidate stored NOTHING — every IFRS filer had an empty set written
+  // before ifrs-full was read. needsReread is the one staleness rule (see
+  // secStaleness); a set it does not flag is a real, current "nothing".
+  if (stored && !needsReread(stored)) return "no-data";
+
+  if (redis) {
+    try {
+      if (await redis.exists(coldNoneKey(clean))) return "no-data";
+    } catch {
+      // A failed negative-cache read costs one fetch, not correctness.
+    }
   }
 
-  // 3. THE RATE BUDGET.
   if (!(await claimColdFetch(clean))) {
     await enqueue(clean);
-    return { status: "pending", reason: "the cold-fetch budget for this minute is spent" };
+    return "busy";
   }
 
-  // 4. THE TIMEOUT.
   try {
-    const set = await withTimeout(
-      fetchAndStore(clean, cik),
-      SEC_COLD_TIMEOUT_MS,
-      `[sec-cold] ${clean}`
-    );
-    return hasUsableData(set) ? { status: "ready", set, cold: true } : emptyResult(clean, set.tx, set.cu);
+    const set = await withTimeout(fetchAndStore(clean, cik), SEC_COLD_TIMEOUT_MS, `[sec-cold] ${clean}`);
+    if (hasUsableData(set)) return "filled";
+    if (redis) {
+      try {
+        await redis.set(coldNoneKey(clean), 1, { ex: COLD_NONE_TTL_S });
+      } catch {
+        // Best effort, as above.
+      }
+    }
+    return "no-data";
   } catch (err) {
-    rethrowIfDynamic(err);
     const reason = String((err as Error)?.message ?? err);
     const queued = await enqueue(clean);
     console.warn(`[sec-cold] ${clean}: ${reason}${queued ? " — queued" : " — queue full"}`);
-    return { status: "pending", reason };
+    return "queued";
   }
+}
+
+/**
+ * A cold symbol still waiting for its first read: a CIK, admitted, and nothing
+ * stored. The pages carry `noindex` exactly while this is true (#535 COWORK
+ * #13), so a thin "not yet read" page is never indexed. Redis unable to answer
+ * reads as "not waiting": metadata must not flip a real page to noindex on a
+ * blip.
+ */
+export async function awaitingSecRead(symbol: string): Promise<boolean> {
+  const clean = symbol.trim().toUpperCase();
+  const cik = cikForSymbol(clean);
+  if (!cik || !admitSymbolForExtraction(clean, cik).admit) return false;
+  return (await factSetExists(clean)) === false;
 }

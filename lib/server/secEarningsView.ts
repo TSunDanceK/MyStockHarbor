@@ -9,7 +9,7 @@ import {
   type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
-import { SEC_FIELDS, type Statement } from "./secFields";
+import { SEC_FIELDS, revenueLineIncompleteValues, type Statement } from "./secFields";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -414,7 +414,51 @@ export const EMPTY_REASONS = {
   needsRevenue: "Needs revenue",
   notCaptured: "Not captured from this filing",
   revenueIncomplete: "Not meaningful — this filer's revenue line is incomplete in its tagged data",
+  epsPerClass: "EPS is reported per share class in the filing",
+  epsPerUnit: "EPS is not reported per share for this filer's units",
 } as const;
+
+/**
+ * FILERS WHOSE EPS IS FILED, BUT NOT AS ONE PLAIN FIGURE — so "Not captured"
+ * would be the wrong reason for their blank EPS (#535 COWORK #11, EPS ruling A).
+ *
+ * A REVIEWED LIST, EACH ENTRY CITED, because the evidence is not in the data
+ * this page reads: companyfacts carries only non-dimensional facts, so EPS
+ * dimensioned by share class never reaches it, and per-unit figures are not
+ * EPS. Every entry was read from the filer's own 10-Q instance for its newest
+ * stored quarter (relay write-spotcheck-census-5, 2026-09-23); the concept and
+ * accession are the citation.
+ *
+ * THE REASON IS SHOWN ONLY WHERE EPS IS ACTUALLY BLANK. A listed filer that
+ * starts tagging a plain EPS gets its figure, not this sentence, so a stale
+ * entry costs nothing; a filer not listed keeps "Not captured from this filing".
+ * ATHS and FWONK also lack EPS and are deliberately NOT listed: their filings
+ * carry no per-share figure this census could name.
+ */
+export const EPS_FILED_OTHERWISE: Record<string, { kind: "class" | "units"; evidence: string }> = {
+  ARES: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasicUndistributed by StatementClassOfStockAxis" },
+  BKR: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (Class A)" },
+  "BRK-B": { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic by StatementClassOfStockAxis (equivalent Class A / Class B)" },
+  "BRK.B": { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic by StatementClassOfStockAxis (equivalent Class A / Class B)" },
+  COKE: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (Common, Class B)" },
+  HSY: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (Common, Class B)" },
+  JEF: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (voting, non-voting)" },
+  KKR: { kind: "class", evidence: "10-Q Q2 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (Common)" },
+  V: { kind: "class", evidence: "10-Q Q2 FY2026: EarningsPerShareBasic by StatementClassOfStockAxis (Class A, B-1, B-2)" },
+  WMG: { kind: "class", evidence: "10-Q Q3 2026: EarningsPerShareBasic/Diluted by StatementClassOfStockAxis (Class A, Class B)" },
+  CQP: { kind: "units", evidence: "10-Q Q2 2026: NetIncomeLossPerOutstandingLimitedPartnershipAndGeneralPartnershipUnitBasicAndDiluted" },
+  MPLX: { kind: "units", evidence: "10-Q Q2 2026: NetIncomeLossPerOutstandingLimitedPartnershipUnitBasicNetOfTax" },
+  PAA: { kind: "units", evidence: "10-Q Q2 2026: IncomeLossFromContinuingOperationsPerOutstandingLimitedPartnershipUnitBasicNetOfTax (common units)" },
+  SUN: { kind: "units", evidence: "10-Q Q2 2026: NetIncomeLossPerOutstandingLimitedPartnershipUnitBasicNetOfTax" },
+  WES: { kind: "units", evidence: "10-Q Q1 2026: NetIncomeLossPerOutstandingLimitedPartnershipUnitBasicNetOfTax" },
+};
+
+/** The named reason for a blank EPS, or null to keep the caller's default. */
+export function epsBlankReason(symbol: string): string | null {
+  const hit = EPS_FILED_OTHERWISE[symbol.trim().toUpperCase()];
+  if (!hit) return null;
+  return hit.kind === "class" ? EMPTY_REASONS.epsPerClass : EMPTY_REASONS.epsPerUnit;
+}
 
 /**
  * THE REVENUE LINE IS INCOMPLETE WHEN THE PERIOD'S OWN OPERATING INCOME
@@ -429,12 +473,8 @@ export const EMPTY_REASONS = {
  * operating income stays under revenue and its margins stand.
  */
 export function revenueLineIncomplete(p: StoredPeriod | null | undefined): boolean {
-  const rev = valueOf(p, "revenue");
-  if (rev === null || rev <= 0) return false;
-  const op = valueOf(p, "operatingIncome");
-  if (op !== null) return op > rev;
-  const pre = valueOf(p, "preTaxIncome");
-  return pre !== null && pre > rev;
+  // THE ONE PREDICATE, shared with the extractor's fallback (secFields).
+  return revenueLineIncompleteValues(valueOf(p, "revenue"), valueOf(p, "operatingIncome"), valueOf(p, "preTaxIncome"));
 }
 /** "3 Jul 2026" — the same format the stock page's earnings card prints. */
 export function plainDate(iso: string): string {
@@ -529,6 +569,11 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
 
 export type SecEarningsView = {
   symbol: string;
+  /**
+   * Why EPS is blank for this filer when it is, where the filing says more than
+   * "not captured" (epsBlankReason). Null keeps each cell's own default.
+   */
+  epsReason: string | null;
   entityName: string | null;
   /** The newest quarter, fiscal-labelled. */
   latestLabel: string;
@@ -1327,6 +1372,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
 
   return {
     symbol: set.symbol,
+    epsReason: epsBlankReason(set.symbol),
     entityName: set.entityName,
     latestLabel: periodLabel(latest),
     latestEnd: latest.e,

@@ -27,6 +27,8 @@ import {
   asFiledOnlyFields,
   cumulativeFields,
   instantFields,
+  revenueLineIncompleteValues,
+  REVENUE_FALLBACK_CHAIN,
   secFieldsHash,
   type FieldDef,
 } from "./secFields";
@@ -102,8 +104,12 @@ export const SEC_YEAR_WINDOW = 6;
  *     no tag moved and no field order moved, so neither `c` nor `h` can see
  *     it, and a stored set written under 3 would keep its empty tables
  *     forever with nothing selecting it.
+ * 5 — a cited per-filer naming exception (data/sec/fiscal-year-naming-
+ *     overrides.json, via secExtractFor) replaces the vote where the two
+ *     disagree. CRWD's quarters move a fiscal year; the same payload labels
+ *     differently, so its stored set must be re-read.
  */
-export const SEC_LABEL_VERSION = 4;
+export const SEC_LABEL_VERSION = 5;
 
 export type FactRow = {
   start?: string;
@@ -810,6 +816,8 @@ export function fiscalMidYear(fiscalYearEndMs: number): number {
  */
 export type FiscalYearNaming = {
   offset: number;
+  /** True when a cited override replaced the vote (applyNamingOverride). */
+  overridden?: boolean;
   /** "annual" is a 10-K, 20-F or 40-F — the filing that states the year outright. */
   basis: "annual" | "10-Q" | null;
   /**
@@ -961,6 +969,20 @@ export function fiscalYearOffset(
   };
 }
 
+/**
+ * A CITED EXCEPTION TO THE VOTE, applied only where the two disagree (#535
+ * COWORK #12 on #2). Every automatic source was measured and each breaks more
+ * filers than it fixes — SEC's fy vote is wrong on CRWD alone, the newest
+ * reading on 3, the filer's own DEI on 2 (AAP, CRM) — so the one remaining
+ * error is corrected by a reviewed, cited entry rather than by a fourth rule.
+ * PURE; the list lives in data/sec/fiscal-year-naming-overrides.json and
+ * reaches here through secExtractFor, so this module stays import-free.
+ */
+export function applyNamingOverride(vote: FiscalYearNaming, override: number | undefined): FiscalYearNaming {
+  if (override === undefined || (override !== 0 && override !== 1) || override === vote.offset) return vote;
+  return { ...vote, offset: override, overridden: true };
+}
+
 // ── extraction ──────────────────────────────────────────────────────────────
 
 type Bucket = Map<string, { row: FactRow; tag: string; ns: string; rank: number; unit: string }[]>;
@@ -976,7 +998,11 @@ const periodKey = (r: FactRow) => `${r.start ?? ""}..${r.end}`;
 export function extractCompanyFacts(
   symbol: string,
   facts: CompanyFacts,
-  opts: { quarters?: number; years?: number; instants?: number } = {}
+  opts: {
+    quarters?: number; years?: number; instants?: number;
+    /** A cited naming exception (data/sec/fiscal-year-naming-overrides.json), via secExtractFor. */
+    namingOffset?: number;
+  } = {}
 ): ExtractResult {
   const keepQuarters = opts.quarters ?? SEC_QUARTER_WINDOW;
   const keepYears = opts.years ?? SEC_YEAR_WINDOW;
@@ -1042,7 +1068,21 @@ export function extractCompanyFacts(
   const quarterMeta = new Map<string, { start: string; row: FactRow }>();
   const yearMeta = new Map<string, { start: string; row: FactRow }>();
 
-  for (const field of cumulativeFields()) {
+  // ONE DIFFERENCING ROUTINE, RUN TWICE: for the real fields, and for the
+  // revenue fallback chain into cells of its own (see REVENUE_FALLBACK_CHAIN).
+  // The parameters shadow the outer names on purpose, so the loop below reads
+  // exactly as it did before it was wrapped.
+  const runCumulative = (
+    fields: FieldDef[],
+    buckets: Map<string, Bucket>,
+    preferred: Map<string, string | null>,
+    quarterCells: Map<string, Map<string, FieldValue>>,
+    yearCells: Map<string, Map<string, FieldValue>>,
+    quarterMeta: Map<string, { start: string; row: FactRow }>,
+    yearMeta: Map<string, { start: string; row: FactRow }>,
+    notes: string[],
+  ) => {
+  for (const field of fields) {
     const bucket = buckets.get(field.key)!;
 
     // Cumulative frames grouped by the fiscal year they start: a 3M, 6M, 9M and
@@ -1131,6 +1171,46 @@ export function extractCompanyFacts(
           covers: [prior.end, f.end],
           from: [prior.end, f.end],
         });
+      }
+    }
+  }
+
+  };
+  runCumulative(cumulativeFields(), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes);
+
+  // ── THE REVENUE FALLBACK, ONLY WHERE THE LINE IS INCOMPLETE ──────────────
+  // Same rows, same differencing, a different chain, and its own cells: a
+  // period the predicate does not flag cannot be touched, by construction. A
+  // fallback that still sits below operating (or pre-tax) income resolves
+  // nothing, so the period keeps its own figure and the pages keep refusing it.
+  {
+    const revenueField = SEC_FIELDS.find((f) => f.key === "revenue")!;
+    const fbField: FieldDef = { ...revenueField, chain: [...REVENUE_FALLBACK_CHAIN], ifrsChain: undefined };
+    const fbRows = rowsForField(facts, fbField, new Set<string>(), currency);
+    const fbBucket: Bucket = new Map();
+    for (const c of fbRows) {
+      const k = periodKey(c.row);
+      const list = fbBucket.get(k);
+      if (list) list.push(c);
+      else fbBucket.set(k, [c]);
+    }
+    const fbQuarter = new Map<string, Map<string, FieldValue>>();
+    const fbYear = new Map<string, Map<string, FieldValue>>();
+    runCumulative(
+      [fbField], new Map([["revenue", fbBucket]]), new Map([["revenue", preferredTag(fbRows)]]),
+      fbQuarter, fbYear, new Map(), new Map(), [],
+    );
+    for (const [cells, fbCells] of [[quarterCells, fbQuarter], [yearCells, fbYear]] as const) {
+      for (const [end, m] of cells) {
+        const rev = m.get("revenue")?.val ?? null;
+        const op = m.get("operatingIncome")?.val ?? null;
+        const pre = m.get("preTaxIncome")?.val ?? null;
+        if (!revenueLineIncompleteValues(rev, op, pre)) continue;
+        const fb = fbCells.get(end)?.get("revenue");
+        const bar = op ?? pre;
+        if (!fb || fb.val == null || bar == null || fb.val < bar) continue;
+        m.set("revenue", fb);
+        notes.push(`revenue ${end}: tagged line ${rev} is below ${op != null ? "operating" : "pre-tax"} income ${bar}; ${fb.tag} ${fb.val} used`);
       }
     }
   }
@@ -1240,7 +1320,7 @@ export function extractCompanyFacts(
   const yearEnds = [...yearCells.keys()].sort();
   const yearEndAnchor = yearEnds[yearEnds.length - 1] ?? null;
   // READ ONCE PER FILER, from its own filings. Not a convention, not a guess.
-  const naming = fiscalYearOffset(facts, yearEndAnchor);
+  const naming = applyNamingOverride(fiscalYearOffset(facts, yearEndAnchor), opts.namingOffset);
   // ── AND THE ANNUAL FILING'S OWN PERIOD END BEATS THE FRAME-DERIVED ONE ──
   // `yearEndAnchor` is the newest twelve-month frame, and a trailing-twelve-
   // month comparative in a 10-Q is twelve months long without being a fiscal
