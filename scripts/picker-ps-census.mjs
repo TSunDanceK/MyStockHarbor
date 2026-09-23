@@ -11,13 +11,14 @@ import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 const redis = Redis.fromEnv();
 
-const src = fs.readFileSync("lib/server/secFields.ts", "utf8");
-const fnSrc = src.slice(src.indexOf("export function revenueLineIncompleteValues"));
-const body = fnSrc.slice(0, fnSrc.indexOf("\n}\n") + 3);
-const incomplete = body.includes("revenueLineIncompleteValues")
-  ? (rev, op, pre) => { if (rev == null || rev <= 0) return false; if (op != null) return op > rev; return pre != null && pre > rev; }
-  : null;
-if (!incomplete) { console.error("FATAL: predicate not found"); process.exit(2); }
+// The rule as shipped in #540 (secEarningsView.revenueLineIncomplete) and,
+// once #546 merges, secFields.revenueLineIncompleteValues — identical text.
+const incomplete = (rev, op, pre) => {
+  if (rev == null || rev <= 0) return false;
+  if (op != null) return op > rev;
+  return pre != null && pre > rev;
+};
+void fs;
 
 const keys = [];
 let cursor = "0";
