@@ -746,6 +746,16 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX. What closes the grid's in-universe SEC gaps
+  // (6-K results, missing records, stale records), projected coverage, job-time
+  // cost, and SEC-only market-cap floor counts. GETs only; `write-` is the
+  // CREDENTIAL boundary. claude/grid-sec-gaps-measured-2026-09-23.md
+  "write-grid-sec-gaps": {
+    script: "scripts/grid-sec-gaps.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-valuation-price": {
     script: "scripts/valuation-price-probe.mjs",
     args: () => [],
