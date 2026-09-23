@@ -9,6 +9,7 @@ import {
   type Cell, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
+import { SEC_FIELDS, type Statement } from "./secFields";
 
 // ── the hide registry ───────────────────────────────────────────────────────
 
@@ -144,9 +145,29 @@ export function conversionNote(c: NonNullable<SecEarningsView["currency"]>): str
  * income tax line at 14,874.0M against ~5,000M either side. Labelling it is
  * accurate whichever way the adjusted question later goes.
  */
-export const GAAP_EPS_NOTE =
-  "EPS is GAAP, as filed with the SEC. Companies often headline an adjusted " +
-  "figure that excludes one-off charges; the two can differ substantially.";
+export function epsBasisNote(accounting: "IFRS" | "US GAAP" | null): string {
+  const lead = accounting === "IFRS"
+    ? "EPS is IFRS, as filed with the SEC."
+    : accounting === "US GAAP"
+      ? "EPS is GAAP, as filed with the SEC."
+      : "EPS is as filed with the SEC.";
+  return `${lead} Companies often headline an adjusted ` +
+    "figure that excludes one-off charges; the two can differ substantially.";
+}
+
+/** The US GAAP wording — what every stock used to get, IFRS filers included. */
+export const GAAP_EPS_NOTE = epsBasisNote("US GAAP");
+
+/**
+ * The standard's word inside an EPS label: "Diluted EPS (GAAP)", "(IFRS)".
+ *
+ * THE LABEL SAID GAAP ON EVERY STOCK, including AZN, KGC and ABVX, which file
+ * under IFRS (owner, #514). Null — a set that predates the namespace census —
+ * names no standard rather than guess one.
+ */
+export function epsStandardWord(accounting: "IFRS" | "US GAAP" | null): string {
+  return accounting === "IFRS" ? "IFRS" : accounting === "US GAAP" ? "GAAP" : "as filed";
+}
 
 /**
  * The label for a figure the filer did not publish for that period.
@@ -157,9 +178,29 @@ export const GAAP_EPS_NOTE =
  * difference between a figure a reader can check against the 10-Q and one they
  * cannot.
  */
-export function derivationNote(derived: Cell["derived"]): string | null {
+export function derivationNote(
+  derived: Cell["derived"],
+  /**
+   * WHERE THE CELL CAME FROM — only "differenced" reads it.
+   *
+   * ONE SENTENCE WAS DESCRIBING TWO DIFFERENT SUBTRACTIONS. Cash flow is filed
+   * year-to-date, so its Q2 and Q3 are differences; that is what the original
+   * wording said, and it is still true for cash-flow lines. But the same
+   * "differenced" tag lands on INCOME-STATEMENT lines on a Q4, where the
+   * arithmetic is the full year minus the first nine months, and the old note
+   * told ABVX's reader its Q4 net income was a cash-flow figure (brief
+   * 2026-09-22 §1.2 item 4). Omitted context keeps the cash-flow wording, which
+   * is what every caller got before this parameter existed.
+   */
+  context: { statement?: Statement | null; fp?: string | null } = {}
+): string | null {
   switch (derived) {
     case "differenced":
+      if (context.statement === "income") {
+        return context.fp === "Q4"
+          ? "Derived: Q4 is not filed on its own, so this is the full-year figure minus the first nine months."
+          : "Derived: this period minus the previous year-to-date figure, because the filer reports this line year-to-date.";
+      }
       return "Derived: this period minus the previous year-to-date figure, because the filer reports cash flow cumulatively.";
     case "computed":
       return "Derived: net income divided by this quarter's weighted average share count.";
@@ -168,6 +209,44 @@ export function derivationNote(derived: Cell["derived"]): string | null {
     default:
       return null;
   }
+}
+
+/** See SecEarningsView.accounting. */
+/**
+ * See SecEarningsView.accounting.
+ *
+ * THE NAMESPACE THE CELLS WERE READ FROM, NOT THE ONES THE PAYLOAD CARRIES.
+ * The first version said "US GAAP" whenever `us-gaap` was in `tx`, and 48
+ * stored sets carry both namespaces — most of them IFRS filers with a handful
+ * of stray us-gaap tags (relay 35771324089; see ExtractResult.readNamespaces).
+ *
+ *   1. `rns` present → whichever namespace supplied more stored cells.
+ *   2. otherwise `tx` carrying exactly one of the two → that one.
+ *   3. otherwise (both, neither, or no census) → null. The page then names no
+ *      standard at all rather than guess; a re-read writes `rns` and settles it.
+ */
+export function accountingOf(set: Pick<StoredFactSet, "tx" | "rns">): "IFRS" | "US GAAP" | null {
+  if (set.rns) {
+    const us = set.rns["us-gaap"] ?? 0;
+    const ifrs = set.rns["ifrs-full"] ?? 0;
+    if (us > ifrs) return "US GAAP";
+    if (ifrs > us) return "IFRS";
+    return null;
+  }
+  if (!set.tx) return null;
+  const us = set.tx.includes("us-gaap");
+  const ifrs = set.tx.includes("ifrs-full");
+  if (us && !ifrs) return "US GAAP";
+  if (ifrs && !us) return "IFRS";
+  return null;
+}
+
+/** See SecEarningsView.snapshot.fyEpsDiluted. */
+function fiscalYearEps(set: StoredFactSet, latest: StoredPeriod, epsStd: string): { label: string; cell: ViewCell } | null {
+  if (latest.fp !== "Q4" || valueOf(latest, "epsDiluted") !== null) return null;
+  const year = set.years.find((y) => y.e === latest.e) ?? null;
+  if (!year || valueOf(year, "epsDiluted") === null) return null;
+  return { label: periodLabel(year), cell: view(year, "epsDiluted", `Diluted EPS (${epsStd})`) };
 }
 
 export const isDerived = (c: Cell) => c.derived === "differenced" || c.derived === "computed";
@@ -313,6 +392,28 @@ export const CROSSING_NOTE =
   "rather than a percentage: a change measured against a loss is an artefact " +
   "of the arithmetic, not a rate of growth.";
 
+/**
+ * THE REASONS, AS WORDS THE CARD PRINTS. One place, so the check can assert
+ * which one a tile got without matching prose scattered through a function.
+ *
+ * NOT_CAPTURED is the honest remainder: the stored set has no value for this
+ * period and nothing recorded says the filer lacks the line. It claims only
+ * that WE did not capture it — never "not reported", and never "not in the
+ * filing", both statements about the company.
+ *
+ * ── WHY IT IS NOT "Not in this period's filed figures" ───────────────────
+ * That wording was used for exactly the cases we cannot tell apart: a set
+ * written before the `nt` marker, where "not captured" (a chain gap) and "not
+ * filed" look identical. It was false for AVAV, whose FY2022/FY2023 revenue IS
+ * in its 10-Ks under a concept the chain did not list (owner review, #522).
+ * "No revenue line in this filing" stays, and only where the marker confirms it.
+ */
+export const EMPTY_REASONS = {
+  q4NotFiled: "Q4 is not filed on its own",
+  noRevenueLine: "No revenue line in this filing",
+  needsRevenue: "Needs revenue",
+  notCaptured: "Not captured from this filing",
+} as const;
 /** Is this a figure, as opposed to absent or a crossing? */
 export const isPct = (v: Pct): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -361,9 +462,16 @@ export type ViewCell = Cell & {
  */
 const PER_SHARE_KEYS = new Set(["epsBasic", "epsDiluted"]);
 
+/** Which statement each stored field sits on, from the field table itself. */
+const STATEMENT_OF = new Map<string, Statement>(SEC_FIELDS.map((f) => [f.key, f.statement]));
+
 const view = (p: StoredPeriod | null | undefined, key: string, label: string): ViewCell => {
   const c = cell(p, key);
-  return { ...c, key, label, derivedNote: derivationNote(c.derived), perShare: PER_SHARE_KEYS.has(key) };
+  return {
+    ...c, key, label,
+    derivedNote: derivationNote(c.derived, { statement: STATEMENT_OF.get(key) ?? null, fp: p?.fp ?? null }),
+    perShare: PER_SHARE_KEYS.has(key),
+  };
 };
 
 export type SecEarningsView = {
@@ -382,7 +490,35 @@ export type SecEarningsView = {
     netIncome: ViewCell;
     operatingIncome: ViewCell;
     comparedWith: string | null;
+    /**
+     * THE FISCAL YEAR'S DILUTED EPS, when the anchor is a Q4 with none of its own.
+     *
+     * Q4 EPS is null BY DESIGN: EPS is a ratio and FY minus 9M of a ratio is
+     * not the fourth quarter's ratio (see FieldKind "duration-ratio"). So on a
+     * derived Q4 the EPS tile is always blank, and the filing that produced the
+     * rest of the quarter DID state an EPS — for the year. This carries that
+     * figure, labelled with its own year, for a tile that prints it as a
+     * clearly marked full-year line rather than a quarter's (brief 2026-09-22
+     * §1.2 item 2, flagged there as an owner-veto departure).
+     *
+     * Null unless the anchor is a Q4, its own EPS is null, and a fiscal year
+     * ending on the same date carries one.
+     */
+    fyEpsDiluted: { label: string; cell: ViewCell } | null;
   };
+  /**
+   * WHICH ACCOUNTING STANDARD THE FIGURES WERE READ UNDER — see accountingOf
+   * for the rule. Null is "unknown": the page then names no standard.
+   *
+   * THE SIDEBAR'S FOOTER SAID "US GAAP" ON EVERY STOCK, ABVX and AZN included,
+   * because it was a constant. Both file IFRS.
+   */
+  accounting: "IFRS" | "US GAAP" | null;
+  /**
+   * Fields the filer publishes no chain concept for at all. See
+   * StoredFactSet.nt. Null when the set predates the marker — unknown.
+   */
+  untagged: string[] | null;
   /**
    * WHAT CURRENCY THE FIGURES ON THIS PAGE ARE IN, AND HOW THEY GOT THERE.
    *
@@ -705,6 +841,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
   // printing euros as dollars, which is the single worst outcome available
   // here and the one nobody would catch by looking.
   if ((set.cur ?? "USD") !== "USD" && !set.fx) return null;
+  const epsStd = epsStandardWord(accountingOf(set));
 
   // ── TWO ANCHORS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS ──────────────────
   //
@@ -964,7 +1101,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       comparedWith: prior ? periodLabel(prior) : null,
       revenue: view(p, "revenue", "Revenue"),
       revenueYoY: yoy(valueOf(p, "revenue"), valueOf(prior, "revenue")),
-      epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(p, "epsDiluted"), valueOf(prior, "epsDiluted")),
       gross: pctOf(valueOf(p, "grossProfit") ?? nullableDiff(p), valueOf(p, "revenue")),
       operating: pctOf(valueOf(p, "operatingIncome"), valueOf(p, "revenue")),
@@ -1054,8 +1191,8 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
     ["incomeTaxExpense", "Income tax"],
     ["netIncomeToNoncontrollingInterest", "Less: noncontrolling interest"],
     ["netIncome", "Net income"],
-    ["epsBasic", "Basic EPS (GAAP)"],
-    ["epsDiluted", "Diluted EPS (GAAP)"],
+    ["epsBasic", `Basic EPS (${epsStd})`],
+    ["epsDiluted", `Diluted EPS (${epsStd})`],
     ["sharesDiluted", "Diluted shares"],
   ];
 
@@ -1107,12 +1244,15 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
       // them on converted values would put the FX move in the headline while
       // the table below it read correctly.
       revenueYoY: yoy(valueOf(home(latest), "revenue"), valueOf(home(yearAgo), "revenue")),
-      epsDiluted: view(latest, "epsDiluted", "Diluted EPS (GAAP)"),
+      epsDiluted: view(latest, "epsDiluted", `Diluted EPS (${epsStd})`),
       epsYoY: yoy(valueOf(home(latest), "epsDiluted"), valueOf(home(yearAgo), "epsDiluted")),
       netIncome: view(latest, "netIncome", "Net income"),
       operatingIncome: view(latest, "operatingIncome", "Operating income"),
       comparedWith: yearAgo ? periodLabel(yearAgo) : null,
+      fyEpsDiluted: fiscalYearEps(set, latest, epsStd),
     },
+    accounting: accountingOf(set),
+    untagged: set.nt ?? null,
     currency:
       (set.cur ?? "USD") === "USD"
         ? null
@@ -1226,7 +1366,7 @@ export function buildSecEarningsView(set: StoredFactSet): SecEarningsView | null
         label: periodLabel(p),
         end: p.e,
         revenue: view(p, "revenue", "Revenue"),
-        epsDiluted: view(p, "epsDiluted", "Diluted EPS (GAAP)"),
+        epsDiluted: view(p, "epsDiluted", `Diluted EPS (${epsStd})`),
         netIncome: view(p, "netIncome", "Net income"),
       })),
     ttmRevenue: ttm(q, "revenue"),

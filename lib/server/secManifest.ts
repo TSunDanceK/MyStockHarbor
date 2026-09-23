@@ -190,6 +190,19 @@ export type SecManifestEntry = {
    * secReportDatesStore is the single home.
    */
   reportDatesAt?: number | null;
+  /**
+   * The newest 8-K or 6-K the daily index saw for this symbol, YYYYMMDD.
+   *
+   * THE ONE SIGNAL THAT A RESULTS DATE MAY HAVE MOVED WITHOUT THE FACT SET
+   * MOVING. An Item 2.02 8-K changes no companyfacts figure until the 10-Q,
+   * so a report-dates rewrite keyed on "the fact set changed" leaves MU on the
+   * due strip for weeks after it reported. The index carries the form and not
+   * the item, so this is "an 8-K or 6-K was filed", and the report-dates phase
+   * treats it as "re-read this record first" rather than as a results claim.
+   *
+   * Optional: absent means the index has not seen one since the field began.
+   */
+  lastEventFiled?: string | null;
   verifiedAt: number | null;
   needsReverify: boolean;
   scoreVersion: number;

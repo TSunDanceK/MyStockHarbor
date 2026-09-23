@@ -339,6 +339,23 @@ check("a /A filing is recorded as a restatement, not folded into lastAccession",
   amendManifest.symbols.MU.lastAmendment?.form === "10-Q/A" && amendManifest.symbols.MU.needsReverify === true,
   JSON.stringify(amendManifest.symbols.MU.lastAmendment));
 
+// An 8-K or 6-K records lastEventFiled, the report-dates phase's tier-1 signal:
+// an Item 2.02 moves no companyfacts figure until the 10-Q, so without it MU
+// would stay on the due strip for weeks after reporting.
+const eventManifest = man.emptyManifest();
+man.seedManifest(eventManifest, ["MU", "ARM", "PLAB"], FIXTURE_CIK, true);
+route.applyFilings(eventManifest, [
+  { symbol: "MU", form: "8-K", filed: "20260923", accession: "0000723125-26-000060", amendment: false },
+  { symbol: "MU", form: "8-K", filed: "20260921", accession: "0000723125-26-000059", amendment: false },
+  { symbol: "ARM", form: "6-K/A", filed: "20260922", accession: "0001973239-26-000020", amendment: true },
+  { symbol: "PLAB", form: "10-Q", filed: "20260923", accession: "0000810136-26-000010", amendment: false },
+]);
+check("an 8-K records lastEventFiled, newest wins",
+  eventManifest.symbols.MU.lastEventFiled === "20260923", String(eventManifest.symbols.MU.lastEventFiled));
+check("...and so does an amended 6-K", eventManifest.symbols.ARM.lastEventFiled === "20260922");
+check("...but a 10-Q does not (it moves the fact set, which queues its own rewrite)",
+  !eventManifest.symbols.PLAB.lastEventFiled);
+
 // ── 6. Dedupe, malformed rows, dissemination window ─────────────────────────
 console.log("\n6. Edges");
 const dupBody = header("x") +

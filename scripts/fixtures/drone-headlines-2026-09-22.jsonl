@@ -1,0 +1,88 @@
+# Real Google News headlines for five drone/defence symbols, captured 2026-09-22
+# by the `drone-sample` relay task (run 35780548638, read-only job).
+#
+# WHY THESE FIVE AND WHY A SECOND CAPTURE. None of ONDS, RCAT, UMAC, AVAV or
+# KTOS is in scripts/fixtures/eventtype-gnews.jsonl, so nothing in this repo
+# said what layer 1 does on drone/defence copy — the exact copy the layered
+# picker was asked about. 14 items per symbol, 70 rows.
+#
+# THE QUERY SHAPE IS RECORDED PER ROW. Google News wants a company name, and
+# three of the five are absent from scripts/fixtures/company-names.txt (a
+# sampled fixture, not a directory). Those were queried by TICKER, which is a
+# worse search; inventing a name would have quietly changed what was searched
+# for. `shape` says which each row got.
+#
+# TITLES ARE VERBATIM, publisher suffix and HTML entities included, exactly as
+# eventtype-gnews.jsonl keeps them: the adapter strips the suffix and the
+# measurement strips it too, and a fixture that pre-strips hides whether the
+# stripper still works.
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"ONDS Stock Draws Traders As Defense Acquisitions Accelerate - timothysykes.com"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Why Is ONDS Stock Falling Premarket? Omnisys-Related Share Resale, Cramer’s ‘Meme Stock’ Jab Weigh - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas (ONDS) Expands Defense Footprint With Aggressive Acquisitions - StocksToTrade"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Acquires GATE Technologies and Bron Technologies, Expanding Precision-Strike Platform with Electronic Safe &amp; Arm and Fuze Technology - Ondas Holdings"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas vs. Red Cat: Which Drone Stock Is the Better Pick Now? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Acquires GATE And Bron Technologies In Deal Worth Up To $390 Million To Expand Precision-Strike Platform - Pulse 2.0"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Enters The Execution Phase (NASDAQ:ONDS) - Seeking Alpha"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Holdings Stock (ONDS) Opinions on Rising Analyst Price Targets - Quiver Quantitative"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Revenue at Palantir-Backed Ondas Rises 1,236%. Stock Falls as Losses Widen. - Barron's"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Inc Stock Short Interest Falls to 40.65% - Moomoo"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Stock Eyes Best Week In 4 Months: CEO Says 'Our Plan Is Working' - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Stock Draws Traders As Defense Backlog Soars - timothysykes.com"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas Drops 6% as Risk-Off Selling Cascades Through Drone Names, Red Cat Slides 3% - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"ONDS","shape":"name","title":"Ondas to Acquire Aran Defense, Strengthening Israel's Sovereign Defense-Industrial Base - Ondas Holdings"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Why Is RCAT Stock Lifting Off Premarket Today? - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat (RCAT) Stock Could Be Above Fair Value As Tariff News Lifts Sentiment - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"RCAT Stock Slips As CEO Jeffrey Thompson Unloads Shares - StocksToTrade"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat (NASDAQ: RCAT) CEO sells stock, lines up multimillion forward deal - Stock Titan"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"RCAT Technical Analysis &amp; Stock Price Forecast - Intellectia AI"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"What Red Cat Holdings Stock's 2026 Revenue Goal Means For Shareholders - simplywall.st"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Here's Why You Should Watch Red Cat In H2 2026 (NASDAQ:RCAT) - Seeking Alpha"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat Stock Could Fly On Pentagon's Biggest-Ever Drone Bet, Evercore Says - Benzinga"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat Misses the Cut in Pentagon's Latest Drone Dominance Round (CORRECTED) - TradingView"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"RCAT Stock Falls To Near Two-Month Low, But Retail Bets Iran Conflict Could Boost Military Drone Demand - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat (RCAT) Stock Still Looks Above Fair Value Following A 7x Run - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat: Big Order Promises Intact (NASDAQ:RCAT) - Seeking Alpha"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Why ONDS, RCAT And Other Drone Stocks Are Surging In Overnight Trading - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"RCAT","shape":"ticker","title":"Red Cat Holdings (RCAT) Stock Is Jumping Today: What’s Moving Drone Stocks? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"3 Drone Tech Stocks Well-Positioned for Long-Term Growth - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"How Investors May Respond To Unusual Machines Stock (UMAC) Conference Presentations - simplywall.st"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Unusual Machines (UMAC) Stock Is Climbing Today: Is the Whole Drone Group Moving? - 24/7 Wall St."}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Is Unusual Machines (UMAC) Undervalued Following Its Investor Conference Lineup? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Why Unusual Machines Stock Is Plummeting Today - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Unusual Machines (UMAC) Stock May Be Overvalued Following Explosive Q2 Growth - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Unusual Machines (UMAC) Could Be 1,262% Overvalued After Its Recent Rally - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"UMAC Stock Might See A 110% Rise From Current Levels, Says Analyst – What’s Driving The Bull Case? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Unusual Machines (UMAC) Reports Q2 Losses, Is The Upside Already Priced In? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"UMAC Stock Eyes Second Weekly Gains: Drone Maker Ties Its CEO’s Fortune To Sky-High Stock Targets - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Piper Sandler Is Bullish on Unusual Machines Stock. Here's Why. - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Why Unusual Machines Stock Just Popped - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"UMAC","shape":"ticker","title":"Assessing Unusual Machines (UMAC) Valuation After A Powerful Momentum-Driven Share Price Run - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Drones Stock AeroVironment Is Now a Space Stock, Too - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AeroVironment (AVAV) Could Be 55% Above Fair Value Following Its $50 Million LOCUST Win - simplywall.st"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AVAV Stock Gains As NASA Taps AeroVironment For Three Mars Helicopters For 2028 Mission — Here’s What They’ll Be Looking For Under The Martian Surface - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Dear AeroVironment Stock Fans, Mark Your Calendars for September 9 - Barchart.com"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AeroVironment Stock: The Market Is Pricing In Too Much Acquisition Risk (NASDAQ:AVAV) - Seeking Alpha"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AeroVironment Stock Jumps After Earnings Beat. There's Still Growth for Drones. - Barron's"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AeroVironment Stock Jumps 4% After Q1 Earnings Beat Expectations - TIKR.com"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Laser Weapons Are Real Now -- and You Can Invest in Them With AeroVironment Stock - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Laser Weapons Are Real Now -- and You Can Invest in Them With AeroVironment Stock - The Motley Fool"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AVAV, KTOS Stocks Gain Overnight: Wedbush Calls AeroVironment, Kratos Long-Term Winners In Defense Tech - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Why AeroVironment (AVAV) Stock Is Up Today - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"AeroVironment (AVAV) Stock Looks Stretched On Its 57% Three Year Run - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"What Does AeroVironment (AVAV) Winning A $464.8 Million Army Laser Deal Change? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"AVAV","shape":"name","title":"Ahead of Aerovironment Earnings, Here's What Barchart Data Says Comes Next for AVAV Stock - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"AVAV, KTOS Stocks Gain Overnight: Wedbush Calls AeroVironment, Kratos Long-Term Winners In Defense Tech - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"KTOS Stock Falls 37% YTD: Can New Defense Awards Spark a Rebound? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"A GE and Kratos cruise-missile engine hits 100% in a critical test phase - Stock Titan"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Why Kratos Defense &amp; Security Solutions (KTOS) Stock Is Down Today - Quiver Quantitative"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Kratos Defense &amp; Security Solutions (NASDAQ:KTOS) Stock Rating Upgraded by Guggenheim - MarketBeat"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Kratos (KTOS) Stock Looks Rich On Cash Flow And Sales - simplywall.st"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Kratos’ Drone Business Is Just the Beginning for This Defense Stock - Clearance Jobs"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Why Is Kratos Defense Stock Down 63% From Its All-Time High - TIKR.com"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Better Drone Stock: Kratos Defense vs. Northrop Grumman - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Insider plans another stock sale at Kratos (NASDAQ: KTOS) - Stock Titan"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Drone Stocks Are Back In Play: Why RCAT, AVAV, KTOS, UMAC Stocks Are Climbing - Stocktwits"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Could Kratos Defense &amp; Security Solutions (KTOS) Stock Outperform GE Aerospace (GE) as Next-Generation Defense Spending Accelerates? - Yahoo Finance"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Kratos receives about $35 million to produce hardware for warfighters - Stock Titan"}
+{"src":"gnews-2026-09-22","symbol":"KTOS","shape":"ticker","title":"Kratos (KTOS) Down 13.7% Since Last Earnings Report: Can It Rebound? - Yahoo Finance"}
