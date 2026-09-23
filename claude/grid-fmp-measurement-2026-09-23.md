@@ -1,5 +1,8 @@
 # The earnings grid's three FMP calls, measured against SEC and the price pool (2026-09-23)
 
+> **2026-09-23 (#552, COWORK #4):** per-ticker FMP values (names, dates) in this doc are redacted as
+> "[removed 2026-09-23]". Aggregate counts and the findings are kept.
+
 **This is a measurement only.** No production code was changed, nothing new is
 wired, and Tiingo was not touched (the owner is still confirming its licence).
 
@@ -61,7 +64,7 @@ date agreement (n=379): same day 356 (93.9%) · ±1 day 22 (5.8%) · 4-10 days 1
 |---|---|
 | The grid's own shape filter drops the symbol | BF-B, BRK-B |
 | FMP never listed these spellings | BRK.B (the manifest carries both BRK.B and BRK-B), ATHS |
-| FMP's date is more than 10 days away | PAA: SEC 2026-09-08, FMP 2026-08-07 |
+| FMP's date is more than 10 days away | PAA: SEC 2026-09-08, FMP [removed 2026-09-23] |
 
 **FMP-only (304), by reason:**
 
@@ -183,15 +186,15 @@ The 11 that differ fall into three kinds:
 
 | Kind | Symbols |
 |---|---|
-| **Renames where SEC is newer** | HCWC (FMP "Healthy Choice Wellness Corp." / SEC "Host Digital Inc."), LUCY ("Lucyd" / "Innovative Eyewear"), ZONE ("CleanCore Solutions" / "Zone Frontier"), CPB ("Campbell Soup Company" / "CAMPBELL'S Co"), BILL ("Bill.com Holdings" / "BILL Holdings") |
-| **Language** | BMA ("Banco Macro S.A." / "Macro Bank Inc."), SQM ("Sociedad Química y Minera de Chile" / "CHEMICAL & MINING CO OF CHILE") |
+| **Renames where SEC is newer** | HCWC (FMP [removed 2026-09-23] / SEC "Host Digital Inc."), LUCY (FMP [removed 2026-09-23] / SEC "Innovative Eyewear"), ZONE (FMP [removed 2026-09-23] / SEC "Zone Frontier"), CPB (FMP [removed 2026-09-23] / SEC "CAMPBELL'S Co"), BILL (FMP [removed 2026-09-23] / SEC "BILL Holdings") |
+| **Language** | BMA (FMP [removed 2026-09-23] / SEC "Macro Bank Inc."), SQM (FMP [removed 2026-09-23] / SEC "CHEMICAL & MINING CO OF CHILE") |
 | **SEC's surname-first or spaced style** | FUL ("FULLER H B CO"), JBSS ("SANFILIPPO JOHN B & SON"), GROW ("U S GLOBAL INVESTORS"), RFIL ("R F INDUSTRIES") |
 
 In the 42 "first word agrees" cases, the difference is mostly FMP appending the
 security class ("Warrants", "American Depositary Shares", "Unit", "9.00% Senior Notes
 due 2027", "PFD DEP1/1000A"). SEC gives the issuer. There are also more renames
 where SEC is newer: ENGN "enGene Therapeutics", OSRH "OSR Health", TWLV "Twelve Seas
-Investment Co III", PPSI, where FMP has the truncated "Pioneer Pow".
+Investment Co III", PPSI, where FMP has a truncated name ([removed 2026-09-23]).
 
 ## C. Admission: FMP quote `exchange` vs `usOk` / the price pool
 

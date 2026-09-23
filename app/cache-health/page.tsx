@@ -22,8 +22,7 @@ import {
   COMPANY_NAME_SNAPSHOT_AS_OF,
 } from "@/lib/server/companyNameSnapshot";
 import {
-  SNAPSHOT_AS_OF,
-  SNAPSHOT_SIZE,
+  PROFILED_SIZE,
   CIK_MAP_SIZE,
   CIK_COVERED,
   CIK_MISSING,
@@ -375,15 +374,9 @@ export default async function CacheHealthPage({
             </p>
           )}
 
-          {/* The snapshot became load-bearing at the flip: there is no FMP call
-              left to refill an expired sector, so a symbol outside this file has
-              no sector, no art bucket and no sector page. */}
-          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 10 }}>
-            Static profile snapshot: {SNAPSHOT_SIZE.toLocaleString()} symbols, captured {SNAPSHOT_AS_OF}.
-            Sector and industry fall through to it when the cache has nothing; a symbol in neither
-            logs <code>[static-profile]</code> and draws the generated card.
-          </p>
-
+          {/* 2026-09-23 (#552, COWORK #4): the "Static profile snapshot" line
+              is gone with data/static-profile.json (FMP data, removed). Sector
+              and industry now fall from the cache to the SEC SIC leg. */}
           {/* ── CIK COVERAGE ──────────────────────────────────────────────
               A symbol with no CIK gets [] from the SEC adapter on EVERY render,
               permanently, and says so only through a per-request console.warn.
@@ -406,8 +399,8 @@ export default async function CacheHealthPage({
 
           <p style={{ color: CIK_MISSING ? "#eab308" : "#94a3b8", fontSize: 12, marginTop: 10 }}>
             CIK map: {CIK_MAP_SIZE.toLocaleString()} symbols — covers{" "}
-            {CIK_COVERED.toLocaleString()} of the {SNAPSHOT_SIZE.toLocaleString()} profiled (
-            {((100 * CIK_COVERED) / Math.max(1, SNAPSHOT_SIZE)).toFixed(1)}%).
+            {CIK_COVERED.toLocaleString()} of the {PROFILED_SIZE.toLocaleString()} profiled (
+            {((100 * CIK_COVERED) / Math.max(1, PROFILED_SIZE)).toFixed(1)}%).
             {CIK_MISSING > 0 ? (
               <>
                 {" "}

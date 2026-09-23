@@ -33,7 +33,19 @@ if (url.search || url.hash || /share|token|bypass|secret/i.test(raw)) {
   throw new Error("PREVIEW_URL must be a bare origin: no query string, no share link, no token");
 }
 const origin = url.origin;
-const symbols = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+// OPTIONAL SECTION TOKEN (Relay B, 2026-09-23): SYMBOLS may carry one
+// "section=<name>" token choosing which block is clipped. Default "about" keeps
+// every existing dispatch unchanged. Names map to a heading test below; the
+// token is validated against that fixed list, so no free text reaches the page.
+const SECTIONS = {
+  about: "/^About /",
+  returns: "/close-over-close change/i",
+};
+const tokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+const sectionToken = tokens.find((t) => t.startsWith("section="));
+const section = sectionToken ? sectionToken.slice("section=".length) : "about";
+if (!Object.hasOwn(SECTIONS, section)) throw new Error(`section= takes one of: ${Object.keys(SECTIONS).join(", ")}`);
+const symbols = tokens.filter((t) => t !== sectionToken);
 if (!symbols.length) throw new Error("SYMBOLS is required");
 if (symbols.some((s) => !/^[A-Z0-9.\-]{1,10}$/i.test(s))) throw new Error("SYMBOLS takes ticker symbols only");
 const BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
@@ -115,9 +127,9 @@ for (const sym of symbols) {
   for (const [label, width, mobile] of [["desktop", 1280, false], ["mobile", 390, true]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile });
     await load(`${origin}/stock/${encodeURIComponent(sym)}`);
-    // The About section: the <section> whose heading reads "About …".
+    // The chosen section: the <section> whose h2 matches (default "About …").
     const box = await evaluate(`(() => {
-      const h = [...document.querySelectorAll("h2")].find((e) => /^About /.test(e.textContent.trim()));
+      const h = [...document.querySelectorAll("h2")].find((e) => ${SECTIONS[section]}.test(e.textContent.trim()));
       const s = h && h.closest("section");
       if (!s) return null;
       s.scrollIntoView();
@@ -126,8 +138,8 @@ for (const sym of symbols) {
                text: s.innerText.slice(0, 1600) };
     })()`);
     if (!box) {
-      console.log(`${sym} ${label}: no About section (title: ${await evaluate("document.title")})`);
-      out.shots[`${sym}-${label}`] = { error: "no About section", title: await evaluate("document.title") };
+      console.log(`${sym} ${label}: no ${section} section (title: ${await evaluate("document.title")})`);
+      out.shots[`${sym}-${label}`] = { error: `no ${section} section`, title: await evaluate("document.title") };
       continue;
     }
     const { data } = await send("Page.captureScreenshot", {

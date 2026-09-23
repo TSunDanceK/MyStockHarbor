@@ -102,7 +102,23 @@ stubbed = sub(
     // The stub returns the FMP window because every fixture below was written
     // against it; the gating itself is checked in section 8 and in
     // scripts/check-provider-flip.mjs, not here.
-    'const feedMaxAgeDays = () => 90;'
+    'const feedMaxAgeDays = () => 90;\n' +
+    // ADDED 2026-09-23 (#553 COWORK #5): fetchStoredSymbolNews now reads the
+    // mode and the active adapters to purge FMP-era items. The stub reports the
+    // fmp rollback, where the provenance rule passes everything -- the fixtures
+    // below carry no provider stamp, and what they measure is ranking, not the
+    // purge (scripts/check-news-purge.mjs owns that).
+    'const newsProviderMode = () => "fmp";\n' +
+    'const activeNewsProviders = () => [{ id: "fmp" }];'
+);
+// The provenance rule, INLINED rather than stubbed (a stub returning true would
+// hide a real regression). Substituted HERE, before the multi-line news/text
+// pattern below, which would otherwise start at this import and swallow the
+// churn grammar inlined after it.
+stubbed = sub(
+  stubbed,
+  /^import \{ isFromActiveProvider \} from "@\/lib\/server\/news\/provenance";$/m,
+  read("lib/server/news/provenance.ts").replace(/^import type [^\n]*$/m, "").replace(/^export /gm, "")
 );
 // INLINED, NOT STUBBED, for the same reason as news/text below: scoreNews now
 // asks isFilingChurn whether an item carries any tone at all, and a stub
@@ -147,6 +163,7 @@ for (const [marker, what] of [
   ["const fetchSymbolNewsWindow", "provider seam stubbed"],
   ["const feedMaxAgeDays", "feed window stubbed"],
   ["function isFilingChurn", "the churn grammar inlined"],
+  ["function isFromActiveProvider", "the provenance rule inlined"],
   ["const readOrRefreshSymbolNews", "newsStore stubbed"],
   ["const getAiNewsBriefs", "ai-news-briefs stubbed"],
 ]) {
