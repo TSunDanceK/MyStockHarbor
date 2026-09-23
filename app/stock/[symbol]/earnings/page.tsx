@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { fmpFetch } from "@/lib/server/fmpUsage";
-import { toDashed } from "@/lib/symbolSpellings.mjs";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
-import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import {
   computeIndicatorSeed,
   type Point,
@@ -102,7 +99,6 @@ type EarningsReactionPoint = {
   reason: "uncovered" | null;
 };
 
-const FMP_BASE = "https://financialmodelingprep.com/stable";
 
 function cleanSymbol(value: string) {
   return String(value || "")
@@ -125,14 +121,6 @@ type FmpEarningsRow = {
   time?: string;
 };
 
-function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.replace(/,/g, ""));
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
 
 
 
@@ -229,37 +217,6 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
 }
 
 
-// Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
-// self-fetching this deployment's own /api/stock-earnings/[symbol] route over
-// HTTP. That route is BotID-protected (instrumentation-client.ts), and BotID
-// only validates a signed header a real browser attaches client-side -- a
-// server-to-server self-fetch never carries one, so it always reads as an
-// unverified bot and 403s itself. This function used `cache: "no-store"`, so
-// every single request hit that self-block with zero caching cushion; the
-// failure was masked because the caller falls back to a locally-computed
-// score (scoreEarnings()) whenever this returns null, so the page never
-// visibly broke -- it just silently used the wrong (non-canonical) score on
-// every load. Same self-block failure mode as
-// claude/pickers-firewall-selfblock-2026-07-17.md and
-// claude/stock-page-earnings-selfblock-2026-07-21.md.
-
-
-
-
-
-
-async function fetchFmpJson<T>(path: string): Promise<T | null> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return null;
-  const url = `${FMP_BASE}${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
-  try {
-    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 6 } });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch { return null; }
-}
-
-
 async function getEarningsData(symbol: string) {
   // ── WHAT THIS PAGE READS, AND FROM WHERE ──────────────────────────────────
   //
@@ -267,13 +224,11 @@ async function getEarningsData(symbol: string) {
   // written by /api/jobs/sec-facts from data.sec.gov's companyfacts. Revenue,
   // EPS, margins, cash flow, the balance sheet and the P&L all come from there.
   //
-  // TWO FMP CALLS REMAIN, AND BOTH ARE PRICE-DERIVED, WHICH THIS PASS DOES NOT
-  // TOUCH. /earnings supplies the ANNOUNCEMENT date and its before-open /
-  // after-close timing, which SEC filings do not carry -- a filing date is not
-  // an announcement date, and the price-reaction card needs the session the
-  // market actually reacted in. getDailyHistory supplies the bars. Market cap,
-  // P/E and the reaction card are still on FMP; the bars have not moved.
-  // THIS IS NOT A COMPLETE MIGRATION AND MUST NOT BE DESCRIBED AS ONE.
+  // NO FMP CALL IS LEFT ON THIS PAGE (#535 COWORK #18 §3, 2026-09-23). The
+  // announcement dates and their session come from the stored SEC report-dates
+  // record (the filing's acceptance time); with none, the reaction card is
+  // hidden rather than dated from FMP's calendar. getDailyHistory supplies the
+  // bars, through its own provider chain.
   // ── ONE GET BEFORE THE REST, AND IT DECIDES WHETHER FMP IS CALLED AT ALL ──
   //
   // Serial on purpose. The record says whether this symbol's announcement dates
@@ -328,7 +283,7 @@ async function getEarningsData(symbol: string) {
     };
   })();
 
-  const [cold, dailyHistory, latestBars, earningsJson] = await Promise.all([
+  const [cold, dailyHistory, latestBars] = await Promise.all([
     resolveFactSetForRender(symbol),
     // THE ~110 KB MEASUREMENT THAT ASKED FOR A BOUNDED RANGE now lives on
     // getDailyBars in lib/server/historyCache.ts, with the thing it justifies —
@@ -356,12 +311,11 @@ async function getEarningsData(symbol: string) {
     // the first's promise already registered and awaits it. One read, two
     // shapes of answer.
     getDailyHistory(symbol, { caller: "stock-earnings-valuation" }).catch(() => [] as Point[]),
-    // SKIPPED WHEN THE FILINGS ALREADY ANSWER IT. Not "fetched and ignored":
-    // an ignored fetch still costs the request, and the daily FMP limit is the
-    // thing the owner has said not to spend.
-    secEvents.length
-      ? Promise.resolve(null)
-      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(toDashed(symbol))}`),
+    // NO FMP FALLBACK (#535 COWORK #18 §3, 2026-09-23). A fourth read here
+    // fetched FMP's /earnings when the filings had not been read, and the
+    // reaction card then said "Dates here come from an earnings calendar"
+    // (BYND, LAZR). With no SEC dates the card is hidden instead — see
+    // hidePriceReaction.
   ]);
   // ── THE ANNUAL-ONLY LAYOUT (#535 COWORK #15) ─────────────────────────────
   // A 20-F/40-F filer whose newest stored quarter is over 6 months old: the page is about
@@ -376,21 +330,10 @@ async function getEarningsData(symbol: string) {
   // number is the divergence this repo keeps finding
   // (claude/traps/two-validators-for-one-value.md), and the SEC figure is the
   // one the page states its source as.
-  const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
-    ? earningsJson
-        .map((item) => {
-          const row = item as Record<string, unknown>;
-          return {
-            symbol,
-            date: typeof row.date === "string" ? row.date : "",
-            epsActual: asNumber(row.epsActual),
-            revenueActual: asNumber(row.revenueActual),
-            time: typeof row.time === "string" ? row.time.toLowerCase() : undefined,
-          } as FmpEarningsRow;
-        })
-        .filter((row) => Boolean(row.date))
-        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    : [];
+  // EMPTY SINCE THE FMP /earnings READ WENT (#535 COWORK #18 §3): every
+  // date on this page comes from the filings. Kept as a typed empty list so
+  // the returned shape is unchanged for its readers.
+  const earningsRows: FmpEarningsRow[] = [];
 
   const completedRows = earningsRows.filter(
     (row) => row.epsActual != null || row.revenueActual != null
@@ -446,7 +389,9 @@ async function getEarningsData(symbol: string) {
   // shown for annual-only filers — their quarterly results are not in SEC
   // structured data for 20-F/40-F filers.
   const reactionEvents = annualForm && cold.status === "ready" ? annualReactionEvents(barEvents, cold.set) : barEvents;
-  const hidePriceReaction = annualForm !== null && reactionEvents.length < ANNUAL_REACTION_MIN;
+  // HIDDEN, NOT REMOVED, 2026-09-23: with no SEC results dates the card has
+  // no dates of its own to measure around (the FMP-calendar fallback is gone).
+  const hidePriceReaction = secEvents.length === 0 || (annualForm !== null && reactionEvents.length < ANNUAL_REACTION_MIN);
   const barRows: { periodEnd: string | null; announcedOn: string; row: FmpEarningsRow }[] =
     secEvents.length
       ? reactionEvents.slice().reverse().map((e) => ({
@@ -531,34 +476,15 @@ async function getEarningsData(symbol: string) {
 }
 
 
-// CONVERTS FOR THE SAME REASON /stock/[symbol]/news's fetchQuoteForMeta does:
-// the route parameter arrives as the reader typed it, "BRK.B", and FMP files
-// Berkshire's B class as BRK-B.
-//
-// WHAT THIS DOES NOT CHANGE, so nobody verifies the wrong thing: the <title>
-// price. generateMetadata prints seed.lastClose, which is the newest bar of
-// getDailyHistory (already dashed via buildFmpSymbol). The price returned here
-// lands in seed.price and the title never reads it.
-async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return { price: null, date: null };
-  try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
-    if (!res.ok) return { price: null, date: null };
-    const json = await res.json();
-    const row = Array.isArray(json) ? json[0] : json;
-    const price = typeof row?.price === "number" && Number.isFinite(row.price) ? (row.price as number) : null;
-    return { price, date: new Date().toISOString().slice(0, 10) };
-  } catch { return { price: null, date: null }; }
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
-  const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => []), fetchQuoteForMeta(clean)]);
+  // NO FMP QUOTE (#535 COWORK #18 §3, 2026-09-23). fetchQuoteForMeta read
+  // FMP's /stable/quote into seed.price, and the title never read it: it
+  // prints seed.lastClose, the newest bar of getDailyHistory.
+  const rawHistory = await getDailyHistory(clean, { caller: "stock-earnings-meta" }).catch(() => []);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
-  const seed = computeIndicatorSeed(points, "", price, date);
+  const seed = computeIndicatorSeed(points, "", null, null);
   const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   // NO LONGER "EPS surprise, revenue surprise" -- the page stopped showing
