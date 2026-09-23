@@ -1,6 +1,10 @@
 # Proposal: delete the Stooq leg from the news quote path
 
-**Status: PROPOSED, NOT APPLIED.** Nothing in this PR removes it. The code
+> **2026-09-23: APPROVED by the owner and applied** (#535 COWORK #4) — both
+> functions and both call sites deleted from `lib/stock-news-data.ts`. The body
+> below is the original proposal, unedited.
+
+**Status (as written 2026-09-22): PROPOSED, NOT APPLIED.** Nothing in this PR removes it. The code
 still calls Stooq exactly as it did yesterday. This document exists so the
 decision is made on measurements rather than on a recollection, and it stays
 unapplied until the owner says so.
