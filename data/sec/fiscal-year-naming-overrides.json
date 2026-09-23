@@ -1,0 +1,12 @@
+{
+  "_readme": "Cited exceptions to the fiscal-year naming vote (secExtract.fiscalYearOffset). Used ONLY where the vote disagrees with the company's own naming. Every entry must cite the filing that states the name. #535 COWORK #12 ruling on #2. Checked by scripts/check-fy-naming-overrides.mjs.",
+  "overrides": [
+    {
+      "cik": 1535527,
+      "symbol": "CRWD",
+      "offset": 1,
+      "citation": "CrowdStrike 10-K filed 2026-03-05 for the fiscal year ended 2026-01-31: the company calls that year fiscal 2026 (its own dei:DocumentFiscalYearFocus is 2026), so the quarter ended 2026-07-31 is Q2 of fiscal 2027. SEC's fy votes 0 and labels it Q2 FY2026 (relay write-spotcheck-census-4, CODE #16).",
+      "addedOn": "2026-09-23"
+    }
+  ]
+}

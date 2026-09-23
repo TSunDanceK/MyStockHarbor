@@ -4,7 +4,8 @@ import { recordJobRun } from "@/lib/server/jobRuns";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secManifest";
 import { drainColdCiks } from "@/lib/server/secColdCik";
-import { extractCompanyFacts, checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { checkIdentities, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
+import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
@@ -549,7 +550,7 @@ export async function GET(req: NextRequest) {
     }
     try {
       const facts = await fetchCompanyFacts(cik);
-      const extracted = extractCompanyFacts(symbol, facts);
+      const extracted = extractForSymbol(symbol, facts);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is
       // also what keeps the conversion after differencing, which happens
