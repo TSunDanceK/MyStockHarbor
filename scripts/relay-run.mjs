@@ -961,6 +961,15 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // A REAL DELETE when SYMBOLS carries mode=delete confirm=<surface> (Relay B,
+  // #553 COWORK #8 §3). Dry run by default. One FMP key family per run, each
+  // on the owner's GO in chat; see the script header for what must be true
+  // before each surface is run.
+  "write-fmp-cache-delete": {
+    script: "scripts/fmp-cache-delete.mjs",
+    args: () => [],
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
