@@ -25,9 +25,15 @@ export default function NextReportCard({ outlook }: { outlook: SymbolOutlook }) 
     <section className="card">
       <div className="eyebrow">Next report</div>
       <h3>Next expected report</h3>
-      <p style={{ marginBottom: 0 }}>
-        <strong>{outlook.headline}</strong>
-      </p>
+      {outlook.value ? (
+        // A SHORT VALUE WHERE THE ANSWER HAS ONE ("Est. April", annual-only
+        // filers, #535 COWORK #22 §5), styled like the page's other values.
+        <div className="metricValue">{outlook.value}</div>
+      ) : (
+        <p style={{ marginBottom: 0 }}>
+          <strong>{outlook.headline}</strong>
+        </p>
+      )}
       {outlook.hedge ? <p style={{ marginBottom: 0 }}>{outlook.hedge}</p> : null}
       {outlook.evidence.length ? (
         <ul className="earningsDataNote" style={{ marginBottom: 0 }}>
