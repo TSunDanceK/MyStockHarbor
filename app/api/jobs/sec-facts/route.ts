@@ -13,6 +13,11 @@ import { needsReread } from "@/lib/server/secStaleness";
 import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import type { Submissions } from "@/lib/server/secReportDates";
+import {
+  FILING_CHECKS_PER_RUN, FILING_FILLS_PER_RUN, FILING_INSTANCE_MAX_BYTES, FILING_PHASE_MS,
+  instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd, pickInstanceName,
+} from "@/lib/server/secFilingFill";
+import type { FilingRef } from "@/lib/server/secFactCodec";
 import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue } from "@/lib/server/secReportDatesWrite";
 import dueStripCut from "@/data/due-strip.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
@@ -417,6 +422,45 @@ async function fetchSubmissions(cik: string): Promise<Submissions> {
   return (await res.json()) as Submissions;
 }
 
+/**
+ * A FILE FROM A FILING'S FOLDER on www.sec.gov/Archives — the folder listing
+ * (index.json) or the XBRL instance. Same rate gate as the two data.sec.gov
+ * fetchers above: SEC's limit is per requester, not per host.
+ */
+async function fetchArchive(cik: string, accn: string, name: string): Promise<Response> {
+  const wait = Math.max(0, lastAt + MIN_GAP_MS - Date.now());
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastAt = Date.now();
+  const url = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accn.replace(/-/g, "")}/${name}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${name}`);
+  return res;
+}
+
+/**
+ * The filing's XBRL instance as text, or null when the folder has none or it
+ * is over FILING_INSTANCE_MAX_BYTES. A 200 carrying HTML is refused, as above.
+ */
+async function fetchFilingInstance(cik: string, filing: FilingRef): Promise<string | null> {
+  const idx = (await (await fetchArchive(cik, filing.accn, "index.json")).json()) as {
+    directory?: { item?: { name?: string; size?: string | number }[] };
+  };
+  const items = idx.directory?.item ?? [];
+  const name = pickInstanceName(items.map((i) => String(i.name ?? "")));
+  if (!name) return null;
+  const size = Number(items.find((i) => i.name === name)?.size ?? 0);
+  if (size > FILING_INSTANCE_MAX_BYTES) return null;
+  const res = await fetchArchive(cik, filing.accn, name);
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("html")) throw new Error(`expected XML, got ${ct}`);
+  const xml = await res.text();
+  return xml.length > FILING_INSTANCE_MAX_BYTES ? null : xml;
+}
+
 export async function GET(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
@@ -520,6 +564,114 @@ export async function GET(req: NextRequest) {
    */
   let revalidated = 0;
 
+  // ── WHEN SEC'S DATA FEED LAGS A FILING, READ THE FILING (#535 COWORK #6) ──
+  //
+  // companyfacts can go seven weeks and more without publishing a filed
+  // period (92 of 862 filers on 2026-09-23). The facts loop above cannot see
+  // that: it re-reads a feed that still lacks the period, and a filer with
+  // nothing queued is never re-read at all. So this checks each filer's newest
+  // original 10-Q/10-K/20-F/40-F against its stored set and, where the set is
+  // behind, reads the period from the filing's own XBRL — fill-only,
+  // currency-locked, through the same extraction (see secFilingFill).
+  //
+  // BEFORE THE FACTS LOOP, WITH ITS OWN TIME SLICE. The loop drains queues
+  // until the budget closes, so a phase after it would get nothing on a busy
+  // day; this takes at most FILING_PHASE_MS and leaves the rest to the loop.
+  // The loop, in turn, does not overwrite a period this phase filled — see
+  // `keepFilled` there.
+  //
+  // ORDER: filers known to lag, re-checked daily (to notice the feed catching
+  // up), then the never-checked, newest filing first, then any whose
+  // lastFiled moved since their last check.
+  const filingFill = { checked: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, backlog: 0 };
+  if (!only) {
+    const dayAgo = Date.now() - 86_400_000;
+    // A NOTICE-ONLY LAG (the filing gave nothing this set can use, e.g. TSM's
+    // TWD-only 20-F) is re-checked weekly: the filing will not change, and a
+    // daily re-read of a 10 MB instance would spend the fill allowance on
+    // filers it cannot help.
+    const weekAgo = Date.now() - 7 * 86_400_000;
+    const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, "");
+    const candidates = Object.entries(manifest.symbols)
+      .filter(([, e]) => e.cik && e.contentHash && !e.delisted)
+      .map(([symbol, e]) => {
+        const rank =
+          e.filingLag && (!e.filingCheckAt || e.filingCheckAt < (e.filingLag.kind === "notice" ? weekAgo : dayAgo)) ? 0
+          : !e.filingCheckAt ? 1
+          : e.lastFiled && e.lastFiled > ymd(e.filingCheckAt) ? 2
+          : -1;
+        return { symbol, e, rank };
+      })
+      .filter((c) => c.rank >= 0)
+      .sort((a, b) => a.rank - b.rank || String(b.e.lastFiled ?? "").localeCompare(String(a.e.lastFiled ?? "")));
+    filingFill.backlog = candidates.length;
+    const phaseEnd = Date.now() + FILING_PHASE_MS;
+    for (const { symbol, e } of candidates) {
+      if (!budget.factsOpen() || Date.now() > phaseEnd || filingFill.checked >= FILING_CHECKS_PER_RUN || filingFill.filled + filingFill.notice >= FILING_FILLS_PER_RUN) break;
+      const cik = e.cik!;
+      try {
+        const set = await readFactSet(symbol);
+        if (!set) continue;
+        filingFill.checked++;
+        const filing = newestPeriodicFiling(await fetchSubmissions(cik));
+        e.filingCheckAt = Date.now();
+        if (!isLagging(set, filing)) {
+          // STILL READ FROM THE FILING is not "caught up": the lag stays
+          // recorded until a companyfacts-only read carries the period.
+          if (!set.ff) e.filingLag = null;
+          continue;
+        }
+        filingFill.lagging++;
+        const f = filing!;
+        const cf = await fetchCompanyFacts(cik);
+        const base = extractCompanyFacts(symbol, cf);
+        let next: StoredFactSet;
+        const baseNewest = newestStoredEnd({
+          quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
+          years: base.years.map((p) => ({ e: p.end })) as StoredPeriod[],
+        });
+        if (baseNewest !== null && baseNewest >= f.reportDate) {
+          // THE FEED CAUGHT UP between the facts loop and now. Nothing to read.
+          next = await toStoredSet(base, defaultSources(), fxSeriesThisRun);
+          e.filingLag = null;
+          filingFill.caughtUp++;
+        } else if (set.lg?.accn === f.accn) {
+          // ALREADY NOTED FOR THIS FILING, and the feed still lacks it: the
+          // stored set and its notice stand. Nothing to write.
+          continue;
+        } else {
+          const xml = await fetchFilingInstance(cik, f);
+          const { merged, added } = xml
+            ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
+            : { merged: cf, added: 0 };
+          next = await toStoredSet(added ? extractCompanyFacts(symbol, merged) : base, defaultSources(), fxSeriesThisRun);
+          const noticeOnly = isLagging(next, f);
+          if (noticeOnly) {
+            next = { ...next, lg: f };
+            filingFill.notice++;
+          } else {
+            next = { ...next, ff: f };
+            filingFill.filled++;
+          }
+          e.filingLag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" : "filled" };
+        }
+        if (!(await writeFactSet(next))) throw new Error("fact-set write failed");
+        e.contentHash = next.contentHash;
+        e.quarters = next.quarters.length;
+        e.years = next.years.length;
+        setsThisRun.set(symbol, next);
+        changedThisRun.push(symbol);
+        if (canWriteSecState()) {
+          revalidatePath(`/stock/${symbol}/earnings`);
+          revalidatePath(`/stock/${symbol}`);
+        } else noteSecWriteBlocked("revalidatePath");
+      } catch (err) {
+        filingFill.failed++;
+        results.push({ symbol, reason: "filing-fill", error: String((err as Error)?.message ?? err) });
+      }
+    }
+  }
+
   // DONE PER QUEUE, and what the budget left for tomorrow. The manifest stamps
   // of every finished symbol are the cursor: tomorrow's queues start after them.
   const done = { cold: 0, reverify: 0, populate: 0, rewindow: 0, manual: 0 };
@@ -547,11 +699,20 @@ export async function GET(req: NextRequest) {
       // network-free and a rate lookup is not; keeping the fetch out here is
       // also what keeps the conversion after differencing, which happens
       // inside it. A USD filer takes no extra call at all.
-      const set = await toStoredSet(extracted, defaultSources(), fxSeriesThisRun);
+      const fresh = await toStoredSet(extracted, defaultSources(), fxSeriesThisRun);
       const rates = identityRates(checkIdentities(extracted));
 
       const prior = await readFactSet(symbol);
-      const changed = prior ? prior.contentHash !== set.contentHash : true;
+      // ── A PERIOD READ FROM THE FILING IS NOT OVERWRITTEN BY A FEED THAT
+      // STILL LACKS IT (#535 COWORK #6). While companyfacts is behind the
+      // recorded lag, the stored set (with its filled period) stands; once the
+      // feed carries the period, this is false and the feed's own read wins.
+      const lagEnd = entry?.filingLag?.reportDate ?? null;
+      const stillBehind = lagEnd !== null && (newestStoredEnd(fresh) ?? "") < lagEnd;
+      const keepFilled = Boolean(stillBehind && prior?.ff && prior.ff.accn === entry?.filingLag?.accn);
+      // The "neither source has it" notice rides along the same way.
+      const set: StoredFactSet = keepFilled ? prior! : stillBehind && prior?.lg ? { ...fresh, lg: prior.lg } : fresh;
+      const changed = keepFilled ? false : prior ? prior.contentHash !== set.contentHash : true;
       // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
       // no filing event behind it is a SILENT RESTATEMENT -- the case the
       // amended-form signal cannot see. The site is allowed to update; it is
@@ -782,6 +943,14 @@ export async function GET(req: NextRequest) {
       .slice(0, 20)
       .map((r) => `${String(r.symbol)}: ${String(r.error).slice(0, 120)}`)
       .join(" | "),
+    // THE FILING FALLBACK, one scalar each (the run record holds scalars).
+    filingChecked: filingFill.checked,
+    filingLagging: filingFill.lagging,
+    filingFilled: filingFill.filled,
+    filingNotice: filingFill.notice,
+    filingCaughtUp: filingFill.caughtUp,
+    filingFailed: filingFill.failed,
+    filingBacklog: filingFill.backlog,
     coldTaken: coldSymbols.length,
     coldCleared,
     coldCikSeen: coldCiks.seen,

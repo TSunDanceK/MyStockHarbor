@@ -196,10 +196,23 @@ check("revalidatePath is inside the changed branch",
 check("...and the counter is incremented beside it, not somewhere else",
   /revalidated\+\+/.test(changedBranch),
   "counting elsewhere would let the number and the behaviour drift apart");
-check("there is exactly one revalidatePath in the job",
-  (JOB.match(/revalidatePath\(/g) ?? []).length === 1,
-  `${(JOB.match(/revalidatePath\(/g) ?? []).length} call site(s) — a second one outside the ` +
+// THE FILING PHASE (#535 COWORK #6, 2026-09-23) FLUSHES TOO, and only after
+// the write it just made — a set it read from the filing is by definition a
+// change. So: exactly one flush OUTSIDE that phase, and every flush inside it
+// sits after its `writeFactSet` succeeded.
+const FILING_PHASE = JOB.slice(
+  JOB.indexOf("const filingFill = {"),
+  JOB.indexOf("const done = { cold:")
+);
+const outside = JOB.replace(FILING_PHASE, "");
+check("the filing phase was found and sliced", FILING_PHASE.length > 500, `${FILING_PHASE.length} chars`);
+check("there is exactly one revalidatePath in the job outside the filing phase",
+  (outside.match(/revalidatePath\(/g) ?? []).length === 1,
+  `${(outside.match(/revalidatePath\(/g) ?? []).length} call site(s) — a second one outside the ` +
     `branch is how "changed-only" becomes "every symbol touched"`);
+check("the filing phase flushes only after its write succeeded",
+  FILING_PHASE.indexOf("revalidatePath(`/stock/${symbol}/earnings`)") > FILING_PHASE.indexOf('if (!(await writeFactSet(next))) throw') &&
+    FILING_PHASE.indexOf('if (!(await writeFactSet(next))) throw') > 0);
 
 {
   // MUTATION: the flush moved out of the changed branch, so every attempted
@@ -208,7 +221,7 @@ check("there is exactly one revalidatePath in the job",
   const moved = JOB.replace("      } else {\n        unchanged++;", "        revalidatePath(`/stock/${symbol}/earnings`);\n      } else {\n        unchanged++;");
   check("the move-the-flush mutation actually applied", moved !== JOB);
   check("MUTATION: a second revalidatePath outside the branch is caught",
-    (moved.match(/revalidatePath\(/g) ?? []).length !== 1,
+    (moved.replace(FILING_PHASE, "").match(/revalidatePath\(/g) ?? []).length !== 1,
     "an assertion that survived this would not be guarding changed-only");
 }
 

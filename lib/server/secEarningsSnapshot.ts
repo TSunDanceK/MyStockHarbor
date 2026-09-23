@@ -27,7 +27,7 @@
 // the full report therefore cannot disagree about the same filing, which they
 // would within a week of anyone tuning either copy. See that module's header.
 import {
-  EMPTY_REASONS, buildSecEarningsView, conversionNote, isPct,
+  EMPTY_REASONS, buildSecEarningsView, conversionNote, filingCreditText, filingNoticeText, isPct,
   type PeriodBasis, type Pct, type SecEarningsView, type ViewCell,
 } from "./secEarningsView";
 import { resolveFactSetForRender, type ColdResult } from "./secColdFetch";
@@ -287,6 +287,17 @@ export type SecEarningsSnapshot = {
 
   /** Set only for a filer that reports in another currency. */
   currencyNote: string | null;
+  /**
+   * "From the 10-Q filed 29 Jul 2026…" when the newest period was read from
+   * the filing because SEC's data feed lagged it. Null otherwise.
+   */
+  filingCredit: string | null;
+  /**
+   * "Results for the quarter ended … were filed with the SEC on …; the figures
+   * are not in SEC's data feed yet" — only when NEITHER the feed nor the filing
+   * parse gave the newer period. Null otherwise.
+   */
+  filingNotice: string | null;
   sourceNote: string;
 };
 
@@ -360,6 +371,8 @@ export function buildSecEarningsSnapshot(args: {
       margins: { gross: null, operating: null, net: null },
       marginReasons: { gross: null, operating: null, net: null },
       currencyNote: null,
+      filingCredit: null,
+      filingNotice: null,
       sourceNote: snapshotSourceNote(null),
     };
   }
@@ -408,6 +421,8 @@ export function buildSecEarningsSnapshot(args: {
       net: marginReason(margins.net),
     },
     currencyNote: view.currency ? conversionNote(view.currency) : null,
+    filingCredit: view.latestFromFiling ? filingCreditText(view.latestFromFiling) : null,
+    filingNotice: view.filedNotInFeed ? filingNoticeText(view.filedNotInFeed) : null,
     sourceNote: snapshotSourceNote(view.accounting),
   };
 }
