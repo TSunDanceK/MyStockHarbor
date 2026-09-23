@@ -46,6 +46,15 @@ for (const r of ROWS) check(`${r.id} reads "${EXPECT_TEXT[r.id]}"`, shown(r) ===
 check('no "$0.01B"-style small B anywhere in the rule',
   M.scaledAmount(10_000_000) === "$10.0M" && M.scaledAmount(999_949_999) === "$999.9M",
   `${M.scaledAmount(10_000_000)}, ${M.scaledAmount(999_949_999)}`);
+// THE ROUNDING EDGES. The tier is chosen after rounding, so a value just under
+// a boundary that rounds up to it reads in the next unit, never "1000.0M".
+const EDGES = [
+  [999_949_999, "$999.9M"], [999_950_000, "$1.00B"], [999_960_000, "$1.00B"], [-999_960_000, "-$1.00B"],
+  [999_994_999_999, "$999.99B"], [999_995_000_000, "$1.00T"], [1_452_300_000_000, "$1.45T"],
+];
+for (const [v, want] of EDGES) check(`${v} reads "${want}"`, M.scaledAmount(v) === want, M.scaledAmount(v));
+check("no amount reads 1000.0M or 1000.00B",
+  EDGES.every(([v]) => !/1000\.0+[MB]/.test(M.scaledAmount(v))), EDGES.map(([v]) => M.scaledAmount(v)).join(", "));
 check("a share count takes the scale without the $",
   M.scaledAmount(49_822_595, false) === "49.8M", M.scaledAmount(49_822_595, false));
 
