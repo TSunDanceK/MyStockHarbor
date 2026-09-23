@@ -220,6 +220,38 @@ function resolveQuiet(
   return { sector: null, industry: null, source: "none", sectorSource: "none", industrySource: "none" };
 }
 
+/**
+ * The date the answering leg's classification was captured, as YYYY-MM-DD, or
+ * null. The /stock source line credits it as "classification as of {date}"
+ * whichever leg answered, so the wording reads the same for every symbol
+ * (owner's wording, follow-up to #517/#518):
+ *
+ *   cache     the fundamentals row's updatedAt — when the warm wrote it. The
+ *             row does not record which leg the warm itself resolved from, so
+ *             this is when the value was last confirmed, not first taken.
+ *   snapshot  SNAPSHOT_AS_OF, the day data/static-profile.json was captured.
+ *   sic       data/sec/registrants.json's asOf, the day the SIC code was read.
+ *
+ * A cache row with no parseable updatedAt yields null — never another leg's
+ * date, which would credit the value to a source it did not come from.
+ */
+export const REGISTRANTS_SIC_AS_OF: string | null =
+  (registrantsFile as unknown as { asOf?: string }).asOf ?? null;
+
+export function classificationAsOf(
+  resolved: Pick<ResolvedProfile, "source">,
+  cachedUpdatedAt: string | null | undefined
+): string | null {
+  const day = (v: string | null | undefined) => {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v ?? ""));
+    return m ? m[1] : null;
+  };
+  if (resolved.source === "cache") return day(cachedUpdatedAt);
+  if (resolved.source === "snapshot") return day(SNAPSHOT_AS_OF);
+  if (resolved.source === "sic") return day(REGISTRANTS_SIC_AS_OF);
+  return null;
+}
+
 function missLine(symbol: string): string {
   const upper = String(symbol ?? "").trim().toUpperCase();
   return (
