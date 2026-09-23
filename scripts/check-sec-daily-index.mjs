@@ -1364,8 +1364,9 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
   // stripped -- which is right for every assertion about BEHAVIOUR and exactly
   // wrong for the ones below about a COMMENT. See this file's header.
   const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
-  check("the route seeds from PRESET_UNIVERSE ∪ the dynamic pool",
-    /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
+  // ...∪ the curated sitemap symbols (#535 COWORK #21), between the two.
+  check("the route seeds from PRESET_UNIVERSE ∪ the curated sitemap symbols ∪ the dynamic pool",
+    /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.priorityStocks,\s*\.\.\.uniqueEtfs,\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
     "the union is the fix; seedManifest cannot add what it is never given");
   check("...and does NOT slice it by ANALYSIS_UNIVERSE_CAP",
     !/ANALYSIS_UNIVERSE_CAP/.test(routeCode),
