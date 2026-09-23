@@ -42,7 +42,9 @@ const { valueOf } = await import("../lib/server/secFactCodec.ts");
 
 const TODAY = process.env.TODAY || new Date().toISOString().slice(0, 10);
 const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
-const STATIC_PROFILE = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8"));
+// The symbols sit under `rows`; the top level is metadata (run 35916509860 read
+// the top level and found no industry for anyone -- fixed here).
+const STATIC_PROFILE = JSON.parse(fs.readFileSync("data/static-profile.json", "utf8")).rows ?? {};
 const SIC_SECTOR = JSON.parse(fs.readFileSync("data/sec/sic-sector.json", "utf8")).codes ?? {};
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -173,7 +175,14 @@ function secRow(sym, set, price) {
     growth = a !== null && b !== null && b > 0 ? ((a - b) / b) * 100 : refusal("no-two-year-dividend");
   }
 
+  const basisOf = (tm) => (tm ? `${tm.basis}:${tm.periodEnd}` : null);
   return {
+    _basis: {
+      eps: inputs.eps ? `${inputs.eps.basis}:${inputs.eps.periodEnd}` : null,
+      operatingIncome: basisOf(oi),
+      freeCashFlow: basisOf(cf),
+      revenue: basisOf(m.revenue),
+    },
     marketCap: fig(cap),
     peRatio: fig(mult.pe),
     psRatio: fig(mult.ps),
@@ -323,4 +332,39 @@ for (const [label, list] of Object.entries(worst)) {
   const fmt = (v) => (Math.abs(v) >= 1e6 ? `${(v / 1e9).toFixed(2)}B` : v.toFixed(2));
   console.log(`  ${label}: ${list.map(([s, f, v]) => `${s} ${fmt(f)}/${fmt(v)}`).join(" · ")}`);
 }
+// ─────────────────────────────────────────────── why agreement is low where it is
+// Split the agree-within-5% rate by the SEC figure's period basis and by how old
+// that period is, for the columns whose agreement looked weakest in run
+// 35916509860. A fiscal-year fallback or an old quarter is a DIFFERENT PERIOD
+// from FMP's TTM, not a wrong number -- this says which it is.
+const ageDays = (iso) => (iso ? Math.round((Date.parse(TODAY) - Date.parse(iso)) / 86_400_000) : null);
+console.log("\nagreement by SEC basis (±5% / ±20%, n) — columns: EPS, PE, Op. Income, FCF, Revenue");
+for (const [key, basisKey] of [["epsTtm", "eps"], ["peRatio", "eps"], ["operatingIncome", "operatingIncome"], ["freeCashFlow", "freeCashFlow"], ["revenue", "revenue"]]) {
+  const buckets = new Map();
+  for (const r of rows) {
+    const f = r.fmp[key], v = r.sec[key];
+    if (typeof f !== "number" || typeof v !== "number") continue;
+    const b = r.sec._basis?.[basisKey];
+    const [kind, end] = b ? b.split(":") : ["none", null];
+    const age = ageDays(end);
+    const form = REGISTRANTS[r.sym]?.annualForm ?? "?";
+    const label = `${kind}${age == null ? "" : age <= 150 ? " ≤150d" : " >150d"} ${form === "10-K" ? "10-K" : "non-10-K"}`;
+    const e = buckets.get(label) ?? { n: 0, a5: 0, a20: 0 };
+    e.n++; if (close(f, v, 0.05)) e.a5++; if (close(f, v, 0.2)) e.a20++;
+    buckets.set(label, e);
+  }
+  const parts = [...buckets].sort((a, b) => b[1].n - a[1].n).map(([l, e]) => `${l}: ${pct(e.a5, e.n)}/${pct(e.a20, e.n)} n=${e.n}`);
+  console.log(`  ${key}: ${parts.join(" · ")}`);
+}
+// A fixed sample of US 10-K large caps, side by side, so the disagreement can
+// be read rather than inferred.
+const SAMPLE = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "JPM", "XOM", "KO", "WMT", "LLY", "COST"];
+console.log("\nsample (FMP vs SEC): EPS · PE · basis");
+for (const sym of SAMPLE) {
+  const r = rows.find((x) => x.sym === sym);
+  if (!r) { console.log(`  ${sym}: not in universe`); continue; }
+  const show = (v) => (typeof v === "number" ? v.toFixed(2) : v?.refused ?? "—");
+  console.log(`  ${sym}: EPS ${show(r.fmp.epsTtm)} / ${show(r.sec.epsTtm)} · PE ${show(r.fmp.peRatio)} / ${show(r.sec.peRatio)} · ${r.sec._basis?.eps ?? "—"} · price ${show(r.fmp.price)}`);
+}
+
 console.log(`\nRedis commands used: ~${commands} (read-only)`);
