@@ -1,5 +1,8 @@
 # The earnings grid's three FMP calls, measured against SEC and the price pool (2026-09-23)
 
+> **2026-09-23 (#552, COWORK #4):** per-ticker FMP values (names, dates) in this doc are redacted as
+> "[removed 2026-09-23]". Aggregate counts and the findings are kept.
+
 **This is a measurement only.** No production code was changed, nothing new is
 wired, and Tiingo was not touched (the owner is still confirming its licence).
 
