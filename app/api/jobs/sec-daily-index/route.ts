@@ -130,6 +130,14 @@ export function applyFilings(manifest: SecManifest, filings: SymbolFiling[]) {
     if (!entry) continue;
     touched.add(f.symbol);
 
+    // AN 8-K OR 6-K, AMENDED OR NOT, MAY BE A RESULTS RELEASE. Recorded before
+    // any gate below, so the report-dates phase can re-read this symbol's
+    // record first -- see SecManifestEntry.lastEventFiled.
+    const bare = f.form.toUpperCase().replace(/\/A$/, "");
+    if ((bare === "8-K" || bare === "6-K") && (!entry.lastEventFiled || f.filed > entry.lastEventFiled)) {
+      entry.lastEventFiled = f.filed;
+    }
+
     // THE AMENDMENT GATE IS NARROWED TO FINANCIAL FORMS, and this was a real
     // defect rather than a tidy-up. `isAmendment` matches any form ending "/A",
     // so a Form 4/A -- an amended insider transaction, common and entirely
