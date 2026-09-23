@@ -1,0 +1,53 @@
+# Merge the six description shards (relay tasks sec-descriptions-1 … -6) into
+# data/sec/descriptions.json and commit it to the branch (PR 3 render, #518).
+# Same runner-side pattern as description-probe-commit.yml: the artifact host
+# is refused to the sandbox, so the runner downloads and commits.
+#
+# THE ROUTINE REFRESH is descriptions-refresh.yml (monthly, opens a PR). This
+# file is for merging hand-dispatched relay runs onto a working branch: put
+# their run IDs below and push.
+name: Commit the filing descriptions
+
+on:
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/descriptions-commit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  RUNS: "35800271392 35800273478 35800275695 35800278403 35800280014 35800282103"
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Download the shard artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p art
+          for run in $RUNS; do
+            name=$(gh api "repos/${{ github.repository }}/actions/runs/${run}/artifacts" --jq '.artifacts[0].name')
+            echo "run ${run}: ${name}"
+            gh run download "${run}" --repo "${{ github.repository }}" --name "${name}" --dir "art/${run}"
+          done
+      - name: Merge, verify, commit
+        run: |
+          set -euo pipefail
+          node scripts/descriptions-merge.mjs art
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sec/descriptions.json
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "Commit the filing descriptions from relay runs ${RUNS}" -m "Six shards of scripts/sec-descriptions-build.mjs, merged (PR 3 render, #518)."
+          git push origin "HEAD:${{ github.ref_name }}"

@@ -182,8 +182,32 @@ const TASKS = {
   // file into the workspace, which the workflow uploads as an artifact, and
   // touches no credential.
   "company-tickers": { script: "scripts/fetch-company-tickers.mjs", args: () => [] },
+  // PR 3 step 1: can the company's own 10-K Item 1 / 20-F Item 4.B replace
+  // FMP's description? Reads submissions and the latest annual primary
+  // document for ~30 symbols. Read-only, no credentials; renders nothing.
+  "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
+  // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
+  "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
+  // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
+  // carries the recent quarters, and whether 2115436 has filed an annual yet.
+  // Read-only, no credentials.
+  "sec-cik-periods": { script: "scripts/sec-cik-periods-probe.mjs", args: () => [], needsTypescript: true },
+  // PR 3 render (#518): the company's own description for every profiled
+  // symbol, in six shards so each fits the read-only job's 30 minutes. Each
+  // writes data/sec/descriptions-part-k.json; descriptions-commit.yml merges
+  // them into data/sec/descriptions.json. Read-only, no credentials.
+  "sec-descriptions-1": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-descriptions-2": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-descriptions-3": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  // NOT A TASK: preview screenshots run in .github/workflows/preview-screenshots.yml,
+  // which reads its Vercel bypass credential from a masked repo secret. A relay
+  // input is printed in the log, and the read-only job holds no secrets by
+  // design, so a credentialled screenshot cannot be a relay task (owner, #518).
   "sec-share-series": { script: "scripts/sec-share-series-probe.mjs", args: () => [], needsTypescript: true },
   // Registrant facts (SIC, business address, incorporation, website, fiscal
   // year end, entity type, latest annual form) for every profiled symbol, from

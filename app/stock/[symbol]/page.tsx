@@ -11,10 +11,11 @@ import {
 import type { ProfileDividend } from "@/lib/server/secDividend";
 import type { StockPageProfileFacts } from "@/lib/server/secEarningsSnapshot";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
-import { resolveProfile } from "@/lib/server/staticProfile";
+import { classificationAsOf, resolveProfile } from "@/lib/server/staticProfile";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { composeCompanyProfile, exchangeFor, registrantFor } from "@/lib/server/stockProfile";
+import { filingDescriptionFor } from "@/lib/server/filingDescription";
 import {
   REFUSAL_WORDS, valuationMultiples, type MultipleInputs, type ValuationFigure, type ValuationInputs,
 } from "@/lib/server/secValuation";
@@ -190,13 +191,13 @@ function str(value: unknown): string | null {
 // "information gain" for indexing). Tries the stable endpoint first, then the
 // legacy v3 profile; maps both field-name variants defensively.
 //
-// ── SINCE 2026-09-22 ONLY `description` IS READ FROM THIS ────────────────
-// Every other row is composed from free sources in lib/server/stockProfile.ts
-// (brief 2026-09-22 PR 2). The function still maps every field — hidden, not
-// removed — so the record of what FMP used to supply survives, and PR 3
-// replaces the description with the company's own 10-K/20-F wording, after
-// which this is not called at all. The description is the LAST FMP field on
-// the page, and the attribution line says so.
+// ── RETIRED 2026-09-22 (PR 3, #518): NOT CALLED. Kept, per the hidden-not-
+// removed rule, as the record of what FMP's profile supplied. PR 2 composed
+// every row from free sources (lib/server/stockProfile.ts); the description,
+// the last field this was read for, is now the company's own annual-report
+// wording (lib/server/filingDescription.ts). No FMP profile call remains on
+// this page.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return null;
@@ -433,7 +434,7 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [historyResult, quoteResult, companyName, secFacts, fmpProfile, fundamentals, directory] =
+  const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory] =
     await Promise.all([
       // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
       // unreachable) stays distinguishable from a read that legitimately
@@ -449,8 +450,6 @@ export default async function StockPage({ params }: Props) {
       // secColdFetch dedupes an in-flight read per symbol the way
       // getDailyHistory does. It does not — see getStockPageSecFacts.
       fetchStockPageSecFacts(upper),
-      // THE DESCRIPTION ONLY — see the note on fetchCompanyProfile.
-      fetchCompanyProfile(upper).catch(() => null),
       // A cached Redis mget that never fetches on a miss: the FMP-cache leg of
       // resolveProfile, exactly as the news page reads it.
       readCachedFundamentalsBulk([upper]).then((m) => m.get(upper) ?? null, () => null),
@@ -464,19 +463,21 @@ export default async function StockPage({ params }: Props) {
   );
 
   // ── THE PROFILE BLOCK, FROM FREE SOURCES (brief 2026-09-22 PR 2) ─────────
-  // Composed rather than fetched: FMP supplies the description and nothing
-  // else. Market cap is the SEC cover-page share count times THIS page's
+  // Composed rather than fetched, and no longer from FMP at all: the
+  // description is the company's own annual-report wording (PR 3, #518). Market cap is the SEC cover-page share count times THIS page's
   // price, so it moves to Tiingo with the quote and needs no change of its
   // own; the 52-week range is computed from the same bars the chart draws.
   const directoryName =
     symbolSpellings(upper).map((s) => directory.get(s)).find(Boolean) ?? "";
+  const taxonomy = resolveProfile(upper, fundamentals);
   const composed = composeCompanyProfile({
     symbol: upper,
     directoryName,
     snapshotName: snapshotCompanyName(upper),
     entityName: secFacts.profileFacts.entityName,
-    fmpDescription: fmpProfile?.description ?? null,
-    taxonomy: resolveProfile(upper, fundamentals),
+    filingDescription: filingDescriptionFor(upper),
+    taxonomy,
+    classificationAsOf: classificationAsOf(taxonomy, fundamentals?.updatedAt),
     valuation: secFacts.profileFacts.valuation,
     price: quote.price,
     points,

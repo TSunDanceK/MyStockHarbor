@@ -1,0 +1,123 @@
+# MONTHLY REFRESH OF THE FILING DESCRIPTIONS (owner, #518 round 5).
+#
+# Rebuilds data/sec/descriptions.json from each registrant's latest 10-K /
+# 20-F and OPENS A PULL REQUEST with the result. Nothing is committed to main:
+# the PR is the review gate, and it diffs one symbol per line.
+#
+#   build   six shards of scripts/sec-descriptions-build.mjs, in parallel.
+#           Read-only: no secrets, no `npm ci` (the only installs are
+#           typescript, to lift the cleaner from its .ts source, and the
+#           pinned word list the build installs itself, each in an empty dir).
+#   merge   scripts/descriptions-merge.mjs refuses a partial merge; if the
+#           file changed, pushes branch descriptions/refresh-YYYY-MM-DD-<run>
+#           and opens a PR against the branch it ran on (main, on the
+#           schedule) with GITHUB_TOKEN.
+#
+# NO INPUTS, deliberately: the repo is public and run logs are readable, so
+# nothing a person types goes into a run. SEC needs no credential; the only
+# token used is the job's own GITHUB_TOKEN.
+#
+# ONE-TIME SETTING: Settings → Actions → General → "Allow GitHub Actions to
+# create and approve pull requests" must be on, or the merge job pushes the
+# branch and then fails at `gh pr create` (the error says so). A PR opened by
+# GITHUB_TOKEN does not start other workflows' pull_request runs; the Vercel
+# preview still builds, since it comes from Vercel's GitHub app.
+#
+# Run it by hand from the Actions tab (Run workflow) at any time.
+name: Refresh the filing descriptions
+
+on:
+  schedule:
+    - cron: "17 6 3 * *" # 06:17 UTC on the 3rd of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: descriptions-refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install typescript in isolation (not npm ci)
+        run: |
+          set -euo pipefail
+          range=$(node -p 'const p=require("./package.json"); (p.devDependencies||{}).typescript || (p.dependencies||{}).typescript')
+          tmp=$(mktemp -d)
+          echo '{"private":true}' > "$tmp/package.json"
+          (cd "$tmp" && npm install --no-save --no-package-lock --no-audit --no-fund --ignore-scripts "typescript@${range}")
+          mkdir -p node_modules
+          cp -r "$tmp/node_modules/typescript" node_modules/typescript
+      - name: Build shard ${{ matrix.shard }}/6
+        env:
+          SHARD: ${{ matrix.shard }}/6
+          BUDGET_MS: "3000000" # 50 min, under the job's 60
+        run: node scripts/sec-descriptions-build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: descriptions-part-${{ matrix.shard }}
+          path: data/sec/descriptions-part-${{ matrix.shard }}.json
+          retention-days: 14
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: descriptions-part-*
+          path: art
+      - name: Merge and verify
+        run: node scripts/descriptions-merge.mjs art | tee merge.log
+      - name: Open a pull request if the file changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/sec/descriptions.json; then
+            echo "descriptions.json unchanged; no PR"
+            exit 0
+          fi
+          changed=$(git diff --numstat -- data/sec/descriptions.json | awk '{print $1}')
+          branch="descriptions/refresh-$(date -u +%Y-%m-%d)-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add data/sec/descriptions.json
+          git commit -m "Refresh the filing descriptions ($(date -u +%Y-%m-%d))" -m "Monthly rebuild by descriptions-refresh.yml, run ${GITHUB_RUN_ID}."
+          git push origin "HEAD:refs/heads/${branch}"
+          {
+            echo "Monthly rebuild of \`data/sec/descriptions.json\` from each registrant's latest 10-K Item 1 / 20-F Item 4.B (\`scripts/sec-descriptions-build.mjs\`, six shards, merged by \`scripts/descriptions-merge.mjs\`)."
+            echo
+            echo "One symbol per line, so the diff shows exactly which descriptions changed (${changed} lines added or changed). Review, then merge; nothing was committed to \`main\`."
+            echo
+            echo '```'
+            cat merge.log
+            echo '```'
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > body.md
+          if ! gh pr create --base "${GITHUB_REF_NAME}" --head "$branch" --title "Refresh the filing descriptions ($(date -u +%Y-%m-%d))" --body-file body.md; then
+            echo "::error::Branch ${branch} is pushed, but the PR could not be opened. Turn on Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests', or open it by hand from the branch."
+            exit 1
+          fi

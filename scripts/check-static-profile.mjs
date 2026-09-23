@@ -425,5 +425,46 @@ console.log("\n=== 7. The SIC leg: third, never over a snapshot row, provenance 
     "node scripts/build-sic-sector.mjs");
 }
 
+console.log("\n=== 8. The classification date is the answering leg's own ===\n");
+{
+  // The /stock source line reads "classification as of {date}" whichever leg
+  // answered. Each leg must return ITS date: a borrowed one credits a value to
+  // a capture it did not come from.
+  const regAsOf = JSON.parse(read("data/sec/registrants.json")).asOf;
+  const load = async (text, tag) => {
+    const f = path.join(ROOT, `.check-staticprofile-${tag}.mjs`);
+    fs.writeFileSync(f, ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
+    try { return await import(`${pathToFileURL(f).href}?t=${Date.now()}`); } finally { fs.unlinkSync(f); }
+  };
+  for (const sym of ["ONDS", "AAPL"]) {
+    const r = sp.resolveProfile(sym, null);
+    const d = sp.classificationAsOf(r, null);
+    check(`${sym}, no cache row: snapshot leg, dated the snapshot's asOf`,
+      r.source === "snapshot" && d === snapshot.asOf, `${r.source} ${d}`);
+    const c = sp.resolveProfile(sym, { sector: r.sector, industry: r.industry });
+    const dc = sp.classificationAsOf(c, "2026-09-21T04:10:00.000Z");
+    check(`${sym}, cache row: cache leg, dated the row's updatedAt`, c.source === "cache" && dc === "2026-09-21", `${c.source} ${dc}`);
+  }
+  check("a cache row with no updatedAt yields no date, not the snapshot's",
+    sp.classificationAsOf({ source: "cache" }, "") === null && sp.classificationAsOf({ source: "cache" }, undefined) === null);
+  check("no leg, no date", sp.classificationAsOf({ source: "none" }, "2026-09-21T00:00:00Z") === null);
+
+  // SIC-ONLY: no company resolves through SIC in today's files (section 7), so
+  // ALAB's snapshot row is removed in a mutated copy — the case of a symbol
+  // that entered the universe after the snapshot was taken.
+  const noAlab = await load(
+    src.replace("const snap = staticProfileFor(symbol);",
+      'const snap = String(symbol).toUpperCase() === "ALAB" ? null : staticProfileFor(symbol);'), "alab");
+  const a = noAlab.resolveProfile("ALAB", null);
+  const da = noAlab.classificationAsOf(a, null);
+  check("ALAB with no snapshot row: SIC leg, dated registrants.json's asOf",
+    a.source === "sic" && a.sector === "Technology" && da === regAsOf, `${a.source} ${a.sector} ${da}`);
+  const borrowed = await load(
+    src.replace('if (resolved.source === "sic") return day(REGISTRANTS_SIC_AS_OF);',
+      'if (resolved.source === "sic") return day(SNAPSHOT_AS_OF);'), "borrowed");
+  check("...and CATCHES the SIC leg borrowing the snapshot's date",
+    borrowed.classificationAsOf({ source: "sic" }, null) !== regAsOf);
+}
+
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
