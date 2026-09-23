@@ -750,6 +750,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #11: #6-B page-visible rescue + 10-Q check, #2 labels, EPS reasons.
+  "write-spotcheck-census-5": {
+    script: "scripts/spotcheck-census-5.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // #535 COWORK #8: Q4_SPLIT before/after on live records. Read-only.
   "write-q4-split-render": {
     script: "scripts/q4-split-render.mjs",
