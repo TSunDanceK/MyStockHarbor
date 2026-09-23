@@ -312,6 +312,19 @@ console.log("\n3. F3 — an empty stored blob is rebuilt, not served");
   check("and the rebuilt rows replace it", Array.isArray(store.get(`${DAY_ITEMS_PREFIX}:${DATE}`)) && store.get(`${DAY_ITEMS_PREFIX}:${DATE}`).length === 3);
 }
 
+// ── 3b. A pre-SEC empty blob is rebuilt even where the day reads complete ──
+// FMP-era "complete and empty" meant every candidate was off-exchange. SEC
+// admits before quoting, so with candidates present an empty blob is stale
+// whatever the flag says (#552).
+console.log("\n3b. A stale empty blob under a complete flag is rebuilt, not served");
+{
+  const store = new Map([[`${DAY_ITEMS_PREFIX}:${DATE}`, []], [`${DAY_COMPLETE_PREFIX}:${DATE}`, "1"]]);
+  harness({ mode: "ok", monthRows: MONTH_ROWS, names: NAMES, store });
+  const m = await loadModule();
+  const r = await m.getFullDayEarnings(DATE, { bypassCap: true });
+  check("the stale [] is not served as an empty day", r.items.length === 3, `got ${r.items.length} rows`);
+}
+
 // ── 4. F2 — an empty day we could not SEE is poison; one we could is not ───
 console.log("\n4. Admission is SEC's — a quote no longer decides whether a row exists");
 {

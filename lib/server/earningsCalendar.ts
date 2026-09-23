@@ -1097,9 +1097,15 @@ export async function getFullDayEarnings(
     // coupling is deliberate and load-bearing in both directions: if F1 ever
     // regresses, a poisoned empty becomes servable again from here. §4 of the
     // check pins the write half; this line is the read half of the same rule.
+    //
+    // 2026-09-23 (#552): THE COMPLETENESS CLAUSE IS GONE. "Fully quoted and
+    // nobody US-listed" was the FMP-era meaning of a settled empty day. Since
+    // the grid moved to SEC, admission happens before any quote (gridAdmits),
+    // so a day with candidates always has rows, and a stored [] with candidates
+    // is a pre-SEC blob, never the true answer, whatever the flag says. Keeping
+    // the clause served that stale [] as an empty day (check §3b).
     const emptyIsSettled =
-      cachedItems != null &&
-      (cachedItems.length > 0 || totalCandidates === 0 || (await isDateComplete(date)));
+      cachedItems != null && (cachedItems.length > 0 || totalCandidates === 0);
     if (cachedItems && emptyIsSettled) {
       const cleaned = dedupeAndSortItems(cachedItems);
       // Persist the cleaned blob if the stored copy carried duplicate rows, so
