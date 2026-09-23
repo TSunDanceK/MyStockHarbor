@@ -200,19 +200,21 @@ check("...and the counter is incremented beside it, not somewhere else",
 // the write it just made — a set it read from the filing is by definition a
 // change. So: exactly one flush OUTSIDE that phase, and every flush inside it
 // sits after its `writeFactSet` succeeded.
-const FILING_PHASE = JOB.slice(
-  JOB.indexOf("const filingFill = {"),
-  JOB.indexOf("const done = { cold:")
-);
-const outside = JOB.replace(FILING_PHASE, "");
-check("the filing phase was found and sliced", FILING_PHASE.length > 500, `${FILING_PHASE.length} chars`);
-check("there is exactly one revalidatePath in the job outside the filing phase",
+// SINCE #535 COWORK #10/#12 THE FILING PHASE IS ITS OWN JOB (sec-filings), so
+// sec-facts has exactly one flush, and the filing job's flush sits after its
+// write.
+const FILING_JOB = readCodeOnly("app/api/jobs/sec-filings/route.ts");
+const FILING_PHASE = FILING_JOB.slice(FILING_JOB.indexOf("for (const { symbol, cik } of candidates)"));
+const outside = JOB;
+check("the filing job's loop was found and sliced", FILING_PHASE.length > 500, `${FILING_PHASE.length} chars`);
+check("sec-facts has no filing phase left", !JOB.includes("const filingFill = {"));
+check("there is exactly one revalidatePath in sec-facts",
   (outside.match(/revalidatePath\(/g) ?? []).length === 1,
   `${(outside.match(/revalidatePath\(/g) ?? []).length} call site(s) — a second one outside the ` +
     `branch is how "changed-only" becomes "every symbol touched"`);
 check("the filing phase flushes only after its write succeeded",
-  FILING_PHASE.indexOf("revalidatePath(`/stock/${symbol}/earnings`)") > FILING_PHASE.indexOf('if (!(await writeFactSet(next))) throw') &&
-    FILING_PHASE.indexOf('if (!(await writeFactSet(next))) throw') > 0);
+  FILING_PHASE.indexOf("revalidatePath(`/stock/${symbol}/earnings`)") > FILING_PHASE.indexOf('if (!(await writeFactSet(out.set))) throw') &&
+    FILING_PHASE.indexOf('if (!(await writeFactSet(out.set))) throw') > 0);
 
 {
   // MUTATION: the flush moved out of the changed branch, so every attempted
