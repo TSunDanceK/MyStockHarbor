@@ -73,6 +73,63 @@ export function toneForMarginDelta(pp: number | null): EarningsTone | null {
   return "neutral";
 }
 
+// ── WHEN A MARGIN MOVE OR A GROWTH RATE IS NOT A SIGNAL (#535 COWORK #20) ──
+//
+// WKHS Q2 FY2026: revenue $3.6M, +374.9% on ~$0.76M, operating margin about
+// -545% against about -1,197%, a $20.2M net loss — and a score of 72, near
+// GOOD, because the margin "widened 658.1pp" (+10) and revenue "grew" (+22).
+// Both are arithmetic on a revenue line too small to carry a ratio. Measured
+// on 856 scored sets (2026-09-23): the margin rule trips 41, the floor 21.
+// By rule, not by symbol; the figures still print, only the score and the
+// sentence stop reading them as signals.
+
+/** An operating margin below this (percent) is revenue too small relative to costs. */
+export const MARGIN_MEANINGFUL_FLOOR_PCT = -100;
+/** A margin move beyond this many percentage points is the same artefact. */
+export const MARGIN_MEANINGFUL_MOVE_PP = 100;
+
+/** Whether a margin pair (older, newer) can be read as a move at all. */
+export function marginMoveMeaningful(older: number | null, newer: number | null): boolean {
+  if (older === null || newer === null || !Number.isFinite(older) || !Number.isFinite(newer)) return false;
+  if (older < MARGIN_MEANINGFUL_FLOOR_PCT || newer < MARGIN_MEANINGFUL_FLOOR_PCT) return false;
+  return Math.abs(newer - older) <= MARGIN_MEANINGFUL_MOVE_PP;
+}
+
+export const MARGIN_NOT_MEANINGFUL = "not meaningful — revenue is too small relative to costs";
+
+/**
+ * Revenue growth off a prior-period revenue under this (USD) is shown but not
+ * scored. A FLOOR ONLY (owner ruling, #535 COWORK #23): large growth off a real
+ * base (NBIS +479% on $91.5M) is growth, and keeps scoring.
+ */
+export const REVENUE_BASE_FLOOR_USD = 5_000_000;
+
+/** The prior period's revenue, from the latest figure and its growth. Null when either is missing. */
+export function priorRevenueFrom(latest: number | null, growthPct: Pct): number | null {
+  if (latest === null || !isPct(growthPct) || growthPct <= -100) return null;
+  return latest / (1 + growthPct / 100);
+}
+
+export function revenueBaseTooSmall(latest: number | null, growthPct: Pct): boolean {
+  const prior = priorRevenueFrom(latest, growthPct);
+  return prior !== null && Math.abs(prior) < REVENUE_BASE_FLOOR_USD;
+}
+
+export const SMALL_REVENUE_BASE = "off a very small base";
+
+/**
+ * The verb for a margin move. "Widened" on a negative margin that moved towards
+ * zero reads as the loss widening; for a margin below zero at either end the
+ * words are "improved" / "worsened", and "widened" / "narrowed" only where both
+ * ends are positive.
+ */
+export function marginMoveVerb(older: number, newer: number, tone: EarningsTone | null): string | null {
+  if (tone !== "good" && tone !== "weak") return null;
+  const positive = older >= 0 && newer >= 0;
+  if (tone === "good") return positive ? "widened" : "improved";
+  return positive ? "narrowed" : "worsened";
+}
+
 /**
  * A value a bar chart may draw, or null for no bar at all.
  *
