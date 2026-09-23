@@ -192,6 +192,94 @@ export function filerPrecision(lags: readonly number[]): { precision: number; pr
   return { precision: overlap / (n * span), predictions: n };
 }
 
+// ── Q4_SPLIT: THE FISCAL-YEAR-END QUARTER HAS ITS OWN HABIT ─────────────────
+//
+// Measured (relay 35862573781, 558 filers with >= 8 lags): one median over every
+// lag admits 423 at in-sample precision 0.868 (hold-out 0.904). Keeping the
+// fiscal-year-end quarter's lags apart from the other three admits 538 at 0.915
+// (hold-out 0.924). A 10-K is due later than a 10-Q, so a regular filer has two
+// habits, and averaging them made KO look irregular (#535 COWORK #8).
+//
+// Needs the record's `fye`. Without it there is no way to know which lag is
+// Q4, and the single pool below is the shipped behaviour, unchanged.
+
+/** Is this period end the fiscal year's end? Within 10 days, across a year boundary. */
+export function isFiscalYearEnd(periodEnd: string, fye: string): boolean {
+  if (!valid(periodEnd) || !/^\d{2}-\d{2}$/.test(fye)) return false;
+  const y = Number(periodEnd.slice(0, 4));
+  return [y - 1, y, y + 1].some((yy) => {
+    const t = parse(`${yy}-${fye}`);
+    return Number.isFinite(t) && Math.abs(parse(periodEnd) - t) <= 10 * DAY;
+  });
+}
+
+/** Usable lags with their period ends, oldest first — lagsFrom's filter, kept paired. */
+function lagSeries(events: readonly ReportEvent[] | undefined): { end: string; lag: number }[] {
+  if (!Array.isArray(events)) return [];
+  return events
+    .filter((e) => e && valid(e.periodEnd) && valid(e.announcedOn))
+    .map((e) => ({ end: e.periodEnd as string, lag: daysBetween(e.periodEnd as string, e.announcedOn) }))
+    .filter((x) => x.lag >= 0 && x.lag <= 200)
+    .sort((a, b) => parse(a.end) - parse(b.end));
+}
+
+/**
+ * Walk-forward precision with two pools. Same listing-day overlap as
+ * filerPrecision; a prediction needs at least 2 prior lags IN ITS OWN POOL, and
+ * a filer is scored only with as many predictions as the single-pool rule
+ * would require (MIN_USABLE_PERIODS - SEED_PERIODS).
+ */
+export function pooledPrecision(
+  series: readonly { end: string; lag: number }[],
+  isQ4: (end: string) => boolean,
+): { precision: number; predictions: number } | null {
+  if (series.length < MIN_USABLE_PERIODS) return null;
+  const span = EXPECTED_WINDOW_DAYS + 1;
+  let overlap = 0;
+  let n = 0;
+  for (let i = 0; i < series.length; i++) {
+    const pool = series.slice(0, i).filter((x) => isQ4(x.end) === isQ4(series[i].end));
+    if (pool.length < 2) continue;
+    const m = median(pool.map((x) => x.lag));
+    if (m == null) continue;
+    overlap += Math.max(0, span - Math.abs(m - series[i].lag));
+    n++;
+  }
+  if (n < MIN_USABLE_PERIODS - SEED_PERIODS) return null;
+  return { precision: overlap / (n * span), predictions: n };
+}
+
+/**
+ * THIS FILER'S HABIT FOR ITS NEXT PERIOD — the one home for the decision and
+ * the evidence line (symbolOutlook's habitOf reads this too). With `fye`, the
+ * median and its sample are the pool the NEXT period belongs to: the Q4 pool
+ * only when the next period is the fiscal year's end.
+ */
+export function lagHabit(rec: StoredReportDates | null): {
+  scored: { precision: number; predictions: number } | null;
+  medianLagDays: number | null;
+  fromPeriods: number;
+  isFpi: boolean;
+  pooled: boolean;
+} {
+  const { lags, isFpi } = lagsFrom(rec?.events);
+  const fye = rec?.fye;
+  if (!fye || !/^\d{2}-\d{2}$/.test(fye)) {
+    return { scored: filerPrecision(lags), medianLagDays: median(lags), fromPeriods: lags.length, isFpi, pooled: false };
+  }
+  const series = lagSeries(rec?.events);
+  const isQ4 = (end: string) => isFiscalYearEnd(end, fye);
+  const nextIsQ4 = valid(rec?.nextPeriodEnd) ? isQ4(rec!.nextPeriodEnd as string) : false;
+  const pool = series.filter((x) => isQ4(x.end) === nextIsQ4).map((x) => x.lag);
+  return {
+    scored: pooledPrecision(series, isQ4),
+    medianLagDays: pool.length >= 2 ? median(pool) : null,
+    fromPeriods: pool.length,
+    isFpi,
+    pooled: true,
+  };
+}
+
 const bandFor = (daysAway: number): ExpectedBandId | null => {
   for (const b of EXPECTED_BANDS) if (daysAway <= b.maxDays) return b.id;
   return null;
@@ -227,14 +315,13 @@ export function expectedFrom(
   if (alreadyDue.has(symbol)) return { skip: "already-due" };
 
   if (!valid(rec.nextPeriodEnd)) return { skip: "no-period-end" };
-  const { lags, isFpi } = lagsFrom(rec.events);
-  const scored = filerPrecision(lags);
-  if (!scored) return { skip: "thin-history" };
+  const habit = lagHabit(rec);
+  if (!habit.scored) return { skip: "thin-history" };
 
-  const bar = isFpi ? PRECISION_BAR_FPI : PRECISION_BAR_DOMESTIC;
-  if (scored.precision < bar) return { skip: "below-precision-bar" };
+  const bar = habit.isFpi ? PRECISION_BAR_FPI : PRECISION_BAR_DOMESTIC;
+  if (habit.scored.precision < bar) return { skip: "below-precision-bar" };
 
-  const lag = median(lags);
+  const lag = habit.medianLagDays;
   if (lag == null) return { skip: "thin-history" };
   const daysAway = daysBetween(today, rec.nextPeriodEnd) + lag;
   // Past-due is the due strip's business, not this section's, and a band is
@@ -249,9 +336,9 @@ export function expectedFrom(
       symbol, band, daysAway,
       periodEnd: rec.nextPeriodEnd,
       medianLagDays: lag,
-      fromPeriods: lags.length,
-      precision: scored.precision,
-      isFpi,
+      fromPeriods: habit.fromPeriods,
+      precision: habit.scored.precision,
+      isFpi: habit.isFpi,
       lastReportedOn: last.on,
       lastReportedPeriodEnd: last.periodEnd,
     },
