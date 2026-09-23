@@ -754,6 +754,10 @@ const TASKS = {
   "googlebot-render": { script: "scripts/googlebot-render-probe.mjs", args: () => [] },
   // #535 COWORK #19 §2: newest structured quarter age for 20-F/40-F filers. Read-only.
   "write-fpi-quarter-age": { script: "scripts/fpi-quarter-age-probe.mjs", args: () => [], writes: true },
+  // #535 COWORK #20 §4: tiny-revenue / extreme-margin score rules, measured on the live sets. Read-only.
+  "write-score-rules": { script: "scripts/score-rules-probe.mjs", args: () => [], needsTypescript: true, writes: true },
+  // #535 COWORK #19 §3: IFRS field coverage and staleness across annual-only filers. Read-only (Redis GETs + companyfacts).
+  "write-ifrs-gap": { script: "scripts/ifrs-gap-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
