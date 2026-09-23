@@ -93,8 +93,9 @@ export default function StockSymbolLayout({ children }: { children: ReactNode })
 // CLIENT-SIDE with their own caches, on every load, regardless of this value:
 //
 //   price          /api/quote           60s Redis cache, tryReserveFmpCallSlot
-//   valuation      /api/stock-valuation its own cache
-//   analyst rating /api/stock-analyst-rating  its own cache
+//   valuation      server-computed from SEC (the /api/stock-valuation route
+//                  was deleted 2026-09-23, #552)
+//   analyst rating retired block; /api/stock-analyst-rating deleted 2026-09-23
 //
 // The chart is server-seeded (initialHistory) and the client fetch is skipped
 // when it is, so the CHART is on this clock -- daily candles, where an hour is

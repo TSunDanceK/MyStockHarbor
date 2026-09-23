@@ -625,6 +625,55 @@ export function waterfallGate(view: SecEarningsView): WaterfallGate {
   return { ok: true, steps, total: operating };
 }
 
+/**
+ * WHERE EACH WATERFALL BAR SITS, as percentages of the track.
+ *
+ * ── THE AXIS SPANS EVERY RUNNING TOTAL, NOT 0..REVENUE (#552 A-queue 1) ────
+ * The scale used to be 0..max(running totals), so anything below zero was
+ * clipped. On WKHS Q2 FY2026 (revenue $3.6M, costs $11.0M + $4.1M + $7.8M,
+ * operating income −$19.4M) the three cost bars started past the right edge
+ * and drew as EMPTY TRACKS, and the result bar took |−19.4M| and filled the
+ * track in the positive blue: a loss drawn as the look of a profit.
+ *
+ * Now the axis runs from min(0, lowest running total, total) to max(0,
+ * highest running total, total). Each step floats from the previous running
+ * total to the next — WKHS's cost of revenue runs from +3.6M to −7.4M, across
+ * zero — and the result bar is drawn from zero to its value, so a loss sits
+ * LEFT of zero. `zeroPct` is where the zero line goes; null when nothing goes
+ * below zero, so a profitable filer (AAPL) draws exactly as before.
+ */
+export type WaterfallGeometry = {
+  zeroPct: number | null;
+  bars: { key: string; label: string; delta: number; leftPct: number; widthPct: number }[];
+  totalBar: { leftPct: number; widthPct: number; loss: boolean };
+};
+
+export function waterfallGeometry(
+  steps: { key: string; label: string; delta: number }[],
+  total: number,
+): WaterfallGeometry | null {
+  const points: { key: string; label: string; delta: number; from: number; to: number }[] = [];
+  for (const s of steps) {
+    const from = points.length ? points[points.length - 1].to : 0;
+    points.push({ ...s, from, to: from + s.delta });
+  }
+  const ends = points.flatMap((p) => [p.from, p.to]);
+  const lo = Math.min(0, total, ...ends);
+  const hi = Math.max(0, total, ...ends);
+  const range = hi - lo;
+  if (!(range > 0) || !Number.isFinite(range)) return null;
+  const at = (n: number) => ((n - lo) / range) * 100;
+  return {
+    zeroPct: lo < 0 ? at(0) : null,
+    bars: points.map((p) => ({
+      key: p.key, label: p.label, delta: p.delta,
+      leftPct: at(Math.min(p.from, p.to)),
+      widthPct: (Math.abs(p.delta) / range) * 100,
+    })),
+    totalBar: { leftPct: at(Math.min(0, total)), widthPct: (Math.abs(total) / range) * 100, loss: total < 0 },
+  };
+}
+
 // ── how a tone is SHOWN ────────────────────────────────────────────────────
 
 /**
@@ -686,7 +735,20 @@ export function growthToneWord(tone: EarningsTone | null): string {
   return "Not measured";
 }
 
-export function marginToneWord(tone: EarningsTone | null): string {
+export function marginToneWord(
+  tone: EarningsTone | null,
+  move?: { older: number; newer: number },
+): string {
+  // THE BADGE TAKES #550's RULE-3 VERB (#552 A-queue 2). BYND's operating
+  // margin −50.0% → −44.8% read "Widening", which on a negative margin reads as
+  // the loss widening. Where either end is below zero the words are
+  // "Improving" / "Worsening"; "Widening" / "Narrowing" only where both ends
+  // are positive. marginMoveVerb is the one rule; this only changes its tense.
+  if (move) {
+    const verb = marginMoveVerb(move.older, move.newer, tone);
+    if (verb === "improved") return "Improving";
+    if (verb === "worsened") return "Worsening";
+  }
   if (tone === "good") return "Widening";
   if (tone === "weak") return "Narrowing";
   if (tone === "neutral") return "Steady";
