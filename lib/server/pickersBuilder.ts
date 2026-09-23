@@ -4945,6 +4945,31 @@ export function isDegradedBuild(data: Pick<PickersPayload, "degradedSymbolPct">)
  * every healthy build, which is every normal run. An escape hatch here would be
  * a footgun whose only function is to reintroduce the bug on purpose.
  */
+
+// ── WHO TRIGGERS A FULL BUILD (#535 COWORK #12 item 3) ──────────────────────
+// Each build reads ~700 symbols of history, ~77 MB, and the meter counted 53-90
+// a day against ~24 that hourly expiry explains, while production runtime logs
+// show far fewer "build complete" lines than the meter's reads. The builds the
+// logs cannot see need attributing, so every build records WHERE it ran: the
+// deployment environment, whether it ran inside `next build` (NEXT_PHASE), the
+// entry point, and why it built. One HINCRBY per build, on a day key.
+// Measurement only: nothing here changes whether or how a build runs.
+export const PICKERS_BUILD_TRIGGERS_PREFIX = "msh:pickers-build-triggers:v1";
+async function recordBuildTrigger(entry: "getPickersData" | "GET" | "GET_WARM", reason: string): Promise<void> {
+  const env = process.env.VERCEL_ENV ?? "none";
+  const phase = process.env.NEXT_PHASE === "phase-production-build" ? "next-build" : "runtime";
+  const dep = (process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_URL ?? "local").slice(0, 16);
+  console.log(`[pickers] build start: env=${env} phase=${phase} entry=${entry} reason=${reason} dep=${dep}`);
+  if (!redis) return;
+  try {
+    const key = `${PICKERS_BUILD_TRIGGERS_PREFIX}:${new Date().toISOString().slice(0, 10)}`;
+    await redis.hincrby(key, `${env}|${phase}|${entry}|${reason}`, 1);
+    await redis.expire(key, 8 * 86400);
+  } catch {
+    // Attribution must never fail a build.
+  }
+}
+
 export async function getPickersData(
   origin: string,
   opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean } = {}
@@ -4996,6 +5021,7 @@ export async function getPickersData(
     }
   }
 
+  await recordBuildTrigger("getPickersData", forceRefresh ? "forced" : cached?.data ? "cached-but-built" : lockToken ? "no-payload" : "no-payload-lock-lost");
   try {
     const data = await buildPickersPayload(origin, { forceHistoryRefresh });
     // FLUSH THE READ METER ONCE, HERE, rather than per symbol inside the loop.
@@ -5194,6 +5220,7 @@ async function handlePickersRequest(
     }
   }
 
+  await recordBuildTrigger(options.requestHistoryForce ? "GET_WARM" : "GET", forceRefresh ? "forced" : cached?.data ? "cached-but-built" : lockToken ? "no-payload" : "no-payload-lock-lost");
   try {
     const origin = originFromReq(req);
     const data = await buildPickersPayload(origin, { forceHistoryRefresh });
