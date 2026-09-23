@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyBars, getDailyHistory } from "@/lib/server/historyCache";
@@ -368,7 +369,7 @@ async function getEarningsData(symbol: string) {
     // thing the owner has said not to spend.
     secEvents.length
       ? Promise.resolve(null)
-      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
+      : fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(toDashed(symbol))}`),
   ]);
   const secView = cold.status === "ready" ? buildSecEarningsView(cold.set) : null;
 
@@ -529,11 +530,19 @@ async function getEarningsData(symbol: string) {
 }
 
 
+// CONVERTS FOR THE SAME REASON /stock/[symbol]/news's fetchQuoteForMeta does:
+// the route parameter arrives as the reader typed it, "BRK.B", and FMP files
+// Berkshire's B class as BRK-B.
+//
+// WHAT THIS DOES NOT CHANGE, so nobody verifies the wrong thing: the <title>
+// price. generateMetadata prints seed.lastClose, which is the newest bar of
+// getDailyHistory (already dashed via buildFmpSymbol). The price returned here
+// lands in seed.price and the title never reads it.
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
   try {
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(toDashed(symbol))}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
     if (!res.ok) return { price: null, date: null };
     const json = await res.json();

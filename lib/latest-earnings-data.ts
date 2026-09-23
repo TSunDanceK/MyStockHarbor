@@ -89,6 +89,7 @@ export type LatestEarningsData = {
 };
 
 import { fmpFetch } from "@/lib/server/fmpUsage";
+import { toDashed } from "@/lib/symbolSpellings.mjs";
 import {
   normalizeEarningsRows,
   readEarningsRows,
@@ -175,12 +176,14 @@ function findClosestByDate<T extends { date?: string }>(
  */
 async function earningsRowsFromStoreOrFmp(
   symbol: string,
-  encoded: string,
   key: string
 ): Promise<FmpStableEarningsItem[] | null> {
   const stored = await readEarningsRows(symbol);
   if (stored?.length) return stored as FmpStableEarningsItem[];
 
+  // Converted HERE rather than taken as a pre-encoded argument, so the dash is
+  // visible at the request that needs it. The store stays keyed by `symbol`.
+  const encoded = encodeURIComponent(toDashed(symbol));
   const fetched = await fetchFmpJson<FmpStableEarningsItem[]>(
     `https://financialmodelingprep.com/stable/earnings?symbol=${encoded}&apikey=${key}`,
   );
@@ -528,7 +531,11 @@ async function getLatestEarningsDataInner(
 
   if (!symbol || !apiKey) return empty;
 
-  const encoded = encodeURIComponent(symbol);
+  // DASHED FOR FMP. /api/stock-earnings/[symbol] and /dashboard?symbol= both
+  // hand this the reader's spelling, dots kept by their cleaners, and every
+  // request below is FMP. Only the requests convert: `symbol` itself, which
+  // keys the store and labels the payload, stays as asked.
+  const encoded = encodeURIComponent(toDashed(symbol));
   const key = encodeURIComponent(apiKey);
 
   const [stableEarnings, stableIncomeStatements, legacyIncomeStatements, analystEstimates, surprisesA, surprisesB] =
@@ -545,7 +552,7 @@ async function getLatestEarningsDataInner(
       // came for -- and populating makes the next render free rather than
       // repeating this fetch every 24h forever. Same shape as the news store
       // in #380.
-      earningsRowsFromStoreOrFmp(symbol, encoded, key),
+      earningsRowsFromStoreOrFmp(symbol, key),
       fetchFmpJson<FmpIncomeStatement[]>(
         `https://financialmodelingprep.com/stable/income-statement?symbol=${encoded}&period=quarter&limit=6&apikey=${key}`,
       ),
