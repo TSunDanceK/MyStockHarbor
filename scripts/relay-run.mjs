@@ -392,6 +392,8 @@ const TASKS = {
     args: (env) => [env.SYMBOLS ?? ""],
     needsTypescript: true,
   },
+  // Read-only: replays sec-facts' per-run FX series cache (#535 COWORK #8).
+  "fx-cache-replay": { script: "scripts/fx-cache-replay.mjs", args: () => [], needsTypescript: true },
   "sec-period-match": {
     script: "scripts/sec-period-match-probe.mjs",
     args: (env) => [env.SYMBOLS ?? ""],
