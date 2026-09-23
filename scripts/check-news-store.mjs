@@ -91,7 +91,9 @@ check(
 
 check(
   "the dedup is injected into the store rather than imported by it",
-  /dedupe:\s*dedupeNews/.test(newsData),
+  // Either the bare injection or (2026-09-23, #553 COWORK #5) the same dedup
+  // wrapped with the FMP-era purge -- still injected, still one implementation.
+  /dedupe:\s*(?:dedupeNews\b|\(list\) => dedupeNews\(list\.filter\(fromActive\)\))/.test(newsData),
   "the store importing lib/stock-news-data would be a cycle, and copying the rule would be two implementations"
 );
 
