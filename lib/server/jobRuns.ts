@@ -68,7 +68,14 @@ export const JOBS = {
   // own request to latestProcessableDate() regardless, so an early fire asks for
   // a date that exists rather than 403ing on one that does not.
   "sec-daily-index": { label: "SEC daily index (daily 04:00)", instrumented: true, cron: "0 4 * * *" },
-  "sec-facts": { label: "SEC fact sets — reverify then populate (daily 04:20)", instrumented: true, cron: "20 4 * * *" },
+  // TEMPORARY SECOND RUN AT 16:20 (added 2026-09-23). The re-read backlog
+  // stood at 751 after a label-version bump and one run a day drains ~64 of
+  // it, so a second pass halves the wait. 16:20 is clear of every other SEC
+  // job (04:00 / 04:20 / 04:40 / 05:10) for the per-requester pacing reason
+  // above. REMOVE IT -- back to "20 4 * * *" here AND in vercel.json -- once
+  // rewindowBacklog on /cache-health is under 50. vercel.json is strict JSON
+  // and cannot carry this note itself.
+  "sec-facts": { label: "SEC fact sets — reverify then populate (daily 04:20, TEMPORARY extra 16:20)", instrumented: true, cron: "20 4,16 * * *" },
   // 04:40, AFTER sec-facts RATHER THAN BESIDE IT, and the gap is the rule.
   // SEC's fair-access limit is per REQUESTER, not per endpoint: two jobs each
   // politely pacing their own calls to 8/s would between them ask for 16/s and
@@ -110,6 +117,8 @@ export function cronIntervalSeconds(cron: string): number {
   if (Number.isFinite(step) && step > 0) return Math.max(60, step * 60);
 
   if (hour === "*") return 60 * 60;
+  // "4,16" fires twice a day; judging it as daily would let a missed run pass.
+  if (hour?.includes(",")) return (60 * 60 * 24) / hour.split(",").length;
   return 60 * 60 * 24;
 }
 
@@ -137,6 +146,7 @@ export function describeCron(cron: string): string {
 
   const mm = (minute ?? "0").padStart(2, "0");
   if (hour === "*") return `hourly at :${mm}`;
+  if (hour?.includes(",")) return `daily ${hour.split(",").map((h) => `${h.padStart(2, "0")}:${mm}`).join(" and ")}`;
   return `daily ${(hour ?? "0").padStart(2, "0")}:${mm}`;
 }
 

@@ -586,6 +586,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READS ONLY: which fact sets sec-facts failed on, reproduced with the
+  // shipped fetch rule and extraction over the queues failures stay in.
+  "write-sec-facts-failures": {
+    script: "scripts/sec-facts-failures.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // READS ONLY: why sec-facts times out -- last runs, next queues, fetch cost.
   "write-sec-facts-timeout-diagnosis": {
     script: "scripts/sec-facts-timeout-diagnosis.mjs",
