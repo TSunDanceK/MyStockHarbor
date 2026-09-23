@@ -733,6 +733,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // #535 COWORK #8: #6-B targeted fallback; #2 the filing's own DEI fiscal year.
+  "write-spotcheck-census-4": {
+    script: "scripts/spotcheck-census-4.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-fy-naming-census": {
     script: "scripts/fiscal-year-naming-census.mjs",
     args: () => [],
