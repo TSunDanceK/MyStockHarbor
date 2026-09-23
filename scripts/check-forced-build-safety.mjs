@@ -100,6 +100,11 @@ const flushRedisReadMeter = async () => {
   bench.meterFlushes = (bench.meterFlushes ?? 0) + 1;
   if (bench.meterThrows) throw new Error("meter unavailable");
 };
+// Build attribution (#535 COWORK #12 item 3): bookkeeping, stubbed. Counted so
+// a check could see it runs once per build; nothing depends on it.
+const recordBuildTrigger = async (entry, reason) => {
+  bench.triggers = [...(bench.triggers ?? []), entry + ":" + reason];
+};
 const buildPickersPayload = async (origin, opts) => {
   bench.builds.push(opts ?? {});
   if (bench.buildThrows) throw new Error("build failed");
