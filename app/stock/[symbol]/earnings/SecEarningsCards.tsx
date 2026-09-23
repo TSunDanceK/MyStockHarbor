@@ -1069,10 +1069,20 @@ const BALANCE_SHEET_SPREAD_DAYS = 95;
  * FOUR LINES WHOSE ABSENCE IS ABOUT THE TAGS, NOT THE COMPANY.
  *
  * Every 10-Q carries equity and liabilities, and a filer whose pre-tax income
- * differs from its operating income has non-operating lines. Where none of the
- * concepts this page reads is tagged, "Not reported" would be a claim about
- * the company that is false; this says what is true. NOT_REPORTED itself is
- * unchanged — it is shared with lines (Q4 EPS) where it is the right claim.
+ * differs from its operating income has non-operating lines. "Not reported"
+ * would be a claim about the company that is false; each gets the words that
+ * are true of it. NOT_REPORTED itself is unchanged — it is shared with lines
+ * (Q4 EPS) where it is the right claim.
+ *
+ * - Liabilities and equity: "Not found in the filing's tagged data" — only
+ *   where the concept really is absent from the filing (AVAV total
+ *   liabilities: no liabilities total tagged at all).
+ * - Interest expense and other income: "Not captured from this filing", the
+ *   site's existing words (EMPTY_REASONS.notCaptured). The filer may tag
+ *   these under concepts this page does not read — AVAV tags
+ *   InterestIncomeExpenseNonoperatingNet (+$4.1M) and
+ *   OtherNonoperatingIncomeExpense (-$0.6M), outside our chains — so "not
+ *   found in the tagged data" would be untrue there (#535 COWORK #1, 2026-09-23).
  */
 const NOT_IN_TAGGED_DATA = "Not found in the filing\u2019s tagged data";
 const TAG_GAP_LINES = new Set(["interestExpense", "nonOperatingIncomeExpense"]);
@@ -1209,7 +1219,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               cell={c}
               compact
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : TAG_GAP_LINES.has(c.key) ? NOT_IN_TAGGED_DATA : NOT_REPORTED}
+              empty={c.key === "revenue" ? revenueEmpty(view) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
             />
           </Row>
         ))}
