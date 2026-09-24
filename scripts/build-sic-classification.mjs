@@ -33,16 +33,37 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
     res: r.phrases.map((p) => ({ phrase: p, re: new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi") })),
   }));
   // A CUSTOMER OR MARKET, NOT THE BUSINESS: "solutions to banks, broker-dealers"
-  // names who Broadridge serves. A match right after one of these words is
-  // skipped and the next occurrence is tried.
-  const SERVES = /\b(solutions to(?! (?:enable|help|support|power|deliver))|services to(?! (?:enable|help|support))|products to(?! (?:enable|help))|primarily for|rather than|instead of|unlike|serving|serves|sold into|end markets|customers such as|customers including|clients such as|clients including)\b[^.;:]{0,60}$/i;
-  const firstOwn = (re, text) => {
-    re.lastIndex = 0;
-    for (let m = re.exec(text); m; m = re.exec(text)) {
-      if (!SERVES.test(text.slice(Math.max(0, m.index - 80), m.index))) return m;
+  // names who Broadridge serves; "banks and credit card issuers rely on our
+  // solutions" names FICO's customers. A match right after one of these words
+  // is skipped and the next occurrence is tried.
+  const SERVES = /\b(solutions to(?! (?:enable|help|support|power|deliver))|services to(?! (?:enable|help|support))|products to(?! (?:enable|help))|primarily for|rather than|instead of|unlike|acquired|acquisition of|serving|serves|sold into|end markets|customers such as|customers including|clients such as|clients including)\b[^.;:]{0,60}$/i;
+  const RELIED = /^[^.;:]{0,60}\b(rely on|relies on|relied on|relied upon)\b/i;
+  // A LIST OF SERVICES, NOT THE BUSINESS: "As part of our services, we provide
+  // consumers with payment processing services, …" (HQY) and "… services,
+  // including …". A match inside such a list, in the same sentence, is skipped
+  // (#552 COWORK #23).
+  const LISTED = /\bincluding\b|\bas part of\b|\bprovides? [^.]{0,50}\bwith\b/i;
+  const sentenceStart = (text, at) => Math.max(0, text.lastIndexOf(".", at - 1) + 1);
+  const firstOwn = (re, text, from = 0, to = text.length) => {
+    re.lastIndex = from;
+    for (let m = re.exec(text); m && m.index < to; m = re.exec(text)) {
+      const before = text.slice(Math.max(0, m.index - 80), m.index);
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 80);
+      const inSentence = text.slice(sentenceStart(text, m.index), m.index);
+      if (!SERVES.test(before) && !RELIED.test(after) && !LISTED.test(inSentence)) return m;
     }
     return null;
   };
+  // THE SELF-DESCRIPTION SENTENCE FIRST ("X is a …", "We are a …"): the
+  // filer's own one-line answer beats a later sentence (#552 COWORK #23).
+  const SELF = /\b(?:is|are)\s+(?:a|an|the|one of)\b|\bwe are\b|\boperates as\b/i;
+  const selfSentence = (text) => {
+    for (const m of text.matchAll(/[^.]+\.?/g)) {
+      if (SELF.test(m[0])) return [m.index, m.index + m[0].length];
+    }
+    return null;
+  };
+  const REIT_TYPES = (r) => r.reit && r.industry !== "REIT - Mortgage" && r.industry !== "REIT - Diversified";
   const quote = (text, at, len) => {
     const start = Math.max(0, text.lastIndexOf(".", at) + 1);
     const end = text.indexOf(".", at + len);
@@ -69,9 +90,39 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
     let hit = null;
     if (text) {
       const eligible = compiled.filter((r) => (!scope || r.sector === scope) && (r.reit ? reitScope : sic !== "6798"));
-      for (const r of eligible) for (const p of r.res) {
-        const m = firstOwn(p.re, text);
-        if (m && (!hit || m.index < hit.at)) hit = { r, p, at: m.index, len: m[0].length };
+      const earliest = (from, to) => {
+        let best = null;
+        for (const r of eligible) for (const p of r.res) {
+          const m = firstOwn(p.re, text, from, to);
+          if (m && (!best || m.index < best.at)) best = { r, p, at: m.index, len: m[0].length };
+        }
+        return best;
+      };
+      // Inside the self-description sentence the RULE ORDER decides, so the
+      // more specific rule wins ("biopharmaceutical company … generic and
+      // proprietary injectable" is Specialty & Generic); across the rest of
+      // the window the earliest mention does.
+      const byOrder = (from, to) => {
+        for (const r of eligible) for (const p of r.res) {
+          const m = firstOwn(p.re, text, from, to);
+          if (m) return { r, p, at: m.index, len: m[0].length };
+        }
+        return null;
+      };
+      const own = selfSentence(text);
+      hit = (own && byOrder(own[0], own[1])) || earliest(0, text.length);
+      // TWO OR MORE PROPERTY TYPES IN ONE SENTENCE → REIT - Diversified
+      // ("office and multifamily properties", "retail, office, and multifamily").
+      if (hit && REIT_TYPES(hit.r)) {
+        const from = sentenceStart(text, hit.at);
+        const end = text.indexOf(".", hit.at + hit.len);
+        const to = end < 0 ? text.length : end;
+        const types = new Set();
+        for (const r of eligible.filter(REIT_TYPES)) for (const p of r.res) if (firstOwn(p.re, text, from, to)) types.add(r.industry);
+        if (types.size >= 2) {
+          const div = compiled.find((r) => r.industry === "REIT - Diversified");
+          hit = { ...hit, r: div, p: { phrase: [...types].map((t) => t.replace("REIT - ", "").toLowerCase()).join(" + ") } };
+        }
       }
     }
     if (hit && hit.r.industry !== entry?.industry) {
@@ -81,12 +132,10 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
         phrase: hit.p.phrase, quote: quote(text, hit.at, hit.len),
         form: row[0], filedOn: row[1], accession: row[2],
       };
-    } else if (!hit && entry?.group && entry.sector) {
-      // Sector from the major group, industry undecided: the sector still
-      // counts for filters; the industry goes to the helper.
-      overrides[symbol] = { sector: entry.sector, industry: null, sic, basis: "SIC major group" };
-      needsClassification.push(symbol);
     } else if (!hit && !entry?.industry) {
+      // No industry from the table or the rules. A code the table does not
+      // list still takes its major group's sector in the resolver
+      // (lib/server/staticProfile.ts); the industry goes to the helper.
       needsClassification.push(symbol);
     }
   }

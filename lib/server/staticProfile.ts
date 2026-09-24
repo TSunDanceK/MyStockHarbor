@@ -17,7 +17,8 @@
 // are readings, or another party's prose, and come from elsewhere.
 import cikMap from "@/data/cik-map.json";
 import registrantsFile from "@/data/sec/registrants.json";
-import sicSectorFile from "@/data/sec/sic-sector.json";
+import classificationFile from "@/data/sec/sic-classification.json";
+import overridesFile from "@/data/sec/classification-overrides.json";
 import { lookupSpellingIn } from "@/lib/symbolSpellings.mjs";
 
 export type StaticProfileRow = {
@@ -33,67 +34,58 @@ const clean = (v: unknown): string | null =>
  * BRIEF-taxonomy-sic-mapping-2026-09-14 §4). Cheap to carry now, costly to
  * retrofit once rows from three legs are mixed in a store.
  */
-export type ProfileFieldSource = "fmp-cache" | "sic" | "none";
+export type ProfileFieldSource = "fmp-cache" | "sic" | "filing" | "none";
 
 export type ResolvedProfile = StaticProfileRow & {
   /** Which leg answered. For logging and for the check script, not for render. */
-  source: "cache" | "sic" | "none";
+  source: "cache" | "sic" | "filing" | "none";
   sectorSource: ProfileFieldSource;
   industrySource: ProfileFieldSource;
+  /** On a "filing" answer: the filing date of the 10-K/20-F text it came from. */
+  filedOn?: string | null;
 };
 
-// ── THE SIC LEG: FOR EVERY SYMBOL WITH NO CACHED ROW ────────────────────────
+// ── THE SEC LEG: FOR EVERY SYMBOL WITH NO CACHED ROW (#552 COWORK #3/#22) ────
 //
-// A symbol with no cached row has no other source (the FMP snapshot leg was
-// removed 2026-09-23), and so no sector page without this. SEC files every registrant under
-// a SIC code (data/sec/registrants.json), and data/sec/sic-sector.json maps
-// codes to FMP's sector labels by MEASURED majority over the 2,587 symbols that
-// carried both (built by scripts/build-sic-sector.mjs, removed 2026-09-23 with
-// the FMP snapshot it read; COWORK #3 replaces this table). A code the evidence does not
-// support maps to null ("unclassified"), and the miss is reported, never
-// guessed.
-//
-// INDUSTRY IS SEC's OWN DESCRIPTION, NOT AN FMP LABEL (taxonomy brief option
-// C). "Semiconductors & Related Devices" is not FMP's "Semiconductors", and the
-// one page that filters on an industry string (/semiconductor-stocks) would
-// not match it. That is deliberate: inventing FMP labels from SIC codes is the
-// owner's call, after seeing the list of strings pages filter on.
-type RegistrantRow = { sic?: string | null; sicDescription?: string | null };
+// Our own mapping, in the Pickers label set, from SEC data only:
+//   1. an OVERRIDE from the filer's own 10-K Item 1 / 20-F text
+//      (data/sec/classification-overrides.json, built by
+//      scripts/build-sic-classification.mjs from data/sec/classification-rules.json),
+//      recorded with the matched phrase and the filing date;
+//   2. else the SIC TABLE (data/sec/sic-classification.json): the code's
+//      hand-assigned sector and industry, or the 2-digit major group's sector
+//      for a code the table does not list;
+//   3. else nothing: the card hides, and the helper lists the symbol.
+// No vendor label is read anywhere on this leg. Replaced the FMP-voted
+// data/sec/sic-sector.json and SEC's raw SIC descriptions as industries.
+type RegistrantRow = { sic?: string | null };
+type ClassRow = { sector: string | null; industry: string | null };
+type OverrideRow = ClassRow & { filedOn?: string | null };
 
-/**
- * SIC CODES WHOSE INDUSTRY IS AN FMP LABEL A PAGE FILTERS ON — the whole table.
- *
- * ONE ROW, BY OWNER DECISION (2026-09-22, on #517). The only industry string
- * any Pickers page presets is "Semiconductors" (/semiconductor-stocks), and a
- * SIC-only symbol would otherwise carry SEC's "Semiconductors & Related
- * Devices", which the preset does not match. Every other SIC-only symbol keeps
- * SEC's own description. A row is added here only by the same kind of decision,
- * with its source recorded, never inferred.
- */
-export const SIC_INDUSTRY_LABELS: Record<string, { label: string; source: string }> = {
-  "3674": {
-    label: "Semiconductors",
-    source:
-      "owner decision 2026-09-22 (#517): SIC 3674 \"Semiconductors & Related Devices\" -> the " +
-      "FMP industry label /semiconductor-stocks presets on",
-  },
-};
 const REGISTRANTS = (registrantsFile as unknown as { rows: Record<string, RegistrantRow> }).rows ?? {};
-const SIC_SECTOR = (sicSectorFile as unknown as { codes: Record<string, { sector: string | null }> }).codes ?? {};
+const CLASSIFICATION = classificationFile as unknown as {
+  codes: Record<string, ClassRow>;
+  majorGroups: Record<string, string | null>;
+};
+const OVERRIDES = (overridesFile as unknown as { overrides: Record<string, OverrideRow> }).overrides ?? {};
 
-/** The SIC leg for a symbol, or null. No I/O: both files are bundled. */
-export function sicProfileFor(symbol: string): StaticProfileRow | null {
+/** The SEC leg for a symbol, or null. No I/O: every file is bundled. */
+export function sicProfileFor(symbol: string): (StaticProfileRow & { from: "filing" | "sic"; filedOn?: string | null }) | null {
   const upper = String(symbol ?? "").trim().toUpperCase();
   if (!upper) return null;
-  // THE DOT/DASH BRIDGE (moved here from the removed snapshot leg, 2026-09-23):
-  // registrants.json spells a share class with a dash (BRK-B) while
-  // lib/curatedSymbols.ts and /stock/BRK.B use a dot. lookupSpellingIn is the
+  // THE DOT/DASH BRIDGE: registrants.json and the overrides spell a share class
+  // with a dash (BRK-B) while /stock/BRK.B uses a dot. lookupSpellingIn is the
   // one owner of that rule (lib/symbolSpellings.mjs); this calls it.
-  const reg = lookupSpellingIn(REGISTRANTS, upper)?.value;
-  if (!reg?.sic) return null;
-  const sector = clean(SIC_SECTOR[reg.sic]?.sector);
-  const industry = SIC_INDUSTRY_LABELS[reg.sic]?.label ?? clean(reg.sicDescription);
-  return sector || industry ? { sector, industry } : null;
+  const o = lookupSpellingIn(OVERRIDES, upper)?.value;
+  if (o && (clean(o.sector) || clean(o.industry))) {
+    return { sector: clean(o.sector), industry: clean(o.industry), from: "filing", filedOn: o.filedOn ?? null };
+  }
+  const code = lookupSpellingIn(REGISTRANTS, upper)?.value?.sic;
+  if (!code) return null;
+  const row = CLASSIFICATION.codes[code];
+  const sector = clean(row?.sector) ?? clean(row ? null : CLASSIFICATION.majorGroups[code.slice(0, 2)]);
+  const industry = clean(row?.industry);
+  return sector || industry ? { sector, industry, from: "sic" } : null;
 }
 
 /**
@@ -147,12 +139,14 @@ function resolveQuiet(
   }
 
   // 2026-09-23 (#552): the FMP snapshot leg that sat here is removed.
-  const sic = sicProfileFor(symbol);
-  if (sic) {
+  const sec = sicProfileFor(symbol);
+  if (sec) {
+    const src = sec.from;
     return {
-      ...sic, source: "sic",
-      sectorSource: sic.sector ? "sic" : "none",
-      industrySource: sic.industry ? "sic" : "none",
+      sector: sec.sector, industry: sec.industry, source: src,
+      sectorSource: sec.sector ? src : "none",
+      industrySource: sec.industry ? src : "none",
+      ...(src === "filing" ? { filedOn: sec.filedOn ?? null } : {}),
     };
   }
 
@@ -169,6 +163,7 @@ function resolveQuiet(
  *             row does not record which leg the warm itself resolved from, so
  *             this is when the value was last confirmed, not first taken.
  *   sic       data/sec/registrants.json's asOf, the day the SIC code was read.
+ *   filing    the filing date of the 10-K/20-F text the override came from.
  *
  * A cache row with no parseable updatedAt yields null — never another leg's
  * date, which would credit the value to a source it did not come from.
@@ -177,7 +172,7 @@ export const REGISTRANTS_SIC_AS_OF: string | null =
   (registrantsFile as unknown as { asOf?: string }).asOf ?? null;
 
 export function classificationAsOf(
-  resolved: Pick<ResolvedProfile, "source">,
+  resolved: Pick<ResolvedProfile, "source" | "filedOn">,
   cachedUpdatedAt: string | null | undefined
 ): string | null {
   const day = (v: string | null | undefined) => {
@@ -186,6 +181,7 @@ export function classificationAsOf(
   };
   if (resolved.source === "cache") return day(cachedUpdatedAt);
   if (resolved.source === "sic") return day(REGISTRANTS_SIC_AS_OF);
+  if (resolved.source === "filing") return day(resolved.filedOn);
   return null;
 }
 

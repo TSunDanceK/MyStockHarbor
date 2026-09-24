@@ -1,5 +1,5 @@
 {
- "_comment": "The 10-K Item 1 rules pass (#552 COWORK #22 condition 2). Deterministic: phrases matched case-insensitively on word boundaries in the first 700 characters of the filer's own Item 1 text (data/sec/descriptions.json). Among the rules whose label belongs to the code's table sector (any sector when the table leaves it open), the EARLIEST-mentioned phrase wins, ties broken by rule order; REIT labels (only for SIC 6798 or text naming a real estate investment trust) likewise. No match: no override, and the name goes to the \"Classification needed\" helper. Tuned against filing text, never against a vendor's per-ticker labels.",
+ "_comment": "The 10-K Item 1 rules pass (#552 COWORK #22 condition 2). Deterministic: phrases matched case-insensitively on word boundaries in the first 700 characters of the filer's own Item 1 text (data/sec/descriptions.json). The filer's self-description sentence (\"X is a \u2026\", \"We are a \u2026\") is searched first, then the whole window. Among the rules whose label belongs to the code's table sector (any sector when the table leaves it open), the EARLIEST-mentioned phrase wins, ties broken by rule order; REIT labels (only for SIC 6798 or text naming a real estate investment trust) likewise. No match: no override, and the name goes to the \"Classification needed\" helper. Tuned against filing text, never against a vendor's per-ticker labels. A match after \"rely on\", inside a \"including / as part of / we provide \u2026 with\" list, or after a customer/negation phrase is skipped. Two or more property types in one REIT sentence give REIT - Diversified.",
  "window": 700,
  "rules": [
   {
@@ -86,7 +86,8 @@
     "office buildings",
     "office space",
     "office portfolio",
-    "class a office"
+    "class a office",
+    "office"
    ]
   },
   {
@@ -98,7 +99,8 @@
     "retail real estate",
     "outlet center",
     "grocery-anchored",
-    "malls"
+    "malls",
+    "retail"
    ]
   },
   {
@@ -135,6 +137,7 @@
   {
    "industry": "Drug Manufacturers - Specialty & Generic",
    "phrases": [
+    "generic and proprietary injectable",
     "specialty pharmaceutical",
     "biosimilar",
     "generic pharmaceutical",
@@ -349,7 +352,6 @@
     "credit card",
     "consumer loans",
     "consumer lending",
-    "consumer finance",
     "installment loans",
     "buy now, pay later",
     "lending platform",
@@ -936,7 +938,12 @@
     "online auction",
     "document management",
     "payroll services",
-    "human capital management"
+    "human capital management",
+    "health savings account",
+    "health savings accounts",
+    "benefits administration",
+    "consumer-directed benefits",
+    "hsa custodian"
    ]
   },
   {
