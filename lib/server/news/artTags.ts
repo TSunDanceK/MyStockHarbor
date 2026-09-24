@@ -208,6 +208,45 @@ export function pickTagged(input: {
 export const TAGGED_COUNT = NAMES.length;
 
 /**
+ * THE GENERIC FALLBACK SET (#553 COWORK #41): "any market" pictures for a card
+ * nothing else can illustrate.
+ *
+ * THE OWNER'S RULE REPLACES "NOTHING" WITH "SOMETHING NEUTRAL". /headlines
+ * measured 26 of 30 cards with no picture: a general headline has no symbol and
+ * no sector, and most titles match no tag or event. A missing picture made the
+ * grid patchy; these images assert nothing about the story -- a market-wide
+ * macro scene or an exchange floor -- so they cannot say something false.
+ *
+ * Rotated by the article's own key (hashKey, as everywhere), so a story keeps
+ * its picture across renders, and de-duplicated through the page's `taken`
+ * set, so neighbouring cards differ until the 16 are used up.
+ */
+export const GENERIC_FALLBACK_PREFIXES = ["any-macro-", "exchanges-any-"] as const;
+const GENERIC_NAMES: string[] = NAMES.filter((n) => GENERIC_FALLBACK_PREFIXES.some((p) => n.startsWith(p)));
+export const GENERIC_FALLBACK_NAMES: readonly string[] = GENERIC_NAMES;
+
+export function pickGeneric(key: string, taken?: Set<string>): NewsArt | null {
+  if (GENERIC_NAMES.length === 0) return null;
+  const first = hashKey(key) % GENERIC_NAMES.length;
+  if (!taken) return artFor(GENERIC_NAMES[first]);
+  for (let step = 0; step < GENERIC_NAMES.length; step += 1) {
+    const name = GENERIC_NAMES[(first + step) % GENERIC_NAMES.length];
+    if (!taken.has(name)) {
+      taken.add(name);
+      return artFor(name);
+    }
+  }
+  return artFor(GENERIC_NAMES[first]);
+}
+
+/** A plan that came back "none" takes a generic picture instead; anything else is kept. */
+export function withGenericFallback(plan: CardArt, key: string, taken?: Set<string>): CardArt {
+  if (plan.kind !== "none") return plan;
+  const art = pickGeneric(key, taken);
+  return art ? { kind: "library", art } : plan;
+}
+
+/**
  * THE WHOLE /headlines RULE, IN ONE FUNCTION.
  *
  * ── WHY THIS IS A FUNCTION AND NOT SIX LINES IN THE PAGE BODY ─────────────
@@ -230,6 +269,7 @@ export const TAGGED_COUNT = NAMES.length;
  *   1. The article's own words -> tagged art. Reaches the whole v2 library.
  *   2. Failing that, the title's event type -> today's event bucket. Exactly
  *      what this page has shipped since #481, untouched.
+ *   3. Failing both, the generic fallback set (withGenericFallback).
  *
  * ── THE TWO ARGUMENTS A GENERAL HEADLINE CANNOT SUPPLY, PINNED HERE ───────
  * sectorBucket stays null: a GeneralHeadline carries no symbol and no sector,
@@ -241,7 +281,8 @@ export const TAGGED_COUNT = NAMES.length;
  * with no symbol there is nothing to draw. art.ts has the rule — a ticker card
  * with no ticker is worse than a blank slot.
  *
- * So the only three outcomes are the right picture, today's picture, or none.
+ * So the three outcomes are the right picture, today's picture, or -- since
+ * #553 COWORK #41 -- a generic "any market" picture. Never none.
  */
 export function planHeadlineArt(input: {
   title: string;
@@ -263,7 +304,9 @@ export function planHeadlineArt(input: {
   });
   if (tagged) return { kind: "library", art: tagged };
 
-  return planCardArt({
+  // 3. Nothing else fits: a generic "any market" picture (#553 COWORK #41),
+  //    so no /headlines card is left without an image.
+  return withGenericFallback(planCardArt({
     variant: "lead",
     // Leg 3 of §7's cascade, and the only leg reachable from this feed: legs 1
     // and 2 read an SEC form and a wire subject, neither of which a general
@@ -275,7 +318,7 @@ export function planHeadlineArt(input: {
     key: input.key,
     taken: input.takenBuckets,
     canGenerate: false,
-  });
+  }), input.key, input.takenNames);
 }
 
 
