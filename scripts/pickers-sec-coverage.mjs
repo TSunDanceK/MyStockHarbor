@@ -46,7 +46,10 @@ const TODAY = process.env.TODAY || new Date().toISOString().slice(0, 10);
 const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
 // The symbols sit under `rows`; the top level is metadata (run 35916509860 read
 // the top level and found no industry for anyone -- fixed here).
-const SIC_SECTOR = JSON.parse(fs.readFileSync("data/sec/sic-sector.json", "utf8")).codes ?? {};
+// A's resolver files (#569): 10-K override -> SIC table -> 2-digit major group.
+const SIC_CLASS = JSON.parse(fs.readFileSync("data/sec/sic-classification.json", "utf8"));
+const OVERRIDES = JSON.parse(fs.readFileSync("data/sec/classification-overrides.json", "utf8")).overrides ?? {};
+const { lookupSpellingIn } = await import("../lib/symbolSpellings.mjs");
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const chunks = (list, n) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
@@ -203,14 +206,20 @@ function secRow(sym, set, price) {
   };
 }
 
-// Sector without FMP: SIC only. The FMP snapshot (data/static-profile.json) was
-// removed by #561 under the no-stored-FMP-data ruling, so there is no industry.
+// Sector and industry exactly as A's staticProfile.sicProfileFor reads them
+// (override, then SIC table, then major group) -- no vendor label anywhere.
 function taxonomy(sym) {
-  const sic = REGISTRANTS[sym]?.sic ?? null;
+  const o = lookupSpellingIn(OVERRIDES, sym)?.value;
+  const sic = lookupSpellingIn(REGISTRANTS, sym)?.value?.sic ?? null;
+  if (o && (o.sector || o.industry)) {
+    return { sector: o.sector ?? null, industry: o.industry ?? null, sectorFrom: "filing", semiconductorSic: sic === "3674" };
+  }
+  const row = sic ? SIC_CLASS.codes[sic] : null;
+  const sector = row?.sector ?? (sic && !row ? SIC_CLASS.majorGroups[sic.slice(0, 2)] ?? null : null);
   return {
-    sector: sic ? SIC_SECTOR[sic]?.sector ?? null : null,
-    industry: null,
-    sectorFrom: sic && SIC_SECTOR[sic]?.sector ? "sic" : null,
+    sector,
+    industry: row?.industry ?? null,
+    sectorFrom: sector ? "sic" : null,
     semiconductorSic: sic === "3674",
   };
 }
@@ -289,7 +298,7 @@ for (const [key, label] of COLS) {
 // Taxonomy.
 const secCount = (fn) => rows.filter(fn).length;
 console.log(`\nSector:   FMP ${secCount((r) => r.fmp.sector)} · SIC ${secCount((r) => r.tax.sector)} (SIC-only ${secCount((r) => r.tax.sectorFrom === "sic")}) · agree ${secCount((r) => r.fmp.sector && r.fmp.sector === r.tax.sector)}`);
-console.log(`Industry: FMP ${secCount((r) => r.fmp.industry)} · SEC none · agree ${secCount((r) => r.fmp.industry && r.fmp.industry === r.tax.industry)}`);
+console.log(`Industry: FMP ${secCount((r) => r.fmp.industry)} · SEC ${secCount((r) => r.tax.industry)} · agree ${secCount((r) => r.fmp.industry && r.fmp.industry === r.tax.industry)}`);
 
 // Hidden columns: what hiding them removes.
 console.log(

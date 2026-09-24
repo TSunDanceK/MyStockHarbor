@@ -99,13 +99,9 @@ export const DATASETS = {
     job: "warm-fundamentals",
     coverage: "registered",
   },
-  profile: {
-    label: "Profile (industry, sector)",
-    ttlSeconds: 60 * 60 * 24 * 30,
-    job: "warm-fundamentals",
-    qualifier: "effectively static, 30d is healthy",
-    coverage: "registered",
-  },
+  // `profile` (FMP industry/sector, 30 d) was removed with the /stable/profile
+  // leg (#553 COWORK #16): sector and industry come from the committed SEC
+  // classification now, which has no queue to go stale.
   screenerFundamentals: {
     label: "Screener fundamentals",
     ttlSeconds: 60 * 60 * 30,

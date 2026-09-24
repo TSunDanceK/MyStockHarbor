@@ -332,8 +332,8 @@ async function fetchForSymbol(
     // universe while this function is called for any symbol with a stock page,
     // so 1,924 of 2,619 profiled symbols -- 73.5%, AOS among them -- had no CIK
     // permanently, and regenerating against the same denominator fixed none of
-    // them. scripts/sec-probe.mjs now builds against the union with
-    // data/static-profile.json's rows.
+    // them. scripts/sec-probe.mjs built against the union with the old
+    // data/static-profile.json rows (the file was removed in #561).
     // See claude/cik-map-coverage-2026-09-14.md.
     const known = NO_CIK_BY_DESIGN.get(upper);
     if (known) {

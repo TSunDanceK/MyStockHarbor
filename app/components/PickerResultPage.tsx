@@ -11,6 +11,7 @@ import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGr
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { resolveProfileBulk } from "@/lib/server/staticProfile";
 import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
@@ -1130,12 +1131,28 @@ async function getPickerData(config: PickerResultConfig) {
           if (!f) continue;
           if (f.marketCap != null) entry.marketCap = f.marketCap;
           if (f.peRatio != null) entry.peRatio = f.peRatio;
-          if (f.industry) entry.industry = f.industry;
-          if (f.sector) entry.sector = f.sector;
         }
       }
     } catch {
       // fundamentals are optional
+    }
+
+    // SECTOR AND INDUSTRY FROM A's RESOLVER, at render (#553 COWORK #3/#16):
+    // 10-K override -> SIC table -> major group, in the Pickers label set, from
+    // committed files only -- no Redis, no FMP, and no wait for the cached
+    // fundamentals rows (26 h) to turn over. The Industry column, the
+    // sector/industry filters and the presets that select on them
+    // (/semiconductor-stocks, /cheap-tech-stocks) all read these two fields.
+    // A symbol the resolver cannot place shows "--" and is listed by the
+    // "Classification needed" helper.
+    const taxonomy = resolveProfileBulk(
+      entries.map((e) => ({ symbol: e.symbol, cached: null })),
+      "pickers page"
+    );
+    for (const entry of entries) {
+      const t = taxonomy.get(entry.symbol.toUpperCase());
+      if (t?.industry) entry.industry = t.industry;
+      if (t?.sector) entry.sector = t.sector;
     }
 
     // Fresher ~15-min quotes (price, % change, volume + fresh market cap & PE)
