@@ -1127,12 +1127,30 @@ export default function SiteHeader({
           },
         ],
       },
+      // A DROP-DOWN SINCE #563 COWORK #3 (N1): the stock bottleneck pages first,
+      // then the capex page. The mobile overlay drills into the same entries.
       {
-        kind: "link",
+        kind: "dropdown",
         label: "Bottlenecks",
-        href: "/bottlenecks",
         isActive: (path) =>
           path === "/bottlenecks" || path.startsWith("/bottlenecks/"),
+        entries: [
+          {
+            kind: "link",
+            label: "Stock bottlenecks",
+            href: "/bottlenecks",
+            isActive: (path) =>
+              path === "/bottlenecks" ||
+              (path.startsWith("/bottlenecks/") && path !== "/bottlenecks/capex"),
+            emphasize: true,
+          },
+          {
+            kind: "link",
+            label: "Capex — Follow the money",
+            href: "/bottlenecks/capex",
+            isActive: (path) => path === "/bottlenecks/capex",
+          },
+        ],
       },
       {
         kind: "dropdown",
