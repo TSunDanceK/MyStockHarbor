@@ -34,6 +34,18 @@ for (const s of syms) {
     for (const re of PATTERNS) for (const m of text.matchAll(re)) { const t = m[0].trim(); if (!hits.some((h) => h === t)) hits.push(t); }
     // WIDER NET (MODE=wide): every sentence naming a share class with
     // conversion, dividend, liquidation or economic-rights wording.
+    // EQUALITY ONLY (MODE=equal): the equity-note sentence that says the
+    // classes share dividends and liquidation, which risk factors crowd out.
+    if (process.env.MODE === "equal") {
+      hits.length = 0;
+      for (const m of text.matchAll(/[^.]{0,400}\b(?:Class|Series|common stock)\b[^.]{0,400}\./gi)) {
+        const t = m[0].trim();
+        if (t.length > 700) continue;
+        if (!/\b(?:identical|same rights|equal rights|rank equally|ratabl|pro rata|equally)\b/i.test(t)) continue;
+        if (!/dividend|distribut|liquidat|economic|rights and privileges|all respects/i.test(t)) continue;
+        if (!hits.includes(t)) hits.push(t);
+      }
+    }
     if (process.env.MODE === "wide") {
       hits.length = 0;
       for (const m of text.matchAll(/[^.]{0,400}\b(?:Class|Series) [A-Z][\w-]{0,3}\b[^.]{0,400}\./g)) {
