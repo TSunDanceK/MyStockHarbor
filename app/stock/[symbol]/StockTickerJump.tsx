@@ -8,6 +8,7 @@ import {
   useDismissOnOutside,
   type SymbolResult,
 } from "@/app/components/TickerJumpDropdown";
+import { useListboxNav } from "@/app/components/useListboxNav";
 
 type StockTickerJumpProps = {
   currentSymbol: string;
@@ -104,6 +105,18 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
   const dismiss = useCallback(() => setOpen(false), []);
   useDismissOnOutside(wrapRef, open, dismiss);
 
+  // Arrow keys, Enter, Escape and Tab: the shared rules (#553 COWORK #36).
+  const nav = useListboxNav({
+    count: Math.min(results.length, 8),
+    open,
+    onSelect: (i) => {
+      const r = results[i];
+      if (r) chooseResult(r);
+    },
+    onClose: dismiss,
+    resetKey: query,
+  });
+
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
     trackTickerInterest(clean); // deliberate selection -> popular-searches signal
@@ -123,6 +136,16 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          {...nav.inputAria}
+          onKeyDown={(e) => {
+            if (nav.onKeyDown(e)) return;
+            // Nothing highlighted: an exact ticker match in the list, as a click on it
+            // would; no exact match, nothing (#553 COWORK #40).
+            if (e.key === "Enter") {
+              const exact = results.find((r) => r.symbol.trim().toUpperCase() === query.trim().toUpperCase());
+              if (exact) { e.preventDefault(); chooseResult(exact); }
+            }
+          }}
           aria-label="Search stock ticker"
           placeholder="Search ticker or company"
           style={{
@@ -141,7 +164,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
           }}
         />
 
-        <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} />
+        <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} nav={nav} />
 
         {!selected?.symbol && query.trim() ? (
           <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
