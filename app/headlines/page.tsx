@@ -1,7 +1,11 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getGeneralMarketHeadlines, type GeneralHeadline } from "@/lib/general-market-news";
+import {
+  getGeneralMarketHeadlines,
+  headlineSourcesText,
+  type GeneralHeadline,
+} from "@/lib/general-market-news";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import NewsCardArt from "@/app/components/NewsCardArt";
 import type { CardArt } from "@/lib/server/news/art";
@@ -14,7 +18,7 @@ const PAGE_TITLE = "Market Headlines | Latest Stock Market News | MyStockHarbor"
 // the event art wired in below, most general headlines match no title pattern
 // and render no picture, so "images" is not a claim this page can make.
 const PAGE_DESCRIPTION =
-  "The latest general market headlines, straight from the news wire with article excerpts, linked out to the full story - no AI commentary, just the news.";
+  "The latest general market headlines from public news feeds, linked out to the full story - no AI commentary, just the news.";
 const PAGE_URL = "https://www.mystockharbor.com/headlines";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
@@ -226,10 +230,10 @@ export default async function HeadlinesPage() {
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 0 }}>
-              The latest general market headlines, straight from the news
-              wire - source, first paragraph, and a link to the full story.
-              No AI summaries or scoring here, just the news in
-              reverse-chronological order.
+              The latest general market headlines from public news feeds -
+              source, time, a short excerpt where the feed provides one, and a
+              link to the full story. No AI summaries or scoring here, just
+              the news in reverse-chronological order.
             </p>
           </section>
 
@@ -246,7 +250,7 @@ export default async function HeadlinesPage() {
                 boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
               }}
             >
-              No headlines available right now. Check back shortly.
+              No headlines could be loaded from the news feeds right now.
             </section>
           ) : (
             <div style={headlinesGridStyle}>
@@ -261,9 +265,12 @@ export default async function HeadlinesPage() {
           )}
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
-            Data source: financialmodelingprep.com. Headlines and excerpts
-            are shown as provided by the news feed - read the full article
-            at the source for complete context before making any decisions.
+            {/* Follows NEWS_PROVIDER, the same switch as the feed above it
+                (2026-09-23, #553 COWORK #1): it read "financialmodelingprep.com"
+                as a literal while the articles came from elsewhere. */}
+            Headlines from {headlineSourcesText()}, shown as
+            each feed provides them. The full article at the source may carry
+            context a headline leaves out.
           </p>
         </div>
 
