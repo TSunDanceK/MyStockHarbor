@@ -1042,6 +1042,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
+  // --dry mode against the live Pickers universe -- prints the issue body, writes
+  // nothing. 2 Redis reads.
+  "write-classification-needed-dry": {
+    script: "scripts/classification-needed.mjs",
+    args: () => ["--dry"],
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
