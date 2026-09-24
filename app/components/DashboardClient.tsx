@@ -11,6 +11,7 @@ import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { indicatorRead, INDICATOR_MANUAL, type ReadUnit } from "@/lib/indicatorRead";
 import { activeRowStyle } from "@/lib/listboxNav";
 import { useListboxNav } from "@/app/components/useListboxNav";
 import { breakdownChipValue } from "@/lib/breakdownChip";
@@ -855,7 +856,24 @@ export default function DashboardClient({
   }
   const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
 
+  // One indicator selected: a live read computed from the plotted series, as of
+  // the last bar on screen, in the timeframe's units (#553 COWORK #38).
+  const readUnit: ReadUnit = activeTimeframe === "W" ? "week" : activeTimeframe === "M" ? "month" : "day";
+  const singleIndicator = selectedIndicators.length === 1 ? selectedIndicators[0] : null;
+  const singleRead = useMemo(() => {
+    if (!singleIndicator) return null;
+    if (!historyAll.length) return "There's no price history loaded for this chart yet, so there's nothing to read.";
+    return indicatorRead(singleIndicator, {
+      closes: closesAll, at: displayEnd - 1, unit: readUnit,
+      ma50: ma50Full, ma200: ma200Full, ema20: ema20Full, vwma20: vwma20Full, bb: bbFull, rsi: rsi14Full, macd: macdFull,
+      stochK: stochFull.k, stochD: stochFull.d, atr: atr14Full, atrAvg: atrSma20Full, volume: volumeFull, volumeAvg: volSma20Full,
+      zone: supportResistanceZones[0] ?? null,
+    });
+  }, [singleIndicator, historyAll, closesAll, displayEnd, readUnit, ma50Full, ma200Full, ema20Full, vwma20Full, bbFull, rsi14Full, macdFull, stochFull, atr14Full, atrSma20Full, volumeFull, volSma20Full, supportResistanceZones]);
+  const singleManual = singleIndicator ? INDICATOR_MANUAL[singleIndicator] ?? null : null;
+
   const chartSummaryText = useMemo(() => {
+    if (singleRead) return singleRead;
     if (!customMode) {
       // null = the MAs this reads from do not exist yet. The custom-indicator
       // branch below already says "needs more data" per indicator; this branch
@@ -881,8 +899,10 @@ export default function DashboardClient({
       if (ind === "ATR(14)") { if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) parts.push(`ATR is running at ${(atrLast / atrSmaLast).toFixed(2)}× its 20-day average.`); else parts.push("ATR needs more data."); }
       if (ind === "Volume") { if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) parts.push(`Volume is running at ${(volumeLast / volumeSmaLast).toFixed(2)}× its 20-day average.`); else parts.push("Volume needs more data."); }
     });
-    return parts.length ? parts.join(" ") : "Custom indicator view is active.";
-  }, [customMode, symbol, selectedIndicators, lastClose, lastMA50, lastMA200, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, stretchScore, divergence]);
+    // Two or more: the per-indicator lines, led by the names (#553 COWORK #38).
+    const names = `Showing ${selectedIndicators.join(", ")}.`;
+    return parts.length ? `${names} ${parts.join(" ")}` : `${names} Custom indicator view is active.`;
+  }, [singleRead, customMode, symbol, selectedIndicators, lastClose, lastMA50, lastMA200, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, stretchScore, divergence]);
 
   const selectedBreakdownRows = useMemo(() => {
     const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
@@ -1009,6 +1029,14 @@ export default function DashboardClient({
     </SectionCard>);
   }
 
+  // What the selected indicator is and how people often read it (#553 COWORK #38).
+  function IndicatorManual({ name, text }: { name: string; text: string }) {
+    return (<div data-indicator-manual style={{ marginTop: 12, padding: 12, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: COLORS.cardFg, marginBottom: 5 }}>About {name}</div>
+      <div style={{ fontSize: 13, lineHeight: 1.55, color: COLORS.mutedFg }}>{text}</div>
+    </div>);
+  }
+
   function BreakdownPanel() {
     return (<SectionCard title={customMode ? "Selected Indicators" : "Breakdown"} right={<BreakdownHelpButton />} allowOverflow>
       {/* repeat(2, minmax(0, 1fr)) + minWidth 0: a chip never widens the card
@@ -1026,6 +1054,7 @@ export default function DashboardClient({
           );
         })}
       </div>
+      {singleManual ? <IndicatorManual name={singleIndicator ?? ""} text={singleManual} /> : null}
       {customMode ? <button type="button" onClick={clearIndicatorSelection} style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button> : null}
     </SectionCard>);
   }
@@ -1045,6 +1074,7 @@ export default function DashboardClient({
         <div style={{ display: "flex", gap: 5, padding: "10px 16px 0" }}>{items.map((item: any) => <span key={customMode ? item.label : item.key} style={{ flex: 1, height: 5, borderRadius: 99, background: chipToneColor(item.tone) }} />)}</div>
         <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span title={breakdownChipValue(customMode ? item.value : item.valueText).full} style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{breakdownChipValue(customMode ? item.value : item.valueText).text}</span></div>)}</div>
         <div style={{ padding: "8px 16px 14px" }}><Link href="/learn" style={{ fontSize: 13, fontWeight: 700, color: "#9cc0ff", textDecoration: "none" }}>Learn what these mean →</Link></div>
+        {singleManual ? <div style={{ padding: "0 16px 12px" }}><IndicatorManual name={singleIndicator ?? ""} text={singleManual} /></div> : null}
         {customMode ? <div style={{ padding: "0 16px 14px" }}><button type="button" onClick={clearIndicatorSelection} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button></div> : null}
       </div> : null}
     </section>);
