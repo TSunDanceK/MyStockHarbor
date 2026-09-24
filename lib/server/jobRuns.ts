@@ -92,6 +92,9 @@ export const JOBS = {
   // One-off: rewrites data/sec/report-dates-rewrite.json under the paired rule
   // and then finds nothing to do. Delete it with the list once drained.
   "sec-report-dates-rewrite": { label: "SEC report dates — pairing rewrite (daily 05:10)", instrumented: true, cron: "10 5 * * *" },
+  // 05:50, after every other SEC job, for the per-requester pacing reason
+  // above. ~44 submissions requests on a normal day (#563).
+  "capex-receivers": { label: "Capex receivers — newest annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
 } as const;
 
 /**
