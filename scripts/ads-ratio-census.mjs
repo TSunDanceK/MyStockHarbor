@@ -46,48 +46,24 @@ for (const s of mine) {
     const docText = async (i) => D.filingText(await get(`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accessionNumber[i].replace(/-/g, "")}/${r.primaryDocument[i]}`, "text"));
     const refOf = (i) => ({ form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i] });
     let line = null, mentions = 0, lastRef = "", row = null;
-    if (i20 >= 0) {
-      const text = await docText(i20);
-      mentions += (text.match(/American depositary/gi) ?? []).length;
-      const ref = refOf(i20);
-      lastRef = `${ref.form} ${ref.source} ${ref.filed}`;
-      const cover = R.coverRowFor(text, s);
-      if (cover?.kind === "ordinary") {
-        row = { kind: "ordinary", ordinaryPerAds: 1, evidence: cover.title, basis: "cover-row", ...ref };
-      } else if (cover?.kind === "ads") {
-        const fromTitle = R.adsRatioOf(cover.title);
-        const got = fromTitle.ok ? fromTitle : R.adsRatioOf(text);
-        if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: fromTitle.ok ? cover.title : got.sentence, basis: fromTitle.ok ? "cover-row" : "20-F text", ...ref };
-        else if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; }
-      } else if (cover?.kind === "other") {
-        line = `OTHER-CLASS ${lastRef} "${cover.title.slice(0, 120)}"`; tally.NONE++;
-      } else {
-        // NO COVER ROW FOR THE TICKER: the filing's own statements, as before.
-        const got = R.adsRatioOf(text);
-        if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, basis: "20-F text", ...ref };
-        else if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; }
-        else {
-          const direct = R.directListingStatement(text, s);
-          if (direct) row = { kind: "ordinary", ordinaryPerAds: 1, evidence: direct, basis: "12(b) + no ADS", ...ref };
-        }
-      }
-    }
-    if (!line && f6IsNewer) {
-      const text = await docText(i6);
-      const got = R.adsRatioOf(text);
-      const ref = refOf(i6);
-      if (got.ok && row && row.ordinaryPerAds !== got.ordinaryPerAds) {
-        // A RATIO CHANGE after the 20-F: refused, for a person (COWORK #45 §3).
-        line = `RATIO-CHANGED 20-F ${row.ordinaryPerAds} -> ${ref.form} ${got.ordinaryPerAds} ${ref.source} ${ref.filed}`; tally.CHANGED++; row = null;
-      } else if (got.ok && !row) {
-        row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, basis: "F-6 newer than the 20-F", ...ref };
-      }
+    const text20 = i20 >= 0 ? await docText(i20) : null;
+    if (text20) mentions += (text20.match(/American depositary/gi) ?? []).length;
+    const f6Text = f6IsNewer ? await docText(i6) : null;
+    lastRef = i20 >= 0 ? `20-F ${r.accessionNumber[i20]} ${r.filingDate[i20]}` : "no 20-F";
+    // THE SHIPPED SOURCE RULE: lib/server/secAdsRatio.decideAdsRow.
+    const decided = R.decideAdsRow(text20, s, f6Text, f6IsNewer);
+    if ("row" in decided) {
+      const i = decided.row.from === "20-F" ? i20 : i6;
+      row = { kind: decided.row.kind, ordinaryPerAds: decided.row.ordinaryPerAds, evidence: decided.row.evidence, basis: decided.row.basis, ...refOf(i) };
+    } else {
+      const key = /^ratio changed/.test(decided.refuse) ? "CHANGED" : /^ratios disagree/.test(decided.refuse) ? "DISAGREE" : "NONE";
+      tally[key]++;
+      line = `${key} ${decided.refuse} | ads-mentions=${mentions} ${lastRef}`;
     }
     if (row && !line) {
       line = `${row.kind === "ads" ? `RATIO ${row.ordinaryPerAds}` : "DIRECT"} ${row.form} ${row.source} ${row.filed} [${row.basis}] "${row.evidence.slice(0, 200)}"`;
       tally[row.kind === "ads" ? "RATIO" : "DIRECT"]++;
     }
-    if (!line) { line = `NONE ads-mentions=${mentions} ${lastRef || "no 20-F or F-6 in recent filings"}`; tally.NONE++; }
     console.log(`${s.padEnd(6)} ${line}`);
     if (row) { const { basis, ...stored } = row; void basis; console.log(`MAP ${JSON.stringify({ symbol: s, ...stored })}`); }
   } catch (e) { tally.ERROR++; console.log(`${s.padEnd(6)} ERROR ${String(e?.message ?? e).slice(0, 60)}`); }

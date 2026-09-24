@@ -154,3 +154,43 @@ export function coverRowFor(text: string, symbol: string): CoverRow | null {
   if (/(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(title)) return { title, kind: "ordinary" };
   return { title, kind: "other" };
 }
+
+export type AdsRowDecision =
+  | { row: { kind: "ads" | "ordinary"; ordinaryPerAds: number; evidence: string; from: "20-F" | "F-6"; basis: string } }
+  | { refuse: string };
+
+/**
+ * THE SOURCE RULE (#552 COWORK #45), in one place: the latest 20-F's cover row
+ * for the ticker decides; an F-6 is read ONLY when filed after that 20-F (or
+ * with no 20-F on the list), and one stating a different ratio from the 20-F
+ * is a ratio change — refused, for a person. `f6Text` is null when there is
+ * no F-6 to read.
+ */
+export function decideAdsRow(text20F: string | null, symbol: string, f6Text: string | null, f6IsNewer: boolean): AdsRowDecision {
+  let row: { kind: "ads" | "ordinary"; ordinaryPerAds: number; evidence: string; from: "20-F" | "F-6"; basis: string } | null = null;
+  if (text20F) {
+    const cover = coverRowFor(text20F, symbol);
+    if (cover?.kind === "ordinary") row = { kind: "ordinary", ordinaryPerAds: 1, evidence: cover.title, from: "20-F", basis: "cover-row" };
+    else if (cover?.kind === "ads") {
+      const t = adsRatioOf(cover.title);
+      const got = t.ok ? t : adsRatioOf(text20F);
+      if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: t.ok ? cover.title : got.sentence, from: "20-F", basis: t.ok ? "cover-row" : "20-F text" };
+      else if (got.why === "ratios-disagree") return { refuse: `ratios disagree ${got.values.join("/")}` };
+    } else if (cover?.kind === "other") return { refuse: `cover row is not common/ordinary: ${cover.title.slice(0, 80)}` };
+    else {
+      const got = adsRatioOf(text20F);
+      if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, from: "20-F", basis: "20-F text" };
+      else if (got.why === "ratios-disagree") return { refuse: `ratios disagree ${got.values.join("/")}` };
+      else {
+        const direct = directListingStatement(text20F, symbol);
+        if (direct) row = { kind: "ordinary", ordinaryPerAds: 1, evidence: direct, from: "20-F", basis: "12(b), no ADS" };
+      }
+    }
+  }
+  if (f6Text && f6IsNewer) {
+    const got = adsRatioOf(f6Text);
+    if (got.ok && row && row.ordinaryPerAds !== got.ordinaryPerAds) return { refuse: `ratio changed after the 20-F: ${row.ordinaryPerAds} -> ${got.ordinaryPerAds}` };
+    if (got.ok && !row) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, from: "F-6", basis: "F-6 newer than the 20-F" };
+  }
+  return row ? { row } : { refuse: "no ratio or listing statement" };
+}

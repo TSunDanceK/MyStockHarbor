@@ -51,6 +51,8 @@ export type ValuationRefusal =
   | "ads-ratio-makes-eps-incomparable"
   | "share-count-is-stale"
   | "no-twelve-month-eps"
+  | "eps-period-is-stale"
+  | "share-basis-changed"
   | "eps-is-zero-or-negative"
   | "no-twelve-month-revenue"
   | "revenue-line-incomplete"
@@ -72,6 +74,10 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "the most recent share count this company has filed is too old to value it with",
   "no-twelve-month-eps":
     "twelve months of diluted EPS are not on file",
+  "eps-period-is-stale":
+    "the latest twelve months of EPS on file ended more than 15 months ago",
+  "share-basis-changed":
+    "the share count has changed by more than a fifth since the period the EPS covers (a split, bonus issue or depositary-ratio change), so the per-share figures do not line up",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
   "no-twelve-month-revenue":
@@ -197,6 +203,10 @@ export type EpsBasis = {
 export type ValuationInputs = {
   shares: SharesBasis | null;
   eps: EpsBasis | null;
+  /** Set when EPS was withheld as stale: the period end it would have used. */
+  staleEpsEnd?: string;
+  /** True when that period was a fiscal year (the wording names a year, not twelve months). */
+  staleEpsYear?: boolean;
   /** Every refusal that applies, in the order they were decided. */
   refusals: ValuationRefusal[];
 };
@@ -516,6 +526,20 @@ export function valuationInputs(
   let eps = ttmEpsFromSet(set, filer, today);
   if (!eps) refusals.push("no-twelve-month-eps");
 
+  // ── A STALE EPS YEAR IS NOT A TRAILING P/E (#552 COWORK #45, every filer) ──
+  // TSM's newest year on file ended 2024-12-31: dividing today's price by it
+  // printed 66.5x beside a "TTM"-sounding label. Past EPS_MAX_AGE_MONTHS from
+  // the period end to today (the price date: a stale price is refused on its
+  // own, see priceIsCurrent), the figure is withheld and the date is said.
+  let staleEpsEnd: string | undefined;
+  let staleEpsYear = false;
+  if (eps && epsIsStale(eps.periodEnd, today)) {
+    staleEpsEnd = eps.periodEnd;
+    staleEpsYear = eps.basis === "fiscal-year";
+    eps = null;
+    refusals.push("eps-period-is-stale");
+  }
+
   // ── A CITED ADS RATIO: EVERYTHING IN THE PRICE'S UNIT (#552 COWORK #22 §1) ──
   // The spec is "ordinary-share price = ADS price / ratio, against the
   // per-ordinary figures". Every caller multiplies or divides by the quoted
@@ -525,6 +549,19 @@ export function valuationInputs(
   // only when the filer's own identity says it is per ordinary share), so
   // P/E = ADS price / EPS per ADS = (ADS price / ratio) / EPS per ordinary.
   if (ads) {
+    // ── NOT ACROSS A SPLIT, BONUS ISSUE OR RATIO CHANGE (COWORK #45 §3) ──
+    // The EPS period's own diluted share count against today's cover count,
+    // both ORDINARY shares: more than SHARE_BASIS_MAX_MOVE apart and the
+    // per-share bases differ, so the P/E is refused rather than computed.
+    if (eps && shares) {
+      const periodEnd = eps.periodEnd;
+      const p = [...set.quarters, ...set.years].find((x) => x.e === periodEnd) ?? null;
+      const dil = valueOf(p, "sharesDiluted");
+      if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {
+        eps = null;
+        refusals.push("share-basis-changed");
+      }
+    }
     if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds };
     if (eps) {
       const periodEnd = eps.periodEnd;
@@ -535,12 +572,31 @@ export function valuationInputs(
     }
   }
 
-  return { shares, eps, refusals };
+  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}) };
+}
+
+/** P/E is withheld when its EPS period ended more than this long before today. */
+export const EPS_MAX_AGE_MONTHS = 15;
+/** More than this relative move between the EPS period's diluted shares and today's cover count is a basis change. */
+export const SHARE_BASIS_MAX_MOVE = 0.2;
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayMonthYearOf(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+export function epsIsStale(periodEnd: string, today: string): boolean {
+  const end = new Date(`${periodEnd}T00:00:00Z`);
+  if (Number.isNaN(end.getTime())) return false;
+  const limit = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + EPS_MAX_AGE_MONTHS, end.getUTCDate());
+  return Date.parse(`${today}T00:00:00Z`) > limit;
 }
 
 export type ValuationFigure =
   | { ok: true; val: number }
-  | { ok: false; why: ValuationRefusal };
+  /** `detail`: the refusal in words with its own date, where one exists (stale EPS). */
+  | { ok: false; why: ValuationRefusal; detail?: string };
 
 /**
  * MARKET CAP — shares x price, or a named refusal.
@@ -623,6 +679,11 @@ export function peRatio(
   // catch it.
   if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
     return { ok: false, why: "ads-ratio-makes-eps-incomparable" };
+  }
+  if (inputs.refusals.includes("share-basis-changed")) return { ok: false, why: "share-basis-changed" };
+  if (inputs.refusals.includes("eps-period-is-stale")) {
+    return { ok: false, why: "eps-period-is-stale",
+      ...(inputs.staleEpsEnd ? { detail: `the latest ${inputs.staleEpsYear ? "fiscal year" : "twelve months"} on file ended ${dayMonthYearOf(inputs.staleEpsEnd)}` } : {}) };
   }
   if (!inputs.eps) {
     return inputs.refusals.includes("no-twelve-month-eps")
