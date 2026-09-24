@@ -66,6 +66,7 @@
   "VRSK": { "industry": "Consulting Services", "phrase": "data, analytics, and technology provider serving clients in the insurance ecosystem" },
   "SOFI": { "industry": "Financial - Credit Services", "phrase": "We offer personal loans, student loans, home loans" },
   "WEX": { "industry": "Software - Infrastructure", "phrase": "personalized payments solutions" },
-  "BR": { "industry": "Information Technology Services", "phrase": "global financial technology leader" }
+  "BR": { "industry": "Information Technology Services", "phrase": "global financial technology leader" },
+  "VMRK": { "industry": "REIT - Residential", "phrase": "multifamily property business" }
  }
 }

@@ -3313,6 +3313,17 @@
    "filedOn": "2026-02-19",
    "accession": "0001628280-26-009546"
   },
+  "VMRK": {
+   "sector": "Real Estate",
+   "industry": "REIT - Residential",
+   "sic": "6798",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "multifamily property business",
+   "quote": "ERP Operating Limited Partnership (“ERPOP”) is focused on conducting the multifamily property business of EQR.",
+   "form": "10-K",
+   "filedOn": "2026-02-13",
+   "accession": "0001193125-26-051433"
+  },
   "VNT": {
    "sector": "Technology",
    "industry": "Software - Application",
@@ -4620,7 +4631,6 @@
   "UVV",
   "VALE",
   "VCRE",
-  "VMRK",
   "VNET",
   "VNO",
   "VTRS",
