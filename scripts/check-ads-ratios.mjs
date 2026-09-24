@@ -94,6 +94,30 @@ console.log("\n2b. the newest source wins (COWORK #45)");
   const IBN = T("Equity Shares, par value Rs.2 per share* New York Stock Exchange American Depositary Shares, each representing two equity shares IBN New York Stock Exchange");
   const ib = R.decideAdsRow(IBN, "IBN", null, false);
   check("IBN: 'each representing two equity shares' → 2", "row" in ib && ib.row.ordinaryPerAds === 2, JSON.stringify(ib));
+  // THE REAL LAYOUTS the per-row reader got wrong (ads-ratio-12b debug, COWORK #45).
+  const AZNR = T("Ordinary Shares of 25 ¢ each The New York Stock Exchange 0.700% Notes due 2026 AZN 26 The New York Stock Exchange 3.125% Notes due 2027 AZN 27 The New York Stock Exchange");
+  const az = R.decideAdsRow(AZNR, "AZN", OLD_F6, false);
+  check("AZN as filed: the ordinary row carries no symbol, only its notes do ('AZN 26'); no ADS registered → ordinary", "row" in az && az.row.kind === "ordinary" && /Ordinary Shares of 25/.test(az.row.evidence), JSON.stringify(az));
+  const E = T("Shares E New York Stock Exchange * American Depositary Shares New York Stock Exchange (Which represent the right to receive two Shares) * Not for trading, but only in connection with the registration of the American Depositary Shares");
+  const e = R.decideAdsRow(E, "E", null, false);
+  check("E: the ordinary line carries the symbol but ADSs are registered; ratio 2 from the section's own footnote", "row" in e && e.row.kind === "ads" && e.row.ordinaryPerAds === 2 && e.row.basis === "12(b) section", JSON.stringify(e));
+  const RIO = T("Ordinary shares of 10p each* American Depositary Shares** RIO New York Stock Exchange *Not for trading, but only in connection with the registration of American Depositary Shares **Each American Depositary Share Represents one Rio Tinto plc Ordinary Shares");
+  const ri = R.decideAdsRow(RIO, "RIO", null, false);
+  check("RIO: titles first, then symbols; ratio 1 from 'Represents one Rio Tinto plc Ordinary Shares'", "row" in ri && ri.row.kind === "ads" && ri.row.ordinaryPerAds === 1, JSON.stringify(ri));
+  const EC = T("Common Shares* American Depository Shares, each representing 20 common shares EC New York Stock Exchange");
+  const ec = R.decideAdsRow(EC, "EC", null, false);
+  check("EC: 'American Depository Shares' (their spelling) is an ADS row, 20", "row" in ec && ec.row.kind === "ads" && ec.row.ordinaryPerAds === 20, JSON.stringify(ec));
+  const SAP = T("Title of each class (SAP) SAP Name of each exchange American Depositary Shares, each representing one Ordinary Share New York Stock Exchange Ordinary Shares, without nominal value* New York Stock Exchange");
+  const sp = R.decideAdsRow(SAP, "SAP", null, false);
+  check("SAP: symbol in the header; the section's ADS title states one", "row" in sp && sp.row.kind === "ads" && sp.row.ordinaryPerAds === 1, JSON.stringify(sp));
+  const ING = T("American Depositary Shares ING New York Stock Exchange");
+  check("ING: ADSs registered, no ratio in the 20-F and only an OLDER F-6 → refused, never ordinary",
+    "refuse" in R.decideAdsRow(ING, "ING", "Each ADS represents one ordinary share.", false));
+  const ingNew = R.decideAdsRow(ING, "ING", "Each ADS represents one ordinary share.", true);
+  check("ING: the same with an F-6 filed AFTER the 20-F → that F-6's ratio", "row" in ingNew && ingNew.row.from === "F-6" && ingNew.row.ordinaryPerAds === 1, JSON.stringify(ingNew));
+  const Ms = await loadR(once(RSRC, "  if (ADS_MENTION.test(section)) return { title: adsWordsOf(section), kind: \"ads\" };\n", ""));
+  const es = Ms.decideAdsRow(E, "E", null, false);
+  check("MUTATION: the section-level ADS rule removed → E reads as a direct listing (caught)", !("row" in es && es.row.kind === "ads"), JSON.stringify(es));
   const Mo = await loadR(once(RSRC, "if (f6Text && f6IsNewer) {", "if (f6Text) {"));
   const dm = Mo.decideAdsRow(AZN20F, "AZN", OLD_F6, false);
   check("MUTATION: an older F-6 allowed to override the newer 20-F → AZN no longer reads as ordinary (caught)", !("row" in dm && dm.row.kind === "ordinary"), JSON.stringify(dm));
@@ -106,7 +130,8 @@ const rowOk = (sym, e) => {
   if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && !/depositary|\bADSs?\b|preferred|preference/i.test(e.evidence)
     && /(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(e.evidence);
   if (e.kind !== "ads") return false;
-  const got = R.adsRatioOf(e.evidence);
+  // The same reader that produced it: a row's own title, or its 12(b) section's footnote.
+  const got = R.sectionRatioOf(e.evidence);
   return got.ok && Math.abs(got.ordinaryPerAds - e.ordinaryPerAds) < 1e-6;
 };
 const bad = Object.entries(MAP).filter(([k, e]) => !rowOk(k, e)).map(([k]) => k);
