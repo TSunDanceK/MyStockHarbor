@@ -903,6 +903,13 @@ export function fiscalYearOffset(
         for (const r of rows) {
           if (!r.accn || !r.end || !r.start || !r.form || !r.fp) continue;
           if (typeof r.fy !== "number" || !Number.isFinite(r.fy)) continue;
+          // A PERIOD CANNOT END AFTER THE FILING THAT REPORTS IT. QXO's FY2023
+          // 10-K (filed 2024-03-14) tags an OperatingLeaseExpense row for
+          // 2025-05-01..2026-04-30 -- a future commitment, not the filing's
+          // period -- and as the accession's latest end it became the "fiscal
+          // year end": every quarter was labelled off 30 April and every
+          // December year was filtered out (#552 COWORK #30).
+          if (r.filed && r.end > r.filed) continue;
           const days = (Date.parse(r.end) - Date.parse(r.start)) / DAY;
           if (!Number.isFinite(days)) continue;
           const cur = byAccn.get(r.accn);
