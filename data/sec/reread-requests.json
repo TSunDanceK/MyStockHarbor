@@ -1,0 +1,15 @@
+{
+ "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
+ "requests": [
+  {
+   "symbol": "XOM",
+   "requestedAt": "2026-09-24T12:30:00Z",
+   "reason": "#581: predecessor-CIK merge (holding-company succession); the stored set predates it and is not stale by the window/chain/label rules"
+  },
+  {
+   "symbol": "QXO",
+   "requestedAt": "2026-09-24T13:00:00Z",
+   "reason": "fiscal-year anchor fix: a duration ending after its own filing date is no longer the filing's period; the stored set has 0 years and a June quarter labelled Q1"
+  }
+ ]
+}
