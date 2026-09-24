@@ -1,0 +1,985 @@
+{
+ "_comment": "The 10-K Item 1 rules pass (#552 COWORK #22 condition 2). Deterministic: phrases matched case-insensitively on word boundaries in the first 700 characters of the filer's own Item 1 text (data/sec/descriptions.json). The filer's self-description sentence (\"X is a \u2026\", \"We are a \u2026\") is searched first, then the whole window. Among the rules whose label belongs to the code's table sector (any sector when the table leaves it open), the EARLIEST-mentioned phrase wins, ties broken by rule order; REIT labels (only for SIC 6798 or text naming a real estate investment trust) likewise. No match: no override, and the name goes to the \"Classification needed\" helper. Tuned against filing text, never against a vendor's per-ticker labels. A match after \"rely on\", inside a \"including / as part of / we provide \u2026 with\" list, or after a customer/negation phrase is skipped. Two or more property types in one REIT sentence give REIT - Diversified.",
+ "window": 700,
+ "rules": [
+  {
+   "industry": "Shell Companies",
+   "phrases": [
+    "blank check company",
+    "special purpose acquisition company"
+   ]
+  },
+  {
+   "industry": "REIT - Mortgage",
+   "phrases": [
+    "mortgage real estate investment trust",
+    "mortgage reit",
+    "agency residential mortgage-backed",
+    "invests in residential mortgage",
+    "commercial mortgage loans",
+    "mortgage-related investments",
+    "real estate-related debt",
+    "originates commercial real estate loans",
+    "real estate finance company"
+   ]
+  },
+  {
+   "industry": "REIT - Specialty",
+   "phrases": [
+    "data center",
+    "data centre",
+    "cell tower",
+    "wireless tower",
+    "communications sites",
+    "communications infrastructure",
+    "self-storage",
+    "self storage",
+    "timberland",
+    "billboard",
+    "outdoor advertising",
+    "farmland",
+    "correctional",
+    "gaming properties",
+    "casino properties",
+    "experiential properties",
+    "gaming",
+    "experiential"
+   ]
+  },
+  {
+   "industry": "REIT - Healthcare Facilities",
+   "phrases": [
+    "senior housing",
+    "medical office",
+    "skilled nursing",
+    "healthcare real estate",
+    "health care real estate",
+    "healthcare facilities",
+    "healthcare properties",
+    "life science properties",
+    "life science real estate"
+   ]
+  },
+  {
+   "industry": "REIT - Hotel & Motel",
+   "phrases": [
+    "hotel",
+    "hotels",
+    "lodging"
+   ]
+  },
+  {
+   "industry": "REIT - Industrial",
+   "phrases": [
+    "industrial properties",
+    "industrial real estate",
+    "logistics real estate",
+    "logistics facilities",
+    "warehouse",
+    "distribution facilities"
+   ]
+  },
+  {
+   "industry": "REIT - Office",
+   "phrases": [
+    "office properties",
+    "office buildings",
+    "office space",
+    "office portfolio",
+    "class a office",
+    "office"
+   ]
+  },
+  {
+   "industry": "REIT - Retail",
+   "phrases": [
+    "shopping center",
+    "shopping centers",
+    "retail properties",
+    "retail real estate",
+    "outlet center",
+    "grocery-anchored",
+    "malls",
+    "retail"
+   ]
+  },
+  {
+   "industry": "REIT - Residential",
+   "phrases": [
+    "apartment",
+    "multifamily",
+    "multi-family",
+    "single-family rental",
+    "single-family homes",
+    "single-family residential",
+    "manufactured housing",
+    "manufactured home",
+    "residential communities",
+    "student housing"
+   ]
+  },
+  {
+   "industry": "REIT - Diversified",
+   "phrases": [
+    "diversified real estate investment trust",
+    "diversified reit",
+    "diversified portfolio of"
+   ]
+  },
+  {
+   "industry": "Drug Manufacturers - General",
+   "phrases": [
+    "global biopharmaceutical company",
+    "global pharmaceutical company",
+    "r&d-driven biopharmaceutical"
+   ]
+  },
+  {
+   "industry": "Drug Manufacturers - Specialty & Generic",
+   "phrases": [
+    "generic and proprietary injectable",
+    "specialty pharmaceutical",
+    "biosimilar",
+    "generic pharmaceutical",
+    "generics"
+   ]
+  },
+  {
+   "industry": "Biotechnology",
+   "phrases": [
+    "clinical-stage",
+    "clinical stage",
+    "biotechnology company",
+    "biopharmaceutical company",
+    "gene therapy",
+    "gene editing",
+    "cell therapy",
+    "product candidates",
+    "therapeutics company"
+   ]
+  },
+  {
+   "industry": "Medical - Pharmaceuticals",
+   "phrases": [
+    "pharmaceutical company",
+    "pharmaceutical products"
+   ]
+  },
+  {
+   "industry": "Medical - Instruments & Supplies",
+   "phrases": [
+    "medical supplies",
+    "medical consumables",
+    "infusion systems",
+    "catheters",
+    "surgical instruments"
+   ]
+  },
+  {
+   "industry": "Medical - Healthcare Information Services",
+   "phrases": [
+    "healthcare technology",
+    "health care technology",
+    "healthcare information",
+    "electronic health record",
+    "telehealth",
+    "virtual care",
+    "digital health company"
+   ]
+  },
+  {
+   "industry": "Medical - Equipment & Services",
+   "phrases": [
+    "medical equipment",
+    "imaging systems",
+    "radiation therapy"
+   ]
+  },
+  {
+   "industry": "Medical - Specialties",
+   "phrases": [
+    "aesthetic",
+    "orthodontic",
+    "dental products",
+    "hearing aids"
+   ]
+  },
+  {
+   "industry": "Medical - Devices",
+   "phrases": [
+    "medical device",
+    "medical technology",
+    "medical device company",
+    "medical technology company",
+    "medical devices",
+    "healthcare technology company"
+   ]
+  },
+  {
+   "industry": "Medical - Care Facilities",
+   "phrases": [
+    "behavioral health",
+    "operates hospitals",
+    "hospital company",
+    "dialysis services",
+    "home health",
+    "senior living"
+   ]
+  },
+  {
+   "industry": "Semiconductors",
+   "phrases": [
+    "semiconductor equipment",
+    "wafer fabrication equipment",
+    "semiconductor manufacturing",
+    "designs semiconductors",
+    "fabless"
+   ]
+  },
+  {
+   "industry": "Electronic Gaming & Multimedia",
+   "phrases": [
+    "video game",
+    "interactive entertainment",
+    "video games",
+    "mobile games"
+   ]
+  },
+  {
+   "industry": "Internet Content & Information",
+   "phrases": [
+    "search engine",
+    "social media",
+    "online community",
+    "digital media",
+    "internet company",
+    "marketplace that connects",
+    "social media platform",
+    "digital media company",
+    "consumer internet",
+    "live streaming",
+    "social platform",
+    "social networking"
+   ]
+  },
+  {
+   "industry": "Software - Infrastructure",
+   "phrases": [
+    "cybersecurity",
+    "security platform",
+    "identity security",
+    "identity management",
+    "observability",
+    "infrastructure software",
+    "developer platform",
+    "cloud infrastructure",
+    "data platform",
+    "zero trust",
+    "application delivery",
+    "content delivery",
+    "cybersecurity company",
+    "cybersecurity platform",
+    "database company",
+    "observability platform",
+    "networking solutions",
+    "endpoint security"
+   ]
+  },
+  {
+   "industry": "Software - Services",
+   "phrases": [
+    "software services",
+    "software development services"
+   ]
+  },
+  {
+   "industry": "Information Technology Services",
+   "phrases": [
+    "it services",
+    "technology services",
+    "consulting and technology",
+    "technology consulting",
+    "managed services",
+    "outsourcing",
+    "technology services company",
+    "digital transformation services",
+    "managed services provider",
+    "it solutions",
+    "outsourcing services",
+    "managed infrastructure services",
+    "it outsourcing"
+   ]
+  },
+  {
+   "industry": "Software - Application",
+   "phrases": [
+    "software-as-a-service",
+    "software as a service",
+    "saas",
+    "cloud software",
+    "software platform",
+    "software company",
+    "enterprise software",
+    "software solutions",
+    "provider of software",
+    "cloud-based software"
+   ]
+  },
+  {
+   "industry": "Financial - Data & Stock Exchanges",
+   "phrases": [
+    "stock exchange",
+    "securities exchange",
+    "exchanges and clearing",
+    "market data",
+    "index provider",
+    "credit ratings",
+    "financial data",
+    "analytics and indexes",
+    "indexes and analytics",
+    "financial information"
+   ]
+  },
+  {
+   "industry": "Financial - Credit Services",
+   "phrases": [
+    "payments network",
+    "payment network",
+    "payment processing",
+    "payments company",
+    "payments platform",
+    "digital payments",
+    "credit card",
+    "consumer loans",
+    "consumer lending",
+    "installment loans",
+    "buy now, pay later",
+    "lending platform",
+    "credit-tech",
+    "credit technology",
+    "loan facilitation",
+    "money transfer",
+    "cross-border payments"
+   ]
+  },
+  {
+   "industry": "Financial - Mortgages",
+   "phrases": [
+    "mortgage lender",
+    "mortgage loans",
+    "mortgage servicing",
+    "mortgage origination",
+    "home loans"
+   ]
+  },
+  {
+   "industry": "Insurance - Reinsurance",
+   "phrases": [
+    "reinsurance"
+   ]
+  },
+  {
+   "industry": "Insurance - Brokers",
+   "phrases": [
+    "insurance brokerage",
+    "insurance broker"
+   ]
+  },
+  {
+   "industry": "Insurance - Diversified",
+   "phrases": [
+    "insurance holding company",
+    "insurance company",
+    "insurance group"
+   ]
+  },
+  {
+   "industry": "Investment - Banking & Investment Services",
+   "phrases": [
+    "investment banking",
+    "investment bank",
+    "independent advisory firm",
+    "financial advisory firm",
+    "investment banking firm"
+   ]
+  },
+  {
+   "industry": "Financial - Capital Markets",
+   "phrases": [
+    "broker-dealer",
+    "trading platform",
+    "market maker",
+    "securities firm",
+    "brokerage firm",
+    "online brokerage",
+    "bitcoin mining",
+    "cryptocurrency exchange",
+    "digital asset platform"
+   ]
+  },
+  {
+   "industry": "Asset Management",
+   "phrases": [
+    "business development company",
+    "asset management",
+    "investment management",
+    "alternative asset",
+    "investment adviser",
+    "asset manager",
+    "closed-end fund",
+    "closed-end management investment company",
+    "private equity firm",
+    "private credit",
+    "venture growth",
+    "venture lending"
+   ]
+  },
+  {
+   "industry": "Financial - Conglomerates",
+   "phrases": [
+    "diversified financial services holding company",
+    "holding company whose subsidiaries engage in a number of diverse"
+   ]
+  },
+  {
+   "industry": "Banks - Diversified",
+   "phrases": [
+    "diversified financial services company",
+    "global financial services firm"
+   ]
+  },
+  {
+   "industry": "Banks - Regional",
+   "phrases": [
+    "bank holding company",
+    "community bank",
+    "savings bank",
+    "commercial bank holding"
+   ]
+  },
+  {
+   "industry": "Banks",
+   "phrases": [
+    "banking group",
+    "universal bank"
+   ]
+  },
+  {
+   "industry": "Uranium",
+   "phrases": [
+    "uranium company",
+    "uranium mining",
+    "uranium producer",
+    "uranium exploration",
+    "uranium project"
+   ]
+  },
+  {
+   "industry": "Silver",
+   "phrases": [
+    "silver mining",
+    "silver producer",
+    "primary silver",
+    "silver company"
+   ]
+  },
+  {
+   "industry": "Other Precious Metals",
+   "phrases": [
+    "precious metals streaming",
+    "precious metals royalty",
+    "royalty and streaming",
+    "platinum group metals",
+    "palladium producer",
+    "streaming and royalty"
+   ]
+  },
+  {
+   "industry": "Gold",
+   "phrases": [
+    "gold mining",
+    "gold producer",
+    "gold company",
+    "gold mine",
+    "gold royalty",
+    "precious metals",
+    "gold mining company",
+    "gold exploration",
+    "gold and silver",
+    "precious metals company"
+   ]
+  },
+  {
+   "industry": "Copper",
+   "phrases": [
+    "copper mining",
+    "copper producer",
+    "copper company",
+    "copper project"
+   ]
+  },
+  {
+   "industry": "Aluminum",
+   "phrases": [
+    "aluminum producer",
+    "aluminum company",
+    "aluminum products"
+   ]
+  },
+  {
+   "industry": "Industrial Materials",
+   "phrases": [
+    "industrial minerals",
+    "critical minerals",
+    "lithium company",
+    "lithium producer",
+    "lithium project",
+    "lithium projects",
+    "rare earth",
+    "graphite producer"
+   ]
+  },
+  {
+   "industry": "Coal",
+   "phrases": [
+    "coal company",
+    "coal producer",
+    "coal mining",
+    "metallurgical coal"
+   ]
+  },
+  {
+   "industry": "Steel",
+   "phrases": [
+    "steel producer",
+    "steel company",
+    "steelmaker",
+    "steel manufacturer"
+   ]
+  },
+  {
+   "industry": "Construction Materials",
+   "phrases": [
+    "aggregates-based",
+    "construction materials company",
+    "cement producer",
+    "crushed stone"
+   ]
+  },
+  {
+   "industry": "Solar",
+   "phrases": [
+    "solar energy company",
+    "solar panels",
+    "solar modules",
+    "solar power systems",
+    "solar tracker",
+    "solar inverter",
+    "residential solar"
+   ]
+  },
+  {
+   "industry": "Oil & Gas Integrated",
+   "phrases": [
+    "integrated energy company",
+    "integrated oil",
+    "integrated oil and gas"
+   ]
+  },
+  {
+   "industry": "Oil & Gas Refining & Marketing",
+   "phrases": [
+    "petroleum refiner",
+    "independent refiner",
+    "refining company",
+    "refining and marketing"
+   ]
+  },
+  {
+   "industry": "Oil & Gas Energy",
+   "phrases": [
+    "oil and natural gas company",
+    "oil and gas company"
+   ]
+  },
+  {
+   "industry": "Renewable Utilities",
+   "phrases": [
+    "renewable energy",
+    "renewable energy company",
+    "renewable power",
+    "wind energy",
+    "hydroelectric"
+   ]
+  },
+  {
+   "industry": "Independent Power Producers",
+   "phrases": [
+    "independent power producer",
+    "power generation company",
+    "wholesale power"
+   ]
+  },
+  {
+   "industry": "Beverages - Wineries & Distilleries",
+   "phrases": [
+    "wine company",
+    "winery",
+    "distiller",
+    "spirits company",
+    "premium spirits"
+   ]
+  },
+  {
+   "industry": "Beverages - Alcoholic",
+   "phrases": [
+    "alcoholic beverage",
+    "brewer",
+    "brewing company",
+    "beer company"
+   ]
+  },
+  {
+   "industry": "Beverages - Non-Alcoholic",
+   "phrases": [
+    "soft drink",
+    "energy drink",
+    "non-alcoholic",
+    "bottled water",
+    "non-alcoholic beverage",
+    "beverage company"
+   ]
+  },
+  {
+   "industry": "Food Confectioners",
+   "phrases": [
+    "confectionery",
+    "chocolate company",
+    "candy company"
+   ]
+  },
+  {
+   "industry": "Gambling, Resorts & Casinos",
+   "phrases": [
+    "gaming entertainment",
+    "sports betting",
+    "igaming",
+    "integrated resort",
+    "casino entertainment",
+    "casino resort",
+    "casinos",
+    "gaming company"
+   ]
+  },
+  {
+   "industry": "Travel Services",
+   "phrases": [
+    "online travel",
+    "travel company",
+    "travel marketplace",
+    "cruise company",
+    "cruise line",
+    "cruise vacation"
+   ]
+  },
+  {
+   "industry": "Travel Lodging",
+   "phrases": [
+    "hospitality company",
+    "hotel company",
+    "lodging company",
+    "hotels and resorts"
+   ]
+  },
+  {
+   "industry": "Luxury Goods",
+   "phrases": [
+    "luxury goods",
+    "luxury brand",
+    "luxury multi-brand",
+    "luxury company"
+   ]
+  },
+  {
+   "industry": "Auto - Recreational Vehicles",
+   "phrases": [
+    "recreational vehicle",
+    "motorcycle",
+    "powersports",
+    "recreational vehicles",
+    "motorcycles",
+    "recreational boats"
+   ]
+  },
+  {
+   "industry": "Entertainment",
+   "phrases": [
+    "entertainment company",
+    "theme park",
+    "live entertainment",
+    "streaming service",
+    "streaming platform",
+    "theme parks",
+    "film studio",
+    "music company"
+   ]
+  },
+  {
+   "industry": "Media & Entertainment",
+   "phrases": [
+    "media company",
+    "media and entertainment"
+   ]
+  },
+  {
+   "industry": "Leisure",
+   "phrases": [
+    "fitness company",
+    "fitness centers",
+    "golf company",
+    "leisure company",
+    "recreational products"
+   ]
+  },
+  {
+   "industry": "Specialty Retail",
+   "phrases": [
+    "e-commerce",
+    "ecommerce",
+    "online retail",
+    "e-commerce company",
+    "online retailer",
+    "specialty retailer",
+    "e-commerce platform",
+    "omnichannel retailer"
+   ]
+  },
+  {
+   "industry": "Real Estate - Development",
+   "phrases": [
+    "real estate development",
+    "develops real estate",
+    "homebuilding and development",
+    "land development"
+   ]
+  },
+  {
+   "industry": "Real Estate - Services",
+   "phrases": [
+    "real estate services",
+    "brokerage services",
+    "property management",
+    "commercial real estate services"
+   ]
+  },
+  {
+   "industry": "Conglomerates",
+   "phrases": [
+    "diversified industrial",
+    "diversified holding company",
+    "conglomerate",
+    "multi-industry company"
+   ]
+  },
+  {
+   "industry": "Industrial - Specialties",
+   "phrases": [
+    "specialty industrial",
+    "engineered products",
+    "industrial technology",
+    "filtration",
+    "industrial technology company"
+   ]
+  },
+  {
+   "industry": "Manufacturing - Textiles",
+   "phrases": [
+    "textile company",
+    "textile manufacturer",
+    "fabrics",
+    "yarn"
+   ]
+  },
+  {
+   "industry": "Marine Shipping",
+   "phrases": [
+    "dry bulk",
+    "container ships",
+    "shipping company",
+    "tanker company",
+    "container shipping",
+    "owns and operates vessels"
+   ]
+  },
+  {
+   "industry": "Integrated Freight & Logistics",
+   "phrases": [
+    "freight forwarding",
+    "supply chain solutions",
+    "logistics company",
+    "logistics provider",
+    "third-party logistics",
+    "supply chain solutions provider"
+   ]
+  },
+  {
+   "industry": "Airlines, Airports & Air Services",
+   "phrases": [
+    "air cargo",
+    "aviation services",
+    "airline",
+    "aviation services company"
+   ]
+  },
+  {
+   "industry": "Staffing & Employment Services",
+   "phrases": [
+    "workforce solutions",
+    "recruitment",
+    "staffing company",
+    "staffing services",
+    "recruitment services"
+   ]
+  },
+  {
+   "industry": "Security & Protection Services",
+   "phrases": [
+    "security services",
+    "alarm monitoring",
+    "public safety",
+    "public safety technology"
+   ]
+  },
+  {
+   "industry": "Advertising Agencies",
+   "phrases": [
+    "marketing agency",
+    "advertising company",
+    "advertising technology",
+    "marketing services company",
+    "digital advertising",
+    "performance marketing"
+   ]
+  },
+  {
+   "industry": "Consulting Services",
+   "phrases": [
+    "advisory services",
+    "research and advisory",
+    "consulting firm",
+    "consulting company"
+   ]
+  },
+  {
+   "industry": "Waste Management",
+   "phrases": [
+    "environmental services",
+    "waste management",
+    "waste services",
+    "recycling company",
+    "environmental services company"
+   ]
+  },
+  {
+   "industry": "Education & Training Services",
+   "phrases": [
+    "education company",
+    "education services",
+    "educational services",
+    "online education",
+    "higher education",
+    "edtech"
+   ]
+  },
+  {
+   "industry": "Rental & Leasing Services",
+   "phrases": [
+    "lessor",
+    "rental company",
+    "equipment rental",
+    "leasing company",
+    "uniform rentals",
+    "aircraft leasing",
+    "lessor of"
+   ]
+  },
+  {
+   "industry": "Electrical Equipment & Parts",
+   "phrases": [
+    "energy storage",
+    "electrical equipment",
+    "power systems",
+    "fuel cell",
+    "battery company",
+    "battery technology",
+    "ev charging",
+    "charging network"
+   ]
+  },
+  {
+   "industry": "Aerospace & Defense",
+   "phrases": [
+    "aerospace and defense",
+    "defense contractor",
+    "defense company",
+    "aerospace company",
+    "space company",
+    "launch services",
+    "satellite company",
+    "defense technology"
+   ]
+  },
+  {
+   "industry": "Specialty Business Services",
+   "phrases": [
+    "outsourced services",
+    "business services company",
+    "auction company",
+    "online auction",
+    "document management",
+    "payroll services",
+    "human capital management",
+    "health savings account",
+    "health savings accounts",
+    "benefits administration",
+    "consumer-directed benefits",
+    "hsa custodian"
+   ]
+  },
+  {
+   "industry": "Industrial - Machinery",
+   "phrases": [
+    "machinery",
+    "industrial equipment"
+   ]
+  },
+  {
+   "industry": "Packaging & Containers",
+   "phrases": [
+    "packaging company",
+    "packaging solutions",
+    "packaging products",
+    "containers and packaging"
+   ]
+  },
+  {
+   "industry": "Telecommunications Services",
+   "phrases": [
+    "telecommunications company",
+    "telecommunications services",
+    "wireless carrier",
+    "broadband provider",
+    "fiber network",
+    "communications services provider"
+   ]
+  },
+  {
+   "industry": "Communication Equipment",
+   "phrases": [
+    "communications equipment",
+    "networking equipment",
+    "antenna systems"
+   ]
+  }
+ ]
+}

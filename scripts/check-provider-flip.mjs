@@ -291,8 +291,10 @@ const spSrc = read("lib/server/staticProfile.ts")
   // The SIC leg's two files (brief 2026-09-22 §2.4), real data again.
   .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
     () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
-  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
-    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
+  .replace(/^import classificationFile from "@\/data\/sec\/sic-classification.json";$/m,
+    () => `const classificationFile = ${read("data/sec/sic-classification.json")};`)
+  .replace(/^import overridesFile from "@\/data\/sec\/classification-overrides.json";$/m,
+    () => `const overridesFile = ${read("data/sec/classification-overrides.json")};`)
   // The spellings helper, handed over rather than stubbed — the same choice
   // check-static-profile.mjs makes, and for the same reason: there is exactly
   // one implementation of the dot/dash bridge and a stub would test a copy.
