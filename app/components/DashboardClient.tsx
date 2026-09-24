@@ -11,6 +11,7 @@ import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { breakdownChipValue } from "@/lib/breakdownChip";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
@@ -965,13 +966,20 @@ export default function DashboardClient({
 
   function BreakdownPanel() {
     return (<SectionCard title={customMode ? "Selected Indicators" : "Breakdown"} right={<BreakdownHelpButton />} allowOverflow>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => (
-          <div key={customMode ? item.label : item.key} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</span></div>
-            <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>{customMode ? item.value : item.valueText}</div>
+      {/* repeat(2, minmax(0, 1fr)) + minWidth 0: a chip never widens the card
+          (#553 COWORK #39). A value that does not fit beside its label wraps
+          to its own line, right-aligned; only a value wider than the whole
+          chip is cut with an ellipsis (full text in the tooltip). */}
+      <div className="msh-breakdown-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => {
+          const v = breakdownChipValue(customMode ? item.value : item.valueText);
+          return (
+          <div key={customMode ? item.label : item.key} title={`${item.label}: ${v.full}`} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", columnGap: 8, rowGap: 2, alignItems: "center", minWidth: 0, padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "100%" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span></div>
+            <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", marginLeft: "auto" }}>{v.text}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {customMode ? <button type="button" onClick={clearIndicatorSelection} style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button> : null}
     </SectionCard>);
@@ -990,7 +998,7 @@ export default function DashboardClient({
       </button>
       {breakdownOpen ? <div style={{ borderTop: `1px solid ${COLORS.borderSoft}` }}>
         <div style={{ display: "flex", gap: 5, padding: "10px 16px 0" }}>{items.map((item: any) => <span key={customMode ? item.label : item.key} style={{ flex: 1, height: 5, borderRadius: 99, background: chipToneColor(item.tone) }} />)}</div>
-        <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone) }}>{customMode ? item.value : item.valueText}</span></div>)}</div>
+        <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span title={breakdownChipValue(customMode ? item.value : item.valueText).full} style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{breakdownChipValue(customMode ? item.value : item.valueText).text}</span></div>)}</div>
         <div style={{ padding: "8px 16px 14px" }}><Link href="/learn" style={{ fontSize: 13, fontWeight: 700, color: "#9cc0ff", textDecoration: "none" }}>Learn what these mean →</Link></div>
         {customMode ? <div style={{ padding: "0 16px 14px" }}><button type="button" onClick={clearIndicatorSelection} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button></div> : null}
       </div> : null}
