@@ -427,7 +427,12 @@ export function reactionPeriodLabels(set: {
   years: StoredPeriod[];
 }): Map<string, string> {
   const out = new Map<string, string>();
-  for (const p of set.quarters) if (p.e) out.set(p.e, periodLabel(p));
+  // AN UNLABELLED QUARTER GETS NO ENTRY (#552 COWORK #37). A first filer's
+  // quarters have no fiscal label yet, and periodLabel falls back to the
+  // period END — a bar reading "2026-06-30" looks measured from the period
+  // end, not from the filing. With no entry the bar takes its announcement's
+  // own label ("Reported Aug 2026"), which is the date it is measured from.
+  for (const p of set.quarters) if (p.e && p.fp && p.fy) out.set(p.e, periodLabel(p));
   const reportsQuarters = set.quarters.length > 0;
   for (const p of set.years) {
     if (!p.e || out.has(p.e)) continue;
