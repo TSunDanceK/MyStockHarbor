@@ -32,7 +32,18 @@ for (const s of syms) {
       .replace(/&#8217;|&rsquo;/g, "'").replace(/&#8220;|&#8221;|&ldquo;|&rdquo;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
     const hits = [];
     for (const re of PATTERNS) for (const m of text.matchAll(re)) { const t = m[0].trim(); if (!hits.some((h) => h === t)) hits.push(t); }
+    // WIDER NET (MODE=wide): every sentence naming a share class with
+    // conversion, dividend, liquidation or economic-rights wording.
+    if (process.env.MODE === "wide") {
+      hits.length = 0;
+      for (const m of text.matchAll(/[^.]{0,400}\b(?:Class|Series) [A-Z][\w-]{0,3}\b[^.]{0,400}\./g)) {
+        const t = m[0].trim();
+        if (t.length > 700 || !/\b(?:convert|dividend|liquidat|economic|identical|same rights|equal(?:ly)? |share-for-share|one-for-one|1,500|per share basis)/i.test(t)) continue;
+        if (/\bnotes?\b|\bwarrant/i.test(t) && !/common/i.test(t)) continue;
+        if (!hits.includes(t)) hits.push(t);
+      }
+    }
     console.log(`\n== ${s} | 10-K ${r.filingDate[i]} ${r.accessionNumber[i]} | ${hits.length} hit(s)`);
-    for (const h of hits.slice(0, 5)) console.log(`   > ${h.slice(0, 380)}`);
+    for (const h of hits.slice(0, process.env.MODE === "wide" ? 8 : 5)) console.log(`   > ${h.slice(0, 480)}`);
   } catch (e) { console.log(`\n== ${s}: error ${String(e?.message ?? e).slice(0, 80)}`); }
 }
