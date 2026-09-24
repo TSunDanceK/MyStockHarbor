@@ -7,6 +7,7 @@ import { drainColdCiks } from "@/lib/server/secColdCik";
 import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { withPredecessorFacts } from "@/lib/server/secSuccession";
+import { withClassCover } from "@/lib/server/secCoverClasses";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
@@ -421,6 +422,18 @@ async function fetchCompanyFacts(cik: string): Promise<CompanyFacts> {
  * double the rate the limit is measured at — which is how a well-behaved
  * client gets a block for the whole account.
  */
+/** The same rate gate, any SEC URL: the per-class cover read (secCoverClasses). */
+async function secGetGated(url: string): Promise<Response> {
+  const wait = Math.max(0, lastAt + MIN_GAP_MS - Date.now());
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastAt = Date.now();
+  const res = await fetch(url, {
+    headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" }, cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res;
+}
+
 async function fetchSubmissions(cik: string): Promise<Submissions> {
   const wait = Math.max(0, lastAt + MIN_GAP_MS - Date.now());
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -486,7 +499,7 @@ export async function GET(req: NextRequest) {
   }
 
   // COMMITTED RE-READ REQUESTS join the reverify queue before it is built
-  // (one a run, one-shot via verifiedAt). See secRereadRequests.
+  // (SEC_REREAD_REQUESTS_PER_RUN a run, one-shot via verifiedAt). See secRereadRequests.
   const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
   if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
 
@@ -574,6 +587,8 @@ export async function GET(req: NextRequest) {
       // the same rate gate. See secSuccession.
       const facts = await withPredecessorFacts(cik, await fetchCompanyFacts(cik), fetchCompanyFacts);
       const extracted = extractForSymbol(symbol, facts);
+      // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
+      extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGetGated);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is
       // also what keeps the conversion after differencing, which happens

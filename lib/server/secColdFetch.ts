@@ -84,6 +84,7 @@ import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { companyFactsAbsent, unreadableReason, type CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
+import { withClassCover } from "./secCoverClasses";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
@@ -479,7 +480,11 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   const facts = await withPredecessorFacts(cik, await fetchFactsFor(cik), fetchFactsFor);
   // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
   // here is the shape where one path gains a condition and the other does not.
-  const set = await toStoredSet(extractForSymbol(symbol, facts));
+  const extracted = extractForSymbol(symbol, facts);
+  // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
+  extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares,
+    (url) => fetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } }));
+  const set = await toStoredSet(extracted);
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same
   // nothing. hasUsableData() tells the two apart at read time.

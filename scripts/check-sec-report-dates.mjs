@@ -962,8 +962,9 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
     "two derivations would let the estimate and the notice name different quarters");
   // THREE FETCHERS, ONE GATE since 2026-09-23 (#535 COWORK #6): the filing-
   // folder read joined companyfacts and submissions on the same `lastAt`.
+  // Three again since #552 COWORK #31: the class-cover read (secGetGated).
   check("every SEC fetcher shares one rate gate",
-    (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 2 &&
+    (job.match(/lastAt \+ MIN_GAP_MS - Date\.now\(\)/g) ?? []).length === 3 &&
       !/let lastAt2|const lastAt2/.test(job),
     "a second gate would let the two endpoints double the request rate");
 }

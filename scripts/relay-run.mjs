@@ -698,6 +698,8 @@ const TASKS = {
   "sec-share-class-evidence-equal": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "equal" } },
   // Read-only, no credential: a passage from a filer's latest filing of a form.
   "sec-filing-grep": { script: "scripts/sec-filing-grep-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped class-cover read over every cited entry (#552 COWORK #31).
+  "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [] },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",

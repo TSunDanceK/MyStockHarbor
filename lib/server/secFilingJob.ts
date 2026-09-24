@@ -25,6 +25,7 @@ import type { Submissions } from "./secReportDates";
 import type { CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
+import { withClassCover } from "./secCoverClasses";
 import { toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
@@ -162,6 +163,8 @@ export type Fetchers = {
   submissions: (cik: string) => Promise<Submissions>;
   companyFacts: (cik: string) => Promise<CompanyFacts>;
   instance: (cik: string, f: FilingRef) => Promise<string | null>;
+  /** The job's own rate-gated GET, for the per-class cover read (secCoverClasses). */
+  get: (url: string) => Promise<Response>;
 };
 
 export type CheckOutcome = (
@@ -211,6 +214,9 @@ async function checkAndFillFrom(
   // A CITED SUCCESSOR (XOM) reads its predecessor's history too. See secSuccession.
   const cf = await withPredecessorFacts(cik, await fetch.companyFacts(cik), fetch.companyFacts);
   const base = extractForSymbol(symbol, cf);
+  // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
+  // See secCoverClasses; any failure keeps the extractor's cover.
+  base.coverShares = await withClassCover(symbol, cik, base.coverShares, fetch.get);
   const baseNewest = newestStoredEnd({
     quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
     years: base.years.map((p) => ({ e: p.end })) as StoredPeriod[],
@@ -223,7 +229,8 @@ async function checkAndFillFrom(
   const { merged, added } = xml
     ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
     : { merged: cf, added: 0 };
-  const next = await toStoredSet(added ? extractForSymbol(symbol, merged) : base, defaultSources(), fxSeries);
+  const filled = added ? { ...extractForSymbol(symbol, merged), coverShares: base.coverShares } : base;
+  const next = await toStoredSet(filled, defaultSources(), fxSeries);
   const noticeOnly = isLagging(next, f);
   const lag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };
   return noticeOnly
