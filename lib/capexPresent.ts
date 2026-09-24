@@ -207,6 +207,10 @@ export type SpendingView = {
   /** 0..100 per year, on this sector's own scale. */
   spark: number[];
   sparkTitles: string[];
+  /** "'21".."'25", under the small bars. */
+  sparkYears: string[];
+  /** Each year's amount, the small bars' hover/tap value. */
+  sparkValues: string[];
   changeText: string;
   ratioFirst: string | null;
   ratioLatest: string | null;
@@ -230,6 +234,8 @@ export function buildSpendingRows(sectors: SpendingSectorInput[], years: number[
       barPct: max > 0 ? (Math.max(0, latest) / max) * 100 : 0,
       spark: s.capex.map((v) => (own > 0 ? (Math.max(0, v) / own) * 100 : 0)),
       sparkTitles: s.capex.map((v, i) => `${years[i]}: ${formatAmount(v, "USD")}`),
+      sparkYears: years.map((y) => `'${String(y).slice(2)}`),
+      sparkValues: s.capex.map((v) => formatAmount(v, "USD")),
       changeText: first > 0 ? changeText(((latest - first) / first) * 100) : "New line",
       ratioFirst: pctText(s.capexToRevenue[0] ?? null),
       ratioLatest: pctText(s.capexToRevenue[last] ?? null),
@@ -237,4 +243,68 @@ export function buildSpendingRows(sectors: SpendingSectorInput[], years: number[
       top: s.top,
     };
   });
+}
+
+// ── The insight cards (#563 COWORK #12) ────────────────────────────────────
+// Every figure is read off the page's own three records; nothing is fetched,
+// nothing is estimated, and nothing flows between panels. The one sum is the
+// share of the 2025 capex across the sectors shown -- within ONE panel, never
+// across receivers or contracts.
+
+export type InsightInput = {
+  spending: { years: number[]; sectors: SpendingSectorInput[]; leaders?: Array<{ symbol: string; sector: string; capex: number }> } | null;
+  receivers: Array<{ ticker: string; label: string; subLabel: string | null; changePct: number | null; changeText: string; fyTo: string }>;
+  contracts: { rows: Array<{ ticker: string; amount: number }>; mappedAmount: number; totalAmount: number | null; window: { start: string; end: string } } | null;
+  companyName: (ticker: string) => string;
+};
+
+export type Insights = {
+  year: number | null;
+  whereMoney: Array<{ sector: string; amount: string; sharePct: number; shareText: string }>;
+  topSpenders: Array<{ ticker: string; name: string; amount: string; sector: string }>;
+  fastest: { sector: string; changeText: string; from: string; to: string; firstYear: number } | null;
+  reinvest: { sector: string; ratioText: string; cohort: number } | null;
+  receiverTop: { ticker: string; name: string; line: string; changeText: string; fyTo: string } | null;
+  contractTop: { ticker: string; name: string; amount: string; mapped: string; total: string | null } | null;
+};
+
+export function buildInsights(input: InsightInput): Insights {
+  const sp = input.spending;
+  const last = sp ? sp.years.length - 1 : -1;
+  const sectors = sp ? sp.sectors.filter((s) => Number.isFinite(s.capex[last])) : [];
+  const allLatest = sectors.reduce((a, s) => a + Math.max(0, s.capex[last]), 0);
+  const byLatest = [...sectors].sort((a, b) => b.capex[last] - a.capex[last]);
+  const whereMoney = allLatest > 0
+    ? byLatest.slice(0, 3).map((s) => {
+        const sharePct = (s.capex[last] / allLatest) * 100;
+        return { sector: s.sector, amount: formatAmount(s.capex[last], "USD"), sharePct, shareText: `${Math.round(sharePct)}%` };
+      })
+    : [];
+  const topSpenders = (sp?.leaders ?? []).slice(0, 5).map((l) => ({
+    ticker: l.symbol,
+    name: input.companyName(l.symbol) || l.symbol,
+    amount: formatAmount(l.capex, "USD"),
+    sector: l.sector,
+  }));
+  const growth = sectors
+    .filter((s) => s.capex[0] > 0)
+    .map((s) => ({ s, pct: ((s.capex[last] - s.capex[0]) / s.capex[0]) * 100 }))
+    .sort((a, b) => b.pct - a.pct)[0];
+  const fastest = growth && sp
+    ? { sector: growth.s.sector, changeText: changeText(growth.pct), from: formatAmount(growth.s.capex[0], "USD"), to: formatAmount(growth.s.capex[last], "USD"), firstYear: sp.years[0] }
+    : null;
+  const ratio = sectors
+    .filter((s) => typeof s.capexToRevenue[last] === "number")
+    .sort((a, b) => (b.capexToRevenue[last] as number) - (a.capexToRevenue[last] as number))[0];
+  const reinvest = ratio ? { sector: ratio.sector, ratioText: `${((ratio.capexToRevenue[last] as number) * 100).toFixed(1)}%`, cohort: ratio.ratioCohort } : null;
+  const rTop = input.receivers.filter((r) => r.changePct !== null).sort((a, b) => (b.changePct as number) - (a.changePct as number))[0];
+  const receiverTop = rTop
+    ? { ticker: rTop.ticker, name: input.companyName(rTop.ticker) || rTop.ticker, line: rTop.subLabel ? `${rTop.label} (${rTop.subLabel})` : rTop.label, changeText: rTop.changeText, fyTo: rTop.fyTo }
+    : null;
+  const c = input.contracts;
+  const cTop = c ? [...c.rows].sort((a, b) => b.amount - a.amount)[0] : undefined;
+  const contractTop = c && cTop
+    ? { ticker: cTop.ticker, name: input.companyName(cTop.ticker) || cTop.ticker, amount: formatAmount(cTop.amount, "USD"), mapped: formatAmount(c.mappedAmount, "USD"), total: c.totalAmount ? formatAmount(c.totalAmount, "USD") : null }
+    : null;
+  return { year: sp ? sp.years[last] : null, whereMoney, topSpenders, fastest, reinvest, receiverTop, contractTop };
 }

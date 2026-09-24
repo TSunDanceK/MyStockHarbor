@@ -114,6 +114,28 @@ async function suite(P, pageCode) {
   ], [2021, 2022, 2023, 2024, 2025]);
   ok("sector bars share one scale: the largest latest year is full width", sp[0].barPct === 100 && sp[1].barPct === 25, `${sp[0].barPct} ${sp[1].barPct}`);
   ok("the small bars are the sector's own scale", sp[1].spark[3] === 100 && Math.abs(sp[1].spark[4] - (75 / 110) * 100) < 1e-9, JSON.stringify(sp[1].spark));
+  ok("each small bar carries its year and its record value (#563 COWORK #11)", sp[0].sparkYears.join() === "'21,'22,'23,'24,'25" && sp[0].sparkValues.join() === "$100bn,$120bn,$150bn,$210bn,$300bn" && sp[1].sparkValues[4] === "$75.0bn", JSON.stringify(sp[0].sparkValues));
+
+  // #563 COWORK #12: the insight cards, each read off its own record.
+  const Y = [2021, 2022, 2023, 2024, 2025];
+  const sec = (sector, first, last, ratio) => ({ sector, cohort: 5, capex: [first, first, first, first, last], ratioCohort: 5, capexToRevenue: [0.1, 0.1, 0.1, 0.1, ratio], top: [] });
+  const ins = P.buildInsights({
+    spending: { years: Y, sectors: [sec("Technology", 100e9, 300e9, 0.12), sec("Communication Services", 50e9, 200e9, 0.18), sec("Utilities", 80e9, 100e9, 0.32), sec("Energy", 60e9, 80e9, 0.1)], leaders: [{ symbol: "MSFT", sector: "Technology", capex: 90e9 }, { symbol: "GOOGL", sector: "Communication Services", capex: 80e9 }] },
+    receivers: [{ ticker: "MU", label: "CMBU", subLabel: "Cloud Memory Business Unit", changePct: 257, changeText: "+257%", fyTo: "FY to Aug 2025" }, { ticker: "NVDA", label: "Compute", subLabel: null, changePct: 68, changeText: "+68%", fyTo: "FY to Jan 2026" }, { ticker: "APLD", label: "Revenues", subLabel: null, changePct: null, changeText: "New line", fyTo: "FY to May 2026" }],
+    contracts: { rows: [{ ticker: "BA", amount: 31e9 }, { ticker: "LMT", amount: 70.55e9 }], mappedAmount: 310.7e9, totalAmount: 803.4e9, window: { start: "2025-09-01", end: "2026-08-31" } },
+    companyName: (t) => ({ MSFT: "Microsoft", GOOGL: "Alphabet", MU: "Micron Technology", LMT: "Lockheed Martin" })[t] ?? "",
+  });
+  ok("where the money is going: the top three by latest capex, with shares of the sectors shown", ins.whereMoney.map((w) => `${w.sector}:${w.amount}:${w.shareText}`).join("|") === "Technology:$300bn:44%|Communication Services:$200bn:29%|Utilities:$100bn:15%", JSON.stringify(ins.whereMoney));
+  ok("who is spending most: the record's leaders, named, largest first", ins.topSpenders.map((t) => `${t.ticker}:${t.name}:${t.amount}`).join("|") === "MSFT:Microsoft:$90.0bn|GOOGL:Alphabet:$80.0bn", JSON.stringify(ins.topSpenders));
+  ok("fastest growing: the largest rise since the first year", ins.fastest?.sector === "Communication Services" && ins.fastest.changeText === "+300%" && ins.fastest.from === "$50.0bn", JSON.stringify(ins.fastest));
+  ok("reinvesting the most: the highest capex ÷ revenue in the latest year", ins.reinvest?.sector === "Utilities" && ins.reinvest.ratioText === "32.0%", JSON.stringify(ins.reinvest));
+  ok("receivers snapshot: the fastest-growing filed line, with its sub-label", ins.receiverTop?.name === "Micron Technology" && ins.receiverTop.line === "CMBU (Cloud Memory Business Unit)" && ins.receiverTop.changeText === "+257%", JSON.stringify(ins.receiverTop));
+  ok("contracts snapshot: the top recipient and the matched total", ins.contractTop?.name === "Lockheed Martin" && ins.contractTop.amount === "$70.5bn" && ins.contractTop.mapped === "$311bn" && ins.contractTop.total === "$803bn", JSON.stringify(ins.contractTop));
+  ok("a record built before the leaders list: that card is simply absent", P.buildInsights({ spending: { years: Y, sectors: [sec("Energy", 1e9, 2e9, 0.1)] }, receivers: [], contracts: null, companyName: () => "" }).topSpenders.length === 0);
+  ok("the chart labels itself (#563 COWORK #11)", pageCode.includes("Long bar = {lastYear}, compared across sectors · Small bars = this sector&apos;s last five years") && pageCode.includes('<span className="spLbl">Trend</span>') && pageCode.includes("row.sparkYears[i]") && pageCode.includes("data-v={row.sparkValues[i]}"));
+  ok("trend bars are tall (56px), from zero within the sector", /\.spCol \{[^}]*grid-template-rows: 56px/.test(pageCode) && /\.spBarBox \{[^}]*height: 56px/.test(pageCode));
+  ok("every card names its source", (pageCode.match(/className="cardSource"/g) ?? []).length >= 6);
+  ok("on mobile the cards stack above the panels", /@media \(max-width: 980px\)[\s\S]*?\.capexSide \{[^}]*order: -1/.test(pageCode));
   ok("change since the first year, and the ratio as text", sp[0].changeText === "+200%" && sp[0].ratioFirst === "8.0%" && sp[0].ratioLatest === "15.0%" && sp[0].latest === "$300bn", JSON.stringify(sp[0]));
   return fails;
 }
@@ -139,6 +161,8 @@ const MUTANTS = [
   ["recipient names left in capitals", () => mut("case", src, "entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],", "entities: [...new Set(r.entities.map((e) => e.name))],")],
   ["a repeated recipient name listed twice", () => mut("dupe", src, "entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],", "entities: r.entities.map((e) => entityCase(e.name)),")],
   ["the largest recipient shown as the company", () => mut("company", src, "company: companyName(r.ticker) || r.ticker,", "company: r.entities[0]?.name ?? r.ticker,")],
+  ["the top-3 sectors in the wrong order", () => mut("top3", src, "byLatest.slice(0, 3).map(", "[...byLatest.slice(0, 3)].reverse().map(")],
+  ["the fastest-growing sector picked by size, not growth", () => mut("fastest", src, ".sort((a, b) => b.pct - a.pct)[0];", ".sort((a, b) => b.s.capex[last] - a.s.capex[last])[0];")],
   ["amounts converted to dollars", () => mut("cur", src, 'const prefix = currency === "USD" ? "$" : `${currency} `;', 'const prefix = "$";')],
 ];
 let survived = 0;
