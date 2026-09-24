@@ -88,8 +88,9 @@ export default async function HeadlinesPage() {
   //
   // WHAT IT DOES, in order: the article's own words -> tagged v2 art; failing
   // that, the title's event type -> the event bucket this page has shown since
-  // #481; failing that, nothing. It never guesses a sector and never draws a
-  // ticker card with no ticker.
+  // #481; failing that, a generic "any market" picture (#553 COWORK #41), so
+  // every card has one. It never guesses a sector and never draws a ticker
+  // card with no ticker.
   //
   // UNTIL THE TAGGED IMAGES LAND this page is byte-for-byte what it is today:
   // manifest-v2.json ships empty, so the first rule returns null for every
@@ -259,6 +260,7 @@ export default async function HeadlinesPage() {
                   key={`${item.url}-${index}`}
                   item={item}
                   art={headlineArt[index]}
+                  eager={index < FIRST_ROW_CARDS}
                 />
               ))}
             </div>
@@ -292,7 +294,12 @@ export default async function HeadlinesPage() {
   );
 }
 
-function HeadlineCard({ item, art }: { item: GeneralHeadline; art: CardArt }) {
+// The first row on a wide screen loads its pictures eagerly; the rest are lazy
+// below the fold (#553 COWORK #41). The grid is auto-fill at 300px+, so a
+// 1280px page shows three across.
+const FIRST_ROW_CARDS = 3;
+
+function HeadlineCard({ item, art, eager }: { item: GeneralHeadline; art: CardArt; eager: boolean }) {
   return (
     <article style={headlineCardStyle}>
       {/*
@@ -317,13 +324,13 @@ function HeadlineCard({ item, art }: { item: GeneralHeadline; art: CardArt }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.image} alt="" loading="lazy" style={headlineThumbImgStyle} />
         </div>
-      ) : art.kind === "none" ? null : (
-        /* A headline whose title matches no pattern still renders nothing, and
-           that is the designed outcome rather than a gap: with no symbol and no
-           sector there is no honest picture to put here. The wrapper is only
-           mounted when there IS art, so an imageless card keeps exactly the
-           layout it has today instead of gaining an empty box. */
-        <div style={headlineThumbWrapStyle}>
+      ) : (
+        /* EVERY CARD HAS THE SAME 16:9 PICTURE SLOT (#553 COWORK #41). A title
+           that matches no tag or event takes a generic "any market" picture
+           (withGenericFallback in artTags.ts), so the slot is never empty and
+           the rows line up. Measured on production before this: 4 of 30 cards
+           had a picture. */
+        <div style={headlineThumbWrapStyle} data-headline-art>
           <NewsCardArt
             plan={art}
             symbol=""
@@ -331,6 +338,7 @@ function HeadlineCard({ item, art }: { item: GeneralHeadline; art: CardArt }) {
             points={[]}
             sizes="(max-width: 640px) 100vw, 380px"
             style={headlineThumbImgStyle}
+            loading={eager ? "eager" : "lazy"}
           />
         </div>
       )}
