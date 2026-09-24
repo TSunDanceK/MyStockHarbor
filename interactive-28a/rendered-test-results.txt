@@ -1,0 +1,27 @@
+PASS desktop toolbar, one row: D | W | M | Candle ▾ | Indicators · 1 ▾ | Draw ▾ | Recenter chart | Undo last drawing | Remove all drawings | ⛶ Fullscreen -- ["D","W","M","Candle ▾","Indicators · 1 ▾","Draw ▾","Recenter chart","Undo last drawing","Remove all drawings","⛶ Fullscreen"]
+PASS desktop toolbar fits on one row (top edges within 10px) -- 5px spread
+PASS the % chip sits at the bottom of the price pane's axis (right side, lower half) -- {"chipBox":{"x":1265,"y":820.09375,"width":26.03125,"height":22},"chartBox":{"x":493,"y":435.09375,"w":830,"h":520,"vy":435.09375}}
+PASS % chip starts off, tooltip 'Show % change'
+PASS % on: pressed, and it names the base bar -- Show % change (from 2026-05-06, the first bar on screen)
+PASS % re-bases on pan (the first visible bar moved earlier) -- 2026-05-06 -> 2026-04-07
+PASS right-click opens the menu inside the chart: Chart type ▸ | Timeframe ▸ | Indicators ▸ | Draw ▸ | Scale ▸ | Recenter | Undo | Clear drawings | Fullscreen -- {"inside":true,"items":["Chart type ▸","Timeframe ▸","Indicators ▸","Draw ▸","Scale ▸","Recenter","Undo","Clear drawings","Fullscreen"]}
+PASS hovering Indicators opens its fly-out, with Volume ticked
+PASS choosing RSI in the menu adds it (toolbar shows 2) and closes the menu -- Indicators · 2
+▾
+PASS keyboard: ↓ → ↓ Enter picks Timeframe ▸ W -- true
+PASS Esc closes the menu
+PASS a click outside closes the menu
+PASS the % scale is remembered after a reload
+PASS phone toolbar: [D W M] + Tools, no other dropdowns
+PASS Tools is a 44px target -- {"x":133.171875,"y":65,"width":89.375,"height":44}
+PASS Tools opens the bottom sheet
+PASS every sheet row is at least 44px -- [44,44,44,44,44,44]
+PASS sheet: Scale ▸ % change turns the % axis on and closes the sheet
+PASS the % chip is a 44px target on touch -- {"x":324,"y":627,"width":44,"height":44}
+PASS long-press on the chart opens the same sheet
+PASS a one-finger pan does not open the sheet
+PASS #29: axis strips mounted on touch
+PASS #29: dragging the price axis by touch rescales it
+PASS #29: the page did not scroll during the axis drag
+PASS #29: double-tap on the price axis resets it (auto-fit back, same labels as before)
+PASS #29: dragging the time axis by touch stretches the bars
