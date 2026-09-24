@@ -1134,6 +1134,14 @@ export default function SiteHeader({
         isActive: (path) =>
           path === "/bottlenecks" || path.startsWith("/bottlenecks/"),
       },
+      // Relay C (#563): the capex page, under the Bottlenecks section. Added as
+      // its own entry (append-only on this shared file).
+      {
+        kind: "link",
+        label: "Follow the Money",
+        href: "/bottlenecks/capex",
+        isActive: (path) => path === "/bottlenecks/capex",
+      },
       {
         kind: "dropdown",
         label: "Earnings",
