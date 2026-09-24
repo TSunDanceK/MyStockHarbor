@@ -155,7 +155,12 @@ export function coverIsCurrent(asOf: string | null | undefined, today: string): 
  * the EPS period, so it is carried separately and labelled separately rather
  * than folded into one "as of" the page would have to pick a meaning for.
  */
-export type SharesBasis = { val: number; asOf: string };
+export type SharesBasis = {
+  val: number;
+  asOf: string;
+  /** Set when `val` is ADS-equivalents: the cited ordinary shares per ADS it was divided by. */
+  adsRatio?: number;
+};
 
 /**
  * TWELVE MONTHS OF DILUTED EPS, AND WHICH TWELVE.
@@ -185,6 +190,8 @@ export type EpsBasis = {
   ytd?: { yearEnd: string; months: number };
   /** "basic" only for a filer that states no diluted EPS at all (BRK). Absent = diluted. */
   kind?: "basic";
+  /** Set when `val` is per ADS, converted from per ordinary share by this cited ratio. */
+  adsRatio?: number;
 };
 
 export type ValuationInputs = {
@@ -422,7 +429,35 @@ export function sharesAreIncomparableToPrice(symbol: string): boolean {
  * Optional, so every existing caller reads exactly as before; absent means
  * "not known", and only the named list then applies.
  */
-export type FilerFacts = { annualForm?: string | null };
+export type FilerFacts = {
+  annualForm?: string | null;
+  /**
+   * THE CITED ADS RATIO (#552 COWORK #22 §1), from data/sec/ads-ratios.json
+   * via secAdsMap.adsRatioFor — passed in, so this module stays free of JSON
+   * imports. Present only where the filer's own 20-F or F-6 states it; absent
+   * keeps the depositary-share refusal exactly as before. Never defaulted.
+   */
+  ads?: { ordinaryPerAds: number; source: string } | null;
+};
+
+/** How far the filer's own EPS identity may sit from 1 or from the ratio. */
+export const ADS_EPS_UNIT_TOLERANCE = 0.03;
+
+/**
+ * WHICH UNIT THE FILED EPS IS IN, from the filer's own arithmetic on one
+ * period: epsDiluted x sharesDiluted / netIncome is ~1 when EPS is per
+ * ordinary share (the diluted count is of ordinary shares) and ~ratio when it
+ * is per ADS. Measured this way before (scripts/ads-eps-unit-probe.mjs: HDB,
+ * TSM, BABA, ASML all ~1). Anything else is refused, never guessed.
+ */
+export function epsUnitOf(p: StoredPeriod | null | undefined, ordinaryPerAds: number): "ordinary" | "ads" | null {
+  const eps = valueOf(p, "epsDiluted"), sh = valueOf(p, "sharesDiluted"), ni = valueOf(p, "netIncome");
+  if (eps === null || sh === null || ni === null || ni === 0 || sh <= 0) return null;
+  const u = (eps * sh) / ni;
+  if (Math.abs(u - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ordinary";
+  if (ordinaryPerAds !== 1 && Math.abs(u / ordinaryPerAds - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ads";
+  return null;
+}
 
 export function valuationInputs(
   set: StoredFactSet,
@@ -435,7 +470,8 @@ export function valuationInputs(
   // count is in, so it holds whatever the cover page turns out to say -- a
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
-  if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {
+  const ads = filer.ads && Number.isFinite(filer.ads.ordinaryPerAds) && filer.ads.ordinaryPerAds > 0 ? filer.ads : null;
+  if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {
     // TWO REFUSALS, NOT ONE, because they are two different claims about two
     // different figures and only one of them was ever assumed. The share-count
     // one is true by definition: a cover-page count is a count of ordinary
@@ -477,8 +513,27 @@ export function valuationInputs(
   // (the newest stored quarter is its Q4, or none is stored): a year older
   // than their newest quarter is not "trailing", and falling back to it is
   // the NVDA defect (#552 COWORK #8) -- refused instead.
-  const eps = ttmEpsFromSet(set, filer, today);
+  let eps = ttmEpsFromSet(set, filer, today);
   if (!eps) refusals.push("no-twelve-month-eps");
+
+  // ── A CITED ADS RATIO: EVERYTHING IN THE PRICE'S UNIT (#552 COWORK #22 §1) ──
+  // The spec is "ordinary-share price = ADS price / ratio, against the
+  // per-ordinary figures". Every caller multiplies or divides by the quoted
+  // ADS price, so the same arithmetic is done once here instead: the share
+  // count becomes ADS-equivalents (ordinary / ratio), so cap = ADS price x
+  // that = (ADS price / ratio) x ordinary; and EPS becomes per ADS (x ratio,
+  // only when the filer's own identity says it is per ordinary share), so
+  // P/E = ADS price / EPS per ADS = (ADS price / ratio) / EPS per ordinary.
+  if (ads) {
+    if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds };
+    if (eps) {
+      const periodEnd = eps.periodEnd;
+      const unitPeriod = [...set.quarters, ...set.years].find((p) => p.e === periodEnd) ?? null;
+      const unit = epsUnitOf(unitPeriod, ads.ordinaryPerAds);
+      if (unit === "ordinary") eps = { ...eps, val: eps.val * ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds };
+      else if (unit !== "ads") { eps = null; refusals.push("ads-ratio-makes-eps-incomparable"); }
+    }
+  }
 
   return { shares, eps, refusals };
 }

@@ -1,0 +1,4 @@
+{
+ "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own latest 20-F or F-6 states it, verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts.",
+ "entries": {}
+}

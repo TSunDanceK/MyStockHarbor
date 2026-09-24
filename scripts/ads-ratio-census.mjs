@@ -29,7 +29,7 @@ async function get(url, as = "json") {
   if (!res.ok) throw new Error(String(res.status));
   return as === "json" ? res.json() : res.text();
 }
-const tally = { RATIO: 0, DISAGREE: 0, NONE: 0, ERROR: 0 };
+const tally = { RATIO: 0, DIRECT: 0, DISAGREE: 0, NONE: 0, ERROR: 0 };
 let reached = 0;
 for (const s of mine) {
   if (Date.now() - started > BUDGET_MS) break;
@@ -39,18 +39,29 @@ for (const s of mine) {
     const r = (await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)).filings?.recent ?? {};
     const pick = (forms) => (r.form ?? []).findIndex((f) => forms.includes(f));
     const tries = [pick(["20-F"]), pick(["F-6", "F-6EF", "F-6 POS"])].filter((i) => i >= 0);
-    let line = null, mentions = 0, lastRef = "";
+    let line = null, mentions = 0, lastRef = "", row = null;
     for (const i of tries) {
       const url = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accessionNumber[i].replace(/-/g, "")}/${r.primaryDocument[i]}`;
       const text = D.filingText(await get(url, "text"));
       mentions += (text.match(/American depositary/gi) ?? []).length;
-      lastRef = `${r.form[i]} ${r.accessionNumber[i]} ${r.filingDate[i]}`;
+      const ref = { form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i] };
+      lastRef = `${ref.form} ${ref.source} ${ref.filed}`;
       const got = R.adsRatioOf(text);
-      if (got.ok) { line = `RATIO ${got.ordinaryPerAds} ${lastRef} (${got.statements}x) "${got.sentence.slice(0, 220)}"`; tally.RATIO++; break; }
+      if (got.ok) {
+        line = `RATIO ${got.ordinaryPerAds} ${lastRef} (${got.statements}x) "${got.sentence.slice(0, 260)}"`; tally.RATIO++;
+        row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, ...ref };
+        break;
+      }
       if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; break; }
+      // ONLY THE 20-F CAN SAY "LISTED DIRECTLY": an F-6 exists only for ADSs.
+      if (ref.form === "20-F") {
+        const direct = R.directListingStatement(text, s);
+        if (direct) { line = `DIRECT ${lastRef} "${direct.slice(0, 260)}"`; tally.DIRECT++; row = { kind: "ordinary", ordinaryPerAds: 1, evidence: direct, ...ref }; break; }
+      }
     }
     if (!line) { line = `NONE ads-mentions=${mentions} ${lastRef || "no 20-F or F-6 in recent filings"}`; tally.NONE++; }
     console.log(`${s.padEnd(6)} ${line}`);
+    if (row) console.log(`MAP ${JSON.stringify({ symbol: s, ...row })}`);
   } catch (e) { tally.ERROR++; console.log(`${s.padEnd(6)} ERROR ${String(e?.message ?? e).slice(0, 60)}`); }
 }
 console.log(`\nshard ${K}/${N}: ${mine.length} 20-F symbols, reached ${reached} | ${JSON.stringify(tally)} | ${Math.round((Date.now() - started) / 1000)}s`);
