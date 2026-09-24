@@ -651,6 +651,9 @@ const TASKS = {
   // Read-only, no credential: the XOM succession merge on the real payloads,
   // through the shipped code, lifted (#552 COWORK #28).
   "sec-succession-verify": { script: "scripts/sec-succession-verify.mjs", args: (env) => [env.SYMBOLS || "XOM"], needsTypescript: true },
+  // Read-only, no credential: why a filer's fiscal year-end anchor is wrong
+  // (QXO, #552 COWORK #30). Lifts the shipped fiscalYearOffset.
+  "sec-fy-anchor": { script: "scripts/sec-fy-anchor-probe.mjs", args: (env) => [env.SYMBOLS || "QXO"], needsTypescript: true },
   "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
   "write-sec-sparse-sets": {
     script: "scripts/sec-sparse-sets-probe.mjs",
@@ -674,6 +677,14 @@ const TASKS = {
   // Read-only, no credential: why a universe symbol has no registrant row --
   // EDGAR's current ticker file and each CIK's submissions (#552 COWORK #29).
   "sec-ticker-status": { script: "scripts/sec-ticker-status-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
+  // QXO anchor fix measured before it ships (#552 COWORK #30).
+  "write-sec-fy-anchor-census": {
+    script: "scripts/sec-fy-anchor-census.mjs",
+    args: () => [],
+    writes: true,
+    needsTypescript: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -1065,6 +1076,15 @@ const TASKS = {
   "write-classification-needed-dry": {
     script: "scripts/classification-needed.mjs",
     args: () => ["--dry"],
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #16 item 3): where Pickers' Market Cap
+  // comes from today over the Pickers universe, for the Friday price split.
+  // 3 Redis reads.
+  "write-pickers-marketcap-census": {
+    script: "scripts/pickers-marketcap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
     writes: true,
   },
 };
