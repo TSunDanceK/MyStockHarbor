@@ -248,7 +248,11 @@ export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
  *   - every quarter's diluted share count is within Q4_SHARE_BASIS_TOLERANCE
  *     of the year's: a split or share-class change inside the year puts the
  *     quarters and the year on different share bases, and the difference
- *     would be an artefact of the split, not a quarter's earnings;
+ *     would be an artefact of the split, not a quarter's earnings. A filer
+ *     that states NO diluted count for any of the four periods is compared on
+ *     its basic counts instead (XOM tags only basic since 2013: it has no
+ *     dilutive securities). The two kinds are never mixed, and the count is
+ *     only this test's input, never part of the EPS;
  *   - the set is in USD as filed: a converted set carries each period at its
  *     own rate, and a year minus three quarters would mix four rates.
  */
@@ -261,16 +265,22 @@ export function derivedQ4Eps(
   const year = set.years.find((y) => y.fy === q4.fy && y.e === q4.e);
   if (!year) return null;
   const yearEps = valueOf(year, "epsDiluted");
-  const yearShares = valueOf(year, "sharesDiluted");
-  if (yearEps === null || yearShares === null || yearShares <= 0) return null;
+  if (yearEps === null) return null;
   const q = (fp: string) => set.quarters.find((p) => p.fy === q4.fy && p.fp === fp);
   const q3 = q("Q3"), q2 = q("Q2"), q1 = q("Q1");
   if (!q1 || !q2 || !q3) return null;
   if (!isConsecutive(q4, q3) || !isConsecutive(q3, q2) || !isConsecutive(q2, q1)) return null;
+  const periods = [year, q1, q2, q3];
+  const shareKey = periods.every((p) => valueOf(p, "sharesDiluted") !== null) ? "sharesDiluted"
+    : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"
+      : null;
+  if (!shareKey) return null;
+  const yearShares = valueOf(year, shareKey) as number;
+  if (yearShares <= 0) return null;
   let sum = 0;
   for (const p of [q1, q2, q3]) {
     const eps = valueOf(p, "epsDiluted");
-    const shares = valueOf(p, "sharesDiluted");
+    const shares = valueOf(p, shareKey);
     if (eps === null || shares === null) return null;
     if (Math.abs(shares / yearShares - 1) > Q4_SHARE_BASIS_TOLERANCE) return null;
     sum += eps;
