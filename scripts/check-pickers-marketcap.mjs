@@ -14,7 +14,6 @@
 //
 //   node scripts/check-pickers-marketcap.mjs
 import "./lib/register-ts-here.mjs";
-import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { readCodeOnly } from "./lib/source-code.mjs";
