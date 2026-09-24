@@ -210,6 +210,12 @@ type Props = {
   // MyStockHarbor SVG chart only. Default false preserves the standalone
   // behaviour for other callers (InsightPostClient).
   hideSourceToggle?: boolean;
+  /**
+   * The drawing width in viewBox units (default 760). /dashboard's wide-chart
+   * layout (lib/dashboardWide.ts) widens it in step with the box so the chart
+   * keeps its height and type size instead of scaling up. Layout only.
+   */
+  viewWidth?: number;
 };
 
 // Fixed, non-interactive brand watermark rendered on top of the chart
@@ -291,9 +297,10 @@ export default function PriceChart(props: Props) {
     showTradingViewLink = true,
     showTradeLink = true,
     hideSourceToggle = false,
+    viewWidth,
   } = props;
 
-  const width = 760;
+  const width = viewWidth && viewWidth > 0 ? viewWidth : 760;
 
   // Only mounts TradingViewChartEmbed (and its ~500KB tv.js script) once the
   // user explicitly clicks the toggle below -- the default experience never
@@ -452,7 +459,7 @@ export default function PriceChart(props: Props) {
   const x = useMemo(() => {
     return (i: number) =>
       padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
-  }, [series.length]);
+  }, [series.length, width]);
 
   const { pMin, pMax, pRange } = useMemo(() => {
     if (!hasData) return { pMin: 0, pMax: 1, pRange: 1 };

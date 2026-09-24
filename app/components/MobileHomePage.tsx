@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TickerLogo from "@/app/components/TickerLogo";
+import { activeRowStyle } from "@/lib/listboxNav";
+import { useListboxNav } from "@/app/components/useListboxNav";
 
 const DEFAULT_SYMBOL = "AAPL";
 
@@ -146,6 +148,15 @@ export default function MobileHomePage() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Arrow keys, Enter, Escape and Tab: the shared rules (#553 COWORK #36).
+  const nav = useListboxNav({
+    count: results.length,
+    open: searchOpen,
+    onSelect: (i) => { const r = results[i]; if (r) goToStock(r.symbol); },
+    onClose: () => setSearchOpen(false),
+    resetKey: query,
+  });
+
   function goToStock(symbol: string) {
     setQuery("");
     setResults([]);
@@ -219,7 +230,9 @@ export default function MobileHomePage() {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
           onFocus={() => setSearchOpen(true)}
+          {...nav.inputAria}
           onKeyDown={(e) => {
+            if (nav.onKeyDown(e)) return;
             if (e.key === "Enter" && results[0]) goToStock(results[0].symbol);
           }}
           placeholder="🔎  Search any ticker or company…"
@@ -238,6 +251,8 @@ export default function MobileHomePage() {
         />
         {searchOpen && results.length > 0 && (
           <div
+            {...nav.listProps}
+            aria-label="Ticker search results"
             style={{
               position: "absolute",
               top: "calc(100% - 4px)",
@@ -251,10 +266,12 @@ export default function MobileHomePage() {
               overflow: "hidden",
             }}
           >
-            {results.map((r) => (
+            {results.map((r, i) => (
               <button
                 key={r.symbol}
                 type="button"
+                tabIndex={-1}
+                {...nav.optionProps(i)}
                 onClick={() => goToStock(r.symbol)}
                 style={{
                   width: "100%",
@@ -268,6 +285,7 @@ export default function MobileHomePage() {
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
+                  ...(nav.active === i ? activeRowStyle(true) : null),
                 }}
               >
                 <TickerLogo symbol={r.symbol} size={22} radius={6} />
