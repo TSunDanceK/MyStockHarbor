@@ -1396,6 +1396,20 @@ check(
   "N identical generic headlines, N different pictures, for the whole set"
 );
 check(
+  "/headlines: past the end of the generic set, a fresh pass — no picture twice within any 3 neighbouring cards",
+  (() => {
+    const takenNames = new Set(), takenBuckets = new Map();
+    const n = tags.GENERIC_FALLBACK_NAMES.length;
+    const srcs = Array.from({ length: n * 3 }, (_, i) => tags.planHeadlineArt({ title: "Stocks drift as investors wait", key: `r${i}`, takenNames, takenBuckets }).art.src);
+    // No picture twice within any window of 3 (a desktop row), anywhere,
+    // including across the point where the set is released.
+    const k = Math.min(3, n);
+    for (let i = 0; i + k <= srcs.length; i++) if (new Set(srcs.slice(i, i + k)).size !== k) return false;
+    return true;
+  })(),
+  "repeating the first choice once the set ran out put the same picture twice in one row on a 44-card page"
+);
+check(
   "/headlines: the generic set is the any-market images",
   tags.GENERIC_FALLBACK_NAMES.length > 0 && tags.GENERIC_FALLBACK_NAMES.every((n) => /^(any-macro|exchanges-any)-\d+$/.test(n)),
   tags.GENERIC_FALLBACK_NAMES.join(", ")
