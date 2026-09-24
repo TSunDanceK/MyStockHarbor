@@ -1425,7 +1425,12 @@ export function buildSecEarningsView(
   // exist close the gap, which is what remains asserted — plus at least one
   // real expense line, because "revenue minus nothing equals operating income"
   // reconciles trivially and breaks nothing down.
-  const gp = valueOf(latest, "grossProfit");
+  // REVENUE LESS COST OF REVENUE where no GrossProfit line is filed (#552
+  // COWORK #42): SPCX files revenue, cost of revenue, R&D and SG&A but no
+  // gross-profit tag, so the reconciliation never ran and the note said its
+  // lines "do not add up" — they reach -141M against a filed -143M. Used for
+  // this test only; the table still shows what was filed.
+  const gp = valueOf(latest, "grossProfit") ?? nullableDiff(latest);
   const opex = ["researchAndDevelopment", "sellingGeneralAndAdministrative", "otherOperatingExpense"]
     .map((k) => valueOf(latest, k));
   const opInc = valueOf(latest, "operatingIncome");
