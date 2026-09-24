@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import type React from "react";
 import { cache } from "react";
 import {
-  getMonthDaysWithEarnings,
+  getMonthDayCounts,
   getDayEarningsForRender,
   getFullDayEarnings,
   populateNextMissingDate,
@@ -16,7 +16,7 @@ import {
   daysInMonth,
   getMonthVisibility,
 } from "@/lib/server/earningsCalendar";
-import { resolveCalendarDay, dayStateMessage } from "@/lib/server/calendarDayState";
+import { resolveCalendarDay, dayStateMessage, easternDate, outOfWindowCell } from "@/lib/server/calendarDayState";
 import { PRICE_COVERAGE_NOTE } from "@/lib/server/gridPriceCoverage";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
@@ -373,9 +373,9 @@ export default async function EarningsCalendarPage({
   const prevDisabled = monthPrefix <= firstYM;
   const nextDisabled = monthPrefix >= lastYM;
 
-  const [daysWithEarnings, dayData, dateComplete, forward] =
+  const [dayCounts, dayData, dateComplete, forward] =
     await Promise.all([
-      getMonthDaysWithEarnings(year, month),
+      getMonthDayCounts(year, month),
       // Shared with generateMetadata via cache() -- this does not re-fetch.
       loadDay(selectedDate),
       loadDayComplete(selectedDate),
@@ -415,6 +415,9 @@ export default async function EarningsCalendarPage({
     totalCandidates: dayData.totalCandidates,
     complete: dateComplete,
     monthVisibility: getMonthVisibility(year, month),
+    // TODAY'S US FILING DAY, STILL OPEN (#552 COWORK #23): "nothing yet", not a
+    // gap. On or after the Eastern date, never before it.
+    dayOpen: selectedDate >= easternDate(new Date()),
   });
   const dayStateNote = dayStateMessage(dayState);
 
@@ -579,17 +582,22 @@ export default async function EarningsCalendarPage({
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
+              {/* 2026-09-23 (#552, COWORK #26 items 2-3): "EPS/revenue
+                  estimates" dropped -- the grid no longer shows estimates. The
+                  day-state note (e.g. the "cannot be listed right now" gap
+                  message) is no longer repeated here; it is shown once, in the
+                  day panel below. */}
               {dayState.kind === "listed" ? (
                 <>
                   <strong>{dayState.items.length}</strong> US-listed{" "}
                   {dayState.items.length === 1 ? "company has" : "companies have"} results on file
                   for {selectedDateLabel}. See how many have filed on each day, then drill into any
-                  date for tickers, EPS/revenue estimates, price and market cap.
+                  date for tickers, price and market cap.
                 </>
               ) : (
                 <>
-                  {dayStateNote} See how many companies have filed on each day, then drill into any
-                  date for tickers, EPS/revenue estimates, price and market cap.
+                  See how many companies have filed on each day, then drill into any date for
+                  tickers, price and market cap.
                 </>
               )}
             </p>
@@ -686,14 +694,42 @@ export default async function EarningsCalendarPage({
                   }
 
                   const cellDate = `${year}-${pad2(month)}-${pad2(day)}`;
-                  const hasEarnings = daysWithEarnings.has(cellDate);
+                  const count = dayCounts.get(cellDate) ?? 0;
                   const isSelected = cellDate === selectedDate;
                   const isToday = cellDate === todayDate;
-                  const outOfWindow = cellDate < windowStart || cellDate > windowEnd;
+                  const outside = outOfWindowCell(cellDate, windowStart, windowEnd);
 
-                  // Greyed, non-clickable archived/out-of-range day: faded
-                  // number + red ✕, no populate.
-                  if (outOfWindow) {
+                  // A FUTURE day is neutral: a faded number, nothing else. A
+                  // red ✕ there read as "failed" (#552 COWORK #23).
+                  if (outside === "future") {
+                    return (
+                      <div
+                        key={cellDate}
+                        aria-disabled="true"
+                        title="Nothing filed yet"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 4,
+                          padding: "10px 4px",
+                          minHeight: 62,
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.05)",
+                          background: "transparent",
+                          color: "#64748b",
+                          cursor: "default",
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.45 }}>{day}</span>
+                      </div>
+                    );
+                  }
+
+                  // Greyed, non-clickable archived day (before the window):
+                  // faded number + ✕, no populate.
+                  if (outside === "archived") {
                     return (
                       <div
                         key={cellDate}
@@ -748,19 +784,25 @@ export default async function EarningsCalendarPage({
                         {day}
                         {isToday ? " •" : ""}
                       </span>
-                      {hasEarnings ? (
+                      {count > 0 ? (
+                        // THE COUNT, NOT ONLY A DOT (#552 COWORK #23): the intro
+                        // promises "how many companies have filed on each day".
                         <span
-                          aria-label="Companies report on this date"
-                          title="Companies report on this date"
+                          aria-label={`${count} ${count === 1 ? "company has" : "companies have"} results on file`}
+                          title={`${count} ${count === 1 ? "company has" : "companies have"} results on file`}
                           style={{
-                            display: "block",
-                            width: 8,
-                            height: 8,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            lineHeight: 1,
+                            padding: "3px 7px",
                             borderRadius: 999,
-                            background: "#22c55e",
-                            boxShadow: "0 0 6px rgba(34,197,94,0.55)",
+                            color: "#bbf7d0",
+                            background: "rgba(34,197,94,0.18)",
+                            border: "1px solid rgba(34,197,94,0.45)",
                           }}
-                        />
+                        >
+                          {count}
+                        </span>
                       ) : (
                         <span style={{ fontSize: 11, opacity: 0.3 }}>—</span>
                       )}
@@ -798,6 +840,7 @@ export default async function EarningsCalendarPage({
                 initialItems={dayData.items.slice(0, 50)}
                 initialHasMore={dayData.items.length > 50}
                 complete={dateComplete}
+                emptyExplainedAbove={dayState.kind !== "listed"}
               />
               {/* ONCE, AND ONLY WHEN A ROW IS ACTUALLY BLANK. Printed under the
                   table rather than in every cell: fifty rows each saying "not
@@ -830,10 +873,14 @@ export default async function EarningsCalendarPage({
               record" are different sentences and both need saying. */}
           <EarningsExpectedSection state={forward.expected} />
 
+          {/* SEC, NOT FMP (#535 COWORK #18 §3). The grid lists announcements
+              filed with the SEC; a 6-K carries no item code, and the text rule
+              measured too many false positives to list as results (COWORK #23,
+              rule C), so those filers are named as absent rather than guessed. */}
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
-            Data source: financialmodelingprep.com. Estimates can change
-            before the report date — treat this as a starting point for
-            further research, not investment advice.
+            Dates are the day each company filed its results announcement with the SEC
+            (Form 8-K, Item 2.02). Companies filing results only as Form 6-K are not
+            listed here. This is a starting point for further research, not investment advice.
           </p>
 
           {/* Continue exploring — server-rendered internal links into other

@@ -42,6 +42,10 @@
 // claude/fmp-exit-options-pickers-2026-09-12.md §0. A dash claims the figure
 // was looked for and found missing FOR THIS COMPANY, which is a statement about
 // the company. Nothing is the truthful rendering of "not offered here".
+//
+// SUPERSEDED FOR THE EARNINGS GRID, 2026-09-23 (owner ruling, #535 COWORK
+// #23): once the grid moved to SEC's announcements, an off-pool row shows "—",
+// and the note below says once what the dash means.
 
 /** Whether this row's price and market cap can be shown at all. */
 export type PriceCoverage =
@@ -81,5 +85,5 @@ export function showsPriceCells(coverage: PriceCoverage): boolean {
  */
 export const PRICE_COVERAGE_NOTE =
   "Price and market cap are shown for the companies this site tracks closely. " +
-  "Blank cells are companies outside that set — the figures are not collected " +
-  "for them, rather than missing for those companies.";
+  "A dash marks companies outside that set — the figures are not collected " +
+  "for them here, rather than missing for those companies.";

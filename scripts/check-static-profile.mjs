@@ -3,8 +3,10 @@
 //
 //   1. NO FMP SNAPSHOT. data/static-profile.json is gone, and no file under
 //      app/ or lib/ imports it. MUTATION: the import put back into the module.
-//   2. LOOKUP ORDER. Cache, then SEC SIC, then null. MUTATION: a snapshot-style
-//      leg reinserted ahead of SIC changes the answering leg.
+//   2. LOOKUP ORDER. Cache, then the filing override, then the SIC table (or the
+//      major group's sector), then null; every Pickers label reachable.
+//      MUTATIONS: an FMP-style leg ahead of SIC; the override leg removed; a
+//      label's only rule emptied.
 //   3. A MISS IS NULL, logged by name, and makes no network request.
 //   4. CIK COVERAGE is counted by membership over registrants.json's rows.
 //   5. THE CLASSIFICATION DATE is the answering leg's own. MUTATION: the SIC
@@ -34,8 +36,10 @@ const inline = (text) => text
   .replace(/^import cikMap from "@\/data\/cik-map.json";$/m, () => `const cikMap = ${read("data/cik-map.json")};`)
   .replace(/^import registrantsFile from "@\/data\/sec\/registrants.json";$/m,
     () => `const registrantsFile = ${read("data/sec/registrants.json")};`)
-  .replace(/^import sicSectorFile from "@\/data\/sec\/sic-sector.json";$/m,
-    () => `const sicSectorFile = ${read("data/sec/sic-sector.json")};`)
+  .replace(/^import classificationFile from "@\/data\/sec\/sic-classification.json";$/m,
+    () => `const classificationFile = ${read("data/sec/sic-classification.json")};`)
+  .replace(/^import overridesFile from "@\/data\/sec\/classification-overrides.json";$/m,
+    () => `const overridesFile = ${read("data/sec/classification-overrides.json")};`)
   .replace(/^import \{ lookupSpellingIn \} from "@\/lib\/symbolSpellings\.mjs";$/m,
     "const { lookupSpellingIn } = globalThis.__symbolSpellings;");
 
@@ -80,22 +84,49 @@ check("either cached field alone counts as a cache hit",
   sp.resolveProfile("AAPL", { sector: "Energy" }).source === "cache" &&
     sp.resolveProfile("AAPL", { industry: "Gold" }).source === "cache");
 const aapl = sp.resolveProfile("AAPL", null);
-check("no cache row → the SIC leg answers (AAPL, SIC 3571, SEC's own description)",
-  aapl.source === "sic" && aapl.industry === "Electronic Computers" &&
-    aapl.sectorSource === (aapl.sector ? "sic" : "none") && aapl.industrySource === "sic", JSON.stringify(aapl));
+check("no cache row → the SIC table answers in the Pickers label set (AAPL, SIC 3571)",
+  aapl.source === "sic" && aapl.sector === "Technology" && aapl.industry === "Computer Hardware" &&
+    aapl.sectorSource === "sic" && aapl.industrySource === "sic", JSON.stringify(aapl));
 check("...likewise for a cache row of nulls, and an undefined one",
   sp.resolveProfile("AAPL", { sector: null, industry: null }).source === "sic" &&
     sp.resolveProfile("AAPL", undefined).source === "sic");
 const nvda = sp.resolveProfile("NVDA", null);
-check("SIC 3674 carries the one owner-decided label",
+check("SIC 3674 → Technology / Semiconductors (the preset's label)",
   nvda.source === "sic" && nvda.sector === "Technology" && nvda.industry === "Semiconductors", JSON.stringify(nvda));
-check("the label table is one row, and records its source",
-  Object.keys(sp.SIC_INDUSTRY_LABELS).length === 1 && /owner decision/.test(sp.SIC_INDUSTRY_LABELS["3674"]?.source ?? ""));
+// THE OVERRIDE LEG FIRST: a filer whose own 10-K text placed it.
+const OV = JSON.parse(read("data/sec/classification-overrides.json")).overrides;
+const pypl = sp.resolveProfile("PYPL", null);
+check("an override from the filer's own text wins over the table (PYPL, SIC 7389 → payments)",
+  pypl.source === "filing" && pypl.industry === OV.PYPL.industry && pypl.industry === "Financial - Credit Services" &&
+    pypl.filedOn === OV.PYPL.filedOn, JSON.stringify(pypl));
+{
+  const M = await load(once(SOURCE, "  if (o && (clean(o.sector) || clean(o.industry))) {", "  if (false) {"));
+  check("MUTATION: without the override leg PYPL is no longer placed by its filing", M.resolveProfile("PYPL", null).source !== "filing");
+}
+{
+  // A CODE THE TABLE DOES NOT LIST takes its 2-digit major group's sector.
+  const T = JSON.parse(read("data/sec/sic-classification.json"));
+  const REG = JSON.parse(read("data/sec/registrants.json")).rows;
+  const sym = Object.keys(REG).sort().find((k) => REG[k].sic && !T.codes[REG[k].sic] && !OV[k] && T.majorGroups[REG[k].sic.slice(0, 2)]);
+  const r = sp.resolveProfile(sym, null);
+  check(`an unlisted code takes its major group's sector (${sym}, SIC ${REG[sym].sic})`,
+    r.source === "sic" && r.sector === T.majorGroups[REG[sym].sic.slice(0, 2)] && r.industry === null, JSON.stringify(r));
+  // EVERY PICKERS LABEL REACHABLE (COWORK #22 condition 1).
+  const rules = JSON.parse(read("data/sec/classification-rules.json")).rules;
+  const reach = new Set([...Object.values(T.codes).map((c) => c.industry).filter(Boolean), ...rules.filter((x) => x.phrases.length).map((x) => x.industry)]);
+  const missing = Object.keys(T.labels).filter((l) => !reach.has(l));
+  check(`every one of the ${Object.keys(T.labels).length} Pickers labels is reachable from the table or a rule`, missing.length === 0, missing.join(", "));
+  check("every table and rule label is in the label list (no stray names)",
+    [...reach].every((l) => l in T.labels) && Object.values(T.codes).every((c) => !c.sector || Object.values(T.labels).includes(c.sector)));
+  const mutated = rules.map((x) => (x.industry === "Uranium" ? { ...x, phrases: [] } : x));
+  const reach2 = new Set([...Object.values(T.codes).map((c) => c.industry).filter(Boolean), ...mutated.filter((x) => x.phrases.length).map((x) => x.industry)]);
+  check("MUTATION: a label's only rule emptied is caught", Object.keys(T.labels).some((l) => !reach2.has(l)));
+}
 check("BRK.B reaches registrants' BRK-B row (the dot/dash bridge)",
   sp.sicProfileFor("BRK.B") !== null && JSON.stringify(sp.sicProfileFor("BRK.B")) === JSON.stringify(sp.sicProfileFor("BRK-B")));
 {
-  const M = await load(once(SOURCE, "  const sic = sicProfileFor(symbol);",
-    '  if (String(symbol).toUpperCase() === "AAPL") return { sector: "Technology", industry: "Consumer Electronics", source: "cache", sectorSource: "fmp-cache", industrySource: "fmp-cache" };\n  const sic = sicProfileFor(symbol);'));
+  const M = await load(once(SOURCE, "  const sec = sicProfileFor(symbol);",
+    '  if (String(symbol).toUpperCase() === "AAPL") return { sector: "Technology", industry: "Consumer Electronics", source: "cache", sectorSource: "fmp-cache", industrySource: "fmp-cache" };\n  const sec = sicProfileFor(symbol);'));
   check("MUTATION: an FMP-style leg ahead of SIC changes the answering leg", M.resolveProfile("AAPL", null).source !== "sic");
 }
 
@@ -145,6 +176,7 @@ console.log("\n=== 5. The classification date is the answering leg's own ===\n")
   const M = await load(once(SOURCE, 'if (resolved.source === "sic") return day(REGISTRANTS_SIC_AS_OF);',
     'if (resolved.source === "sic") return day("2026-01-01");'));
   check("MUTATION: the SIC leg borrowing another date is caught", M.classificationAsOf({ source: "sic" }, null) !== regAsOf);
+  check("filing leg → the filing date of the text it came from", sp.classificationAsOf(pypl, null) === OV.PYPL.filedOn);
 }
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
