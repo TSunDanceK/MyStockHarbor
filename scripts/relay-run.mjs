@@ -638,6 +638,8 @@ const TASKS = {
   // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
   // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
   // ~70 commands.
+  // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
+  "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
