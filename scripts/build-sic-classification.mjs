@@ -30,6 +30,10 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
     industry: r.industry,
     sector: labels[r.industry],
     reit: r.industry.startsWith("REIT - "),
+    // SELF-ONLY: generic self-descriptions ("a technology platform", "an online
+    // marketplace") count only inside the filer's own "X is a …" sentence and
+    // only for a catch-all code, never as a stray mention (#552 COWORK #26).
+    selfOnly: Boolean(r.selfOnly),
     res: r.phrases.map((p) => ({ phrase: p, re: new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi") })),
   }));
   // A CUSTOMER OR MARKET, NOT THE BUSINESS: "solutions to banks, broker-dealers"
@@ -83,16 +87,22 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
     const entry = listed ?? (sic ? { sector: table.majorGroups[sic.slice(0, 2)] ?? null, industry: null, rules: true, group: true } : null);
     const row = descriptions[symbol];
     const text = row ? String(row[3] ?? "").slice(0, window) : "";
-    const scope = entry?.sector ?? null;
+    // CROSS-SECTOR codes (3559 special machinery, 4400 water transport, 3690
+    // misc electrical): the table keeps its default, but the rules may place a
+    // filer in another sector ("wafer" → Semiconductors, "cruise" → Travel
+    // Services) (#552 COWORK #26).
+    const scope = entry?.crossSector ? null : entry?.sector ?? null;
+    const catchAll = !entry?.sector;
     const reitScope = sic === "6798" || /\breal estate investment trust\b/i.test(text);
     // EARLIEST MENTION WINS, ties to rule order: the filer states its business
     // first, and a later phrase is usually a customer, a market or a peer.
     let hit = null;
     if (text) {
-      const eligible = compiled.filter((r) => (!scope || r.sector === scope) && (r.reit ? reitScope : sic !== "6798"));
+      const eligible = compiled.filter((r) => (!scope || r.sector === scope) && (r.reit ? reitScope : sic !== "6798") && (!r.selfOnly || catchAll));
+      const general = eligible.filter((r) => !r.selfOnly);
       const earliest = (from, to) => {
         let best = null;
-        for (const r of eligible) for (const p of r.res) {
+        for (const r of general) for (const p of r.res) {
           const m = firstOwn(p.re, text, from, to);
           if (m && (!best || m.index < best.at)) best = { r, p, at: m.index, len: m[0].length };
         }
