@@ -8,6 +8,7 @@ import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
+import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -247,7 +248,7 @@ type ViewMode = "list" | "chart";
 // spec). General/Performance/Valuation/Dividends/Financials/Analysts.
 export type TabKey = "general" | "performance" | "valuation" | "dividends" | "financials" | "analysts";
 
-const TABS: { key: TabKey; label: string }[] = [
+const ALL_TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "General" },
   { key: "performance", label: "Performance" },
   { key: "valuation", label: "Valuation" },
@@ -255,6 +256,11 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "financials", label: "Financials" },
   { key: "analysts", label: "Analysts" },
 ];
+// Hidden, not removed (2026-09-23): lib/pickerHiddenFields.ts decides which tabs
+// and columns render. The Analysts tab goes because every data column on it
+// is hidden; its definition stays above so removing the registry entry brings
+// it back.
+const TABS = ALL_TABS.filter((t) => !HIDDEN_PICKER_TABS.includes(t.key));
 
 // The one number each tab leads with on a phone.
 //
@@ -546,6 +552,11 @@ function divYieldPct(e: ResultEntry, d: DerivedRow): number | null {
 
 /** PERCENT, not a fraction. No price in this one -- both inputs are filings. */
 function payoutRatioPct(e: ResultEntry, _d: DerivedRow): number | null {
+  // ON A FILINGS ROW, THE STORED RATIO (2026-09-23). Div ($) is SEC there but
+  // EPS is not yet (COWORK #5 Q1: the TTM EPS basis is being fixed by Relay A),
+  // so dividing one by the other would mix two sources in one cell. The stored
+  // payout ratio stays until EPS moves; then this branch goes.
+  if (e.fundamentalsFrom === "sec") return num(e.payoutRatio);
   const dps = num(e.divPerShare);
   const eps = num(e.epsTtm);
   if (dps == null || eps == null || eps <= 0) return num(e.payoutRatio);
@@ -683,7 +694,10 @@ export default function PickerResultsGrid({
 }) {
   const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
+  // A page configured to open on a hidden tab opens on General instead.
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    HIDDEN_PICKER_TABS.includes(defaultTab) ? "general" : defaultTab
+  );
   const [sort, setSort] = useState<SortState>(null);
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
 
@@ -895,6 +909,11 @@ export default function PickerResultsGrid({
       financials: [symbol, name, marketCap, revenue, opinc, netinc, fcf, eps],
       analysts: [symbol, name, marketCap, rating, analysts, price, ptgt, ptups],
     };
+    // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
+    // hidden column cannot be rendered, sorted or picked as a phone headline.
+    for (const tab of Object.keys(sets) as TabKey[]) {
+      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key));
+    }
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
     // without it the table keeps the tone it was first built with.
