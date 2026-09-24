@@ -11,6 +11,7 @@ import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGr
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { isRegularSessionOpen } from "@/lib/server/marketHours";
@@ -94,6 +95,11 @@ export type PickerResultConfig = {
   // presetFilters otherwise: the page ships the full universe with these
   // already applied, and the visitor can loosen or combine them in place.
   presetPredicates?: Predicate[];
+  // Fundamentals presets only (#553 COWORK #14): drop exchange-traded notes and
+  // preferreds from the universe this page ships. They trade under their own
+  // tickers but SEC files their issuer's statements, so a note's price against
+  // its parent's cash flow reads as a "cash-rich value stock". lib/server/pickerEquity.
+  excludeNonEquity?: boolean;
   // The single quantity this page's rows are ORDERED by, as opposed to the
   // condition that decides which rows are on it. Separating the two is the
   // whole point: membership stays a judgement, ordering becomes one named
@@ -773,7 +779,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
     // membership flags are computed once up front so they can be folded into
     // each entry's reasons/score alongside the 18 custom-builder flags.
     const categoryFlags = buildCategoryFlags(sections, signalRecords);
-    const all = signalRecords.map((record): ResultEntry | null => {
+    let all = signalRecords.map((record): ResultEntry | null => {
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const flags: ResultEntryFlags = { ...flagsFromRecord(record), ...(categoryFlags.get(symbol) ?? {}) };
@@ -797,6 +803,10 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
+
+    if (config.kind === "preset" && config.excludeNonEquity) {
+      all = all.filter((entry) => !excludedFromFundamentals(entry.symbol));
+    }
 
     // NOTE: "preset" deliberately returns the FULL universe here, exactly like
     // "allSymbols". The page's own condition is applied client-side instead,
