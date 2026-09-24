@@ -1,9 +1,9 @@
 // The "Who is spending" record's store (Relay C, #563 COWORK #1 D1). The page
 // imports THIS module only; the builder (./capexSpendingJob) reads the SEC
-// manifest and fact sets and must not be pulled into the page bundle.
+// fact sets and must not be pulled into the page bundle.
 //
 // REDIS: one key. The job (daily cron, weekly rebuild) does 1 GET a day, and
-// on a rebuild 1 GET of the manifest, ~N/100 MGETs of fact sets and 1 SET; the
+// on a rebuild ~27 MGETs of fact sets (100 keys each) and 1 SET; the
 // page does 1 GET per hourly render.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";

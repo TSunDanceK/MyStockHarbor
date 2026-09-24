@@ -14,8 +14,8 @@ export const maxDuration = 300;
 // old. The cron is daily because /cache-health reads a cron's minute and hour
 // only; a weekly cron would read as a stalled daily job.
 //
-// Redis: 1 GET a day for the record's age. On a rebuild: 1 GET of the SEC
-// manifest, one MGET per 100 fact sets, 1 SET (+ the job-run stamp).
+// Redis: 1 GET a day for the record's age. On a rebuild: one MGET per 100
+// fact-set keys (~2,700 keys, so ~27), 1 SET (+ the job-run stamp).
 const SPENDING_FRESH_DAYS = 6.5;
 
 async function authorize(req: NextRequest): Promise<Response | null> {
@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       sectors: built.record?.sectors.length ?? 0,
       otherCurrency: built.record?.otherCurrency ?? 0,
       unclassified: built.record?.unclassified ?? 0,
+      duplicateListings: built.record?.duplicateListings ?? 0,
       years: built.record ? `${built.record.years[0]}..${built.record.years[built.record.years.length - 1]}` : null,
       wrote,
       dryRun,

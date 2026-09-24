@@ -137,3 +137,59 @@ export function buildContractRows(rows: Array<{ ticker: string; amount: number; 
     entityCount: r.entities.length,
   }));
 }
+
+// ── "Who is spending" (Layer 1, #563 COWORK #1 D1) ─────────────────────────
+// One row per sector. The long bar is the latest calendar year on ONE scale
+// shared by every sector (the largest sector is full width); the five small
+// bars are that sector's own five years on its own scale, so they show shape,
+// not size. Capex ÷ revenue is shown as text for the first and latest year.
+
+export type SpendingSectorInput = {
+  sector: string;
+  cohort: number;
+  capex: number[];
+  ratioCohort: number;
+  capexToRevenue: (number | null)[];
+  top: string[];
+};
+
+export type SpendingView = {
+  sector: string;
+  cohort: number;
+  latest: string;
+  /** 0..100 on the scale shared by all sectors. */
+  barPct: number;
+  /** 0..100 per year, on this sector's own scale. */
+  spark: number[];
+  sparkTitles: string[];
+  changeText: string;
+  ratioFirst: string | null;
+  ratioLatest: string | null;
+  ratioCohort: number;
+  top: string[];
+};
+
+const pctText = (x: number | null) => (x === null ? null : `${(x * 100).toFixed(1)}%`);
+
+export function buildSpendingRows(sectors: SpendingSectorInput[], years: number[]): SpendingView[] {
+  const last = years.length - 1;
+  const max = Math.max(0, ...sectors.map((s) => s.capex[last] ?? 0));
+  return sectors.map((s) => {
+    const own = Math.max(0, ...s.capex);
+    const first = s.capex[0];
+    const latest = s.capex[last];
+    return {
+      sector: s.sector,
+      cohort: s.cohort,
+      latest: formatAmount(latest, "USD"),
+      barPct: max > 0 ? (Math.max(0, latest) / max) * 100 : 0,
+      spark: s.capex.map((v) => (own > 0 ? (Math.max(0, v) / own) * 100 : 0)),
+      sparkTitles: s.capex.map((v, i) => `${years[i]}: ${formatAmount(v, "USD")}`),
+      changeText: first > 0 ? changeText(((latest - first) / first) * 100) : "New line",
+      ratioFirst: pctText(s.capexToRevenue[0] ?? null),
+      ratioLatest: pctText(s.capexToRevenue[last] ?? null),
+      ratioCohort: s.ratioCohort,
+      top: s.top,
+    };
+  });
+}
