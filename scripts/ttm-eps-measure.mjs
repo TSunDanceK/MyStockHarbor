@@ -177,4 +177,12 @@ for (const p of pinned.sort((x, y) => x.s.localeCompare(y.s))) {
 }
 const missing = PINNED.filter((s) => !sets.has(s));
 if (missing.length) console.log(`  not in the read: ${missing.join(" ")}`);
+// THE PINS' OWN ROWS, compact, so check-sec-valuation can pin these filers on
+// their real filed values (SEC only): end, fp, fy, epsDiluted, sharesDiluted.
+console.log(`\npin rows (SEC values only):`);
+const row = (p) => [p.e, p.fp, p.fy, valueOf(p, "epsDiluted"), valueOf(p, "sharesDiluted")];
+for (const s of PINNED) {
+  const set = sets.get(s);
+  if (set) console.log(`  PIN ${s} ${JSON.stringify({ cur: set.cur ?? null, annualForm: REG[s]?.annualForm ?? null, q: set.quarters.slice(0, 8).map(row), y: set.years.slice(0, 2).map(row) })}`);
+}
 console.log(`\nRedis commands used by this read: ${commands}`);
