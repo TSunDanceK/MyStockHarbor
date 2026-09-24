@@ -115,6 +115,30 @@ console.log("\n2b. the newest source wins (COWORK #45)");
     "refuse" in R.decideAdsRow(ING, "ING", "Each ADS represents one ordinary share.", false));
   const ingNew = R.decideAdsRow(ING, "ING", "Each ADS represents one ordinary share.", true);
   check("ING: the same with an F-6 filed AFTER the 20-F → that F-6's ratio", "row" in ingNew && ingNew.row.from === "F-6" && ingNew.row.ordinaryPerAds === 1, JSON.stringify(ingNew));
+  const IRS = T("Global Depositary Shares, each representing ten shares of Common Stock IRS New York Stock Exchange");
+  const ir = R.decideAdsRow(IRS, "IRS", null, false);
+  check("IRS: Global Depositary Shares are depositary shares (never a direct listing), 10", "row" in ir && ir.row.kind === "ads" && ir.row.ordinaryPerAds === 10, JSON.stringify(ir));
+  check("TV: GDSs of CPOs → refused (the CPO is itself a bundle of shares)",
+    "refuse" in R.decideAdsRow(T("(for listing purposes only) Global Depositary Shares (“GDSs”), each representing five Ordinary Participation Certificates (Certificados de Participación Ordinarios) (“CPOs”) TV New York Stock Exchange"), "TV", null, false));
+  check("CX: ADSs of CPOs → refused, never the CPO's 'two Series A shares'",
+    "refuse" in R.decideAdsRow(T("Ordinary Participation Certificates (Certificados de Participación Ordinarios), or CPOs, each CPO representing two Series A shares and one Series B share, traded in the form of American Depositary Shares CX New York Stock Exchange"), "CX", null, false));
+  for (const [sym, row] of [["AVAL", "American Depositary Shares, each representing 20 preferred shares, par value Ps 1.00 per preferred share AVAL New York Stock Exchange"],
+    ["ITUB", "Preferred Shares, without par value* New York Stock Exchange American Depositary Shares (as evidenced by American Depositary Receipts), each representing one Preferred Share ITUB New York Stock Exchange"]]) {
+    const r = R.decideAdsRow(T(row), sym, null, false);
+    check(`${sym}: depositary shares of PREFERRED shares → refused (EPS and the share count are per common share)`, "refuse" in r, JSON.stringify(r));
+  }
+  const PBR = T("American Depositary Shares, or ADSs, each representing two Common Shares PBR /PBRA New York Stock Exchange American Depositary Shares, each representing two Preferred Shares");
+  check("PBR-A: a class ticker no row names never borrows the common ADS line", "refuse" in R.decideAdsRow(PBR, "PBR-A", null, false));
+  const pb = R.decideAdsRow(PBR, "PBR", null, false);
+  check("PBR: its own row, two common shares", "row" in pb && pb.row.ordinaryPerAds === 2, JSON.stringify(pb));
+  const Mp = await loadR(once(RSRC, "(?:(?!preferred|preference)[A-Za-z.&]+\\s+)", "(?:[A-Za-z.&]+\\s+)"));
+  const Mpp = await loadR(once(RSRC, "      if (PREFERRED_UNDERLYING.test(cover.title)) return", "      if (false) return"));
+  const mp = Mp.decideAdsRow(T("Preferred Shares* New York Stock Exchange American Depositary Shares, each representing four Preferred Shares CIB New York Stock Exchange"), "CIB", null, false);
+  const mpp = Mpp.decideAdsRow(T("Preferred Shares* New York Stock Exchange American Depositary Shares, each representing four Preferred Shares CIB New York Stock Exchange"), "CIB", null, false);
+  const Mb = await loadR(once(once(RSRC, "(?:(?!preferred|preference)[A-Za-z.&]+\\s+)", "(?:[A-Za-z.&]+\\s+)"), "      if (PREFERRED_UNDERLYING.test(cover.title)) return", "      if (false) return"));
+  const mb = Mb.decideAdsRow(T("Preferred Shares* New York Stock Exchange American Depositary Shares, each representing four Preferred Shares CIB New York Stock Exchange"), "CIB", null, false);
+  check("MUTATION: both preferred guards removed → CIB reads 4 per preferred share (caught)", "row" in mb, JSON.stringify(mb));
+  check("MUTATION: either preferred guard alone still refuses CIB", "refuse" in mp && "refuse" in mpp, JSON.stringify([mp, mpp]));
   const Ms = await loadR(once(RSRC, "  if (ADS_MENTION.test(section)) return { title: adsWordsOf(section), kind: \"ads\" };\n", ""));
   const es = Ms.decideAdsRow(E, "E", null, false);
   check("MUTATION: the section-level ADS rule removed → E reads as a direct listing (caught)", !("row" in es && es.row.kind === "ads"), JSON.stringify(es));
