@@ -201,7 +201,7 @@ async function getBenchmarksDataInner(
     }
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
-      scope: scope === "crypto" ? "Crypto Benchmarks (FMP)" : "Benchmarks (FMP)",
+      scope: scope === "crypto" ? "Crypto Benchmarks" : "Benchmarks",
       items: [],
     };
 
@@ -235,7 +235,7 @@ async function getBenchmarksDataInner(
 
   const payload: BenchPayload = {
     updatedAt: now.toISOString(),
-    scope: scope === "crypto" ? "Crypto Benchmarks (FMP)" : "Benchmarks (FMP)",
+    scope: scope === "crypto" ? "Crypto Benchmarks" : "Benchmarks",
     items,
   };
 

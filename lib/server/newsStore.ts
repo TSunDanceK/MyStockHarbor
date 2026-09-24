@@ -337,6 +337,35 @@ export async function readOrRefreshSymbolNews<T extends NewsMergeItem>(
   return result;
 }
 
+/**
+ * Several symbols' stored records in ONE command (MGET), for the sector feed.
+ *
+ * ADDED 2026-09-23 (#553 COWORK #1). Spec §4 defines a sector feed as "the union
+ * of the sector's constituent per-symbol stores, deduped"; before this the sector
+ * feed asked FMP for its constituents directly, outside NEWS_PROVIDER. READ-ONLY:
+ * it never refreshes a constituent, so a sector page costs one Redis command and
+ * no upstream call, and a symbol nobody has viewed contributes nothing yet.
+ *
+ * Returns only the symbols that have a record. Never throws: a failed read is an
+ * empty map, which the caller treats as "nothing new this pass".
+ */
+export async function readStoredSymbolNews<T>(symbols: string[]): Promise<Map<string, T[]>> {
+  const out = new Map<string, T[]>();
+  const upper = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
+  if (!redis || !upper.length) return out;
+  try {
+    const entries = await redis.mget<(StoredNews<T> | null)[]>(...upper.map(symbolKey));
+    entries.forEach((entry, i) => {
+      if (entry && typeof entry === "object" && Array.isArray(entry.items) && entry.items.length) {
+        out.set(upper[i], entry.items);
+      }
+    });
+  } catch {
+    // Same contract as readStored: a Redis failure reads as "nothing stored".
+  }
+  return out;
+}
+
 export async function readOrRefreshSectorNews<T extends NewsMergeItem>(
   slug: string,
   deps: Omit<RefreshDeps<T>, "isEarnings">,

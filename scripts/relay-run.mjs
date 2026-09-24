@@ -620,6 +620,14 @@ const TASKS = {
   // READS ONLY: the pairing rewrite's per-run counters and the drained count.
   // READS ONLY: HLEN of the grid's day index and the rewrite job's last
   // summary (#552). 3 commands.
+  // READS ONLY: COWORK #3's measurement (#552). Aggregates only: SIC coverage,
+  // sector agreement per filter, industry purity per SIC code, preset counts.
+  // Fetches SEC submissions for symbols registrants.json lacks.
+  "write-sic-classification-census": {
+    script: "scripts/sic-classification-census.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -968,6 +976,14 @@ const TASKS = {
   "write-fmp-cache-delete": {
     script: "scripts/fmp-cache-delete.mjs",
     args: () => [],
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #11): items per sector
+  // news page on the free stack, from the shipped sectorWindow + the stores.
+  "write-sector-news-count": {
+    script: "scripts/sector-news-free-count.mjs",
+    args: () => [],
+    needsTypescript: true,
     writes: true,
   },
 };
