@@ -64,6 +64,10 @@ type StockValuationData = {
   /** Why a figure is blank, in words; null where it has a value. From SEC. */
   reasons?: Partial<Record<"peRatio" | "priceToSalesRatio" | "priceToBookRatio" | "evToEbitda", string | null>>;
   sourceNote: string;
+  /** "TTM to 26 Jul 2026" or "FY2025": which twelve months the P/E is on. */
+  peBasis?: string | null;
+  /** The derived-Q4 caveat, when the TTM includes one. */
+  peBasisNote?: string | null;
 };
 
 type AnalystRatingData = {
@@ -1010,7 +1014,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
               </div>
               {!valuationLoading && valuation ? (
                 <div className="stock-stat-cell">
-                  <div className="stock-stat-label">P/E (TTM)</div>
+                  <div className="stock-stat-label">P/E ({valuation.peBasis ?? "TTM"})</div>
                   <div className="stock-stat-value">{formatValuationMultiple(valuation.peRatio)}</div>
                   <div className="stock-stat-sub">See valuation ↓</div>
                 </div>
@@ -1131,7 +1135,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>{symbol} valuation multiples (TTM)</h2>
                 <div className="valuationGrid">
                   {[
-                    { label: "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio },
+                    { label: valuation?.peBasis ? `P/E Ratio (${valuation.peBasis})` : "P/E Ratio", value: valuation?.peRatio, reason: valuation?.reasons?.peRatio ?? (valuation?.peRatio != null ? valuation?.peBasisNote : null) },
                     { label: "P/S Ratio", value: valuation?.priceToSalesRatio, reason: valuation?.reasons?.priceToSalesRatio },
                     { label: "P/B Ratio", value: valuation?.priceToBookRatio, reason: valuation?.reasons?.priceToBookRatio },
                     { label: "EV/EBITDA", value: valuation?.evToEbitda, reason: valuation?.reasons?.evToEbitda },
