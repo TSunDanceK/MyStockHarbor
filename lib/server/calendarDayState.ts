@@ -45,6 +45,12 @@ export type CalendarDayInputs = {
    * about the market.
    */
   monthVisibility: "known" | "unknown" | "unseen";
+  /**
+   * The date is today's US filing day and it has not ended (Eastern time).
+   * An empty answer then means "not yet", not "none" and not "we failed"
+   * (#552 COWORK #23). A genuine read failure still says so.
+   */
+  dayOpen?: boolean;
 };
 
 export type CalendarDayState =
@@ -58,6 +64,8 @@ export type CalendarDayState =
    * foreign filers is not the same day as an empty calendar.
    */
   | { kind: "none-us-listed"; totalCandidates: number }
+  /** Today, before the US filing day has ended, with nothing filed yet. */
+  | { kind: "not-yet" }
   /** We cannot answer. A claim about us. */
   | {
       kind: "unavailable";
@@ -79,6 +87,11 @@ export function resolveCalendarDay(inputs: CalendarDayInputs): CalendarDayState 
   if (inputs.items.length > 0) {
     return { kind: "listed", items: inputs.items, totalCandidates: inputs.totalCandidates };
   }
+
+  // TODAY IS STILL OPEN: nothing filed yet is the answer, whatever the counts
+  // say. Placed AFTER the month-unread branch, so a real failure keeps the gap
+  // wording, and after "listed", so rows always show.
+  if (inputs.dayOpen) return { kind: "not-yet" };
 
   if (inputs.totalCandidates <= 0) {
     // A zero denominator is answered BEFORE it is divided by or reasoned from.
@@ -107,6 +120,10 @@ export function resolveCalendarDay(inputs: CalendarDayInputs): CalendarDayState 
 export const DAY_NONE_SCHEDULED =
   "No US-listed companies have results on file for this date.";
 
+export const DAY_NOT_YET =
+  "No results filed yet today. Companies can file until the end of the US business day, " +
+  "and this list updates as they do.";
+
 export const DAY_NONE_US_LISTED =
   "No US-listed companies have results on file for this date. " +
   "Companies outside US listings are not covered by this page.";
@@ -129,7 +146,25 @@ export function dayStateMessage(state: CalendarDayState): string | null {
       return DAY_NONE_SCHEDULED;
     case "none-us-listed":
       return DAY_NONE_US_LISTED;
+    case "not-yet":
+      return DAY_NOT_YET;
     case "unavailable":
       return DAY_UNAVAILABLE;
   }
+}
+
+/**
+ * How a grid cell outside the navigable window is drawn (#552 COWORK #23).
+ * A PAST day outside the window is archived (faded, ✕). A FUTURE day is
+ * neutral: nothing has been filed yet, and a red ✕ there read as "failed".
+ */
+export function outOfWindowCell(cellDate: string, windowStart: string, windowEnd: string): "archived" | "future" | null {
+  if (cellDate < windowStart) return "archived";
+  if (cellDate > windowEnd) return "future";
+  return null;
+}
+
+/** Today's date in US Eastern time, YYYY-MM-DD: the filing day SEC keeps. */
+export function easternDate(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }

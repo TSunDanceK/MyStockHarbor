@@ -11,8 +11,8 @@
 //      in the element name or the filing text.
 //   4. COST. A company whose annual accession did not change must cost one
 //      submissions request, not a 4.5 MB instance.
-//   5. THE RULINGS DRIFT: the 45 lines, the 7 headings, the 16 broad tags, the
-//      4 hyperscaler notes, the 4 sub-labels (COWORK #2).
+//   5. THE RULINGS DRIFT: the 45 lines, the 7 headings, the 21 broad tags, the
+//      4 hyperscaler notes, the 5 sub-labels (COWORK #2 and #3).
 //
 // THE XBRL BELOW IS CONSTRUCTED, shaped like real instances (contexts with
 // xbrldi:explicitMember, srt:ConsolidationItemsAxis beside the segment axis,
@@ -188,11 +188,12 @@ async function suite({ X, C }, data) {
   const heads = data.groups.map((g) => g.heading).join("|");
   ok("the seven headings, as ruled", heads === "Chips|Chip-making equipment|Memory & storage|Networking & optics|Servers & assembly|Power & cooling|Cloud & data centres", heads);
   ok("every line sits under one of them", rows.every((r) => data.groups.some((g) => g.id === r.group)));
-  const BROAD = "amat amkr avgo dlr eqix etn fix gev hpe-networking hubb ibm klac lrcx nvt pwr ter";
-  ok("the 15 broad lines plus HPE Networking carry the tag", rows.filter((r) => r.broad).map((r) => r.id).sort().join(" ") === BROAD, rows.filter((r) => r.broad).map((r) => r.id).sort().join(" "));
+  // COWORK #2's 15, HPE Networking, and COWORK #3's five (CSCO, CIEN, GLW, DELL, JBL).
+  const BROAD = "amat amkr avgo cien csco dell dlr eqix etn fix gev glw hpe-networking hubb ibm jbl klac lrcx nvt pwr ter";
+  ok("the 21 broad lines carry the tag", rows.filter((r) => r.broad).map((r) => r.id).sort().join(" ") === BROAD, rows.filter((r) => r.broad).map((r) => r.id).sort().join(" "));
   ok("the hyperscaler note sits on MSFT, AMZN, GOOGL, ORCL", rows.filter((r) => r.hyperscaler).map((r) => r.ticker).sort().join() === "AMZN,GOOGL,MSFT,ORCL");
   const subs = rows.filter((r) => r.subLabel).map((r) => `${r.ticker}:${r.subLabel.source}`).sort().join();
-  ok("four sub-labels, each with its source", subs === "CLS:filing-text,FLEX:element,INTC:element,MU:filing-text", subs);
+  ok("five sub-labels, each with its source", subs === "AMZN:filing-text,CLS:filing-text,FLEX:element,INTC:element,MU:filing-text", subs);
   ok("every element-sourced sub-label is in its element name", rows.filter((r) => r.subLabel?.source === "element").every((r) => X.subLabelVerified(r.subLabel, r.element, null)));
   ok("axes are segment or product only", rows.every((r) => r.axis === "segment" || r.axis === "product"));
   return fails;

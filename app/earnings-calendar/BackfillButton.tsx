@@ -35,12 +35,13 @@ export default function BackfillButton({
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
+  // 2026-09-23 (#552, COWORK #26 item 4): hidden, not deleted. The disabled
+  // "Backfill (no earnings on this date)" label rendered to every reader, not
+  // only the owner, and on the SEC-fed grid it read as a statement about the
+  // market on days the index simply had not filled yet. With nothing to fetch
+  // there is nothing to override, so render nothing.
   if (!hasEarnings) {
-    return (
-      <button type="button" disabled style={{ ...btnStyle, opacity: 0.35, cursor: "default" }}>
-        Backfill (no earnings on this date)
-      </button>
-    );
+    return null;
   }
 
   async function submit() {

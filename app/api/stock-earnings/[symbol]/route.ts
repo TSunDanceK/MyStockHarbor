@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLatestEarningsData } from "@/lib/latest-earnings-data";
+import { secEarningsSummary } from "@/lib/server/secEarningsSummary";
 import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
@@ -12,19 +12,19 @@ function cleanSymbol(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 }
 
-// Thin HTTP wrapper around the shared lib/latest-earnings-data.ts logic
-// (the same computation the News page uses directly, server-side). This
-// used to have its own separate FMP-endpoint-based implementation that
-// diverged from the News page's numbers; see lib/latest-earnings-data.ts
-// for why that was consolidated.
+// THE DASHBOARD PILL'S CLIENT REFETCH. Since 2026-09-23 (#535 COWORK #18 §3)
+// it returns the SEC snapshot's verdict (lib/server/secEarningsSummary.ts) —
+// hasStructuredData, tone and the band label, nothing else. It used to return
+// lib/latest-earnings-data.ts's FMP-based object, including FMP's exact
+// `nextEarningsDate`, which the owner's 2026-09-23 ruling keeps off the site.
 // DELIBERATELY NOT CDN-CACHED YET, and this is the reason rather than an
 // oversight.
 //
 // /api/stock-valuation set the precondition for its sibling routes in its own
 // comment: "a 200 that might mean 'we are broken' cannot safely be stored, so
 // the distinction has to exist before anyone adds a cache header here, not
-// after." THIS ROUTE STILL FAILS THAT TEST. getLatestEarningsData catches its
-// own errors and returns an all-nulls object with a 200, so "FMP is down" and
+// after." THIS ROUTE STILL FAILS THAT TEST. secEarningsSummary catches its
+// own errors and returns "Unavailable" with a 200, so "Redis is down" and
 // "this ticker has no earnings" are the same response -- and a cache header
 // would pin a failure onto every stock page for the length of the window.
 //
@@ -38,6 +38,5 @@ export async function GET(_request: Request, { params }: Props) {
 
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
-  const data = await getLatestEarningsData(clean, "yellow");
-  return NextResponse.json(data);
+  return NextResponse.json(await secEarningsSummary(clean));
 }
