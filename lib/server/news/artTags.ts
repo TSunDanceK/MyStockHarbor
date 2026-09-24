@@ -229,15 +229,32 @@ export function pickGeneric(key: string, taken?: Set<string>): NewsArt | null {
   if (GENERIC_NAMES.length === 0) return null;
   const first = hashKey(key) % GENERIC_NAMES.length;
   if (!taken) return artFor(GENERIC_NAMES[first]);
-  for (let step = 0; step < GENERIC_NAMES.length; step += 1) {
-    const name = GENERIC_NAMES[(first + step) % GENERIC_NAMES.length];
-    if (!taken.has(name)) {
-      taken.add(name);
-      return artFor(name);
+  const walk = (): NewsArt | null => {
+    for (let step = 0; step < GENERIC_NAMES.length; step += 1) {
+      const name = GENERIC_NAMES[(first + step) % GENERIC_NAMES.length];
+      if (!taken.has(name)) {
+        taken.add(name);
+        return artFor(name);
+      }
     }
-  }
-  return artFor(GENERIC_NAMES[first]);
+    return null;
+  };
+  // ALL 16 ON THE PAGE ALREADY (a 44-card page used 26 generic slots): start a
+  // fresh pass rather than repeat the first choice, which put the same picture
+  // twice in one row. The set is released and walked again, so the next 16
+  // generic cards are distinct from each other too.
+  //
+  // THE LAST ROW STAYS BLOCKED across the release: the most recently placed
+  // RECENT_KEEP generic pictures (a 1280px page is 3 across) remain taken, so
+  // the first cards of the new pass cannot match the cards beside them.
+  const found = walk();
+  if (found) return found;
+  const recent = [...taken].filter((n) => GENERIC_SET.has(n)).slice(-Math.min(RECENT_KEEP, GENERIC_NAMES.length - 1));
+  for (const name of GENERIC_NAMES) if (!recent.includes(name)) taken.delete(name);
+  return walk() ?? artFor(GENERIC_NAMES[first]);
 }
+const GENERIC_SET = new Set(GENERIC_NAMES);
+const RECENT_KEEP = 3;
 
 /** A plan that came back "none" takes a generic picture instead; anything else is kept. */
 export function withGenericFallback(plan: CardArt, key: string, taken?: Set<string>): CardArt {
