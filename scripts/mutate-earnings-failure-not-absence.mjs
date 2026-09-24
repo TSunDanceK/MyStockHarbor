@@ -63,18 +63,13 @@ const MUTANTS = [
     from: `  const complete = quotedEveryCandidate && !anyCapped && !anyFailed;`,
     to: `  const complete = quotedEveryCandidate && !anyCapped;`,
   },
-  {
-    id: "F2   the write guard removed (writes empty whatever happened)",
-    file: CAL,
-    from: `  if (!emptyAndUnverifiable) {\n    // Materialise what we have, so the next render -- and Show more -- read it\n    // back instead of re-quoting.\n    await writeDayItemsCache(date, items);\n  }`,
-    to: `  await writeDayItemsCache(date, items);`,
-  },
-  {
-    id: "F2b  the write guard reverted to the candidate-count form",
-    file: CAL,
-    from: `  const emptyAndUnverifiable = items.length === 0 && totalCandidates > 0 && anyFailed;`,
-    to: `  const emptyAndUnverifiable = items.length === 0 && totalCandidates > 0;`,
-  },
+  // ── F2/F2b RETIRED 2026-09-23 (#552): EQUIVALENT MUTANTS NOW ─────────────
+  // Both mutated the write guard `emptyAndUnverifiable` (items empty while
+  // candidates exist and a quote failed). Since the grid moved to SEC, every
+  // admitted candidate is a row before any quote, so `items.length === 0 &&
+  // totalCandidates > 0` cannot hold at write time and no input can tell the
+  // mutants from the shipped code. They survived on #556 for that reason, not
+  // because a check was missing. The guard stays in the code as a backstop.
   {
     id: "F3   the cache read reverted to truthiness",
     file: CAL,
@@ -82,10 +77,14 @@ const MUTANTS = [
     to: `    if (cachedItems) {`,
   },
   {
-    id: "F3b  the settled-empty read reverted to the candidate-count form",
+    // REPLACES the old F3b (2026-09-23, #552): the completeness clause was the
+    // FMP-era "settled empty" and is now removed from the shipped read, so the
+    // mutant is putting it BACK. §3b catches it: a pre-SEC [] under a complete
+    // flag would be served as an empty day again.
+    id: "F3b  the completeness clause restored on the settled-empty read",
     file: CAL,
-    from: `      (cachedItems.length > 0 || totalCandidates === 0 || (await isDateComplete(date)));`,
-    to: `      (cachedItems.length > 0 || totalCandidates === 0);`,
+    from: `      cachedItems != null && (cachedItems.length > 0 || totalCandidates === 0);`,
+    to: `      cachedItems != null && (cachedItems.length > 0 || totalCandidates === 0 || (await isDateComplete(date)));`,
   },
   {
     id: "F5   the empty-month cache refusal removed",
