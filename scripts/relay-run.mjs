@@ -620,6 +620,14 @@ const TASKS = {
   // READS ONLY: the pairing rewrite's per-run counters and the drained count.
   // READS ONLY: HLEN of the grid's day index and the rewrite job's last
   // summary (#552). 3 commands.
+  // READS ONLY: COWORK #3's measurement (#552). Aggregates only: SIC coverage,
+  // sector agreement per filter, industry purity per SIC code, preset counts.
+  // Fetches SEC submissions for symbols registrants.json lacks.
+  "write-sic-classification-census": {
+    script: "scripts/sic-classification-census.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
