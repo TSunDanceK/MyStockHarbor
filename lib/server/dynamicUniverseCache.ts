@@ -392,6 +392,24 @@ export async function readStalestUniverseSlice(count: number): Promise<string[]>
  * Chunked because ZREM takes the members as arguments and a large eviction
  * would otherwise build one enormous command.
  */
+/**
+ * The cumulative scores of these symbols, ONE ZMSCORE. For a rename (#553
+ * COWORK #22): the successor takes the old ticker's score so the 700 cap does
+ * not prune it before a build sees it. Absent symbols and failures read as 0.
+ */
+export async function readUniverseScores(symbols: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!redis || !symbols.length) return out;
+  try {
+    const scores = (await redis.zmscore(SCORE_KEY, symbols)) as (number | null)[] | null;
+    symbols.forEach((s, i) => out.set(s, Number(scores?.[i] ?? 0) || 0));
+  } catch {
+    // A failed read carries no score; the successor then enters at the boost
+    // floor below rather than not at all.
+  }
+  return out;
+}
+
 export async function removeFromDynamicUniverse(symbols: string[]) {
   if (!redis) return 0;
 
