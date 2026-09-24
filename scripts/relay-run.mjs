@@ -692,6 +692,9 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // Read-only, no credential: the 10-K sentences on how a filer's share
+  // classes relate (conversion, economic rights) (#552 COWORK #31).
+  "sec-share-class-evidence": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
