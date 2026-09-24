@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { RECEIVER_ENTRIES, RECEIVER_GROUPS, readReceiversRecord } from "@/lib/server/capexReceivers";
 import { readContractsRecord } from "@/lib/server/capexContracts";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
+import { normaliseCompanyName } from "@/lib/server/news/companyName";
 import { buildContractRows, buildReceiverGroups, formatAmount, type ReceiverView } from "@/lib/capexPresent";
 
 // Capex -- "Follow the money" (Relay C, #563). Phase 1 panels, each from a
@@ -32,7 +34,9 @@ const HYPERSCALER_NOTE =
 export default async function CapexPage() {
   const [receivers, contracts] = await Promise.all([readReceiversRecord(), readContractsRecord()]);
   const groups = buildReceiverGroups(RECEIVER_GROUPS, RECEIVER_ENTRIES, receivers?.rows ?? {});
-  const contractRows = contracts ? buildContractRows(contracts.rows, 15) : [];
+  // Our directory's name for each company, short form ("General Dynamics"),
+  // from the committed snapshot: no request at render.
+  const contractRows = contracts ? buildContractRows(contracts.rows, 15, (t) => normaliseCompanyName(snapshotCompanyName(t))) : [];
 
   return (
     <main style={mainStyle}>
@@ -113,10 +117,23 @@ export default async function CapexPage() {
               </p>
               <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
                 {contractRows.map((r) => (
-                  <div key={r.ticker} style={rowStyle} title={`${r.ticker}: ${r.amount} across ${r.entityCount} recipient record${r.entityCount === 1 ? "" : "s"}`}>
-                    <div style={rowHeadStyle}>
-                      <Link href={`/stock/${encodeURIComponent(r.ticker)}`} style={tickerStyle}>{r.ticker}</Link>
-                      <span style={labelStyle}>{r.entities}{r.entityCount > 1 ? ` + ${r.entityCount - 1} more` : ""}</span>
+                  <div key={r.ticker} className="capexRow" style={rowStyle} title={`${r.company}: ${r.amount} across ${r.entities.length} recipient record${r.entities.length === 1 ? "" : "s"}`}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={rowHeadStyle}>
+                        <span style={tickerStyle}>{r.company}</span>
+                        <Link href={`/stock/${encodeURIComponent(r.ticker)}`} style={subLabelStyle}>{r.ticker}</Link>
+                      </div>
+                      <details style={detailsStyle}>
+                        <summary style={summaryStyle}>
+                          Paid to: {r.entities[0]}
+                          {r.entities.length > 1 ? `, … (${r.entities.length} entities)` : ""}
+                        </summary>
+                        <ul style={entityListStyle}>
+                          {r.entities.map((name) => (
+                            <li key={name}>{name}</li>
+                          ))}
+                        </ul>
+                      </details>
                     </div>
                     <div style={barTrackStyle}>
                       <div style={{ ...barStyle, width: `${Math.max(1, r.barPct)}%`, background: "#60a5fa" }} />
@@ -132,7 +149,8 @@ export default async function CapexPage() {
           <p style={sourceStyle}>
             Source: USAspending.gov (federal spending data). Recipient names come from SAM.gov registrations.
             Matching a recipient to a listed company is ours: an exact name, or a documented alias for a
-            subsidiary. Obligations are commitments to pay, not payments made.
+            subsidiary. Contracts to run national laboratories are left out, even where a listed company owns
+            the operator. Obligations are commitments to pay, not payments made.
           </p>
         </section>
 
@@ -218,5 +236,8 @@ const barTrackStyle: CSSProperties = { height: 10, borderRadius: 4, background: 
 const barStyle: CSSProperties = { height: "100%", borderRadius: 4 };
 const valueStyle: CSSProperties = { fontSize: 16, fontWeight: 950, textAlign: "right" };
 const metaStyle: CSSProperties = { marginTop: 2, fontSize: 12, color: "rgba(241,245,249,0.6)" };
+const detailsStyle: CSSProperties = { marginTop: 4 };
+const summaryStyle: CSSProperties = { cursor: "pointer", fontSize: 12, color: "rgba(241,245,249,0.6)" };
+const entityListStyle: CSSProperties = { margin: "6px 0 0 0", paddingLeft: 18, fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.7)" };
 const sourceStyle: CSSProperties = { margin: "18px 0 0 0", fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.5)" };
 const footnoteStyle: CSSProperties = { marginTop: 18, fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.48)" };

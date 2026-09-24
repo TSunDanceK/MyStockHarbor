@@ -89,14 +89,19 @@ async function suite(P, pageCode) {
   ok("a new line has no bar and sorts last", cloud[cloud.length - 1].id === "apld" && cloud[cloud.length - 1].barPct === 0 && cloud[cloud.length - 1].changeText === "New line");
   ok("a company with no figures yet is simply absent", P.buildReceiverGroups(GROUPS, ENTRIES, { nvda: FIGS.nvda }).length === 1);
 
-  const c = P.buildContractRows([{ ticker: "LMT", amount: 50e9, entities: [{ name: "LOCKHEED MARTIN CORP" }, { name: "SIKORSKY" }] }, { ticker: "GD", amount: 25e9, entities: [{ name: "ELECTRIC BOAT" }] }], 15);
-  ok("contract bars scale to the largest, in dollars", c[0].barPct === 100 && c[1].barPct === 50 && c[0].amount === "$50.0bn" && c[0].entityCount === 2);
+  const names = { LMT: "Lockheed Martin", GD: "General Dynamics" };
+  const c = P.buildContractRows([{ ticker: "LMT", amount: 50e9, entities: [{ name: "LOCKHEED MARTIN CORPORATION" }, { name: "SIKORSKY AIRCRAFT CORPORATION" }] }, { ticker: "GD", amount: 25e9, entities: [{ name: "ELECTRIC BOAT CORPORATION" }] }, { ticker: "ZZZ", amount: 1e9, entities: [] }], 15, (t) => names[t] ?? "");
+  ok("contract bars scale to the largest, in dollars", c[0].barPct === 100 && c[1].barPct === 50 && c[0].amount === "$50.0bn" && c[0].entities.length === 2);
+  ok("a row names the company, not its largest recipient", c[1].company === "General Dynamics" && c[2].company === "ZZZ", JSON.stringify(c.map((r) => r.company)));
+  ok("every recipient listed, in normal case", c[0].entities.join("|") === "Lockheed Martin Corporation|Sikorsky Aircraft Corporation" && c[1].entities[0] === "Electric Boat Corporation", JSON.stringify(c[0].entities));
+  ok("true capitals and legal forms survive the casing", P.entityCase("GENERAL DYNAMICS OTS (WILKES BARRE), LLC") === "General Dynamics OTS (Wilkes Barre), LLC" && P.entityCase("L3HARRIS TECHNOLOGIES INTEGRATED SYSTEMS L.P.") === "L3Harris Technologies Integrated Systems L.P." && P.entityCase("AT&T ENTERPRISES, LLC") === "AT&T Enterprises, LLC" && P.entityCase("Already Mixed Inc.") === "Already Mixed Inc.");
 
   // The page.
   ok("the hyperscaler note is Cowork's wording", pageCode.includes("These companies are also among the largest spenders above; this is what they sell, not what they buy."));
   ok("the broad tag is Cowork's wording", pageCode.includes("Broad line: includes non-data-centre sales"));
   ok("each panel has a sources line", (pageCode.match(/style=\{sourceStyle\}/g) ?? []).length >= 2 && pageCode.includes("USAspending.gov") && pageCode.includes("SAM.gov") && pageCode.includes("filed with the SEC"));
   ok("no arrows or flows between panels", !/[→⟶⇒➔]|flows? (to|from)|pays? (to|whom)(?! here)/i.test(pageCode.replace("nothing here estimates who pays whom", "")));
+  ok("contract rows name the company and expand to their recipients", pageCode.includes("{r.company}") && /<details[\s\S]*Paid to:[\s\S]*r\.entities\.map/.test(pageCode) && pageCode.includes("normaliseCompanyName(snapshotCompanyName(t))"));
   ok("nothing is summed on the page", !/\.reduce\(/.test(pageCode));
   ok("noindex until Layer 1", /robots:\s*\{\s*index:\s*false/.test(pageCode));
   return fails;
@@ -119,6 +124,8 @@ const MUTANTS = [
   ["the bar cap removed", () => mut("cap", src, "(Math.min(Math.abs(pct), BAR_CAP_PCT) / BAR_CAP_PCT) * 100", "Math.abs(pct)")],
   ["the hyperscaler note on every group", () => mut("note", src, "hyperscalerNote: entries.some((e) => e.group === g.id && e.hyperscaler)", "hyperscalerNote: true")],
   ["a group total added", () => mut("total", src, "if (rows.length) out.push({ id: g.id, heading: g.heading,", "if (rows.length) out.push({ total: rows.length, id: g.id, heading: g.heading,")],
+  ["recipient names left in capitals", () => mut("case", src, "entities: r.entities.map((e) => entityCase(e.name)),", "entities: r.entities.map((e) => e.name),")],
+  ["the largest recipient shown as the company", () => mut("company", src, "company: companyName(r.ticker) || r.ticker,", "company: r.entities[0]?.name ?? r.ticker,")],
   ["amounts converted to dollars", () => mut("cur", src, 'const prefix = currency === "USD" ? "$" : `${currency} `;', 'const prefix = "$";')],
 ];
 let survived = 0;
