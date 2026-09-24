@@ -216,6 +216,12 @@ export type CoverShares = {
   derived: Derivation;
   /** Present when the filer is multi-class and companyfacts cannot name them. */
   candidates?: number[];
+  /**
+   * The filing's own sentence stating the classes convert one-for-one, when
+   * the count is two classes summed on that basis (secCoverAuto). The citation
+   * travels with the number.
+   */
+  basis?: string;
 };
 
 export type PeriodRecord = {
@@ -320,6 +326,17 @@ export type ExtractResult = {
    * for a year. Optional: absent on older sets and hand-built results.
    */
   annualShares?: [string, number][];
+  /**
+   * THE NEWEST QUARTER'S YEAR-TO-DATE FRAME, WHEN ITS OWN CASH FLOW CANNOT BE
+   * DERIVED (#552 COWORK #37). A first-time filer's Q2 10-Q carries cash flow
+   * for six months only: there is no Q1 frame to difference against, so the
+   * quarter's cash cells are null and the page said the filings "do not carry
+   * a cash-flow statement". They do, over six months. This keeps that frame,
+   * as filed, and ONLY then: a quarter whose three months could be derived
+   * never carries it, so an established filer's set is unchanged.
+   * fp/fy null: a year-to-date span is not a fiscal period.
+   */
+  ytd?: PeriodRecord;
   /**
    * FIELDS NO CONCEPT IN OUR CHAIN WAS PUBLISHED FOR, IN ANY PERIOD, IN ANY UNIT.
    *
@@ -1106,6 +1123,7 @@ export function extractCompanyFacts(
     quarterMeta: Map<string, { start: string; row: FactRow }>,
     yearMeta: Map<string, { start: string; row: FactRow }>,
     notes: string[],
+    ytdSink?: Map<string, { start: string; end: string; n: number; row: FactRow; cells: Map<string, FieldValue> }>,
   ) => {
   for (const field of fields) {
     const bucket = buckets.get(field.key)!;
@@ -1143,6 +1161,18 @@ export function extractCompanyFacts(
           if (!meta.has(f.end)) meta.set(f.end, { start, row: f.best.row });
           return m;
         };
+
+        // A SIX- OR NINE-MONTH FRAME, AS FILED, kept aside for `ytd` only; it
+        // never becomes a quarter or a year.
+        if (ytdSink && (f.n === 2 || f.n === 3)) {
+          const k = `${start}|${f.end}`;
+          let y = ytdSink.get(k);
+          if (!y) { y = { start, end: f.end, n: f.n, row: f.best.row, cells: new Map() }; ytdSink.set(k, y); }
+          y.cells.set(field.key, {
+            val: f.best.row.val!, tag: f.best.tag, ns: f.best.ns, unit: f.best.unit, derived: "as-filed",
+            covers: [start, f.end],
+          });
+        }
 
         if (f.n === 4) {
           cell(yearCells, yearMeta).set(field.key, {
@@ -1201,7 +1231,8 @@ export function extractCompanyFacts(
   }
 
   };
-  runCumulative(cumulativeFields(), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes);
+  const ytdFrames = new Map<string, { start: string; end: string; n: number; row: FactRow; cells: Map<string, FieldValue> }>();
+  runCumulative(cumulativeFields(), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes, ytdFrames);
 
   // ── THE REVENUE FALLBACK, ONLY WHERE THE LINE IS INCOMPLETE ──────────────
   // Same rows, same differencing, a different chain, and its own cells: a
@@ -1400,6 +1431,23 @@ export function extractCompanyFacts(
     true
   ).slice(0, keepYears);
 
+  // See ExtractResult.ytd: only where the newest quarter's own cash flow is
+  // missing, and only a frame ending on that quarter's end that carries it.
+  const ocfAt = SEC_FIELD_KEYS.indexOf("operatingCashFlow");
+  const newestQ = quarters[0];
+  const ytdFrame = newestQ && newestQ.values[ocfAt] == null
+    ? [...ytdFrames.values()]
+        .filter((y) => y.end === newestQ.end && y.cells.get("operatingCashFlow") != null)
+        .sort((a, b) => b.n - a.n)[0] ?? null
+    : null;
+  const ytd: PeriodRecord | null = ytdFrame
+    ? {
+        end: ytdFrame.end, start: ytdFrame.start, fp: null, fy: null,
+        accession: ytdFrame.row.accn ?? null, filed: ytdFrame.row.filed ?? null,
+        values: SEC_FIELD_KEYS.map((k) => ytdFrame.cells.get(k) ?? null),
+      }
+    : null;
+
   const instants = pack(instantCells, (e) => ({ start: null, row: instantMeta.get(e) })).slice(
     0,
     keepInstants
@@ -1425,6 +1473,7 @@ export function extractCompanyFacts(
         .filter((e): e is [string, string] => e[1] !== null)
     ),
     annualShares: annualShareSeries(buckets.get("sharesBasic"), preferred.get("sharesBasic") ?? null, naming.yearEnd),
+    ...(ytd ? { ytd } : {}),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
     readNamespaces: countReadNamespaces([...quarters, ...years, ...instants]),
     notes,
