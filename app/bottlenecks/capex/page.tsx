@@ -92,7 +92,9 @@ export default async function CapexPage() {
               <p style={noteStyle}>
                 Each sector counts only the companies that reported capex in all five years ({spending.years.length}{" "}
                 years), so a bar does not grow just because more companies started reporting.
-                {spending.otherCurrency > 0 ? ` ${spending.otherCurrency} filers reporting in other currencies not included.` : ""}
+                {spending.otherCurrency > 0
+                  ? ` Figures filed in other currencies are converted to US dollars; ${spending.otherCurrency} filers whose currency could not be converted are not included.`
+                  : " Figures filed in other currencies are converted to US dollars."}
                 {spending.unclassified > 0 ? ` ${spending.unclassified} companies without a sector are not placed.` : ""}
                 {spending.duplicateListings > 0 ? " Companies with more than one listing are counted once." : ""}
               </p>
