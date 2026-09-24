@@ -71,6 +71,7 @@ export const CRAWLABLE_NAV_SECTIONS: NavSection[] = [
       { href: "/pickers", label: "Basic Pickers" },
       { href: "/insights", label: "Insights" },
       { href: "/bottlenecks", label: "Bottlenecks" },
+      { href: "/bottlenecks/capex", label: "Capex — Follow the money" },
       { href: "/earnings-calendar", label: "Earnings Calendar" },
     ],
   },
