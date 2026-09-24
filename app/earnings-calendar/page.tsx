@@ -840,6 +840,7 @@ export default async function EarningsCalendarPage({
                 initialItems={dayData.items.slice(0, 50)}
                 initialHasMore={dayData.items.length > 50}
                 complete={dateComplete}
+                emptyExplainedAbove={dayState.kind !== "listed"}
               />
               {/* ONCE, AND ONLY WHEN A ROW IS ACTUALLY BLANK. Printed under the
                   table rather than in every cell: fifty rows each saying "not
