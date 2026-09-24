@@ -33,10 +33,12 @@ export type NewsCardArtProps = {
    */
   sizes: string;
   style?: CSSProperties;
+  /** "eager" for the first row on screen only; everything else stays lazy (#553 COWORK #41). */
+  loading?: "lazy" | "eager";
 };
 
 export default function NewsCardArt({
-  plan, symbol, changePct, points, sizes, style,
+  plan, symbol, changePct, points, sizes, style, loading = "lazy",
 }: NewsCardArtProps) {
   if (plan.kind === "none") return null;
 
@@ -61,7 +63,8 @@ export default function NewsCardArt({
       width={plan.art.width}
       height={plan.art.height}
       alt=""
-      loading="lazy"
+      loading={loading}
+      decoding="async"
       style={style}
     />
   );
