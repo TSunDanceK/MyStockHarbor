@@ -254,6 +254,7 @@
    "industry": "Semiconductors",
    "phrases": [
     "semiconductor equipment",
+    "lithography",
     "wafer fabrication equipment",
     "semiconductor manufacturing",
     "designs semiconductors",
@@ -714,7 +715,10 @@
     "cruise vacation brands",
     "cruise industry",
     "cruise brands",
-    "cruises"
+    "cruises",
+    "guest arrivals",
+    "vacation rental",
+    "short-term rental"
    ]
   },
   {
@@ -968,6 +972,7 @@
    "industry": "Specialty Business Services",
    "phrases": [
     "outsourced services",
+    "uniform rental",
     "business services company",
     "auction company",
     "online auction",
@@ -1014,6 +1019,13 @@
     "communications equipment",
     "networking equipment",
     "antenna systems"
+   ]
+  },
+  {
+   "industry": "Industrial - Distribution",
+   "phrases": [
+    "value-added distributor",
+    "industrial distributor"
    ]
   }
  ]
