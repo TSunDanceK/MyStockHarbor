@@ -65,6 +65,14 @@ const ADR_WORDING =
 const DEBT_WORDING =
   /\bnotes?\b|\bdebentures?\b|\bsubordinated\b|\bbonds?\b|\bcapital securities\b|\btrust preferred\b/i;
 
+/**
+ * Debt acronyms that carry no debt word. "ZONES" (zero-premium exchangeable
+ * subordinated notes: CCZ, "Comcast Holdings ZONES") is Comcast's debt, not its
+ * equity (Relay B, #552 COWORK #26). CASE-SENSITIVE on purpose: the acronym is
+ * written in capitals, and "zones" in lower case is an ordinary word.
+ */
+const DEBT_ACRONYMS = /\bZONES\b/;
+
 /** Preferred equity, including the depositary-share wrapper around it. */
 const PREFERRED_WORDING = /\bpreferred\b|\bdepositary shares\b/i;
 
@@ -92,7 +100,7 @@ export function securityKindFromName(securityName: string | null | undefined): S
   if (securityName == null || String(securityName).trim() === "") return "unverifiable";
   const name = String(securityName);
   if (ADR_WORDING.test(name)) return "issuer-equity";
-  if (DEBT_WORDING.test(name) || PREFERRED_WORDING.test(name) || WARRANT_WORDING.test(name)) {
+  if (DEBT_WORDING.test(name) || DEBT_ACRONYMS.test(name) || PREFERRED_WORDING.test(name) || WARRANT_WORDING.test(name)) {
     return "derivative-of-issuer";
   }
   return "issuer-equity";

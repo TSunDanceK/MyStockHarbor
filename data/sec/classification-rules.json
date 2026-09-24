@@ -1,5 +1,5 @@
 {
- "_comment": "The 10-K Item 1 rules pass (#552 COWORK #22 condition 2). Deterministic: phrases matched case-insensitively on word boundaries in the first 700 characters of the filer's own Item 1 text (data/sec/descriptions.json). The filer's self-description sentence (\"X is a \u2026\", \"We are a \u2026\") is searched first, then the whole window. Among the rules whose label belongs to the code's table sector (any sector when the table leaves it open), the EARLIEST-mentioned phrase wins, ties broken by rule order; REIT labels (only for SIC 6798 or text naming a real estate investment trust) likewise. No match: no override, and the name goes to the \"Classification needed\" helper. Tuned against filing text, never against a vendor's per-ticker labels. A match after \"rely on\", inside a \"including / as part of / we provide \u2026 with\" list, or after a customer/negation phrase is skipped. Two or more property types in one REIT sentence give REIT - Diversified.",
+ "_comment": "The 10-K Item 1 rules pass (#552 COWORK #22 condition 2). Deterministic: phrases matched case-insensitively on word boundaries in the first 700 characters of the filer's own Item 1 text (data/sec/descriptions.json). The filer's self-description sentence (\"X is a \u2026\", \"We are a \u2026\") is searched first, then the whole window. Among the rules whose label belongs to the code's table sector (any sector when the table leaves it open), the EARLIEST-mentioned phrase wins, ties broken by rule order; REIT labels (only for SIC 6798 or text naming a real estate investment trust) likewise. No match: no override, and the name goes to the \"Classification needed\" helper. Tuned against filing text, never against a vendor's per-ticker labels. A match after \"rely on\", inside a \"including / as part of / we provide \u2026 with\" list, or after a customer/negation phrase is skipped. Two or more property types in one REIT sentence give REIT - Diversified. Rules marked selfOnly count only inside the self-description sentence of a catch-all code (7370/7374/7389 and the like).",
  "window": 700,
  "rules": [
   {
@@ -227,13 +227,41 @@
    ]
   },
   {
+   "industry": "Internet Content & Information",
+   "selfOnly": true,
+   "phrases": [
+    "online platform",
+    "online marketplace",
+    "mobile app",
+    "digital platform",
+    "internet platform",
+    "online service"
+   ]
+  },
+  {
+   "industry": "Software - Application",
+   "selfOnly": true,
+   "phrases": [
+    "technology platform",
+    "technology company",
+    "cloud platform",
+    "ai platform",
+    "software provider",
+    "platform company"
+   ]
+  },
+  {
    "industry": "Semiconductors",
    "phrases": [
     "semiconductor equipment",
     "wafer fabrication equipment",
     "semiconductor manufacturing",
     "designs semiconductors",
-    "fabless"
+    "fabless",
+    "for the semiconductor industry",
+    "semiconductor industry",
+    "wafers",
+    "wafer"
    ]
   },
   {
@@ -322,7 +350,10 @@
     "enterprise software",
     "software solutions",
     "provider of software",
-    "cloud-based software"
+    "cloud-based software",
+    "sports data",
+    "sports technology",
+    "technology platform enabling"
    ]
   },
   {
@@ -679,7 +710,11 @@
     "travel marketplace",
     "cruise company",
     "cruise line",
-    "cruise vacation"
+    "cruise vacation",
+    "cruise vacation brands",
+    "cruise industry",
+    "cruise brands",
+    "cruises"
    ]
   },
   {
