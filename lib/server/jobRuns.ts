@@ -95,6 +95,16 @@ export const JOBS = {
   // One-off: rewrites data/sec/report-dates-rewrite.json under the paired rule
   // and then finds nothing to do. Delete it with the list once drained.
   "sec-report-dates-rewrite": { label: "SEC report dates — pairing rewrite (daily 05:10)", instrumented: true, cron: "10 5 * * *" },
+  // Relay C (#563 COWORK #2): the capex page's "Who is receiving" lines, read
+  // from each company's latest annual filing. 05:50 is clear of every other SEC
+  // job (04:00 / 04:20 / 04:40 / 05:10, sec-filings at :40) for the
+  // per-requester pacing reason above.
+  "capex-receivers": { label: "Capex receivers from annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
+  // Relay C (#563 D5): federal contract obligations per listed company, from
+  // USAspending. DAILY CRON, WEEKLY DATA: the route rebuilds only when its
+  // record is 6.5 days old, so this row's silence rule (cronIntervalSeconds
+  // reads minute and hour only) stays honest.
+  "capex-contracts": { label: "Capex federal contracts from USAspending (daily 06:10, rebuilds weekly)", instrumented: true, cron: "10 6 * * *" },
 } as const;
 
 /**
