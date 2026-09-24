@@ -1,12 +1,12 @@
 // WHAT A LOCATOR CHANGE MOVES, BEFORE IT SHIPS (#552 COWORK #38).
 // For every 10-K registrant in the shard: the latest 10-K, located and cleaned
-// by the SHIPPED lib/server/secDescription.ts and by the same file with the
-// previous ITEM1_END (no trailing page number), and a line for each symbol
+// by this branch's lib/server/secDescription.ts and by main's, and a line for each symbol
 // whose description or excerpt CHANGES (the first 160 characters of each).
 // SEC text only; read-only, no credential. ≤8 requests/s.
 //   SHARD=1/6 node scripts/sec-description-locator-census.mjs
 import fs from "node:fs";
-import { readCodeOnly } from "./lib/source-code.mjs";
+import { execSync } from "node:child_process";
+import { readCodeOnly, stripComments } from "./lib/source-code.mjs";
 import { lift } from "./lib/earnings-plan.mjs";
 
 const UA = process.env.SEC_USER_AGENT || "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; locator census)";
@@ -14,11 +14,13 @@ const [K, N] = (process.env.SHARD || "1/1").split("/").map(Number);
 const BUDGET_MS = Number(process.env.BUDGET_MS || 26 * 60 * 1000);
 const started = Date.now();
 const SRC = readCodeOnly("lib/server/secDescription.ts");
-const OLD_END = "const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)$/;";
-const NEW_LINE = SRC.match(/^const ITEM1_END = .*$/m)[0];
-if (NEW_LINE === OLD_END) throw new Error("the shipped ITEM1_END is the old one: nothing to compare");
+// THE BASELINE IS MAIN'S OWN FILE, fetched on the runner (the repo is public),
+// so the census measures exactly this branch's change to the locator.
+execSync("git fetch --quiet --depth=1 origin main", { stdio: "inherit" });
+const BASE = execSync("git show FETCH_HEAD:lib/server/secDescription.ts", { encoding: "utf8", maxBuffer: 16 << 20 });
+if (BASE === fs.readFileSync("lib/server/secDescription.ts", "utf8")) throw new Error("the branch's locator is main's: nothing to compare");
 const NEW = await lift(SRC);
-const OLD = await lift(SRC.replace(NEW_LINE, OLD_END));
+const OLD = await lift(stripComments(BASE));
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const only = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 const mine = only.length ? only : Object.keys(REG).sort().filter((s, i) => i % N === K - 1 && REG[s]?.cik && /^10-K/.test(REG[s]?.annualForm ?? ""));
