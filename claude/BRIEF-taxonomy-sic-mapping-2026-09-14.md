@@ -1,5 +1,8 @@
 # Taxonomy and SIC mapping (brief)
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 > **Provenance.** The authoritative document is the Claude Project copy of the
 > same name. This repo mirror was **written from the owner's summary, not copied
 > from the original**, which is Project-only and not visible from a coding
@@ -70,7 +73,7 @@ records which one a page is showing.
 Decision 2 lists SIC as the fourth leg of the resolution chain — used when the
 first three have nothing. **It should also run where they do have something.**
 
-`Media & Entertainment` (1 symbol, LION — Lionsgate) is filed under sector
+`Media & Entertainment` (1 symbol, [removed 2026-09-24]) is filed under sector
 **Technology** while all 43 other media-adjacent symbols are under Communication
 Services. That is a **sector-column** error, and neither remedy on the table
 reaches it: an industry alias map operates on the wrong column, and a per-symbol

@@ -1,5 +1,8 @@
 # Audit of the ≤3 band — what is noise, what is real, and two findings that are neither
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 **Date:** 2026-09-14
 **Scope:** 16 labels, 30 symbols, 1.1% of coverage.
 **Status:** REPORT ONLY. Nothing folded, nothing edited.
@@ -12,10 +15,10 @@ whatever is wrong in it is permanent.
 
 | Label | Symbols | Why it is real |
 |---|---|---|
-| `Silver` | AG, AYA, EXK | Sits in a coherent commodity family: Gold (28), Other Precious Metals (11), Copper (5), Aluminum (4). |
-| `Uranium` | CCJ, LEU, NXE | Same family. Cameco is not a rounding error. |
-| `Industrial - Pollution & Treatment Controls` | CECO, PCT, VLTO | Veralto is a $20bn+ spin-off. Small label, real category. |
-| **`Home Improvement`** | FND, **HD, LOW** | **Home Depot and Lowe's.** A 3-symbol label holding two of the largest US retailers. Size is not a proxy for significance, and any rule that folds by count alone would have folded this. |
+| `Silver` | [removed 2026-09-24] | Sits in a coherent commodity family: Gold (28), Other Precious Metals (11), Copper (5), Aluminum (4). |
+| `Uranium` | [removed 2026-09-24] | Same family. [removed 2026-09-24] is not a rounding error. |
+| `Industrial - Pollution & Treatment Controls` | [removed 2026-09-24] | [removed 2026-09-24] is a $20bn+ spin-off. Small label, real category. |
+| **`Home Improvement`** | [removed 2026-09-24] | A 3-symbol label holding two of the largest US retailers. Size is not a proxy for significance, and any rule that folds by count alone would have folded this. |
 
 `Home Improvement` is the strongest argument against a purely size-based floor:
 by symbol count it is in the smallest decile; by market cap it is one of the
@@ -25,15 +28,15 @@ largest categories on the site.
 
 | Label | Symbols | Duplicates / belongs with |
 |---|---|---|
-| `Oil & Gas Energy` | SPH | Catch-all beside six real Oil & Gas labels (E&P 41, Midstream 37, Equipment & Services 27, Refining 14, Integrated 14, Drilling 9). |
-| `Software - Services` | CART, IOND, VRSK | `Software - Application` (121) / `Information Technology Services` (42). |
-| `Medical - Specialties` | ALC, STE | Alcon and Steris are devices/instruments — `Medical - Devices` (38), `Medical - Instruments & Supplies` (25). |
-| `Medical - Equipment & Services` | MMED | **Misfiled.** MindMed is a clinical-stage pharma, not equipment. |
-| `Industrial - Specialties` | AZZ, CSW | Catch-all. |
-| `Manufacturing - Miscellaneous` | PRLB | Catch-all by name. |
-| `Manufacturing - Textiles` | AIN | Singleton; Albany International is arguably machinery. |
-| `Real Estate - Diversified` | IRS | `Real Estate - Services` (13), `REIT - Diversified` (10). |
-| `Beverages - Wineries & Distilleries` | BF-B | `Beverages - Alcoholic` (8). Brown-Forman is a distiller — the label is *accurate*, it is the split that is arbitrary. |
+| `Oil & Gas Energy` | [removed 2026-09-24] | Catch-all beside six real Oil & Gas labels (E&P 41, Midstream 37, Equipment & Services 27, Refining 14, Integrated 14, Drilling 9). |
+| `Software - Services` | [removed 2026-09-24] | `Software - Application` (121) / `Information Technology Services` (42). |
+| `Medical - Specialties` | [removed 2026-09-24] | [removed 2026-09-24] are devices/instruments — `Medical - Devices` (38), `Medical - Instruments & Supplies` (25). |
+| `Medical - Equipment & Services` | [removed 2026-09-24] | **Misfiled.** [removed 2026-09-24] is a clinical-stage pharma, not equipment. |
+| `Industrial - Specialties` | [removed 2026-09-24] | Catch-all. |
+| `Manufacturing - Miscellaneous` | [removed 2026-09-24] | Catch-all by name. |
+| `Manufacturing - Textiles` | [removed 2026-09-24] | Singleton; [removed 2026-09-24] is arguably machinery. |
+| `Real Estate - Diversified` | [removed 2026-09-24] | `Real Estate - Services` (13), `REIT - Diversified` (10). |
+| `Beverages - Wineries & Distilleries` | [removed 2026-09-24] | `Beverages - Alcoholic` (8). [removed 2026-09-24] is a distiller — the label is *accurate*, it is the split that is arbitrary. |
 
 **Folding judgement is not uniform here.** `Medical - Equipment & Services` is a
 misfiling to correct; `Beverages - Wineries & Distilleries` is an accurate label
@@ -43,7 +46,7 @@ that merely duplicates a broader one. Those want different treatment.
 
 ### 3a. LION is on the wrong SECTOR page today
 
-`Media & Entertainment` (1 symbol, **LION** — Lionsgate) is filed under sector
+`Media & Entertainment` (1 symbol, [removed 2026-09-24]) is filed under sector
 **Technology**. Every other media-adjacent industry is under Communication
 Services:
 
@@ -56,7 +59,7 @@ Services:
 ```
 
 **Sector is the URL slug, the nav and the sitemap.** This is not a cosmetic label
-problem: Lionsgate renders on `/sector/technology` and is absent from
+problem: the symbol renders on `/sector/technology` and is absent from
 `/sector/communication-services`. An industry-level alias map does not fix it,
 because the error is in the sector column.
 
@@ -75,8 +78,7 @@ CMS-PB  CTA-PA  CTA-PB  EP-PC  FITB-PA  FITB-PM
 MER-PK  OAK-PA  OAK-PB  SEAL-PB  TRTN-PC
 ```
 
-This changes the reading of the bare `Banks` label. Its two symbols are **ITUB**
-(Itaú Unibanco, a genuine foreign bank) and **MER-PK** (a Merrill Lynch preferred).
+This changes the reading of the bare `Banks` label. Its two symbols are [removed 2026-09-24].
 So the label the SIC-mapping argument turns on contains **one real company and one
 security**.
 
@@ -128,11 +130,11 @@ plus the 11 preferreds. The symbol-spelling hazard is already recorded in
 
 ## 4. What this says about the fold
 
-- **Do not fold by size.** `Home Improvement` (3 symbols, HD + LOW) and
+- **Do not fold by size.** `Home Improvement` (3 symbols, [removed 2026-09-24]) and
   `Manufacturing - Miscellaneous` (1 symbol, a catch-all by name) sit in the same
   band and want opposite treatment.
 - **The signature the review named holds** — a one-symbol label that
   near-duplicates a much larger one — but it identifies *candidates*, and only
   the symbol confirms it. Four of sixteen survived inspection.
-- **Two of the sixteen are not fold candidates at all**: LION is a sector error
+- **Two of the sixteen are not fold candidates at all**: [removed 2026-09-24] is a sector error
   and the preferred/warrant rows are a universe-composition question.
