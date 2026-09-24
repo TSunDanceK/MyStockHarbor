@@ -98,8 +98,10 @@ export const JOBS = {
   // per-requester pacing reason above.
   "capex-receivers": { label: "Capex receivers from annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
   // Relay C (#563 D5): federal contract obligations per listed company, from
-  // USAspending. Weekly -- the 12-month window moves a month at a time.
-  "capex-contracts": { label: "Capex federal contracts from USAspending (weekly Mon 06:10)", instrumented: true, cron: "10 6 * * 1" },
+  // USAspending. DAILY CRON, WEEKLY DATA: the route rebuilds only when its
+  // record is 6.5 days old, so this row's silence rule (cronIntervalSeconds
+  // reads minute and hour only) stays honest.
+  "capex-contracts": { label: "Capex federal contracts from USAspending (daily 06:10, rebuilds weekly)", instrumented: true, cron: "10 6 * * *" },
 } as const;
 
 /**

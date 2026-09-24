@@ -1,0 +1,1299 @@
+{
+ "_comment": "SIC code -> Pickers sector/industry, in our own mapping (#552 COWORK #3/#22). Hand-assigned from each code's SEC description onto the fixed Pickers label list below; no per-ticker data. \"rules\": true means the 10-K Item 1 rules pass (data/sec/classification-rules.json) may decide or refine the industry for names under this code; industry null with rules means the table itself does not decide it. majorGroups: a code the table does not list takes its 2-digit SIC major group's sector (null where the group spans sectors), and its industry from the rules pass. crossSector: the rules may place a filer under this code in another sector (default kept when none matches).",
+ "asOf": "2026-09-24",
+ "labels": {
+  "Advertising Agencies": "Communication Services",
+  "Aerospace & Defense": "Industrials",
+  "Agricultural - Machinery": "Industrials",
+  "Agricultural Farm Products": "Consumer Defensive",
+  "Agricultural Inputs": "Basic Materials",
+  "Airlines, Airports & Air Services": "Industrials",
+  "Aluminum": "Basic Materials",
+  "Apparel - Footwear & Accessories": "Consumer Cyclical",
+  "Apparel - Manufacturers": "Consumer Cyclical",
+  "Apparel - Retail": "Consumer Cyclical",
+  "Asset Management": "Financial Services",
+  "Auto - Dealerships": "Consumer Cyclical",
+  "Auto - Manufacturers": "Consumer Cyclical",
+  "Auto - Parts": "Consumer Cyclical",
+  "Auto - Recreational Vehicles": "Consumer Cyclical",
+  "Banks": "Financial Services",
+  "Banks - Diversified": "Financial Services",
+  "Banks - Regional": "Financial Services",
+  "Beverages - Alcoholic": "Consumer Defensive",
+  "Beverages - Non-Alcoholic": "Consumer Defensive",
+  "Beverages - Wineries & Distilleries": "Consumer Defensive",
+  "Biotechnology": "Healthcare",
+  "Broadcasting": "Communication Services",
+  "Chemicals": "Basic Materials",
+  "Chemicals - Specialty": "Basic Materials",
+  "Coal": "Energy",
+  "Communication Equipment": "Technology",
+  "Computer Hardware": "Technology",
+  "Conglomerates": "Industrials",
+  "Construction Materials": "Basic Materials",
+  "Consulting Services": "Industrials",
+  "Consumer Electronics": "Technology",
+  "Copper": "Basic Materials",
+  "Department Stores": "Consumer Cyclical",
+  "Discount Stores": "Consumer Defensive",
+  "Diversified Utilities": "Utilities",
+  "Drug Manufacturers - General": "Healthcare",
+  "Drug Manufacturers - Specialty & Generic": "Healthcare",
+  "Education & Training Services": "Consumer Defensive",
+  "Electrical Equipment & Parts": "Industrials",
+  "Electronic Gaming & Multimedia": "Technology",
+  "Engineering & Construction": "Industrials",
+  "Entertainment": "Communication Services",
+  "Financial - Capital Markets": "Financial Services",
+  "Financial - Conglomerates": "Financial Services",
+  "Financial - Credit Services": "Financial Services",
+  "Financial - Data & Stock Exchanges": "Financial Services",
+  "Financial - Mortgages": "Financial Services",
+  "Food Confectioners": "Consumer Defensive",
+  "Food Distribution": "Consumer Defensive",
+  "Furnishings, Fixtures & Appliances": "Consumer Cyclical",
+  "Gambling, Resorts & Casinos": "Consumer Cyclical",
+  "Gold": "Basic Materials",
+  "Grocery Stores": "Consumer Defensive",
+  "Hardware, Equipment & Parts": "Technology",
+  "Home Improvement": "Consumer Cyclical",
+  "Household & Personal Products": "Consumer Defensive",
+  "Independent Power Producers": "Utilities",
+  "Industrial - Distribution": "Industrials",
+  "Industrial - Machinery": "Industrials",
+  "Industrial - Pollution & Treatment Controls": "Industrials",
+  "Industrial - Specialties": "Industrials",
+  "Industrial Materials": "Basic Materials",
+  "Information Technology Services": "Technology",
+  "Insurance - Brokers": "Financial Services",
+  "Insurance - Diversified": "Financial Services",
+  "Insurance - Life": "Financial Services",
+  "Insurance - Property & Casualty": "Financial Services",
+  "Insurance - Reinsurance": "Financial Services",
+  "Insurance - Specialty": "Financial Services",
+  "Integrated Freight & Logistics": "Industrials",
+  "Internet Content & Information": "Communication Services",
+  "Investment - Banking & Investment Services": "Financial Services",
+  "Leisure": "Consumer Cyclical",
+  "Luxury Goods": "Consumer Cyclical",
+  "Manufacturing - Metal Fabrication": "Industrials",
+  "Manufacturing - Miscellaneous": "Industrials",
+  "Manufacturing - Textiles": "Industrials",
+  "Manufacturing - Tools & Accessories": "Industrials",
+  "Marine Shipping": "Industrials",
+  "Media & Entertainment": "Technology",
+  "Medical - Care Facilities": "Healthcare",
+  "Medical - Devices": "Healthcare",
+  "Medical - Diagnostics & Research": "Healthcare",
+  "Medical - Distribution": "Healthcare",
+  "Medical - Equipment & Services": "Healthcare",
+  "Medical - Healthcare Information Services": "Healthcare",
+  "Medical - Healthcare Plans": "Healthcare",
+  "Medical - Instruments & Supplies": "Healthcare",
+  "Medical - Pharmaceuticals": "Healthcare",
+  "Medical - Specialties": "Healthcare",
+  "Oil & Gas Drilling": "Energy",
+  "Oil & Gas Energy": "Energy",
+  "Oil & Gas Equipment & Services": "Energy",
+  "Oil & Gas Exploration & Production": "Energy",
+  "Oil & Gas Integrated": "Energy",
+  "Oil & Gas Midstream": "Energy",
+  "Oil & Gas Refining & Marketing": "Energy",
+  "Other Precious Metals": "Basic Materials",
+  "Packaged Foods": "Consumer Defensive",
+  "Packaging & Containers": "Consumer Cyclical",
+  "Paper, Lumber & Forest Products": "Basic Materials",
+  "Personal Products & Services": "Consumer Cyclical",
+  "Publishing": "Communication Services",
+  "REIT - Diversified": "Real Estate",
+  "REIT - Healthcare Facilities": "Real Estate",
+  "REIT - Hotel & Motel": "Real Estate",
+  "REIT - Industrial": "Real Estate",
+  "REIT - Mortgage": "Real Estate",
+  "REIT - Office": "Real Estate",
+  "REIT - Residential": "Real Estate",
+  "REIT - Retail": "Real Estate",
+  "REIT - Specialty": "Real Estate",
+  "Railroads": "Industrials",
+  "Real Estate - Development": "Real Estate",
+  "Real Estate - Diversified": "Real Estate",
+  "Real Estate - Services": "Real Estate",
+  "Regulated Electric": "Utilities",
+  "Regulated Gas": "Utilities",
+  "Regulated Water": "Utilities",
+  "Renewable Utilities": "Utilities",
+  "Rental & Leasing Services": "Industrials",
+  "Residential Construction": "Consumer Cyclical",
+  "Restaurants": "Consumer Cyclical",
+  "Security & Protection Services": "Industrials",
+  "Semiconductors": "Technology",
+  "Shell Companies": "Financial Services",
+  "Silver": "Basic Materials",
+  "Software - Application": "Technology",
+  "Software - Infrastructure": "Technology",
+  "Software - Services": "Technology",
+  "Solar": "Energy",
+  "Specialty Business Services": "Industrials",
+  "Specialty Retail": "Consumer Cyclical",
+  "Staffing & Employment Services": "Industrials",
+  "Steel": "Basic Materials",
+  "Technology Distributors": "Technology",
+  "Telecommunications Services": "Communication Services",
+  "Tobacco": "Consumer Defensive",
+  "Travel Lodging": "Consumer Cyclical",
+  "Travel Services": "Consumer Cyclical",
+  "Trucking": "Industrials",
+  "Uranium": "Energy",
+  "Waste Management": "Industrials"
+ },
+ "codes": {
+  "0100": {
+   "sector": "Consumer Defensive",
+   "industry": "Agricultural Farm Products",
+   "sec": "Agricultural Production-Crops"
+  },
+  "1000": {
+   "sector": "Basic Materials",
+   "industry": null,
+   "rules": true,
+   "sec": "Metal Mining"
+  },
+  "1040": {
+   "sector": "Basic Materials",
+   "industry": "Gold",
+   "rules": true,
+   "sec": "Gold and Silver Ores"
+  },
+  "1221": {
+   "sector": "Energy",
+   "industry": "Coal",
+   "sec": "Bituminous Coal & Lignite Surface Mining"
+  },
+  "1311": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Exploration & Production",
+   "sec": "Crude Petroleum & Natural Gas"
+  },
+  "1381": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Drilling",
+   "sec": "Drilling Oil & Gas Wells"
+  },
+  "1389": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Equipment & Services",
+   "sec": "Oil & Gas Field Services, NEC"
+  },
+  "1400": {
+   "sector": "Basic Materials",
+   "industry": null,
+   "rules": true,
+   "sec": "Mining & Quarrying of  Nonmetallic Minerals (No Fuels)"
+  },
+  "1520": {
+   "sector": "Consumer Cyclical",
+   "industry": "Residential Construction",
+   "sec": "General Bldg Contractors - Residential Bldgs"
+  },
+  "1531": {
+   "sector": "Consumer Cyclical",
+   "industry": "Residential Construction",
+   "sec": "Operative Builders"
+  },
+  "1600": {
+   "sector": "Industrials",
+   "industry": "Engineering & Construction",
+   "sec": "Heavy Construction Other Than Bldg Const - Contractors"
+  },
+  "1623": {
+   "sector": "Industrials",
+   "industry": "Engineering & Construction",
+   "sec": "Water, Sewer, Pipeline, Comm & Power Line Construction"
+  },
+  "1700": {
+   "sector": "Industrials",
+   "industry": "Engineering & Construction",
+   "sec": "Construction - Special Trade Contractors"
+  },
+  "1731": {
+   "sector": "Industrials",
+   "industry": "Engineering & Construction",
+   "sec": "Electrical Work"
+  },
+  "2000": {
+   "sector": "Consumer Defensive",
+   "industry": "Packaged Foods",
+   "sec": "Food and Kindred Products"
+  },
+  "2011": {
+   "sector": "Consumer Defensive",
+   "industry": "Packaged Foods",
+   "sec": "Meat Packing Plants"
+  },
+  "2030": {
+   "sector": "Consumer Defensive",
+   "industry": "Packaged Foods",
+   "sec": "Canned, Frozen & Preservd Fruit, Veg & Food Specialties"
+  },
+  "2040": {
+   "sector": "Consumer Defensive",
+   "industry": "Packaged Foods",
+   "sec": "Grain Mill Products"
+  },
+  "2070": {
+   "sector": "Consumer Defensive",
+   "industry": "Agricultural Farm Products",
+   "sec": "Fats & Oils"
+  },
+  "2080": {
+   "sector": "Consumer Defensive",
+   "industry": null,
+   "rules": true,
+   "sec": "Beverages"
+  },
+  "2082": {
+   "sector": "Consumer Defensive",
+   "industry": "Beverages - Alcoholic",
+   "sec": "Malt Beverages"
+  },
+  "2086": {
+   "sector": "Consumer Defensive",
+   "industry": "Beverages - Non-Alcoholic",
+   "sec": "Bottled & Canned Soft Drinks & Carbonated Waters"
+  },
+  "2090": {
+   "sector": "Consumer Defensive",
+   "industry": "Packaged Foods",
+   "sec": "Miscellaneous Food Preparations & Kindred Products"
+  },
+  "2111": {
+   "sector": "Consumer Defensive",
+   "industry": "Tobacco",
+   "sec": "Cigarettes"
+  },
+  "2300": {
+   "sector": "Consumer Cyclical",
+   "industry": "Apparel - Manufacturers",
+   "sec": "Apparel & Other Finishd Prods of  Fabrics & Similar Matl"
+  },
+  "2320": {
+   "sector": "Consumer Cyclical",
+   "industry": "Apparel - Manufacturers",
+   "sec": "Men's & Boys' Furnishgs, Work Clothg, & Allied Garments"
+  },
+  "2621": {
+   "sector": "Basic Materials",
+   "industry": "Paper, Lumber & Forest Products",
+   "sec": "Paper Mills"
+  },
+  "2650": {
+   "sector": "Consumer Cyclical",
+   "industry": "Packaging & Containers",
+   "sec": "Paperboard Containers & Boxes"
+  },
+  "2711": {
+   "sector": "Communication Services",
+   "industry": "Publishing",
+   "sec": "Newspapers: Publishing or  Publishing & Printing"
+  },
+  "2731": {
+   "sector": "Communication Services",
+   "industry": "Publishing",
+   "sec": "Books: Publishing or  Publishing & Printing"
+  },
+  "2741": {
+   "sector": "Communication Services",
+   "industry": "Publishing",
+   "sec": "Miscellaneous Publishing"
+  },
+  "2800": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals",
+   "sec": "Chemicals & Allied Products"
+  },
+  "2810": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals",
+   "sec": "Industrial Inorganic Chemicals"
+  },
+  "2820": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals",
+   "sec": "Plastic Material, Synth Resin/Rubber, Cellulos (No Glass)"
+  },
+  "2821": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals",
+   "sec": "Plastic Materials, Synth Resins & Nonvulcan Elastomers"
+  },
+  "2833": {
+   "sector": "Healthcare",
+   "industry": "Drug Manufacturers - Specialty & Generic",
+   "sec": "Medicinal Chemicals & Botanical Products"
+  },
+  "2834": {
+   "sector": "Healthcare",
+   "industry": null,
+   "rules": true,
+   "sec": "Pharmaceutical Preparations"
+  },
+  "2835": {
+   "sector": "Healthcare",
+   "industry": "Medical - Diagnostics & Research",
+   "sec": "In Vitro & In Vivo Diagnostic Substances"
+  },
+  "2836": {
+   "sector": "Healthcare",
+   "industry": "Biotechnology",
+   "sec": "Biological Products, (No Diagnostic Substances)"
+  },
+  "2840": {
+   "sector": "Consumer Defensive",
+   "industry": "Household & Personal Products",
+   "sec": "Soap, Detergents, Cleang Preparations, Perfumes, Cosmetics"
+  },
+  "2844": {
+   "sector": "Consumer Defensive",
+   "industry": "Household & Personal Products",
+   "sec": "Perfumes, Cosmetics & Other Toilet Preparations"
+  },
+  "2851": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals - Specialty",
+   "sec": "Paints, Varnishes, Lacquers, Enamels & Allied Prods"
+  },
+  "2860": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals",
+   "sec": "Industrial Organic Chemicals"
+  },
+  "2870": {
+   "sector": "Basic Materials",
+   "industry": "Agricultural Inputs",
+   "sec": "Agricultural Chemicals"
+  },
+  "2890": {
+   "sector": "Basic Materials",
+   "industry": "Chemicals - Specialty",
+   "sec": "Miscellaneous Chemical Products"
+  },
+  "2911": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Refining & Marketing",
+   "rules": true,
+   "sec": "Petroleum Refining"
+  },
+  "3021": {
+   "sector": "Consumer Cyclical",
+   "industry": "Apparel - Footwear & Accessories",
+   "sec": "Rubber & Plastics Footwear"
+  },
+  "3089": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Plastics Products, NEC"
+  },
+  "3140": {
+   "sector": "Consumer Cyclical",
+   "industry": "Apparel - Footwear & Accessories",
+   "sec": "Footwear, (No Rubber)"
+  },
+  "3241": {
+   "sector": "Basic Materials",
+   "industry": "Construction Materials",
+   "sec": "Cement, Hydraulic"
+  },
+  "3310": {
+   "sector": "Basic Materials",
+   "industry": "Steel",
+   "sec": "Steel Works, Blast Furnaces & Rolling & Finishing Mills"
+  },
+  "3312": {
+   "sector": "Basic Materials",
+   "industry": "Steel",
+   "sec": "Steel Works, Blast Furnaces & Rolling Mills (Coke Ovens)"
+  },
+  "3350": {
+   "sector": "Basic Materials",
+   "industry": null,
+   "rules": true,
+   "sec": "Rolling Drawing & Extruding of  Nonferrous Metals"
+  },
+  "3411": {
+   "sector": "Consumer Cyclical",
+   "industry": "Packaging & Containers",
+   "sec": "Metal Cans"
+  },
+  "3420": {
+   "sector": "Industrials",
+   "industry": "Manufacturing - Tools & Accessories",
+   "sec": "Cutlery, Handtools & General Hardware"
+  },
+  "3440": {
+   "sector": "Industrials",
+   "industry": "Manufacturing - Metal Fabrication",
+   "sec": "Fabricated Structural Metal Products"
+  },
+  "3490": {
+   "sector": "Industrials",
+   "industry": "Manufacturing - Metal Fabrication",
+   "sec": "Miscellaneous Fabricated Metal Products"
+  },
+  "3510": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Engines & Turbines"
+  },
+  "3523": {
+   "sector": "Industrials",
+   "industry": "Agricultural - Machinery",
+   "sec": "Farm Machinery & Equipment"
+  },
+  "3533": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Equipment & Services",
+   "sec": "Oil & Gas Field Machinery & Equipment"
+  },
+  "3550": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Special Industry Machinery (No Metalworking Machinery)"
+  },
+  "3559": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "rules": true,
+   "sec": "Special Industry Machinery, NEC",
+   "crossSector": true
+  },
+  "3560": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "General Industrial Machinery & Equipment"
+  },
+  "3561": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Pumps & Pumping Equipment"
+  },
+  "3564": {
+   "sector": "Industrials",
+   "industry": "Industrial - Pollution & Treatment Controls",
+   "sec": "Industrial & Commercial Fans & Blowers & Air Purifing Equip"
+  },
+  "3569": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "rules": true,
+   "sec": "General Industrial Machinery & Equipment, NEC"
+  },
+  "3570": {
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "sec": "Computer & office Equipment"
+  },
+  "3571": {
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "sec": "Electronic Computers"
+  },
+  "3572": {
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "sec": "Computer Storage Devices"
+  },
+  "3576": {
+   "sector": "Technology",
+   "industry": "Communication Equipment",
+   "sec": "Computer Communications Equipment"
+  },
+  "3577": {
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "sec": "Computer Peripheral Equipment, NEC"
+  },
+  "3578": {
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "sec": "Calculating & Accounting Machines (No Electronic Computers)"
+  },
+  "3580": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Refrigeration & Service Industry Machinery"
+  },
+  "3585": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Air-Cond & Warm Air Heatg Equip & Comm & Indl Refrig Equip"
+  },
+  "3590": {
+   "sector": "Industrials",
+   "industry": "Industrial - Machinery",
+   "sec": "Misc Industrial & Commercial Machinery & Equipment"
+  },
+  "3600": {
+   "sector": "Industrials",
+   "industry": "Electrical Equipment & Parts",
+   "sec": "Electronic & Other Electrical Equipment (No Computer Equip)"
+  },
+  "3620": {
+   "sector": "Industrials",
+   "industry": "Electrical Equipment & Parts",
+   "sec": "Electrical Industrial Apparatus"
+  },
+  "3621": {
+   "sector": "Industrials",
+   "industry": "Electrical Equipment & Parts",
+   "sec": "Motors & Generators"
+  },
+  "3630": {
+   "sector": "Consumer Cyclical",
+   "industry": "Furnishings, Fixtures & Appliances",
+   "sec": "Household Appliances"
+  },
+  "3651": {
+   "sector": "Technology",
+   "industry": "Consumer Electronics",
+   "sec": "Household Audio & Video Equipment"
+  },
+  "3663": {
+   "sector": "Technology",
+   "industry": "Communication Equipment",
+   "sec": "Radio & Tv Broadcasting & Communications Equipment"
+  },
+  "3669": {
+   "sector": "Technology",
+   "industry": "Communication Equipment",
+   "sec": "Communications Equipment, NEC"
+  },
+  "3670": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Electronic Components & Accessories"
+  },
+  "3672": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Printed Circuit Boards"
+  },
+  "3674": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sec": "Semiconductors & Related Devices"
+  },
+  "3679": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Electronic Components, NEC"
+  },
+  "3690": {
+   "sector": "Industrials",
+   "industry": "Electrical Equipment & Parts",
+   "rules": true,
+   "sec": "Miscellaneous Electrical Machinery, Equipment & Supplies",
+   "crossSector": true
+  },
+  "3711": {
+   "sector": "Consumer Cyclical",
+   "industry": "Auto - Manufacturers",
+   "sec": "Motor Vehicles & Passenger Car Bodies"
+  },
+  "3714": {
+   "sector": "Consumer Cyclical",
+   "industry": "Auto - Parts",
+   "sec": "Motor Vehicle Parts & Accessories"
+  },
+  "3721": {
+   "sector": "Industrials",
+   "industry": "Aerospace & Defense",
+   "sec": "Aircraft"
+  },
+  "3724": {
+   "sector": "Industrials",
+   "industry": "Aerospace & Defense",
+   "sec": "Aircraft Engines & Engine Parts"
+  },
+  "3728": {
+   "sector": "Industrials",
+   "industry": "Aerospace & Defense",
+   "sec": "Aircraft Parts & Auxiliary Equipment, NEC"
+  },
+  "3743": {
+   "sector": "Industrials",
+   "industry": "Railroads",
+   "sec": "Railroad Equipment"
+  },
+  "3760": {
+   "sector": "Industrials",
+   "industry": "Aerospace & Defense",
+   "sec": "Guided Missiles & Space Vehicles & Parts"
+  },
+  "3812": {
+   "sector": "Industrials",
+   "industry": "Aerospace & Defense",
+   "sec": "Search, Detection, Navigation, Guidance, Aeronautical Sys"
+  },
+  "3823": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Industrial Instruments For Measurement, Display, and Control"
+  },
+  "3825": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Instruments For Meas & Testing of  Electricity & Elec Signals"
+  },
+  "3826": {
+   "sector": "Healthcare",
+   "industry": "Medical - Diagnostics & Research",
+   "sec": "Laboratory Analytical Instruments"
+  },
+  "3827": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "sec": "Optical Instruments & Lenses"
+  },
+  "3829": {
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "rules": true,
+   "sec": "Measuring & Controlling Devices, NEC",
+   "crossSector": true
+  },
+  "3841": {
+   "sector": "Healthcare",
+   "industry": "Medical - Devices",
+   "rules": true,
+   "sec": "Surgical & Medical Instruments & Apparatus"
+  },
+  "3842": {
+   "sector": "Healthcare",
+   "industry": "Medical - Instruments & Supplies",
+   "sec": "Orthopedic, Prosthetic & Surgical Appliances & Supplies"
+  },
+  "3844": {
+   "sector": "Healthcare",
+   "industry": "Medical - Devices",
+   "sec": "X-Ray Apparatus & Tubes & Related Irradiation Apparatus"
+  },
+  "3845": {
+   "sector": "Healthcare",
+   "industry": "Medical - Devices",
+   "sec": "Electromedical & Electrotherapeutic Apparatus"
+  },
+  "3851": {
+   "sector": "Healthcare",
+   "industry": "Medical - Instruments & Supplies",
+   "sec": "Ophthalmic Goods"
+  },
+  "3949": {
+   "sector": "Consumer Cyclical",
+   "industry": "Leisure",
+   "sec": "Sporting & Athletic Goods, NEC"
+  },
+  "3990": {
+   "sector": "Industrials",
+   "industry": "Manufacturing - Miscellaneous",
+   "sec": "Miscellaneous Manufacturing Industries"
+  },
+  "4011": {
+   "sector": "Industrials",
+   "industry": "Railroads",
+   "sec": "Railroads, Line-Haul Operating"
+  },
+  "4210": {
+   "sector": "Industrials",
+   "industry": "Integrated Freight & Logistics",
+   "sec": "Trucking & Courier Services (No Air)"
+  },
+  "4213": {
+   "sector": "Industrials",
+   "industry": "Trucking",
+   "sec": "Trucking (No Local)"
+  },
+  "4400": {
+   "sector": "Industrials",
+   "industry": "Marine Shipping",
+   "rules": true,
+   "sec": "Water Transportation",
+   "crossSector": true
+  },
+  "4412": {
+   "sector": "Industrials",
+   "industry": "Marine Shipping",
+   "sec": "Deep Sea Foreign Transportation of  Freight"
+  },
+  "4512": {
+   "sector": "Industrials",
+   "industry": "Airlines, Airports & Air Services",
+   "sec": "Air Transportation, Scheduled"
+  },
+  "4581": {
+   "sector": "Industrials",
+   "industry": "Airlines, Airports & Air Services",
+   "sec": "Airports, Flying Fields & Airport Terminal Services"
+  },
+  "4610": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Midstream",
+   "sec": "Pipe Lines (No Natural Gas)"
+  },
+  "4700": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Transportation Services"
+  },
+  "4731": {
+   "sector": "Industrials",
+   "industry": "Integrated Freight & Logistics",
+   "sec": "Arrangement of  Transportation of  Freight & Cargo"
+  },
+  "4812": {
+   "sector": "Communication Services",
+   "industry": "Telecommunications Services",
+   "sec": "Radiotelephone Communications"
+  },
+  "4813": {
+   "sector": "Communication Services",
+   "industry": "Telecommunications Services",
+   "sec": "Telephone Communications (No Radiotelephone)"
+  },
+  "4832": {
+   "sector": "Communication Services",
+   "industry": "Broadcasting",
+   "sec": "Radio Broadcasting Stations"
+  },
+  "4833": {
+   "sector": "Communication Services",
+   "industry": "Broadcasting",
+   "sec": "Television Broadcasting Stations"
+  },
+  "4841": {
+   "sector": "Communication Services",
+   "industry": "Telecommunications Services",
+   "sec": "Cable & Other Pay Television Services"
+  },
+  "4899": {
+   "sector": "Communication Services",
+   "industry": "Telecommunications Services",
+   "sec": "Communications Services, NEC"
+  },
+  "4911": {
+   "sector": "Utilities",
+   "industry": "Regulated Electric",
+   "sec": "Electric Services"
+  },
+  "4922": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Midstream",
+   "sec": "Natural Gas Transmission"
+  },
+  "4923": {
+   "sector": "Utilities",
+   "industry": "Regulated Gas",
+   "sec": "Natural Gas Transmisison & Distribution"
+  },
+  "4924": {
+   "sector": "Utilities",
+   "industry": "Regulated Gas",
+   "sec": "Natural Gas Distribution"
+  },
+  "4931": {
+   "sector": "Utilities",
+   "industry": "Diversified Utilities",
+   "sec": "Electric & Other Services Combined"
+  },
+  "4932": {
+   "sector": "Utilities",
+   "industry": "Diversified Utilities",
+   "sec": "Gas & Other Services Combined"
+  },
+  "4941": {
+   "sector": "Utilities",
+   "industry": "Regulated Water",
+   "sec": "Water Supply"
+  },
+  "4953": {
+   "sector": "Industrials",
+   "industry": "Waste Management",
+   "sec": "Refuse Systems"
+  },
+  "5045": {
+   "sector": "Technology",
+   "industry": "Technology Distributors",
+   "sec": "Wholesale-Computers & Peripheral Equipment & Software"
+  },
+  "5065": {
+   "sector": "Technology",
+   "industry": "Technology Distributors",
+   "sec": "Wholesale-Electronic Parts & Equipment, NEC"
+  },
+  "5080": {
+   "sector": "Industrials",
+   "industry": "Industrial - Distribution",
+   "sec": "Wholesale-Machinery, Equipment & Supplies"
+  },
+  "5084": {
+   "sector": "Industrials",
+   "industry": "Industrial - Distribution",
+   "sec": "Wholesale-Industrial Machinery & Equipment"
+  },
+  "5122": {
+   "sector": "Healthcare",
+   "industry": "Medical - Distribution",
+   "sec": "Wholesale-Drugs, Proprietaries & Druggists' Sundries"
+  },
+  "5140": {
+   "sector": "Consumer Defensive",
+   "industry": "Food Distribution",
+   "sec": "Wholesale-Groceries & Related Products"
+  },
+  "5141": {
+   "sector": "Consumer Defensive",
+   "industry": "Food Distribution",
+   "sec": "Wholesale-Groceries, General Line"
+  },
+  "5200": {
+   "sector": "Consumer Cyclical",
+   "industry": "Home Improvement",
+   "sec": "Retail-Building Materials, Hardware, Garden Supply"
+  },
+  "5211": {
+   "sector": "Consumer Cyclical",
+   "industry": "Home Improvement",
+   "sec": "Retail-Lumber & Other Building Materials Dealers"
+  },
+  "5311": {
+   "sector": "Consumer Cyclical",
+   "industry": "Department Stores",
+   "sec": "Retail-Department Stores"
+  },
+  "5331": {
+   "sector": "Consumer Defensive",
+   "industry": "Discount Stores",
+   "sec": "Retail-Variety Stores"
+  },
+  "5411": {
+   "sector": "Consumer Defensive",
+   "industry": "Grocery Stores",
+   "sec": "Retail-Grocery Stores"
+  },
+  "5500": {
+   "sector": "Consumer Cyclical",
+   "industry": "Auto - Dealerships",
+   "sec": "Retail-Auto Dealers & Gasoline Stations"
+  },
+  "5531": {
+   "sector": "Consumer Cyclical",
+   "industry": "Specialty Retail",
+   "sec": "Retail-Auto & Home Supply Stores"
+  },
+  "5651": {
+   "sector": "Consumer Cyclical",
+   "industry": "Apparel - Retail",
+   "sec": "Retail-Family Clothing Stores"
+  },
+  "5712": {
+   "sector": "Consumer Cyclical",
+   "industry": "Specialty Retail",
+   "sec": "Retail-Furniture Stores"
+  },
+  "5810": {
+   "sector": "Consumer Cyclical",
+   "industry": "Restaurants",
+   "sec": "Retail-Eating & Drinking Places"
+  },
+  "5812": {
+   "sector": "Consumer Cyclical",
+   "industry": "Restaurants",
+   "sec": "Retail-Eating  Places"
+  },
+  "5900": {
+   "sector": "Consumer Cyclical",
+   "industry": "Specialty Retail",
+   "sec": "Retail-Miscellaneous Retail"
+  },
+  "5961": {
+   "sector": "Consumer Cyclical",
+   "industry": "Specialty Retail",
+   "rules": true,
+   "sec": "Retail-Catalog & Mail-Order Houses"
+  },
+  "5990": {
+   "sector": "Consumer Cyclical",
+   "industry": "Specialty Retail",
+   "sec": "Retail-Retail Stores, NEC"
+  },
+  "6021": {
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "sec": "National Commercial Banks"
+  },
+  "6022": {
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "sec": "State Commercial Banks"
+  },
+  "6029": {
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "sec": "Commercial Banks, NEC"
+  },
+  "6035": {
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "sec": "Savings Institution, Federally Chartered"
+  },
+  "6036": {
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "sec": "Savings Institutions, Not Federally Chartered"
+  },
+  "6141": {
+   "sector": "Financial Services",
+   "industry": "Financial - Credit Services",
+   "sec": "Personal Credit Institutions"
+  },
+  "6162": {
+   "sector": "Financial Services",
+   "industry": "Financial - Mortgages",
+   "sec": "Mortgage Bankers & Loan Correspondents"
+  },
+  "6199": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Finance Services"
+  },
+  "6200": {
+   "sector": "Financial Services",
+   "industry": "Financial - Data & Stock Exchanges",
+   "sec": "Security & Commodity Brokers, Dealers, Exchanges & Services"
+  },
+  "6211": {
+   "sector": "Financial Services",
+   "industry": "Financial - Capital Markets",
+   "sec": "Security Brokers, Dealers & Flotation Companies"
+  },
+  "6282": {
+   "sector": "Financial Services",
+   "industry": "Asset Management",
+   "sec": "Investment Advice"
+  },
+  "6311": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Life",
+   "sec": "Life Insurance"
+  },
+  "6321": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Life",
+   "sec": "Accident & Health Insurance"
+  },
+  "6324": {
+   "sector": "Healthcare",
+   "industry": "Medical - Healthcare Plans",
+   "sec": "Hospital & Medical Service Plans"
+  },
+  "6331": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Property & Casualty",
+   "sec": "Fire, Marine & Casualty Insurance"
+  },
+  "6351": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Specialty",
+   "sec": "Surety Insurance"
+  },
+  "6361": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Specialty",
+   "sec": "Title Insurance"
+  },
+  "6399": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Diversified",
+   "sec": "Insurance Carriers, NEC"
+  },
+  "6411": {
+   "sector": "Financial Services",
+   "industry": "Insurance - Brokers",
+   "sec": "Insurance Agents, Brokers & Service"
+  },
+  "6500": {
+   "sector": "Real Estate",
+   "industry": "Real Estate - Diversified",
+   "rules": true,
+   "sec": "Real Estate"
+  },
+  "6512": {
+   "sector": "Real Estate",
+   "industry": "Real Estate - Diversified",
+   "sec": "Opeators of  Nonresidential Buildings"
+  },
+  "6531": {
+   "sector": "Real Estate",
+   "industry": "Real Estate - Services",
+   "sec": "Real Estate Agents & Managers (For Others)"
+  },
+  "6770": {
+   "sector": "Financial Services",
+   "industry": "Shell Companies",
+   "sec": "Blank Checks"
+  },
+  "6792": {
+   "sector": "Energy",
+   "industry": "Oil & Gas Exploration & Production",
+   "sec": "Oil Royalty Traders"
+  },
+  "6794": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Patent Owners & Lessors"
+  },
+  "6795": {
+   "sector": "Basic Materials",
+   "industry": "Gold",
+   "sec": "Mineral Royalty Traders"
+  },
+  "6798": {
+   "sector": "Real Estate",
+   "industry": null,
+   "rules": true,
+   "sec": "Real Estate Investment Trusts"
+  },
+  "7011": {
+   "sector": "Consumer Cyclical",
+   "industry": "Travel Lodging",
+   "rules": true,
+   "sec": "Hotels & Motels"
+  },
+  "7200": {
+   "sector": "Consumer Cyclical",
+   "industry": "Personal Products & Services",
+   "sec": "Services-Personal Services"
+  },
+  "7311": {
+   "sector": "Communication Services",
+   "industry": "Advertising Agencies",
+   "sec": "Services-Advertising Agencies"
+  },
+  "7320": {
+   "sector": "Financial Services",
+   "industry": "Financial - Data & Stock Exchanges",
+   "sec": "Services-Consumer Credit Reporting, Collection Agencies"
+  },
+  "7340": {
+   "sector": "Industrials",
+   "industry": "Specialty Business Services",
+   "sec": "Services-To Dwellings & Other Buildings"
+  },
+  "7350": {
+   "sector": "Industrials",
+   "industry": "Rental & Leasing Services",
+   "sec": "Services-Miscellaneous Equipment Rental & Leasing"
+  },
+  "7359": {
+   "sector": "Industrials",
+   "industry": "Rental & Leasing Services",
+   "sec": "Services-Equipment Rental & Leasing, NEC"
+  },
+  "7363": {
+   "sector": "Industrials",
+   "industry": "Staffing & Employment Services",
+   "sec": "Services-Help Supply Services"
+  },
+  "7370": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Services-Computer Programming, Data Processing, Etc."
+  },
+  "7371": {
+   "sector": "Technology",
+   "industry": "Information Technology Services",
+   "sec": "Services-Computer Programming Services"
+  },
+  "7372": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "rules": true,
+   "sec": "Services-Prepackaged Software"
+  },
+  "7373": {
+   "sector": "Technology",
+   "industry": "Information Technology Services",
+   "sec": "Services-Computer Integrated Systems Design"
+  },
+  "7374": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Services-Computer Processing & Data Preparation"
+  },
+  "7381": {
+   "sector": "Industrials",
+   "industry": "Security & Protection Services",
+   "sec": "Services-Detective, Guard & Armored Car Services"
+  },
+  "7389": {
+   "sector": null,
+   "industry": null,
+   "rules": true,
+   "sec": "Services-Business Services, NEC"
+  },
+  "7510": {
+   "sector": "Industrials",
+   "industry": "Rental & Leasing Services",
+   "sec": "Services-Auto Rental & Leasing (No Drivers)"
+  },
+  "7900": {
+   "sector": "Consumer Cyclical",
+   "industry": "Leisure",
+   "rules": true,
+   "sec": "Services-Amusement & Recreation Services"
+  },
+  "7990": {
+   "sector": "Consumer Cyclical",
+   "industry": "Leisure",
+   "rules": true,
+   "sec": "Services-Miscellaneous Amusement & Recreation"
+  },
+  "7997": {
+   "sector": "Consumer Cyclical",
+   "industry": "Leisure",
+   "sec": "Services-Membership Sports & Recreation Clubs"
+  },
+  "8000": {
+   "sector": "Healthcare",
+   "industry": "Medical - Care Facilities",
+   "sec": "Services-Health Services"
+  },
+  "8050": {
+   "sector": "Healthcare",
+   "industry": "Medical - Care Facilities",
+   "sec": "Services-Nursing & Personal Care Facilities"
+  },
+  "8062": {
+   "sector": "Healthcare",
+   "industry": "Medical - Care Facilities",
+   "sec": "Services-General Medical & Surgical Hospitals, NEC"
+  },
+  "8071": {
+   "sector": "Healthcare",
+   "industry": "Medical - Diagnostics & Research",
+   "sec": "Services-Medical Laboratories"
+  },
+  "8082": {
+   "sector": "Healthcare",
+   "industry": "Medical - Care Facilities",
+   "sec": "Services-Home Health Care Services"
+  },
+  "8090": {
+   "sector": "Healthcare",
+   "industry": "Medical - Care Facilities",
+   "sec": "Services-Misc Health & Allied Services, NEC"
+  },
+  "8200": {
+   "sector": "Consumer Defensive",
+   "industry": "Education & Training Services",
+   "sec": "Services-Educational Services"
+  },
+  "8711": {
+   "sector": "Industrials",
+   "industry": "Engineering & Construction",
+   "sec": "Services-Engineering Services"
+  },
+  "8731": {
+   "sector": "Healthcare",
+   "industry": "Medical - Diagnostics & Research",
+   "sec": "Services-Commercial Physical & Biological Research"
+  },
+  "8742": {
+   "sector": "Industrials",
+   "industry": "Consulting Services",
+   "rules": true,
+   "sec": "Services-Management Consulting Services"
+  }
+ },
+ "majorGroups": {
+  "01": "Consumer Defensive",
+  "02": "Consumer Defensive",
+  "07": "Consumer Defensive",
+  "08": "Basic Materials",
+  "09": "Consumer Defensive",
+  "10": "Basic Materials",
+  "12": "Energy",
+  "13": "Energy",
+  "14": "Basic Materials",
+  "15": "Industrials",
+  "16": "Industrials",
+  "17": "Industrials",
+  "20": "Consumer Defensive",
+  "21": "Consumer Defensive",
+  "22": "Industrials",
+  "23": "Consumer Cyclical",
+  "24": "Basic Materials",
+  "25": "Consumer Cyclical",
+  "26": "Basic Materials",
+  "27": "Communication Services",
+  "28": "Basic Materials",
+  "29": "Energy",
+  "30": "Basic Materials",
+  "31": "Consumer Cyclical",
+  "32": "Basic Materials",
+  "33": "Basic Materials",
+  "34": "Industrials",
+  "35": "Industrials",
+  "36": "Technology",
+  "37": "Industrials",
+  "38": null,
+  "39": "Consumer Cyclical",
+  "40": "Industrials",
+  "41": "Industrials",
+  "42": "Industrials",
+  "44": "Industrials",
+  "45": "Industrials",
+  "46": "Energy",
+  "47": "Industrials",
+  "48": "Communication Services",
+  "49": "Utilities",
+  "50": null,
+  "51": null,
+  "52": "Consumer Cyclical",
+  "53": "Consumer Cyclical",
+  "54": "Consumer Defensive",
+  "55": "Consumer Cyclical",
+  "56": "Consumer Cyclical",
+  "57": "Consumer Cyclical",
+  "58": "Consumer Cyclical",
+  "59": "Consumer Cyclical",
+  "60": "Financial Services",
+  "61": "Financial Services",
+  "62": "Financial Services",
+  "63": "Financial Services",
+  "64": "Financial Services",
+  "65": "Real Estate",
+  "67": "Financial Services",
+  "70": "Consumer Cyclical",
+  "72": "Consumer Cyclical",
+  "73": null,
+  "75": "Consumer Cyclical",
+  "76": "Industrials",
+  "78": "Communication Services",
+  "79": "Consumer Cyclical",
+  "80": "Healthcare",
+  "81": "Industrials",
+  "82": "Consumer Defensive",
+  "83": "Healthcare",
+  "86": null,
+  "87": "Industrials",
+  "89": null,
+  "99": null
+ }
+}

@@ -82,11 +82,15 @@ console.log("\n3. THE CALL SITES — the part that regressed twice before");
   check("...off the pool hit, not a second universe test",
     /fromPricePool: Boolean\(quote\?\.usOk\)/.test(CAL),
     "two producers for one fact is claude/traps/two-validators-for-one-value.md");
-  check("the grid hides the cells rather than dashing them",
-    /showsPrice\(i\) \? formatPrice/.test(LIST) && /showsPrice\(i\) \? formatCompact/.test(LIST));
-  check("...and an uncovered row renders EMPTY, never a dash",
-    /: ""\)/.test(LIST),
-    "a dash says the figure was looked for and not found FOR THIS COMPANY");
+  // SUPERSEDED 2026-09-23 (owner ruling, #535 COWORK #23): on the SEC-fed
+  // grid an off-pool row shows "—" in both cells, and the note says once what
+  // the dash means. Pinned the other way round now.
+  check("an off-pool row shows a dash in both cells (owner ruling, COWORK #23)",
+    /\{ key: "price", label: "Price", fmt: \(i\) => formatPrice\(i\.price\) \}/.test(LIST) &&
+      /\{ key: "marketCap", label: "Market Cap", fmt: \(i\) => formatCompact\(i\.marketCap\) \}/.test(LIST) &&
+      /return value !== null \? `\$\$\{value\.toFixed\(2\)\}` : "—";/.test(LIST));
+  check("...and the note explains the dash, once",
+    /A dash marks companies outside that set/.test(fs.readFileSync("lib/server/gridPriceCoverage.ts", "utf8")));
   check("the page prints the note only when a row is actually blank",
     /items\.some\(\(i\) => i\.priceCoverage === "outside-bar-universe"\)/.test(PAGE),
     "a standing note on a fully-covered day explains a gap that is not there");
@@ -149,7 +153,7 @@ console.log("\n6. THE MUTANTS");
   // and only one is true.
   await underMutation(
     "cutover: the note blames the companies instead of the coverage",
-    "\"for them, rather than missing for those companies.\";",
+    "\"for them here, rather than missing for those companies.\";",
     "\"for them because they are too small to track.\";",
     (mm) => /rather than missing/i.test(mm.PRICE_COVERAGE_NOTE)
   );
