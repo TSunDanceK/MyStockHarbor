@@ -1059,6 +1059,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // P/E, EPS AND PAYOUT: FMP TODAY VS secValuation (#553 COWORK #18/#19),
+  // measured before the move, plus the refused caps per reason for A.
+  // Read-only; ~705 Redis reads (one GET per fact set).
+  "write-pickers-pe-census": {
+    script: "scripts/pickers-pe-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
