@@ -29,7 +29,7 @@ async function get(url, as = "json") {
   if (!res.ok) throw new Error(String(res.status));
   return as === "json" ? res.json() : res.text();
 }
-const tally = { RATIO: 0, DIRECT: 0, DISAGREE: 0, NONE: 0, ERROR: 0 };
+const tally = { RATIO: 0, DIRECT: 0, DISAGREE: 0, CHANGED: 0, NONE: 0, ERROR: 0 };
 let reached = 0;
 for (const s of mine) {
   if (Date.now() - started > BUDGET_MS) break;
@@ -38,35 +38,58 @@ for (const s of mine) {
     const cik = String(REG[s].cik);
     const r = (await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)).filings?.recent ?? {};
     const pick = (forms) => (r.form ?? []).findIndex((f) => forms.includes(f));
-    const tries = [pick(["20-F"]), pick(["F-6", "F-6EF", "F-6 POS"])].filter((i) => i >= 0);
+    const i20 = pick(["20-F"]);
+    const i6 = pick(["F-6", "F-6EF", "F-6 POS"]);
+    // NEWEST SOURCE WINS (#552 COWORK #45): an F-6 counts only if it was filed
+    // after the latest 20-F (or there is no 20-F on the list at all).
+    const f6IsNewer = i6 >= 0 && (i20 < 0 || r.filingDate[i6] > r.filingDate[i20]);
+    const docText = async (i) => D.filingText(await get(`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accessionNumber[i].replace(/-/g, "")}/${r.primaryDocument[i]}`, "text"));
+    const refOf = (i) => ({ form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i] });
     let line = null, mentions = 0, lastRef = "", row = null;
-    for (const i of tries) {
-      const url = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accessionNumber[i].replace(/-/g, "")}/${r.primaryDocument[i]}`;
-      const text = D.filingText(await get(url, "text"));
+    if (i20 >= 0) {
+      const text = await docText(i20);
       mentions += (text.match(/American depositary/gi) ?? []).length;
-      const ref = { form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i] };
+      const ref = refOf(i20);
       lastRef = `${ref.form} ${ref.source} ${ref.filed}`;
-      if (process.env.SHOW12B) {
-        const flat = text.replace(/\s+/g, " "), at = flat.search(/pursuant to Section 12\s*\(\s*b\s*\)/i);
-        console.log(`  12(b) ${ref.form}: ${at < 0 ? "not found" : flat.slice(at, at + 500)}`);
-        for (const m of flat.matchAll(/.{0,120}depositary.{0,120}/gi)) console.log(`  depositary: ${m[0]}`);
+      const cover = R.coverRowFor(text, s);
+      if (cover?.kind === "ordinary") {
+        row = { kind: "ordinary", ordinaryPerAds: 1, evidence: cover.title, basis: "cover-row", ...ref };
+      } else if (cover?.kind === "ads") {
+        const fromTitle = R.adsRatioOf(cover.title);
+        const got = fromTitle.ok ? fromTitle : R.adsRatioOf(text);
+        if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: fromTitle.ok ? cover.title : got.sentence, basis: fromTitle.ok ? "cover-row" : "20-F text", ...ref };
+        else if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; }
+      } else if (cover?.kind === "other") {
+        line = `OTHER-CLASS ${lastRef} "${cover.title.slice(0, 120)}"`; tally.NONE++;
+      } else {
+        // NO COVER ROW FOR THE TICKER: the filing's own statements, as before.
+        const got = R.adsRatioOf(text);
+        if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, basis: "20-F text", ...ref };
+        else if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; }
+        else {
+          const direct = R.directListingStatement(text, s);
+          if (direct) row = { kind: "ordinary", ordinaryPerAds: 1, evidence: direct, basis: "12(b) + no ADS", ...ref };
+        }
       }
+    }
+    if (!line && f6IsNewer) {
+      const text = await docText(i6);
       const got = R.adsRatioOf(text);
-      if (got.ok) {
-        line = `RATIO ${got.ordinaryPerAds} ${lastRef} (${got.statements}x) "${got.sentence.slice(0, 260)}"`; tally.RATIO++;
-        row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, ...ref };
-        break;
+      const ref = refOf(i6);
+      if (got.ok && row && row.ordinaryPerAds !== got.ordinaryPerAds) {
+        // A RATIO CHANGE after the 20-F: refused, for a person (COWORK #45 §3).
+        line = `RATIO-CHANGED 20-F ${row.ordinaryPerAds} -> ${ref.form} ${got.ordinaryPerAds} ${ref.source} ${ref.filed}`; tally.CHANGED++; row = null;
+      } else if (got.ok && !row) {
+        row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, basis: "F-6 newer than the 20-F", ...ref };
       }
-      if (got.why === "ratios-disagree") { line = `DISAGREE ${got.values.join("/")} ${lastRef}`; tally.DISAGREE++; break; }
-      // ONLY THE 20-F CAN SAY "LISTED DIRECTLY": an F-6 exists only for ADSs.
-      if (ref.form === "20-F") {
-        const direct = R.directListingStatement(text, s);
-        if (direct) { line = `DIRECT ${lastRef} "${direct.slice(0, 260)}"`; tally.DIRECT++; row = { kind: "ordinary", ordinaryPerAds: 1, evidence: direct, ...ref }; break; }
-      }
+    }
+    if (row && !line) {
+      line = `${row.kind === "ads" ? `RATIO ${row.ordinaryPerAds}` : "DIRECT"} ${row.form} ${row.source} ${row.filed} [${row.basis}] "${row.evidence.slice(0, 200)}"`;
+      tally[row.kind === "ads" ? "RATIO" : "DIRECT"]++;
     }
     if (!line) { line = `NONE ads-mentions=${mentions} ${lastRef || "no 20-F or F-6 in recent filings"}`; tally.NONE++; }
     console.log(`${s.padEnd(6)} ${line}`);
-    if (row) console.log(`MAP ${JSON.stringify({ symbol: s, ...row })}`);
+    if (row) { const { basis, ...stored } = row; void basis; console.log(`MAP ${JSON.stringify({ symbol: s, ...stored })}`); }
   } catch (e) { tally.ERROR++; console.log(`${s.padEnd(6)} ERROR ${String(e?.message ?? e).slice(0, 60)}`); }
 }
 console.log(`\nshard ${K}/${N}: ${mine.length} 20-F symbols, reached ${reached} | ${JSON.stringify(tally)} | ${Math.round((Date.now() - started) / 1000)}s`);
