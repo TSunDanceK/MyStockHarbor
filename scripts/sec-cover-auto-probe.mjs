@@ -65,6 +65,9 @@ for (const s of syms) {
       const cands = text.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z(])/).filter((x) => /Class\s+[A-Z]\b/.test(x) && /convert/i.test(x));
       console.log(`  ${form} ${r.accessionNumber[j]} filed ${r.filingDate[j]}: 1:1 statement ${JSON.stringify(A.oneToOneStatement(text))}`);
       for (const c of cands.slice(0, 6)) console.log(`    · ${c.slice(0, 360)}`);
+      const rights = text.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z(])/)
+        .filter((x) => /Class\s+A\b/.test(x) && /Class\s+B\b/.test(x) && /dividend|liquidat/i.test(x) && /identical|same|equal|rank equally|share ratably|equally/i.test(x));
+      for (const c of rights.slice(0, 4)) console.log(`    RIGHTS · ${c.slice(0, 360)}`);
     }
   } catch (e) { console.log(`\n== ${s}: ERROR ${String(e?.message ?? e).slice(0, 120)}`); }
 }

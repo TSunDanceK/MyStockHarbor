@@ -39,6 +39,8 @@ const WORD = String.raw`(?:one|1|\(1\)|one\s*\(1\))`;
 const ONE_FOR_ONE = [
   new RegExp(String.raw`convertible\b[^.]{0,120}?\binto\s+${WORD}\s+(?:fully\s+paid\s+and\s+non-?assessable\s+)?shares?\s+of\s+(?:our\s+|the\s+Company'?s\s+)?Class\s+[A-Z]\b`, "i"),
   new RegExp(String.raw`\bconvert(?:s|ed|ible)?\b[^.]{0,160}?\b(?:on\s+a\s+)?(?:${WORD}[- ](?:for|to)[- ]${WORD}|share[- ]for[- ]share)\s+basis`, "i"),
+  // META's 10-K: "convertible into an equivalent number of shares of our Class A common stock".
+  /convertible\s+into\s+an\s+equivalent\s+number\s+of\s+shares\s+of\s+(?:our\s+)?Class\s+[A-Z]\b/i,
 ];
 
 /** The first sentence in `text` stating a 1:1 class conversion, trimmed, or null. */

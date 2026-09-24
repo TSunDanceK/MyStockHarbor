@@ -34,6 +34,8 @@ const YES = [
   "Each share of Class B common stock is convertible at any time at the option of the holder into one share of Class A common stock.",
   "Shares of our Class B common stock convert into shares of Class A common stock on a one-for-one basis upon transfer.",
   "Each share of Class B common stock is convertible into one (1) fully paid and nonassessable share of Class A common stock.",
+  "Shares of our Class B common stock are convertible into an equivalent number of shares of our Class A common stock and generally convert into shares of our Class A common stock upon transfer.",
+  "Each share of Class B common stock will be convertible at any time at the option of the holder into one share of our Class A common stock.",
 ];
 const NO = [
   "Each share of Class A common stock is convertible into 1,500 shares of Class B common stock.",
