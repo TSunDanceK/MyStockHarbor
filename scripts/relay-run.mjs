@@ -986,6 +986,25 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
+  // and uncredentialled: public SEC and USAspending endpoints, no store. One
+  // PART per task so each fits the 30-minute job and they run side by side.
+  "capex-frames": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "frames" } },
+  "capex-segments": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "segments" } },
+  "capex-links-1": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "1/5" } },
+  "capex-links-2": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "2/5" } },
+  "capex-links-3": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "3/5" } },
+  "capex-links-4": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "4/5" } },
+  "capex-links-5": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "5/5" } },
+  "capex-fts-nvidia": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "NVIDIA" } },
+  "capex-fts-tsmc": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "TSMC" } },
+  "capex-fts-asml": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "ASML" } },
+  "capex-8k": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "8k" } },
+  "capex-usa": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa" } },
+  "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
+  "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
+  "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
 };
 
 const argv = process.argv.slice(2);
