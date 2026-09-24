@@ -399,6 +399,19 @@ for (const [href, pass] of PRESETS) {
 // row by row, and count the sets refused for currency (non-USD, unconverted).
 const cashRich = PRESETS.find(([h]) => h === "/cash-rich-value-stocks")[1];
 console.log(`cash-rich rows as shipped: ${rows.filter((r) => isEquity(r) && cashRich(pageValues(r))).map((r) => r.sym).join(" ")}`);
+// COWORK #15: the PAGE builds from the picker universe (msh:pickers:v10:symbols),
+// not the whole price pool -- name the cash-rich rows the page cannot show.
+{
+  const raw = await redis.get("msh:pickers:v10:symbols");
+  commands++;
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbols : null;
+  if (!list) console.log(`picker universe: unreadable (${typeof raw})`);
+  else {
+    const uni = new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()));
+    const cr = rows.filter((r) => isEquity(r) && cashRich(pageValues(r)));
+    console.log(`picker universe: ${uni.size} symbols; cash-rich rows the page can show: ${cr.filter((r) => uni.has(r.sym)).length}; not in the picker universe: ${cr.filter((r) => !uni.has(r.sym)).map((r) => r.sym).join(" ") || "none"}`);
+  }
+}
 console.log(`  of which have NO SEC row (keep stored values): ${rows.filter((r) => isEquity(r) && !r.shipped && cashRich(pageValues(r))).map((r) => r.sym).join(" ") || "none"}`);
 console.log(`sets refused for currency (non-USD, unconverted): ${rows.filter((r) => r.unit && r.unit.reporting !== "USD" && !r.unit.converted).map((r) => `${r.sym}:${r.unit.reporting}`).join(" ") || "none"}`);
 console.log(`sets converted by A's FX module: ${rows.filter((r) => r.unit?.converted).length}`);
