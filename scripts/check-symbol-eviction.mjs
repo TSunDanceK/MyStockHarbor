@@ -1374,11 +1374,13 @@ check(
     "differ is the one worth reading"
 );
 check(
-  "both eviction sites tally the flag they got back",
-  (job.match(/if \(evicted\.tombstoned\) sweep\.tombstoned/g) ?? []).length === 2 &&
+  "every eviction site tallies the flag it got back",
+  // THREE since #553 COWORK #20 added the SEC-listing route (secListing.ts).
+  (job.match(/if \(evicted\.tombstoned\) sweep\.tombstoned/g) ?? []).length === 3 &&
     /if \(evicted\.tombstoned\) sweep\.tombstonedByAbsence\+\+;/.test(job) &&
-    /if \(evicted\.tombstoned\) sweep\.tombstonedByStaleBars\+\+;/.test(job),
-  "two call sites, two signals — tallying one and aliasing the other would " +
+    /if \(evicted\.tombstoned\) sweep\.tombstonedByStaleBars\+\+;/.test(job) &&
+    /if \(evicted\.tombstoned\) sweep\.tombstonedBySecListing\+\+;/.test(job),
+  "three call sites, three signals — tallying one and aliasing another would " +
     "reintroduce the defect on whichever half nobody checked"
 );
 
