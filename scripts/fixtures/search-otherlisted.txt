@@ -1,0 +1,13 @@
+ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+BAC$L|Bank of America Corporation Non Cumulative Perpetual Conv Pfd Ser L|N|BACpL|N|100|N|BAC-L
+BRK.B|Berkshire Hathaway Inc. Class B Common Stock|N|BRK.B|N|100|N|BRK-B
+IWM|iShares Russell 2000 ETF|P|IWM|Y|100|N|IWM
+SPY|SPDR S&P 500 ETF Trust|P|SPY|Y|100|N|SPY
+SHV|iShares Short Treasury Bond ETF|Z|SHV|Y|100|N|SHV
+SQQQ|ProShares UltraPro Short QQQ|P|SQQQ|Y|100|N|SQQQ
+QYLD|Global X NASDAQ 100 Covered Call ETF|P|QYLD|Y|100|N|QYLD
+XOM|Exxon Mobil Corporation Common Stock|N|XOM|N|100|N|XOM
+AWI|Armstrong World Industries Inc Common Stock|N|AWI|N|100|N|AWI
+IEXQ|Some IEX Listing Inc. Common Stock|V|IEXQ|N|100|N|IEXQ
+ATEST|NYSE TEST STOCK|N|ATEST|N|100|Y|ATEST
+File Creation Time: 0923202621:00||||||||
