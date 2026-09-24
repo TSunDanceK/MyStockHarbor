@@ -100,6 +100,15 @@ export const JOBS = {
   // job (04:00 / 04:20 / 04:40 / 05:10, sec-filings at :40) for the
   // per-requester pacing reason above.
   "capex-receivers": { label: "Capex receivers from annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
+  // Relay C (#563 D5): federal contract obligations per listed company, from
+  // USAspending. DAILY CRON, WEEKLY DATA: the route rebuilds only when its
+  // record is 6.5 days old, so this row's silence rule (cronIntervalSeconds
+  // reads minute and hour only) stays honest.
+  "capex-contracts": { label: "Capex federal contracts from USAspending (daily 06:10, rebuilds weekly)", instrumented: true, cron: "10 6 * * *" },
+  // Relay C (#563 D1): "Who is spending" -- capex, revenue and R&D by sector
+  // from A's stored fact sets. DAILY CRON, WEEKLY DATA, for the same silence
+  // rule as capex-contracts; 06:30 is after sec-facts (04:20).
+  "capex-spending": { label: "Capex spending by sector from SEC fact sets (daily 06:30, rebuilds weekly)", instrumented: true, cron: "30 6 * * *" },
 } as const;
 
 /**
