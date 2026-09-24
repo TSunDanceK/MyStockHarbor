@@ -13,16 +13,12 @@
 // committed snapshot, the same two inputs its own entry point uses. No network,
 // no Redis: a gate that depends on a fetch opens when the fetch is slow.
 //
-// ONE B-SIDE SUPPLEMENT: "ZONES". CCZ's directory name is "Comcast Holdings
-// ZONES" (Zero-premium Exchangeable Notes) and carries none of the guard's debt
-// words. Asked on #553 for A to add it to DEBT_WORDING; this line goes when it
-// lands. It fires only on a shared CIK, as the guard's own words do.
+// CCZ ("Comcast Holdings ZONES") is caught by the guard's own debt-acronym
+// rule since #575; the interim B-side ZONES line is gone.
 import { admitForExtraction } from "./securityKind";
 import { loadTickerMap } from "./secTickerMap";
 import { snapshotCompanyName } from "./companyNameSnapshot";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
-
-const ZONES_WORDING = /\bZONES\b/;
 
 export type FundamentalsExclusion = "debt-or-preferred" | "unverifiable" | null;
 
@@ -37,10 +33,8 @@ export type EquityInputs = {
 /** Pure: why this symbol leaves the fundamentals presets, or null to keep it. */
 export function fundamentalsExclusion(inputs: EquityInputs): FundamentalsExclusion {
   const verdict = admitForExtraction(inputs);
-  if (!verdict.admit) return verdict.reason === "derivative-of-issuer" ? "debt-or-preferred" : "unverifiable";
-  const shared = inputs.cikGroup.some((s) => s.toUpperCase() !== inputs.symbol.trim().toUpperCase());
-  if (shared && inputs.cik && ZONES_WORDING.test(inputs.securityName ?? "")) return "debt-or-preferred";
-  return null;
+  if (verdict.admit) return null;
+  return verdict.reason === "derivative-of-issuer" ? "debt-or-preferred" : "unverifiable";
 }
 
 let groups: Map<string, string[]> | null = null;

@@ -7,8 +7,8 @@
 //      so the preset paired a note's price with the parent's cash flow.
 //   2. A REAL COMPANY IS DROPPED: the parent itself (CMCSA, T), an LP unit (ET),
 //      an ADR of preferred shares (PBR-A), a second share class (BRK-B, GOOG).
-//   3. CCZ SLIPS BACK IN. Its name is "Comcast Holdings ZONES", which carries
-//      none of the guard's debt words; the B-side supplement is what catches it.
+//   3. CCZ SLIPS BACK IN. Its name is "Comcast Holdings ZONES"; the guard's
+//      debt-acronym rule (#575) is what catches it.
 //   4. THE WIRING GOES SLACK: the page stops filtering, a fundamentals preset
 //      loses its opt-in, or a technical preset gains it.
 //
@@ -91,7 +91,7 @@ async function suite(mod, pages) {
   for (const s of OUT) ok(`${s} (${NAMES[s]}) leaves the fundamentals presets`, verdict(s) === "debt-or-preferred", String(verdict(s)));
   for (const s of IN) ok(`${s} (${NAMES[s]}) stays`, verdict(s) === null, String(verdict(s)));
 
-  ok("ZONES only counts on a shared CIK (a lone filer's statements are its own)",
+  ok("a lone filer is admitted whatever its name says (the guard's rule)",
     mod.fundamentalsExclusion({ symbol: "ZZZ", cik: "1", cikGroup: ["ZZZ"], securityName: "Lone Issuer ZONES" }) === null);
   ok("a shared CIK with no name on file is unverifiable, never kept",
     mod.fundamentalsExclusion({ symbol: "ZZZ", cik: "1", cikGroup: ["ZZZ", "ZZY"], securityName: null }) === "unverifiable");
@@ -120,8 +120,7 @@ const mut = (label, src, from, to) => {
   return src.replace(from, () => to);
 };
 const MUTANTS = [
-  ["the ZONES supplement removed", () => [GUARD, mut("zones", EQUITY, `if (shared && inputs.cik && ZONES_WORDING.test`, `if (false && ZONES_WORDING.test`), pages]],
-  ["ZONES fires without a shared CIK", () => [GUARD, mut("lone", EQUITY, `if (shared && inputs.cik && ZONES_WORDING`, `if (ZONES_WORDING`), pages]],
+  ["the guard's ZONES rule removed (CCZ would stay)", () => [mut("zones", GUARD, `const DEBT_ACRONYMS = /\\bZONES\\b/;`, `const DEBT_ACRONYMS = /(?!)/;`), EQUITY, pages]],
   ["unverifiable kept", () => [GUARD, mut("unverifiable", EQUITY, `: "unverifiable";`, `: null;`), pages]],
   ["the guard's ADR-first rule removed (PBR-A would be dropped)", () => [mut("adr", GUARD, `if (ADR_WORDING.test(name)) return "issuer-equity";`, ""), EQUITY, pages]],
   ["the guard's debt words removed (TBB would stay)", () => [mut("debt", GUARD, `/\\bnotes?\\b|\\bdebentures?\\b|\\bsubordinated\\b|`, `/`), EQUITY, pages]],
