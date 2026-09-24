@@ -67,6 +67,10 @@
     {
       "path": "/api/jobs/sec-filings",
       "schedule": "40 * * * *"
+    },
+    {
+      "path": "/api/jobs/warm-pickers-sec",
+      "schedule": "35 5 * * *"
     }
   ]
 }

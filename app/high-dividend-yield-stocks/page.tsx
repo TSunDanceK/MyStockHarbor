@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No stocks in the analyzed universe are currently yielding above 4%.",
   tone: "green",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [{ kind: "number", field: "divYield", min: 4 }],
   // Ordered by the same field that defines the set. See /low-pe-stocks.
   orderBy: { field: "divYield", dir: "desc", label: "Dividend Yield" },

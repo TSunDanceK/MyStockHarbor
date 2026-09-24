@@ -10,6 +10,7 @@ import {
   getSectorEarningsThisWeek,
   getSectorMovers,
   getSectorPerformanceRow,
+  sessionDateLabel,
   type SectorBreadth,
   type SectorEarningsEntry,
   type SectorMovers,
@@ -226,6 +227,20 @@ export default async function SectorNewsPage({ params }: Props) {
 
   const { newsScore, earningsScore, detailedNews, compactNews, mentions, constituents } = data;
 
+  // Outside the regular session the card shows the LAST session's move, and
+  // says so (#553 COWORK #12) -- never "today" for a number that is not.
+  const lastSession = performance?.dayBasis === "last-session";
+  const dayTitle = lastSession ? "Last Session" : "Sector Today";
+  const sessionLabel = lastSession ? sessionDateLabel(performance?.sessionDate) : null;
+  const rankLine =
+    typeof performance?.rank === "number"
+      ? lastSession
+        ? `${sessionLabel ?? "Last session"} · ranked ${performance.rank} of 11`
+        : `Ranked ${performance.rank} of 11 today`
+      : lastSession && sessionLabel
+        ? sessionLabel
+        : "Ranking unavailable";
+
   const leadSummary = buildSectorLead({
     sector,
     newsScore,
@@ -233,6 +248,7 @@ export default async function SectorNewsPage({ params }: Props) {
     constituentCount: constituents.length,
     dayMove: performance?.day ?? null,
     rank: performance?.rank ?? null,
+    lastSession: lastSession ? sessionDateLabel(performance?.sessionDate) : null,
   });
 
   const sectorRead = buildSectorRead({
@@ -359,16 +375,14 @@ export default async function SectorNewsPage({ params }: Props) {
 
               <div style={miniScoreGridStyle}>
                 <div style={miniScoreCardStyle(performanceTone(performance?.day))}>
-                  <div style={miniScoreTitleStyle}>Sector Today</div>
+                  <div style={miniScoreTitleStyle}>{dayTitle}</div>
                   <div
                     style={{ ...miniScoreNumberStyle, color: moveColour(performance?.day ?? null) }}
                   >
                     {formatPercent(performance?.day ?? null)}
                   </div>
                   <div style={miniScoreLabelStyle}>
-                    {typeof performance?.rank === "number"
-                      ? `Ranked ${performance.rank} of 11 today`
-                      : "Ranking unavailable"}
+                    {rankLine}
                   </div>
                 </div>
                 <div style={miniScoreCardStyle(newsScore.tone)}>
@@ -881,7 +895,11 @@ function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sector
 
   return (
     <section style={sidebarCardStyle}>
-      <div style={sectionEyebrowStyle}>Inside the sector today</div>
+      <div style={sectionEyebrowStyle}>
+        {movers.dayBasis === "last-session"
+          ? `Inside the sector · last session${sessionDateLabel(movers.sessionDate) ? ` (${sessionDateLabel(movers.sessionDate)})` : ""}`
+          : "Inside the sector today"}
+      </div>
       <h2 style={sectionTitleSmallStyle}>Top Movers</h2>
 
       {hasRows ? (
