@@ -66,3 +66,12 @@ export function writeWideChoice(storage: Pick<Storage, "setItem"> | null | undef
     // Private windows and blocked storage: the page still works, it just forgets.
   }
 }
+
+/**
+ * The button's icon, a bold arrow in a 20-unit box (#553 COWORK #35). An arrow
+ * with a shaft, not a bare chevron: the Basic chart's pan control is a "‹".
+ * LEFT in the normal layout: the chart extends left over the card column.
+ * RIGHT in wide mode: it goes back to its column.
+ */
+export const WIDE_ARROW_LEFT = "M16 10H4M9 5l-5 5 5 5";
+export const WIDE_ARROW_RIGHT = "M4 10h12M11 5l5 5-5 5";

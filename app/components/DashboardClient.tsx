@@ -14,7 +14,7 @@ import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
-import { browserStorage, readWideChoice, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
+import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -1057,15 +1057,15 @@ export default function DashboardClient({
   // on the plot, where the Basic chart's round "‹" pan arrow (Pan back in
   // time) already sits. Desktop only: narrow widths are single-column already
   // (hidden by .msh-widebtn below 961px and never rendered on the phone layout).
+  // A bold arrow (#553 COWORK #35): LEFT = extend the chart over the card
+  // column; RIGHT = back to two columns. 34px target, 20px icon.
   function WideChartButton() {
     const label = wideChart ? "Back to two columns" : "Widen chart";
     return (
-      <button type="button" className="msh-widebtn" onClick={toggleWideChart} title={label} aria-label={label} aria-pressed={wideChart}
-        style={{ alignItems: "center", justifyContent: "center", width: 30, height: 30, flex: "0 0 auto", borderRadius: 8, border: `1px solid ${wideChart ? "rgba(96,165,250,0.55)" : COLORS.controlBorder}`, background: wideChart ? "rgba(47,107,255,0.22)" : COLORS.controlBg, color: wideChart ? "#dbeafe" : COLORS.controlFg, cursor: "pointer", padding: 0 }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          {wideChart
-            ? <><path d="M1.5 3.5h5v9h-5z" /><path d="M9.5 3.5h5v9h-5z" /></>
-            : <><path d="M1.5 3.5h13v9h-13z" /><path d="M4.5 8h7M4.5 8l1.8-1.8M4.5 8l1.8 1.8M11.5 8l-1.8-1.8M11.5 8l-1.8 1.8" /></>}
+      <button type="button" className="msh-widebtn" onClick={toggleWideChart} title={label} aria-label={label} aria-pressed={wideChart} data-wide-arrow={wideChart ? "right" : "left"}
+        style={{ alignItems: "center", justifyContent: "center", width: 34, height: 34, flex: "0 0 auto", borderRadius: 9, border: `1px solid ${wideChart ? "rgba(96,165,250,0.55)" : COLORS.controlBorder}`, background: wideChart ? "rgba(47,107,255,0.22)" : COLORS.controlBg, color: wideChart ? "#dbeafe" : COLORS.controlFg, cursor: "pointer", padding: 0 }}>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d={wideChart ? WIDE_ARROW_RIGHT : WIDE_ARROW_LEFT} />
         </svg>
       </button>
     );
