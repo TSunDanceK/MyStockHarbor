@@ -51,14 +51,6 @@ on:
         description: "Task name (see TASKS in scripts/relay-run.mjs). write- prefix = needs credentials"
         required: true
         default: stooq-access
-      run_id:
-        description: "Run ID of the dump artifact to read (blank = skip download)"
-        required: false
-        default: "34690240239"
-      artifact_name:
-        description: "Artifact name to download"
-        required: false
-        default: step0-dump
       symbols:
         description: "Task-specific symbol list"
         required: false
@@ -100,40 +92,11 @@ jobs:
       # package.json -- measured at 438 packages, @upstash/redis included. That
       # would have voided the property this comment describes while looking like
       # a one-package install. The isolated path keeps the client absent.
-      - name: Download the frozen dump
-        if: inputs.run_id != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.artifact_name }}
-          path: dump
-          run-id: ${{ inputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # THE PATH IS NOT ASSUMED. upload-artifact rooted the original at the least
-      # common ancestor of its paths, so the files sit one level down. Guessing
-      # would read as an empty dump rather than a wrong path.
-      - name: Locate the dump directory
-        id: locate
-        if: inputs.run_id != ''
-        run: |
-          set -euo pipefail
-          found=$(find dump -name universe.json -printf '%h\n' | head -n 1)
-          if [ -z "${found}" ]; then
-            echo "::error::No universe.json under dump/ — the artifact is not a Step 0 dump. Contents:"
-            find dump -maxdepth 3 -type f | head -n 40
-            exit 1
-          fi
-          echo "dir=${found}" >> "$GITHUB_OUTPUT"
-          ls -la "${found}"
-
+      # THE STEP 0 DUMP DOWNLOAD IS GONE (2026-09-24, #552 COWORK #23): the
+      # artifact was FMP data and has been deleted, and no relay task may depend
+      # on it. relay-run.mjs refuses any task still marked needsDump.
       - name: Run the task
         env:
-          DUMP_DIR: ${{ steps.locate.outputs.dir }}
-          # PROVENANCE REACHES THE TASK, not just the run summary. A report that
-          # cannot name the dump it described is not reproducible, and the
-          # summary is a different artifact from the JSON the task writes.
-          DUMP_RUN_ID: ${{ inputs.run_id }}
-          DUMP_ARTIFACT: ${{ inputs.artifact_name }}
           SYMBOLS: ${{ inputs.symbols }}
           PAYERS: ${{ inputs.payers }}
           NONPAYERS: ${{ inputs.nonpayers }}
@@ -148,17 +111,15 @@ jobs:
           {
             echo "## Relay — ${{ inputs.task }}"
             echo
-            echo "Dump: run \`${{ inputs.run_id }}\` · artifact \`${{ inputs.artifact_name }}\`"
-            echo
             echo '```'
             cat task.log 2>/dev/null || echo "(no task.log — the step did not run)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # THE FILE A TASK PRODUCES HAS TO LEAVE THE RUNNER, or the task is a
-      # log that says a fetch worked. `steps.locate.outputs.dir` is only set
-      # when a dump was downloaded, so for a task with no dump that glob
-      # resolved to nothing and company-tickers discarded the 798 KB file it
+      # log that says a fetch worked. The upload once globbed the dump
+      # directory (removed 2026-09-24), which for a task with no dump
+      # resolved to nothing, and company-tickers discarded the 798 KB file it
       # had just fetched and validated. That is why the committed copy came in
       # through a browser save and arrived with a stray byte at byte 0.
       - name: Upload the output
@@ -168,7 +129,6 @@ jobs:
           name: relay-${{ inputs.task }}-${{ github.run_id }}
           path: |
             task.log
-            ${{ steps.locate.outputs.dir }}/*.json
             data/sec/*.json
             sec-symbol-status.json
             sec-reread-probe.json
