@@ -198,6 +198,8 @@ const TASKS = {
   "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
   "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
   "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  // Named symbols only (SYMBOLS=…): prints each row for a one-row refresh (#552 COWORK #38).
+  "sec-descriptions-adhoc": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true },
   // NOT A TASK: preview screenshots run in .github/workflows/preview-screenshots.yml,
   // which reads its Vercel bypass credential from a masked repo secret. A relay
   // input is printed in the log, and the read-only job holds no secrets by
@@ -716,6 +718,7 @@ const TASKS = {
   "sec-locator-census-4": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
   "sec-locator-census-5": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
   "sec-locator-census-6": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  "sec-locator-debug": { script: "scripts/sec-locator-debug.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
   "sec-locator-census": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
