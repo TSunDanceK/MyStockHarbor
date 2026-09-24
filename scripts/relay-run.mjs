@@ -1160,6 +1160,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // THE DELISTING SWEEP'S LATEST RUN (#553 COWORK #26): the SEC listing
+  // pass's fields, its change log and snapshot size. Read-only; 3 commands.
+  "write-sweep-reading": {
+    script: "scripts/sweep-reading.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-classification-needed-dry": {
     script: "scripts/classification-needed.mjs",
     args: () => ["--dry"],
