@@ -14,6 +14,7 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import registrantsFile from "@/data/sec/registrants.json";
+import companyTickersFile from "@/data/sec/company-tickers.json";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import { factKey, valueOf, type StoredFactSet } from "./secFactStore";
 import { secFieldsHash } from "./secFields";
@@ -28,11 +29,30 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
+/**
+ * Each ticker's position in SEC's list for its filer (0 = listed first, SEC's
+ * primary listing). Tie-break for folding a filer's listings into one row.
+ */
+function secListingRank(): Map<string, number> {
+  const ct = companyTickersFile as unknown as { fields: string[]; data: unknown[][] };
+  const ti = ct.fields.indexOf("ticker"), ci = ct.fields.indexOf("cik");
+  const seen = new Map<number, number>();
+  const out = new Map<string, number>();
+  for (const row of ct.data) {
+    const cik = Number(row[ci]);
+    const n = seen.get(cik) ?? 0;
+    seen.set(cik, n + 1);
+    for (const spelling of symbolSpellings(String(row[ti])) as string[]) if (!out.has(spelling)) out.set(spelling, n);
+  }
+  return out;
+}
+
 /** One stored fact set, as the aggregation reads it. Exported for the check. */
-export function toSpendingInput(set: StoredFactSet, sector: string | null, cik: string | null): SpendingInput {
+export function toSpendingInput(set: StoredFactSet, sector: string | null, cik: string | null, rank: number | null = null): SpendingInput {
   return {
     symbol: set.symbol,
     cik,
+    rank,
     sector,
     currency: set.cur ?? null,
     years: (set.years ?? []).map((y) => ({
@@ -85,7 +105,11 @@ export async function buildSpendingRecord(nowMs: number): Promise<{
     }
   }
   const sectors = resolveProfileBulk(sets.map((s) => ({ symbol: s.symbol, cached: null })), "capex-spending");
-  const inputs = sets.map((s) => toSpendingInput(s, sectors.get(s.symbol.toUpperCase())?.sector ?? null, s.cik ?? cikOf.get(s.symbol.toUpperCase()) ?? null));
+  const rank = secListingRank();
+  const inputs = sets.map((s) => {
+    const sym = s.symbol.toUpperCase();
+    return toSpendingInput(s, sectors.get(sym)?.sector ?? null, s.cik ?? cikOf.get(sym) ?? null, rank.get(sym) ?? null);
+  });
   const record = aggregateSpending(inputs, spendingYears(nowMs), nowMs);
   return { record, symbols: symbols.length, setsRead: sets.length, staleFieldOrder, commands };
 }

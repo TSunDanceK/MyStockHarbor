@@ -42,6 +42,8 @@ export type SpendingInput = {
   symbol: string;
   /** The SEC filer; listings sharing one are the same company. */
   cik: string | null;
+  /** Position in SEC's own ticker list for this filer (0 = its primary listing). */
+  rank?: number | null;
   sector: string | null;
   /** Reporting currency; absent or "USD" for USD filers. */
   currency: string | null;
@@ -101,12 +103,15 @@ const usable = (v: number | null | undefined): v is number => typeof v === "numb
 
 /**
  * One input per SEC filer. Kept: the listing with the most capex years, then
- * the shortest symbol (the common stock over its notes), then alphabetical.
+ * the one SEC lists first for the filer (CMCSA over its exchangeable notes
+ * CCZ, BN over BNJ), then the shortest symbol, then alphabetical.
  */
 export function dedupeByFiler(inputs: SpendingInput[]): { kept: SpendingInput[]; duplicates: number } {
   const capexYears = (i: SpendingInput) => i.years.filter((y) => usable(y.capex)).length;
   const better = (a: SpendingInput, b: SpendingInput) =>
-    capexYears(a) - capexYears(b) || b.symbol.length - a.symbol.length || (a.symbol < b.symbol ? 1 : -1);
+    capexYears(a) - capexYears(b) ||
+    (b.rank ?? Infinity) - (a.rank ?? Infinity) ||
+    b.symbol.length - a.symbol.length || (a.symbol < b.symbol ? 1 : -1);
   const byFiler = new Map<string, SpendingInput>();
   const kept: SpendingInput[] = [];
   let duplicates = 0;
