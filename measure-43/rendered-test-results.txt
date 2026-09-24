@@ -1,0 +1,24 @@
+PASS Measure ▾ lists the three tools, no Clear measures: Price & date (Measure) | Price range | Date range -- ["Price & date (Measure)","Price range","Date range"]
+PASS placed: +28.31 (+9.11%) / 26 bars · 36 days -- {"price":["+28.31 (+9.11%)"],"date":["26 bars · 36 days"]}
+PASS the hint says how to clear: "Click anywhere or press Esc to clear"
+PASS Undo does not touch the measure (it is not in Undo) -- {"price":["+28.31 (+9.11%)"],"date":["26 bars · 36 days"]}
+PASS the next press clears the measure -- {"price":[],"date":[]}
+PASS ...and does nothing else: that drag did not pan the chart -- 1778025600000 -> 1778025600000
+PASS after clearing, clicks place nothing -- {"price":[],"date":[]}
+PASS the chart pans normally again
+PASS Price range places (price line only) -- {"price":["+39.09 (+13.18%)"],"date":[]}
+PASS a click on the measure itself also just clears it (no select, no drag) -- {"price":[],"date":[]}
+PASS Date range places (span line only) -- {"price":[],"date":["26 bars · 40 days"]}
+PASS Esc clears it -- {"price":[],"date":[]}
+PASS Measure ▸ fly-out: Price & date (Measure) | Price range | Date range -- ["Price & date (Measure)","Price range","Date range"]
+PASS Shift + drag quick measure still works, without panning -- {"price":["+39.09 (+13.20%)"],"date":["26 bars · 40 days"]}
+PASS ...and clears on the next click -- {"price":[],"date":[]}
+PASS phone sheet: Measure has the three tools, no Clear measures -- ["✕","Chart type\n▸","Timeframe\n▸","Indicators\n▸","Draw\n▸","Measure\n▾","Price & date (Measure)","Price range","Date range","Scale\n▸","Recenter","Undo","Clear drawings"]
+PASS placing hint: "Tap the start, then the end", no Done button
+PASS tap-tap places a measure (+17.40 (+5.39%) / 17 bars · 26 days), no pan while placing -- {"price":["+17.40 (+5.39%)"],"date":["17 bars · 26 days"]}
+PASS placed hint: "Tap anywhere to clear"
+PASS the next touch clears it -- {"price":[],"date":[]}
+PASS ...and that drag did not pan
+PASS after clearing, a drag pans again
+
+22/22
