@@ -58,6 +58,9 @@ export type ReceiverRow = {
   labelInFiling: string | null;
   /** Sub-label shown only when true. */
   subLabelOk: boolean;
+  /** The sub-label text that check ran against. A new or reworded sub-label
+   *  re-reads the filing once, instead of waiting a year for the next one. */
+  subLabelChecked?: string | null;
   /** Set when a newer filing dropped the element: these are the older figures. */
   staleSince: string | null;
 };
@@ -125,7 +128,11 @@ export async function refreshReceivers(
       for (const e of group) flags.push({ id: e.id, kind: "no-annual-filing", detail: `no 10-K/20-F/40-F in submissions for CIK ${cik}` });
       continue;
     }
-    const current = group.every((e) => rows[e.id]?.accession === filing.accession || (rows[e.id]?.staleSince === filing.accession));
+    const current = group.every(
+      (e) =>
+        (rows[e.id]?.accession === filing.accession || rows[e.id]?.staleSince === filing.accession) &&
+        (!e.subLabel || rows[e.id]?.subLabelChecked === e.subLabel.text)
+    );
     if (current && !opts.force) { keepFlags(); continue; }
     if (filingsRead >= opts.maxFilings || Date.now() - t0 > opts.budgetMs) { deferred++; keepFlags(); continue; }
     filingsRead++;
@@ -187,6 +194,7 @@ export async function refreshReceivers(
         changePct: percentChange(line.current, line.prior),
         labelInFiling,
         subLabelOk,
+        subLabelChecked: e.subLabel?.text ?? null,
         staleSince: null,
       };
       if (JSON.stringify(rows[e.id]) !== JSON.stringify(row)) changed = true;
