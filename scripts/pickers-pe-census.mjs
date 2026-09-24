@@ -94,7 +94,7 @@ const push = (o, k, v, cap = 400) => { if ((o[k] ??= []).length < cap) o[k].push
 const t = { fmpPe: 0, fmpPeNeg: 0, secPe: 0, secRefused: {}, secNull: 0, noSet: 0, both: 0, agree5: 0, agree20: 0, off: 0,
   basis: {}, fyLabels: {}, derivedQ4: 0, fmpEps: 0, secEps: 0, epsAgree5: 0, epsBoth: 0,
   fmpPayout: 0, secPayout: 0, payoutSameBasis: 0, payoutMixed: 0, payoutBoth: 0, payoutAgree5: 0 };
-const ex = { secRefused: {}, off: [], fmpPeNeg: [], payoutMixed: [], capRefused: {} };
+const ex = { secRefused: {}, payoutMixed: [], capRefused: {} };
 const rows = [];
 for (const s of universe) {
   const p = pool.get(s);
@@ -103,7 +103,7 @@ for (const s of universe) {
   const d = extra.get(s);
   const fmpEps = num(d?.epsTtm);
   const fmpPayout = num(d?.payoutRatio);
-  if (fmpPe !== null) { t.fmpPe++; if (fmpPe <= 0) { t.fmpPeNeg++; if (ex.fmpPeNeg.length < 30) ex.fmpPeNeg.push(`${s}:${fmpPe.toFixed(1)}`); } }
+  if (fmpPe !== null) { t.fmpPe++; if (fmpPe <= 0) t.fmpPeNeg++; }
   if (fmpEps !== null) t.fmpEps++;
   if (fmpPayout !== null) t.fmpPayout++;
 
@@ -138,7 +138,7 @@ for (const s of universe) {
   if (fmpPe !== null && secPe !== null) {
     t.both++;
     const r = Math.abs(secPe / fmpPe - 1);
-    if (r <= 0.05) t.agree5++; else if (r <= 0.2) t.agree20++; else { t.off++; ex.off.push([s, fmpPe, secPe]); }
+    if (r <= 0.05) t.agree5++; else if (r <= 0.2) t.agree20++; else { t.off++; if (excludedFromFundamentals(s) !== null) t.offExcluded = (t.offExcluded ?? 0) + 1; }
   }
   if (fmpEps !== null && secEps !== null) { t.epsBoth++; if (Math.abs(secEps / fmpEps - 1) <= 0.05) t.epsAgree5++; }
   if (fmpPayout !== null && secPayout !== null) { t.payoutBoth++; if (Math.abs(secPayout - fmpPayout) <= 5) t.payoutAgree5++; }
@@ -157,12 +157,12 @@ const presets = {
 };
 console.log(`Pickers universe ${universe.length}; fact sets ${sets.size}; SEC rows ${secRows.size}; pool ${pool.size}; stock-data ${extra.size}`);
 console.log("\n== P/E");
-console.log(`FMP today: ${t.fmpPe} rows (${t.fmpPeNeg} of them zero/negative, which the <= presets admit): ${ex.fmpPeNeg.join(" ")}`);
+console.log(`FMP today: ${t.fmpPe} rows (${t.fmpPeNeg} of them zero/negative, which the <= presets admit)`);
 console.log(`SEC: ${t.secPe} P/E; refused ${JSON.stringify(t.secRefused)}; no price/unstated ${t.secNull}; no fact set ${t.noSet}`);
 for (const [why, xs] of Object.entries(ex.secRefused)) console.log(`  ${why}: ${xs.slice(0, 12).join(" ")}`);
 console.log(`both present ${t.both}: within 5% ${t.agree5}, 5-20% ${t.agree20}, over 20% ${t.off}`);
-ex.off.sort((a, b) => Math.abs(b[2] / b[1] - 1) - Math.abs(a[2] / a[1] - 1));
-console.log(`  largest disagreements (sym FMP SEC): ${ex.off.slice(0, 25).map(([s, a, b]) => `${s} ${a.toFixed(1)} ${b.toFixed(1)}`).join("; ")}`);
+// AGGREGATE ONLY: no per-ticker FMP value is printed or kept (owner's ruling, #553 COWORK #23).
+console.log(`  over 20%: ${t.off - (t.offExcluded ?? 0)} operating companies, ${t.offExcluded ?? 0} notes/preferreds the presets exclude`);
 console.log("\n== EPS basis (SEC)");
 console.log(`${JSON.stringify(t.basis)}; FY labels ${JSON.stringify(t.fyLabels)}`);
 console.log(`EPS: FMP ${t.fmpEps}, SEC ${t.secEps}; both ${t.epsBoth}, within 5% ${t.epsAgree5}`);
@@ -181,5 +181,4 @@ for (const [name, fn] of Object.entries(presets)) {
 console.log("\n== Refused Market Caps, per reason (for A, COWORK #19)");
 console.log("REFUSED-CAPS-JSON " + JSON.stringify(ex.capRefused));
 console.log("REFUSED-PE-JSON " + JSON.stringify(ex.secRefused));
-console.log("PE-OFF-JSON " + JSON.stringify(ex.off.map(([s, a, b]) => [s, +a.toFixed(2), +b.toFixed(2), excludedFromFundamentals(s) !== null])));
 console.log(`\nRedis commands: ~${5 + universe.length} (read-only)`);
