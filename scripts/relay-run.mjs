@@ -985,6 +985,14 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
     writes: true,
+  },  // Relay C (#563 COWORK #2): the capex receivers job's own code against live
+  // SEC. DRY by default (0 Redis); SYMBOLS="mode=seed" writes the one key
+  // msh:capex:receivers:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-receivers": {
+    script: "scripts/capex-receivers-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
   },
 };
 
