@@ -12,12 +12,47 @@
    "reason": "fiscal-year anchor fix: a duration ending after its own filing date is no longer the filing's period; the stored set has 0 years and a June quarter labelled Q1"
   },
   {
-   "symbol": "ABNB",
+   "symbol": "V",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover; and #552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "BRK.B",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover; and #552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "COST",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "NFLX",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "META",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "CMCSA",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "MA",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
   {
    "symbol": "ACN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "ABNB",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
@@ -37,17 +72,7 @@
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
   {
-   "symbol": "BRK.B",
-   "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
-  },
-  {
    "symbol": "CHTR",
-   "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
-  },
-  {
-   "symbol": "CMCSA",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
@@ -84,17 +109,7 @@
   {
    "symbol": "HSY",
    "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
-  },
-  {
-   "symbol": "MA",
-   "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
-  },
-  {
-   "symbol": "META",
-   "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover; and #552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
   },
   {
    "symbol": "NKE",
@@ -162,11 +177,6 @@
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   },
   {
-   "symbol": "V",
-   "requestedAt": "2026-09-25T00:00:00Z",
-   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
-  },
-  {
    "symbol": "VG",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
@@ -180,6 +190,81 @@
    "symbol": "XYZ",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "PEP",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "NOW",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "C",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "BKR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "AZO",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "KKR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "AAP",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "DPZ",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "WES",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "WTRG",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "SN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "MPLX",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "ALNY",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "MDB",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "TPL",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
   }
  ]
 }

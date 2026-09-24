@@ -28,9 +28,10 @@
 //   - one EPS concept for all three; diluted wherever the filer states a
 //     diluted figure, basic only for a filer that states none at all (BRK),
 //     and the basis says which;
-//   - the weighted share count of each year-to-date within
-//     Q4_SHARE_BASIS_TOLERANCE of the year's: a split between the 10-K and the
-//     10-Q puts them on different bases, and that is refused, not adjusted;
+//   - the three weighted share counts (year, year-to-date, prior year-to-date)
+//     within Q4_SHARE_BASIS_TOLERANCE of EACH OTHER: a split between the 10-K
+//     and the 10-Q, or a share issuance inside the window, puts them on
+//     different bases, and that is refused, not adjusted;
 //   - USD per share only;
 //   - ONE CLASS: the cited listed class (data/sec/share-classes.json), else
 //     the undimensioned figure, else the only class the filer states. Several
@@ -164,8 +165,12 @@ export function ttmFromInstances(
     const shareOf = (list: DurationFact[], p: DurationFact) =>
       list.find((f) => SHARE_CONCEPTS[c.shares].includes(f.concept) && f.start === p.start && f.end === p.end)?.val ?? null;
     const sy = shareOf(K, fy), sc = shareOf(Q, ytd), sp = shareOf(Q, prior);
-    if (sy === null || sc === null || sp === null || sy <= 0) return { ok: false, why: `no ${c.shares} share count for all three periods` };
-    if ([sc, sp].some((s) => Math.abs(s / sy - 1) > Q4_SHARE_BASIS_TOLERANCE)) {
+    if (sy === null || sc === null || sp === null || Math.min(sy, sc, sp) <= 0) return { ok: false, why: `no ${c.shares} share count for all three periods` };
+    // PAIRWISE, NOT AGAINST THE YEAR ALONE: a six-month average sits between
+    // its quarters, so a count that jumped mid-year (COF's Discover shares,
+    // 384M -> 640M) passes a year-only test while each year-to-date is on a
+    // different basis from the other. All three within the tolerance of each other.
+    if (Math.max(sy, sc, sp) / Math.min(sy, sc, sp) - 1 > Q4_SHARE_BASIS_TOLERANCE) {
       return { ok: false, why: `share basis moved between the 10-K and the 10-Q (${sy} vs ${sc}/${sp})` };
     }
     const val = Math.round((fy.val + ytd.val - prior.val) * 10_000) / 10_000;
