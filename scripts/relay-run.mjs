@@ -1138,6 +1138,28 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
+  // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
+  "write-sec-delisting-census": {
+    script: "scripts/sec-delisting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE FOUR STALE TICKERS (#553 COWORK #20): BK -> BNY and EQR -> VMRK with
+  // their scores carried, EA and WBS evicted. Owner's GO only; ~15 commands.
+  "write-pickers-ticker-swap-dry": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => ["--dry"],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-pickers-ticker-swap": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
