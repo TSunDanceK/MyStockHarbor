@@ -42,10 +42,10 @@ function facts(filings) {
   if (has(Q2)) {
     rev.push(r(Q2, "2026-04-01", "2026-06-30", 7_814e6), r(Q2, "2025-04-01", "2025-06-30", 4_071e6), r(Q2, "2026-01-01", "2026-06-30", 14_500e6), r(Q2, "2025-01-01", "2025-06-30", 7_900e6));
     cor.push(r(Q2, "2026-04-01", "2026-06-30", 3_495e6), r(Q2, "2025-04-01", "2025-06-30", 2_282e6));
-    // The breakdown misses the filed -143M by 5M on 7.8B of revenue (item 8).
-    gp.push(r(Q2, "2026-04-01", "2026-06-30", 4_319e6));
-    rd.push(r(Q2, "2026-04-01", "2026-06-30", 1_467e6));
-    sga.push(r(Q2, "2026-04-01", "2026-06-30", 3_000e6));
+    // SPCX's live lines (relay 36054345316): NO GrossProfit tag; revenue -
+    // cost - R&D - SG&A = -141M against a filed -143M (#552 COWORK #42).
+    rd.push(r(Q2, "2026-04-01", "2026-06-30", 3_548e6));
+    sga.push(r(Q2, "2026-04-01", "2026-06-30", 912e6));
     op.push(r(Q2, "2026-04-01", "2026-06-30", -143e6), r(Q2, "2025-04-01", "2025-06-30", -970e6));
     ni.push(r(Q2, "2026-04-01", "2026-06-30", -541e6), r(Q2, "2025-04-01", "2025-06-30", -1_008e6), r(Q2, "2026-01-01", "2026-06-30", -900e6), r(Q2, "2025-01-01", "2025-06-30", -1_700e6));
     eps.push(r(Q2, "2026-04-01", "2026-06-30", -0.09), r(Q2, "2025-04-01", "2025-06-30", -0.34));
@@ -142,8 +142,13 @@ check("the filing link is the 10-Q's own EDGAR index (CIK + accession), not the 
   const Mm = await loadCards(once("if (!cik || !accession ||", "return `https://www.sec.gov/cgi-bin/browse-edgar?CIK=${cik}`; if (!cik || !accession ||"));
   check("MUTATION: the old browse link back → caught", build(Mm, [Q2]).view.latestFilingUrl !== INDEX);
 }
-check("the expense lines count as adding up: a 5M miss on 7.8B of revenue is rounding, not a gap",
-  A.view.incomeStatementComplete === true);
+check("no gross-profit tag: revenue less cost of revenue reconciles the lines (-141M vs -143M), so no 'do not add up' note",
+  val(M, q(A.set, "2026-06-30"), "grossProfit") === null && A.view.incomeStatementComplete === true
+  && !/do not add up/.test(text(M, "SecIncomeStatementCard", A.view)));
+{
+  const Mm = await loadCards(once(`const gp = valueOf(latest, "grossProfit") ?? nullableDiff(latest);`, `const gp = valueOf(latest, "grossProfit");`));
+  check("MUTATION: the revenue-less-cost fallback removed → the note fires again on SPCX", build(Mm, [Q2]).view.incomeStatementComplete === false);
+}
 {
   const Mm = await loadCards(once("export const ADD_UP_REVENUE_SHARE = 0.001;", "export const ADD_UP_REVENUE_SHARE = 0;"));
   check("MUTATION: tolerance on operating income alone → 'do not add up' again", build(Mm, [Q2]).view.incomeStatementComplete === false);
@@ -227,6 +232,15 @@ console.log("\nF. the next report, hedged, from the first filing");
   check("Q2 filed 35 days after 30 Jun → the quarter to 30 Sep, around late October–mid November",
     /^The quarter to 30 Sept? 2026 may be reported around late October–mid November\.$/.test(o?.headline ?? "") && o.value === "Est. late October–mid November"
     && /first quarterly filing only, filed 35 days after/.test(o.hedge), JSON.stringify(o));
+  const two = F.firstFilerNextReport("SPCX", B.set, "2026-11-20");
+  check("two 10-Qs on file, no 10-K (a mid-quarter IPO like CBRS) → the hedge counts them",
+    /from SPCX's 2 quarterly filings so far/.test(two?.hedge ?? ""), two?.hedge);
+  {
+    const Fc = await lift(once("const filings = new Set(set.quarters.map((p) => p.a).filter(Boolean)).size;", "const filings = 1;")(readCodeOnly("lib/server/firstFilerOutlook.ts"))
+      .replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "") + `\nfunction plainDate(d) { return d; }\nexport { firstFilerNextReport };`);
+    check("MUTATION: filings not counted → 'first quarterly filing only' on a two-filing company",
+      /first quarterly filing only/.test(Fc.firstFilerNextReport("SPCX", B.set, "2026-11-20")?.hedge ?? ""));
+  }
   check("no report day is named in the estimate (a part of a month)", !/\b\d{1,2} (Oct|Nov)/.test(o?.headline ?? "x"));
   check("once the estimate has passed with nothing filed, it stands down (the due logic owns that)", F.firstFilerNextReport("SPCX", A.set, "2026-11-20") === null);
   check("after the first 10-K it steps aside for the shared estimator", F.firstFilerNextReport("SPCX", Cc.set, "2027-03-01") === null);
