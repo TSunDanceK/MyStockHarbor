@@ -17,7 +17,12 @@ export type Quote = {
   exchange: string | null;
   date: string | null;
   time: string | null;
-  source: string;
+  // null since 2026-09-23 (#553 COWORK #1): this was the literal
+  // "financialmodelingprep.com" on EVERY quote, the empty one included, so a
+  // quote with no data still credited FMP and the dashboard footer printed it.
+  // The data path is unchanged (prices move provider in Friday's split); only
+  // the stamp is gone. A future provider sets its own name here.
+  source: string | null;
   // Added for the trader quote-snapshot header: day range, volume vs average,
   // previous close and change. All come from the same stable/quote call
   // already being made — no extra API cost.
@@ -45,7 +50,7 @@ export function emptyQuote(symbol: string): Quote {
     exchange: null,
     date: null,
     time: null,
-    source: "financialmodelingprep.com",
+    source: null,
     open: null,
     previousClose: null,
     change: null,
@@ -206,7 +211,7 @@ async function fetchQuoteFromFmpUncached(symbol: string): Promise<Quote> {
       exchange: str(row?.exchange),
       date: now.toISOString().slice(0, 10),
       time: now.toISOString().slice(11, 19),
-      source: "financialmodelingprep.com",
+      source: null,
       open: num(row?.open),
       previousClose: num(row?.previousClose),
       change: num(row?.change),
