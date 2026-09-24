@@ -23,6 +23,12 @@ type Props = {
   initialItems: EarningsListItem[];
   initialHasMore: boolean;
   complete: boolean;
+  /**
+   * The page's day panel already states why there are no rows (for example
+   * "No results filed yet today"). Then the list says nothing when empty, so
+   * two different messages never show at once (#552 COWORK #26).
+   */
+  emptyExplainedAbove?: boolean;
 };
 
 // Which columns can be sorted, and whether they sort as text or numbers.
@@ -112,7 +118,7 @@ function mergeUniqueBySymbol(prev: EarningsListItem[], more: EarningsListItem[])
 // /api/earnings-calendar/day (a pure cache read, no quoting), so paging is cheap
 // and never blocks. Column headers are clickable to re-sort the loaded rows;
 // the default is market cap, largest at the top.
-export default function EarningsDayList({ date, initialItems, initialHasMore, complete }: Props) {
+export default function EarningsDayList({ date, initialItems, initialHasMore, complete, emptyExplainedAbove = false }: Props) {
   const [items, setItems] = useState<EarningsListItem[]>(initialItems);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -233,6 +239,7 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
   }
 
   if (items.length === 0) {
+    if (emptyExplainedAbove) return null;
     return (
       <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
         {complete

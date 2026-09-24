@@ -101,5 +101,32 @@ check("the cell renders the per-day count from getMonthDayCounts",
   /const count = dayCounts\.get\(cellDate\) \?\? 0;/.test(readCodeOnly("app/earnings-calendar/page.tsx")) &&
     /\{count\}/.test(readCodeOnly("app/earnings-calendar/page.tsx")));
 
+console.log("\n5. one message, not two (#552 COWORK #26)");
+{
+  // RENDERED: the day list with no rows, with and without the page's note above it.
+  const { createRequire } = await import("node:module");
+  const require = createRequire(`${process.cwd()}/package.json`);
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const LIST = fs.readFileSync("app/earnings-calendar/EarningsDayList.tsx", "utf8");
+  const buildList = (src) => {
+    const js = ts.transpileModule(src.replace(/^"use client";\s*/, ""), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
+    }).outputText;
+    const mod = { exports: {} };
+    const req = (m) => (m === "next/link" ? { __esModule: true, default: (p) => React.createElement("a", p) } : require(m));
+    new Function("require", "module", "exports", "React", js)(req, mod, mod.exports, React);
+    return mod.exports.default;
+  };
+  const render = (Comp, explained) => renderToStaticMarkup(React.createElement(Comp, { date: "2026-09-24", initialItems: [], initialHasMore: false, complete: false, emptyExplainedAbove: explained }));
+  const L = buildList(LIST);
+  check("with the day panel's note above, the empty list renders nothing", render(L, true) === "");
+  check("without it, the list still explains itself", /still populating/.test(render(L, false)));
+  check("the page passes the flag whenever the panel shows a note",
+    /emptyExplainedAbove=\{dayState\.kind !== "listed"\}/.test(readCodeOnly("app/earnings-calendar/page.tsx")));
+  const M = buildList(once(LIST, "    if (emptyExplainedAbove) return null;\n", ""));
+  check("MUTATION: without the guard both messages show again", /still populating/.test(render(M, true)));
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
