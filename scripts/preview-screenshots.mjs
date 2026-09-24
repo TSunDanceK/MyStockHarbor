@@ -40,7 +40,12 @@ const origin = url.origin;
 const SECTIONS = {
   about: "/^About /",
   returns: "/close-over-close change/i",
+  // THE WHOLE EARNINGS PAGE (CODE-A, #552 COWORK #37): /stock/X/earnings, from
+  // the top, up to FULL_PAGE_MAX_PX. No heading test: the page is the subject.
+  earnings: null,
 };
+const PATHS = { earnings: "/earnings" };
+const FULL_PAGE_MAX_PX = 14000;
 const tokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 const sectionToken = tokens.find((t) => t.startsWith("section="));
 const section = sectionToken ? sectionToken.slice("section=".length) : "about";
@@ -126,9 +131,14 @@ const out = { origin, takenAt: new Date().toISOString(), shots: {} };
 for (const sym of symbols) {
   for (const [label, width, mobile] of [["desktop", 1280, false], ["mobile", 390, true]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile });
-    await load(`${origin}/stock/${encodeURIComponent(sym)}`);
-    // The chosen section: the <section> whose h2 matches (default "About …").
-    const box = await evaluate(`(() => {
+    await load(`${origin}/stock/${encodeURIComponent(sym)}${PATHS[section] ?? ""}`);
+    // The chosen section: the <section> whose h2 matches (default "About …"),
+    // or the whole page for a section with no heading test.
+    const box = SECTIONS[section] === null ? await evaluate(`(() => {
+      const el = document.querySelector("main") ?? document.body;
+      return { x: 0, y: 0, width: document.documentElement.clientWidth, height: Math.min(document.documentElement.scrollHeight, ${FULL_PAGE_MAX_PX}),
+               text: el.innerText.slice(0, 6000) };
+    })()`) : await evaluate(`(() => {
       const h = [...document.querySelectorAll("h2")].find((e) => ${SECTIONS[section]}.test(e.textContent.trim()));
       const s = h && h.closest("section");
       if (!s) return null;
@@ -144,11 +154,11 @@ for (const sym of symbols) {
     }
     const { data } = await send("Page.captureScreenshot", {
       format: "png", captureBeyondViewport: true,
-      clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 4000), scale: 1 },
+      clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, SECTIONS[section] === null ? FULL_PAGE_MAX_PX : 4000), scale: 1 },
     });
     out.shots[`${sym}-${label}`] = { png: data, text: box.text, height: Math.round(box.height) };
     console.log(`${sym} ${label}: ${Math.round(box.height)}px`);
-    console.log(box.text.split("\n").slice(0, 12).map((l) => `    | ${l}`).join("\n"));
+    console.log(box.text.split("\n").slice(0, SECTIONS[section] === null ? 400 : 12).map((l) => `    | ${l}`).join("\n"));
   }
 }
 
