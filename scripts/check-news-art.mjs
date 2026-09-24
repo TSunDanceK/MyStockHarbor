@@ -517,11 +517,12 @@ const SURFACES = [
   // the library art too, which it never did". A reason that is sound for the
   // generated card was read as a reason for nothing at all, twice.
   //
-  // noneIsNull, because this surface is the one that can legitimately plan
-  // `none`: with sectorBucket null and canGenerate false, a title matching no
-  // pattern has no honest picture, and an empty 16:9 wrapper on most of the
-  // grid would be worse than the blank it replaces.
-  { file: "app/headlines/page.tsx", label: "headlines page", compact: false, noneIsNull: true },
+  // NOT noneIsNull ANY MORE (#553 COWORK #41). It was, because a title
+  // matching no pattern had "no honest picture" and 26 of 30 production cards
+  // rendered no slot. The owner ruled that a patchy grid is the worse outcome:
+  // planHeadlineArt now ends in a generic "any market" picture, never none, so
+  // the else-branch renders the slot unconditionally, like every other surface.
+  { file: "app/headlines/page.tsx", label: "headlines page", compact: false, noneIsNull: false },
 ];
 
 // DELIBERATELY IMAGELESS, with the reason attached. EMPTY, and the partition
@@ -1361,10 +1362,66 @@ check(
   })(),
   "the path this page has shipped since #481 is a fall-through, not a casualty"
 );
+const isGeneric = (p) => p.kind === "library" && /^\/news-art\/(any-macro|exchanges-any)-\d+\.webp$/.test(p.art.src);
 check(
-  "/headlines: an ordinary headline plans NONE — never a guessed sector, never a blank ticker card",
-  headlineArt("Stocks drift as investors wait for Friday's data").kind === "none",
-  "with sectorBucket null and canGenerate false the only outcomes are the right art or no art"
+  "/headlines: an ordinary headline takes a GENERIC picture — never none, never a guessed sector, never a blank ticker card (#553 COWORK #41)",
+  isGeneric(headlineArt("Stocks drift as investors wait for Friday's data")),
+  "the owner's rule: every card has an image; with no tag and no event the picture is a neutral any-market one"
+);
+check(
+  "/headlines: NO headline plans none — 200 varied titles, every one gets library art",
+  (() => {
+    const words = ["Stocks", "Futures", "Dollar", "Bonds", "Traders", "Markets", "Investors", "Index", "Shares", "Yields"];
+    const verbs = ["drift", "slip", "edge higher", "wobble", "steady", "turn mixed", "pause", "extend gains", "fall back", "hold"];
+    const takenNames = new Set(), takenBuckets = new Map();
+    let n = 0;
+    for (const w of words) for (const v of verbs) for (const tail of ["ahead of data", "as week ends"]) {
+      const p = tags.planHeadlineArt({ title: `${w} ${v} ${tail}`, key: `${w}${v}${tail}`, takenNames, takenBuckets });
+      if (p.kind !== "library") return false;
+      n++;
+    }
+    return n === 200;
+  })(),
+  "a page of 30 is the production shape; 200 leaves no room for an unlucky title"
+);
+check(
+  "/headlines: neighbouring generic cards differ — the fallback walks the set without repeating",
+  (() => {
+    const takenNames = new Set(), takenBuckets = new Map();
+    // As many cards as the set holds (the synthetic manifest here is small).
+    const keys = tags.GENERIC_FALLBACK_NAMES.map((_, i) => `k${i}`);
+    const srcs = keys.map((k) => tags.planHeadlineArt({ title: "Stocks drift as investors wait", key: k, takenNames, takenBuckets }).art.src);
+    return srcs.length >= 2 && srcs.every((x) => /any-macro|exchanges-any/.test(x)) && new Set(srcs).size === srcs.length;
+  })(),
+  "N identical generic headlines, N different pictures, for the whole set"
+);
+check(
+  "/headlines: past the end of the generic set, a fresh pass — no picture twice within any 3 neighbouring cards",
+  (() => {
+    const takenNames = new Set(), takenBuckets = new Map();
+    const n = tags.GENERIC_FALLBACK_NAMES.length;
+    const srcs = Array.from({ length: n * 3 }, (_, i) => tags.planHeadlineArt({ title: "Stocks drift as investors wait", key: `r${i}`, takenNames, takenBuckets }).art.src);
+    // No picture twice within any window of 3 (a desktop row), anywhere,
+    // including across the point where the set is released.
+    const k = Math.min(3, n);
+    for (let i = 0; i + k <= srcs.length; i++) if (new Set(srcs.slice(i, i + k)).size !== k) return false;
+    return true;
+  })(),
+  "repeating the first choice once the set ran out put the same picture twice in one row on a 44-card page"
+);
+check(
+  "/headlines: the generic set is the any-market images",
+  tags.GENERIC_FALLBACK_NAMES.length > 0 && tags.GENERIC_FALLBACK_NAMES.every((n) => /^(any-macro|exchanges-any)-\d+$/.test(n)),
+  tags.GENERIC_FALLBACK_NAMES.join(", ")
+);
+check(
+  "/headlines: in the REAL library the generic set is 16 images, and every file (and its -sm) ships",
+  (() => {
+    const real = Object.keys(JSON.parse(fs.readFileSync(path.join(ROOT, "public/news-art/manifest-v2.json"), "utf8")))
+      .filter((n) => /^(any-macro|exchanges-any)-/.test(n));
+    return real.length === 16 && real.every((n) => fs.existsSync(path.join(ROOT, `public/news-art/${n}.webp`)) && fs.existsSync(path.join(ROOT, `public/news-art/${n}-sm.webp`)));
+  })(),
+  "a generic name without its file is a broken image on every card that falls back"
 );
 check(
   "/headlines: the tagged rule is asked FIRST — a story that matches both gets the tagged one",
@@ -1386,7 +1443,9 @@ check(
       "Acme slips in afternoon trading",
       "Oil prices rose again. Oil markets are pricing in a supply cut."
     );
-    return once.kind === "none" && twice.kind === "library" && twice.art.bucket === "refining-any-01";
+    // One mention: not what the story is about, so the generic picture
+    // (#553 COWORK #41 replaced "none" here); two: the refining art.
+    return isGeneric(once) && twice.kind === "library" && twice.art.bucket === "refining-any-01";
   })(),
   "one mention in the body is not what a story is about; two is. 'refining' wins on `related` here, which is the 1-point leg doing its job"
 );
@@ -1433,11 +1492,35 @@ check(
 // that are still on v1 rather than deleted. A narrowed assertion is the point:
 // the sector page and the dashboard strip going quietly onto tag scoring is
 // exactly what it still exists to catch.
+// NARROWED AGAIN (#553 COWORK #41): the sector page now takes ONE thing from
+// artTags -- withGenericFallback, so a lead card that plans none still gets a
+// picture. It still does no tag scoring of its own.
 check(
-  "the two remaining v1 surfaces are untouched: /sector/*/news and the dashboard strip",
-  !/artTags|articleTopic|industryArt/.test(readCodeOnly("app/sector/[slug]/news/page.tsx")) &&
-    !/artTags|articleTopic|industryArt/.test(readCodeOnly("lib/server/internalNews.ts")),
+  "the two remaining v1 surfaces do no tag scoring: /sector/*/news (generic fallback only) and the dashboard strip",
+  (() => {
+    const sector = readCodeOnly("app/sector/[slug]/news/page.tsx");
+    const imports = [...sector.matchAll(/import \{([^}]*)\} from "@\/lib\/server\/news\/artTags"/g)].map((m) => m[1].trim());
+    return imports.length === 1 && imports[0] === "withGenericFallback" &&
+      !/articleTopic|industryArt|planSymbolCardArt|pickTagged|planHeadlineArt/.test(sector) &&
+      !/artTags|articleTopic|industryArt/.test(readCodeOnly("lib/server/internalNews.ts"));
+  })(),
   "the sector page has a slug and no industry; the strip is a server-built payload. Each is its own change"
+);
+check(
+  "/sector/*/news: a lead card that plans none takes the generic picture",
+  /const leadArt: CardArt\[\] = detailedNews\.map\(\(item\) => withGenericFallback\(/.test(readCodeOnly("app/sector/[slug]/news/page.tsx")),
+  "the same fallback as /headlines, so the two surfaces cannot drift"
+);
+check(
+  "/headlines: the first row loads eagerly, everything below it lazily, with width and height set",
+  (() => {
+    const page = readCodeOnly("app/headlines/page.tsx");
+    const card = readCodeOnly("app/components/NewsCardArt.tsx");
+    return /eager=\{index < FIRST_ROW_CARDS\}/.test(page) && /const FIRST_ROW_CARDS = 3;/.test(page) &&
+      /loading=\{eager \? "eager" : "lazy"\}/.test(page) &&
+      /loading = "lazy"/.test(card) && /loading=\{loading\}/.test(card) && /width=\{plan\.art\.width\}/.test(card) && /height=\{plan\.art\.height\}/.test(card);
+  })(),
+  "eager below the fold costs every visitor bandwidth for pictures they may never scroll to"
 );
 
 // ── SERVING: THE FOLDER'S OWN REQUEST PATH ─────────────────────────────────
