@@ -581,7 +581,10 @@ export default async function StockPage({ params }: Props) {
             : `We do not have market data for ${upper}. It may be delisted, not covered by our data provider, or not a valid ticker symbol.`}
         </p>
         <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
-          Try <Link href="/stock-search">searching for another symbol</Link>, or browse the{" "}
+          {/* Was /stock-search, a raw-JSON FMP route with no page behind it
+              (deleted 2026-09-23, Relay B #553 inventory #22). The dashboard
+              carries the site's search box. */}
+          Try <Link href="/">searching for another symbol</Link>, or browse the{" "}
           <Link href="/pickers">stock screeners</Link>.
         </p>
         <RelatedStocks currentSymbol={upper} symbols={getRelatedSymbols(upper)} />
