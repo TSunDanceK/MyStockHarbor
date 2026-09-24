@@ -130,4 +130,29 @@ for (const [label, make] of MUTANTS) {
   }
 }
 if (survived) process.exit(1);
-console.log(`check-capex-page: all assertions pass; ${MUTANTS.length} mutants caught`);
+
+// ── The nav (#563 COWORK #3, N1): Bottlenecks is a drop-down, stock pages first ──
+function navSuite(header, sections) {
+  const fails = [];
+  const i = header.indexOf('label: "Bottlenecks"');
+  const block = i < 0 ? "" : header.slice(header.lastIndexOf("{", i), header.indexOf("],", i));
+  const first = block.indexOf('href: "/bottlenecks"');
+  const capex = block.indexOf('href: "/bottlenecks/capex"');
+  if (!/kind: "dropdown"/.test(block)) fails.push("Bottlenecks is a drop-down");
+  if (!(first >= 0 && capex > first)) fails.push("its entries are /bottlenecks first, then /bottlenecks/capex");
+  if (/label: "Follow the Money"/.test(header)) fails.push("no separate top-level capex link");
+  if (!sections.includes('{ href: "/bottlenecks/capex", label: "Capex — Follow the money" }')) fails.push("the crawlable nav lists the capex page");
+  return fails;
+}
+const header = read("app/components/SiteHeader.tsx");
+const sections = read("lib/navSections.ts");
+const navFails = navSuite(header, sections);
+if (navFails.length) {
+  console.error("FAIL check-capex-page (nav):\n  " + navFails.join("\n  "));
+  process.exit(1);
+}
+if (!navSuite(header.replace('kind: "dropdown",\n        label: "Bottlenecks",', 'kind: "link",\n        label: "Bottlenecks",'), sections).length) {
+  console.error("MUTANT SURVIVED: Bottlenecks back to a plain link");
+  process.exit(1);
+}
+console.log(`check-capex-page: all assertions pass; ${MUTANTS.length + 1} mutants caught`);
