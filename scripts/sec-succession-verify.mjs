@@ -52,7 +52,7 @@ for (const s of (process.argv[2] || "XOM").split(",")) {
     for (const p of [...x.quarters.slice(0, 5), ...x.years.slice(0, 1)]) {
       console.log(`    ${p.end} ${p.fp} eps ${val(p, "epsDiluted")} shares ${val(p, "sharesDiluted")} ni ${val(p, "netIncome")}`);
     }
-    for (const [tag, n] of Object.entries(facts.facts?.["us-gaap"] ?? {}).filter(([t]) => /^EarningsPerShare(Diluted|BasicAndDiluted)$|^WeightedAverageNumberOfDilutedSharesOutstanding$/.test(t)).map(([t, d]) => [t, Object.values(d.units ?? {}).flat().map((r) => r.end).sort().at(-1)])) {
+    for (const [tag, n] of Object.entries(facts.facts?.["us-gaap"] ?? {}).filter(([t]) => /^EarningsPerShare(Diluted|BasicAndDiluted)$|WeightedAverage.*Outstanding/.test(t)).map(([t, d]) => [t, Object.values(d.units ?? {}).flat().map((r) => r.end).sort().at(-1)])) {
       console.log(`    tag ${tag}: newest end ${n}`);
     }
     console.log(`    cover shares ${x.coverShares?.val ?? "—"} as of ${x.coverShares?.asOf ?? "—"}; EPS ${v.eps ? `${v.eps.val.toFixed(2)} ${v.eps.basis}${v.eps.derivedQ4 ? ` (Q4 ${v.eps.derivedQ4} derived)` : ""} to ${v.eps.periodEnd}` : "refused"}; refusals ${v.refusals.join(",") || "none"}`);
