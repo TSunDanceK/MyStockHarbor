@@ -8,6 +8,7 @@ import { readCachedStockDataBulk } from "./stockDataCache";
 import { getCachedDailyHistoryBulk } from "./historyCache";
 import { getCachedDayItems, isDateInWindow, type EarningsListItem } from "./earningsCalendar";
 import { getCompanyNameMap } from "./companyNames";
+import { dayWindow as dayWindowAt, type DayBasis } from "./lastSession";
 
 // ---------------------------------------------------------------------------
 // The four sector panels, all built from caches the site already fills.
@@ -56,7 +57,9 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const PERFORMANCE_KEY = "msh:sector-performance:v1";
+// v2: rows carry dayBasis/sessionDate. A v1 row read by v2 code would render
+// with no basis, i.e. with the wrong label.
+const PERFORMANCE_KEY = "msh:sector-performance:v2";
 const PERFORMANCE_TTL_SECONDS = 15 * 60;
 
 const BREADTH_KEY_PREFIX = "msh:sector-breadth:v1:";
@@ -72,6 +75,9 @@ const MOVERS_SHOWN = 4;
 
 /** Price-pool rows older than this are excluded from user-visible rankings. */
 const MAX_QUOTE_AGE_MS = 30 * 60 * 1000;
+
+/** Which quotes may speak for a 1D move now (see lib/server/lastSession.ts). */
+const dayWindow = (nowMs: number) => dayWindowAt(nowMs, MAX_QUOTE_AGE_MS);
 
 const EARNINGS_LOOKAHEAD_DAYS = 7;
 
@@ -89,7 +95,14 @@ export type SectorPerformanceRow = {
   sampled: number;
   /** 1 = best 1D performer of the 11. Null when day is null. */
   rank: number | null;
+  /** "live" in the regular session; outside it, the last session's move. */
+  dayBasis: DayBasis;
+  /** Eastern date (yyyy-mm-dd) of the session `day` describes when not live. */
+  sessionDate: string | null;
 };
+
+export type { DayBasis } from "./lastSession";
+export { sessionDateLabel } from "./lastSession";
 
 export type SectorPerformanceTable = {
   rows: SectorPerformanceRow[];
@@ -133,6 +146,7 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
   ]);
 
   const now = Date.now();
+  const dayRule = dayWindow(now);
 
   const rows: SectorPerformanceRow[] = SECTORS.map((sector) => {
     const symbols = bySector.get(sector.slug) ?? [];
@@ -148,8 +162,8 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
       const weight =
         typeof quote?.marketCap === "number" && quote.marketCap > 0 ? quote.marketCap : 1;
 
-      const fresh = quote && now - quote.ts <= MAX_QUOTE_AGE_MS;
-      dayEntries.push({ value: fresh ? quote.changePct : null, weight });
+      const counts = quote && dayRule.counts(quote.ts);
+      dayEntries.push({ value: counts ? quote.changePct : null, weight });
       weekEntries.push({ value: data?.perf1w ?? null, weight });
       monthEntries.push({ value: data?.perf1m ?? null, weight });
       ytdEntries.push({ value: data?.perfYtd ?? null, weight });
@@ -166,6 +180,8 @@ async function buildSectorPerformance(): Promise<SectorPerformanceTable> {
       ytd: weightedAverage(ytdEntries).value,
       sampled: day.count,
       rank: null,
+      dayBasis: dayRule.basis,
+      sessionDate: dayRule.sessionDate,
     };
   });
 
@@ -232,10 +248,14 @@ export type SectorMovers = {
   losers: SectorMover[];
   /** Constituents with a quote fresh enough to rank. */
   sampled: number;
+  /** Same rule and label as the performance row (see dayWindow). */
+  dayBasis: DayBasis;
+  sessionDate: string | null;
 };
 
 export async function getSectorMovers(slug: string): Promise<SectorMovers> {
-  const empty: SectorMovers = { gainers: [], losers: [], sampled: 0 };
+  const dayRule = dayWindow(Date.now());
+  const empty: SectorMovers = { gainers: [], losers: [], sampled: 0, dayBasis: dayRule.basis, sessionDate: dayRule.sessionDate };
 
   try {
     const constituents = await getSectorConstituents(slug, MOVERS_SAMPLE);
@@ -246,8 +266,6 @@ export async function getSectorMovers(slug: string): Promise<SectorMovers> {
       getCompanyNameMap().catch(() => new Map<string, string>()),
     ]);
 
-    const now = Date.now();
-
     const rows: SectorMover[] = [];
 
     for (const symbol of constituents) {
@@ -256,7 +274,8 @@ export async function getSectorMovers(slug: string): Promise<SectorMovers> {
       if (typeof quote.changePct !== "number" || !Number.isFinite(quote.changePct)) continue;
       // Mixing a 1-minute-old and a 25-minute-old % change in one ranking would
       // quietly misorder it, so stale rows are dropped rather than ranked.
-      if (now - quote.ts > MAX_QUOTE_AGE_MS) continue;
+      // Outside the session, "fresh" means from the last session (dayWindow).
+      if (!dayRule.counts(quote.ts)) continue;
 
       rows.push({
         symbol,
@@ -277,6 +296,8 @@ export async function getSectorMovers(slug: string): Promise<SectorMovers> {
         .slice(-MOVERS_SHOWN)
         .reverse(),
       sampled: rows.length,
+      dayBasis: dayRule.basis,
+      sessionDate: dayRule.sessionDate,
     };
   } catch {
     return empty;

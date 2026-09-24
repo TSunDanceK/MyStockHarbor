@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No stocks in the analyzed universe currently meet both the yield and dividend growth conditions.",
   tone: "green",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [
     { kind: "number", field: "divYield", min: 2 },
     { kind: "number", field: "divGrowth", min: 5 },
