@@ -825,20 +825,21 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   const [coarse, setCoarse] = useState(false);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // ---- COWORK #28 (b): measure tools ----
-  // Measures live in overlayIdsRef with the drawings (so Undo and Clear
-  // drawings take them too) and also in measureIdsRef (for Clear measures).
-  const measureIdsRef = useRef<string[]>([]);
+  // ---- COWORK #28 (b), #43: measure tools ----
+  // A measure is TEMPORARY (COWORK #43): once drawn, the next click or tap
+  // anywhere on the chart (or Esc) removes it and does nothing else. It is not
+  // a drawing: not in Undo, not selectable, not draggable, one at a time.
   const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
   const measureMenuRef = useRef<HTMLDivElement | null>(null);
   const measurePanelRef = useRef<HTMLDivElement | null>(null);
-  // The selected drawing or measure: Delete (or the phone's Delete pill) removes it.
+  // The selected drawing: Delete (or the phone's Delete pill) removes it.
   const selectedRef = useRef<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Touch placement: panning pauses from picking a tool until Done, so the two
-  // taps (and any corner drag after) cannot scroll the chart instead.
-  const placingRef = useRef<{ id: string; drawn: boolean } | null>(null);
-  const [placing, setPlacingState] = useState<{ id: string; drawn: boolean } | null>(null);
+  // The one measure on the chart, being placed (drawn: false) or placed.
+  // On touch, panning pauses while it is being placed, so the two taps
+  // cannot scroll the chart instead.
+  const measureRef = useRef<{ id: string; drawn: boolean } | null>(null);
+  const [measure, setMeasureState] = useState<{ id: string; drawn: boolean } | null>(null);
   // The Shift + drag quick measure: not an undoable drawing, gone on the next click.
   const quickRef = useRef<string | null>(null);
 
@@ -1082,11 +1083,10 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   }
 
   // ---- Drawing tools ----
-  // Every drawing and measure reports selection and removal, so Delete knows
-  // what is selected and the id lists never keep a removed overlay.
+  // Every drawing reports selection and removal, so Delete knows what is
+  // selected and the id list never keeps a removed overlay.
   function forget(id: string) {
     overlayIdsRef.current = overlayIdsRef.current.filter((x) => x !== id);
-    measureIdsRef.current = measureIdsRef.current.filter((x) => x !== id);
     if (selectedRef.current === id) { selectedRef.current = null; setSelectedId(null); }
   }
   type OverlayHookEvent = { overlay: { id: string } };
@@ -1099,7 +1099,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   function startTool(overlay: string, key: string) {
     const chart = chartRef.current;
     if (!chart) return;
-    endPlacing();
+    clearMeasure();
     setActiveTool(key);
     setDrawMenuOpen(false);
     try {
@@ -1117,7 +1117,6 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   function undoLastDrawing() {
     const chart = chartRef.current;
     if (!chart) return;
-    endPlacing(false);
     const id = overlayIdsRef.current.pop();
     if (id) {
       try { chart.removeOverlay({ id }); } catch { /* noop */ }
@@ -1128,30 +1127,25 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   function clearDrawings() {
     const chart = chartRef.current;
     if (!chart) return;
-    endPlacing(false);
+    clearMeasure();
     clearQuick();
     for (const id of [...overlayIdsRef.current]) {
       try { chart.removeOverlay({ id }); } catch { /* noop */ }
     }
     overlayIdsRef.current = [];
-    measureIdsRef.current = [];
   }
 
-  // ---- Measure tools (#553 COWORK #28 part b) ----
-  function setPlacing(p: { id: string; drawn: boolean } | null) {
-    placingRef.current = p;
-    setPlacingState(p);
+  // ---- Measure tools (#553 COWORK #28 part b, #43) ----
+  function setMeasure(m: { id: string; drawn: boolean } | null) {
+    measureRef.current = m;
+    setMeasureState(m);
   }
-  // Done (or picking another tool): panning comes back; a measure still
-  // waiting for its second tap is dropped rather than left half-drawn.
-  function endPlacing(dropUnfinished = true) {
-    const p = placingRef.current;
-    if (!p) return;
-    setPlacing(null);
-    if (dropUnfinished && !p.drawn) {
-      try { chartRef.current?.removeOverlay({ id: p.id }); } catch { /* noop */ }
-      forget(p.id);
-    }
+  // Removes the measure (placed, or still being placed) and gives panning back.
+  function clearMeasure() {
+    const m = measureRef.current;
+    if (!m) return;
+    setMeasure(null);
+    try { chartRef.current?.removeOverlay({ id: m.id }); } catch { /* noop */ }
     try { chartRef.current?.setScrollEnabled(true); } catch { /* noop */ }
   }
 
@@ -1160,38 +1154,28 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     const tool = MEASURE_TOOLS.find((t) => t.key === kind);
     if (!chart || !tool) return;
     setMeasureMenuOpen(false);
-    endPlacing();
+    clearMeasure();
+    clearQuick();
     let id: string | null = null;
     try {
       id = chart.createOverlay({
         name: tool.overlay,
-        ...overlayHooks,
         onDrawEnd: () => {
-          if (placingRef.current && placingRef.current.id === id) setPlacing({ id, drawn: true });
+          if (!id || measureRef.current?.id !== id) return false;
+          const placed = id;
+          setMeasure({ id: placed, drawn: true });
+          // Placed: locked (no select, no drag) and panning comes back.
+          window.setTimeout(() => { try { chartRef.current?.overrideOverlay({ id: placed, lock: true }); } catch { /* noop */ } }, 0);
+          try { chartRef.current?.setScrollEnabled(true); } catch { /* noop */ }
           return false;
         },
       });
     } catch { /* noop */ }
     if (!id) return;
-    overlayIdsRef.current.push(id);
-    measureIdsRef.current.push(id);
+    setMeasure({ id, drawn: false });
     if (coarse || isMobile) {
       try { chart.setScrollEnabled(false); } catch { /* noop */ }
-      setPlacing({ id, drawn: false });
     }
-  }
-
-  function clearMeasures() {
-    const chart = chartRef.current;
-    if (!chart) return;
-    endPlacing(false);
-    clearQuick();
-    const ids = [...measureIdsRef.current];
-    for (const id of ids) {
-      try { chart.removeOverlay({ id }); } catch { /* noop */ }
-    }
-    overlayIdsRef.current = overlayIdsRef.current.filter((x) => !ids.includes(x));
-    measureIdsRef.current = [];
   }
 
   function deleteSelected() {
@@ -1243,7 +1227,6 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     else if (verb === "ind" && arg) toggleIndicator(arg as IndicatorName);
     else if (verb === "draw" && arg) { const t = DRAW_TOOLS.find((d) => d.key === arg); if (t) startTool(t.overlay, t.key); }
     else if (verb === "measure" && arg) startMeasure(arg as MeasureKind);
-    else if (verb === "measure-clear") clearMeasures();
     else if (verb === "scale" && arg) setScale(arg === "percent" ? "percent" : "price");
     else if (verb === "recenter") recenter();
     else if (verb === "undo") undoLastDrawing();
@@ -1254,7 +1237,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   // ---- Right-click menu (desktop) and long-press sheet (touch) ----
   // Our own controls on the chart (axis strips, % chip, menu) never open the
   // menu or start a long-press.
-  const onOwnControl = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("[data-axis-strip],[data-scale-chip],[data-chart-menu],[data-measure-pill]"));
+  const onOwnControl = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("[data-axis-strip],[data-scale-chip],[data-chart-menu],[data-delete-pill]"));
   function onContextMenu(e: React.MouseEvent) {
     if (isMobile || onOwnControl(e.target)) return;
     e.preventDefault();
@@ -1264,7 +1247,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   }
   const pressRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
   function onPointerDownPress(e: React.PointerEvent) {
-    if (e.pointerType === "mouse" || onOwnControl(e.target) || placingRef.current) return;
+    if (e.pointerType === "mouse" || onOwnControl(e.target) || measureRef.current) return;
     if (pressRef.current) { window.clearTimeout(pressRef.current.timer); pressRef.current = null; return; } // a second finger: a pinch
     const timer = window.setTimeout(() => { pressRef.current = null; setSheetOpen(true); }, LONG_PRESS_MS);
     pressRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, timer };
@@ -1351,10 +1334,14 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     return () => cleanups.forEach((f) => f());
   }, [coarse, applyScale]);
 
-  // ---- #28 (b): Shift + drag quick measure (desktop), Delete key ----
-  // A capture-phase mousedown on the chart box runs before klinecharts' own
-  // handler (on the canvas inside it), so a Shift-drag measures instead of
-  // panning. Any later click clears the quick measure (TradingView's habit).
+  // ---- #28 (b), #43: the clearing click, Shift + drag quick measure, Esc, Delete ----
+  // Capture-phase listeners on the chart box run before klinecharts' own
+  // handlers (on the canvas inside it). So:
+  //  - with a placed measure, the next press (mouse or touch) only clears it:
+  //    the whole press -- down, moves, up, click -- is swallowed, so it cannot
+  //    pan, move the crosshair, place a point or select a drawing;
+  //  - a Shift-drag measures instead of panning; any later click clears that
+  //    quick measure (TradingView's habit).
   useEffect(() => {
     const wrap = canvasWrapRef.current;
     if (!wrap) return;
@@ -1368,8 +1355,32 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
         return Array.isArray(p) ? p[0] ?? null : p;
       } catch { return null; }
     };
+    let swallowing = false;
+    let swallowClickUntil = 0;
+    const clearing = (e: Event) => {
+      if (!measureRef.current?.drawn || onOwnControl(e.target)) return false;
+      e.preventDefault();
+      e.stopPropagation();
+      clearMeasure();
+      swallowing = true;
+      return true;
+    };
+    const eat = (e: Event) => {
+      if (!swallowing) return;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+    };
+    const eatEnd = (e: Event) => {
+      if (!swallowing) return;
+      eat(e);
+      swallowing = false;
+      swallowClickUntil = Date.now() + 400;
+    };
+    const eatClick = (e: Event) => { if (Date.now() < swallowClickUntil) { e.preventDefault(); e.stopPropagation(); } };
+    const touchDown = (e: TouchEvent) => { clearing(e); };
     const down = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      if (clearing(e)) return;
       if (!e.shiftKey) { clearQuick(); return; }
       if (onOwnControl(e.target)) return;
       const chart = chartRef.current;
@@ -1390,17 +1401,34 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       if (b) { try { chartRef.current?.overrideOverlay({ id: drag.id, points: [drag.a, b] }); } catch { /* noop */ } }
     };
     const up = () => { drag = null; };
+    const opts = { capture: true, passive: false } as const;
     wrap.addEventListener("mousedown", down, true);
+    wrap.addEventListener("touchstart", touchDown, opts);
+    wrap.addEventListener("mousemove", eat, true);
+    wrap.addEventListener("touchmove", eat, opts);
+    wrap.addEventListener("mouseup", eatEnd, true);
+    wrap.addEventListener("touchend", eatEnd, opts);
+    wrap.addEventListener("touchcancel", eatEnd, opts);
+    wrap.addEventListener("click", eatClick, true);
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     return () => {
       wrap.removeEventListener("mousedown", down, true);
+      wrap.removeEventListener("touchstart", touchDown, opts);
+      wrap.removeEventListener("mousemove", eat, true);
+      wrap.removeEventListener("touchmove", eat, opts);
+      wrap.removeEventListener("mouseup", eatEnd, true);
+      wrap.removeEventListener("touchend", eatEnd, opts);
+      wrap.removeEventListener("touchcancel", eatEnd, opts);
+      wrap.removeEventListener("click", eatClick, true);
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && (measureRef.current || quickRef.current)) { clearMeasure(); clearQuick(); return; }
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       if (!selectedRef.current) return;
       // Only when nothing that takes typing has focus.
@@ -1621,11 +1649,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
                   {RULER_ICON}<span>{tool.label}</span>
                 </button>
               ))}
-              <button type="button" onClick={() => { clearMeasures(); setMeasureMenuOpen(false); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderTop: "1px solid rgba(255,255,255,0.10)", background: "transparent", color: "#9fb0c7", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                {CLEAR_ICON}<span>Clear measures</span>
-              </button>
-              <div style={{ padding: "7px 12px 9px", fontSize: 11, color: "#7c8aa3", borderTop: "1px solid rgba(255,255,255,0.05)" }}>Tip: Shift + drag on the chart for a quick measure.</div>
+              <div style={{ padding: "7px 12px 9px", fontSize: 11, color: "#7c8aa3", borderTop: "1px solid rgba(255,255,255,0.05)" }}>A measure clears on your next click. Tip: Shift + drag for a quick one.</div>
             </div>
           ) : null}
         </div>
@@ -1707,18 +1731,22 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           <div ref={xStripRef} data-axis-strip="x" style={{ position: "absolute", left: 0, right: 56, bottom: 0, height: 44, zIndex: 5, touchAction: "none" }} />
         </>) : null}
 
-        {/* Touch: while a measure is being placed, panning is paused until Done.
-            With a drawing or measure selected, a Delete pill removes it. */}
-        {placing || (selectedId && (coarse || isMobile)) ? (
-          <div data-measure-pill style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 7, display: "flex", alignItems: "center", gap: 8, maxWidth: "calc(100% - 16px)",
+        {/* The measure hint (#553 COWORK #43). It takes no clicks, so a tap on it
+            clears the measure like a tap anywhere else. */}
+        {measure ? (
+          <div data-measure-hint style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 7, pointerEvents: "none", maxWidth: "calc(100% - 16px)", whiteSpace: "nowrap",
+            background: "rgba(15,23,42,0.94)", border: "1px solid rgba(96,165,250,0.5)", borderRadius: 999, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: "#cbd5e1", boxShadow: "0 8px 20px rgba(0,0,0,0.35)" }}>
+            {!measure.drawn
+              ? (coarse || isMobile ? "Tap the start, then the end" : "Click the start, then the end")
+              : (coarse || isMobile ? "Tap anywhere to clear" : "Click anywhere or press Esc to clear")}
+          </div>
+        ) : null}
+        {/* Touch: a selected drawing gets a Delete pill. */}
+        {!measure && selectedId && (coarse || isMobile) ? (
+          <div data-delete-pill style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 7, display: "flex", alignItems: "center", gap: 8, maxWidth: "calc(100% - 16px)",
             background: "rgba(15,23,42,0.94)", border: "1px solid rgba(96,165,250,0.5)", borderRadius: 999, padding: "0 0 0 12px", fontSize: 12, fontWeight: 700, color: "#cbd5e1", boxShadow: "0 8px 20px rgba(0,0,0,0.35)" }}>
-            {placing ? (<>
-              <span style={{ whiteSpace: "nowrap" }}>{placing.drawn ? "Drag a corner to adjust" : "Tap the start, then the end"}</span>
-              <button type="button" data-measure-done onClick={() => endPlacing()} style={{ minHeight: 44, minWidth: 64, border: "none", borderRadius: 999, background: "#2f6bff", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Done</button>
-            </>) : (<>
-              <span style={{ whiteSpace: "nowrap" }}>Selected</span>
-              <button type="button" data-overlay-delete onClick={deleteSelected} style={{ minHeight: 44, minWidth: 72, border: "none", borderRadius: 999, background: "rgba(239,68,68,0.85)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Delete</button>
-            </>)}
+            <span style={{ whiteSpace: "nowrap" }}>Selected</span>
+            <button type="button" data-overlay-delete onClick={deleteSelected} style={{ minHeight: 44, minWidth: 72, border: "none", borderRadius: 999, background: "rgba(239,68,68,0.85)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Delete</button>
           </div>
         ) : null}
 
