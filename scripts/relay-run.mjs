@@ -648,6 +648,8 @@ const TASKS = {
   // READS ONLY: the capex record's unplaced symbols (#552 COWORK #35). 1 GET.
   "write-capex-unplaced-list": { script: "scripts/capex-unplaced-list.mjs", args: () => [], writes: true },
   "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
+  // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
+  "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
