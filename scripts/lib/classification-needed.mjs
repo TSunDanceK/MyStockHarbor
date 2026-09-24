@@ -34,22 +34,31 @@ const STOP = new Set(["company", "companies", "services", "products", "other", "
 const words = (s) => new Set((String(s ?? "").toLowerCase().match(WORD) ?? []).filter((w) => !STOP.has(w)).map((w) => w.replace(/(ies|es|s)$/, "")));
 
 /**
- * A suggestion FROM THE LABEL SET ONLY, never free text: the known sector's
- * industries (or all labels when the sector is unknown), scored by shared words
- * with the filing's own description and SEC's SIC wording. No match -> no
- * suggestion, rather than a guess dressed as one.
+ * A suggestion FROM THE LABEL SET ONLY, never free text, and ONLY INSIDE A
+ * KNOWN SECTOR (#553 COWORK #23): no sector, no suggestion. Within the sector,
+ * industries are scored by shared words with the filing's own description and
+ * SEC's SIC wording.
+ *
+ * SIC WORDING ALONE IS NOT EVIDENCE OF AN INDUSTRY. The 2026-09-24 dry run
+ * suggested "Other Precious Metals" for FCX, RIO, VALE, HBM and HWM on the one
+ * word "metal" from SIC 1000 / 3350 ("Metal Mining"), none of them with a
+ * stored description. Scoping to the sector cannot stop that -- all five ARE
+ * Basic Materials -- so an industry needs a word from the filer's own
+ * description, or two shared words in all. Otherwise the sector alone is
+ * offered, which is what is actually known.
  */
 export function suggestLabel({ sector, sicText, description }, labels) {
-  const evidence = new Set([...words(sicText), ...words(description)]);
-  // With no sector to narrow it, one shared word across 144 labels is noise
-  // (Accenture scored "Asset Management" on "management"): ask for two.
-  const floor = sector ? 1 : 2;
+  if (!sector) return null;
+  const fromFiling = words(description);
+  const evidence = new Set([...words(sicText), ...fromFiling]);
   let best = null;
   let tied = false;
   for (const [industry, labelSector] of Object.entries(labels)) {
-    if (sector && labelSector !== sector) continue;
-    const score = [...words(industry)].filter((w) => evidence.has(w)).length;
-    if (score < floor) continue;
+    if (labelSector !== sector) continue;
+    const shared = [...words(industry)].filter((w) => evidence.has(w));
+    if (!shared.length) continue;
+    if (shared.length < 2 && !shared.some((w) => fromFiling.has(w))) continue;
+    const score = shared.length;
     if (!best || score > best.score) { best = { sector: labelSector, industry, score }; tied = false; }
     else if (score === best.score) tied = true;
   }
@@ -57,7 +66,7 @@ export function suggestLabel({ sector, sicText, description }, labels) {
   // estate" all three real-estate ones. Picking the first would dress an
   // arbitrary choice as evidence (PepsiCo -> "Beverages - Alcoholic").
   if (best && !tied) return { sector: best.sector, industry: best.industry };
-  return sector ? { sector, industry: null } : null;
+  return { sector, industry: null };
 }
 
 /** Table-safe, link-free, one line. The repo is public: no URL leaves here. */
@@ -117,9 +126,23 @@ export const MAX_BODY = 60_000;
 
 const fmt = (t) => (t ? `${t.sector ?? "—"} / ${t.industry ?? "—"}` : "—");
 
-/** The issue body, or null when there is nothing to classify (close the issue). */
-export function issueBody({ missing, changed }, asOf, universeSize) {
-  if (!missing.length && !changed.length) return null;
+/**
+ * The universe's ticker changes the delisting sweep made (#553 COWORK #22), as
+ * INFORMATION lines: renames followed by CIK, delistings, and the cases it
+ * flagged. Read from the sweep's log (lib/server/secListing.ts
+ * LISTING_CHANGES_KEY); only the last `days` are shown, newest first.
+ */
+export function listingLines(stored, asOf, days = 14) {
+  if (!Array.isArray(stored)) return [];
+  const cutoff = new Date(Date.parse(`${asOf}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+  return stored
+    .filter((c) => c && typeof c.at === "string" && typeof c.line === "string" && c.at >= cutoff)
+    .map((c) => `${c.at}: ${c.line}`);
+}
+
+/** The issue body, or null when there is nothing to classify or report (close the issue). */
+export function issueBody({ missing, changed }, asOf, universeSize, listing = []) {
+  if (!missing.length && !changed.length && !listing.length) return null;
   const lines = [
     `Checked ${universeSize} Pickers universe symbols on ${asOf}. The resolver (10-K override, then SIC table) could not fully place the ones below.`,
     "",
@@ -135,6 +158,11 @@ export function issueBody({ missing, changed }, asOf, universeSize) {
   if (changed.length) {
     lines.push(`### SIC code changed at SEC (${changed.length})`, "", "| Symbol | Company | SIC was → now | SEC wording | Has now | Suggested (a hint: check it) |", "|---|---|---|---|---|---|");
     for (const r of changed) lines.push(`| ${cell(r.symbol, 12)} | ${cell(r.name, 40)} | ${cell(r.was, 6)} → ${cell(r.now, 6)} | ${cell(r.secDescription, 60)} | ${cell(fmt(r.have), 50)} | ${cell(fmt(r.suggestion), 60)} |`);
+    lines.push("");
+  }
+  if (listing.length) {
+    lines.push(`### Ticker changes (information; no action needed) (${listing.length})`, "", "Made automatically by the daily delisting sweep: a rename keeps the company (same SEC CIK) under its new ticker; a delisting leaves the universe. Lines marked \"check by hand\" were not decided automatically.", "");
+    for (const l of listing.slice(0, MAX_ROWS)) lines.push(`- ${cell(l, 200)}`);
     lines.push("");
   }
   lines.push("_Generated daily by the Classification needed helper (Relay B)._");
