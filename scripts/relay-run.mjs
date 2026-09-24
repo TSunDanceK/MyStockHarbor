@@ -620,6 +620,13 @@ const TASKS = {
   // READS ONLY: the pairing rewrite's per-run counters and the drained count.
   // READS ONLY: HLEN of the grid's day index and the rewrite job's last
   // summary (#552). 3 commands.
+  // READS ONLY: one symbol's report-dates record, manifest stamps and newest
+  // EDGAR filings. Credentialled for the read.
+  "write-symbol-record": {
+    script: "scripts/symbol-record-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
