@@ -46,7 +46,13 @@ const SECTIONS = {
 };
 const PATHS = { earnings: "/earnings" };
 const FULL_PAGE_MAX_PX = 14000;
-const tokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+const allTokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+// OPTIONAL PAGE TOKEN (Relay B, #553 COWORK #27): "page=dashboard" shoots
+// /dashboard's chart in each mode, normal and wide, and measures the layout.
+const pageToken = allTokens.find((t) => t.startsWith("page="));
+const page = pageToken ? pageToken.slice("page=".length) : "stock";
+if (!["stock", "dashboard"].includes(page)) throw new Error("page= takes stock or dashboard");
+const tokens = allTokens.filter((t) => t !== pageToken);
 const sectionToken = tokens.find((t) => t.startsWith("section="));
 const section = sectionToken ? sectionToken.slice("section=".length) : "about";
 if (!Object.hasOwn(SECTIONS, section)) throw new Error(`section= takes one of: ${Object.keys(SECTIONS).join(", ")}`);
@@ -128,7 +134,75 @@ async function load(url) {
 
 
 const out = { origin, takenAt: new Date().toISOString(), shots: {} };
-for (const sym of symbols) {
+
+// ── /dashboard WIDE CHART (#553 COWORK #27) ───────────────────────────────
+// For each chart mode, normal then wide, at a 1440px desktop: a screenshot of
+// the chart + cards area, and a RENDERED TEST of the layout --
+//   wide:   the chart card spans the grid; Overview and Breakdown sit below
+//           it, side by side; the chart engine fills the wider card;
+//   normal: the chart shares the row with the 360px card column;
+//   Basic:  the SVG re-measures (its viewBox widens) so its rendered height
+//           stays within 6% of normal -- a chart that merely stretched would
+//           grow ~45% taller.
+// A failed assertion is printed as FAIL and recorded; the run still pushes
+// the screenshots so the failure can be seen.
+if (page === "dashboard") {
+  const sym = symbols[0];
+  await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1200, deviceScaleFactor: 1, mobile: false });
+  await load(`${origin}/dashboard?symbol=${encodeURIComponent(sym)}`);
+  const click = (expr) => evaluate(`(() => { const b = ${expr}; if (!b) return false; b.click(); return true; })()`);
+  const measure = () => evaluate(`(() => {
+    const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) }; };
+    const grid = document.querySelector(".msh-grid.msh-desktop-only");
+    const chart = document.getElementById("chart");
+    const card = (t) => [...grid.querySelectorAll("*")].find((e) => e.childElementCount === 0 && e.textContent.trim() === t)?.closest("section, div[style*='border-radius']");
+    // The engine is the WIDEST drawing surface in the card: the header's line /
+    // candle / widen icons are small SVGs too, and lightweight-charts stacks
+    // several canvases.
+    const widest = (els) => els.sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0] || null;
+    const engine = chart && widest([...chart.querySelectorAll("iframe, canvas, svg[viewBox]")]);
+    const svg = engine && engine.tagName.toLowerCase() === "svg" ? engine : null;
+    const btn = document.querySelector(".msh-widebtn");
+    return { grid: box(grid), chart: box(chart), overview: box(card(${JSON.stringify(sym)} + " Overview")), breakdown: box(card("Breakdown") || card("Selected Indicators")),
+      engine: box(engine), engineTag: engine && engine.tagName, viewBox: svg && svg.getAttribute("viewBox"),
+      button: btn && { pressed: btn.getAttribute("aria-pressed"), label: btn.getAttribute("aria-label") }, wideAttr: grid && grid.getAttribute("data-wide-chart") };
+  })()`);
+  const results = [];
+  const assert = (name, cond, detail) => { results.push({ name, ok: Boolean(cond), detail }); console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? ` -- ${detail}` : ""}`); };
+  const normalBasicHeight = {};
+  for (const mode of ["Basic", "Interactive", "TradingView"]) {
+    await click(`[...document.querySelectorAll("button[aria-pressed]")].find((b) => b.textContent.trim() === ${JSON.stringify(mode)})`);
+    await sleep(mode === "TradingView" ? 6000 : 2500);
+    for (const wide of [false, true]) {
+      const m0 = await measure();
+      if ((m0?.wideAttr === "1") !== wide) { await click(`document.querySelector(".msh-widebtn")`); await sleep(mode === "TradingView" ? 5000 : 2500); }
+      const m = await measure();
+      const key = `dashboard-${mode.toLowerCase()}-${wide ? "wide" : "normal"}`;
+      if (!m?.grid || !m.chart) { assert(`${key}: layout found`, false, JSON.stringify(m)); continue; }
+      if (wide) {
+        assert(`${key}: chart card spans the grid`, Math.abs(m.chart.w - m.grid.w) <= 4, `chart ${m.chart.w} vs grid ${m.grid.w}`);
+        assert(`${key}: Overview and Breakdown below the chart`, m.overview && m.breakdown && m.overview.y >= m.chart.y + m.chart.h && m.breakdown.y >= m.chart.y + m.chart.h, JSON.stringify({ chart: m.chart, overview: m.overview, breakdown: m.breakdown }));
+        assert(`${key}: the two cards side by side`, m.overview && m.breakdown && Math.abs(m.overview.y - m.breakdown.y) <= 4 && m.breakdown.x > m.overview.x + m.overview.w - 4, JSON.stringify({ overview: m.overview, breakdown: m.breakdown }));
+        assert(`${key}: the chart engine fills the wide card`, m.engine && m.engine.w >= m.chart.w - 80, `${m.engineTag} ${m.engine?.w} in ${m.chart.w}`);
+        assert(`${key}: button pressed, labelled "Back to two columns"`, m.button?.pressed === "true" && m.button.label === "Back to two columns", JSON.stringify(m.button));
+        if (mode === "Basic") assert(`${key}: the Basic SVG re-measured (viewBox widened, height kept)`, m.viewBox && Number(m.viewBox.split(" ")[2]) > 760 && Math.abs(m.engine.h - normalBasicHeight.h) / normalBasicHeight.h <= 0.06, `viewBox ${m.viewBox}; height ${m.engine?.h} vs normal ${normalBasicHeight.h}`);
+      } else {
+        assert(`${key}: the chart shares the row with the card column`, m.chart.w <= m.grid.w - 300, `chart ${m.chart.w} vs grid ${m.grid.w}`);
+        assert(`${key}: button not pressed, labelled "Widen chart"`, m.button?.pressed === "false" && m.button.label === "Widen chart", JSON.stringify(m.button));
+        if (mode === "Basic") normalBasicHeight.h = m.engine?.h ?? 0;
+      }
+      const top = Math.max(0, m.grid.y - 8);
+      const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: top, width: 1440, height: Math.min(m.grid.h + 16, 3000), scale: 1 } });
+      out.shots[key] = { png: data, height: Math.round(m.grid.h), text: JSON.stringify({ chart: m.chart, overview: m.overview, breakdown: m.breakdown, engine: m.engine, engineTag: m.engineTag, viewBox: m.viewBox }) };
+    }
+  }
+  // Leave the viewer's stored choice as it was found (normal).
+  if ((await measure())?.wideAttr === "1") await click(`document.querySelector(".msh-widebtn")`);
+  out.results = results;
+  console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
+}
+
+for (const sym of page === "dashboard" ? [] : symbols) {
   for (const [label, width, mobile] of [["desktop", 1280, false], ["mobile", 390, true]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile });
     await load(`${origin}/stock/${encodeURIComponent(sym)}${PATHS[section] ?? ""}`);
