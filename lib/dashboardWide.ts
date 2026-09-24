@@ -35,19 +35,8 @@ export function wideViewWidth(gridWidth: number): number {
   return Math.round((BASIC_VIEW_WIDTH * wide) / normal);
 }
 
-/**
- * The browser's localStorage, or null. The PROPERTY READ ITSELF can throw
- * (blocked site data, some private modes), so it is read inside a try -- a
- * caller writing `window.localStorage` inline would throw before any helper's
- * own try could catch it.
- */
-export function browserStorage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
+/** The shared guarded storage read (lib/browserStorage.ts, #553 COWORK #33). */
+export { browserStorage } from "./browserStorage";
 
 /** Read the remembered choice; false when storage is absent or throws. */
 export function readWideChoice(storage: Pick<Storage, "getItem"> | null | undefined): boolean {

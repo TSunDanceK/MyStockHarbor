@@ -49,9 +49,11 @@ const FULL_PAGE_MAX_PX = 14000;
 const allTokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 // OPTIONAL PAGE TOKEN (Relay B, #553 COWORK #27): "page=dashboard" shoots
 // /dashboard's chart in each mode, normal and wide, and measures the layout.
+// "page=storage" (#553 COWORK #33 / #40) loads five pages with browser storage
+// BLOCKED and asserts each still renders its header.
 const pageToken = allTokens.find((t) => t.startsWith("page="));
 const page = pageToken ? pageToken.slice("page=".length) : "stock";
-if (!["stock", "dashboard"].includes(page)) throw new Error("page= takes stock or dashboard");
+if (!["stock", "dashboard", "storage"].includes(page)) throw new Error("page= takes stock, dashboard or storage");
 const tokens = allTokens.filter((t) => t !== pageToken);
 const sectionToken = tokens.find((t) => t.startsWith("section="));
 const section = sectionToken ? sectionToken.slice("section=".length) : "about";
@@ -202,7 +204,43 @@ if (page === "dashboard") {
   console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
 }
 
-for (const sym of page === "dashboard" ? [] : symbols) {
+// ── BLOCKED STORAGE (#553 COWORK #33, #40) ───────────────────────────────
+// Privacy modes and some embedded browsers block site data; reading
+// window.localStorage then throws a SecurityError. Before lib/browserStorage.ts
+// the site header read it bare and every page without a symbol in its URL
+// crashed. Two ways of blocking, five pages each: the header must render and
+// no storage error may reach the page. A RENDERED TEST: FAIL lines are
+// recorded and the run still writes its output.
+if (page === "storage") {
+  const sym = symbols[0];
+  const results = [];
+  const assert = (name, cond, detail) => { results.push({ name, ok: Boolean(cond), detail }); console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? ` -- ${detail}` : ""}`); };
+  const BLOCKERS = {
+    "property-throws": `for (const n of ["localStorage", "sessionStorage"]) Object.defineProperty(window, n, { configurable: true, get() { throw new DOMException("The operation is insecure.", "SecurityError"); } });`,
+    "methods-throw": `for (const m of ["getItem", "setItem", "removeItem"]) Storage.prototype[m] = function () { throw new DOMException("blocked", "SecurityError"); };`,
+  };
+  const PAGES = ["/", `/dashboard?symbol=${encodeURIComponent(sym)}`, "/platforms", "/pickers", `/stock/${encodeURIComponent(sym)}`];
+  await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  for (const [kind, source] of Object.entries(BLOCKERS)) {
+    const { identifier } = await send("Page.addScriptToEvaluateOnNewDocument", { source });
+    for (const path of PAGES) {
+      await load(`${origin}${path}`);
+      const thrown = events.filter((e) => e.method === "Runtime.exceptionThrown").map((e) => String(e.params?.exceptionDetails?.exception?.description ?? e.params?.exceptionDetails?.text ?? ""));
+      const storageErrors = thrown.filter((t) => /insecure|SecurityError|blocked/i.test(t));
+      const state = await evaluate(`(() => ({ header: !!document.querySelector("header"), crashed: /Application error|client-side exception/i.test(document.body.innerText) }))()`);
+      assert(`${kind} ${path}: renders with its header`, state?.header && !state.crashed && storageErrors.length === 0, JSON.stringify({ ...state, storageErrors: storageErrors.slice(0, 2) }));
+      if (path === "/") {
+        const { data } = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1280, height: 900, scale: 1 } });
+        out.shots[`storage-${kind}-home`] = { png: data, text: JSON.stringify(state) };
+      }
+    }
+    await send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+  }
+  out.results = results;
+  console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
+}
+
+for (const sym of page !== "stock" ? [] : symbols) {
   for (const [label, width, mobile] of [["desktop", 1280, false], ["mobile", 390, true]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile });
     await load(`${origin}/stock/${encodeURIComponent(sym)}${PATHS[section] ?? ""}`);
