@@ -23,7 +23,7 @@ import fs from "node:fs";
 const OUT = "data/sec/classification-overrides.json";
 const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
-export function buildOverrides({ registrants, table, rules, descriptions }) {
+export function buildOverrides({ registrants, table, rules, descriptions, manual = {} }) {
   const labels = table.labels;
   const window = rules.window;
   const compiled = rules.rules.map((r) => ({
@@ -171,7 +171,30 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
       needsClassification.push(symbol);
     }
   }
-  return { overrides, needsClassification };
+  // ── HAND-REVIEWED ENTRIES (data/sec/classification-manual.json) ────────
+  // For a name whose filing text places it but no general rule should
+  // (#552 COWORK #29). The entry names an industry and a PHRASE; the phrase
+  // must appear verbatim (case-insensitive) in the filer's own stored text,
+  // and the quote, form, date and accession are taken from that text here --
+  // never typed by hand. An unknown label or a phrase not in the text FAILS
+  // the build rather than shipping an uncited placement. No vendor label.
+  for (const [symbol, m] of Object.entries(manual)) {
+    const row = descriptions[symbol];
+    if (!row) throw new Error(`manual ${symbol}: no stored description to cite`);
+    const sector = m.sector ?? labels[m.industry];
+    if (!labels[m.industry] || !sector) throw new Error(`manual ${symbol}: unknown industry label "${m.industry}"`);
+    const text = String(row[3] ?? "");
+    const at = text.toLowerCase().indexOf(String(m.phrase).toLowerCase());
+    if (!m.phrase || at < 0) throw new Error(`manual ${symbol}: phrase "${m.phrase}" is not in its filing text`);
+    overrides[symbol] = {
+      sector, industry: m.industry, sic: registrants[symbol]?.sic ?? null,
+      basis: `${row[0] === "20-F" ? "20-F Item 4.B" : "10-K Item 1"}, reviewed`,
+      phrase: m.phrase, quote: quote(text, at, m.phrase.length),
+      form: row[0], filedOn: row[1], accession: row[2],
+    };
+  }
+  const placed = new Set(Object.keys(manual));
+  return { overrides, needsClassification: needsClassification.filter((s) => !placed.has(s)) };
 }
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;
@@ -180,7 +203,8 @@ if (isMain) {
   const table = read("data/sec/sic-classification.json");
   const rules = read("data/sec/classification-rules.json");
   const desc = read("data/sec/descriptions.json");
-  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows });
+  const manual = read("data/sec/classification-manual.json").entries;
+  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows, manual });
   const doc = {
     _comment:
       "Per-symbol sector/industry overrides from each filer's own 10-K Item 1 / 20-F text, by the rules in " +

@@ -282,6 +282,12 @@ export type SecManifestEntry = {
      * cheapest to skip, so it ranks ahead of everything else in the queue.
      */
     | "cik-change"
+    /**
+     * A committed one-off request (data/sec/reread-requests.json), e.g. after
+     * an extraction change the window/chain/label rules cannot see (XOM's
+     * predecessor merge, #581). See secRereadRequests.
+     */
+    | "requested"
     | null;
   /** When re-reading was first requested. The queue drains oldest-first. */
   enqueuedAt?: number | null;
