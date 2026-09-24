@@ -70,11 +70,31 @@ check("Item 12.D 'American Depositary Shares Not applicable' still counts as dir
 check("any mention of depositary shares → no direct listing", R.directListingStatement(`${TABLE} American Depositary Shares`, "ASML") === null);
 check("a preferred share row is not the common listing", R.directListingStatement(TABLE.replace("Ordinary shares, nominal value €0.09 ASML", "Preferred shares, Series A ASML-PA"), "ASML") === null);
 
+console.log("\n2b. the newest source wins (COWORK #45)");
+{
+  const H = "PURSUANT TO SECTION 12(b) OR (g). Securities registered or to be registered pursuant to Section 12(b) of the Act: Title of each class Trading Symbol(s) Name of each exchange on which registered ";
+  const AZN20F = `${H}Ordinary Shares of US$0.25 each AZN The Nasdaq Stock Market LLC Securities registered pursuant to Section 12(g): None. Our ADS programme was terminated.`;
+  const OLD_F6 = "American Depositary Shares evidenced by American Depositary Receipts, each American Depositary Share representing one-half of one ordinary share of AstraZeneca PLC.";
+  const d = R.decideAdsRow(AZN20F, "AZN", OLD_F6, false);
+  check("AZN: the latest 20-F's cover row (ordinary shares under AZN) beats the older F-6's one-half", "row" in d && d.row.kind === "ordinary" && d.row.ordinaryPerAds === 1, JSON.stringify(d));
+  const TSM20F = `${H}Common Shares, par value NT$10 per share* American Depositary Shares, each representing 5 Common Shares TSM New York Stock Exchange`;
+  const t = R.decideAdsRow(TSM20F, "TSM", null, false);
+  check("TSM: the cover row is the ADS, ratio 5 from its own title", "row" in t && t.row.ordinaryPerAds === 5 && t.row.basis === "cover-row", JSON.stringify(t));
+  check("an F-6 NEWER than the 20-F stating a different ratio → refused as a ratio change",
+    "refuse" in R.decideAdsRow(TSM20F, "TSM", "each American Depositary Share representing ten common shares", true));
+  check("no 20-F statement and only an OLDER F-6 → no row (the F-6 is not read)",
+    "refuse" in R.decideAdsRow(`${H}Something else entirely`, "XYZ", OLD_F6, false));
+  const Mo = await loadR(once(RSRC, "if (f6Text && f6IsNewer) {", "if (f6Text) {"));
+  const dm = Mo.decideAdsRow(AZN20F, "AZN", OLD_F6, false);
+  check("MUTATION: an older F-6 allowed to override the newer 20-F → AZN no longer reads as ordinary (caught)", !("row" in dm && dm.row.kind === "ordinary"), JSON.stringify(dm));
+}
+
 console.log("\n3. the committed map");
 const MAP = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries;
 const rowOk = (sym, e) => {
   if (!/^\d{10}-\d{2}-\d{6}$/.test(e.source) || !/^\d{4}-\d{2}-\d{2}$/.test(e.filed) || !e.evidence) return false;
-  if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && R.directListingStatement(`Securities registered or to be registered pursuant to Section 12(b) ${e.evidence}`, sym) !== null;
+  if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && !/depositary|\bADSs?\b|preferred|preference/i.test(e.evidence)
+    && /(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(e.evidence);
   if (e.kind !== "ads") return false;
   const got = R.adsRatioOf(e.evidence);
   return got.ok && Math.abs(got.ordinaryPerAds - e.ordinaryPerAds) < 1e-6;
@@ -120,6 +140,38 @@ check("EPS in neither unit (identity ~3) → refused, not guessed", V.peRatio(V.
   const Md = await loadMutant(once(VS, `if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {`, `if (false && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {`));
   check("MUTATION: the refusal lifted without a cited ratio → a cap in the wrong unit appears (caught)",
     Md.marketCap(Md.valuationInputs(set(yearOrd), TODAY, { annualForm: "20-F" }), 100)?.ok === true);
+}
+
+console.log("\n4b. stale EPS and a changed share basis (COWORK #45)");
+{
+  const VS = fs.readFileSync("lib/server/secValuation.ts", "utf8");
+  const loadMutant = async (src) => {
+    const tmp = `lib/server/.check-ads-mut-${process.pid}-${Math.random().toString(36).slice(2)}.ts`;
+    fs.writeFileSync(tmp, src);
+    try { return await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  };
+  const fy24 = period("2024-12-31", "2024-01-01", "FY", 2024, { epsDiluted: 45.25, sharesDiluted: 25.93e9, netIncome: 45.25 * 25.93e9 });
+  const staleIn = V.valuationInputs(set(fy24), TODAY, { annualForm: "20-F", ads: ads5 });
+  const stalePe = V.peRatio(staleIn, 452);
+  check("TSM on FY2024 EPS (ended 21 months before today) → P/E withheld, with the date said",
+    stalePe?.ok === false && stalePe.why === "eps-period-is-stale" && stalePe.detail === "the latest fiscal year on file ended 31 Dec 2024", JSON.stringify(stalePe));
+  check("...the market cap is unaffected (it does not use EPS)", V.marketCap(staleIn, 452)?.ok === true);
+  const q = (e, s2, eps) => period(e, s2, null, null, { epsDiluted: eps, sharesDiluted: 1e9, netIncome: eps * 1e9 });
+  const dom = { symbol: "DOMX", quarters: [q("2025-03-31", "2025-01-01", 1), q("2024-12-31", "2024-10-01", 1), q("2024-09-30", "2024-07-01", 1), q("2024-06-30", "2024-04-01", 1)],
+    years: [], instants: [], cover: { asOf: "2026-07-01", accession: null, filed: null, val: 1e9, derived: "as-filed" }, cur: "USD" };
+  const domPe = V.peRatio(V.valuationInputs(dom, TODAY, { annualForm: "10-K" }), 50);
+  check("every filer, not just 20-F: twelve months ending 2025-03-31 → withheld, 'twelve months' said",
+    domPe?.ok === false && domPe.why === "eps-period-is-stale" && /twelve months on file ended 31 Mar 2025/.test(domPe.detail ?? ""), JSON.stringify(domPe));
+  check("a current year (FY2025, 9 months old) still shows its P/E", V.peRatio(withR, 200)?.ok === true);
+  const Ms = await loadMutant(once(VS, "if (eps && epsIsStale(eps.periodEnd, today)) {", "if (false) {"));
+  check("MUTATION: the staleness guard removed → a stale EPS year still shows a P/E (caught)",
+    Ms.peRatio(Ms.valuationInputs(set(fy24), TODAY, { annualForm: "20-F", ads: ads5 }), 452)?.ok === true);
+  const split = period("2025-12-31", "2025-01-01", "FY", 2025, { epsDiluted: 45.25, sharesDiluted: 20e9, netIncome: 45.25 * 20e9 });
+  const sp = V.peRatio(V.valuationInputs(set(split), TODAY, { annualForm: "20-F", ads: ads5 }), 200);
+  check("cover 25.93bn against the EPS year's 20bn diluted shares (+30%) → refused as a changed basis", sp?.ok === false && sp.why === "share-basis-changed", JSON.stringify(sp));
+  const Mb = await loadMutant(once(VS, "if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {", "if (false) {"));
+  check("MUTATION: the share-basis guard removed → a P/E across the change (caught)",
+    Mb.peRatio(Mb.valuationInputs(set(split), TODAY, { annualForm: "20-F", ads: ads5 }), 200)?.ok === true);
 }
 
 console.log("\n5. wiring: the stock page and the earnings page pass the cited ratio");
