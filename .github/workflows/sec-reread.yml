@@ -3,7 +3,7 @@
 # for checking a single page after a deploy without waiting a day for the
 # cron. Still goes through the same code path."). A hand-pulled lever: the
 # schedule stays in vercel.json. Tickers only; each is validated before any
-# request is made. The route's JSON summary is printed, capped.
+# request is made. The log carries HTTP status and counts only (#552 COWORK #43).
 name: SEC re-read
 
 on:
@@ -44,9 +44,14 @@ jobs:
               -H "Authorization: Bearer ${CRON_SECRET}" \
               "${BASE_URL}/api/jobs/sec-facts?symbol=${s}&t=$(date +%s)" || printf '\n000')
             code=$(printf '%s' "${body}" | tail -n 1)
-            echo "${s}: HTTP ${code}"
-            printf '%s' "${body}" | head -n -1 | head -c 1500
-            echo
+            # STATUS AND COUNTS ONLY (#552 COWORK #43): Actions logs on this
+            # repo are public, so nothing from the body is printed raw -- no
+            # error strings, key names or URLs. jq picks numbers and booleans.
+            counts=$(printf '%s' "${body}" | head -n -1 | jq -r '
+              "written=\(.written // "-") unchanged=\(.unchanged // "-") failed=\(.failed // "-")"
+              + (.results[0] // {} | " changed=\(.changed | tostring) quarters=\(.quarters // "-") years=\(.years // "-") error=\(if has("error") then "yes" else "no" end)")
+            ' 2>/dev/null || echo "unparsed")
+            echo "${s}: HTTP ${code} ${counts}"
             if [ "${code}" != "200" ]; then
               echo "::error::${s} returned ${code}"
               failures=$((failures + 1))
