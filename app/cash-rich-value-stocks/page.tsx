@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No stocks in the analyzed universe currently meet both the free cash flow and valuation conditions.",
   tone: "blue",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [
     { kind: "number", field: "freeCashFlow", min: 10_000_000_000 },
     { kind: "number", field: "peRatio", max: 20 },

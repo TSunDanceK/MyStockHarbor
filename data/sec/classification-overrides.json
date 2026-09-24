@@ -46,6 +46,17 @@
    "filedOn": "2026-03-03",
    "accession": "0001292814-26-000640"
   },
+  "ABNB": {
+   "sector": "Consumer Cyclical",
+   "industry": "Travel Services",
+   "sic": "7340",
+   "basis": "10-K Item 1",
+   "phrase": "guest arrivals",
+   "quote": "Airbnb was founded in 2007 when two hosts welcomed three guests to their San Francisco home, and has since grown into a global community of over 5 million hosts who have welcome…",
+   "form": "10-K",
+   "filedOn": "2026-02-12",
+   "accession": "0001559720-26-000004"
+  },
   "ABUS": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -85,7 +96,7 @@
    "sic": "8093",
    "basis": "10-K Item 1",
    "phrase": "behavioral health",
-   "quote": "We are committed to providing the communities we serve with high-quality, cost-effective behavioral healthcare services, while growing our business, increasing profitability and…",
+   "quote": "Our business strategy is to become the indispensable behavioral healthcare provider for the high-acuity and complex needs patient population.",
    "form": "10-K",
    "filedOn": "2026-02-27",
    "accession": "0001193125-26-078266"
@@ -140,7 +151,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "senior housing",
-   "quote": ", a Maryland corporation, is a self-managed real estate investment trust, or REIT, that acquires, owns and operates a diversified portfolio of clinical healthcare real estate pr…",
+   "quote": "American Healthcare REIT, Inc., a Maryland corporation, is a self-managed real estate investment trust, or REIT, that acquires, owns and operates a diversified portfolio of clin…",
    "form": "10-K",
    "filedOn": "2026-02-27",
    "accession": "0001193125-26-082692"
@@ -613,7 +624,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "communications infrastructure",
-   "quote": "We own, operate and lease shared communications infrastructure that is geographically dispersed throughout the U.",
+   "quote": "We own, operate and lease shared communications infrastructure that is geographically dispersed throughout the U.S., including (1) more than 40,000 towers and other structures, …",
    "form": "10-K",
    "filedOn": "2026-02-23",
    "accession": "0001051470-26-000016"
@@ -760,6 +771,17 @@
    "form": "10-K",
    "filedOn": "2026-05-19",
    "accession": "0000017313-26-000035"
+  },
+  "CTAS": {
+   "sector": "Industrials",
+   "industry": "Specialty Business Services",
+   "sic": "2320",
+   "basis": "10-K Item 1",
+   "phrase": "uniform rental",
+   "quote": "Cintas’ reportable operating segments are the Uniform Rental and Facility Services operating segment and the First Aid and Safety Services operating segment.",
+   "form": "10-K",
+   "filedOn": "2026-07-29",
+   "accession": "0000723254-26-000028"
   },
   "CTRE": {
    "sector": "Real Estate",
@@ -1092,12 +1114,12 @@
    "accession": "0001628280-25-045769"
   },
   "FERG": {
-   "sector": "Consumer Cyclical",
-   "industry": "Specialty Retail",
+   "sector": "Industrials",
+   "industry": "Industrial - Distribution",
    "sic": "5070",
    "basis": "10-K Item 1",
-   "phrase": "e-commerce",
-   "quote": "We sell through a common network of distribution centers, branches, counter service and expert sales associates, showroom consultants and e-commerce channels.",
+   "phrase": "value-added distributor",
+   "quote": "Ferguson is North America’s largest value-added distributor of essential water and air solutions, serving the specialized professional in our $340 billion residential and non-re…",
    "form": "10-KT",
    "filedOn": "2026-02-27",
    "accession": "0002011641-26-000006"
@@ -1130,7 +1152,7 @@
    "sic": "7389",
    "basis": "10-K Item 1",
    "phrase": "provider of software",
-   "quote": "We are a leading independent provider of software and payment processing solutions in the U.",
+   "quote": "We are a leading independent provider of software and payment processing solutions in the U.S.",
    "form": "10-K",
    "filedOn": "2026-02-27",
    "accession": "0001794669-26-000010"
@@ -1218,7 +1240,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "gaming",
-   "quote": ", formerly known as Penn National Gaming, Inc.",
+   "quote": "GLPI was incorporated on February 13, 2013, as a wholly-owned subsidiary of PENN Entertainment, Inc., formerly known as Penn National Gaming, Inc.",
    "form": "10-K",
    "filedOn": "2026-02-19",
    "accession": "0001575965-26-000032"
@@ -1306,7 +1328,7 @@
    "sic": "4700",
    "basis": "10-K Item 1",
    "phrase": "logistics provider",
-   "quote": ", together with its subsidiaries, is the largest pure-play contract logistics provider in the world and a foremost innovator in the industry.",
+   "quote": "GXO Logistics, Inc., together with its subsidiaries, is the largest pure-play contract logistics provider in the world and a foremost innovator in the industry.",
    "form": "10-K",
    "filedOn": "2026-02-25",
    "accession": "0001852244-26-000007"
@@ -1636,7 +1658,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "grocery-anchored",
-   "quote": ", owns interests in various operating subsidiaries and joint ventures engaged in the ownership, operation, acquisition, development, and redevelopment of high-quality, open-air,…",
+   "quote": "Kite Realty Group Trust is a publicly held REIT that, through its majority-owned subsidiary, Kite Realty Group, L.P., owns interests in various operating subsidiaries and joint …",
    "form": "10-K",
    "filedOn": "2026-02-17",
    "accession": "0001286043-26-000009"
@@ -2219,7 +2241,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "invests in residential mortgage",
-   "quote": ", a Maryland corporation, is a specialty finance company that invests in residential mortgage-backed securities (“RMBS”).",
+   "quote": "Orchid Island Capital, Inc., a Maryland corporation, is a specialty finance company that invests in residential mortgage-backed securities (“RMBS”).",
    "form": "10-K",
    "filedOn": "2026-02-20",
    "accession": "0001437749-26-004889"
@@ -2296,7 +2318,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "shopping center",
-   "quote": ", a real estate investment trust (“REIT”) founded 35 years ago, is one of the nation’s largest owners and operators of omni-channel grocery-anchored shopping centers.",
+   "quote": "OVERVIEW —Phillips Edison & Company, Inc., a real estate investment trust (“REIT”) founded 35 years ago, is one of the nation’s largest owners and operators of omni-channel groc…",
    "form": "10-K",
    "filedOn": "2026-02-10",
    "accession": "0001476204-26-000005"
@@ -2318,7 +2340,7 @@
    "sic": "7011",
    "basis": "10-K Item 1",
    "phrase": "casinos",
-   "quote": ", together with its subsidiaries, operates in 28 jurisdictions throughout North America, with a broadly diversified portfolio of casinos, racetracks, and online sports betting (…",
+   "quote": "PENN Entertainment, Inc., together with its subsidiaries, operates in 28 jurisdictions throughout North America, with a broadly diversified portfolio of casinos, racetracks, and…",
    "form": "10-K",
    "filedOn": "2026-02-26",
    "accession": "0000921738-26-000008"
@@ -2472,7 +2494,7 @@
    "sic": "7389",
    "basis": "10-K Item 1",
    "phrase": "performance marketing",
-   "quote": "Our approach to proprietary performance marketing technologies allows clients to engage high-intent digital media or traffic from a wide range of device types (e.",
+   "quote": "Our approach to proprietary performance marketing technologies allows clients to engage high-intent digital media or traffic from a wide range of device types (e.g., mobile, des…",
    "form": "10-K",
    "filedOn": "2026-08-26",
    "accession": "0001193125-26-367160"
@@ -2637,7 +2659,7 @@
    "sic": "7990",
    "basis": "10-K Item 1",
    "phrase": "sports betting",
-   "quote": "We are a leading online gaming and entertainment company that focuses primarily on online casino and online sports betting in the U.",
+   "quote": "We are a leading online gaming and entertainment company that focuses primarily on online casino and online sports betting in the U.S., Canadian and Latin American markets.",
    "form": "10-K",
    "filedOn": "2026-02-18",
    "accession": "0001793659-26-000009"
@@ -2791,7 +2813,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "self storage",
-   "quote": ", a Maryland corporation (the “Company”), is a self-managed and fully-integrated self storage real estate investment trust (“REIT”), formed on January 8, 2013 under the Maryland…",
+   "quote": "SmartStop Self Storage REIT, Inc., a Maryland corporation (the “Company”), is a self-managed and fully-integrated self storage real estate investment trust (“REIT”), formed on J…",
    "form": "10-K",
    "filedOn": "2026-02-27",
    "accession": "0001193125-26-082573"
@@ -2857,7 +2879,7 @@
    "sic": "2080",
    "basis": "10-K Item 1",
    "phrase": "wine company",
-   "quote": ", Mexico, New Zealand, and Italy with powerful, consumer-connected, high-quality brands like Modelo Especial, Corona Extra, Pacifico, Victoria, Kim Crawford, Ruffino, The Prison…",
+   "quote": "We are an international producer and marketer of beer, wine, and spirits with operations in the U.S., Mexico, New Zealand, and Italy with powerful, consumer-connected, high-qual…",
    "form": "10-K",
    "filedOn": "2026-04-22",
    "accession": "0000016918-26-000011"
@@ -2868,7 +2890,7 @@
    "sic": "6798",
    "basis": "10-K Item 1",
    "phrase": "manufactured housing",
-   "quote": "We own manufactured housing (\"MH\") and recreational vehicle (\"RV\") communities in the United States (\"U.",
+   "quote": "We own manufactured housing (\"MH\") and recreational vehicle (\"RV\") communities in the United States (\"U.S.\"), Canada, and the UK (together with MH and RV, the \"properties\").",
    "form": "10-K",
    "filedOn": "2026-02-25",
    "accession": "0000912593-26-000086"
@@ -3011,7 +3033,7 @@
    "sic": "7374",
    "basis": "10-K Item 1",
    "phrase": "technology platform",
-   "quote": ", which we refer to as Toast, we, or the Company, is a cloud-based, all-in-one digital technology platform purpose-built for the entire restaurant community.",
+   "quote": "Toast, Inc., which we refer to as Toast, we, or the Company, is a cloud-based, all-in-one digital technology platform purpose-built for the entire restaurant community.",
    "form": "10-K",
    "filedOn": "2026-02-18",
    "accession": "0001650164-26-000057"
@@ -3164,7 +3186,7 @@
    "industry": "Semiconductors",
    "sic": "3559",
    "basis": "10-K Item 1",
-   "phrase": "wafer",
+   "phrase": "lithography",
    "quote": "Our comprehensive collection of ion beam, laser annealing, metal organic chemical vapor deposition (“MOCVD”), chemical vapor deposition (“CVD”), advanced packaging lithography, …",
    "form": "10-K",
    "filedOn": "2026-02-25",
@@ -3352,7 +3374,7 @@
    "sic": "6199",
    "basis": "10-K Item 1",
    "phrase": "technology company",
-   "quote": "We are a product-driven technology company that built a financial solutions platform for “digital natives,” defined as those born after 1980 (i.",
+   "quote": "We are a product-driven technology company that built a financial solutions platform for “digital natives,” defined as those born after 1980 (i.e., Millennials, Gen Z, and later…",
    "form": "10-K",
    "filedOn": "2026-04-24",
    "accession": "0001628280-26-027232"
@@ -3374,7 +3396,7 @@
    "sic": "5700",
    "basis": "10-K Item 1",
    "phrase": "specialty retailer",
-   "quote": ", incorporated in 1973, is an omni-channel specialty retailer of high-quality products for the home.",
+   "quote": "Williams-Sonoma, Inc., incorporated in 1973, is an omni-channel specialty retailer of high-quality products for the home.",
    "form": "10-K",
    "filedOn": "2026-03-26",
    "accession": "0000719955-26-000059"
@@ -3440,7 +3462,7 @@
    "sic": "4822",
    "basis": "10-K Item 1",
    "phrase": "digital media",
-   "quote": ", together with its subsidiaries, is a vertically focused digital media and internet company whose portfolio includes leading brands in technology, shopping, gaming and entertai…",
+   "quote": "Ziff Davis, Inc., together with its subsidiaries, is a vertically focused digital media and internet company whose portfolio includes leading brands in technology, shopping, gam…",
    "form": "10-K",
    "filedOn": "2026-02-24",
    "accession": "0001084048-26-000005"
@@ -3551,7 +3573,6 @@
   "CLH",
   "CLSK",
   "CLVT",
-  "CLX",
   "CMP",
   "CMPR",
   "CNH",

@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import ts from "typescript";
 import { grabConst } from "./lib/source-code.mjs";
+import { grabFunction } from "./lib/earnings-plan.mjs";
 import { loadProfile, html, visibleText, once, React } from "./lib/render-snapshot.mjs";
 
 let failures = 0;
@@ -41,6 +42,12 @@ async function loadComposer(mutate = (s) => s) {
     strip("lib/server/secFactCodec.ts"),
     strip("lib/server/secEarningsView.ts"),
     grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
+    // THE ANNUAL-ONLY PREDICATE (#548), AHEAD OF secValuation THAT READS IT
+    // for the P/E basis (#552 COWORK #9). The function and its one constant,
+    // not the module: annualOnly declares MONTHS, which other lifted modules
+    // may declare too.
+    grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
+    grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
     strip("lib/server/secValuation.ts"),
     strip("lib/server/secShareHistory.ts"),
     read("lib/symbolSpellings.mjs").replace(/^export /gm, ""),
@@ -371,6 +378,20 @@ console.log("\n10. the sector/industry credit reads the same whichever leg answe
   ));
   check("...and CATCHES the cache leg going back to \"classification cache\"",
     /classification cache/.test(render(P, compose(legacy, "AAPL", { taxonomy: { ...taxonomy, ...leg("cache") } }), "AAPL")));
+  // WHICH TWELVE MONTHS THE P/E IS ON (#552 COWORK #8/#9): the label says it,
+  // and the client no longer hard-codes "P/E (TTM)" over a fiscal year.
+  check("P/E basis label: 'TTM to 26 Jul 2026' for four quarters, 'FY2024' for a fiscal year",
+    M.peBasisLabel({ val: 7.91, basis: "four-quarters", periodEnd: "2026-07-26", derivedQ4: "2026-01-25" }) === "TTM to 26 Jul 2026" &&
+      M.peBasisLabel({ val: 1.36, basis: "fiscal-year", periodEnd: "2024-12-31", fiscalYear: 2024 }) === "FY2024" &&
+      M.peBasisLabel(null) === null);
+  check("the derived-Q4 caveat is said when (and only when) a Q4 was derived",
+    /25 Jan 2026/.test(M.peBasisNote({ val: 7.91, basis: "four-quarters", periodEnd: "2026-07-26", derivedQ4: "2026-01-25" }) ?? "") &&
+      M.peBasisNote({ val: 3.9, basis: "four-quarters", periodEnd: "2026-06-30" }) === null);
+  {
+    const client = fs.readFileSync("app/stock/[symbol]/StockSymbolPageClient.tsx", "utf8");
+    check("the hero P/E label carries the basis, not a hard-coded TTM",
+      client.includes("P/E ({valuation.peBasis ?? \"TTM\"})") && !client.includes(">P/E (TTM)<"));
+  }
   check("dates are day-month-year, parsed without a time zone",
     M.dayMonthYear("2026-09-13") === "13 Sep 2026" && M.dayMonthYear("2026-01-01") === "1 Jan 2026" && M.dayMonthYear("2026-09-21T04:10:00Z") === null);
 }
