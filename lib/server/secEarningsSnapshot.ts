@@ -40,6 +40,7 @@ import {
 } from "./secValuation";
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
 import { registrantFor } from "./stockProfile";
+import { adsRatioFor } from "./secAdsMap";
 import {
   TIMING_WORDING, type ReportTiming,
 } from "./secReportDates";
@@ -532,6 +533,8 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
       valuation: set
         ? valuationInputs(set, new Date().toISOString().slice(0, 10), {
             annualForm: registrantFor(clean)?.annualForm ?? null,
+            // THE CITED ADS RATIO, where the filer states one (#552 COWORK #22 §1).
+            ads: adsRatioFor(clean),
           })
         : null,
       shareHistory: buildShareHistory(set),
