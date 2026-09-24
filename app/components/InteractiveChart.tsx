@@ -1160,12 +1160,23 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     try {
       id = chart.createOverlay({
         name: tool.overlay,
-        onDrawEnd: () => {
+        onDrawEnd: (e: { overlay: { points: MeasurePoint[] } }) => {
           if (!id || measureRef.current?.id !== id) return false;
-          const placed = id;
-          setMeasure({ id: placed, drawn: true });
-          // Placed: locked (no select, no drag) and panning comes back.
-          window.setTimeout(() => { try { chartRef.current?.overrideOverlay({ id: placed, lock: true }); } catch { /* noop */ } }, 0);
+          const drawing = id;
+          const points = e.overlay.points.map((pt) => ({ ...pt }));
+          // Placed: swapped for a LOCKED copy at the same points (no select, no
+          // drag). A copy rather than overrideOverlay({ lock }) because the one
+          // just drawn stays the library's clicked overlay and keeps showing its
+          // corner handles, which say "drag me".
+          window.setTimeout(() => {
+            const chart2 = chartRef.current;
+            if (!chart2 || measureRef.current?.id !== drawing) return;
+            try { chart2.removeOverlay({ id: drawing }); } catch { /* noop */ }
+            let placed: string | null = null;
+            try { placed = chart2.createOverlay({ name: tool.overlay, points, lock: true }); } catch { /* noop */ }
+            setMeasure(placed ? { id: placed, drawn: true } : null);
+          }, 0);
+          setMeasure({ id: drawing, drawn: true });
           try { chartRef.current?.setScrollEnabled(true); } catch { /* noop */ }
           return false;
         },
