@@ -136,6 +136,7 @@ async function suite(P, pageCode) {
   ok("the chart labels itself (#563 COWORK #11)", pageCode.includes("Long bar = {lastYear}, compared across sectors · Small bars = this sector&apos;s last five years") && pageCode.includes('<span className="spLbl">Trend</span>') && pageCode.includes("row.sparkYears[i]") && pageCode.includes("data-v={row.sparkValues[i]}"));
   ok("trend bars are tall (56px), from zero within the sector", /\.spCol \{[^}]*grid-template-rows: 56px/.test(pageCode) && /\.spBarBox \{[^}]*height: 56px/.test(pageCode));
   ok("every card names its source", (pageCode.match(/className="cardSource"/g) ?? []).length >= 6);
+  ok("the card column scrolls with the page, never sticky (#563 COWORK #14)", !/\.capexSide \{[^}]*position:\s*sticky/.test(pageCode) && !/capexSide[^{]*\{[^}]*sticky/.test(pageCode));
   ok("on mobile the cards stack above the panels", /@media \(max-width: 980px\)[\s\S]*?\.capexSide \{[^}]*order: -1/.test(pageCode));
   ok("change since the first year, and the ratio as text", sp[0].changeText === "+200%" && sp[0].ratioFirst === "8.0%" && sp[0].ratioLatest === "15.0%" && sp[0].latest === "$300bn", JSON.stringify(sp[0]));
   return fails;
@@ -175,6 +176,11 @@ for (const [label, make] of MUTANTS) {
   }
 }
 if (survived) process.exit(1);
+// Page mutant (#563 COWORK #14): the card column made sticky again.
+if (!(await suite(await load(src), pageCode.replace(".capexSide { display: grid;", ".capexSide { position: sticky; top: 18px; display: grid;"))).length) {
+  console.error("MUTANT SURVIVED: the card column sticky again");
+  process.exit(1);
+}
 
 // ── The nav (#563 COWORK #3, N1): Bottlenecks is a drop-down, stock pages first ──
 function navSuite(header, sections) {
@@ -218,4 +224,4 @@ if (!navSuite(header.replace('width: "max-content",\n          maxWidth: `calc(1
   console.error("MUTANT SURVIVED: the header menu's fixed width restored");
   process.exit(1);
 }
-console.log(`check-capex-page: all assertions pass; ${MUTANTS.length + 2} mutants caught`);
+console.log(`check-capex-page: all assertions pass; ${MUTANTS.length + 3} mutants caught`);
