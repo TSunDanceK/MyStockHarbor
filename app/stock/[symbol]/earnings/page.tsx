@@ -1028,8 +1028,8 @@ export default async function StockEarningsPage({ params }: Props) {
                   {score.available && score.unavailable.includes(SCORE_COMPONENTS.cashConversion) ? (
                     <li>
                       Cash flow against net income would show whether reported profit is turning into
-                      cash — {clean}&apos;s filings do not carry a cash-flow statement this page can
-                      read, so it is not part of the score above.
+                      cash — {clean}&apos;s cash-flow figures for this period could not be read from
+                      its filings, so it is not part of the score above.
                     </li>
                   ) : (
                     <li>Cash flow against net income shows whether reported profit is turning into cash.</li>

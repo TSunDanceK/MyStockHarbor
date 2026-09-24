@@ -736,9 +736,14 @@ export type SecEarningsView = {
      * YEAR. One period for the whole card; see the comment at cashBasis for the
      * mixed-period trap this exists to prevent.
      */
-    basis: "quarter" | "year";
+    basis: "quarter" | "year" | "year-to-date";
     /** That period's own label, for the card heading and the score narrative. */
     period: string;
+    /**
+     * Months the year-to-date frame covers ("year-to-date" only, else null).
+     * See ytdLabel.
+     */
+    months: number | null;
   };
   balance: {
     asOf: string;
@@ -863,11 +868,32 @@ export function priorYearOf(
   quarters: StoredPeriod[],
   p: StoredPeriod | null
 ): StoredPeriod | null {
-  // No fiscal label, no match. fp/fy are derived from the filer's own year-end
-  // by fiscalLabel(); a period the labeller could not place has no defensible
-  // comparator, and guessing one is the whole defect.
-  if (!p?.fp || p.fy == null) return null;
-  return quarters.find((c) => c.fp === p.fp && c.fy === p.fy! - 1) ?? null;
+  if (!p) return null;
+  const byLabel = p.fp && p.fy != null ? quarters.find((c) => c.fp === p.fp && c.fy === p.fy! - 1) ?? null : null;
+  // ── OR THE SAME PERIOD ONE YEAR EARLIER, BY ITS DATES (#552 COWORK #37) ──
+  // A FIRST FILER has no annual report yet, so the labeller has no year-end to
+  // place its quarters with and stores them unlabelled — SPCX's 10-Q carries
+  // the 2025-04-01..2025-06-30 comparative right beside 2026-04-01..2026-06-30,
+  // and the page said "prior-year quarter not on file". This is not a nearest-
+  // row fallback: start and end must each sit one year earlier and the length
+  // must match, within SAME_PERIOD_SLACK_DAYS (a 52/53-week year moves a
+  // weekday-anchored end by a few days). Anything else is still no match.
+  return byLabel ?? quarters.find((c) => sameSpanOneYearEarlier(c, p)) ?? null;
+}
+
+/** How far a date may sit from "exactly one year earlier" and still be the same period. */
+export const SAME_PERIOD_SLACK_DAYS = 10;
+const DAY_MS = 86_400_000;
+const shiftYear = (iso: string, years: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.getTime();
+};
+function sameSpanOneYearEarlier(c: StoredPeriod, p: StoredPeriod): boolean {
+  if (!c.s || !p.s || c === p) return false;
+  const near = (a: number, b: number) => Math.abs(a - b) <= SAME_PERIOD_SLACK_DAYS * DAY_MS;
+  const len = (x: StoredPeriod) => Date.parse(x.e) - Date.parse(x.s!);
+  return near(Date.parse(c.e), shiftYear(p.e, -1)) && near(Date.parse(c.s), shiftYear(p.s, -1)) && near(len(c), len(p));
 }
 
 /**
@@ -878,6 +904,15 @@ export function priorYearOf(
  * the table implied a continuity the data does not have.
  */
 export function isConsecutive(newer: StoredPeriod, older: StoredPeriod): boolean {
+  // UNLABELLED (a first filer, #552 COWORK #37): adjacent by dates — the older
+  // period ends the day before the newer starts (within a few days) and both
+  // are quarter-length. Labelled periods keep the label rule below.
+  if ((!newer.fp || newer.fy == null) && (!older.fp || older.fy == null)) {
+    if (!newer.s || !older.s) return false;
+    const gap = (Date.parse(newer.s) - Date.parse(older.e)) / DAY_MS;
+    const q = (x: StoredPeriod) => (Date.parse(x.e) - Date.parse(x.s!)) / DAY_MS;
+    return gap >= 0 && gap <= 4 && q(newer) >= 80 && q(newer) <= 120 && q(older) >= 80 && q(older) <= 120;
+  }
   if (!newer.fp || !older.fp || newer.fy == null || older.fy == null) return false;
   const n = Number(newer.fp.slice(1));
   const o = Number(older.fp.slice(1));
@@ -1205,9 +1240,16 @@ export function buildSecEarningsView(
   // mixed comparison this guards against.
   const cashYear = set.years[0] ?? null;
   const quarterHasCash = valueOf(latest, "operatingCashFlow") !== null;
-  const cashFrom = quarterHasCash || !cashYear || valueOf(cashYear, "operatingCashFlow") === null
+  // ── A FIRST FILER'S SIX MONTHS, BEFORE ANY OLDER YEAR (#552 COWORK #37) ──
+  // `yt` is stored only when the newest quarter's own cash flow could not be
+  // derived, and it ends on that quarter's end: the same statement the
+  // filing carries, over its own span. It is the whole card's period, on the
+  // same one-period rule as the annual fallback below, and says so.
+  const ytd = !quarterHasCash && set.yt && set.yt.e === latest.e && valueOf(set.yt, "operatingCashFlow") !== null
+    ? set.yt : null;
+  const cashFrom = ytd ?? (quarterHasCash || !cashYear || valueOf(cashYear, "operatingCashFlow") === null
     ? latest
-    : cashYear;
+    : cashYear);
   // ANNUAL-ONLY FILERS ARE ALWAYS "year", even though cashFrom === latest.
   // The anchor IS a fiscal year for them, so the old `cashFrom === latest`
   // test reported basis "quarter" beside a period labelled FY2025 — the exact
@@ -1218,8 +1260,9 @@ export function buildSecEarningsView(
   // which reported "quarter" the moment the anchor itself became a year — the
   // card would have carried annual figures under quarterly wording on exactly
   // the filer this change is about.
-  const cashBasis: "quarter" | "year" =
-    set.years.some((y) => y.e === cashFrom.e && y.fp === cashFrom.fp) ? "year" : "quarter";
+  const cashBasis: "quarter" | "year" | "year-to-date" = ytd
+    ? "year-to-date"
+    : set.years.some((y) => y.e === cashFrom.e && y.fp === cashFrom.fp) ? "year" : "quarter";
 
   // ── THE FIVE-YEAR ANNUAL ROWS, BUILT ONCE FOR BOTH PLACES THEY APPEAR ────
   //
@@ -1455,7 +1498,8 @@ export function buildSecEarningsView(
         ["net income", valueOf(cashFrom, "netIncome")],
       ]),
       basis: cashBasis,
-      period: periodLabel(cashFrom),
+      period: ytd ? ytdLabel(ytd) : periodLabel(cashFrom),
+      months: ytd ? ytdMonths(ytd) : null,
     },
     /**
      * HOW FAR APART THE THREE PERIODS ON THIS PAGE ARE, in days.
@@ -1539,6 +1583,19 @@ export function buildSecEarningsView(
     coverShares: set.cover,
     asOf: set.at,
   };
+}
+
+/** Whole months a year-to-date frame spans (6 for a first filer's Q2). */
+export function ytdMonths(p: StoredPeriod): number | null {
+  if (!p.s) return null;
+  return Math.round((Date.parse(p.e) - Date.parse(p.s)) / DAY_MS / 30.44);
+}
+
+const MONTH_WORDS: Record<number, string> = { 6: "Six", 9: "Nine" };
+/** "Six months to 30 Jun 2026": the frame named by its own span, never as a quarter. */
+export function ytdLabel(p: StoredPeriod): string {
+  const m = ytdMonths(p);
+  return `${m !== null && MONTH_WORDS[m] ? MONTH_WORDS[m] : `${m ?? "?"}`} months to ${plainDate(p.e)}`;
 }
 
 /** revenue - costOfRevenue, for a filer that publishes no GrossProfit tag. */

@@ -743,11 +743,29 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
   );
 }
 
+/** The Growth & Margins card's whole body when no period can be compared yet. */
+export const GROWTH_MARGINS_EMPTY = (one: string) =>
+  `No ${one} on file has the same ${one} a year earlier to compare it with yet, so there is no growth or margin trend to show.`;
+
+function GrowthMarginsEmpty({ one }: { one: string }) {
+  return (
+    <section className="card">
+      <div className="eyebrow">Growth &amp; margins</div>
+      <h2>Is growth accelerating, and are margins holding up?</h2>
+      <p>{GROWTH_MARGINS_EMPTY(one)}</p>
+    </section>
+  );
+}
+
 export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
   // TABLE NOUNS COME FROM tableBasis. This card describes the TABLE, not the
   // latest period, and the two differ when a filer's newest annual period ends
   // after its newest quarter.
   const w = periodWords(view.tableBasis);
+  // ── NO ROW, ONE SENTENCE (#552 COWORK #37) ──────────────────────────────
+  // Every row needs the same period a year earlier on file. When none has it
+  // this rendered a header row over an empty body; it now says why instead.
+  if (view.margins.length === 0) return <GrowthMarginsEmpty one={w.one} />;
   return (
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
@@ -1050,6 +1068,8 @@ function BalanceSheetBars({ view }: { view: SecEarningsView }) {
   );
 }
 
+const lcFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
 export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const c = view.cashQuality;
   const w = periodWords(view.basis);
@@ -1081,6 +1101,17 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           not {view.latestLabel}.
         </p>
       ) : null}
+      {/* A FIRST FILER'S YEAR-TO-DATE FRAME (#552 COWORK #37). Its first 10-Q
+          carries cash flow over the year so far and nothing earlier to
+          subtract, so the card is that span, named, rather than "not filed". */}
+      {c.basis === "year-to-date" ? (
+        <p style={{ marginTop: 8, marginBottom: 0 }}>
+          <strong>{view.symbol}&apos;s filings so far carry its cash-flow statement for the{" "}
+          {lcFirst(c.period)} only.</strong> There is no earlier quarter on file to subtract, so
+          the latest quarter alone cannot be separated out: every figure on this card —
+          including the net income it is compared against — covers those {c.months ?? ""} months.
+        </p>
+      ) : null}
       {/* ── THE MAGNITUDES, EACH WITH ITS FIGURE ─────────────────────────────
           The question this card asks — is the profit turning into cash — is a
           COMPARISON of three magnitudes, and three numbers in a column is the
@@ -1094,7 +1125,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
         {/* OPERATING CASH FLOW, CAPEX AND FREE CASH FLOW ARE THE BARS ABOVE —
             the rows that repeated them are gone (see CashQualityBars). What
             follows is only what the bars do not show. */}
-        <Row label={c.basis === "year" ? "Net income (same period)" : "Net income"}>
+        <Row label={c.basis === "quarter" ? "Net income" : "Net income (same period)"}>
           <CellValue cell={c.netIncome} compact />
         </Row>
         {/* BOTH LEGS ARE THE SAME PERIOD. Annual operating cash flow against a
@@ -1121,6 +1152,8 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
       <p className="earningsDataNote">
         {c.basis === "year" ? (
           <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
+        ) : c.basis === "year-to-date" ? (
+          <>Cash-flow figures as filed, for the {lcFirst(c.period)}. Source: {SEC_ATTRIBUTION}.</>
         ) : (
           <>
             Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
