@@ -119,7 +119,7 @@ for (const s of universe) {
     if (inputs.eps && !inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
       secEps = inputs.eps.val; t.secEps++;
       const b = inputs.eps.basis === "fiscal-year" ? `FY${inputs.eps.fiscalYear ?? "?"}` : "TTM";
-      inc(t.basis, inputs.eps.basis === "fiscal-year" ? "fiscal-year" : inputs.eps.derivedQ4 ? "TTM (Q4 derived)" : "TTM (4 filed quarters)");
+      inc(t.basis, inputs.eps.basis === "fiscal-year" ? "fiscal-year" : inputs.eps.basis === "year-to-date" ? `TTM (FY + YTD - prior YTD${inputs.eps.kind === "basic" ? ", basic" : ""})` : inputs.eps.derivedQ4 ? "TTM (Q4 derived)" : "TTM (4 filed quarters)");
       if (inputs.eps.basis === "fiscal-year") inc(t.fyLabels, b);
       const dps = V.twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
       if (dps && secEps > 0) {

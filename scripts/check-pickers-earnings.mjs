@@ -92,6 +92,8 @@ async function suite(mod, code) {
   const kgc = earn(fixture("KGC"));
   ok("an annual-only EPS is labelled with its fiscal year (KGC)", kgc.epsBasis === "FY2025" && kgc.peRatio !== null, JSON.stringify(kgc));
   ok("the label reads as a date", mod.basisLabel({ basis: "four-quarters", periodEnd: "2026-06-30" }) === "TTM to 30 Jun 2026");
+  ok("A's year-to-date twelve months read as TTM, and basic EPS says so (#588)",
+    mod.basisLabel({ basis: "year-to-date", periodEnd: "2026-06-30", kind: "basic" }) === "TTM to 30 Jun 2026, basic EPS");
 
   // 4. ADS stays "–".
   const azn = earn(fixture("AZN"), { annualForm: "20-F" });
@@ -141,7 +143,8 @@ const MUTANTS = [
   ["payout divides FY dividends by TTM EPS", () => [mut("period", src, `if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {`, `if (dps) {`), code]],
   ["a fiscal-year loss still gets a payout", () => [mut("loss", src, `if (e === null || e <= 0 || d === null) return null;`, `if (e === null || d === null) return null;`), code]],
   ["ADS EPS shown", () => [mut("ads", src, `const epsTtm = usd && !ads && eps ? eps.val : null;`, `const epsTtm = usd && eps ? eps.val : null;`), code]],
-  ["the basis always reads TTM", () => [mut("label", src, "if (b.basis === \"fiscal-year\") return b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`;", ""), code]],
+  ["the basis always reads TTM", () => [mut("label", src, "const label = b.basis === \"fiscal-year\" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;", "const label = `TTM to ${date}`;"), code]],
+  ["basic EPS unsaid", () => [mut("basic", src, "return b.kind === \"basic\" ? `${label}, basic EPS` : label;", "return label;"), code]],
   ["a legacy row refuses instead of leaving", () => [mut("legacy", src, `if (!("eps" in row)) return null;`, ""), code]],
   ["the page keeps FMP's figure on a refusal", () => [src, { ...code, page: mut("clear", code.page, `const v = earnings[field];\n              if (v === null) delete rec[field];`, `const v = earnings[field];\n              if (v === null) continue;`) }]],
   ["the grid recomputes payout on a filings row", () => [src, { ...code, grid: mut("grid", code.grid, `if (e.fundamentalsFrom === "sec") return num(e.payoutRatio);`, "") }]],
