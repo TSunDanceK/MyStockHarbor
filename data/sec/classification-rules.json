@@ -254,6 +254,7 @@
    "industry": "Semiconductors",
    "phrases": [
     "semiconductor equipment",
+    "lithography",
     "wafer fabrication equipment",
     "semiconductor manufacturing",
     "designs semiconductors",
@@ -287,7 +288,8 @@
     "consumer internet",
     "live streaming",
     "social platform",
-    "social networking"
+    "social networking",
+    "connect and share"
    ]
   },
   {
@@ -390,7 +392,9 @@
     "credit technology",
     "loan facilitation",
     "money transfer",
-    "cross-border payments"
+    "cross-border payments",
+    "card-issuing",
+    "card network"
    ]
   },
   {
@@ -714,7 +718,11 @@
     "cruise vacation brands",
     "cruise industry",
     "cruise brands",
-    "cruises"
+    "cruises",
+    "guest arrivals",
+    "vacation rental",
+    "short-term rental",
+    "travel service provider"
    ]
   },
   {
@@ -756,7 +764,8 @@
     "streaming platform",
     "theme parks",
     "film studio",
-    "music company"
+    "music company",
+    "entertainment services"
    ]
   },
   {
@@ -968,6 +977,7 @@
    "industry": "Specialty Business Services",
    "phrases": [
     "outsourced services",
+    "uniform rental",
     "business services company",
     "auction company",
     "online auction",
@@ -985,7 +995,8 @@
    "industry": "Industrial - Machinery",
    "phrases": [
     "machinery",
-    "industrial equipment"
+    "industrial equipment",
+    "construction and mining equipment"
    ]
   },
   {
@@ -1014,6 +1025,13 @@
     "communications equipment",
     "networking equipment",
     "antenna systems"
+   ]
+  },
+  {
+   "industry": "Industrial - Distribution",
+   "phrases": [
+    "value-added distributor",
+    "industrial distributor"
    ]
   }
  ]

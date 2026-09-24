@@ -23,7 +23,7 @@ import fs from "node:fs";
 const OUT = "data/sec/classification-overrides.json";
 const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
-export function buildOverrides({ registrants, table, rules, descriptions }) {
+export function buildOverrides({ registrants, table, rules, descriptions, manual = {} }) {
   const labels = table.labels;
   const window = rules.window;
   const compiled = rules.rules.map((r) => ({
@@ -40,21 +40,43 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
   // names who Broadridge serves; "banks and credit card issuers rely on our
   // solutions" names FICO's customers. A match right after one of these words
   // is skipped and the next occurrence is tried.
-  const SERVES = /\b(solutions to(?! (?:enable|help|support|power|deliver))|services to(?! (?:enable|help|support))|products to(?! (?:enable|help))|primarily for|rather than|instead of|unlike|acquired|acquisition of|serving|serves|sold into|end markets|customers such as|customers including|clients such as|clients including)\b[^.;:]{0,60}$/i;
+  const SERVES = /\b(solutions to(?! (?:enable|help|support|power|deliver))|services to(?! (?:enable|help|support))|products to(?! (?:enable|help))|primarily for|rather than|instead of|unlike|acquired|acquisition of|serve|serving|serves|sold into|end markets|customers such as|customers including|clients such as|clients including)\b[^.;:]{0,60}$/i;
+  // "tailored to serve the needs of residents in … LTCFs, such as assisted
+  // living facilities … and behavioral health facilities" (GRDN): the list of
+  // whom a pharmacy serves runs long, so this one clause reaches further.
+  const SERVES_NEEDS = /\bserve the needs of\b[^.;:]{0,160}$/i;
   const RELIED = /^[^.;:]{0,60}\b(rely on|relies on|relied on|relied upon)\b/i;
   // A LIST OF SERVICES, NOT THE BUSINESS: "As part of our services, we provide
   // consumers with payment processing services, …" (HQY) and "… services,
   // including …". A match inside such a list, in the same sentence, is skipped
   // (#552 COWORK #23).
   const LISTED = /\bincluding\b|\bas part of\b|\bprovides? [^.]{0,50}\bwith\b/i;
-  const sentenceStart = (text, at) => Math.max(0, text.lastIndexOf(".", at - 1) + 1);
+  // A SALES CHANNEL, NOT THE BUSINESS: "We sell through … branches, counter
+  // service … and e-commerce channels" (FERG) names how a distributor sells.
+  // A match in a "sell through" sentence, or followed by "channel(s)", is
+  // skipped (#552 COWORK #27).
+  const CHANNEL_LIST = /\b(?:sell|sells|sold|market|markets)\s+(?:\w+\s+){0,3}?through\b/i;
+  const CHANNEL = /^\s*channels?\b/i;
+  // A SENTENCE STOP is a period followed by a space or the end, so a decimal
+  // ("2.5 billion guest arrivals", ABNB) does not start a sentence mid-number.
+  const lastStop = (text, before) => {
+    for (let i = Math.min(before, text.length) - 1; i >= 0; i--) if (text[i] === "." && !/\S/.test(text[i + 1] ?? " ")) return i;
+    return -1;
+  };
+  const nextStop = (text, from) => {
+    for (let i = from; i < text.length; i++) if (text[i] === "." && !/\S/.test(text[i + 1] ?? " ")) return i;
+    return -1;
+  };
+  const sentenceStart = (text, at) => lastStop(text, at) + 1;
   const firstOwn = (re, text, from = 0, to = text.length) => {
     re.lastIndex = from;
     for (let m = re.exec(text); m && m.index < to; m = re.exec(text)) {
       const before = text.slice(Math.max(0, m.index - 80), m.index);
+      const lead = text.slice(Math.max(0, m.index - 200), m.index);
       const after = text.slice(m.index + m[0].length, m.index + m[0].length + 80);
       const inSentence = text.slice(sentenceStart(text, m.index), m.index);
-      if (!SERVES.test(before) && !RELIED.test(after) && !LISTED.test(inSentence)) return m;
+      if (!SERVES.test(before) && !SERVES_NEEDS.test(lead) && !RELIED.test(after) && !LISTED.test(inSentence) &&
+        !CHANNEL_LIST.test(inSentence) && !CHANNEL.test(after)) return m;
     }
     return null;
   };
@@ -69,8 +91,8 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
   };
   const REIT_TYPES = (r) => r.reit && r.industry !== "REIT - Mortgage" && r.industry !== "REIT - Diversified";
   const quote = (text, at, len) => {
-    const start = Math.max(0, text.lastIndexOf(".", at) + 1);
-    const end = text.indexOf(".", at + len);
+    const start = lastStop(text, at + 1) + 1;
+    const end = nextStop(text, at + len);
     const s = text.slice(start, end < 0 ? Math.min(text.length, at + 160) : end + 1).replace(/\s+/g, " ").trim();
     return s.length > 180 ? `${s.slice(0, 177)}…` : s;
   };
@@ -125,7 +147,7 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
       // ("office and multifamily properties", "retail, office, and multifamily").
       if (hit && REIT_TYPES(hit.r)) {
         const from = sentenceStart(text, hit.at);
-        const end = text.indexOf(".", hit.at + hit.len);
+        const end = nextStop(text, hit.at + hit.len);
         const to = end < 0 ? text.length : end;
         const types = new Set();
         for (const r of eligible.filter(REIT_TYPES)) for (const p of r.res) if (firstOwn(p.re, text, from, to)) types.add(r.industry);
@@ -149,7 +171,30 @@ export function buildOverrides({ registrants, table, rules, descriptions }) {
       needsClassification.push(symbol);
     }
   }
-  return { overrides, needsClassification };
+  // ── HAND-REVIEWED ENTRIES (data/sec/classification-manual.json) ────────
+  // For a name whose filing text places it but no general rule should
+  // (#552 COWORK #29). The entry names an industry and a PHRASE; the phrase
+  // must appear verbatim (case-insensitive) in the filer's own stored text,
+  // and the quote, form, date and accession are taken from that text here --
+  // never typed by hand. An unknown label or a phrase not in the text FAILS
+  // the build rather than shipping an uncited placement. No vendor label.
+  for (const [symbol, m] of Object.entries(manual)) {
+    const row = descriptions[symbol];
+    if (!row) throw new Error(`manual ${symbol}: no stored description to cite`);
+    const sector = m.sector ?? labels[m.industry];
+    if (!labels[m.industry] || !sector) throw new Error(`manual ${symbol}: unknown industry label "${m.industry}"`);
+    const text = String(row[3] ?? "");
+    const at = text.toLowerCase().indexOf(String(m.phrase).toLowerCase());
+    if (!m.phrase || at < 0) throw new Error(`manual ${symbol}: phrase "${m.phrase}" is not in its filing text`);
+    overrides[symbol] = {
+      sector, industry: m.industry, sic: registrants[symbol]?.sic ?? null,
+      basis: `${row[0] === "20-F" ? "20-F Item 4.B" : "10-K Item 1"}, reviewed`,
+      phrase: m.phrase, quote: quote(text, at, m.phrase.length),
+      form: row[0], filedOn: row[1], accession: row[2],
+    };
+  }
+  const placed = new Set(Object.keys(manual));
+  return { overrides, needsClassification: needsClassification.filter((s) => !placed.has(s)) };
 }
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;
@@ -158,7 +203,8 @@ if (isMain) {
   const table = read("data/sec/sic-classification.json");
   const rules = read("data/sec/classification-rules.json");
   const desc = read("data/sec/descriptions.json");
-  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows });
+  const manual = read("data/sec/classification-manual.json").entries;
+  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows, manual });
   const doc = {
     _comment:
       "Per-symbol sector/industry overrides from each filer's own 10-K Item 1 / 20-F text, by the rules in " +

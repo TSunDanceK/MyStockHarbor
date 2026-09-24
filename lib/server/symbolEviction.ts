@@ -433,6 +433,19 @@ export function staleBarEvictionAction(
   );
 }
 
+/**
+ * The SEC-listing route's action (secListing.ts, #553 COWORK #20), through the
+ * same gate. The evidence rule lives there; the preset exemption lives here,
+ * once, for the reason actionFor gives.
+ */
+export function secListingEvictionAction(
+  symbol: string,
+  unlisted: boolean,
+  presets: ReadonlySet<string> = PRESET_SYMBOLS
+): EvictionAction {
+  return actionFor(unlisted, symbol, presets);
+}
+
 const PRESET_ALARM_KEY_PREFIX = "msh:evict:preset-alarm:v1:";
 // LONG ENOUGH TO BE "ONCE", SHORT ENOUGH NOT TO BE "NEVER AGAIN". A permanent
 // marker means one missed log line is the only warning that will ever exist;

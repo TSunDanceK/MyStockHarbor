@@ -635,6 +635,56 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
+  // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
+  // ~70 commands.
+  "write-ttm-eps-measure": {
+    script: "scripts/ttm-eps-measure.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: fact sets with no years / unlabelled quarters (XOM's shape),
+  // and companyfacts + the shipped extractor for XOM and a few more
+  // (#552 COWORK #28). ~35 commands.
+  // Read-only, no credential: EDGAR submissions for successor:predecessor
+  // CIK pairs, to cite a holding-company succession (#552 COWORK #28).
+  // Read-only, no credential: the XOM succession merge on the real payloads,
+  // through the shipped code, lifted (#552 COWORK #28).
+  "sec-succession-verify": { script: "scripts/sec-succession-verify.mjs", args: (env) => [env.SYMBOLS || "XOM"], needsTypescript: true },
+  // Read-only, no credential: why a filer's fiscal year-end anchor is wrong
+  // (QXO, #552 COWORK #30). Lifts the shipped fiscalYearOffset.
+  "sec-fy-anchor": { script: "scripts/sec-fy-anchor-probe.mjs", args: (env) => [env.SYMBOLS || "QXO"], needsTypescript: true },
+  "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
+  "write-sec-sparse-sets": {
+    script: "scripts/sec-sparse-sets-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the Pickers symbols ranked by SEC shares x pool price (ranks
+  // only, no values), to place the unclassified names (#552 COWORK #29).
+  "write-pickers-universe-rank": {
+    script: "scripts/pickers-universe-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the Pickers names the SEC resolver cannot place, with their
+  // SIC, filing text and size rank (ranks only) (#552 COWORK #29).
+  "write-pickers-unplaced": {
+    script: "scripts/pickers-unplaced.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Read-only, no credential: why a universe symbol has no registrant row --
+  // EDGAR's current ticker file and each CIK's submissions (#552 COWORK #29).
+  "sec-ticker-status": { script: "scripts/sec-ticker-status-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
+  // QXO anchor fix measured before it ships (#552 COWORK #30).
+  "write-sec-fy-anchor-census": {
+    script: "scripts/sec-fy-anchor-census.mjs",
+    args: () => [],
+    writes: true,
+    needsTypescript: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -1009,7 +1059,58 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
     writes: true,
+  },  // Relay C (#563 COWORK #2): the capex receivers job's own code against live
+  // SEC. DRY by default (0 Redis); SYMBOLS="mode=seed" writes the one key
+  // msh:capex:receivers:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-receivers": {
+    script: "scripts/capex-receivers-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },  // READ-ONLY DESPITE THE PREFIX (Relay C, #563 D5): USAspending's own names
+  // and parent records for the top recipients -- the evidence the committed
+  // contract alias list is written from. 0 Redis.
+  "write-capex-contract-aliases": {
+    script: "scripts/capex-usaspending-aliases.mjs",
+    args: () => [],
+    writes: true,
   },
+  // Relay C (#563 D1): the "Who is spending" builder against the live SEC fact
+  // sets. DRY by default (reads only); SYMBOLS="mode=seed" writes
+  // msh:capex:spending:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-spending": {
+    script: "scripts/capex-spending-run.mjs",
+    args: () => ["--allow-writes"],
+    writes: true,
+  },
+  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
+  // SET) -- only on the owner's OK.
+  "write-capex-contracts": {
+    script: "scripts/capex-contracts-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
+  // and uncredentialled: public SEC and USAspending endpoints, no store. One
+  // PART per task so each fits the 30-minute job and they run side by side.
+  "capex-frames": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "frames" } },
+  "capex-segments": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "segments" } },
+  "capex-links-1": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "1/5" } },
+  "capex-links-2": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "2/5" } },
+  "capex-links-3": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "3/5" } },
+  "capex-links-4": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "4/5" } },
+  "capex-links-5": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "5/5" } },
+  "capex-fts-nvidia": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "NVIDIA" } },
+  "capex-fts-tsmc": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "TSMC" } },
+  "capex-fts-asml": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "ASML" } },
+  "capex-8k": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "8k" } },
+  "capex-usa": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa" } },
+  "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
+  "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
+  "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
   // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
   // once so the PR preview shows the filings figures. A key nothing on main
   // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
@@ -1017,6 +1118,45 @@ const TASKS = {
   "write-pickers-sec-seed": {
     script: "scripts/pickers-sec-seed.mjs",
     args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
+  // --dry mode against the live Pickers universe -- prints the issue body, writes
+  // nothing. 2 Redis reads.
+  "write-classification-needed-dry": {
+    script: "scripts/classification-needed.mjs",
+    args: () => ["--dry"],
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #16 item 3): where Pickers' Market Cap
+  // comes from today over the Pickers universe, for the Friday price split.
+  // 3 Redis reads.
+  "write-pickers-marketcap-census": {
+    script: "scripts/pickers-marketcap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
+  // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
+  "write-sec-delisting-census": {
+    script: "scripts/sec-delisting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE FOUR STALE TICKERS (#553 COWORK #20): BK -> BNY and EQR -> VMRK with
+  // their scores carried, EA and WBS evicted. Owner's GO only; ~15 commands.
+  "write-pickers-ticker-swap-dry": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => ["--dry"],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-pickers-ticker-swap": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => [],
     needsTypescript: true,
     writes: true,
   },
