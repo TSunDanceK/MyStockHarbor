@@ -15,6 +15,7 @@
 // Redis cost: one HSET per refused re-read, one HDEL per resolved multi-class
 // re-read. Never on a render's read path.
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 
 export const SEC_COVER_REVIEW_HASH = "msh:sec:cover-review:v1";
@@ -27,7 +28,7 @@ export type CoverReviewEntry = {
 };
 
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(PAGE_READ_CACHE) : null;
 
 export async function recordCoverReview(symbol: string, entry: Omit<CoverReviewEntry, "at">): Promise<void> {
   if (!redis) return;

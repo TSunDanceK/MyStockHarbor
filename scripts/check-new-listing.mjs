@@ -34,7 +34,6 @@ const Q2 = { accn: "0001628280-26-052535", form: "10-Q", fy: 2026, fp: "Q2", fil
 const Q3 = { accn: "0001628280-26-099999", form: "10-Q", fy: 2026, fp: "Q3", filed: "2026-11-05" };
 const K = { accn: "0001628280-27-011111", form: "10-K", fy: 2026, fp: "FY", filed: "2027-02-20" };
 const r = (f, start, end, val) => ({ start, end, val, accn: f.accn, form: f.form, fy: f.fy, fp: f.fp, filed: f.filed });
-const inst = (f, end, val) => ({ end, val, accn: f.accn, form: f.form, fy: f.fy, fp: f.fp, filed: f.filed });
 function facts(filings) {
   const has = (f) => filings.includes(f);
   const usd = (rows) => ({ units: { USD: rows.filter(Boolean) } });
