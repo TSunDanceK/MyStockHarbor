@@ -35,8 +35,8 @@ export function parseCount(raw: string): number | null {
 
 const COUNT = String.raw`(\d+(?:\.\d+)?|\d+\s*/\s*\d+|one[- ]half|one[- ](?:quarter|fourth|third|fifth|tenth|twentieth|fortieth)|two[- ]thirds|three[- ](?:quarters|fourths)|one hundred|twenty-five|[a-z]+)(?:\s*\(\s*[\d.,/]+\s*\))?(?:\s+of\s+(?:one|an?))?`;
 const SHARE = String.raw`(?:ordinary|common|equity|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|class\s+[a-z]|class\s+“?[a-z]”?|series\s+[a-z]\s+)?\s*shares?`;
-// "Depository" too: EC's own cover spells it that way.
-const ADS = String.raw`(?:ADS|ADSs|American\s+deposit[ao]ry\s+shares?)`;
+// "Depository" too: EC's own cover spells it that way; GDSs (IRS) are the same instrument.
+const ADS = String.raw`(?:ADS|ADSs|GDS|GDSs|(?:American|Global)\s+deposit[ao]ry\s+shares?)`;
 /**
  * The phrasings, each capturing the number of ordinary shares ONE ADS stands
  * for. All anchored on "represent" / "equal" so a price, a volume or a count
@@ -136,7 +136,12 @@ export function adsRatioOf(text: string):
 // ordinary/common shares is a direct listing.
 
 const SECTION_12B = /registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i;
-const ADS_MENTION = /American\s+deposit[ao]ry|\bADSs?\b/i;
+const ADS_MENTION = /(?:American|Global)\s+deposit[ao]ry|\b[AG]DSs?\b/i;
+// A DEPOSITARY SHARE OF SOMETHING OTHER THAN COMMON EQUITY: preferred shares
+// (AVAL, CIB, ITUB) or CPO units (CX, TV). The filer's EPS and share count are
+// per common share, so no ratio makes the arithmetic honest — refused.
+const NOT_COMMON_UNDERLYING = /\bCPOs?\b|participation\s+certificates|\bunits?\b/i;
+const PREFERRED_UNDERLYING = /represent\w*\s+(?:the\s+)?(?:rights?\s+to\s+(?:receive\s+)?)?\S+\s+(?:[\w.,$]+\s+){0,3}?(?:preferred|preference)\b/i;
 
 /** The 20-F cover's 12(b) section, from its heading up to the 12(g) line, flattened. */
 export function section12bOf(text: string): string | null {
@@ -203,6 +208,9 @@ export function coverRowFor(text: string, symbol: string): CoverRow | null {
   if (!named) return null;
   const ads = rows.find((r) => r.kind === "ads");
   if (ads) return ads;
+  // A CLASS TICKER (PBR-A) that no row names is never given the section's
+  // first ADS line: that line is the other class's.
+  if (!rows.length && /[-.]/.test(symbol)) return null;
   if (ADS_MENTION.test(section)) return { title: adsWordsOf(section), kind: "ads" };
   const ord = rows.find((r) => r.kind === "ordinary");
   if (ord) return ord;
@@ -217,7 +225,8 @@ export function coverRowFor(text: string, symbol: string): CoverRow | null {
 // registers ADSs: E's "(Which represent the right to receive two Shares)",
 // RIO's "Each American Depositary Share Represents one Rio Tinto plc Ordinary
 // Shares" (the company's name between the count and the class).
-const SECTION_RATIO = new RegExp(String.raw`\brepresent(?:s|ing)?\s+(?:the\s+)?(?:rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+(?:[A-Za-z.&]+\s+){0,4}?${SHARE}`, "gi");
+// Never across "preferred"/"preference": that is a different class (AVAL, CIB, ITUB).
+const SECTION_RATIO = new RegExp(String.raw`\brepresent(?:s|ing)?\s+(?:the\s+)?(?:rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+(?:(?!preferred|preference)[A-Za-z.&]+\s+){0,4}?${SHARE}`, "gi");
 
 export function sectionRatioOf(section: string): ReturnType<typeof adsRatioOf> {
   const std = adsRatioOf(section);
@@ -250,6 +259,8 @@ export function decideAdsRow(text20F: string | null, symbol: string, f6Text: str
     const cover = coverRowFor(text20F, symbol);
     if (cover?.kind === "ordinary") row = { kind: "ordinary", ordinaryPerAds: 1, evidence: cover.title, from: "20-F", basis: "cover-row" };
     else if (cover?.kind === "ads") {
+      if (NOT_COMMON_UNDERLYING.test(cover.title)) return { refuse: `depositary shares of units/CPOs: ${cover.title.slice(0, 80)}` };
+      if (PREFERRED_UNDERLYING.test(cover.title)) return { refuse: `depositary shares of preferred shares: ${cover.title.slice(0, 80)}` };
       // The row's own title, then the section with its footnotes, then the 20-F's text.
       const t = adsRatioOf(cover.title);
       const sec = t.ok ? t : sectionRatioOf(section12bOf(text20F) ?? "");
@@ -257,6 +268,7 @@ export function decideAdsRow(text20F: string | null, symbol: string, f6Text: str
       if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: t.ok ? cover.title : got.sentence, from: "20-F", basis: t.ok ? "cover-row" : sec.ok ? "12(b) section" : "20-F text" };
       else if (got.why === "ratios-disagree") return { refuse: `ratios disagree ${got.values.join("/")}` };
     } else if (cover?.kind === "other") return { refuse: `cover row is not common/ordinary: ${cover.title.slice(0, 80)}` };
+    else if (/[-.]/.test(symbol) && ADS_MENTION.test(section12bOf(text20F) ?? "")) return { refuse: "class ticker on no 12(b) row" };
     else {
       const got = adsRatioOf(text20F);
       if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: got.sentence, from: "20-F", basis: "20-F text" };
