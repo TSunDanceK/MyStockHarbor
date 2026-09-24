@@ -17,6 +17,7 @@
 // That is prevented here by construction rather than by care -- the differencing
 // walks `cumulativeFields()` and there is no code path from it to an instant
 // field. See secFields.ts for why the flag lives on the definition.
+import type { InstanceEps } from "./secFactCodec";
 import {
   COVER_SHARES_FIELD,
   COVER_SHARES_FALLBACK,
@@ -251,6 +252,12 @@ export type ExtractResult = {
   instants: PeriodRecord[];
   /** Filer-level, with its own asOf. Null when the filer published none. */
   coverShares: CoverShares | null;
+  /**
+   * Set by the READERS, never by extraction (it needs two filings' XBRL):
+   * twelve months of EPS from the filings, where the periods cannot give it.
+   * See secInstanceEps.
+   */
+  ttmEps?: InstanceEps;
   /**
    * THE CURRENCY THE VALUES ABOVE ARE IN — always, including "USD".
    *
