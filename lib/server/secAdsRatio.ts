@@ -123,3 +123,34 @@ export function adsRatioOf(text: string):
   if (values.length > 1) return { ok: false, why: "ratios-disagree", values };
   return { ok: true, ordinaryPerAds: values[0], sentence: all[0].sentence, statements: all.length };
 }
+
+// ── THE LATEST 20-F'S COVER ROW FOR THIS TICKER DECIDES (#552 COWORK #45) ──
+//
+// AZN's F-6 (2025) says each ADS is one-half of an ordinary share; if its
+// FY2025 20-F cover lists ORDINARY SHARES under "AZN", the listing changed and
+// the older F-6 must not win. The 12(b) table names, row by row, the class
+// title, its trading symbol and its exchange, so the title immediately before
+// this ticker is the security the price is quoted for.
+
+export type CoverRow = { title: string; kind: "ads" | "ordinary" | "other" };
+
+/** The 12(b) row title for `symbol` in a 20-F, classified, or null when the table has no such row. */
+export function coverRowFor(text: string, symbol: string): CoverRow | null {
+  const flat = text.replace(/\s+/g, " ");
+  const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
+  if (at < 0) return null;
+  const table = flat.slice(at, at + 1600);
+  const sym = String(symbol).toUpperCase().replace(/[-.]/g, "[-. ]?");
+  const m = new RegExp(String.raw`(?<![A-Za-z0-9])${sym}(?![A-Za-z0-9])`).exec(table.slice(40));
+  if (!m) return null;
+  const before = table.slice(0, 40 + m.index);
+  // THE ROW STARTS after the header's "registered" or the previous row's exchange name.
+  let cut = 0;
+  for (const b of before.matchAll(/\b(?:registered:?|Exchange|LLC|Market|Inc\.?|\(“?NYSE”?\)|\*+)(?=\s)/gi)) cut = b.index + b[0].length;
+  const title = before.slice(cut).replace(/^[\s:*.,;–-]+/, "").trim();
+  if (!title) return null;
+  if (/American\s+depositary|\bADSs?\b/i.test(title)) return { title, kind: "ads" };
+  if (/preferred|preference|warrant|\bnotes?\b|debentures?|\bunits?\b/i.test(title)) return { title, kind: "other" };
+  if (/(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(title)) return { title, kind: "ordinary" };
+  return { title, kind: "other" };
+}
