@@ -12,7 +12,7 @@
 //   4. COST. A company whose annual accession did not change must cost one
 //      submissions request, not a 4.5 MB instance.
 //   5. THE RULINGS DRIFT: the 45 lines, the 7 headings, the 21 broad tags, the
-//      4 hyperscaler notes, the 5 sub-labels (COWORK #2 and #3).
+//      4 hyperscaler notes, the 6 sub-labels (COWORK #2, #3 and #7).
 //
 // THE XBRL BELOW IS CONSTRUCTED, shaped like real instances (contexts with
 // xbrldi:explicitMember, srt:ConsolidationItemsAxis beside the segment axis,
@@ -174,6 +174,16 @@ async function suite({ X, C }, data) {
   const s6 = fakeSec({ accession: "acc-2026", inst: inst5, doc: "<p>Our memory unit.</p>" });
   const r6 = await C.refreshReceivers([mu], null, s6.f, OPTS);
   ok("…and refused (flagged, not shown) when the text is not there", r6.record.rows["x-cm"]?.subLabelOk === false && r6.record.flags.some((f) => f.kind === "sub-label-unverified"));
+  // #563 COWORK #5: a sub-label added to a line whose filing has not changed
+  // (ASML's NXE) is checked on the next run, not at next year's 20-F.
+  const plain = { ...mu, subLabel: null };
+  const r8a = await C.refreshReceivers([plain], null, fakeSec({ accession: "acc-2026", inst: inst5 }).f, OPTS);
+  const s8 = fakeSec({ accession: "acc-2026", inst: inst5 });
+  const r8 = await C.refreshReceivers([mu], r8a.record, s8.f, OPTS);
+  ok("a new sub-label on an unchanged filing re-reads it once and is verified", r8.stats.filingsRead === 1 && r8.record.rows["x-cm"]?.subLabelOk === true, JSON.stringify(r8.stats));
+  const s9 = fakeSec({ accession: "acc-2026", inst: inst5 });
+  const r9 = await C.refreshReceivers([mu], r8.record, s9.f, OPTS);
+  ok("…and only once", r9.stats.filingsRead === 0, JSON.stringify(r9.stats));
 
   const two = [ENTRY, { ...ENTRY, id: "y-dc", cik: 2 }];
   const s7 = fakeSec({ accession: "acc-2026", inst: instance() });
@@ -193,7 +203,8 @@ async function suite({ X, C }, data) {
   ok("the 21 broad lines carry the tag", rows.filter((r) => r.broad).map((r) => r.id).sort().join(" ") === BROAD, rows.filter((r) => r.broad).map((r) => r.id).sort().join(" "));
   ok("the hyperscaler note sits on MSFT, AMZN, GOOGL, ORCL", rows.filter((r) => r.hyperscaler).map((r) => r.ticker).sort().join() === "AMZN,GOOGL,MSFT,ORCL");
   const subs = rows.filter((r) => r.subLabel).map((r) => `${r.ticker}:${r.subLabel.source}`).sort().join();
-  ok("five sub-labels, each with its source", subs === "AMZN:filing-text,CLS:filing-text,FLEX:element,INTC:element,MU:filing-text", subs);
+  ok("six sub-labels, each with its source (ASML's added in #563 COWORK #7)", subs === "AMZN:filing-text,ASML:filing-text,CLS:filing-text,FLEX:element,INTC:element,MU:filing-text", subs);
+  ok("ASML's is the 20-F's own name for NXE", rows.find((r) => r.id === "asml")?.subLabel?.text === "EUV 0.33 NA");
   ok("every element-sourced sub-label is in its element name", rows.filter((r) => r.subLabel?.source === "element").every((r) => X.subLabelVerified(r.subLabel, r.element, null)));
   ok("axes are segment or product only", rows.every((r) => r.axis === "segment" || r.axis === "product"));
   return fails;
@@ -221,6 +232,7 @@ const MUTANTS = [
   ["element sub-labels always accepted", () => [mut("sub", xbrlSrc, `if (sub.source === "element") return foldForMatch(localName(element).replace(/Member$/, "")).includes(want);`, `if (sub.source === "element") return true;`), coreSrc]],
   ["an unchanged accession re-reads the filing", () => [xbrlSrc, mut("skip", coreSrc, `if (current && !opts.force) { keepFlags(); continue; }`, ``)]],
   ["a dropped element blanks the row", () => [xbrlSrc, mut("stale", coreSrc, `rows[e.id] = { ...old, staleSince: filing.accession };`, `delete rows[e.id];`)]],
+  ["a new sub-label waits for next year's filing", () => [xbrlSrc, mut("subskip", coreSrc, `(!e.subLabel || rows[e.id]?.subLabelChecked === e.subLabel.text)`, `true`)]],
   ["label renames not flagged", () => [xbrlSrc, mut("rename", coreSrc, `if (labelInFiling !== null && labelInFiling !== e.filedLabel) {`, `if (false) {`)]],
 ];
 let survived = 0;

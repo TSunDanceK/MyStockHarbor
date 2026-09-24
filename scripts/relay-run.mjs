@@ -638,6 +638,8 @@ const TASKS = {
   // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
   // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
   // ~70 commands.
+  // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
+  "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -685,6 +687,26 @@ const TASKS = {
     writes: true,
     needsTypescript: true,
   },
+  // READS ONLY: why Pickers market caps are refused on the share count, with
+  // each filing's own per-class cover facts (#552 COWORK #31).
+  "write-cover-shares-refusals": {
+    script: "scripts/cover-shares-refusal-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Read-only, no credential: the 10-K sentences on how a filer's share
+  // classes relate (conversion, economic rights) (#552 COWORK #31).
+  "sec-share-class-evidence": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  "sec-share-class-evidence-equal": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "equal" } },
+  // Read-only, no credential: a passage from a filer's latest filing of a form.
+  "sec-filing-grep": { script: "scripts/sec-filing-grep-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped class-cover read over every cited entry (#552 COWORK #31).
+  // Read-only, no credential: a filer's EPS concepts, companyfacts and instance (#552 COWORK #33).
+  "sec-eps-concepts": { script: "scripts/eps-concepts-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped filing-based TTM EPS on real filings (#552 COWORK #33).
+  "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
+  "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
+  "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -1110,6 +1132,9 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
+  // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
+  "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },
   "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
   // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
   // once so the PR preview shows the filings figures. A key nothing on main
