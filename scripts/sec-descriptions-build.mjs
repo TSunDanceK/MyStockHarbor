@@ -120,6 +120,10 @@ for (const symbol of mine) {
   if (!cleaned.ok) { misses[symbol] = cleaned.why; continue; }
   if (cleaned.joined) { joinedWords += cleaned.joined; joinedRows++; }
   rows[symbol] = [annual.form, annual.filedOn, annual.accession, cleaned.text];
+  // NAMED SYMBOLS (SYMBOLS=…): the row is printed too, so a one-row refresh can
+  // be applied to data/sec/descriptions.json from the log (the artifact host is
+  // refused to the sandbox). The full build keeps its summary-only log.
+  if (only.length) console.log(`ROW ${JSON.stringify({ symbol, row: rows[symbol] })}`);
 }
 const notReached = mine.slice(reached);
 

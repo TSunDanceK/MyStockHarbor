@@ -198,6 +198,8 @@ const TASKS = {
   "sec-descriptions-4": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
   "sec-descriptions-5": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
   "sec-descriptions-6": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  // Named symbols only (SYMBOLS=…): prints each row for a one-row refresh (#552 COWORK #38).
+  "sec-descriptions-adhoc": { script: "scripts/sec-descriptions-build.mjs", args: () => [], needsTypescript: true },
   // NOT A TASK: preview screenshots run in .github/workflows/preview-screenshots.yml,
   // which reads its Vercel bypass credential from a masked repo secret. A relay
   // input is printed in the log, and the read-only job holds no secrets by
@@ -207,6 +209,8 @@ const TASKS = {
   // year end, entity type, latest annual form) for every profiled symbol, from
   // SEC submissions. Read-only, no credentials. Prints the file into its log
   // for the session to reassemble — see the script header.
+  // Named symbols only (SYMBOLS=…): fetch those rows, print each (#552 COWORK #35).
+  "sec-registrants-named": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
   "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
   // EDGAR's own state/country code list, with ISO-3166 codes attached by name
   // match, for the /stock page's Country row. Read-only, no credentials.
@@ -641,7 +645,13 @@ const TASKS = {
   // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
   "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
   // READS ONLY: the Pickers universe as symbols (#552 COWORK #37). 1 GET.
+  // READS ONLY: the capex record's unplaced symbols (#552 COWORK #35). 1 GET.
+  "write-capex-unplaced-list": { script: "scripts/capex-unplaced-list.mjs", args: () => [], writes: true },
   "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
+  // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
+  "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
+  // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
+  "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -709,6 +719,22 @@ const TASKS = {
   "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
   // Read-only, no credential: the longer Item 1 excerpt for named symbols (#552 COWORK #32/#37).
   "sec-item1-excerpts": { script: "scripts/sec-item1-excerpts-build.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
+  // Read-only, no credential: which descriptions a locator change moves (#552 COWORK #38).
+  "sec-locator-census-1": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-locator-census-2": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-locator-census-3": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-locator-census-4": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-locator-census-5": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-locator-census-6": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  "sec-locator-debug": { script: "scripts/sec-locator-debug.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
+  "sec-locator-census": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true },
+  // Read-only, no credential: instance facts matching PATTERN (#552 COWORK #38).
+  "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
+  "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
+  // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
+  "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
+  "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
+  "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {

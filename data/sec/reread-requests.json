@@ -265,6 +265,21 @@
    "symbol": "TPL",
    "requestedAt": "2026-09-25T00:00:00Z",
    "reason": "#552 COWORK #33: twelve-month EPS now read from the 10-K and 10-Q XBRL (fiscal year + year-to-date - prior year-to-date) where the stored quarters cannot give it"
+  },
+  {
+   "symbol": "SPCX",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #37: first filer — the six-month cash-flow frame (yt) and the cited Class A + B cover (share-classes.json, 424B4) are read on the next extraction"
+  },
+  {
+   "symbol": "MAIR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #37: first filer — six-month cash-flow frame and the cited Class A + B cover (share-classes.json, 424B4)"
+  },
+  {
+   "symbol": "INIO",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #37: first filer — the six-month cash-flow frame (yt) is read on the next extraction"
   }
  ]
 }
