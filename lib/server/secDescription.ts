@@ -87,15 +87,7 @@ function lines(text: string): Line[] {
 
 const ITEM1 = /^item1(business(es)?(description|overview)?)?$/;
 const BUSINESS = /^business(es)?(description|overview)?$/;
-// A TABLE OF CONTENTS PRINTS THE PAGE ON THE SAME LINE: ABBV's reads
-// "Item 1A. RISK FACTORS 14". Without the trailing page number that line was no
-// end, so the TOC's "Item 1. Business" paired with the REAL Item 1A far below,
-// the "section" opened with the rest of the TOC, and the page showed a stray
-// Skyrizi dosing line as AbbVie's description (#552 COWORK #38). A heading line
-// never ends in a page number, so allowing one on an END cannot end a real
-// section early; it only lets the TOC pair close, and the TOC pair is then
-// too short to be a section and is skipped, as designed.
-const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)(\d{1,3})?$/;
+const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)$/;
 
 // ── 20-F: ITEM 4 "INFORMATION ON THE COMPANY" → 4.B "BUSINESS OVERVIEW" ────
 //
@@ -122,6 +114,9 @@ const C_ALONE = /^(item4)?c$/;
 const ORG_STRUCTURE = /^organi[sz]ationalstructure$/;
 /** A heading line is short; a long line that happens to fold to a pattern is prose. */
 const HEADING_KEY_MAX = 80;
+
+/** A line this long is prose, never a TOC entry or a heading. */
+const PROSE_LINE_CHARS = 200;
 
 /** A table-of-contents pair is closer than this; a real section is longer. */
 const MIN_SECTION_CHARS = 1500;
@@ -170,6 +165,7 @@ function pairSection(
   for (const e of ends) {
     const before = starts.filter(([s]) => s < e);
     const between = before.filter(([s]) => s > prevEnd);
+    const lastEnd = prevEnd;
     prevEnd = e;
     if (!before.length) continue;
     // RUNNING PAGE HEADERS: DAL prints "Item 1. Business" at the top of every
@@ -179,7 +175,20 @@ function pairSection(
     // previous end, the section starts at its FIRST occurrence.
     const keys = between.map(([s]) => L[s].key);
     const repeated = between.length >= 3 && keys.filter((k) => k === keys[keys.length - 1]).length >= 3;
-    const [, from] = repeated ? between[0] : before[before.length - 1];
+    let [, from] = repeated ? between[0] : before[before.length - 1];
+    // A START ALREADY CLOSED BY AN EARLIER END is a table-of-contents entry,
+    // not the section's heading (#552 COWORK #38). ABBV's body carries no
+    // "Item 1. Business" line at all: the only start is the TOC's, its TOC pair
+    // is too short and skipped, and the same start then paired with the real
+    // "ITEM 1A. RISK FACTORS" -- so the section opened with the rest of the TOC
+    // and the page showed a stray Skyrizi dosing line as AbbVie's description.
+    // The section begins, instead, at the first prose line after that earlier
+    // end; with none before this end, this pair is not a section.
+    if (!between.length && lastEnd >= 0) {
+      const j = L.findIndex((l, k) => k > lastEnd && k < e && l.text.length >= PROSE_LINE_CHARS);
+      if (j < 0) continue;
+      from = L[j].start;
+    }
     if (L[e].start - from >= minChars) return { span: { from, to: L[e].start }, starts: starts.length };
   }
   const [s, from] = starts[starts.length - 1];

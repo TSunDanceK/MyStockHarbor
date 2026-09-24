@@ -70,9 +70,21 @@ console.log("\n1. 10-K Item 1: the section, not the TOC or a cautionary-note lin
     "Item 1A. Risk Factors", "As described below, these risks could materially affect our business.", "Item 1A. Risk Factors", "x"].join("\n");
   const dal = D.locateSection(pages, "10-K");
   check("running page headers: the section starts at its first page (DAL)", dal.found && dal.body.startsWith("Delta Air Lines is a major airline"));
-  const lastOnly = await load(once("const [, from] = repeated ? between[0] : before[before.length - 1];", "const [, from] = before[before.length - 1];"));
+  const lastOnly = await load(once("let [, from] = repeated ? between[0] : before[before.length - 1];", "let [, from] = before[before.length - 1];"));
   const bad2 = lastOnly.locateSection(pages, "10-K");
   check("...and CATCHES the last page taken as the section", !bad2.found || !bad2.body.startsWith("Delta Air Lines"));
+  // ABBV (#552 COWORK #38): no "Item 1. Business" in the body at all; the only
+  // start is the TOC's, already closed by the TOC's own "Item 1A.". The section
+  // begins at the first prose line after that end, not in the TOC.
+  const abbv = ["PART I", "Item 1.", "BUSINESS", "1", "Item 1A.", "RISK FACTORS", "14", "Item 2.", "PROPERTIES", "29",
+    "AbbVie is a global, diversified research-based biopharmaceutical company positioned for success with a comprehensive product portfolio that has leadership positions across immunology, oncology, aesthetics, neuroscience and eye care. " + filler("AbbVie"),
+    "ITEM 1A. RISK FACTORS", "x"].join("\n");
+  const ab = D.locateSection(abbv, "10-K");
+  check("a TOC start reused for the real end: the section starts at the first prose line after the TOC (ABBV)",
+    ab.found && ab.body.startsWith("AbbVie is a global"), ab.found ? ab.body.slice(0, 60) : ab.why);
+  const reuse = await load(once("if (!between.length && lastEnd >= 0) {", "if (false) {"));
+  const bad3 = reuse.locateSection(abbv, "10-K");
+  check("...and CATCHES the TOC taken as the section's opening", !bad3.found || !bad3.body.startsWith("AbbVie"));
   const split = ["Item 1. Busines s Description", "Berkshire Hathaway Inc. is a holding company. " + filler("Berkshire"), "Item 1A. Ris k Factors", "x"].join("\n");
   check("a heading with words split mid-way is read letters-only (BRK.B)", D.locateSection(split, "10-K").found);
 }
