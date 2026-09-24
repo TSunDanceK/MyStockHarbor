@@ -7,6 +7,7 @@ import { drainColdCiks } from "@/lib/server/secColdCik";
 import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { withPredecessorFacts } from "@/lib/server/secSuccession";
+import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
@@ -483,6 +484,11 @@ export async function GET(req: NextRequest) {
         coldCiks.conflicts.map((c) => `${c.symbol} manifest=${c.manifest} cold=${c.cold}`).join(", ")
     );
   }
+
+  // COMMITTED RE-READ REQUESTS join the reverify queue before it is built
+  // (one a run, one-shot via verifiedAt). See secRereadRequests.
+  const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
+  if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
 
   const q = populationQueues(manifest);
   // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
