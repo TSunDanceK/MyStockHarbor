@@ -87,6 +87,17 @@ async function suite(W, code) {
       code.dash.includes(".msh-grid-wide{grid-template-columns:1fr;}") && code.dash.includes(".msh-wide-cards{display:grid;grid-template-columns:1fr 1fr;"));
   ok("the button says what it does and is a toggle", /aria-pressed=\{wideChart\}/.test(code.dash) && code.dash.includes(`"Back to two columns"`) && code.dash.includes(`"Widen chart"`));
   ok("the button is hidden where the layout is single-column", code.dash.includes("@media(max-width:960px){.msh-widebtn{display:none!important;}"));
+  // 7. The icon and target (#553 COWORK #35).
+  const leftward = (d) => /^M(\d+) 10H(\d+)/.exec(d);
+  const rightward = (d) => /^M(\d+) 10h(\d+)/.exec(d);
+  ok("normal layout: a LEFT arrow (extend the chart)", !!leftward(W.WIDE_ARROW_LEFT) && Number(leftward(W.WIDE_ARROW_LEFT)[1]) > Number(leftward(W.WIDE_ARROW_LEFT)[2]) && /l-5 5 5 5$/.test(W.WIDE_ARROW_LEFT));
+  ok("wide mode: a RIGHT arrow (back to two columns)", !!rightward(W.WIDE_ARROW_RIGHT) && /l5 5-5 5$/.test(W.WIDE_ARROW_RIGHT));
+  ok("the button draws LEFT when normal and RIGHT when wide", /<path d=\{wideChart \? WIDE_ARROW_RIGHT : WIDE_ARROW_LEFT\} \/>/.test(code.dash));
+  const btn = /function WideChartButton\(\)[\s\S]*?\n  \}\n/.exec(code.dash)?.[0] ?? "";
+  const px = (re) => Number(re.exec(btn)?.[1] ?? 0);
+  ok("the click target is at least 32x32", px(/width: (\d+), height: \d+/) >= 32 && px(/width: \d+, height: (\d+)/) >= 32);
+  ok("the icon is 18-20px and bold", px(/<svg width="(\d+)"/) >= 18 && px(/<svg width="(\d+)"/) <= 20 && Number(/strokeWidth="([\d.]+)"/.exec(btn)?.[1] ?? 0) >= 2.2);
+  ok("tooltip and label stay", /title=\{label\} aria-label=\{label\} aria-pressed=\{wideChart\}/.test(btn));
   ok("the button is not on the plot (the Basic pan arrows are)", /<WideChartButton \/><div style=\{\{ fontSize: 11/.test(code.dash));
   return fails;
 }
@@ -118,6 +129,10 @@ const MUTANTS = [
     // no catch
   }`), code]],
   ["storage read outside the try", () => [src, { ...code, dash: mut("inline", code.dash, "readWideChoice(browserStorage())", "readWideChoice(window.localStorage)") }]],
+  ["arrows swapped (right arrow to extend)", () => [src, { ...code, dash: mut("swap", code.dash, "wideChart ? WIDE_ARROW_RIGHT : WIDE_ARROW_LEFT", "wideChart ? WIDE_ARROW_LEFT : WIDE_ARROW_RIGHT") }]],
+  ["left arrow drawn pointing right", () => [mut("dir", src, `WIDE_ARROW_LEFT = "M16 10H4M9 5l-5 5 5 5"`, `WIDE_ARROW_LEFT = "M4 10h12M11 5l5 5-5 5"`), code]],
+  ["the small 30px button back", () => [src, { ...code, dash: mut("size", code.dash, `justifyContent: "center", width: 34, height: 34, flex`, `justifyContent: "center", width: 30, height: 30, flex`) }]],
+  ["a thin 16px icon back", () => [src, { ...code, dash: mut("icon", code.dash, `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6"`, `<svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6"`) }]],
   ["button shown on narrow widths", () => [src, { ...code, dash: mut("narrow", code.dash, "@media(max-width:960px){.msh-widebtn{display:none!important;}", "@media(max-width:960px){") }]],
 ];
 
@@ -136,4 +151,4 @@ for (const [label, make] of MUTANTS) {
   }
 }
 if (survived) process.exit(1);
-console.log(`check-dashboard-wide: height kept at 4 widths, layout and wiring hold; ${MUTANTS.length} mutants caught`);
+console.log(`check-dashboard-wide: height kept at 4 widths, layout, wiring and the arrow button hold; ${MUTANTS.length} mutants caught`);
