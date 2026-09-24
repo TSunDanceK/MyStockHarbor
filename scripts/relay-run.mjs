@@ -660,6 +660,23 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the Pickers symbols ranked by SEC shares x pool price (ranks
+  // only, no values), to place the unclassified names (#552 COWORK #29).
+  "write-pickers-universe-rank": {
+    script: "scripts/pickers-universe-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: the Pickers names the SEC resolver cannot place, with their
+  // SIC, filing text and size rank (ranks only) (#552 COWORK #29).
+  "write-pickers-unplaced": {
+    script: "scripts/pickers-unplaced.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Read-only, no credential: why a universe symbol has no registrant row --
+  // EDGAR's current ticker file and each CIK's submissions (#552 COWORK #29).
+  "sec-ticker-status": { script: "scripts/sec-ticker-status-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
   // QXO anchor fix measured before it ships (#552 COWORK #30).
   "write-sec-fy-anchor-census": {
