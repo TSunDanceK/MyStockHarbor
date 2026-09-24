@@ -359,18 +359,27 @@
    "listed": "CommonClassAMember",
    "weights": {
     "CommonClassAMember": 1,
-    "CommonClassB1Member": 1.5445,
-    "CommonClassB2Member": 1.5014,
-    "CommonClassB3Member": 1.4953,
-    "CommonClassCMember": 4.0
+    "CommonClassB1Member": null,
+    "CommonClassB2Member": null,
+    "CommonClassB3Member": null,
+    "CommonClassCMember": null
    },
    "evidence": [
     "June 30, 2026 ... Conversion Rate Into Class A Common Stock ... Class B-1 common stock 2 1.5445 (3) 3 ... Class B-2 common stock — (2) 1.5014 (3) 1 ... Class B-3 common stock 61 1.4953 (3) 91 ... Class C common stock 18 4.0000 73",
-    "The class B-1, B-2 and B-3 to class A common stock conversion calculations for dividend payments are based on a conversion rate rounded to the tenth decimal. Conversion rates are presented on a rounded basis."
+    "The class B-1, B-2 and B-3 to class A common stock conversion calculations for dividend payments are based on a conversion rate rounded to the tenth decimal. Conversion rates are presented on a rounded basis.",
+    "Each 10-Q/10-K tags the rates as v:CommonStockConversionRate per class (10-Q 0001403161-26-000104, as of 2026-06-30: B-1 1.5445, B-2 1.5014, B-3 1.4953, C 4.0000); they are read from the filing whose cover is used, never stored here."
    ],
    "source": "0001403161-26-000104",
-   "asOf": "2026-06-30",
-   "note": "B-1/B-2/B-3 rates fall with each U.S. litigation escrow deposit; refresh from each 10-Q."
+   "note": "B-1/B-2/B-3 rates fall with each U.S. litigation escrow deposit; read from each filing's own XBRL (rates), refused if a filing omits one.",
+   "rates": {
+    "concept": "CommonStockConversionRate",
+    "classes": [
+     "CommonClassB1Member",
+     "CommonClassB2Member",
+     "CommonClassB3Member",
+     "CommonClassCMember"
+    ]
+   }
   },
   "VG": {
    "listed": "CommonClassAMember",
