@@ -1,0 +1,96 @@
+PASS [after] stock-page: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] stock-page: Down highlights row 1 -- active=0
+PASS [after] stock-page: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(11, 18, 32)|none
+PASS [after] stock-page: Down x3 -> row 3
+PASS [after] stock-page: Up -> row 2
+PASS [after] stock-page: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] stock-page: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] stock-page: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] stock-page: typing resets the highlight -- active=-1
+PASS [after] stock-page: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] stock-page: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] stock-page: Enter picks the highlighted row (NVA), as a click would -- url=http://127.0.0.1:3100/stock/NVA
+PASS [after] stock-earnings: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] stock-earnings: Down highlights row 1 -- active=0
+PASS [after] stock-earnings: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(11, 18, 32)|none
+PASS [after] stock-earnings: Down x3 -> row 3
+PASS [after] stock-earnings: Up -> row 2
+PASS [after] stock-earnings: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] stock-earnings: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] stock-earnings: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] stock-earnings: typing resets the highlight -- active=-1
+PASS [after] stock-earnings: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] stock-earnings: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] stock-earnings: Enter picks the highlighted row (NVA), as a click would -- url=http://127.0.0.1:3100/stock/NVA/earnings
+PASS [after] stock-news: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] stock-news: Down highlights row 1 -- active=0
+PASS [after] stock-news: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(11, 18, 32)|none
+PASS [after] stock-news: Down x3 -> row 3
+PASS [after] stock-news: Up -> row 2
+PASS [after] stock-news: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] stock-news: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] stock-news: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] stock-news: typing resets the highlight -- active=-1
+PASS [after] stock-news: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] stock-news: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] stock-news: Enter picks the highlighted row (NVA), as a click would -- url=http://127.0.0.1:3100/stock/NVA/news
+PASS [after] dashboard-desktop: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] dashboard-desktop: Down highlights row 1 -- active=0
+PASS [after] dashboard-desktop: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(20, 27, 43)|none
+PASS [after] dashboard-desktop: Down x3 -> row 3
+PASS [after] dashboard-desktop: Up -> row 2
+PASS [after] dashboard-desktop: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] dashboard-desktop: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] dashboard-desktop: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] dashboard-desktop: typing resets the highlight -- active=-1
+PASS [after] dashboard-desktop: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] dashboard-desktop: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] dashboard-desktop: Enter picks the highlighted row (NVA), as a click would -- value=NVA
+PASS [after] dashboard-phone: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] dashboard-phone: Down highlights row 1 -- active=0
+PASS [after] dashboard-phone: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(20, 27, 43)|none
+PASS [after] dashboard-phone: Down x3 -> row 3
+PASS [after] dashboard-phone: Up -> row 2
+PASS [after] dashboard-phone: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] dashboard-phone: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] dashboard-phone: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] dashboard-phone: typing resets the highlight -- active=-1
+PASS [after] dashboard-phone: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] dashboard-phone: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] dashboard-phone: Enter picks the highlighted row (NVA), as a click would -- value=NVA
+PASS [after] home-phone: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":6}
+PASS [after] home-phone: Down highlights row 1 -- active=0
+PASS [after] home-phone: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgba(0, 0, 0, 0)|none
+PASS [after] home-phone: Down x3 -> row 3
+PASS [after] home-phone: Up -> row 2
+PASS [after] home-phone: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] home-phone: Down to the last row stays there, in view -- {"a":5,"n":6,"inView":true}
+PASS [after] home-phone: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] home-phone: typing resets the highlight -- active=-1
+PASS [after] home-phone: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] home-phone: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] home-phone: Enter picks the highlighted row (NVA), as a click would -- url=http://127.0.0.1:3100/stock/NVA
+PASS [after] pickers: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] pickers: Down highlights row 1 -- active=0
+PASS [after] pickers: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(11, 18, 32)|none
+PASS [after] pickers: Down x3 -> row 3
+PASS [after] pickers: Up -> row 2
+PASS [after] pickers: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] pickers: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] pickers: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] pickers: typing resets the highlight -- active=-1
+PASS [after] pickers: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] pickers: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] pickers: Enter picks the highlighted row (NVA), as a click would -- value=NVA
+PASS [after] earnings-calendar: combobox + listbox ARIA, list open -- {"role":"combobox","exp":"true","list":"listbox","n":8}
+PASS [after] earnings-calendar: Down highlights row 1 -- active=0
+PASS [after] earnings-calendar: the highlight is visible (differs from other rows) -- rgba(47, 107, 255, 0.3)|rgba(147, 183, 255, 0.85) 0px 0px 0px 2px inset vs rgb(11, 18, 32)|none
+PASS [after] earnings-calendar: Down x3 -> row 3
+PASS [after] earnings-calendar: Up -> row 2
+PASS [after] earnings-calendar: Up past the top returns to the typed text -- {"a":-1,"f":true}
+PASS [after] earnings-calendar: Down to the last row stays there, in view -- {"a":7,"n":8,"inView":true}
+PASS [after] earnings-calendar: hovering a row moves the one highlight there -- {"a":1,"sel":1}
+PASS [after] earnings-calendar: typing resets the highlight -- active=-1
+PASS [after] earnings-calendar: Escape closes and keeps the text -- {"open":false,"v":"NV"}
+PASS [after] earnings-calendar: Tab closes and picks nothing -- {"open":false,"v":"NVD"}
+PASS [after] earnings-calendar: Enter picks the highlighted row (NVA), as a click would -- value=NVA
