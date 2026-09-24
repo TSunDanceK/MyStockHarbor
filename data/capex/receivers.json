@@ -238,12 +238,12 @@
    "cik": 1645590,
    "group": "networking-optics",
    "axis": "segment",
-   "element": null,
+   "element": "hpe:NetworkingMember",
    "filedLabel": "Networking",
    "subLabel": null,
    "broad": true,
    "hyperscaler": false,
-   "probeAccession": null
+   "probeAccession": "0001645590-25-000130"
   },
   {
    "id": "cien",

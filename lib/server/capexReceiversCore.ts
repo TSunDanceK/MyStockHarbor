@@ -48,6 +48,8 @@ export type ReceiverRow = {
   filingDate: string;
   fyStart: string;
   fyEnd: string;
+  /** The revenue concept both years were read from (for audit). */
+  concept: string;
   currency: string;
   current: number;
   prior: number | null;
@@ -178,6 +180,7 @@ export async function refreshReceivers(
         filingDate: filing.filingDate,
         fyStart: line.fyStart,
         fyEnd: line.fyEnd,
+        concept: line.concept,
         currency: line.currency,
         current: line.current,
         prior: line.prior,
