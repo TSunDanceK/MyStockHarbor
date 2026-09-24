@@ -90,8 +90,11 @@ async function suite(mod) {
 
   ok("every figure the module returns is one of SEC_PICKER_FIELDS, and vice versa",
     Object.keys(figs.AAPL).sort().join() === [...mod.SEC_PICKER_FIELDS].sort().join());
-  ok("P/E, EPS and Payout Ratio are NOT owned by the filings yet (COWORK #5 Q1)",
-    !["peRatio", "epsTtm", "payoutRatio"].some((k) => mod.SEC_PICKER_FIELDS.includes(k)));
+  // P/E, EPS and Payout moved with COWORK #21 as their OWN list, applied only
+  // to rows that carry `eps` (scripts/check-pickers-earnings.mjs covers them).
+  ok("P/E, EPS and Payout Ratio are the separate SEC_EARNINGS_FIELDS, not among the twelve",
+    !["peRatio", "epsTtm", "payoutRatio"].some((k) => mod.SEC_PICKER_FIELDS.includes(k)) &&
+      ["peRatio", "epsTtm", "payoutRatio"].every((k) => mod.SEC_EARNINGS_FIELDS.includes(k)));
 
   // ── CURRENCY (#553 COWORK #11: EC revenue 123.86T COP, HMY 179.91B ZAR) ──
   // EC-like: a 20-F filer in a currency A's FX sources do not serve -> `cur`
