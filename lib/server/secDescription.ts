@@ -392,6 +392,26 @@ function nameWords(s: string): string[] {
  * fragment; only a proper suffix is, which reads as a defined short name whose
  * definition was stripped.
  */
+// A DESCRIPTION NAMES ITS SUBJECT (#552 COWORK #38). ABBV's Item 1 opens with
+// product tables, so the first prose line was "In psoriatic disease …, Skyrizi
+// is administered as a quarterly subcutaneous injection…", shown as AbbVie's
+// description. Text that names neither the company (a distinctive word of its
+// name, or its initials) nor itself ("we", "our", "the Company") is about
+// something else, and no description beats a wrong one.
+const GENERIC_NAME_WORDS = new Set([
+  "inc", "corp", "corporation", "co", "company", "companies", "group", "holdings", "holding", "ltd", "limited", "plc",
+  "lp", "llc", "sa", "nv", "ag", "se", "trust", "the", "and", "of", "international", "global", "new",
+]);
+export function speaksOfTheCompany(text: string, companyName: string): boolean {
+  if (/\b(we|our|us|the company|the corporation|the partnership|the trust|the bank)\b/i.test(text)) return true;
+  const words = nameWords(companyName);
+  const hay = ` ${nameWords(text).join(" ")} `;
+  // Two letters count: PG&E's name words are "pg" and "e" (census, #552 COWORK #38).
+  if (words.some((w) => w.length >= 2 && !GENERIC_NAME_WORDS.has(w) && hay.includes(` ${w} `))) return true;
+  const initials = words.filter((w) => !GENERIC_NAME_WORDS.has(w) || w === "international").map((w) => w[0]).join("");
+  return initials.length >= 2 && hay.includes(` ${initials} `);
+}
+
 export function opensWithNameFragment(paragraph: string, companyName: string): boolean {
   const name = nameWords(companyName);
   const head = nameWords(paragraph.slice(0, 120));
@@ -601,6 +621,9 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   // Rule 4, on what would render.
   for (const [re, label] of REJECT) if (re.test(text)) return { ok: false, why: `rejected: ${label}` };
   if (text.length < DESCRIPTION_MIN_CHARS) return { ok: false, why: `too short after cleaning (${text.length} chars)` };
+  if (opts.companyName && !speaksOfTheCompany(text, opts.companyName)) {
+    return { ok: false, why: "rejected: the opening does not describe the company" };
+  }
   return { ok: true, text, joined };
 }
 
