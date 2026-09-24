@@ -83,6 +83,10 @@ export type SpendingRecord = {
   /** Companies with some capex but not in all five years (outside every cohort). */
   partial: number;
   sectors: SectorSpending[];
+  /** The five largest spenders in the latest year across every sector's
+   *  cohort, largest first (#563 COWORK #12's "Who is spending most" card).
+   *  Optional: records built before it was added lack it. */
+  leaders?: Array<{ symbol: string; sector: string; capex: number }>;
 };
 
 /**
@@ -167,9 +171,11 @@ export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: 
   }
   const complete = (a: (number | null)[]): a is number[] => a.every((v) => v !== null);
   const sectors: SectorSpending[] = [];
+  const everyone: Array<{ symbol: string; sector: string; capex: number }> = [];
   for (const [sector, rows] of bySector) {
     const cohort = rows.filter((r) => complete(r.capex));
     if (!cohort.length) continue;
+    for (const r of cohort) everyone.push({ symbol: r.symbol, sector, capex: r.capex[years.length - 1] as number });
     const ratio = cohort.filter((r) => complete(r.revenue));
     const rndRows = rows.filter((r) => complete(r.rnd));
     const sum = (rs: Row[], k: "capex" | "revenue" | "rnd", i: number) => rs.reduce((a, r) => a + (r[k][i] as number), 0);
@@ -189,5 +195,5 @@ export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: 
     });
   }
   sectors.sort((a, b) => b.capex[b.capex.length - 1] - a.capex[a.capex.length - 1]);
-  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, duplicateListings, otherCurrency, unclassified, unclassifiedLargest: unplaced.sort((a, b) => b.capex - a.capex).slice(0, 10), partial, sectors };
+  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, duplicateListings, otherCurrency, unclassified, unclassifiedLargest: unplaced.sort((a, b) => b.capex - a.capex).slice(0, 10), partial, sectors, leaders: everyone.sort((a, b) => b.capex - a.capex).slice(0, 5) };
 }

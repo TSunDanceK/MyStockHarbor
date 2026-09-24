@@ -1162,6 +1162,14 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Relay C (#563 COWORK #12): prints the capex page's three records (1 MGET)
+  // for a local render against production data.
+  "write-capex-records-dump": {
+    script: "scripts/capex-records-dump.mjs",
+    args: () => [],
+    writes: true,
+  },
   // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
   // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
   "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },
