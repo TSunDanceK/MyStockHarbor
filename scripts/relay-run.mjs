@@ -971,6 +971,13 @@ const TASKS = {
   // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #5): which Redis keys in
   // B's area still hold FMP payloads, and how many news records carry FMP-era
   // items. SCAN + sampled TTL + MGET only.
+  // READ-ONLY (Relay B, #553 COWORK #12): why a sector's "Sector today" reads
+  // "--". write- only for the Redis credentials; 5 commands.
+  "write-sector-today-probe": {
+    script: "scripts/sector-today-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-fmp-residue-census": {
     script: "scripts/fmp-residue-census.mjs",
     args: () => [],
