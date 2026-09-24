@@ -166,7 +166,7 @@ export type SharesBasis = { val: number; asOf: string };
  */
 export type EpsBasis = {
   val: number;
-  basis: "four-quarters" | "fiscal-year";
+  basis: "four-quarters" | "fiscal-year" | "year-to-date";
   /** The newest period end the figure covers. */
   periodEnd: string;
   /**
@@ -177,6 +177,14 @@ export type EpsBasis = {
   derivedQ4?: string;
   /** Only on "fiscal-year": the fiscal year it is, for the "P/E (FY2025)" label. */
   fiscalYear?: number | null;
+  /**
+   * Only on "year-to-date" (#552 COWORK #33): the fiscal year's end and the
+   * year-to-date's length in months, for "fiscal year to X plus N months to Y,
+   * less the same N months a year earlier". See secInstanceEps.
+   */
+  ytd?: { yearEnd: string; months: number };
+  /** "basic" only for a filer that states no diluted EPS at all (BRK). Absent = diluted. */
+  kind?: "basic";
 };
 
 export type ValuationInputs = {
@@ -304,6 +312,40 @@ function newestFiscalYear(years: StoredPeriod[]): EpsBasis | null {
   const val = valueOf(y, "epsDiluted");
   if (val === null) return null;
   return { val, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy };
+}
+
+/**
+ * TWELVE MONTHS OF DILUTED EPS for a stored set, or null. The rule is stated
+ * above valuationInputs' call; it is its own function because the READERS ask
+ * the same question before paying for the filing read (secInstanceEps), and
+ * two copies of it would drift.
+ *
+ * LAST, THE FILINGS' OWN FIGURE (#552 COWORK #33): fiscal year + year-to-date
+ * - the prior year-to-date, read from the 10-K and 10-Q XBRL, where the set's
+ * quarters and year cannot give twelve months. Only when it runs to the
+ * newest stored quarter or later: an older one is not trailing.
+ */
+export function ttmEpsFromSet(
+  set: Pick<StoredFactSet, "quarters" | "years" | "cur" | "te">,
+  filer: FilerFacts,
+  today: string,
+): EpsBasis | null {
+  const annualOnly = annualOnlyForm(filer.annualForm, set, today) !== null;
+  const newestQuarter = set.quarters[0]?.e ?? null;
+  const year = newestFiscalYear(set.years);
+  if (annualOnly) return year;
+  const fromSet = fourConsecutiveQuarters(set) ??
+    (year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null);
+  if (fromSet) return fromSet;
+  const te = set.te;
+  if (!te || (set.cur && set.cur !== "USD") || (newestQuarter !== null && te.periodEnd < newestQuarter)) return null;
+  return {
+    val: te.val,
+    basis: "year-to-date",
+    periodEnd: te.periodEnd,
+    ytd: { yearEnd: te.yearEnd, months: Math.round(te.ytdDays / 30.4) },
+    ...(te.kind === "basic" ? { kind: "basic" as const } : {}),
+  };
 }
 
 /**
@@ -435,13 +477,7 @@ export function valuationInputs(
   // (the newest stored quarter is its Q4, or none is stored): a year older
   // than their newest quarter is not "trailing", and falling back to it is
   // the NVDA defect (#552 COWORK #8) -- refused instead.
-  const annualOnly = annualOnlyForm(filer.annualForm, set, today) !== null;
-  const newestQuarter = set.quarters[0]?.e ?? null;
-  const year = newestFiscalYear(set.years);
-  const eps = annualOnly
-    ? year
-    : fourConsecutiveQuarters(set) ??
-      (year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null);
+  const eps = ttmEpsFromSet(set, filer, today);
   if (!eps) refusals.push("no-twelve-month-eps");
 
   return { shares, eps, refusals };
