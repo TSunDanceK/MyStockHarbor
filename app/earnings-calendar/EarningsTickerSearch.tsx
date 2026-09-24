@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
+import { activeRowStyle } from "@/lib/listboxNav";
+import { useListboxNav } from "@/app/components/useListboxNav";
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
@@ -111,6 +113,15 @@ export default function EarningsTickerSearch() {
     }
   }
 
+  // Arrow keys, Enter, Escape and Tab: the shared rules (#553 COWORK #36).
+  const nav = useListboxNav({
+    count: Math.min(results.length, 8),
+    open,
+    onSelect: (i) => { const r = results[i]; if (r) void chooseResult(r); },
+    onClose: () => setOpen(false),
+    resetKey: query,
+  });
+
   return (
     <div ref={wrapRef} style={{ position: "relative", maxWidth: 440 }}>
       {/* Icon + input share their own relative box. The results dropdown below
@@ -154,6 +165,15 @@ export default function EarningsTickerSearch() {
             setInfo(null);
           }}
           onFocus={() => setOpen(true)}
+          {...nav.inputAria}
+          onKeyDown={(e) => {
+            if (nav.onKeyDown(e)) return;
+            // Nothing highlighted: an exact ticker match, if the list has one.
+            if (e.key === "Enter") {
+              const exact = results.find((r) => r.symbol.trim().toUpperCase() === query.trim().toUpperCase());
+              if (exact) { e.preventDefault(); void chooseResult(exact); }
+            }
+          }}
           placeholder="Search a ticker or company"
           aria-label="Search for a ticker or company"
           style={{
@@ -174,6 +194,8 @@ export default function EarningsTickerSearch() {
 
       {open && results.length > 0 ? (
         <div
+          {...nav.listProps}
+          aria-label="Ticker search results"
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
@@ -187,10 +209,12 @@ export default function EarningsTickerSearch() {
             overflow: "hidden",
           }}
         >
-          {results.slice(0, 8).map((result) => (
+          {results.slice(0, 8).map((result, i) => (
             <button
               key={`${result.symbol}-${result.exchange}`}
               type="button"
+              tabIndex={-1}
+              {...nav.optionProps(i)}
               onClick={() => chooseResult(result)}
               style={{
                 width: "100%",
@@ -204,6 +228,7 @@ export default function EarningsTickerSearch() {
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
+                ...(nav.active === i ? activeRowStyle(true) : null),
               }}
             >
               <TickerLogo symbol={result.symbol} size={22} radius={6} />
