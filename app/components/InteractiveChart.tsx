@@ -15,6 +15,7 @@ import {
   LONG_PRESS_MS, LONG_PRESS_SLOP, type MenuSection, type ScaleMode,
 } from "@/lib/interactiveChartMenu";
 import { MEASURE_TOOLS, measureColor, measureLabel, measureStats, type MeasureKind, type MeasurePoint } from "@/lib/measure";
+import { formatBarDate } from "@/lib/chartDate";
 
 /**
  * InteractiveChart
@@ -93,6 +94,8 @@ interface ChartApi {
   unsubscribeAction(type: string, callback?: (data?: unknown) => void): void;
   overrideOverlay(override: Record<string, unknown>): void;
   convertFromPixel(coordinates: Array<{ x?: number; y?: number }>, finder: { paneId?: string; absolute?: boolean }): unknown;
+  setTimezone(timezone: string): void;
+  setCustomApi(api: Record<string, unknown>): void;
 }
 
 type Interval = "d" | "w" | "m";
@@ -989,6 +992,11 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       readyRef.current = true;
 
       chart.setStyles(CHART_STYLES);
+      // Every bar is a day, week or month stamped at UTC midnight: dates only,
+      // in UTC, in the tooltip, the crosshair label and the axis (#553 COWORK
+      // #42). The library's default showed "2026-08-13 01:00" in UK summer time.
+      try { chart.setTimezone("UTC"); } catch { /* noop */ }
+      try { chart.setCustomApi({ formatDate: (_f: unknown, ts: number, format: string, type: number) => formatBarDate(ts, format, type) }); } catch { /* noop */ }
       // The remembered % / price scale (#553 COWORK #28).
       scaleRef.current = readScale(readStored(SCALE_KEY));
       setScaleState(scaleRef.current);
