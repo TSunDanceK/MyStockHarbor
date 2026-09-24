@@ -760,6 +760,8 @@ const TASKS = {
   "write-ifrs-gap": { script: "scripts/ifrs-gap-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   // Exports stored sets as gzip+base64 lines, for check fixtures. Read-only.
   "write-export-fixtures": { script: "scripts/export-fixtures-probe.mjs", args: (env) => [], writes: true },
+  // #535 05:00 check-in: SEC job runs, filing state, cold-fill counters, picker build attribution. Read-only.
+  "write-checkin": { script: "scripts/checkin-probe.mjs", args: () => [], writes: true },
   "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
