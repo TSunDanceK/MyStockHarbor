@@ -3,16 +3,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { RECEIVER_ENTRIES, RECEIVER_GROUPS, readReceiversRecord } from "@/lib/server/capexReceivers";
 import { readContractsRecord } from "@/lib/server/capexContracts";
-import { buildContractRows, buildReceiverGroups, formatAmount, type ReceiverView } from "@/lib/capexPresent";
+import { readSpendingRecord } from "@/lib/server/capexSpending";
+import { buildContractRows, buildReceiverGroups, buildSpendingRows, formatAmount, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
 
 // Capex -- "Follow the money" (Relay C, #563). Phase 1 panels, each from a
 // filed or published source, side by side and deliberately NOT connected:
 // no arrows, no flows, no sums across companies (COWORK #1 / #2).
 //
-// NOINDEX until "Who is spending" (Layer 1) lands with A's sector resolver: a
-// page whose first panel is a placeholder is not the page to rank.
+// Indexed now that "Who is spending" (Layer 1) is in, built from A's SEC fact
+// sets and sector resolver.
 //
-// Redis: two GETs per render (receivers, contracts), hourly ISR.
+// Redis: three GETs per render (spending, receivers, contracts), hourly ISR.
 export const revalidate = 3600;
 
 const PAGE_TITLE = "Capex: Follow the Money | AI & Data-Centre Spending | MyStockHarbor";
@@ -23,14 +24,17 @@ export const metadata: Metadata = {
   title: PAGE_TITLE,
   description: PAGE_DESCRIPTION,
   alternates: { canonical: "https://www.mystockharbor.com/bottlenecks/capex" },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 const HYPERSCALER_NOTE =
   "These companies are also among the largest spenders above; this is what they sell, not what they buy.";
 
 export default async function CapexPage() {
-  const [receivers, contracts] = await Promise.all([readReceiversRecord(), readContractsRecord()]);
+  const [spending, receivers, contracts] = await Promise.all([readSpendingRecord(), readReceiversRecord(), readContractsRecord()]);
+  const spendingRows = spending ? buildSpendingRows(spending.sectors, spending.years) : [];
+  const firstYear = spending?.years[0];
+  const lastYear = spending?.years[spending.years.length - 1];
   const groups = buildReceiverGroups(RECEIVER_GROUPS, RECEIVER_ENTRIES, receivers?.rows ?? {});
   const contractRows = contracts ? buildContractRows(contracts.rows, 15) : [];
 
@@ -52,14 +56,39 @@ export default async function CapexPage() {
           </div>
         </section>
 
-        {/* 1. Who is spending -- Layer 1, waiting on A's sector resolver. */}
+        {/* 1. Who is spending -- Layer 1: sector totals, a fixed cohort each. */}
         <section id="spending" style={panelStyle}>
           <div style={eyebrowStyle}>1 · WHO IS SPENDING</div>
           <h2 style={panelTitleStyle}>Capital spending by sector</h2>
-          <p style={bodyStyle}>
-            Coming next: five years of capital expenditure by sector, and capex as a share of revenue,
-            from the companies&apos; own cash-flow statements. It waits on the sector grouping the rest of
-            the site uses, so the sectors here match the ones you see elsewhere.
+          {spending && spendingRows.length ? (
+            <>
+              <p style={bodyStyle}>
+                Capital expenditure (money spent on buildings, equipment and data centres) reported by US-listed
+                companies, added up by sector for each calendar year {firstYear} to {lastYear}. The long bar is{" "}
+                {lastYear}, on one scale for every sector. The five small bars are that sector&apos;s own five years,
+                to show the direction rather than the size.
+              </p>
+              <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+                {spendingRows.map((r) => (
+                  <SpendingRow key={r.sector} row={r} firstYear={firstYear!} lastYear={lastYear!} />
+                ))}
+              </div>
+              <p style={noteStyle}>
+                Each sector counts only the companies that reported capex in all five years ({spending.years.length}{" "}
+                years), so a bar does not grow just because more companies started reporting.
+                {spending.otherCurrency > 0 ? ` ${spending.otherCurrency} filers reporting in other currencies not included.` : ""}
+                {spending.unclassified > 0 ? ` ${spending.unclassified} companies without a sector are not placed.` : ""}
+                {spending.duplicateListings > 0 ? " Companies with more than one listing are counted once." : ""}
+              </p>
+            </>
+          ) : (
+            <p style={emptyStyle}>The sector figures are rebuilt weekly from annual reports. Check back shortly.</p>
+          )}
+          <p style={sourceStyle}>
+            Source: each company&apos;s annual cash-flow and income statements filed with the SEC (10-K, 20-F or
+            40-F). Fiscal years are placed in the calendar year that holds most of them. Sectors are the ones used
+            across this site. Totals are sums of filed figures, not estimates; capex ÷ revenue uses the companies
+            in each sector that reported both in every year.
           </p>
         </section>
 
@@ -150,6 +179,47 @@ export default async function CapexPage() {
   );
 }
 
+function SpendingRow({ row, firstYear, lastYear }: { row: SpendingView; firstYear: number; lastYear: number }) {
+  return (
+    <div className="capexRow" style={rowStyle} title={`${row.sector}: ${row.latest} in ${lastYear}, ${row.cohort} companies`}>
+      <div style={{ minWidth: 0 }}>
+        <div style={rowHeadStyle}>
+          <span style={tickerStyle}>{row.sector}</span>
+          <span style={subLabelStyle}>{row.cohort} companies</span>
+        </div>
+        <div style={metaStyle}>
+          Largest reported:{" "}
+          {row.top.map((t, i) => (
+            <span key={t}>
+              {i ? ", " : ""}
+              <Link href={`/stock/${encodeURIComponent(t)}`} style={{ color: "inherit" }}>{t}</Link>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div style={barTrackStyle}>
+          <div style={{ ...barStyle, width: `${Math.max(1, row.barPct)}%`, background: "#a78bfa" }} />
+        </div>
+        <div style={sparkStyle} aria-label={`Capex ${firstYear} to ${lastYear}`}>
+          {row.spark.map((h, i) => (
+            <div key={i} title={row.sparkTitles[i]} style={{ flex: 1, height: `${Math.max(4, h)}%`, borderRadius: 2, background: "rgba(167,139,250,0.55)" }} />
+          ))}
+        </div>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <div style={valueStyle}>{row.latest}</div>
+        <div style={metaStyle}>{row.changeText} since {firstYear}</div>
+        {row.ratioLatest ? (
+          <div style={metaStyle} title={`Capex ÷ revenue, ${row.ratioCohort} companies`}>
+            Of revenue: {row.ratioFirst ?? "–"} ({firstYear}), {row.ratioLatest} ({lastYear})
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function ReceiverRow({ row }: { row: ReceiverView }) {
   const up = (row.changePct ?? 0) >= 0;
   return (
@@ -218,5 +288,6 @@ const barTrackStyle: CSSProperties = { height: 10, borderRadius: 4, background: 
 const barStyle: CSSProperties = { height: "100%", borderRadius: 4 };
 const valueStyle: CSSProperties = { fontSize: 16, fontWeight: 950, textAlign: "right" };
 const metaStyle: CSSProperties = { marginTop: 2, fontSize: 12, color: "rgba(241,245,249,0.6)" };
+const sparkStyle: CSSProperties = { display: "flex", alignItems: "flex-end", gap: 3, height: 22, marginTop: 6 };
 const sourceStyle: CSSProperties = { margin: "18px 0 0 0", fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.5)" };
 const footnoteStyle: CSSProperties = { marginTop: 18, fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.48)" };

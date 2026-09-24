@@ -20,7 +20,10 @@
 //    as unclassified, not placed. A company whose figures could not be
 //    converted to US dollars has no stored years (A's FX rule) and is counted
 //    as "reporting in another currency", not dropped silently.
-// 4. SECTOR TOTALS ONLY. There is no grand total and nothing flows between
+// 4. ONE COMPANY, ONE ROW. Several listings can share one SEC filer (BRK-B and
+//    BRK.B; BN and its listed notes BNJ, BNH): they file one set of accounts,
+//    so they are counted once, by CIK, or a sector would sum a company twice.
+// 5. SECTOR TOTALS ONLY. There is no grand total and nothing flows between
 //    sectors or between this panel and the others.
 
 export const SPENDING_YEARS = 5;
@@ -37,6 +40,8 @@ export type SpendingYearInput = {
 
 export type SpendingInput = {
   symbol: string;
+  /** The SEC filer; listings sharing one are the same company. */
+  cik: string | null;
   sector: string | null;
   /** Reporting currency; absent or "USD" for USD filers. */
   currency: string | null;
@@ -65,6 +70,8 @@ export type SpendingRecord = {
   /** The calendar years, oldest first. */
   years: number[];
   companiesRead: number;
+  /** Extra listings of a filer already counted (share classes, listed notes). */
+  duplicateListings: number;
   /** Companies with no usable annual figures in USD (another reporting currency). */
   otherCurrency: number;
   /** Companies the sector resolver could not place. */
@@ -92,7 +99,34 @@ export function spendingYears(nowMs: number): number[] {
 
 const usable = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
-export function aggregateSpending(inputs: SpendingInput[], years: number[], nowMs: number): SpendingRecord {
+/**
+ * One input per SEC filer. Kept: the listing with the most capex years, then
+ * the shortest symbol (the common stock over its notes), then alphabetical.
+ */
+export function dedupeByFiler(inputs: SpendingInput[]): { kept: SpendingInput[]; duplicates: number } {
+  const capexYears = (i: SpendingInput) => i.years.filter((y) => usable(y.capex)).length;
+  const better = (a: SpendingInput, b: SpendingInput) =>
+    capexYears(a) - capexYears(b) || b.symbol.length - a.symbol.length || (a.symbol < b.symbol ? 1 : -1);
+  const byFiler = new Map<string, SpendingInput>();
+  const kept: SpendingInput[] = [];
+  let duplicates = 0;
+  for (const input of inputs) {
+    if (!input.cik) {
+      kept.push(input);
+      continue;
+    }
+    const k = String(Number(input.cik));
+    const prev = byFiler.get(k);
+    if (prev) {
+      duplicates++;
+      if (better(input, prev) > 0) byFiler.set(k, input);
+    } else byFiler.set(k, input);
+  }
+  return { kept: [...kept, ...byFiler.values()], duplicates };
+}
+
+export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: number): SpendingRecord {
+  const { kept: inputs, duplicates: duplicateListings } = dedupeByFiler(all);
   type Row = { symbol: string; capex: (number | null)[]; revenue: (number | null)[]; rnd: (number | null)[] };
   const bySector = new Map<string, Row[]>();
   let otherCurrency = 0, unclassified = 0, partial = 0;
@@ -143,5 +177,5 @@ export function aggregateSpending(inputs: SpendingInput[], years: number[], nowM
     });
   }
   sectors.sort((a, b) => b.capex[b.capex.length - 1] - a.capex[a.capex.length - 1]);
-  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, otherCurrency, unclassified, partial, sectors };
+  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, duplicateListings, otherCurrency, unclassified, partial, sectors };
 }
