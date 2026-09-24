@@ -3,7 +3,7 @@
 // Mirrors buildSectorPerformance (lib/server/sectorPanels.ts): the top 25 names
 // of each sector from msh:sector-index:v1, their price-pool rows, and the 30-min
 // freshness gate that decides whether a name counts toward `day`. Also prints the
-// cached table the page is serving right now (msh:sector-performance:v1).
+// cached table the page is serving right now (msh:sector-performance:v2).
 //   relay task: write-sector-today-probe
 //   Redis cost: 3 GETs + 1 TTL + 1 HMGET (275 fields) = 5 commands, once.
 import { Redis } from "@upstash/redis";
@@ -15,10 +15,10 @@ const now = Date.now();
 
 const [index, table, health] = await Promise.all([
   redis.get("msh:sector-index:v1"),
-  redis.get("msh:sector-performance:v1"),
+  redis.get("msh:sector-performance:v2"),
   redis.get("msh:pricepool:session-health:v1"),
 ]);
-const ttl = await redis.ttl("msh:sector-performance:v1");
+const ttl = await redis.ttl("msh:sector-performance:v2");
 if (!index?.bySlug) throw new Error("msh:sector-index:v1 missing");
 const age = (ms) => (ms == null ? "-" : `${Math.round(ms / 60000)}m`);
 console.log(`now ${new Date(now).toISOString()} · index built ${age(now - index.builtAt)} ago · classified ${index.classified}/${index.total}`);
