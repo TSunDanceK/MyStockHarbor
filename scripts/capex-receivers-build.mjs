@@ -17,6 +17,7 @@
 //
 //   node scripts/capex-receivers-build.mjs
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { liftCapexParsers } from "./lib/capex-lift.mjs";
 
 const { extractMemberRevenue, parseLabelLinkbase, RECEIVER_GROUPS } = await liftCapexParsers();
@@ -179,6 +180,9 @@ const out = {
 };
 console.log(`entries ${entries.length} of ${CURATED.length}; problems ${problems.length}`);
 for (const p of problems) console.log(`PROBLEM ${p}`);
+// The committed copy comes out of this log by hand; the hash proves it exact.
+const text = JSON.stringify(out, null, 1) + "\n";
+console.log(`SHA256 ${crypto.createHash("sha256").update(text).digest("hex")}`);
 console.log("=====BEGIN receivers.json=====");
-console.log(JSON.stringify(out, null, 1));
+console.log(text.trimEnd());
 console.log("=====END receivers.json=====");
