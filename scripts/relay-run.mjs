@@ -709,6 +709,14 @@ const TASKS = {
   "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
   // Read-only, no credential: the longer Item 1 excerpt for named symbols (#552 COWORK #32/#37).
   "sec-item1-excerpts": { script: "scripts/sec-item1-excerpts-build.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
+  // Read-only, no credential: which descriptions a locator change moves (#552 COWORK #38).
+  "sec-locator-census-1": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/6" } },
+  "sec-locator-census-2": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/6" } },
+  "sec-locator-census-3": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/6" } },
+  "sec-locator-census-4": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/6" } },
+  "sec-locator-census-5": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/6" } },
+  "sec-locator-census-6": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/6" } },
+  "sec-locator-census": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
