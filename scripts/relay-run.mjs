@@ -762,6 +762,8 @@ const TASKS = {
   "write-export-fixtures": { script: "scripts/export-fixtures-probe.mjs", args: (env) => [], writes: true },
   // #535 05:00 check-in: SEC job runs, filing state, cold-fill counters, picker build attribution. Read-only.
   "write-checkin": { script: "scripts/checkin-probe.mjs", args: () => [], writes: true },
+  // The same read-only render check, routed through the job that does not download the (expired) step0 dump. Reads no store.
+  "write-googlebot-render": { script: "scripts/googlebot-render-probe.mjs", args: () => [], writes: true },
   "write-sitemap-coverage": { script: "scripts/sitemap-coverage-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-annual-layout-render": { script: "scripts/annual-layout-render.mjs", args: () => [], needsTypescript: true, writes: true },
   // #535 COWORK #9/#10: SEC cache sizes, Upstash meter, daily-index filing
