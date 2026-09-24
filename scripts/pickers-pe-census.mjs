@@ -22,11 +22,36 @@ import { Redis } from "@upstash/redis";
 const V = await import("../lib/server/secValuation.ts");
 const P = await import("../lib/server/pickersSecFundamentals.ts");
 const S = await import("../lib/server/secFactStore.ts");
-const F = await import("../lib/server/fundamentalsCache.ts");
-const SD = await import("../lib/server/stockDataCache.ts");
-const { registrantFor } = await import("../lib/server/stockProfile.ts");
-const { excludedFromFundamentals } = await import("../lib/server/pickerEquity.ts");
-const { resolveProfileBulk } = await import("../lib/server/staticProfile.ts");
+// stockProfile, pickerEquity and staticProfile import JSON through the "@/"
+// alias, which the relay's loader does not resolve. The committed files are
+// read directly instead, and A's guard is loaded the way check-non-equity
+// loads it (its render-path loaders stubbed), so the exclusion is A's rule,
+// not a copy.
+import fs from "node:fs";
+import ts from "typescript";
+import { lookupSpellingIn, lookupBySpelling } from "../lib/symbolSpellings.mjs";
+const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
+const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
+const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
+const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+const guardSrc = fs.readFileSync("lib/server/securityKind.ts", "utf8")
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+  .replace(/\/\/ ─+\n\/\/ THE RENDER-PATH ENTRY POINT[\s\S]*$/, "");
+const equitySrc = fs.readFileSync("lib/server/pickerEquity.ts", "utf8")
+  .replace(/import \{ admitForExtraction \} from "\.\/securityKind";/, `import { admitForExtraction } from "${dataUrl(transpile(guardSrc))}";`)
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+  .replace(/import \{ lookupBySpelling \} from "\.\.\/symbolSpellings\.mjs";/, "const lookupBySpelling = () => null;");
+const { fundamentalsExclusion } = await import(dataUrl(transpile(equitySrc)));
+const tickerFile = (await import("../lib/server/secTickerMap.ts")).loadTickerMap();
+const groups = new Map();
+for (const [sym, e] of tickerFile.map) if (e?.cik) groups.set(e.cik, [...(groups.get(e.cik) ?? []), sym]);
+const excludedFromFundamentals = (s) => {
+  const cik = lookupBySpelling(tickerFile.map, s)?.value?.cik ?? null;
+  return fundamentalsExclusion({ symbol: s, cik, cikGroup: cik ? groups.get(cik) ?? [] : [], securityName: lookupSpellingIn(NAMES, s)?.value ?? null });
+};
 const redis = Redis.fromEnv();
 const today = new Date().toISOString().slice(0, 10);
 
@@ -40,13 +65,21 @@ universe.forEach((s, i) => {
   if (typeof r === "string") try { r = JSON.parse(r); } catch { r = null; }
   if (r && typeof r === "object") pool.set(s, r);
 });
-const fund = await F.readCachedFundamentalsBulk(universe);
-const extra = await SD.readCachedStockDataBulk(universe);
+// The two stored FMP rows, read by key exactly as fundamentalsCache and
+// stockDataCache do (one MGET each); those modules are not imported for the
+// alias reason above.
+const mgetMap = async (prefix) => {
+  const vals = await redis.mget(...universe.map((s) => `${prefix}${s}`));
+  const m = new Map();
+  universe.forEach((s, i) => { const v = vals[i]; if (v && typeof v === "object") m.set(s, v); });
+  return m;
+};
+const fund = await mgetMap("msh:pickers:fundamentals:v1:");
+const extra = await mgetMap("msh:stockdata:v1:");
 const secRows = await P.readSecPickerRows(universe);
-const profiles = await resolveProfileBulk(universe.map((symbol) => ({ symbol, cached: null })), "pe census");
 // The sector the page shows TODAY (stored row; #578 is held), on both sides,
 // so only P/E differs between the two counts.
-const sectorOf = (s) => fund.get(s)?.sector ?? profiles.get(s)?.sector ?? null;
+const sectorOf = (s) => fund.get(s)?.sector ?? null;
 
 const sets = new Map();
 for (let i = 0; i < universe.length; i += 25) {
