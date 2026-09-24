@@ -628,6 +628,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: how many Pickers names a multi-class market-cap rule could
+  // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  "write-multiclass-cap-census": {
+    script: "scripts/multiclass-cap-census.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],

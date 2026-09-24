@@ -184,9 +184,25 @@ async function census(name, universe) {
   const techSic = rows.filter((x) => x.mappedSector === "Technology").length;
   console.log(`  presets (the category predicate only): /semiconductor-stocks industry=Semiconductors today ${semiToday} vs SIC ${semiSic}; ` +
     `/cheap-tech-stocks sector=Technology today ${techToday} vs SIC ${techSic}`);
+  return rows;
 }
 
 await census("U1 Pickers universe", u1);
-await census("U2 top 3,000 by market cap", u2);
+const u2rows = await census("U2 top 3,000 by market cap", u2);
+
+// WHO IS RIGHT, where our sector differs from today's (#552 COWORK #26): for
+// the low-precision sectors, 10 names we place in the sector that today's
+// label does not, each with OUR basis. Today's per-ticker value is NOT printed
+// (it is the vendor's); Cowork compares against the live page.
+const basisOf = (s) => {
+  const o = overrideFor(s);
+  if (o && (o.sector || o.industry)) return `${o.basis}: "${o.phrase}" — ${String(o.quote ?? "").slice(0, 110)}`;
+  return "SIC table";
+};
+for (const sec of ["Industrials", "Consumer Cyclical", "Basic Materials"]) {
+  const off = u2rows.filter((x) => x.mappedSector === sec && x.t.sector && x.t.sector !== sec).slice(0, 10);
+  console.log(`\n=== ${sec}: 10 names we place here that today's label does not ===`);
+  for (const x of off) console.log(`  ${x.s} | SIC ${x.sic ?? "—"} ${x.desc ?? ""} | ours: ${x.mappedIndustry ?? "(sector only)"} | ${basisOf(x.s)}`);
+}
 console.log(`\nSEC submissions fetched for symbols not in registrants.json: ${fetched} (failed ${fetchFailed})`);
 console.log(`Redis commands used by this read: ${commands}`);

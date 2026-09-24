@@ -1,5 +1,5 @@
 {
- "_comment": "SIC code -> Pickers sector/industry, in our own mapping (#552 COWORK #3/#22). Hand-assigned from each code's SEC description onto the fixed Pickers label list below; no per-ticker data. \"rules\": true means the 10-K Item 1 rules pass (data/sec/classification-rules.json) may decide or refine the industry for names under this code; industry null with rules means the table itself does not decide it. majorGroups: a code the table does not list takes its 2-digit SIC major group's sector (null where the group spans sectors), and its industry from the rules pass.",
+ "_comment": "SIC code -> Pickers sector/industry, in our own mapping (#552 COWORK #3/#22). Hand-assigned from each code's SEC description onto the fixed Pickers label list below; no per-ticker data. \"rules\": true means the 10-K Item 1 rules pass (data/sec/classification-rules.json) may decide or refine the industry for names under this code; industry null with rules means the table itself does not decide it. majorGroups: a code the table does not list takes its 2-digit SIC major group's sector (null where the group spans sectors), and its industry from the rules pass. crossSector: the rules may place a filer under this code in another sector (default kept when none matches).",
  "asOf": "2026-09-24",
  "labels": {
   "Advertising Agencies": "Communication Services",
@@ -465,7 +465,8 @@
    "sector": "Industrials",
    "industry": "Industrial - Machinery",
    "rules": true,
-   "sec": "Special Industry Machinery, NEC"
+   "sec": "Special Industry Machinery, NEC",
+   "crossSector": true
   },
   "3560": {
    "sector": "Industrials",
@@ -592,7 +593,8 @@
    "sector": "Industrials",
    "industry": "Electrical Equipment & Parts",
    "rules": true,
-   "sec": "Miscellaneous Electrical Machinery, Equipment & Supplies"
+   "sec": "Miscellaneous Electrical Machinery, Equipment & Supplies",
+   "crossSector": true
   },
   "3711": {
    "sector": "Consumer Cyclical",
@@ -658,7 +660,8 @@
    "sector": "Technology",
    "industry": "Hardware, Equipment & Parts",
    "rules": true,
-   "sec": "Measuring & Controlling Devices, NEC"
+   "sec": "Measuring & Controlling Devices, NEC",
+   "crossSector": true
   },
   "3841": {
    "sector": "Healthcare",
@@ -715,7 +718,8 @@
    "sector": "Industrials",
    "industry": "Marine Shipping",
    "rules": true,
-   "sec": "Water Transportation"
+   "sec": "Water Transportation",
+   "crossSector": true
   },
   "4412": {
    "sector": "Industrials",
