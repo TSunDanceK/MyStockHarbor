@@ -97,6 +97,9 @@ export const JOBS = {
   // job (04:00 / 04:20 / 04:40 / 05:10, sec-filings at :40) for the
   // per-requester pacing reason above.
   "capex-receivers": { label: "Capex receivers from annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
+  // Relay C (#563 D5): federal contract obligations per listed company, from
+  // USAspending. Weekly -- the 12-month window moves a month at a time.
+  "capex-contracts": { label: "Capex federal contracts from USAspending (weekly Mon 06:10)", instrumented: true, cron: "10 6 * * 1" },
 } as const;
 
 /**
