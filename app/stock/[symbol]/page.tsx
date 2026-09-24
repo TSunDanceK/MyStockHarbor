@@ -14,7 +14,7 @@ import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { classificationAsOf, resolveProfile } from "@/lib/server/staticProfile";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
-import { composeCompanyProfile, exchangeFor, registrantFor } from "@/lib/server/stockProfile";
+import { composeCompanyProfile, exchangeFor, peBasisLabel, peBasisNote, registrantFor } from "@/lib/server/stockProfile";
 import { filingDescriptionFor } from "@/lib/server/filingDescription";
 import {
   REFUSAL_WORDS, valuationMultiples, type MultipleInputs, type ValuationFigure, type ValuationInputs,
@@ -513,6 +513,10 @@ export default async function StockPage({ params }: Props) {
       evToEbitda: why(multiples?.evEbitda),
     },
     sourceNote: valuationSourceNote(secFacts.profileFacts.multiples, secFacts.profileFacts.valuation),
+    // WHICH TWELVE MONTHS, said on the label (#552 COWORK #8/#9): "TTM to …"
+    // or "FY2025", never a bare "TTM" over a fiscal-year figure.
+    peBasis: peBasisLabel(secFacts.profileFacts.valuation?.eps),
+    peBasisNote: peBasisNote(secFacts.profileFacts.valuation?.eps),
   };
 
   // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.

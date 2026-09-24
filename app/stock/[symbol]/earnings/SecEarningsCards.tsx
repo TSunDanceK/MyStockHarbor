@@ -1848,9 +1848,10 @@ export function SecValuationCard({
     : pe === null ? NOT_REPORTED
       : pe.ok ? pe.val.toFixed(1)
         : pe.why === "eps-is-zero-or-negative" ? "Not meaningful" : "Not available";
+  // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
-    ? "the last four quarters"
-    : `the latest fiscal year, to ${inputs.eps?.periodEnd}`;
+    ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`
+    : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd}`;
   const peSub = !current ? null
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"

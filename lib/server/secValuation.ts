@@ -41,6 +41,7 @@ import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
 import { valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
+import { annualOnlyForm } from "./annualOnly";
 
 /** Why a numerator could not be supplied. Rendered, never swallowed. */
 export type ValuationRefusal =
@@ -168,6 +169,14 @@ export type EpsBasis = {
   basis: "four-quarters" | "fiscal-year";
   /** The newest period end the figure covers. */
   periodEnd: string;
+  /**
+   * Only on "four-quarters": the fiscal Q4 inside the window had no filed EPS
+   * (it sits inside the 10-K), so its EPS is the fiscal year's diluted EPS
+   * minus Q1-Q3's, and this is that Q4's period end. See derivedQ4Eps.
+   */
+  derivedQ4?: string;
+  /** Only on "fiscal-year": the fiscal year it is, for the "P/E (FY2025)" label. */
+  fiscalYear?: number | null;
 };
 
 export type ValuationInputs = {
@@ -190,19 +199,93 @@ export type ValuationInputs = {
  * established the run — and widening it would silently shorten tables that are
  * correct today.
  */
-function fourConsecutiveQuarters(quarters: StoredPeriod[]): EpsBasis | null {
-  const four = quarters.slice(0, 4);
+function fourConsecutiveQuarters(set: Pick<StoredFactSet, "quarters" | "years" | "cur">): EpsBasis | null {
+  const four = set.quarters.slice(0, 4);
   if (four.length < 4) return null;
   for (let i = 1; i < four.length; i++) {
     if (!isConsecutive(four[i - 1], four[i])) return null;
   }
-  const vals = four.map((q) => valueOf(q, "epsDiluted"));
+  let derivedQ4: string | undefined;
+  const vals = four.map((q) => {
+    const filed = valueOf(q, "epsDiluted");
+    if (filed !== null) return filed;
+    const d = derivedQ4Eps(set, q);
+    if (d !== null) derivedQ4 = q.e;
+    return d;
+  });
   if (vals.some((v) => v === null)) return null;
   return {
     val: (vals as number[]).reduce((a, b) => a + b, 0),
     basis: "four-quarters",
     periodEnd: four[0].e,
+    ...(derivedQ4 ? { derivedQ4 } : {}),
   };
+}
+
+/**
+ * HOW FAR A QUARTER'S DILUTED SHARE COUNT MAY SIT FROM ITS FISCAL YEAR'S before
+ * the year is treated as spanning a split, a reverse split or a share-class
+ * change. A year's weighted count is the average of its quarters', so an
+ * ordinary buyback or issuance moves a quarter a few percent from it; a 2:1
+ * split moves the pre-split quarters by half, and a 1:20 reverse split by 95%.
+ */
+export const Q4_SHARE_BASIS_TOLERANCE = 0.2;
+
+/**
+ * FISCAL Q4 DILUTED EPS, DERIVED: the fiscal year's diluted EPS minus Q1, Q2
+ * and Q3's (#552 COWORK #8, method (a)).
+ *
+ * WHY IT IS NEEDED. A 10-K reports the year, not its fourth quarter, so Q4 EPS
+ * is not on file for any 10-Q filer, and before this every such filer whose
+ * newest quarter was Q1-Q3 fell back to LAST fiscal year's EPS (NVDA 4.90 on
+ * a TTM of about 7.97). Q4 net income is already differenced the same way;
+ * EPS was left null because a per-share figure only subtracts cleanly when
+ * the share basis held still, so that is what is checked.
+ *
+ * REFUSED (null) unless ALL hold:
+ *   - the fiscal year row is the SAME fiscal year and ends on Q4's own end;
+ *   - Q1, Q2 and Q3 of that year are stored, consecutive, each with EPS;
+ *   - every quarter's diluted share count is within Q4_SHARE_BASIS_TOLERANCE
+ *     of the year's: a split or share-class change inside the year puts the
+ *     quarters and the year on different share bases, and the difference
+ *     would be an artefact of the split, not a quarter's earnings. A filer
+ *     that states NO diluted count for any of the four periods is compared on
+ *     its basic counts instead (XOM tags only basic since 2013: it has no
+ *     dilutive securities). The two kinds are never mixed, and the count is
+ *     only this test's input, never part of the EPS;
+ *   - the set is in USD as filed: a converted set carries each period at its
+ *     own rate, and a year minus three quarters would mix four rates.
+ */
+export function derivedQ4Eps(
+  set: Pick<StoredFactSet, "quarters" | "years" | "cur">,
+  q4: StoredPeriod,
+): number | null {
+  if (q4.fp !== "Q4" || q4.fy == null) return null;
+  if (set.cur && set.cur !== "USD") return null;
+  const year = set.years.find((y) => y.fy === q4.fy && y.e === q4.e);
+  if (!year) return null;
+  const yearEps = valueOf(year, "epsDiluted");
+  if (yearEps === null) return null;
+  const q = (fp: string) => set.quarters.find((p) => p.fy === q4.fy && p.fp === fp);
+  const q3 = q("Q3"), q2 = q("Q2"), q1 = q("Q1");
+  if (!q1 || !q2 || !q3) return null;
+  if (!isConsecutive(q4, q3) || !isConsecutive(q3, q2) || !isConsecutive(q2, q1)) return null;
+  const periods = [year, q1, q2, q3];
+  const shareKey = periods.every((p) => valueOf(p, "sharesDiluted") !== null) ? "sharesDiluted"
+    : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"
+      : null;
+  if (!shareKey) return null;
+  const yearShares = valueOf(year, shareKey) as number;
+  if (yearShares <= 0) return null;
+  let sum = 0;
+  for (const p of [q1, q2, q3]) {
+    const eps = valueOf(p, "epsDiluted");
+    const shares = valueOf(p, shareKey);
+    if (eps === null || shares === null) return null;
+    if (Math.abs(shares / yearShares - 1) > Q4_SHARE_BASIS_TOLERANCE) return null;
+    sum += eps;
+  }
+  return yearEps - sum;
 }
 
 /**
@@ -220,7 +303,7 @@ function newestFiscalYear(years: StoredPeriod[]): EpsBasis | null {
   if (!y) return null;
   const val = valueOf(y, "epsDiluted");
   if (val === null) return null;
-  return { val, basis: "fiscal-year", periodEnd: y.e };
+  return { val, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy };
 }
 
 /**
@@ -343,9 +426,22 @@ export function valuationInputs(
     refusals.push("no-cover-share-count");
   }
 
-  // QUARTERS FIRST — they are newer. A filer with both gets the four-quarter
-  // figure, which is what "trailing twelve months" means to a reader.
-  const eps = fourConsecutiveQuarters(set.quarters) ?? newestFiscalYear(set.years);
+  // ANNUAL-ONLY FILERS (#548's rule, imported, not copied) keep the fiscal
+  // year: their quarters live in 6-K releases outside the structured data, and
+  // no Q4 is derived or TTM built from IFRS partials (#552 COWORK #9).
+  //
+  // QUARTERLY FILERS get four quarters, Q4 derived where it is not on file.
+  // The fiscal year is their basis only when it IS their latest twelve months
+  // (the newest stored quarter is its Q4, or none is stored): a year older
+  // than their newest quarter is not "trailing", and falling back to it is
+  // the NVDA defect (#552 COWORK #8) -- refused instead.
+  const annualOnly = annualOnlyForm(filer.annualForm, set, today) !== null;
+  const newestQuarter = set.quarters[0]?.e ?? null;
+  const year = newestFiscalYear(set.years);
+  const eps = annualOnly
+    ? year
+    : fourConsecutiveQuarters(set) ??
+      (year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null);
   if (!eps) refusals.push("no-twelve-month-eps");
 
   return { shares, eps, refusals };
