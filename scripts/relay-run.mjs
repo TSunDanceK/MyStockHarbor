@@ -643,6 +643,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: fact sets with no years / unlabelled quarters (XOM's shape),
+  // and companyfacts + the shipped extractor for XOM and a few more
+  // (#552 COWORK #28). ~35 commands.
+  "write-sec-sparse-sets": {
+    script: "scripts/sec-sparse-sets-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
