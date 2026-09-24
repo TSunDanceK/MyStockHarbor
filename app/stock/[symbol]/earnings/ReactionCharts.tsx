@@ -241,7 +241,7 @@ export function PriceReactionCard({
   symbol, latest, reaction, drift, datesFromSec, uncoveredLabels, noPriceHistoryNote,
 }: {
   symbol: string;
-  latest: { label: string; reactionPct: number | null; volumeMultiple: number | null } | null;
+  latest: { label: string; reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null } | null;
   reaction: SingleBarPoint[];
   drift: DriftQuarter[];
   datesFromSec: boolean;
@@ -264,6 +264,9 @@ export function PriceReactionCard({
         <p>
           <strong>Most recent reaction ({latest.label}):</strong> {pct1(latest.reactionPct)}
           {latest.volumeMultiple != null ? ` on ${latest.volumeMultiple.toFixed(1)}x average volume` : ""}.
+          {latest.volumeMultiple == null && latest.volumeSessions != null
+            ? ` No volume comparison: only ${latest.volumeSessions} trading session${latest.volumeSessions === 1 ? "" : "s"} before this report, and the average needs 20.`
+            : ""}
         </p>
       ) : null}
       {hasAnyReaction ? (

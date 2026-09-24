@@ -18,6 +18,9 @@
 //   node scripts/check-new-listing.mjs
 import { loadCards, html, visibleText, React } from "./lib/render-cards.mjs";
 import { once } from "./lib/render-snapshot.mjs";
+import "./lib/register-ts-here.mjs";
+import { readCodeOnly } from "./lib/source-code.mjs";
+import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -179,6 +182,68 @@ console.log("\nD. Growth & Margins with nothing comparable");
   const Mm = await loadCards(once("if (view.margins.length === 0) return <GrowthMarginsEmpty", "if (false) return <GrowthMarginsEmpty"));
   check("MUTATION: the empty state removed → an empty table renders again",
     html(React.createElement(Mm.SecGrowthMarginsCard, { view: bare })).includes("<table"));
+}
+
+console.log("\nE. the price reaction, keyed to the filing");
+{
+  // SPCX's stored event: 8-K item 2.02 filed 2026-08-04 at 16:01 (after the
+  // close), for the period ending 2026-06-30 (relay 36048757242).
+  const R = await import("../lib/server/secReportDates.ts");
+  const bars = [{ periodEnd: "2026-06-30", announcedOn: "2026-08-04" }];
+  const label = R.reactionBarLabels(bars, (e) => M.reactionPeriodLabels(A.set).get(e))[0];
+  check("an unlabelled quarter's bar is named by its filing ('Reported Aug 2026'), never by the period end",
+    label === "Reported Aug 2026", label);
+  check("...and a labelled quarter keeps its fiscal name", M.reactionPeriodLabels(Cc.set).get("2026-06-30") === "Q2 FY2026");
+  const Mm = await loadCards(once("if (p.e && p.fp && p.fy) out.set(p.e, periodLabel(p));", "if (p.e) out.set(p.e, periodLabel(p));"));
+  check("MUTATION: unlabelled quarters labelled again → the bar reads the period end",
+    R.reactionBarLabels(bars, (e) => Mm.reactionPeriodLabels(A.set).get(e))[0] === "2026-06-30");
+
+  const PAGE = readCodeOnly("app/stock/[symbol]/earnings/page.tsx");
+  const loadReact = (src) => lift([
+    (src.match(/const REACTION_SESSION_GAP_DAYS = \d+;/) ?? [""])[0],
+    (src.match(/const VOLUME_MIN_SESSIONS = \d+;/) ?? [""])[0],
+    grabFunction(src, "computeEarningsReactionDetail"), "export { computeEarningsReactionDetail };"].join("\n"));
+  const RX = await loadReact(PAGE);
+  const series = (n) => Array.from({ length: n + 3 }, (_, i) => ({
+    date: new Date(Date.UTC(2026, 6, 1) + i * 86_400_000).toISOString().slice(0, 10), close: 100 + i, volume: i === n + 1 ? 9_000 : 1_000 }));
+  const at = (n) => series(n)[n].date; // the report date: n sessions before it... after-close, base = that session
+  const short = RX.computeEarningsReactionDetail({ symbol: "SPCX", date: at(4), time: "amc" }, series(4));
+  check("four sessions before the filing → no volume multiple, and the count is kept for the note",
+    short.reactionPct !== null && short.volumeMultiple === null && short.volumeSessions === 5, JSON.stringify(short));
+  const full = RX.computeEarningsReactionDetail({ symbol: "AAPL", date: at(30), time: "amc" }, series(30));
+  check("a full 20-session history → the multiple (9x)", Math.abs(full.volumeMultiple - 9) < 1e-9 && full.volumeSessions === null, JSON.stringify(full));
+  const RXm = await loadReact(once("if (sessionsHeld < VOLUME_MIN_SESSIONS) volumeSessions = sessionsHeld;\n    else if (window.length) {", "if (window.length) {")(PAGE));
+  check("MUTATION: the minimum removed → a multiple over five sessions",
+    RXm.computeEarningsReactionDetail({ symbol: "SPCX", date: at(4), time: "amc" }, series(4)).volumeMultiple !== null);
+  const RC = await (await import("./lib/render-cards.mjs")).loadReactionCharts();
+  const t = visibleText(html(React.createElement(RC.PriceReactionCard, { symbol: "SPCX", latest: { label, reactionPct: 3.2, volumeMultiple: null, volumeSessions: 5 },
+    reaction: [], drift: [], datesFromSec: true, uncoveredLabels: [], noPriceHistoryNote: "" })));
+  check("the card says why there is no volume comparison", /only 5 trading sessions before this report, and the average needs 20/.test(t), t.slice(0, 200));
+}
+
+console.log("\nF. the next report, hedged, from the first filing");
+{
+  const F = await import("../lib/server/firstFilerOutlook.ts");
+  const o = F.firstFilerNextReport("SPCX", A.set, "2026-09-24");
+  check("Q2 filed 35 days after 30 Jun → the quarter to 30 Sep, around late October–mid November",
+    /^The quarter to 30 Sept? 2026 may be reported around late October–mid November\.$/.test(o?.headline ?? "") && o.value === "Est. late October–mid November"
+    && /first quarterly filing only, filed 35 days after/.test(o.hedge), JSON.stringify(o));
+  check("no report day is named in the estimate (a part of a month)", !/\b\d{1,2} (Oct|Nov)/.test(o?.headline ?? "x"));
+  check("once the estimate has passed with nothing filed, it stands down (the due logic owns that)", F.firstFilerNextReport("SPCX", A.set, "2026-11-20") === null);
+  check("after the first 10-K it steps aside for the shared estimator", F.firstFilerNextReport("SPCX", Cc.set, "2027-03-01") === null);
+  const Rd = await import("../lib/server/secReportDates.ts");
+  const nxt = Rd.nextPeriodEndFrom(Cc.set.quarters.map((p) => p.e), Cc.set.years.map((p) => p.e));
+  // The shared estimator steps by the median spacing (92 days), so it lands
+  // within days of the 31 Mar quarter end; its report-date matching is its own.
+  check("...which now has the real fiscal pattern: the next quarter ends around 31 Mar 2027",
+    !!nxt && Math.abs(Date.parse(nxt.end) - Date.parse("2027-03-31")) <= 7 * 86_400_000 && nxt.annual === false, JSON.stringify(nxt));
+  check("the first filing alone has no cadence for the shared estimator (why this exists)",
+    Rd.nextPeriodEndFrom(A.set.quarters.map((p) => p.e), []) === null);
+  const SRC = readCodeOnly("lib/server/firstFilerOutlook.ts");
+  const Fm = await lift(once("if (set.years.length > 0) return null;", "")(SRC).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
+    + `\nfunction plainDate(d) { return d; }\nexport { firstFilerNextReport };`);
+  check("MUTATION: the no-fiscal-year guard removed → a labelled filer gets the first-filing estimate",
+    Fm.firstFilerNextReport("SPCX", Cc.set, "2027-03-01") !== null);
 }
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);

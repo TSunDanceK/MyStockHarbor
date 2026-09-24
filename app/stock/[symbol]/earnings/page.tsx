@@ -45,6 +45,7 @@ import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
 import { outlookForEarningsCard } from "@/lib/server/symbolOutlook";
+import { firstFilerNextReport } from "@/lib/server/firstFilerOutlook";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
@@ -84,6 +85,8 @@ type EarningsReactionPoint = {
   label: string;
   reactionPct: number | null;
   volumeMultiple: number | null;
+  /** Sessions before the report when fewer than VOLUME_MIN_SESSIONS (no multiple then). */
+  volumeSessions?: number | null;
   drift5Pct: number | null;
   drift20Pct: number | null;
   /** Fewer than 5 / 20 trading days have passed since the reaction session. */
@@ -136,7 +139,10 @@ type FmpEarningsRow = {
  */
 const REACTION_SESSION_GAP_DAYS = 7;
 
-function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null } {
+/** Sessions of volume the average needs before a multiple is shown. */
+const VOLUME_MIN_SESSIONS = 20;
+
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; volumeSessions?: number | null; drift5Pct: number | null; drift20Pct: number | null; drift5Pending: boolean; drift20Pending: boolean; reason: "uncovered" | null } {
   const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null, drift5Pending: false, drift20Pending: false, reason: null as "uncovered" | null };
   /** The series does not reach this report — a fact about the bars, not the filing. */
   const uncovered = { ...empty, reason: "uncovered" as const };
@@ -188,13 +194,22 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
 
   const reactionVolume = points[reactIdx]?.volume;
   let volumeMultiple: number | null = null;
+  let volumeSessions: number | null = null;
   if (typeof reactionVolume === "number" && Number.isFinite(reactionVolume) && reactionVolume > 0) {
     const lookback = 20;
     const windowStart = Math.max(0, baseIdx - lookback + 1);
     const window = points.slice(windowStart, baseIdx + 1)
       .map((p) => p.volume)
       .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
-    if (window.length) {
+    // A MINIMUM HISTORY (#552 COWORK #37). A recent listing has only a few
+    // sessions before its first report, and "3.1x average volume" over four
+    // post-IPO sessions is a multiple of nothing typical. Short → no multiple,
+    // and the count is returned so the card can say why.
+    // Counted in SESSIONS HELD, not volumes read: one bar with no volume on
+    // an established stock is not a short history.
+    const sessionsHeld = baseIdx + 1 - windowStart;
+    if (sessionsHeld < VOLUME_MIN_SESSIONS) volumeSessions = sessionsHeld;
+    else if (window.length) {
       const avgVolume = window.reduce((a, b) => a + b, 0) / window.length;
       if (avgVolume > 0) volumeMultiple = reactionVolume / avgVolume;
     }
@@ -213,7 +228,7 @@ function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { 
   // horizon: the chart draws a "not yet" marker rather than a bar or a gap.
   const drift5Pending = drift5Pct === null && reactionPct !== null && reactIdx + 4 > points.length - 1;
   const drift20Pending = drift20Pct === null && reactionPct !== null && reactIdx + 19 > points.length - 1;
-  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null };
+  return { reactionPct, volumeMultiple, volumeSessions, drift5Pct, drift20Pct, drift5Pending, drift20Pending, reason: null };
 }
 
 
@@ -426,9 +441,16 @@ async function getEarningsData(symbol: string) {
   // behind it the card says so ("no-record") rather than printing the date.
   // outlookForEarningsCard is handed a boolean, not the date, on purpose.
   // ANNUAL-ONLY: the next report is the next ANNUAL report, as a month.
-  const nextReport = annualForm && cold.status === "ready"
+  // A FIRST-TIME FILER (no fiscal year on file yet): where the shared
+  // estimator has nothing, a hedged estimate from its first filing's own
+  // period and filing lag (#552 COWORK #37). See firstFilerOutlook.
+  const firstFiler = !annualForm && cold.status === "ready"
+    ? firstFilerNextReport(symbol.trim().toUpperCase(), cold.set, todayIso)
+    : null;
+  const sharedOutlook = annualForm && cold.status === "ready"
     ? annualNextReportOutlook(symbol.trim().toUpperCase(), cold.set, annualForm)
     : outlookForEarningsCard(symbol.trim().toUpperCase(), secRead, Boolean(next?.date), todayIso);
+  const nextReport = firstFiler && (!sharedOutlook || sharedOutlook.kind === "no-estimate") ? firstFiler : sharedOutlook;
 
   const score = scoreFromSec(secView, symbol.trim().toUpperCase(), cold);
 
@@ -998,7 +1020,7 @@ export default async function StockEarningsPage({ params }: Props) {
                   are not in SEC structured data for 20-F/40-F filers. */}
               {data.hidePriceReaction ? null : <PriceReactionCard
                 symbol={clean}
-                latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple } : null}
+                latest={latestReaction ? { label: latestReaction.label, reactionPct: latestReaction.reactionPct, volumeMultiple: latestReaction.volumeMultiple, volumeSessions: latestReaction.volumeSessions ?? null } : null}
                 reaction={reactionData}
                 drift={driftQuarters}
                 datesFromSec={data.datesFromSec}
