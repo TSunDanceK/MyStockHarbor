@@ -18,6 +18,7 @@
 // committed under data/sec/. Every number in them comes from SEC.
 import fs from "node:fs";
 import { grabConst } from "./source-code.mjs";
+import { grabFunction } from "./earnings-plan.mjs";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -98,6 +99,12 @@ export async function loadCards(mutate = (src) => src) {
     // module: secReportDates declares `const DAY` and so does secExtract above,
     // and the duplicate is a SyntaxError at import.
     grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
+    // THE ANNUAL-ONLY PREDICATE (#548), AHEAD OF secValuation THAT READS IT
+    // for the P/E basis (#552 COWORK #9). The function and its one constant,
+    // not the module: annualOnly declares MONTHS, which other lifted modules
+    // may declare too.
+    grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
+    grabFunction(fs.readFileSync("lib/server/annualOnly.ts", "utf8"), "annualOnlyForm"),
     stripImports("lib/server/secValuation.ts"),
   ].join("\n");
   const cards = fs
