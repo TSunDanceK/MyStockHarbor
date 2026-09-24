@@ -31,11 +31,11 @@ async function load(src) {
   }
 }
 
-const LABELS = { Semiconductors: "Technology", "Software - Application": "Technology", Aluminum: "Basic Materials", "Asset Management": "Financial Services", Banks: "Financial Services" };
+const LABELS = { Semiconductors: "Technology", "Software - Application": "Technology", Aluminum: "Basic Materials", "Other Precious Metals": "Basic Materials", "Asset Management": "Financial Services", Banks: "Financial Services" };
 const data = {
   overrides: { OVR: { sector: "Technology", industry: "Software - Application" } },
-  registrants: { AA: { sic: "3334" }, CHIP: { sic: "3674" }, NONE: {}, MG: { sic: "7389" }, OVR: { sic: "7389" } },
-  classification: { labels: LABELS, codes: { 3334: { sector: "Basic Materials", industry: null, sec: "Primary Production of Aluminum" }, 3674: { sector: "Technology", industry: "Semiconductors", sec: "Semiconductors" } }, majorGroups: { 73: null } },
+  registrants: { AA: { sic: "3334" }, CHIP: { sic: "3674" }, NONE: {}, MG: { sic: "7389" }, OVR: { sic: "7389" }, FCX: { sic: "1000" } },
+  classification: { labels: LABELS, codes: { 1000: { sector: "Basic Materials", industry: null, sec: "Metal Mining" }, 3334: { sector: "Basic Materials", industry: null, sec: "Primary Production of Aluminum" }, 3674: { sector: "Technology", industry: "Semiconductors", sec: "Semiconductors" } }, majorGroups: { 73: null } },
   descriptions: { AA: ["10-K", "", "", "Alcoa (see https://example.com, www.example.com, ir@example.com | x) makes aluminum and runs software application tools. More text."], MG: ["10-K", "", "", "A leading provider of fleet management services."] },
   names: { AA: "Alcoa Corporation Common Stock", CHIP: "Chip Co", MG: "Mystery Group Inc. Class A Common Stock" },
 };
@@ -44,14 +44,20 @@ async function suite(M, sources) {
   const fails = [];
   const ok = (label, cond, detail = "") => { if (!cond) fails.push(`${label}${detail ? ` — ${detail}` : ""}`); };
 
-  const { missing, changed } = M.buildRows(["AA", "CHIP", "NONE", "MG", "OVR"], data, { N1: { symbol: "CHIP", was: "3674", now: "3334", description: "Primary Production of Aluminum", seenOn: "2026-09-24" } });
+  const { missing, changed } = M.buildRows(["AA", "CHIP", "NONE", "MG", "OVR", "FCX"], data, { N1: { symbol: "CHIP", was: "3674", now: "3334", description: "Primary Production of Aluminum", seenOn: "2026-09-24" } });
   const ids = missing.map((r) => r.symbol).sort().join();
-  ok("only symbols the resolver cannot FULLY place are listed", ids === "AA,MG,NONE", ids);
+  ok("only symbols the resolver cannot FULLY place are listed", ids === "AA,FCX,MG,NONE", ids);
   ok("an override counts as placed", !missing.some((r) => r.symbol === "OVR"));
   const aa = missing.find((r) => r.symbol === "AA");
   ok("a known sector narrows the suggestion to its own industries", aa.suggestion?.sector === "Basic Materials" && aa.suggestion?.industry === "Aluminum", JSON.stringify(aa.suggestion));
   const mg = missing.find((r) => r.symbol === "MG");
-  ok("with no sector, one shared word is not a suggestion", mg.suggestion === null, JSON.stringify(mg.suggestion));
+  ok("with no sector, no suggestion at all (COWORK #23)", mg.suggestion === null, JSON.stringify(mg.suggestion));
+  ok("...even with two shared words", M.suggestLabel({ sector: null, sicText: "", description: "an asset management company" }, LABELS) === null);
+  const fcx = missing.find((r) => r.symbol === "FCX");
+  ok("SIC wording alone is not an industry: FCX gets its sector, not 'Other Precious Metals'",
+    fcx.suggestion?.sector === "Basic Materials" && fcx.suggestion?.industry === null, JSON.stringify(fcx.suggestion));
+  const cross = M.suggestLabel({ sector: "Financial Services", sicText: "", description: "we make aluminum" }, LABELS);
+  ok("a label from another sector is never offered", cross?.sector === "Financial Services" && cross?.industry === null, JSON.stringify(cross));
   const tie = M.suggestLabel({ sector: "Technology", sicText: "", description: "software semiconductors" }, LABELS);
   ok("a tie is not a suggestion", tie?.industry === null, JSON.stringify(tie));
   ok("every suggestion is a label from the set", missing.every((r) => !r.suggestion?.industry || LABELS[r.suggestion.industry] === r.suggestion.sector));
@@ -90,8 +96,9 @@ const mut = (label, s, from, to) => {
 const MUTANTS = [
   ["placed symbols listed too", () => mut("placed", src, "if (t.sector && t.industry) continue;", "")],
   ["URLs kept in cells", () => mut("url", src, '.replace(/https?:\\/\\/\\S+/gi, "")', "")],
-  ["suggestions ignore the known sector", () => mut("sector", src, "if (sector && labelSector !== sector) continue;", "")],
-  ["one word enough with no sector", () => mut("floor", src, "const floor = sector ? 1 : 2;", "const floor = 1;")],
+  ["suggestions ignore the known sector", () => mut("sector", src, "if (labelSector !== sector) continue;", "")],
+  ["a suggestion with no sector", () => mut("nosector", src, "if (!sector) return null;", "")],
+  ["SIC wording alone suggests an industry", () => mut("sic", src, "if (shared.length < 2 && !shared.some((w) => fromFiling.has(w))) continue;", "")],
   ["never closes", () => mut("close", src, 'if (body === null) return existing ? { kind: "close" } : { kind: "none" };', 'if (body === null) return { kind: "none" };')],
   ["ties broken by label order", () => mut("tie", src, "if (best && !tied) return", "if (best) return")],
   ["no row cap", () => mut("cap", src, "missing.slice(0, MAX_ROWS)", "missing")],
