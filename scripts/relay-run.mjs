@@ -657,6 +657,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the Pickers symbols ranked by SEC shares x pool price (ranks
+  // only, no values), to place the unclassified names (#552 COWORK #29).
+  "write-pickers-universe-rank": {
+    script: "scripts/pickers-universe-rank.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
