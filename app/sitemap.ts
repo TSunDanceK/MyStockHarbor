@@ -32,6 +32,7 @@ const mainPages = [
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
   { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
   { path: "/bottlenecks", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/bottlenecks/capex", changeFrequency: "weekly" as const, priority: 0.7 },
   // A-Z directory of every curated /stock/{sym} page and its /news and
   // /earnings subpages (app/stocks/page.tsx). High priority because it is
   // the only internal link path to 322 of the URLs below -- see the note at

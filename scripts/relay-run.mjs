@@ -1074,7 +1074,16 @@ const TASKS = {
     script: "scripts/capex-usaspending-aliases.mjs",
     args: () => [],
     writes: true,
-  },  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  },
+  // Relay C (#563 D1): the "Who is spending" builder against the live SEC fact
+  // sets. DRY by default (reads only); SYMBOLS="mode=seed" writes
+  // msh:capex:spending:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-spending": {
+    script: "scripts/capex-spending-run.mjs",
+    args: () => ["--allow-writes"],
+    writes: true,
+  },
+  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
   // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
   // SET) -- only on the owner's OK.
   "write-capex-contracts": {
