@@ -6,7 +6,7 @@ import { readContractsRecord } from "@/lib/server/capexContracts";
 import { readSpendingRecord } from "@/lib/server/capexSpending";
 import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 import { normaliseCompanyName } from "@/lib/server/news/companyName";
-import { buildContractRows, buildReceiverGroups, buildSpendingRows, formatAmount, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
+import { buildContractRows, buildInsights, buildReceiverGroups, buildSpendingRows, formatAmount, type Insights, type ReceiverView, type SpendingView } from "@/lib/capexPresent";
 
 // Capex -- "Follow the money" (Relay C, #563). Phase 1 panels, each from a
 // filed or published source, side by side and deliberately NOT connected:
@@ -16,6 +16,8 @@ import { buildContractRows, buildReceiverGroups, buildSpendingRows, formatAmount
 // sets and sector resolver.
 //
 // Redis: three GETs per render (spending, receivers, contracts), hourly ISR.
+// The right-hand insight cards (#563 COWORK #12) read those same three
+// records: no new Redis command, no new request.
 export const revalidate = 3600;
 
 const PAGE_TITLE = "Capex: Follow the Money | AI & Data-Centre Spending | MyStockHarbor";
@@ -40,7 +42,14 @@ export default async function CapexPage() {
   const groups = buildReceiverGroups(RECEIVER_GROUPS, RECEIVER_ENTRIES, receivers?.rows ?? {});
   // Our directory's name for each company, short form ("General Dynamics"),
   // from the committed snapshot: no request at render.
-  const contractRows = contracts ? buildContractRows(contracts.rows, 15, (t) => normaliseCompanyName(snapshotCompanyName(t))) : [];
+  const companyName = (t: string) => normaliseCompanyName(snapshotCompanyName(t));
+  const contractRows = contracts ? buildContractRows(contracts.rows, 15, companyName) : [];
+  const insights = buildInsights({
+    spending,
+    receivers: groups.flatMap((g) => g.rows),
+    contracts,
+    companyName,
+  });
 
   return (
     <main style={mainStyle}>
@@ -60,6 +69,8 @@ export default async function CapexPage() {
           </div>
         </section>
 
+        <div className="capexGrid">
+        <div className="capexMain">
         {/* 1. Who is spending -- Layer 1: sector totals, a fixed cohort each. */}
         <section id="spending" style={panelStyle}>
           <div style={eyebrowStyle}>1 · WHO IS SPENDING</div>
@@ -68,11 +79,12 @@ export default async function CapexPage() {
             <>
               <p style={bodyStyle}>
                 Capital expenditure (money spent on buildings, equipment and data centres) reported by US-listed
-                companies, added up by sector for each calendar year {firstYear} to {lastYear}. The long bar is{" "}
-                {lastYear}, on one scale for every sector. The five small bars are that sector&apos;s own five years,
-                to show the direction rather than the size.
+                companies, added up by sector for each calendar year {firstYear} to {lastYear}.
               </p>
-              <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+              <p className="spKey">
+                Long bar = {lastYear}, compared across sectors · Small bars = this sector&apos;s last five years
+              </p>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                 {spendingRows.map((r) => (
                   <SpendingRow key={r.sector} row={r} firstYear={firstYear!} lastYear={lastYear!} />
                 ))}
@@ -187,6 +199,10 @@ export default async function CapexPage() {
           </p>
         </section>
 
+        </div>
+        <InsightColumn insights={insights} contractsWindow={contracts?.window ?? null} />
+        </div>
+
         <p style={footnoteStyle}>
           Filed and published figures only, shown for information. Nothing on this page is a forecast or a
           recommendation.
@@ -194,7 +210,45 @@ export default async function CapexPage() {
       </div>
 
       <style>{`
-        .capexWrap { max-width: 1040px; margin: 0 auto; padding: 28px 16px 56px; }
+        .capexWrap { max-width: 1240px; margin: 0 auto; padding: 28px 16px 56px; }
+        /* Two columns like the earnings page: panels left, insight cards right.
+           Under 980px one column, the cards ABOVE the panels (#563 COWORK #12). */
+        .capexGrid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr); gap: 22px; align-items: start; }
+        .capexGrid > * { min-width: 0; }
+        .capexSide { position: sticky; top: 18px; display: grid; gap: 16px; margin-top: 22px; }
+        .capexCard { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
+        .capexCard h3 { margin: 6px 0 0 0; font-size: 18px; letter-spacing: -0.02em; }
+        .cardEyebrow { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
+        .cardBig { margin-top: 8px; font-size: 26px; font-weight: 950; letter-spacing: -0.03em; }
+        .cardText { margin: 6px 0 0 0; font-size: 14px; line-height: 1.6; color: rgba(241,245,249,0.8); }
+        .cardSource { margin: 10px 0 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(241,245,249,0.5); }
+        .cardList { margin: 10px 0 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+        .cardList li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; font-size: 14px; }
+        .cardList a { color: #f8fafc; font-weight: 900; text-decoration: none; }
+        .cardName { color: rgba(241,245,249,0.65); font-size: 12.5px; margin-left: 6px; }
+        .cardAmt { font-weight: 900; }
+        .shareTrack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.06); margin-top: 10px; }
+        .bulletList { margin: 10px 0 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; color: rgba(241,245,249,0.8); }
+        .spKey { margin: 12px 0 0 0; font-size: 12.5px; font-weight: 800; color: rgba(196,181,253,0.9); }
+        .spRow { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); display: grid; gap: 8px; }
+        .spHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 14px; }
+        .spLine { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; align-items: center; }
+        .spLbl { font-size: 11px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(241,245,249,0.55); }
+        .spTrack { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .spFill { height: 12px; border-radius: 4px; background: #a78bfa; flex: none; }
+        .spAmt { font-size: 14px; font-weight: 950; white-space: nowrap; }
+        .spTrend { display: grid; grid-template-columns: repeat(5, minmax(0, 44px)); gap: 6px; }
+        .spCol { display: grid; grid-template-rows: 56px auto; gap: 3px; justify-items: stretch; }
+        .spBarBox { position: relative; display: flex; align-items: flex-end; height: 56px; }
+        .spBar { width: 100%; border-radius: 3px 3px 1px 1px; background: rgba(167,139,250,0.6); cursor: help; outline: none; }
+        .spBar:hover, .spBar:focus { background: #c4b5fd; }
+        .spBar:hover::after, .spBar:focus::after { content: attr(data-v); position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap; padding: 3px 7px; border-radius: 6px; background: #0f172a; border: 1px solid rgba(148,163,184,0.35); color: #f1f5f9; font-size: 11.5px; font-weight: 800; z-index: 5; }
+        .spYear { text-align: center; font-size: 10.5px; font-weight: 800; color: rgba(241,245,249,0.5); }
+        .spMeta { font-size: 12px; color: rgba(241,245,249,0.6); }
+        @media (max-width: 980px) {
+          .capexGrid { grid-template-columns: 1fr; }
+          .capexSide { position: static; order: -1; }
+        }
         @media (max-width: 640px) { .capexRow { grid-template-columns: 1fr !important; } }
       `}</style>
     </main>
@@ -203,42 +257,168 @@ export default async function CapexPage() {
 
 function SpendingRow({ row, firstYear, lastYear }: { row: SpendingView; firstYear: number; lastYear: number }) {
   return (
-    <div className="capexRow" style={rowStyle} title={`${row.sector}: ${row.latest} in ${lastYear}, ${row.cohort} companies`}>
-      <div style={{ minWidth: 0 }}>
-        <div style={rowHeadStyle}>
+    <div className="spRow">
+      <div className="spHead">
+        <div>
           <span style={tickerStyle}>{row.sector}</span>
-          <span style={subLabelStyle}>{row.cohort} companies</span>
+          <span style={{ ...subLabelStyle, marginLeft: 8 }}>{row.cohort} companies</span>
         </div>
-        <div style={metaStyle}>
-          Largest reported:{" "}
-          {row.top.map((t, i) => (
-            <span key={t}>
-              {i ? ", " : ""}
-              <Link href={`/stock/${encodeURIComponent(t)}`} style={{ color: "inherit" }}>{t}</Link>
+        <div className="spMeta">
+          {row.changeText} since {firstYear}
+          {row.ratioLatest ? (
+            <span title={`Capex ÷ revenue, ${row.ratioCohort} companies`}>
+              {" "}· of revenue: {row.ratioFirst ?? "–"} ({firstYear}), {row.ratioLatest} ({lastYear})
             </span>
-          ))}
+          ) : null}
         </div>
       </div>
-      <div>
-        <div style={barTrackStyle}>
-          <div style={{ ...barStyle, width: `${Math.max(1, row.barPct)}%`, background: "#a78bfa" }} />
+      <div className="spLine">
+        <span className="spLbl">{lastYear}</span>
+        <div className="spTrack" title={`${row.sector}: ${row.latest} in ${lastYear}`}>
+          {/* 80% of the track is the scale, so the figure always fits at the bar's end. */}
+          <div className="spFill" style={{ width: `${Math.max(1, row.barPct * 0.8)}%` }} />
+          <span className="spAmt">{row.latest}</span>
         </div>
-        <div style={sparkStyle} aria-label={`Capex ${firstYear} to ${lastYear}`}>
+      </div>
+      <div className="spLine">
+        <span className="spLbl">Trend</span>
+        <div className="spTrend" aria-label={`Capex ${firstYear} to ${lastYear}`}>
           {row.spark.map((h, i) => (
-            <div key={i} title={row.sparkTitles[i]} style={{ flex: 1, height: `${Math.max(4, h)}%`, borderRadius: 2, background: "rgba(167,139,250,0.55)" }} />
+            <div key={i} className="spCol">
+              <div className="spBarBox">
+                <div
+                  className="spBar"
+                  tabIndex={0}
+                  role="img"
+                  aria-label={row.sparkTitles[i]}
+                  data-v={row.sparkValues[i]}
+                  style={{ height: `${Math.max(3, h)}%` }}
+                />
+              </div>
+              <span className="spYear">{row.sparkYears[i]}</span>
+            </div>
           ))}
         </div>
       </div>
-      <div style={{ textAlign: "right" }}>
-        <div style={valueStyle}>{row.latest}</div>
-        <div style={metaStyle}>{row.changeText} since {firstYear}</div>
-        {row.ratioLatest ? (
-          <div style={metaStyle} title={`Capex ÷ revenue, ${row.ratioCohort} companies`}>
-            Of revenue: {row.ratioFirst ?? "–"} ({firstYear}), {row.ratioLatest} ({lastYear})
-          </div>
-        ) : null}
+      <div className="spMeta">
+        Largest reported:{" "}
+        {row.top.map((t, i) => (
+          <span key={t}>
+            {i ? ", " : ""}
+            <Link href={`/stock/${encodeURIComponent(t)}`} style={{ color: "inherit" }}>{t}</Link>
+          </span>
+        ))}
       </div>
     </div>
+  );
+}
+
+// The right column (#563 COWORK #12): each card reads one of the page's three
+// records, names its source and year, and never links one panel to another.
+function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; contractsWindow: { start: string; end: string } | null }) {
+  const shareColors = ["#a78bfa", "#60a5fa", "#34d399"];
+  return (
+    <aside className="capexSide">
+      {x.whereMoney.length ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Where the money is going</div>
+          <h3>Largest sectors by {x.year} capex</h3>
+          <div className="shareTrack" aria-hidden="true">
+            {x.whereMoney.map((w, i) => (
+              <div key={w.sector} style={{ width: `${w.sharePct}%`, background: shareColors[i] }} />
+            ))}
+          </div>
+          <ul className="cardList">
+            {x.whereMoney.map((w, i) => (
+              <li key={w.sector}>
+                <span><span style={{ color: shareColors[i] }}>■</span> {w.sector}</span>
+                <span className="cardAmt">{w.amount} · {w.shareText}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="cardSource">Share of {x.year} capex across the sectors shown. Source: SEC annual filings, calendar {x.year}.</p>
+        </section>
+      ) : null}
+
+      {x.topSpenders.length ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Who is spending most</div>
+          <h3>Largest reported capex, {x.year}</h3>
+          <ul className="cardList">
+            {x.topSpenders.map((t) => (
+              <li key={t.ticker}>
+                <span>
+                  <Link href={`/stock/${encodeURIComponent(t.ticker)}`}>{t.ticker}</Link>
+                  <span className="cardName">{t.name}</span>
+                </span>
+                <span className="cardAmt">{t.amount}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="cardSource">Source: each company&apos;s cash-flow statement filed with the SEC, calendar {x.year}.</p>
+        </section>
+      ) : null}
+
+      {x.fastest ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Fastest growing</div>
+          <h3>{x.fastest.sector}</h3>
+          <div className="cardBig">{x.fastest.changeText}</div>
+          <p className="cardText">Capex went from {x.fastest.from} in {x.fastest.firstYear} to {x.fastest.to} in {x.year}, the largest rise of any sector shown.</p>
+          <p className="cardSource">Source: SEC annual filings, calendar {x.fastest.firstYear}–{x.year}.</p>
+        </section>
+      ) : null}
+
+      {x.reinvest ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Reinvesting the most</div>
+          <h3>{x.reinvest.sector}</h3>
+          <div className="cardBig">{x.reinvest.ratioText}</div>
+          <p className="cardText">of revenue went back into capital spending in {x.year}, the highest share of any sector shown ({x.reinvest.cohort} companies).</p>
+          <p className="cardSource">Source: SEC annual filings, calendar {x.year}.</p>
+        </section>
+      ) : null}
+
+      {x.receiverTop ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Receivers snapshot</div>
+          <h3>Fastest-growing filed line</h3>
+          <p className="cardText">
+            <Link href={`/stock/${encodeURIComponent(x.receiverTop.ticker)}`} style={{ color: "#f8fafc", fontWeight: 900, textDecoration: "none" }}>{x.receiverTop.name}</Link>
+            {" "}— {x.receiverTop.line}
+          </p>
+          <div className="cardBig">{x.receiverTop.changeText}</div>
+          <p className="cardSource">Change against the year before. Source: the company&apos;s latest annual report, {x.receiverTop.fyTo}.</p>
+        </section>
+      ) : null}
+
+      {x.contractTop ? (
+        <section className="capexCard">
+          <div className="cardEyebrow">Federal contracts snapshot</div>
+          <h3>
+            <Link href={`/stock/${encodeURIComponent(x.contractTop.ticker)}`} style={{ color: "inherit", textDecoration: "none" }}>{x.contractTop.name}</Link>
+          </h3>
+          <div className="cardBig">{x.contractTop.amount}</div>
+          <p className="cardText">
+            The largest matched recipient. Matched listed companies together: {x.contractTop.mapped}
+            {x.contractTop.total ? ` of ${x.contractTop.total} obligated in all` : ""}.
+          </p>
+          <p className="cardSource">
+            Source: USAspending.gov{contractsWindow ? `, ${monthYear(contractsWindow.start)} to ${monthYear(contractsWindow.end)}` : ""}.
+          </p>
+        </section>
+      ) : null}
+
+      <section className="capexCard">
+        <div className="cardEyebrow">What it means</div>
+        <h3>Reading this page</h3>
+        <ul className="bulletList">
+          <li>Rising capex can signal that companies expect demand to grow; it can also weigh on free cash flow in the short term.</li>
+          <li>Capex as a share of revenue shows how much of each sales dollar is being reinvested.</li>
+          <li>Spending by buyers and sales by suppliers are shown side by side; the page does not link them.</li>
+        </ul>
+      </section>
+    </aside>
   );
 }
 
@@ -310,7 +490,6 @@ const barTrackStyle: CSSProperties = { height: 10, borderRadius: 4, background: 
 const barStyle: CSSProperties = { height: "100%", borderRadius: 4 };
 const valueStyle: CSSProperties = { fontSize: 16, fontWeight: 950, textAlign: "right" };
 const metaStyle: CSSProperties = { marginTop: 2, fontSize: 12, color: "rgba(241,245,249,0.6)" };
-const sparkStyle: CSSProperties = { display: "flex", alignItems: "flex-end", gap: 3, height: 22, marginTop: 6 };
 const detailsStyle: CSSProperties = { marginTop: 4 };
 const summaryStyle: CSSProperties = { cursor: "pointer", fontSize: 12, color: "rgba(241,245,249,0.6)" };
 const entityListStyle: CSSProperties = { margin: "6px 0 0 0", paddingLeft: 18, fontSize: 12, lineHeight: 1.6, color: "rgba(241,245,249,0.7)" };
