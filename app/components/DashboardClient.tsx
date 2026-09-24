@@ -14,6 +14,7 @@ import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import { browserStorage, readWideChoice, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -457,6 +458,41 @@ export default function DashboardClient({
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // WIDE CHART (#553 COWORK #27, layout only; lib/dashboardWide.ts). The chart
+  // spans both columns and the Overview + Breakdown cards sit below it, side
+  // by side. Remembered per viewer; renders normally without storage.
+  const [wideChart, setWideChart] = useState(false);
+  useEffect(() => { setWideChart(readWideChoice(browserStorage())); }, []);
+  function toggleWideChart() {
+    setWideChart((w) => {
+      writeWideChoice(browserStorage(), !w);
+      return !w;
+    });
+  }
+  // The desktop grid's width, measured, so the Basic chart can RE-MEASURE:
+  // its viewBox widens with the box (wideViewWidth) rather than the SVG
+  // scaling up. The grid div is stable across renders, unlike ChartPanel.
+  const deskGridRef = useRef<HTMLDivElement | null>(null);
+  const [deskGridWidth, setDeskGridWidth] = useState(0);
+  useEffect(() => {
+    const el = deskGridRef.current;
+    if (!el) return;
+    const measure = () => setDeskGridWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const basicViewWidth = wideChart && !isMobile ? wideViewWidth(deskGridWidth) : undefined;
+  // Every engine re-measures on toggle: Interactive has its own ResizeObserver
+  // and TradingView autosizes, but both also listen for window resize, so one
+  // is dispatched after the layout has changed.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => window.cancelAnimationFrame(id);
+  }, [wideChart]);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
   const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
@@ -1017,6 +1053,24 @@ export default function DashboardClient({
     );
   }
 
+  // WIDEN / BACK TO TWO COLUMNS. At the card's LEFT edge, in its header -- not
+  // on the plot, where the Basic chart's round "‹" pan arrow (Pan back in
+  // time) already sits. Desktop only: narrow widths are single-column already
+  // (hidden by .msh-widebtn below 961px and never rendered on the phone layout).
+  function WideChartButton() {
+    const label = wideChart ? "Back to two columns" : "Widen chart";
+    return (
+      <button type="button" className="msh-widebtn" onClick={toggleWideChart} title={label} aria-label={label} aria-pressed={wideChart}
+        style={{ alignItems: "center", justifyContent: "center", width: 30, height: 30, flex: "0 0 auto", borderRadius: 8, border: `1px solid ${wideChart ? "rgba(96,165,250,0.55)" : COLORS.controlBorder}`, background: wideChart ? "rgba(47,107,255,0.22)" : COLORS.controlBg, color: wideChart ? "#dbeafe" : COLORS.controlFg, cursor: "pointer", padding: 0 }}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          {wideChart
+            ? <><path d="M1.5 3.5h5v9h-5z" /><path d="M9.5 3.5h5v9h-5z" /></>
+            : <><path d="M1.5 3.5h13v9h-13z" /><path d="M4.5 8h7M4.5 8l1.8-1.8M4.5 8l1.8 1.8M11.5 8l-1.8-1.8M11.5 8l-1.8 1.8" /></>}
+        </svg>
+      </button>
+    );
+  }
+
   function FullscreenButton() {
     return (
       <button type="button" onClick={() => setFullscreen(true)} title="Open chart fullscreen" aria-label="Open chart fullscreen"
@@ -1038,7 +1092,7 @@ export default function DashboardClient({
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
       return <TradingViewChartEmbed symbol={symbol} height={h} />;
     }
-    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
+    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} viewWidth={full ? undefined : basicViewWidth} />;
   }
 
   function ChartPanel() {
@@ -1047,7 +1101,7 @@ export default function DashboardClient({
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
-            {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
+            {!isMobile ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
             <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
               {/* On Basic: the zoom + / − controls ride on this (mode-switch)
@@ -1259,6 +1313,10 @@ export default function DashboardClient({
         .msh-scanbtn:hover{background:#16294d;}
         .msh-grid{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;}
         .msh-col{display:flex;flex-direction:column;gap:16px;}
+        .msh-grid-wide{grid-template-columns:1fr;}
+        .msh-wide-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+        .msh-widebtn{display:inline-flex;}
+        @media(max-width:960px){.msh-widebtn{display:none!important;}.msh-wide-cards{grid-template-columns:1fr;}}
         .msh-lower{display:grid;gap:16px;margin-top:16px;}
         .msh-news-loading-bar{width:36%;height:100%;border-radius:999px;background:linear-gradient(90deg,#2f6bff,#16c784);animation:mshLoad 1.15s ease-in-out infinite;}
         @keyframes mshLoad{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
@@ -1293,9 +1351,18 @@ export default function DashboardClient({
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 
-        <div className="msh-grid msh-desktop-only">
-          <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
-          <div className="msh-col"><ChartPanel /></div>
+        <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
+          {wideChart ? (
+            <>
+              <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+              <div className="msh-wide-cards"><OverviewPanel /><BreakdownPanel /></div>
+            </>
+          ) : (
+            <>
+              <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
+              <div className="msh-col"><ChartPanel /></div>
+            </>
+          )}
         </div>
 
         <div className="msh-mobile-only" style={{ display: "grid", gap: 14 }}>
