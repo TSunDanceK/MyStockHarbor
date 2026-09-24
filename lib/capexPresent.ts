@@ -124,17 +124,59 @@ export function buildReceiverGroups(
   return out;
 }
 
-export type ContractView = { ticker: string; amount: string; barPct: number; entities: string; entityCount: number };
+export type ContractView = {
+  ticker: string;
+  /** Our directory name for the company ("General Dynamics"); the ticker when there is none. */
+  company: string;
+  amount: string;
+  barPct: number;
+  /** The USAspending recipient names, largest first, in normal case, each once. */
+  entities: string[];
+  /** Recipient records behind them: USAspending often repeats one name under several registrations. */
+  records: number;
+};
 
-export function buildContractRows(rows: Array<{ ticker: string; amount: number; entities: Array<{ name: string }> }>, show: number): ContractView[] {
+// Words USAspending writes in capitals that ARE capitals, and a few names whose
+// own capitalisation is mixed. Everything else is put in normal case: the page
+// shows no all-caps names (#563 COWORK #4).
+const KEEP_UPPER = new Set(["LLC", "USG", "OTS", "CACI", "KBR", "HII", "QTC", "CGI", "FCA", "US", "USA", "V2X", "BAE", "IBM", "SAIC", "GE", "RTX", "AWS", "DXC", "AECOM", "BWXT", "NASA", "IT", "II", "III"]);
+const MIXED: Record<string, string> = { L3HARRIS: "L3Harris", OPTUMRX: "OptumRx", OPTUMSERVE: "OptumServe", AMERISOURCEBERGEN: "AmerisourceBergen" };
+const LEGAL: Record<string, string> = { INC: "Inc.", CORP: "Corp.", CO: "Co.", LTD: "Ltd", LP: "L.P.", PLC: "plc" };
+const SMALL = new Set(["AND", "OF", "THE", "FOR", "DE"]);
+
+/** "ELECTRIC BOAT CORPORATION" -> "Electric Boat Corporation"; a name already in mixed case is left alone. */
+export function entityCase(raw: string): string {
+  const name = String(raw ?? "").trim();
+  if (/[a-z]/.test(name)) return name;
+  return name
+    .split(/\s+/)
+    .map((word, i) =>
+      word.replace(/[A-Z0-9&]+(?:\.[A-Z](?![A-Z]))*\.?/g, (tok) => {
+        const bare = tok.replace(/\./g, "");
+        if (MIXED[bare]) return MIXED[bare];
+        if (LEGAL[bare]) return LEGAL[bare];
+        if (KEEP_UPPER.has(bare) || tok.includes("&")) return tok;
+        if (i > 0 && SMALL.has(bare)) return tok.toLowerCase();
+        return tok.charAt(0) + tok.slice(1).toLowerCase();
+      })
+    )
+    .join(" ");
+}
+
+export function buildContractRows(
+  rows: Array<{ ticker: string; amount: number; entities: Array<{ name: string }> }>,
+  show: number,
+  companyName: (ticker: string) => string = () => ""
+): ContractView[] {
   const top = rows.slice(0, show);
   const max = Math.max(0, ...top.map((r) => r.amount));
   return top.map((r) => ({
     ticker: r.ticker,
+    company: companyName(r.ticker) || r.ticker,
     amount: formatAmount(r.amount, "USD"),
     barPct: max > 0 ? (Math.max(0, r.amount) / max) * 100 : 0,
-    entities: r.entities[0]?.name ?? "",
-    entityCount: r.entities.length,
+    entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],
+    records: r.entities.length,
   }));
 }
 
