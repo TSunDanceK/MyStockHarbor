@@ -45,12 +45,19 @@ export function suggestLabel({ sector, sicText, description }, labels) {
   // (Accenture scored "Asset Management" on "management"): ask for two.
   const floor = sector ? 1 : 2;
   let best = null;
+  let tied = false;
   for (const [industry, labelSector] of Object.entries(labels)) {
     if (sector && labelSector !== sector) continue;
     const score = [...words(industry)].filter((w) => evidence.has(w)).length;
-    if (score >= floor && (!best || score > best.score)) best = { sector: labelSector, industry, score };
+    if (score < floor) continue;
+    if (!best || score > best.score) { best = { sector: labelSector, industry, score }; tied = false; }
+    else if (score === best.score) tied = true;
   }
-  return best ? { sector: best.sector, industry: best.industry } : sector ? { sector, industry: null } : null;
+  // A TIE IS NOT A SUGGESTION: "beverage" matches both beverage labels, "real
+  // estate" all three real-estate ones. Picking the first would dress an
+  // arbitrary choice as evidence (PepsiCo -> "Beverages - Alcoholic").
+  if (best && !tied) return { sector: best.sector, industry: best.industry };
+  return sector ? { sector, industry: null } : null;
 }
 
 /** Table-safe, link-free, one line. The repo is public: no URL leaves here. */
@@ -120,13 +127,13 @@ export function issueBody({ missing, changed }, asOf, universeSize) {
     "",
   ];
   if (missing.length) {
-    lines.push(`### No sector or industry (${missing.length})`, "", "| Symbol | Company | SIC | Filing says | Has now | Suggested |", "|---|---|---|---|---|---|");
+    lines.push(`### No sector or industry (${missing.length})`, "", "| Symbol | Company | SIC | Filing says | Has now | Suggested (a hint: check it) |", "|---|---|---|---|---|---|");
     for (const r of missing.slice(0, MAX_ROWS)) lines.push(`| ${cell(r.symbol, 12)} | ${cell(r.name, 40)} | ${cell(r.sic, 6)} | ${cell(r.description)} | ${cell(fmt(r.have), 50)} | ${cell(fmt(r.suggestion), 60)} |`);
     if (missing.length > MAX_ROWS) lines.push("", `…and ${missing.length - MAX_ROWS} more, listed on the next runs as these are resolved.`);
     lines.push("");
   }
   if (changed.length) {
-    lines.push(`### SIC code changed at SEC (${changed.length})`, "", "| Symbol | Company | SIC was → now | SEC wording | Has now | Suggested |", "|---|---|---|---|---|---|");
+    lines.push(`### SIC code changed at SEC (${changed.length})`, "", "| Symbol | Company | SIC was → now | SEC wording | Has now | Suggested (a hint: check it) |", "|---|---|---|---|---|---|");
     for (const r of changed) lines.push(`| ${cell(r.symbol, 12)} | ${cell(r.name, 40)} | ${cell(r.was, 6)} → ${cell(r.now, 6)} | ${cell(r.secDescription, 60)} | ${cell(fmt(r.have), 50)} | ${cell(fmt(r.suggestion), 60)} |`);
     lines.push("");
   }

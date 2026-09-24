@@ -52,6 +52,8 @@ async function suite(M, sources) {
   ok("a known sector narrows the suggestion to its own industries", aa.suggestion?.sector === "Basic Materials" && aa.suggestion?.industry === "Aluminum", JSON.stringify(aa.suggestion));
   const mg = missing.find((r) => r.symbol === "MG");
   ok("with no sector, one shared word is not a suggestion", mg.suggestion === null, JSON.stringify(mg.suggestion));
+  const tie = M.suggestLabel({ sector: "Technology", sicText: "", description: "software semiconductors" }, LABELS);
+  ok("a tie is not a suggestion", tie?.industry === null, JSON.stringify(tie));
   ok("every suggestion is a label from the set", missing.every((r) => !r.suggestion?.industry || LABELS[r.suggestion.industry] === r.suggestion.sector));
   ok("company names drop the instrument words", aa.name === "Alcoa Corporation" && mg.name === "Mystery Group Inc.", `${aa.name} | ${mg.name}`);
   ok("SIC-change notices are listed with the new code's classification", changed.length === 1 && changed[0].now === "3334" && changed[0].suggestion?.sector === "Basic Materials");
@@ -91,6 +93,7 @@ const MUTANTS = [
   ["suggestions ignore the known sector", () => mut("sector", src, "if (sector && labelSector !== sector) continue;", "")],
   ["one word enough with no sector", () => mut("floor", src, "const floor = sector ? 1 : 2;", "const floor = 1;")],
   ["never closes", () => mut("close", src, 'if (body === null) return existing ? { kind: "close" } : { kind: "none" };', 'if (body === null) return { kind: "none" };')],
+  ["ties broken by label order", () => mut("tie", src, "if (best && !tied) return", "if (best) return")],
   ["no row cap", () => mut("cap", src, "missing.slice(0, MAX_ROWS)", "missing")],
 ];
 let survived = 0;
