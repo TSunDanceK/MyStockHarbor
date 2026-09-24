@@ -75,6 +75,10 @@
     {
       "path": "/api/jobs/capex-contracts",
       "schedule": "10 6 * * *"
+    },
+    {
+      "path": "/api/jobs/capex-spending",
+      "schedule": "30 6 * * *"
     }
   ]
 }
