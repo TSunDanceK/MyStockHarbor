@@ -1171,6 +1171,13 @@ const TASKS = {
   // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
   // --dry mode against the live Pickers universe -- prints the issue body, writes
   // nothing. 2 Redis reads.
+  // WHICH UNIVERSE NAMES A PRESET'S INDUSTRY HOLDS (#553 COWORK #24), under
+  // A's resolver. SYMBOLS = the industry label. Read-only; 1 Redis read.
+  "write-pickers-industry-list": {
+    script: "scripts/pickers-industry-list.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-classification-needed-dry": {
     script: "scripts/classification-needed.mjs",
     args: () => ["--dry"],

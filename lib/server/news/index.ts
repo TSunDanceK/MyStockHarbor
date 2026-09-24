@@ -33,11 +33,12 @@
 // intended trade.
 //
 // ── WHAT BECOMES LOAD-BEARING HERE ─────────────────────────────────────────
-// data/static-profile.json. Until this step the cached FMP value always
-// answered first for sector and industry; there is no free source carrying
-// FMP's taxonomy, so from here the snapshot is the floor and a symbol outside
-// it resolves to null — no bucket, the generated card, and absent from sector
-// pages. lib/server/staticProfile.ts logs every one of those misses.
+// The SEC classification leg (lib/server/staticProfile: 10-K override -> SIC
+// table -> major group, #569; the FMP snapshot it replaced was removed in
+// #561). Once the cached value is gone it is the floor, and a symbol it cannot
+// place resolves to null — no bucket, the generated card, and absent from
+// sector pages. staticProfile logs those misses, and the "Classification
+// needed" helper lists them.
 import { beginTiming } from "../timing";
 import { fmpNewsProvider } from "./fmpProvider";
 import { gnewsProvider } from "./gnewsProvider";
