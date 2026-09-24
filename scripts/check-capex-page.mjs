@@ -8,7 +8,7 @@
 //   * the broad-line tag, the hyperscaler note (on the cloud group only), and a
 //     sub-label only once verified against the filing;
 //   * a +600% line capped on the bar, never flattening every other bar;
-//   * sources under each panel; no arrows or flows; noindex until Layer 1.
+//   * sources under each panel; no arrows or flows; indexed once Layer 1 is in.
 //
 //   node scripts/check-capex-page.mjs
 import "./lib/register-ts-here.mjs";
@@ -95,15 +95,26 @@ async function suite(P, pageCode) {
   ok("a row names the company, not its largest recipient", c[1].company === "General Dynamics" && c[2].company === "ZZZ", JSON.stringify(c.map((r) => r.company)));
   ok("every recipient listed, in normal case", c[0].entities.join("|") === "Lockheed Martin Corporation|Sikorsky Aircraft Corporation" && c[1].entities[0] === "Electric Boat Corporation", JSON.stringify(c[0].entities));
   ok("true capitals and legal forms survive the casing", P.entityCase("GENERAL DYNAMICS OTS (WILKES BARRE), LLC") === "General Dynamics OTS (Wilkes Barre), LLC" && P.entityCase("L3HARRIS TECHNOLOGIES INTEGRATED SYSTEMS L.P.") === "L3Harris Technologies Integrated Systems L.P." && P.entityCase("AT&T ENTERPRISES, LLC") === "AT&T Enterprises, LLC" && P.entityCase("Already Mixed Inc.") === "Already Mixed Inc.");
+  ok("\"Mc\" names keep their capital (#563 COWORK #5)", P.entityCase("MCKESSON CORPORATION") === "McKesson Corporation" && P.entityCase("MCDONALD'S CORPORATION") === "McDonald's Corporation", P.entityCase("MCKESSON CORPORATION"));
 
   // The page.
   ok("the hyperscaler note is Cowork's wording", pageCode.includes("These companies are also among the largest spenders above; this is what they sell, not what they buy."));
   ok("the broad tag is Cowork's wording", pageCode.includes("Broad line: includes non-data-centre sales"));
-  ok("each panel has a sources line", (pageCode.match(/style=\{sourceStyle\}/g) ?? []).length >= 2 && pageCode.includes("USAspending.gov") && pageCode.includes("SAM.gov") && pageCode.includes("filed with the SEC"));
+  ok("each panel has a sources line", (pageCode.match(/style=\{sourceStyle\}/g) ?? []).length >= 3 && pageCode.includes("USAspending.gov") && pageCode.includes("SAM.gov") && pageCode.includes("filed with the SEC"));
   ok("no arrows or flows between panels", !/[→⟶⇒➔]|flows? (to|from)|pays? (to|whom)(?! here)/i.test(pageCode.replace("nothing here estimates who pays whom", "")));
   ok("contract rows name the company and expand to their recipients", pageCode.includes("{r.company}") && /<details[\s\S]*Paid to:[\s\S]*r\.entities\.map/.test(pageCode) && pageCode.includes("normaliseCompanyName(snapshotCompanyName(t))"));
   ok("nothing is summed on the page", !/\.reduce\(/.test(pageCode));
-  ok("noindex until Layer 1", /robots:\s*\{\s*index:\s*false/.test(pageCode));
+  ok("indexed now that Layer 1 is in", /robots:\s*\{\s*index:\s*true/.test(pageCode) && pageCode.includes("readSpendingRecord()"));
+  ok("the sector note is Cowork's wording (#563 COWORK #6)", pageCode.replace(/\s+/g, " ").includes("Sectors follow our classification: Amazon is counted in Consumer Cyclical, Alphabet and Meta in Communication Services."));
+  ok("the other-currency count is Cowork's wording", pageCode.includes("filers reporting in other currencies not included."));
+
+  const sp = P.buildSpendingRows([
+    { sector: "Technology", cohort: 40, capex: [100e9, 120e9, 150e9, 210e9, 300e9], ratioCohort: 38, capexToRevenue: [0.08, 0.09, 0.1, 0.12, 0.15], top: ["MSFT", "AMZN", "GOOGL"] },
+    { sector: "Energy", cohort: 30, capex: [90e9, 80e9, 100e9, 110e9, 75e9], ratioCohort: 30, capexToRevenue: [0.1, null, 0.1, 0.1, 0.09], top: ["XOM"] },
+  ], [2021, 2022, 2023, 2024, 2025]);
+  ok("sector bars share one scale: the largest latest year is full width", sp[0].barPct === 100 && sp[1].barPct === 25, `${sp[0].barPct} ${sp[1].barPct}`);
+  ok("the small bars are the sector's own scale", sp[1].spark[3] === 100 && Math.abs(sp[1].spark[4] - (75 / 110) * 100) < 1e-9, JSON.stringify(sp[1].spark));
+  ok("change since the first year, and the ratio as text", sp[0].changeText === "+200%" && sp[0].ratioFirst === "8.0%" && sp[0].ratioLatest === "15.0%" && sp[0].latest === "$300bn", JSON.stringify(sp[0]));
   return fails;
 }
 
@@ -124,6 +135,7 @@ const MUTANTS = [
   ["the bar cap removed", () => mut("cap", src, "(Math.min(Math.abs(pct), BAR_CAP_PCT) / BAR_CAP_PCT) * 100", "Math.abs(pct)")],
   ["the hyperscaler note on every group", () => mut("note", src, "hyperscalerNote: entries.some((e) => e.group === g.id && e.hyperscaler)", "hyperscalerNote: true")],
   ["a group total added", () => mut("total", src, "if (rows.length) out.push({ id: g.id, heading: g.heading,", "if (rows.length) out.push({ total: rows.length, id: g.id, heading: g.heading,")],
+  ["sector bars each on their own scale", () => mut("sscale", src, "barPct: max > 0 ? (Math.max(0, latest) / max) * 100 : 0,", "barPct: own > 0 ? (Math.max(0, latest) / own) * 100 : 0,")],
   ["recipient names left in capitals", () => mut("case", src, "entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],", "entities: [...new Set(r.entities.map((e) => e.name))],")],
   ["a repeated recipient name listed twice", () => mut("dupe", src, "entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],", "entities: r.entities.map((e) => entityCase(e.name)),")],
   ["the largest recipient shown as the company", () => mut("company", src, "company: companyName(r.ticker) || r.ticker,", "company: r.entities[0]?.name ?? r.ticker,")],
