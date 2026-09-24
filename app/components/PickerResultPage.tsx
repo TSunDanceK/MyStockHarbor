@@ -1118,6 +1118,9 @@ async function getPickerData(config: PickerResultConfig) {
       // names are optional
     }
 
+    // One switch for where Market Cap comes from (see the filings overlay).
+    const secMarketCap = pickersFundamentalsSource() === "sec";
+
     // Best-effort fundamentals (market cap, PE, industry) for the list view's
     // extra columns. Redis-ONLY read (see fundamentalsCache.readCachedFundamentalsBulk)
     // -- populated daily by the warm-fundamentals cron, so this never spends
@@ -1128,7 +1131,12 @@ async function getPickerData(config: PickerResultConfig) {
         for (const entry of entries) {
           const f = fundamentals.get(entry.symbol);
           if (!f) continue;
-          if (f.marketCap != null) entry.marketCap = f.marketCap;
+          // MARKET CAP IS NOT TAKEN FROM HERE on the SEC path (Friday prep, #553
+          // COWORK #16): it is price x SEC cover-page shares, set by the filings
+          // overlay below from whatever price this row shows -- so the price
+          // split changes the price and nothing else. The stored row's cap is
+          // FMP-derived; it stays only for the PICKERS_FUNDAMENTALS=fmp rollback.
+          if (f.marketCap != null && !secMarketCap) entry.marketCap = f.marketCap;
           if (f.peRatio != null) entry.peRatio = f.peRatio;
           if (f.industry) entry.industry = f.industry;
           if (f.sector) entry.sector = f.sector;
@@ -1153,7 +1161,7 @@ async function getPickerData(config: PickerResultConfig) {
           if (p.price != null) entry.price = p.price;
           if (p.changePct != null) entry.changePct = p.changePct;
           if (p.volume != null) entry.volume = p.volume;
-          if (p.marketCap != null) entry.marketCap = p.marketCap;
+          if (p.marketCap != null && !secMarketCap) entry.marketCap = p.marketCap;
           if (p.pe != null) entry.peRatio = p.pe;
           // THE SPREAD, NOT A SINGLE MOMENT. Rows on one page are refreshed on
           // two different policies (15 minutes for the attention tier, 60 for
