@@ -599,10 +599,10 @@ export default async function StockNewsPage({ params }: Props) {
   // Sector comes back as FMP's own label ("Technology"), so it goes through
   // sectorSlugFromLabel to reach the slugs lib/server/news/art.ts maps.
   //
-  // STEP 7 PUT THE SNAPSHOT UNDER THIS READ. Before the flip an empty cache row
+  // THE SEC LEG SITS UNDER THIS READ (#569). Before the flip an empty cache row
   // meant no sector and the generated card, and the cache always refilled itself
   // from FMP within the day. There is no FMP call left to refill it, so
-  // resolveProfile falls through to data/static-profile.json — still no network
+  // resolveProfile falls through to the SEC classification leg — still no network
   // request, still no throw, and it logs any symbol that neither leg answers for.
   const endFundamentals = beginTiming("page", `fundamentals ${upper}`);
   const fundamentals = (await readCachedFundamentalsBulk([upper])).get(upper) ?? null;
