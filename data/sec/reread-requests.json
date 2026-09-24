@@ -1,5 +1,5 @@
 {
- "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
+ "_comment": "One-off re-read requests for the sec-facts cron: a symbol whose stored set was last verified BEFORE requestedAt is put on the manifest's reverify queue (reason 'requested'), at most SEC_REREAD_REQUESTS_PER_RUN (12) a run. The cron's own verifiedAt stamp retires the request once the re-read lands, so an entry left here is inert. Read by lib/server/secRereadRequests.ts. No secret, no manual call: a code change, reviewed like any other.",
  "requests": [
   {
    "symbol": "XOM",
@@ -10,6 +10,176 @@
    "symbol": "QXO",
    "requestedAt": "2026-09-24T13:00:00Z",
    "reason": "fiscal-year anchor fix: a duration ending after its own filing date is no longer the filing's period; the stored set has 0 years and a June quarter labelled Q1"
+  },
+  {
+   "symbol": "ABNB",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "ACN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "AI",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "AUR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "BLK",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "BRK.B",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "CHTR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "CMCSA",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "COKE",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "CRWV",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "DKS",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "GSAT",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "H",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "HIMS",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "HSY",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "MA",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "META",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "NKE",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "PATH",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "PLTR",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "RBLX",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "RBRK",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "REGN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "RIVN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "RL",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "ROKU",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "SPG",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "TSN",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "UHS",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "ULS",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "V",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "VG",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "WTS",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
+  },
+  {
+   "symbol": "XYZ",
+   "requestedAt": "2026-09-25T00:00:00Z",
+   "reason": "#552 COWORK #31: cover count now read per class from the filing's own instance, weighted by data/sec/share-classes.json; the stored set carries the old missing/stale companyfacts cover"
   }
  ]
 }

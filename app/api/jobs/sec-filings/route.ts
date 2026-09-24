@@ -69,6 +69,7 @@ async function secJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 const fetchers = {
+  get: secGet,
   submissions: (cik: string) => secJson<Submissions>(`https://data.sec.gov/submissions/CIK${cik}.json`),
   companyFacts: (cik: string) => secJson<CompanyFacts>(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`),
   instance: async (cik: string, f: FilingRef): Promise<string | null> => {

@@ -1,0 +1,407 @@
+{
+ "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts.",
+ "entries": {
+  "ABNB": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassHMember": 1,
+    "CommonClassCMember": 0
+   },
+   "evidence": [
+    "The rights, including the liquidation and dividend rights, of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion.",
+    "convert into one share of Class A common stock on a share-for-share basis upon the sale of such share of Class H common stock to any person or entity that is not the Company's subsidiary.",
+    "Class C: 0 shares on the cover (the count, not a weight, decides it)."
+   ],
+   "source": "0001559720-26-000004"
+  },
+  "ACN": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassXMember": 0
+   },
+   "evidence": [
+    "A Class X ordinary share does not entitle its holder to receive dividends, and holders of those shares are not entitled to be paid any amount upon a winding-up of Accenture plc."
+   ],
+   "source": "0001467373-25-000217"
+  },
+  "AI": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The rights, including the liquidation and dividend rights, of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion."
+   ],
+   "source": "0001577526-26-000078"
+  },
+  "AUR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Class A and Class B have identical liquidation and dividend rights."
+   ],
+   "source": "0001828108-26-000016"
+  },
+  "BLK": {
+   "listed": "CommonStockMember",
+   "weights": {
+    "CommonStockMember": 1,
+    "FullyDilutedSharesMember": 0,
+    "ExchangeableUnitsMember": 0
+   },
+   "evidence": [
+    "As of January 31, 2026 , there were 155,541,536 shares of the registrant's common stock outstanding ( 163,156,051 on a fully diluted basis, including 7,614,515 Class B-2 common units of a consolidated subsidiary, BlackRock Saturn Subco, LLC, which are exchange",
+    "(The fully diluted and exchangeable-unit rows are not classes of BlackRock common stock: weight 0.)"
+   ],
+   "source": "0001193125-26-071966"
+  },
+  "BRK.B": {
+   "listed": "CommonClassBMember",
+   "weights": {
+    "CommonClassBMember": 1,
+    "CommonClassAMember": 1500
+   },
+   "evidence": [
+    "Each share of Class A common stock is convertible, at the option of the holder, into 1,500 shares of Class B common stock.",
+    "Class B common stock possesses dividend and distribution rights equal to one-fifteen-hundredth (1/1,500) of such rights of Class A common stock."
+   ],
+   "source": "0001193125-26-083899"
+  },
+  "CHTR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The Charter Class C common stock will be equivalent, economically, to the outstanding Charter Class A common stock and the Charter Class B common stock but will have a number of votes per share that reflect the voting power of the Charter Holdings common units"
+   ],
+   "source": "0001091667-26-000017"
+  },
+  "CMCSA": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The Class B common stock can be converted, on a share for share basis, into Class A common stock."
+   ],
+   "source": "0001628280-26-004994"
+  },
+  "COKE": {
+   "listed": "CommonClassUndefinedMember",
+   "weights": {
+    "CommonClassUndefinedMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The Class B Common Stock is convertible into Common Stock on a share-for-share basis at any time at the option of the holder.",
+    "each class of common stock has participated equally in all dividends declared by the Board of Directors and paid by the Company since 1994."
+   ],
+   "source": "0001628280-26-009057"
+  },
+  "CRWV": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassCMember": 1
+   },
+   "evidence": [
+    "Dividend and Liquidation Rights All classes of common stock participate equally in any dividends declared by the Company, subject to the rights of preferred stockholders.",
+    "The rights, including the liquidation and dividend rights, of the holders of the Company's Class A common stock and Class B common stock are identical, except with respect to voting."
+   ],
+   "source": "0001769628-26-000104"
+  },
+  "DKS": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Holders of common stock generally have rights identical to holders of Class B common stock, except that holders of common stock are entitled to one vote per share and holders of Class B common stock are entitled to ten votes per share.",
+    "Each share of Class B common stock can be converted at any time into one share of common stock at the holder's option."
+   ],
+   "source": "0001089063-26-000007"
+  },
+  "GSAT": {
+   "listed": "CommonStockMember",
+   "weights": {
+    "CommonStockMember": 1,
+    "PreferredStockMember": 0
+   },
+   "evidence": [
+    "Holders of Series A Preferred Stock are entitled to receive, when, as and if declared by our Board of Directors or a committee thereof, cumulative cash dividends based on the liquidation preference of the Series A Preferred Stock",
+    "(Preferred stock is not common equity: weight 0.)"
+   ],
+   "source": "0001366868-26-000012"
+  },
+  "H": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "converted on a share-for-share basis into shares of Class A common stock"
+   ],
+   "source": "0001468174-26-000007"
+  },
+  "HIMS": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassVMember": 1
+   },
+   "evidence": [
+    "The rights are identical, including liquidation and dividend rights, except Class V common stock has additional voting rights."
+   ],
+   "source": "0001773751-26-000022"
+  },
+  "HSY": {
+   "listed": "CommonStockMember",
+   "weights": {
+    "CommonStockMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "However, Class B shares are convertible into shares of Common Stock at any time on a share-for-share basis.",
+    "With respect to dividend rights, holders of the Common Stock are entitled to cash dividends 10% higher than those declared and paid on the Class B Stock. (Weighted at its cited 1:1 conversion ratio, not as an equal class.)"
+   ],
+   "source": "0001628280-26-008586"
+  },
+  "MA": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "convertible on a one-for-one basis into shares of Class A common stock.",
+    "The following table summarizes the dividends declared by our Board of Directors on our outstanding Class A common stock and Class B common stock, payable in 2026: Date of Declaration Amount Payable per Share"
+   ],
+   "source": "0001141391-26-000013"
+  },
+  "META": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The holders of our Class A and Class B common stock (together, \"common stock\") have identical liquidation and dividend rights but different voting rights.",
+    "Shares of our Class B common stock are convertible into an equivalent number of shares of our Class A common stock and generally convert into shares of our Class A common stock upon transfer."
+   ],
+   "source": "0001628280-26-003942"
+  },
+  "NKE": {
+   "listed": "CommonClassBMember",
+   "weights": {
+    "CommonClassBMember": 1,
+    "CommonClassAMember": 1
+   },
+   "evidence": [
+    "Each share of Class A Common Stock is convertible into one share of Class B Common Stock.",
+    "There are no differences in the dividend and liquidation preferences or participation rights of the holders of Class A and Class B Common Stock."
+   ],
+   "source": "0000320187-26-000088"
+  },
+  "PATH": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The rights of the holders of our Class A and Class B common stock, including liquidation and dividend rights, are identical except with regard to voting and conversion rights."
+   ],
+   "source": "0001734722-26-000012"
+  },
+  "PLTR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1,
+    "CommonClassFMember": 1
+   },
+   "evidence": [
+    "the same rights, except with respect to voting and conversion rights.",
+    "convertible at any time, at the option of the holder thereof, into one share of Class B common stock."
+   ],
+   "source": "0001321655-26-000011"
+  },
+  "RBLX": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Our Class B common stock is not listed nor traded on any stock exchange, but is convertible into shares of our Class A common stock on a one-for-one basis.",
+    "Holders of Class A common stock and Class B common stock are entitled to dividends on a pro rata basis, when, as, and if declared by the Company's Board of Directors, subject to the rights of the holders of the Company's convertible preferred stock."
+   ],
+   "source": "0001315098-26-000024"
+  },
+  "RBRK": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "As the liquidation and dividend rights are identical, the undistributed earnings are allocated on a proportionate basis to each class of common stock and the resulting basic and diluted net loss per share attributable to common stockholders are, therefore, the same for both Class A and Class B common stock on both individual and combined basis."
+   ],
+   "source": "0001943896-26-000013"
+  },
+  "REGN": {
+   "listed": "CommonStockMember",
+   "weights": {
+    "CommonStockMember": 1,
+    "CommonClassAMember": 1
+   },
+   "evidence": [
+    "Shares of Class A Stock are convertible, at any time, at the option of the holder into shares of Common Stock on a share-for-share basis.",
+    "Holders of Class A Stock have rights and privileges identical to Common Stockholders except that each share of Class A is entitled to ten votes per share, while each share of Common Stock is entitled to one vote per share."
+   ],
+   "source": "0000872589-26-000008"
+  },
+  "RIVN": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Except with respect to voting and conversion, the rights, including liquidation and dividend rights, of the holders of Class A and Class B common stock are identical (see Note 15 \"Stockholders' Equity\" )."
+   ],
+   "source": "0001874178-26-000008"
+  },
+  "RL": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Shares of our Class B common stock may be converted immediately into Class A common stock on a one-for-one basis by the holder."
+   ],
+   "source": "0001628280-26-037074"
+  },
+  "ROKU": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Except with respect to certain voting, conversion, and transfer rights and as otherwise expressly provided in the Company's amended and restated certificate of incorporation or required by applicable law, shares of the Company's Class A common stock and Class B common stock have the same rights and privileges and rank equally, share ratably, and are identical in all respects as to all matters."
+   ],
+   "source": "0001628280-26-008114"
+  },
+  "SPG": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Shares of Class B common stock convert automatically into an equal number of shares of common stock upon the occurrence of certain events and can be converted into shares of common stock at the option of the holders."
+   ],
+   "source": "0001104659-26-019419"
+  },
+  "TSN": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Holders of Class B stock may convert such stock into Class A stock on a share-for-share basis."
+   ],
+   "source": "0000100493-25-000095"
+  },
+  "UHS": {
+   "listed": "CommonClassBMember",
+   "weights": {
+    "CommonClassBMember": 1,
+    "CommonClassAMember": 1,
+    "CommonClassCMember": 1,
+    "CommonClassDMember": 1
+   },
+   "evidence": [
+    "Class A, C and D Common Stock are convertible on a share for share basis into Class B Common Stock."
+   ],
+   "source": "0001193125-26-071676"
+  },
+  "ULS": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Class A and Class B common stock each convey the same rights and privileges to their respective holders, except that Class A common stock entitles its holders to 1 vote per share in respect of matters on which stockholders are entitled to vote and Class B common stock entitles its holders to 10 votes per share."
+   ],
+   "source": "0001901440-26-000005"
+  },
+  "V": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassB1Member": 1.5445,
+    "CommonClassB2Member": 1.5014,
+    "CommonClassB3Member": 1.4953,
+    "CommonClassCMember": 4.0
+   },
+   "evidence": [
+    "June 30, 2026 ... Conversion Rate Into Class A Common Stock ... Class B-1 common stock 2 1.5445 (3) 3 ... Class B-2 common stock — (2) 1.5014 (3) 1 ... Class B-3 common stock 61 1.4953 (3) 91 ... Class C common stock 18 4.0000 73",
+    "The class B-1, B-2 and B-3 to class A common stock conversion calculations for dividend payments are based on a conversion rate rounded to the tenth decimal. Conversion rates are presented on a rounded basis."
+   ],
+   "source": "0001403161-26-000104",
+   "asOf": "2026-06-30",
+   "note": "B-1/B-2/B-3 rates fall with each U.S. litigation escrow deposit; refresh from each 10-Q."
+  },
+  "VG": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "All such Class B shares of common stock are convertible into our Class A common stock on a one-to-one basis at any time at the option of the holder thereof."
+   ],
+   "source": "0002007855-26-000013"
+  },
+  "WTS": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of our Class B common stock (10 votes per share) is convertible into one share of Class A common stock (1 vote per share)."
+   ],
+   "source": "0001104659-26-018541"
+  },
+  "XYZ": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The holders of our Class A and Class B common stock (together, \"common stock\") have identical liquidation and dividend rights but different voting rights."
+   ],
+   "source": "0001628280-26-012254"
+  }
+ }
+}

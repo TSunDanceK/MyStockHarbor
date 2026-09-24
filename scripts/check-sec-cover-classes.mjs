@@ -11,7 +11,8 @@
 //   3. Every companyfacts reader applies it after extracting (cold fetch, the
 //      sec-facts cron, the sec-filings job). MUTATION: one reader unwired.
 //   4. The committed map: every entry names its listed class among its
-//      weights, cites evidence, and uses positive weights.
+//      weights at > 0, cites evidence, and weighs every other class >= 0
+//      (0 = a cited non-economic class, e.g. ACN's Class X voting shares).
 //
 //   node scripts/check-sec-cover-classes.mjs
 import fs from "node:fs";
@@ -86,8 +87,14 @@ check("the filing fill keeps the class cover on its merged extraction",
 
 console.log("\n4. the committed map");
 const MAP = JSON.parse(fs.readFileSync("data/sec/share-classes.json", "utf8")).entries;
-check("every entry names its listed class, cites evidence and a source, and uses positive weights",
-  Object.values(MAP).every((e) => e.listed in e.weights && e.evidence?.length && e.source && Object.values(e.weights).every((w) => w > 0)));
+const validEntry = (e) => e.listed in e.weights && e.weights[e.listed] > 0 && e.evidence?.length > 0 && !!e.source
+  && Object.values(e.weights).every((w) => typeof w === "number" && Number.isFinite(w) && w >= 0);
+const bad = Object.entries(MAP).filter(([, e]) => !validEntry(e)).map(([k]) => k);
+check("every entry names its listed class at a positive weight, cites evidence and a source; other weights >= 0 (0 = a cited non-economic class)",
+  bad.length === 0, bad.join(", "));
+check("MUTATION: META's listed class at weight 0 → caught",
+  !validEntry({ ...MAP.META, weights: { ...MAP.META.weights, [MAP.META.listed]: 0 } }));
+check("MUTATION: a negative weight → caught", !validEntry({ ...BRK, weights: { ...BRK.weights, CommonClassAMember: -1 } }));
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
