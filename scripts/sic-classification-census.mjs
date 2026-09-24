@@ -9,9 +9,11 @@
 //       Pickers renders today, read here once for ranking and comparison only.
 //
 // "Today's label" = the sector/industry Pickers renders now (the fundamentals
-// row, else the screener row). "SIC-mapped" = sector from data/sec/sic-sector.json
-// plus the one owner-decided industry label (3674). The industry question is
-// how cleanly each SIC code maps to ONE of today's industry labels (its purity).
+// row, else the screener row). "Mapped" = our own SEC leg, as the resolver in
+// lib/server/staticProfile.ts reads it: the 10-K override
+// (data/sec/classification-overrides.json), else the SIC table
+// (data/sec/sic-classification.json), else the major group's sector. The
+// comparison with today's labels is a one-off internal number; nothing is stored.
 //
 //   relay task: write-sic-classification-census  (credentialled for the read)
 import fs from "node:fs";
@@ -28,10 +30,18 @@ const SCR = keyOf("lib/server/fundamentalsCache.ts", "SCREENER_FUND_KEY_PREFIX")
 if (!SYMBOLS_KEY || !FUND || !SCR) { console.error("FATAL: key names not readable"); process.exit(2); }
 
 const registrants = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
-const sicSector = JSON.parse(fs.readFileSync("data/sec/sic-sector.json", "utf8")).codes;
+const TABLE = JSON.parse(fs.readFileSync("data/sec/sic-classification.json", "utf8"));
+const OVERRIDES = JSON.parse(fs.readFileSync("data/sec/classification-overrides.json", "utf8"));
+const overrideFor = (s) => symbolSpellings(s).map((v) => OVERRIDES.overrides[v]).find(Boolean) ?? null;
+const mapped = (s, sic) => {
+  const o = overrideFor(s);
+  if (o && (o.sector || o.industry)) return { sector: o.sector ?? null, industry: o.industry ?? null };
+  if (!sic) return { sector: null, industry: null };
+  const row = TABLE.codes[sic];
+  return { sector: row ? row.sector : TABLE.majorGroups[sic.slice(0, 2)] ?? null, industry: row?.industry ?? null };
+};
 const tickers = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
 const cikByTicker = new Map(tickers.data.map(([cik, , t]) => [String(t).toUpperCase(), String(cik).padStart(10, "0")]));
-const INDUSTRY_LABEL = { "3674": "Semiconductors" };
 const COARSE = new Set(["6770", "7372", "6199", "6189", "6798", "9995", "8742"]);
 
 // ── the universes and today's labels ─────────────────────────────────────
@@ -94,20 +104,19 @@ async function census(name, universe) {
   for (const s of universe) {
     const sic = await sicFor(s);
     const t = today(s);
-    const mappedSector = sic ? (sicSector[sic.sic]?.sector ?? null) : null;
-    rows.push({ s, sic: sic?.sic ?? null, desc: sic?.desc ?? null, t, mappedSector,
-      mappedIndustry: sic ? (INDUSTRY_LABEL[sic.sic] ?? null) : null });
+    const m = mapped(s, sic?.sic ?? null);
+    rows.push({ s, sic: sic?.sic ?? null, desc: sic?.desc ?? null, t, mappedSector: m.sector, mappedIndustry: m.industry });
   }
   const n = rows.length;
   const pct = (k) => `${k} (${((100 * k) / Math.max(1, n)).toFixed(1)}%)`;
   const withSic = rows.filter((x) => x.sic);
-  const mapped = rows.filter((x) => x.mappedSector);
+  const mappedRows = rows.filter((x) => x.mappedSector);
   const todayHas = rows.filter((x) => x.t.sector);
   const both = rows.filter((x) => x.mappedSector && x.t.sector);
   const agree = both.filter((x) => x.mappedSector === x.t.sector);
   console.log(`\n=== ${name}: ${n} symbols ===`);
   console.log(`  has a SIC code                 ${pct(withSic.length)}`);
-  console.log(`  SIC maps to a sector label     ${pct(mapped.length)}   (today renders a sector for ${pct(todayHas.length)})`);
+  console.log(`  SIC maps to a sector label     ${pct(mappedRows.length)}   (today renders a sector for ${pct(todayHas.length)})`);
   console.log(`  sector agrees with today       ${agree.length} of ${both.length} comparable (${((100 * agree.length) / Math.max(1, both.length)).toFixed(1)}%)`);
 
   // per sector filter: today's rows vs SIC-mapped rows
@@ -160,6 +169,14 @@ async function census(name, universe) {
   const inImpure = withSic.filter((x) => impureCodes.has(x.sic) && !COARSE.has(x.sic)).length;
   console.log(`  override candidates: no SIC ${noSic} + coarse codes (6770/7372/6199/…) ${coarse} + mixed codes ${inImpure} = ${noSic + coarse + inImpure}`);
 
+  // industry agreement with today's label, and names left for the helper
+  const indBoth = rows.filter((x) => x.mappedIndustry && x.t.industry);
+  const indAgree = indBoth.filter((x) => x.mappedIndustry === x.t.industry).length;
+  const noSector = rows.filter((x) => !x.mappedSector).length;
+  const noIndustry = rows.filter((x) => !x.mappedIndustry).length;
+  console.log(`  mapped industry agrees with today: ${indAgree} of ${indBoth.length} (${((100 * indAgree) / Math.max(1, indBoth.length)).toFixed(1)}%)`);
+  console.log(`  left without a sector: ${noSector}; without an industry (the helper's list for this universe): ${noIndustry}`);
+
   // presets
   const semiToday = rows.filter((x) => x.t.industry === "Semiconductors").length;
   const semiSic = rows.filter((x) => x.mappedIndustry === "Semiconductors").length;
@@ -167,9 +184,25 @@ async function census(name, universe) {
   const techSic = rows.filter((x) => x.mappedSector === "Technology").length;
   console.log(`  presets (the category predicate only): /semiconductor-stocks industry=Semiconductors today ${semiToday} vs SIC ${semiSic}; ` +
     `/cheap-tech-stocks sector=Technology today ${techToday} vs SIC ${techSic}`);
+  return rows;
 }
 
 await census("U1 Pickers universe", u1);
-await census("U2 top 3,000 by market cap", u2);
+const u2rows = await census("U2 top 3,000 by market cap", u2);
+
+// WHO IS RIGHT, where our sector differs from today's (#552 COWORK #26): for
+// the low-precision sectors, 10 names we place in the sector that today's
+// label does not, each with OUR basis. Today's per-ticker value is NOT printed
+// (it is the vendor's); Cowork compares against the live page.
+const basisOf = (s) => {
+  const o = overrideFor(s);
+  if (o && (o.sector || o.industry)) return `${o.basis}: "${o.phrase}" — ${String(o.quote ?? "").slice(0, 110)}`;
+  return "SIC table";
+};
+for (const sec of ["Industrials", "Consumer Cyclical", "Basic Materials"]) {
+  const off = u2rows.filter((x) => x.mappedSector === sec && x.t.sector && x.t.sector !== sec).slice(0, 10);
+  console.log(`\n=== ${sec}: 10 names we place here that today's label does not ===`);
+  for (const x of off) console.log(`  ${x.s} | SIC ${x.sic ?? "—"} ${x.desc ?? ""} | ours: ${x.mappedIndustry ?? "(sector only)"} | ${basisOf(x.s)}`);
+}
 console.log(`\nSEC submissions fetched for symbols not in registrants.json: ${fetched} (failed ${fetchFailed})`);
 console.log(`Redis commands used by this read: ${commands}`);
