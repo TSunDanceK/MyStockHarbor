@@ -83,14 +83,14 @@ async function suite(M, chart) {
     /onClick=\{\(\) => startMeasure\(tool\.key\)\}/.test(chart) && /else if \(verb === "measure" && arg\) startMeasure\(arg as MeasureKind\);/.test(chart) && /measureTools: MEASURE_TOOLS\.map/.test(chart));
   ok("no Clear measures anywhere (one temporary measure at a time)", !/measure-clear|Clear measures|clearMeasures\(/.test(chart));
   ok("measures are not drawings: not in Undo, no selection hooks", !/overlayIdsRef\.current\.push\(id\);\s*measureIdsRef/.test(chart) && /setMeasure\(\{ id, drawn: false \}\);/.test(chart) && !/name: tool\.overlay,\s*\.\.\.overlayHooks/.test(chart));
-  ok("once placed, a measure is locked (no select, no drag)", /overrideOverlay\(\{ id: placed, lock: true \}\)/.test(chart));
+  ok("once placed, a measure is locked, with no corner handles (no select, no drag)", /placed = chart2\.createOverlay\(\{ name: tool\.overlay, points, lock: true \}\);/.test(chart));
   ok("the next press on the chart only clears a placed measure (capture phase, swallowed)",
     /if \(!measureRef\.current\?\.drawn \|\| onOwnControl\(e\.target\)\) return false;\s*e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*clearMeasure\(\);/.test(chart) &&
     /wrap\.addEventListener\("touchstart", touchDown, opts\);/.test(chart) && /wrap\.addEventListener\("mousemove", eat, true\);/.test(chart) && /wrap\.addEventListener\("mouseup", eatEnd, true\);/.test(chart));
   ok("Esc clears the measure", /if \(e\.key === "Escape" && \(measureRef\.current \|\| quickRef\.current\)\) \{ clearMeasure\(\); clearQuick\(\); return; \}/.test(chart));
   ok("Shift + drag runs in the capture phase, before the library pans", /wrap\.addEventListener\("mousedown", down, true\);/.test(chart) && /if \(!e\.shiftKey\) \{ clearQuick\(\); return; \}/.test(chart));
   ok("touch: panning pauses while placing and comes back once placed",
-    /if \(coarse \|\| isMobile\) \{\s*try \{ chart\.setScrollEnabled\(false\); \}/.test(chart) && /setMeasure\(\{ id: placed, drawn: true \}\);[\s\S]{0,300}setScrollEnabled\(true\)/.test(chart));
+    /if \(coarse \|\| isMobile\) \{\s*try \{ chart\.setScrollEnabled\(false\); \}/.test(chart) && /setMeasure\(\{ id: drawing, drawn: true \}\);\s*try \{ chartRef\.current\?\.setScrollEnabled\(true\); \}/.test(chart));
   ok("the hint takes no clicks (a tap on it clears like anywhere else)", /data-measure-hint style=\{\{[^}]*pointerEvents: "none"/.test(chart));
   ok("Delete removes the selected drawing; its pill is a 44px target", /if \(e\.key !== "Delete" && e\.key !== "Backspace"\) return;/.test(chart) && /data-overlay-delete onClick=\{deleteSelected\} style=\{\{ minHeight: 44/.test(chart));
   return fails;
@@ -118,7 +118,7 @@ const MUTANTS = [
   ["no plural handling", () => [mut("plural", src, "abs === 1 ? one : many", "many"), chart]],
   ["Shift + drag in the bubble phase (the library pans first)", () => [src, mut("capture", chart, 'wrap.addEventListener("mousedown", down, true);', 'wrap.addEventListener("mousedown", down);')]],
   ["the clearing press also reaches the chart (pans or places)", () => [src, mut("swallow", chart, "if (!measureRef.current?.drawn || onOwnControl(e.target)) return false;\n      e.preventDefault();\n      e.stopPropagation();", "if (!measureRef.current?.drawn || onOwnControl(e.target)) return false;")]],
-  ["a placed measure stays draggable", () => [src, mut("lock", chart, "overrideOverlay({ id: placed, lock: true })", "overrideOverlay({ id: placed })")]],
+  ["a placed measure stays draggable", () => [src, mut("lock", chart, "placed = chart2.createOverlay({ name: tool.overlay, points, lock: true });", "placed = chart2.createOverlay({ name: tool.overlay, points });")]],
   ["Esc does nothing", () => [src, mut("esc", chart, 'if (e.key === "Escape" && (measureRef.current || quickRef.current)) { clearMeasure(); clearQuick(); return; }', "")]],
   ["touch keeps panning while placing", () => [src, chart.replace(/if \(coarse \|\| isMobile\) \{\s*try \{ chart\.setScrollEnabled\(false\); \} catch \{[^}]*\}/, "if (coarse || isMobile) {")]],
 ];
