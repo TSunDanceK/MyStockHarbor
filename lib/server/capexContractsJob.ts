@@ -28,18 +28,21 @@ export const CONTRACT_ROWS_KEPT = 25;
 export const CONTRACT_ALIASES = aliasFile.aliases as ContractAlias[];
 export const CONTRACT_EXCLUSIONS = aliasFile.exclusions as ContractExclusion[];
 
-/** Our universe (registrants.json CIKs) with their SEC names. */
+/**
+ * Our universe with SEC names. Walks company-tickers IN ITS OWN ORDER and keeps
+ * a row only when its ticker is one of ours: SEC lists a company's primary
+ * ticker first (AT&T: T, then TBB, T-PA, T-PC), and the mapper keeps the first
+ * row per name -- so a name maps to the common stock, never to a note.
+ */
 export function universeNames(): UniverseName[] {
-  const rows = (registrants as { rows: Record<string, { cik: string }> }).rows;
-  const symByCik = new Map<number, string>();
-  for (const [sym, r] of Object.entries(rows)) if (r?.cik) symByCik.set(Number(r.cik), sym);
+  const ours = new Set(Object.keys((registrants as { rows: Record<string, unknown> }).rows));
   const t = companyTickers as { fields: string[]; data: Array<Array<string | number>> };
-  const ci = t.fields.indexOf("cik");
+  const ti = t.fields.indexOf("ticker");
   const ni = t.fields.indexOf("name");
   const out: UniverseName[] = [];
   for (const row of t.data) {
-    const sym = symByCik.get(Number(row[ci]));
-    if (sym) out.push({ ticker: sym, secName: String(row[ni]) });
+    const sym = String(row[ti]);
+    if (ours.has(sym)) out.push({ ticker: sym, secName: String(row[ni]) });
   }
   return out;
 }
