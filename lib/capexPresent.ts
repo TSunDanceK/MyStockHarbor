@@ -261,6 +261,8 @@ export type InsightInput = {
 export type Insights = {
   year: number | null;
   whereMoney: Array<{ sector: string; amount: string; sharePct: number; shareText: string }>;
+  /** The remaining sectors' share, so the share bar's empty part is named. */
+  otherSectors: { count: number; shareText: string } | null;
   topSpenders: Array<{ ticker: string; name: string; amount: string; sector: string }>;
   fastest: { sector: string; changeText: string; from: string; to: string; firstYear: number } | null;
   reinvest: { sector: string; ratioText: string; cohort: number } | null;
@@ -280,6 +282,10 @@ export function buildInsights(input: InsightInput): Insights {
         return { sector: s.sector, amount: formatAmount(s.capex[last], "USD"), sharePct, shareText: `${Math.round(sharePct)}%` };
       })
     : [];
+  const shownShare = whereMoney.reduce((a, w) => a + w.sharePct, 0);
+  const otherSectors = whereMoney.length && sectors.length > whereMoney.length
+    ? { count: sectors.length - whereMoney.length, shareText: `${Math.round(100 - shownShare)}%` }
+    : null;
   const topSpenders = (sp?.leaders ?? []).slice(0, 5).map((l) => ({
     ticker: l.symbol,
     name: input.companyName(l.symbol) || l.symbol,
@@ -306,5 +312,5 @@ export function buildInsights(input: InsightInput): Insights {
   const contractTop = c && cTop
     ? { ticker: cTop.ticker, name: input.companyName(cTop.ticker) || cTop.ticker, amount: formatAmount(cTop.amount, "USD"), mapped: formatAmount(c.mappedAmount, "USD"), total: c.totalAmount ? formatAmount(c.totalAmount, "USD") : null }
     : null;
-  return { year: sp ? sp.years[last] : null, whereMoney, topSpenders, fastest, reinvest, receiverTop, contractTop };
+  return { year: sp ? sp.years[last] : null, whereMoney, otherSectors, topSpenders, fastest, reinvest, receiverTop, contractTop };
 }

@@ -126,6 +126,7 @@ async function suite(P, pageCode) {
     companyName: (t) => ({ MSFT: "Microsoft", GOOGL: "Alphabet", MU: "Micron Technology", LMT: "Lockheed Martin" })[t] ?? "",
   });
   ok("where the money is going: the top three by latest capex, with shares of the sectors shown", ins.whereMoney.map((w) => `${w.sector}:${w.amount}:${w.shareText}`).join("|") === "Technology:$300bn:44%|Communication Services:$200bn:29%|Utilities:$100bn:15%", JSON.stringify(ins.whereMoney));
+  ok("the rest of the share bar is named: the other sectors' share", ins.otherSectors?.count === 1 && ins.otherSectors.shareText === "12%", JSON.stringify(ins.otherSectors));
   ok("who is spending most: the record's leaders, named, largest first", ins.topSpenders.map((t) => `${t.ticker}:${t.name}:${t.amount}`).join("|") === "MSFT:Microsoft:$90.0bn|GOOGL:Alphabet:$80.0bn", JSON.stringify(ins.topSpenders));
   ok("fastest growing: the largest rise since the first year", ins.fastest?.sector === "Communication Services" && ins.fastest.changeText === "+300%" && ins.fastest.from === "$50.0bn", JSON.stringify(ins.fastest));
   ok("reinvesting the most: the highest capex ÷ revenue in the latest year", ins.reinvest?.sector === "Utilities" && ins.reinvest.ratioText === "32.0%", JSON.stringify(ins.reinvest));

@@ -335,6 +335,12 @@ function InsightColumn({ insights: x, contractsWindow }: { insights: Insights; c
                 <span className="cardAmt">{w.amount} · {w.shareText}</span>
               </li>
             ))}
+            {x.otherSectors ? (
+              <li>
+                <span style={{ color: "rgba(241,245,249,0.65)" }}>■ The other {x.otherSectors.count} sectors</span>
+                <span className="cardAmt" style={{ color: "rgba(241,245,249,0.65)" }}>{x.otherSectors.shareText}</span>
+              </li>
+            ) : null}
           </ul>
           <p className="cardSource">Share of {x.year} capex across the sectors shown. Source: SEC annual filings, calendar {x.year}.</p>
         </section>
