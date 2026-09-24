@@ -1089,6 +1089,30 @@ const TASKS = {
     args: () => ["--allow-writes"],
     needsTypescript: true,
     writes: true,
+  },  // READ-ONLY DESPITE THE PREFIX (Relay C, #563 D5): USAspending's own names
+  // and parent records for the top recipients -- the evidence the committed
+  // contract alias list is written from. 0 Redis.
+  "write-capex-contract-aliases": {
+    script: "scripts/capex-usaspending-aliases.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // Relay C (#563 D1): the "Who is spending" builder against the live SEC fact
+  // sets. DRY by default (reads only); SYMBOLS="mode=seed" writes
+  // msh:capex:spending:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-spending": {
+    script: "scripts/capex-spending-run.mjs",
+    args: () => ["--allow-writes"],
+    writes: true,
+  },
+  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
+  // SET) -- only on the owner's OK.
+  "write-capex-contracts": {
+    script: "scripts/capex-contracts-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
   },
   // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
   // and uncredentialled: public SEC and USAspending endpoints, no store. One
@@ -1132,6 +1156,28 @@ const TASKS = {
   // 3 Redis reads.
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
+  // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
+  "write-sec-delisting-census": {
+    script: "scripts/sec-delisting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // THE FOUR STALE TICKERS (#553 COWORK #20): BK -> BNY and EQR -> VMRK with
+  // their scores carried, EA and WBS evicted. Owner's GO only; ~15 commands.
+  "write-pickers-ticker-swap-dry": {
+    script: "scripts/pickers-ticker-swap.mjs",
+    args: () => ["--dry"],
+    needsTypescript: true,
+    writes: true,
+  },
+  "write-pickers-ticker-swap": {
+    script: "scripts/pickers-ticker-swap.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,
