@@ -640,6 +640,8 @@ const TASKS = {
   // ~70 commands.
   // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
   "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
+  // READS ONLY: the Pickers universe as symbols (#552 COWORK #37). 1 GET.
+  "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
