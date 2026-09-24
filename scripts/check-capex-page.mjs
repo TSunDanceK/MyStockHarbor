@@ -95,6 +95,7 @@ async function suite(P, pageCode) {
   ok("a row names the company, not its largest recipient", c[1].company === "General Dynamics" && c[2].company === "ZZZ", JSON.stringify(c.map((r) => r.company)));
   ok("every recipient listed, in normal case", c[0].entities.join("|") === "Lockheed Martin Corporation|Sikorsky Aircraft Corporation" && c[1].entities[0] === "Electric Boat Corporation", JSON.stringify(c[0].entities));
   ok("true capitals and legal forms survive the casing", P.entityCase("GENERAL DYNAMICS OTS (WILKES BARRE), LLC") === "General Dynamics OTS (Wilkes Barre), LLC" && P.entityCase("L3HARRIS TECHNOLOGIES INTEGRATED SYSTEMS L.P.") === "L3Harris Technologies Integrated Systems L.P." && P.entityCase("AT&T ENTERPRISES, LLC") === "AT&T Enterprises, LLC" && P.entityCase("Already Mixed Inc.") === "Already Mixed Inc.");
+  ok("\"Mc\" names keep their capital (#563 COWORK #5)", P.entityCase("MCKESSON CORPORATION") === "McKesson Corporation" && P.entityCase("MCDONALD'S CORPORATION") === "McDonald's Corporation", P.entityCase("MCKESSON CORPORATION"));
 
   // The page.
   ok("the hyperscaler note is Cowork's wording", pageCode.includes("These companies are also among the largest spenders above; this is what they sell, not what they buy."));
