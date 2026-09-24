@@ -337,17 +337,69 @@ const pageValues = (r) => {
   if (!r.shipped) return { ...base, divYield: r.fmp.divYield, divGrowth: r.fmp.divGrowth, freeCashFlow: r.fmp.freeCashFlow };
   return { ...base, divYield: n(r.shipped.divYield), divGrowth: n(r.shipped.divGrowth), freeCashFlow: n(r.shipped.freeCashFlow) };
 };
-console.log("\npreset rows — today vs the page as the Pickers PR ships it");
+// COWORK #14: debt and preferreds leave the fundamentals presets. The page's
+// own rule (lib/server/pickerEquity over A's lib/server/securityKind guard), fed
+// the committed ticker map and name snapshot. Loaded as pure halves -- the
+// snapshot loader's "@/" JSON import does not resolve in bare Node -- exactly as
+// scripts/check-non-equity.mjs loads them.
+const ts = (await import("typescript")).default;
+const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+const guardUrl = dataUrl(transpile(fs.readFileSync("lib/server/securityKind.ts", "utf8")
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+  .replace(/\/\/ ─+\n\/\/ THE RENDER-PATH ENTRY POINT[\s\S]*$/, "")));
+const { fundamentalsExclusion } = await import(dataUrl(transpile(fs.readFileSync("lib/server/pickerEquity.ts", "utf8")
+  .replace(/import \{ admitForExtraction \} from "\.\/securityKind";/, `import { admitForExtraction } from "${guardUrl}";`)
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "")
+  .replace(/import \{ lookupBySpelling \} from "\.\.\/symbolSpellings\.mjs";/, "")
+  .replace(/\/\*\* The render-path entry point\.[\s\S]*$/, ""))));
+const tickerFile = JSON.parse(fs.readFileSync("data/sec/company-tickers.json", "utf8"));
+const SNAP = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
+const { lookupBySpelling } = await import("../lib/symbolSpellings.mjs");
+const TI = tickerFile.fields.indexOf("ticker"), CI = tickerFile.fields.indexOf("cik");
+const cikMap = new Map(), cikGroups = new Map();
+for (const row of tickerFile.data) {
+  const t = String(row[TI]).toUpperCase(), c = row[CI] == null ? null : String(row[CI]);
+  if (!c) continue;
+  cikMap.set(t, { cik: c });
+  cikGroups.set(c, [...(cikGroups.get(c) ?? []), t]);
+}
+const exclusionOf = (sym) => {
+  const cik = lookupBySpelling(cikMap, sym)?.value?.cik ?? null;
+  const name = lookupBySpelling(new Map(Object.entries(SNAP)), sym)?.value ?? null;
+  return { why: fundamentalsExclusion({ symbol: sym, cik, cikGroup: cik ? cikGroups.get(cik) ?? [] : [], securityName: name }), name };
+};
+const excluded = rows.map((r) => ({ r, ...exclusionOf(r.sym) })).filter((x) => x.why);
+console.log(`\nexcluded from the fundamentals presets: ${excluded.length}`);
+for (const x of excluded) console.log(`  ${x.r.sym.padEnd(7)} ${x.why.padEnd(17)} ${(x.name ?? "(no name on file)").slice(0, 100)}`);
+
+// (#562 aside) does the live directory itself carry a literal "?" in the
+// MicroSectors names? JSON escapes show "?" vs U+FFFD (a bad decode).
+const micro = [];
+for (const url of ["https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt", "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt"]) {
+  const buf = await fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  if (!buf) { console.log(`directory UNREACHABLE: ${url}`); continue; }
+  for (const line of Buffer.from(buf).toString("latin1").split("\n")) {
+    const [sym, name = ""] = line.split("|");
+    if (/microsectors/i.test(name) && /[^\x20-\x7e]|\?/.test(name)) micro.push(`${sym}=${JSON.stringify(name.slice(0, 40))}`);
+  }
+}
+console.log(`MicroSectors names with "?" or non-ASCII, read as raw bytes (latin1): ${micro.slice(0, 6).join(" · ") || "none"}`);
+const isEquity = (r) => !exclusionOf(r.sym).why;
+
+console.log("\npreset rows — today vs the page as the Pickers PR ships it (debt/preferred excluded)");
 for (const [href, pass] of PRESETS) {
   const today = rows.filter((r) => pass(r.fmp)).length;
-  const shipped = rows.filter((r) => pass(pageValues(r))).length;
+  const shipped = rows.filter((r) => isEquity(r) && pass(pageValues(r))).length;
   console.log(`  ${href.padEnd(29)} today ${String(today).padStart(4)} → shipped ${String(shipped).padStart(4)}${shipped === 0 ? "   *** ZERO ***" : ""}`);
 }
 // COWORK #11: name the cash-rich rows so the page's count can be reconciled
 // row by row, and count the sets refused for currency (non-USD, unconverted).
 const cashRich = PRESETS.find(([h]) => h === "/cash-rich-value-stocks")[1];
-console.log(`cash-rich rows as shipped: ${rows.filter((r) => cashRich(pageValues(r))).map((r) => r.sym).join(" ")}`);
-console.log(`  of which have NO SEC row (keep stored values): ${rows.filter((r) => !r.shipped && cashRich(pageValues(r))).map((r) => r.sym).join(" ") || "none"}`);
+console.log(`cash-rich rows as shipped: ${rows.filter((r) => isEquity(r) && cashRich(pageValues(r))).map((r) => r.sym).join(" ")}`);
+console.log(`  of which have NO SEC row (keep stored values): ${rows.filter((r) => isEquity(r) && !r.shipped && cashRich(pageValues(r))).map((r) => r.sym).join(" ") || "none"}`);
 console.log(`sets refused for currency (non-USD, unconverted): ${rows.filter((r) => r.unit && r.unit.reporting !== "USD" && !r.unit.converted).map((r) => `${r.sym}:${r.unit.reporting}`).join(" ") || "none"}`);
 console.log(`sets converted by A's FX module: ${rows.filter((r) => r.unit?.converted).length}`);
 const cov = (k) => rows.filter((r) => r.shipped && typeof r.shipped[k] === "number").length;
