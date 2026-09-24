@@ -1160,6 +1160,12 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // ONE CACHED HISTORY ENTRY, read-only, for a local screenshot fixture.
+  "write-history-key-dump": {
+    script: "scripts/history-key-dump.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-classification-needed-dry": {
     script: "scripts/classification-needed.mjs",
     args: () => ["--dry"],
