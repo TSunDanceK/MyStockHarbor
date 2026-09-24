@@ -685,6 +685,13 @@ const TASKS = {
     writes: true,
     needsTypescript: true,
   },
+  // READS ONLY: why Pickers market caps are refused on the share count, with
+  // each filing's own per-class cover facts (#552 COWORK #31).
+  "write-cover-shares-refusals": {
+    script: "scripts/cover-shares-refusal-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
