@@ -1028,6 +1028,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY (Relay B, #553 COWORK #16 item 3): where Pickers' Market Cap
+  // comes from today over the Pickers universe, for the Friday price split.
+  // 3 Redis reads.
+  "write-pickers-marketcap-census": {
+    script: "scripts/pickers-marketcap-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
