@@ -664,6 +664,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the Pickers names the SEC resolver cannot place, with their
+  // SIC, filing text and size rank (ranks only) (#552 COWORK #29).
+  "write-pickers-unplaced": {
+    script: "scripts/pickers-unplaced.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
