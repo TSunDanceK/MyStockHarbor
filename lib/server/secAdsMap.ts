@@ -10,6 +10,8 @@ import ratiosFile from "@/data/sec/ads-ratios.json";
 import { lookupSpellingIn } from "../symbolSpellings.mjs";
 
 export type AdsRatioEntry = {
+  /** "ads": a stated ratio. "ordinary": listed directly (ratio 1, cited from the 12(b) row). */
+  kind: "ads" | "ordinary";
   /** Ordinary shares one ADS represents. */
   ordinaryPerAds: number;
   /** The filing's sentence, verbatim. */
