@@ -51,6 +51,7 @@ const INPUTS = [
   I("NEWCO", "Technology", cyYears(1000, { skip: [2021, 2022] }), { cik: "3" }), // not in every year
   I("JUL", "Industrials", julJun, { cik: "4" }),
   I("NOSEC", null, cyYears(50), { cik: "5" }),
+  I("BIGNOSEC", null, cyYears(500), { cik: "8" }),
   I("EURO", "Industrials", [], { cik: "6", currency: "EUR" }),
   // SEC lists CMCSA first; its exchangeable notes CCZ are shorter but second.
   { ...I("CCZ", "Communication Services", cyYears(20), { cik: "7" }), rank: 1 },
@@ -74,8 +75,9 @@ async function suite(M) {
   ok("R&D has its own cohort", tech?.rndCohort === 1 && tech.rnd[0] === 100);
   ok("a July–June filer fills 2021..2025 from FY2022..FY2026's midpoints", ind?.cohort === 1 && ind.capex.every((v) => v === 7), JSON.stringify(ind));
   ok("another currency is counted, not dropped silently", r.otherCurrency === 1);
-  ok("no sector: counted as unclassified, not placed", r.unclassified === 1 && !r.sectors.some((s) => s.top.includes("NOSEC")));
-  ok("sector totals only, no grand total", Object.keys(r).sort().join() === "builtAt,companiesRead,duplicateListings,otherCurrency,partial,sectors,unclassified,v,years", Object.keys(r).sort().join());
+  ok("no sector: counted as unclassified, not placed", r.unclassified === 2 && !r.sectors.some((s) => s.top.includes("NOSEC")));
+  ok("the unplaced are named, largest first (#563 COWORK #6)", r.unclassifiedLargest.map((u) => `${u.symbol}:${u.capex}`).join() === "BIGNOSEC:700,NOSEC:70", JSON.stringify(r.unclassifiedLargest));
+  ok("sector totals only, no grand total", Object.keys(r).sort().join() === "builtAt,companiesRead,duplicateListings,otherCurrency,partial,sectors,unclassified,unclassifiedLargest,v,years", Object.keys(r).sort().join());
   ok("sectors sort by latest capex", r.sectors[0].sector === "Technology");
   const moved = M.aggregateSpending([I("CHG", "Energy", [...cyYears(5), { s: "2025-01-01", e: "2025-03-31", capex: 999, revenue: 1, rnd: null }], { cik: "9" })], YEARS, NOW);
   ok("two years in one calendar year: the later-ending one is kept", moved.sectors[0].capex[4] === 5 * 1.4, JSON.stringify(moved.sectors[0].capex));
@@ -96,7 +98,8 @@ const MUTANTS = [
   ["fiscal year placed by its end, not its midpoint", () => mut("mid", "return new Date((start + end) / 2).getUTCFullYear();", "return new Date(end).getUTCFullYear();")],
   ["cohort of anyone with any capex", () => mut("cohort", "const cohort = rows.filter((r) => complete(r.capex));", "const cohort = rows.filter((r) => r.capex.some((v) => v !== null)).map((r) => ({ ...r, capex: r.capex.map((v) => v ?? 0) }));")],
   ["other currencies dropped silently", () => mut("cur", "if (input.currency && input.currency !== \"USD\") otherCurrency++;", "")],
-  ["unclassified placed in a catch-all", () => mut("unc", "if (!input.sector) {\n      if (row.capex.some((v) => v !== null)) unclassified++;\n      continue;\n    }", "if (!input.sector) input.sector = \"Other\";")],
+  ["unclassified placed in a catch-all", () => mut("unc", "    if (!input.sector) {\n      if (row.capex.some((v) => v !== null)) {", "    if (!input.sector) input.sector = \"Other\";\n    if (false) {\n      if (row.capex.some((v) => v !== null)) {")],
+  ["the unplaced list not sorted by capex", () => mut("uncsort", "unplaced.sort((a, b) => b.capex - a.capex)", "unplaced")],
   ["listings not folded by filer", () => mut("dedupe", "const { kept: inputs, duplicates: duplicateListings } = dedupeByFiler(all);", "const inputs = all, duplicateListings = 0;")],
   ["SEC's listing order ignored", () => mut("rank", "(b.rank ?? Infinity) - (a.rank ?? Infinity) ||", "")],
   ["a grand total added", () => mut("total", "return { v: 1, builtAt: nowMs,", "return { total: sectors.length, v: 1, builtAt: nowMs,")],

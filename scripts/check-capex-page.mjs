@@ -105,6 +105,7 @@ async function suite(P, pageCode) {
   ok("contract rows name the company and expand to their recipients", pageCode.includes("{r.company}") && /<details[\s\S]*Paid to:[\s\S]*r\.entities\.map/.test(pageCode) && pageCode.includes("normaliseCompanyName(snapshotCompanyName(t))"));
   ok("nothing is summed on the page", !/\.reduce\(/.test(pageCode));
   ok("indexed now that Layer 1 is in", /robots:\s*\{\s*index:\s*true/.test(pageCode) && pageCode.includes("readSpendingRecord()"));
+  ok("the sector note is Cowork's wording (#563 COWORK #6)", pageCode.replace(/\s+/g, " ").includes("Sectors follow our classification: Amazon is counted in Consumer Cyclical, Alphabet and Meta in Communication Services."));
   ok("the other-currency count is Cowork's wording", pageCode.includes("filers reporting in other currencies not included."));
 
   const sp = P.buildSpendingRows([

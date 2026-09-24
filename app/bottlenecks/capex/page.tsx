@@ -84,6 +84,10 @@ export default async function CapexPage() {
                 {spending.unclassified > 0 ? ` ${spending.unclassified} companies without a sector are not placed.` : ""}
                 {spending.duplicateListings > 0 ? " Companies with more than one listing are counted once." : ""}
               </p>
+              <p style={noteStyle}>
+                Sectors follow our classification: Amazon is counted in Consumer Cyclical, Alphabet and Meta in
+                Communication Services.
+              </p>
             </>
           ) : (
             <p style={emptyStyle}>The sector figures are rebuilt weekly from annual reports. Check back shortly.</p>
