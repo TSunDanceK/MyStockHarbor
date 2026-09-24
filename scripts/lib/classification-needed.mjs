@@ -34,22 +34,31 @@ const STOP = new Set(["company", "companies", "services", "products", "other", "
 const words = (s) => new Set((String(s ?? "").toLowerCase().match(WORD) ?? []).filter((w) => !STOP.has(w)).map((w) => w.replace(/(ies|es|s)$/, "")));
 
 /**
- * A suggestion FROM THE LABEL SET ONLY, never free text: the known sector's
- * industries (or all labels when the sector is unknown), scored by shared words
- * with the filing's own description and SEC's SIC wording. No match -> no
- * suggestion, rather than a guess dressed as one.
+ * A suggestion FROM THE LABEL SET ONLY, never free text, and ONLY INSIDE A
+ * KNOWN SECTOR (#553 COWORK #23): no sector, no suggestion. Within the sector,
+ * industries are scored by shared words with the filing's own description and
+ * SEC's SIC wording.
+ *
+ * SIC WORDING ALONE IS NOT EVIDENCE OF AN INDUSTRY. The 2026-09-24 dry run
+ * suggested "Other Precious Metals" for FCX, RIO, VALE, HBM and HWM on the one
+ * word "metal" from SIC 1000 / 3350 ("Metal Mining"), none of them with a
+ * stored description. Scoping to the sector cannot stop that -- all five ARE
+ * Basic Materials -- so an industry needs a word from the filer's own
+ * description, or two shared words in all. Otherwise the sector alone is
+ * offered, which is what is actually known.
  */
 export function suggestLabel({ sector, sicText, description }, labels) {
-  const evidence = new Set([...words(sicText), ...words(description)]);
-  // With no sector to narrow it, one shared word across 144 labels is noise
-  // (Accenture scored "Asset Management" on "management"): ask for two.
-  const floor = sector ? 1 : 2;
+  if (!sector) return null;
+  const fromFiling = words(description);
+  const evidence = new Set([...words(sicText), ...fromFiling]);
   let best = null;
   let tied = false;
   for (const [industry, labelSector] of Object.entries(labels)) {
-    if (sector && labelSector !== sector) continue;
-    const score = [...words(industry)].filter((w) => evidence.has(w)).length;
-    if (score < floor) continue;
+    if (labelSector !== sector) continue;
+    const shared = [...words(industry)].filter((w) => evidence.has(w));
+    if (!shared.length) continue;
+    if (shared.length < 2 && !shared.some((w) => fromFiling.has(w))) continue;
+    const score = shared.length;
     if (!best || score > best.score) { best = { sector: labelSector, industry, score }; tied = false; }
     else if (score === best.score) tied = true;
   }
@@ -57,7 +66,7 @@ export function suggestLabel({ sector, sicText, description }, labels) {
   // estate" all three real-estate ones. Picking the first would dress an
   // arbitrary choice as evidence (PepsiCo -> "Beverages - Alcoholic").
   if (best && !tied) return { sector: best.sector, industry: best.industry };
-  return sector ? { sector, industry: null } : null;
+  return { sector, industry: null };
 }
 
 /** Table-safe, link-free, one line. The repo is public: no URL leaves here. */
