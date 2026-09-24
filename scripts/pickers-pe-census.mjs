@@ -114,7 +114,7 @@ for (const s of universe) {
     const inputs = V.valuationInputs(set, today, registrantFor(s) ?? {});
     const fig = V.peRatio(inputs, price);
     if (fig?.ok) { secPe = fig.val; t.secPe++; }
-    else if (fig) { inc(t.secRefused, fig.why); push(ex.secRefused, fig.why, s, 12); }
+    else if (fig) { inc(t.secRefused, fig.why); push(ex.secRefused, fig.why, s); }
     else t.secNull++;
     if (inputs.eps && !inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
       secEps = inputs.eps.val; t.secEps++;
@@ -159,7 +159,7 @@ console.log(`Pickers universe ${universe.length}; fact sets ${sets.size}; SEC ro
 console.log("\n== P/E");
 console.log(`FMP today: ${t.fmpPe} rows (${t.fmpPeNeg} of them zero/negative, which the <= presets admit): ${ex.fmpPeNeg.join(" ")}`);
 console.log(`SEC: ${t.secPe} P/E; refused ${JSON.stringify(t.secRefused)}; no price/unstated ${t.secNull}; no fact set ${t.noSet}`);
-for (const [why, xs] of Object.entries(ex.secRefused)) console.log(`  ${why}: ${xs.join(" ")}`);
+for (const [why, xs] of Object.entries(ex.secRefused)) console.log(`  ${why}: ${xs.slice(0, 12).join(" ")}`);
 console.log(`both present ${t.both}: within 5% ${t.agree5}, 5-20% ${t.agree20}, over 20% ${t.off}`);
 ex.off.sort((a, b) => Math.abs(b[2] / b[1] - 1) - Math.abs(a[2] / a[1] - 1));
 console.log(`  largest disagreements (sym FMP SEC): ${ex.off.slice(0, 25).map(([s, a, b]) => `${s} ${a.toFixed(1)} ${b.toFixed(1)}`).join("; ")}`);
@@ -180,4 +180,6 @@ for (const [name, fn] of Object.entries(presets)) {
 }
 console.log("\n== Refused Market Caps, per reason (for A, COWORK #19)");
 console.log("REFUSED-CAPS-JSON " + JSON.stringify(ex.capRefused));
+console.log("REFUSED-PE-JSON " + JSON.stringify(ex.secRefused));
+console.log("PE-OFF-JSON " + JSON.stringify(ex.off.map(([s, a, b]) => [s, +a.toFixed(2), +b.toFixed(2), excludedFromFundamentals(s) !== null])));
 console.log(`\nRedis commands: ~${5 + universe.length} (read-only)`);
