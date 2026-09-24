@@ -1042,7 +1042,34 @@ const TASKS = {
     args: () => [],
     needsTypescript: true,
     writes: true,
+  },  // Relay C (#563 COWORK #2): the capex receivers job's own code against live
+  // SEC. DRY by default (0 Redis); SYMBOLS="mode=seed" writes the one key
+  // msh:capex:receivers:v1 (1 SET) -- only on the owner's OK.
+  "write-capex-receivers": {
+    script: "scripts/capex-receivers-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
   },
+  // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
+  // and uncredentialled: public SEC and USAspending endpoints, no store. One
+  // PART per task so each fits the 30-minute job and they run side by side.
+  "capex-frames": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "frames" } },
+  "capex-segments": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "segments" } },
+  "capex-links-1": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "1/5" } },
+  "capex-links-2": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "2/5" } },
+  "capex-links-3": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "3/5" } },
+  "capex-links-4": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "4/5" } },
+  "capex-links-5": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "links", SHARD: "5/5" } },
+  "capex-fts-nvidia": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "NVIDIA" } },
+  "capex-fts-tsmc": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "TSMC" } },
+  "capex-fts-asml": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "fts", NAME: "ASML" } },
+  "capex-8k": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "8k" } },
+  "capex-usa": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa" } },
+  "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
+  "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
+  "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
   // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
   // once so the PR preview shows the filings figures. A key nothing on main
   // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
