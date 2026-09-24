@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No stocks in the analyzed universe are currently trading below 15 times earnings.",
   tone: "blue",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [{ kind: "number", field: "peRatio", max: 15 }],
   // The predicate that defines the set is also the order. Before this the page
   // shipped in `reasons.length` order -- how many of 25 technical conditions a

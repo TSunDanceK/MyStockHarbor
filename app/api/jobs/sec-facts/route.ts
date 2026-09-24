@@ -6,6 +6,7 @@ import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secM
 import { drainColdCiks } from "@/lib/server/secColdCik";
 import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { extractForSymbol } from "@/lib/server/secExtractFor";
+import { withPredecessorFacts } from "@/lib/server/secSuccession";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
@@ -563,7 +564,9 @@ export async function GET(req: NextRequest) {
       continue;
     }
     try {
-      const facts = await fetchCompanyFacts(cik);
+      // A CITED SUCCESSOR (XOM) reads its predecessor's history too, through
+      // the same rate gate. See secSuccession.
+      const facts = await withPredecessorFacts(cik, await fetchCompanyFacts(cik), fetchCompanyFacts);
       const extracted = extractForSymbol(symbol, facts);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is

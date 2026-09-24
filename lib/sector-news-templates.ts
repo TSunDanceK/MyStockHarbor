@@ -45,8 +45,10 @@ export function buildSectorLead(args: {
   constituentCount: number;
   dayMove: number | null;
   rank: number | null;
+  /** Set ("Wed 23 Sep") when dayMove is the LAST session's, outside hours. */
+  lastSession?: string | null;
 }): string {
-  const { sector, newsScore, articleCount, constituentCount, dayMove, rank } = args;
+  const { sector, newsScore, articleCount, constituentCount, dayMove, rank, lastSession } = args;
 
   const parts: string[] = [];
 
@@ -59,7 +61,13 @@ export function buildSectorLead(args: {
   );
 
   const move = moveWord(dayMove);
-  if (move && typeof rank === "number") {
+  if (move && lastSession) {
+    parts.push(
+      typeof rank === "number"
+        ? `In the last session (${lastSession}) the sector finished ${move}, ranking ${ordinal(rank)} of 11.`
+        : `In the last session (${lastSession}) the sector finished ${move}.`
+    );
+  } else if (move && typeof rank === "number") {
     parts.push(
       `The sector is trading ${move} today and ranks ${ordinal(rank)} of 11 on the day.`
     );

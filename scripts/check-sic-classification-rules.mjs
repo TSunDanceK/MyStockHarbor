@@ -9,6 +9,12 @@
 //   4. SELF-ONLY rules count only inside the self-description sentence of a
 //      catch-all code. MUTATION: selfOnly ignored.
 //   5. Two REIT property types in one sentence → REIT - Diversified.
+//   7. COWORK #27: a sales channel ("sell through … e-commerce channels") and
+//      a "serve the needs of …" customer list are skipped; a decimal ("2.5
+//      billion") does not start a sentence; 7340/2320 move only the names
+//      whose text says so; 5912 drug stores and 2842 cleaning preparations
+//      sit in Healthcare / Household at table level. MUTATIONS: each guard
+//      removed.
 //   And the committed overrides file is current (build --check).
 //
 //   node scripts/check-sic-classification-rules.mjs
@@ -44,6 +50,12 @@ const CASES = [
   ["EEE", "7370", "Zeta is a technology platform for small businesses."],
   ["FFF", "7370", "We sell tools. Our partners include a technology platform for small businesses."],
   ["GGG", "6798", "We are a REIT that owns office and multifamily properties in coastal markets."],
+  ["HHH", "5070", "Acme distributes plumbing supplies to contractors. We sell through branches, counter service and e-commerce channels."],
+  ["III", "5912", "We provide medication services tailored to serve the needs of residents in lower acuity facilities, such as assisted living facilities and behavioral health facilities."],
+  ["JJJ", "7340", "Since 2007 hosts have welcomed over 2.5 billion guest arrivals in almost every country."],
+  ["KKK", "7340", "We provide janitorial and facility services to commercial buildings."],
+  ["LLL", "2320", "Our segments are Uniform Rental and Facility Services and First Aid and Safety Services."],
+  ["MMM", "2320", "We design and market apparel under our own brands."],
 ];
 const o = run(B, CASES);
 
@@ -69,6 +81,30 @@ check("outside it (a partner's description): does not", o.FFF?.industry !== "Sof
 
 console.log("\n5. REIT property types");
 check("office + multifamily in one sentence → REIT - Diversified", o.GGG?.industry === "REIT - Diversified", JSON.stringify(o.GGG));
+
+console.log("\n7. COWORK #27 guards and moves");
+check("'e-commerce channels' in a sell-through sentence is not the business", !o.HHH, JSON.stringify(o.HHH));
+check("'serve the needs of residents … behavioral health facilities' is a customer list", !o.III, JSON.stringify(o.III));
+check("7340: 'guest arrivals' → Travel Services, quoted from the sentence start (not '5 billion …')",
+  o.JJJ?.industry === "Travel Services" && o.JJJ.quote.startsWith("Since 2007"), JSON.stringify(o.JJJ));
+check("7340: a building-services filer keeps the table's Industrials", !o.KKK);
+check("2320: 'uniform rental' → Specialty Business Services", o.LLL?.industry === "Specialty Business Services" && o.LLL.sector === "Industrials", JSON.stringify(o.LLL));
+check("2320: an apparel maker keeps the table's label", !o.MMM, JSON.stringify(o.MMM));
+check("table: 5912 drug stores → Healthcare; 2842 cleaning preparations → Household & Personal Products",
+  table.codes["5912"]?.sector === "Healthcare" && table.codes["2842"]?.industry === "Household & Personal Products" && table.labels["Household & Personal Products"] === "Consumer Defensive");
+{
+  const M = await load(SRC.replace("!CHANNEL_LIST.test(inSentence) && !CHANNEL.test(after)", "true"));
+  check("MUTATION: channel guards removed → e-commerce counts again", run(M, CASES).HHH?.industry === "Specialty Retail");
+}
+{
+  const M = await load(SRC.replace("!SERVES_NEEDS.test(lead) && ", ""));
+  check("MUTATION: serve-the-needs guard removed → the customer list counts", Boolean(run(M, CASES).III));
+}
+{
+  const M = await load(SRC.replace('if (text[i] === "." && !/\\S/.test(text[i + 1] ?? " ")) return i;\n    return -1;\n  };\n  const nextStop',
+    'if (text[i] === ".") return i;\n    return -1;\n  };\n  const nextStop'));
+  check("MUTATION: any period is a stop → the quote starts mid-number", !run(M, CASES).JJJ?.quote.startsWith("Since 2007"));
+}
 
 console.log("\n6. the committed file is current");
 check("classification-overrides.json matches the rules",

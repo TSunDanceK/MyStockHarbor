@@ -1,0 +1,37 @@
+# "Classification needed" (Relay B, #553 COWORK #3): daily, opens/updates/closes
+# ONE issue listing Pickers universe symbols A's resolver cannot fully place,
+# plus A's SIC-change notices, each with a suggested label from the resolver's
+# set. It never edits data/sec/classification-overrides.json -- approvals land
+# by PR. Redis: 2 reads a run (read-only token). No links in the issue body.
+name: Classification needed
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Print the body only (no issue write)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: Update the Classification needed issue
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/classification-needed.mjs ${{ inputs.dry && '--dry' || '' }}
