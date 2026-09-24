@@ -145,6 +145,17 @@ const long = " It sells these products to industrial customers and government ag
   check("a leading one-line slogan is dropped (RKLB)", rklb.ok && rklb.text.startsWith("Rocket Lab is"));
 }
 
+console.log("\n6a. a description names its subject (ABBV, #552 COWORK #38)");
+{
+  const sky = "In psoriatic disease (plaque psoriasis or psoriatic arthritis), Skyrizi is administered as a quarterly subcutaneous injection following two induction doses. When administered for Crohn's disease and ulcerative colitis, Skyrizi is given as three induction doses via IV infusion, followed by subcutaneous injection via an on-body injector every eight weeks. Skyrizi is sold in numerous other markets worldwide.";
+  check("ABBV's Skyrizi dosing line is not AbbVie's description", !D.cleanDescription(sky, { companyName: "AbbVie Inc." }).ok);
+  check("the company's own name keeps a description", D.cleanDescription("Apple Inc. designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services." + long, { companyName: "Apple Inc." }).ok);
+  check("\"we\" keeps a description", D.cleanDescription("We are a leading provider of cloud software for finance teams, and our products help customers close their books faster." + long, { companyName: "Blackline, Inc." }).ok);
+  check("the company's initials keep a description (IBM)", D.cleanDescription("IBM is a hybrid cloud and artificial intelligence company serving enterprise clients in more than 175 countries around the world." + long, { companyName: "INTERNATIONAL BUSINESS MACHINES CORP" }).ok);
+  const M = await load(once("if (opts.companyName && !speaksOfTheCompany(text, opts.companyName)) {", "if (false) {"));
+  check("MUTATION: the rule removed → the Skyrizi line ships as AbbVie's description", M.cleanDescription(sky, { companyName: "AbbVie Inc." }).ok);
+}
+
 console.log("\n6b. full-build rules: rosters, tables, run-ons, name-on-its-own-line");
 {
   const dal = D.cleanDescription(["Delta Air Lines is a major United States airline providing scheduled air transportation for passengers and cargo." + long,
