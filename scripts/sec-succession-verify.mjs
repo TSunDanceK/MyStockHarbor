@@ -27,7 +27,7 @@ const M = await lift([
   FILL.match(/^const foreignCurrencyIn = [\s\S]*?;$/m)?.[0] ?? "",
   grabFunction(FILL, "mergeFillOnly"),
   strip("lib/server/secSuccession.ts"),
-  "export { extractCompanyFacts, encodeFactSet, mergeSuccession, withPredecessorFacts, valuationInputs };",
+  "export { extractCompanyFacts, encodeFactSet, mergeSuccession, withPredecessorFacts, valuationInputs, SEC_FIELD_KEYS };",
 ].join("\n"));
 const get = async (cik) => {
   const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, "0")}.json`, { headers: { "User-Agent": UA, "Accept-Encoding": "gzip, deflate" } });
@@ -48,6 +48,13 @@ for (const s of (process.argv[2] || "XOM").split(",")) {
     const set = M.encodeFactSet(x);
     const v = M.valuationInputs(set, new Date().toISOString().slice(0, 10), { annualForm: REG[s]?.annualForm ?? "10-K" });
     console.log(`  ${label}: quarters ${x.quarters.length} (unlabelled ${x.quarters.filter((p) => !p.fp).length}), years ${x.years.length}; newest quarters ${x.quarters.slice(0, 5).map((p) => `${p.end} ${p.fp} FY${p.fy}`).join(", ")}; newest year ${x.years[0]?.end ?? "—"}`);
+    const val = (p, k) => p.values[M.SEC_FIELD_KEYS.indexOf(k)]?.val ?? null;
+    for (const p of [...x.quarters.slice(0, 5), ...x.years.slice(0, 1)]) {
+      console.log(`    ${p.end} ${p.fp} eps ${val(p, "epsDiluted")} shares ${val(p, "sharesDiluted")} ni ${val(p, "netIncome")}`);
+    }
+    for (const [tag, n] of Object.entries(facts.facts?.["us-gaap"] ?? {}).filter(([t]) => /^EarningsPerShare(Diluted|BasicAndDiluted)$|^WeightedAverageNumberOfDilutedSharesOutstanding$/.test(t)).map(([t, d]) => [t, Object.values(d.units ?? {}).flat().map((r) => r.end).sort().at(-1)])) {
+      console.log(`    tag ${tag}: newest end ${n}`);
+    }
     console.log(`    cover shares ${x.coverShares?.val ?? "—"} as of ${x.coverShares?.asOf ?? "—"}; EPS ${v.eps ? `${v.eps.val.toFixed(2)} ${v.eps.basis}${v.eps.derivedQ4 ? ` (Q4 ${v.eps.derivedQ4} derived)` : ""} to ${v.eps.periodEnd}` : "refused"}; refusals ${v.refusals.join(",") || "none"}`);
   }
 }
