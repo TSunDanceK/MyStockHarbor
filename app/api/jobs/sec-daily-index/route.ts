@@ -29,6 +29,8 @@ import {
 import { PRESET_UNIVERSE } from "@/lib/server/presetUniverse";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
+import { recordSuccessionEvents, successionEventsOf, type SuccessionEvent } from "@/lib/server/secSuccessionFlags";
+import { CITED_PREDECESSOR_CIKS } from "@/lib/server/secSuccession";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -432,6 +434,7 @@ export async function GET(req: NextRequest) {
   for (let d = start; d <= latest && dates.length < maxDays; d = addDays(d, 1)) dates.push(d);
 
   const days: Record<string, unknown>[] = [];
+  const successionEvents: SuccessionEvent[] = [];
   const filingsBySymbol: Record<string, SymbolFiling[]> = {};
   let consecutive = manifest.consecutiveIndexFailures;
   let consecutiveAbsent = manifest.consecutiveIndexAbsent ?? 0;
@@ -442,6 +445,9 @@ export async function GET(req: NextRequest) {
 
     if (res.outcome === "parsed") {
       const filings = intersect(res.parsed.rows, bySymbolCik);
+      // POSSIBLE SUCCESSIONS (#552 COWORK #36): 8-K12Bs from untracked filers
+      // and 25-NSEs for tracked ones, from the rows already in hand.
+      successionEvents.push(...successionEventsOf(res.parsed.rows, bySymbolCik));
       const applied = applyFilings(manifest, filings);
       for (const f of filings) (filingsBySymbol[f.symbol] ??= []).push(f);
       // ANY success resets both counters.
@@ -525,7 +531,13 @@ export async function GET(req: NextRequest) {
         Object.entries(manifest.symbols).filter(([, e]) => e.cik && !e.delisted).map(([s]) => s)
       );
 
+  // FLAGGED, NEVER LINKED: see lib/server/secSuccessionFlags. No Redis at all
+  // on a day without an 8-K12B or 25-NSE of interest.
+  const successionFlagged = await recordSuccessionEvents(successionEvents, latest, CITED_PREDECESSOR_CIKS);
+
   const summary = {
+    successionEvents: successionEvents.length,
+    successionFlags: successionFlagged.map((f) => `${f.symbol}: ${f.successorCik} <- ${f.predecessorCik}`).join(" | "),
     secNewsFiled: secNews?.filed ?? 0,
     secNewsBackfill: secNews?.backfill ?? 0,
     secNewsRequests: secNews?.requests ?? 0,
