@@ -1004,6 +1004,9 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // Builds data/capex/receivers.json (printed; the sandbox commits it). Lifts
+  // the parsers from lib/server/capexReceivers.ts, hence the compiler.
+  "capex-receivers-build": { script: "scripts/capex-receivers-build.mjs", args: () => [], needsTypescript: true },
   "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
 };
 
