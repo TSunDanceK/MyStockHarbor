@@ -555,10 +555,10 @@ export function SecSnapshotCard({
           as "under accession 0000320193-26-000081" in the middle of a sentence
           a reader was meant to understand. It still identifies the filing, so
           it carries the link rather than the prose. */}
-      {view.latestAccession ? (
+      {view.latestFilingUrl ? (
         <p style={{ marginTop: -4 }}>
           <a
-            href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(view.symbol)}&type=10-&dateb=&owner=include&count=10`}
+            href={view.latestFilingUrl}
             style={{ color: "#93c5fd", fontWeight: 800 }}
           >
             View this filing on SEC EDGAR

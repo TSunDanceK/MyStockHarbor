@@ -323,7 +323,9 @@ async function getEarningsData(symbol: string) {
   const annualForm = cold.status === "ready"
     ? annualOnlyForm(registrantFor(symbol)?.annualForm, cold.set, new Date().toISOString().slice(0, 10))
     : null;
-  const secView = cold.status === "ready" ? buildSecEarningsView(cold.set, { annualForm }) : null;
+  const secView = cold.status === "ready"
+    ? buildSecEarningsView(cold.set, { annualForm, cik: cikForSymbol(symbol) })
+    : null;
 
   // DATES AND TIMING ONLY. epsActual/revenueActual are deliberately not read
   // off these rows any more, even though they are present: two sources for one

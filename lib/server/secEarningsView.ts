@@ -585,6 +585,8 @@ export type SecEarningsView = {
   latestLabel: string;
   latestEnd: string;
   latestAccession: string | null;
+  /** The newest period's filing index on EDGAR, or null. See filingIndexUrl. */
+  latestFilingUrl: string | null;
   latestFiled: string | null;
   /**
    * SET WHEN THE NEWEST PERIOD WAS READ FROM THE FILING ITSELF because SEC's
@@ -1009,6 +1011,11 @@ export function buildSecEarningsView(
      * annualOnlyForm, #535 COWORK #15): the page is about fiscal years only.
      */
     annualForm?: AnnualForm | null;
+    /**
+     * The registrant's CIK from the committed map, for a set that carries
+     * none (a set filled from the filing before companyfacts published).
+     */
+    cik?: string | null;
   } = {},
 ): SecEarningsView | null {
   const annualFiler = opts.annualForm ?? null;
@@ -1428,8 +1435,7 @@ export function buildSecEarningsView(
     // `every((v) => v !== null)` did — TS infers a type predicate there and
     // handed the reduce a number[]. The `?? 0` was always doing the work; the
     // annotation just says so out loud.
-    Math.abs(gp - opex.reduce<number>((a, b) => a + (b ?? 0), 0) - opInc) <=
-      Math.max(Math.abs(opInc), 1) * 0.01;
+    Math.abs(gp - opex.reduce<number>((a, b) => a + (b ?? 0), 0) - opInc) <= addUpTolerance(opInc, valueOf(latest, "revenue"));
 
   return {
     symbol: set.symbol,
@@ -1439,6 +1445,7 @@ export function buildSecEarningsView(
     latestLabel: periodLabel(latest),
     latestEnd: latest.e,
     latestAccession: latest.a,
+    latestFilingUrl: filingIndexUrl(set.cik ?? opts.cik ?? null, latest.a),
     latestFiled: latest.f,
     // BY ACCESSION, NOT BY "ff IS PRESENT": the credit belongs to the period
     // that filing supplied, and a later companyfacts re-read that published it
@@ -1583,6 +1590,37 @@ export function buildSecEarningsView(
     coverShares: set.cover,
     asOf: set.at,
   };
+}
+
+/**
+ * HOW FAR THE EXPENSE LINES MAY MISS OPERATING INCOME AND STILL "ADD UP".
+ *
+ * 1% of operating income alone collapses when operating income is near zero:
+ * SPCX's Q2 FY2026 lines miss its -$143M by about $5M on $7.8B of revenue
+ * (0.06%) and the card said they "do not add up" (#552 COWORK #37). A
+ * breakdown is judged against the size of the income statement, so the bar is
+ * the larger of 1% of operating income and 0.1% of revenue. AAPL's 0.03% miss
+ * passes under either.
+ */
+export const ADD_UP_REVENUE_SHARE = 0.001;
+export function addUpTolerance(opInc: number, revenue: number | null): number {
+  return Math.max(Math.abs(opInc) * 0.01, Math.abs(revenue ?? 0) * ADD_UP_REVENUE_SHARE, 1);
+}
+
+/**
+ * THE FILING'S OWN INDEX PAGE ON EDGAR (#552 COWORK #37).
+ *
+ * The link was the legacy company browse with CIK=<ticker>, which lands on a
+ * search result rather than the filing, and on nothing for a ticker EDGAR does
+ * not map. The index is addressed by the registrant's CIK (unpadded) and the
+ * accession (dashes removed, then the dashed form + "-index.htm"). Null when
+ * either is unknown: no link beats a link to the wrong page.
+ */
+export function filingIndexUrl(cik: string | null, accession: string | null): string | null {
+  if (!cik || !accession || !/^\d{10}-\d{2}-\d{6}$/.test(accession)) return null;
+  const n = Number(cik);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return `https://www.sec.gov/Archives/edgar/data/${n}/${accession.replace(/-/g, "")}/${accession}-index.htm`;
 }
 
 /** Whole months a year-to-date frame spans (6 for a first filer's Q2). */
