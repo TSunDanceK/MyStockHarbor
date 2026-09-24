@@ -143,6 +143,7 @@ function NavSubmenu({
     maxHeight: number;
   } | null>(null);
   const triggerRef = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -156,7 +157,11 @@ function NavSubmenu({
       const margin = 10;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const width = Math.min(minWidth, viewportWidth - margin * 2);
+      // The flyout sizes to its longest label (width: max-content below);
+      // `minWidth` is a floor, not the width. Position by the MEASURED width
+      // once it has rendered, so a long label is never clipped behind a
+      // horizontal scrollbar (#563 COWORK #9).
+      const width = Math.min(Math.max(minWidth, flyoutRef.current?.offsetWidth ?? 0), viewportWidth - margin * 2);
 
       // Prefer opening to the right of the trigger row; fall back to the
       // left if there isn't enough room so the flyout never gets clipped
@@ -177,10 +182,13 @@ function NavSubmenu({
     }
 
     updatePosition();
+    // Once more after the flyout has rendered, now with its measured width.
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
 
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -207,14 +215,18 @@ function NavSubmenu({
   const flyout =
     isOpen && flyoutPos ? (
       <div
+        ref={flyoutRef}
         role="menu"
         className="mshGlobalHeaderDropdownMenu"
         style={{
           position: "fixed",
           top: flyoutPos.top,
           left: flyoutPos.left,
-          width: flyoutPos.width,
+          minWidth: minWidth,
+          width: "max-content",
+          maxWidth: `calc(100vw - 20px)`,
           maxHeight: flyoutPos.maxHeight,
+          overflowX: "hidden",
           overflowY: "auto",
           background: "#0b1220",
           border: "1px solid rgba(255,255,255,0.12)",
@@ -340,6 +352,11 @@ function NavDropdown({
       const viewportWidth = window.innerWidth;
       const margin = 10;
       const desiredWidth = item.menuMinWidth ?? 180;
+      // The menu sizes to its longest label (width: max-content below);
+      // `menuMinWidth` is a floor, not the width. A fixed 180px clipped
+      // "Capex — Follow the money" behind a horizontal scrollbar (#563
+      // COWORK #9). Position by the MEASURED width once it has rendered.
+      const measured = menuRef.current?.offsetWidth ?? 0;
 
       // The menu was previously anchored purely by its right edge
       // (`right: window.innerWidth - rect.right`) with no horizontal
@@ -350,7 +367,7 @@ function NavDropdown({
       // instead (right-aligned to the trigger by default) and clamp both
       // edges to the viewport, capping the width so the whole menu always
       // stays on-screen and scrolls internally if it's still too tall.
-      const width = Math.min(desiredWidth, viewportWidth - margin * 2);
+      const width = Math.min(Math.max(desiredWidth, measured), viewportWidth - margin * 2);
       let left = rect.right - width;
       left = Math.min(Math.max(left, margin), viewportWidth - margin - width);
 
@@ -366,10 +383,13 @@ function NavDropdown({
     }
 
     updatePosition();
+    // Once more after the menu has rendered, now with its measured width.
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
 
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -429,8 +449,11 @@ function NavDropdown({
           position: "fixed",
           top: menuPos.top,
           left: menuPos.left,
-          width: menuPos.width,
+          minWidth: Math.min(item.menuMinWidth ?? 180, menuPos.width),
+          width: "max-content",
+          maxWidth: `calc(100vw - 20px)`,
           maxHeight: menuPos.maxHeight,
+          overflowX: "hidden",
           overflowY: "auto",
           background: "#0b1220",
           border: "1px solid rgba(255,255,255,0.12)",
