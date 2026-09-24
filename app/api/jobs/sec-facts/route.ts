@@ -6,6 +6,8 @@ import { readManifest, writeManifest, type SecManifest } from "@/lib/server/secM
 import { drainColdCiks } from "@/lib/server/secColdCik";
 import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW, SEC_YEAR_WINDOW, type CompanyFacts } from "@/lib/server/secExtract";
 import { extractForSymbol } from "@/lib/server/secExtractFor";
+import { withPredecessorFacts } from "@/lib/server/secSuccession";
+import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
@@ -483,6 +485,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // COMMITTED RE-READ REQUESTS join the reverify queue before it is built
+  // (one a run, one-shot via verifiedAt). See secRereadRequests.
+  const requested = applyRereadRequests(manifest, SEC_REREAD_REQUESTS, Date.now());
+  if (requested.length) console.log(`[sec-facts] re-read requested: ${requested.join(", ")}`);
+
   const q = populationQueues(manifest);
   // CAPTURED BEFORE THE FACT-SET LOOP CLEARS IT. A symbol queued for a re-read
   // by an 8-K or 6-K ("unconfirmed") filed since Sep 20 has no lastEventFiled
@@ -563,7 +570,9 @@ export async function GET(req: NextRequest) {
       continue;
     }
     try {
-      const facts = await fetchCompanyFacts(cik);
+      // A CITED SUCCESSOR (XOM) reads its predecessor's history too, through
+      // the same rate gate. See secSuccession.
+      const facts = await withPredecessorFacts(cik, await fetchCompanyFacts(cik), fetchCompanyFacts);
       const extracted = extractForSymbol(symbol, facts);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is

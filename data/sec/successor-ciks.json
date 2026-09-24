@@ -1,0 +1,20 @@
+{
+ "_comment": "Holding-company successions: the listed ticker moved to a NEW registrant (CIK) whose companyfacts starts at the reorganization, while its history stays under the predecessor's CIK. Each entry is reviewed and cited from EDGAR's own filing lists (relay sec-succession). Read by lib/server/secSuccession.ts; the predecessor's facts only FILL periods the successor has not published, and only when the two cover-page share counts agree (a 1:1 exchange).",
+ "successors": [
+  {
+   "symbol": "XOM",
+   "cik": 2115436,
+   "name": "ExxonMobil Holdings Corp",
+   "predecessorCik": 34088,
+   "predecessorName": "EXXON MOBIL CORP",
+   "kind": "holding-company reorganization",
+   "evidence": [
+    "8-K12B filed 2026-07-01 by the successor, accession 0001193125-26-291990",
+    "25-NSE filed 2026-07-02 for the predecessor (NYSE listing withdrawn)",
+    "10-Q for the period ended 2026-06-30, accession 0000034088-26-000093, listed under both CIKs"
+   ],
+   "citedFrom": "relay sec-succession, run 35994313863",
+   "addedOn": "2026-09-24"
+  }
+ ]
+}

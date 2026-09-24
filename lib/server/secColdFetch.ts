@@ -83,6 +83,7 @@ import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 import { companyFactsAbsent, unreadableReason, type CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
+import { withPredecessorFacts } from "./secSuccession";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
@@ -473,6 +474,26 @@ const SEC_UA = process.env.SEC_USER_AGENT || "";
 export const SEC_COLD_FETCH_REVALIDATE = 3600;
 
 async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet> {
+  // A CITED SUCCESSOR (XOM) reads its predecessor's history too, through the
+  // same fetch and its rules. See secSuccession.
+  const facts = await withPredecessorFacts(cik, await fetchFactsFor(cik), fetchFactsFor);
+  // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
+  // here is the shape where one path gains a condition and the other does not.
+  const set = await toStoredSet(extractForSymbol(symbol, facts));
+  // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
+  // caching it is what stops every visitor re-fetching 3MB to learn the same
+  // nothing. hasUsableData() tells the two apart at read time.
+  await writeFactSet(set);
+  // THE MANIFEST IS THE ONLY PLACE THAT DOES NOT KNOW THIS CIK. We cannot have
+  // reached here without one — cikForSymbol is the first gate in
+  // resolveFactSetForRender — and `populationQueues` filters on `e.cik`, so an
+  // entry without one is in NO cron queue. Recorded to a small side channel
+  // rather than written into the 417 KB manifest from a render. See secColdCik.
+  await recordColdCik(symbol, cik);
+  return set;
+}
+
+async function fetchFactsFor(cik: string): Promise<CompanyFacts> {
   const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
     headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
     // NOT `cache: "no-store"`. That hint opts the whole route out of static
@@ -502,21 +523,7 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   const ct = res.headers.get("content-type") ?? "";
   // A 200 carrying HTML is not data. Same strictness that caught Stooq.
   if (!absent && !ct.includes("json")) throw new Error(`expected JSON, got ${ct}`);
-  const facts: CompanyFacts = absent ? { cik: Number(cik), facts: {} } : ((await res.json()) as CompanyFacts);
-  // SAME CONVERSION RULE AS THE CRON, from the same function. A second copy
-  // here is the shape where one path gains a condition and the other does not.
-  const set = await toStoredSet(extractForSymbol(symbol, facts));
-  // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
-  // caching it is what stops every visitor re-fetching 3MB to learn the same
-  // nothing. hasUsableData() tells the two apart at read time.
-  await writeFactSet(set);
-  // THE MANIFEST IS THE ONLY PLACE THAT DOES NOT KNOW THIS CIK. We cannot have
-  // reached here without one — cikForSymbol is the first gate in
-  // resolveFactSetForRender — and `populationQueues` filters on `e.cik`, so an
-  // entry without one is in NO cron queue. Recorded to a small side channel
-  // rather than written into the 417 KB manifest from a render. See secColdCik.
-  await recordColdCik(symbol, cik);
-  return set;
+  return absent ? { cik: Number(cik), facts: {} } : ((await res.json()) as CompanyFacts);
 }
 
 /**

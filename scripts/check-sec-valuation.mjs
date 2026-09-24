@@ -6,7 +6,7 @@
 // 19 built from three quarters looks exactly like a P/E of 14 built from four,
 // and nothing downstream can tell them apart.
 import { readCodeOnly, grabConst } from "./lib/source-code.mjs";
-import { lift } from "./lib/earnings-plan.mjs";
+import { lift, grabFunction } from "./lib/earnings-plan.mjs";
 
 const strip = (f) => readCodeOnly(f).replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "");
 
@@ -31,6 +31,10 @@ const PRELUDE = [
   // declaration is cut out by name, and cutting it fails loudly rather than
   // silently yielding nothing.
   grabConst("lib/server/secReportDates.ts", "DEADLINE_FALLBACK"),
+  // THE ANNUAL-ONLY PREDICATE (#548), read by valuationInputs for the P/E
+  // basis (#552 COWORK #9): the function and its constant, not the module.
+  grabConst("lib/server/annualOnly.ts", "ANNUAL_ONLY_QUARTER_MONTHS"),
+  grabFunction(readCodeOnly("lib/server/annualOnly.ts"), "annualOnlyForm"),
 ].join("\n");
 const SRC = strip("lib/server/secValuation.ts");
 
@@ -63,10 +67,12 @@ const underMutation = async (name, from, to, probe) => {
 
 // ── fixtures, positional like the real stored set ─────────────────────────
 const EPS = mod.SEC_FIELD_INDEX.epsDiluted;
+const SHARES = mod.SEC_FIELD_INDEX.sharesDiluted;
 const WIDTH = mod.SEC_FIELD_KEYS.length;
-const q = (fy, fp, end, eps) => {
+const q = (fy, fp, end, eps, shares = null) => {
   const v = Array(WIDTH).fill(null);
   if (eps !== null) v[EPS] = eps;
+  if (shares !== null) v[SHARES] = shares;
   return { e: end, s: null, fp, fy, a: "a", f: end, v, d: "" };
 };
 const set = (over = {}) => ({
@@ -153,17 +159,141 @@ console.log("\n2. A FISCAL YEAR IS A BASIS; FY PLUS NINE MONTHS IS NOT");
     `got ${yearOnly.eps?.val} on ${yearOnly.eps?.basis} — RYAAY and ABEV are this shape`);
 
   // THE TWO BASES ARE NEVER COMBINED. A filer with three quarters AND a fiscal
-  // year must not produce FY + 9M; it falls to the whole year.
+  // year must not produce FY + 9M. Nor does it fall back to that year when the
+  // year is OLDER than its newest quarter: that year is not "trailing", and
+  // the fallback was the NVDA defect (#552 COWORK #8). It is refused.
   const both = mod.valuationInputs(set({
     quarters: FOUR.slice(0, 3),
     years: [q(2025, "FY", "2025-12-31", 4.2)],
   }), TODAY);
-  check("three quarters beside a fiscal year give the YEAR, never the sum of both",
-    near(both.eps?.val, 4.2) && both.eps.basis === "fiscal-year",
+  check("three quarters beside an OLDER fiscal year: refused — neither the stale year nor FY+9M",
+    both.eps === null && both.refusals.includes("no-twelve-month-eps"),
     `got ${both.eps?.val} on ${both.eps?.basis}; FY+9M would be ${4.2 + 1.0 + 0.9 + 1.2}`);
+  await underMutation(
+    "the stale fiscal-year fallback restored",
+    "(year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null)",
+    "year",
+    (m) => m.valuationInputs(set({ quarters: FOUR.slice(0, 3), years: [q(2025, "FY", "2025-12-31", 4.2)] }), TODAY).eps === null
+  );
   check("and quarters are PREFERRED when they qualify, because they are newer",
     mod.valuationInputs(set({ quarters: FOUR, years: [q(2025, "FY", "2025-12-31", 4.2)] }), TODAY)
       .eps?.basis === "four-quarters");
+}
+
+console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 COWORK #8/#9)");
+{
+  // THE PINS ARE REAL FILED ROWS, SEC values only, from the read-only relay
+  // run write-ttm-eps-measure (35990661130): [end, fp, fy, epsDiluted,
+  // sharesDiluted]. Before this fix NVDA priced on FY2026's 4.90.
+  const PIN = {
+    NVDA: { annualForm: "10-K", cur: null,
+      q: [["2026-07-26", "Q2", 2027, 2.46, 24285000000], ["2026-04-26", "Q1", 2027, 2.39, 24391000000], ["2026-01-25", "Q4", 2026, null, null], ["2025-10-26", "Q3", 2026, 1.3, 24483000000], ["2025-07-27", "Q2", 2026, 1.08, 24532000000], ["2025-04-27", "Q1", 2026, 0.76, 24611000000]],
+      y: [["2026-01-25", "FY", 2026, 4.9, 24514000000]] },
+    GOOGL: { annualForm: "10-K", cur: "USD",
+      q: [["2026-06-30", "Q2", 2026, 9.11, 12309000000], ["2026-03-31", "Q1", 2026, 5.11, 12238000000], ["2025-12-31", "Q4", 2025, null, null], ["2025-09-30", "Q3", 2025, 2.87, 12203000000], ["2025-06-30", "Q2", 2025, 2.31, 12198000000], ["2025-03-31", "Q1", 2025, 2.81, 12291000000]],
+      y: [["2025-12-31", "FY", 2025, 10.81, 12230000000]] },
+    MSFT: { annualForm: "10-K", cur: null,
+      q: [["2026-06-30", "Q4", 2026, null, null], ["2026-03-31", "Q3", 2026, 4.27, 7445000000], ["2025-12-31", "Q2", 2026, 5.16, 7460000000], ["2025-09-30", "Q1", 2026, 3.72, 7466000000]],
+      y: [["2026-06-30", "FY", 2026, 17.95, 7453000000]] },
+    // XOM's stored quarters carry no fiscal labels and it has no years: an
+    // extractor gap, pinned here as a named refusal, not a number.
+    XOM: { annualForm: null, cur: null, q: [["2026-06-30", null, null, 3.48, null], ["2025-06-30", null, null, 1.64, null]], y: [] },
+    // Annual-only (#548): 20-F, no structured quarter. Keeps its fiscal year.
+    TSM: { annualForm: "20-F", cur: "USD", q: [], y: [["2024-12-31", "FY", 2024, 1.36, 25929700000]] },
+  };
+  const pinSet = (p) => set({ symbol: "PIN", cur: p.cur ?? undefined,
+    quarters: p.q.map(([e, fp, fy, eps, sh]) => q(fy, fp, e, eps, sh)),
+    years: p.y.map(([e, fp, fy, eps, sh]) => q(fy, fp, e, eps, sh)) });
+  const PIN_TODAY = "2026-09-24";
+  const epsOf = (m, name) => m.valuationInputs(pinSet(PIN[name]), PIN_TODAY, { annualForm: PIN[name].annualForm }).eps;
+
+  const nvda = epsOf(mod, "NVDA");
+  check("NVDA: TTM 7.91 over the four quarters to 2026-07-26, its Q4 derived as 4.90 − (0.76 + 1.08 + 1.30)",
+    near(nvda?.val, 7.91, 1e-6) && nvda.basis === "four-quarters" && nvda.periodEnd === "2026-07-26" && nvda.derivedQ4 === "2026-01-25",
+    JSON.stringify(nvda));
+  const googl = epsOf(mod, "GOOGL");
+  check("GOOGL: TTM 19.91 to 2026-06-30 (a USD-reporting set is not 'converted')",
+    near(googl?.val, 19.91, 1e-6) && googl.derivedQ4 === "2025-12-31", JSON.stringify(googl));
+  const msft = epsOf(mod, "MSFT");
+  check("MSFT: newest quarter IS Q4, so the TTM equals FY2026's 17.95",
+    near(msft?.val, 17.95, 1e-6) && msft.periodEnd === "2026-06-30", JSON.stringify(msft));
+  const xom = mod.valuationInputs(pinSet(PIN.XOM), PIN_TODAY, { annualForm: null });
+  check("XOM: no fiscal labels, no years → a named refusal, not a number",
+    xom.eps === null && xom.refusals.includes("no-twelve-month-eps"), JSON.stringify(xom.eps));
+  const tsm = epsOf(mod, "TSM");
+  check("TSM (annual-only, 20-F): the fiscal year, labelled FY2024",
+    near(tsm?.val, 1.36) && tsm.basis === "fiscal-year" && tsm.fiscalYear === 2024, JSON.stringify(tsm));
+
+  // THE MUTATION COWORK #8 ASKED FOR: the old rule (no derivation, any year as
+  // a fallback) puts NVDA back on 4.90.
+  {
+    let pinHolds;
+    try {
+      const m = await build(SRC
+        .replace("const d = derivedQ4Eps(set, q);", "const d = null;")
+        .replace("(year && (newestQuarter === null || year.periodEnd >= newestQuarter) ? year : null)", "year"));
+      pinHolds = near(epsOf(m, "NVDA")?.val, 7.91, 1e-6);
+    } catch { pinHolds = false; }
+    check('MUTATION "the old fiscal-year fallback" fails the NVDA pin', !pinHolds,
+      pinHolds ? "NVDA still 7.91 with the old rule — the pin proves nothing" : "");
+  }
+
+  // ANNUAL-ONLY FILERS NEVER GET A TTM, even when four old consecutive
+  // quarters are stored (a 6-K with XBRL, over six months ago).
+  const ANNUAL = { annualForm: "20-F", cur: null,
+    q: [["2024-12-31", "Q4", 2024, 0.9, 100], ["2024-09-30", "Q3", 2024, 0.8, 100], ["2024-06-30", "Q2", 2024, 0.7, 100], ["2024-03-31", "Q1", 2024, 0.6, 100]],
+    y: [["2025-12-31", "FY", 2025, 5.0, 100]] };
+  const annual = mod.valuationInputs(pinSet(ANNUAL), PIN_TODAY, { annualForm: "20-F" }).eps;
+  check("an annual-only filer with old quarters on file keeps its fiscal year",
+    annual?.basis === "fiscal-year" && near(annual.val, 5.0), JSON.stringify(annual));
+  await underMutation(
+    "the TTM path applied to an annual-only filer",
+    "const annualOnly = annualOnlyForm(filer.annualForm, set, today) !== null;",
+    "const annualOnly = false;",
+    (m) => m.valuationInputs(pinSet(ANNUAL), PIN_TODAY, { annualForm: "20-F" }).eps?.basis === "fiscal-year"
+  );
+
+  // THE Q4 GUARDS. A split inside the year, and a converted set, refuse.
+  const split = { ...PIN.NVDA, q: PIN.NVDA.q.map((r, i) => (i >= 4 ? [...r.slice(0, 4), r[4] / 10] : r)) };
+  check("a share basis that moved inside the year (a 10:1 split) refuses the derived Q4",
+    mod.valuationInputs(pinSet(split), PIN_TODAY, { annualForm: "10-K" }).eps === null);
+  await underMutation(
+    "the share-basis guard removed",
+    "    if (Math.abs(shares / yearShares - 1) > Q4_SHARE_BASIS_TOLERANCE) return null;\n",
+    "",
+    (m) => m.valuationInputs(pinSet(split), PIN_TODAY, { annualForm: "10-K" }).eps === null
+  );
+  // BASIC COUNTS WHEN NO DILUTED COUNT IS STATED (XOM tags only basic since
+  // 2013). The EPS values are XOM's filed rows (relay sec-succession-verify,
+  // 35994871934); the share counts are illustrative, inside the 20% band.
+  const BASIC = mod.SEC_FIELD_INDEX.sharesBasic;
+  const basicOnly = (rows, yearRows, mixYear = false) => set({ symbol: "PIN",
+    quarters: rows.map(([e, fp, fy, eps, sh]) => { const p = q(fy, fp, e, eps); if (sh !== null) p.v[BASIC] = sh; return p; }),
+    years: yearRows.map(([e, fp, fy, eps, sh]) => { const p = q(fy, fp, e, eps, mixYear ? sh : null); if (sh !== null && !mixYear) p.v[BASIC] = sh; return p; }) });
+  const XOMQ = [["2026-06-30", "Q2", 2026, 3.48, 4150000000], ["2026-03-31", "Q1", 2026, 1.0, 4190000000], ["2025-12-31", "Q4", 2025, null, null],
+    ["2025-09-30", "Q3", 2025, 1.76, 4270000000], ["2025-06-30", "Q2", 2025, 1.64, 4300000000], ["2025-03-31", "Q1", 2025, 1.76, 4330000000]];
+  const XOMY = [["2025-12-31", "FY", 2025, 6.7, 4290000000]];
+  const xomEps = mod.valuationInputs(basicOnly(XOMQ, XOMY), PIN_TODAY, { annualForm: "10-K" }).eps;
+  check("a filer stating only BASIC counts (XOM): Q4 derived as 6.70 − (1.76 + 1.64 + 1.76), TTM 7.78",
+    near(xomEps?.val, 7.78, 1e-6) && xomEps.derivedQ4 === "2025-12-31", JSON.stringify(xomEps));
+  check("diluted on the year but basic on the quarters is never mixed: refused",
+    mod.valuationInputs(basicOnly(XOMQ, XOMY, true), PIN_TODAY, { annualForm: "10-K" }).eps === null);
+  await underMutation(
+    "the basic-count fallback removed",
+    '    : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"\n',
+    "",
+    (m) => near(m.valuationInputs(basicOnly(XOMQ, XOMY), PIN_TODAY, { annualForm: "10-K" }).eps?.val, 7.78, 1e-6)
+  );
+
+  const converted = { ...PIN.NVDA, cur: "EUR" };
+  check("a set converted from another currency refuses the derived Q4 (four rates, one subtraction)",
+    mod.valuationInputs(pinSet(converted), PIN_TODAY, { annualForm: "10-K" }).eps === null);
+  await underMutation(
+    "the currency guard removed",
+    '  if (set.cur && set.cur !== "USD") return null;\n',
+    "",
+    (m) => m.valuationInputs(pinSet(converted), PIN_TODAY, { annualForm: "10-K" }).eps === null
+  );
 }
 
 console.log("\n3. A MULTI-CLASS SHARE COUNT CANNOT BE PICKED");

@@ -24,6 +24,7 @@ import type { FilingRef, StoredFactSet, StoredPeriod } from "./secFactCodec";
 import type { Submissions } from "./secReportDates";
 import type { CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
+import { withPredecessorFacts } from "./secSuccession";
 import { toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
@@ -207,7 +208,8 @@ async function checkAndFillFrom(
     return { kind: "current", lag: stored.ff ? prior?.lag ?? null : null };
   }
   const f = filing!;
-  const cf = await fetch.companyFacts(cik);
+  // A CITED SUCCESSOR (XOM) reads its predecessor's history too. See secSuccession.
+  const cf = await withPredecessorFacts(cik, await fetch.companyFacts(cik), fetch.companyFacts);
   const base = extractForSymbol(symbol, cf);
   const baseNewest = newestStoredEnd({
     quarters: base.quarters.map((p) => ({ e: p.end })) as StoredPeriod[],
