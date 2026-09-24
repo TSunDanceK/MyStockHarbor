@@ -280,7 +280,9 @@
   "2320": {
    "sector": "Consumer Cyclical",
    "industry": "Apparel - Manufacturers",
-   "sec": "Men's & Boys' Furnishgs, Work Clothg, & Allied Garments"
+   "rules": true,
+   "sec": "Men's & Boys' Furnishgs, Work Clothg, & Allied Garments",
+   "crossSector": true
   },
   "2621": {
    "sector": "Basic Materials",
@@ -352,6 +354,11 @@
    "sector": "Consumer Defensive",
    "industry": "Household & Personal Products",
    "sec": "Soap, Detergents, Cleang Preparations, Perfumes, Cosmetics"
+  },
+  "2842": {
+   "sector": "Consumer Defensive",
+   "industry": "Household & Personal Products",
+   "sec": "Specialty Cleaning, Polishing and Sanitation Preparations"
   },
   "2844": {
    "sector": "Consumer Defensive",
@@ -917,6 +924,12 @@
    "industry": "Specialty Retail",
    "sec": "Retail-Miscellaneous Retail"
   },
+  "5912": {
+   "sector": "Healthcare",
+   "industry": null,
+   "rules": true,
+   "sec": "Retail-Drug Stores and Proprietary Stores"
+  },
   "5961": {
    "sector": "Consumer Cyclical",
    "industry": "Specialty Retail",
@@ -1091,7 +1104,9 @@
   "7340": {
    "sector": "Industrials",
    "industry": "Specialty Business Services",
-   "sec": "Services-To Dwellings & Other Buildings"
+   "rules": true,
+   "sec": "Services-To Dwellings & Other Buildings",
+   "crossSector": true
   },
   "7350": {
    "sector": "Industrials",

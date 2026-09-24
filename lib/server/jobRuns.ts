@@ -60,6 +60,9 @@ export const JOBS = {
   "warm-stock-data": { label: "Stock data (every 10 min, :07)", instrumented: true, cron: "7-57/10 * * * *" },
   "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
   "warm-picker-universe": { label: "Picker universe (daily 07:02)", instrumented: true, cron: "2 7 * * *" },
+  // Relay B, 2026-09-23: the picker pages' SEC fundamentals. Reads stored fact
+  // sets only (no upstream call); 05:35 is after sec-facts' 04:20 refresh.
+  "warm-pickers-sec": { label: "Picker SEC fundamentals (daily 05:35)", instrumented: true, cron: "35 5 * * *" },
   // 04:00 UTC, AND THE TIME IS THE POINT. EDGAR dissemination runs to 22:00 ET,
   // so a date's daily index is not final until after that. 04:00 UTC is 00:00 ET
   // on EDT and 23:00 ET on EST -- past the close in both, without needing the

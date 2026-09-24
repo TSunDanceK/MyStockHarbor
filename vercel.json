@@ -69,6 +69,10 @@
       "schedule": "40 * * * *"
     },
     {
+      "path": "/api/jobs/warm-pickers-sec",
+      "schedule": "35 5 * * *"
+    },
+    {
       "path": "/api/jobs/capex-receivers",
       "schedule": "50 5 * * *"
     }

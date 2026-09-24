@@ -635,6 +635,28 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
+  // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
+  // ~70 commands.
+  "write-ttm-eps-measure": {
+    script: "scripts/ttm-eps-measure.mjs",
+    args: () => [],
+    writes: true,
+  },
+  // READS ONLY: fact sets with no years / unlabelled quarters (XOM's shape),
+  // and companyfacts + the shipped extractor for XOM and a few more
+  // (#552 COWORK #28). ~35 commands.
+  // Read-only, no credential: EDGAR submissions for successor:predecessor
+  // CIK pairs, to cite a holding-company succession (#552 COWORK #28).
+  // Read-only, no credential: the XOM succession merge on the real payloads,
+  // through the shipped code, lifted (#552 COWORK #28).
+  "sec-succession-verify": { script: "scripts/sec-succession-verify.mjs", args: (env) => [env.SYMBOLS || "XOM"], needsTypescript: true },
+  "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
+  "write-sec-sparse-sets": {
+    script: "scripts/sec-sparse-sets-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -971,6 +993,13 @@ const TASKS = {
   // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #5): which Redis keys in
   // B's area still hold FMP payloads, and how many news records carry FMP-era
   // items. SCAN + sampled TTL + MGET only.
+  // READ-ONLY (Relay B, #553 COWORK #12): why a sector's "Sector today" reads
+  // "--". write- only for the Redis credentials; 5 commands.
+  "write-sector-today-probe": {
+    script: "scripts/sector-today-probe.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-fmp-residue-census": {
     script: "scripts/fmp-residue-census.mjs",
     args: () => [],
@@ -983,6 +1012,16 @@ const TASKS = {
   "write-fmp-cache-delete": {
     script: "scripts/fmp-cache-delete.mjs",
     args: () => [],
+    writes: true,
+  },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #1 item 4): Pickers SEC
+  // coverage vs the FMP values production shows, per column and per preset,
+  // plus the preset row counts under the shipped lib/server/pickersSecFundamentals.
+  // HKEYS/HMGET/MGET/GET only; ~870 commands once.
+  "write-pickers-sec-coverage": {
+    script: "scripts/pickers-sec-coverage.mjs",
+    args: () => [],
+    needsTypescript: true,
     writes: true,
   },
   // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #11): items per sector
@@ -1020,6 +1059,24 @@ const TASKS = {
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
   "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
+  // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
+  // once so the PR preview shows the filings figures. A key nothing on main
+  // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
+  // the script's own gate holds even if it is ever invoked outside this router.
+  "write-pickers-sec-seed": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
+  // --dry mode against the live Pickers universe -- prints the issue body, writes
+  // nothing. 2 Redis reads.
+  "write-classification-needed-dry": {
+    script: "scripts/classification-needed.mjs",
+    args: () => ["--dry"],
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
