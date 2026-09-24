@@ -1,5 +1,5 @@
 {
- "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
+ "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K (or, for a new listing with no 10-K yet, its IPO prospectus, 424B4) states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
  "entries": {
   "ABNB": {
    "listed": "CommonClassAMember",
@@ -193,6 +193,18 @@
    ],
    "source": "0001141391-26-000013"
   },
+  "MAIR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of Class B common stock is convertible into shares of Class A common stock on a one-for-one basis at the option of the Class B stockholder.",
+    "The holders of Class A common stock and the holders of Class B common stock shall be entitled to share equally, on a per share basis, in such dividends and other distributions of cash, property or shares of stock of the Company as may be declared by the Board from time to time with respect to the Class A common stock and Class B common stock"
+   ],
+   "source": "0001193125-26-160250"
+  },
   "META": {
    "listed": "CommonClassAMember",
    "weights": {
@@ -308,6 +320,19 @@
     "Except with respect to certain voting, conversion, and transfer rights and as otherwise expressly provided in the Company's amended and restated certificate of incorporation or required by applicable law, shares of the Company's Class A common stock and Class B common stock have the same rights and privileges and rank equally, share ratably, and are identical in all respects as to all matters."
    ],
    "source": "0001628280-26-008114"
+  },
+  "SPCX": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of Class B common stock will be convertible at any time at the option of the holder into one share of our Class A common stock.",
+    "Any dividends paid to the holders of shares of Class A common stock, Class B common stock and Class C common stock will be paid pro rata, on an equal priority, pari passu basis.",
+    "Upon the Company’s liquidation, dissolution or winding up, holders of shares of Class A common stock, Class B common stock and Class C common stock are entitled to share ratably in all assets remaining after payment of liabilities and the liquidation preference of any then outstanding shares of capital stock of the Company."
+   ],
+   "source": "0001628280-26-042639"
   },
   "SPG": {
    "listed": "CommonClassAMember",

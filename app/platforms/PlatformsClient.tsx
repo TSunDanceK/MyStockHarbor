@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { readStored, writeStored } from "@/lib/browserStorage";
 import AffiliateLink from "../components/AffiliateLink";
 
 type Region = "UK" | "US";
@@ -443,7 +444,7 @@ export default function PlatformsClient({
   const [region, setRegion] = useState<Region>(initialRegion);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("msh-platform-region");
+    const saved = readStored("msh-platform-region");
     if (saved === "UK" || saved === "US") {
       setRegion(saved);
     }
@@ -451,7 +452,7 @@ export default function PlatformsClient({
 
   function switchRegion(nextRegion: Region) {
     setRegion(nextRegion);
-    window.localStorage.setItem("msh-platform-region", nextRegion);
+    writeStored("msh-platform-region", nextRegion);
   }
 
   const platforms = region === "US" ? US_PLATFORMS : UK_PLATFORMS;
