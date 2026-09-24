@@ -13,7 +13,7 @@ import { getDailyHistory } from "@/lib/server/historyCache";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
-import { getLatestEarningsData } from "@/lib/latest-earnings-data";
+import { secEarningsSummary } from "@/lib/server/secEarningsSummary";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
 import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 
@@ -120,15 +120,10 @@ async function getInitialEarningsSummary(
     // a prop, which serialises it into the page's RSC payload -- including
     // FMP's `nextEarningsDate`, an exact next-report day that nothing on this
     // page renders and that the owner's 2026-09-23 ruling keeps off the site.
-    const d = await getLatestEarningsData(symbol, "yellow");
-    return {
-      hasStructuredData: d.hasStructuredData,
-      tone: d.tone,
-      toneLabel: d.toneLabel,
-      reportDate: d.reportDate,
-      epsSurprisePercent: d.epsSurprisePercent,
-      revenueSurprisePercent: d.revenueSurprisePercent,
-    };
+    //
+    // AND FROM SEC SINCE 2026-09-23 (#535 COWORK #18 §3): the stock page's own
+    // snapshot verdict, not a second score built on FMP's /stable/earnings.
+    return await secEarningsSummary(symbol);
   } catch {
     return null;
   }
