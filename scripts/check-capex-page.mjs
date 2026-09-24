@@ -162,6 +162,20 @@ function navSuite(header, sections) {
   if (!(first >= 0 && capex > first)) fails.push("its entries are /bottlenecks first, then /bottlenecks/capex");
   if (/label: "Follow the Money"/.test(header)) fails.push("no separate top-level capex link");
   if (!sections.includes('{ href: "/bottlenecks/capex", label: "Capex — Follow the money" }')) fails.push("the crawlable nav lists the capex page");
+  // #563 COWORK #9: a fixed-width panel clipped "Capex — Follow the money"
+  // behind a horizontal scrollbar. Every header menu and flyout sizes to its
+  // content, never scrolls sideways, and is positioned by its measured width.
+  // (Rendered at 1366 and 1024 wide: no item's scrollWidth exceeds its
+  // clientWidth in any drop-down; the fixed 180px is caught.)
+  const menus = [...header.matchAll(/className="mshGlobalHeaderDropdownMenu"\s*style=\{\{([\s\S]*?)\}\}/g)].map((m) => m[1]);
+  if (menus.length !== 2) fails.push(`two header menu panels (menu + flyout), found ${menus.length}`);
+  for (const m of menus) {
+    if (!/width:\s*"max-content"/.test(m)) fails.push("a header menu panel sizes to its content (width: max-content)");
+    if (/\bwidth:\s*(menuPos|flyoutPos)\.width/.test(m)) fails.push("no header menu panel has a fixed width");
+    if (!/overflowX:\s*"hidden"/.test(m)) fails.push("no header menu panel scrolls sideways (overflowX: hidden)");
+    if (!/maxWidth:/.test(m)) fails.push("a header menu panel stays inside the viewport (maxWidth)");
+  }
+  if (!/menuRef\.current\?\.offsetWidth/.test(header) || !/flyoutRef\.current\?\.offsetWidth/.test(header)) fails.push("menus are positioned by their measured width");
   return fails;
 }
 const header = read("app/components/SiteHeader.tsx");
@@ -175,4 +189,8 @@ if (!navSuite(header.replace('kind: "dropdown",\n        label: "Bottlenecks",',
   console.error("MUTANT SURVIVED: Bottlenecks back to a plain link");
   process.exit(1);
 }
-console.log(`check-capex-page: all assertions pass; ${MUTANTS.length + 1} mutants caught`);
+if (!navSuite(header.replace('width: "max-content",\n          maxWidth: `calc(100vw - 20px)`,\n          maxHeight: menuPos.maxHeight,', 'width: menuPos.width,\n          maxWidth: `calc(100vw - 20px)`,\n          maxHeight: menuPos.maxHeight,'), sections).length) {
+  console.error("MUTANT SURVIVED: the header menu's fixed width restored");
+  process.exit(1);
+}
+console.log(`check-capex-page: all assertions pass; ${MUTANTS.length + 2} mutants caught`);

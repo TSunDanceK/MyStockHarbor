@@ -345,8 +345,9 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
  * cover. No FMP wording — the section no longer reads FMP.
  */
 function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null): string {
-  const basis = (b: "four-quarters" | "fiscal-year", end: string) =>
-    b === "four-quarters" ? `the four quarters to ${end}` : `the fiscal year to ${end}`;
+  const basis = (b: "four-quarters" | "fiscal-year" | "year-to-date", end: string) =>
+    b === "four-quarters" ? `the four quarters to ${end}`
+      : b === "year-to-date" ? `the twelve months to ${end}` : `the fiscal year to ${end}`;
   const parts: string[] = [];
   if (v?.eps) parts.push(`earnings over ${basis(v.eps.basis, v.eps.periodEnd)}`);
   if (m?.revenue) parts.push(`revenue over ${basis(m.revenue.basis, m.revenue.periodEnd)}`);

@@ -65,9 +65,10 @@ check("the budget starts before the manifest read",
     route.indexOf("const budget = makeJobBudget();") < route.indexOf("await readManifest()"));
 // TWO again since the filing-folder read moved to its own job (#535 COWORK
 // #10/#12): companyfacts and submissions. The filing job's one gate is bounded
-// the same way, asserted below.
-check("both SEC fetches are bounded",
-  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 2);
+// the same way, asserted below. THREE since #552 COWORK #31: the cited
+// multi-class filers' cover read (secGetGated) is bounded the same way.
+check("all three SEC fetches (companyfacts, submissions, the class-cover read) are bounded",
+  (route.match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 3);
 check("the filing job's SEC fetch is bounded too, through its one rate gate",
   (fs.readFileSync("app/api/jobs/sec-filings/route.ts", "utf8").match(/signal: AbortSignal\.timeout\(FETCH_TIMEOUT_MS\)/g) ?? []).length === 1);
 check("both FX fetches (FRED, ECB) are bounded",
