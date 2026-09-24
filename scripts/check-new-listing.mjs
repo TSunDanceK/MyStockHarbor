@@ -35,11 +35,15 @@ const inst = (f, end, val) => ({ end, val, accn: f.accn, form: f.form, fy: f.fy,
 function facts(filings) {
   const has = (f) => filings.includes(f);
   const usd = (rows) => ({ units: { USD: rows.filter(Boolean) } });
-  const rev = [], cor = [], op = [], ni = [], eps = [], sh = [], ocf = [], capex = [];
+  const rev = [], cor = [], op = [], ni = [], eps = [], sh = [], ocf = [], capex = [], gp = [], rd = [], sga = [];
   // Q2 10-Q: three months to 06-30 (current + comparative), six months YTD, both tagged fy2026 Q2.
   if (has(Q2)) {
     rev.push(r(Q2, "2026-04-01", "2026-06-30", 7_814e6), r(Q2, "2025-04-01", "2025-06-30", 4_071e6), r(Q2, "2026-01-01", "2026-06-30", 14_500e6), r(Q2, "2025-01-01", "2025-06-30", 7_900e6));
     cor.push(r(Q2, "2026-04-01", "2026-06-30", 3_495e6), r(Q2, "2025-04-01", "2025-06-30", 2_282e6));
+    // The breakdown misses the filed -143M by 5M on 7.8B of revenue (item 8).
+    gp.push(r(Q2, "2026-04-01", "2026-06-30", 4_319e6));
+    rd.push(r(Q2, "2026-04-01", "2026-06-30", 1_467e6));
+    sga.push(r(Q2, "2026-04-01", "2026-06-30", 3_000e6));
     op.push(r(Q2, "2026-04-01", "2026-06-30", -143e6), r(Q2, "2025-04-01", "2025-06-30", -970e6));
     ni.push(r(Q2, "2026-04-01", "2026-06-30", -541e6), r(Q2, "2025-04-01", "2025-06-30", -1_008e6), r(Q2, "2026-01-01", "2026-06-30", -900e6), r(Q2, "2025-01-01", "2025-06-30", -1_700e6));
     eps.push(r(Q2, "2026-04-01", "2026-06-30", -0.09), r(Q2, "2025-04-01", "2025-06-30", -0.34));
@@ -75,6 +79,7 @@ function facts(filings) {
         Revenues: usd(rev), CostOfRevenue: usd(cor), OperatingIncomeLoss: usd(op), NetIncomeLoss: usd(ni),
         EarningsPerShareDiluted: { units: { "USD/shares": eps } },
         WeightedAverageNumberOfDilutedSharesOutstanding: { units: { shares: sh } },
+        GrossProfit: usd(gp), ResearchAndDevelopmentExpense: usd(rd), SellingGeneralAndAdministrativeExpense: usd(sga),
         NetCashProvidedByUsedInOperatingActivities: usd(ocf), PaymentsToAcquirePropertyPlantAndEquipment: usd(capex),
       },
     },
@@ -121,6 +126,25 @@ check("the score reads more than one input (revenue growth, profitability, cash 
   const Mm = await loadCards(once("const cashFrom = ytd ?? (", "const cashFrom = ("));
   check("MUTATION: the year-to-date fallback removed → no operating cash flow on the card",
     build(Mm, [Q2]).view.cashQuality.operatingCashFlow.val === null);
+}
+
+const INDEX = "https://www.sec.gov/Archives/edgar/data/1181412/000162828026052535/0001628280-26-052535-index.htm";
+check("the filing link is the 10-Q's own EDGAR index (CIK + accession), not the ticker browse",
+  A.view.latestFilingUrl === INDEX, A.view.latestFilingUrl);
+{
+  const m = html(React.createElement(M.SecSnapshotCard, { view: A.view, score: A.score }));
+  check("...and the snapshot card links to it", m.includes(`href="${INDEX}"`) && !m.includes("browse-edgar"));
+  const noCik = M.buildSecEarningsView({ ...A.set, cik: null }, { cik: "0001181412" });
+  check("a set with no CIK (filled from the filing) takes the registrant map's", noCik.latestFilingUrl === INDEX);
+  check("no CIK anywhere → no link, never a wrong one", M.buildSecEarningsView({ ...A.set, cik: null }).latestFilingUrl === null);
+  const Mm = await loadCards(once("if (!cik || !accession ||", "return `https://www.sec.gov/cgi-bin/browse-edgar?CIK=${cik}`; if (!cik || !accession ||"));
+  check("MUTATION: the old browse link back → caught", build(Mm, [Q2]).view.latestFilingUrl !== INDEX);
+}
+check("the expense lines count as adding up: a 5M miss on 7.8B of revenue is rounding, not a gap",
+  A.view.incomeStatementComplete === true);
+{
+  const Mm = await loadCards(once("export const ADD_UP_REVENUE_SHARE = 0.001;", "export const ADD_UP_REVENUE_SHARE = 0;"));
+  check("MUTATION: tolerance on operating income alone → 'do not add up' again", build(Mm, [Q2]).view.incomeStatementComplete === false);
 }
 
 console.log("\nB. + the Q3 10-Q");
