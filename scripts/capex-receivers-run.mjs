@@ -56,12 +56,12 @@ const { record, stats } = await refreshReceivers(file.rows, null, fetchers, {
 
 const fmt = (v, cur) => (v === null || v === undefined ? "—" : `${cur === "USD" ? "" : cur + " "}${(v / 1e9).toFixed(2)}bn`);
 console.log(`receivers: ${file.rows.length} lines, ${stats.companies} companies; filings read ${stats.filingsRead}, deferred ${stats.deferred}, SEC requests ${stats.secRequests}, ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
-console.log("id | form accession | FY | current | prior | change | label in filing | sub-label ok");
+console.log("id | form accession | FY | concept | current | prior | change | label in filing | sub-label ok");
 for (const e of file.rows) {
   const r = record.rows[e.id];
   if (!r) { console.log(`${e.id} | NO ROW`); continue; }
   const pc = percentChange(r.current, r.prior);
-  console.log(`${e.id} | ${r.form} ${r.accession} | ${r.fyStart}..${r.fyEnd} | ${fmt(r.current, r.currency)} | ${fmt(r.prior, r.currency)} | ${pc === null ? "n/a" : (pc >= 0 ? "+" : "") + pc.toFixed(0) + "%"} | ${r.labelInFiling ?? "(none)"}${r.labelInFiling && r.labelInFiling !== e.filedLabel ? ` ≠ committed "${e.filedLabel}"` : ""} | ${e.subLabel ? r.subLabelOk : "-"}`);
+  console.log(`${e.id} | ${r.form} ${r.accession} | ${r.fyStart}..${r.fyEnd} | ${r.concept.replace(/^[^:]+:/, "")} | ${fmt(r.current, r.currency)} | ${fmt(r.prior, r.currency)} | ${pc === null ? "n/a" : (pc >= 0 ? "+" : "") + pc.toFixed(0) + "%"} | ${r.labelInFiling ?? "(none)"}${r.labelInFiling && r.labelInFiling !== e.filedLabel ? ` ≠ committed "${e.filedLabel}"` : ""} | ${e.subLabel ? r.subLabelOk : "-"}`);
 }
 console.log(`\nflags (${record.flags.length}):`);
 for (const f of record.flags) console.log(`  ${f.id}: ${f.kind} — ${f.detail}`);
