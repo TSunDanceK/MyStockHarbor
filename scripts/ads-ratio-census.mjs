@@ -51,6 +51,11 @@ for (const s of mine) {
     const f6Text = f6IsNewer ? await docText(i6) : null;
     lastRef = i20 >= 0 ? `20-F ${r.accessionNumber[i20]} ${r.filingDate[i20]}` : "no 20-F";
     // THE SHIPPED SOURCE RULE: lib/server/secAdsRatio.decideAdsRow.
+    if (process.env.SHOW12B && text20) {
+      const flat = text20.replace(/\s+/g, " "), at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
+      console.log(`  12(b) table: ${at < 0 ? "not found" : flat.slice(at, at + 2500)}`);
+      console.log(`  rows: ${JSON.stringify(R.coverRowsFor(text20, s))}`);
+    }
     const decided = R.decideAdsRow(text20, s, f6Text, f6IsNewer);
     if ("row" in decided) {
       const i = decided.row.from === "20-F" ? i20 : i6;
