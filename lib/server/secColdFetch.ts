@@ -85,6 +85,7 @@ import { companyFactsAbsent, unreadableReason, type CompanyFacts } from "./secEx
 import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
+import { withInstanceEps } from "./secInstanceEps";
 import { type StoredFactSet } from "./secFactCodec";
 import { toStoredSet } from "./secFactBuild";
 import { needsReread } from "./secStaleness";
@@ -482,8 +483,10 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // here is the shape where one path gains a condition and the other does not.
   const extracted = extractForSymbol(symbol, facts);
   // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
-  extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares,
-    (url) => fetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } }));
+  const secGet = (url: string) => fetch(url, { headers: { "User-Agent": SEC_UA }, next: { revalidate: SEC_COLD_FETCH_REVALIDATE } });
+  extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGet);
+  // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
+  extracted.ttmEps = await withInstanceEps(symbol, cik, extracted, secGet);
   const set = await toStoredSet(extracted);
   // STORED EVEN WHEN EMPTY. An IFRS filer's empty set is a real answer and
   // caching it is what stops every visitor re-fetching 3MB to learn the same

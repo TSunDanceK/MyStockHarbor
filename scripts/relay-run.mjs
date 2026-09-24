@@ -703,6 +703,8 @@ const TASKS = {
   // Read-only, no credential: the shipped class-cover read over every cited entry (#552 COWORK #31).
   // Read-only, no credential: a filer's EPS concepts, companyfacts and instance (#552 COWORK #33).
   "sec-eps-concepts": { script: "scripts/eps-concepts-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
+  // Read-only, no credential: the shipped filing-based TTM EPS on real filings (#552 COWORK #33).
+  "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {

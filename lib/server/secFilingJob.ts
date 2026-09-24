@@ -26,6 +26,7 @@ import type { CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { withPredecessorFacts } from "./secSuccession";
 import { withClassCover } from "./secCoverClasses";
+import { withInstanceEps } from "./secInstanceEps";
 import { toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
 import { sicChangeOf, type SicChange } from "./secSicChange";
@@ -222,6 +223,8 @@ async function checkAndFillFrom(
     years: base.years.map((p) => ({ e: p.end })) as StoredPeriod[],
   });
   if (baseNewest !== null && baseNewest >= f.reportDate) {
+    // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q where the periods cannot give it. See secInstanceEps.
+    base.ttmEps = await withInstanceEps(symbol, cik, base, fetch.get);
     return { kind: "caught-up", set: await toStoredSet(base, defaultSources(), fxSeries), lag: null };
   }
   if (stored.lg?.accn === f.accn) return { kind: "noted", lag: prior?.lag ?? { accn: f.accn, reportDate: f.reportDate, kind: "notice" } };
@@ -230,6 +233,7 @@ async function checkAndFillFrom(
     ? mergeFillOnly(cf, instanceToFacts(xml, f).facts, base.reportingCurrency)
     : { merged: cf, added: 0 };
   const filled = added ? { ...extractForSymbol(symbol, merged), coverShares: base.coverShares } : base;
+  filled.ttmEps = await withInstanceEps(symbol, cik, filled, fetch.get);
   const next = await toStoredSet(filled, defaultSources(), fxSeries);
   const noticeOnly = isLagging(next, f);
   const lag = { accn: f.accn, reportDate: f.reportDate, kind: noticeOnly ? "notice" as const : "filled" as const };

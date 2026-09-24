@@ -8,6 +8,7 @@ import { checkIdentities, companyFactsAbsent, identityRates, SEC_QUARTER_WINDOW,
 import { extractForSymbol } from "@/lib/server/secExtractFor";
 import { withPredecessorFacts } from "@/lib/server/secSuccession";
 import { withClassCover } from "@/lib/server/secCoverClasses";
+import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
 import { toStoredSet } from "@/lib/server/secFactBuild";
@@ -589,6 +590,9 @@ export async function GET(req: NextRequest) {
       const extracted = extractForSymbol(symbol, facts);
       // A CITED MULTI-CLASS FILER'S COVER COMES FROM ITS OWN FILING, per class.
       extracted.coverShares = await withClassCover(symbol, cik, extracted.coverShares, secGetGated);
+      // TWELVE MONTHS OF EPS FROM THE 10-K AND 10-Q, only where the periods
+      // cannot give it (#552 COWORK #33). See secInstanceEps.
+      extracted.ttmEps = await withInstanceEps(symbol, cik, extracted, secGetGated);
       // CONVERTED HERE, NOT IN THE EXTRACTION. extractCompanyFacts is
       // network-free and a rate lookup is not; keeping the fetch out here is
       // also what keeps the conversion after differencing, which happens

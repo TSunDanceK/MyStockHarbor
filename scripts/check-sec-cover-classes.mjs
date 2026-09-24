@@ -73,7 +73,7 @@ check("no per-class facts refuses", !M.coverFromClasses([], BRK, {}).ok);
 
 console.log("\n3. every companyfacts reader applies it after extracting");
 const READERS = {
-  "lib/server/secColdFetch.ts": /const extracted = extractForSymbol\(symbol, facts\);\s*extracted\.coverShares = await withClassCover\(symbol, cik, extracted\.coverShares,/,
+  "lib/server/secColdFetch.ts": /const extracted = extractForSymbol\(symbol, facts\);[\s\S]{0,400}?extracted\.coverShares = await withClassCover\(symbol, cik, extracted\.coverShares, secGet\)/,
   "app/api/jobs/sec-facts/route.ts": /const extracted = extractForSymbol\(symbol, facts\);\s*extracted\.coverShares = await withClassCover\(symbol, cik, extracted\.coverShares, secGetGated\)/,
   "lib/server/secFilingJob.ts": /const base = extractForSymbol\(symbol, cf\);\s*base\.coverShares = await withClassCover\(symbol, cik, base\.coverShares, fetch\.get\)/,
 };

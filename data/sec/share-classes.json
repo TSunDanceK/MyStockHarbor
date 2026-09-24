@@ -1,5 +1,5 @@
 {
- "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts.",
+ "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
  "entries": {
   "ABNB": {
    "listed": "CommonClassAMember",
@@ -70,9 +70,11 @@
    },
    "evidence": [
     "Each share of Class A common stock is convertible, at the option of the holder, into 1,500 shares of Class B common stock.",
-    "Class B common stock possesses dividend and distribution rights equal to one-fifteen-hundredth (1/1,500) of such rights of Class A common stock."
+    "Class B common stock possesses dividend and distribution rights equal to one-fifteen-hundredth (1/1,500) of such rights of Class A common stock.",
+    "EPS is stated per EquivalentClassAMember and per EquivalentClassBMember (10-Q 0001193125-26-341032: 17,868 per equivalent Class A share and 11.91 per equivalent Class B share for the quarter to 2026-06-30; 17,868 / 1,500 = 11.91). The listed Class B's EPS is the EquivalentClassBMember figure."
    ],
-   "source": "0001193125-26-083899"
+   "source": "0001193125-26-083899",
+   "epsMember": "EquivalentClassBMember"
   },
   "CHTR": {
    "listed": "CommonClassAMember",

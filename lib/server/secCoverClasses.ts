@@ -33,6 +33,8 @@ export type ShareClassEntry = {
   evidence: string[];
   /** The 10-K the evidence is quoted from (accession). */
   source: string;
+  /** The class to read EPS for, when not `listed` (BRK: per equivalent Class B share). See secInstanceEps. */
+  epsMember?: string;
 };
 
 const ENTRIES = (sharesFile as unknown as { entries: Record<string, ShareClassEntry> }).entries;
