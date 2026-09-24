@@ -263,6 +263,28 @@ console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 
     "",
     (m) => m.valuationInputs(pinSet(split), PIN_TODAY, { annualForm: "10-K" }).eps === null
   );
+  // BASIC COUNTS WHEN NO DILUTED COUNT IS STATED (XOM tags only basic since
+  // 2013). The EPS values are XOM's filed rows (relay sec-succession-verify,
+  // 35994871934); the share counts are illustrative, inside the 20% band.
+  const BASIC = mod.SEC_FIELD_INDEX.sharesBasic;
+  const basicOnly = (rows, yearRows, mixYear = false) => set({ symbol: "PIN",
+    quarters: rows.map(([e, fp, fy, eps, sh]) => { const p = q(fy, fp, e, eps); if (sh !== null) p.v[BASIC] = sh; return p; }),
+    years: yearRows.map(([e, fp, fy, eps, sh]) => { const p = q(fy, fp, e, eps, mixYear ? sh : null); if (sh !== null && !mixYear) p.v[BASIC] = sh; return p; }) });
+  const XOMQ = [["2026-06-30", "Q2", 2026, 3.48, 4150000000], ["2026-03-31", "Q1", 2026, 1.0, 4190000000], ["2025-12-31", "Q4", 2025, null, null],
+    ["2025-09-30", "Q3", 2025, 1.76, 4270000000], ["2025-06-30", "Q2", 2025, 1.64, 4300000000], ["2025-03-31", "Q1", 2025, 1.76, 4330000000]];
+  const XOMY = [["2025-12-31", "FY", 2025, 6.7, 4290000000]];
+  const xomEps = mod.valuationInputs(basicOnly(XOMQ, XOMY), PIN_TODAY, { annualForm: "10-K" }).eps;
+  check("a filer stating only BASIC counts (XOM): Q4 derived as 6.70 − (1.76 + 1.64 + 1.76), TTM 7.78",
+    near(xomEps?.val, 7.78, 1e-6) && xomEps.derivedQ4 === "2025-12-31", JSON.stringify(xomEps));
+  check("diluted on the year but basic on the quarters is never mixed: refused",
+    mod.valuationInputs(basicOnly(XOMQ, XOMY, true), PIN_TODAY, { annualForm: "10-K" }).eps === null);
+  await underMutation(
+    "the basic-count fallback removed",
+    '    : periods.every((p) => valueOf(p, "sharesDiluted") === null && valueOf(p, "sharesBasic") !== null) ? "sharesBasic"\n',
+    "",
+    (m) => near(m.valuationInputs(basicOnly(XOMQ, XOMY), PIN_TODAY, { annualForm: "10-K" }).eps?.val, 7.78, 1e-6)
+  );
+
   const converted = { ...PIN.NVDA, cur: "EUR" };
   check("a set converted from another currency refuses the derived Q4 (four rates, one subtraction)",
     mod.valuationInputs(pinSet(converted), PIN_TODAY, { annualForm: "10-K" }).eps === null);
