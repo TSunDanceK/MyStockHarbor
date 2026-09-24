@@ -660,6 +660,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
+  // QXO anchor fix measured before it ships (#552 COWORK #30).
+  "write-sec-fy-anchor-census": {
+    script: "scripts/sec-fy-anchor-census.mjs",
+    args: () => [],
+    writes: true,
+    needsTypescript: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
