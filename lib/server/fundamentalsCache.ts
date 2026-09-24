@@ -10,7 +10,7 @@
 import { Redis } from "@upstash/redis";
 import { readPricePoolBulk } from "./pricePool";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
-import { claimStalest, deferSymbol, markRefreshed, registerSymbols } from "./stalenessQueue";
+import { claimStalest, markRefreshed, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 import { resolveProfileBulk } from "./staticProfile";
@@ -37,9 +37,7 @@ const redis =
     : null;
 
 const FUND_KEY_PREFIX = "msh:pickers:fundamentals:v1:";
-const PROFILE_KEY_PREFIX = "msh:pickers:profile:v1:";
 const FUND_TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily warm
-const PROFILE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30d -- industry/sector are static
 
 // STEP 2 (2026-08-06 follow-up session): app/api/market/route.ts already makes
 // one stable/company-screener call per master-list rebuild (~daily) to source
@@ -66,24 +64,6 @@ const SCREENER_FUND_KEY_PREFIX = "msh:pickers:screener-fundamentals:v1:";
 // ensureDailyShuffledMasterList's Eastern-day rollover in app/api/market) so a
 // delayed rebuild doesn't empty the cache before the next one lands.
 const SCREENER_FUND_TTL_SECONDS = 60 * 60 * 30; // 30h
-
-// A symbol FMP genuinely has no industry for (an ETF, a trust, a recent
-// listing). Recorded so it is retried periodically rather than either
-// re-fetched on every single run or excluded forever.
-//
-// Both of those failure modes are real and this key sits exactly between them.
-// Excluding forever is the bug fixed below -- it is what kept GFS/TSEM/ALAB off
-// /semiconductor-stocks. Re-fetching every run is what the naive form of that
-// fix produces: `fetchProfile` returns a truthy object with `industry: null`
-// for such a symbol, so it never stops qualifying as a miss, and it would
-// occupy the PROFILE_MAX_PER_RUN budget every day forever, starving genuinely
-// new symbols and slowing the very backfill this change exists to enable.
-//
-// A week is chosen against the daily cron: long enough that a permanently
-// empty symbol costs one attempt a week rather than seven, short enough that a
-// newly listed company picks up its industry within a week of FMP having it.
-const PROFILE_EMPTY_KEY_PREFIX = "msh:pickers:profile-noindustry:v1:";
-const PROFILE_EMPTY_TTL_SECONDS = 60 * 60 * 24 * 7; // 7d
 
 // Where the quote stage stopped last run, as an index into the universe.
 //
@@ -131,22 +111,6 @@ const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
 // this the run says so on its record instead of quietly spending the universe.
 const QUOTE_FALLBACK_MAX_PER_RUN = 100;
 // ─────────────────────────────────────────────────────────────────────────────
-// Cap on fresh profile fetches per run.
-//
-// Overridable via MSH_PROFILE_MAX_PER_RUN for a BACKFILL. Fixing the exclusion
-// below turns every previously locked-out symbol into a miss at once, and the
-// cron is daily (`30 7 * * *` in vercel.json), so at 120 a backlog of N takes
-// ceil(N/120) DAYS to clear. Raise the env var for a few runs, then remove it.
-//
-// Raising it is safe but not free: every profile fetch still goes through
-// reserveFmpCallSlot (300/min) and the shared 90s wait budget, so a large
-// value does not breach the FMP limit -- it just means the run spends longer
-// waiting, against `maxDuration = 300` on the route. Values into the low
-// hundreds are fine; the whole universe in one run is not.
-const PROFILE_MAX_PER_RUN = (() => {
-  const raw = Number(process.env.MSH_PROFILE_MAX_PER_RUN);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 120;
-})();
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings warmers
 
 // The FMP guard counts calls per MINUTE, so an exhausted budget means "wait a
@@ -163,12 +127,6 @@ export type FundamentalsRow = {
   industry: string | null;
   sector: string | null;
   updatedAt: string;
-};
-
-type ProfileLite = {
-  industry: string | null;
-  sector: string | null;
-  marketCap: number | null;
 };
 
 export type ScreenerFundamentalsRow = {
@@ -269,55 +227,6 @@ export async function readCachedFundamentalsBulk(
   }
 
   return result;
-}
-
-async function readCachedProfilesBulk(
-  symbols: string[]
-): Promise<Map<string, ProfileLite>> {
-  const result = new Map<string, ProfileLite>();
-  if (!redis) return result;
-  try {
-    const keys = symbols.map((s) => `${PROFILE_KEY_PREFIX}${s}`);
-    const values = await redis.mget<ProfileLite[]>(...keys);
-    symbols.forEach((symbol, i) => {
-      const row = values[i];
-      if (row && typeof row === "object") {
-        result.set(symbol, {
-          industry: str(row.industry),
-          sector: str(row.sector),
-          marketCap: num(row.marketCap),
-        });
-      }
-    });
-  } catch {
-    // fail open
-  }
-  return result;
-}
-
-/**
- * Symbols we asked FMP about within PROFILE_EMPTY_TTL_SECONDS and which came
- * back with no industry. See PROFILE_EMPTY_KEY_PREFIX.
- *
- * Fails OPEN to the empty set, and that direction is deliberate: a Redis blip
- * then means "retry these symbols", costing at most one extra run of profile
- * fetches. Failing closed would mean "skip them", which is the exclusion this
- * whole change removes -- and it would be invisible, because a skipped symbol
- * and a symbol with no industry render identically.
- */
-async function readEmptyProfileMarks(symbols: string[]): Promise<Set<string>> {
-  const marked = new Set<string>();
-  if (!redis || !symbols.length) return marked;
-  try {
-    const keys = symbols.map((s) => `${PROFILE_EMPTY_KEY_PREFIX}${s}`);
-    const values = await redis.mget<(string | number | null)[]>(...keys);
-    symbols.forEach((symbol, i) => {
-      if (values[i] != null) marked.add(symbol);
-    });
-  } catch {
-    // fail open -- see above, the open direction is the safe one here
-  }
-  return marked;
 }
 
 /**
@@ -563,32 +472,10 @@ async function fetchQuoteFundamentals(
   return { quotes: out, consumed, batchQuoteAvailable: batchAvailable };
 }
 
-async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | null> {
-  try {
-    await reserveFmpCallSlot();
-    const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(
-      sym
-    )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
-    if (!res.ok) return null;
-    const json = await res.json().catch(() => null);
-    const row = Array.isArray(json) ? json[0] : json;
-    if (!row) return null;
-    return {
-      industry: str(row?.industry),
-      sector: str(row?.sector),
-      marketCap: num(row?.marketCap) ?? num(row?.mktCap),
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Cron/warm worker: refresh cached fundamentals for the given universe.
- *   - industry/sector: reuse cached profiles, then the screener-fundamentals
- *     cache (free -- see cacheScreenerFundamentals), and only THEN fall back to
- *     a fresh profile fetch for whatever neither source covers, capped per run
+ *   - industry/sector: A's SEC resolver only (10-K override -> SIC table);
+ *     no FMP profile fetch since #553 COWORK #16
  *   - then market cap + PE via quote (daily-fresh)
  * Writes one combined FundamentalsRow per symbol (26h TTL). Fail-open and
  * budget-guarded throughout. Returns a small summary for the job response.
@@ -607,130 +494,13 @@ export async function warmFundamentals(symbols: string[]) {
 
   const wait: WaitBudget = { remainingMs: CAPACITY_WAIT_BUDGET_MS };
 
-  // 1) industry/sector. Reuse cached profiles first, then the screener
-  // fundamentals cache (zero FMP cost -- populated as a side effect of the
-  // company-screener call app/api/market/route.ts already makes), and only
-  // fetch a fresh profile for whatever neither source already covers. This
-  // stage runs before quotes deliberately. Quotes need one call per symbol on
-  // plans without batch-quote -- roughly the whole universe -- so running it
-  // first left the profile stage staring at a drained budget, and profiles
-  // (or the screener cache) are the only source of industry/sector. Profiles
-  // are also far cheaper in aggregate: they carry a 30-day TTL, so in the
-  // steady state this stage fetches a handful of symbols a day, not the whole
-  // universe.
-  //
-  // WHAT COUNTS AS A MISS IS THE WHOLE POINT, and it was wrong until
-  // 2026-08-22. This tested `screenerFund.has(s)` -- that a screener ROW
-  // EXISTS -- when what the stage needs is that the row has an INDUSTRY.
-  // `ScreenerFundamentalsRow.industry` is `string | null`, and
-  // cacheScreenerFundamentals stores a row whenever `row.symbol` is truthy, so
-  // any symbol whose screener row carried a null industry was treated as
-  // covered and never sent to the profile fetch -- the one call that could
-  // have supplied it. Nothing expired it back into contention either: the
-  // screener call refreshes that row every rebuild, so the exclusion renewed
-  // itself indefinitely. Re-running the cron could never fix it, because the
-  // filter ran before the fetch loop and skipped the same symbols every time.
-  //
-  // The user-visible damage was silent and was NOT a missing column.
-  // /semiconductor-stocks selects on `industry === "Semiconductors"` and
-  // /cheap-tech-stocks on `sector === "Technology"`, so an affected company was
-  // not shown with a dash -- it was absent from the page. The best-performing
-  // page in that cluster had been serving an incomplete list.
-  //
-  // Same fix as claude/seo-recovery-progress-2026-08-17.md ("prefer whichever
-  // source has a sector"), which was applied to the read path and never to this
-  // one. The write below already does the right thing
-  // (`p?.industry ?? sc?.industry ?? null`); only the SELECTION of what to
-  // fetch was still asking the wrong question.
-  //
-  // What the remaining misses actually are: symbols no source has an industry
-  // for yet -- those outside the screener's own filter (sub-floor market cap,
-  // non NASDAQ/NYSE, funds/ETFs) AND those inside it whose row came back with a
-  // null industry.
-  const cachedProfiles = await readCachedProfilesBulk(cleanSymbols);
+  // 1) industry/sector: NO FETCH. Since #553 COWORK #16 they come from A's
+  // resolver alone (lib/server/staticProfile: 10-K override -> SIC table ->
+  // major group), not from FMP. The per-symbol /stable/profile fetch, its 30-day
+  // profile cache and its empty-marks are gone -- and with them ~2 MGETs over
+  // the universe and up to 120 FMP calls + SETs a run. The screener cache is
+  // still read for its market-cap fallback only.
   const screenerFund = await readCachedScreenerFundamentals(cleanSymbols);
-  const emptyProfileMarks = await readEmptyProfileMarks(cleanSymbols);
-  // BOTH FIELDS, not just industry. `sector` and `industry` are SEPARATE
-  // nullable columns on ScreenerFundamentalsRow, and a row can carry one without
-  // the other. Testing only `industry` marked such a symbol as covered, so it
-  // never got a profile fetch and its sector stayed null forever -- which left
-  // /cheap-tech-stocks (`sector` = Technology) permanently truncated. Exactly the
-  // defect #337 fixed for /semiconductor-stocks, one field over.
-  const needsIndustry = cleanSymbols.filter((s) => {
-    const profile = cachedProfiles.get(s);
-    const screener = screenerFund.get(s);
-    const noIndustry = !profile?.industry && !screener?.industry;
-    const noSector = !profile?.sector && !screener?.sector;
-    return noIndustry || noSector;
-  });
-  // Asked recently and FMP had nothing. Deferred, never excluded -- the mark
-  // expires (PROFILE_EMPTY_TTL_SECONDS) and the symbol returns to the queue.
-  const profileMisses = needsIndustry.filter((s) => !emptyProfileMarks.has(s));
-  // THE TRADE THIS CHANGE MAKES, MEASURED RATHER THAN ASSUMED.
-  //
-  // Widening the filter above turns every sector-only gap into a profile miss at
-  // once, so the profile stage now reaches PROFILE_MAX_PER_RUN on runs where it
-  // previously ran out of work. That stage spends the SHARED 90s wait budget
-  // FIRST, and fetchQuoteFundamentals `return out`s when the budget is dry
-  // rather than degrading -- so the cost of fixing sectors is paid in P/E
-  // coverage, silently, unless it is counted.
-  //
-  // Recorded before and after so the split is a number in the run summary. If
-  // waitAfterProfilesMs collapses toward zero, run the backlog out of band with
-  // MSH_PROFILE_MAX_PER_RUN instead of letting the daily job absorb it.
-  const waitBeforeProfilesMs = wait.remainingMs;
-  let profileFetches = 0;
-  let profileIndustriesFound = 0;
-  let profileEmptyMarked = 0;
-  for (const sym of profileMisses) {
-    if (profileFetches >= PROFILE_MAX_PER_RUN) break;
-    if (!(await awaitFmpCapacity(wait))) break;
-    const profile = await fetchProfile(sym, apiKey);
-    if (profile) {
-      cachedProfiles.set(sym, profile);
-      profileFetches++;
-      try {
-        await redis.set(`${PROFILE_KEY_PREFIX}${sym}`, profile, { ex: PROFILE_TTL_SECONDS });
-      } catch {
-        // fail open
-      }
-      // ALSO BOTH FIELDS. The marker used to be set on `!profile.industry`
-      // alone, so a profile carrying an industry but no sector was cached,
-      // never marked, and never revisited -- it would be re-selected by the
-      // filter above every run and re-fetched forever, or (before that filter
-      // was fixed) never selected at all. Either way the sector never arrived.
-      if (profile.industry && profile.sector) {
-        profileIndustriesFound++;
-        // Staleness bookkeeping. Only on a REAL industry: a profile that came
-        // back without one has not been refreshed in any sense the health page
-        // cares about, and scoring it as fresh would make a permanently empty
-        // symbol read green.
-        await markRefreshed("profile", [sym]);
-      } else {
-        // Asked, and FMP had no industry. Mark it so the next few runs spend
-        // their budget on symbols that might actually yield one.
-        //
-        // Only ever set after a SUCCESSFUL fetch that genuinely lacked an
-        // industry. `fetchProfile` returns null on a network error, a non-ok
-        // status or a parse failure, and that path deliberately falls through
-        // here without marking -- otherwise one bad FMP minute would defer a
-        // healthy symbol for a week, which is a small version of the bug being
-        // fixed.
-        profileEmptyMarked++;
-        try {
-          await redis.set(`${PROFILE_EMPTY_KEY_PREFIX}${sym}`, 1, { ex: PROFILE_EMPTY_TTL_SECONDS });
-        } catch {
-          // fail open
-        }
-        // Queue rule 1: defer, never exclude. Without this a symbol FMP has no
-        // industry for is permanently the stalest thing in the set and holds
-        // the front of the queue forever, so "do the stalest first" quietly
-        // becomes "retry the broken ones forever". Same window as the
-        // empty-marker above so the two cannot disagree.
-        await deferSymbol("profile", sym, PROFILE_EMPTY_TTL_SECONDS);
-      }
-    }
-  }
 
   // 2) market cap + PE, resuming where the last run stopped.
   //
@@ -833,14 +603,9 @@ export async function warmFundamentals(symbols: string[]) {
   // did not. The FMP value still wins where there is one — resolveProfileBulk
   // puts the cache first — so a live row is unchanged.
   const resolvedTaxonomy = resolveProfileBulk(
-    cleanSymbols.map((sym) => {
-      const p = cachedProfiles.get(sym);
-      const sc = screenerFund.get(sym);
-      return {
-        symbol: sym,
-        cached: { sector: p?.sector ?? sc?.sector ?? null, industry: p?.industry ?? sc?.industry ?? null },
-      };
-    }),
+    // cached: null -- no vendor label is a candidate (COWORK #16); the
+    // resolver answers from the filing override or the SIC table.
+    cleanSymbols.map((sym) => ({ symbol: sym, cached: null })),
     "pickers fundamentals warm"
   );
 
@@ -850,13 +615,12 @@ export async function warmFundamentals(symbols: string[]) {
   const writePipeline = redis.pipeline();
   for (const sym of cleanSymbols) {
     const q = quoteMap.get(sym);
-    const p = cachedProfiles.get(sym);
     const sc = screenerFund.get(sym);
-    if (!q && !p && !sc) continue;
     const tax = resolvedTaxonomy.get(sym);
+    if (!q && !sc && !tax?.sector && !tax?.industry) continue;
     const row: FundamentalsRow = {
       symbol: sym,
-      marketCap: q?.marketCap ?? p?.marketCap ?? sc?.marketCap ?? null,
+      marketCap: q?.marketCap ?? sc?.marketCap ?? null,
       peRatio: q?.peRatio ?? null,
       industry: tax?.industry ?? null,
       sector: tax?.sector ?? null,
@@ -912,7 +676,6 @@ export async function warmFundamentals(symbols: string[]) {
   // succeeded, so a dataset missing half the universe would report 100% fresh
   // on the half it has -- coverage that cannot see what is absent.
   await registerSymbols("fundamentals", cleanSymbols);
-  await registerSymbols("profile", cleanSymbols);
   if (quoteMap.size) await markRefreshed("fundamentals", [...quoteMap.keys()]);
 
   // Write the buffered FMP byte samples once, at the end, rather than a Redis
@@ -968,28 +731,12 @@ export async function warmFundamentals(symbols: string[]) {
     // per-symbol path is the permanent cost, not a transient one.
     batchQuoteAvailable,
     screenerCovered: screenerFund.size,
-    // Symbols no source has an industry for, BEFORE deferring the ones FMP has
-    // already been asked about. Reported alongside profileMisses so a large
-    // gap between the two reads as "mostly deferred", not "mostly done".
-    // How much of the shared 90s wait budget the profile stage left for the
-    // quote stage. The quote stage exits early and silently when this hits
-    // zero, so a falling number here is P/E coverage being traded for sector
-    // coverage -- visible, rather than discovered later.
-    waitBeforeProfilesMs,
-    waitAfterProfilesMs: wait.remainingMs,
-    waitSpentOnProfilesMs: waitBeforeProfilesMs - wait.remainingMs,
-    needsIndustry: needsIndustry.length,
-    profileMisses: profileMisses.length,
-    profileFetches,
-    profileIndustriesFound,
-    profileEmptyMarked,
-    emptyMarked: emptyProfileMarks.size,
-    profilesKnown: cachedProfiles.size,
+    // Sector/industry now come from the SEC resolver; these count what it
+    // answered (the misses are what the "Classification needed" helper lists).
     industryKnown,
     industryMissing: cleanSymbols.length - industryKnown,
     sectorKnown,
     sectorMissing: cleanSymbols.length - sectorKnown,
-    profileMaxPerRun: PROFILE_MAX_PER_RUN,
     waitedMs: CAPACITY_WAIT_BUDGET_MS - wait.remainingMs,
     written,
   };
