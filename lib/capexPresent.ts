@@ -151,12 +151,15 @@ export function entityCase(raw: string): string {
   return name
     .split(/\s+/)
     .map((word, i) =>
-      word.replace(/[A-Z0-9&]+(?:\.[A-Z](?![A-Z]))*\.?/g, (tok) => {
+      word.replace(/[A-Z0-9&]+(?:\.[A-Z](?![A-Z]))*\.?/g, (tok, at: number, whole: string) => {
+        if (at > 0 && whole[at - 1] === "'") return tok.toLowerCase(); // MCDONALD'S -> McDonald's
         const bare = tok.replace(/\./g, "");
         if (MIXED[bare]) return MIXED[bare];
         if (LEGAL[bare]) return LEGAL[bare];
         if (KEEP_UPPER.has(bare) || tok.includes("&")) return tok;
         if (i > 0 && SMALL.has(bare)) return tok.toLowerCase();
+        // Scottish/Irish "Mc" names: MCKESSON -> McKesson, MCDONALD -> McDonald.
+        if (/^MC[A-Z]{4,}$/.test(tok)) return "Mc" + tok.charAt(2) + tok.slice(3).toLowerCase();
         return tok.charAt(0) + tok.slice(1).toLowerCase();
       })
     )
