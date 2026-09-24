@@ -22,9 +22,12 @@ import {
   writeStaleBarDays,
   mergeStaleBarDay,
   staleBarEvictionAction,
+  secListingEvictionAction,
   EVICTION_MIN_FAIL_STREAK,
   EVICTION_STALE_BAR_WEEKDAYS,
 } from "../../../../lib/server/symbolEviction";
+import { resolveTickerMap } from "../../../../lib/server/secTickerMap";
+import { secUnlistedSymbols } from "../../../../lib/server/secListing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,6 +123,7 @@ export async function GET(req: NextRequest) {
   // would read as "the entire universe is absent" and start corroboration
   // against every symbol at once. Absence is only evidence when there was
   // something to be absent from.
+  let sweepUniverse: string[] | null = null;
   const sweep = {
     absent: 0,
     // THE THIRD SIGNAL, COUNTED SEPARATELY AND NEVER FOLDED IN. `absentAndFailing: 0`
@@ -147,6 +151,12 @@ export async function GET(req: NextRequest) {
     tombstonedByStaleBars: 0,
     presetHandEdit: [] as string[],
     skipped: null as string | null,
+    // THE FOURTH SIGNAL (secListing.ts): absent from SEC's live ticker file.
+    // Its own skip reason, because it runs when the three above cannot.
+    secUnlisted: [] as string[],
+    evictedBySecListing: 0,
+    tombstonedBySecListing: 0,
+    secSkipped: null as string | null,
   };
   if (!result.ok || !result.symbols.length) {
     sweep.skipped = "screener-unavailable";
@@ -163,6 +173,7 @@ export async function GET(req: NextRequest) {
       const { symbols: universe } = await getWarmTargetSymbols(
         process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"
       );
+      sweepUniverse = universe;
       if (!universe.length) {
         sweep.skipped = "universe-unavailable";
         throw new SweepSkipped();
@@ -362,6 +373,65 @@ export async function GET(req: NextRequest) {
     console.warn(`[screener-fundamentals] delisting sweep skipped: ${sweep.skipped}`);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE FOURTH SIGNAL: SEC NO LONGER LISTS THE TICKER (#553 COWORK #20).
+  //
+  // OUTSIDE THE SCREENER BRANCH ON PURPOSE. The three rules above all stand on
+  // FMP and skip when its screener read fails; BK, EQR, EA and WBS stayed in
+  // the universe for weeks under them, and after 14 October the screener read
+  // fails every day. This pass needs only SEC's ticker file, already in Redis
+  // (one GET), and the universe -- reused when the pass above read it.
+  //
+  // Same preset gate, same eviction, same deregistration as the other routes.
+  // A rename is evicted like a delisting: the successor ticker (BNY for BK)
+  // cannot be derived from committed data, so the log names every symbol for a
+  // person to check.
+  try {
+    const universe =
+      sweepUniverse ??
+      (await getWarmTargetSymbols(process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com")).symbols;
+    const verdict = secUnlistedSymbols(universe, await resolveTickerMap());
+    sweep.secSkipped = verdict.skipped;
+    const already = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
+    const secEvicted: string[] = [];
+    for (const symbol of verdict.unlisted) {
+      sweep.secUnlisted.push(symbol);
+      if (already.has(symbol)) continue;
+      const action = secListingEvictionAction(symbol, true);
+      if (action === "hand-edit") {
+        sweep.presetHandEdit.push(symbol);
+        if (await claimPresetHandEditAlarm(symbol)) {
+          console.error(
+            `[screener-fundamentals] PRESET UNIVERSE NEEDS A HAND EDIT: ${symbol} ` +
+              `is no longer in SEC's ticker file. It cannot be evicted -- it is ` +
+              `hardcoded in lib/server/presetUniverse.ts. Check whether it was ` +
+              `renamed, acquired or delisted, then edit that array and redeploy.`
+          );
+        }
+        continue;
+      }
+      if (action === "evict") {
+        const evicted = await evictSymbol(symbol);
+        sweep.evicted.push(symbol);
+        sweep.evictedBySecListing++;
+        if (evicted.tombstoned) sweep.tombstonedBySecListing++;
+        secEvicted.push(symbol);
+      }
+    }
+    if (secEvicted.length) {
+      await deregisterSymbols(secEvicted);
+      console.warn(
+        `[screener-fundamentals] evicted ${secEvicted.length} symbol(s) SEC's ticker ` +
+          `file no longer lists: ${secEvicted.join(", ")}. A RENAME looks the same ` +
+          `as a delisting here -- check each for a successor ticker (same CIK) and ` +
+          `add it to the universe by hand.`
+      );
+    }
+  } catch (error) {
+    sweep.secSkipped = "sec-sweep-threw";
+    console.warn("[screener-fundamentals] SEC listing sweep failed:", error);
+  }
+
   await recordJobRun("warm-screener-fundamentals", result.ok, {
     // Symbols carrying BOTH signals today, and the ones that reached the
     // corroboration threshold. `absent` far above `evicted` is the healthy
@@ -412,6 +482,12 @@ export async function GET(req: NextRequest) {
     // an array because a JobRun summary value is a scalar; null when there is
     // nothing to report, so the field reads as "clean" rather than as "".
     presetNeedsHandEdit: sweep.presetHandEdit.join(", ") || null,
+    // THE FOURTH SIGNAL, named rather than counted: every symbol here is a
+    // delisting OR a rename, and only a person can tell which.
+    secUnlisted: sweep.secUnlisted.join(", ") || null,
+    evictedBySecListing: sweep.evictedBySecListing,
+    tombstonedBySecListing: sweep.tombstonedBySecListing,
+    secSweepSkipped: sweep.secSkipped,
     // WHY A DAY LOOKED CLEAN. Without this, "the sweep ran and found nothing"
     // and "the sweep never ran" are the same record -- and the second is the
     // more likely one, since it happens whenever the self-fetch is challenged
