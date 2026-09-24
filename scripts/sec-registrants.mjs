@@ -46,7 +46,11 @@ const { map: tickerMap } = tick.parseTickerFile(fs.readFileSync("data/sec/compan
 const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
 const previous = JSON.parse(fs.readFileSync(OUT, "utf8"));
 
-const symbols = [...new Set([...Object.keys(previous.rows ?? {}), ...Object.keys(cikMap)])].sort();
+// NAMED MODE (SYMBOLS=…, #552 COWORK #35): only those symbols are fetched, the
+// committed rows are kept as they are, and each fetched row is also printed as
+// `ROW {json}` so it can be applied from the log without a full refresh.
+const named = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+const symbols = named.length ? named : [...new Set([...Object.keys(previous.rows ?? {}), ...Object.keys(cikMap)])].sort();
 const cikFor = (s) => {
   for (const v of symbolSpellings(s)) {
     if (cikMap[v]) return tick.padCik(cikMap[v]);
@@ -76,7 +80,7 @@ async function getJson(url) {
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const ANNUAL = new Set(["10-K", "10-K405", "10-KT", "20-F", "40-F"]);
 
-const rows = {};
+const rows = named.length ? { ...(previous.rows ?? {}) } : {};
 const misses = { noCik: [], http: [] };
 const cikCache = new Map();
 let i = 0;
@@ -104,6 +108,7 @@ for (const symbol of symbols) {
     entityType: str(j.entityType),
     annualForm,
   };
+  if (named.length) console.log(`ROW ${JSON.stringify({ symbol, row: rows[symbol] })}`);
   if (i % 250 === 0) console.log(`  ... ${i} of ${symbols.length}`);
 }
 

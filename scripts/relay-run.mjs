@@ -209,6 +209,8 @@ const TASKS = {
   // year end, entity type, latest annual form) for every profiled symbol, from
   // SEC submissions. Read-only, no credentials. Prints the file into its log
   // for the session to reassemble — see the script header.
+  // Named symbols only (SYMBOLS=…): fetch those rows, print each (#552 COWORK #35).
+  "sec-registrants-named": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
   "sec-registrants": { script: "scripts/sec-registrants.mjs", args: () => [], needsTypescript: true },
   // EDGAR's own state/country code list, with ISO-3166 codes attached by name
   // match, for the /stock page's Country row. Read-only, no credentials.
@@ -643,6 +645,8 @@ const TASKS = {
   // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
   "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
   // READS ONLY: the Pickers universe as symbols (#552 COWORK #37). 1 GET.
+  // READS ONLY: the capex record's unplaced symbols (#552 COWORK #35). 1 GET.
+  "write-capex-unplaced-list": { script: "scripts/capex-unplaced-list.mjs", args: () => [], writes: true },
   "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
