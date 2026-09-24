@@ -288,7 +288,8 @@
     "consumer internet",
     "live streaming",
     "social platform",
-    "social networking"
+    "social networking",
+    "connect and share"
    ]
   },
   {
@@ -391,7 +392,9 @@
     "credit technology",
     "loan facilitation",
     "money transfer",
-    "cross-border payments"
+    "cross-border payments",
+    "card-issuing",
+    "card network"
    ]
   },
   {
@@ -718,7 +721,8 @@
     "cruises",
     "guest arrivals",
     "vacation rental",
-    "short-term rental"
+    "short-term rental",
+    "travel service provider"
    ]
   },
   {
@@ -760,7 +764,8 @@
     "streaming platform",
     "theme parks",
     "film studio",
-    "music company"
+    "music company",
+    "entertainment services"
    ]
   },
   {
@@ -990,7 +995,8 @@
    "industry": "Industrial - Machinery",
    "phrases": [
     "machinery",
-    "industrial equipment"
+    "industrial equipment",
+    "construction and mining equipment"
    ]
   },
   {
