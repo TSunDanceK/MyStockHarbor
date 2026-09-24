@@ -106,7 +106,8 @@ async function suite(P, pageCode) {
   ok("nothing is summed on the page", !/\.reduce\(/.test(pageCode));
   ok("indexed now that Layer 1 is in", /robots:\s*\{\s*index:\s*true/.test(pageCode) && pageCode.includes("readSpendingRecord()"));
   ok("the sector note is Cowork's wording (#563 COWORK #6)", pageCode.replace(/\s+/g, " ").includes("Sectors follow our classification: Amazon is counted in Consumer Cyclical, Alphabet and Meta in Communication Services."));
-  ok("the other-currency count is Cowork's wording", pageCode.includes("filers reporting in other currencies not included."));
+  // The owner-approved wording (#563): conversion first, then the count left out.
+  ok("the other-currency note is the approved wording", pageCode.includes("Figures filed in other currencies are converted to US dollars; ${spending.otherCurrency} filers whose currency could not be converted are not included."));
 
   const sp = P.buildSpendingRows([
     { sector: "Technology", cohort: 40, capex: [100e9, 120e9, 150e9, 210e9, 300e9], ratioCohort: 38, capexToRevenue: [0.08, 0.09, 0.1, 0.12, 0.15], top: ["MSFT", "AMZN", "GOOGL"] },
