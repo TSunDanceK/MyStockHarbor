@@ -640,6 +640,8 @@ const TASKS = {
   // ~70 commands.
   // READS ONLY: why the 51 quarterly filers have no TTM EPS (#552 COWORK #33). 3 MGET.
   "write-no-ttm-eps-probe": { script: "scripts/no-ttm-eps-probe.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), writes: true },
+  // READS ONLY: the Pickers universe as symbols (#552 COWORK #37). 1 GET.
+  "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -705,6 +707,8 @@ const TASKS = {
   "sec-eps-concepts": { script: "scripts/eps-concepts-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   // Read-only, no credential: the shipped filing-based TTM EPS on real filings (#552 COWORK #33).
   "sec-instance-eps-verify": { script: "scripts/sec-instance-eps-verify.mjs", args: (env) => (env.SYMBOLS ? [env.SYMBOLS] : []), needsTypescript: true },
+  // Read-only, no credential: the longer Item 1 excerpt for named symbols (#552 COWORK #32/#37).
+  "sec-item1-excerpts": { script: "scripts/sec-item1-excerpts-build.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {

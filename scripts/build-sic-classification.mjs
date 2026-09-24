@@ -23,7 +23,7 @@ import fs from "node:fs";
 const OUT = "data/sec/classification-overrides.json";
 const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
-export function buildOverrides({ registrants, table, rules, descriptions, manual = {} }) {
+export function buildOverrides({ registrants, table, rules, descriptions, manual = {}, excerpts = {} }) {
   const labels = table.labels;
   const window = rules.window;
   const compiled = rules.rules.map((r) => ({
@@ -178,17 +178,26 @@ export function buildOverrides({ registrants, table, rules, descriptions, manual
   // and the quote, form, date and accession are taken from that text here --
   // never typed by hand. An unknown label or a phrase not in the text FAILS
   // the build rather than shipping an uncited placement. No vendor label.
+  //
+  // THE LONGER EXCERPT (#552 COWORK #32/#37): where the display description
+  // does not carry the phrase, the same section's longer excerpt
+  // (data/sec/item1-excerpts.json) may, under the same verbatim guard. The
+  // display text is tried first, and the basis says which one was cited.
   for (const [symbol, m] of Object.entries(manual)) {
-    const row = descriptions[symbol];
-    if (!row) throw new Error(`manual ${symbol}: no stored description to cite`);
+    const shown = descriptions[symbol], longer = excerpts[symbol];
+    if (!shown && !longer) throw new Error(`manual ${symbol}: no stored description to cite`);
     const sector = m.sector ?? labels[m.industry];
     if (!labels[m.industry] || !sector) throw new Error(`manual ${symbol}: unknown industry label "${m.industry}"`);
+    const find = (r) => (r ? String(r[3] ?? "").toLowerCase().indexOf(String(m.phrase).toLowerCase()) : -1);
+    const inShown = find(shown);
+    const row = inShown >= 0 ? shown : longer ?? shown;
+    const fromExcerpt = inShown < 0 && Boolean(longer);
     const text = String(row[3] ?? "");
-    const at = text.toLowerCase().indexOf(String(m.phrase).toLowerCase());
+    const at = inShown >= 0 ? inShown : find(longer);
     if (!m.phrase || at < 0) throw new Error(`manual ${symbol}: phrase "${m.phrase}" is not in its filing text`);
     overrides[symbol] = {
       sector, industry: m.industry, sic: registrants[symbol]?.sic ?? null,
-      basis: `${row[0] === "20-F" ? "20-F Item 4.B" : "10-K Item 1"}, reviewed`,
+      basis: `${row[0] === "20-F" ? "20-F Item 4.B" : "10-K Item 1"}${fromExcerpt ? " (longer excerpt)" : ""}, reviewed`,
       phrase: m.phrase, quote: quote(text, at, m.phrase.length),
       form: row[0], filedOn: row[1], accession: row[2],
     };
@@ -204,7 +213,8 @@ if (isMain) {
   const rules = read("data/sec/classification-rules.json");
   const desc = read("data/sec/descriptions.json");
   const manual = read("data/sec/classification-manual.json").entries;
-  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows, manual });
+  const excerpts = read("data/sec/item1-excerpts.json").rows;
+  const { overrides, needsClassification } = buildOverrides({ registrants, table, rules, descriptions: desc.rows, manual, excerpts });
   const doc = {
     _comment:
       "Per-symbol sector/industry overrides from each filer's own 10-K Item 1 / 20-F text, by the rules in " +

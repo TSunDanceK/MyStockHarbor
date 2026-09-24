@@ -4027,6 +4027,105 @@
    "form": "10-K",
    "filedOn": "2026-08-26",
    "accession": "0001104659-26-101493"
+  },
+  "NXT": {
+   "sector": "Energy",
+   "industry": "Solar",
+   "sic": "3674",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "global market leader in solar tracking systems",
+   "quote": "Founded in 2013 by our Chief Executive Officer, Dan Shugar, we pioneered and remain the global market leader in solar tracking systems.",
+   "form": "10-K",
+   "filedOn": "2026-05-19",
+   "accession": "0001852131-26-000017"
+  },
+  "ENPH": {
+   "sector": "Energy",
+   "industry": "Solar",
+   "sic": "3674",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "microinverters work with virtually every solar panel made",
+   "quote": "Our intelligent microinverters work with virtually every solar panel made, and when paired with our smart technology, result in one of the industry’s best-performing clean energ…",
+   "form": "10-K",
+   "filedOn": "2026-02-17",
+   "accession": "0001463101-26-000013"
+  },
+  "SEDG": {
+   "sector": "Energy",
+   "industry": "Solar",
+   "sic": "3674",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "harvested and managed in photovoltaic (also known as PV) systems",
+   "quote": "We are a global smart energy technology company that changed the way power is harvested and managed in photovoltaic (also known as PV) systems.",
+   "form": "10-K",
+   "filedOn": "2026-02-25",
+   "accession": "0001178913-26-000632"
+  },
+  "VIAV": {
+   "sector": "Technology",
+   "industry": "Communication Equipment",
+   "sic": "3674",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "data center ecosystems and communication networks",
+   "quote": "Our test and measurement, and resilient Position, Navigation and Timing (PNT) solutions enable and secure critical infrastructure ranging from data center ecosystems and communi…",
+   "form": "10-K",
+   "filedOn": "2026-08-13",
+   "accession": "0001628280-26-056765"
+  },
+  "QCOM": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3663",
+   "basis": "10-K Item 1 (longer excerpt), reviewed",
+   "phrase": "revenues principally from sales of integrated circuit products",
+   "quote": "We derive revenues principally from sales of integrated circuit products, including our Snapdragon® and Qualcomm Dragonwing™ families of highly-integrated, system-based solution…",
+   "form": "10-K",
+   "filedOn": "2025-11-05",
+   "accession": "0000804328-25-000085"
+  },
+  "LRCX": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3559",
+   "basis": "10-K Item 1 (longer excerpt), reviewed",
+   "phrase": "wafer fabrication equipment and services to the semiconductor industry",
+   "quote": "We are a global supplier of innovative wafer fabrication equipment and services to the semiconductor industry.",
+   "form": "10-K",
+   "filedOn": "2026-08-07",
+   "accession": "0000707549-26-000037"
+  },
+  "KLAC": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3827",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "process-enabling solutions for manufacturing wafers",
+   "quote": "We provide advanced process control and process-enabling solutions for manufacturing wafers, reticles/masks, chemicals/materials, integrated circuits, packaged ICs and printed c…",
+   "form": "10-K",
+   "filedOn": "2026-08-06",
+   "accession": "0000319201-26-000027"
+  },
+  "TER": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3825",
+   "basis": "10-K Item 1, reviewed",
+   "phrase": "automated test systems are used to test semiconductors",
+   "quote": "Teradyne's automated test systems are used to test semiconductors, wireless products, data storage, silicon photonics, and complex electronics systems in many industries includi…",
+   "form": "10-K",
+   "filedOn": "2026-02-19",
+   "accession": "0001193125-26-059002"
+  },
+  "NVMI": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3827",
+   "basis": "20-F Item 4.B, reviewed",
+   "phrase": "metrology solutions for advanced process control used in semiconductor manufacturing",
+   "quote": "Nova is a leading innovator and key provider of metrology solutions for advanced process control used in semiconductor manufacturing.",
+   "form": "20-F",
+   "filedOn": "2026-02-17",
+   "accession": "0001178913-26-000504"
   }
  },
  "needsClassification": [
