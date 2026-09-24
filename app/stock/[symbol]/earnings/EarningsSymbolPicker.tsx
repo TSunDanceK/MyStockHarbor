@@ -223,10 +223,11 @@ export default function EarningsSymbolPicker({
             {...nav.inputAria}
             onKeyDown={(e) => {
               if (nav.onKeyDown(e)) return;
-              // Nothing highlighted: the exact ticker match, as the page's own button does.
+              // Nothing highlighted: an exact ticker match in the list, as a click on it
+              // would; no exact match, nothing (#553 COWORK #40).
               if (e.key === "Enter") {
-                e.preventDefault();
-                goToEarningsPage();
+                const exact = results.find((r) => r.symbol.trim().toUpperCase() === query.trim().toUpperCase());
+                if (exact) { e.preventDefault(); chooseResult(exact); }
               }
             }}
             aria-label="Search stock ticker"

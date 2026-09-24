@@ -168,7 +168,7 @@ export default function EarningsTickerSearch() {
           {...nav.inputAria}
           onKeyDown={(e) => {
             if (nav.onKeyDown(e)) return;
-            // Nothing highlighted: an exact ticker match, if the list has one.
+            // Nothing highlighted: an exact ticker match in the list; none, nothing (#553 COWORK #40).
             if (e.key === "Enter") {
               const exact = results.find((r) => r.symbol.trim().toUpperCase() === query.trim().toUpperCase());
               if (exact) { e.preventDefault(); void chooseResult(exact); }

@@ -90,6 +90,13 @@ async function suite(N, code) {
       ok(`${b.name}: the highlighted row is drawn`, new RegExp(`\\.\\.\\.\\(${n}\\.active === i \\? activeRowStyle\\(true\\) : null\\)`).test(c));
     }
   }
+  // COWORK #40 ruling: with nothing highlighted, Enter in boxes that had no
+  // Enter before acts on an EXACT ticker match in the list, else nothing.
+  for (const f of ["app/stock/[symbol]/StockTickerJump.tsx", "app/stock/[symbol]/earnings/EarningsSymbolPicker.tsx", "app/stock/[symbol]/news/StockNewsTickerJump.tsx", "app/earnings-calendar/EarningsTickerSearch.tsx"]) {
+    const c = code.boxes[f] ?? "";
+    ok(`${f}: Enter with nothing highlighted acts only on an exact match in the list`,
+      /const exact = results\.find\(\(r\) => r\.symbol\.trim\(\)\.toUpperCase\(\) === query\.trim\(\)\.toUpperCase\(\)\);\s*if \(exact\) \{ e\.preventDefault\(\); (void )?chooseResult\(exact\); \}/.test(c) && !/chooseResult\(selected\)|goToEarningsPage\(\);\s*\}\s*\}\}/.test(c));
+  }
   const dd = code.boxes[DROPDOWN] ?? "";
   ok("the shared dropdown: listbox ids, option props and the highlight", /\{\.\.\.nav\?\.listProps\}/.test(dd) && /\{\.\.\.nav\?\.optionProps\(i\)\}/.test(dd) && /\.\.\.\(nav\?\.active === i \? activeRowStyle\(true\) : null\)/.test(dd));
   ok("no ticker search box on the site is left out", code.unlisted.length === 0, code.unlisted.join(", "));
@@ -148,6 +155,7 @@ const MUTANTS = [
   ["the phone hero draws no highlight", () => [src, { ...code, boxes: { ...code.boxes, "app/components/DashboardClient.tsx": mut("mob", code.boxes["app/components/DashboardClient.tsx"], "...(navMobile.active === i ? activeRowStyle(true) : null)", "") } }]],
   ["the shared dropdown drops the hook", () => [src, { ...code, boxes: { ...code.boxes, [DROPDOWN]: mut("dd", code.boxes[DROPDOWN], "{...nav?.optionProps(i)}", "") } }]],
   ["a stock-page box does not hand the hook over", () => [src, { ...code, boxes: { ...code.boxes, "app/stock/[symbol]/news/StockNewsTickerJump.tsx": mut("news", code.boxes["app/stock/[symbol]/news/StockNewsTickerJump.tsx"], " nav={nav} />", " />") } }]],
+  ["Enter jumps to a typed symbol that is not in the list (the ruling broken)", () => [src, { ...code, boxes: { ...code.boxes, "app/stock/[symbol]/StockTickerJump.tsx": mut("exact", code.boxes["app/stock/[symbol]/StockTickerJump.tsx"], "if (exact) { e.preventDefault(); chooseResult(exact); }", "if (selected) { e.preventDefault(); chooseResult(selected); }") } }]],
   ["a new search box left out", () => [src, { ...code, unlisted: ["app/some/NewSearch.tsx"] }]],
 ];
 
