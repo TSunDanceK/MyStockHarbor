@@ -2,7 +2,7 @@
 // Prints each named symbol's stored fact set: cover, every period (end, start,
 // fp/fy, accession, filed) with the income/cash-flow fields that matter to the
 // earnings page, and the notes. SEC values only.
-//   relay task: write-new-listing-sets   Redis cost: 1 MGET.
+//   relay task: write-new-listing-sets   Redis cost: 2 MGETs (fact sets, report dates).
 import "./lib/register-ts-here.mjs";
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
@@ -14,8 +14,14 @@ const FACTS = keyOf("lib/server/secManifest.ts", "SEC_FACTS_PREFIX");
 const syms = (process.env.SYMBOLS || "SPCX,INIO,MAIR,CBRS,BSP,PS,AAPL").split(",").filter(Boolean);
 const want = ["revenue", "costOfRevenue", "grossProfit", "operatingIncome", "netIncome", "epsDiluted", "sharesDiluted", "operatingCashFlow", "capex", "freeCashFlow", "stockBasedComp", "interestExpense", "rnd", "sga"];
 const got = await redis.mget(...syms.map((s) => `${FACTS}:${s}`));
+const DATES = keyOf("lib/server/secReportDatesStore.ts", "SEC_REPORT_DATES_PREFIX");
+const dates = await redis.mget(...syms.map((s) => `${DATES}:${s}`));
 syms.forEach((s, j) => {
   const set = got[j];
+  const rd = dates[j];
+  if (rd) console.log(`\n-- ${s} report dates: ${JSON.stringify({ ...rd, events: (rd.events ?? []).slice(0, 4) })}`);
+  else console.log(`\n-- ${s} report dates: none`);
+  if (set?.yt) console.log(`  YTD ${JSON.stringify(set.yt)}`);
   if (!set) { console.log(`\n== ${s}: no stored set`); return; }
   console.log(`\n== ${s} (${set.entityName}) cik ${set.cik} cur ${set.cur ?? "USD"} | cover ${JSON.stringify(set.cover)}`);
   const row = (p) => {
@@ -30,4 +36,4 @@ syms.forEach((s, j) => {
   if (q0) console.log(`  other fields on newest quarter: ${other.map((k) => { const i = SEC_FIELD_KEYS.indexOf(k); return q0.v[i] == null ? null : k; }).filter(Boolean).join(",")}`);
 });
 console.log(`\nfield keys: ${SEC_FIELD_KEYS.join(",")}`);
-console.log("Redis commands: 1");
+console.log("Redis commands: 2");
