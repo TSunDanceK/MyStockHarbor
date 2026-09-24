@@ -13,9 +13,11 @@ import TickerLogo from "@/app/components/TickerLogo";
 import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
 import { activeRowStyle } from "@/lib/listboxNav";
 import { useListboxNav } from "@/app/components/useListboxNav";
+import { breakdownChipValue } from "@/lib/breakdownChip";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -459,6 +461,41 @@ export default function DashboardClient({
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  // WIDE CHART (#553 COWORK #27, layout only; lib/dashboardWide.ts). The chart
+  // spans both columns and the Overview + Breakdown cards sit below it, side
+  // by side. Remembered per viewer; renders normally without storage.
+  const [wideChart, setWideChart] = useState(false);
+  useEffect(() => { setWideChart(readWideChoice(browserStorage())); }, []);
+  function toggleWideChart() {
+    setWideChart((w) => {
+      writeWideChoice(browserStorage(), !w);
+      return !w;
+    });
+  }
+  // The desktop grid's width, measured, so the Basic chart can RE-MEASURE:
+  // its viewBox widens with the box (wideViewWidth) rather than the SVG
+  // scaling up. The grid div is stable across renders, unlike ChartPanel.
+  const deskGridRef = useRef<HTMLDivElement | null>(null);
+  const [deskGridWidth, setDeskGridWidth] = useState(0);
+  useEffect(() => {
+    const el = deskGridRef.current;
+    if (!el) return;
+    const measure = () => setDeskGridWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const basicViewWidth = wideChart && !isMobile ? wideViewWidth(deskGridWidth) : undefined;
+  // Every engine re-measures on toggle: Interactive has its own ResizeObserver
+  // and TradingView autosizes, but both also listen for window resize, so one
+  // is dispatched after the layout has changed.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => window.cancelAnimationFrame(id);
+  }, [wideChart]);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
   const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
@@ -974,13 +1011,20 @@ export default function DashboardClient({
 
   function BreakdownPanel() {
     return (<SectionCard title={customMode ? "Selected Indicators" : "Breakdown"} right={<BreakdownHelpButton />} allowOverflow>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => (
-          <div key={customMode ? item.label : item.key} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</span></div>
-            <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>{customMode ? item.value : item.valueText}</div>
+      {/* repeat(2, minmax(0, 1fr)) + minWidth 0: a chip never widens the card
+          (#553 COWORK #39). A value that does not fit beside its label wraps
+          to its own line, right-aligned; only a value wider than the whole
+          chip is cut with an ellipsis (full text in the tooltip). */}
+      <div className="msh-breakdown-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+        {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => {
+          const v = breakdownChipValue(customMode ? item.value : item.valueText);
+          return (
+          <div key={customMode ? item.label : item.key} title={`${item.label}: ${v.full}`} style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", columnGap: 8, rowGap: 2, alignItems: "center", minWidth: 0, padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, maxWidth: "100%" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ fontWeight: 700, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span></div>
+            <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", marginLeft: "auto" }}>{v.text}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {customMode ? <button type="button" onClick={clearIndicatorSelection} style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button> : null}
     </SectionCard>);
@@ -999,7 +1043,7 @@ export default function DashboardClient({
       </button>
       {breakdownOpen ? <div style={{ borderTop: `1px solid ${COLORS.borderSoft}` }}>
         <div style={{ display: "flex", gap: 5, padding: "10px 16px 0" }}>{items.map((item: any) => <span key={customMode ? item.label : item.key} style={{ flex: 1, height: 5, borderRadius: 99, background: chipToneColor(item.tone) }} />)}</div>
-        <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone) }}>{customMode ? item.value : item.valueText}</span></div>)}</div>
+        <div style={{ padding: "8px 16px 4px" }}>{items.map((item: any) => <div key={customMode ? item.label : item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${COLORS.borderSoft}` }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} /><span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{item.label}</span><span title={breakdownChipValue(customMode ? item.value : item.valueText).full} style={{ fontSize: 13, fontWeight: 700, color: chipToneColor(item.tone), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{breakdownChipValue(customMode ? item.value : item.valueText).text}</span></div>)}</div>
         <div style={{ padding: "8px 16px 14px" }}><Link href="/learn" style={{ fontSize: 13, fontWeight: 700, color: "#9cc0ff", textDecoration: "none" }}>Learn what these mean →</Link></div>
         {customMode ? <div style={{ padding: "0 16px 14px" }}><button type="button" onClick={clearIndicatorSelection} style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>← Back to Overview</button></div> : null}
       </div> : null}
@@ -1026,6 +1070,24 @@ export default function DashboardClient({
     );
   }
 
+  // WIDEN / BACK TO TWO COLUMNS. At the card's LEFT edge, in its header -- not
+  // on the plot, where the Basic chart's round "‹" pan arrow (Pan back in
+  // time) already sits. Desktop only: narrow widths are single-column already
+  // (hidden by .msh-widebtn below 961px and never rendered on the phone layout).
+  // A bold arrow (#553 COWORK #35): LEFT = extend the chart over the card
+  // column; RIGHT = back to two columns. 34px target, 20px icon.
+  function WideChartButton() {
+    const label = wideChart ? "Back to two columns" : "Widen chart";
+    return (
+      <button type="button" className="msh-widebtn" onClick={toggleWideChart} title={label} aria-label={label} aria-pressed={wideChart} data-wide-arrow={wideChart ? "right" : "left"}
+        style={{ alignItems: "center", justifyContent: "center", width: 34, height: 34, flex: "0 0 auto", borderRadius: 9, border: `1px solid ${wideChart ? "rgba(96,165,250,0.55)" : COLORS.controlBorder}`, background: wideChart ? "rgba(47,107,255,0.22)" : COLORS.controlBg, color: wideChart ? "#dbeafe" : COLORS.controlFg, cursor: "pointer", padding: 0 }}>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d={wideChart ? WIDE_ARROW_RIGHT : WIDE_ARROW_LEFT} />
+        </svg>
+      </button>
+    );
+  }
+
   function FullscreenButton() {
     return (
       <button type="button" onClick={() => setFullscreen(true)} title="Open chart fullscreen" aria-label="Open chart fullscreen"
@@ -1047,7 +1109,7 @@ export default function DashboardClient({
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
       return <TradingViewChartEmbed symbol={symbol} height={h} />;
     }
-    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
+    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} viewWidth={full ? undefined : basicViewWidth} />;
   }
 
   function ChartPanel() {
@@ -1056,7 +1118,7 @@ export default function DashboardClient({
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
-            {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
+            {!isMobile ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><WideChartButton /><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div></div> : null}
             <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
               {/* On Basic: the zoom + / − controls ride on this (mode-switch)
@@ -1268,6 +1330,10 @@ export default function DashboardClient({
         .msh-scanbtn:hover{background:#16294d;}
         .msh-grid{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;}
         .msh-col{display:flex;flex-direction:column;gap:16px;}
+        .msh-grid-wide{grid-template-columns:1fr;}
+        .msh-wide-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+        .msh-widebtn{display:inline-flex;}
+        @media(max-width:960px){.msh-widebtn{display:none!important;}.msh-wide-cards{grid-template-columns:1fr;}}
         .msh-lower{display:grid;gap:16px;margin-top:16px;}
         .msh-news-loading-bar{width:36%;height:100%;border-radius:999px;background:linear-gradient(90deg,#2f6bff,#16c784);animation:mshLoad 1.15s ease-in-out infinite;}
         @keyframes mshLoad{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
@@ -1302,9 +1368,18 @@ export default function DashboardClient({
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 
-        <div className="msh-grid msh-desktop-only">
-          <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
-          <div className="msh-col"><ChartPanel /></div>
+        <div ref={deskGridRef} className={`msh-grid msh-desktop-only${wideChart ? " msh-grid-wide" : ""}`} data-wide-chart={wideChart ? "1" : "0"}>
+          {wideChart ? (
+            <>
+              <div className="msh-col msh-wide-chart"><ChartPanel /></div>
+              <div className="msh-wide-cards"><OverviewPanel /><BreakdownPanel /></div>
+            </>
+          ) : (
+            <>
+              <div className="msh-col"><OverviewPanel /><BreakdownPanel /></div>
+              <div className="msh-col"><ChartPanel /></div>
+            </>
+          )}
         </div>
 
         <div className="msh-mobile-only" style={{ display: "grid", gap: 14 }}>
