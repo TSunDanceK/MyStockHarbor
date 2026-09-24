@@ -46,6 +46,11 @@ for (const s of mine) {
       mentions += (text.match(/American depositary/gi) ?? []).length;
       const ref = { form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i] };
       lastRef = `${ref.form} ${ref.source} ${ref.filed}`;
+      if (process.env.SHOW12B) {
+        const flat = text.replace(/\s+/g, " "), at = flat.search(/pursuant to Section 12\s*\(\s*b\s*\)/i);
+        console.log(`  12(b) ${ref.form}: ${at < 0 ? "not found" : flat.slice(at, at + 500)}`);
+        for (const m of flat.matchAll(/.{0,120}depositary.{0,120}/gi)) console.log(`  depositary: ${m[0]}`);
+      }
       const got = R.adsRatioOf(text);
       if (got.ok) {
         line = `RATIO ${got.ordinaryPerAds} ${lastRef} (${got.statements}x) "${got.sentence.slice(0, 260)}"`; tally.RATIO++;

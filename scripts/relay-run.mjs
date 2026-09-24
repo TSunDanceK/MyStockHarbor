@@ -737,6 +737,7 @@ const TASKS = {
   "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
   "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
   "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
