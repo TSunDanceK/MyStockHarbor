@@ -652,6 +652,9 @@ const TASKS = {
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
   // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
   "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
+  // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
+  // traded unit and every refusal, from the stored sets. No price. 1 MGET.
+  "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
