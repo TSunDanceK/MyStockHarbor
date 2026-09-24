@@ -4,7 +4,7 @@
 //   1. applyRereadRequests, RUN: flags a symbol last verified before the
 //      request; not one verified after it (one-shot); not one already queued;
 //      not one with no CIK or no manifest entry; not a future-dated request;
-//      at most one a run. MUTATIONS: the verifiedAt test removed (the request
+//      at most `cap` a run, and the cap a small slice of the reverify queue. MUTATIONS: the verifiedAt test removed (the request
 //      would re-read the symbol every run forever); the cap removed.
 //   2. The cron applies the requests BEFORE it builds its queues.
 //      MUTATION: applied after.
@@ -58,12 +58,16 @@ const M = await load(SRC);
   check("no CIK, or no manifest entry → nothing",
     M.applyRereadRequests(manifest(), [REQ("NOCIK"), REQ("ZZZZ")], NOW).length === 0);
   check("a future-dated request waits", M.applyRereadRequests(manifest(), [REQ("XOM", "2026-10-01T00:00:00Z")], NOW).length === 0);
-  check("at most one a run", M.applyRereadRequests(manifest(), [REQ("XOM"), REQ("MSFT")], NOW).join() === "XOM");
+  check("at most `cap` a run", M.applyRereadRequests(manifest(), [REQ("XOM"), REQ("MSFT")], NOW, 1).join() === "XOM");
+  const PER_RUN = Number(SRC.match(/^export const SEC_REREAD_REQUESTS_PER_RUN = (\d+);$/m)?.[1]);
+  const REVERIFY = Number(readCodeOnly("app/api/jobs/sec-facts/route.ts").match(/^export const SEC_REVERIFY_PER_RUN = (\d+);$/m)?.[1]);
+  check("the per-run cap is a small slice of the reverify queue (<= 1/10 of SEC_REVERIFY_PER_RUN)",
+    PER_RUN >= 1 && PER_RUN * 10 <= REVERIFY, `${PER_RUN} of ${REVERIFY}`);
   const Mm = await load(once(SRC, "if ((entry.verifiedAt ?? 0) >= at) continue;", ""));
   check("MUTATION: the verifiedAt test removed → a re-read symbol is flagged again forever",
     Mm.applyRereadRequests(manifest(), [REQ("AAPL")], NOW).length === 1);
   const Mc = await load(once(SRC, "if (applied.length >= cap) break;", ""));
-  check("MUTATION: the cap removed → two in one run", Mc.applyRereadRequests(manifest(), [REQ("XOM"), REQ("MSFT")], NOW).length === 2);
+  check("MUTATION: the cap removed → two in one run", Mc.applyRereadRequests(manifest(), [REQ("XOM"), REQ("MSFT")], NOW, 1).length === 2);
 }
 
 console.log("\n2. the cron applies them before building its queues");
