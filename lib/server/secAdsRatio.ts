@@ -35,7 +35,8 @@ export function parseCount(raw: string): number | null {
 
 const COUNT = String.raw`(\d+(?:\.\d+)?|\d+\s*/\s*\d+|one[- ]half|one[- ](?:quarter|fourth|third|fifth|tenth|twentieth|fortieth)|two[- ]thirds|three[- ](?:quarters|fourths)|one hundred|twenty-five|[a-z]+)(?:\s*\(\s*[\d.,/]+\s*\))?(?:\s+of\s+(?:one|an?))?`;
 const SHARE = String.raw`(?:ordinary|common|equity|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|class\s+[a-z]|class\s+“?[a-z]”?|series\s+[a-z]\s+)?\s*shares?`;
-const ADS = String.raw`(?:ADS|ADSs|American\s+depositary\s+shares?|American\s+depositary\s+share)`;
+// "Depository" too: EC's own cover spells it that way.
+const ADS = String.raw`(?:ADS|ADSs|American\s+deposit[ao]ry\s+shares?)`;
 /**
  * The phrasings, each capturing the number of ordinary shares ONE ADS stands
  * for. All anchored on "represent" / "equal" so a price, a volume or a count
@@ -124,67 +125,112 @@ export function adsRatioOf(text: string):
   return { ok: true, ordinaryPerAds: values[0], sentence: all[0].sentence, statements: all.length };
 }
 
-// ── THE LATEST 20-F'S COVER ROW FOR THIS TICKER DECIDES (#552 COWORK #45) ──
+// ── THE LATEST 20-F'S 12(b) SECTION DECIDES (#552 COWORK #45) ──
 //
-// AZN's F-6 (2025) says each ADS is one-half of an ordinary share; if its
-// FY2025 20-F cover lists ORDINARY SHARES under "AZN", the listing changed and
-// the older F-6 must not win. The 12(b) table names, row by row, the class
-// title, its trading symbol and its exchange, so the title immediately before
-// this ticker is the security the price is quoted for.
+// AZN's F-6 (2025) says each ADS is one-half of an ordinary share; its FY2025
+// 20-F registers ORDINARY SHARES and no ADSs, so the listing changed and the
+// older F-6 must not win. Covers are laid out every which way (RIO lists all
+// titles, then all symbols; SAP puts its symbol in the header; E's ADS line
+// carries no symbol at all), so the SECTION decides, not a row: a 12(b) section
+// that registers depositary shares is an ADS listing, one that registers only
+// ordinary/common shares is a direct listing.
 
-export type CoverRow = { title: string; kind: "ads" | "ordinary" | "other" };
+const SECTION_12B = /registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i;
+const ADS_MENTION = /American\s+deposit[ao]ry|\bADSs?\b/i;
 
-/** Every 12(b) row listed under `symbol` in a 20-F, classified, in table order. */
-export function coverRowsFor(text: string, symbol: string): CoverRow[] {
+/** The 20-F cover's 12(b) section, from its heading up to the 12(g) line, flattened. */
+export function section12bOf(text: string): string | null {
   const flat = text.replace(/\s+/g, " ");
-  const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
-  if (at < 0) return [];
-  // THE WHOLE TABLE: up to the 12(g) line (AZN lists a dozen notes first).
+  const at = flat.search(SECTION_12B);
+  if (at < 0) return null;
+  // THE WHOLE SECTION, footnotes included: AZN lists a dozen notes first.
   let table = flat.slice(at, at + 8000);
   const g = table.slice(60).search(/pursuant\s+to\s+Section\s+12\s*\(\s*g\s*\)/i);
   if (g >= 0) table = table.slice(0, 60 + g);
+  return table;
+}
+
+const symbolRe = (symbol: string, flags: string) => {
   const sym = String(symbol).toUpperCase().replace(/[-.]/g, "[-. ]?");
-  // A note's symbol ("AZN/26", "AZN26") is not the ticker.
-  const re = new RegExp(String.raw`(?<![A-Za-z0-9/])${sym}(?![A-Za-z0-9/])`, "g");
+  // A note's symbol ("AZN/26", "AZN26", "AZN 26") is not the ticker.
+  return new RegExp(String.raw`(?<![A-Za-z0-9/])${sym}(?![A-Za-z0-9/]|\s\d{2,4}[A-Z]?\b)`, flags);
+};
+
+export type CoverRow = { title: string; kind: "ads" | "ordinary" | "other" };
+
+const kindOfTitle = (title: string): CoverRow["kind"] =>
+  ADS_MENTION.test(title) ? "ads"
+    : /preferred|preference|warrant|\bnotes?\b|debentures?|\bunits?\b|%/i.test(title) ? "other"
+      : /(?:ordinary|common|equity)\s+(?:shares?|stock)|\bshares?\b/i.test(title) ? "ordinary" : "other";
+
+/** Every 12(b) row listed under `symbol` in a 20-F, classified, in table order. */
+export function coverRowsFor(text: string, symbol: string): CoverRow[] {
+  const table = section12bOf(text);
+  if (!table) return [];
   const rows: CoverRow[] = [];
   let prevEnd = 0;
-  for (const m of table.slice(40).matchAll(re)) {
+  for (const m of table.slice(40).matchAll(symbolRe(symbol, "g"))) {
     const idx = 40 + m.index;
     const before = table.slice(prevEnd, idx);
     prevEnd = idx + m[0].length;
     let cut = 0;
     for (const b of before.matchAll(/\b(?:registered:?|Exchange|LLC|Market|Inc\.?|\(“?NYSE”?\))(?=\s)|\*+(?=\s)/gi)) cut = b.index + b[0].length;
     const title = before.slice(cut).replace(/^[\s:*.,;–-]+/, "").trim();
-    if (!title) continue;
-    const kind = /American\s+depositary|\bADSs?\b/i.test(title) ? "ads"
-      : /preferred|preference|warrant|\bnotes?\b|debentures?|\bunits?\b|%/i.test(title) ? "other"
-      : /(?:ordinary|common|equity)\s+(?:shares?|stock)|\bshares?\b/i.test(title) ? "ordinary" : "other";
-    rows.push({ title, kind });
+    if (title) rows.push({ title, kind: kindOfTitle(title) });
   }
   return rows;
 }
 
+/** The section's own words about its depositary shares: the ADS title and its footnote. */
+function adsWordsOf(section: string): string {
+  const at = section.search(ADS_MENTION);
+  return at < 0 ? "" : around(section, at, 160);
+}
+
 /**
- * The ONE row the price is quoted for. An ADS row wins; an ordinary row counts
- * only when the table does not register ADSs at all (an ordinary line marked
- * "not for trading, but only in connection with" the ADSs is the deposit, not
- * the listing — VOD, WPP, HLN). Null when there is no row for the ticker.
+ * The ONE listing the price is quoted for, from the latest 20-F's 12(b)
+ * section. Depositary shares registered there → the ADS (an ordinary line
+ * under the same symbol is the deposit, "not for trading" — VOD, WPP, E).
+ * None → the ordinary/common row, when the section names this symbol at all
+ * (AZN's ordinary row carries no symbol; only its notes do). Null when the
+ * section is missing or never names the symbol.
  */
 export function coverRowFor(text: string, symbol: string): CoverRow | null {
+  const section = section12bOf(text);
+  if (!section) return null;
   const rows = coverRowsFor(text, symbol);
-  if (!rows.length) return null;
+  const named = rows.length > 0 || new RegExp(String.raw`\b${String(symbol).toUpperCase().replace(/[-.]/g, "[-. ]?")}\b`).test(section);
+  if (!named) return null;
   const ads = rows.find((r) => r.kind === "ads");
   if (ads) return ads;
-  const flat = text.replace(/\s+/g, " ");
-  const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
-  const table = at >= 0 ? flat.slice(at, at + 8000) : "";
+  if (ADS_MENTION.test(section)) return { title: adsWordsOf(section), kind: "ads" };
   const ord = rows.find((r) => r.kind === "ordinary");
-  if (ord && /American\s+depositary|\bADSs?\b/i.test(table.split(/pursuant\s+to\s+Section\s+12\s*\(\s*g\s*\)/i)[0] ?? "")) {
-    // THE TABLE REGISTERS ADSs, but not under this ticker's row: the ordinary
-    // line is the deposit. The ratio comes from the filing's text instead.
-    return { title: ord.title, kind: "ads" };
+  if (ord) return ord;
+  if (rows.length) return rows[0];
+  // NO ROW CARRIES THE SYMBOL (AZN: "Ordinary Shares of 25 ¢ each The New York
+  // Stock Exchange", then "AZN 26…" notes): the section's ordinary title.
+  const title = /((?:Class\s+[A-Z]\s+)?(?:ordinary|common)\s+shares?\b[^*]{0,80}?(?:Exchange|LLC|Market)\b)/i.exec(section.slice(40));
+  return title ? { title: title[1].trim(), kind: "ordinary" } : null;
+}
+
+// THE SECTION'S FOOTNOTE PHRASINGS, read only inside a 12(b) section that
+// registers ADSs: E's "(Which represent the right to receive two Shares)",
+// RIO's "Each American Depositary Share Represents one Rio Tinto plc Ordinary
+// Shares" (the company's name between the count and the class).
+const SECTION_RATIO = new RegExp(String.raw`\brepresent(?:s|ing)?\s+(?:the\s+)?(?:rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+(?:[A-Za-z.&]+\s+){0,4}?${SHARE}`, "gi");
+
+export function sectionRatioOf(section: string): ReturnType<typeof adsRatioOf> {
+  const std = adsRatioOf(section);
+  if (std.ok || std.why === "ratios-disagree") return std;
+  const all: AdsRatioStatement[] = [];
+  for (const m of section.matchAll(SECTION_RATIO)) {
+    const n = parseCount(m[1]);
+    if (n !== null && n > 0 && n <= 1000) all.push({ ordinaryPerAds: n, sentence: around(section, m.index, m[0].length) });
   }
-  return ord ?? rows[0];
+  if (!all.length) return std;
+  const values = [...new Set(all.map((a) => Math.round(a.ordinaryPerAds * 1e6) / 1e6))];
+  if (values.length > 1) return { ok: false, why: "ratios-disagree", values };
+  return { ok: true, ordinaryPerAds: values[0], sentence: all[0].sentence, statements: all.length };
 }
 
 export type AdsRowDecision =
@@ -204,9 +250,11 @@ export function decideAdsRow(text20F: string | null, symbol: string, f6Text: str
     const cover = coverRowFor(text20F, symbol);
     if (cover?.kind === "ordinary") row = { kind: "ordinary", ordinaryPerAds: 1, evidence: cover.title, from: "20-F", basis: "cover-row" };
     else if (cover?.kind === "ads") {
+      // The row's own title, then the section with its footnotes, then the 20-F's text.
       const t = adsRatioOf(cover.title);
-      const got = t.ok ? t : adsRatioOf(text20F);
-      if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: t.ok ? cover.title : got.sentence, from: "20-F", basis: t.ok ? "cover-row" : "20-F text" };
+      const sec = t.ok ? t : sectionRatioOf(section12bOf(text20F) ?? "");
+      const got = sec.ok || sec.why === "ratios-disagree" ? sec : adsRatioOf(text20F);
+      if (got.ok) row = { kind: "ads", ordinaryPerAds: got.ordinaryPerAds, evidence: t.ok ? cover.title : got.sentence, from: "20-F", basis: t.ok ? "cover-row" : sec.ok ? "12(b) section" : "20-F text" };
       else if (got.why === "ratios-disagree") return { refuse: `ratios disagree ${got.values.join("/")}` };
     } else if (cover?.kind === "other") return { refuse: `cover row is not common/ordinary: ${cover.title.slice(0, 80)}` };
     else {
