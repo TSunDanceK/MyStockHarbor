@@ -1,5 +1,5 @@
 {
- "_comment": "Hand-reviewed placements for names whose own filing text places them but no general rule should (#552 COWORK #29). Each entry is an industry from the fixed label list and a PHRASE that must appear verbatim in the filer's stored 10-K Item 1 / 20-F Item 4.B text (data/sec/descriptions.json); scripts/build-sic-classification.mjs takes the quote, form, date and accession from that text and FAILS on a phrase that is not there. No vendor label is read. A name whose text supports no placement is not listed; it stays with the helper.",
+ "_comment": "Hand-reviewed placements for names whose own filing text places them but no general rule should (#552 COWORK #29). Each entry is an industry from the fixed label list and a PHRASE that must appear verbatim in the filer's stored 10-K Item 1 / 20-F Item 4.B text (data/sec/descriptions.json); scripts/build-sic-classification.mjs takes the quote, form, date and accession from that text and FAILS on a phrase that is not there. No vendor label is read. A name whose text supports no placement is not listed; it stays with the helper. A phrase may also come from the longer excerpt in data/sec/item1-excerpts.json when the display text lacks one (#552 COWORK #37); the basis then says so.",
  "entries": {
   "APH": { "industry": "Hardware, Equipment & Parts", "phrase": "connectors and interconnect systems" },
   "BKNG": { "industry": "Travel Services", "phrase": "Accommodations Ground Transportation Flights" },
@@ -43,6 +43,15 @@
   "ONC": { "industry": "Biotechnology", "phrase": "global oncology company discovering and developing" },
   "ZTS": { "industry": "Drug Manufacturers - Specialty & Generic", "phrase": "animal health industry" },
   "ELAN": { "industry": "Drug Manufacturers - Specialty & Generic", "phrase": "global leader in animal health" },
-  "PAHC": { "industry": "Drug Manufacturers - Specialty & Generic", "phrase": "animal health" }
+  "PAHC": { "industry": "Drug Manufacturers - Specialty & Generic", "phrase": "animal health" },
+  "NXT": { "industry": "Solar", "phrase": "global market leader in solar tracking systems" },
+  "ENPH": { "industry": "Solar", "phrase": "microinverters work with virtually every solar panel made" },
+  "SEDG": { "industry": "Solar", "phrase": "harvested and managed in photovoltaic (also known as PV) systems" },
+  "VIAV": { "industry": "Communication Equipment", "phrase": "data center ecosystems and communication networks" },
+  "QCOM": { "industry": "Semiconductors", "phrase": "revenues principally from sales of integrated circuit products" },
+  "LRCX": { "industry": "Semiconductors", "phrase": "wafer fabrication equipment and services to the semiconductor industry" },
+  "KLAC": { "industry": "Semiconductors", "phrase": "process-enabling solutions for manufacturing wafers" },
+  "TER": { "industry": "Semiconductors", "phrase": "automated test systems are used to test semiconductors" },
+  "NVMI": { "industry": "Semiconductors", "phrase": "metrology solutions for advanced process control used in semiconductor manufacturing" }
  }
 }
