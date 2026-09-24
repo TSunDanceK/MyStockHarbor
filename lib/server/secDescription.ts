@@ -649,3 +649,26 @@ export function joinSplitWords(text: string, isWord: (w: string) => boolean): { 
   }
   return { text: out.join(" "), joined };
 }
+
+// ── THE LONGER EXCERPT, FOR CLASSIFICATION ONLY (#552 COWORK #32/#37) ─────
+//
+// The display description above is the opening ~900 characters, and for many
+// filers that paragraph names no business at all ("We incorporated in
+// California in 1985…", QCOM) or is rejected outright for a cross-reference
+// (LRCX). A reviewed classification entry may cite a phrase from further into
+// the same Item 1 / Item 4.B section: this is that text, the section's opening
+// ITEM1_EXCERPT_MAX_CHARS, whitespace-normalised and cut at a sentence end.
+//
+// NEVER RENDERED. It is a citation source for data/sec/classification-manual.json,
+// under the same verbatim guard (the build fails on a phrase not in it). It is
+// not cleaned of cross-references because nothing is shown from it: a
+// cross-reference sentence cannot be a phrase anyone would cite.
+export const ITEM1_EXCERPT_MAX_CHARS = 6000;
+
+export function itemExcerpt(body: string): string {
+  const flat = String(body ?? "").replace(/\s+/g, " ").trim();
+  if (flat.length <= ITEM1_EXCERPT_MAX_CHARS) return flat;
+  const cut = flat.slice(0, ITEM1_EXCERPT_MAX_CHARS);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".” "));
+  return end > ITEM1_EXCERPT_MAX_CHARS / 2 ? cut.slice(0, end + 1) : cut;
+}
