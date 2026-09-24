@@ -819,9 +819,11 @@ console.log("\n5. the page is wired to the filings, not to the calendar");
   // ── THE FMP CALL IS SKIPPED, NOT IGNORED ───────────────────────────────
   // An ignored fetch still spends the daily limit, which is the cost this step
   // exists to remove.
-  check("the /earnings call is conditional on the SEC record being empty",
-    /secEvents\.length\s*\?\s*Promise\.resolve\(null\)\s*:\s*fetchFmpJson/.test(page),
-    "the FMP call must be behind the SEC record, not merely unused");
+  // SUPERSEDED 2026-09-23 (#535 COWORK #18 §3): the FMP call is gone, not
+  // gated, and with no SEC record the reaction card is hidden.
+  check("no FMP /earnings call, and no SEC dates hides the reaction card",
+    !/fetchFmpJson/.test(page) && /const hidePriceReaction = secEvents\.length === 0 \|\|/.test(page),
+    "a card dated from FMP's calendar is what this replaced");
 
   // ── THE LABEL COMES FROM THE PERIOD, NOT THE ANNOUNCEMENT ──────────────
   // THE DEFECT THIS GUARDS: a quarter ending 30 June announced 30 July was

@@ -23,6 +23,12 @@ type Props = {
   initialItems: EarningsListItem[];
   initialHasMore: boolean;
   complete: boolean;
+  /**
+   * The page's day panel already states why there are no rows (for example
+   * "No results filed yet today"). Then the list says nothing when empty, so
+   * two different messages never show at once (#552 COWORK #26).
+   */
+  emptyExplainedAbove?: boolean;
 };
 
 // Which columns can be sorted, and whether they sort as text or numbers.
@@ -37,7 +43,7 @@ type MetricKey = Extract<SortKey, "epsEstimated" | "revenueEstimated" | "price" 
 const TEXT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>(["symbol", "company"]);
 
 function formatCompact(value: number | null) {
-  if (value === null) return "-";
+  if (value === null) return "—";
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
@@ -45,11 +51,7 @@ function formatCompact(value: number | null) {
 }
 
 function formatPrice(value: number | null) {
-  return value !== null ? `$${value.toFixed(2)}` : "-";
-}
-
-function formatEps(value: number | null) {
-  return value !== null ? `$${value.toFixed(2)}` : "-";
+  return value !== null ? `$${value.toFixed(2)}` : "—";
 }
 
 // ── HIDDEN, NOT DASHED, FOR ROWS OUTSIDE THE BAR SOURCE ───────────────────
@@ -63,15 +65,18 @@ function formatEps(value: number | null) {
 // ABSENT READS AS COVERED. Rows cached before the flag existed carry no
 // coverage, and blanking a whole day's figures on deploy would be a worse
 // error than showing what those rows have always shown.
-function showsPrice(item: EarningsListItem): boolean {
-  return item.priceCoverage !== "outside-bar-universe";
-}
-
+//
+// SUPERSEDED FOR THE SEC-FED GRID (owner ruling, #535 COWORK #23, 2026-09-23):
+// a row off the price pool now shows "—" in both columns. Its row exists
+// because SEC lists its announcement, so the dash says only that no price was
+// read for it here.
+//
+// HIDDEN, NOT REMOVED, 2026-09-23: "EPS Est." and "Revenue Est." (#535 COWORK
+// #18 §3). They were FMP's consensus figures; SEC publishes no estimates, and
+// the grid no longer reads FMP. The fields stay on the row type, null.
 const METRIC_COLUMNS: { key: MetricKey; label: string; fmt: (item: EarningsListItem) => string }[] = [
-  { key: "epsEstimated", label: "EPS Est.", fmt: (i) => formatEps(i.epsEstimated) },
-  { key: "revenueEstimated", label: "Revenue Est.", fmt: (i) => formatCompact(i.revenueEstimated) },
-  { key: "price", label: "Price", fmt: (i) => (showsPrice(i) ? formatPrice(i.price) : "") },
-  { key: "marketCap", label: "Market Cap", fmt: (i) => (showsPrice(i) ? formatCompact(i.marketCap) : "") },
+  { key: "price", label: "Price", fmt: (i) => formatPrice(i.price) },
+  { key: "marketCap", label: "Market Cap", fmt: (i) => formatCompact(i.marketCap) },
 ];
 
 const COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [
@@ -84,7 +89,9 @@ const COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [
 // earnings calendar is a list of things that are about to report, so the
 // consensus estimate is the number the page is about -- market cap is only the
 // default ORDER, not the reason anyone is reading the row.
-const DEFAULT_METRIC: MetricKey = "epsEstimated";
+// Market cap since the estimates were hidden (2026-09-23): it is also the
+// default ORDER, so the phone row leads with the figure the list is sorted by.
+const DEFAULT_METRIC: MetricKey = "marketCap";
 
 function isMetricKey(key: SortKey): key is MetricKey {
   return !TEXT_KEYS.has(key);
@@ -111,7 +118,7 @@ function mergeUniqueBySymbol(prev: EarningsListItem[], more: EarningsListItem[])
 // /api/earnings-calendar/day (a pure cache read, no quoting), so paging is cheap
 // and never blocks. Column headers are clickable to re-sort the loaded rows;
 // the default is market cap, largest at the top.
-export default function EarningsDayList({ date, initialItems, initialHasMore, complete }: Props) {
+export default function EarningsDayList({ date, initialItems, initialHasMore, complete, emptyExplainedAbove = false }: Props) {
   const [items, setItems] = useState<EarningsListItem[]>(initialItems);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
@@ -232,6 +239,7 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
   }
 
   if (items.length === 0) {
+    if (emptyExplainedAbove) return null;
     return (
       <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
         {complete
@@ -406,8 +414,6 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
                   <td style={companyTdStyle} title={item.company}>
                     {item.company}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatEps(item.epsEstimated)}</td>
-                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.revenueEstimated)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatPrice(item.price)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.marketCap)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>
