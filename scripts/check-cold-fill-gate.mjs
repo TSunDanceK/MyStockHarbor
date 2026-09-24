@@ -112,8 +112,9 @@ check("...in order: free gates, counters, the paid check, the fill ceiling, the 
 check("the action is a server action", /^"use server";/.test(fs.readFileSync(ACTION, "utf8")));
 check("BotID is asked for DEEP ANALYSIS", /checkBotId\(\{ advancedOptions: \{ checkLevel: "deepAnalysis" \} \}\)/.test(action));
 check("the lock is released whatever happens", /finally \{\s*await releaseColdFillLock\(clean\);/.test(action));
-check("it returns an outcome word, never figures",
-  (action.match(/return \{[^}]*\}/g) ?? []).every((r) => /^return \{ ok: (true, outcome \}|false, refused: ("[a-z-]+"|\w+) \})$/.test(r.replace(/\s+/g, " "))),
+// The status poll (#552 COWORK #46) answers a yes/no, never figures either.
+check("it returns an outcome word or a ready flag, never figures",
+  (action.match(/return \{[^}]*\}/g) ?? []).every((r) => /^return \{ (ok: (true, outcome \}|false, refused: ("[a-z-]+"|\w+) \})|ready: (false|\(await factSetExists\(clean\)\) === true) \})$/.test(r.replace(/\s+/g, " "))),
   (action.match(/return \{[^}]*\}/g) ?? []).join(" | "));
 const instr = readCodeOnly("instrumentation-client.ts");
 check("BotID protects the page POSTs the action rides on",
@@ -124,7 +125,7 @@ console.log("\n3. what a crawler sees");
 const cf = fs.readFileSync("app/stock/[symbol]/ColdFill.tsx", "utf8");
 check("the server-rendered state is 'not yet read'; only a hydrated page moves to 'reading'",
   /useSyncExternalStore\(noSubscribe, \(\) => true, \(\) => false\)/.test(cf) &&
-    /const phase: Phase = settled \?\? \(hydrated \? "reading" : "waiting"\);/.test(cf));
+    /const view: ColdFillView = settled \?\? \(hydrated \? "reading" : "waiting"\);/.test(cf));
 // The words moved to coldFillSettle.ts with the settle rule (#535 COWORK #19);
 // the fallback sentence is the one that ruling named.
 const words = fs.readFileSync("app/stock/[symbol]/coldFillSettle.ts", "utf8");
