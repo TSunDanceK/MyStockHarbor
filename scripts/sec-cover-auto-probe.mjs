@@ -43,7 +43,14 @@ for (const s of syms) {
     console.log(`  per-class cover facts on ${newest ?? "-"}: ${facts.filter((f) => f.asOf === newest).map((f) => `${f.member}=${f.val}`).join(", ") || "none"}`);
     if (facts.length) {
       const doc = r.primaryDocument[i];
-      const stmt = A.oneToOneStatement(D.filingText(await get(`${base}/${doc}`, "text")));
+      const text = D.filingText(await get(`${base}/${doc}`, "text"));
+      const stmt = A.oneToOneStatement(text);
+      // THE CANDIDATE SENTENCES, so a miss can be read rather than guessed at.
+      if (process.env.SHOW) {
+        const cands = text.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z(])/).filter((x) => /Class\s+[A-Z]\b/.test(x) && /convert/i.test(x));
+        for (const c of cands.slice(0, 8)) console.log(`    · ${c.slice(0, 320)}`);
+        console.log(`    (${cands.length} sentence(s) naming a class and conversion)`);
+      }
       console.log(`  1:1 statement: ${stmt ? JSON.stringify(stmt) : "none found"}`);
       const out = A.autoCoverFromClasses(facts, stmt, { accession: acc, filed: r.filingDate[i] });
       console.log(`  auto: ${out.ok ? `SUM ${out.cover.val} as of ${out.cover.asOf}` : `REVIEW — ${out.why}`}`);
