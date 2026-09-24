@@ -129,6 +129,7 @@ async function suite(R, dash) {
 
   // 5. Wiring.
   ok("one indicator: the summary shows the live read", /const singleIndicator = selectedIndicators\.length === 1 \? selectedIndicators\[0\] : null;/.test(dash) && /if \(singleRead\) return singleRead;/.test(dash));
+  ok("one indicator with no history loaded still reads as a single indicator, plainly", /if \(!historyAll\.length\) return "There's no price history loaded for this chart yet, so there's nothing to read\.";/.test(dash));
   ok("the read is as of the last bar on screen, from the full plotted series", /closes: closesAll, at: displayEnd - 1, unit: readUnit,/.test(dash));
   ok("the timeframe sets the units", /const readUnit: ReadUnit = activeTimeframe === "W" \? "week" : activeTimeframe === "M" \? "month" : "day";/.test(dash));
   ok("the manual goes in the Selected Indicators card and the phone accordion", (dash.match(/<IndicatorManual name=\{singleIndicator \?\? ""\} text=\{singleManual\} \/>/g) ?? []).length === 2);

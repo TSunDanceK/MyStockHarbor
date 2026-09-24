@@ -815,7 +815,8 @@ export default function DashboardClient({
   const readUnit: ReadUnit = activeTimeframe === "W" ? "week" : activeTimeframe === "M" ? "month" : "day";
   const singleIndicator = selectedIndicators.length === 1 ? selectedIndicators[0] : null;
   const singleRead = useMemo(() => {
-    if (!singleIndicator || !historyAll.length) return null;
+    if (!singleIndicator) return null;
+    if (!historyAll.length) return "There's no price history loaded for this chart yet, so there's nothing to read.";
     return indicatorRead(singleIndicator, {
       closes: closesAll, at: displayEnd - 1, unit: readUnit,
       ma50: ma50Full, ma200: ma200Full, ema20: ema20Full, vwma20: vwma20Full, bb: bbFull, rsi: rsi14Full, macd: macdFull,
