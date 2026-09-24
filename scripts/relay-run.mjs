@@ -731,6 +731,8 @@ const TASKS = {
   // Read-only, no credential: instance facts matching PATTERN (#552 COWORK #38).
   "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
   "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
+  // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
+  "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {

@@ -216,6 +216,12 @@ export type CoverShares = {
   derived: Derivation;
   /** Present when the filer is multi-class and companyfacts cannot name them. */
   candidates?: number[];
+  /**
+   * The filing's own sentence stating the classes convert one-for-one, when
+   * the count is two classes summed on that basis (secCoverAuto). The citation
+   * travels with the number.
+   */
+  basis?: string;
 };
 
 export type PeriodRecord = {
