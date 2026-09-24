@@ -246,5 +246,20 @@ console.log("\nF. the next report, hedged, from the first filing");
     Fm.firstFilerNextReport("SPCX", Cc.set, "2027-03-01") !== null);
 }
 
+console.log("\nG. derived on every build, and the cache picks up a new filing");
+{
+  const codec = readCodeOnly("lib/server/secFactCodec.ts");
+  const type = codec.slice(codec.indexOf("export type StoredFactSet = {"), codec.indexOf("\n};", codec.indexOf("export type StoredFactSet = {")));
+  check("no stored new-listing flag: the set's type carries no listing/first-filer field",
+    type.length > 100 && !/listing|firstFil|newFil|isNew/i.test(type));
+  const layout = readCodeOnly("app/stock/[symbol]/layout.tsx");
+  const rv = Number((layout.match(/export const revalidate = (\d+);/) ?? [])[1]);
+  check("the earnings page re-renders within an hour (layout revalidate), and the page sets no cache policy of its own",
+    rv > 0 && rv <= 3600 && !/export const (revalidate|dynamic)\b/.test(readCodeOnly("app/stock/[symbol]/earnings/page.tsx")), `revalidate ${rv}`);
+  const crons = JSON.parse(readCodeOnly("vercel.json")).crons ?? [];
+  check("the filing job that rewrites a set on a new 10-Q/10-K runs hourly",
+    crons.some((c) => c.path === "/api/jobs/sec-filings" && /^\d+ \* \* \* \*$/.test(c.schedule)));
+}
+
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

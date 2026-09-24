@@ -55,5 +55,16 @@ for (const s of syms) {
       const out = A.autoCoverFromClasses(facts, stmt, { accession: acc, filed: r.filingDate[i] });
       console.log(`  auto: ${out.ok ? `SUM ${out.cover.val} as of ${out.cover.asOf}` : `REVIEW — ${out.why}`}`);
     }
+    // THE PROSPECTUS, for a map row's citation only (DOCFORMS=424B4,S-1). The
+    // automatic rule never reads it: it is not the live periodic filing.
+    for (const form of (process.env.DOCFORMS || "").split(",").filter(Boolean)) {
+      const j = (r.form ?? []).findIndex((f) => f === form);
+      if (j < 0) { console.log(`  ${form}: none in recent filings`); continue; }
+      const pb = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accessionNumber[j].replace(/-/g, "")}`;
+      const text = D.filingText(await get(`${pb}/${r.primaryDocument[j]}`, "text"));
+      const cands = text.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z(])/).filter((x) => /Class\s+[A-Z]\b/.test(x) && /convert/i.test(x));
+      console.log(`  ${form} ${r.accessionNumber[j]} filed ${r.filingDate[j]}: 1:1 statement ${JSON.stringify(A.oneToOneStatement(text))}`);
+      for (const c of cands.slice(0, 6)) console.log(`    · ${c.slice(0, 360)}`);
+    }
   } catch (e) { console.log(`\n== ${s}: ERROR ${String(e?.message ?? e).slice(0, 120)}`); }
 }

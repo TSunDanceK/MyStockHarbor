@@ -734,6 +734,7 @@ const TASKS = {
   // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
+  "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
