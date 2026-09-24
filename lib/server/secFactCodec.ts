@@ -52,6 +52,30 @@ export type StoredPeriod = {
   d: string;
 };
 
+/**
+ * TWELVE MONTHS OF EPS READ FROM THE FILINGS' OWN XBRL (#552 COWORK #33):
+ * fiscal year (10-K) + year-to-date (10-Q) - the prior year-to-date. Stored
+ * only where the set's own quarters and year cannot give twelve months. See
+ * secInstanceEps.
+ */
+export type InstanceEps = {
+  val: number;
+  /** The 10-Q's period end: the twelve months run to here. */
+  periodEnd: string;
+  /** The fiscal year's end, from the 10-K. */
+  yearEnd: string;
+  ytdStart: string;
+  ytdDays: number;
+  /** "basic" only for a filer that states no diluted EPS at all. */
+  kind: "diluted" | "basic";
+  /** The share class read (StatementClassOfStockAxis member), or null for the undimensioned figure. */
+  member: string | null;
+  concept: string;
+  /** Accessions: the 10-K and the 10-Q. */
+  k: string | null;
+  q: string | null;
+};
+
 export type StoredFactSet = {
   /** Schema/field-order gate. A reader whose hash differs must refetch. */
   h: string;
@@ -64,6 +88,8 @@ export type StoredFactSet = {
   years: StoredPeriod[];
   instants: StoredPeriod[];
   cover: CoverShares | null;
+  /** See InstanceEps. Absent unless the set needed it and the filings supported it. */
+  te?: InstanceEps;
   /**
    * Taxonomy namespaces the payload carried. OPTIONAL, because sets written
    * before this existed do not have it -- absent is "unknown", not "none", and
@@ -209,7 +235,7 @@ export const DERIVATION_OF: Record<string, "as-filed" | "differenced" | "compute
   F: "as-filed", D: "differenced", C: "computed", A: "ambiguous", "-": null,
 };
 
-function encodePeriod(p: PeriodRecord): StoredPeriod {
+export function encodePeriod(p: PeriodRecord): StoredPeriod {
   return {
     e: p.end, s: p.start, fp: p.fp, fy: p.fy, a: p.accession, f: p.filed,
     v: p.values.map((c) => c?.val ?? null),
@@ -238,6 +264,8 @@ export function contentHashOf(set: Omit<StoredFactSet, "contentHash">): string {
     }
   }
   feed(String(set.cover?.val ?? "~"));
+  // ONLY WHEN PRESENT, so no set without it changes hash.
+  if (set.te) feed(`te${set.te.val}@${set.te.periodEnd}`);
   return h.toString(16).padStart(8, "0");
 }
 
@@ -272,6 +300,7 @@ export function encodeFactSet(
     years: result.years.map(encodePeriod),
     instants: result.instants.map(encodePeriod),
     cover: result.coverShares,
+    ...(result.ttmEps ? { te: result.ttmEps } : {}),
     tx: result.taxonomies,
     c: secChainsHash(),
     cu: result.refusedUnits,
