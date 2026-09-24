@@ -1,5 +1,8 @@
 # News art v2 on the symbol-led surfaces: the industry layer (2026-09-22)
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 > **2026-09-23 (#552, COWORK #4/#5):** FMP values in this doc are redacted as
 > "[removed 2026-09-23]", and so is text describing keeping FMP data after the key lapses. The findings are kept.
 
