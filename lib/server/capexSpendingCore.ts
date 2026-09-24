@@ -78,6 +78,8 @@ export type SpendingRecord = {
   otherCurrency: number;
   /** Companies the sector resolver could not place. */
   unclassified: number;
+  /** The largest of those by latest-year capex (up to 10), so the gap is visible, not just counted. */
+  unclassifiedLargest: Array<{ symbol: string; capex: number }>;
   /** Companies with some capex but not in all five years (outside every cohort). */
   partial: number;
   sectors: SectorSpending[];
@@ -135,6 +137,7 @@ export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: 
   type Row = { symbol: string; capex: (number | null)[]; revenue: (number | null)[]; rnd: (number | null)[] };
   const bySector = new Map<string, Row[]>();
   let otherCurrency = 0, unclassified = 0, partial = 0;
+  const unplaced: Array<{ symbol: string; capex: number }> = [];
   for (const input of inputs) {
     if (!input.years.length) {
       if (input.currency && input.currency !== "USD") otherCurrency++;
@@ -150,7 +153,11 @@ export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: 
     });
     const row: Row = { symbol: input.symbol, capex: pick("capex"), revenue: pick("revenue"), rnd: pick("rnd") };
     if (!input.sector) {
-      if (row.capex.some((v) => v !== null)) unclassified++;
+      if (row.capex.some((v) => v !== null)) {
+        unclassified++;
+        const latest = [...row.capex].reverse().find((v) => v !== null);
+        if (latest != null) unplaced.push({ symbol: row.symbol, capex: latest });
+      }
       continue;
     }
     if (row.capex.some((v) => v !== null) && row.capex.some((v) => v === null)) partial++;
@@ -182,5 +189,5 @@ export function aggregateSpending(all: SpendingInput[], years: number[], nowMs: 
     });
   }
   sectors.sort((a, b) => b.capex[b.capex.length - 1] - a.capex[a.capex.length - 1]);
-  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, duplicateListings, otherCurrency, unclassified, partial, sectors };
+  return { v: 1, builtAt: nowMs, years, companiesRead: inputs.length, duplicateListings, otherCurrency, unclassified, unclassifiedLargest: unplaced.sort((a, b) => b.capex - a.capex).slice(0, 10), partial, sectors };
 }

@@ -20,6 +20,7 @@ if (r) {
   const bn = (v) => `${(v / 1e9).toFixed(1)}bn`;
   for (const s of r.sectors)
     console.log(`  ${s.sector.padEnd(24)} cohort ${String(s.cohort).padStart(4)}  capex ${s.capex.map(bn).join(" → ")}  capex/rev ${s.capexToRevenue.map((x) => (x === null ? "-" : `${(x * 100).toFixed(1)}%`)).join(" ")} (n=${s.ratioCohort})  R&D n=${s.rndCohort} ${bn(s.rnd[s.rnd.length - 1])}  top ${s.top.join(",")}`);
+  console.log(`without a sector (${r.unclassified}), largest by latest capex: ${r.unclassifiedLargest.map((u) => `${u.symbol} ${bn(u.capex)}`).join(", ")}`);
   console.log(`record size ${JSON.stringify(r).length} bytes`);
 }
 const plausible = Boolean(r && built.setsRead >= 200 && r.sectors.length >= 8);
