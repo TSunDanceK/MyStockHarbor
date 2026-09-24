@@ -166,12 +166,24 @@ export function samePeriodPayout(set: StoredFactSet, eps: EpsBasis | null): Payo
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "TTM to 30 Jun 2026" or "FY2025" -- what the cell's tooltip says. */
-export function basisLabel(b: { basis: "four-quarters" | "fiscal-year"; periodEnd: string; fiscalYear?: number | null }): string {
+/**
+ * "TTM to 30 Jun 2026" or "FY2025" -- what the cell's tooltip says, in the
+ * stock page's words (stockProfile.peBasisLabel, which this module cannot
+ * import: that file pulls JSON through the "@/" alias the relay's loader and
+ * the checks do not resolve). A's "year-to-date" basis (#588: fiscal year +
+ * year-to-date - the prior year-to-date) IS twelve trailing months, so it reads
+ * TTM; a filer that states only basic EPS (BRK) says so.
+ */
+export function basisLabel(b: {
+  basis: "four-quarters" | "fiscal-year" | "year-to-date";
+  periodEnd: string;
+  fiscalYear?: number | null;
+  kind?: "basic";
+}): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b.periodEnd);
   const date = m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : b.periodEnd;
-  if (b.basis === "fiscal-year") return b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`;
-  return `TTM to ${date}`;
+  const label = b.basis === "fiscal-year" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;
+  return b.kind === "basic" ? `${label}, basic EPS` : label;
 }
 
 /** The columns a row can fill, as the picker entry names them. */
