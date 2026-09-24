@@ -31,7 +31,8 @@ type InternalNewsCard = { title: string; source: string | null; pubDate: string 
 // card sits beside the Overview card fixed in #317 and was still rendering
 // "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
 export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; changePct?: number | null; sparkPoints?: number[]; };
-export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable"; reportDate?: string | null; epsSurprisePercent?: number | null; revenueSurprisePercent?: number | null; };
+// FROM THE SEC SNAPSHOT (lib/server/secEarningsSummary.ts) since 2026-09-23: the band label ("Good", "Mixed", "Weak", "Unavailable").
+export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: string; };
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
 type DivergenceState = "bullish" | "bearish" | "none";
 type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "orange" | "red" | "muted"; valueText: string; severity: number; order: number; };
