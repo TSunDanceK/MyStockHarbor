@@ -80,6 +80,14 @@ export type NewsItem = {
   imageVerdict?: "allow" | "deny" | null;
   /** Which adapter produced the item. Set by the adapter, not inferred. */
   provider?: NewsProviderId;
+  /**
+   * The feed's own language tag (dc:language), wires only; null when the feed
+   * sends none. /headlines and sector pages keep English items only (#553
+   * COWORK #11: FEMSA's Spanish release sat beside its English one).
+   */
+  language?: string | null;
+  /** The issuing company as the wire names it (dc:contributor). Wires only. */
+  issuer?: string | null;
 };
 
 /**
@@ -106,7 +114,10 @@ export type FmpStockNewsItem = {
   link?: string;
 };
 
-export type NewsProviderId = "gnews" | "wire" | "sec" | "fmp";
+// "marketwatch" | "cnbc" (2026-09-23): the /headlines-only feeds in
+// ./headlineFeeds.ts. They are not NewsProviders -- no per-symbol leg -- but
+// their items still say where they came from.
+export type NewsProviderId = "gnews" | "wire" | "sec" | "fmp" | "marketwatch" | "cnbc";
 
 /**
  * A news source, behind one interface.

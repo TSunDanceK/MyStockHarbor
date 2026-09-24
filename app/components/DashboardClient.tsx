@@ -15,7 +15,7 @@ import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
 
-export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
+export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
 type ChartInterval = "d" | "w" | "m";
 type ChartMode = "basic" | "interactive" | "tradingview";
@@ -958,7 +958,7 @@ export default function DashboardClient({
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend ?? "Not enough history yet"}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
         <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>{customMode ? "Selected Indicator Summary" : "Chart Summary"}</div>{chartSummaryText}</div>
-        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""} · Source: {quote?.source ?? "financialmodelingprep.com"}</div>
+        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""}{/* No fallback source name (2026-09-23, #553 COWORK #1): the "financialmodelingprep.com" default credited FMP even on an empty quote. */}{quote?.source ? ` · Source: ${quote.source}` : ""}</div>
       </div>
     </SectionCard>);
   }

@@ -886,6 +886,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
       setAnalystRating(null);
       return;
     }
+    // UNREACHABLE WHILE RETIRED: the route below was deleted 2026-09-23 (#552
+    // COWORK #1). Un-retiring the block needs a new source first; until then
+    // this fetch would 404 and draw the block's "unavailable" state.
     let cancelled = false;
     async function loadAnalystRating() {
       setAnalystRatingLoading(true);
@@ -1155,8 +1158,9 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
                   The whole block below still compiles and still knows how to
                   draw itself; RETIRED_BLOCKS["analyst-ratings"] in
                   ./retiredBlocks.ts is what stops it reaching a reader, and
-                  names the source (FMP /stable/grades-consensus and
-                  /price-target-summary, via /api/stock-analyst-rating), the
+                  names the source (FMP /stable/price-target-consensus and
+                  /grades-consensus, via /api/stock-analyst-rating, a route
+                  deleted 2026-09-23), the
                   date, and why there is no successor to move it to.
 
                   THE SOURCE NOTE GOES DARK WITH IT, which is the point of
@@ -1434,7 +1438,11 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
         .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
         .learn-grid { display: grid; gap: 0; }
         .explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .returns-charts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        /* STACKED AT EVERY WIDTH (owner, #553 COWORK #6, 2026-09-23): the Daily
+           and Weekly returns cards sit one above the other at full width, so the
+           bars and their labels get the room a half-width card squeezed out.
+           Layout only -- the returns themselves are computed as before. */
+        .returns-charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 
         a:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
@@ -1444,7 +1452,6 @@ export default function StockSymbolPageClient({ symbol, pageToken, earningsSnaps
           .explore-grid { grid-template-columns: 1fr !important; }
           .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .valuationGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .returns-charts-grid { grid-template-columns: 1fr !important; }
         }
 
         @media (max-width: 640px) {

@@ -739,7 +739,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .waterfall { margin-top: 12px; display: grid; gap: 8px; }
         .wfRow { display: grid; grid-template-columns: minmax(96px, 22%) 1fr minmax(64px, auto); align-items: center; gap: 10px; }
         .wfLabel { font-size: 12px; font-weight: 850; color: rgba(203,213,225,0.80); }
-        .wfTrack { height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
+        .wfTrack { position: relative; height: 12px; border-radius: 4px; background: rgba(255,255,255,0.04); overflow: hidden; }
+        .wfZero { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px solid rgba(226,232,240,0.55); }
         .wfBar { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
         .wfValue { font-size: 12px; font-weight: 900; color: #e2e8f0; text-align: right; white-space: nowrap; }
         .wfTotal .wfLabel, .wfTotal .wfValue { color: #dbeafe; }

@@ -572,8 +572,8 @@ const UNDER_TEST = [
   // called by StockSymbolPageClient with the page's symbol unchanged.
   ["app/stock/[symbol]/page.tsx", "fetchCompanyProfile", "the profile panel on /stock/[symbol]"],
   ["app/stock/[symbol]/page.tsx", "fetchShareHistory", "the share-count history on /stock/[symbol]"],
-  ["app/api/stock-analyst-rating/[symbol]/route.ts", "GET", "the analyst rating panel"],
-  ["app/api/stock-valuation/[symbol]/route.ts", "GET", "the valuation panel"],
+  // The two API routes (stock-analyst-rating, stock-valuation) were deleted
+  // 2026-09-23 (#552 COWORK #1); check-retired-routes keeps them gone.
   // Visible only since the helper-path rule above; route parameter via the
   // page's own cleanSymbol, which keeps the dot.
   // Route-fed one layer down: /api/stock-earnings/[symbol] and /dashboard?symbol=
@@ -664,7 +664,6 @@ const TRACED = new Map([
   ["lib/server/benchmarksBuilder.ts#fetchFmpQuote", "no dot: fixed SPY/QQQ/DIA/IWM and BTCUSD-style lists only"],
   ["lib/server/earningsCalendar.ts#quoteOne", "no dot: FMP earnings-calendar rows, and looksNonUsOrDerivative drops any symbol with '.' or '-'"],
   ["lib/server/indexChanges.ts#fetchRecentIndexAdditions", "no dot, by FMP convention not measurement: FMP constituent endpoints, 402 on this plan so unreached today"],
-  ["app/api/debug/static-profile/route.ts#fetchStatic", "PRESET: readPickersSymbolsIfCached"],
   ["app/api/jobs/warm-earnings/route.ts#fetchFmpEarnings", "PRESET: the earnings warm queue, filled from the pickers universe and the dynamic universe"],
   ["lib/sector-news-data.ts#fetchFmpSectorNewsWindow", "PRESET: getSectorConstituents, if BRK.B survives the top-40 market-cap cut"],
   ["lib/server/fundamentalsCache.ts#fetchQuoteFundamentals", "PRESET: warm-fundamentals over the warm targets"],
