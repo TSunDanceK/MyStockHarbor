@@ -696,6 +696,8 @@ const TASKS = {
   // classes relate (conversion, economic rights) (#552 COWORK #31).
   "sec-share-class-evidence": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   "sec-share-class-evidence-equal": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "equal" } },
+  // Read-only, no credential: a passage from a filer's latest filing of a form.
+  "sec-filing-grep": { script: "scripts/sec-filing-grep-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
