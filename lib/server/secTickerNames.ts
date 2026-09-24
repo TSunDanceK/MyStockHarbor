@@ -14,6 +14,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { snapshotCompanyName } from "./companyNameSnapshot";
+import { cleanListingName } from "./listingName";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
 
 type Row = { name: string; exchange: string | null };
@@ -52,7 +53,9 @@ export function secExchangeFor(symbol: string): string | null {
 
 /** The name the grid shows: the directory snapshot's, else SEC's; "" when neither. */
 export function gridCompanyName(symbol: string): string {
-  return snapshotCompanyName(symbol) || lookupBySpelling(load(), symbol)?.value?.name || "";
+  // THE COMPANY, NOT THE SECURITY (#552 COWORK #23): "Cintas Corporation -
+  // Common Stock" reads as "Cintas Corporation".
+  return cleanListingName(snapshotCompanyName(symbol) || lookupBySpelling(load(), symbol)?.value?.name || "");
 }
 
 /** The grid's admission test: a Nasdaq or NYSE listing, per SEC's own file. */

@@ -859,7 +859,10 @@ export async function fetchMonthRows(
 async function getMonthCandidates(year: number, month: number): Promise<Map<string, EarningsCandidate[]>> {
   const key = monthKey(year, month);
   const cached = candidatesCache.get(key);
-  if (cached && Date.now() - cached.at < MONTH_CACHE_MS) return cached.byDate;
+  if (cached && Date.now() - cached.at < MONTH_CACHE_MS) {
+    monthVisibility.set(key, "known");
+    return cached.byDate;
+  }
 
   // ── SEC'S OWN ANNOUNCEMENTS, NOT FMP'S CALENDAR (#535 COWORK #18 §3) ─────
   // Candidates: the day index the report-dates job writes (an Item 2.02 8-K,
@@ -870,6 +873,10 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
   // none, and the columns are hidden (EarningsDayList).
   const index = await readResultsDays();
   const byDate = new Map<string, EarningsCandidate[]>();
+  // THE READ'S OUTCOME IS RECORDED (#552 COWORK #23). Without it every month
+  // stayed "unseen", so every empty day, today included, rendered the gap
+  // message ("cannot be listed right now") instead of a plain answer.
+  monthVisibility.set(key, index ? "known" : "unknown");
   if (!index) return byDate; // unreadable is not "nobody reported": not cached below
   const prefix = `${year}-${pad2(month)}-`;
   for (const [date, symbols] of symbolsByDay(index, gridAdmits)) {
@@ -896,6 +903,14 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
 // shows only a presence dot (no number), so this never needs a quote or a
 // stored tally -- it's derived straight from the free, already-cached monthly
 // candidate feed. Nothing to over-count, nothing to self-correct.
+/** Companies per in-month date, for the count in each grid cell (#552 COWORK #23). Same single read. */
+export async function getMonthDayCounts(year: number, month: number): Promise<Map<string, number>> {
+  const byDate = await getMonthCandidates(year, month);
+  const counts = new Map<string, number>();
+  for (const [date, list] of byDate) if (list.length > 0) counts.set(date, list.length);
+  return counts;
+}
+
 export async function getMonthDaysWithEarnings(year: number, month: number): Promise<Set<string>> {
   const byDate = await getMonthCandidates(year, month);
   const days = new Set<string>();
