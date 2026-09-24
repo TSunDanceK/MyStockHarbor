@@ -2,6 +2,8 @@
 
 import { useEffect, type RefObject } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
+import { activeRowStyle } from "@/lib/listboxNav";
+import type { ListboxNav } from "@/app/components/useListboxNav";
 
 /**
  * Shared results dropdown for the three "jump to another ticker" search
@@ -101,11 +103,14 @@ export function TickerJumpDropdown({
   results,
   onChoose,
   maxResults = 8,
+  nav,
 }: {
   open: boolean;
   results: SymbolResult[];
   onChoose: (result: SymbolResult) => void;
   maxResults?: number;
+  /** Keyboard navigation from useListboxNav (#553 COWORK #36). */
+  nav?: ListboxNav;
 }) {
   if (!open || results.length === 0) return null;
 
@@ -113,6 +118,7 @@ export function TickerJumpDropdown({
     <div
       role="listbox"
       aria-label="Ticker search results"
+      {...nav?.listProps}
       style={{
         position: "absolute",
         top: "calc(100% + 8px)",
@@ -133,12 +139,14 @@ export function TickerJumpDropdown({
         boxShadow: "0 18px 34px rgba(0,0,0,0.72)",
       }}
     >
-      {results.slice(0, maxResults).map((result) => (
+      {results.slice(0, maxResults).map((result, i) => (
         <button
           key={`${result.symbol}-${result.exchange}`}
           type="button"
           role="option"
           aria-selected={false}
+          tabIndex={-1}
+          {...nav?.optionProps(i)}
           onClick={() => onChoose(result)}
           style={{
             width: "100%",
@@ -152,6 +160,7 @@ export function TickerJumpDropdown({
             display: "flex",
             alignItems: "center",
             gap: 10,
+            ...(nav?.active === i ? activeRowStyle(true) : null),
           }}
         >
           <TickerLogo symbol={result.symbol} size={22} radius={6} />

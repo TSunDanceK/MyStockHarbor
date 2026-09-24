@@ -172,7 +172,7 @@ const diffSites = [...extractCode.matchAll(/derived:\s*"differenced"/g)].map((m)
 // fallback chain. The site must still sit inside that one routine.
 const cumLoopAt = extractCode.indexOf("const runCumulative = (");
 check("the differencing routine is run for cumulativeFields()",
-  /runCumulative\(cumulativeFields\(\), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes\);/.test(extractCode));
+  /runCumulative\(cumulativeFields\(\), buckets, preferred, quarterCells, yearCells, quarterMeta, yearMeta, notes(, ytdFrames)?\);/.test(extractCode));
 const asFiledAt = extractCode.indexOf("for (const field of asFiledOnlyFields())");
 const instLoopAt = extractCode.indexOf("for (const field of instantFields())");
 check("the extractor emits `differenced` in exactly one place", diffSites.length === 1,

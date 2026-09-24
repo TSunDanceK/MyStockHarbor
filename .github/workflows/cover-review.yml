@@ -1,0 +1,37 @@
+# Multi-class share counts needing review (CODE-A, #552 COWORK #37 addendum):
+# daily, posts ONE comment on #552 listing companies whose cover states shares
+# per class with no total, no cited map row and no one-for-one statement --
+# only when the open list changed. Resolved entries drop out on their own.
+# Redis: 2 reads a run. No links, no values in the comment.
+name: Cover review
+
+on:
+  schedule:
+    - cron: "45 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Print the body only (no comment)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: Post the open review list on #552
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/cover-review-post.mjs ${{ inputs.dry && '--dry' || '' }}

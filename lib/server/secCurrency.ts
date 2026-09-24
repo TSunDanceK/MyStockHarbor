@@ -297,6 +297,8 @@ export function convertExtractResult(
       quarters: convertList(result.quarters),
       years: convertList(result.years),
       instants: convertList(result.instants),
+      // THE YEAR-TO-DATE FRAME ON THE SAME RULE: converted, or dropped.
+      ...(result.ytd ? { ytd: convertList([result.ytd])[0] } : {}),
       // coverShares IS A SHARE COUNT and is deliberately not touched here.
     },
     conversion: {

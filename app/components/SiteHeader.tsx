@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
-import { rememberSymbol } from "@/lib/symbol";
+import { rememberSymbol, SYMBOL_STORAGE_KEY } from "@/lib/symbol";
+import { readStored } from "@/lib/browserStorage";
 
 type StockNavKind = "earnings" | "analysis" | "news";
 
@@ -93,7 +94,7 @@ function useLastStockSymbol(pathname: string | null) {
       return;
     }
 
-    setLastSymbol(cleanSymbol(window.localStorage.getItem("msh_last_symbol")));
+    setLastSymbol(cleanSymbol(readStored(SYMBOL_STORAGE_KEY)));
   }, [pathname]);
 
   return lastSymbol;
@@ -101,7 +102,7 @@ function useLastStockSymbol(pathname: string | null) {
 
 function currentCachedSymbol() {
   if (typeof window === "undefined") return "AAPL";
-  return cleanSymbol(window.localStorage.getItem("msh_last_symbol"));
+  return cleanSymbol(readStored(SYMBOL_STORAGE_KEY));
 }
 
 function normalisePathname(pathname: string | null) {
