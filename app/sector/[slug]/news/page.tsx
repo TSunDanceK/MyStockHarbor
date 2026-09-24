@@ -31,6 +31,7 @@ import {
 import WhyThisMatters from "@/app/stock/[symbol]/news/WhyThisMatters";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import { bucketFor, planCardArt, type CardArt } from "@/lib/server/news/art";
+import { withGenericFallback } from "@/lib/server/news/artTags";
 import { newsAttribution, hasPublisherExcerpt } from "@/lib/news-attribution";
 import NewsCardArt from "@/app/components/NewsCardArt";
 
@@ -591,7 +592,10 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
   // adjacent cards can draw from different buckets, and index 2 of one is a
   // different image from index 2 of another.
   const takenByBucket = new Map<string, Set<number>>();
-  const leadArt: CardArt[] = detailedNews.map((item) =>
+  // A lead card is never left without a picture (#553 COWORK #41): a plan that
+  // comes back "none" takes the generic fallback, as /headlines does.
+  const takenGeneric = new Set<string>();
+  const leadArt: CardArt[] = detailedNews.map((item) => withGenericFallback(
     planCardArt({
       variant: "lead",
       eventType: item.eventType,
@@ -603,7 +607,7 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
       // drawing an empty one. Every sector slug maps to a bucket that holds
       // art, so in practice the lead cards take library art regardless.
       canGenerate: primarySymbol(item, constituents) !== null,
-    })
+    }), item.guid ?? item.link, takenGeneric)
   );
 
   return (
