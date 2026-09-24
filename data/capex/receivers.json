@@ -228,7 +228,7 @@
    "element": "csco:NetworkingMember",
    "filedLabel": "Networking",
    "subLabel": null,
-   "broad": false,
+   "broad": true,
    "hyperscaler": false,
    "probeAccession": "0000858877-26-000132"
   },
@@ -254,7 +254,7 @@
    "element": "cien:OpticalNetworkingMember",
    "filedLabel": "Optical Networking",
    "subLabel": null,
-   "broad": false,
+   "broad": true,
    "hyperscaler": false,
    "probeAccession": "0001628280-25-056698"
   },
@@ -319,7 +319,7 @@
    "element": "glw:OpticalCommunicationsMember",
    "filedLabel": "Optical Communications",
    "subLabel": null,
-   "broad": false,
+   "broad": true,
    "hyperscaler": false,
    "probeAccession": "0000024741-26-000124"
   },
@@ -345,7 +345,7 @@
    "element": "dell:InfrastructureSolutionsGroupMember",
    "filedLabel": "Infrastructure Solutions Group",
    "subLabel": null,
-   "broad": false,
+   "broad": true,
    "hyperscaler": false,
    "probeAccession": "0001571996-26-000008"
   },
@@ -384,7 +384,7 @@
    "element": "jbl:IntelligentInfrastructureMember",
    "filedLabel": "Intelligent Infrastructure",
    "subLabel": null,
-   "broad": false,
+   "broad": true,
    "hyperscaler": false,
    "probeAccession": "0001628280-25-045293"
   },
@@ -532,7 +532,10 @@
    "axis": "segment",
    "element": "amzn:AmazonWebServicesSegmentMember",
    "filedLabel": "AWS",
-   "subLabel": null,
+   "subLabel": {
+    "text": "Amazon Web Services",
+    "source": "filing-text"
+   },
    "broad": false,
    "hyperscaler": true,
    "probeAccession": "0001018724-26-000004"
