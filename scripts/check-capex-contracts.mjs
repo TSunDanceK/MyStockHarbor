@@ -80,12 +80,25 @@ async function suite(M, aliasFile, universeTickers) {
   ok("every exclusion carries a reason", aliasFile.exclusions.every((e) => typeof e.reason === "string" && e.reason.trim().length >= 12));
   ok("no recipient is both aliased and excluded", aliasFile.exclusions.every((e) => !aliasNames.has(M.normName(e.recipient))));
   ok("no recipient is aliased twice", aliasNames.size === aliasFile.aliases.length);
+
+  // The REAL list against the REAL universe, in company-tickers' own order
+  // (the job's universeNames rule: primary ticker first).
+  const real = M.buildMapper(aliasFile.aliases, aliasFile.exclusions, realUniverse);
+  ok("AT&T maps to the common stock, never the note", real("AT&T INC.")?.ticker === "T" && real("AT&T ENTERPRISES, LLC")?.ticker === "T");
+  ok("Sikorsky is Lockheed's, not RTX's (stale parent record overridden)", real("SIKORSKY AIRCRAFT CORPORATION")?.ticker === "LMT");
+  ok("Amentum and V2X map to themselves, not their stale parents", real("AMENTUM SERVICES, INC.")?.ticker === "AMTM" && real("V2X SYSTEMS LLC")?.ticker === "VVX");
+  ok("a joint venture stays unmapped", real("SAVANNAH RIVER NUCLEAR SOLUTIONS LLC") === null);
+  ok("the primes map by exact name", real("LOCKHEED MARTIN CORPORATION")?.ticker === "LMT" && real("THE BOEING COMPANY")?.ticker === "BA");
   return fails;
 }
 
 const src = read(CORE);
 const aliasFile = JSON.parse(read("data/capex/contract-aliases.json"));
 const universeTickers = new Set(Object.keys(JSON.parse(read("data/sec/registrants.json")).rows));
+const ct = JSON.parse(read("data/sec/company-tickers.json"));
+const realUniverse = ct.data
+  .map((r) => ({ ticker: String(r[ct.fields.indexOf("ticker")]), secName: String(r[ct.fields.indexOf("name")]) }))
+  .filter((u) => universeTickers.has(u.ticker));
 const base = await suite(await load(src), aliasFile, universeTickers);
 if (base.length) {
   console.error("FAIL check-capex-contracts:\n  " + base.join("\n  "));
