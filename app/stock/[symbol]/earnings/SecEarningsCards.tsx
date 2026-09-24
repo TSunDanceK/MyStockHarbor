@@ -1851,14 +1851,16 @@ export function SecValuationCard({
   // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
     ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`
-    : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd}`;
+    : inputs.eps?.basis === "year-to-date" && inputs.eps.ytd
+      ? `the twelve months to ${inputs.eps.periodEnd} (the fiscal year to ${inputs.eps.ytd.yearEnd} plus ${inputs.eps.ytd.months} months, less the same ${inputs.eps.ytd.months} months a year earlier)`
+      : `${inputs.eps?.fiscalYear ? `fiscal year ${inputs.eps.fiscalYear}` : "the latest fiscal year"}, to ${inputs.eps?.periodEnd}`;
   const peSub = !current ? null
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
         ? `${inputs.eps && inputs.eps.val < 0 ? "Loss" : "No earnings"} over ${epsSpan}`
         : sentence(REFUSAL_WORDS[pe.why])
       : inputs.eps
-        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} diluted EPS over ${epsSpan}`
+        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"} over ${epsSpan}`
         : null;
   return (
     <section className="card">
