@@ -74,7 +74,7 @@
     },
     {
       "path": "/api/jobs/capex-contracts",
-      "schedule": "10 6 * * 1"
+      "schedule": "10 6 * * *"
     }
   ]
 }
