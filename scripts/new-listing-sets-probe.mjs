@@ -12,7 +12,7 @@ const { SEC_FIELD_KEYS } = await import("../lib/server/secFields.ts");
 const keyOf = (src, n) => (fs.readFileSync(src, "utf8").match(new RegExp(`${n} = "([^"]+)"`)) ?? [])[1];
 const FACTS = keyOf("lib/server/secManifest.ts", "SEC_FACTS_PREFIX");
 const syms = (process.env.SYMBOLS || "SPCX,INIO,MAIR,CBRS,BSP,PS,AAPL").split(",").filter(Boolean);
-const want = ["revenue", "costOfRevenue", "grossProfit", "operatingIncome", "netIncome", "epsDiluted", "sharesDiluted", "operatingCashFlow", "capex", "freeCashFlow", "stockBasedComp", "interestExpense", "rnd", "sga"];
+const want = ["revenue", "costOfRevenue", "grossProfit", "operatingIncome", "netIncome", "epsDiluted", "sharesDiluted", "operatingCashFlow", "capex", "freeCashFlow", "shareBasedCompensation", "interestExpense", "researchAndDevelopment", "sellingGeneralAndAdministrative", "otherOperatingExpense"];
 const got = await redis.mget(...syms.map((s) => `${FACTS}:${s}`));
 const DATES = keyOf("lib/server/secReportDatesStore.ts", "SEC_REPORT_DATES_PREFIX");
 const dates = await redis.mget(...syms.map((s) => `${DATES}:${s}`));
