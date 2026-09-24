@@ -26,6 +26,6 @@ for (const s of (process.argv[2] || "").split(",").filter(Boolean)) {
   for (const m of xml.matchAll(/<([\w-]+):(\w+)\b([^>]*)>\s*([^<]{1,60}?)\s*<\/\1:\2>/g)) {
     if (!re.test(m[2])) continue;
     const c = ctx.get((m[3].match(/contextRef="([^"]+)"/) ?? [])[1]);
-    if (n++ < 60) console.log(`  ${m[1]}:${m[2]} ${c} = ${m[4]}`);
+    if (n++ < Number(process.env.LIMIT || 60)) console.log(`  ${m[1]}:${m[2]} ${c} = ${m[4]}`);
   }
 }

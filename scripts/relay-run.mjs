@@ -725,6 +725,7 @@ const TASKS = {
   "sec-locator-debug": { script: "scripts/sec-locator-debug.mjs", args: (env) => [env.SYMBOLS || ""], needsTypescript: true },
   "sec-locator-census": { script: "scripts/sec-description-locator-census.mjs", args: () => [], needsTypescript: true },
   // Read-only, no credential: instance facts matching PATTERN (#552 COWORK #38).
+  "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
   "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
   "sec-cover-classes-verify": { script: "scripts/sec-cover-classes-verify.mjs", args: () => [], needsTypescript: true },
   "sec-share-class-evidence-wide": { script: "scripts/share-class-evidence-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { MODE: "wide" } },
