@@ -1007,6 +1007,8 @@ const TASKS = {
   // Builds data/capex/receivers.json (printed; the sandbox commits it). Lifts
   // the parsers from lib/server/capexReceivers.ts, hence the compiler.
   "capex-receivers-build": { script: "scripts/capex-receivers-build.mjs", args: () => [], needsTypescript: true },
+  // Builds data/capex/federal-baseline.json (printed). USAspending only.
+  "capex-federal-build": { script: "scripts/capex-federal-build.mjs", args: () => [], needsTypescript: true },
   "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
 };
 

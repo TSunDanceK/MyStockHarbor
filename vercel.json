@@ -71,6 +71,10 @@
     {
       "path": "/api/jobs/capex-receivers",
       "schedule": "50 5 * * *"
+    },
+    {
+      "path": "/api/jobs/capex-federal",
+      "schedule": "30 6 * * *"
     }
   ]
 }

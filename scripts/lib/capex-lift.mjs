@@ -12,3 +12,12 @@ export async function liftCapexParsers() {
   const types = src.slice(src.indexOf("export type ReceiverGroup"), start);
   return lift(`${types}\n${src.slice(start, end)}`, "", "capexReceivers parsers");
 }
+
+/** The pure matching and USAspending-fetch parts of lib/server/capexFederal.ts. */
+export async function liftCapexFederal() {
+  const src = fs.readFileSync("lib/server/capexFederal.ts", "utf8");
+  const start = src.indexOf("export const CAPEX_FEDERAL_REDIS_KEY");
+  const end = src.indexOf("const redis =");
+  if (start < 0 || end < 0) throw new Error("capex-lift: markers not found in lib/server/capexFederal.ts");
+  return lift(src.slice(start, end), "", "capexFederal");
+}

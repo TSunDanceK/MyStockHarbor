@@ -95,6 +95,9 @@ export const JOBS = {
   // 05:50, after every other SEC job, for the per-requester pacing reason
   // above. ~44 submissions requests on a normal day (#563).
   "capex-receivers": { label: "Capex receivers — newest annual filings (daily 05:50)", instrumented: true, cron: "50 5 * * *" },
+  // Daily cron, WEEKLY data: the route refreshes only when its record is 6.5
+  // days old, so a daily cron keeps this row's silence meaningful (#563 D5).
+  "capex-federal": { label: "Capex federal contracts — USAspending (daily 06:30, refreshes weekly)", instrumented: true, cron: "30 6 * * *" },
 } as const;
 
 /**
