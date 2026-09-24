@@ -6,6 +6,7 @@
 //
 //   node scripts/capex-federal-build.mjs
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { liftCapexFederal } from "./lib/capex-lift.mjs";
 
 const F = await liftCapexFederal();
@@ -30,6 +31,10 @@ console.log(`window ${doc.window.start}..${doc.window.end}; recipients ${doc.rec
 for (const c of doc.companies.slice(0, 40)) console.log(`  ${c.ticker.padEnd(6)} ${(c.amount / 1e9).toFixed(2)}bn  recipients ${c.recipients}  via ${c.via}  ${c.name}`);
 console.log("UNMATCHED:");
 for (const u of doc.unmatchedLargest) console.log(`  ${(u.amount / 1e6).toFixed(0)}m  ${u.name}`);
+// The copy that lands in the repo comes out of this log by hand, so the log
+// carries a hash of exactly this text to prove the copy byte-identical.
+const text = JSON.stringify(doc, null, 1) + "\n";
+console.log(`SHA256 ${crypto.createHash("sha256").update(text).digest("hex")}`);
 console.log("=====BEGIN federal-baseline.json=====");
-console.log(JSON.stringify(doc, null, 1));
+console.log(text.trimEnd());
 console.log("=====END federal-baseline.json=====");
