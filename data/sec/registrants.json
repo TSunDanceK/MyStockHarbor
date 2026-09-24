@@ -27041,6 +27041,17 @@
    "entityType": "operating",
    "annualForm": "10-K"
   },
+  "VMRK": {
+   "cik": "0000906107",
+   "sic": "6798",
+   "sicDescription": "Real Estate Investment Trusts",
+   "stateOrCountry": "IL",
+   "stateOfIncorporation": null,
+   "website": null,
+   "fiscalYearEnd": "1231",
+   "entityType": "operating",
+   "annualForm": "10-K"
+  },
   "VNET": {
    "cik": "0001508475",
    "sic": "7370",

@@ -91,6 +91,12 @@ export type StoredFactSet = {
   /** See InstanceEps. Absent unless the set needed it and the filings supported it. */
   te?: InstanceEps;
   /**
+   * The newest quarter's year-to-date frame, where that quarter's own cash
+   * flow could not be derived (a first filer's six months). See
+   * ExtractResult.ytd. Absent on every other set.
+   */
+  yt?: StoredPeriod;
+  /**
    * Taxonomy namespaces the payload carried. OPTIONAL, because sets written
    * before this existed do not have it -- absent is "unknown", not "none", and
    * every reader must treat it that way.
@@ -266,6 +272,7 @@ export function contentHashOf(set: Omit<StoredFactSet, "contentHash">): string {
   feed(String(set.cover?.val ?? "~"));
   // ONLY WHEN PRESENT, so no set without it changes hash.
   if (set.te) feed(`te${set.te.val}@${set.te.periodEnd}`);
+  if (set.yt) { feed(`yt${set.yt.s}..${set.yt.e}`); for (const v of set.yt.v) feed(v === null ? "~" : String(v)); }
   return h.toString(16).padStart(8, "0");
 }
 
@@ -301,6 +308,7 @@ export function encodeFactSet(
     instants: result.instants.map(encodePeriod),
     cover: result.coverShares,
     ...(result.ttmEps ? { te: result.ttmEps } : {}),
+    ...(result.ytd ? { yt: encodePeriod(result.ytd) } : {}),
     tx: result.taxonomies,
     c: secChainsHash(),
     cu: result.refusedUnits,
@@ -321,6 +329,7 @@ export function encodeFactSet(
         quarters: fx.reported.quarters.map(encodePeriod),
         years: fx.reported.years.map(encodePeriod),
         instants: fx.reported.instants.map(encodePeriod),
+        ...(base.yt && fx.reported.ytd ? { yt: encodePeriod(fx.reported.ytd) } : {}),
       }
     : base;
   return { ...base, contentHash: contentHashOf(hashInput) };
@@ -418,7 +427,12 @@ export function reactionPeriodLabels(set: {
   years: StoredPeriod[];
 }): Map<string, string> {
   const out = new Map<string, string>();
-  for (const p of set.quarters) if (p.e) out.set(p.e, periodLabel(p));
+  // AN UNLABELLED QUARTER GETS NO ENTRY (#552 COWORK #37). A first filer's
+  // quarters have no fiscal label yet, and periodLabel falls back to the
+  // period END — a bar reading "2026-06-30" looks measured from the period
+  // end, not from the filing. With no entry the bar takes its announcement's
+  // own label ("Reported Aug 2026"), which is the date it is measured from.
+  for (const p of set.quarters) if (p.e && p.fp && p.fy) out.set(p.e, periodLabel(p));
   const reportsQuarters = set.quarters.length > 0;
   for (const p of set.years) {
     if (!p.e || out.has(p.e)) continue;

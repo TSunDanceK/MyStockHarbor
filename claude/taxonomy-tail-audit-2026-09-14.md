@@ -1,5 +1,8 @@
 # Audit of the ≤3 band — what is noise, what is real, and two findings that are neither
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 **Date:** 2026-09-14
 **Scope:** 16 labels, 30 symbols, 1.1% of coverage.
 **Status:** REPORT ONLY. Nothing folded, nothing edited.

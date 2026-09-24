@@ -1,5 +1,8 @@
 # Taxonomy and SIC mapping (brief)
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 > **Provenance.** The authoritative document is the Claude Project copy of the
 > same name. This repo mirror was **written from the owner's summary, not copied
 > from the original**, which is Project-only and not visible from a coding

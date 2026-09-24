@@ -1,5 +1,5 @@
 {
- "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
+ "_comment": "Cited share-class weights for multi-class filers (#552 COWORK #31), in listed-class equivalents per share, keyed by StatementClassOfStockAxis member. Weight 1 only where the filer's own 10-K (or, for a new listing with no 10-K yet, its IPO prospectus, 424B4) states the classes are economically equal (1:1 convertible and equal dividend/liquidation rights); a stated conversion ratio otherwise. A filer not listed here, or a class not named in its entry, is refused. Read by lib/server/secCoverClasses.ts. An optional epsMember names the class to read EPS for when it is not the listed cover class (BRK's EPS is per equivalent Class B share); read by lib/server/secInstanceEps.ts.",
  "entries": {
   "ABNB": {
    "listed": "CommonClassAMember",
@@ -193,6 +193,18 @@
    ],
    "source": "0001141391-26-000013"
   },
+  "MAIR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of Class B common stock is convertible into shares of Class A common stock on a one-for-one basis at the option of the Class B stockholder.",
+    "The holders of Class A common stock and the holders of Class B common stock shall be entitled to share equally, on a per share basis, in such dividends and other distributions of cash, property or shares of stock of the Company as may be declared by the Board from time to time with respect to the Class A common stock and Class B common stock"
+   ],
+   "source": "0001193125-26-160250"
+  },
   "META": {
    "listed": "CommonClassAMember",
    "weights": {
@@ -309,6 +321,19 @@
    ],
    "source": "0001628280-26-008114"
   },
+  "SPCX": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of Class B common stock will be convertible at any time at the option of the holder into one share of our Class A common stock.",
+    "Any dividends paid to the holders of shares of Class A common stock, Class B common stock and Class C common stock will be paid pro rata, on an equal priority, pari passu basis.",
+    "Upon the Company’s liquidation, dissolution or winding up, holders of shares of Class A common stock, Class B common stock and Class C common stock are entitled to share ratably in all assets remaining after payment of liabilities and the liquidation preference of any then outstanding shares of capital stock of the Company."
+   ],
+   "source": "0001628280-26-042639"
+  },
   "SPG": {
    "listed": "CommonClassAMember",
    "weights": {
@@ -359,18 +384,27 @@
    "listed": "CommonClassAMember",
    "weights": {
     "CommonClassAMember": 1,
-    "CommonClassB1Member": 1.5445,
-    "CommonClassB2Member": 1.5014,
-    "CommonClassB3Member": 1.4953,
-    "CommonClassCMember": 4.0
+    "CommonClassB1Member": null,
+    "CommonClassB2Member": null,
+    "CommonClassB3Member": null,
+    "CommonClassCMember": null
    },
    "evidence": [
     "June 30, 2026 ... Conversion Rate Into Class A Common Stock ... Class B-1 common stock 2 1.5445 (3) 3 ... Class B-2 common stock — (2) 1.5014 (3) 1 ... Class B-3 common stock 61 1.4953 (3) 91 ... Class C common stock 18 4.0000 73",
-    "The class B-1, B-2 and B-3 to class A common stock conversion calculations for dividend payments are based on a conversion rate rounded to the tenth decimal. Conversion rates are presented on a rounded basis."
+    "The class B-1, B-2 and B-3 to class A common stock conversion calculations for dividend payments are based on a conversion rate rounded to the tenth decimal. Conversion rates are presented on a rounded basis.",
+    "Each 10-Q/10-K tags the rates as v:CommonStockConversionRate per class (10-Q 0001403161-26-000104, as of 2026-06-30: B-1 1.5445, B-2 1.5014, B-3 1.4953, C 4.0000); they are read from the filing whose cover is used, never stored here."
    ],
    "source": "0001403161-26-000104",
-   "asOf": "2026-06-30",
-   "note": "B-1/B-2/B-3 rates fall with each U.S. litigation escrow deposit; refresh from each 10-Q."
+   "note": "B-1/B-2/B-3 rates fall with each U.S. litigation escrow deposit; read from each filing's own XBRL (rates), refused if a filing omits one.",
+   "rates": {
+    "concept": "CommonStockConversionRate",
+    "classes": [
+     "CommonClassB1Member",
+     "CommonClassB2Member",
+     "CommonClassB3Member",
+     "CommonClassCMember"
+    ]
+   }
   },
   "VG": {
    "listed": "CommonClassAMember",

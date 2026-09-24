@@ -52,6 +52,21 @@
   "LRCX": { "industry": "Semiconductors", "phrase": "wafer fabrication equipment and services to the semiconductor industry" },
   "KLAC": { "industry": "Semiconductors", "phrase": "process-enabling solutions for manufacturing wafers" },
   "TER": { "industry": "Semiconductors", "phrase": "automated test systems are used to test semiconductors" },
-  "NVMI": { "industry": "Semiconductors", "phrase": "metrology solutions for advanced process control used in semiconductor manufacturing" }
+  "NVMI": { "industry": "Semiconductors", "phrase": "metrology solutions for advanced process control used in semiconductor manufacturing" },
+  "ABT": { "industry": "Medical - Devices", "phrase": "Diagnostic Products, Nutritional Products, and Medical Devices" },
+  "GLW": { "industry": "Hardware, Equipment & Parts", "phrase": "fiber-optic hardware, fiber-optic connectors, optical components" },
+  "PLD": { "industry": "REIT - Industrial", "phrase": "global leader in logistics real estate" },
+  "O": { "industry": "REIT - Retail", "phrase": "freestanding commercial properties leased under long" },
+  "ESS": { "industry": "REIT - Residential", "phrase": "predominantly apartment communities" },
+  "FRT": { "industry": "REIT - Retail", "phrase": "community and neighborhood shopping centers" },
+  "SPG": { "industry": "REIT - Retail", "phrase": "premier shopping, dining, entertainment and mixed-use destinations" },
+  "BIDU": { "industry": "Internet Content & Information", "phrase": "enhance our search functionality" },
+  "EBAY": { "industry": "Specialty Retail", "phrase": "global commerce leader that connects people" },
+  "SE": { "industry": "Specialty Retail", "phrase": "three core businesses of e-commerce, digital financial services, and digital entertainment" },
+  "VRSK": { "industry": "Consulting Services", "phrase": "data, analytics, and technology provider serving clients in the insurance ecosystem" },
+  "SOFI": { "industry": "Financial - Credit Services", "phrase": "We offer personal loans, student loans, home loans" },
+  "WEX": { "industry": "Software - Infrastructure", "phrase": "personalized payments solutions" },
+  "BR": { "industry": "Information Technology Services", "phrase": "global financial technology leader" },
+  "VMRK": { "industry": "REIT - Residential", "phrase": "multifamily property business" }
  }
 }

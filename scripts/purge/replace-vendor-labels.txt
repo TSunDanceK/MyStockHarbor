@@ -1,0 +1,16 @@
+regex:(?m)^(\| (?:\*\*)?`[A-Z][A-Za-z&,. -]*`(?:\*\*)? \| )(?:\*\*)?[A-Z][A-Z0-9.-]*(?:\*\*)?(?:, (?:\*\*)?[A-Z][A-Z0-9.-]*(?:\*\*)?)*( \| )==>\1[removed 2026-09-24]\2
+regex:(\| Same family\. )[A-Z][a-z]+( is not a rounding error\. \|)==>\1[removed 2026-09-24]\2
+regex:(\| )[A-Z][a-z]+( is a \$20bn\+ spin-off\.)==>\1[removed 2026-09-24]\2
+regex:\*\*Home Depot and Lowe's\.\*\* (A 3-symbol label)==>\1
+regex:(\| )[A-Z][a-z]+ and [A-Z][a-z]+( are devices/instruments)==>\1[removed 2026-09-24]\2
+regex:(\*\*Misfiled\.\*\* )[A-Z][A-Za-z]+( is a clinical-stage pharma)==>\1[removed 2026-09-24]\2
+regex:(Singleton; )[A-Z][a-z]+ [A-Z][a-z]+( is arguably machinery)==>\1[removed 2026-09-24]\2
+regex:[A-Z][a-z]+-[A-Z][a-z]+( is a distiller — the label is \*accurate\*)==>[removed 2026-09-24]\1
+regex:(`Media & Entertainment` \(1 symbol, )(?:\*\*)?[A-Z]+(?:\*\*)? — [A-Z][a-z]+\)==>\1[removed 2026-09-24])
+regex:(problem: )[A-Z][a-z]+( renders on `/sector/technology`)==>\1the symbol\2
+regex:(Its two symbols are )\*\*[A-Z]+\*\*\s*\([^)]*\) and \*\*[A-Z-]+\*\* \([^)]*\)==>\1[removed 2026-09-24]
+regex:(`Home Improvement` \(3 symbols, )[A-Z]+ \+ [A-Z]+\)==>\1[removed 2026-09-24])
+regex:(\*\*Two of the sixteen are not fold candidates at all\*\*: )[A-Z]+( is a sector error)==>\1[removed 2026-09-24]\2
+regex:\b[A-Z]{2,5}('s (?:label )?is\s+)"[^"]{1,40}"==>[removed 2026-09-24]\1[removed 2026-09-24]
+regex:(?m)^\| [A-Z]{2,5} \| [A-Z][A-Za-z&,. -]+ \|( `sector-[a-z-]+` \| `[a-z-]+` \|)$==>| [removed 2026-09-24] | [removed 2026-09-24] |\1
+regex:(\| `industry=Semiconductors` \| \*\*4\*\* — )[A-Z, ]+( \|)==>\1[removed 2026-09-24]\2

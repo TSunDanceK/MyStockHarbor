@@ -21,6 +21,8 @@ const M = await lift([
   grabFunction(FILL, "pickInstanceName"),
   "function shareClassesFor(s) { return ENTRIES[s] ?? ENTRIES[s.replace('-', '.')] ?? null; }",
   grabFunction(SRC, "parseCoverClasses"),
+  grabFunction(SRC, "parseClassRates"),
+  grabFunction(SRC, "withFilingRates"),
   grabFunction(SRC, "coverFromClasses"),
   grabFunction(SRC, "withClassCover"),
   "export { withClassCover };",
