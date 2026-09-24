@@ -1133,7 +1133,7 @@ export default function DashboardClient({
   // lines) -- those belong to the Basic chart only.
   function ChartEngine({ full, compact, trailing }: { full?: boolean; compact?: boolean; trailing?: React.ReactNode } = {}) {
     if (chartMode === "interactive") {
-      return <InteractiveChart symbol={symbol} seed={historyAll} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} />;
+      return <InteractiveChart symbol={symbol} seed={historyAll} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} onFullscreen={full ? undefined : () => setFullscreen(true)} />;
     }
     if (chartMode === "tradingview") {
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
@@ -1154,9 +1154,10 @@ export default function DashboardClient({
               {/* On Basic: the zoom + / − controls ride on this (mode-switch)
                   line so the toolbar fits in 2 lines on phone portrait. D/W/M
                   and the Indicator + Line/Candle controls sit on line 2 below.
-                  Fullscreen is hidden on Basic (no benefit); shown elsewhere. */}
+                  Fullscreen is hidden on Basic (no benefit); Interactive has it in its own toolbar. */}
               {chartMode === "basic" ? <ChartToolbar /> : null}
-              {chartMode !== "basic" ? <FullscreenButton /> : null}
+              {/* Interactive carries Fullscreen at the end of its own toolbar (#553 COWORK #28). */}
+              {chartMode === "tradingview" ? <FullscreenButton /> : null}
             </div>
           </div>
           {chartMode === "basic" ? (
