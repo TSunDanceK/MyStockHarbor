@@ -87,14 +87,52 @@ check("the filing fill keeps the class cover on its merged extraction",
 
 console.log("\n4. the committed map");
 const MAP = JSON.parse(fs.readFileSync("data/sec/share-classes.json", "utf8")).entries;
+// A NULL weight is allowed ONLY for a class whose rate the filing states
+// (`rates`), and every such class must be null: a stored number there would be
+// a stale rate reused (#552 COWORK #37/#38).
 const validEntry = (e) => e.listed in e.weights && e.weights[e.listed] > 0 && e.evidence?.length > 0 && !!e.source
-  && Object.values(e.weights).every((w) => typeof w === "number" && Number.isFinite(w) && w >= 0);
+  && Object.entries(e.weights).every(([c, w]) => (e.rates?.classes.includes(c)
+    ? w === null
+    : typeof w === "number" && Number.isFinite(w) && w >= 0));
 const bad = Object.entries(MAP).filter(([, e]) => !validEntry(e)).map(([k]) => k);
 check("every entry names its listed class at a positive weight, cites evidence and a source; other weights >= 0 (0 = a cited non-economic class)",
   bad.length === 0, bad.join(", "));
 check("MUTATION: META's listed class at weight 0 → caught",
   !validEntry({ ...MAP.META, weights: { ...MAP.META.weights, [MAP.META.listed]: 0 } }));
 check("MUTATION: a negative weight → caught", !validEntry({ ...BRK, weights: { ...BRK.weights, CommonClassAMember: -1 } }));
+check("V reads its rates from the filing: every rate class is null in the map", MAP.V?.rates?.classes.length === 4 && MAP.V.rates.classes.every((c) => MAP.V.weights[c] === null));
+check("MUTATION: a fixed V rate written back into the map → caught",
+  !validEntry({ ...MAP.V, weights: { ...MAP.V.weights, CommonClassB1Member: 1.5445 } }));
+
+console.log("\n5. filing-stated rates (V)");
+{
+  const R = await lift([grabFunction(SRC, "parseClassRates"), grabFunction(SRC, "withFilingRates"), grabFunction(SRC, "parseCoverClasses"), grabFunction(SRC, "coverFromClasses"),
+    "export { parseClassRates, withFilingRates, parseCoverClasses, coverFromClasses };"].join("\n"));
+  const ictx = (id, date, member) => ctx(id, date, [[AX, `us-gaap:${member}`]]);
+  const rate = (id, v) => `<v:CommonStockConversionRate contextRef="${id}" decimals="4">${v}</v:CommonStockConversionRate>`;
+  const cls = ["CommonClassB1Member", "CommonClassB2Member", "CommonClassB3Member", "CommonClassCMember"];
+  const XMLV = [
+    ...["A", ...cls.map((c) => c.replace(/^CommonClass|Member$/g, ""))].map((k, i) => ictx(`c${i}`, "2026-07-21", i ? cls[i - 1] : "CommonClassAMember")),
+    ...cls.map((c, i) => ictx(`r${i}`, "2026-06-30", c)), ...cls.map((c, i) => ictx(`o${i}`, "2025-09-30", c)),
+    fact("c0", "1673000000"), fact("c1", "2000000"), fact("c2", "1"), fact("c3", "61000000"), fact("c4", "18000000"),
+    rate("r0", "1.5445"), rate("r1", "1.5014"), rate("r2", "1.4953"), rate("r3", "4.0000"),
+    rate("o0", "1.5549"), rate("o1", "1.5223"), rate("o2", "0"), rate("o3", "4.0000"),
+  ].join("\n");
+  const got = R.withFilingRates(MAP.V, XMLV);
+  check("the newest-dated rate per class is read (2026-06-30, not 2025-09-30)",
+    got.ok && got.entry.weights.CommonClassB1Member === 1.5445 && got.entry.weights.CommonClassB3Member === 1.4953, JSON.stringify(got.ok && got.entry.weights));
+  const cov = got.ok && R.coverFromClasses(R.parseCoverClasses(XMLV), got.entry, {});
+  const want = Math.round(1673000000 + 2000000 * 1.5445 + 1 * 1.5014 + 61000000 * 1.4953 + 18000000 * 4);
+  check("V's cover is A + each class × THIS filing's rate", cov?.ok && cov.cover.val === want, JSON.stringify(cov));
+  const noB2 = XMLV.replace(rate("r1", "1.5014"), "").replace(rate("o1", "1.5223"), "");
+  check("a filing that omits a rate REFUSES (no stale rate reused)", !R.withFilingRates(MAP.V, noB2).ok);
+  check("...and the map alone (rates never filled) refuses too, never a weight of 0",
+    !R.coverFromClasses(R.parseCoverClasses(XMLV), MAP.V, {}).ok);
+  const Rm = await lift([grabFunction(SRC, "parseClassRates"),
+    grabFunction(once(SRC, "if (missing.length) return", "if (false) return"), "withFilingRates"), "export { withFilingRates };"].join("\n"));
+  check("MUTATION: the missing-rate refusal removed → caught (no longer a clean refusal)",
+    (() => { try { const r = Rm.withFilingRates(MAP.V, noB2); return r.ok; } catch { return true; } })());
+}
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
