@@ -110,6 +110,9 @@ const TASKS = {
   // sandbox is refused news.google.com by policy, and the adapter's parser must
   // be tested against the feed's real shape.
   "gnews-sample": { script: "scripts/gnews-sample.mjs", args: () => [] },
+  // Throwaway (branch claude/b-feeds-fixture only): the four /headlines feeds'
+  // raw XML, for a local screenshot fixture.
+  "feed-xml-dump": { script: "scripts/feed-xml-dump.mjs", args: () => [] },
   // SYMBOLS comes from the workflow's `symbols` input and the script defaults
   // to the five drone/defence names when it is blank, so a dispatch that
   // forgets it still captures the thing it was added for.
