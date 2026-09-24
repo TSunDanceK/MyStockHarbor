@@ -138,6 +138,9 @@ export type Submissions = {
   name?: unknown;
   /** "Large accelerated filer" | "Accelerated filer" | "Non-accelerated filer" | … */
   category?: unknown;
+  /** SEC's Standard Industrial Classification code, and its description. */
+  sic?: unknown;
+  sicDescription?: unknown;
   filings?: { recent?: SubmissionsFilings };
 };
 
