@@ -1,4 +1,5 @@
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
+import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
 
 // ---------------------------------------------------------------------------
 // The screener's field registry.
@@ -122,7 +123,14 @@ export const NUMBER_FIELDS: ScreenerFieldDef[] = [
   { key: "perf1y", label: "1 Year Performance", group: "Performance", kind: "number", format: "percent" },
 ];
 
-export const ALL_FIELDS: ScreenerFieldDef[] = [...FLAG_FIELDS, ...CATEGORY_FIELDS, ...NUMBER_FIELDS];
+// HIDDEN FIELDS ARE NOT OFFERED (2026-09-23, lib/pickerHiddenFields.ts). Their
+// definitions stay in the lists above; they are filtered out HERE so the search
+// box cannot offer a condition on a column the page no longer shows, and a URL
+// carrying one is not recognised (FIELD_BY_KEY below) rather than silently
+// filtering every row away on a field that is always empty.
+const offered = (f: ScreenerFieldDef) => !HIDDEN_FIELD_KEYS.has(f.key);
+
+export const ALL_FIELDS: ScreenerFieldDef[] = [...FLAG_FIELDS, ...CATEGORY_FIELDS, ...NUMBER_FIELDS].filter(offered);
 
 export const FIELD_BY_KEY = new Map<string, ScreenerFieldDef>(ALL_FIELDS.map((f) => [f.key, f]));
 

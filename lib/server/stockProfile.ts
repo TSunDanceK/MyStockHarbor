@@ -27,7 +27,7 @@ import registrantsFile from "@/data/sec/registrants.json";
 import locationFile from "@/data/sec/edgar-location-codes.json";
 import { symbolSpellings } from "@/lib/symbolSpellings.mjs";
 import type { CompanyProfile, ProfileSource } from "@/app/components/CompanyProfile";
-import type { ValuationInputs } from "./secValuation";
+import type { EpsBasis, ValuationInputs } from "./secValuation";
 import { marketCap } from "./secValuation";
 import { loadTickerMap } from "./secTickerMap";
 import type { ResolvedProfile } from "./staticProfile";
@@ -154,6 +154,24 @@ export function dayMonthYear(isoDate: string | null | undefined): string | null 
   if (!m) return null;
   const month = MONTHS[Number(m[2]) - 1];
   return month ? `${Number(m[3])} ${month} ${m[1]}` : null;
+}
+
+/**
+ * WHICH TWELVE MONTHS A P/E IS ON, in the page's words (#552 COWORK #8/#9).
+ * "TTM to 26 Jul 2026" for four quarters, "FY2025" for an annual-only filer's
+ * fiscal year. The page used to print "P/E (TTM)" over a fiscal-year figure.
+ */
+export function peBasisLabel(eps: EpsBasis | null | undefined): string | null {
+  if (!eps) return null;
+  if (eps.basis === "fiscal-year") return eps.fiscalYear ? `FY${eps.fiscalYear}` : `fiscal year to ${dayMonthYear(eps.periodEnd) ?? eps.periodEnd}`;
+  return `TTM to ${dayMonthYear(eps.periodEnd) ?? eps.periodEnd}`;
+}
+
+/** The derived-Q4 caveat, or null. Said once, under the figure it qualifies. */
+export function peBasisNote(eps: EpsBasis | null | undefined): string | null {
+  return eps?.basis === "four-quarters" && eps.derivedQ4
+    ? `Q4 EPS (to ${dayMonthYear(eps.derivedQ4) ?? eps.derivedQ4}) is the fiscal year's diluted EPS less Q1–Q3; the annual report does not state a fourth quarter.`
+    : null;
 }
 
 /**

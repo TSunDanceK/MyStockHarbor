@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No semiconductor stocks are currently available from the live feed.",
   tone: "blue",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [{ kind: "category", field: "industry", values: ["Semiconductors"] }],
   maxItems: 36,
   // Deliberately General rather than a metric tab: this page screens on an
