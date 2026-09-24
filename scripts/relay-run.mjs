@@ -635,6 +635,14 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: the TTM EPS fix measured before it ships (#552 COWORK #8/#9):
+  // old rule vs derived Q4 vs NI/shares; reference compared in aggregate only.
+  // ~70 commands.
+  "write-ttm-eps-measure": {
+    script: "scripts/ttm-eps-measure.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
