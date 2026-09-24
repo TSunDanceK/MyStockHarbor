@@ -215,7 +215,10 @@ export default async function CapexPage() {
            Under 980px one column, the cards ABOVE the panels (#563 COWORK #12). */
         .capexGrid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr); gap: 22px; align-items: start; }
         .capexGrid > * { min-width: 0; }
-        .capexSide { position: sticky; top: 18px; display: grid; gap: 16px; margin-top: 22px; }
+        /* NOT sticky (#563 COWORK #14): the column is taller than a laptop
+           screen, so a sticky one hid its lower cards until the page's end.
+           It scrolls with the page, like the earnings page's right column. */
+        .capexSide { display: grid; gap: 16px; margin-top: 22px; }
         .capexCard { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
         .capexCard h3 { margin: 6px 0 0 0; font-size: 18px; letter-spacing: -0.02em; }
         .cardEyebrow { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
@@ -247,7 +250,7 @@ export default async function CapexPage() {
         .spMeta { font-size: 12px; color: rgba(241,245,249,0.6); }
         @media (max-width: 980px) {
           .capexGrid { grid-template-columns: 1fr; }
-          .capexSide { position: static; order: -1; }
+          .capexSide { order: -1; }
         }
         @media (max-width: 640px) { .capexRow { grid-template-columns: 1fr !important; } }
       `}</style>
