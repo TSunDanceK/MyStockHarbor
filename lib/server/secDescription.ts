@@ -406,7 +406,8 @@ export function speaksOfTheCompany(text: string, companyName: string): boolean {
   if (/\b(we|our|us|the company|the corporation|the partnership|the trust|the bank)\b/i.test(text)) return true;
   const words = nameWords(companyName);
   const hay = ` ${nameWords(text).join(" ")} `;
-  if (words.some((w) => w.length >= 3 && !GENERIC_NAME_WORDS.has(w) && hay.includes(` ${w} `))) return true;
+  // Two letters count: PG&E's name words are "pg" and "e" (census, #552 COWORK #38).
+  if (words.some((w) => w.length >= 2 && !GENERIC_NAME_WORDS.has(w) && hay.includes(` ${w} `))) return true;
   const initials = words.filter((w) => !GENERIC_NAME_WORDS.has(w) || w === "international").map((w) => w[0]).join("");
   return initials.length >= 2 && hay.includes(` ${initials} `);
 }
