@@ -34,7 +34,7 @@ export function parseCount(raw: string): number | null {
 }
 
 const COUNT = String.raw`(\d+(?:\.\d+)?|\d+\s*/\s*\d+|one[- ]half|one[- ](?:quarter|fourth|third|fifth|tenth|twentieth|fortieth)|two[- ]thirds|three[- ](?:quarters|fourths)|one hundred|twenty-five|[a-z]+)(?:\s*\(\s*[\d.,/]+\s*\))?(?:\s+of\s+(?:one|an?))?`;
-const SHARE = String.raw`(?:ordinary|common|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|class\s+[a-z]|class\s+“?[a-z]”?|series\s+[a-z]\s+)?\s*shares?`;
+const SHARE = String.raw`(?:ordinary|common|equity|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|class\s+[a-z]|class\s+“?[a-z]”?|series\s+[a-z]\s+)?\s*shares?`;
 const ADS = String.raw`(?:ADS|ADSs|American\s+depositary\s+shares?|American\s+depositary\s+share)`;
 /**
  * The phrasings, each capturing the number of ordinary shares ONE ADS stands
@@ -134,25 +134,57 @@ export function adsRatioOf(text: string):
 
 export type CoverRow = { title: string; kind: "ads" | "ordinary" | "other" };
 
-/** The 12(b) row title for `symbol` in a 20-F, classified, or null when the table has no such row. */
-export function coverRowFor(text: string, symbol: string): CoverRow | null {
+/** Every 12(b) row listed under `symbol` in a 20-F, classified, in table order. */
+export function coverRowsFor(text: string, symbol: string): CoverRow[] {
   const flat = text.replace(/\s+/g, " ");
   const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
-  if (at < 0) return null;
-  const table = flat.slice(at, at + 1600);
+  if (at < 0) return [];
+  // THE WHOLE TABLE: up to the 12(g) line (AZN lists a dozen notes first).
+  let table = flat.slice(at, at + 8000);
+  const g = table.slice(60).search(/pursuant\s+to\s+Section\s+12\s*\(\s*g\s*\)/i);
+  if (g >= 0) table = table.slice(0, 60 + g);
   const sym = String(symbol).toUpperCase().replace(/[-.]/g, "[-. ]?");
-  const m = new RegExp(String.raw`(?<![A-Za-z0-9])${sym}(?![A-Za-z0-9])`).exec(table.slice(40));
-  if (!m) return null;
-  const before = table.slice(0, 40 + m.index);
-  // THE ROW STARTS after the header's "registered" or the previous row's exchange name.
-  let cut = 0;
-  for (const b of before.matchAll(/\b(?:registered:?|Exchange|LLC|Market|Inc\.?|\(“?NYSE”?\)|\*+)(?=\s)/gi)) cut = b.index + b[0].length;
-  const title = before.slice(cut).replace(/^[\s:*.,;–-]+/, "").trim();
-  if (!title) return null;
-  if (/American\s+depositary|\bADSs?\b/i.test(title)) return { title, kind: "ads" };
-  if (/preferred|preference|warrant|\bnotes?\b|debentures?|\bunits?\b/i.test(title)) return { title, kind: "other" };
-  if (/(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(title)) return { title, kind: "ordinary" };
-  return { title, kind: "other" };
+  // A note's symbol ("AZN/26", "AZN26") is not the ticker.
+  const re = new RegExp(String.raw`(?<![A-Za-z0-9/])${sym}(?![A-Za-z0-9/])`, "g");
+  const rows: CoverRow[] = [];
+  let prevEnd = 0;
+  for (const m of table.slice(40).matchAll(re)) {
+    const idx = 40 + m.index;
+    const before = table.slice(prevEnd, idx);
+    prevEnd = idx + m[0].length;
+    let cut = 0;
+    for (const b of before.matchAll(/\b(?:registered:?|Exchange|LLC|Market|Inc\.?|\(“?NYSE”?\))(?=\s)|\*+(?=\s)/gi)) cut = b.index + b[0].length;
+    const title = before.slice(cut).replace(/^[\s:*.,;–-]+/, "").trim();
+    if (!title) continue;
+    const kind = /American\s+depositary|\bADSs?\b/i.test(title) ? "ads"
+      : /preferred|preference|warrant|\bnotes?\b|debentures?|\bunits?\b|%/i.test(title) ? "other"
+      : /(?:ordinary|common|equity)\s+(?:shares?|stock)|\bshares?\b/i.test(title) ? "ordinary" : "other";
+    rows.push({ title, kind });
+  }
+  return rows;
+}
+
+/**
+ * The ONE row the price is quoted for. An ADS row wins; an ordinary row counts
+ * only when the table does not register ADSs at all (an ordinary line marked
+ * "not for trading, but only in connection with" the ADSs is the deposit, not
+ * the listing — VOD, WPP, HLN). Null when there is no row for the ticker.
+ */
+export function coverRowFor(text: string, symbol: string): CoverRow | null {
+  const rows = coverRowsFor(text, symbol);
+  if (!rows.length) return null;
+  const ads = rows.find((r) => r.kind === "ads");
+  if (ads) return ads;
+  const flat = text.replace(/\s+/g, " ");
+  const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
+  const table = at >= 0 ? flat.slice(at, at + 8000) : "";
+  const ord = rows.find((r) => r.kind === "ordinary");
+  if (ord && /American\s+depositary|\bADSs?\b/i.test(table.split(/pursuant\s+to\s+Section\s+12\s*\(\s*g\s*\)/i)[0] ?? "")) {
+    // THE TABLE REGISTERS ADSs, but not under this ticker's row: the ordinary
+    // line is the deposit. The ratio comes from the filing's text instead.
+    return { title: ord.title, kind: "ads" };
+  }
+  return ord ?? rows[0];
 }
 
 export type AdsRowDecision =

@@ -84,6 +84,16 @@ console.log("\n2b. the newest source wins (COWORK #45)");
     "refuse" in R.decideAdsRow(TSM20F, "TSM", "each American Depositary Share representing ten common shares", true));
   check("no 20-F statement and only an OLDER F-6 → no row (the F-6 is not read)",
     "refuse" in R.decideAdsRow(`${H}Something else entirely`, "XYZ", OLD_F6, false));
+  const T = (x) => `${H}${x} Securities registered or to be registered pursuant to Section 12(g) of the Act: None`;
+  const VOD = T("Ordinary shares of 20 20/21 US cents each VOD* NASDAQ Stock Market LLC* American Depositary Shares, each representing 10 ordinary shares VOD NASDAQ Stock Market LLC *Not for trading, but only in connection with the registration of the American Depositary Shares");
+  const v = R.decideAdsRow(VOD, "VOD", null, false);
+  check("VOD: the ordinary line under the same ticker is the deposit ('not for trading'); the ADS row wins, 10", "row" in v && v.row.kind === "ads" && v.row.ordinaryPerAds === 10, JSON.stringify(v));
+  const AZNN = T("0.700% Notes due 2026 AZN/26 Nasdaq Stock Market LLC Ordinary Shares of US$0.25 each AZN Nasdaq Stock Market LLC 3.125% Notes due 2027 AZN27 Nasdaq Stock Market LLC");
+  const an = R.decideAdsRow(AZNN, "AZN", OLD_F6, false);
+  check("AZN with notes listed first: a note's symbol (AZN/26, AZN27) is not the ticker; ordinary shares under AZN", "row" in an && an.row.kind === "ordinary", JSON.stringify(an));
+  const IBN = T("Equity Shares, par value Rs.2 per share* New York Stock Exchange American Depositary Shares, each representing two equity shares IBN New York Stock Exchange");
+  const ib = R.decideAdsRow(IBN, "IBN", null, false);
+  check("IBN: 'each representing two equity shares' → 2", "row" in ib && ib.row.ordinaryPerAds === 2, JSON.stringify(ib));
   const Mo = await loadR(once(RSRC, "if (f6Text && f6IsNewer) {", "if (f6Text) {"));
   const dm = Mo.decideAdsRow(AZN20F, "AZN", OLD_F6, false);
   check("MUTATION: an older F-6 allowed to override the newer 20-F → AZN no longer reads as ordinary (caught)", !("row" in dm && dm.row.kind === "ordinary"), JSON.stringify(dm));
