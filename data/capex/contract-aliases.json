@@ -1,5 +1,5 @@
 {
- "about": "Federal contracts panel (#563 COWORK #1 D5): USAspending recipient names mapped to a listed company in our universe WHERE THE EXACT-NAME RULE CANNOT, each with its basis. Built from the relay evidence run 35982772478 (top 1,000 recipients, 12 months to 2026-08-31); USAspending parent records were checked by hand because some are stale (Sikorsky, Amentum, V2X). Exclusions are names that must never map. Joint ventures, universities, national-lab operators without a single listed owner, and private firms stay unmapped by design.",
+ "about": "Federal contracts panel (#563 COWORK #1 D5): USAspending recipient names mapped to a listed company in our universe WHERE THE EXACT-NAME RULE CANNOT, each with its basis. Built from the relay evidence run 35982772478 (top 1,000 recipients, 12 months to 2026-08-31); USAspending parent records were checked by hand because some are stale (Sikorsky, Amentum, V2X). Exclusions are names that must never map. Joint ventures, universities and private firms stay unmapped by design, and so do national-laboratory M&O operators EVEN WHEN a listed company owns the operator (#563 COWORK #4): a lab's operating budget is not the owner's contract line.",
  "aliases": [
   {
    "recipient": "OPTUM PUBLIC SECTOR SOLUTIONS, INC.",
@@ -67,21 +67,6 @@
    "basis": "General Dynamics shipyard subsidiary (Bath Iron Works), per General Dynamics' 10-K segment description."
   },
   {
-   "recipient": "NATIONAL TECHNOLOGY & ENGINEERING SOLUTIONS OF SANDIA, LLC",
-   "ticker": "HON",
-   "basis": "USAspending recipient record (relay run 35982772478, 2026-09-24) lists parent HONEYWELL INTERNATIONAL INC; NTESS, the Sandia National Laboratories operator, is a wholly owned Honeywell subsidiary."
-  },
-  {
-   "recipient": "HONEYWELL FEDERAL MANUFACTURING & TECHNOLOGIES, LLC",
-   "ticker": "HON",
-   "basis": "Honeywell subsidiary operating the Kansas City National Security Campus; the Honeywell name is the parent's."
-  },
-  {
-   "recipient": "FLUOR MARINE PROPULSION, LLC",
-   "ticker": "FLR",
-   "basis": "USAspending recipient record (relay run 35982772478, 2026-09-24) lists parent FLUOR CORPORATION."
-  },
-  {
    "recipient": "CACI, INC. - FEDERAL",
    "ticker": "CACI",
    "basis": "USAspending recipient record (relay run 35982772478, 2026-09-24) lists parent CACI INTERNATIONAL INC."
@@ -145,11 +130,6 @@
    "recipient": "AMERICAN CENTRIFUGE OPERATING, LLC",
    "ticker": "LEU",
    "basis": "USAspending recipient record (relay run 35982772478, 2026-09-24) lists parent CENTRUS ENERGY CORP."
-  },
-  {
-   "recipient": "LEIDOS BIOMEDICAL RESEARCH INC",
-   "ticker": "LDOS",
-   "basis": "USAspending recipient record (relay run 35982772478, 2026-09-24) lists parent LEIDOS HOLDINGS, INC."
   },
   {
    "recipient": "QTC MEDICAL SERVICES INC",
@@ -291,6 +271,42 @@
   {
    "recipient": "CENTRAL PLATEAU CLEANUP COMPANY, LLC",
    "reason": "A joint venture (parent record says AECOM, stale); JVs are not attributed to one company."
+  },
+  {
+   "recipient": "NATIONAL TECHNOLOGY & ENGINEERING SOLUTIONS OF SANDIA, LLC",
+   "reason": "Operator of Sandia National Laboratories (a DOE/NNSA laboratory), wholly owned by Honeywell: national laboratory M&O contract. The lab's operating budget is not Honeywell's contract revenue line."
+  },
+  {
+   "recipient": "HONEYWELL FEDERAL MANUFACTURING & TECHNOLOGIES, LLC",
+   "reason": "Operator of the NNSA Kansas City National Security Campus, a Honeywell subsidiary: national laboratory M&O contract (NNSA nuclear security enterprise site)."
+  },
+  {
+   "recipient": "FLUOR MARINE PROPULSION, LLC",
+   "reason": "Operator of the Naval Nuclear Laboratory for DOE Naval Reactors, a Fluor subsidiary: national laboratory M&O contract."
+  },
+  {
+   "recipient": "LEIDOS BIOMEDICAL RESEARCH INC",
+   "reason": "Operator of the Frederick National Laboratory for Cancer Research, an FFRDC, for a Leidos subsidiary: national laboratory operating contract."
+  },
+  {
+   "recipient": "TRIAD NATIONAL SECURITY, LLC",
+   "reason": "Operator of Los Alamos National Laboratory: national laboratory M&O contract. Never attributed to a listed company, whoever holds a stake."
+  },
+  {
+   "recipient": "LAWRENCE LIVERMORE NATIONAL SECURITY, LLC",
+   "reason": "Operator of Lawrence Livermore National Laboratory: national laboratory M&O contract. Never attributed to a listed company, whoever holds a stake."
+  },
+  {
+   "recipient": "CONSOLIDATED NUCLEAR SECURITY, LLC",
+   "reason": "Operator of the Y-12 and Pantex NNSA sites: national laboratory M&O contract. Never attributed to a listed company, whoever holds a stake."
+  },
+  {
+   "recipient": "UT-BATTELLE LLC",
+   "reason": "Operator of Oak Ridge National Laboratory: national laboratory M&O contract. Never attributed to a listed company, whoever holds a stake."
+  },
+  {
+   "recipient": "BATTELLE ENERGY ALLIANCE LLC",
+   "reason": "Operator of Idaho National Laboratory: national laboratory M&O contract. Never attributed to a listed company, whoever holds a stake."
   }
  ]
 }
