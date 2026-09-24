@@ -155,7 +155,7 @@ export function rollUp(
   const companies = [...byTicker.values()]
     .sort((a, b) => b.amount - a.amount)
     .slice(0, keep)
-    .map(({ top: _top, ...c }) => c);
+    .map((c) => ({ ticker: c.ticker, cik: c.cik, name: c.name, amount: c.amount, recipients: c.recipients, via: c.via }));
   unmatched.sort((a, b) => b.amount - a.amount);
   return { companies, matched, unmatchedLargest: unmatched.slice(0, 25) };
 }

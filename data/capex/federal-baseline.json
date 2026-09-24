@@ -1,0 +1,436 @@
+{
+ "version": 1,
+ "updatedAt": "2026-09-24T09:47:38.972Z",
+ "window": {
+  "start": "2025-09-01",
+  "end": "2026-08-31"
+ },
+ "totalObligations": 803431895612.82,
+ "topRecipientsObligations": 629625653658.5396,
+ "recipientsRead": 1000,
+ "matchedObligations": 320389117723.47003,
+ "companies": [
+  {
+   "ticker": "LMT",
+   "cik": "936468",
+   "name": "LOCKHEED MARTIN CORP",
+   "amount": 70548693023.54,
+   "recipients": 21,
+   "via": "name"
+  },
+  {
+   "ticker": "BA",
+   "cik": "12927",
+   "name": "BOEING CO",
+   "amount": 31113387115.550003,
+   "recipients": 14,
+   "via": "name"
+  },
+  {
+   "ticker": "RTX",
+   "cik": "101829",
+   "name": "RTX Corp",
+   "amount": 28752574185.81,
+   "recipients": 13,
+   "via": "alias"
+  },
+  {
+   "ticker": "GD",
+   "cik": "40533",
+   "name": "GENERAL DYNAMICS CORP",
+   "amount": 26437385369.6,
+   "recipients": 10,
+   "via": "alias"
+  },
+  {
+   "ticker": "UNH",
+   "cik": "731766",
+   "name": "UNITEDHEALTH GROUP INC",
+   "amount": 24253035656.019997,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "MCK",
+   "cik": "927653",
+   "name": "MCKESSON CORP",
+   "amount": 13463039877.94,
+   "recipients": 1,
+   "via": "name"
+  },
+  {
+   "ticker": "NOC",
+   "cik": "1133421",
+   "name": "NORTHROP GRUMMAN CORP /DE/",
+   "amount": 13042575969.720001,
+   "recipients": 23,
+   "via": "alias"
+  },
+  {
+   "ticker": "LDOS",
+   "cik": "1336920",
+   "name": "Leidos Holdings, Inc.",
+   "amount": 10563449268.549997,
+   "recipients": 10,
+   "via": "name"
+  },
+  {
+   "ticker": "HON",
+   "cik": "773840",
+   "name": "HONEYWELL INTERNATIONAL INC",
+   "amount": 8827744883.029999,
+   "recipients": 5,
+   "via": "alias"
+  },
+  {
+   "ticker": "HII",
+   "cik": "1501585",
+   "name": "HUNTINGTON INGALLS INDUSTRIES, INC.",
+   "amount": 8382997226.62,
+   "recipients": 4,
+   "via": "alias"
+  },
+  {
+   "ticker": "BAH",
+   "cik": "1443646",
+   "name": "Booz Allen Hamilton Holding Corp",
+   "amount": 6688658780.2300005,
+   "recipients": 2,
+   "via": "name"
+  },
+  {
+   "ticker": "COR",
+   "cik": "1140859",
+   "name": "Cencora, Inc.",
+   "amount": 6680892612.52,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "HUM",
+   "cik": "49071",
+   "name": "HUMANA INC",
+   "amount": 5632223083.65,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "LHX",
+   "cik": "202058",
+   "name": "L3HARRIS TECHNOLOGIES, INC. /DE/",
+   "amount": 4827852976.12,
+   "recipients": 9,
+   "via": "alias"
+  },
+  {
+   "ticker": "FLR",
+   "cik": "1124198",
+   "name": "FLUOR CORP",
+   "amount": 4391322442.3,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "SAIC",
+   "cik": "1571123",
+   "name": "Science Applications International Corp",
+   "amount": 4132829327.2999997,
+   "recipients": 2,
+   "via": "name"
+  },
+  {
+   "ticker": "ACN",
+   "cik": "1467373",
+   "name": "Accenture plc",
+   "amount": 3670790777.45,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "CACI",
+   "cik": "16058",
+   "name": "CACI INTERNATIONAL INC /DE/",
+   "amount": 3524251819.27,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "AMTM",
+   "cik": "2011286",
+   "name": "Amentum Holdings, Inc.",
+   "amount": 3335535253.06,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "DELL",
+   "cik": "1571996",
+   "name": "Dell Technologies Inc.",
+   "amount": 3205722931.67,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "MMS",
+   "cik": "1032220",
+   "name": "MAXIMUS, INC.",
+   "amount": 3062982426.6400003,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "VVX",
+   "cik": "1601548",
+   "name": "V2X, Inc.",
+   "amount": 2938824049.3,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "SPCX",
+   "cik": "1181412",
+   "name": "SPACE EXPLORATION TECHNOLOGIES CORP",
+   "amount": 2804662177.74,
+   "recipients": 1,
+   "via": "name"
+  },
+  {
+   "ticker": "GE",
+   "cik": "40545",
+   "name": "GENERAL ELECTRIC CO",
+   "amount": 2258810012.28,
+   "recipients": 2,
+   "via": "name"
+  },
+  {
+   "ticker": "TXT",
+   "cik": "217346",
+   "name": "TEXTRON INC",
+   "amount": 2252226798.59,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "ORCL",
+   "cik": "1341439",
+   "name": "ORACLE CORP",
+   "amount": 1954957732.43,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "PLTR",
+   "cik": "1321655",
+   "name": "Palantir Technologies Inc.",
+   "amount": 1951476815.35,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "RS",
+   "cik": "861884",
+   "name": "RELIANCE, INC.",
+   "amount": 1474842155.44,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "GIB",
+   "cik": "1061574",
+   "name": "CGI INC",
+   "amount": 1358694931.73,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "T",
+   "cik": "732717",
+   "name": "AT&T INC.",
+   "amount": 1233496209.98,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "IBM",
+   "cik": "51143",
+   "name": "INTERNATIONAL BUSINESS MACHINES CORP",
+   "amount": 1106070323.73,
+   "recipients": 2,
+   "via": "name"
+  },
+  {
+   "ticker": "FER",
+   "cik": "1468522",
+   "name": "Ferrovial N.V.",
+   "amount": 1079128994.07,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "GEO",
+   "cik": "923796",
+   "name": "GEO GROUP INC",
+   "amount": 1049038287.49,
+   "recipients": 1,
+   "via": "name"
+  },
+  {
+   "ticker": "OSK",
+   "cik": "775158",
+   "name": "OSHKOSH CORP",
+   "amount": 1012834694.97,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "LEU",
+   "cik": "1065059",
+   "name": "CENTRUS ENERGY CORP",
+   "amount": 915875260,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "PSN",
+   "cik": "275880",
+   "name": "PARSONS CORP",
+   "amount": 903764104.97,
+   "recipients": 1,
+   "via": "alias"
+  },
+  {
+   "ticker": "OLN",
+   "cik": "74303",
+   "name": "OLIN Corp",
+   "amount": 831561170.68,
+   "recipients": 2,
+   "via": "alias"
+  },
+  {
+   "ticker": "F",
+   "cik": "37996",
+   "name": "FORD MOTOR CO",
+   "amount": 762498217.72,
+   "recipients": 1,
+   "via": "name"
+  },
+  {
+   "ticker": "PSX",
+   "cik": "1534701",
+   "name": "Phillips 66",
+   "amount": 728090439.26,
+   "recipients": 1,
+   "via": "name"
+  },
+  {
+   "ticker": "KBR",
+   "cik": "1357615",
+   "name": "KBR, INC.",
+   "amount": 696778651.24,
+   "recipients": 1,
+   "via": "alias"
+  }
+ ],
+ "unmatchedLargest": [
+  {
+   "name": "TRIWEST HEALTHCARE ALLIANCE CORP",
+   "amount": 16293849548.54
+  },
+  {
+   "name": "FISHER SAND & GRAVEL CO",
+   "amount": 13905570062.7
+  },
+  {
+   "name": "ATLANTIC DIVING SUPPLY, INC.",
+   "amount": 6189389790.44
+  },
+  {
+   "name": "BARNARD CONSTRUCTION COMPANY, INCORPORATED",
+   "amount": 5888246736.86
+  },
+  {
+   "name": "TRIAD NATIONAL SECURITY, LLC",
+   "amount": 5483504023.35
+  },
+  {
+   "name": "LAWRENCE LIVERMORE NATIONAL SECURITY, LLC",
+   "amount": 3884802082.85
+  },
+  {
+   "name": "DAVIE DEFENSE INC.",
+   "amount": 3500000000
+  },
+  {
+   "name": "SAVANNAH RIVER NUCLEAR SOLUTIONS LLC",
+   "amount": 3444868720.32
+  },
+  {
+   "name": "CONSOLIDATED NUCLEAR SECURITY, LLC",
+   "amount": 3429991886.14
+  },
+  {
+   "name": "BCCG A JOINT VENTURE",
+   "amount": 3242621193.7
+  },
+  {
+   "name": "UT-BATTELLE LLC",
+   "amount": 3086775503.94
+  },
+  {
+   "name": "DELOITTE CONSULTING LLP",
+   "amount": 3000737944.04
+  },
+  {
+   "name": "SLS FEDERAL SERVICES LLC",
+   "amount": 2379100930
+  },
+  {
+   "name": "SPENCER CONSTRUCTION LLC",
+   "amount": 2359541157.42
+  },
+  {
+   "name": "BATTELLE ENERGY ALLIANCE, LLC",
+   "amount": 2351916659.68
+  },
+  {
+   "name": "BOLLINGER SHIPYARDS LOCKPORT, L.L.C.",
+   "amount": 2314000232.07
+  },
+  {
+   "name": "SIERRA NEVADA COMPANY, LLC",
+   "amount": 2294959457.62
+  },
+  {
+   "name": "THE JOHNS HOPKINS UNIVERSITY APPLIED PHYSICS LABORATORY LLC",
+   "amount": 2200196945.28
+  },
+  {
+   "name": "PERATON INC.",
+   "amount": 2162185563.55
+  },
+  {
+   "name": "CALIFORNIA INSTITUTE OF TECHNOLOGY",
+   "amount": 2134591661.5
+  },
+  {
+   "name": "CARAHSOFT TECHNOLOGY CORP",
+   "amount": 2097990394.77
+  },
+  {
+   "name": "BECHTEL PLANT MACHINERY, INC.",
+   "amount": 2059003453
+  },
+  {
+   "name": "W S DARLEY & CO",
+   "amount": 2047670248.83
+  },
+  {
+   "name": "LOYAL SOURCE GOVERNMENT SERVICES LLC",
+   "amount": 2017276393.77
+  },
+  {
+   "name": "SOUTHWEST VALLEY CONSTRUCTORS CO",
+   "amount": 1981060687.51
+  }
+ ]
+}

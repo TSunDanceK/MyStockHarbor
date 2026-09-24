@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   }
 
   const match = buildMatcher(
-    (tickersFile as { data: TickerRow[] }).data,
+    (tickersFile as unknown as { data: TickerRow[] }).data,
     (aliasFile as { aliases: FederalAlias[] }).aliases,
     (aliasFile as { exclusions: FederalExclusion[] }).exclusions
   );
