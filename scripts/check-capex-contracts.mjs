@@ -125,4 +125,37 @@ for (const [label, make] of MUTANTS) {
   }
 }
 if (survived) process.exit(1);
-console.log(`check-capex-contracts: all assertions pass; ${MUTANTS.length} mutants caught`);
+
+// ── The job: weekly data from a daily cron, no implausible write, a deadline ──
+// (ported from #572 under #563 COWORK #3). /cache-health reads a cron's minute
+// and hour only, so a Mondays-only cron reads as a stalled daily job; the
+// route fires daily and rebuilds when its record is 6.5 days old.
+function jobSuite(route, job, vercel, jobs) {
+  const fails = [];
+  const ok = (label, cond) => { if (!cond) fails.push(label); };
+  const cron = JSON.parse(vercel).crons.find((c) => c.path === "/api/jobs/capex-contracts")?.schedule ?? "";
+  ok("the cron fires daily (every day-of-week)", /^\d+ \d+ \* \* \*$/.test(cron));
+  ok("JOBS carries the same cron", jobs.split("\n").some((l) => l.includes('"capex-contracts":') && l.includes(`cron: "${cron}"`)));
+  ok("a fresh record skips the rebuild", /ageDays < CONTRACTS_FRESH_DAYS/.test(route) && /CONTRACTS_FRESH_DAYS = 6\.5/.test(route));
+  ok("an implausibly small read is not written", /recipientsRead >= 500 && built\.record\.rows\.length >= 10/.test(route) && /const record = plausible \? built\.record : null;/.test(route));
+  ok("every USAspending call stops at the deadline", /if \(left < 5_000\) return null;/.test(job) && (job.match(/, deadline\)\)?/g) ?? []).length >= 2);
+  return fails;
+}
+const JOB = { route: read("app/api/jobs/capex-contracts/route.ts"), job: read("lib/server/capexContractsJob.ts"), vercel: read("vercel.json"), jobs: read("lib/server/jobRuns.ts") };
+const jobFails = jobSuite(JOB.route, JOB.job, JOB.vercel, JOB.jobs);
+if (jobFails.length) {
+  console.error("FAIL check-capex-contracts (job):\n  " + jobFails.join("\n  "));
+  process.exit(1);
+}
+const JOB_MUTANTS = [
+  ["the weekly cron restored", () => jobSuite(JOB.route, JOB.job, JOB.vercel.replace('"schedule": "10 6 * * *"', '"schedule": "10 6 * * 1"'), JOB.jobs)],
+  ["the plausibility gate removed", () => jobSuite(JOB.route.replace("const record = plausible ? built.record : null;", "const record = built.record;"), JOB.job, JOB.vercel, JOB.jobs)],
+  ["the deadline ignored", () => jobSuite(JOB.route, JOB.job.replace("if (left < 5_000) return null;", ""), JOB.vercel, JOB.jobs)],
+];
+for (const [label, run] of JOB_MUTANTS) {
+  if (!run().length) {
+    console.error(`MUTANT SURVIVED: ${label}`);
+    process.exit(1);
+  }
+}
+console.log(`check-capex-contracts: all assertions pass; ${MUTANTS.length + JOB_MUTANTS.length} mutants caught`);
