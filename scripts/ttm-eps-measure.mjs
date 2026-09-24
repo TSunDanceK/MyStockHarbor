@@ -123,6 +123,7 @@ const oldBasis = new Map(), newBasis = new Map(), fySplit = new Map(), refusedWh
 const agree = { old: [0, 0, 0], a: [0, 0, 0], b: [0, 0, 0] };
 const aVsB = [0, 0, 0, 0, 0, 0];
 const pinned = [];
+const apart = [];
 for (const [s, set] of sets) {
   const filer = { annualForm: REG[s]?.annualForm ?? null };
   const annualOnly = annualOnlyForm(filer.annualForm, set, TODAY) !== null;
@@ -146,6 +147,10 @@ for (const [s, set] of sets) {
   if (n?.basis === "four-quarters" && b !== null) {
     aVsB[0]++;
     [0.01, 0.02, 0.05, 0.1, 0.2].forEach((t, i) => { if (within(b, n.val, t)) aVsB[i + 1]++; });
+    if (!within(b, n.val, 0.2)) {
+      const nci = set.quarters.slice(0, 4).some((q) => valueOf(q, "netIncomeToNoncontrollingInterest"));
+      apart.push(`${s} (a) ${n.val.toFixed(2)} (b) ${b.toFixed(2)}${n.derivedQ4 ? " Q4-derived" : ""}${nci ? " NCI" : ""}${n.val * b < 0 ? " SIGN" : ""}`);
+    }
   }
   if (PINNED.includes(s)) pinned.push({ s, o, n, b });
 }
@@ -163,10 +168,12 @@ for (const [k, label] of [["old", "old rule"], ["a", "(a) derived Q4 (shipped)"]
   console.log(`  ${label}: n=${n}  ±5% ${pct(p5, n)}  ±20% ${pct(p20, n)}`);
 }
 console.log(`\n(a) vs (b) where both exist (n=${aVsB[0]}): within 1% ${pct(aVsB[1], aVsB[0])}; 2% ${pct(aVsB[2], aVsB[0])}; 5% ${pct(aVsB[3], aVsB[0])}; 10% ${pct(aVsB[4], aVsB[0])}; 20% ${pct(aVsB[5], aVsB[0])}`);
+console.log(`\n(a) and (b) more than 20% apart (SEC values only; NCI = a noncontrolling-interest line is filed; SIGN = opposite signs):`);
+for (const x of apart.sort()) console.log(`  ${x}`);
 console.log(`\npinned (SEC values only): symbol | old | new (a) | (b)`);
 const f = (e) => (e ? `${e.val.toFixed(2)} ${e.basis}${e.derivedQ4 ? ` (Q4 ${e.derivedQ4} derived)` : ""} to ${e.periodEnd}` : "refused");
 for (const p of pinned.sort((x, y) => x.s.localeCompare(y.s))) {
-  console.log(`  ${p.s} | ${f(p.o)} | ${f(p.n)} | ${p.b === null ? "—" : p.b.toFixed(2)}`);
+  console.log(`  ${p.s} | ${f(p.o)} | ${f(p.n)} | ${p.b === null ? "—" : p.b.toFixed(2)}${p.n ? "" : ` | refused: ${whyNoQ4(sets.get(p.s))}; newest quarter ${sets.get(p.s).quarters[0]?.e ?? "none"} ${sets.get(p.s).quarters[0]?.fp ?? ""}; years ${sets.get(p.s).years.length}`}`);
 }
 const missing = PINNED.filter((s) => !sets.has(s));
 if (missing.length) console.log(`  not in the read: ${missing.join(" ")}`);
