@@ -77,7 +77,7 @@ async function suite(L, E, route) {
   ok("a listed symbol is kept", E.secListingEvictionAction("BK", false) === "keep");
 
   // Wiring: outside the screener branch, and it evicts.
-  const passAt = route.indexOf("secUnlistedSymbols(universe, await resolveTickerMap())");
+  const passAt = route.indexOf("const verdict = secUnlistedSymbols(universe, live)");
   const branchEnd = route.indexOf("if (sweep.skipped) {");
   ok("the route runs the SEC pass", passAt > 0);
   ok("the SEC pass sits AFTER the FMP branch closes (it must survive FMP's end)", passAt > branchEnd && branchEnd > 0);
@@ -109,11 +109,11 @@ const MUTANTS = [
   ["exact-spelling lookup (BRK.B misses BRK-B)", () => [mut("spell", listingSrc, `!lookupBySpelling(live.map, s)`, `!live.map.has(s)`), evictionSrc, routeCode]],
   ["the preset gate bypassed", () => [listingSrc, mut("gate", evictionSrc, `return actionFor(unlisted, symbol, presets);`, `return unlisted ? "evict" : "keep";`), routeCode]],
   ["the pass nested under the FMP branch", () => {
-    const CALL = "secUnlistedSymbols(universe, await resolveTickerMap())";
+    const CALL = "const verdict = secUnlistedSymbols(universe, live)";
     const moved = mut("nest", routeCode, CALL, "null").replace("if (sweep.skipped) {", () => `${CALL};\n  if (sweep.skipped) {`);
     return [listingSrc, evictionSrc, moved];
   }],
-  ["detects but never evicts", () => [listingSrc, evictionSrc, mut("evict", routeCode, `if (action === "evict") {\n        const evicted = await evictSymbol(symbol);\n        sweep.evicted.push(symbol);\n        sweep.evictedBySecListing++;`, `if (action === "evict") {\n        sweep.evictedBySecListing++;`)]],
+  ["detects but never evicts", () => [listingSrc, evictionSrc, mut("evict", routeCode, `const evicted = await evictSymbol(symbol);\n        sweep.evicted.push(symbol);\n        sweep.evictedBySecListing++;`, `const evicted = { tombstoned: false };\n        sweep.evicted.push(symbol);\n        sweep.evictedBySecListing++;`)]],
 ];
 
 let survived = 0;
