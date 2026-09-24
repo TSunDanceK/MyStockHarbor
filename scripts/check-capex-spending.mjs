@@ -52,6 +52,9 @@ const INPUTS = [
   I("JUL", "Industrials", julJun, { cik: "4" }),
   I("NOSEC", null, cyYears(50), { cik: "5" }),
   I("EURO", "Industrials", [], { cik: "6", currency: "EUR" }),
+  // SEC lists CMCSA first; its exchangeable notes CCZ are shorter but second.
+  { ...I("CCZ", "Communication Services", cyYears(20), { cik: "7" }), rank: 1 },
+  { ...I("CMCSA", "Communication Services", cyYears(20), { cik: "7" }), rank: 0 },
 ];
 
 async function suite(M) {
@@ -63,7 +66,8 @@ async function suite(M) {
   const r = M.aggregateSpending(INPUTS, YEARS, NOW);
   const tech = r.sectors.find((s) => s.sector === "Technology");
   const ind = r.sectors.find((s) => s.sector === "Industrials");
-  ok("one row per filer: the second listing is folded", r.duplicateListings === 1 && tech?.cohort === 2 && tech.top.filter((t) => t.startsWith("AAA")).length === 1, JSON.stringify(tech));
+  ok("one row per filer: the second listing is folded", r.duplicateListings === 2 && tech?.cohort === 2 && tech.top.filter((t) => t.startsWith("AAA")).length === 1, JSON.stringify(tech));
+  ok("the filer's row is the listing SEC names first, not the shortest", r.sectors.find((s) => s.sector === "Communication Services")?.top.join() === "CMCSA");
   ok("the fixed cohort leaves out a company missing years", tech?.capex[0] === 110 && tech?.capex[4] === 140 * 1.1 && !tech.top.includes("NEWCO"), JSON.stringify(tech?.capex));
   ok("a company with some years is counted as partial", r.partial === 1, String(r.partial));
   ok("capex ÷ revenue uses only companies with revenue every year", tech?.ratioCohort === 1 && Math.abs(tech.capexToRevenue[0] - 0.1) < 1e-12, JSON.stringify(tech?.capexToRevenue));
@@ -94,6 +98,7 @@ const MUTANTS = [
   ["other currencies dropped silently", () => mut("cur", "if (input.currency && input.currency !== \"USD\") otherCurrency++;", "")],
   ["unclassified placed in a catch-all", () => mut("unc", "if (!input.sector) {\n      if (row.capex.some((v) => v !== null)) unclassified++;\n      continue;\n    }", "if (!input.sector) input.sector = \"Other\";")],
   ["listings not folded by filer", () => mut("dedupe", "const { kept: inputs, duplicates: duplicateListings } = dedupeByFiler(all);", "const inputs = all, duplicateListings = 0;")],
+  ["SEC's listing order ignored", () => mut("rank", "(b.rank ?? Infinity) - (a.rank ?? Infinity) ||", "")],
   ["a grand total added", () => mut("total", "return { v: 1, builtAt: nowMs,", "return { total: sectors.length, v: 1, builtAt: nowMs,")],
   ["the earlier of two years kept", () => mut("order", "[...input.years].sort((a, b) => a.e.localeCompare(b.e))", "[...input.years].sort((a, b) => b.e.localeCompare(a.e))")],
 ];
