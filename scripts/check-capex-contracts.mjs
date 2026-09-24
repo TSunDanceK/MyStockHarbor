@@ -88,6 +88,12 @@ async function suite(M, aliasFile, universeTickers) {
   ok("Sikorsky is Lockheed's, not RTX's (stale parent record overridden)", real("SIKORSKY AIRCRAFT CORPORATION")?.ticker === "LMT");
   ok("Amentum and V2X map to themselves, not their stale parents", real("AMENTUM SERVICES, INC.")?.ticker === "AMTM" && real("V2X SYSTEMS LLC")?.ticker === "VVX");
   ok("a joint venture stays unmapped", real("SAVANNAH RIVER NUCLEAR SOLUTIONS LLC") === null);
+  // #563 COWORK #4: a national lab's operating budget is not its owner's line.
+  ok("national-lab operators stay unmapped, even when a listed company owns them",
+    ["NATIONAL TECHNOLOGY & ENGINEERING SOLUTIONS OF SANDIA, LLC", "HONEYWELL FEDERAL MANUFACTURING & TECHNOLOGIES, LLC", "FLUOR MARINE PROPULSION, LLC", "LEIDOS BIOMEDICAL RESEARCH INC", "TRIAD NATIONAL SECURITY, LLC"].every((n) => real(n) === null));
+  ok("no alias names a laboratory or a national-security site operator",
+    !aliasFile.aliases.some((x) => /LABORATOR|SANDIA|LIVERMORE|LOS ALAMOS|OAK RIDGE|BATTELLE|NATIONAL SECURITY|NUCLEAR SECURITY|MARINE PROPULSION|BIOMEDICAL RESEARCH|PANTEX|Y-12/.test(x.recipient)),
+    aliasFile.aliases.filter((x) => /LABORATOR|SANDIA|NATIONAL SECURITY|MARINE PROPULSION|BIOMEDICAL RESEARCH/.test(x.recipient)).map((x) => x.recipient).join());
   ok("the primes map by exact name", real("LOCKHEED MARTIN CORPORATION")?.ticker === "LMT" && real("THE BOEING COMPANY")?.ticker === "BA");
   return fails;
 }
