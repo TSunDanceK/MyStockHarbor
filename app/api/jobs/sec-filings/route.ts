@@ -33,6 +33,7 @@ import {
   type FilingState,
 } from "@/lib/server/secFilingJob";
 import { buildDueList } from "@/lib/server/secFilingDue";
+import { recordSicChanges, type SicChange } from "@/lib/server/secSicChange";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,6 +121,7 @@ export async function GET(req: NextRequest) {
   const updates = new Map<string, FilingState>();
   const fxSeries = new Map<string, FxSeries | null>();
   const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0 };
+  const sicChanges: SicChange[] = [];
   const failures: string[] = [];
   let stoppedBy: "done" | "fill-cap" | "budget" = "done";
 
@@ -133,6 +135,7 @@ export async function GET(req: NextRequest) {
     try {
       const out = await checkAndFill(symbol, cik, stored, state.get(symbol), fetchers, fxSeries);
       updates.set(symbol, { c: Date.now(), lag: out.lag ?? null });
+      if (out.sicChange) sicChanges.push(out.sicChange);
       if (out.kind === "current") { tally.current++; continue; }
       tally.lagging++;
       if (out.kind === "noted") continue;
@@ -154,6 +157,8 @@ export async function GET(req: NextRequest) {
   }
 
   const stateWritten = await writeFilingState(updates);
+  // ONE HSET FOR THE WHOLE RUN, and only when a code moved (#552 COWORK #3).
+  const sicChanged = await recordSicChanges(sicChanges, today);
   // THE CATCH-UP ENDS ITSELF: the first catch-up run that got through every
   // candidate hands over to the normal schedule.
   if (mode === "catch-up" && stoppedBy === "done") await markCatchUpDone();
@@ -167,6 +172,7 @@ export async function GET(req: NextRequest) {
     stoppedBy,
     backlog: candidates.length - tally.checked - tally.noSet,
     stateWritten,
+    sicChanged,
     failures: failures.slice(0, 10).join(" | ") || null,
     ms: Date.now() - started,
   };
