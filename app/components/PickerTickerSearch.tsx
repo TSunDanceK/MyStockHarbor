@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import TickerLogo from "@/app/components/TickerLogo";
+import { activeRowStyle } from "@/lib/listboxNav";
+import { useListboxNav } from "@/app/components/useListboxNav";
 
 type SymbolResult = { symbol: string; name: string; exchange?: string };
 
@@ -76,6 +78,16 @@ export default function PickerTickerSearch({
     onSubmit(sym, resolvedName);
   }
 
+  // Arrow keys, Enter, Escape and Tab: the shared rules (#553 COWORK #36).
+  // Enter with nothing highlighted still submits the typed text, as before.
+  const nav = useListboxNav({
+    count: Math.min(results.length, 8),
+    open,
+    onSelect: (i) => { const r = results[i]; if (r) submit(r.symbol, r.name); },
+    onClose: () => setOpen(false),
+    resetKey: query,
+  });
+
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -87,7 +99,9 @@ export default function PickerTickerSearch({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          {...nav.inputAria}
           onKeyDown={(e) => {
+            if (nav.onKeyDown(e)) return;
             if (e.key === "Enter") submit(query);
           }}
           placeholder="e.g. AAPL — see every list it qualifies for"
@@ -127,6 +141,8 @@ export default function PickerTickerSearch({
 
       {open && results.length > 0 ? (
         <div
+          {...nav.listProps}
+          aria-label="Ticker search results"
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
@@ -140,10 +156,12 @@ export default function PickerTickerSearch({
             overflow: "hidden",
           }}
         >
-          {results.slice(0, 8).map((r) => (
+          {results.slice(0, 8).map((r, i) => (
             <button
               key={`${r.symbol}-${r.exchange ?? ""}`}
               type="button"
+              tabIndex={-1}
+              {...nav.optionProps(i)}
               onClick={() => submit(r.symbol, r.name)}
               style={{
                 width: "100%",
@@ -157,6 +175,7 @@ export default function PickerTickerSearch({
                 background: "#0b1220",
                 color: "#f8fafc",
                 cursor: "pointer",
+                ...(nav.active === i ? activeRowStyle(true) : null),
               }}
             >
               <TickerLogo symbol={r.symbol} size={22} radius={6} />
