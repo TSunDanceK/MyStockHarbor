@@ -650,6 +650,8 @@ const TASKS = {
   "write-pickers-universe-list": { script: "scripts/pickers-universe-list.mjs", args: () => [], writes: true },
   // READS ONLY: has the committed re-read queue drained (#552 COWORK #39). ~4 commands.
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
+  // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
+  "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
