@@ -121,6 +121,23 @@ console.log("\n8. hand-reviewed entries (#552 COWORK #29): cited from the filer'
   check("a name with no stored text fails the build", throws(() => withManual(B, { ZZZ: { industry: "Software - Application", phrase: "x" } })));
   const M = await load(SRC.replace("if (!m.phrase || at < 0) throw", "if (false) throw"));
   check("MUTATION: phrase check removed → an uncited placement ships", !throws(() => withManual(M, { AAA: { industry: "Software - Application", phrase: "cloud platform" } })));
+  // THE LONGER EXCERPT (#552 COWORK #37): a phrase past the display text is cited from it.
+  const excerpts = { AAA: ["10-K", "2026-02-01", "0000000000-26-000009", "Acme runs Google Services and Google Cloud for everyone. We sell ads. We derive revenues principally from sales of integrated circuit products."],
+    YYY: ["10-K", "2026-02-02", "0000000000-26-000010", "Why Corp makes wafer fabrication equipment for chipmakers."] };
+  const withBoth = (M, manual) => M.buildOverrides({ registrants: { ...reg, YYY: { sic: "3559" } }, table, rules, descriptions: desc, manual, excerpts });
+  const ex = withBoth(B, { AAA: { industry: "Semiconductors", phrase: "sales of integrated circuit products" } }).overrides.AAA;
+  check("a phrase only in the longer excerpt places the name, and the basis says so",
+    ex?.industry === "Semiconductors" && /\(longer excerpt\), reviewed/.test(ex.basis) && ex.quote.startsWith("We derive revenues"), JSON.stringify(ex));
+  const shownFirst = withBoth(B, { AAA: { industry: "Internet Content & Information", phrase: "google services and google cloud" } }).overrides.AAA;
+  check("a phrase in the display text is cited from the display text (no excerpt basis)", shownFirst?.basis === "10-K Item 1, reviewed");
+  check("a name with an excerpt but no display text is placed from the excerpt",
+    withBoth(B, { YYY: { industry: "Semiconductors", phrase: "wafer fabrication equipment" } }).overrides.YYY?.accession === "0000000000-26-000010");
+  check("the verbatim guard holds for the excerpt too", throws(() => withBoth(B, { AAA: { industry: "Semiconductors", phrase: "memory chips" } })));
+  const EX_ANCHOR = "const shown = descriptions[symbol], longer = excerpts[symbol];";
+  if (SRC.split(EX_ANCHOR).length !== 2) throw new Error("excerpt mutation anchor must match once");
+  const Mx = await load(SRC.replace(EX_ANCHOR, "const shown = descriptions[symbol], longer = undefined;"));
+  check("MUTATION: the excerpt ignored → a phrase past the display text fails the build",
+    throws(() => withBoth(Mx, { AAA: { industry: "Semiconductors", phrase: "sales of integrated circuit products" } })));
   const manual = read("data/sec/classification-manual.json").entries;
   check("every committed entry uses a label from the fixed list", Object.values(manual).every((m) => table.labels[m.industry]));
 }

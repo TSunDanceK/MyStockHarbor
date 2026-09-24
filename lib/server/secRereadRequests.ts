@@ -21,8 +21,13 @@ export type RereadRequest = { symbol: string; requestedAt: string; reason: strin
 
 export const SEC_REREAD_REQUESTS = requestsFile.requests as RereadRequest[];
 
-/** At most this many requests are applied per run. */
-export const SEC_REREAD_REQUESTS_PER_RUN = 1;
+/**
+ * At most this many requests are applied per run. 12 since #552 COWORK #31
+ * (the 34 cited multi-class filers): the reverify queue itself takes
+ * SEC_REVERIFY_PER_RUN (150) a run and the job's time budget defers what it
+ * cannot reach, so 12 clears the list in three runs and still cannot crowd it.
+ */
+export const SEC_REREAD_REQUESTS_PER_RUN = 12;
 
 /**
  * Flag the requested symbols for re-read in the (in-memory) manifest, and

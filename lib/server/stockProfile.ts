@@ -169,6 +169,12 @@ export function peBasisLabel(eps: EpsBasis | null | undefined): string | null {
 
 /** The derived-Q4 caveat, or null. Said once, under the figure it qualifies. */
 export function peBasisNote(eps: EpsBasis | null | undefined): string | null {
+  if (eps?.basis === "year-to-date" && eps.ytd) {
+    const m = eps.ytd.months;
+    return `Twelve-month EPS is the fiscal year to ${dayMonthYear(eps.ytd.yearEnd) ?? eps.ytd.yearEnd} plus the ${m} months to ` +
+      `${dayMonthYear(eps.periodEnd) ?? eps.periodEnd}, less the same ${m} months a year earlier, from the 10-K and 10-Q.` +
+      (eps.kind === "basic" ? " Basic EPS: the company states no diluted figure." : "");
+  }
   return eps?.basis === "four-quarters" && eps.derivedQ4
     ? `Q4 EPS (to ${dayMonthYear(eps.derivedQ4) ?? eps.derivedQ4}) is the fiscal year's diluted EPS less Q1–Q3; the annual report does not state a fourth quarter.`
     : null;
