@@ -1,0 +1,29 @@
+PASS desktop toolbar: D | W | M | Candle ▾ | Indicators · 1 ▾ | Draw ▾ | Measure ▾ | Recenter chart | Undo last drawing | Remove all drawings | ⛶ Fullscreen -- ["D","W","M","Candle ▾","Indicators · 1 ▾","Draw ▾","Measure ▾","Recenter chart","Undo last drawing","Remove all drawings","⛶ Fullscreen"]
+PASS toolbar still one row with Measure added -- 5px
+PASS Measure ▾ lists: Price & date (Measure) | Price range | Date range | Clear measures -- ["Price & date (Measure)","Price range","Date range","Clear measures"]
+PASS an up measure shows both lines: +28.31 (+9.11%) / 26 bars · 36 days -- {"price":["+28.31 (+9.11%)"],"date":["26 bars · 36 days"]}
+PASS drawing a measure does not pan the chart
+PASS the bar count is positive left-to-right -- 26 bars · 36 days
+PASS Undo removes the measure -- {"price":[],"date":[]}
+PASS a down measure is red-signed and its % is from its own start: +28.31 (+9.11%) vs −28.31 (−8.35%) -- 100/8.35 - 100/9.11 = 0.9991
+PASS click the measure to select it, Delete removes it -- {"price":[],"date":[]}
+PASS Price range: price line only (+28.31 (+9.11%)) -- {"price":["+28.31 (+9.11%)"],"date":[]}
+PASS Date range adds a bars/days line only (17 bars · 24 days) -- {"price":["+28.31 (+9.11%)"],"date":["17 bars · 24 days"]}
+PASS right-click menu: Chart type ▸ | Timeframe ▸ | Indicators ▸ | Draw ▸ | Measure ▸ | Scale ▸ | Recenter | Undo | Clear drawings | Fullscreen -- ["Chart type ▸","Timeframe ▸","Indicators ▸","Draw ▸","Measure ▸","Scale ▸","Recenter","Undo","Clear drawings","Fullscreen"]
+PASS Measure ▸ fly-out: Price & date (Measure) | Price range | Date range | Clear measures -- ["Price & date (Measure)","Price range","Date range","Clear measures"]
+PASS Clear measures removes them all -- {"price":[],"date":[]}
+PASS Shift + drag draws a quick measure (+28.31 (+9.12%) / 26 bars · 36 days) -- {"price":["+28.31 (+9.12%)"],"date":["26 bars · 36 days"]}
+PASS ...without panning the chart -- 1778025600000 -> 1778025600000
+PASS the next click clears the quick measure -- {"price":[],"date":[]}
+PASS a plain drag still pans
+PASS phone sheet has a Measure section with the three tools + Clear -- ["✕","Chart type\n▸","Timeframe\n▸","Indicators\n▸","Draw\n▸","Measure\n▾","Price & date (Measure)","Price range","Date range","Clear measures","Scale\n▸","Recenter","Undo","Clear drawings"]
+PASS placing: the pill says what to do, with a 44px Done -- Tap the start, then the end
+PASS tap-tap draws a measure (+17.40 (+5.39%) / 17 bars · 26 days) -- {"price":["+17.40 (+5.39%)"],"date":["17 bars · 26 days"]}
+PASS panning is paused while placing
+PASS after the second tap the pill offers adjusting, then Done -- Drag a corner to adjust
+PASS Done ends placing (no Done button left)
+PASS tapping a measure selects it and shows a 44px Delete
+PASS Delete removes it -- {"price":[],"date":[]}
+PASS after Done, a drag pans again
+
+27/27
