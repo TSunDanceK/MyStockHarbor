@@ -993,6 +993,13 @@ const TASKS = {
     args: () => ["--allow-writes"],
     needsTypescript: true,
     writes: true,
+  },  // READ-ONLY DESPITE THE PREFIX (Relay C, #563 D5): USAspending's own names
+  // and parent records for the top recipients -- the evidence the committed
+  // contract alias list is written from. 0 Redis.
+  "write-capex-contract-aliases": {
+    script: "scripts/capex-usaspending-aliases.mjs",
+    args: () => [],
+    writes: true,
   },
 };
 
