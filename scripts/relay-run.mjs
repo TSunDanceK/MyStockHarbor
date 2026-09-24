@@ -1067,6 +1067,21 @@ const TASKS = {
     args: () => ["--allow-writes"],
     needsTypescript: true,
     writes: true,
+  },  // READ-ONLY DESPITE THE PREFIX (Relay C, #563 D5): USAspending's own names
+  // and parent records for the top recipients -- the evidence the committed
+  // contract alias list is written from. 0 Redis.
+  "write-capex-contract-aliases": {
+    script: "scripts/capex-usaspending-aliases.mjs",
+    args: () => [],
+    writes: true,
+  },  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
+  // SET) -- only on the owner's OK.
+  "write-capex-contracts": {
+    script: "scripts/capex-contracts-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
   },
   // CAPEX — FOLLOW THE MONEY feasibility probe (#563 queue item 1). Read-only
   // and uncredentialled: public SEC and USAspending endpoints, no store. One
