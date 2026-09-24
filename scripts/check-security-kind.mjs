@@ -262,11 +262,22 @@ console.log("\n9. THE MUTANTS");
   );
   await underMutation(
     "step 3: exclusion becomes residual instead of positive (ET and ASML deleted)",
-    'if (DEBT_WORDING.test(name) || PREFERRED_WORDING.test(name) || WARRANT_WORDING.test(name)) {\n    return "derivative-of-issuer";\n  }\n  return "issuer-equity";',
+    'if (DEBT_WORDING.test(name) || DEBT_ACRONYMS.test(name) || PREFERRED_WORDING.test(name) || WARRANT_WORDING.test(name)) {\n    return "derivative-of-issuer";\n  }\n  return "issuer-equity";',
     'if (/common stock/i.test(name)) return "issuer-equity";\n  return "derivative-of-issuer";',
     (mm) => ["ET", "ASML", "BN"].every((s) => mm.admitForExtraction({
       symbol: s, cik: cikOf.get(s), cikGroup: byCik.get(cikOf.get(s)), securityName: NAMES[s],
     }).admit === true)
+  );
+  // ZONES (#552 COWORK #26): Comcast's exchangeable debt, named with no debt word.
+  check("\"Comcast Holdings ZONES\" is debt, not Comcast's equity",
+    m.securityKindFromName("Comcast Holdings ZONES") === "derivative-of-issuer");
+  check("...and a lower-case \"zones\" in an ordinary name is not",
+    m.securityKindFromName("Time Zones Holdings Inc. - Common Stock") === "issuer-equity");
+  await underMutation(
+    "ZONES dropped from the debt acronyms (CCZ slips through as equity)",
+    "const DEBT_ACRONYMS = /\\bZONES\\b/;",
+    "const DEBT_ACRONYMS = /\\bnever-matches-anything\\b/;",
+    (mm) => mm.securityKindFromName("Comcast Holdings ZONES") === "derivative-of-issuer"
   );
   await underMutation(
     "step 3: debt wording narrowed to 'preferred' only (MER-PK and TBB slip through)",

@@ -376,6 +376,17 @@
    "filedOn": "2026-02-23",
    "accession": "0001193125-26-064267"
   },
+  "AZTA": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3559",
+   "basis": "10-K Item 1",
+   "phrase": "semiconductor manufacturing",
+   "quote": "We entered the life sciences market in 2011, leveraging our in-house precision automation and cryogenics capabilities that we were then applying in the semiconductor manufacturi…",
+   "form": "10-K",
+   "filedOn": "2025-12-04",
+   "accession": "0001437749-25-036931"
+  },
   "BBIO": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -476,11 +487,11 @@
    "accession": "0000014272-26-000004"
   },
   "BTDR": {
-   "sector": "Financial Services",
-   "industry": "Financial - Capital Markets",
+   "sector": "Technology",
+   "industry": "Software - Application",
    "sic": "6199",
    "basis": "20-F Item 4.B",
-   "phrase": "bitcoin mining",
+   "phrase": "technology company",
    "quote": "We are a world-leading technology company for AI and Bitcoin mining infrastructure.",
    "form": "20-F",
    "filedOn": "2026-04-30",
@@ -882,6 +893,17 @@
    "filedOn": "2026-02-03",
    "accession": "0001628280-26-005044"
   },
+  "DOCN": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7370",
+   "basis": "10-K Item 1",
+   "phrase": "cloud platform",
+   "quote": "DigitalOcean is an agentic inference cloud platform that helps AI and Digital Native Enterprises build, run, and scale intelligent applications with speed, simplicity, and predi…",
+   "form": "10-K",
+   "filedOn": "2026-02-24",
+   "accession": "0001582961-26-000019"
+  },
   "DRH": {
    "sector": "Real Estate",
    "industry": "REIT - Hotel & Motel",
@@ -1058,6 +1080,17 @@
    "filedOn": "2026-02-12",
    "accession": "0001193125-26-048898"
   },
+  "FDS": {
+   "sector": "Communication Services",
+   "industry": "Internet Content & Information",
+   "sic": "7370",
+   "basis": "10-K Item 1",
+   "phrase": "digital platform",
+   "quote": "FactSet is a global financial digital platform and enterprise solutions provider with open and flexible technologies that deliver financial intelligence to investment profession…",
+   "form": "10-K",
+   "filedOn": "2025-10-22",
+   "accession": "0001628280-25-045769"
+  },
   "FERG": {
    "sector": "Consumer Cyclical",
    "industry": "Specialty Retail",
@@ -1068,6 +1101,17 @@
    "form": "10-KT",
    "filedOn": "2026-02-27",
    "accession": "0002011641-26-000006"
+  },
+  "FIS": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7389",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "FIS is a financial technology company providing solutions to financial institutions, businesses and developers.",
+   "form": "10-K",
+   "filedOn": "2026-02-24",
+   "accession": "0001136893-26-000013"
   },
   "FLYW": {
    "sector": "Technology",
@@ -1211,6 +1255,17 @@
    "form": "10-K",
    "filedOn": "2026-02-26",
    "accession": "0001104659-26-020562"
+  },
+  "GPN": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7389",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "We are a leading payments technology company delivering innovative software and services to our customers globally, with worldwide reach spanning North America, Europe, Asia-Pac…",
+   "form": "10-K",
+   "filedOn": "2026-02-20",
+   "accession": "0001123360-26-000008"
   },
   "GRND": {
    "sector": "Communication Services",
@@ -1476,6 +1531,17 @@
    "filedOn": "2026-02-25",
    "accession": "0001104659-26-019676"
   },
+  "JOYY": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7374",
+   "basis": "20-F Item 4.B",
+   "phrase": "technology company",
+   "quote": "We are a global technology company with a mission to enrich lives through technology, leveraging a proprietary technology stack to bridge social interaction, programmatic advert…",
+   "form": "20-F",
+   "filedOn": "2026-04-28",
+   "accession": "0001104659-26-049917"
+  },
   "KALU": {
    "sector": "Basic Materials",
    "industry": "Aluminum",
@@ -1652,6 +1718,17 @@
    "filedOn": "2026-03-10",
    "accession": "0001801198-26-000008"
   },
+  "LIF": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7374",
+   "basis": "10-K Item 1",
+   "phrase": "technology platform",
+   "quote": "Life360 is a leading technology platform connecting millions of people throughout the world to the people, pets and things they care about most.",
+   "form": "10-K",
+   "filedOn": "2026-03-02",
+   "accession": "0001581760-26-000016"
+  },
   "LKFT": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -1740,13 +1817,24 @@
    "filedOn": "2026-02-11",
    "accession": "0001628280-26-006960"
   },
+  "LZ": {
+   "sector": "Communication Services",
+   "industry": "Internet Content & Information",
+   "sic": "7374",
+   "basis": "10-K Item 1",
+   "phrase": "online platform",
+   "quote": "LegalZoom is a leading online platform for legal services, transforming how individuals and small businesses navigate the legal system.",
+   "form": "10-K",
+   "filedOn": "2026-02-23",
+   "accession": "0001286139-26-000012"
+  },
   "MA": {
-   "sector": "Financial Services",
-   "industry": "Financial - Credit Services",
+   "sector": "Technology",
+   "industry": "Software - Application",
    "sic": "7389",
    "basis": "10-K Item 1",
-   "phrase": "payments network",
-   "quote": "We operate a payments network that provides choice and flexibility for consumers, merchants and our customers.",
+   "phrase": "technology company",
+   "quote": "Mastercard is a technology company in the global payments industry.",
    "form": "10-K",
    "filedOn": "2026-02-11",
    "accession": "0001141391-26-000013"
@@ -1982,6 +2070,17 @@
    "filedOn": "2026-03-31",
    "accession": "0001760854-26-000003"
   },
+  "NCLH": {
+   "sector": "Consumer Cyclical",
+   "industry": "Travel Services",
+   "sic": "4400",
+   "basis": "10-K Item 1",
+   "phrase": "cruise industry",
+   "quote": "Norwegian commenced operations from Miami, Florida in 1966, launching the modern cruise industry by offering weekly departures from Miami, Florida to destinations in the Caribbean.",
+   "form": "10-K",
+   "filedOn": "2026-03-02",
+   "accession": "0001104659-26-022067"
+  },
   "NHI": {
    "sector": "Real Estate",
    "industry": "REIT - Healthcare Facilities",
@@ -2036,6 +2135,17 @@
    "form": "10-K",
    "filedOn": "2026-02-10",
    "accession": "0001628280-26-006901"
+  },
+  "NU": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "6199",
+   "basis": "20-F Item 4.B",
+   "phrase": "technology company",
+   "quote": "We are in the early stages of becoming a technology company that is revolutionizing a broad range of services by putting the customer at the center of their strate",
+   "form": "20-F",
+   "filedOn": "2026-04-08",
+   "accession": "0001292814-26-002166"
   },
   "NVO": {
    "sector": "Healthcare",
@@ -2092,6 +2202,17 @@
    "filedOn": "2026-03-31",
    "accession": "0001437749-26-010636"
   },
+  "ONTO": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3829",
+   "basis": "10-K Item 1",
+   "phrase": "for the semiconductor industry",
+   "quote": "Onto Innovation® is a worldwide leader in the design, development, manufacture and support of metrology and inspection tools for the semiconductor industry, including process co…",
+   "form": "10-K",
+   "filedOn": "2026-02-24",
+   "accession": "0001193125-26-066937"
+  },
   "ORC": {
    "sector": "Real Estate",
    "industry": "REIT - Mortgage",
@@ -2124,6 +2245,17 @@
    "form": "10-K",
    "filedOn": "2026-03-12",
    "accession": "0001213900-26-026929"
+  },
+  "PAYO": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7389",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "Payoneer is a financial technology company purpose-built to enable the world’s small and medium-sized businesses (“SMB(s)”) to grow and operate their businesses around the world…",
+   "form": "10-K",
+   "filedOn": "2026-02-26",
+   "accession": "0001104659-26-020487"
   },
   "PAYP": {
    "sector": "Financial Services",
@@ -2356,6 +2488,17 @@
    "filedOn": "2026-03-02",
    "accession": "0001104659-26-021898"
   },
+  "RAMP": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7374",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "is a leading data collaboration technology company, empowering marketers and media owners to deliver and measure marketing performance everywhere it matters.",
+   "form": "10-K",
+   "filedOn": "2026-05-21",
+   "accession": "0000733269-26-000025"
+  },
   "RAPP": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -2388,6 +2531,17 @@
    "form": "10-K",
    "filedOn": "2026-03-19",
    "accession": "0001943896-26-000013"
+  },
+  "RCL": {
+   "sector": "Consumer Cyclical",
+   "industry": "Travel Services",
+   "sic": "4400",
+   "basis": "10-K Item 1",
+   "phrase": "cruise vacation",
+   "quote": "We are a vacation industry leader, owning and operating three global cruise vacation brands: Royal Caribbean, Celebrity Cruises and Silversea (collectively, our \"Global Brands\").",
+   "form": "10-K",
+   "filedOn": "2026-02-11",
+   "accession": "0000884887-26-000007"
   },
   "RCUS": {
    "sector": "Healthcare",
@@ -2653,6 +2807,17 @@
    "filedOn": "2026-02-23",
    "accession": "0001599298-26-000015"
   },
+  "SNAP": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7370",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "is a technology company.",
+   "form": "10-K",
+   "filedOn": "2026-02-05",
+   "accession": "0001564408-26-000013"
+  },
   "SNDX": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -2665,12 +2830,12 @@
    "accession": "0001193125-26-076536"
   },
   "SRAD": {
-   "sector": "Consumer Cyclical",
-   "industry": "Gambling, Resorts & Casinos",
+   "sector": "Technology",
+   "industry": "Software - Application",
    "sic": "7370",
    "basis": "20-F Item 4.B",
-   "phrase": "sports betting",
-   "quote": "Since our founding in 2001, we have been at the forefront of innovation in the sports betting industry and we continue to be a global leader in understanding, leveraging and mon…",
+   "phrase": "technology platform",
+   "quote": "Sportradar is a leading technology platform enabling next generation engagement in sports and the number one provider of B2B solutions to the global sports betting industry base…",
    "form": "20-F",
    "filedOn": "2026-03-27",
    "accession": "0001104659-26-035485"
@@ -2754,11 +2919,11 @@
   },
   "TBLA": {
    "sector": "Communication Services",
-   "industry": "Advertising Agencies",
+   "industry": "Internet Content & Information",
    "sic": "7370",
    "basis": "10-K Item 1",
-   "phrase": "advertising technology",
-   "quote": "We empower businesses to grow through performance advertising technology that goes beyond search and social and delivers measurable outcomes at scale.",
+   "phrase": "mobile app",
+   "quote": "Taboola is a technology company that helps businesses grow by placing ads on publisher sites, mobile apps, and devices, which we collectively refer to as digital properties.",
    "form": "10-K",
    "filedOn": "2026-02-25",
    "accession": "0001840502-26-000004"
@@ -2845,8 +3010,8 @@
    "industry": "Software - Application",
    "sic": "7374",
    "basis": "10-K Item 1",
-   "phrase": "software-as-a-service",
-   "quote": "We provide a comprehensive platform of software-as-a-service, or SaaS, products and financial technology solutions, including integrated payment processing, restaurant-grade har…",
+   "phrase": "technology platform",
+   "quote": ", which we refer to as Toast, we, or the Company, is a cloud-based, all-in-one digital technology platform purpose-built for the entire restaurant community.",
    "form": "10-K",
    "filedOn": "2026-02-18",
    "accession": "0001650164-26-000057"
@@ -2872,6 +3037,17 @@
    "form": "10-K",
    "filedOn": "2026-02-25",
    "accession": "0001193125-26-068600"
+  },
+  "TRIP": {
+   "sector": "Communication Services",
+   "industry": "Internet Content & Information",
+   "sic": "7370",
+   "basis": "10-K Item 1",
+   "phrase": "online platform",
+   "quote": "The Tripadvisor group (the “Group”) is a portfolio of global online platforms purpose-built to connect travelers with experiences, accommodations, restaurants and other relevant…",
+   "form": "10-K",
+   "filedOn": "2026-02-13",
+   "accession": "0001193125-26-051281"
   },
   "TRVI": {
    "sector": "Healthcare",
@@ -2928,6 +3104,17 @@
    "filedOn": "2026-03-02",
    "accession": "0001193125-26-085490"
   },
+  "UBER": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7389",
+   "basis": "10-K Item 1",
+   "phrase": "technology platform",
+   "quote": "is a technology platform that uses a massive network, leading technology, operational excellence and product expertise to power movement from point A to point B.",
+   "form": "10-K",
+   "filedOn": "2026-02-13",
+   "accession": "0001543151-26-000015"
+  },
   "UDR": {
    "sector": "Real Estate",
    "industry": "REIT - Residential",
@@ -2972,6 +3159,17 @@
    "filedOn": "2025-11-06",
    "accession": "0001403161-25-000089"
   },
+  "VECO": {
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "sic": "3559",
+   "basis": "10-K Item 1",
+   "phrase": "wafer",
+   "quote": "Our comprehensive collection of ion beam, laser annealing, metal organic chemical vapor deposition (“MOCVD”), chemical vapor deposition (“CVD”), advanced packaging lithography, …",
+   "form": "10-K",
+   "filedOn": "2026-02-25",
+   "accession": "0001104659-26-019711"
+  },
   "VERA": {
    "sector": "Healthcare",
    "industry": "Biotechnology",
@@ -2993,6 +3191,17 @@
    "form": "10-K",
    "filedOn": "2026-02-25",
    "accession": "0001705696-26-000034"
+  },
+  "VIK": {
+   "sector": "Consumer Cyclical",
+   "industry": "Travel Services",
+   "sic": "4400",
+   "basis": "20-F Item 4.B",
+   "phrase": "cruise industry",
+   "quote": "Our guests can experience all three categories of the cruise industry—ocean, river and expedition cruising—under our single brand.",
+   "form": "20-F",
+   "filedOn": "2026-03-03",
+   "accession": "0001745201-26-000007"
   },
   "VKTX": {
    "sector": "Healthcare",
@@ -3017,11 +3226,11 @@
    "accession": "0001628280-26-009546"
   },
   "VNT": {
-   "sector": "Industrials",
-   "industry": "Industrial - Specialties",
+   "sector": "Technology",
+   "industry": "Software - Application",
    "sic": "3824",
    "basis": "10-K Item 1",
-   "phrase": "industrial technology",
+   "phrase": "technology company",
    "quote": "Vontier Corporation is a global industrial technology company uniting productivity, automation and multi-energy technologies to meet the needs of a rapidly evolving, more connec…",
    "form": "10-K",
    "filedOn": "2026-02-12",
@@ -3116,15 +3325,37 @@
    "accession": "0000929008-26-000008"
   },
   "WD": {
-   "sector": "Real Estate",
-   "industry": "Real Estate - Services",
+   "sector": "Technology",
+   "industry": "Software - Application",
    "sic": "6199",
    "basis": "10-K Item 1",
-   "phrase": "commercial real estate services",
-   "quote": "Through investments in people, brand, and technology, we have built a diversified suite of commercial real estate services to meet the needs of our customers.",
+   "phrase": "technology company",
+   "quote": "We are a leading commercial real estate (i) services, (ii) finance, and (iii) technology company in the United States.",
    "form": "10-K",
    "filedOn": "2026-02-26",
    "accession": "0001104659-26-020249"
+  },
+  "WDAY": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "7374",
+   "basis": "10-K Item 1",
+   "phrase": "ai platform",
+   "quote": "Workday is the enterprise AI platform for managing people, money, and agents.",
+   "form": "10-K",
+   "filedOn": "2026-03-06",
+   "accession": "0001327811-26-000014"
+  },
+  "WLTH": {
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "sic": "6199",
+   "basis": "10-K Item 1",
+   "phrase": "technology company",
+   "quote": "We are a product-driven technology company that built a financial solutions platform for “digital natives,” defined as those born after 1980 (i.",
+   "form": "10-K",
+   "filedOn": "2026-04-24",
+   "accession": "0001628280-26-027232"
   },
   "WPC": {
    "sector": "Real Estate",
@@ -3352,7 +3583,6 @@
   "DLB",
   "DLO",
   "DLX",
-  "DOCN",
   "DOO",
   "DOV",
   "DPC",
@@ -3377,12 +3607,10 @@
   "FA",
   "FBIN",
   "FCX",
-  "FDS",
   "FDX",
   "FDXF",
   "FICO",
   "FIGR",
-  "FIS",
   "FISV",
   "FIVN",
   "FLUT",
@@ -3406,7 +3634,6 @@
   "GOOGL",
   "GPC",
   "GPGI",
-  "GPN",
   "GRAB",
   "GRDN",
   "GRFS",
@@ -3452,7 +3679,6 @@
   "JHX",
   "JJSF",
   "JNJ",
-  "JOYY",
   "KARD",
   "KEEL",
   "KLAR",
@@ -3466,7 +3692,6 @@
   "LFTO",
   "LFUS",
   "LGND",
-  "LIF",
   "LIND",
   "LINE",
   "LION",
@@ -3474,7 +3699,6 @@
   "LPX",
   "LTC",
   "LU",
-  "LZ",
   "LZB",
   "MAIN",
   "MARA",
@@ -3506,7 +3730,6 @@
   "NNN",
   "NPK",
   "NPO",
-  "NU",
   "NUTX",
   "NUVB",
   "NVS",
@@ -3530,7 +3753,6 @@
   "PAGS",
   "PAHC",
   "PAY",
-  "PAYO",
   "PBA",
   "PBH",
   "PBI",
@@ -3554,7 +3776,6 @@
   "PURR",
   "QBTS",
   "QXO",
-  "RAMP",
   "RBA",
   "RBC",
   "RDDT",
@@ -3594,7 +3815,6 @@
   "SJM",
   "SKY",
   "SMR",
-  "SNAP",
   "SNY",
   "SOFI",
   "SPCX",
@@ -3628,7 +3848,6 @@
   "TPR",
   "TRAX",
   "TREX",
-  "TRIP",
   "TRS",
   "TSLX",
   "TSN",
@@ -3636,7 +3855,6 @@
   "TTAM",
   "TTC",
   "TVTX",
-  "UBER",
   "UFPI",
   "ULS",
   "UMH",
@@ -3653,13 +3871,11 @@
   "VTRS",
   "VVV",
   "VVX",
-  "WDAY",
   "WELL",
   "WEX",
   "WFG",
   "WIX",
   "WKC",
-  "WLTH",
   "WMS",
   "WSE",
   "WSO",
