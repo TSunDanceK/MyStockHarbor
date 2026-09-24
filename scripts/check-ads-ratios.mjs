@@ -42,6 +42,8 @@ const CASES = [
   ["“ADS” American Depositary Share representing one-fourth of one share of Common Stock.", 0.25],
   ["Each Class A ADS represents the right to receive one half of one Class A ordinary share of Grifols.", 0.5],
   ["Where ADSs are held, two ADSs represent one share.", 0.5],
+  ["The ADSs are listed on the NYSE. Each ADS represents rights to five Class B Shares.", 5],
+  ["FTL completed a registered secondary offering of 4,050,549 ADSs, each representing five Class B common shares of Telecom Argentina.", 5],
   ["American Depositary Shares, each representing 200 shares of common stock, without nominal value", 200],
   ["As of March 1, 1,234,567 ADSs were outstanding and the ADS price rose 5 percent.", null],
 ];
@@ -62,8 +64,9 @@ check("two different ratios in one filing are left for a person, never averaged"
 }
 
 console.log("\n2. direct listings");
-const TABLE = "Securities registered or to be registered pursuant to Section 12(b) of the Act: Title of each class Trading Symbol Name of each exchange on which registered Ordinary shares, nominal value €0.09 ASML The Nasdaq Stock Market LLC";
+const TABLE = "PURSUANT TO SECTION 12(b) OR (g) OF THE SECURITIES EXCHANGE ACT OF 1934 OR ANNUAL REPORT. Securities registered or to be registered pursuant to Section 12(b) of the Act: Title of each class Trading Symbol Name of each exchange on which registered Ordinary shares, nominal value €0.09 ASML The Nasdaq Stock Market LLC";
 check("ordinary shares under the ticker in the 12(b) row → cited", /Ordinary shares, nominal value €0\.09 ASML/.test(R.directListingStatement(TABLE, "ASML") ?? ""));
+check("Item 12.D 'American Depositary Shares Not applicable' still counts as direct", /ASML/.test(R.directListingStatement(`${TABLE} D. American Depositary Shares Not applicable.`, "ASML") ?? ""));
 check("any mention of depositary shares → no direct listing", R.directListingStatement(`${TABLE} American Depositary Shares`, "ASML") === null);
 check("a preferred share row is not the common listing", R.directListingStatement(TABLE.replace("Ordinary shares, nominal value €0.09 ASML", "Preferred shares, Series A ASML-PA"), "ASML") === null);
 
@@ -71,7 +74,7 @@ console.log("\n3. the committed map");
 const MAP = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries;
 const rowOk = (sym, e) => {
   if (!/^\d{10}-\d{2}-\d{6}$/.test(e.source) || !/^\d{4}-\d{2}-\d{2}$/.test(e.filed) || !e.evidence) return false;
-  if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && R.directListingStatement(`pursuant to Section 12(b) ${e.evidence}`, sym) !== null;
+  if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && R.directListingStatement(`Securities registered or to be registered pursuant to Section 12(b) ${e.evidence}`, sym) !== null;
   if (e.kind !== "ads") return false;
   const got = R.adsRatioOf(e.evidence);
   return got.ok && Math.abs(got.ordinaryPerAds - e.ordinaryPerAds) < 1e-6;

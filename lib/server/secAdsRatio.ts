@@ -34,7 +34,7 @@ export function parseCount(raw: string): number | null {
 }
 
 const COUNT = String.raw`(\d+(?:\.\d+)?|\d+\s*/\s*\d+|one[- ]half|one[- ](?:quarter|fourth|third|fifth|tenth|twentieth|fortieth)|two[- ]thirds|three[- ](?:quarters|fourths)|one hundred|twenty-five|[a-z]+)(?:\s*\(\s*[\d.,/]+\s*\))?(?:\s+of\s+(?:one|an?))?`;
-const SHARE = String.raw`(?:ordinary|common|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|series\s+[a-z]\s+)?\s*shares?`;
+const SHARE = String.raw`(?:ordinary|common|class\s+[a-z]\s+ordinary|class\s+[a-z]\s+common|class\s+[a-z]|class\s+“?[a-z]”?|series\s+[a-z]\s+)?\s*shares?`;
 const ADS = String.raw`(?:ADS|ADSs|American\s+depositary\s+shares?|American\s+depositary\s+share)`;
 /**
  * The phrasings, each capturing the number of ordinary shares ONE ADS stands
@@ -44,11 +44,15 @@ const ADS = String.raw`(?:ADS|ADSs|American\s+depositary\s+shares?|American\s+de
 const PRECEDING_COUNT = String.raw`(?<!\b(?:two|three|four|five|six|seven|eight|nine|ten|twenty|\d+)\s+)`;
 const RATIO_PATTERNS: { re: RegExp; ratio: (m: RegExpExecArray) => number | null }[] = [
   // "each ADS represents five ordinary shares"
-  { re: new RegExp(String.raw`\b(?:each|one|1)\s+${ADS}\s+(?:currently\s+)?(?:represents?|representing|is\s+equal\s+to|equals)\s+(?:the\s+right\s+to\s+receive\s+)?${COUNT}\s+${SHARE}`, "gi"),
+  { re: new RegExp(String.raw`\b(?:each|one|1)\s+${ADS}\s+(?:currently\s+)?(?:represents?|representing|is\s+equal\s+to|equals)\s+(?:(?:the\s+)?rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+${SHARE}`, "gi"),
     ratio: (m) => parseCount(m[1]) },
   // "ADSs, each representing one-half of one ordinary share" — NOT when a
   // count precedes the ADS ("two ADSs represent one share" is the next rule).
-  { re: new RegExp(String.raw`${PRECEDING_COUNT}${ADS}\s*(?:\((?!\s*each)[^)]{0,40}\)\s*)?,?\s*\(?\s*(?:each\s+)?(?:of\s+which\s+)?(?:currently\s+)?(?:represents?|representing)\s+(?:the\s+right\s+to\s+receive\s+)?${COUNT}\s+${SHARE}`, "gi"),
+  // WITH "EACH", a preceding number is how many ADSs, not a ratio: "4,050,549
+  // ADSs, each representing five Class B common shares" (TEO) states five.
+  { re: new RegExp(String.raw`${ADS}\s*(?:\((?!\s*each)[^)]{0,40}\)\s*)?,?\s*\(?\s*each\s+(?:of\s+which\s+)?(?:currently\s+)?(?:represents?|representing)\s+(?:(?:the\s+)?rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+${SHARE}`, "gi"),
+    ratio: (m) => parseCount(m[1]) },
+  { re: new RegExp(String.raw`${PRECEDING_COUNT}${ADS}\s*(?:\((?!\s*each)[^)]{0,40}\)\s*)?,?\s*\(?\s*(?:of\s+which\s+)?(?:currently\s+)?(?:represents?|representing)\s+(?:(?:the\s+)?rights?\s+to\s+(?:receive\s+)?)?${COUNT}\s+${SHARE}`, "gi"),
     ratio: (m) => parseCount(m[1]) },
   // "two ADSs represent one share" (FMS): shares / ADSs.
   { re: new RegExp(String.raw`\b(two|three|four|five|ten|twenty|\d+)\s+${ADS}\s+(?:together\s+)?(?:represents?|representing)\s+${COUNT}\s+${SHARE}`, "gi"),
@@ -92,8 +96,11 @@ export function adsRatioStatements(text: string): AdsRatioStatement[] {
  */
 export function directListingStatement(text: string, symbol: string): string | null {
   const flat = text.replace(/\s+/g, " ");
-  if (/depositary/i.test(flat)) return null;
-  const at = flat.search(/pursuant to Section 12\s*\(\s*b\s*\)/i);
+  // "D. American Depositary Shares Not applicable" (Item 12.D) is the filing
+  // SAYING there are none — the direct-listing signal, not a mention of ADSs.
+  if (/depositary/i.test(flat.replace(/American Depositary Shares\.?\s*:?\s*Not applicable/gi, ""))) return null;
+  // THE SECURITIES TABLE, not the "PURSUANT TO SECTION 12(b) OR (g)" checkbox line above it.
+  const at = flat.search(/registered,?\s+or\s+to\s+be\s+registered,?\s+pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
   if (at < 0) return null;
   const table = flat.slice(at, at + 900);
   const sym = String(symbol).toUpperCase().replace(/[-.]/g, "[-. ]?");
