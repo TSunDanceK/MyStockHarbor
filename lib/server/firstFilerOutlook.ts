@@ -70,11 +70,18 @@ export function firstFilerNextReport(
   const to = iso(est + FIRST_FILER_SPREAD_DAYS * DAY);
   if (to < today) return null;
   const when = monthPartRange(from, to);
+  // COUNTED FROM THE STORED QUARTERS' OWN ACCESSIONS (#552 COWORK #42): a
+  // mid-quarter IPO (CBRS) has two 10-Qs on file before any 10-K, and "first
+  // filing only" understated the basis.
+  const filings = new Set(set.quarters.map((p) => p.a).filter(Boolean)).size;
+  const hedge = filings > 1
+    ? `Estimated from ${symbol}'s ${filings} quarterly filings so far; the latest was filed ${lag} days after its quarter ended, and timing may differ.`
+    : `Estimated from ${symbol}'s first quarterly filing only, filed ${lag} days after its quarter ended; timing may differ.`;
   return {
     symbol, kind: "beyond-window",
     headline: `The quarter to ${plainDate(nextEnd)} may be reported around ${when}.`,
     value: `Est. ${when}`,
-    hedge: `Estimated from ${symbol}'s first quarterly filing only, filed ${lag} days after its quarter ended; timing may differ.`,
+    hedge,
     evidence: [`Quarter to ${plainDate(q.e)}: filed ${plainDate(q.f)}.`],
   };
 }
