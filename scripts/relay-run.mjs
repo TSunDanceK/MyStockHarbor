@@ -1059,6 +1059,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHICH UNIVERSE SYMBOLS SEC NO LONGER LISTS (#553 COWORK #20): measured
+  // before the delisting sweep acts on it. Read-only; ~4 Redis reads.
+  "write-sec-delisting-census": {
+    script: "scripts/sec-delisting-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
 };
 
 const argv = process.argv.slice(2);
