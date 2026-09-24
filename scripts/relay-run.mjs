@@ -992,11 +992,31 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #1 item 4): Pickers SEC
+  // coverage vs the FMP values production shows, per column and per preset,
+  // plus the preset row counts under the shipped lib/server/pickersSecFundamentals.
+  // HKEYS/HMGET/MGET/GET only; ~870 commands once.
+  "write-pickers-sec-coverage": {
+    script: "scripts/pickers-sec-coverage.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // READ-ONLY DESPITE THE PREFIX (Relay B, #553 COWORK #11): items per sector
   // news page on the free stack, from the shipped sectorWindow + the stores.
   "write-sector-news-count": {
     script: "scripts/sector-news-free-count.mjs",
     args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
+  // once so the PR preview shows the filings figures. A key nothing on main
+  // reads; ~860 commands. Run only on the owner's OK. The flag is passed on so
+  // the script's own gate holds even if it is ever invoked outside this router.
+  "write-pickers-sec-seed": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes"],
     needsTypescript: true,
     writes: true,
   },

@@ -57,6 +57,7 @@ const config: PickerResultConfig = {
   emptyText: "No technology stocks in the analyzed universe are currently trading below 25 times earnings.",
   tone: "blue",
   kind: "preset",
+  excludeNonEquity: true,
   presetPredicates: [
     { kind: "category", field: "sector", values: ["Technology"] },
     { kind: "number", field: "peRatio", max: 25 },
