@@ -130,8 +130,10 @@ export type ContractView = {
   company: string;
   amount: string;
   barPct: number;
-  /** The USAspending recipient entities, largest first, in normal case. */
+  /** The USAspending recipient names, largest first, in normal case, each once. */
   entities: string[];
+  /** Recipient records behind them: USAspending often repeats one name under several registrations. */
+  records: number;
 };
 
 // Words USAspending writes in capitals that ARE capitals, and a few names whose
@@ -173,6 +175,7 @@ export function buildContractRows(
     company: companyName(r.ticker) || r.ticker,
     amount: formatAmount(r.amount, "USD"),
     barPct: max > 0 ? (Math.max(0, r.amount) / max) * 100 : 0,
-    entities: r.entities.map((e) => entityCase(e.name)),
+    entities: [...new Set(r.entities.map((e) => entityCase(e.name)))],
+    records: r.entities.length,
   }));
 }
