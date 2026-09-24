@@ -59,6 +59,13 @@
   "O": { "industry": "REIT - Retail", "phrase": "freestanding commercial properties leased under long" },
   "ESS": { "industry": "REIT - Residential", "phrase": "predominantly apartment communities" },
   "FRT": { "industry": "REIT - Retail", "phrase": "community and neighborhood shopping centers" },
-  "SPG": { "industry": "REIT - Retail", "phrase": "premier shopping, dining, entertainment and mixed-use destinations" }
+  "SPG": { "industry": "REIT - Retail", "phrase": "premier shopping, dining, entertainment and mixed-use destinations" },
+  "BIDU": { "industry": "Internet Content & Information", "phrase": "enhance our search functionality" },
+  "EBAY": { "industry": "Specialty Retail", "phrase": "global commerce leader that connects people" },
+  "SE": { "industry": "Specialty Retail", "phrase": "three core businesses of e-commerce, digital financial services, and digital entertainment" },
+  "VRSK": { "industry": "Consulting Services", "phrase": "data, analytics, and technology provider serving clients in the insurance ecosystem" },
+  "SOFI": { "industry": "Financial - Credit Services", "phrase": "We offer personal loans, student loans, home loans" },
+  "WEX": { "industry": "Software - Infrastructure", "phrase": "personalized payments solutions" },
+  "BR": { "industry": "Information Technology Services", "phrase": "global financial technology leader" }
  }
 }
