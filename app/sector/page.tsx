@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import {
   getSectorPerformanceTable,
+  sessionDateLabel,
   type SectorPerformanceRow,
 } from "@/lib/server/sectorPanels";
 import { getSectorConstituentCounts } from "@/lib/server/sectorUniverse";
@@ -122,7 +123,11 @@ export default async function SectorIndexPage() {
 
                 <div style={cardStatsStyle}>
                   <div>
-                    <div style={statLabelStyle}>Today</div>
+                    <div style={statLabelStyle}>
+                      {row?.dayBasis === "last-session"
+                        ? `Last session${sessionDateLabel(row.sessionDate) ? ` · ${sessionDateLabel(row.sessionDate)}` : ""}`
+                        : "Today"}
+                    </div>
                     <div style={{ ...statValueStyle, color: moveColour(row?.day) }}>
                       {formatPercent(row?.day)}
                     </div>
