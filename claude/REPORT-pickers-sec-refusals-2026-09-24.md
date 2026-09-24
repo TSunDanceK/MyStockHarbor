@@ -11,7 +11,7 @@ Relay B, #553 COWORK #19. Measured by relay `write-pickers-pe-census` over the 7
 | Payout rows | 699 | 260 (190 with DPS and EPS on the same basis and period end, 70 mixed) |
 
 - **P/E refusals:** 107 ADS (ruled "–"), 57 losses, **51 `no-twelve-month-eps`**. The 51 include BRK.B, V, XOM, COST, NFLX, PEP, NOW, CRWD, BKNG and C.
-- **Agreement:** where both exist (480), 408 are within 5%, 38 within 5–20%, and 34 are over 20% (11 of those 34 are notes or preferreds the presets already exclude).
+- **Agreement:** where both exist (480), 408 are within 5%, 38 within 5–20%, and 34 are over 20% (12 of those 34 are notes or preferreds the presets already exclude).
 - **EPS basis:** 484 are TTM with a derived Q4, 27 are TTM from four filed quarters, 27 are fiscal year (FY2025 ×23, FY2026 ×4).
 - **Mixed payout:** almost every mixed case is TTM EPS to 2026-06-30 against FY2025 DPS. The Q4 dividend is not filed as a quarter.
 - **Presets** (after the debt/preferred exclusion), today → on SEC:
@@ -49,34 +49,10 @@ INTC, SNOW, GILD, AVAV, RIVN, RKLB, PLUG, HIMS, IONQ, RIOT, LCID, FSLY, ZS, SEDG
 
 ASML, NIO, BABA, XPEV, LI, VOD, SPOT, TAK, WDS, TTE, STM, SNY, SHG, WIT, UMC, TSEM, TM, SBS, RIO, VIK, VALE, TIGO, SQM, SKM, SAN, ZTO, SE, WSE, WF, UL, TS, SONY, MFG, BBVA, BAP, DB, PBR-A, AU, UBS, PHG, NU, MUFG, KB, INFY, GMAB, CX, BSBR, JBS, IHG, BSAC, BEP, PAC, NVMI, MT, GFI, FMX, PDD, HMC, GFS, BUD, BEPH, BBDO, BBD, AZN, ALC, NVS, KOF, KEP, JD, ICLR, IBN, HTHT, GSK, BIPI, AMX, AEG, AEFC, ABEV, MICC, LYG, IX, ESLT, EMBJ, EC, CIB, BTI, ARGX, NOK, KSPI, NVO, NMR, VIV, TCOM, SNN, SHEL, SAP, RYAAY, RELX, PUK, ONON, NWG, NGG, NBIS, HSBC, HMY, FMS, FER
 
-## P/E more than 20% from FMP's (both present)
+## P/E agreement with FMP (aggregate only)
 
-34 names; 12 are notes or preferreds the fundamentals presets already exclude.
+Per the owner's ruling, no per-ticker FMP values are kept in the repo; this section gives counts only.
 
-| Symbol | FMP P/E | SEC P/E |
-|---|---|---|
-| ONC | [removed 2026-09-24] | 829.55 |
-| OMC | [removed 2026-09-24] | 188.72 |
-| SYM | [removed 2026-09-24] | 873.8 |
-| ALB | [removed 2026-09-24] | 436.42 |
-| TPG | [removed 2026-09-24] | 67.06 |
-| IAG | [removed 2026-09-24] | 17.45 |
-| CVE | [removed 2026-09-24] | 20.19 |
-| IESC | [removed 2026-09-24] | 14.2 |
-| APH | [removed 2026-09-24] | 20.6 |
-| DD | [removed 2026-09-24] | 154.02 |
-| SOMN | [removed 2026-09-24] | 10.82 |
-| WPM | [removed 2026-09-24] | 44.93 |
-| KGC | [removed 2026-09-24] | 14.16 |
-| CPB | [removed 2026-09-24] | 10.02 |
-| FNV | [removed 2026-09-24] | 45.3 |
-| AEM | [removed 2026-09-24] | 22.07 |
-| VIRT | [removed 2026-09-24] | 8.81 |
-| AGI | [removed 2026-09-24] | 16.42 |
-| PAAS | [removed 2026-09-24] | 18.79 |
-| RPRX | [removed 2026-09-24] | 30.83 |
-| KNX | [removed 2026-09-24] | 319.86 |
-| CCI | [removed 2026-09-24] | 35.65 |
-
-Excluded notes/preferreds: AIZN, RZC, PFH, SOJE, SOJD, SOJC, UNMA, XELLL, EP-PC, BNJ, FITB-PM, TBB
-
+| Both present | Within 5% | 5–20% | Over 20% | Over 20%, notes/preferreds the presets exclude | Over 20%, operating companies |
+|---|---|---|---|---|---|
+| 480 | 408 (85.0%) | 38 (7.9%) | 34 (7.1%) | 12 | 22 |
