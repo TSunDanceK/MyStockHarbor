@@ -671,6 +671,9 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // Read-only, no credential: why a universe symbol has no registrant row --
+  // EDGAR's current ticker file and each CIK's submissions (#552 COWORK #29).
+  "sec-ticker-status": { script: "scripts/sec-ticker-status-probe.mjs", args: (env) => [env.SYMBOLS || ""] },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
