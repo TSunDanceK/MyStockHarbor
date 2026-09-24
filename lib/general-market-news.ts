@@ -1,182 +1,49 @@
 import { unstable_cache } from "next/cache";
 
-import { fmpFetch } from "@/lib/server/fmpUsage";
-/**
- * A single general market headline, already trimmed down to exactly what
- * the /headlines page needs. Deliberately NOT reusing NewsItem from
- * lib/stock-news-data.ts (or anything from lib/ai-news-briefs.ts) -- this
- * feed has no AI scoring, briefs, "why it matters" commentary, or
- * sentiment tone-coloring. It's a plain, reverse-chronological list of
- * headlines pulled straight from FMP with an excerpt and a link out.
- */
-export type GeneralHeadline = {
-  title: string;
-  image: string | null;
-  publishedDate: string | null;
-  source: string;
-  excerpt: string | null;
-  url: string;
-};
+import { dedupeNews } from "@/lib/news-scoring";
+import { composeHeadlines, type GeneralHeadline } from "@/lib/server/news/headlineFeeds";
+import { fetchMarketHeadlines, marketHeadlineSourceLabels } from "@/lib/server/news/marketHeadlines";
 
-// Mirrors the shape FMP's news endpoints share across their stock-news and
-// general-news variants (see FmpStockNewsItem in lib/server/news/types.ts).
-type FmpGeneralNewsItem = {
-  title?: string;
-  publishedDate?: string;
-  date?: string;
-  publisher?: string;
-  site?: string;
-  image?: string;
-  text?: string;
-  content?: string;
-  description?: string;
-  url?: string;
-  link?: string;
-};
+export type { GeneralHeadline };
 
-function decodeHtml(value: string) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
+// WHERE THE HEADLINES COME FROM (2026-09-23, #553 COWORK #1): through the
+// NEWS_PROVIDER seam, lib/server/news/marketHeadlines.ts. This module used to
+// call FMP's general-news endpoint itself, outside that switch, so the step-7
+// flip to the free stack never reached /headlines. The FMP fetch now lives in
+// the FMP adapter and runs only under NEWS_PROVIDER=fmp. What reaches the page
+// (merge, dedup, order, cap, excerpt trim) is composeHeadlines in
+// lib/server/news/headlineFeeds.ts, which is pure and checked by
+// scripts/check-headlines-off-fmp.mjs.
+//
+// No AI briefs, scoring or "why it matters" commentary here -- a plain,
+// reverse-chronological list with an excerpt where the source supplies one.
 
-/**
- * Trims a raw FMP excerpt down to a short "first paragraph" length. FMP's
- * `text`/`content` field is usually already a short excerpt, but this
- * guards against the occasional full-length blob by cutting at a sentence
- * or word boundary near ~400 characters rather than dumping a wall of text
- * on the card.
- */
-function truncateExcerpt(raw: string, maxLength = 400): string {
-  const cleaned = decodeHtml(raw.replace(/\s+/g, " ").trim());
-  if (cleaned.length <= maxLength) return cleaned;
-
-  const hardCut = cleaned.slice(0, maxLength);
-
-  // Prefer cutting at the end of a sentence within the window.
-  const sentenceEnd = Math.max(
-    hardCut.lastIndexOf(". "),
-    hardCut.lastIndexOf("! "),
-    hardCut.lastIndexOf("? ")
-  );
-  if (sentenceEnd > maxLength * 0.4) {
-    return `${hardCut.slice(0, sentenceEnd + 1).trim()}`;
-  }
-
-  // Otherwise fall back to the last whole word before the cutoff.
-  const wordBoundary = hardCut.lastIndexOf(" ");
-  const safeCut = wordBoundary > 0 ? hardCut.slice(0, wordBoundary) : hardCut;
-  return `${safeCut.trim()}…`;
-}
-
-/**
- * Fetches general, market-wide headlines from FMP -- not tied to any one
- * ticker. Tries the current `stable` endpoint first, falling back to the
- * legacy `v4` endpoint if that fails, mirroring the stable-then-legacy
- * pattern used by the FMP news adapter in lib/server/news/fmpProvider.ts. No AI
- * processing of any kind happens here -- this is a plain pass-through of
- * FMP's own fields.
- *
- * Exported only so lib/server/news/fmpProvider.ts can reuse it for the
- * NewsProvider interface's fetchMarket() rather than restating this endpoint
- * pair and its parsing. Nothing else about this module changed, and /headlines
- * still reads getGeneralMarketHeadlines below.
- */
-export async function fetchFmpGeneralNews(): Promise<GeneralHeadline[]> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return [];
-
-  const key = encodeURIComponent(apiKey);
-
-  const endpoints = [
-    `https://financialmodelingprep.com/stable/news/general-latest?limit=50&apikey=${key}`,
-    `https://financialmodelingprep.com/api/v4/general_news?page=0&apikey=${key}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fmpFetch(url, {
-        next: { revalidate: 900 },
-      });
-
-      if (!res.ok) continue;
-
-      const data = (await res.json()) as unknown;
-      if (!Array.isArray(data)) continue;
-
-      const items = data
-        .map((item: FmpGeneralNewsItem): GeneralHeadline | null => {
-          const title = typeof item.title === "string" ? item.title.trim() : "";
-          const url =
-            typeof item.url === "string" && item.url.trim()
-              ? item.url.trim()
-              : typeof item.link === "string"
-                ? item.link.trim()
-                : "";
-
-          if (!title || !url) return null;
-
-          const excerptSource =
-            typeof item.text === "string" && item.text.trim()
-              ? item.text
-              : typeof item.content === "string" && item.content.trim()
-                ? item.content
-                : typeof item.description === "string"
-                  ? item.description
-                  : "";
-
-          return {
-            title: decodeHtml(title),
-            image:
-              typeof item.image === "string" && item.image.trim()
-                ? item.image.trim()
-                : null,
-            publishedDate:
-              typeof item.publishedDate === "string" && item.publishedDate.trim()
-                ? item.publishedDate
-                : typeof item.date === "string" && item.date.trim()
-                  ? item.date
-                  : null,
-            source:
-              typeof item.site === "string" && item.site.trim()
-                ? item.site.trim()
-                : typeof item.publisher === "string" && item.publisher.trim()
-                  ? item.publisher.trim()
-                  : "News",
-            excerpt: excerptSource.trim() ? truncateExcerpt(excerptSource) : null,
-            url,
-          };
-        })
-        .filter((item): item is GeneralHeadline => Boolean(item));
-
-      if (items.length) return items;
-    } catch {
-      continue;
-    }
-  }
-
-  return [];
-}
-
+// v2: the v1 entry holds an FMP payload. A new key means the first render after
+// deploy reads the new sources instead of serving FMP articles for up to 30 min.
 const getCachedGeneralMarketHeadlines = unstable_cache(
-  async () => fetchFmpGeneralNews(),
-  ["msh-general-market-headlines-v1"],
+  async () => composeHeadlines(await fetchMarketHeadlines(), dedupeNews),
+  ["msh-general-market-headlines-v2"],
   {
     revalidate: 1800,
   }
 );
 
-/**
- * Plain, reverse-chronological general market headlines -- no AI briefs,
- * no scoring, no "why it matters" commentary. Used by app/headlines/page.tsx.
- */
+/** Used by app/headlines/page.tsx. */
 export async function getGeneralMarketHeadlines(): Promise<GeneralHeadline[]> {
   try {
     return await getCachedGeneralMarketHeadlines();
   } catch {
     return [];
   }
+}
+
+/**
+ * The footer's source phrase, from the same switch as the feed:
+ * "the MarketWatch, CNBC, GlobeNewswire and PR Newswire public feeds" on the
+ * free stack, "Financial Modeling Prep" under the NEWS_PROVIDER=fmp rollback.
+ */
+export function headlineSourcesText(): string {
+  const labels = marketHeadlineSourceLabels();
+  if (labels.length <= 1) return labels[0] ?? "the news feeds";
+  return `the ${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]} public feeds`;
 }
