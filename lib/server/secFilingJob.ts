@@ -26,6 +26,7 @@ import type { CompanyFacts } from "./secExtract";
 import { extractForSymbol } from "./secExtractFor";
 import { toStoredSet } from "./secFactBuild";
 import { defaultSources, type FxSeries } from "./fxRates";
+import { sicChangeOf, type SicChange } from "./secSicChange";
 import { instanceToFacts, isLagging, mergeFillOnly, newestPeriodicFiling, newestStoredEnd } from "./secFilingFill";
 
 const redis =
@@ -162,10 +163,14 @@ export type Fetchers = {
   instance: (cik: string, f: FilingRef) => Promise<string | null>;
 };
 
-export type CheckOutcome =
+export type CheckOutcome = (
   | { kind: "current"; lag: null | FilingState["lag"] }
   | { kind: "noted"; lag: FilingState["lag"] }
-  | { kind: "caught-up" | "filled" | "notice"; set: StoredFactSet; lag: FilingState["lag"] };
+  | { kind: "caught-up" | "filled" | "notice"; set: StoredFactSet; lag: FilingState["lag"] }
+) & {
+  /** The filer's SIC code moved since registrants.json (#552 COWORK #3). Flag only. */
+  sicChange?: SicChange | null;
+};
 
 /**
  * One filer: is its stored set behind its newest filing, and if so, read the
@@ -180,7 +185,22 @@ export async function checkAndFill(
   fetch: Fetchers,
   fxSeries: Map<string, FxSeries | null>,
 ): Promise<CheckOutcome> {
-  const filing = newestPeriodicFiling(await fetch.submissions(cik));
+  // THE SAME PAYLOAD, READ TWICE: the SIC comparison costs no request.
+  const subs = await fetch.submissions(cik);
+  const sicChange = sicChangeOf(symbol, subs);
+  return { ...(await checkAndFillFrom(symbol, cik, stored, prior, fetch, fxSeries, subs)), sicChange };
+}
+
+async function checkAndFillFrom(
+  symbol: string,
+  cik: string,
+  stored: StoredFactSet,
+  prior: FilingState | undefined,
+  fetch: Fetchers,
+  fxSeries: Map<string, FxSeries | null>,
+  subs: Submissions,
+): Promise<CheckOutcome> {
+  const filing = newestPeriodicFiling(subs);
   if (!isLagging(stored, filing)) {
     // STILL READ FROM THE FILING is not "caught up": the lag stays recorded
     // until a companyfacts-only read carries the period.
