@@ -38,6 +38,11 @@ export function predecessorCikFor(cik: number | string | null | undefined): stri
   return s ? String(s.predecessorCik).padStart(10, "0") : null;
 }
 
+/** Predecessor CIKs already on the cited list, zero-padded (not re-flagged, #552 COWORK #36). */
+export const CITED_PREDECESSOR_CIKS: ReadonlySet<string> = new Set(
+  [...BY_CIK.values()].map((s) => String(s.predecessorCik).padStart(10, "0")),
+);
+
 /** Cover-page counts more than this far apart are not a 1:1 exchange. */
 export const SUCCESSION_SHARE_TOLERANCE = 0.1;
 

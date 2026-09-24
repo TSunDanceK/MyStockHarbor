@@ -50,7 +50,19 @@ const previous = JSON.parse(fs.readFileSync(OUT, "utf8"));
 // committed rows are kept as they are, and each fetched row is also printed as
 // `ROW {json}` so it can be applied from the log without a full refresh.
 const named = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
-const symbols = named.length ? named : [...new Set([...Object.keys(previous.rows ?? {}), ...Object.keys(cikMap)])].sort();
+// ── RENAMES FOLLOW THE CIK (#552 COWORK #36) ──────────────────────────────
+// Planned from the committed ticker file by the shipped rule; the old ticker
+// is kept as an alias row after the loop. See lib/server/secRegistrantRenames.
+const RENAMES_SRC = readCodeOnly("lib/server/secRegistrantRenames.ts");
+const renameMod = await lift([grabFunction(RENAMES_SRC, "pad"), grabFunction(RENAMES_SRC, "planRenames"), "export { planRenames };"].join("\n"));
+const plan = named.length ? { renames: [], ambiguous: [] }
+  : renameMod.planRenames(previous.rows ?? {}, new Map([...tickerMap].map(([t, e]) => [t, e.cik])));
+const renamedFrom = new Set(plan.renames.map((r) => r.from));
+const aliasRows = Object.entries(previous.rows ?? {}).filter(([, r]) => r.aliasOf);
+const aliasSyms = new Set(aliasRows.map(([k]) => k));
+const symbols = named.length ? named : [...new Set([
+  ...Object.keys(previous.rows ?? {}), ...Object.keys(cikMap), ...plan.renames.map((r) => r.to),
+])].filter((sym) => !renamedFrom.has(sym) && !aliasSyms.has(sym)).sort();
 const cikFor = (s) => {
   for (const v of symbolSpellings(s)) {
     if (cikMap[v]) return tick.padCik(cikMap[v]);
@@ -112,6 +124,14 @@ for (const symbol of symbols) {
   if (i % 250 === 0) console.log(`  ... ${i} of ${symbols.length}`);
 }
 
+// THE OLD TICKERS, AS ALIASES of the row their CIK moved to: this run's
+// renames, and every alias carried from before (refreshed from its target).
+for (const r of plan.renames) {
+  if (rows[r.to]) { rows[r.from] = { ...rows[r.to], aliasOf: r.to }; console.log(`RENAMED ${r.from} -> ${r.to} (CIK ${r.cik})`); }
+}
+for (const [a, prev] of aliasRows) if (rows[prev.aliasOf]) rows[a] = { ...rows[prev.aliasOf], aliasOf: prev.aliasOf };
+for (const a of plan.ambiguous) console.log(`RENAME-AMBIGUOUS ${a.from} (CIK ${a.cik}) now under ${a.candidates.join(", ")}: left for a person`);
+
 const asOf = new Date().toISOString().slice(0, 10);
 const file = {
   _comment:
@@ -121,7 +141,7 @@ const file = {
     "that line is the regeneration trigger, as for static-profile.json.",
   asOf,
   source: "data.sec.gov submissions",
-  fields: ["cik", "sic", "sicDescription", "stateOrCountry", "stateOfIncorporation", "website", "fiscalYearEnd", "entityType", "annualForm"],
+  fields: ["cik", "sic", "sicDescription", "stateOrCountry", "stateOfIncorporation", "website", "fiscalYearEnd", "entityType", "annualForm", "aliasOf"],
   rows,
 };
 const json = JSON.stringify(file, null, 1) + "\n";
