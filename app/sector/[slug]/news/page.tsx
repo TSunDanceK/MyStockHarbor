@@ -243,6 +243,7 @@ export default async function SectorNewsPage({ params }: Props) {
     performance,
     topMentions: mentions,
     earningsCount: earnings.length,
+    articleCount: data.rankedNews.length,
   });
 
   const url = `${SITE}${sectorNewsPath(sector.slug)}`;

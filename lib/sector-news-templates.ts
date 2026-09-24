@@ -50,8 +50,12 @@ export function buildSectorLead(args: {
 
   const parts: string[] = [];
 
+  // NO TONE WITHOUT HEADLINES (#553 COWORK #11): with an empty feed the score
+  // is a default, and "reading mixed" described coverage that did not exist.
   parts.push(
-    `${sector.name} headlines are currently reading ${toneWord(newsScore.tone)}, based on the latest coverage across the ${constituentCount || "largest"} biggest ${sector.name.toLowerCase()} names we track.`
+    articleCount
+      ? `${sector.name} headlines are currently reading ${toneWord(newsScore.tone)}, based on the latest coverage across the ${constituentCount || "largest"} biggest ${sector.name.toLowerCase()} names we track.`
+      : `No recent headlines are stored yet for the ${constituentCount || "largest"} biggest ${sector.name.toLowerCase()} names we track, so there is no news tone to read here right now.`
   );
 
   const move = moveWord(dayMove);
@@ -67,10 +71,6 @@ export function buildSectorLead(args: {
     parts.push(
       `This is a read on what the news flow is saying right now, framed as context rather than a forecast -- so you can see quickly whether headlines are helping or hurting the sector story.`
     );
-  } else {
-    parts.push(
-      `There is very little fresh coverage across these names at the moment, so treat the score below as low-conviction until the news flow picks up.`
-    );
   }
 
   return parts.join(" ");
@@ -84,22 +84,27 @@ export function buildSectorRead(args: {
   performance: { day: number | null; week: number | null; month: number | null; ytd: number | null } | null;
   topMentions: Array<{ symbol: string; count: number }>;
   earningsCount: number;
+  /** Headlines behind the score. 0 = no tone claims at all (COWORK #11). Absent reads as "some". */
+  articleCount?: number;
 }): string[] {
   const { sector, newsScore, earningsLabel, breadth, performance, topMentions, earningsCount } =
     args;
+  const noHeadlines = args.articleCount === 0;
 
   const out: string[] = [];
 
   // 1. What the headlines are doing.
   const drivers = topMentions.slice(0, 3).map((m) => m.symbol);
   out.push(
-    drivers.length
+    noHeadlines
+      ? `There are no recent ${sector.name.toLowerCase()} headlines stored for the largest names yet, so there is no news-flow read to give here.`
+      : drivers.length
       ? `The ${sector.name.toLowerCase()} news flow is currently leaning ${toneWord(newsScore.tone)}, and it is being driven mostly by ${drivers.join(", ")}. When a handful of names dominate a sector's coverage, the sector score is really telling you about those names first and the wider group second.`
       : `The ${sector.name.toLowerCase()} news flow is currently leaning ${toneWord(newsScore.tone)}, without any single company dominating the coverage. A broad, unconcentrated news mix usually means the score reflects the sector rather than one company's story.`
   );
 
-  // 2. Whether price agrees with the headlines.
-  if (performance && typeof performance.month === "number") {
+  // 2. Whether price agrees with the headlines -- only when there are headlines.
+  if (!noHeadlines && performance && typeof performance.month === "number") {
     const monthDirection = performance.month >= 0 ? "higher" : "lower";
     const agrees =
       (newsScore.tone === "green" && performance.month >= 0) ||
