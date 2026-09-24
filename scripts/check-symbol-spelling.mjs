@@ -565,7 +565,6 @@ const UNDER_TEST = [
   // The two #524 named as the same bug and left: both fed by the same route
   // parameter, both FMP's quote endpoint, so the evidence for the dash is the
   // same measurement as fetchFmpQuote's rather than a new one.
-  ["app/stock/[symbol]/earnings/page.tsx", "fetchQuoteForMeta", "the price in the earnings page <title>"],
   ["app/stock/[symbol]/page.tsx", "fetchQuote", "the server-rendered price and quote outcome on /stock/[symbol]"],
   // Traced, not assumed: every one of these takes the route parameter. The two
   // page.tsx helpers get `upper` from params in the page component; the two API
@@ -577,7 +576,6 @@ const UNDER_TEST = [
   // 2026-09-23 (#552 COWORK #1); check-retired-routes keeps them gone.
   // Visible only since the helper-path rule above; route parameter via the
   // page's own cleanSymbol, which keeps the dot.
-  ["app/stock/[symbol]/earnings/page.tsx", "getEarningsData", "the FMP earnings-date fallback on /stock/[symbol]/earnings"],
   // Route-fed one layer down: /api/stock-earnings/[symbol] and /dashboard?symbol=
   // reach getLatestEarningsData with dots kept by their cleaners.
   ["lib/latest-earnings-data.ts", "getLatestEarningsDataInner", "the dashboard / earnings-API income, estimates and surprises"],
