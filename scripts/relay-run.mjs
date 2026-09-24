@@ -651,11 +651,22 @@ const TASKS = {
   // Read-only, no credential: the XOM succession merge on the real payloads,
   // through the shipped code, lifted (#552 COWORK #28).
   "sec-succession-verify": { script: "scripts/sec-succession-verify.mjs", args: (env) => [env.SYMBOLS || "XOM"], needsTypescript: true },
+  // Read-only, no credential: why a filer's fiscal year-end anchor is wrong
+  // (QXO, #552 COWORK #30). Lifts the shipped fiscalYearOffset.
+  "sec-fy-anchor": { script: "scripts/sec-fy-anchor-probe.mjs", args: (env) => [env.SYMBOLS || "QXO"], needsTypescript: true },
   "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
   "write-sec-sparse-sets": {
     script: "scripts/sec-sparse-sets-probe.mjs",
     args: () => [],
     writes: true,
+  },
+  // READS ONLY (the symbol list, 1 command) + companyfacts for the pool: the
+  // QXO anchor fix measured before it ships (#552 COWORK #30).
+  "write-sec-fy-anchor-census": {
+    script: "scripts/sec-fy-anchor-census.mjs",
+    args: () => [],
+    writes: true,
+    needsTypescript: true,
   },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
