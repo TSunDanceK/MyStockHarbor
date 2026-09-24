@@ -1000,6 +1000,14 @@ const TASKS = {
     script: "scripts/capex-usaspending-aliases.mjs",
     args: () => [],
     writes: true,
+  },  // Relay C (#563 D5): the weekly contracts job's logic from a runner. DRY by
+  // default (0 Redis); SYMBOLS="mode=seed" writes msh:capex:contracts:v1 (1
+  // SET) -- only on the owner's OK.
+  "write-capex-contracts": {
+    script: "scripts/capex-contracts-run.mjs",
+    args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
   },
 };
 
