@@ -126,9 +126,23 @@ export const MAX_BODY = 60_000;
 
 const fmt = (t) => (t ? `${t.sector ?? "—"} / ${t.industry ?? "—"}` : "—");
 
-/** The issue body, or null when there is nothing to classify (close the issue). */
-export function issueBody({ missing, changed }, asOf, universeSize) {
-  if (!missing.length && !changed.length) return null;
+/**
+ * The universe's ticker changes the delisting sweep made (#553 COWORK #22), as
+ * INFORMATION lines: renames followed by CIK, delistings, and the cases it
+ * flagged. Read from the sweep's log (lib/server/secListing.ts
+ * LISTING_CHANGES_KEY); only the last `days` are shown, newest first.
+ */
+export function listingLines(stored, asOf, days = 14) {
+  if (!Array.isArray(stored)) return [];
+  const cutoff = new Date(Date.parse(`${asOf}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+  return stored
+    .filter((c) => c && typeof c.at === "string" && typeof c.line === "string" && c.at >= cutoff)
+    .map((c) => `${c.at}: ${c.line}`);
+}
+
+/** The issue body, or null when there is nothing to classify or report (close the issue). */
+export function issueBody({ missing, changed }, asOf, universeSize, listing = []) {
+  if (!missing.length && !changed.length && !listing.length) return null;
   const lines = [
     `Checked ${universeSize} Pickers universe symbols on ${asOf}. The resolver (10-K override, then SIC table) could not fully place the ones below.`,
     "",
@@ -144,6 +158,11 @@ export function issueBody({ missing, changed }, asOf, universeSize) {
   if (changed.length) {
     lines.push(`### SIC code changed at SEC (${changed.length})`, "", "| Symbol | Company | SIC was → now | SEC wording | Has now | Suggested (a hint: check it) |", "|---|---|---|---|---|---|");
     for (const r of changed) lines.push(`| ${cell(r.symbol, 12)} | ${cell(r.name, 40)} | ${cell(r.was, 6)} → ${cell(r.now, 6)} | ${cell(r.secDescription, 60)} | ${cell(fmt(r.have), 50)} | ${cell(fmt(r.suggestion), 60)} |`);
+    lines.push("");
+  }
+  if (listing.length) {
+    lines.push(`### Ticker changes (information; no action needed) (${listing.length})`, "", "Made automatically by the daily delisting sweep: a rename keeps the company (same SEC CIK) under its new ticker; a delisting leaves the universe. Lines marked \"check by hand\" were not decided automatically.", "");
+    for (const l of listing.slice(0, MAX_ROWS)) lines.push(`- ${cell(l, 200)}`);
     lines.push("");
   }
   lines.push("_Generated daily by the Classification needed helper (Relay B)._");

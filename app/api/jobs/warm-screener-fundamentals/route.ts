@@ -26,8 +26,19 @@ import {
   EVICTION_MIN_FAIL_STREAK,
   EVICTION_STALE_BAR_WEEKDAYS,
 } from "../../../../lib/server/symbolEviction";
-import { resolveTickerMap } from "../../../../lib/server/secTickerMap";
-import { secUnlistedSymbols } from "../../../../lib/server/secListing";
+import { loadTickerMap, resolveTickerMap } from "../../../../lib/server/secTickerMap";
+import {
+  describeChange,
+  planListingChanges,
+  readLastSeenCiks,
+  recordListingChanges,
+  secUnlistedSymbols,
+  tickersByCik,
+  writeLastSeenCiks,
+} from "../../../../lib/server/secListing";
+import { addToDynamicUniverse, readUniverseScores } from "../../../../lib/server/dynamicUniverseCache";
+import { registrantFor } from "../../../../lib/server/stockProfile";
+import { lookupBySpelling } from "../../../../lib/symbolSpellings.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -154,6 +165,11 @@ export async function GET(req: NextRequest) {
     // THE FOURTH SIGNAL (secListing.ts): absent from SEC's live ticker file.
     // Its own skip reason, because it runs when the three above cannot.
     secUnlisted: [] as string[],
+    // RENAMES FOLLOWED BY CIK (#553 COWORK #22), and the cases a person should
+    // look at (no CIK, no single successor, successor already in the universe,
+    // a rename over the per-run cap).
+    secRenamed: [] as string[],
+    secFlagged: [] as string[],
     evictedBySecListing: 0,
     tombstonedBySecListing: 0,
     secSkipped: null as string | null,
@@ -383,22 +399,25 @@ export async function GET(req: NextRequest) {
   // (one GET), and the universe -- reused when the pass above read it.
   //
   // Same preset gate, same eviction, same deregistration as the other routes.
-  // A rename is evicted like a delisting: the successor ticker (BNY for BK)
-  // cannot be derived from committed data, so the log names every symbol for a
-  // person to check.
+  // A RENAME IS FOLLOWED BY CIK (#553 COWORK #22, secListing.planListingChanges):
+  // a CIK SEC still lists under exactly one other ticker is a rename -- the
+  // successor takes the old ticker's universe score, the old one is evicted.
+  // A CIK SEC no longer lists is a delisting or merger and is evicted as before.
+  // Anything it will not decide (no CIK, no single successor, successor already
+  // in the universe, over the per-run cap) is evicted or left, and FLAGGED.
   try {
     const universe =
       sweepUniverse ??
       (await getWarmTargetSymbols(process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com")).symbols;
-    const verdict = secUnlistedSymbols(universe, await resolveTickerMap());
+    const live = await resolveTickerMap();
+    const verdict = secUnlistedSymbols(universe, live);
     sweep.secSkipped = verdict.skipped;
     const already = new Set([...sweep.evicted, ...sweep.presetHandEdit]);
-    const secEvicted: string[] = [];
+    const todo: string[] = [];
     for (const symbol of verdict.unlisted) {
       sweep.secUnlisted.push(symbol);
       if (already.has(symbol)) continue;
-      const action = secListingEvictionAction(symbol, true);
-      if (action === "hand-edit") {
+      if (secListingEvictionAction(symbol, true) === "hand-edit") {
         sweep.presetHandEdit.push(symbol);
         if (await claimPresetHandEditAlarm(symbol)) {
           console.error(
@@ -410,22 +429,58 @@ export async function GET(req: NextRequest) {
         }
         continue;
       }
-      if (action === "evict") {
+      todo.push(symbol);
+    }
+
+    if (todo.length) {
+      // THE OLD TICKER'S CIK: committed registrants, the committed ticker
+      // file, then the last-seen snapshot this pass writes below. SEC's data
+      // throughout; one HMGET, only on a day something is unlisted.
+      const lastSeen = await readLastSeenCiks(todo);
+      const committed = loadTickerMap();
+      const cikOf = (s: string) =>
+        registrantFor(s)?.cik ?? lookupBySpelling(committed.map, s)?.value?.cik ?? lastSeen.get(s) ?? null;
+      const changes = planListingChanges(todo, { cikOf, byCik: tickersByCik(live.map), universe });
+      const renames = changes.flatMap((c) => (c.kind === "rename" ? [c] : []));
+      const scores = await readUniverseScores(renames.map((c) => c.from));
+      const secEvicted: string[] = [];
+      for (const c of changes) {
+        if (c.kind === "deferred") {
+          sweep.secFlagged.push(describeChange(c));
+          continue;
+        }
+        if (c.kind === "rename") {
+          // The successor FIRST: if the add fails, the old ticker stays and
+          // tomorrow's run tries again, rather than losing both.
+          await addToDynamicUniverse([c.to], "market", Math.max(1, scores.get(c.from) ?? 0));
+          sweep.secRenamed.push(`${c.from}->${c.to}`);
+        } else if (c.why !== "cik-gone") {
+          sweep.secFlagged.push(describeChange(c));
+        }
+        const symbol = c.kind === "rename" ? c.from : c.symbol;
         const evicted = await evictSymbol(symbol);
         sweep.evicted.push(symbol);
         sweep.evictedBySecListing++;
         if (evicted.tombstoned) sweep.tombstonedBySecListing++;
         secEvicted.push(symbol);
       }
+      if (secEvicted.length) await deregisterSymbols(secEvicted);
+      const lines = changes.map(describeChange);
+      if (lines.length) {
+        console.warn(`[screener-fundamentals] SEC listing changes: ${lines.join(" | ")}`);
+        await recordListingChanges(lines);
+      }
     }
-    if (secEvicted.length) {
-      await deregisterSymbols(secEvicted);
-      console.warn(
-        `[screener-fundamentals] evicted ${secEvicted.length} symbol(s) SEC's ticker ` +
-          `file no longer lists: ${secEvicted.join(", ")}. A RENAME looks the same ` +
-          `as a delisting here -- check each for a successor ticker (same CIK) and ` +
-          `add it to the universe by hand.`
-      );
+
+    // THE LAST-SEEN SNAPSHOT, written AFTER planning so today's absences are
+    // read against yesterday's CIKs. Only from a map the pass trusted.
+    if (verdict.skipped === null) {
+      const pairs: Record<string, string> = {};
+      for (const s of universe) {
+        const cik = lookupBySpelling(live.map, s)?.value?.cik;
+        if (cik) pairs[s] = cik;
+      }
+      await writeLastSeenCiks(pairs);
     }
   } catch (error) {
     sweep.secSkipped = "sec-sweep-threw";
@@ -485,6 +540,8 @@ export async function GET(req: NextRequest) {
     // THE FOURTH SIGNAL, named rather than counted: every symbol here is a
     // delisting OR a rename, and only a person can tell which.
     secUnlisted: sweep.secUnlisted.join(", ") || null,
+    secRenamed: sweep.secRenamed.join(", ") || null,
+    secFlagged: sweep.secFlagged.join(" | ") || null,
     evictedBySecListing: sweep.evictedBySecListing,
     tombstonedBySecListing: sweep.tombstonedBySecListing,
     secSweepSkipped: sweep.secSkipped,
