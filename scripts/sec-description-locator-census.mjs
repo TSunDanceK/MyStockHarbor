@@ -20,7 +20,7 @@ execSync("git fetch --quiet --depth=1 origin main", { stdio: "inherit" });
 const BASE = execSync("git show FETCH_HEAD:lib/server/secDescription.ts", { encoding: "utf8", maxBuffer: 16 << 20 });
 if (BASE === fs.readFileSync("lib/server/secDescription.ts", "utf8")) throw new Error("the branch's locator is main's: nothing to compare");
 const NEW = await lift(SRC);
-const OLD = await lift(stripComments(BASE));
+const OLD = await lift(stripComments(BASE, { file: "lib/server/secDescription.ts" }));
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const only = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 const mine = only.length ? only : Object.keys(REG).sort().filter((s, i) => i % N === K - 1 && REG[s]?.cik && /^10-K/.test(REG[s]?.annualForm ?? ""));
