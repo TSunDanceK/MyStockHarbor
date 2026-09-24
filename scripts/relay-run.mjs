@@ -1110,6 +1110,9 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
+  // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
+  "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },
   "capex-usa-small": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "usa", USA_PAGES: "10", USA_DETAIL: "200", FETCH_TIMEOUT_MS: "45000" } },
   // A REAL WRITE (Relay B, Pickers PR): seeds msh:pickers:sec-fundamentals:v1
   // once so the PR preview shows the filings figures. A key nothing on main
