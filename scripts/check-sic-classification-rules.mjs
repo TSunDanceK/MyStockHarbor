@@ -106,6 +106,25 @@ check("table: 5912 drug stores → Healthcare; 2842 cleaning preparations → Ho
   check("MUTATION: any period is a stop → the quote starts mid-number", !run(M, CASES).JJJ?.quote.startsWith("Since 2007"));
 }
 
+console.log("\n8. hand-reviewed entries (#552 COWORK #29): cited from the filer's own text or refused");
+{
+  const reg = { AAA: { sic: "7370" } };
+  const desc = { AAA: ["10-K", "2026-02-01", "0000000000-26-000009", "Acme runs Google Services and Google Cloud for everyone. We sell ads."] };
+  const withManual = (M, manual) => M.buildOverrides({ registrants: reg, table, rules, descriptions: desc, manual });
+  const ok = withManual(B, { AAA: { industry: "Internet Content & Information", phrase: "google services and google cloud" } }).overrides.AAA;
+  check("a phrase in the text places the name; quote, form and accession come from the text",
+    ok?.industry === "Internet Content & Information" && ok.sector === "Communication Services" && ok.quote.startsWith("Acme runs Google Services") &&
+      ok.accession === "0000000000-26-000009" && /reviewed/.test(ok.basis), JSON.stringify(ok));
+  const throws = (fn) => { try { fn(); return false; } catch { return true; } };
+  check("a phrase NOT in the text fails the build", throws(() => withManual(B, { AAA: { industry: "Software - Application", phrase: "cloud platform" } })));
+  check("an unknown label fails the build", throws(() => withManual(B, { AAA: { industry: "Search Engines", phrase: "Google Services" } })));
+  check("a name with no stored text fails the build", throws(() => withManual(B, { ZZZ: { industry: "Software - Application", phrase: "x" } })));
+  const M = await load(SRC.replace("if (!m.phrase || at < 0) throw", "if (false) throw"));
+  check("MUTATION: phrase check removed → an uncited placement ships", !throws(() => withManual(M, { AAA: { industry: "Software - Application", phrase: "cloud platform" } })));
+  const manual = read("data/sec/classification-manual.json").entries;
+  check("every committed entry uses a label from the fixed list", Object.values(manual).every((m) => table.labels[m.industry]));
+}
+
 console.log("\n6. the committed file is current");
 check("classification-overrides.json matches the rules",
   (() => { try { execFileSync("node", ["scripts/build-sic-classification.mjs", "--check"], { stdio: "pipe" }); return true; } catch { return false; } })());
