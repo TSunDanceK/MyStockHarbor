@@ -646,6 +646,9 @@ const TASKS = {
   // READS ONLY: fact sets with no years / unlabelled quarters (XOM's shape),
   // and companyfacts + the shipped extractor for XOM and a few more
   // (#552 COWORK #28). ~35 commands.
+  // Read-only, no credential: EDGAR submissions for successor:predecessor
+  // CIK pairs, to cite a holding-company succession (#552 COWORK #28).
+  "sec-succession": { script: "scripts/sec-succession-probe.mjs", args: (env) => [env.SYMBOLS || "2115436:34088"] },
   "write-sec-sparse-sets": {
     script: "scripts/sec-sparse-sets-probe.mjs",
     args: () => [],
