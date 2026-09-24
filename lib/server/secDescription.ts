@@ -87,7 +87,15 @@ function lines(text: string): Line[] {
 
 const ITEM1 = /^item1(business(es)?(description|overview)?)?$/;
 const BUSINESS = /^business(es)?(description|overview)?$/;
-const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)$/;
+// A TABLE OF CONTENTS PRINTS THE PAGE ON THE SAME LINE: ABBV's reads
+// "Item 1A. RISK FACTORS 14". Without the trailing page number that line was no
+// end, so the TOC's "Item 1. Business" paired with the REAL Item 1A far below,
+// the "section" opened with the rest of the TOC, and the page showed a stray
+// Skyrizi dosing line as AbbVie's description (#552 COWORK #38). A heading line
+// never ends in a page number, so allowing one on an END cannot end a real
+// section early; it only lets the TOC pair close, and the TOC pair is then
+// too short to be a section and is skipped, as designed.
+const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descriptionof)?properties)?)(\d{1,3})?$/;
 
 // ── 20-F: ITEM 4 "INFORMATION ON THE COMPANY" → 4.B "BUSINESS OVERVIEW" ────
 //
