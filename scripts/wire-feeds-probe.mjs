@@ -120,7 +120,11 @@ for (const [name, group, url] of FEEDS) {
   // Verbatim items are held back and printed AFTER the summary: the job log is
   // read from the tail, and a release description is long enough to push the
   // numbers out of reach.
-  if (group === "wire") verbatim.push([name, blocks.slice(0, 8)]);
+  // The headline feeds are captured too (2026-09-23): /headlines moves onto
+  // MarketWatch + CNBC + the wires (spec §4), and their adapter needs verbatim
+  // fixtures the same way the wire adapter did. One payload per dispatch still
+  // applies -- `symbols` picks which of the four is printed.
+  verbatim.push([name, blocks.slice(0, group === "wire" ? 8 : 12)]);
 }
 
 console.log("\n================ SUMMARY");
