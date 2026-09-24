@@ -117,7 +117,7 @@ export default async function CapexPage() {
               </p>
               <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
                 {contractRows.map((r) => (
-                  <div key={r.ticker} className="capexRow" style={rowStyle} title={`${r.company}: ${r.amount} across ${r.entities.length} recipient record${r.entities.length === 1 ? "" : "s"}`}>
+                  <div key={r.ticker} className="capexRow" style={rowStyle} title={`${r.company}: ${r.amount} across ${r.records} recipient record${r.records === 1 ? "" : "s"}`}>
                     <div style={{ minWidth: 0 }}>
                       <div style={rowHeadStyle}>
                         <span style={tickerStyle}>{r.company}</span>
@@ -126,7 +126,7 @@ export default async function CapexPage() {
                       <details style={detailsStyle}>
                         <summary style={summaryStyle}>
                           Paid to: {r.entities[0]}
-                          {r.entities.length > 1 ? `, … (${r.entities.length} entities)` : ""}
+                          {r.entities.length > 1 ? `, … (${r.entities.length} names)` : ""}
                         </summary>
                         <ul style={entityListStyle}>
                           {r.entities.map((name) => (
