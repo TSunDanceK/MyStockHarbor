@@ -628,6 +628,13 @@ const TASKS = {
     args: () => [],
     writes: true,
   },
+  // READS ONLY: how many Pickers names a multi-class market-cap rule could
+  // recover (#552 COWORK #26). SEC values only; ~30 commands.
+  "write-multiclass-cap-census": {
+    script: "scripts/multiclass-cap-census.mjs",
+    args: () => [],
+    writes: true,
+  },
   "write-results-days-status": {
     script: "scripts/results-days-status.mjs",
     args: () => [],
@@ -1127,10 +1134,13 @@ if (spec.needsTypescript) {
   }
 }
 
-if (spec.needsDump && !process.env.DUMP_DIR) {
+// RETIRED 2026-09-24 (#552 COWORK #23): the Step 0 dump was FMP data, is
+// deleted, and relay.yml no longer downloads it. A task still marked needsDump
+// is refused outright rather than run against nothing.
+if (spec.needsDump) {
   console.error(
-    `FATAL: "${task}" reads the frozen dump but DUMP_DIR is empty — the download ` +
-      `or locate step did not run. Dispatch with a run_id.`
+    `FATAL: "${task}" reads the Step 0 FMP dump, which is deleted. Dump-reading ` +
+      `relay tasks are retired (#552); no relay task may depend on it.`
   );
   process.exit(2);
 }
