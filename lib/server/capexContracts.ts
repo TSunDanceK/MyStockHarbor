@@ -6,8 +6,9 @@
 // work; API code CC0). Displayed with attribution; recipient names come from
 // SAM.gov registrations.
 //
-// REDIS: one key. The weekly job does 1 SET (+ the job-run stamp); the page
-// does 1 GET per hourly render. About 25 commands a day, ~6 KB stored.
+// REDIS: one key. The job (daily cron, weekly rebuild) does 1 GET a day and 1
+// SET a week (+ the job-run stamp); the page does 1 GET per hourly render.
+// About 26 commands a day, ~6 KB stored.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { ContractsRecord } from "./capexContractsCore";
