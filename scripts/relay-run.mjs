@@ -1262,6 +1262,11 @@ const TASKS = {
   "capex-links-probe-11": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "11/12" } },
   "capex-links-probe-12": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "12/12" } },
   "capex-links-probe-named": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true },
+  // The same universe under RULES=v2 (the three rules CODE-C #18 measured in-sample).
+  "capex-links-probe-v2-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "1/4" } },
+  "capex-links-probe-v2-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "2/4" } },
+  "capex-links-probe-v2-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "3/4" } },
+  "capex-links-probe-v2-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "4/4" } },
 };
 
 const argv = process.argv.slice(2);

@@ -37,6 +37,9 @@ import { grabFunction, lift } from "./lib/earnings-plan.mjs";
 const UA =
   process.env.SEC_USER_AGENT ?? "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; capex links probe)";
 const SELFTEST = process.env.SELFTEST === "1";
+// RULES=v2 adds the three rules measured in CODE-C #18 (in-sample on the v1
+// hand-check sample); v1 (the default) is the extractor the gate measured.
+const V2 = (process.env.RULES || "v1") === "v2";
 
 // ── A's modules ─────────────────────────────────────────────────────────────
 const tickerSrc = readCodeOnly("lib/server/secTickerMap.ts");
@@ -182,6 +185,14 @@ function partiesIn(span, self) {
       // one common-looking word ("Materion" fine, "Ameren" fine; "Energy" not):
       // single-token names need a suffix or an internal capital / all caps
       if (single && !hasSuffix && !/[A-Z].*[A-Z]/.test(text) && n.length < 5) continue;
+      if (V2 && !hasSuffix) {
+        // R1a: a short acronym (GDS, DSS, DoW, API) is a registrant only with a suffix
+        if (single && text.replace(/\.$/, "").length <= 4 && /[A-Z].*[A-Z]/.test(text)) continue;
+        // R1b: a name inside a longer proper noun ("Information Technology Strategy
+        // Committee", "Danver Outdoor Kitchens", "Antofagasta Minerals") is not that registrant
+        const before = span.slice(0, start), rest = span.slice(last.index + last[0].length);
+        if (/[A-Z][A-Za-z&'-]*\s$/.test(before) || /^\s[A-Z][A-Za-z]/.test(rest)) continue;
+      }
       push(text, hit.cik, hit.ticker, "listed-name");
       i += len - 1;
       break;
@@ -219,21 +230,40 @@ const PATTERNS = [
   { role: "customer", rule: "we-sell-to", re: new RegExp(`\\bwe\\s+(?:\\w+\\s+){0,2}?(?:sell|sells|sold|supply|supplies|supplied|ship|ships|shipped|deliver|delivers|delivered)\\s+(?:[\\w,-]+\\s+){0,8}?to\\s+${SPAN_END}`, "i") },
 ];
 
+// R2 (v2): platforms, marketplaces and partnerships are named, but they are not
+// a supplier or customer of the filer ("the Apple App Store", "hyperscalers
+// such as AWS", "integrates with ...").
+const MENTION_ONLY = /\b(App Store|Google Play|app stores?|marketplaces?|browsers?|ecosystems?|integrat\w*|partnerships?|partnering|partnered|Infrastructure-as-a-Service|IaaS)\b/i;
 function extract(sentence, self, drops) {
   for (const [k, re] of Object.entries(DROPS)) if (re.test(sentence)) { drops[k] = (drops[k] ?? 0) + 1; return []; }
+  if (V2 && MENTION_ONLY.test(sentence)) { drops.mentionOnly = (drops.mentionOnly ?? 0) + 1; return []; }
   const links = [];
   const seen = new Set();
   for (const p of PATTERNS) {
-    const m = sentence.match(p.re);
-    if (!m) continue;
+    // v2 reads every occurrence; the span is a lookahead so one match cannot
+    // swallow the next ("made by Airbus or Boeing ... made by Bombardier or Embraer")
+    const ms = V2
+      ? [...sentence.matchAll(new RegExp(p.re.source.replace(SPAN_END, `(?=${SPAN_END})`), p.re.flags.replace("g", "") + "g"))]
+      : [sentence.match(p.re)].filter(Boolean);
+    for (const m of ms) {
     // "such as X, Y and Z": the span is the list up to the clause end
     let span = m[1];
     if (/customers-such-as|suppliers-such-as|our-/.test(p.rule)) span = span.split(/\b(?:and other|among others|as well as|, which|, who)\b/)[0];
+    if (V2) {
+      // R3a: "supplied by distributors ... are Apple, ..." -- the party must be
+      // the agent of the verb, not the subject of a later clause
+      if (p.rule === "made-by") span = span.split(/\b(?:are|is|were|was|include[sd]?)\b/)[0];
+      // R3b: "X is a vehicle manufacturer" describes X; only "our ..." relates it
+      if (/^x-is-/.test(p.rule) && !/\b(our|one of our)\s/.test(m[0].slice(m[1].length))) continue;
+      // R3c: selling royalties, rights, stakes or assets is a transaction, not a customer
+      if (p.rule === "we-sell-to" && /\b(sold|sell|sells)\s+(?:\w+\s+){0,3}?(royalt\w*|rights?|interests?|stakes?|assets?|shares|business|portion|licen[cs]es?)\b/i.test(`${m[0]}${m[1] ?? ""}`)) continue;
+    }
     for (const party of partiesIn(span, self)) {
       const key = party.cik ? `c${party.cik}` : party.name.toUpperCase();
       if (seen.has(`${p.role}:${key}`)) continue;
       seen.add(`${p.role}:${key}`);
       links.push({ role: p.role, rule: p.rule, ...party });
+    }
     }
   }
   // a party found under both roles in one sentence is ambiguous: keep neither
@@ -294,6 +324,21 @@ if (SELFTEST) {
   }
   console.log(`selftest ${cases.length - bad}/${cases.length}`);
   process.exit(bad ? 1 : 0);
+}
+
+// ── EVAL=file: re-run the extractor on hand-checked sample sentences, no network.
+// Each sampled link is "kept" when this rule set still extracts that party, in
+// that role, from its filed sentence.
+if (process.env.EVAL) {
+  const sample = JSON.parse(fs.readFileSync(process.env.EVAL, "utf8"));
+  for (const [k, l] of sample.entries()) {
+    const self = { cik: l.filerCik, norms: new Set([normName(names.gridCompanyName(l.filer))].filter(Boolean)) };
+    const got = extract(l.quote, self, {});
+    const key = (x) => (x.cik ? `c${x.cik}` : x.name.toUpperCase());
+    const kept = got.some((x) => x.role === l.role && key(x) === (l.partyCik ? `c${l.partyCik}` : l.party.toUpperCase()));
+    console.log(`EVAL ${JSON.stringify({ k: k + 1, kept })}`);
+  }
+  process.exit(0);
 }
 
 // ── fetch ───────────────────────────────────────────────────────────────────
