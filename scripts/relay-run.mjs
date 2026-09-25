@@ -658,6 +658,8 @@ const TASKS = {
   // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
   // traded unit and every refusal, from the stored sets. No price. 1 MGET.
   "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Non-USD sets still refusing periods for want of a rate (#552 COWORK #51). Reads only; ~10 MGETs.
+  "write-fx-refused-census": { script: "scripts/fx-refused-census.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
