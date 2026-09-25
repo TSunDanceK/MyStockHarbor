@@ -958,6 +958,19 @@ check("the run logs one line whatever happens",
   /console\.log\("\[sec-facts\]"/.test(jobRaw));
 check("a content-hash move with no filing event is logged as a silent restatement",
   /SILENT RESTATEMENT/.test(jobRaw));
+// AN OFF-MANIFEST SYMBOL HAS NO ENTRY (#552 COWORK #56, TSM): inside the facts
+// loop, every read of `entry` before its `if (entry)` block must be guarded.
+// TSM's re-read threw "reading 'needsReverify'" on the restatement line.
+const entryUnguarded = (src) => {
+  const from = src.indexOf("const entry = manifest.symbols[symbol];");
+  const to = src.indexOf("if (entry) {", from);
+  const body = src.slice(from, to).replace(/\/\/.*$/gm, "");
+  return from < 0 || to < 0 ? ["loop not found"] : [...body.matchAll(/\bentry\.(\w+)/g)].map((m) => m[0]);
+};
+check("an off-manifest symbol reads its entry only through entry?. before `if (entry)` (TSM)",
+  entryUnguarded(jobRaw).length === 0, entryUnguarded(jobRaw).join(" "));
+check("...and CATCHES the restatement line's `entry.needsReverify` restored",
+  entryUnguarded(jobRaw.replace("!entry?.needsReverify", "!entry.needsReverify")).includes("entry.needsReverify"));
 check("it is registered as a cron",
   JSON.parse(fs.readFileSync("vercel.json", "utf8")).crons.some((c) => c.path === "/api/jobs/sec-facts"));
 
