@@ -1256,6 +1256,9 @@ const TASKS = {
   // One-time, after the poolField change deploys. 4-5 commands.
   "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
   "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
   // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
   // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
   // Candidates for review only; nothing is published unreviewed. Redis 0.
