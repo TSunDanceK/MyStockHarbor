@@ -126,3 +126,29 @@ export async function toStoredSet(
   return encodeFactSet(result, { conversion, reported: extracted });
 }
 
+
+/**
+ * A PERIOD THAT HAD NO RATE NOW HAS ONE (#552 COWORK #50, CHT).
+ *
+ * contentHash is taken on the REPORTED figures, deliberately: a rate revision
+ * is not the filer restating, and the historical conversion must not move on
+ * a re-read. The cost is that the job's `changed` test cannot see a set whose
+ * conversion became POSSIBLE. CHT converted through ECB's TWD leg, which ends
+ * 2020-10-30, so ten periods were refused ("no exchange rate on file"); once
+ * FRED's DEXTAUS was added, the re-read built all of them and wrote nothing,
+ * because the reported figures had not moved.
+ *
+ * So a rewrite is also warranted when a period the stored set REFUSED is
+ * converted in the fresh one. Narrow on purpose: a rate that merely differs
+ * for an already-converted period is not a reason, so stored rates stay put.
+ */
+export function conversionGained(
+  prior: Pick<StoredFactSet, "fx"> | null | undefined,
+  fresh: Pick<StoredFactSet, "fx" | "quarters" | "years" | "instants">
+): boolean {
+  const before = prior?.fx?.refused ?? [];
+  if (!before.length || !fresh.fx) return false;
+  const stillRefused = new Set(fresh.fx.refused);
+  const present = new Set([...fresh.quarters, ...fresh.years, ...fresh.instants].map((p) => p.e));
+  return before.some((end) => !stillRefused.has(end) && present.has(end));
+}
