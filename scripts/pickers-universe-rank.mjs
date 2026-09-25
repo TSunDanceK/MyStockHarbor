@@ -6,6 +6,7 @@
 //   Redis cost: 1 GET + 1 HKEYS-free HMGET per 100 + 1 MGET per 25 ≈ 36 commands.
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
+import { toDashed } from "../lib/symbolSpellings.mjs";
 
 const redis = Redis.fromEnv();
 let commands = 0;
@@ -18,8 +19,8 @@ const price = new Map(), shares = new Map();
 for (let i = 0; i < u.length; i += 100) {
   const chunk = u.slice(i, i + 100);
   commands++;
-  const rows = await redis.hmget("msh:price-pool:v1", ...chunk);
-  chunk.forEach((s, j) => { const p = Array.isArray(rows) ? rows[j] : rows?.[s]; if (typeof p?.price === "number") price.set(s, p.price); });
+  const rows = await redis.hmget("msh:price-pool:v1", ...chunk.map(toDashed)); // pool fields are dashed (pricePool.poolField)
+  chunk.forEach((s, j) => { const p = Array.isArray(rows) ? rows[j] : rows?.[toDashed(s)]; if (typeof p?.price === "number") price.set(s, p.price); });
 }
 for (let i = 0; i < u.length; i += 25) {
   const chunk = u.slice(i, i + 25);
