@@ -1,3 +1,4 @@
+import fs from "node:fs";
 // IS FRED'S DEXTAUS CURRENT, WHICH WAY DOES IT POINT, AND WHAT HAS CHT BEEN
 // CONVERTED WITH? (#535 COWORK #22 §0, #552 queue item 5)
 //
@@ -16,7 +17,9 @@
 //
 // Read-only and uncredentialled: it touches no store. It prints public
 // reference rates only, never a price.
-const UA = process.env.SEC_USER_AGENT || "MyStockHarbor fx probe";
+const UA =
+  process.env.SEC_USER_AGENT ||
+  "MyStockHarbor/1.0 (sonnybrindle@mystockharbor.com; twd rate probe)";
 const from = "2019-01-01";
 const to = new Date().toISOString().slice(0, 10);
 
@@ -113,13 +116,9 @@ if (both.length) {
 console.log("\n" + "=".repeat(74));
 console.log("5. companyfacts money units by period end (TSM, CHT)");
 console.log("=".repeat(74));
-const tick = await get("https://www.sec.gov/files/company_tickers.json", "application/json");
-let cikOf = () => null;
-try {
-  const rows = Object.values(JSON.parse(tick.body ?? "{}"));
-  const m = new Map(rows.map((r) => [String(r.ticker).toUpperCase(), String(r.cik_str).padStart(10, "0")]));
-  cikOf = (s) => m.get(s) ?? null;
-} catch { console.log(`ticker file unreadable (status ${tick.status})`); }
+// CIKs from the repo's own map: the SEC ticker file answered 403 on the runner.
+const cikMap = JSON.parse(fs.readFileSync("data/cik-map.json", "utf8"));
+const cikOf = (s) => (cikMap[s] ? String(cikMap[s]).padStart(10, "0") : null);
 for (const sym of ["TSM", "CHT"]) {
   const cik = cikOf(sym);
   if (!cik) { console.log(`${sym}: no CIK`); continue; }
