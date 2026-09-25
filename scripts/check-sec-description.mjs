@@ -109,8 +109,25 @@ console.log("\n2. 20-F: Item 4, then its Business Overview");
   const br = D.locateSection(bipReal, "20-F");
   check("Item 4 ends at Item 6 when the body has no 4A/5 heading, so a 4.B past a long 4.A is found (BIP)",
     br.found && br.body.startsWith("Our Operations"), br.found ? br.body.slice(0, 40) : br.why);
-  const noSix = await load(once("const ITEM4_END = /^item(4a|5|6|7)[a-z]*$/;", "const ITEM4_END = /^item(4a|5)[a-z]*$/;"));
+  const noSix = await load(once("else if (open && shortKey(i, ITEM4_LATE_END))", "else if (false)"));
   check("...and CATCHES Item 6 removed as an end (BIP back to 'no Business Overview heading')", !noSix.locateSection(bipReal, "20-F").found);
+  // TK (branch regression, 201 of 210): the TOC lists 4, 4A, 5, 6, 7 with sub-entries,
+  // so TOC "Item 4" to TOC "Item 7" is past 1,500 chars. With 6/7 as ends
+  // unconditionally that TOC run won, and the body's Business Overview was never read.
+  const tocLong = ["Item 4. Information on the Company", "24", "A. History and Development", "25", "B. Business Overview", "25",
+    "Item 4A. Unresolved Staff Comments", "41", "Item 5. Operating and Financial Review and Prospects", "42",
+    ...Array.from({ length: 40 }, (_, k) => `Sub-entry number ${k} of the table of contents`),
+    "Item 6. Directors, Senior Management and Employees", "60", "Item 7. Major Shareholders and Related Party Transactions", "70"];
+  const tk = [...tocLong, "Item 4. Information on the Company", "A. History and Development", filler("History"), "B. Business Overview",
+    "Teekay Tankers owns and operates a fleet of crude oil tankers. " + filler("TK"), "C. Organizational Structure", filler("Org"),
+    "Item 4A. Unresolved Staff Comments", "none", "Item 5. Operating and Financial Review and Prospects", filler("MDA"),
+    "Item 6. Directors, Senior Management and Employees", filler("Dir")].join("\n");
+  check("the TOC's own 'Item 4 … Item 7' run is not taken as Item 4 (TK)", tocLong.slice(0, -4).join("\n").length >= 1500
+    && (() => { const t = D.locateSection(tk, "20-F"); return t.found && t.body.startsWith("Teekay Tankers"); })());
+  const always = await load(once("else if (open && shortKey(i, ITEM4_LATE_END))", "else if (shortKey(i, ITEM4_LATE_END))"));
+  const tkBad = always.locateSection(tk, "20-F");
+  check("...and CATCHES Item 6/7 as ends even after a 4A/5 (TK's TOC run wins again)", !tkBad.found || !tkBad.body.startsWith("Teekay Tankers"),
+    tkBad.found ? tkBad.body.slice(0, 40) : tkBad.why);
   const noFour = await load(once("const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;", "const ITEM4B_ANY = /^(item4)?b?businessoverview$/;"));
   check("...and CATCHES the '4' prefix removed (BIP back to 'no Business Overview heading')", !noFour.locateSection(bip, "20-F").found);
   check("40-F has no description", !D.locateSection("x", "40-F").found);
