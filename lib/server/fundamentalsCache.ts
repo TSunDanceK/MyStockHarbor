@@ -10,7 +10,7 @@
 import { Redis } from "@upstash/redis";
 import { readPricePoolBulk } from "./pricePool";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
-import { claimStalest, markRefreshed, registerSymbols } from "./stalenessQueue";
+import { claimStalest, deferSymbol, markRefreshed, readDeferred, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 import { resolveProfileBulk } from "./staticProfile";
@@ -110,6 +110,8 @@ const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
 // than silently reinstating the old per-symbol rotation. If poolMisses exceeds
 // this the run says so on its record instead of quietly spending the universe.
 const QUOTE_FALLBACK_MAX_PER_RUN = 100;
+/** A fallback quote that came back empty is not retried for this long (#553 COWORK #51 item 3). */
+export const QUOTE_FALLBACK_FAILURE_DEFER_SECONDS = 24 * 60 * 60;
 // ─────────────────────────────────────────────────────────────────────────────
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings warmers
 
@@ -571,11 +573,20 @@ export async function warmFundamentals(symbols: string[]) {
     }
   }
   const poolHits = quoteMap.size;
-  const fallbackOrder = poolMisses.slice(0, QUOTE_FALLBACK_MAX_PER_RUN);
+  // FAILURE MEMORY (#553 COWORK #51 item 3; CODE-B #39): a pool miss whose FMP
+  // fallback came back empty used to be retried every hour, forever. Such a
+  // symbol is now deferred for a day, and deferred symbols are skipped here.
+  // One ZRANGE a run; one ZADD per failing symbol, at most once a day each.
+  const deferredMisses = await readDeferred("fundamentals");
+  const retryable = poolMisses.filter((s) => !deferredMisses.has(s));
+  const fallbackOrder = retryable.slice(0, QUOTE_FALLBACK_MAX_PER_RUN);
   const fallbackDeferred = poolMisses.length - fallbackOrder.length;
 
   const { quotes: fetchedQuotes, consumed: quotesConsumed, batchQuoteAvailable } =
     await fetchQuoteFundamentals(fallbackOrder, apiKey, wait);
+  for (const sym of fallbackOrder.slice(0, quotesConsumed)) {
+    if (!fetchedQuotes.has(sym)) await deferSymbol("fundamentals", sym, QUOTE_FALLBACK_FAILURE_DEFER_SECONDS);
+  }
   // Fetched wins over pooled for the same symbol -- it cannot happen today
   // (only misses are fetched) but a future edit that widens the fallback should
   // not silently prefer the older value.

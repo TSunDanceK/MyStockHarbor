@@ -40,6 +40,10 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE CURRENCY VOTE (#552 COWORK #50/#55): ties on fields and rules (a)/(b)/(c),
+  // against the SHIPPED reportingCurrency. ALL=1 widens to every registrant.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
+  "currency-vote-census-all": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true, env: { ALL: "1" } },
   // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
   // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
@@ -185,6 +189,8 @@ const TASKS = {
   "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
   // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
   "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
+  // Item 4's sub-headings, read from the filing (#552 COWORK #48). Read-only.
+  "sec-description-heads": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { HEADS: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
   // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
@@ -1253,6 +1259,13 @@ const TASKS = {
   // The universe it checks (price pool + Pickers), as tickers only.
   // Read-only; HKEYS + GET = 2 Redis commands.
   "write-universe-tickers": { script: "scripts/universe-tickers.mjs", args: () => [], writes: true },
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
 };
 
 const argv = process.argv.slice(2);

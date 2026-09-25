@@ -76,6 +76,24 @@ async function suite(M, sources) {
   ok("an empty list with no issue does nothing", M.issueAction(null, null).kind === "none");
   ok("rows and no issue create one; a changed body updates it", M.issueAction(null, "b").kind === "create" && M.issueAction({ body: "a" }, "b").kind === "update" && M.issueAction({ body: "b" }, "b").kind === "none");
 
+  // POSSIBLE SUCCESSIONS (#553 COWORK #44): shown as flags, never linked.
+  const FLAGS = {
+    XOM: { symbol: "XOM", successorCik: "0002115436", successorName: "ExxonMobil Holdings Corp", predecessorCik: "0000034088", predecessorName: "EXXON MOBIL CORP", eightK12b: "2026-07-01", nse25: "2026-07-02", seenOn: "2026-07-02" },
+    NEWCO: JSON.stringify({ symbol: "NEWCO", successorCik: "123", successorName: "Newco Holdings Inc (see https://example.com)", predecessorCik: "456", predecessorName: "NEWCO INC", eightK12b: "2026-09-20", nse25: "2026-09-22" }),
+    BAD: { symbol: "BAD" },
+  };
+  const succ = M.successionLines(FLAGS, M.citedPredecessors({ successors: [{ symbol: "XOM", cik: 2115436, predecessorCik: 34088 }] }));
+  ok("a pair already on the cited successor list is not flagged again", !succ.some((l) => l.startsWith("XOM")), JSON.stringify(succ));
+  ok("a flag reads NEW (CIK) ← OLD (CIK) with both filing dates",
+    succ.length === 1 && succ[0] === "NEWCO: possible successor: Newco Holdings Inc (see https://example.com) (CIK 0000000123) ← NEWCO INC (CIK 0000000456), evidence: 8-K12B 2026-09-20, 25-NSE 2026-09-22", JSON.stringify(succ));
+  ok("with nothing cited, every complete flag is shown", M.successionLines(FLAGS).length === 2);
+  const sBody = M.issueBody({ missing: [], changed: [] }, "2026-09-25", 700, [], succ);
+  ok("successions alone keep the issue open, under their own flag-only section",
+    sBody !== null && /### Possible holding-company successions \(flag only; never linked automatically\) \(1\)/.test(sBody) && /- NEWCO: possible successor:/.test(sBody), String(sBody).slice(0, 300));
+  ok("the succession lines carry no links", sBody !== null && !/https?:|www\./i.test(sBody));
+  ok("the runner reads A's flag hash and passes it to the body",
+    /"msh:sec:succession-flags:v1"/.test(sources.runner) && /issueBody\(rows, asOf, universe\.length, listing, succession\)/.test(sources.runner));
+
   ok("the runner never writes the overrides file", !/writeFile|appendFile|createWriteStream/.test(sources.runner) && !/classification-overrides\.json["'`]?\s*,\s*[^)]*\bw/.test(sources.runner));
   ok("the runner refuses to act on an unreadable universe", /is empty or unreadable -- refusing to close the issue on no data/.test(sources.runner));
   ok("the workflow can only write issues", /permissions:\s*\n\s*contents: read\s*\n\s*issues: write/.test(sources.workflow) && !/contents: write|pull-requests: write/.test(sources.workflow));
@@ -102,6 +120,9 @@ const MUTANTS = [
   ["never closes", () => mut("close", src, 'if (body === null) return existing ? { kind: "close" } : { kind: "none" };', 'if (body === null) return { kind: "none" };')],
   ["ties broken by label order", () => mut("tie", src, "if (best && !tied) return", "if (best) return")],
   ["no row cap", () => mut("cap", src, "missing.slice(0, MAX_ROWS)", "missing")],
+  ["cited successions flagged again", () => mut("cited", src, "if (cited.has(padCik(f.predecessorCik))) continue;", "")],
+  ["successions alone close the issue", () => mut("succClose", src, "&& !listing.length && !succession.length) return null;", "&& !listing.length) return null;")],
+  ["succession lines not cleaned", () => mut("succCell", src, "lines.push(`- ${cell(l, 240)}`)", "lines.push(`- ${l}`)")],
 ];
 let survived = 0;
 for (const [label, make] of MUTANTS) {
