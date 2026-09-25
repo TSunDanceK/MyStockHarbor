@@ -210,6 +210,14 @@ const FRED_SERIES: Record<string, { id: string; quote: "usd-per-unit" | "unit-pe
   JPY: { id: "DEXJPUS", quote: "unit-per-usd" },
   CHF: { id: "DEXSZUS", quote: "unit-per-usd" },
   BRL: { id: "DEXBZUS", quote: "unit-per-usd" },
+  // DEXTAUS is NEW TAIWAN DOLLARS to one U.S. DOLLAR (#552, COWORK #22 §0).
+  // MEASURED (relay twd-rate, 2026-09-25): 1,928 daily rows from 2019-01-02 to
+  // 2026-09-18, zero "." placeholders, last value 31.82, so it is TWD per USD.
+  // Without it, TWD fell through to the ECB cross, and ECB's TWD leg ENDS on
+  // 2020-10-30 (469 rows). Every later TWD period (CHT's, and TSM's FY2025)
+  // therefore had no rate. Where both sources existed, they agreed to within
+  // 0.56% (median 0.055%) over 453 days.
+  TWD: { id: "DEXTAUS", quote: "unit-per-usd" },
 };
 
 /**
