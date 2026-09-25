@@ -1272,6 +1272,11 @@ const TASKS = {
   "capex-links-probe-v3-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "2/4" } },
   "capex-links-probe-v3-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "3/4" } },
   "capex-links-probe-v3-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "4/4" } },
+  // RULES=v4, the final pattern round, frozen before its draw (#563 COWORK #18).
+  "capex-links-probe-v4-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "1/4" } },
+  "capex-links-probe-v4-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "2/4" } },
+  "capex-links-probe-v4-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "3/4" } },
+  "capex-links-probe-v4-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "4/4" } },
 };
 
 const argv = process.argv.slice(2);

@@ -40,7 +40,7 @@ const SELFTEST = process.env.SELFTEST === "1";
 // RULES=v2 adds the three rules measured in CODE-C #18 (in-sample on the v1
 // hand-check sample); v1 (the default) is the extractor the gate measured.
 const RULES = process.env.RULES || "v1";
-const V2 = RULES === "v2" || RULES === "v3";
+const V2 = RULES === "v2" || RULES === "v3" || RULES === "v4";
 // RULES=v3 (#563 COWORK #17), FROZEN before the fresh gate sample was drawn:
 //   R1c  a one-word listed name with no suffix is not a party when the same
 //        filing also uses it as a lower-case word ("Founder"/"founder",
@@ -50,7 +50,12 @@ const V2 = RULES === "v2" || RULES === "v3";
 //        include:") are dropped, even when the item itself never says so;
 //   H    hosting/cloud (AWS, Azure, Google Cloud, "host our platform") is tagged
 //        role "hosting" and kept apart from supplier links.
-const V3 = RULES === "v3";
+const V3 = RULES === "v3" || RULES === "v4";
+// RULES=v4 (#563 COWORK #18), the final pattern round, FROZEN before its draw.
+// v3's name, agency, lead-in and hosting rules stay; the patterns are cut to
+// explicit trade statements only (PATTERNS_V4), with more sentence drops
+// (V4_DROPS) and the alias rule A1.
+const V4 = RULES === "v4";
 
 // ── A's modules ─────────────────────────────────────────────────────────────
 const tickerSrc = readCodeOnly("lib/server/secTickerMap.ts");
@@ -160,6 +165,7 @@ const GOV_BODY = /^(?:the\s+)?(DoW|DOW|DoD|DOD|DoE|DOE|DoJ|DOJ|DoT|DOT|DHS|HHS|G
 // R1c (v3) backstop for capitalised common words, when the filing's own
 // lower-case vocabulary is not at hand (the offline EVAL replay).
 const COMMON_CAP = new Set(["FOUNDER", "CO-FOUNDER", "MILLENNIUM", "STRATEGY", "MINERALS", "OUTDOOR", "API", "DSS", "GDS"]);
+const ALIAS_DESCRIPTOR = /^(Inc|Incorporated|Corp|Corporation|Company|Co|Ltd|Limited|LLC|L\.P|plc|PLC|N\.V|S\.A|AG|SE|Holdings?|Group|International|Technologies|Technology|Semiconductor|Manufacturing|Electronics|Micro|Devices|Research|Materials|Platforms|Web|Services|Networks|Systems|Communications|Laboratories|Pharmaceuticals|Motor|Motors|Stores|Brands|Foods|Energy|Industries|Enterprises|Health|Solutions|Instruments|Precision|Products)\.?,?$/;
 // Find named companies inside a text span. Returns [{name, cik, ticker, how}].
 function partiesIn(span, self) {
   const out = [];
@@ -178,6 +184,14 @@ function partiesIn(span, self) {
   for (const m of span.matchAll(ALIAS_RE)) {
     const t = ALIASES[m[1]];
     const cik = t ? Number(tickerMap.get(t)?.cik) || null : null;
+    // A1 (v4): an alias loses to a longer proper name that continues past it
+    // ("Coca-Cola Consolidated", "Coca-Cola Canada Bottling"), unless the next
+    // word only describes the company ("Coca-Cola Company", "Micron Technology").
+    // The longer name is then matched (or not) by the listed-name pass below.
+    if (V4) {
+      const next = span.slice(m.index + m[1].length).match(/^\s+([A-Z][A-Za-z&.-]*)/);
+      if (next && !ALIAS_DESCRIPTOR.test(next[1])) continue;
+    }
     aliasSpans.push([m.index, m.index + m[1].length]);
     push(m[1], cik, t ? tickerForCik(cik) ?? t : null, "alias");
   }
@@ -251,6 +265,28 @@ const PATTERNS = [
   { role: "customer", rule: "we-sell-to", re: new RegExp(`\\bwe\\s+(?:\\w+\\s+){0,2}?(?:sell|sells|sold|supply|supplies|supplied|ship|ships|shipped|deliver|delivers|delivered)\\s+(?:[\\w,-]+\\s+){0,8}?to\\s+${SPAN_END}`, "i") },
 ];
 
+// v4: explicit trade statements only. The role is the sentence's own noun:
+// "sales to", "customer", "purchase from", "suppliers/foundries" carry it, and
+// "X accounted for n% of our net sales" takes it from the noun in X's phrase
+// ("two suppliers, Cisco and Zebra, each constituted ..." is a supplier).
+// The subject must be the filer ("we", "our").
+const PATTERNS_V4 = [
+  { role: "customer", rule: "sales-to", re: new RegExp(`(?<![A-Za-z]'s\\s)(?<!\\w's\\s(?:\\w+\\s)?)\\b(?:[Oo]ur\\s+(?:\\w+\\s+){0,2}?)?(?:[Ss]ales|[Rr]evenues?|[Ss]hipments|[Nn]et sales|[Pp]roduct sales)\\s+to\\s+${SPAN_END}`) },
+  { role: "customer", rule: "accounted-for", re: /([A-Z][^;:]{2,140}?)\s*(?:\([^)]*\)\s*)?(?:,\s*)?(?:and its affiliates\s*)?(?:each\s+|collectively\s+|together\s+)?(?:accounted|represented|comprised|constituted|made up)\s+(?:for\s+)?(?:approximately |about |roughly |over |more than |less than |nearly |in excess of )?\d+(?:\.\d+)?\s?(?:%|percent)\s+(?:and \d+(?:\.\d+)?\s?(?:%|percent)\s+)?of\s+(?:our|the Company's|total|consolidated)\s+(?:total\s+|consolidated\s+|net\s+)*(?:revenues?|sales|net sales|net revenues?|product revenues?)/ },
+  { role: "customer", rule: "our-largest-customer", re: new RegExp(`\\bour\\s+(?:(?:two|three|four|five|ten|\\d+)\\s+)?(?:single\\s+)?largest\\s+(?:single\\s+)?(?:\\w+\\s+)?customers?\\s*(?:,|is|are|was|were|—|-|include|included|includes)\\s*${SPAN_END}`, "i") },
+  { role: "supplier", rule: "buy-from", re: new RegExp(`\\b[Ww]e\\s+(?:\\w+\\s+){0,2}?(?:purchase|purchases|purchased|buy|buys|bought|license|licenses|licensed)\\s+(?:[\\w,-]+\\s+){0,8}?from\\s+${SPAN_END}`) },
+  { role: "supplier", rule: "suppliers-such-as", re: new RegExp(`\\b(?:[Oo]ur|[Ww]e\\s+(?:\\w+\\s+){0,2}?(?:use|utilize|engage|rely on))\\s+(?:[\\w,-]+\\s+){0,5}?(?:suppliers?|foundr(?:y|ies)|contract manufacturers?)\\b[^.;]{0,40}?\\b(?:such as|including|include|includes|are|is|namely)\\s+${SPAN_END}`) },
+  // the one narrow manufacturing pattern COWORK #18 allowed: the filer's own
+  // wafers/chips/products, made BY X (X is the agent)
+  { role: "supplier", rule: "our-products-made-by", re: new RegExp(`\\b(?:[Oo]ur|[Aa]ll of our|[Ss]ubstantially all of our|[Mm]ost of our|[Tt]he majority of our)\\s+(?:[\\w-]+\\s+){0,3}?(?:wafers|chips|products|devices|semiconductors|integrated circuits|components|dies|processors|GPUs)\\s+(?:are|is|were|have been)\\s+(?:currently\\s+|primarily\\s+|principally\\s+|substantially\\s+|exclusively\\s+|all\\s+|generally\\s+)?(?:manufactured|fabricated|produced)\\s+(?:for us\\s+)?(?:primarily\\s+|exclusively\\s+|solely\\s+)?by\\s+${SPAN_END}`) },
+];
+const V4_DROPS = {
+  glossary: /^[A-Z][^:.]{1,60}:\s|\b(?:means|is defined as|refers to)\b/,
+  partnersAndCustomers: /\b(?:partners?\s+(?:and|or|&)\s+customers?|customers?\s+(?:and|or|&)\s+partners?)\b/i,
+  litigation: /\b(?:assert\w*|alleg\w*|defend\w*|infring\w*|sued|lawsuits?|claims? against)\b/i,
+  reliefOrExhibit: /\b(?:exemptive|promissory note|in favor of|dated (?:as of )?[A-Z][a-z]+ \d)\b/,
+  biography: /\b(?:her|his)\s+(?:major\s+|former\s+)?(?:clients|career|experience|tenure)\b|\bwhere (?:she|he)\b/i,
+};
 // H (v3): cloud hosting is a supplier of a different kind and would swamp the
 // supply-chain view (COWORK #17 D2), so it gets its own role.
 const HOSTING_NAME = /^(Amazon Web Services|AWS|Azure|Microsoft Azure|Google Cloud|Google Cloud Platform|GCP|Oracle Cloud|OCI|IBM Cloud)$/i;
@@ -268,9 +304,10 @@ const MENTION_ONLY = /\b(App Store|Google Play|app stores?|marketplaces?|browser
 function extract(sentence, self, drops) {
   for (const [k, re] of Object.entries(DROPS)) if (re.test(sentence)) { drops[k] = (drops[k] ?? 0) + 1; return []; }
   if (V2 && MENTION_ONLY.test(sentence)) { drops.mentionOnly = (drops.mentionOnly ?? 0) + 1; return []; }
+  if (V4) for (const [k, re] of Object.entries(V4_DROPS)) if (re.test(sentence)) { drops[k] = (drops[k] ?? 0) + 1; return []; }
   const links = [];
   const seen = new Set();
-  for (const p of PATTERNS) {
+  for (const p of V4 ? PATTERNS_V4 : PATTERNS) {
     // v2 reads every occurrence; the span is a lookahead so one match cannot
     // swallow the next ("made by Airbus or Boeing ... made by Bombardier or Embraer")
     const ms = V2
@@ -289,11 +326,23 @@ function extract(sentence, self, drops) {
       // R3c: selling royalties, rights, stakes or assets is a transaction, not a customer
       if (p.rule === "we-sell-to" && /\b(sold|sell|sells)\s+(?:\w+\s+){0,3}?(royalt\w*|rights?|interests?|stakes?|assets?|shares|business|portion|licen[cs]es?)\b/i.test(`${m[0]}${m[1] ?? ""}`)) continue;
     }
+    let role = p.role;
+    if (V4) {
+      // the clause ends at its verb: "Sales to AT&T were $500m ..." / "we purchase X from Y, and Z"
+      if (p.rule === "sales-to") span = span.split(/\b(?:were|was|represented|accounted|comprised|constituted|increased|decreased|declined|grew|totaled|totalled)\b/)[0];
+      if (p.rule === "our-largest-customer" || p.rule === "suppliers-such-as") span = span.split(/\b(?:and other|among others|as well as|, which|, who)\b/)[0];
+      // the role is the noun in X's own phrase
+      if (p.rule === "accounted-for") {
+        const sup = /\b(?:suppliers?|vendors?|manufacturers? of (?:the )?products)\b/i.test(span), cus = /\b(?:customers?|clients?|wholesalers?|distributors?|retailers?)\b/i.test(span);
+        if (sup && cus) continue;
+        role = sup ? "supplier" : "customer";
+      }
+    }
     for (const party of partiesIn(span, self)) {
       const key = party.cik ? `c${party.cik}` : party.name.toUpperCase();
-      if (seen.has(`${p.role}:${key}`)) continue;
-      seen.add(`${p.role}:${key}`);
-      links.push({ role: p.role, rule: p.rule, ...party });
+      if (seen.has(`${role}:${key}`)) continue;
+      seen.add(`${role}:${key}`);
+      links.push({ role, rule: p.rule, ...party });
     }
     }
   }
@@ -374,7 +423,28 @@ if (SELFTEST) {
     ["Acme relies on the Company's distributors.", ""],
     ["Networking net revenue increased 51.1%, primarily due to revenue attributable to Juniper Networks.", ""],
   ];
-  if (V3) {
+  if (V4) {
+    cases.length = 0;
+    cases.push(
+      ["We rely on TSMC to manufacture substantially all of our wafers.", ""],
+      ["Substantially all of our wafers are manufactured by Taiwan Semiconductor Manufacturing Company Limited.", "supplier:TSM"],
+      ["Walmart Inc. accounted for 21% of our net sales in fiscal 2025.", "customer:WMT"],
+      ["Sales to AT&T were $500.7 million, or 10.5% of total revenue, in fiscal 2025.", "customer:T"],
+      ["Products from two suppliers, Cisco and Zebra, each constituted more than 10% of our net sales for the fiscal year.", "supplier:CSCO,supplier:ZBRA"],
+      ["Our largest customer, CVS Health, accounted for 28 percent of our fiscal 2026 revenue.", "customer:CVS"],
+      ["We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.", "supplier:SK Hynix,supplier:MU,supplier:Samsung"],
+      ["Our non-alcohol customers include Coca-Cola Canada Bottling Limited and Coca-Cola Consolidated, Inc.", ""],
+      ["Our largest customers include The Coca-Cola Company.", "customer:KO"],
+      ["FICO score: A measure of consumer credit risk produced by Fair Isaac Corporation.", ""],
+      ["Our partners and customers include NVIDIA and Lockheed Martin.", ""],
+      ["We disagree with the assertions made by Qualcomm and will defend against them; sales to Qualcomm continue.", ""],
+      ["We compete with NVIDIA, AMD and Intel in data center GPUs.", ""],
+      ["We utilize foundries, such as Taiwan Semiconductor Manufacturing Company Limited, or TSMC, to produce our wafers.", "supplier:TSM"],
+      ["Some of these therapies are manufactured and marketed by large pharmaceutical companies such as Gilead Sciences, Inc.", ""],
+      ["Our products are manufactured and marketed by Gilead Sciences, Inc. under a license.", ""],
+      ["Sales to Microsoft represented a significant portion of revenue.", "customer:MSFT"],
+    );
+  } else if (V3) {
     cases.push(
       ["Our success depends in part on the continued service of Jane Roe, our Co-Founder, and we rely on our Founder for strategy.", ""],
       ["We deliver a broad range of products, services and solutions principally to the U.S. Department of War (\"DoW\"), and our customers include the DoW and GSA.", ""],
@@ -392,7 +462,10 @@ if (SELFTEST) {
   if (V3) {
     // R4: a list item under a competitor lead-in; the doc-level path, with a
     // negative control (the same item under a supplier lead-in is kept)
-    const doc = (lead) => `${lead}\nindependent vendors that offer a mix of security products, such as Zscaler, Inc. and Okta, Inc.;\nOther text follows here in a normal sentence of the filing.`;
+    const item = V4
+      ? "we purchase security appliances and software from Zscaler, Inc. and Okta, Inc.;"
+      : "independent vendors that offer a mix of security products, such as Zscaler, Inc. and Okta, Inc.;";
+    const doc = (lead) => `${lead}\n${item}\nOther text follows here in a normal sentence of the filing.`;
     const a = [...linksFromText(doc("Our competitors include:"), self, {}).found.values()].length;
     const b = [...linksFromText(doc("Our suppliers include:"), self, {}).found.values()].length;
     const okR4 = a === 0 && b > 0;
