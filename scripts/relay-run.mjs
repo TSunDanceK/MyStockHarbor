@@ -1246,6 +1246,10 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
 };
 
 const argv = process.argv.slice(2);
