@@ -99,18 +99,28 @@ const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descri
 //   RYAAY — Item 4 has NO Business Overview sub-heading at all (Introduction,
 //           Strategy, Route System, …); "Business Overview" appears only under
 //           Item 5. Inside Item 4 or nowhere, so RYAAY has no description.
+//   BIP   — numbered sub-headings, "4.B BUSINESS OVERVIEW" / "4.C ORGANIZATIONAL
+//           STRUCTURE" (#552 COWORK #48): the key is "4bbusinessoverview", so
+//           a bare "4" prefix is accepted wherever "item4" is.
 // Inside Item 4 an UNLETTERED "Business Overview" is accepted; outside it
 // (a filing whose Item 4 heading is not found) only a lettered 4.B is, since
 // an unlettered one can be Item 5's (RYAAY).
 const ITEM4 = /^item4(informationonthecompany)?$/;
 const ITEM4_TITLE = /^informationonthecompany$/;
 const ITEM4_END = /^item(4a|5)[a-z]*$/;
-const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;
-const ITEM4B_ANY = /^(item4)?b?businessoverview$/;
-const B_ALONE = /^(item4)?b$/;
+// ITEM 6 / 7 TOO, BUT ONLY WHEN 4A AND 5 ARE MISSING (#552 COWORK #48): BIP's
+// body has no "Item 4A" or "Item 5" heading line (its next body heading is
+// "ITEM 6."), so Item 4 fell back to an 8,000-character window and its 4.B,
+// past a long history table, was outside it. A 6/7 line closes Item 4 only when
+// no 4A/5 line has come since the last Item 4 start: otherwise a TOC's
+// "Item 4 … Item 7" run (TK: ~1,530 chars) is long enough to pass as a section.
+const ITEM4_LATE_END = /^item(6|7)[a-z]*$/;
+const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;
+const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;
+const B_ALONE = /^(item4|4)?b$/;
 const BUSINESS_OVERVIEW = /^businessoverview$/;
-const ITEM4C = /^(item4)?c?organi[sz]ationalstructure$/;
-const C_ALONE = /^(item4)?c$/;
+const ITEM4C = /^(item4|4)?c?organi[sz]ationalstructure$/;
+const C_ALONE = /^(item4|4)?c$/;
 const ORG_STRUCTURE = /^organi[sz]ationalstructure$/;
 /** A heading line is short; a long line that happens to fold to a pattern is prose. */
 const HEADING_KEY_MAX = 80;
@@ -205,8 +215,16 @@ export function locateSection(text: string, form: string): Located {
   }
 
   // 20-F. Item 4 first.
-  const item4 = pairSection(L, 0, n, (i) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE),
-    (i) => L[i].key.length <= HEADING_KEY_MAX && ITEM4_END.test(L[i].key), MIN_SECTION_CHARS, bounded);
+  const item4Start = (i: number) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE);
+  const shortKey = (i: number, re: RegExp) => L[i].key.length <= HEADING_KEY_MAX && re.test(L[i].key);
+  const item4Ends = new Set<number>();
+  let open = false;
+  for (let i = 0; i < n; i++) {
+    if (item4Start(i) >= 0) open = true;
+    else if (shortKey(i, ITEM4_END)) { item4Ends.add(i); open = false; }
+    else if (open && shortKey(i, ITEM4_LATE_END)) { item4Ends.add(i); open = false; }
+  }
+  const item4 = pairSection(L, 0, n, item4Start, (i) => item4Ends.has(i), MIN_SECTION_CHARS, bounded);
   if (item4.span) {
     const lo = L.findIndex((l) => l.start >= item4.span!.from);
     const hiIdx = L.findIndex((l) => l.start >= item4.span!.to);

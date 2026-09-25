@@ -1,0 +1,47 @@
+# Daily usage alert (Relay B, #553 COWORK #53; #535 COWORK #17 Part 3).
+# Counters mode: the job guard's per-job daily command totals, read with the
+# existing READ-ONLY Upstash token (8 reads a run). Opens "⚠ Usage spike: …"
+# when a job is over 2x its 7-day median or its breaker tripped; writes the
+# "Weekly job cost report" on Mondays. Management mode (whole-database figures)
+# switches on only when the owner adds UPSTASH_MGMT_EMAIL and
+# UPSTASH_MGMT_API_KEY as secrets and UPSTASH_DATABASE_ID as a repo variable.
+# The script prints no secret, host or link.
+name: Usage alert
+
+on:
+  schedule:
+    - cron: "40 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Print the issues only (no issue write)"
+        type: boolean
+        default: false
+      weekly:
+        description: "Also write the weekly cost report"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: Check yesterday's usage
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          UPSTASH_MGMT_EMAIL: ${{ secrets.UPSTASH_MGMT_EMAIL }}
+          UPSTASH_MGMT_API_KEY: ${{ secrets.UPSTASH_MGMT_API_KEY }}
+          UPSTASH_DATABASE_ID: ${{ vars.UPSTASH_DATABASE_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/usage-alert.mjs ${{ inputs.dry && '--dry' || '' }} ${{ inputs.weekly && '--weekly' || '' }}

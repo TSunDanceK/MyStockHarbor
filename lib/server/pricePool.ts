@@ -21,6 +21,7 @@ import {
 import { isActiveMarketWindow } from "./marketHours";
 import { isPriceDue, readTier1, TIER1_TTL_MS, TIER2_TTL_MS } from "./priceTiers";
 import { JOBS, cronIntervalSeconds } from "./jobRuns";
+import { toDashed } from "../symbolSpellings.mjs";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
 // symbol the screener can display: price, % change, volume, market cap and PE.
@@ -377,12 +378,33 @@ export type PricePoolRow = {
   failAt?: number;
 };
 
-function cleanSymbol(value: string) {
+/** The symbol as a caller spelled it, trimmed and upper-cased. Not a pool field. */
+function callerSpelling(value: string) {
   return String(value || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9.-]/g, "");
 }
+
+/**
+ * THE POOL FIELD: ONE CANONICAL SPELLING, THE DASHED ONE (#553 COWORK #53).
+ *
+ * This kept `.` and `-` both, so BRK.B and BRK-B were two fields. The refresh
+ * reached FMP's dashed spelling (tier-1 carried both) and wrote BRK-B every
+ * run, while the Pickers universe asks for BRK.B -- whose row was measured at
+ * 656 h old on 2026-09-25. Pickers showed a four-week-old Berkshire price.
+ *
+ * DASHED, NOT DOTTED, because the universe is not consistently dotted: BF-B,
+ * MKC-V, PBR-A and the preferreds (EP-PC, MER-PK) are dashed in it, and dashed
+ * is the vendor/SEC spelling (symbolSpellings.toDashed). Every write and read
+ * of a pool field goes through here; readPricePoolBulk hands rows back under
+ * the caller's own spelling as well, so no reader has to change.
+ */
+export function poolField(value: string) {
+  return toDashed(callerSpelling(value));
+}
+
+const cleanSymbol = poolField;
 
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -405,6 +427,15 @@ export async function readPricePoolBulk(
 
   const fields = uniqueClean(symbols);
   if (!fields.length) return out;
+  // Each row is returned under its pool field AND every spelling a caller
+  // asked for it by (BRK.B -> the BRK-B row), so callers keep using their own.
+  const askedAs = new Map<string, string[]>();
+  for (const raw of symbols) {
+    const asked = callerSpelling(raw);
+    if (!asked) continue;
+    const field = poolField(asked);
+    if (field !== asked) askedAs.set(field, [...(askedAs.get(field) ?? []), asked]);
+  }
 
   // The smallest of the four metered reads by an order of magnitude (~220 B a
   // symbol against history's ~110 KB), and it is metered anyway: a ranking whose
@@ -426,7 +457,7 @@ export async function readPricePoolBulk(
       fields.forEach((sym, i) => {
         const row = asArray ? asArray[i] : asObj ? asObj[sym] : null;
         if (row && typeof row === "object" && typeof row.ts === "number") {
-          out.set(sym, {
+          const view: PricePoolRow = {
             price: num(row.price),
             changePct: num(row.changePct),
             volume: num(row.volume),
@@ -439,7 +470,9 @@ export async function readPricePoolBulk(
             peTs: num(row.peTs) ?? 0,
             failStreak: num(row.failStreak) ?? 0,
             failAt: num(row.failAt) ?? 0,
-          });
+          };
+          out.set(sym, view);
+          for (const alias of askedAs.get(sym) ?? []) out.set(alias, view);
         }
       });
     }
@@ -930,7 +963,8 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // unreadable or empty set is not fatal: priceTtlMsFor defaults to tier 2, so
   // the worst case is the whole universe on the hourly policy -- degraded,
   // never stalled.
-  const tier1 = await readTier1();
+  // In pool spelling, so a tier-1 entry recorded as BRK.B matches the BRK-B field.
+  const tier1 = new Set([...(await readTier1())].map(poolField));
 
   // Free head start from the mover buckets. Only symbols already in our own
   // universe are used -- bucket rows for names outside `clean` are ignored, so
