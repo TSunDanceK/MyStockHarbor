@@ -52,6 +52,12 @@ export function fundamentalRowNeedsWrite(
   if (!prev || typeof prev !== "object") return true;
   const at = typeof prev.updatedAt === "string" ? Date.parse(prev.updatedAt) : NaN;
   if (!Number.isFinite(at) || nowMs - at >= ROW_REWRITE_AFTER_MS) return true;
+  // A NEW UTC DAY REWRITES TOO. The /stock source line shows "classification
+  // as of {day}" from this row's updatedAt (staticProfile.classificationAsOf),
+  // so a row skipped across midnight would read as yesterday's. The first run
+  // after 00:00 UTC rewrites every row, keeping the displayed day exactly as it
+  // was before this change; the 12h rule already makes that run a near-full one.
+  if (new Date(at).toISOString().slice(0, 10) !== new Date(nowMs).toISOString().slice(0, 10)) return true;
   return (
     (prev.marketCap ?? null) !== next.marketCap ||
     (prev.peRatio ?? null) !== next.peRatio ||
