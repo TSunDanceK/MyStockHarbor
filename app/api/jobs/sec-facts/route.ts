@@ -11,7 +11,7 @@ import { withClassCover } from "@/lib/server/secCoverClasses";
 import { withInstanceEps } from "@/lib/server/secInstanceEps";
 import { applyRereadRequests, SEC_REREAD_REQUESTS } from "@/lib/server/secRereadRequests";
 import { readFactSet, writeFactSet, type StoredFactSet, type StoredPeriod } from "@/lib/server/secFactStore";
-import { toStoredSet } from "@/lib/server/secFactBuild";
+import { conversionGained, toStoredSet } from "@/lib/server/secFactBuild";
 import { defaultSources, type FxSeries } from "@/lib/server/fxRates";
 import { readColdQueue, clearColdQueue, cikForSymbol } from "@/lib/server/secColdFetch";
 import { needsReread } from "@/lib/server/secStaleness";
@@ -614,7 +614,9 @@ export async function GET(req: NextRequest) {
       // The "neither source has it" notice rides along the same way.
       const keepNotice = Boolean(prior?.lg && freshNewest < prior.lg.reportDate);
       const set: StoredFactSet = keepFilled ? prior! : keepNotice ? { ...fresh, lg: prior!.lg } : fresh;
-      const changed = keepFilled ? false : prior ? prior.contentHash !== set.contentHash : true;
+      // OR A REFUSED PERIOD NOW CONVERTS (a rate source was added). The hash is
+      // on the reported figures and cannot see it. See conversionGained.
+      const changed = keepFilled ? false : prior ? prior.contentHash !== set.contentHash || conversionGained(prior, set) : true;
       // LAYER 2 OF THE CORRECTIONS FAILSAFE (spec §3). A figure that moved with
       // no filing event behind it is a SILENT RESTATEMENT -- the case the
       // amended-form signal cannot see. The site is allowed to update; it is
