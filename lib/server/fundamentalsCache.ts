@@ -38,6 +38,53 @@ const redis =
 
 const FUND_KEY_PREFIX = "msh:pickers:fundamentals:v1:";
 const FUND_TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily warm
+/** An unchanged row is still rewritten after this long, so its TTL never runs low. */
+export const ROW_REWRITE_AFTER_MS = 12 * 60 * 60 * 1000;
+
+type StoredFundamentalRow = { marketCap?: unknown; peRatio?: unknown; industry?: unknown; sector?: unknown; updatedAt?: unknown };
+
+/** Pure: does `next` need writing over what is stored? */
+export function fundamentalRowNeedsWrite(
+  prev: StoredFundamentalRow | null | undefined,
+  next: { marketCap: number | null; peRatio: number | null; industry: string | null; sector: string | null },
+  nowMs: number
+): boolean {
+  if (!prev || typeof prev !== "object") return true;
+  const at = typeof prev.updatedAt === "string" ? Date.parse(prev.updatedAt) : NaN;
+  if (!Number.isFinite(at) || nowMs - at >= ROW_REWRITE_AFTER_MS) return true;
+  // A NEW UTC DAY REWRITES TOO. The /stock source line shows "classification
+  // as of {day}" from this row's updatedAt (staticProfile.classificationAsOf),
+  // so a row skipped across midnight would read as yesterday's. The first run
+  // after 00:00 UTC rewrites every row, keeping the displayed day exactly as it
+  // was before this change; the 12h rule already makes that run a near-full one.
+  if (new Date(at).toISOString().slice(0, 10) !== new Date(nowMs).toISOString().slice(0, 10)) return true;
+  return (
+    (prev.marketCap ?? null) !== next.marketCap ||
+    (prev.peRatio ?? null) !== next.peRatio ||
+    (prev.industry ?? null) !== next.industry ||
+    (prev.sector ?? null) !== next.sector
+  );
+}
+
+/** The stored rows, in chunked MGETs (1 command per 500 keys). Empty on any error. */
+async function readStoredFundamentalRows(symbols: string[]): Promise<Map<string, StoredFundamentalRow>> {
+  const out = new Map<string, StoredFundamentalRow>();
+  if (!redis || !symbols.length) return out;
+  try {
+    for (let i = 0; i < symbols.length; i += 500) {
+      const chunk = symbols.slice(i, i + 500);
+      const rows = (await redis.mget<(StoredFundamentalRow | null)[]>(...chunk.map((s) => `${FUND_KEY_PREFIX}${s}`))) ?? [];
+      chunk.forEach((s, j) => {
+        const r = rows[j];
+        if (r && typeof r === "object") out.set(s, r);
+      });
+    }
+  } catch {
+    // An unreadable store means "write everything", which is today's behaviour.
+    out.clear();
+  }
+  return out;
+}
 
 // STEP 2 (2026-08-06 follow-up session): app/api/market/route.ts already makes
 // one stable/company-screener call per master-list rebuild (~daily) to source
@@ -621,8 +668,17 @@ export async function warmFundamentals(symbols: string[]) {
   );
 
   // 3) write combined records for every symbol we have any data for.
+  //
+  // ONLY THE ROWS THAT CHANGED (#553 COWORK #53). This rewrote ~850 rows every
+  // hour (~20K commands a day) although, outside the US session, the price pool
+  // does not move and nearly every row is identical. One chunked MGET of the
+  // stored rows (2 commands) now decides: a row is written when its values
+  // changed, or when it was last written ROW_REWRITE_AFTER_MS ago, so every
+  // row keeps at least FUND_TTL - 12h = 14h of TTL and cannot lapse.
   const now = new Date().toISOString();
+  const stored = await readStoredFundamentalRows(cleanSymbols);
   let written = 0;
+  let unchanged = 0;
   const writePipeline = redis.pipeline();
   for (const sym of cleanSymbols) {
     const q = quoteMap.get(sym);
@@ -637,6 +693,10 @@ export async function warmFundamentals(symbols: string[]) {
       sector: tax?.sector ?? null,
       updatedAt: now,
     };
+    if (!fundamentalRowNeedsWrite(stored.get(sym), row, Date.parse(now))) {
+      unchanged++;
+      continue;
+    }
     writePipeline.set(`${FUND_KEY_PREFIX}${sym}`, row, { ex: FUND_TTL_SECONDS });
     written++;
   }
@@ -750,5 +810,7 @@ export async function warmFundamentals(symbols: string[]) {
     sectorMissing: cleanSymbols.length - sectorKnown,
     waitedMs: CAPACITY_WAIT_BUDGET_MS - wait.remainingMs,
     written,
+    // Rows skipped because nothing changed and they were written < 12h ago.
+    unchanged,
   };
 }
