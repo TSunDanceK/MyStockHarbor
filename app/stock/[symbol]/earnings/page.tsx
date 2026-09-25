@@ -47,6 +47,7 @@ import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
 import { outlookForEarningsCard } from "@/lib/server/symbolOutlook";
 import { firstFilerNextReport } from "@/lib/server/firstFilerOutlook";
 import { adsRatioFor } from "@/lib/server/secAdsMap";
+import { nonEquityListingOf } from "@/lib/server/secPrimaryListing";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
@@ -472,7 +473,7 @@ async function getEarningsData(symbol: string) {
   // THE SAME 20-F RULE THE /stock PROFILE APPLIES, from the same registrant
   // file, so the two pages cannot disagree about whether a cap is computable.
   const valuation = cold.status === "ready"
-    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol) })
+    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol) })
     : { shares: null, eps: null, refusals: [] };
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
