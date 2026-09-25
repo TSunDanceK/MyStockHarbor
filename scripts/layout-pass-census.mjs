@@ -19,6 +19,8 @@ const syms = Object.keys(REG);
 const TODAY = new Date().toISOString().slice(0, 10);
 let commands = 0, stored = 0;
 const nonOp = [], nearZero = [], bsMoved = [];
+let pbBefore = 0, pbAfter = 0, avav = "no set";
+const inclNci = [], nciBlocked = [], liabDerived = [];
 const ROW_KEYS = ["revenue", "operatingIncome", "nonOperatingIncomeExpense", "preTaxIncome", "netIncome"];
 for (let i = 0; i < syms.length; i += 50) {
   const chunk = syms.slice(i, i + 50);
@@ -39,6 +41,21 @@ for (let i = 0; i < syms.length; i += 50) {
       if (inp.eps && inp.eps.val > 0 && inp.eps.val < VAL.PE_MIN_EPS) nearZero.push(`${sym}(${inp.eps.val.toFixed(3)})`);
     } catch { /* a set the valuation cannot read is not counted */ }
     const bs = C.balanceSheetInstant(set), first = set.instants?.[0] ?? null;
+    // COWORK #54: P/B equity before (parent only) and after (bookEquityAt), and derived liabilities.
+    if (bs) {
+      const parent = C.valueOf(bs, "stockholdersEquity"), total = C.valueOf(bs, "totalEquity");
+      const after = VAL.bookEquityAt(set, bs);
+      if (parent === null) pbBefore++;
+      if (after.equity === null) pbAfter++;
+      if (parent === null && after.equityIncludesNci) inclNci.push(sym);
+      if (after.equityOnlyInclNci) nciBlocked.push(sym);
+      if (C.valueOf(bs, "totalLiabilities") === null && C.valueOf(bs, "totalAssets") !== null && total !== null) liabDerived.push(sym);
+    }
+    if (sym === "AVAV") {
+      const m = VAL.multipleInputs(set);
+      avav = `ebitda ${m.ebitda ? `op ${m.ebitda.vals.operatingIncome} + D&A ${m.ebitda.vals.depreciationAndAmortization}` : `missing: ${(m.ebitdaMissing ?? []).join(", ")}`}; ` +
+        `debt ST ${m.balanceSheet?.shortTermDebt ?? "none"}, LT ${m.balanceSheet?.longTermDebt ?? "none"}, cash ${m.balanceSheet?.cash ?? "none"}`;
+    }
     if ((bs?.e ?? null) !== (first?.e ?? null)) bsMoved.push(`${sym}(${first?.e ?? "-"}→${bs?.e ?? "none"})`);
   });
 }
@@ -49,4 +66,10 @@ console.log(`\nP/E "Not meaningful" (trailing EPS > 0 and < $${VAL.PE_MIN_EPS}):
 console.log(`  ${nearZero.join(" ")}`);
 console.log(`\nbalance-sheet date moves (newest instant was not a period end): ${bsMoved.length}`);
 console.log(`  ${bsMoved.slice(0, 80).join(" ")}${bsMoved.length > 80 ? " …" : ""}`);
+console.log(`\nP/B "—" for want of equity: before ${pbBefore}, after ${pbAfter}`);
+console.log(`case 1, P/B on NCI-inclusive equity (no NCI tagged): ${inclNci.length}  ${inclNci.join(" ")}`);
+console.log(`...still refused, NCI tagged: ${nciBlocked.length}  ${nciBlocked.join(" ")}`);
+console.log(`case 3, total liabilities derived (assets - total equity): ${liabDerived.length}`);
+console.log(`  ${liabDerived.slice(0, 80).join(" ")}${liabDerived.length > 80 ? " …" : ""}`);
+console.log(`AVAV EV/EBITDA inputs: ${avav}`);
 console.log(`Redis commands: ${commands}`);
