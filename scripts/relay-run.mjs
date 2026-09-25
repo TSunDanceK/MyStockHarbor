@@ -1246,6 +1246,8 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHO TRIGGERS FULL PICKERS BUILDS (#544; #553 COWORK #51). Read-only; 16 commands. Side branch.
+  "write-build-triggers-reading": { script: "scripts/build-triggers-reading.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
