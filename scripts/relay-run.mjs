@@ -1246,6 +1246,9 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
 };
 
 const argv = process.argv.slice(2);
