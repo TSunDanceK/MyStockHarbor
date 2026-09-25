@@ -552,10 +552,10 @@ function divYieldPct(e: ResultEntry, d: DerivedRow): number | null {
 
 /** PERCENT, not a fraction. No price in this one -- both inputs are filings. */
 function payoutRatioPct(e: ResultEntry, _d: DerivedRow): number | null {
-  // ON A FILINGS ROW, THE STORED RATIO (2026-09-23). Div ($) is SEC there but
-  // EPS is not yet (COWORK #5 Q1: the TTM EPS basis is being fixed by Relay A),
-  // so dividing one by the other would mix two sources in one cell. The stored
-  // payout ratio stays until EPS moves; then this branch goes.
+  // ON A FILINGS ROW, THE FILED RATIO (#553 COWORK #21): DPS over EPS from ONE
+  // period (pickersSecFundamentals.samePeriodPayout). Recomputing it here from
+  // Div ($) and EPS would divide a fiscal-year dividend by a TTM EPS for most
+  // payers -- the exact mix the filed ratio refuses.
   if (e.fundamentalsFrom === "sec") return num(e.payoutRatio);
   const dps = num(e.divPerShare);
   const eps = num(e.epsTtm);
@@ -568,9 +568,31 @@ type Col = {
   label: string;
   sortType: "str" | "num";
   cls?: string;
+  /** Header tooltip, for a column whose meaning needs one line of explanation. */
+  tip?: string;
   get: (e: ResultEntry, d: DerivedRow) => string | number | null;
   cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
 };
+
+// ── THE PERIOD A FILED FIGURE COVERS (#553 COWORK #21) ─────────────────────
+// P/E, EPS and Payout from the filings cover four quarters for most filers and
+// the fiscal year for annual-only ones (and for payout where the dividend is
+// only filed yearly). The basis differs ROW BY ROW, so no header can state it:
+// the cell's tooltip names it ("TTM to 30 Jun 2026" / "FY2025"), and a
+// fiscal-year figure carries a small "FY" so a reader skimming the column sees
+// which numbers are a year old without hovering.
+const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY). Hover a value for its period.";
+
+function basisCell(value: ReactNode, v: number | null, basis: string | undefined): ReactNode {
+  if (v == null || !Number.isFinite(v)) return MUTED;
+  if (!basis) return value;
+  return (
+    <span title={basis}>
+      {value}
+      {basis.startsWith("FY") ? <span className="basisFy">FY</span> : null}
+    </span>
+  );
+}
 
 // Compact price line for a phone row.
 //
@@ -869,7 +891,7 @@ export default function PickerResultsGrid({
         );
       },
     };
-    const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
+    const pe: Col = { key: "pe", label: "PE Ratio", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.peRatio), cell: (e) => basisCell(numCell(num(e.peRatio)), num(e.peRatio), e.epsBasis) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
 
     const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => pctCell(num(e.perf1w)) };
@@ -886,7 +908,7 @@ export default function PickerResultsGrid({
 
     const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
     const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e, d) => divYieldPct(e, d), cell: (e, d) => plainPctCell(divYieldPct(e, d)) };
-    const payout: Col = { key: "payout", label: "Payout Ratio", sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d) => plainPctCell(payoutRatioPct(e, d)) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", tip: BASIS_TIP, sortType: "num", get: (e, d) => payoutRatioPct(e, d), cell: (e, d) => basisCell(plainPctCell(payoutRatioPct(e, d)), payoutRatioPct(e, d), e.fundamentalsFrom === "sec" ? e.payoutBasis : undefined) };
     const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
     const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
 
@@ -894,7 +916,7 @@ export default function PickerResultsGrid({
     const opinc: Col = { key: "opinc", label: "Op. Income", sortType: "num", get: (e) => num(e.operatingIncome), cell: (e) => moneyCell(num(e.operatingIncome)) };
     const netinc: Col = { key: "netinc", label: "Net Income", sortType: "num", get: (e) => num(e.netIncome), cell: (e) => moneyCell(num(e.netIncome)) };
     const fcf: Col = { key: "fcf", label: "FCF", sortType: "num", get: (e) => num(e.freeCashFlow), cell: (e) => moneyCell(num(e.freeCashFlow)) };
-    const eps: Col = { key: "eps", label: "EPS", sortType: "num", get: (e) => num(e.epsTtm), cell: (e) => numCell(num(e.epsTtm)) };
+    const eps: Col = { key: "eps", label: "EPS", tip: BASIS_TIP, sortType: "num", get: (e) => num(e.epsTtm), cell: (e) => basisCell(numCell(num(e.epsTtm)), num(e.epsTtm), e.epsBasis) };
 
     const rating: Col = { key: "rating", label: "Rating", sortType: "str", get: (e) => e.rating ?? "", cell: (e) => textCell(e.rating) };
     const analysts: Col = { key: "analysts", label: "Analysts", sortType: "num", get: (e) => num(e.analystCount), cell: (e) => numCell(num(e.analystCount), 0) };
@@ -1383,6 +1405,7 @@ export default function PickerResultsGrid({
                           className={col.cls}
                           onClick={() => onHeaderClick(col.key, col.sortType)}
                           aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none"}
+                          title={col.tip}
                         >
                           {col.label}
                           {active ? <span className="sortArrow" aria-hidden="true">{sort?.dir === "asc" ? "▲" : "▼"}</span> : null}

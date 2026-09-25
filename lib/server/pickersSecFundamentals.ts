@@ -18,10 +18,17 @@
 //   Div Yield       Div ($) ÷ price
 //   Div Growth      TTM vs the prior TTM, else FY vs FY
 //
-// NOT MOVED, BY RULING (COWORK #5 Q1): P/E, EPS and Payout Ratio stay on their
-// current source until Relay A fixes the TTM EPS basis in valuationInputs (for
-// most filers it currently falls back to the last fiscal year). Sector and
-// industry are out of scope too (Q3) -- they move to A's resolver in their own PR.
+//   P/E             price ÷ twelve months of diluted EPS  secValuation.peRatio
+//   EPS             that twelve months, basis named       valuationInputs (post-#577)
+//   Payout Ratio    DPS ÷ EPS from ONE period             samePeriodPayout, below
+//
+// P/E, EPS AND PAYOUT (#553 COWORK #18/#21) moved once A's TTM EPS fix (#577)
+// landed. Their basis varies by ROW -- four quarters for a quarterly filer, the
+// fiscal year for an annual-only one -- so every figure carries a label
+// ("TTM to 30 Jun 2026", "FY2025") that the grid puts in the cell's tooltip.
+// They are applied separately (applySecEarnings) because a row written before
+// they existed has no `eps` key, and must leave the stored figures alone rather
+// than clear them. Sector and industry move to A's resolver in their own PR.
 //
 // ── TWO HALVES, AND WHY ────────────────────────────────────────────────────
 // A ratio against price has to be divided at READ time or it is frozen at the
@@ -47,9 +54,11 @@ import { storedInReportingCurrency } from "./secCurrency";
 import {
   marketCap,
   multipleInputs,
+  peRatio,
   twelveMonthsOf,
   valuationInputs,
   valuationMultiples,
+  type EpsBasis,
   type FilerFacts,
   type MultipleInputs,
   type ValuationInputs,
@@ -110,7 +119,72 @@ export type SecPickerRow = {
   freeCashFlow: number | null;
   divPerShare: number | null;
   divGrowth: number | null;
+  /**
+   * Twelve months of diluted EPS as valuationInputs chose it, or null. OPTIONAL
+   * ON PURPOSE: a row written before P/E moved has no key at all, and
+   * applySecEarnings reads that as "leave the stored figures", not as a refusal.
+   */
+  eps?: EpsBasis | null;
+  /** Payout from one period only, or null. Same optionality as `eps`. */
+  payout?: PayoutBasis | null;
 };
+
+/** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
+export type PayoutBasis = {
+  val: number;
+  basis: "four-quarters" | "fiscal-year";
+  periodEnd: string;
+  fiscalYear?: number | null;
+};
+
+/**
+ * PAYOUT FROM ONE PERIOD, OR NOTHING (#553 COWORK #21).
+ *
+ * The census found 70 of 260 payers whose EPS is TTM to June while their
+ * dividends-per-share are only on file for the fiscal year to December: the Q4
+ * dividend sits inside the 10-K and is never filed as a quarter. Dividing one
+ * by the other is a ratio of two different years. So:
+ *   1. TTM DPS over TTM EPS, when both are four quarters ending the same day;
+ *   2. else the newest fiscal year's DPS over THAT year's diluted EPS;
+ *   3. else null ("–").
+ * A loss (EPS <= 0) has no payout ratio, as it has no P/E.
+ */
+export function samePeriodPayout(set: StoredFactSet, eps: EpsBasis | null): PayoutBasis | null {
+  if (eps && eps.basis === "four-quarters" && eps.val > 0) {
+    const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
+    if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {
+      return { val: (dps.vals.dividendsDeclaredPerShare / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
+    }
+  }
+  const y = set.years[0];
+  if (!y) return null;
+  const e = valueOf(y, "epsDiluted");
+  const d = valueOf(y, "dividendsDeclaredPerShare");
+  if (e === null || e <= 0 || d === null) return null;
+  return { val: (d / e) * 100, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy ?? null };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * "TTM to 30 Jun 2026" or "FY2025" -- what the cell's tooltip says, in the
+ * stock page's words (stockProfile.peBasisLabel, which this module cannot
+ * import: that file pulls JSON through the "@/" alias the relay's loader and
+ * the checks do not resolve). A's "year-to-date" basis (#588: fiscal year +
+ * year-to-date - the prior year-to-date) IS twelve trailing months, so it reads
+ * TTM; a filer that states only basic EPS (BRK) says so.
+ */
+export function basisLabel(b: {
+  basis: "four-quarters" | "fiscal-year" | "year-to-date";
+  periodEnd: string;
+  fiscalYear?: number | null;
+  kind?: "basic";
+}): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b.periodEnd);
+  const date = m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : b.periodEnd;
+  const label = b.basis === "fiscal-year" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;
+  return b.kind === "basic" ? `${label}, basic EPS` : label;
+}
 
 /** The columns a row can fill, as the picker entry names them. */
 export type SecPickerFigures = {
@@ -190,6 +264,10 @@ export function buildSecPickerRow(
       freeCashFlow: null,
       divPerShare: null,
       divGrowth: null,
+      // EPS is money per share: not in dollars, not written. Payout goes too --
+      // the row carries nothing derived from a figure it refused.
+      eps: null,
+      payout: null,
     };
   }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
@@ -209,6 +287,8 @@ export function buildSecPickerRow(
     freeCashFlow: cf ? cf.vals.operatingCashFlow - Math.abs(cf.vals.capex) : null,
     divPerShare: dps ? dps.vals.dividendsDeclaredPerShare : null,
     divGrowth: dividendGrowth(set),
+    eps: inputs.eps,
+    payout: samePeriodPayout(set, inputs.eps),
   };
 }
 
@@ -257,6 +337,44 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
     divPerShare: money(row.divPerShare),
     divYield: money(divYield),
     divGrowth: money(row.divGrowth),
+  };
+}
+
+/** P/E, EPS and Payout, the three that moved with #553 COWORK #21. */
+export type SecEarningsFigures = {
+  peRatio: number | null;
+  epsTtm: number | null;
+  payoutRatio: number | null;
+  /** "TTM to 30 Jun 2026" / "FY2025" for the P/E and EPS cells, or null. */
+  epsBasis: string | null;
+  payoutBasis: string | null;
+};
+
+export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["peRatio", "epsTtm", "payoutRatio"];
+
+/**
+ * READ half for the three. NULL (not a figures object) for a row written
+ * before they moved: the page then leaves the stored values, exactly as for a
+ * symbol with no row. Pure.
+ */
+export function applySecEarnings(row: SecPickerRow, price: number | null): SecEarningsFigures | null {
+  if (!("eps" in row)) return null;
+  const usd = moneyIsUsd(row.unit);
+  const eps = row.eps ?? null;
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps, refusals: row.inputs.refusals };
+  // ADS NAMES STAY "–" (COWORK #18): EPS per ordinary share beside a price per
+  // depositary share is the same unit error the P/E refusal exists for, and a
+  // payout beside them would be the only figure left standing in the row.
+  const ads = row.inputs.refusals.includes("ads-ratio-makes-eps-incomparable");
+  const pe = usd ? ok(peRatio(inputs, price)) : null;
+  const epsTtm = usd && !ads && eps ? eps.val : null;
+  const payout = usd && !ads && row.payout ? row.payout : null;
+  return {
+    peRatio: pe,
+    epsTtm,
+    payoutRatio: payout ? payout.val : null,
+    epsBasis: eps && (pe !== null || epsTtm !== null) ? basisLabel(eps) : null,
+    payoutBasis: payout ? basisLabel(payout) : null,
   };
 }
 
