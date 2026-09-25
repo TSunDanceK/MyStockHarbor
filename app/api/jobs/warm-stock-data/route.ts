@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardJob } from "../../../../lib/server/jobGuard";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmStockData } from "../../../../lib/server/stockDataCache";
 
@@ -27,7 +28,7 @@ function isAuthorized(req: NextRequest) {
   return auth === `Bearer ${secret}`;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -87,3 +88,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-stock-data", handleGET);
