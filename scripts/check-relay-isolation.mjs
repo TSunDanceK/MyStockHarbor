@@ -125,7 +125,7 @@ console.log(`  stateful  if: ${stIf}`);
 // rather than loosely matched.
 check(
   "exactly one job runs per dispatch — both gates key on the write- prefix, inverted",
-  roIf === "${{ !startsWith(inputs.task, 'write-') }}" &&
+  roIf === "${{ !startsWith(inputs.task, 'write-') && !startsWith(inputs.task, 'tiingo-') }}" &&
     stIf === "${{ startsWith(inputs.task, 'write-') }}",
   roIf && stIf
     ? "the write- prefix routes to the credentialled job and nothing else does"
@@ -189,6 +189,23 @@ check(
   "a missing script would otherwise surface as a module-not-found three minutes " +
     "into a runner"
 );
+
+// ── The third job: Tiingo only (#553 COWORK #49) ────────────────────────────
+console.log("");
+const tiingo = sliceJob("tiingo");
+check("the tiingo job exists", Boolean(tiingo));
+if (tiingo) {
+  const tiCode = stripComments(tiingo);
+  const tiSecrets = [...new Set(secretsIn(tiCode))];
+  check("the tiingo job's gate is the tiingo- prefix", ifOf(tiCode) === "${{ startsWith(inputs.task, 'tiingo-') }}", String(ifOf(tiCode)));
+  check("the tiingo job references TIINGO_API_KEY and no other secret", tiSecrets.length === 1 && tiSecrets[0] === "TIINGO_API_KEY", tiSecrets.join(", "));
+  check("the tiingo job has no Upstash credential and runs no npm ci", !/UPSTASH/.test(tiCode) && !/npm ci/.test(tiCode));
+  check("the tiingo job uploads no artifact (public logs; Tiingo data is not distributed)", !/upload-artifact/.test(tiCode));
+  check("the tiingo job invokes the router WITHOUT --allow-writes", /relay-run\.mjs "\$\{TASK\}"\s*2>&1/.test(tiCode) && !/--allow-writes/.test(tiCode));
+  check("no other job references TIINGO_API_KEY", !/TIINGO_API_KEY/.test(roCode) && !/TIINGO_API_KEY/.test(stCode));
+  check("the router enforces the tiingo- prefix and refuses other tasks where the key is present",
+    /task\.startsWith\("tiingo-"\) !== Boolean\(spec\.tiingo\)/.test(router) && /!spec\.tiingo && process\.env\.TIINGO_API_KEY/.test(router));
+}
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
