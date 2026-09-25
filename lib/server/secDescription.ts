@@ -99,18 +99,21 @@ const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descri
 //   RYAAY — Item 4 has NO Business Overview sub-heading at all (Introduction,
 //           Strategy, Route System, …); "Business Overview" appears only under
 //           Item 5. Inside Item 4 or nowhere, so RYAAY has no description.
+//   BIP   — numbered sub-headings, "4.B BUSINESS OVERVIEW" / "4.C ORGANIZATIONAL
+//           STRUCTURE" (#552 COWORK #48): the key is "4bbusinessoverview", so
+//           a bare "4" prefix is accepted wherever "item4" is.
 // Inside Item 4 an UNLETTERED "Business Overview" is accepted; outside it
 // (a filing whose Item 4 heading is not found) only a lettered 4.B is, since
 // an unlettered one can be Item 5's (RYAAY).
 const ITEM4 = /^item4(informationonthecompany)?$/;
 const ITEM4_TITLE = /^informationonthecompany$/;
 const ITEM4_END = /^item(4a|5)[a-z]*$/;
-const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;
-const ITEM4B_ANY = /^(item4)?b?businessoverview$/;
-const B_ALONE = /^(item4)?b$/;
+const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;
+const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;
+const B_ALONE = /^(item4|4)?b$/;
 const BUSINESS_OVERVIEW = /^businessoverview$/;
-const ITEM4C = /^(item4)?c?organi[sz]ationalstructure$/;
-const C_ALONE = /^(item4)?c$/;
+const ITEM4C = /^(item4|4)?c?organi[sz]ationalstructure$/;
+const C_ALONE = /^(item4|4)?c$/;
 const ORG_STRUCTURE = /^organi[sz]ationalstructure$/;
 /** A heading line is short; a long line that happens to fold to a pattern is prose. */
 const HEADING_KEY_MAX = 80;
