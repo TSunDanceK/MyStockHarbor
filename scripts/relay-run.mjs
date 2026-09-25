@@ -1246,6 +1246,22 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // READ-ONLY (Relay C, #563 COWORK #16): phase 2 named-links precision probe.
+  // Latest 10-K/20-F text across the universe, 12 shards; LINK lines carry the
+  // filed sentence and accession for the hand check. No store, Redis 0.
+  "capex-links-probe-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/12" } },
+  "capex-links-probe-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/12" } },
+  "capex-links-probe-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/12" } },
+  "capex-links-probe-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/12" } },
+  "capex-links-probe-5": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/12" } },
+  "capex-links-probe-6": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/12" } },
+  "capex-links-probe-7": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "7/12" } },
+  "capex-links-probe-8": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "8/12" } },
+  "capex-links-probe-9": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "9/12" } },
+  "capex-links-probe-10": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "10/12" } },
+  "capex-links-probe-11": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "11/12" } },
+  "capex-links-probe-12": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "12/12" } },
+  "capex-links-probe-named": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true },
 };
 
 const argv = process.argv.slice(2);
