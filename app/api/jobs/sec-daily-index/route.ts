@@ -31,6 +31,7 @@ import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
 import { recordSuccessionEvents, successionEventsOf, type SuccessionEvent } from "@/lib/server/secSuccessionFlags";
 import { CITED_PREDECESSOR_CIKS } from "@/lib/server/secSuccession";
+import { primaryListingSymbols } from "@/lib/server/secPrimaryListing";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -386,7 +387,9 @@ export async function GET(req: NextRequest) {
   // stored as the empty answer — see companyFactsAbsent), and only a manifest
   // entry puts them in the job's populate queue to have it stored.
   const universe = [
-    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+    // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
+    // list above while its notes' ticker BIPI was, so the set lived under a note.
+    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...(await readDynamicUniverse()).map((e) => e.symbol)]),
   ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 
