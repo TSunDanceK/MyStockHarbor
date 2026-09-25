@@ -231,6 +231,53 @@ console.log("\n4b. stale EPS and a changed share basis (COWORK #45)");
   const Mb = await loadMutant(once(VS, "if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {", "if (false) {"));
   check("MUTATION: the share-basis guard removed → a P/E across the change (caught)",
     Mb.peRatio(Mb.valuationInputs(set(split), TODAY, { annualForm: "20-F", ads: ads5 }), 200)?.ok === true);
+
+  // ── THE MARKET CAP WITH IT (COWORK #49 §1) ─────────────────────────────
+  // BABA-shaped: cover 1,858,037,427 against ~19bn diluted ordinary shares,
+  // ratio 8. The cap it used to publish was ~a tenth of the real one.
+  const babaYear = period("2026-03-31", "2025-04-01", "FY", 2026, { epsDiluted: 5, sharesDiluted: 19.0e9, netIncome: 5 * 19.0e9 });
+  const baba = { ...set(babaYear), symbol: "BABA", cover: { asOf: "2026-06-30", accession: null, filed: null, val: 1858037427, derived: "as-filed" } };
+  const ads8 = { ordinaryPerAds: 8, source: "x", kind: "ads" };
+  const babaIn = V.valuationInputs(baba, TODAY, { annualForm: "20-F", ads: ads8 });
+  const babaCap = V.marketCap(babaIn, 150), babaPe = V.peRatio(babaIn, 150);
+  check("BABA: cover ÷ 8 vs diluted ÷ 8 more than 20% apart → the market cap is withheld, same reason as the P/E",
+    babaCap?.ok === false && babaCap.why === "share-basis-changed" && babaPe?.ok === false && babaPe.why === "share-basis-changed",
+    JSON.stringify({ babaCap, babaPe }));
+  // With the EPS already withheld as stale (TSM-style), the newest period that
+  // states diluted shares is the comparison, so the cap is still tested.
+  const babaStale = { ...baba, years: [period("2024-03-31", "2023-04-01", "FY", 2024, { epsDiluted: 5, sharesDiluted: 19.0e9, netIncome: 5 * 19.0e9 })] };
+  const bsCap = V.marketCap(V.valuationInputs(babaStale, TODAY, { annualForm: "20-F", ads: ads8 }), 150);
+  check("...and when the EPS was already withheld as stale, the cap is still tested (withheld)",
+    bsCap?.ok === false && bsCap.why === "share-basis-changed", JSON.stringify(bsCap));
+  check("TSM (cover = diluted) keeps its cap", V.marketCap(withR, 200)?.ok === true && V.marketCap(staleIn, 452)?.ok === true);
+  const Mc = await loadMutant(once(VS, "        eps = null;\n        shares = null;\n", "        eps = null;\n"));
+  check("MUTATION: shares kept when the basis test fails → BABA's tenth-size cap published again (caught)",
+    Mc.marketCap(Mc.valuationInputs(baba, TODAY, { annualForm: "20-F", ads: ads8 }), 150)?.ok === true);
+}
+
+console.log("\n4c. wording: a direct listing is not an ADS (COWORK #49 §2)");
+{
+  const ord1 = { ordinaryPerAds: 1, source: "x", kind: "ordinary" };
+  const asml = V.valuationInputs(set(yearOrd), TODAY, { annualForm: "20-F", ads: ord1 });
+  check("direct listing: shares read plain 'shares'", V.sharesBasisWords(asml.shares) === "shares", V.sharesBasisWords(asml.shares));
+  check("direct listing: EPS reads 'per share'", V.epsUnitWords(asml.eps) === " per share", V.epsUnitWords(asml.eps));
+  const tsm = V.valuationInputs(set(yearOrd), TODAY, { annualForm: "20-F", ads: { ...ads5, kind: "ads" } });
+  check("ADS row: 'ADS-equivalent shares (each ADS = 5 ordinary shares)'",
+    V.sharesBasisWords(tsm.shares) === "ADS-equivalent shares (each ADS = 5 ordinary shares)", V.sharesBasisWords(tsm.shares));
+  check("ADS row: EPS ' per ADS (each ADS = 5 ordinary shares)'",
+    V.epsUnitWords(tsm.eps) === " per ADS (each ADS = 5 ordinary shares)", V.epsUnitWords(tsm.eps));
+  check("singular: 'each ADS = 1 ordinary share'", V.adsEqualsWords(1) === "each ADS = 1 ordinary share");
+  check("no map row (domestic): no suffix at all", V.epsUnitWords({}) === "" && V.sharesBasisWords({}) === "shares");
+  const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
+  check("the valuation card uses both helpers (no hand-written ADS wording left)",
+    /sharesBasisWords\(inputs\.shares\)/.test(cards) && /epsUnitWords\(inputs\.eps\)/.test(cards) && !/ordinary shares each/.test(cards));
+  const VS = fs.readFileSync("lib/server/secValuation.ts", "utf8");
+  const tmp = `lib/server/.check-ads-mut-${process.pid}-w.ts`;
+  fs.writeFileSync(tmp, once(VS, `return eps.adsKind === "ordinary" ? " per share" :`, `return false ? " per share" :`));
+  let Mw;
+  try { Mw = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  check("MUTATION: kind ignored → ASML worded 'per ADS (each ADS = 1 ordinary share)' again (caught)",
+    Mw.epsUnitWords(asml.eps) !== " per share");
 }
 
 console.log("\n5. wiring: the stock page and the earnings page pass the cited ratio");
