@@ -74,8 +74,11 @@ export const PICKER_CHARTS_MEASURED_SOURCE =
 export const PICKER_CHARTS_KEY = "msh:picker-charts:v1";
 
 // Must comfortably outlive PICKERS_REDIS_TTL_SECONDS (1h) so the series can
-// never expire out from under a payload that is still being served.
-const PICKER_CHARTS_TTL_SECONDS = 3 * 60 * 60;
+// never expire out from under a payload that is still being served -- and,
+// since #553 COWORK #51 item 2, the 25h LAST-GOOD manifest that previews and
+// `next build` serve from. One hash, refreshed on every write: the longer TTL
+// costs no command and holds one copy.
+const PICKER_CHARTS_TTL_SECONDS = 26 * 60 * 60;
 
 // ~11KB per symbol measured, so 40 symbols is ~0.44MB per request -- an order
 // of magnitude under the 10MB ceiling, with room for the series to grow.
