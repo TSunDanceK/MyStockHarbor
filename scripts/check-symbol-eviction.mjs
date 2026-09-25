@@ -533,7 +533,10 @@ console.log("\n3. The hashes and the queues, which no TTL will ever reach");
 
 check(
   "both per-symbol hashes are HDEL'd",
-  /p\.hdel\(hash, symbol\)/.test(evict) &&
+  /p\.hdel\(hash, \.\.\.fields\)/.test(evict) &&
+    // The pool's field is DASHED (pricePool.poolField, #553 COWORK #53): a
+    // dotted symbol's row must be deleted under its dashed field too.
+    /hash === "msh:price-pool:v1" \? \[\.\.\.new Set\(\[symbol, toDashed\(symbol\)\]\)\] : \[symbol\]/.test(evict) &&
     /"msh:price-pool:v1"/.test(evict) &&
     /"msh:picker-charts:v1"/.test(evict),
   "their fields carry no TTL and the key-level expiry is reset every run, so a " +
