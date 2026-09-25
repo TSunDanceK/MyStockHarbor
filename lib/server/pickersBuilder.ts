@@ -504,7 +504,21 @@ const PICKERS_CHUNK_PREFIX = "msh:pickers:v10:chunk";
 // Longer than the manifest's TTL so a chunk can never expire out from under a
 // manifest that still points at it -- the same reasoning as
 // PICKER_CHARTS_TTL_SECONDS against PICKERS_REDIS_TTL_SECONDS one module over.
-const PICKERS_CHUNK_TTL_SECONDS = 3 * 60 * 60;
+//
+// 26 HOURS, NOT 3 (#553 COWORK #51 item 2): the chunks also back the LAST-GOOD
+// manifest below, which lives 25h. No extra command -- the TTL rides on the SET
+// -- only storage: each build's ~1.5 MB of chunks now lives a day, and with
+// previews and `next build` no longer building that is ~10 builds' worth.
+const PICKERS_CHUNK_TTL_SECONDS = 26 * 60 * 60;
+
+// THE LAST-GOOD MANIFEST (#553 COWORK #51 item 2). The same manifest, written
+// beside the 1h one on every build with a 25h TTL, pointing at the same
+// build-scoped chunks (which outlive it by an hour). Only the contexts that
+// must never build -- previews and `next build` -- read it, so a production
+// visitor still gets the 1h freshness rule, and a preview or a deploy renders
+// yesterday's picks rather than running a ~700-symbol build to render them.
+export const PICKERS_LAST_GOOD_MANIFEST_KEY = "msh:pickers:v10:manifest:last-good";
+const PICKERS_LAST_GOOD_TTL_SECONDS = 25 * 60 * 60;
 
 // THE SYMBOL LIST, ON ITS OWN KEY, WRITTEN BY THE BUILDER.
 //
@@ -766,9 +780,9 @@ export async function readPickersSymbolsIfCached(): Promise<string[] | null> {
  * back, which is the honest outcome. recordCount is on the manifest for exactly
  * this test.
  */
-async function readPickersV10(): Promise<CachedPickersPayload | null> {
+async function readPickersV10(manifestKey = PICKERS_MANIFEST_KEY): Promise<CachedPickersPayload | null> {
   if (!redis) return null;
-  const manifest = await redis.get<PickersManifest>(PICKERS_MANIFEST_KEY);
+  const manifest = await redis.get<PickersManifest>(manifestKey);
   if (!manifest || typeof manifest !== "object") return null;
   if (!Array.isArray(manifest.chunkKeys) || !manifest.head) return null;
 
@@ -789,7 +803,7 @@ async function readPickersV10(): Promise<CachedPickersPayload | null> {
   };
 }
 
-async function readPickersCache() {
+async function readPickersCache(opts: { lastGood?: boolean } = {}) {
   if (!redis) return null;
 
   try {
@@ -799,7 +813,9 @@ async function readPickersCache() {
     // the exact cost #419 removed. v9 is not written any more, so this branch
     // goes quiet on its own within 60 minutes and can be deleted next time
     // anyone is in this file.
-    const entry = (await readPickersV10()) ?? (await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY));
+    const entry = opts.lastGood
+      ? await readPickersV10(PICKERS_LAST_GOOD_MANIFEST_KEY)
+      : (await readPickersV10()) ?? (await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY));
     if (!entry || typeof entry !== "object") return null;
     if (!entry.data || typeof entry.data !== "object") return null;
 
@@ -1081,8 +1097,11 @@ async function writePickersChunked(stripped: PickersPayload) {
   // the body that breaches, and chunking harder would not help.
   account(tryMeasureSet(PICKERS_MANIFEST_KEY, manifest, PICKERS_REDIS_TTL_SECONDS));
   await redis.set(PICKERS_MANIFEST_KEY, manifest, { ex: PICKERS_REDIS_TTL_SECONDS });
+  // The same manifest again, for the contexts that never build. After the 1h
+  // one, so a reader of either always finds complete chunks. +1 SET a build.
+  await redis.set(PICKERS_LAST_GOOD_MANIFEST_KEY, manifest, { ex: PICKERS_LAST_GOOD_TTL_SECONDS });
 
-  const requests = groups.length + 2;
+  const requests = groups.length + 3;
   const inflationPct =
     totalValueBytes > 0 ? ((totalBodyBytes / totalValueBytes - 1) * 100).toFixed(1) : "0.0";
   console.log(
@@ -1191,16 +1210,22 @@ function pickersSleep(ms: number) {
  * chart series, so polling it would do that expensive hydration on every pass;
  * this checks for the key at one command a time and hydrates once, at the end.
  */
-async function waitForPickersPayload() {
+async function waitForPickersPayload(maxWaitMs = PICKERS_MAX_WAIT_MS) {
   if (!redis) return null;
 
   const startedAt = Date.now();
 
-  while (Date.now() - startedAt < PICKERS_MAX_WAIT_MS) {
+  while (Date.now() - startedAt < maxWaitMs) {
     await pickersSleep(PICKERS_WAIT_STEP_MS);
 
     try {
-      if (await redis.exists(PICKERS_REDIS_KEY)) return await readPickersCache();
+      // THE v10 MANIFEST, NOT ONLY THE v9 KEY (#553 COWORK #51 item 2). The
+      // builder has written v10 since the chunking change and v9 only on the
+      // reduced fallback, so polling v9 alone never saw the winner publish:
+      // every lock loser waited the full budget and then built anyway. That
+      // was the "no-payload-lock-lost" row in the #544 attribution -- 30 of
+      // 50 full builds on 2026-09-24.
+      if (await redis.exists(PICKERS_MANIFEST_KEY, PICKERS_REDIS_KEY)) return await readPickersCache();
     } catch {
       return null;
     }
@@ -4955,6 +4980,28 @@ export function isDegradedBuild(data: Pick<PickersPayload, "degradedSymbolPct">)
 // entry point, and why it built. One HINCRBY per build, on a day key.
 // Measurement only: nothing here changes whether or how a build runs.
 export const PICKERS_BUILD_TRIGGERS_PREFIX = "msh:pickers-build-triggers:v1";
+
+// ── WHERE A FULL BUILD MAY RUN (#553 COWORK #51 item 2) ─────────────────────
+// Previews and `next build` share production's Redis, so a build there reads
+// ~700 symbols of production history (and can fetch a missing one from a
+// production data provider) and writes production's keys with branch code.
+// The #544 attribution put 42 of 50 full builds on 2026-09-24 in exactly those
+// contexts. They now serve the fresh payload, else the last-good one, and
+// never build:
+//   - "preview": never builds. Nothing at all to serve is an error, loudly.
+//   - "next-build": never builds while a last-good payload exists; on a truly
+//     cold store the lock winner builds once and every other worker waits for
+//     it (the lock TTL, not the 12s runtime budget).
+// Production runtime (ISR, /api/pickers, the warm job) is unchanged.
+export type PickersBuildGate = "allowed" | "preview" | "next-build";
+export function pickersBuildGate(): PickersBuildGate {
+  if (process.env.NEXT_PHASE === "phase-production-build") return "next-build";
+  if (process.env.VERCEL_ENV === "preview") return "preview";
+  return "allowed";
+}
+async function readPickersLastGood() {
+  return readPickersCache({ lastGood: true });
+}
 async function recordBuildTrigger(entry: "getPickersData" | "GET" | "GET_WARM", reason: string): Promise<void> {
   const env = process.env.VERCEL_ENV ?? "none";
   const phase = process.env.NEXT_PHASE === "phase-production-build" ? "next-build" : "runtime";
@@ -5001,6 +5048,21 @@ export async function getPickersData(
     return cached.data;
   }
 
+  // THE GATE (#553 COWORK #51 item 2): see pickersBuildGate. A gated context
+  // serves the last-good payload rather than building one.
+  const gate = pickersBuildGate();
+  if (gate !== "allowed") {
+    const lastGood = await readPickersLastGood();
+    if (lastGood?.data) {
+      console.log(`[pickers] ${gate}: serving the last-good payload (cachedAt ${new Date(lastGood.cachedAt).toISOString()}); no build`);
+      memo = { ts: now, data: lastGood.data };
+      return lastGood.data;
+    }
+    if (gate === "preview") {
+      throw new Error("[pickers] preview: no fresh or last-good payload in the store, and previews never build");
+    }
+  }
+
   const lockToken = await acquirePickersLock();
 
   // LOCK LOST WITH NOTHING TO SERVE. Wait for the winner instead of starting a
@@ -5013,7 +5075,9 @@ export async function getPickersData(
   // forced run is one cron request, not a stampede, so it is not what this is
   // protecting against anyway.
   if (!lockToken && !forceRefresh && !cached?.data) {
-    const published = await waitForPickersPayload();
+    // A `next build` worker waits as long as the lock can be held: the winner
+    // is another worker of the same build, and a second build is the cost.
+    const published = await waitForPickersPayload(gate === "allowed" ? PICKERS_MAX_WAIT_MS : PICKERS_LOCK_TTL_SECONDS * 1000);
 
     if (published?.data) {
       memo = { ts: now, data: published.data };
@@ -5200,13 +5264,35 @@ async function handlePickersRequest(
     });
   }
 
+
+  // THE GATE (#553 COWORK #51 item 2), as in getPickersData. A preview's
+  // /api/pickers serves the last-good payload and never builds.
+  const gate = pickersBuildGate();
+  if (gate !== "allowed") {
+    const lastGood = await readPickersLastGood();
+    if (lastGood?.data) {
+      memo = { ts: now, data: lastGood.data };
+      return NextResponse.json(lastGood.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Pickers-History-Forced": "false",
+        },
+      });
+    }
+    if (gate === "preview") {
+      return NextResponse.json(
+        { error: "No pickers payload is cached, and previews never build one." },
+        { status: 503, headers: { "X-Pickers-History-Forced": "false" } }
+      );
+    }
+  }
   const lockToken = await acquirePickersLock();
 
   // Same single-flight wait as getPickersData -- see the note there, and on
   // waitForPickersPayload, for why the no-cached-payload case is the one that
   // stampedes and why a forced run is deliberately excluded.
   if (!lockToken && !forceRefresh && !cached?.data) {
-    const published = await waitForPickersPayload();
+    const published = await waitForPickersPayload(gate === "allowed" ? PICKERS_MAX_WAIT_MS : PICKERS_LOCK_TTL_SECONDS * 1000);
 
     if (published?.data) {
       memo = { ts: now, data: published.data };
