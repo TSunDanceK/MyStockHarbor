@@ -741,11 +741,13 @@ export async function writeStaleBarDays(
 export async function clearAbsence(symbols: string[]): Promise<void> {
   if (!redis || !symbols.length) return;
   try {
+    // ONE MULTI-KEY DEL PER 500, NOT A PIPELINE OF 500 DELs (#553 COWORK #53).
+    // Upstash bills a pipeline per command and a multi-key DEL as one, and this
+    // runs daily over the whole present universe (~850 keys, most of which do
+    // not exist): ~850 commands a day became 2.
     for (let i = 0; i < symbols.length; i += 500) {
-      const group = symbols.slice(i, i + 500);
-      const p = redis.pipeline();
-      for (const s of group) p.del(`${ABSENCE_KEY_PREFIX}${s}`);
-      await p.exec();
+      const keys = symbols.slice(i, i + 500).map((s) => `${ABSENCE_KEY_PREFIX}${s}`);
+      await redis.del(...keys);
     }
   } catch {
     // fail open -- stale evidence expires on its own, and shouldEvict still
