@@ -1248,6 +1248,8 @@ const TASKS = {
   },
   // WHO TRIGGERS FULL PICKERS BUILDS (#544; #553 COWORK #51). Read-only; 16 commands. Side branch.
   "write-build-triggers-reading": { script: "scripts/build-triggers-reading.mjs", args: () => [], writes: true },
+  // DOT/DASH DUPLICATES IN THE PRICE POOL (#553 COWORK #51 item 4). Read-only; 4 commands. Side branch.
+  "write-spelling-dup-reading": { script: "scripts/spelling-dup-reading.mjs", args: () => [], writes: true },
 };
 
 const argv = process.argv.slice(2);
