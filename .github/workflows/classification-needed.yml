@@ -2,7 +2,7 @@
 # ONE issue listing Pickers universe symbols A's resolver cannot fully place,
 # plus A's SIC-change notices, each with a suggested label from the resolver's
 # set. It never edits data/sec/classification-overrides.json -- approvals land
-# by PR. Redis: 2 reads a run (read-only token). No links in the issue body.
+# by PR. Redis: 4 reads a run (read-only token). No links in the issue body.
 name: Classification needed
 
 on:
