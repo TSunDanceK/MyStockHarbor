@@ -42,6 +42,7 @@ import { JOB_RUN_PREFIX, type JobKey } from "./jobRuns";
 export type GuardedJob = Extract<
   JobKey,
   "warm-stock-data" | "warm-fundamentals" | "warm-screener-fundamentals" | "warm-picker-universe" | "warm-pickers-sec" | "ipo-refresh"
+  | "tiingo-quotes" | "tiingo-eod"
 >;
 
 /**
@@ -63,6 +64,12 @@ export const JOB_LIMITS: Record<GuardedJob, { perRun: number; perDay: number }> 
   "warm-pickers-sec": { perRun: 2_100, perDay: 6_500 },
   // 1 run/day, ~5 a run (stated). A catch-up run is still tiny.
   "ipo-refresh": { perRun: 200, perDay: 600 },
+  // Tiingo (#553 COWORK #55 §2). Quotes: ~10 a run inside market hours (HKEYS,
+  // limiter pipeline of 4, HSET, EXPIRE, run record), ~10 active runs a day.
+  "tiingo-quotes": { perRun: 60, perDay: 600 },
+  // EOD: ~890 a complete night (844 SETs, limiter ~40, HKEYS, GET/SET meta);
+  // the 02:45 run is 1 GET after a complete night.
+  "tiingo-eod": { perRun: 2_000, perDay: 4_000 },
 };
 
 export const JOB_COMMANDS_PREFIX = "msh:jobs:commands:v1";
