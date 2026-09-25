@@ -1314,7 +1314,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               compact
              
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
+              empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
             />
           </Row>
         ))}
@@ -1801,14 +1801,20 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
                   <span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}
                 </span>
               ) : null}
+              {/* THE NEWEST CROSSING, in the snapshot's words (#552 COWORK #47):
+                  AXTI's EPS growth is refused, but its latest quarter turned
+                  profitable, and that is the news. */}
+              {l.latestWords ? <span className="trendLatest">{l.latestWords}</span> : null}
               <div className="trendChipRow">
-                {/* A LEVEL GETS NO VERDICT CHIP. trendSummary leaves the
-                    operating-margin line untoned on purpose: whether 6% is good
-                    depends on the industry and this page has no comparison. */}
-                {l.tone === null && l.value !== null ? null : <ToneChip tone={l.tone} word={word} />}
+                {/* A LEVEL GETS NO VERDICT CHIP ON ITS VALUE — whether 6% is
+                    good depends on the industry. Its DIRECTION does get one
+                    (latest against typical, the Growth & Margins band): l.move. */}
+                {l.kind === "level"
+                  ? (l.move ? <ToneChip tone={l.move.tone} word={l.move.word} /> : null)
+                  : l.value === null ? null : <ToneChip tone={l.tone} word={word} />}
                 <span className="trendCount">
                   {l.value === null
-                    ? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`
+                    ? (l.reason ?? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`)
                     : `${l.counted} of ${l.counted + l.skipped} ${l.counted + l.skipped === 1 ? w.one : w.many}`}
                 </span>
               </div>

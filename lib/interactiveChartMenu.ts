@@ -40,7 +40,7 @@ export type MenuCatalog = {
   intervals: { key: string; label: string }[];
   indicators: { key: string; label: string }[];
   drawTools: { key: string; label: string }[];
-  /** Measure tools (COWORK #28 part b); empty until they ship. */
+  /** Measure tools (COWORK #28 part b). A measure is temporary (#43), so there is no "Clear measures". */
   measureTools?: { key: string; label: string }[];
 };
 
@@ -53,7 +53,7 @@ export function buildChartMenu(state: MenuState, cat: MenuCatalog): MenuSection[
     { key: "draw", label: "Draw", items: cat.drawTools.map((t) => ({ id: `draw:${t.key}`, label: t.label })) },
   ];
   if (cat.measureTools?.length) {
-    sections.push({ key: "measure", label: "Measure", items: [...cat.measureTools.map((t) => ({ id: `measure:${t.key}`, label: t.label })), { id: "measure-clear", label: "Clear measures" }] });
+    sections.push({ key: "measure", label: "Measure", items: cat.measureTools.map((t) => ({ id: `measure:${t.key}`, label: t.label })) });
   }
   sections.push(
     { key: "scale", label: "Scale", items: [

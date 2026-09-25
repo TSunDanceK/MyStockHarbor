@@ -767,19 +767,22 @@ function SectorFeed({ sector, data }: { sector: string; data: SectorNewsBaseData
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
                   ) : (
-                    /* Nothing is drawn for an article that resolves to no
-                       constituent — canGenerate false — because this card's
-                       whole content is the ticker, and a ticker card with no
-                       ticker is worse than a blank slot. The row already falls
-                       back to the publisher name for its own label there. */
+                    /* An article that resolves to no constituent -- canGenerate
+                       false -- has no ticker for the generated card (a ticker
+                       card with no ticker is worse than a blank slot), so it
+                       takes a SQUARE CROP of the generic fallback art instead
+                       (#553 COWORK #42: no row without a picture; at 56px a
+                       crop reads as a thumbnail). The shared takenGeneric set
+                       keeps it from repeating a lead card's picture. The crop
+                       is compactThumbStyle's 56x56 objectFit: cover. */
                     <NewsCardArt
-                      plan={planCardArt({
+                      plan={withGenericFallback(planCardArt({
                         variant: "compact",
                         sectorBucket,
                         key: item.guid ?? item.link,
                         taken: takenByBucket,
                         canGenerate: symbol !== null,
-                      })}
+                      }), item.guid ?? item.link, takenGeneric)}
                       symbol={symbol ?? ""}
                       changePct={null}
                       points={[]}
