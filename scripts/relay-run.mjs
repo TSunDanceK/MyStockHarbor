@@ -1267,6 +1267,11 @@ const TASKS = {
   "capex-links-probe-v2-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "2/4" } },
   "capex-links-probe-v2-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "3/4" } },
   "capex-links-probe-v2-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "4/4" } },
+  // RULES=v3, frozen before the fresh gate sample (#563 COWORK #17).
+  "capex-links-probe-v3-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "1/4" } },
+  "capex-links-probe-v3-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "2/4" } },
+  "capex-links-probe-v3-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "3/4" } },
+  "capex-links-probe-v3-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "4/4" } },
 };
 
 const argv = process.argv.slice(2);

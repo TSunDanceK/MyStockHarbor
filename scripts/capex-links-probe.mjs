@@ -39,7 +39,18 @@ const UA =
 const SELFTEST = process.env.SELFTEST === "1";
 // RULES=v2 adds the three rules measured in CODE-C #18 (in-sample on the v1
 // hand-check sample); v1 (the default) is the extractor the gate measured.
-const V2 = (process.env.RULES || "v1") === "v2";
+const RULES = process.env.RULES || "v1";
+const V2 = RULES === "v2" || RULES === "v3";
+// RULES=v3 (#563 COWORK #17), FROZEN before the fresh gate sample was drawn:
+//   R1c  a one-word listed name with no suffix is not a party when the same
+//        filing also uses it as a lower-case word ("Founder"/"founder",
+//        "Strategy"/"strategy") -- plus a fixed backstop list;
+//   R1d  US government bodies and agencies are never parties (DoW, DoD, GSA…);
+//   R4   list items under a lead-in that names competitors ("Our competitors
+//        include:") are dropped, even when the item itself never says so;
+//   H    hosting/cloud (AWS, Azure, Google Cloud, "host our platform") is tagged
+//        role "hosting" and kept apart from supplier links.
+const V3 = RULES === "v3";
 
 // ── A's modules ─────────────────────────────────────────────────────────────
 const tickerSrc = readCodeOnly("lib/server/secTickerMap.ts");
@@ -144,6 +155,11 @@ const CORP_SUFFIX_RE = /^,?\s*(Inc\.?|Incorporated|Corporation|Corp\.?|Company|C
 // filer-side words, auditors, and banks acting as agents.
 const NOT_PARTY = /^(Company|the Company|Government|U\.S\. Government|Department|Board|Nasdaq|NYSE|SEC|FDIC|Federal|State|Treasury|IRS|FASB|PCAOB|Medicare|Medicaid|Ernst|Deloitte|KPMG|PricewaterhouseCoopers|PwC|Grant Thornton|BDO|Moody|Standard & Poor|S&P|Fitch|Computershare|Broadridge|Wells Fargo|JPMorgan|Bank of America|Citibank|Citigroup|Goldman Sachs|Morgan Stanley)\b/i;
 
+// R1d (v3): government bodies and agencies, by name or acronym.
+const GOV_BODY = /^(?:the\s+)?(DoW|DOW|DoD|DOD|DoE|DOE|DoJ|DOJ|DoT|DOT|DHS|HHS|GSA|NASA|NIH|FDA|CMS|CDC|VA|EPA|USDA|NSF|DARPA|DLA|DISA|NGA|NRO|NSA|CIA|FBI|FAA|FCC|FTC|NRC|SBA|USPS|IRS|NATO|MoD|MOD|IMOD|U\.?S\.?(?:\s+(?:Army|Navy|Air Force|Space Force|Government|Department|Postal))?|United States(?:\s+Government)?|Department|Ministry|Army|Navy|Air Force|Space Force|Marine Corps|Coast Guard|Veterans Affairs|Medicare|Medicaid)\b/;
+// R1c (v3) backstop for capitalised common words, when the filing's own
+// lower-case vocabulary is not at hand (the offline EVAL replay).
+const COMMON_CAP = new Set(["FOUNDER", "CO-FOUNDER", "MILLENNIUM", "STRATEGY", "MINERALS", "OUTDOOR", "API", "DSS", "GDS"]);
 // Find named companies inside a text span. Returns [{name, cik, ticker, how}].
 function partiesIn(span, self) {
   const out = [];
@@ -154,6 +170,7 @@ function partiesIn(span, self) {
     if (cik && self.cik === cik) return;
     if (self.norms.has(normName(name))) return;
     if (NOT_PARTY.test(name)) return;
+    if (V3 && GOV_BODY.test(name)) return;
     seen.add(key);
     out.push({ name, cik: cik ?? null, ticker: ticker ?? null, how });
   };
@@ -185,6 +202,10 @@ function partiesIn(span, self) {
       // one common-looking word ("Materion" fine, "Ameren" fine; "Energy" not):
       // single-token names need a suffix or an internal capital / all caps
       if (single && !hasSuffix && !/[A-Z].*[A-Z]/.test(text) && n.length < 5) continue;
+      if (V3 && !hasSuffix && single) {
+        const w = text.replace(/[.,]+$/, "");
+        if (COMMON_CAP.has(n) || COMMON_CAP.has(w.toUpperCase()) || (self.lower && self.lower.has(w.toLowerCase()))) continue;
+      }
       if (V2 && !hasSuffix) {
         // R1a: a short acronym (GDS, DSS, DoW, API) is a registrant only with a suffix
         if (single && text.replace(/\.$/, "").length <= 4 && /[A-Z].*[A-Z]/.test(text)) continue;
@@ -230,6 +251,16 @@ const PATTERNS = [
   { role: "customer", rule: "we-sell-to", re: new RegExp(`\\bwe\\s+(?:\\w+\\s+){0,2}?(?:sell|sells|sold|supply|supplies|supplied|ship|ships|shipped|deliver|delivers|delivered)\\s+(?:[\\w,-]+\\s+){0,8}?to\\s+${SPAN_END}`, "i") },
 ];
 
+// H (v3): cloud hosting is a supplier of a different kind and would swamp the
+// supply-chain view (COWORK #17 D2), so it gets its own role.
+const HOSTING_NAME = /^(Amazon Web Services|AWS|Azure|Microsoft Azure|Google Cloud|Google Cloud Platform|GCP|Oracle Cloud|OCI|IBM Cloud)$/i;
+const HOSTING_WORDS = /\b(cloud|hosting|hosted|host|hosts|data cent(?:er|re)s?|co-?location|computing (?:and storage )?(?:capacity|infrastructure|services)|storage capacity|infrastructure services|AWS|Azure|Amazon Web Services|Google Cloud)\b/i;
+const CLOUD_TICKERS = new Set(["AMZN", "MSFT", "GOOGL", "GOOG", "ORCL", "IBM"]);
+function isHosting(l, sentence) {
+  if (l.role !== "supplier") return false;
+  if (HOSTING_NAME.test(l.name)) return true;
+  return CLOUD_TICKERS.has(l.ticker ?? "") && HOSTING_WORDS.test(sentence);
+}
 // R2 (v2): platforms, marketplaces and partnerships are named, but they are not
 // a supplier or customer of the filer ("the Apple App Store", "hyperscalers
 // such as AWS", "integrates with ...").
@@ -269,7 +300,9 @@ function extract(sentence, self, drops) {
   // a party found under both roles in one sentence is ambiguous: keep neither
   const byKey = new Map();
   for (const l of links) { const k = l.cik ?? l.name.toUpperCase(); byKey.set(k, (byKey.get(k) ?? new Set()).add(l.role)); }
-  return links.filter((l) => byKey.get(l.cik ?? l.name.toUpperCase()).size === 1);
+  const kept = links.filter((l) => byKey.get(l.cik ?? l.name.toUpperCase()).size === 1);
+  if (V3) for (const l of kept) if (isHosting(l, sentence)) l.role = "hosting";
+  return kept;
 }
 
 // ── text ────────────────────────────────────────────────────────────────────
@@ -290,12 +323,38 @@ function htmlToText(html) {
     .replace(/[ \t\r\f\v]+/g, " ")
     .replace(/\n\s*/g, "\n");
 }
-function sentences(text) {
-  return text
+const segments = (text) =>
+  text
     .split(/\n+/)
     .flatMap((p) => p.split(/(?<=[a-z0-9)%"][.!?])\s+(?=[A-Z("“])/))
     .map((s) => s.trim())
-    .filter((s) => s.length >= 30 && s.length <= 1200);
+    .filter(Boolean);
+const keepSentence = (s) => s.length >= 30 && s.length <= 1200;
+
+// One filing's text -> its links. v1/v2 read each sentence on its own; v3 also
+// carries two pieces of document context: the filing's lower-case vocabulary
+// (R1c) and whether the current segment is an item under a competitor lead-in (R4).
+function linksFromText(text, self, drops) {
+  const segs = segments(text);
+  const ctx = V3 ? { ...self, lower: new Set(text.match(/\b[a-z][a-z-]+\b/g) ?? []) } : self;
+  const found = new Map();
+  let sentenceCount = 0, competitorList = false;
+  for (const seg of segs) {
+    if (V3) {
+      const isItem = /^[a-z•·▪◦\-–—(;]/.test(seg) || /;\s*(?:and|or)?$/.test(seg);
+      if (competitorList && !isItem) competitorList = false;
+      if (DROPS.competitor.test(seg) && /:\s*$/.test(seg)) { competitorList = true; continue; }
+      if (competitorList) { if (keepSentence(seg)) { sentenceCount++; drops.leadInCompetitor = (drops.leadInCompetitor ?? 0) + 1; } continue; }
+    }
+    if (!keepSentence(seg)) continue;
+    sentenceCount++;
+    for (const l of extract(seg, ctx, drops)) {
+      const key = `${l.role}:${l.cik ?? l.name.toUpperCase()}`;
+      if (found.has(key)) { found.get(key).n++; continue; }
+      found.set(key, { ...l, n: 1, quote: seg.length > 600 ? `${seg.slice(0, 600)}…` : seg });
+    }
+  }
+  return { found, sentenceCount };
 }
 
 // ── self-test: fixed sentences, no network ──────────────────────────────────
@@ -315,12 +374,31 @@ if (SELFTEST) {
     ["Acme relies on the Company's distributors.", ""],
     ["Networking net revenue increased 51.1%, primarily due to revenue attributable to Juniper Networks.", ""],
   ];
+  if (V3) {
+    cases.push(
+      ["Our success depends in part on the continued service of Jane Roe, our Co-Founder, and we rely on our Founder for strategy.", ""],
+      ["We deliver a broad range of products, services and solutions principally to the U.S. Department of War (\"DoW\"), and our customers include the DoW and GSA.", ""],
+      ["We rely on Amazon Web Services to host our platform and customer data.", "hosting:AMZN"],
+      ["We rely on Illumina, Inc. as a sole supplier for our sequencers.", "supplier:ILMN"],
+    );
+  }
   let bad = 0;
   for (const [s, want] of cases) {
     const got = extract(s, self, {}).map((l) => `${l.role}:${l.ticker ?? l.name}`).join(",");
     const ok = got === want;
     if (!ok) bad++;
     console.log(`${ok ? "ok  " : "FAIL"} ${JSON.stringify(got)} want ${JSON.stringify(want)} :: ${s}`);
+  }
+  if (V3) {
+    // R4: a list item under a competitor lead-in; the doc-level path, with a
+    // negative control (the same item under a supplier lead-in is kept)
+    const doc = (lead) => `${lead}\nindependent vendors that offer a mix of security products, such as Zscaler, Inc. and Okta, Inc.;\nOther text follows here in a normal sentence of the filing.`;
+    const a = [...linksFromText(doc("Our competitors include:"), self, {}).found.values()].length;
+    const b = [...linksFromText(doc("Our suppliers include:"), self, {}).found.values()].length;
+    const okR4 = a === 0 && b > 0;
+    if (!okR4) bad++;
+    console.log(`${okR4 ? "ok  " : "FAIL"} R4 lead-in: competitor list ${a} links (want 0), supplier list ${b} (want >0)`);
+    cases.push(["(R4)", ""]);
   }
   console.log(`selftest ${cases.length - bad}/${cases.length}`);
   process.exit(bad ? 1 : 0);
@@ -389,16 +467,9 @@ for (const cik of ciks) {
     cik,
     norms: new Set([normName(sub.name), ...(sub.formerNames ?? []).map((x) => normName(x.name)), ...u.symbols.map((s) => normName(names.gridCompanyName(s)))].filter(Boolean)),
   };
-  const sents = sentences(htmlToText(html));
+  const { found, sentenceCount } = linksFromText(htmlToText(html), self, drops);
+  const sents = { length: sentenceCount };
   tot.sentences += sents.length;
-  const found = new Map();
-  for (const s of sents) {
-    for (const l of extract(s, self, drops)) {
-      const key = `${l.role}:${l.cik ?? l.name.toUpperCase()}`;
-      if (found.has(key)) { found.get(key).n++; continue; }
-      found.set(key, { ...l, n: 1, quote: s.length > 600 ? `${s.slice(0, 600)}…` : s });
-    }
-  }
   tot.links += found.size;
   if (found.size) tot.withLink++;
   const rank = SIZE_RANK.get(cik) ?? null;
