@@ -105,6 +105,13 @@ const flushRedisReadMeter = async () => {
 const recordBuildTrigger = async (entry, reason) => {
   bench.triggers = [...(bench.triggers ?? []), entry + ":" + reason];
 };
+// The build gate (#553 COWORK #51 item 2), stubbed: bench.gate picks the
+// context, bench.lastGood is what the 25h last-good manifest holds.
+const PICKERS_LOCK_TTL_SECONDS = 120;
+const PICKERS_MAX_WAIT_MS = 12_000;
+const pickersBuildGate = () => bench.gate ?? "allowed";
+const readPickersLastGood = async () => bench.lastGood ?? null;
+const waitForPickersPayload = async () => bench.published ?? null;
 const buildPickersPayload = async (origin, opts) => {
   bench.builds.push(opts ?? {});
   if (bench.buildThrows) throw new Error("build failed");
@@ -149,6 +156,9 @@ function reset(over = {}) {
   bench.cronOk = false;
   bench.meterThrows = false;
   bench.meterFlushes = 0;
+  bench.gate = "allowed";
+  bench.lastGood = null;
+  bench.published = null;
   Object.assign(bench, over);
   m.resetMemo();
 }
@@ -373,6 +383,50 @@ check(
     !/forceRefresh \? null : await readPickersCache\(\)/.test(code),
   "the conditional read is what disabled all three fallbacks at once"
 );
+
+console.log("\n=== 7. The build gate: previews and `next build` never build (#553 COWORK #51) ===\n");
+const LAST_GOOD = { cachedAt: 0, data: payload("last-good", 0) };
+
+reset({ gate: "preview", cache: null, lastGood: LAST_GOOD });
+out = await m.getPickersData("o", {});
+check("PREVIEW + no fresh payload: serves the last-good payload", out.label === "last-good", out.label);
+check("PREVIEW + no fresh payload: no build, no write", bench.builds.length === 0 && bench.writes.length === 0, `${bench.builds.length} build(s)`);
+
+reset({ gate: "preview", cache: null, lastGood: LAST_GOOD });
+out = await m.getPickersData("o", { forceRefresh: true });
+check("PREVIEW + FORCED: still no build", bench.builds.length === 0 && out.label === "last-good", `${bench.builds.length} build(s), ${out.label}`);
+
+reset({ gate: "preview", cache: null, lastGood: null });
+let previewThrew = false;
+try { await m.getPickersData("o", {}); } catch { previewThrew = true; }
+check("PREVIEW + nothing at all: throws rather than builds", previewThrew && bench.builds.length === 0);
+
+reset({ gate: "preview", cache: GOOD_CACHE, lastGood: LAST_GOOD });
+out = await m.getPickersData("o", {});
+check("PREVIEW + fresh payload: the fresh one wins over last-good", out.label === "cached-good", out.label);
+
+reset({ gate: "next-build", cache: null, lastGood: LAST_GOOD, lock: null });
+out = await m.getPickersData("o", {});
+check("NEXT-BUILD + last-good: served, no build (the lock is never taken)", out.label === "last-good" && bench.builds.length === 0, `${bench.builds.length} build(s)`);
+
+reset({ gate: "next-build", cache: null, lastGood: null, lock: null, published: { data: payload("winner", 0) } });
+out = await m.getPickersData("o", {});
+check("NEXT-BUILD cold + lock lost: waits for the winner, no second build", out.label === "winner" && bench.builds.length === 0, `${bench.builds.length} build(s)`);
+
+reset({ gate: "next-build", cache: null, lastGood: null, lock: "token" });
+out = await m.getPickersData("o", {});
+check("NEXT-BUILD cold + lock won: builds once (a truly empty store)", bench.builds.length === 1 && out.label === "fresh-healthy");
+
+reset({ gate: "allowed", cache: null, lastGood: LAST_GOOD, lock: "token" });
+out = await m.getPickersData("o", {});
+check("PRODUCTION RUNTIME: unchanged — no fresh payload means a build, not last-good", bench.builds.length === 1 && out.label === "fresh-healthy", out.label);
+
+reset({ gate: "preview", cache: null, lastGood: null });
+let gateRes = await m.handlePickersRequest(req());
+check("PREVIEW /api/pickers + nothing: 503, no build", gateRes.status === 503 && bench.builds.length === 0, `status ${gateRes.status}`);
+reset({ gate: "preview", cache: null, lastGood: LAST_GOOD });
+gateRes = await m.handlePickersRequest(req({ force: true, bearer: "Bearer x" }));
+check("PREVIEW /api/pickers forced: last-good, no build", gateRes.data?.label === "last-good" && bench.builds.length === 0, `${gateRes.data?.label}`);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
