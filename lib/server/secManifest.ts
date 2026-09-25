@@ -561,6 +561,33 @@ export function symbolsByCik(manifest: SecManifest): Map<string, string> {
 /** Where step 3 will store the extracted fact set. Named here because this is
  *  the module that has to discard one. */
 export const SEC_FACTS_PREFIX = "msh:sec:facts:v1";
+
+/**
+ * EVERY SYMBOL WITH A STORED FACT SET (#552 COWORK #57/#58). A set written by
+ * the cold path or an on-demand read has no manifest entry unless something
+ * else put it there, and a symbol outside the manifest is in no cron queue:
+ * measured 2026-09-25, 54 of 961 stored sets (TSM among them), never re-read.
+ * The daily index unions these so the gap cannot re-open. SCAN at 1,000 keys a
+ * call, so ~1 command per 1,000 stored sets; a failed or short read returns
+ * what it has, which is harmless because seeding only adds.
+ */
+export async function storedFactSetSymbols(maxCalls = 50): Promise<{ symbols: string[]; commands: number }> {
+  if (!redis) return { symbols: [], commands: 0 };
+  const out = new Set<string>();
+  let cursor: string | number = 0;
+  let commands = 0;
+  try {
+    do {
+      const [next, keys]: [string | number, string[]] = await redis.scan(cursor, { match: `${SEC_FACTS_PREFIX}:*`, count: 1000 });
+      commands++;
+      cursor = next;
+      for (const k of keys) out.add(k.slice(SEC_FACTS_PREFIX.length + 1));
+    } while (String(cursor) !== "0" && commands < maxCalls);
+  } catch {
+    // Seeding only adds: a short list costs a day, never an entry.
+  }
+  return { symbols: [...out], commands };
+}
 // Registered in symbolEviction.PER_SYMBOL_KEYS, so evicting a delisted symbol
 // deletes its fact set with everything else.
 //

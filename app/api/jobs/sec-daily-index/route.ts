@@ -13,6 +13,7 @@ import {
   reconcileDelistings,
   reconcileExchanges,
   discardFactSets,
+  storedFactSetSymbols,
   type SecManifest,
 } from "@/lib/server/secManifest";
 import { resolveTickerMap, refreshTickerMap } from "@/lib/server/secTickerMap";
@@ -32,6 +33,7 @@ import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
 import { recordSuccessionEvents, successionEventsOf, type SuccessionEvent } from "@/lib/server/secSuccessionFlags";
 import { CITED_PREDECESSOR_CIKS } from "@/lib/server/secSuccession";
 import { primaryListingSymbols } from "@/lib/server/secPrimaryListing";
+import { POPULAR_SYMBOLS } from "@/lib/server/symbolSearch";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -386,10 +388,16 @@ export async function GET(req: NextRequest) {
   // rendered `noindex` because their CIK has no companyfacts (a 404, now
   // stored as the empty answer — see companyFactsAbsent), and only a manifest
   // entry puts them in the job's populate queue to have it stored.
+  // AND EVERY SYMBOL THAT ALREADY HAS A STORED SET, AND THE POPULAR LIST
+  // (#552 COWORK #57/#58). The dynamic pool ages names out after 14 days, so a
+  // set written on demand (TSM) or by the cold path had no entry and was never
+  // re-read: 54 of 961 stored sets on 2026-09-25. JNJ, on the popular list, had
+  // neither an entry nor a set. See storedFactSetSymbols.
+  const stored = await storedFactSetSymbols();
   const universe = [
     // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
     // list above while its notes' ticker BIPI was, so the set lived under a note.
-    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...POPULAR_SYMBOLS, ...stored.symbols, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
   ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 
@@ -596,7 +604,8 @@ export async function GET(req: NextRequest) {
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
-    redisCommands: dryRun || inspectionOnly ? 2 : 3,
+    // Plus the stored-set SCAN (~1 per 1,000 stored sets, #552 COWORK #58).
+    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands,
     // Stated rather than left to be inferred from a watermark that did not move.
     watermarkMoved: !dryRun && !inspectionOnly && written,
     inspectionOnly,
