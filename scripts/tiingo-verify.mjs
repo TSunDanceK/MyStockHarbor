@@ -23,6 +23,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { toDashed } from "../lib/symbolSpellings.mjs";
 
 const KEY = process.env.TIINGO_API_KEY ?? "";
 if (!KEY) {
@@ -69,13 +70,112 @@ function csvFields(line) {
   return out;
 }
 
-const tiingoSpelling = (s) => s.trim().toUpperCase().replace(/\./g, "-");
+const tiingoSpelling = toDashed;
 const universe = [...new Set((process.env.SYMBOLS ?? "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean))];
 const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const REG = read("data/sec/registrants.json").rows ?? {};
 const NAMES = read("data/company-names.json").rows ?? {};
 
 console.log(`universe from SYMBOLS: ${universe.length} tickers${universe.length ? "" : " (none given: sections 3, 4 and 6 are skipped)"}`);
+
+// CAPPED RE-RUN (MODE=rerun, #553 COWORK #55 §1), after the plan upgrade:
+// bulk status, latest EOD date on 3 tickers, limit headers, search hit rate on
+// 20 names, one AAPL full-history call, one IEX batch quote. HARD CAP 60 requests; the first 429
+// stops every further request. Same print rules: statuses, counts, dates,
+// byte sizes and names of fields/headers only.
+if (process.env.MODE === "rerun") {
+  const CAP = 60;
+  let stopped = null;
+  const headerNames = new Set();
+  const capped = async (p, opts) => {
+    if (stopped) return { status: -1, headers: new Headers(), ms: 0, body: null };
+    if (requests >= CAP) { stopped = `request cap ${CAP} reached`; return { status: -1, headers: new Headers(), ms: 0, body: null }; }
+    const r = await get(p, opts);
+    for (const k of r.headers.keys()) headerNames.add(k);
+    if (r.status === 429) stopped = `HTTP 429 on request ${requests}`;
+    return r;
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  console.log("\n=== R1. bulk endpoint ===");
+  const bulk = await capped("/tiingo/daily/prices?format=csv", { text: true });
+  if (bulk.status === 200 && typeof bulk.body === "string") {
+    const lines = bulk.body.split(/\r?\n/).filter(Boolean);
+    const h = csvFields(lines[0] ?? "");
+    const iD = h.findIndex((f) => /^date$/i.test(f));
+    const dates = new Map();
+    for (const l of lines.slice(1)) { const d = iD >= 0 ? String(csvFields(l)[iD]).slice(0, 10) : "?"; dates.set(d, (dates.get(d) ?? 0) + 1); }
+    console.log(`HTTP 200 in ${bulk.ms} ms; ${Buffer.byteLength(bulk.body)} bytes; ${lines.length - 1} rows; field names: ${h.join(", ")}; latest date: ${[...dates.keys()].sort().pop()}`);
+  } else {
+    const hint = typeof bulk.body === "string" && /power/i.test(bulk.body) ? " (body mentions a Power plan; body not printed)" : " (body not printed)";
+    console.log(`HTTP ${bulk.status} in ${bulk.ms} ms${hint}`);
+  }
+  console.log(`limit-like headers on the bulk call: ${limitHeaders(bulk.headers)}`);
+
+  console.log("\n=== R2. freshness: latest EOD date, 3 tickers (JSON) ===");
+  for (const t of ["AAPL", "MSFT", "BRK-B"]) {
+    const r = await capped(`/tiingo/daily/${t}/prices?startDate=2026-09-15`);
+    const rows = Array.isArray(r.body) ? r.body : [];
+    const last = rows.length ? String(rows[rows.length - 1]?.date ?? "").slice(0, 10) : "";
+    const shape = Array.isArray(r.body) ? `array of ${rows.length}` : r.body === null ? "unparsed" : typeof r.body;
+    console.log(`${t}: HTTP ${r.status} in ${r.ms} ms; body ${shape}; row field names: ${rows[0] ? Object.keys(rows[0]).join(", ") : "(none)"}; latest date: ${last || "(none)"}`);
+  }
+  console.log(`run at ${new Date().toISOString()}`);
+
+  console.log("\n=== R3. provisioned-limit headers ===");
+  const test = await capped("/api/test");
+  console.log(`/api/test: HTTP ${test.status}; limit-like headers: ${limitHeaders(test.headers)}`);
+
+  console.log("\n=== R4. search, 20 names (hit rate only) ===");
+  const cleanName = (n) => String(n).replace(/\s+-\s+.*$/, "").replace(/\b(Common Stock|Ordinary Shares|American Depositary Shares?|Class [A-Z]|Inc\.?|Corporation|Corp\.?|Ltd\.?|plc|N\.V\.|S\.A\.)\b/gi, " ").replace(/[,.]/g, " ").replace(/\s+/g, " ").trim();
+  const withName = universe.filter((s) => NAMES[s]);
+  const step = Math.max(1, Math.floor(withName.length / 20));
+  const sample = withName.filter((_, i) => i % step === 0).slice(0, 20);
+  const st = new Map();
+  let first = 0, top5 = 0, asked = 0;
+  for (const s of sample) {
+    const r = await capped(`/tiingo/utilities/search?query=${encodeURIComponent(cleanName(NAMES[s]))}`);
+    if (r.status === -1) break;
+    asked++;
+    st.set(r.status, (st.get(r.status) ?? 0) + 1);
+    const got = Array.isArray(r.body) ? r.body.map((x) => String(x?.ticker ?? "").toUpperCase()) : [];
+    const want = tiingoSpelling(s);
+    if (got[0] === want) first++;
+    if (got.slice(0, 5).includes(want)) top5++;
+    await sleep(500);
+  }
+  console.log(`name queries: ${asked}/${sample.length}; statuses: ${[...st.entries()].map(([k, n]) => `${k}: ${n}`).join("; ") || "(none)"}; our ticker first: ${first}/${asked}; in top 5: ${top5}/${asked}`);
+
+  console.log("\n=== R5. AAPL full history (csv) ===");
+  const full = await capped("/tiingo/daily/AAPL/prices?startDate=1970-01-01&format=csv", { text: true });
+  if (full.status === 200 && typeof full.body === "string") {
+    const lines = full.body.split(/\r?\n/).filter(Boolean);
+    const h = csvFields(lines[0] ?? "");
+    const iD = h.findIndex((f) => /^date$/i.test(f));
+    const firstDate = iD >= 0 ? String(csvFields(lines[1] ?? "")[iD] ?? "").slice(0, 10) : "(no date column)";
+    const lastDate = iD >= 0 ? String(csvFields(lines[lines.length - 1] ?? "")[iD] ?? "").slice(0, 10) : "(no date column)";
+    console.log(`HTTP 200 in ${full.ms} ms; ${Buffer.byteLength(full.body)} bytes; ${lines.length - 1} rows; first date ${firstDate}; last date ${lastDate}; field names: ${h.join(", ")}`);
+  } else {
+    console.log(`HTTP ${full.status} in ${full.ms} ms (body not printed)`);
+  }
+
+  console.log("\n=== R6. IEX batch quotes (the hourly job's call), one request for every SYMBOLS ticker ===");
+  const iexList = universe.map(tiingoSpelling);
+  const iex = await capped(`/iex/?tickers=${encodeURIComponent(iexList.join(","))}`);
+  if (iex.status === 200 && Array.isArray(iex.body)) {
+    const got = new Set(iex.body.map((x) => String(x?.ticker ?? "").toUpperCase()));
+    const stamps = iex.body.map((x) => String(x?.timestamp ?? "")).filter(Boolean).sort();
+    console.log(`HTTP 200 in ${iex.ms} ms; asked ${iexList.length}, rows ${iex.body.length}, matched ${iexList.filter((t) => got.has(t)).length}; field names: ${iex.body[0] ? Object.keys(iex.body[0]).join(", ") : "(none)"}; newest timestamp: ${stamps.pop() ?? "(none)"}`);
+  } else {
+    console.log(`HTTP ${iex.status} in ${iex.ms} ms (body not printed)`);
+  }
+  console.log(`limit-like headers on the IEX call: ${limitHeaders(iex.headers)}`);
+
+  console.log(`\nall response header names seen: ${[...headerNames].sort().join(", ")}`);
+  console.log(`stopped early: ${stopped ?? "no"}`);
+  console.log(`Tiingo requests used: ${requests} (cap ${CAP}); Redis commands: 0; stored: nothing`);
+  process.exit(0);
+}
 
 // FOLLOW-UP MODE (MODE=followup): the questions the first run left open --
 // what the search failures were, whether per-ticker price calls hold up across
@@ -191,7 +291,7 @@ try {
 }
 
 function classOf(sym) {
-  const reg = REG[sym] ?? REG[sym.replace(/\./g, "-")] ?? null;
+  const reg = REG[sym] ?? REG[toDashed(sym)] ?? null;
   if (/[.-]P[A-Z]?$|\.PR|-P-|\bPR[A-Z]?$/.test(sym) || /^[A-Z]+p[A-Z]*$/.test(sym)) return "preferred";
   if (/\.(U|UN|W|WS|WT|R|RT)$|-(U|UN|W|WS|WT|R|RT)$/.test(sym) || (/^[A-Z]{5}$/.test(sym) && /[UWR]$/.test(sym))) return "unit/warrant/right";
   if (/[.-][A-Z]$/.test(sym)) return "multi-class";
