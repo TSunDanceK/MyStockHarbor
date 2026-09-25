@@ -105,6 +105,9 @@ async function handleGET(req: NextRequest) {
       industryMissing: result.industryMissing ?? null,
       screenerCovered: result.screenerCovered ?? null,
       selection: result.quoteSelection ?? null,
+      // Rows written vs skipped as unchanged (#553 COWORK #53 cheap win).
+      written: result.written ?? null,
+      unchanged: result.unchanged ?? null,
     });
     return NextResponse.json(result);
   } catch (error) {
