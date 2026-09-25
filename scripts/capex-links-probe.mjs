@@ -546,7 +546,10 @@ async function get(url, json = true) {
     if (res.status === 404) return null;
     if (res.status === 429 || res.status >= 500) { await sleep(1500 * 2 ** a); continue; }
     if (!res.ok) return null;
-    const text = await res.text();
+    // a body cut off mid-stream ("terminated", bad gzip block) is retried like a
+    // failed connection, not thrown: one bad read must not end a shard
+    let text;
+    try { text = await res.text(); } catch { await sleep(1000 * 2 ** a); continue; }
     bytes += text.length;
     return json ? JSON.parse(text) : text;
   }
