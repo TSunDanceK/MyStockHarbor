@@ -12,16 +12,17 @@
 // or next.config. scripts/ is where the relay's probe lives and is not
 // deployed code, so it is not scanned.
 //
-// WHEN THE ADAPTER PR LANDS it changes ALLOWED below, in the same diff, to
-// the adapter's one file -- so the exception is reviewed rather than drifted
-// into.
+// THE ADAPTER PR (step 1) changed ALLOWED below, in the same diff, to the
+// adapter's one file -- so the exception was reviewed rather than drifted into.
 //
 //   node scripts/check-tiingo-key-scope.mjs
 import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const ALLOWED = new Set([]); // the adapter's file, when it exists
+// The adapter's one file (#553 COWORK #55 §2). Who may IMPORT it is held by
+// scripts/check-tiingo-callers.mjs: the two job routes, through jobs.ts.
+const ALLOWED = new Set(["lib/server/marketData/tiingo.ts"]);
 const ROOTS = ["app", "lib", "components", "hooks", "utils"];
 const ROOT_FILES = ["middleware.ts", "middleware.js", "instrumentation.ts", "instrumentation-client.ts", "next.config.ts", "next.config.js", "next.config.mjs"];
 const EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
@@ -52,6 +53,14 @@ const check = (label, ok, detail = "") => {
 
 const hits = scan(files);
 check(`no deployed file reads the Tiingo key (${files.length} files scanned)`, hits.length === 0, hits.join(", "));
+
+// THE ALLOWANCE MUST NAME A REAL READER. A renamed or moved adapter would leave
+// ALLOWED exempting a path that no longer exists while the new file fails --
+// or, worse, a stale entry that a future file happens to reuse.
+for (const f of ALLOWED) {
+  const p = path.join(ROOT, f);
+  check(`the allowed file ${f} exists and reads the key`, fs.existsSync(p) && PATTERN.test(fs.readFileSync(p, "utf8")));
+}
 
 // THE CHECK MUST BE ABLE TO FAIL: a planted read in a scratch file under lib/
 // has to be caught, or the scan is measuring nothing.
