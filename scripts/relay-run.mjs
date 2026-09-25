@@ -264,6 +264,8 @@ const TASKS = {
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
   // Read-only: annual values of named tags from companyfacts (#552 COWORK #57).
   "sec-tag-values": { script: "scripts/tag-values-probe.mjs", args: () => [] },
+  // READS ONLY: stored fact sets with no manifest entry (#552 COWORK #57, TSM).
+  "write-manifest-gap": { script: "scripts/manifest-gap-probe.mjs", args: () => [], writes: true },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
