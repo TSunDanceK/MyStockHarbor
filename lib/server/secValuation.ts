@@ -166,6 +166,8 @@ export type SharesBasis = {
   asOf: string;
   /** Set when `val` is ADS-equivalents: the cited ordinary shares per ADS it was divided by. */
   adsRatio?: number;
+  /** The map row's kind: "ordinary" is a direct listing (ratio 1), worded as plain shares. */
+  adsKind?: "ads" | "ordinary";
 };
 
 /**
@@ -198,6 +200,8 @@ export type EpsBasis = {
   kind?: "basic";
   /** Set when `val` is per ADS, converted from per ordinary share by this cited ratio. */
   adsRatio?: number;
+  /** The map row's kind, as on SharesBasis. */
+  adsKind?: "ads" | "ordinary";
 };
 
 export type ValuationInputs = {
@@ -447,7 +451,7 @@ export type FilerFacts = {
    * imports. Present only where the filer's own 20-F or F-6 states it; absent
    * keeps the depositary-share refusal exactly as before. Never defaulted.
    */
-  ads?: { ordinaryPerAds: number; source: string } | null;
+  ads?: { ordinaryPerAds: number; source: string; kind?: "ads" | "ordinary" } | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -553,22 +557,35 @@ export function valuationInputs(
     // The EPS period's own diluted share count against today's cover count,
     // both ORDINARY shares: more than SHARE_BASIS_MAX_MOVE apart and the
     // per-share bases differ, so the P/E is refused rather than computed.
-    if (eps && shares) {
-      const periodEnd = eps.periodEnd;
-      const p = [...set.quarters, ...set.years].find((x) => x.e === periodEnd) ?? null;
+    //
+    // ── AND THE MARKET CAP WITH IT (#552 COWORK #49 §1) ─────────────────────
+    // BABA published a $25.73B cap beside a P/E refused on exactly this
+    // ground: 1,858,037,427 ÷ 8 is about a tenth of its real ADS-equivalents.
+    // A count that fails the basis test is not a count to multiply by a price
+    // either, so both figures are withheld with the one reason. The test runs
+    // whether or not an EPS survived: with none (stale, TSM), the newest
+    // period that states diluted shares is the comparison.
+    if (shares) {
+      const all = [...set.quarters, ...set.years];
+      const basisEnd = eps?.periodEnd ??
+        all.filter((x) => valueOf(x, "sharesDiluted") !== null).map((x) => x.e).sort().at(-1) ?? null;
+      const p = basisEnd ? all.find((x) => x.e === basisEnd) ?? null : null;
       const dil = valueOf(p, "sharesDiluted");
       if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {
         eps = null;
+        shares = null;
         refusals.push("share-basis-changed");
       }
     }
-    if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds };
+    const adsKind = ads.kind ?? "ads";
+    if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
     if (eps) {
       const periodEnd = eps.periodEnd;
       const unitPeriod = [...set.quarters, ...set.years].find((p) => p.e === periodEnd) ?? null;
       const unit = epsUnitOf(unitPeriod, ads.ordinaryPerAds);
-      if (unit === "ordinary") eps = { ...eps, val: eps.val * ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds };
-      else if (unit !== "ads") { eps = null; refusals.push("ads-ratio-makes-eps-incomparable"); }
+      if (unit === "ordinary") eps = { ...eps, val: eps.val * ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
+      else if (unit === "ads") eps = { ...eps, adsRatio: ads.ordinaryPerAds, adsKind };
+      else { eps = null; refusals.push("ads-ratio-makes-eps-incomparable"); }
     }
   }
 
@@ -591,6 +608,29 @@ export function epsIsStale(periodEnd: string, today: string): boolean {
   if (Number.isNaN(end.getTime())) return false;
   const limit = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + EPS_MAX_AGE_MONTHS, end.getUTCDate());
   return Date.parse(`${today}T00:00:00Z`) > limit;
+}
+
+// ── HOW THE BASIS IS WORDED (#552 COWORK #49 §2) ────────────────────────
+// A direct listing (map kind "ordinary", ratio 1) is ordinary shares traded
+// as they are: calling them "ADS-equivalent" or "per ADS (1 ordinary shares
+// each)" described a depositary that does not exist (ASML, AZN, SPOT).
+
+/** "each ADS = 1 ordinary share" / "each ADS = 5 ordinary shares". */
+export function adsEqualsWords(ordinaryPerAds: number): string {
+  return `each ADS = ${ordinaryPerAds} ordinary share${ordinaryPerAds === 1 ? "" : "s"}`;
+}
+
+/** The noun after the share count: "shares", or "ADS-equivalent shares (each ADS = 5 ordinary shares)". */
+export function sharesBasisWords(shares: Pick<SharesBasis, "adsRatio" | "adsKind">): string {
+  return shares.adsRatio && shares.adsKind !== "ordinary"
+    ? `ADS-equivalent shares (${adsEqualsWords(shares.adsRatio)})`
+    : "shares";
+}
+
+/** What follows "diluted EPS": "", " per share" (direct listing), " per ADS (each ADS = 5 ordinary shares)". */
+export function epsUnitWords(eps: Pick<EpsBasis, "adsRatio" | "adsKind">): string {
+  if (!eps.adsRatio) return "";
+  return eps.adsKind === "ordinary" ? " per share" : ` per ADS (${adsEqualsWords(eps.adsRatio)})`;
 }
 
 export type ValuationFigure =
@@ -623,6 +663,7 @@ export function marketCap(
     const why = inputs.refusals.find(
       (r) =>
         r === "multi-class-share-count-is-ambiguous" ||
+        r === "share-basis-changed" ||
         r === "share-count-is-stale" ||
         r === "no-cover-share-count"
     );
