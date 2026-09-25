@@ -100,6 +100,17 @@ console.log("\n2. 20-F: Item 4, then its Business Overview");
   const b = D.locateSection(bip, "20-F");
   check("a numbered '4.B BUSINESS OVERVIEW' inside Item 4 is found, and ends at '4.C' (BIP)",
     b.found && b.body.startsWith("Our Operations") && !b.body.includes("ORGANIZATIONAL"), b.found ? b.body.slice(0, 60) : b.why);
+  // BIP's real layout: no Item 4A / Item 5 heading in the body, the next is Item 6,
+  // and 4.A carries a long history table before 4.B.
+  const bipReal = ["Item 4.", "INFORMATION ON THE COMPANY", "68", "Item 4A.", "UNRESOLVED STAFF COMMENTS", "111", "Item 5.", "OPERATING AND FINANCIAL REVIEW", "111",
+    "ITEM 4. INFORMATION ON THE COMPANY", "4.A HISTORY AND DEVELOPMENT OF BROOKFIELD INFRASTRUCTURE", "x".repeat(12000),
+    "4.B BUSINESS OVERVIEW", "Our Operations", "Brookfield Infrastructure owns and operates utilities, transport, midstream and data. " + filler("BIP"),
+    "4.C ORGANIZATIONAL STRUCTURE", filler("Org"), "Operating results are discussed below. " + filler("MDA"), "ITEM 6. DIRECTORS, SENIOR MANAGEMENT AND EMPLOYEES", filler("Dir")].join("\n");
+  const br = D.locateSection(bipReal, "20-F");
+  check("Item 4 ends at Item 6 when the body has no 4A/5 heading, so a 4.B past a long 4.A is found (BIP)",
+    br.found && br.body.startsWith("Our Operations"), br.found ? br.body.slice(0, 40) : br.why);
+  const noSix = await load(once("const ITEM4_END = /^item(4a|5|6|7)[a-z]*$/;", "const ITEM4_END = /^item(4a|5)[a-z]*$/;"));
+  check("...and CATCHES Item 6 removed as an end (BIP back to 'no Business Overview heading')", !noSix.locateSection(bipReal, "20-F").found);
   const noFour = await load(once("const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;", "const ITEM4B_ANY = /^(item4)?b?businessoverview$/;"));
   check("...and CATCHES the '4' prefix removed (BIP back to 'no Business Overview heading')", !noFour.locateSection(bip, "20-F").found);
   check("40-F has no description", !D.locateSection("x", "40-F").found);

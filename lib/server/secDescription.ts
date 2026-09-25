@@ -107,7 +107,11 @@ const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descri
 // an unlettered one can be Item 5's (RYAAY).
 const ITEM4 = /^item4(informationonthecompany)?$/;
 const ITEM4_TITLE = /^informationonthecompany$/;
-const ITEM4_END = /^item(4a|5)[a-z]*$/;
+// ITEM 6 / 7 TOO (#552 COWORK #48): BIP's body has no "Item 4A" or "Item 5"
+// heading line (its next body heading is "ITEM 6."), so Item 4 fell back to an
+// 8,000-character window and its 4.B, past a long history table, was outside it.
+// A TOC pair is still skipped as too short; where 4A or 5 exists it comes first.
+const ITEM4_END = /^item(4a|5|6|7)[a-z]*$/;
 const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;
 const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;
 const B_ALONE = /^(item4|4)?b$/;
