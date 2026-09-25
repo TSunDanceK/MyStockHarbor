@@ -2,6 +2,7 @@
  "_comment": "Hand-reviewed placements for names whose own filing text places them but no general rule should (#552 COWORK #29). Each entry is an industry from the fixed label list and a PHRASE that must appear verbatim in the filer's stored 10-K Item 1 / 20-F Item 4.B text (data/sec/descriptions.json); scripts/build-sic-classification.mjs takes the quote, form, date and accession from that text and FAILS on a phrase that is not there. No vendor label is read. A name whose text supports no placement is not listed; it stays with the helper. A phrase may also come from the longer excerpt in data/sec/item1-excerpts.json when the display text lacks one (#552 COWORK #37); the basis then says so.",
  "entries": {
   "APH": { "industry": "Hardware, Equipment & Parts", "phrase": "connectors and interconnect systems" },
+  "BIP": { "industry": "Diversified Utilities", "phrase": "portfolio of infrastructure assets that are diversified by sector and by geography" },
   "BKNG": { "industry": "Travel Services", "phrase": "Accommodations Ground Transportation Flights" },
   "GOOGL": { "industry": "Internet Content & Information", "phrase": "Google Services and Google Cloud" },
   "GOOG": { "industry": "Internet Content & Information", "phrase": "Google Services and Google Cloud" },
