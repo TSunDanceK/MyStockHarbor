@@ -327,6 +327,22 @@ export default function AboutPage() {
             before the open.
           </p>
 
+          {/* CONTRACT §5.4.1 (#553 COWORK #55 §2, 2026-09-25): the attribution
+              Tiingo's agreement requires on the legal/about page, linked. Its
+              absence is a breach; scripts/check-tiingo-step1.mjs holds it. */}
+          <p style={paraStyle}>
+            Some of the price data the site uses comes from Tiingo:{" "}
+            <a
+              href="https://www.tiingo.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={linkStyle}
+            >
+              Market Data from Tiingo.com
+            </a>
+            .
+          </p>
+
           <p style={paraStyle}>
             Company profiles, financial statements, dividend history and
             analyst figures refresh on their own slower schedules, since they

@@ -5,7 +5,8 @@
 //
 //   1. No FMP attribution reaches a reader at all: the description is the
 //      company's own annual-report wording with its filing named under it,
-//      and no description means no paragraph (PR 3, #518).
+//      and no description means one neutral line, never a gap (#552 COWORK #57;
+//      it was no paragraph at all under PR 3, #518).
 //   2. A market-cap refusal HIDES the row; it is never printed in the card.
 //   3. Every 20-F filer's cap is refused — AZN and ABVX included, which the
 //      five-name list missed (§2.6).
@@ -394,6 +395,25 @@ console.log("\n10. the sector/industry credit reads the same whichever leg answe
   }
   check("dates are day-month-year, parsed without a time zone",
     M.dayMonthYear("2026-09-13") === "13 Sep 2026" && M.dayMonthYear("2026-01-01") === "1 Jan 2026" && M.dayMonthYear("2026-09-21T04:10:00Z") === null);
+}
+
+// NO DESCRIPTION IS SAID, NEVER A GAP (#552 COWORK #57): a symbol in the
+// descriptions file's misses renders one neutral line where the text would be,
+// in every layout branch (with or without stat rows).
+{
+  const cp = fs.readFileSync("app/components/CompanyProfile.tsx", "utf8");
+  const saysNone = (src) => {
+    const line = (src.match(/NO_DESCRIPTION_LINE = "([^"]+)"/) ?? [])[1];
+    const block = src.slice(src.indexOf("const descriptionBlock = hasDescription ?"), src.indexOf("const statBoxes"));
+    const branches = src.slice(src.indexOf("{hasDescription && hasRows ? ("));
+    const noDescBranch = branches.slice(branches.indexOf(") : (") , branches.indexOf("</section>"));
+    return line === "Description not available from the filing." && /\) : \(\s*<div className="cp-desc">\s*<p[^>]*>\{NO_DESCRIPTION_LINE\}<\/p>/.test(block) && noDescBranch.includes("{descriptionBlock}");
+  };
+  check("no description → the neutral line 'Description not available from the filing.', in the no-description layout too", saysNone(cp));
+  check("...and CATCHES the block going back to null (a silent gap)",
+    !saysNone(cp.replace(/\) : \(\s*<div className="cp-desc">\s*<p[^>]*>\{NO_DESCRIPTION_LINE\}<\/p>\s*<\/div>\s*\);/, ") : null;")));
+  check("...and CATCHES the no-description layout dropping the block",
+    !saysNone(cp.replace("<>\n          {descriptionBlock}\n          <div style={gridStyle}", "<>\n          <div style={gridStyle}")));
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nThe About block is composed from free sources.");
