@@ -40,6 +40,9 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // SPLIT SG&A (S&M + G&A, no combined tag) ACROSS THE UNIVERSE (#552 COWORK #40).
+  // Read-only, uncredentialled, counts only plus GOOGL's own rows.
+  "sga-split-coverage": { script: "scripts/sga-split-coverage.mjs", args: () => [] },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {
