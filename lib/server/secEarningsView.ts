@@ -26,6 +26,9 @@ import type { AnnualForm } from "./annualOnly";
  * A zero is the specific thing to avoid: "EPS surprise: 0.00" reads as "came in
  * exactly in line", which is a claim, and a false one.
  */
+
+/** The income-statement label for a summed SG&A row (#552 COWORK #40, approved wording). */
+export const SGA_SUMMED_LABEL = "Sales & marketing + G&A";
 export type RetiredSource = {
   id: string;
   label: string;
@@ -827,6 +830,8 @@ export type SecEarningsView = {
    * measurement that made that distinction necessary.
    */
   incomeStatementComplete: boolean;
+  /** The latest period's SG&A is sales & marketing + G&A summed (no combined tag filed). */
+  sgaSummed?: boolean;
   /**
    * The filed periods, newest first, for the earnings-history table.
    *
@@ -1425,12 +1430,15 @@ export function buildSecEarningsView(
   const sti = valueOf(bsAt, "shortTermInvestments");
   const liquid = cashVal === null && sti === null ? null : (cashVal ?? 0) + (sti ?? 0);
 
+  // SALES & MARKETING + G&A, SUMMED (#552 COWORK #40): labelled for what it
+  // is, never as a filed SG&A. Keyed on the latest period's own start|end.
+  const sgaSummed = Boolean(set.sg?.includes(`${latest.s ?? ""}|${latest.e}`));
   const PL: [string, string][] = [
     ["revenue", "Revenue"],
     ["costOfRevenue", "Cost of revenue"],
     ["grossProfit", "Gross profit"],
     ["researchAndDevelopment", "Research & development"],
-    ["sellingGeneralAndAdministrative", "Selling, general & admin"],
+    ["sellingGeneralAndAdministrative", sgaSummed ? SGA_SUMMED_LABEL : "Selling, general & admin"],
     ["otherOperatingExpense", "Other operating expense"],
     ["operatingIncome", "Operating income (EBIT)"],
     ["interestExpense", "Interest expense"],
@@ -1599,6 +1607,7 @@ export function buildSecEarningsView(
       : null,
     incomeStatement: withDerivedNonOperating(PL.map(([k, label]) => view(latest, k, label))),
     incomeStatementComplete,
+    sgaSummed,
     // ── THE SAME THIN-ROW BAR AS THE GROWTH TABLE, AND THE SAME CAP ─────────
     //
     // This mapped the WHOLE of `q`, unfiltered and uncapped, while the growth

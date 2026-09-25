@@ -192,6 +192,13 @@ export type StoredFactSet = {
    */
   cc?: Record<string, string>;
   /**
+   * `start|end` of periods whose SG&A is sales & marketing + G&A summed
+   * (secFields.SUMMED_SGA_TAG, #552 COWORK #40), so the card labels the row
+   * for what it is. Optional; absent = none, or written before it existed.
+   * NOT in contentHashOf: provenance, not a value (the value itself is hashed).
+   */
+  sg?: string[];
+  /**
    * Fiscal-year basic shares, every year in the payload: `[yearEnd, shares]`.
    * See ExtractResult.annualShares. Optional; not in contentHashOf, since it
    * duplicates a field the hashed years already carry for the retained span.
@@ -316,6 +323,7 @@ export function encodeFactSet(
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
+    ...(result.summedSga?.length ? { sg: result.summedSga } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,

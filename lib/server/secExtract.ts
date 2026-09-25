@@ -31,6 +31,8 @@ import {
   revenueLineIncompleteValues,
   REVENUE_FALLBACK_CHAIN,
   secFieldsHash,
+  SELLING_TAGS,
+  SUMMED_SGA_TAG,
   type FieldDef,
 } from "./secFields";
 // VALUE IMPORTS FROM secCurrency, WHICH IMPORTS ONLY TYPES BACK FROM HERE.
@@ -244,6 +246,12 @@ export type PeriodRecord = {
 };
 
 export type ExtractResult = {
+  /**
+   * `start|end` of every period whose SG&A is the synthesized sales &
+   * marketing + G&A sum (SUMMED_SGA_TAG), so the card can label it. Optional:
+   * absent on results built before it existed, and on filers with none.
+   */
+  summedSga?: string[];
   symbol: string;
   cik: number | null;
   entityName: string | null;
@@ -1068,6 +1076,10 @@ export function extractCompanyFacts(
   // recorded, and unreadableReason says so, as it does now.
   const currency = reportingCurrency(facts) ?? "USD";
 
+  // SPLIT SG&A, SUMMED BEFORE ANY FIELD IS READ, so the YTD differencing and
+  // the chain ranking treat it like any other row. See withSummedSga.
+  facts = withSummedSga(facts);
+
   // One pass per field, bucketed by period key.
   //
   // ── AND ONE PREFERRED CONCEPT PER FIELD, FOR THIS FILER ──────────────────
@@ -1476,6 +1488,7 @@ export function extractCompanyFacts(
     ...(ytd ? { ytd } : {}),
     untagged: SEC_FIELDS.filter((f) => !fieldIsTagged(facts, f)).map((f) => f.key),
     readNamespaces: countReadNamespaces([...quarters, ...years, ...instants]),
+    summedSga: summedSgaPeriods([...quarters, ...years]),
     notes,
   };
 }
@@ -1763,4 +1776,54 @@ export function identityRates(results: IdentityResult[]) {
     out[r.identity][r.status]++;
   }
   return out;
+}
+
+// ── SPLIT SG&A (#552 COWORK #40) ──────────────────────────────────────────
+
+/**
+ * Where a filer files G&A and a selling/marketing line for the SAME period in
+ * the SAME filing and unit, and no combined SG&A for that period in any filing,
+ * add a row under SUMMED_SGA_TAG carrying their sum. Pure; the input is not
+ * touched. The combined tag always wins: a period that has one is never summed,
+ * so the 18 filers that file both the parts and the total are not double counted.
+ */
+export function withSummedSga(facts: CompanyFacts): CompanyFacts {
+  const g = facts.facts?.["us-gaap"];
+  const ga = g?.GeneralAndAdministrativeExpense?.units;
+  if (!g || !ga) return facts;
+  const combined = new Set<string>();
+  for (const rows of Object.values(g.SellingGeneralAndAdministrativeExpense?.units ?? {})) {
+    for (const r of rows ?? []) combined.add(`${r.start ?? ""}|${r.end ?? ""}`);
+  }
+  const out: Record<string, FactRow[]> = {};
+  let added = 0;
+  for (const [unit, gaRows] of Object.entries(ga)) {
+    for (const r of gaRows ?? []) {
+      if (!r.start || !r.end || typeof r.val !== "number") continue;
+      if (combined.has(`${r.start}|${r.end}`)) continue;
+      // The first selling tag with a row for the same period, filing and unit.
+      let sell: FactRow | undefined;
+      for (const tag of SELLING_TAGS) {
+        sell = (g[tag]?.units?.[unit] ?? []).find((x) =>
+          x.start === r.start && x.end === r.end && x.accn === r.accn && typeof x.val === "number");
+        if (sell) break;
+      }
+      if (!sell) continue;
+      (out[unit] ??= []).push({ ...r, val: r.val + (sell.val as number) });
+      added++;
+    }
+  }
+  if (!added) return facts;
+  return {
+    ...facts,
+    facts: { ...facts.facts, "us-gaap": { ...g, [SUMMED_SGA_TAG]: { units: out } } },
+  };
+}
+
+/** `start|end` of the periods whose SG&A cell came from the synthesized sum. */
+export function summedSgaPeriods(periods: PeriodRecord[]): string[] {
+  const i = SEC_FIELD_KEYS.indexOf("sellingGeneralAndAdministrative");
+  return periods
+    .filter((p) => p.values[i]?.tag === SUMMED_SGA_TAG)
+    .map((p) => `${p.start ?? ""}|${p.end}`);
 }
