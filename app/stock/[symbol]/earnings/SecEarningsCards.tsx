@@ -18,7 +18,7 @@ import {
 } from "@/lib/server/secPresentation";
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import {
-  REFUSAL_WORDS, marketCap, peRatio, type ValuationInputs,
+  REFUSAL_WORDS, epsUnitWords, marketCap, peRatio, sharesBasisWords, type ValuationInputs,
 } from "@/lib/server/secValuation";
 
 /**
@@ -1881,7 +1881,7 @@ export function SecValuationCard({
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} shares × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
@@ -1897,9 +1897,9 @@ export function SecValuationCard({
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
         ? `${inputs.eps && inputs.eps.val < 0 ? "Loss" : "No earnings"} over ${epsSpan}`
-        : sentence(REFUSAL_WORDS[pe.why])
+        : sentence(pe.detail ?? REFUSAL_WORDS[pe.why])
       : inputs.eps
-        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"} over ${epsSpan}`
+        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"}${epsUnitWords(inputs.eps)} over ${epsSpan}`
         : null;
   return (
     <section className="card">
