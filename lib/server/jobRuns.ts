@@ -109,6 +109,15 @@ export const JOBS = {
   // from A's stored fact sets. DAILY CRON, WEEKLY DATA, for the same silence
   // rule as capex-contracts; 06:30 is after sec-facts (04:20).
   "capex-spending": { label: "Capex spending by sector from SEC fact sets (daily 06:30, rebuilds weekly)", instrumented: true, cron: "30 6 * * *" },
+  // TIINGO (#553 COWORK #55 §2, #56, #57): the only two callers of the adapter.
+  // Quotes fire hourly on every day and act only inside the buffered market
+  // window, so weekend silence never reads as a fault. QUOTE_CADENCE_MINUTES in
+  // lib/server/marketData/jobs.ts is the knob; check-tiingo-step1 keeps it, this
+  // line and vercel.json in step.
+  "tiingo-quotes": { label: "Tiingo IEX quotes (hourly :11, acts in market hours)", instrumented: true, cron: "11 * * * *" },
+  // 00:45 is after Tiingo's evening corrections; 02:45 retries a night whose
+  // date had not landed, and is one GET when the first run completed.
+  "tiingo-eod": { label: "Tiingo EOD history re-pull (daily 00:45, retry 02:45)", instrumented: true, cron: "45 0,2 * * *" },
 } as const;
 
 /**
