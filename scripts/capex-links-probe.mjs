@@ -492,6 +492,44 @@ if (process.env.EVAL) {
   process.exit(0);
 }
 
+// ── SCAN=receivers (#563 COWORK #19, plan (c) batch 1): candidate sentences
+// for HUMAN-STYLE REVIEW, not links. Every sentence that names one of the batch-1
+// receivers (the curated list minus AMZN, GOOGL, MSFT) next to a trade word, after
+// all of v4's sentence drops. Name matching is v4's (A1, R1a-d). Nothing here is
+// published; the review decides.
+const SCAN = process.env.SCAN === "receivers";
+const RECEIVER_ROWS = JSON.parse(fs.readFileSync("data/capex/receivers.json", "utf8")).rows;
+const BATCH1_EXCLUDED = new Set(["AMZN", "GOOGL", "MSFT"]);
+const RECEIVER_CIKS = new Map(); // cik -> ticker
+for (const r of RECEIVER_ROWS) if (!BATCH1_EXCLUDED.has(r.ticker)) RECEIVER_CIKS.set(Number(r.cik), r.ticker);
+const TRADE_CUE = /\b(suppl(?:y|ies|ied|ier|iers)|vendors?|purchas\w*|buy|buys|bought|sourc(?:e|es|ed|ing) from|procure\w*|manufactur\w*|fabricat\w*|foundr(?:y|ies)|licens\w* from|sales to|sold to|sell\w* to|ship\w* to|customers?|clients?|distributors?|resellers?|accounted for|% of (?:our )?(?:total |net )?(?:sales|revenues?))\b/i;
+function scanReceivers(text, self, drops) {
+  const segs = segments(text);
+  const ctx = { ...self, lower: new Set(text.match(/\b[a-z][a-z-]+\b/g) ?? []) };
+  const out = new Map(); // receiver cik -> sentences (max 3, earliest first)
+  let competitorList = false, n = 0;
+  for (const seg of segs) {
+    const isItem = /^[a-z•·▪◦\-–—(;]/.test(seg) || /;\s*(?:and|or)?$/.test(seg);
+    if (competitorList && !isItem) competitorList = false;
+    if (DROPS.competitor.test(seg) && /:\s*$/.test(seg)) { competitorList = true; continue; }
+    if (competitorList || !keepSentence(seg)) continue;
+    n++;
+    if (!TRADE_CUE.test(seg)) continue;
+    let dropped = false;
+    for (const [k, re] of [...Object.entries(DROPS), ...Object.entries(V4_DROPS), ["mentionOnly", MENTION_ONLY]]) {
+      if (re.test(seg)) { drops[k] = (drops[k] ?? 0) + 1; dropped = true; break; }
+    }
+    if (dropped) continue;
+    for (const party of partiesIn(seg, ctx)) {
+      if (!party.cik || !RECEIVER_CIKS.has(party.cik)) continue;
+      const arr = out.get(party.cik) ?? [];
+      if (arr.length < 3 && !arr.some((a) => a.quote === seg)) arr.push({ party: party.name, how: party.how, quote: seg.length > 700 ? `${seg.slice(0, 700)}…` : seg });
+      out.set(party.cik, arr);
+    }
+  }
+  return { out, sentenceCount: n };
+}
+
 // ── fetch ───────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let lastAt = 0, requests = 0, bytes = 0;
@@ -540,6 +578,18 @@ for (const cik of ciks) {
     cik,
     norms: new Set([normName(sub.name), ...(sub.formerNames ?? []).map((x) => normName(x.name)), ...u.symbols.map((s) => normName(names.gridCompanyName(s)))].filter(Boolean)),
   };
+  if (SCAN) {
+    const { out, sentenceCount } = scanReceivers(htmlToText(html), self, drops);
+    tot.sentences += sentenceCount;
+    tot.links += out.size;
+    if (out.size) tot.withLink++;
+    const rank = SIZE_RANK.get(cik) ?? null;
+    console.log(`FILER ${JSON.stringify({ cik, sym: u.symbols[0], form: f.form[k], date: f.filingDate[k], accn, rank, sentences: sentenceCount, receivers: out.size })}`);
+    for (const [rc, arr] of out) {
+      console.log(`CAND ${JSON.stringify({ filer: u.symbols[0], filerCik: cik, form: f.form[k], date: f.filingDate[k], accn, receiver: RECEIVER_CIKS.get(rc), receiverCik: rc, sentences: arr })}`);
+    }
+    continue;
+  }
   const { found, sentenceCount } = linksFromText(htmlToText(html), self, drops);
   const sents = { length: sentenceCount };
   tot.sentences += sents.length;

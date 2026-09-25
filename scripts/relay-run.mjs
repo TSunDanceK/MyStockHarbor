@@ -1277,6 +1277,11 @@ const TASKS = {
   "capex-links-probe-v4-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "2/4" } },
   "capex-links-probe-v4-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "3/4" } },
   "capex-links-probe-v4-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "4/4" } },
+  // Plan (c) batch 1 (#563 COWORK #19): candidate sentences naming a receiver, for review.
+  "capex-receiver-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "1/4" } },
+  "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
+  "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
+  "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
 };
 
 const argv = process.argv.slice(2);
