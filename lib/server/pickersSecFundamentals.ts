@@ -320,7 +320,10 @@ export const MAX_SYMBOLS_PER_RUN = 2_000;
 
 export async function warmPickersSec(
   symbols: string[],
-  registrantFor: (symbol: string) => { annualForm?: string | null } | null,
+  // THE SAME FILER FACTS THE STOCK AND EARNINGS PAGES PASS (#553 COWORK #44):
+  // the 20-F form and the cited ADS ratio from A's map (secAdsMap.adsRatioFor).
+  // A callback, so this module stays free of JSON imports like secValuation.
+  filerFor: (symbol: string) => FilerFacts,
   nowMs = Date.now()
 ): Promise<WarmPickersSecResult> {
   const result: WarmPickersSecResult = {
@@ -356,7 +359,7 @@ export async function warmPickersSec(
       result.noFactSet++;
       continue;
     }
-    batch[symbol] = buildSecPickerRow(set, today, { annualForm: registrantFor(symbol)?.annualForm ?? null }, nowMs);
+    batch[symbol] = buildSecPickerRow(set, today, filerFor(symbol), nowMs);
     if (Object.keys(batch).length >= 100 && !(await flush())) return result;
   }
   if (!(await flush())) return result;
