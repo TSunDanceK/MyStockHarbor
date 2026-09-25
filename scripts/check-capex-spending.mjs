@@ -77,8 +77,11 @@ async function suite(M) {
   ok("another currency is counted, not dropped silently", r.otherCurrency === 1);
   ok("no sector: counted as unclassified, not placed", r.unclassified === 2 && !r.sectors.some((s) => s.top.includes("NOSEC")));
   ok("the unplaced are named, largest first (#563 COWORK #6)", r.unclassifiedLargest.map((u) => `${u.symbol}:${u.capex}`).join() === "BIGNOSEC:700,NOSEC:70", JSON.stringify(r.unclassifiedLargest));
-  ok("sector totals only, no grand total", Object.keys(r).sort().join() === "builtAt,companiesRead,duplicateListings,otherCurrency,partial,sectors,unclassified,unclassifiedLargest,v,years", Object.keys(r).sort().join());
+  ok("sector totals only, no grand total", Object.keys(r).sort().join() === "builtAt,companiesRead,duplicateListings,leaders,otherCurrency,partial,sectors,unclassified,unclassifiedLargest,v,years", Object.keys(r).sort().join());
   ok("sectors sort by latest capex", r.sectors[0].sector === "Technology");
+  // #563 COWORK #12: the five largest companies, from the cohorts only (NEWCO
+  // is missing years; NOSEC has no sector), one per filer.
+  ok("the leaders are the cohort's largest, one row per filer", r.leaders.map((l) => `${l.symbol}:${l.sector}`).join() === "AAA:Technology,CMCSA:Communication Services,BBB:Technology,JUL:Industrials", JSON.stringify(r.leaders));
   const moved = M.aggregateSpending([I("CHG", "Energy", [...cyYears(5), { s: "2025-01-01", e: "2025-03-31", capex: 999, revenue: 1, rnd: null }], { cik: "9" })], YEARS, NOW);
   ok("two years in one calendar year: the later-ending one is kept", moved.sectors[0].capex[4] === 5 * 1.4, JSON.stringify(moved.sectors[0].capex));
   return fails;
@@ -99,6 +102,7 @@ const MUTANTS = [
   ["cohort of anyone with any capex", () => mut("cohort", "const cohort = rows.filter((r) => complete(r.capex));", "const cohort = rows.filter((r) => r.capex.some((v) => v !== null)).map((r) => ({ ...r, capex: r.capex.map((v) => v ?? 0) }));")],
   ["other currencies dropped silently", () => mut("cur", "if (input.currency && input.currency !== \"USD\") otherCurrency++;", "")],
   ["unclassified placed in a catch-all", () => mut("unc", "    if (!input.sector) {\n      if (row.capex.some((v) => v !== null)) {", "    if (!input.sector) input.sector = \"Other\";\n    if (false) {\n      if (row.capex.some((v) => v !== null)) {")],
+  ["the leaders not sorted by capex", () => mut("leadsort", "everyone.sort((a, b) => b.capex - a.capex)", "everyone")],
   ["the unplaced list not sorted by capex", () => mut("uncsort", "unplaced.sort((a, b) => b.capex - a.capex)", "unplaced")],
   ["listings not folded by filer", () => mut("dedupe", "const { kept: inputs, duplicates: duplicateListings } = dedupeByFiler(all);", "const inputs = all, duplicateListings = 0;")],
   ["SEC's listing order ignored", () => mut("rank", "(b.rank ?? Infinity) - (a.rank ?? Infinity) ||", "")],
