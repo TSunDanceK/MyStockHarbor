@@ -143,9 +143,16 @@ console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reas
   check("total liabilities derived = 5.73 - 4.40 = 1.33B, marked derived", Math.abs(liab.val - 1.33 * B) < 1 && liab.derived === "computed" && /accounting identity/.test(liab.derivedNote));
   const filedL = V.withDerivedLiabilities({ key: "totalLiabilities", label: "Total liabilities", val: 1 * B, derived: "as-filed", derivedNote: null }, AVAV.instants[0]);
   check("a filed total liabilities is never replaced", filedL.val === 1 * B && filedL.derived === "as-filed");
+  const fallback = per("2026-08-01", null, { totalAssets: 10 * B, stockholdersEquity: 4 * B, totalEquity: 4 * B });
+  check("equity that may be the parent-only fallback, with an NCI tagged → not derived (the NCI is not a liability)",
+    V.withDerivedLiabilities({ key: "totalLiabilities", label: "x", val: null, derived: null, derivedNote: null }, fallback, true).val === null);
+  check("...the same figures with no NCI tagged → derived 6B", V.withDerivedLiabilities({ key: "totalLiabilities", label: "x", val: null, derived: null, derivedNote: null }, fallback, false).val === 6 * B);
+  const Mf = await loadMutant(VIEW_FILE, once(VS, '  if (nciTagged && equity === valueOf(at, "stockholdersEquity")) return cellIn;\n', ""));
+  check("MUTATION: fallback guard removed → NCI counted as a liability (caught)",
+    Mf.withDerivedLiabilities({ key: "totalLiabilities", label: "x", val: null, derived: null, derivedNote: null }, fallback, true).val === 6 * B);
   const Ml = await loadMutant(VIEW_FILE, once(VS, "  if (assets === null || equity === null) return cellIn;\n", "  return cellIn; void assets; void equity;\n"));
   check("MUTATION: identity removed → 'Not found' again (caught)", Ml.withDerivedLiabilities({ key: "totalLiabilities", label: "x", val: null, derived: null, derivedNote: null }, AVAV.instants[0]).val === null);
-  check("the balance sheet builds total liabilities through it", /totalLiabilities: withDerivedLiabilities\(view\(bsAt, "totalLiabilities"/.test(VS));
+  check("the balance sheet builds total liabilities through it", /totalLiabilities: withDerivedLiabilities\(view\(bsAt, "totalLiabilities", "Total liabilities"\), bsAt,\s*\[\.\.\.set\.quarters/.test(VS));
   const page = fs.readFileSync("app/stock/[symbol]/page.tsx", "utf8");
   check("the stock page shows a computed figure's note in the reason line", /f\?\.ok \? f\.note \?\? null : null/.test(page));
 }
