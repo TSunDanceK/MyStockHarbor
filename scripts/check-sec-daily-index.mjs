@@ -94,12 +94,12 @@ const idx = await lift(
 );
 
 const man = await lift(
-  [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"),
+  [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"), grabFunction(MANIFEST_SRC, "dotDashSpellings"),
    grabFunction(MANIFEST_SRC, "seedManifest"), grabFunction(MANIFEST_SRC, "symbolsByCik"),
    grabFunction(MANIFEST_SRC, "mapChangeThreshold"), grabFunction(MANIFEST_SRC, "reconcileCiks"),
    grabFunction(MANIFEST_SRC, "reconcileDelistings"), grabFunction(MANIFEST_SRC, "reconcileExchanges"),
    grabFunction(MANIFEST_SRC, "exchangeHistogram"), grabFunction(MANIFEST_SRC, "secRereadQueue")].join("\n") +
-    "\nexport { emptyEntry, emptyManifest, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
+    "\nexport { emptyEntry, emptyManifest, dotDashSpellings, seedManifest, symbolsByCik, mapChangeThreshold, reconcileCiks, reconcileDelistings, reconcileExchanges, exchangeHistogram, secRereadQueue };",
   // THE TRANSITIVE CALLEE, AND IT FAILED AT RUN TIME FIRST. grabFunction lifts
   // ONE body and does not follow imports, so seedManifest's lookupBySpelling
   // threw ReferenceError the moment it was called. The helper's REAL source is
@@ -1370,16 +1370,47 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
   // TSM and 53 others had a set and no entry, so no cron ever re-read them).
   const unionRe = /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.priorityStocks,\s*\.\.\.uniqueEtfs,\s*\.\.\.primaryListingSymbols\(\),\s*\.\.\.POPULAR_SYMBOLS,\s*\.\.\.stored\.symbols,\s*\.\.\.\(await readDynamicUniverse\(\)\)/;
   check("the route seeds from PRESET_UNIVERSE ∪ the curated sitemap symbols ∪ the cited primary listings ∪ the popular list ∪ every stored set ∪ the dynamic pool",
-    unionRe.test(routeCode) && /const stored = await storedFactSetSymbols\(\)/.test(routeCode),
+    unionRe.test(routeCode) && /const stored = await readFactSetIndex\(\)/.test(routeCode),
     "the union is the fix; seedManifest cannot add what it is never given");
   check("...and CATCHES the stored-set leg dropped (the TSM gap re-opens)",
     !unionRe.test(routeCode.replace("...stored.symbols, ", "")));
-  // THE SCAN ITSELF: every fact-set key, prefix-matched, paged to the end.
+  // THE INDEX, NOT A SCAN (#552 COWORK #59). SCAN's COUNT pages over the whole
+  // keyspace, so a capped scan returns a partial list silently and its cost
+  // grows with every key family. The route reads one SMEMBERS; the only SCAN
+  // is the one-time backfill, which runs to cursor 0 with no cap, and only
+  // when the index came back empty on a run that may write.
   {
-    const man = readCodeOnly("lib/server/secManifest.ts");
-    const fn = man.slice(man.indexOf("export async function storedFactSetSymbols"), man.indexOf("export async function storedFactSetSymbols") + 1200);
-    check("storedFactSetSymbols SCANs the fact-set prefix to cursor 0, 1,000 a call, and never throws",
-      /match: `\$\{SEC_FACTS_PREFIX\}:\*`/.test(fn) && /count: 1000/.test(fn) && /String\(cursor\) !== "0"/.test(fn) && /catch/.test(fn));
+    const man2 = readCodeOnly("lib/server/secManifest.ts");
+    const readFn = man2.slice(man2.indexOf("export async function readFactSetIndex"), man2.indexOf("export async function backfillFactSetIndex"));
+    const fillFn = man2.slice(man2.indexOf("export async function backfillFactSetIndex"), man2.indexOf("export async function backfillFactSetIndex") + 1400);
+    check("the daily index reads the fact-set index (SMEMBERS), and the route itself never SCANs",
+      /redis\.smembers\(SEC_FACTS_INDEX_KEY\)/.test(readFn) && !/\.scan\(/.test(readFn) && !/\.scan\(/.test(routeCode));
+    const fillOk = (f) => /match: `\$\{SEC_FACTS_PREFIX\}:\*`/.test(f) && /\} while \(String\(cursor\) !== "0"\);/.test(f) && /redis\.sadd\(SEC_FACTS_INDEX_KEY/.test(f) && /canWriteSecState\(\)/.test(f);
+    check("the one-time backfill SCANs to cursor 0 with NO call cap, SADDs, and is write-gated", fillOk(fillFn));
+    check("...and CATCHES a call cap (a partial backfill that looks finished)",
+      !fillOk(fillFn.replace('} while (String(cursor) !== "0");', '} while (String(cursor) !== "0" && commands < 50);')));
+    check("the backfill runs only when the index read came back empty, and never on a dry or inspection run",
+      /!stored\.failed && stored\.symbols\.length === 0 && !dryRun && !inspectionOnly \? await backfillFactSetIndex\(\)/.test(routeCode));
+  }
+  // ONE ENTRY PER SECURITY ACROSS DOT/DASH (#552 COWORK #59, the #623 class):
+  // the lists spell BRK.B, a stored set may be indexed as BRK-B.
+  {
+    const cik = new Map([["BRK-B", { cik: "0001067983", exchange: "NYSE" }]]);
+    const m2 = man.emptyManifest();
+    man.seedManifest(m2, ["BRK.B", "BRK-B", "BF-B", "BF.B"], cik, true);
+    const keys = Object.keys(m2.symbols).sort().join(" ");
+    check("seeding BRK.B and BRK-B (and BF-B, BF.B) makes ONE entry each, the first spelling seen", keys === "BF-B BRK.B", keys);
+    check("...and only the dot/dash pair: MER-PK and MER$K stay distinct keys (no $-widening)",
+      man.dotDashSpellings("MER-PK").join(" ") === "MER-PK MER.PK" && !man.dotDashSpellings("MER-PK").includes("MER$K"));
+    const naive = await lift(
+      [grabFunction(MANIFEST_SRC, "emptyEntry"), grabFunction(MANIFEST_SRC, "emptyManifest"), grabFunction(MANIFEST_SRC, "dotDashSpellings"),
+       grabFunction(MANIFEST_SRC, "seedManifest").replace(/const existingKey = [^\n]+\n/, "const existingKey = symbol;\n")].join("\n") +
+        "\nexport { emptyManifest, seedManifest };",
+      fs.readFileSync(path.join(ROOT, "lib/symbolSpellings.mjs"), "utf8").replace(/^export /gm, "") + "\nconst SEC_SCORE_VERSION = 1;"
+    );
+    const m3 = naive.emptyManifest();
+    naive.seedManifest(m3, ["BRK.B", "BRK-B"], cik, true);
+    check("...and CATCHES an exact-key match (BRK.B and BRK-B become two entries)", Object.keys(m3.symbols).length === 2);
   }
   check("...and does NOT slice it by ANALYSIS_UNIVERSE_CAP",
     !/ANALYSIS_UNIVERSE_CAP/.test(routeCode),
