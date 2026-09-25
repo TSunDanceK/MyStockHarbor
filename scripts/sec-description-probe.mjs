@@ -128,6 +128,32 @@ for (const symbol of LIST) {
       at += l.length + 1;
     }
   }
+  // HEADS=1: the short heading-like lines between the LAST "Item 4" line and
+  // the next "Item 5" line (#552 COWORK #48: NGG, BIP), so a 20-F layout the
+  // locator misses is read from evidence.
+  if (process.env.HEADS) {
+    const ls = text.split("\n");
+    // Every short Item-level line with its character offset, TOC included, so
+    // the start/end pairing the locator sees can be read off directly.
+    let off = 0;
+    const items = [];
+    for (const l of ls) {
+      const k = l.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (k.length <= 80 && /^(item\d|\d[a-z]?(business|organi|informationon))/.test(k)) items.push(`${off}:${k.slice(0, 40)}`);
+      off += l.length + 1;
+    }
+    console.log(`\n### ${symbol} item lines (${items.length}): ${items.slice(0, 60).join(" | ")}`);
+    const i4 = ls.map((l, i) => (/^\s*item\s*4\b/i.test(l) && l.length < 120 ? i : -1)).filter((i) => i >= 0);
+    console.log(`\n### ${symbol} ${form}: ${i4.length} "Item 4" lines at ${i4.slice(0, 8).join(",")}`);
+    for (const start of i4.slice(-2)) {
+      let shown = 0;
+      for (let j = start; j < ls.length && shown < 60; j++) {
+        const l = ls[j].trim();
+        if (j > start && /^item\s*5\b/i.test(l)) { console.log(`   [${j}] ${JSON.stringify(l.slice(0, 80))}  (end)`); break; }
+        if (l && l.length <= 70 && !/[.;:,]$/.test(l) && /^[A-Z0-9]/.test(l)) { console.log(`   [${j}] ${JSON.stringify(l)}`); shown++; }
+      }
+    }
+  }
   if (!loc.found) { results.push({ ...base, url, found: false, why: loc.why }); continue; }
   const cleaned = desc.cleanDescription(loc.body, { companyName: sub.body.name ?? null });
   // THE RAW OPENING TOO, so a rejection can be checked against what it rejected.
