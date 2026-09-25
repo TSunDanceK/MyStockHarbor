@@ -78,6 +78,45 @@ const NAMES = read("data/company-names.json").rows ?? {};
 
 console.log(`universe from SYMBOLS: ${universe.length} tickers${universe.length ? "" : " (none given: sections 3, 4 and 6 are skipped)"}`);
 
+// PREFERRED SPELLINGS (MODE=spellings, #553 COWORK #55 §2): how Tiingo writes
+// the three preferreds its metadata endpoint missed. Reads the PUBLIC
+// supported_tickers file for rows under those roots (ticker spellings only),
+// then tries at most 5 candidate spellings each on the metadata endpoint:
+// 15 requests at most, statuses only.
+if (process.env.MODE === "spellings") {
+  const WANT = [["EP", "C"], ["FITB", "M"], ["MER", "K"]];
+  try {
+    const res = await fetch("https://apimedia.tiingo.com/docs/tiingo/daily/supported_tickers.zip");
+    const tmpd = fs.mkdtempSync(path.join(os.tmpdir(), "tiingo-"));
+    fs.writeFileSync(path.join(tmpd, "st.zip"), Buffer.from(await res.arrayBuffer()));
+    const csv = execFileSync("unzip", ["-p", path.join(tmpd, "st.zip")], { maxBuffer: 256 * 1024 * 1024 }).toString("utf8");
+    const lines = csv.split(/\r?\n/).filter(Boolean);
+    const h = csvFields(lines[0]);
+    const iT = h.findIndex((f) => f.toLowerCase() === "ticker");
+    const iEnd = h.findIndex((f) => f.toLowerCase() === "enddate");
+    for (const [root] of WANT) {
+      const hits = lines.slice(1).map(csvFields).filter((f) => new RegExp(`^${root}[^A-Z]`, "i").test(String(f[iT] ?? ""))).map((f) => `${f[iT]}${f[iEnd] ? ` (end ${String(f[iEnd]).slice(0, 10)})` : ""}`);
+      console.log(`supported_tickers rows under ${root}: ${hits.slice(0, 20).join(", ") || "(none)"}`);
+    }
+    fs.rmSync(tmpd, { recursive: true, force: true });
+  } catch (err) {
+    console.log(`supported_tickers could not be read (${String(err?.name ?? err)})`);
+  }
+  for (const [root, series] of WANT) {
+    const cands = [`${root}-P-${series}`, `${root}-P${series}`, `${root}P${series}`, `${root}_P${series}`, `${root}-${series}`];
+    const out = [];
+    for (const c of cands) {
+      const r = await get(`/tiingo/daily/${encodeURIComponent(c)}`);
+      out.push(`${c}: ${r.status}`);
+      if (r.status === 429) break;
+      if (r.status === 200) break;
+    }
+    console.log(`${root} series ${series}: ${out.join("; ")}`);
+  }
+  console.log(`\nTiingo requests used: ${requests} (cap 15); Redis commands: 0; stored: nothing`);
+  process.exit(0);
+}
+
 // CAPPED RE-RUN (MODE=rerun, #553 COWORK #55 §1), after the plan upgrade:
 // bulk status, latest EOD date on 3 tickers, limit headers, search hit rate on
 // 20 names, one AAPL full-history call, one IEX batch quote. HARD CAP 60 requests; the first 429
