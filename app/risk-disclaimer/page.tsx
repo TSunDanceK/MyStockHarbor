@@ -83,6 +83,23 @@ export default function RiskDisclaimerPage() {
             guarantee future results.
           </p>
 
+          {/* CONTRACT §5.1.2 and §5.3(ix) (#553 COWORK #55 §2, 2026-09-25):
+              the End Customer terms the Tiingo agreement asks us to carry.
+              scripts/check-tiingo-step1.mjs holds the personal-research line. */}
+          <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
+            Use of Market Data
+          </h2>
+
+          <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+            Market data shown on MyStockHarbor, including prices supplied by
+            third-party data providers, is made available for personal research
+            purposes only. It may not be resold, redistributed, or copied or
+            exported in bulk or in machine-readable form (for example as CSV,
+            Excel or JSON files, or through automated access), other than
+            limited information about one or a few stock tickers for your own
+            personal use.
+          </p>
+
           <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
             Limitation of Liability
           </h2>

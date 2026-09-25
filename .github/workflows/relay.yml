@@ -69,7 +69,7 @@ jobs:
   # endpoints lands here, and it cannot touch the database because it has no way
   # to authenticate to it.
   read-only:
-    if: ${{ !startsWith(inputs.task, 'write-') }}
+    if: ${{ !startsWith(inputs.task, 'write-') && !startsWith(inputs.task, 'tiingo-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -184,3 +184,43 @@ jobs:
           path: task.log
           retention-days: 90
           if-no-files-found: warn
+
+  # ── TIINGO ONLY (Relay B, #553 COWORK #49). The third job, gated on the
+  # tiingo- prefix: it holds TIINGO_API_KEY and NOTHING ELSE -- no Upstash
+  # credential and no `npm ci`, so it can read Tiingo and cannot touch the
+  # database, while the read-only job above stays secret-free.
+  #
+  # ACTIONS LOGS ARE PUBLIC. Tiingo data in a log is distribution (contract
+  # §5.3, §5.4.2), so a tiingo- task prints statuses, counts, timings and field
+  # names only, and this job uploads NO artifact: task.log goes to the run
+  # summary and nowhere else.
+  tiingo:
+    if: ${{ startsWith(inputs.task, 'tiingo-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run the Tiingo task
+        env:
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+          SYMBOLS: ${{ inputs.symbols }}
+          MODE: ${{ (inputs.payers == 'followup' || inputs.payers == 'rerun' || inputs.payers == 'spellings') && inputs.payers || '' }}
+          TASK: ${{ inputs.task }}
+        run: |
+          set -o pipefail
+          node scripts/relay-run.mjs "${TASK}" 2>&1 | tee task.log
+
+      - name: Put the output in the run summary
+        if: always()
+        run: |
+          {
+            echo "## Relay — ${{ inputs.task }}"
+            echo
+            echo '```'
+            cat task.log 2>/dev/null || echo "(no task.log — the step did not run)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
