@@ -1218,6 +1218,14 @@ const TASKS = {
   // READ-ONLY (Relay B, #553 COWORK #16 item 3): where Pickers' Market Cap
   // comes from today over the Pickers universe, for the Friday price split.
   // 3 Redis reads.
+  // PICKERS vs THE EARNINGS PAGE ON THE CITED ADS RATIO (#553 COWORK #44/#47).
+  // Read-only; 1 GET per symbol + 1 HMGET. Side branch, never merged.
+  "write-pickers-ads-census": {
+    script: "scripts/pickers-ads-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   "write-pickers-marketcap-census": {
     script: "scripts/pickers-marketcap-census.mjs",
     args: () => [],
