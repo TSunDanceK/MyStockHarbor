@@ -658,6 +658,8 @@ const TASKS = {
   // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
   // traded unit and every refusal, from the stored sets. No price. 1 MGET.
   "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Pages the layout pass touches (#552 COWORK #40/#49). Reads only; ~51 MGETs.
+  "write-layout-pass-census": { script: "scripts/layout-pass-census.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
