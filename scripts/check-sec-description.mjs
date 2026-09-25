@@ -89,10 +89,19 @@ console.log("\n2. 20-F: Item 4, then its Business Overview");
     "Item 5. Operating and Financial Review and Prospects", "Business Overview", "wrong " + filler("Item5")].join("\n");
   const r = D.locateSection(ryaay, "20-F");
   check("no Business Overview inside Item 4 → no description, not Item 5's (RYAAY)", !r.found);
-  const unbounded = await load((src) => once("const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;", "const ITEM4B_LETTERED = /^(item4)?b?businessoverview$/;")(
+  const unbounded = await load((src) => once("const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;", "const ITEM4B_LETTERED = /^(item4|4)?b?businessoverview$/;")(
     once("if (item4.span) {", "if (false) {")(src)));
   const leaked = unbounded.locateSection(ryaay, "20-F");
   check("...and CATCHES a search outside Item 4 that takes Item 5's Business Overview", leaked.found && /^wrong/.test(leaked.body));
+  // BIP (#552 COWORK #48): numbered sub-headings, "4.B BUSINESS OVERVIEW".
+  const bip = [...toc, "ITEM 4. INFORMATION ON THE COMPANY", "4.A HISTORY AND DEVELOPMENT OF BROOKFIELD INFRASTRUCTURE", filler("History"),
+    "4.B BUSINESS OVERVIEW", "Our Operations", "Brookfield Infrastructure owns and operates utilities, transport, midstream and data infrastructure. " + filler("BIP"),
+    "4.C ORGANIZATIONAL STRUCTURE", filler("Org"), "Item 4A. UNRESOLVED STAFF COMMENTS", "none", "ITEM 5. Operating and Financial Review and Prospects", filler("Item5")].join("\n");
+  const b = D.locateSection(bip, "20-F");
+  check("a numbered '4.B BUSINESS OVERVIEW' inside Item 4 is found, and ends at '4.C' (BIP)",
+    b.found && b.body.startsWith("Our Operations") && !b.body.includes("ORGANIZATIONAL"), b.found ? b.body.slice(0, 60) : b.why);
+  const noFour = await load(once("const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;", "const ITEM4B_ANY = /^(item4)?b?businessoverview$/;"));
+  check("...and CATCHES the '4' prefix removed (BIP back to 'no Business Overview heading')", !noFour.locateSection(bip, "20-F").found);
   check("40-F has no description", !D.locateSection("x", "40-F").found);
 }
 
