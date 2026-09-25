@@ -14,7 +14,9 @@ for (let i = 7; i >= 0; i--) {
   const iso = d.toISOString().slice(0, 10);
   const trig = (await redis.hgetall(`msh:pickers-build-triggers:v1:${iso}`)) ?? {};
   commands++;
-  const [reads, units] = (await redis.hmget(`msh:redis-units:v1:${iso.replace(/-/g, "")}`, "history-bulk:pickers-build:reads", "history-bulk:pickers-build:units")) ?? [];
+  const F = ["history-bulk:pickers-build:reads", "history-bulk:pickers-build:units"];
+  const got = (await redis.hmget(`msh:redis-units:v1:${iso.replace(/-/g, "")}`, ...F)) ?? {};
+  const [reads, units] = Array.isArray(got) ? got : F.map((f) => got[f]);
   commands++;
   const rows = Object.entries(trig).sort((a, b) => Number(b[1]) - Number(a[1]));
   const total = rows.reduce((a, [, n]) => a + Number(n), 0);
