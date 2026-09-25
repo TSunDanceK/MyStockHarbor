@@ -38,7 +38,7 @@
 // assume the company has no earnings, which is a claim about the company. The
 // true claim is almost always about the filing.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
-import { valueOf } from "./secFactCodec";
+import { balanceSheetInstant, valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 import { annualOnlyForm } from "./annualOnly";
@@ -54,6 +54,7 @@ export type ValuationRefusal =
   | "eps-period-is-stale"
   | "share-basis-changed"
   | "eps-is-zero-or-negative"
+  | "eps-near-zero"
   | "no-twelve-month-revenue"
   | "revenue-line-incomplete"
   | "no-balance-sheet-equity"
@@ -76,8 +77,12 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "twelve months of diluted EPS are not on file",
   "eps-period-is-stale":
     "the latest twelve months of EPS on file ended more than 15 months ago",
+  // NEUTRAL ABOUT THE CAUSE (#552 COWORK #51): for BABA the likely cause is
+  // our cover read, not a corporate action, so no cause is suggested.
   "share-basis-changed":
-    "the share count has changed by more than a fifth since the period the EPS covers (a split, bonus issue or depositary-ratio change), so the per-share figures do not line up",
+    "the share count on file differs by more than a fifth from the one behind the EPS, so these figures aren't comparable",
+  "eps-near-zero":
+    "trailing EPS is close to zero, so a P/E is not meaningful",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
   "no-twelve-month-revenue":
@@ -592,6 +597,9 @@ export function valuationInputs(
   return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}) };
 }
 
+/** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
+export const PE_MIN_EPS = 0.05;
+
 /** P/E is withheld when its EPS period ended more than this long before today. */
 export const EPS_MAX_AGE_MONTHS = 15;
 /** More than this relative move between the EPS period's diluted shares and today's cover count is a basis change. */
@@ -732,6 +740,13 @@ export function peRatio(
       : null;
   }
   if (inputs.eps.val <= 0) return { ok: false, why: "eps-is-zero-or-negative" };
+  // NEAR-ZERO EPS IS NOT A P/E (#552 COWORK #49): AXTI's $75.90 / $0.01 printed
+  // 7590.0, arithmetically true and falsely precise. Below the floor the figure
+  // is withheld with the EPS said. EPS-based, not "P/E above N": a very high
+  // P/E on real earnings is still a real figure.
+  if (inputs.eps.val > 0 && inputs.eps.val < PE_MIN_EPS) {
+    return { ok: false, why: "eps-near-zero", detail: `Not meaningful: trailing EPS is close to zero ($${inputs.eps.val.toFixed(2)})` };
+  }
   if (price === null || !Number.isFinite(price) || price <= 0) return null;
   return { ok: true, val: price / inputs.eps.val };
 }
@@ -818,7 +833,7 @@ export type MultipleInputs = {
 };
 
 export function multipleInputs(set: StoredFactSet): MultipleInputs {
-  const b = set.instants[0] ?? null;
+  const b = balanceSheetInstant(set);
   const revenue = twelveMonthsOf(set, ["revenue"]);
   const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {

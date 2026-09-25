@@ -448,3 +448,19 @@ export function reactionPeriodLabels(set: {
   }
   return out;
 }
+
+/**
+ * THE BALANCE-SHEET DATE A PAGE SHOWS: the newest instant that closes a stored
+ * quarter or year, never an opening balance (#552 COWORK #50 / #52).
+ *
+ * IFRS filers restate an opening balance sheet (CHT: 2020-01-01, 2019-01-01,
+ * three fields each). While CHT's later periods were refused for want of a
+ * rate, `instants[0]` was that opening date, so the card read "as at
+ * 2020-01-01" with every line "Not reported". An opening balance closes no
+ * period, so it never matches a period end; with no match there is no
+ * balance sheet to show, which is the honest answer.
+ */
+export function balanceSheetInstant(set: Pick<StoredFactSet, "instants" | "quarters" | "years">): StoredPeriod | null {
+  const ends = new Set([...set.quarters, ...set.years].map((p) => p.e));
+  return set.instants.find((i) => ends.has(i.e)) ?? null;
+}
