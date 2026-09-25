@@ -21,6 +21,9 @@
 // 20-F instance is TWD only: unlocked, TWD wins the currency vote, TWD has no
 // rate series, and toStoredSet stores NO periods — the page would go blank.
 // Locked, the filing adds nothing and the notice (StoredFactSet.lg) says why.
+// (Since #552 COWORK #55 TSM's vote is TWD, with a TWD rate from FRED, so the
+// lock admits its FY2025 20-F. The lock itself is unchanged: it still keeps
+// any other currency out of a set.)
 //
 // The fetches live in the cron (app/api/jobs/sec-facts), behind its rate gate.
 import type { CompanyFacts, FactRow } from "./secExtract";
