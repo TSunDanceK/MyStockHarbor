@@ -58,8 +58,10 @@ console.log("\nc. the balance sheet on AVAV");
   const t = card(M, "SecBalanceSheetCard", vAvav);
   check("total equity is shown under its own label, with the filed figure",
     /Total equity \(incl\. noncontrolling interests\).*\$4\.40B/.test(t) && !/Shareholders' equity/.test(t), t.slice(-420));
-  check("total liabilities says the tags do not carry it",
-    new RegExp(`Total liabilities ${NOT_FOUND}`).test(t));
+  // COWORK #54: untagged, but total assets and total equity are filed at the
+  // same date, so it is derived (assets - equity) and marked, not "not found".
+  check("total liabilities is derived from assets less equity, and marked (COWORK #54)",
+    /Total liabilities \$1\.3\dB\s*derived/.test(t) && !new RegExp(`Total liabilities ${NOT_FOUND}`).test(t), (t.match(/Total liabilities[^A-Z]{0,40}/) ?? [""])[0]);
   check("a filer with the parent-only figure keeps the plain label (AAPL)",
     /Shareholders' equity/.test(card(M, "SecBalanceSheetCard", vAapl)) &&
       !/incl\. noncontrolling/.test(card(M, "SecBalanceSheetCard", vAapl)));

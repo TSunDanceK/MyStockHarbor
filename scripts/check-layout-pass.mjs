@@ -103,6 +103,53 @@ console.log("\n5. P/E on near-zero EPS (AXTI)");
   check("MUTATION: floor removed → 7590.0 printed again (caught)", M.peRatio(inputs(0.01), 75.90)?.ok === true);
 }
 
+console.log("\n7. AVAV (COWORK #54): P/B on NCI-inclusive equity, EV/EBITDA reasons, derived liabilities");
+{
+  const { SEC_FIELD_KEYS } = await import("../lib/server/secFields.ts");
+  const per = (e, s, vals) => ({ e, s, fp: s ? "Q1" : "Q1", fy: 2027, a: null, f: null, v: SEC_FIELD_KEYS.map((k) => vals[k] ?? null), d: "" });
+  const bs = (vals) => per("2026-08-01", null, vals);
+  const q = (vals) => per("2026-08-01", "2026-05-03", vals);
+  const set = (bsVals, qVals = {}) => ({ symbol: "AVAV", quarters: [q(qVals)], years: [], instants: [bs(bsVals)] });
+  const AVAV = set({ totalEquity: 4.40 * B, totalAssets: 5.73 * B });
+  const r1 = VAL.bookEquityAt(AVAV, AVAV.instants[0]);
+  check("AVAV: no parent equity, no NCI tagged → the NCI-inclusive $4.40B, flagged", r1.equity === 4.40 * B && r1.equityIncludesNci && !r1.equityOnlyInclNci, JSON.stringify(r1));
+  const NCI = set({ totalEquity: 4.40 * B }, { netIncomeToNoncontrollingInterest: 5e6 });
+  const r2 = VAL.bookEquityAt(NCI, NCI.instants[0]);
+  check("NCI tagged and non-zero → still refused, by name", r2.equity === null && r2.equityOnlyInclNci);
+  const ZERO = set({ totalEquity: 4.40 * B }, { netIncomeToNoncontrollingInterest: 0 });
+  check("NCI tagged as 0 → the inclusive total is used", VAL.bookEquityAt(ZERO, ZERO.instants[0]).equity === 4.40 * B);
+  const PARENT = set({ stockholdersEquity: 4.1 * B, totalEquity: 4.40 * B });
+  check("parent equity present → parent wins", VAL.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.1 * B);
+  const Mn = await loadMutant(VAL_FILE, once(VALS, "  return nciTagged\n", "  return false && nciTagged\n"));
+  check("MUTATION: NCI test removed → an NCI filer gets a P/B on the inclusive total (caught)", Mn.bookEquityAt(NCI, NCI.instants[0]).equity === 4.40 * B);
+  const Mp = await loadMutant(VAL_FILE, once(VALS, "  if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };\n", ""));
+  check("MUTATION: parent-first removed → the inclusive total replaces parent equity (caught)", Mp.bookEquityAt(PARENT, PARENT.instants[0]).equity === 4.40 * B);
+
+  const inputs = { shares: { val: 1e8, asOf: "2026-08-01" }, eps: null, refusals: [] };
+  const mi = (bsx, ebitda, ebitdaMissing = []) => ({ revenue: null, ebitda, ebitdaMissing, balanceSheet: bsx });
+  const avavBs = { asOf: "2026-08-01", equity: 4.40 * B, equityIncludesNci: true, shortTermDebt: 0.02 * B, longTermDebt: 0.7 * B, cash: 0.5 * B };
+  const pb = VAL.valuationMultiples(inputs, mi(avavBs, null, ["depreciation & amortization"]), 80.6).pb;
+  check("P/B ≈ 8.06B / 4.40B = 1.8x, with the incl.-NCI note", pb.ok && Math.abs(pb.val - 8.06 / 4.40) < 0.01 && pb.note === VAL.PB_INCL_NCI_NOTE, JSON.stringify(pb));
+  const refused = VAL.valuationMultiples(inputs, mi({ ...avavBs, equity: null, equityIncludesNci: false, equityOnlyInclNci: true }, null), 80.6).pb;
+  check("refusal reads 'equity is tagged only including noncontrolling interests…', never 'no shareholders' equity'",
+    refused.ok === false && refused.why === "equity-tagged-only-incl-nci" && !/no shareholders/.test(VAL.REFUSAL_WORDS[refused.why]));
+  const neg = VAL.valuationMultiples(inputs, mi(avavBs, { vals: { operatingIncome: -1.2 * B, depreciationAndAmortization: 0.3 * B } }), 80.6).evEbitda;
+  check("EBITDA ≤ 0 → 'EBITDA over the last twelve months is not positive…'", neg.ok === false && neg.why === "ebitda-is-zero-or-negative" && /^EBITDA over the last twelve months is not positive/.test(VAL.REFUSAL_WORDS[neg.why]));
+  const miss = VAL.valuationMultiples(inputs, mi({ ...avavBs, longTermDebt: null }, null, ["depreciation & amortization"]), 80.6).evEbitda;
+  check("a missing input is named: long-term debt, D&A (twelve months)",
+    miss.ok === false && miss.detail === "not on file: long-term debt, depreciation & amortization (twelve months); it is not approximated", miss.detail);
+
+  const liab = V.withDerivedLiabilities({ key: "totalLiabilities", label: "Total liabilities", val: null, derived: null, derivedNote: null }, AVAV.instants[0]);
+  check("total liabilities derived = 5.73 - 4.40 = 1.33B, marked derived", Math.abs(liab.val - 1.33 * B) < 1 && liab.derived === "computed" && /accounting identity/.test(liab.derivedNote));
+  const filedL = V.withDerivedLiabilities({ key: "totalLiabilities", label: "Total liabilities", val: 1 * B, derived: "as-filed", derivedNote: null }, AVAV.instants[0]);
+  check("a filed total liabilities is never replaced", filedL.val === 1 * B && filedL.derived === "as-filed");
+  const Ml = await loadMutant(VIEW_FILE, once(VS, "  if (assets === null || equity === null) return cellIn;\n", "  return cellIn; void assets; void equity;\n"));
+  check("MUTATION: identity removed → 'Not found' again (caught)", Ml.withDerivedLiabilities({ key: "totalLiabilities", label: "x", val: null, derived: null, derivedNote: null }, AVAV.instants[0]).val === null);
+  check("the balance sheet builds total liabilities through it", /totalLiabilities: withDerivedLiabilities\(view\(bsAt, "totalLiabilities"/.test(VS));
+  const page = fs.readFileSync("app/stock/[symbol]/page.tsx", "utf8");
+  check("the stock page shows a computed figure's note in the reason line", /f\?\.ok \? f\.note \?\? null : null/.test(page));
+}
+
 console.log("\n6. copy");
 check("'N other periods omitted' (CHT's refused periods were its LATER ones)", /other period\$\{c\.refused\.length === 1/.test(VS) && !/earlier period\$\{/.test(VS));
 check("share-basis refusal names no cause", /the share count on file differs by more than a fifth from the one behind the EPS, so these figures aren't comparable/.test(VALS) && !/a split, bonus issue or depositary-ratio change/.test(VALS));

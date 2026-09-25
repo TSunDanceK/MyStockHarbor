@@ -600,6 +600,24 @@ export const INTEREST_WITHIN_FILED_OTHER = "Not tagged separately; typically wit
 export const GROSS_PROFIT_COMPUTED_LABEL = "Gross profit (computed)";
 
 /**
+ * TOTAL LIABILITIES, DERIVED where untagged (#552 COWORK #54, AVAV): total
+ * assets less total equity (incl. noncontrolling interests) at the same
+ * instant. An accounting identity, not an estimate, and marked "derived" like
+ * the other derived lines. A filed figure is never replaced.
+ */
+export function withDerivedLiabilities(cellIn: ViewCell, at: StoredPeriod | null | undefined): ViewCell {
+  if (cellIn.val !== null) return cellIn;
+  const assets = valueOf(at, "totalAssets"), equity = valueOf(at, "totalEquity");
+  if (assets === null || equity === null) return cellIn;
+  return {
+    ...cellIn,
+    val: assets - equity,
+    derived: "computed",
+    derivedNote: "Derived: total assets less total equity (including noncontrolling interests) at the same date — an accounting identity. The filing does not tag total liabilities.",
+  };
+}
+
+/**
  * GROSS PROFIT, COMPUTED WHERE IT IS NOT FILED (#552 COWORK #40 §3). Revenue
  * less cost of revenue, labelled "(computed)" so it is never read as a filed
  * figure. SPCX and GOOGL file both lines and no gross-profit tag.
@@ -1666,7 +1684,7 @@ export function buildSecEarningsView(
             ["current liabilities", valueOf(bsAt, "totalCurrentLiabilities")],
           ]),
           totalAssets: view(bsAt, "totalAssets", "Total assets"),
-          totalLiabilities: view(bsAt, "totalLiabilities", "Total liabilities"),
+          totalLiabilities: withDerivedLiabilities(view(bsAt, "totalLiabilities", "Total liabilities"), bsAt),
           ...equityCell(bsAt),
         }
       : null,
