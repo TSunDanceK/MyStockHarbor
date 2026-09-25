@@ -40,6 +40,10 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE TSM VOTE (#552 COWORK #50/#53): 20-F/40-F filers whose currency vote is a
+  // tie on fields, and what "more rows" (a) or "newest annual period" (b) would
+  // decide, with before/after FY revenue. Read-only, uncredentialled.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
   // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
   // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
