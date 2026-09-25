@@ -48,6 +48,10 @@ async function suite(M, src) {
     w({ ...NEXT, sector: "Energy", updatedAt: hoursAgo(1) }, NEXT, NOW) === true && w({ ...NEXT, industry: null, updatedAt: hoursAgo(1) }, NEXT, NOW) === true);
   ok("an unreadable updatedAt: write", w({ ...NEXT, updatedAt: "garbage" }, NEXT, NOW) === true);
   ok("the rewrite age is 12h", M.ROW_REWRITE_AFTER_MS === 12 * 3.6e6);
+  // The /stock "classification as of {day}" line reads this row's updatedAt.
+  const justAfterMidnight = Date.parse("2026-09-26T00:22:00Z");
+  ok("identical row written 1h ago but on the previous UTC day: rewrite (the 'as of' day stays today's)",
+    w({ ...NEXT, updatedAt: "2026-09-25T23:22:00Z" }, NEXT, justAfterMidnight) === true);
   ok("the warm uses the decision before every SET",
     /if \(!fundamentalRowNeedsWrite\(stored\.get\(sym\), row, Date\.parse\(now\)\)\) \{\s*unchanged\+\+;\s*continue;\s*\}\s*writePipeline\.set\(/.test(src));
   return fails;
@@ -73,6 +77,7 @@ const MUTANTS = [
   ["unchanged rows are never rewritten (the TTL lapses)", "  if (!Number.isFinite(at) || nowMs - at >= ROW_REWRITE_AFTER_MS) return true;", "  if (!Number.isFinite(at)) return true;"],
   ["a market-cap change is missed", "    (prev.marketCap ?? null) !== next.marketCap ||\n", ""],
   ["every row is skipped", "    if (!fundamentalRowNeedsWrite(stored.get(sym), row, Date.parse(now))) {", "    if (true) {"],
+  ["a row skipped across midnight keeps yesterday's date", "  if (new Date(at).toISOString().slice(0, 10) !== new Date(nowMs).toISOString().slice(0, 10)) return true;\n", ""],
   ["a missing row is skipped", "  if (!prev || typeof prev !== \"object\") return true;", "  if (!prev || typeof prev !== \"object\") return false;"],
 ];
 for (const [label, from, to] of MUTANTS) {
