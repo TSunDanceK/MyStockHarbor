@@ -51,6 +51,8 @@ export type ValuationRefusal =
   | "ads-ratio-makes-eps-incomparable"
   | "share-count-is-stale"
   | "no-twelve-month-eps"
+  | "eps-period-is-stale"
+  | "share-basis-changed"
   | "eps-is-zero-or-negative"
   | "no-twelve-month-revenue"
   | "revenue-line-incomplete"
@@ -72,6 +74,10 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "the most recent share count this company has filed is too old to value it with",
   "no-twelve-month-eps":
     "twelve months of diluted EPS are not on file",
+  "eps-period-is-stale":
+    "the latest twelve months of EPS on file ended more than 15 months ago",
+  "share-basis-changed":
+    "the share count has changed by more than a fifth since the period the EPS covers (a split, bonus issue or depositary-ratio change), so the per-share figures do not line up",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
   "no-twelve-month-revenue":
@@ -155,7 +161,14 @@ export function coverIsCurrent(asOf: string | null | undefined, today: string): 
  * the EPS period, so it is carried separately and labelled separately rather
  * than folded into one "as of" the page would have to pick a meaning for.
  */
-export type SharesBasis = { val: number; asOf: string };
+export type SharesBasis = {
+  val: number;
+  asOf: string;
+  /** Set when `val` is ADS-equivalents: the cited ordinary shares per ADS it was divided by. */
+  adsRatio?: number;
+  /** The map row's kind: "ordinary" is a direct listing (ratio 1), worded as plain shares. */
+  adsKind?: "ads" | "ordinary";
+};
 
 /**
  * TWELVE MONTHS OF DILUTED EPS, AND WHICH TWELVE.
@@ -185,11 +198,19 @@ export type EpsBasis = {
   ytd?: { yearEnd: string; months: number };
   /** "basic" only for a filer that states no diluted EPS at all (BRK). Absent = diluted. */
   kind?: "basic";
+  /** Set when `val` is per ADS, converted from per ordinary share by this cited ratio. */
+  adsRatio?: number;
+  /** The map row's kind, as on SharesBasis. */
+  adsKind?: "ads" | "ordinary";
 };
 
 export type ValuationInputs = {
   shares: SharesBasis | null;
   eps: EpsBasis | null;
+  /** Set when EPS was withheld as stale: the period end it would have used. */
+  staleEpsEnd?: string;
+  /** True when that period was a fiscal year (the wording names a year, not twelve months). */
+  staleEpsYear?: boolean;
   /** Every refusal that applies, in the order they were decided. */
   refusals: ValuationRefusal[];
 };
@@ -422,7 +443,35 @@ export function sharesAreIncomparableToPrice(symbol: string): boolean {
  * Optional, so every existing caller reads exactly as before; absent means
  * "not known", and only the named list then applies.
  */
-export type FilerFacts = { annualForm?: string | null };
+export type FilerFacts = {
+  annualForm?: string | null;
+  /**
+   * THE CITED ADS RATIO (#552 COWORK #22 §1), from data/sec/ads-ratios.json
+   * via secAdsMap.adsRatioFor — passed in, so this module stays free of JSON
+   * imports. Present only where the filer's own 20-F or F-6 states it; absent
+   * keeps the depositary-share refusal exactly as before. Never defaulted.
+   */
+  ads?: { ordinaryPerAds: number; source: string; kind?: "ads" | "ordinary" } | null;
+};
+
+/** How far the filer's own EPS identity may sit from 1 or from the ratio. */
+export const ADS_EPS_UNIT_TOLERANCE = 0.03;
+
+/**
+ * WHICH UNIT THE FILED EPS IS IN, from the filer's own arithmetic on one
+ * period: epsDiluted x sharesDiluted / netIncome is ~1 when EPS is per
+ * ordinary share (the diluted count is of ordinary shares) and ~ratio when it
+ * is per ADS. Measured this way before (scripts/ads-eps-unit-probe.mjs: HDB,
+ * TSM, BABA, ASML all ~1). Anything else is refused, never guessed.
+ */
+export function epsUnitOf(p: StoredPeriod | null | undefined, ordinaryPerAds: number): "ordinary" | "ads" | null {
+  const eps = valueOf(p, "epsDiluted"), sh = valueOf(p, "sharesDiluted"), ni = valueOf(p, "netIncome");
+  if (eps === null || sh === null || ni === null || ni === 0 || sh <= 0) return null;
+  const u = (eps * sh) / ni;
+  if (Math.abs(u - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ordinary";
+  if (ordinaryPerAds !== 1 && Math.abs(u / ordinaryPerAds - 1) <= ADS_EPS_UNIT_TOLERANCE) return "ads";
+  return null;
+}
 
 export function valuationInputs(
   set: StoredFactSet,
@@ -435,7 +484,8 @@ export function valuationInputs(
   // count is in, so it holds whatever the cover page turns out to say -- a
   // perfectly clean, unambiguous, single-class ordinary-share count is exactly
   // the case this refusal exists for.
-  if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {
+  const ads = filer.ads && Number.isFinite(filer.ads.ordinaryPerAds) && filer.ads.ordinaryPerAds > 0 ? filer.ads : null;
+  if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {
     // TWO REFUSALS, NOT ONE, because they are two different claims about two
     // different figures and only one of them was ever assumed. The share-count
     // one is true by definition: a cover-page count is a count of ordinary
@@ -477,15 +527,116 @@ export function valuationInputs(
   // (the newest stored quarter is its Q4, or none is stored): a year older
   // than their newest quarter is not "trailing", and falling back to it is
   // the NVDA defect (#552 COWORK #8) -- refused instead.
-  const eps = ttmEpsFromSet(set, filer, today);
+  let eps = ttmEpsFromSet(set, filer, today);
   if (!eps) refusals.push("no-twelve-month-eps");
 
-  return { shares, eps, refusals };
+  // ── A STALE EPS YEAR IS NOT A TRAILING P/E (#552 COWORK #45, every filer) ──
+  // TSM's newest year on file ended 2024-12-31: dividing today's price by it
+  // printed 66.5x beside a "TTM"-sounding label. Past EPS_MAX_AGE_MONTHS from
+  // the period end to today (the price date: a stale price is refused on its
+  // own, see priceIsCurrent), the figure is withheld and the date is said.
+  let staleEpsEnd: string | undefined;
+  let staleEpsYear = false;
+  if (eps && epsIsStale(eps.periodEnd, today)) {
+    staleEpsEnd = eps.periodEnd;
+    staleEpsYear = eps.basis === "fiscal-year";
+    eps = null;
+    refusals.push("eps-period-is-stale");
+  }
+
+  // ── A CITED ADS RATIO: EVERYTHING IN THE PRICE'S UNIT (#552 COWORK #22 §1) ──
+  // The spec is "ordinary-share price = ADS price / ratio, against the
+  // per-ordinary figures". Every caller multiplies or divides by the quoted
+  // ADS price, so the same arithmetic is done once here instead: the share
+  // count becomes ADS-equivalents (ordinary / ratio), so cap = ADS price x
+  // that = (ADS price / ratio) x ordinary; and EPS becomes per ADS (x ratio,
+  // only when the filer's own identity says it is per ordinary share), so
+  // P/E = ADS price / EPS per ADS = (ADS price / ratio) / EPS per ordinary.
+  if (ads) {
+    // ── NOT ACROSS A SPLIT, BONUS ISSUE OR RATIO CHANGE (COWORK #45 §3) ──
+    // The EPS period's own diluted share count against today's cover count,
+    // both ORDINARY shares: more than SHARE_BASIS_MAX_MOVE apart and the
+    // per-share bases differ, so the P/E is refused rather than computed.
+    //
+    // ── AND THE MARKET CAP WITH IT (#552 COWORK #49 §1) ─────────────────────
+    // BABA published a $25.73B cap beside a P/E refused on exactly this
+    // ground: 1,858,037,427 ÷ 8 is about a tenth of its real ADS-equivalents.
+    // A count that fails the basis test is not a count to multiply by a price
+    // either, so both figures are withheld with the one reason. The test runs
+    // whether or not an EPS survived: with none (stale, TSM), the newest
+    // period that states diluted shares is the comparison.
+    if (shares) {
+      const all = [...set.quarters, ...set.years];
+      const basisEnd = eps?.periodEnd ??
+        all.filter((x) => valueOf(x, "sharesDiluted") !== null).map((x) => x.e).sort().at(-1) ?? null;
+      const p = basisEnd ? all.find((x) => x.e === basisEnd) ?? null : null;
+      const dil = valueOf(p, "sharesDiluted");
+      if (dil !== null && dil > 0 && Math.abs(shares.val / dil - 1) > SHARE_BASIS_MAX_MOVE) {
+        eps = null;
+        shares = null;
+        refusals.push("share-basis-changed");
+      }
+    }
+    const adsKind = ads.kind ?? "ads";
+    if (shares) shares = { ...shares, val: shares.val / ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
+    if (eps) {
+      const periodEnd = eps.periodEnd;
+      const unitPeriod = [...set.quarters, ...set.years].find((p) => p.e === periodEnd) ?? null;
+      const unit = epsUnitOf(unitPeriod, ads.ordinaryPerAds);
+      if (unit === "ordinary") eps = { ...eps, val: eps.val * ads.ordinaryPerAds, adsRatio: ads.ordinaryPerAds, adsKind };
+      else if (unit === "ads") eps = { ...eps, adsRatio: ads.ordinaryPerAds, adsKind };
+      else { eps = null; refusals.push("ads-ratio-makes-eps-incomparable"); }
+    }
+  }
+
+  return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}) };
+}
+
+/** P/E is withheld when its EPS period ended more than this long before today. */
+export const EPS_MAX_AGE_MONTHS = 15;
+/** More than this relative move between the EPS period's diluted shares and today's cover count is a basis change. */
+export const SHARE_BASIS_MAX_MOVE = 0.2;
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayMonthYearOf(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+export function epsIsStale(periodEnd: string, today: string): boolean {
+  const end = new Date(`${periodEnd}T00:00:00Z`);
+  if (Number.isNaN(end.getTime())) return false;
+  const limit = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + EPS_MAX_AGE_MONTHS, end.getUTCDate());
+  return Date.parse(`${today}T00:00:00Z`) > limit;
+}
+
+// ── HOW THE BASIS IS WORDED (#552 COWORK #49 §2) ────────────────────────
+// A direct listing (map kind "ordinary", ratio 1) is ordinary shares traded
+// as they are: calling them "ADS-equivalent" or "per ADS (1 ordinary shares
+// each)" described a depositary that does not exist (ASML, AZN, SPOT).
+
+/** "each ADS = 1 ordinary share" / "each ADS = 5 ordinary shares". */
+export function adsEqualsWords(ordinaryPerAds: number): string {
+  return `each ADS = ${ordinaryPerAds} ordinary share${ordinaryPerAds === 1 ? "" : "s"}`;
+}
+
+/** The noun after the share count: "shares", or "ADS-equivalent shares (each ADS = 5 ordinary shares)". */
+export function sharesBasisWords(shares: Pick<SharesBasis, "adsRatio" | "adsKind">): string {
+  return shares.adsRatio && shares.adsKind !== "ordinary"
+    ? `ADS-equivalent shares (${adsEqualsWords(shares.adsRatio)})`
+    : "shares";
+}
+
+/** What follows "diluted EPS": "", " per share" (direct listing), " per ADS (each ADS = 5 ordinary shares)". */
+export function epsUnitWords(eps: Pick<EpsBasis, "adsRatio" | "adsKind">): string {
+  if (!eps.adsRatio) return "";
+  return eps.adsKind === "ordinary" ? " per share" : ` per ADS (${adsEqualsWords(eps.adsRatio)})`;
 }
 
 export type ValuationFigure =
   | { ok: true; val: number }
-  | { ok: false; why: ValuationRefusal };
+  /** `detail`: the refusal in words with its own date, where one exists (stale EPS). */
+  | { ok: false; why: ValuationRefusal; detail?: string };
 
 /**
  * MARKET CAP — shares x price, or a named refusal.
@@ -512,6 +663,7 @@ export function marketCap(
     const why = inputs.refusals.find(
       (r) =>
         r === "multi-class-share-count-is-ambiguous" ||
+        r === "share-basis-changed" ||
         r === "share-count-is-stale" ||
         r === "no-cover-share-count"
     );
@@ -568,6 +720,11 @@ export function peRatio(
   // catch it.
   if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
     return { ok: false, why: "ads-ratio-makes-eps-incomparable" };
+  }
+  if (inputs.refusals.includes("share-basis-changed")) return { ok: false, why: "share-basis-changed" };
+  if (inputs.refusals.includes("eps-period-is-stale")) {
+    return { ok: false, why: "eps-period-is-stale",
+      ...(inputs.staleEpsEnd ? { detail: `the latest ${inputs.staleEpsYear ? "fiscal year" : "twelve months"} on file ended ${dayMonthYearOf(inputs.staleEpsEnd)}` } : {}) };
   }
   if (!inputs.eps) {
     return inputs.refusals.includes("no-twelve-month-eps")
