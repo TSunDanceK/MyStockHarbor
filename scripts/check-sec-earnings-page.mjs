@@ -474,7 +474,8 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
   check("...and an absent component contributes exactly zero, not a default",
     /const pts = sc/.test("") ||
       /if \(isPct\(s\.revenueYoY\) && !revenueBaseTooSmall\(s\.revenue\?\.val \?\? null, s\.revenueYoY\)\) \{\s*contribute\(/.test(scoreRaw) &&
-      /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(scoreRaw) &&
+      // #552 COWORK #40: also not off a large non-operating item (still no else).
+      /if \(isPct\(s\.epsYoY\) && !view\.largeNonOperating\) contribute\(/.test(scoreRaw) &&
       /if \(s\.netIncome\.val != null\) contribute\(/.test(scoreRaw) &&
       /if \(marginPair && marginMoveMeaningful\(marginPair\.first, marginPair\.last\)\) \{\s*contribute\(/.test(scoreRaw) &&
       /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(scoreRaw),

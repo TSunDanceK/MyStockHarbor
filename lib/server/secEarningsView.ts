@@ -5,7 +5,7 @@
 // are the part that has to be checkable. scripts/check-sec-earnings-page.mjs
 // asserts against this file, not against the markup.
 import {
-  cell, periodLabel, ttm, valueOf,
+  balanceSheetInstant, cell, periodLabel, ttm, valueOf,
   type Cell, type FilingRef, type StoredFactSet, type StoredPeriod,
 } from "./secFactCodec";
 import { storedInReportingCurrency } from "./secCurrency";
@@ -135,7 +135,9 @@ export function conversionNote(c: NonNullable<SecEarningsView["currency"]>): str
     `. Each period uses its own rate, so historical figures do not move with today's.`,
     ` Growth percentages are calculated in ${c.reporting} before conversion, so they show the business result rather than the currency move.`,
     c.refused.length
-      ? ` ${c.refused.length} earlier period${c.refused.length === 1 ? "" : "s"} omitted: no exchange rate on file.`
+      // "OTHER", NOT "EARLIER" (#552 COWORK #50): CHT's refused periods were
+      // its LATER ones, after ECB's TWD leg ended in 2020.
+      ? ` ${c.refused.length} other period${c.refused.length === 1 ? "" : "s"} omitted: no exchange rate on file.`
       : "",
   ].join("");
 }
@@ -538,6 +540,8 @@ export type ViewCell = Cell & {
    * default (#552 COWORK #47: interest folded into a derived non-operating line).
    */
   emptyText?: string;
+  /** A short grey line under the label (the large non-operating marker, COWORK #40). */
+  sub?: string;
   /**
    * A PER-SHARE FIGURE, which is formatted to two decimals wherever it renders.
    *
@@ -587,6 +591,60 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
 export const OTHER_INCOME_DERIVED_LABEL = "Other income (net)";
 export const NON_OPERATING_DERIVED_LABEL = "Non-operating items (net)";
 export const INTEREST_IN_OTHER_INCOME = "Included in other income (net) below";
+/**
+ * AAPL (#552 COWORK #49): a filed other-income total and no interest line. The
+ * interest is not a missing fact when the filing reports it inside that total,
+ * but the tags cannot prove which, so the wording is hedged.
+ */
+export const INTEREST_WITHIN_FILED_OTHER = "Not tagged separately; typically within other income / expense";
+export const GROSS_PROFIT_COMPUTED_LABEL = "Gross profit (computed)";
+
+/**
+ * GROSS PROFIT, COMPUTED WHERE IT IS NOT FILED (#552 COWORK #40 §3). Revenue
+ * less cost of revenue, labelled "(computed)" so it is never read as a filed
+ * figure. SPCX and GOOGL file both lines and no gross-profit tag.
+ */
+export function withComputedGrossProfit(rows: ViewCell[]): ViewCell[] {
+  const at = (k: string) => rows.find((r) => r.key === k);
+  const gp = at("grossProfit");
+  const rev = at("revenue")?.val ?? null;
+  const cost = at("costOfRevenue")?.val ?? null;
+  if (!gp || gp.val !== null || rev === null || cost === null) return rows;
+  const computed: ViewCell = {
+    ...gp,
+    val: rev - cost,
+    derived: "computed",
+    label: GROSS_PROFIT_COMPUTED_LABEL,
+    derivedNote: "Computed: revenue less cost of revenue. The filing does not tag a gross-profit line.",
+  };
+  return rows.map((r) => (r === gp ? computed : r));
+}
+
+/**
+ * A LARGE NON-OPERATING ITEM, MARKED (#552 COWORK #40 §4). GOOGL Q2 FY2026:
+ * other income 97.98B against operating income 40.77B, so net income 112.19B
+ * and EPS 9.23 for one quarter. True, but it reads as an error to a beginner.
+ *
+ * THE RULE: the non-operating amount (the tagged total, else pre-tax less
+ * operating income) exceeds BOTH operating income in size and a quarter of
+ * revenue. The earlier "|net - operating| > revenue" note would not fire on
+ * GOOGL (71.4B < 119.8B), so it is not the rule. Words only; no figure moves.
+ */
+export const LARGE_NON_OPERATING_SHARE_OF_REVENUE = 0.25;
+export function largeNonOperating(rows: ViewCell[]): { amount: number } | null {
+  const v = (k: string) => rows.find((r) => r.key === k)?.val ?? null;
+  const rev = v("revenue"), op = v("operatingIncome"), pre = v("preTaxIncome");
+  const nonOp = v("nonOperatingIncomeExpense") ?? (pre !== null && op !== null ? pre - op : null);
+  if (nonOp === null || op === null || rev === null || rev <= 0) return null;
+  if (Math.abs(nonOp) <= Math.abs(op) || Math.abs(nonOp) <= rev * LARGE_NON_OPERATING_SHARE_OF_REVENUE) return null;
+  return { amount: nonOp };
+}
+export function withNonOperatingMarker(rows: ViewCell[]): ViewCell[] {
+  const big = largeNonOperating(rows);
+  if (!big) return rows;
+  const sub = `Includes a large non-operating ${big.amount > 0 ? "gain" : "loss"}; see the filing.`;
+  return rows.map((r) => (r.key === "nonOperatingIncomeExpense" || r.key === "netIncome" ? { ...r, sub } : r));
+}
 
 export function withDerivedNonOperating(rows: ViewCell[]): ViewCell[] {
   const at = (k: string) => rows.find((r) => r.key === k);
@@ -594,6 +652,10 @@ export function withDerivedNonOperating(rows: ViewCell[]): ViewCell[] {
   const interest = at("interestExpense");
   const pre = at("preTaxIncome")?.val ?? null;
   const op = at("operatingIncome")?.val ?? null;
+  // A FILED total with no interest line (AAPL): say where the interest likely sits.
+  if (nonOp && nonOp.val !== null && interest && interest.val === null) {
+    return rows.map((r) => (r === interest ? { ...r, emptyText: INTEREST_WITHIN_FILED_OTHER } : r));
+  }
   if (!nonOp || nonOp.val !== null || pre === null || op === null) return rows;
   const interestFiled = interest?.val != null;
   const derived: ViewCell = {
@@ -832,6 +894,8 @@ export type SecEarningsView = {
   incomeStatementComplete: boolean;
   /** The latest period's SG&A is sales & marketing + G&A summed (no combined tag filed). */
   sgaSummed?: boolean;
+  /** The latest period carries a large non-operating item (largeNonOperating). The score skips EPS growth. */
+  largeNonOperating?: boolean;
   /**
    * The filed periods, newest first, for the earnings-history table.
    *
@@ -1387,7 +1451,7 @@ export function buildSecEarningsView(
     ["capital expenditure", capex.val],
   ]);
 
-  const bsAt = set.instants[0] ?? null;
+  const bsAt = balanceSheetInstant(set);
   const std = valueOf(bsAt, "shortTermDebt");
   const ltd = valueOf(bsAt, "longTermDebt");
   const totalDebt = std === null && ltd === null ? null : (std ?? 0) + (ltd ?? 0);
@@ -1451,6 +1515,7 @@ export function buildSecEarningsView(
     ["epsDiluted", `Diluted EPS (${epsStd})`],
     ["sharesDiluted", "Diluted shares"],
   ];
+  const incomeRows = withNonOperatingMarker(withDerivedNonOperating(withComputedGrossProfit(PL.map(([k, label]) => view(latest, k, label)))));
 
   // Does the stored breakdown actually reach the filed operating income? If it
   // does not, the card says the waterfall is partial rather than presenting a
@@ -1605,7 +1670,8 @@ export function buildSecEarningsView(
           ...equityCell(bsAt),
         }
       : null,
-    incomeStatement: withDerivedNonOperating(PL.map(([k, label]) => view(latest, k, label))),
+    incomeStatement: incomeRows,
+    largeNonOperating: largeNonOperating(incomeRows) !== null,
     incomeStatementComplete,
     sgaSummed,
     // ── THE SAME THIN-ROW BAR AS THE GROWTH TABLE, AND THE SAME CAP ─────────
