@@ -13,7 +13,8 @@ import {
   reconcileDelistings,
   reconcileExchanges,
   discardFactSets,
-  storedFactSetSymbols,
+  readFactSetIndex,
+  backfillFactSetIndex,
   type SecManifest,
 } from "@/lib/server/secManifest";
 import { resolveTickerMap, refreshTickerMap } from "@/lib/server/secTickerMap";
@@ -389,11 +390,15 @@ export async function GET(req: NextRequest) {
   // stored as the empty answer — see companyFactsAbsent), and only a manifest
   // entry puts them in the job's populate queue to have it stored.
   // AND EVERY SYMBOL THAT ALREADY HAS A STORED SET, AND THE POPULAR LIST
-  // (#552 COWORK #57/#58). The dynamic pool ages names out after 14 days, so a
-  // set written on demand (TSM) or by the cold path had no entry and was never
-  // re-read: 54 of 961 stored sets on 2026-09-25. JNJ, on the popular list, had
-  // neither an entry nor a set. See storedFactSetSymbols.
-  const stored = await storedFactSetSymbols();
+  // (#552 COWORK #57/#58/#59). The dynamic pool ages names out after 14 days,
+  // so a set written on demand (TSM) or by the cold path had no entry and was
+  // never re-read: 54 of 961 stored sets on 2026-09-25. JNJ, on the popular
+  // list, had neither an entry nor a set. Read from the fact-set INDEX, one
+  // SMEMBERS; the index is backfilled once, the first run that finds it empty.
+  const stored = await readFactSetIndex();
+  const indexBackfill =
+    !stored.failed && stored.symbols.length === 0 && !dryRun && !inspectionOnly ? await backfillFactSetIndex().catch(() => null) : null;
+  if (indexBackfill) stored.symbols = (await readFactSetIndex()).symbols;
   const universe = [
     // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
     // list above while its notes' ticker BIPI was, so the set lived under a note.
@@ -604,8 +609,13 @@ export async function GET(req: NextRequest) {
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
-    // Plus the stored-set SCAN (~1 per 1,000 stored sets, #552 COWORK #58).
+    // Plus the fact-set index read: 1 SMEMBERS (#552 COWORK #59). The one-time
+    // backfill's SCAN and SADDs are reported on their own line below.
     redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands,
+    factSetIndex: stored.symbols.length,
+    factSetIndexBackfillScanned: indexBackfill?.scanned ?? null,
+    factSetIndexBackfillAdded: indexBackfill?.added ?? null,
+    factSetIndexBackfillCommands: indexBackfill?.commands ?? null,
     // Stated rather than left to be inferred from a watermark that did not move.
     watermarkMoved: !dryRun && !inspectionOnly && written,
     inspectionOnly,
