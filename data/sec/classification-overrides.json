@@ -3632,6 +3632,17 @@
    "filedOn": "2026-02-11",
    "accession": "0001104659-26-013549"
   },
+  "BIP": {
+   "sector": "Utilities",
+   "industry": "Diversified Utilities",
+   "sic": "4400",
+   "basis": "20-F Item 4.B, reviewed",
+   "phrase": "portfolio of infrastructure assets that are diversified by sector and by geography",
+   "quote": "We own a portfolio of infrastructure assets that are diversified by sector and by geography.",
+   "form": "20-F",
+   "filedOn": "2026-03-17",
+   "accession": "0001406234-26-000002"
+  },
   "BKNG": {
    "sector": "Consumer Cyclical",
    "industry": "Travel Services",
