@@ -531,6 +531,11 @@ export type ViewCell = Cell & {
   label: string;
   derivedNote: string | null;
   /**
+   * The words for an EMPTY cell, where the view knows better than the card's
+   * default (#552 COWORK #47: interest folded into a derived non-operating line).
+   */
+  emptyText?: string;
+  /**
    * A PER-SHARE FIGURE, which is formatted to two decimals wherever it renders.
    *
    * ── WHY THE CELL CARRIES THIS AND NOT THE CALL SITE ──────────────────────
@@ -567,6 +572,41 @@ const view = (p: StoredPeriod | null | undefined, key: string, label: string): V
     perShare: PER_SHARE_KEYS.has(key),
   };
 };
+
+// ── OTHER INCOME (NET), DERIVED (#552 COWORK #47) ─────────────────────────
+//
+// AXTI Q2 FY2026: operating income $10.4M, pre-tax income $15.1M, and both
+// non-operating lines read "Not captured from this filing" — $4.7M of real
+// money unexplained. Where the filer tags no non-operating total, the gap
+// between the two filed ends IS that total, so it is shown, marked derived,
+// the way derived cash-flow figures are. Never "Not captured" when both ends
+// are filed.
+export const OTHER_INCOME_DERIVED_LABEL = "Other income (net)";
+export const NON_OPERATING_DERIVED_LABEL = "Non-operating items (net)";
+export const INTEREST_IN_OTHER_INCOME = "Included in other income (net) below";
+
+export function withDerivedNonOperating(rows: ViewCell[]): ViewCell[] {
+  const at = (k: string) => rows.find((r) => r.key === k);
+  const nonOp = at("nonOperatingIncomeExpense");
+  const interest = at("interestExpense");
+  const pre = at("preTaxIncome")?.val ?? null;
+  const op = at("operatingIncome")?.val ?? null;
+  if (!nonOp || nonOp.val !== null || pre === null || op === null) return rows;
+  const interestFiled = interest?.val != null;
+  const derived: ViewCell = {
+    ...nonOp,
+    val: pre - op,
+    derived: "computed",
+    label: interestFiled ? NON_OPERATING_DERIVED_LABEL : OTHER_INCOME_DERIVED_LABEL,
+    derivedNote: interestFiled
+      ? "Derived: pre-tax income less operating income — every non-operating item combined, including the interest expense above. The filing does not tag the rest separately."
+      : "Derived: pre-tax income less operating income — every non-operating item combined (interest, investment income and other), which the filing does not tag separately.",
+  };
+  return rows.map((r) =>
+    r === nonOp ? derived
+      : r === interest && !interestFiled ? { ...r, emptyText: INTEREST_IN_OTHER_INCOME }
+        : r);
+}
 
 export type SecEarningsView = {
   symbol: string;
@@ -1557,7 +1597,7 @@ export function buildSecEarningsView(
           ...equityCell(bsAt),
         }
       : null,
-    incomeStatement: PL.map(([k, label]) => view(latest, k, label)),
+    incomeStatement: withDerivedNonOperating(PL.map(([k, label]) => view(latest, k, label))),
     incomeStatementComplete,
     // ── THE SAME THIN-ROW BAR AS THE GROWTH TABLE, AND THE SAME CAP ─────────
     //

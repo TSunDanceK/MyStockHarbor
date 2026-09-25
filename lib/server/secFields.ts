@@ -328,8 +328,15 @@ const INCOME: FieldDef[] = ([
   { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense"], unit: "USD" },
   { key: "otherOperatingExpense", chain: ["OtherOperatingIncomeExpenseNet"], unit: "USD" },
   { key: "operatingIncome", chain: ["OperatingIncomeLoss"], unit: "USD" },
-  { key: "interestExpense", chain: ["InterestExpense", "InterestExpenseDebt", "InterestIncomeExpenseNet"], unit: "USD" },
-  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense"], unit: "USD" },
+  // InterestExpenseNonoperating (#552 COWORK #47): the ASU 2023-era spelling
+  // of the same expense, ranked after the two that already win cells so it can
+  // only fill a blank. Coverage measured with the SEC frames API (see
+  // scripts/nonop-tag-coverage.mjs).
+  { key: "interestExpense", chain: ["InterestExpense", "InterestExpenseDebt", "InterestExpenseNonoperating", "InterestIncomeExpenseNet"], unit: "USD" },
+  // OtherNonoperatingIncomeExpense fills the "Other income / expense" row where
+  // no non-operating total is tagged (AVAV, and the COWORK #47 list). Where
+  // neither is, the view derives it: pre-tax less operating income.
+  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD" },
   // THE TWO TAGS DIFFER PRECISELY ON MINORITY INTEREST -- which is why
   // netIncomeToNoncontrollingInterest is stored: without it the two cannot be
   // reconciled and the chain's own ambiguity is unresolvable after the fact.
