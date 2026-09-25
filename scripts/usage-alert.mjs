@@ -63,7 +63,10 @@ if (managementMode(process.env)) {
 
 const issues = [];
 if (result.due) issues.push({ ...spikeIssue(dates[0], result), kind: "spike" });
-if (weekly) issues.push({ ...weeklyReport(dates[0], days.slice(0, 7)), kind: "weekly" });
+// No counters yet (the first week after the guard shipped): an empty report is noise.
+const hasCounters = days.slice(0, 7).some((d) => Object.keys(d.commands).length);
+if (weekly && hasCounters) issues.push({ ...weeklyReport(dates[0], days.slice(0, 7)), kind: "weekly" });
+else if (weekly) console.log("weekly report skipped: no counters in the last 7 days yet");
 for (const i of issues) i.body += mgmtNote;
 
 if (dry || !issues.length) {
