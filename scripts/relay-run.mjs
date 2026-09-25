@@ -40,6 +40,9 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
+  // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
+  "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {

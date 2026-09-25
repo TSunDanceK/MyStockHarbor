@@ -162,6 +162,32 @@ console.log("\nDIRECTION — normalised in the adapter, so no call site can inve
     !near(cad[0]?.usdPerUnit, 1.3864, 1e-9),
     ""
   );
+  // TWD (#552 COWORK #22 §0): the real DEXTAUS value for 2026-09-18. The ECB
+  // fallback's TWD leg stops in 2020, so FRED is the ONLY live route for TWD.
+  const twd = await fx.fredSource(stub(csv("DEXTAUS", "31.82")))
+    .fetchSeries("TWD", "2026-09-01", "2026-09-30");
+  check(
+    "DEXTAUS (Taiwan dollars per USD) is INVERTED to USD per Taiwan dollar",
+    near(twd[0]?.usdPerUnit, 1 / 31.82, 1e-12),
+    `got ${twd[0]?.usdPerUnit?.toFixed(6)} (expected ${(1 / 31.82).toFixed(6)}, NOT 31.82)`
+  );
+  check("FRED supports TWD (else it falls to ECB's 2020-ending leg)", fx.fredSource().supports("TWD"));
+  await underMutation(
+    "TWD taken as USD per unit (a ~1,000x error on TSM and CHT)",
+    'TWD: { id: "DEXTAUS", quote: "unit-per-usd" }',
+    'TWD: { id: "DEXTAUS", quote: "usd-per-unit" }',
+    async (m) => {
+      const t = await m.fredSource(stub(csv("DEXTAUS", "31.82")))
+        .fetchSeries("TWD", "2026-09-01", "2026-09-30");
+      return near(t[0]?.usdPerUnit, 1 / 31.82, 1e-12);
+    }
+  );
+  await underMutation(
+    "TWD dropped from the FRED map",
+    '  TWD: { id: "DEXTAUS", quote: "unit-per-usd" },\n',
+    "",
+    (m) => m.fredSource().supports("TWD")
+  );
   await underMutation(
     "every series treated as USD-per-unit (the 1.92x error on CNI)",
     'usdPerUnit: quote === "usd-per-unit" ? val : 1 / val',
