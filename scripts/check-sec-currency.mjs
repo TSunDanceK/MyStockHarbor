@@ -289,6 +289,38 @@ console.log("\n5. THE CURRENCY IS DECIDED ONCE, PER FILER");
     "  if (fieldsPerCurrency.has(\"USD\")) return \"USD\";\n  const ranked = [...fieldsPerCurrency.entries()].sort((a, b) => {",
     (m) => m.reportingCurrency(wideEur) === "EUR"
   );
+  // ── A TIE ON FIELDS: RECENCY, THEN ROWS, THEN USD (#552 COWORK #55, rule c) ──
+  // Every money field in both currencies, so the field counts tie exactly.
+  const yr = (y) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val: 1 });
+  const twoCurrencies = (a, b) => ({
+    cik: 1,
+    facts: { "ifrs-full": Object.fromEntries(mod.SEC_FIELDS.filter((f) => f.unit === "USD")
+      .map((f) => [f.ifrsChain?.[0] ?? f.chain[0], { units: { ...a, ...b } }])) },
+  });
+  // TSM: TWD history to FY2024 (more rows), USD convenience to FY2024 (fewer).
+  const tsm = twoCurrencies({ TWD: [2019, 2020, 2021, 2022, 2023, 2024].map(yr) }, { USD: [2022, 2023, 2024].map(yr) });
+  check("TSM shape: same fields, same newest FY, more TWD rows → TWD", tag()(tsm) === "TWD", `decided ${tag()(tsm)}`);
+  // DEO: GBP stops at FY2023 with more rows; USD runs to FY2025 → stays USD.
+  const deo = twoCurrencies({ GBP: [2018, 2019, 2020, 2021, 2022, 2023].map(yr) }, { USD: [2023, 2024, 2025].map(yr) });
+  check("DEO shape: GBP has more rows but stops at FY2023; USD runs to FY2025 → USD", tag()(deo) === "USD", `decided ${tag()(deo)}`);
+  // ASX-like: both to FY2025, TWD more rows → TWD.
+  const asx = twoCurrencies({ TWD: [2021, 2022, 2023, 2024, 2025].map(yr) }, { USD: [2025].map(yr) });
+  check("both currencies current, more TWD rows → TWD", tag()(asx) === "TWD");
+  const even = twoCurrencies({ TWD: [2024].map(yr) }, { USD: [2024].map(yr) });
+  check("fields, recency and rows all tied → USD", tag()(even) === "USD");
+  await underMutation(
+    "rule (a) replaces (c): the recency step removed (DEO would move to FY2023 GBP figures)",
+    '    if (na !== nb) return na < nb ? 1 : -1;\n',
+    "",
+    (m) => m.reportingCurrency(deo) === "USD"
+  );
+  await underMutation(
+    "the row step removed (TSM stays on its USD convenience rows)",
+    "    if (ra !== rb) return rb - ra;\n",
+    "",
+    (m) => m.reportingCurrency(tsm) === "TWD"
+  );
+
   check(
     "the winner is stable against payload order",
     tag()(facts({ PLN: [{ val: 1 }], EUR: [{ val: 1 }] })) ===
