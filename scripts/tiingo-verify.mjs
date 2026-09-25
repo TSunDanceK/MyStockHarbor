@@ -77,6 +77,44 @@ const NAMES = read("data/company-names.json").rows ?? {};
 
 console.log(`universe from SYMBOLS: ${universe.length} tickers${universe.length ? "" : " (none given: sections 3, 4 and 6 are skipped)"}`);
 
+// FOLLOW-UP MODE (MODE=followup): the questions the first run left open --
+// what the search failures were, whether per-ticker price calls hold up across
+// many symbols, and the latest EOD date. About 60 requests, spaced out.
+if (process.env.MODE === "followup") {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tally = (m, k) => m.set(k, (m.get(k) ?? 0) + 1);
+  const fmtTally = (m) => [...m.entries()].map(([k, n]) => `${k}: ${n}`).join("; ");
+  console.log("\n=== follow-up A: search statuses (10 samples x 2 queries, 1 s apart) ===");
+  const sample = universe.filter((s) => NAMES[s]).filter((_, i) => i % 80 === 0).slice(0, 10);
+  const st = new Map();
+  let first429 = null;
+  for (const s of sample) {
+    for (const q of [tiingoSpelling(s), String(NAMES[s]).split(/\s+-\s+|,| Inc| Corp/)[0]]) {
+      const r = await get(`/tiingo/utilities/search?query=${encodeURIComponent(q)}`);
+      tally(st, r.status);
+      if (r.status === 429 && !first429) first429 = [...r.headers.keys()].join(", ");
+      await sleep(1000);
+    }
+  }
+  console.log(`statuses: ${fmtTally(st)}${first429 ? `; header names on the first 429: ${first429}` : ""}`);
+  console.log("\n=== follow-up B: per-ticker price calls, 30 universe tickers (statuses and latest date only) ===");
+  const pst = new Map(), latest = new Map();
+  const pick = universe.filter((_, i) => i % 28 === 0).slice(0, 30);
+  for (const s of pick) {
+    const r = await get(`/tiingo/daily/${encodeURIComponent(tiingoSpelling(s))}/prices?format=csv&startDate=2026-09-15`, { text: true });
+    tally(pst, r.status);
+    if (r.status === 200 && typeof r.body === "string") {
+      const rows = r.body.split(/\r?\n/).filter(Boolean);
+      const d = String(csvFields(rows[rows.length - 1] ?? "")[0] ?? "").slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) tally(latest, d);
+    }
+    await sleep(200);
+  }
+  console.log(`statuses: ${fmtTally(pst)}; latest bar date (date: tickers): ${fmtTally(latest)}; run at ${new Date().toISOString()}`);
+  console.log(`\nTiingo requests used: ${requests}; Redis commands: 0; stored: nothing`);
+  process.exit(0);
+}
+
 // ── 2. PROVISIONED LIMITS (first, so the headers are from a clean window) ──
 console.log("\n=== 2. provisioned limits ===");
 const test = await get("/api/test");

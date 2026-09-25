@@ -208,6 +208,7 @@ jobs:
         env:
           TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
           SYMBOLS: ${{ inputs.symbols }}
+          MODE: ${{ inputs.payers == 'followup' && 'followup' || '' }}
           TASK: ${{ inputs.task }}
         run: |
           set -o pipefail
