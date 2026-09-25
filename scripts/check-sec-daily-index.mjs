@@ -937,7 +937,7 @@ check("exchange is reconciled on every run with a map, not gated on a refresh",
 check("the exchange histogram reaches the job output",
   /exchangeHistogram: exchanges\?\.histogram/.test(routeCode));
 check("the Redis budget is stated as three, not still claiming two",
-  /redisCommands: dryRun \|\| inspectionOnly \? 2 : 3/.test(routeCode), "manifest GET + tickers GET + manifest SET");
+  /redisCommands: \(dryRun \|\| inspectionOnly \? 2 : 3\) \+ stored\.commands/.test(routeCode), "manifest GET + tickers GET + manifest SET, plus the stored-set SCAN");
 
 // ── 12. The manifest is BOUNDED — the pre-merge question ───────────────────
 //
@@ -1366,9 +1366,21 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
   const routeRaw = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
   // ...∪ the curated sitemap symbols (#535 COWORK #21), between the two.
   // ...∪ each cited primary listing per shared CIK (#552 COWORK #48: BIP).
-  check("the route seeds from PRESET_UNIVERSE ∪ the curated sitemap symbols ∪ the cited primary listings ∪ the dynamic pool",
-    /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.priorityStocks,\s*\.\.\.uniqueEtfs,\s*\.\.\.primaryListingSymbols\(\),\s*\.\.\.\(await readDynamicUniverse\(\)\)/.test(routeCode),
+  // ...∪ the popular list and every symbol with a stored set (#552 COWORK #58:
+  // TSM and 53 others had a set and no entry, so no cron ever re-read them).
+  const unionRe = /new Set\(\[\s*\.\.\.PRESET_UNIVERSE,\s*\.\.\.priorityStocks,\s*\.\.\.uniqueEtfs,\s*\.\.\.primaryListingSymbols\(\),\s*\.\.\.POPULAR_SYMBOLS,\s*\.\.\.stored\.symbols,\s*\.\.\.\(await readDynamicUniverse\(\)\)/;
+  check("the route seeds from PRESET_UNIVERSE ∪ the curated sitemap symbols ∪ the cited primary listings ∪ the popular list ∪ every stored set ∪ the dynamic pool",
+    unionRe.test(routeCode) && /const stored = await storedFactSetSymbols\(\)/.test(routeCode),
     "the union is the fix; seedManifest cannot add what it is never given");
+  check("...and CATCHES the stored-set leg dropped (the TSM gap re-opens)",
+    !unionRe.test(routeCode.replace("...stored.symbols, ", "")));
+  // THE SCAN ITSELF: every fact-set key, prefix-matched, paged to the end.
+  {
+    const man = readCodeOnly("lib/server/secManifest.ts");
+    const fn = man.slice(man.indexOf("export async function storedFactSetSymbols"), man.indexOf("export async function storedFactSetSymbols") + 1200);
+    check("storedFactSetSymbols SCANs the fact-set prefix to cursor 0, 1,000 a call, and never throws",
+      /match: `\$\{SEC_FACTS_PREFIX\}:\*`/.test(fn) && /count: 1000/.test(fn) && /String\(cursor\) !== "0"/.test(fn) && /catch/.test(fn));
+  }
   check("...and does NOT slice it by ANALYSIS_UNIVERSE_CAP",
     !/ANALYSIS_UNIVERSE_CAP/.test(routeCode),
     "that cap bounds ANALYSIS — a history fetch and indicator pass per symbol. " +
