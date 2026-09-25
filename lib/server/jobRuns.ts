@@ -24,7 +24,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const JOB_RUN_PREFIX = "msh:job-run:v1";
+export const JOB_RUN_PREFIX = "msh:job-run:v1";
 // Comfortably longer than the slowest job's cadence (daily), so a job that ran
 // yesterday still shows, and short enough that one which stopped a week ago
 // reads as gone rather than as old-but-fine.
