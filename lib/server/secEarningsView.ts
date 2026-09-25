@@ -605,10 +605,15 @@ export const GROSS_PROFIT_COMPUTED_LABEL = "Gross profit (computed)";
  * instant. An accounting identity, not an estimate, and marked "derived" like
  * the other derived lines. A filed figure is never replaced.
  */
-export function withDerivedLiabilities(cellIn: ViewCell, at: StoredPeriod | null | undefined): ViewCell {
+export function withDerivedLiabilities(cellIn: ViewCell, at: StoredPeriod | null | undefined, nciTagged = false): ViewCell {
   if (cellIn.val !== null) return cellIn;
   const assets = valueOf(at, "totalAssets"), equity = valueOf(at, "totalEquity");
   if (assets === null || equity === null) return cellIn;
+  // ONLY AGAINST THE NCI-INCLUSIVE TOTAL. totalEquity falls back to parent-only
+  // StockholdersEquity; for a filer carrying NCI, assets less THAT would put the
+  // NCI into liabilities. Equal to the parent figure AND an NCI tagged for the
+  // closing period means it may be the fallback: not derived.
+  if (nciTagged && equity === valueOf(at, "stockholdersEquity")) return cellIn;
   return {
     ...cellIn,
     val: assets - equity,
@@ -1684,7 +1689,8 @@ export function buildSecEarningsView(
             ["current liabilities", valueOf(bsAt, "totalCurrentLiabilities")],
           ]),
           totalAssets: view(bsAt, "totalAssets", "Total assets"),
-          totalLiabilities: withDerivedLiabilities(view(bsAt, "totalLiabilities", "Total liabilities"), bsAt),
+          totalLiabilities: withDerivedLiabilities(view(bsAt, "totalLiabilities", "Total liabilities"), bsAt,
+            [...set.quarters, ...set.years].some((p) => p.e === bsAt?.e && (valueOf(p, "netIncomeToNoncontrollingInterest") ?? 0) !== 0)),
           ...equityCell(bsAt),
         }
       : null,

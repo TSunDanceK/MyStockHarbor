@@ -20,7 +20,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 let commands = 0, stored = 0;
 const nonOp = [], nearZero = [], bsMoved = [];
 let pbBefore = 0, pbAfter = 0, avav = "no set";
-const inclNci = [], nciBlocked = [], liabDerived = [];
+const inclNci = [], nciBlocked = [], liabDerived = [], liabHeld = [];
 const ROW_KEYS = ["revenue", "operatingIncome", "nonOperatingIncomeExpense", "preTaxIncome", "netIncome"];
 for (let i = 0; i < syms.length; i += 50) {
   const chunk = syms.slice(i, i + 50);
@@ -49,7 +49,10 @@ for (let i = 0; i < syms.length; i += 50) {
       if (after.equity === null) pbAfter++;
       if (parent === null && after.equityIncludesNci) inclNci.push(sym);
       if (after.equityOnlyInclNci) nciBlocked.push(sym);
-      if (C.valueOf(bs, "totalLiabilities") === null && C.valueOf(bs, "totalAssets") !== null && total !== null) liabDerived.push(sym);
+      const nci = [...set.quarters, ...set.years].some((p) => p.e === bs.e && (C.valueOf(p, "netIncomeToNoncontrollingInterest") ?? 0) !== 0);
+      const lc = VIEW.withDerivedLiabilities({ key: "totalLiabilities", label: "", val: C.valueOf(bs, "totalLiabilities"), derived: null, derivedNote: null }, bs, nci);
+      if (lc.derived === "computed") liabDerived.push(sym);
+      else if (C.valueOf(bs, "totalLiabilities") === null && C.valueOf(bs, "totalAssets") !== null && total !== null) liabHeld.push(sym);
     }
     if (sym === "AVAV") {
       const m = VAL.multipleInputs(set);
@@ -71,5 +74,6 @@ console.log(`case 1, P/B on NCI-inclusive equity (no NCI tagged): ${inclNci.leng
 console.log(`...still refused, NCI tagged: ${nciBlocked.length}  ${nciBlocked.join(" ")}`);
 console.log(`case 3, total liabilities derived (assets - total equity): ${liabDerived.length}`);
 console.log(`  ${liabDerived.slice(0, 80).join(" ")}${liabDerived.length > 80 ? " …" : ""}`);
+console.log(`...not derived (equity may be the parent-only fallback and an NCI is tagged): ${liabHeld.length}  ${liabHeld.join(" ")}`);
 console.log(`AVAV EV/EBITDA inputs: ${avav}`);
 console.log(`Redis commands: ${commands}`);
