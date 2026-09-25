@@ -11,11 +11,16 @@
 //      no numeric fields at all, and a filed percentage only inside the quote.
 //   4. DISHONEST PROVENANCE. The review is a CODE-C session's, audited by
 //      Cowork; the file must not claim hand or human review.
-//   5. SCOPE DRIFT: parties outside the batch's receivers, untracked tickers,
+//   5. AN AUDIT SAMPLE NOBODY CAN REPRODUCE. The draw is Python's
+//      random.Random(seed).sample(population, 20); scripts/lib/py-random.mjs
+//      reproduces it bit for bit, and this check re-runs it against the stored
+//      population and fails unless it yields the stored sample (#563 COWORK #20).
+//   6. SCOPE DRIFT: parties outside the batch's receivers, untracked tickers,
 //      a filer linked to itself, or the same link twice.
 //
 //   node scripts/check-capex-links-reviewed.mjs
 import fs from "node:fs";
+import { pyRandom } from "./lib/py-random.mjs";
 
 const FILE = "data/capex/links-reviewed.json";
 const data = JSON.parse(fs.readFileSync(FILE, "utf8"));
@@ -37,6 +42,22 @@ function validate(d) {
   if (!Array.isArray(d?.links) || !Array.isArray(d?.rejected)) return fails;
   ok("reviewer names the real reviewer", typeof d.reviewer === "string" && /CODE-C/.test(d.reviewer));
   ok("audit block with a seed", d.audit && Number.isInteger(d.audit.seed) && typeof d.audit.status === "string");
+  const a = d.audit ?? {};
+  if (Array.isArray(a.population) && Array.isArray(a.drawOrder) && Array.isArray(a.sample)) {
+    const pop = a.population;
+    ok("audit population is sorted as stored (Python's sorted() on ASCII keys)", pop.every((k, i) => i === 0 || pop[i - 1] < k));
+    const redraw = pyRandom(a.seed).sample(pop, a.drawOrder.length);
+    ok("audit draw reproduces: random.Random(seed).sample(population, n) == drawOrder", JSON.stringify(redraw) === JSON.stringify(a.drawOrder));
+    ok("audit sample is the draw, sorted", JSON.stringify([...a.drawOrder].sort()) === JSON.stringify(a.sample));
+    ok("audit sample has 20 distinct links", new Set(a.sample).size === 20);
+    const published = new Set(d.links.map((l) => `${l.filer}|${l.party}|${l.role}`));
+    ok("every audited link is still published", a.sample.every((k) => published.has(k)));
+    const after = new Set(a.addedAfterDraw ?? []);
+    ok("the population is exactly the published links, less those added after the draw",
+      pop.length + after.size === published.size && pop.every((k) => published.has(k) && !after.has(k)) && [...after].every((k) => published.has(k)));
+  } else {
+    ok("audit block stores population, drawOrder and sample", false);
+  }
   ok("no claim of hand or human review anywhere", !HAND_CLAIM.test(JSON.stringify(d)));
   const excluded = new Set(d.excludedReceivers ?? []);
   const scope = new Set(receivers.map((r) => r.ticker).filter((t) => !excluded.has(t)));
@@ -48,8 +69,9 @@ function validate(d) {
     ok(`${at}: role`, ROLES.has(l.role));
     ok(`${at}: filer is tracked`, Boolean(registrants[l.filer]));
     ok(`${at}: party is tracked`, Boolean(registrants[l.party]));
-    // in scope: a receiver named by any filer, or a receiver naming its own customer
-    ok(`${at}: in the batch's scope`, scope.has(l.party) || (scope.has(l.filer) && l.role === "customer"));
+    // in scope (COWORK #20 F1): a receiver as supplier or customer of any filer,
+    // or a receiver's own named customer or supplier -- one side is a receiver
+    ok(`${at}: in the batch's scope`, scope.has(l.party) || scope.has(l.filer));
     ok(`${at}: not linked to itself`, l.filer !== l.party);
     ok(`${at}: accession`, ACCESSION.test(l.accession ?? ""));
     ok(`${at}: form`, FORMS.has(l.form));
@@ -95,8 +117,12 @@ const MUTANTS = {
   "a bad accession": (d) => { first(d).accession = "123"; },
   "an untracked party": (d) => { first(d).party = "ZZZZNOTREAL"; },
   "a party outside the batch (hyperscaler excluded)": (d) => { const l = d.links.find((x) => x.role === "supplier"); l.party = "AMZN"; },
-  "a receiver's supplier outside scope published": (d) => { const l = d.links.find((x) => x.role === "customer" && !["AMAT", "ASML", "CIEN", "LRCX", "MU", "DELL", "HPE", "IBM", "INTC", "AMD", "GEV", "NVDA", "SNDK", "ORCL", "CSCO", "AVGO"].includes(x.party)) ?? first(d); l.role = "supplier"; l.party = "HON"; },
-  "a deferred link also published": (d) => { d.links.push({ ...d.deferred[0], verdict: "correct" }); d.counts.confirmed++; d.counts.reviewed++; },
+  "a link with no receiver on either side": (d) => { const l = d.links.find((x) => x.filer === "FTNT") ?? first(d); l.party = "HON"; },
+  "a deferred link also published": (d) => { const l = { ...first(d) }; d.deferred = [{ ...l, reason: "held" }]; },
+  "an audit sample that is not the seeded draw": (d) => { d.audit.drawOrder[0] = d.audit.population.find((k) => !d.audit.drawOrder.includes(k)); d.audit.sample = [...d.audit.drawOrder].sort(); },
+  "an audit population missing a published link": (d) => { d.audit.population = d.audit.population.slice(1); },
+  "a different audit seed": (d) => { d.audit.seed += 1; },
+  "an audited link no longer published": (d) => { const k = d.audit.sample[0]; d.links = d.links.filter((l) => `${l.filer}|${l.party}|${l.role}` !== k); d.counts.confirmed--; d.counts.reviewed--; },
   "a filer linked to itself": (d) => { first(d).party = first(d).filer; },
   "the same link twice": (d) => { d.links.push({ ...first(d) }); d.counts.confirmed++; d.counts.reviewed++; },
   "a hand-review claim": (d) => { d.about = `${d.about} Checked by hand.`; },
