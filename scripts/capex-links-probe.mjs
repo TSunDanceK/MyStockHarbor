@@ -93,7 +93,7 @@ const ALIASES = {
   Samsung: null, "SK hynix": null, "SK Hynix": null, Foxconn: null, "Hon Hai": null, Panasonic: null,
   CATL: null, "Contemporary Amperex": null, Pegatron: null, Wistron: null, Quanta: null, "LG Energy": null,
   "LG Chem": null, BOE: null, Kioxia: null, Huawei: null, Bosch: null, Siemens: null, Airbus: null,
-  "Tokyo Electron": null, ASE: null, SPIL: null, KYEC: null, Sigurd: null, "STATS ChipPAC": null,
+  "Tokyo Electron": null, ASE: null, "Advanced Semiconductor Engineering": null, SPIL: null, "Siliconware Precision": null, STATSChipPAC: null, KYEC: null, Sigurd: null, "STATS ChipPAC": null,
   Mediatek: null, MediaTek: null, Denso: null, Continental: null, Aldi: null, Lidl: null, Ikea: null, IKEA: null,
   Apple: "AAPL", Microsoft: "MSFT", Amazon: "AMZN", "Amazon Web Services": "AMZN", AWS: "AMZN",
   Google: "GOOGL", Alphabet: "GOOGL", Meta: "META", Oracle: "ORCL", Intel: "INTC", AMD: "AMD",
@@ -212,7 +212,7 @@ const PATTERNS = [
   { role: "supplier", rule: "our-supplier-x", re: new RegExp(`\\bour\\s+(?:sole|single|primary|principal|main|key|largest|major|only|current|exclusive)\\s+(?:\\w+\\s+){0,2}?(?:supplier|vendor|foundry|manufacturer|source|licensor)s?\\s*(?:,|is|are|was|—|-)\\s*${SPAN_END}`, "i") },
   // customers
   { role: "customer", rule: "accounted-for", re: /([A-Z][^;:]{2,140}?)\s*(?:\([^)]*\)\s*)?(?:,\s*)?(?:and its affiliates\s*)?(?:accounted|represented|comprised|constituted|made up)\s+(?:for\s+)?(?:approximately |about |roughly |over |more than |less than |nearly )?\d+(?:\.\d+)?\s?%\s+(?:and \d+(?:\.\d+)?\s?%\s+)?of\s+(?:our\s+|the\s+|total\s+|consolidated\s+|net\s+)*(?:revenues?|sales|net sales|net revenues?|product revenues?|accounts receivable|receivables)/ },
-  { role: "customer", rule: "sales-to", re: new RegExp(`\\b(?:sales|revenues?|shipments|net sales)\\s+(?:\\w+\\s+){0,2}?to\\s+${SPAN_END}`, "i") },
+  { role: "customer", rule: "sales-to", re: new RegExp(`\\b(?:sales|revenues?|shipments|net sales|product sales)\\s+to\\s+${SPAN_END}`, "i") },
   { role: "customer", rule: "customers-such-as", re: new RegExp(`\\b(?:customers?|clients?|retailers?|retail partners?|distributors?|resellers?|OEMs?|hyperscalers?)\\b[^.;]{0,40}?\\b(?:such as|including|include|includes|included|namely|like)\\s+${SPAN_END}`, "i") },
   { role: "customer", rule: "x-is-customer", re: /(?:^|[,;]\s*|\b(?:and|that|while)\s+)([A-Z][^;:]{2,90}?)\s+(?:is|are|was|were|remains|has been|became)\s+(?:our|the|a|an|one of our)\s+(?:\w+\s+){0,3}?(?:customers?|clients?)\b/ },
   { role: "customer", rule: "our-customer-x", re: new RegExp(`\\bour\\s+(?:largest|single largest|largest single|primary|principal|main|key|major|significant|top)\\s+(?:\\w+\\s+){0,1}?(?:customers?|clients?)\\s*(?:,|is|are|was|were|—|-|include|included)\\s*${SPAN_END}`, "i") },
@@ -283,6 +283,7 @@ if (SELFTEST) {
     ["In 2024 we completed the acquisition of Juniper Networks.", ""],
     ["Our customers include Amazon Web Services, Google and Oracle Corporation.", "customer:AMZN,customer:GOOGL,customer:ORCL"],
     ["Acme relies on the Company's distributors.", ""],
+    ["Networking net revenue increased 51.1%, primarily due to revenue attributable to Juniper Networks.", ""],
   ];
   let bad = 0;
   for (const [s, want] of cases) {
