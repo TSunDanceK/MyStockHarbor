@@ -14,6 +14,7 @@ import {
   buildChartMenu, clampMenu, parseAction, percentBase, readScale, SCALE_KEY,
   LONG_PRESS_MS, LONG_PRESS_SLOP, type MenuSection, type ScaleMode,
 } from "@/lib/interactiveChartMenu";
+import { MEASURE_TOOLS, measureColor, measureLabel, measureStats, type MeasureKind, type MeasurePoint } from "@/lib/measure";
 import { formatBarDate } from "@/lib/chartDate";
 
 /**
@@ -91,6 +92,8 @@ interface ChartApi {
   getDataList(): KLineData[];
   subscribeAction(type: string, callback: (data?: unknown) => void): void;
   unsubscribeAction(type: string, callback?: (data?: unknown) => void): void;
+  overrideOverlay(override: Record<string, unknown>): void;
+  convertFromPixel(coordinates: Array<{ x?: number; y?: number }>, finder: { paneId?: string; absolute?: boolean }): unknown;
   setTimezone(timezone: string): void;
   setCustomApi(api: Record<string, unknown>): void;
 }
@@ -374,6 +377,83 @@ function registerCustomIndicators(kl: unknown) {
   customIndicatorsRegistered = true;
 }
 
+// ---- Measure tools (#553 COWORK #28 part b) ----
+// klinecharts has no built-in price/date range tool (its fibonacciLine is a
+// retracement), so the three are CUSTOM OVERLAYS registered with
+// registerOverlay: a tinted box between the two points, an arrow from the
+// start to the end, and a solid label. Being overlays, they select, drag (by a
+// corner or the box), undo and remove exactly like the drawings. The numbers
+// and the label text come from lib/measure.ts.
+function tint(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+type Coord = { x: number; y: number };
+function arrowHead(from: Coord, to: Coord, size = 7): Coord[] {
+  const ang = Math.atan2(to.y - from.y, to.x - from.x);
+  return [
+    to,
+    { x: to.x - size * Math.cos(ang - Math.PI / 7), y: to.y - size * Math.sin(ang - Math.PI / 7) },
+    { x: to.x - size * Math.cos(ang + Math.PI / 7), y: to.y - size * Math.sin(ang + Math.PI / 7) },
+  ];
+}
+let measureOverlaysRegistered = false;
+function registerMeasureOverlays(kl: unknown) {
+  if (measureOverlaysRegistered) return;
+  const register = (kl as { registerOverlay: (t: Record<string, unknown>) => void }).registerOverlay;
+  for (const tool of MEASURE_TOOLS) {
+    register({
+      name: tool.overlay,
+      totalStep: 3,
+      needDefaultPointFigure: true,
+      needDefaultXAxisFigure: tool.key !== "price",
+      needDefaultYAxisFigure: tool.key !== "date",
+      createPointFigures: ({ overlay, coordinates, bounding, precision }: {
+        overlay: { points: MeasurePoint[] }; coordinates: Coord[];
+        bounding: { width: number; height: number }; precision: { price: number };
+      }) => {
+        if (coordinates.length < 2) return [];
+        const [a, b] = coordinates;
+        const stats = measureStats(overlay.points[0] ?? {}, overlay.points[1] ?? {});
+        const color = measureColor(tool.key, stats);
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+        const figures: Record<string, unknown>[] = [
+          { type: "rect", attrs: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) },
+            styles: { style: "stroke_fill", color: tint(color, 0.14), borderColor: tint(color, 0.55), borderSize: 1 } },
+        ];
+        const arrow = (from: Coord, to: Coord) => {
+          if (Math.hypot(to.x - from.x, to.y - from.y) < 6) return;
+          figures.push({ type: "line", attrs: { coordinates: [from, to] }, styles: { color, size: 1.5 }, ignoreEvent: true });
+          figures.push({ type: "polygon", attrs: { coordinates: arrowHead(from, to) }, styles: { style: "fill", color }, ignoreEvent: true });
+        };
+        if (tool.key !== "date") arrow({ x: midX, y: a.y }, { x: midX, y: b.y });
+        if (tool.key !== "price") arrow({ x: a.x, y: midY }, { x: b.x, y: midY });
+        // The label sits past the END of the move: above the box when it rose,
+        // below when it fell, kept inside the pane.
+        const lines = measureLabel(tool.key, stats, precision?.price ?? 2);
+        if (!lines.length) return figures;
+        const LINE_H = 20;
+        const blockH = lines.length * LINE_H;
+        const widest = Math.max(...lines.map((l) => l.length)) * 7.4 + 14;
+        const x = Math.max(widest / 2 + 2, Math.min(midX, bounding.width - widest / 2 - 2));
+        const above = tool.key === "date" ? false : stats.up;
+        let top = above ? Math.min(a.y, b.y) - 6 - blockH : Math.max(a.y, b.y) + 6;
+        top = Math.max(2, Math.min(top, bounding.height - blockH - 2));
+        lines.forEach((text, i) => {
+          figures.push({
+            type: "text",
+            attrs: { x, y: top + i * LINE_H, text, align: "center", baseline: "top" },
+            styles: { color: "#ffffff", size: 12, weight: "bold", backgroundColor: color, borderRadius: 4, paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 3 },
+          });
+        });
+        return figures;
+      },
+    });
+  }
+  measureOverlaysRegistered = true;
+}
+
 // Drawing / measurement tools -> KLineChart built-in overlay template names.
 const DRAW_TOOLS: { key: string; overlay: string; label: string }[] = [
   { key: "trend", overlay: "segment", label: "Trend line" },
@@ -456,6 +536,9 @@ const RECENTER_ICON = (
 );
 const UNDO_ICON = (
   <IconWrap><path d="M5.5 4 L2.8 6.8 L5.5 9.6" /><path d="M2.8 6.8 H10.4 A2.8 2.8 0 0 1 13.2 9.6 V12.4" /></IconWrap>
+);
+const RULER_ICON = (
+  <IconWrap><rect x="1.8" y="5.2" width="12.4" height="5.6" rx="0.8" /><line x1="4.4" y1="5.2" x2="4.4" y2="7.6" /><line x1="7" y1="5.2" x2="7" y2="8.4" /><line x1="9.6" y1="5.2" x2="9.6" y2="7.6" /><line x1="12.2" y1="5.2" x2="12.2" y2="8.4" /></IconWrap>
 );
 const CLEAR_ICON = (
   <IconWrap><line x1="2.5" y1="4.4" x2="13.5" y2="4.4" /><path d="M4.6 4.4 V13 H11.4 V4.4" /><path d="M6.4 4.4 V3 H9.6 V4.4" /><line x1="6.6" y1="7" x2="6.6" y2="11" /><line x1="9.4" y1="7" x2="9.4" y2="11" /></IconWrap>
@@ -745,6 +828,24 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   const [coarse, setCoarse] = useState(false);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
 
+  // ---- COWORK #28 (b), #43: measure tools ----
+  // A measure is TEMPORARY (COWORK #43): once drawn, the next click or tap
+  // anywhere on the chart (or Esc) removes it and does nothing else. It is not
+  // a drawing: not in Undo, not selectable, not draggable, one at a time.
+  const [measureMenuOpen, setMeasureMenuOpen] = useState(false);
+  const measureMenuRef = useRef<HTMLDivElement | null>(null);
+  const measurePanelRef = useRef<HTMLDivElement | null>(null);
+  // The selected drawing: Delete (or the phone's Delete pill) removes it.
+  const selectedRef = useRef<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The one measure on the chart, being placed (drawn: false) or placed.
+  // On touch, panning pauses while it is being placed, so the two taps
+  // cannot scroll the chart instead.
+  const measureRef = useRef<{ id: string; drawn: boolean } | null>(null);
+  const [measure, setMeasureState] = useState<{ id: string; drawn: boolean } | null>(null);
+  // The Shift + drag quick measure: not an undoable drawing, gone on the next click.
+  const quickRef = useRef<string | null>(null);
+
   // Apply safety limits so the chart can never be scrolled into the void or
   // zoomed/dragged completely off screen.
   const applySafetyLimits = useCallback((chart: ChartApi) => {
@@ -882,6 +983,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       // neutral-zone band) and register the Trend Helper overlays before the
       // chart is created so createIndicator uses them. Idempotent.
       try { registerCustomIndicators(kl); } catch { /* noop */ }
+      try { registerMeasureOverlays(kl); } catch { /* noop */ }
       disposeRef.current = kl.dispose as unknown as (element: HTMLElement) => void;
 
       const chart = (kl.init(el) as unknown) as ChartApi | null;
@@ -989,15 +1091,29 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   }
 
   // ---- Drawing tools ----
+  // Every drawing reports selection and removal, so Delete knows what is
+  // selected and the id list never keeps a removed overlay.
+  function forget(id: string) {
+    overlayIdsRef.current = overlayIdsRef.current.filter((x) => x !== id);
+    if (selectedRef.current === id) { selectedRef.current = null; setSelectedId(null); }
+  }
+  type OverlayHookEvent = { overlay: { id: string } };
+  const overlayHooks = {
+    onSelected: (e: OverlayHookEvent) => { selectedRef.current = e.overlay.id; setSelectedId(e.overlay.id); return false; },
+    onDeselected: (e: OverlayHookEvent) => { if (selectedRef.current === e.overlay.id) { selectedRef.current = null; setSelectedId(null); } return false; },
+    onRemoved: (e: OverlayHookEvent) => { forget(e.overlay.id); return false; },
+  };
+
   function startTool(overlay: string, key: string) {
     const chart = chartRef.current;
     if (!chart) return;
+    clearMeasure();
     setActiveTool(key);
     setDrawMenuOpen(false);
     try {
       const value = overlay === "simpleAnnotation"
-        ? { name: overlay, extendData: "Note" }
-        : overlay;
+        ? { name: overlay, extendData: "Note", ...overlayHooks }
+        : { name: overlay, ...overlayHooks };
       const id = chart.createOverlay(value);
       if (id) overlayIdsRef.current.push(id);
     } catch { /* noop */ }
@@ -1012,16 +1128,86 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     const id = overlayIdsRef.current.pop();
     if (id) {
       try { chart.removeOverlay({ id }); } catch { /* noop */ }
+      forget(id);
     }
   }
 
   function clearDrawings() {
     const chart = chartRef.current;
     if (!chart) return;
-    for (const id of overlayIdsRef.current) {
+    clearMeasure();
+    clearQuick();
+    for (const id of [...overlayIdsRef.current]) {
       try { chart.removeOverlay({ id }); } catch { /* noop */ }
     }
     overlayIdsRef.current = [];
+  }
+
+  // ---- Measure tools (#553 COWORK #28 part b, #43) ----
+  function setMeasure(m: { id: string; drawn: boolean } | null) {
+    measureRef.current = m;
+    setMeasureState(m);
+  }
+  // Removes the measure (placed, or still being placed) and gives panning back.
+  function clearMeasure() {
+    const m = measureRef.current;
+    if (!m) return;
+    setMeasure(null);
+    try { chartRef.current?.removeOverlay({ id: m.id }); } catch { /* noop */ }
+    try { chartRef.current?.setScrollEnabled(true); } catch { /* noop */ }
+  }
+
+  function startMeasure(kind: MeasureKind) {
+    const chart = chartRef.current;
+    const tool = MEASURE_TOOLS.find((t) => t.key === kind);
+    if (!chart || !tool) return;
+    setMeasureMenuOpen(false);
+    clearMeasure();
+    clearQuick();
+    let id: string | null = null;
+    try {
+      id = chart.createOverlay({
+        name: tool.overlay,
+        onDrawEnd: (e: { overlay: { points: MeasurePoint[] } }) => {
+          if (!id || measureRef.current?.id !== id) return false;
+          const drawing = id;
+          const points = e.overlay.points.map((pt) => ({ ...pt }));
+          // Placed: swapped for a LOCKED copy at the same points (no select, no
+          // drag). A copy rather than overrideOverlay({ lock }) because the one
+          // just drawn stays the library's clicked overlay and keeps showing its
+          // corner handles, which say "drag me".
+          window.setTimeout(() => {
+            const chart2 = chartRef.current;
+            if (!chart2 || measureRef.current?.id !== drawing) return;
+            try { chart2.removeOverlay({ id: drawing }); } catch { /* noop */ }
+            let placed: string | null = null;
+            try { placed = chart2.createOverlay({ name: tool.overlay, points, lock: true }); } catch { /* noop */ }
+            setMeasure(placed ? { id: placed, drawn: true } : null);
+          }, 0);
+          setMeasure({ id: drawing, drawn: true });
+          try { chartRef.current?.setScrollEnabled(true); } catch { /* noop */ }
+          return false;
+        },
+      });
+    } catch { /* noop */ }
+    if (!id) return;
+    setMeasure({ id, drawn: false });
+    if (coarse || isMobile) {
+      try { chart.setScrollEnabled(false); } catch { /* noop */ }
+    }
+  }
+
+  function deleteSelected() {
+    const id = selectedRef.current;
+    if (!id) return;
+    try { chartRef.current?.removeOverlay({ id }); } catch { /* noop */ }
+    forget(id);
+  }
+
+  function clearQuick() {
+    if (!quickRef.current) return;
+    try { chartRef.current?.removeOverlay({ id: quickRef.current }); } catch { /* noop */ }
+    quickRef.current = null;
   }
 
   // Reset the view: restore the default zoom and scroll the latest data back
@@ -1048,6 +1234,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       intervals: INTERVALS,
       indicators: [...PRICE_INDICATORS, ...LOWER_INDICATORS].map((k) => ({ key: k, label: INDICATOR_LABELS[k] })),
       drawTools: DRAW_TOOLS.map((t) => ({ key: t.key, label: t.label })),
+      measureTools: MEASURE_TOOLS.map((t) => ({ key: t.key, label: t.label })),
     }
   );
   function runAction(id: string) {
@@ -1058,6 +1245,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     else if (verb === "tf" && arg) setIntervalKey(arg as Interval);
     else if (verb === "ind" && arg) toggleIndicator(arg as IndicatorName);
     else if (verb === "draw" && arg) { const t = DRAW_TOOLS.find((d) => d.key === arg); if (t) startTool(t.overlay, t.key); }
+    else if (verb === "measure" && arg) startMeasure(arg as MeasureKind);
     else if (verb === "scale" && arg) setScale(arg === "percent" ? "percent" : "price");
     else if (verb === "recenter") recenter();
     else if (verb === "undo") undoLastDrawing();
@@ -1068,7 +1256,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   // ---- Right-click menu (desktop) and long-press sheet (touch) ----
   // Our own controls on the chart (axis strips, % chip, menu) never open the
   // menu or start a long-press.
-  const onOwnControl = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("[data-axis-strip],[data-scale-chip],[data-chart-menu]"));
+  const onOwnControl = (t: EventTarget | null) => t instanceof Element && Boolean(t.closest("[data-axis-strip],[data-scale-chip],[data-chart-menu],[data-delete-pill]"));
   function onContextMenu(e: React.MouseEvent) {
     if (isMobile || onOwnControl(e.target)) return;
     e.preventDefault();
@@ -1078,7 +1266,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   }
   const pressRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
   function onPointerDownPress(e: React.PointerEvent) {
-    if (e.pointerType === "mouse" || onOwnControl(e.target)) return;
+    if (e.pointerType === "mouse" || onOwnControl(e.target) || measureRef.current) return;
     if (pressRef.current) { window.clearTimeout(pressRef.current.timer); pressRef.current = null; return; } // a second finger: a pinch
     const timer = window.setTimeout(() => { pressRef.current = null; setSheetOpen(true); }, LONG_PRESS_MS);
     pressRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, timer };
@@ -1165,6 +1353,114 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     return () => cleanups.forEach((f) => f());
   }, [coarse, applyScale]);
 
+  // ---- #28 (b), #43: the clearing click, Shift + drag quick measure, Esc, Delete ----
+  // Capture-phase listeners on the chart box run before klinecharts' own
+  // handlers (on the canvas inside it). So:
+  //  - with a placed measure, the next press (mouse or touch) only clears it:
+  //    the whole press -- down, moves, up, click -- is swallowed, so it cannot
+  //    pan, move the crosshair, place a point or select a drawing;
+  //  - a Shift-drag measures instead of panning; any later click clears that
+  //    quick measure (TradingView's habit).
+  useEffect(() => {
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    let drag: { id: string; a: MeasurePoint } | null = null;
+    const toPoint = (e: MouseEvent): MeasurePoint | null => {
+      const chart = chartRef.current;
+      const box = containerRef.current?.getBoundingClientRect();
+      if (!chart || !box) return null;
+      try {
+        const p = chart.convertFromPixel([{ x: e.clientX - box.left, y: e.clientY - box.top }], { paneId: "candle_pane", absolute: true }) as MeasurePoint | MeasurePoint[];
+        return Array.isArray(p) ? p[0] ?? null : p;
+      } catch { return null; }
+    };
+    let swallowing = false;
+    let swallowClickUntil = 0;
+    const clearing = (e: Event) => {
+      if (!measureRef.current?.drawn || onOwnControl(e.target)) return false;
+      e.preventDefault();
+      e.stopPropagation();
+      clearMeasure();
+      swallowing = true;
+      return true;
+    };
+    const eat = (e: Event) => {
+      if (!swallowing) return;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+    };
+    const eatEnd = (e: Event) => {
+      if (!swallowing) return;
+      eat(e);
+      swallowing = false;
+      swallowClickUntil = Date.now() + 400;
+    };
+    const eatClick = (e: Event) => { if (Date.now() < swallowClickUntil) { e.preventDefault(); e.stopPropagation(); } };
+    const touchDown = (e: TouchEvent) => { clearing(e); };
+    const down = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (clearing(e)) return;
+      if (!e.shiftKey) { clearQuick(); return; }
+      if (onOwnControl(e.target)) return;
+      const chart = chartRef.current;
+      const a = toPoint(e);
+      if (!chart || !a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      clearQuick();
+      let id: string | null = null;
+      try { id = chart.createOverlay({ name: "mshMeasure", points: [a, a], lock: true }); } catch { /* noop */ }
+      if (!id) return;
+      quickRef.current = id;
+      drag = { id, a };
+    };
+    const move = (e: MouseEvent) => {
+      if (!drag) return;
+      const b = toPoint(e);
+      if (b) { try { chartRef.current?.overrideOverlay({ id: drag.id, points: [drag.a, b] }); } catch { /* noop */ } }
+    };
+    const up = () => { drag = null; };
+    const opts = { capture: true, passive: false } as const;
+    wrap.addEventListener("mousedown", down, true);
+    wrap.addEventListener("touchstart", touchDown, opts);
+    wrap.addEventListener("mousemove", eat, true);
+    wrap.addEventListener("touchmove", eat, opts);
+    wrap.addEventListener("mouseup", eatEnd, true);
+    wrap.addEventListener("touchend", eatEnd, opts);
+    wrap.addEventListener("touchcancel", eatEnd, opts);
+    wrap.addEventListener("click", eatClick, true);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      wrap.removeEventListener("mousedown", down, true);
+      wrap.removeEventListener("touchstart", touchDown, opts);
+      wrap.removeEventListener("mousemove", eat, true);
+      wrap.removeEventListener("touchmove", eat, opts);
+      wrap.removeEventListener("mouseup", eatEnd, true);
+      wrap.removeEventListener("touchend", eatEnd, opts);
+      wrap.removeEventListener("touchcancel", eatEnd, opts);
+      wrap.removeEventListener("click", eatClick, true);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && (measureRef.current || quickRef.current)) { clearMeasure(); clearQuick(); return; }
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (!selectedRef.current) return;
+      // Only when nothing that takes typing has focus.
+      const a = document.activeElement;
+      if (a && a !== document.body && !canvasWrapRef.current?.contains(a)) return;
+      e.preventDefault();
+      deleteSelected();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---- Close menus on outside click ----
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -1176,6 +1472,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       if (outside(indicatorMenuRef, indicatorPanelRef)) setIndicatorMenuOpen(false);
       if (outside(typeMenuRef, typePanelRef)) setTypeMenuOpen(false);
       if (outside(drawMenuRef, drawPanelRef)) setDrawMenuOpen(false);
+      if (outside(measureMenuRef, measurePanelRef)) setMeasureMenuOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -1287,7 +1584,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
         {/* Chart type dropdown */}
         {!narrow ? (<>
         <div style={{ position: "relative" }} ref={typeMenuRef}>
-          <button type="button" onClick={(e) => { const willOpen = !typeMenuOpen; setIndicatorMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 178); setTypeMenuOpen(willOpen); }} title={dense ? activeTypeLabel : undefined} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !typeMenuOpen; setIndicatorMenuOpen(false); setDrawMenuOpen(false); setMeasureMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 178); setTypeMenuOpen(willOpen); }} title={dense ? activeTypeLabel : undefined} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {TYPE_ICONS[chartType]}{!dense ? <span>{activeTypeLabel}</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {typeMenuOpen ? menuPortal(
@@ -1308,7 +1605,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Indicators dropdown */}
         <div style={{ position: "relative" }} ref={indicatorMenuRef}>
-          <button type="button" onClick={(e) => { const willOpen = !indicatorMenuOpen; setTypeMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 250); setIndicatorMenuOpen(willOpen); }} title={dense ? "Indicators" : undefined} style={{ ...btn(activeIndicators.length > 0), display: "inline-flex", alignItems: "center", gap: dense ? 4 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !indicatorMenuOpen; setTypeMenuOpen(false); setDrawMenuOpen(false); setMeasureMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 250); setIndicatorMenuOpen(willOpen); }} title={dense ? "Indicators" : undefined} style={{ ...btn(activeIndicators.length > 0), display: "inline-flex", alignItems: "center", gap: dense ? 4 : 6 }}>
             {dense ? INDICATORS_ICON : null}
             {dense
               ? (activeIndicators.length ? <span style={{ fontSize: 11 }}>{activeIndicators.length}</span> : null)
@@ -1337,7 +1634,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Drawing tools dropdown */}
         <div style={{ position: "relative" }} ref={drawMenuRef}>
-          <button type="button" onClick={(e) => { const willOpen = !drawMenuOpen; setTypeMenuOpen(false); setIndicatorMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 210); setDrawMenuOpen(willOpen); }} title={dense ? "Draw" : undefined} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !drawMenuOpen; setTypeMenuOpen(false); setIndicatorMenuOpen(false); setMeasureMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 210); setDrawMenuOpen(willOpen); }} title={dense ? "Draw" : undefined} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {PENCIL_ICON}{!dense ? <span>Draw</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {drawMenuOpen ? menuPortal(
@@ -1353,6 +1650,25 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
                   {TOOL_ICONS[tool.key]}<span>{tool.label}</span>
                 </button>
               ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Measure tools dropdown (#553 COWORK #28 part b) */}
+        <div style={{ position: "relative" }} ref={measureMenuRef}>
+          <button type="button" data-measure-menu onClick={(e) => { const willOpen = !measureMenuOpen; setTypeMenuOpen(false); setIndicatorMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 236); setMeasureMenuOpen(willOpen); }} title={dense ? "Measure" : "Measure a move (or Shift + drag on the chart)"} style={{ ...btn(measureMenuOpen), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
+            {RULER_ICON}{!dense ? <span>Measure</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
+          </button>
+          {measureMenuOpen ? menuPortal(
+            <div ref={measurePanelRef} style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 236, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+              <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Measure</div>
+              {MEASURE_TOOLS.map((tool) => (
+                <button key={tool.key} type="button" onClick={() => startMeasure(tool.key)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderTop: "1px solid rgba(255,255,255,0.05)", background: "transparent", color: "#cbd5e1", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {RULER_ICON}<span>{tool.label}</span>
+                </button>
+              ))}
+              <div style={{ padding: "7px 12px 9px", fontSize: 11, color: "#7c8aa3", borderTop: "1px solid rgba(255,255,255,0.05)" }}>A measure clears on your next click. Tip: Shift + drag for a quick one.</div>
             </div>
           ) : null}
         </div>
@@ -1434,6 +1750,25 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           <div ref={xStripRef} data-axis-strip="x" style={{ position: "absolute", left: 0, right: 56, bottom: 0, height: 44, zIndex: 5, touchAction: "none" }} />
         </>) : null}
 
+        {/* The measure hint (#553 COWORK #43). It takes no clicks, so a tap on it
+            clears the measure like a tap anywhere else. */}
+        {measure ? (
+          <div data-measure-hint style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 7, pointerEvents: "none", maxWidth: "calc(100% - 16px)", whiteSpace: "nowrap",
+            background: "rgba(15,23,42,0.94)", border: "1px solid rgba(96,165,250,0.5)", borderRadius: 999, padding: "7px 14px", fontSize: 12, fontWeight: 700, color: "#cbd5e1", boxShadow: "0 8px 20px rgba(0,0,0,0.35)" }}>
+            {!measure.drawn
+              ? (coarse || isMobile ? "Tap the start, then the end" : "Click the start, then the end")
+              : (coarse || isMobile ? "Tap anywhere to clear" : "Click anywhere or press Esc to clear")}
+          </div>
+        ) : null}
+        {/* Touch: a selected drawing gets a Delete pill. */}
+        {!measure && selectedId && (coarse || isMobile) ? (
+          <div data-delete-pill style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 7, display: "flex", alignItems: "center", gap: 8, maxWidth: "calc(100% - 16px)",
+            background: "rgba(15,23,42,0.94)", border: "1px solid rgba(96,165,250,0.5)", borderRadius: 999, padding: "0 0 0 12px", fontSize: 12, fontWeight: 700, color: "#cbd5e1", boxShadow: "0 8px 20px rgba(0,0,0,0.35)" }}>
+            <span style={{ whiteSpace: "nowrap" }}>Selected</span>
+            <button type="button" data-overlay-delete onClick={deleteSelected} style={{ minHeight: 44, minWidth: 72, border: "none", borderRadius: 999, background: "rgba(239,68,68,0.85)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>Delete</button>
+          </div>
+        ) : null}
+
         {ctxMenu ? (
           <ChartContextMenu sections={menuSections} at={ctxMenu}
             box={{ width: canvasWrapRef.current?.clientWidth ?? 800, height: canvasWrapRef.current?.clientHeight ?? 500 }}
@@ -1444,7 +1779,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
       {!compact ? (
         <div style={{ marginTop: 6, fontSize: 11, color: "rgba(148,163,184,0.6)", lineHeight: 1.4 }}>
-          Interactive chart · drag to pan, scroll / pinch to zoom, drag an axis to stretch it (double-tap it to reset). {isMobile ? "Long-press the chart for tools." : "Right-click the chart for tools."} Tap a drawing to select, then drag to move.
+          Interactive chart · drag to pan, scroll / pinch to zoom, drag an axis to stretch it (double-tap it to reset). {isMobile ? "Long-press the chart for tools, including Measure." : "Right-click the chart for tools; Shift + drag to measure a move."} {isMobile ? "Tap a drawing to select it, then drag to move it." : "Click a drawing to select it, drag to move it, or press Delete to remove it."}
         </div>
       ) : null}
     </div>
