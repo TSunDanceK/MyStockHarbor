@@ -18,6 +18,7 @@ import { breakdownChipValue } from "@/lib/breakdownChip";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import { utcDay, utcStamp } from "@/lib/utcDate";
 import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
@@ -1233,7 +1234,7 @@ export default function DashboardClient({
     };
     return (
       <SectionCard title={assetType === "crypto" ? "Crypto Benchmarks" : "Market Benchmarks"} right={assetType === "stock" ? <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link> : null}>
-        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}</div>
+        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {(bench?.updatedAt && utcStamp(bench.updatedAt)) || "—"} · {bench?.scope ?? "Benchmarks"}</div>
         {isMobile ? (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
             {items.map(it => <BenchCard key={it.key} it={it} />)}
@@ -1270,7 +1271,7 @@ export default function DashboardClient({
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : news.cards.length >= 3 ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: 12 }}>
             {news.cards.map((item, idx) => (
               <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{(item.pubDate && utcDay(item.pubDate)) || "Recent"}</div></div>
                 {/*
                   HIDDEN, NOT DELETED — publisher thumbnails passed through by
                   FMP, who were never the rights holder. See

@@ -40,6 +40,9 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
+  // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
+  "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {
@@ -1048,6 +1051,10 @@ const TASKS = {
   // question, explicitly not to be settled by assuming symmetry. This settles
   // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
   "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
+  // NON-OPERATING TAG COVERAGE (#552 COWORK #47): SEC frames, counts only. Read-only.
+  "nonop-tag-coverage": { script: "scripts/nonop-tag-coverage.mjs", args: () => [] },
+  // STORED SETS AS JSON for a local render fixture (#552 COWORK #47). 1 MGET.
+  "write-factset-dump": { script: "scripts/factset-dump-probe.mjs", args: () => [], writes: true },
   // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
   // prescribes summing each class's shares x that class's close; secFields.ts
   // records from measurement that companyfacts carries no class label. Both
@@ -1171,6 +1178,14 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Relay C (#563 COWORK #12): prints the capex page's three records (1 MGET)
+  // for a local render against production data.
+  "write-capex-records-dump": {
+    script: "scripts/capex-records-dump.mjs",
+    args: () => [],
+    writes: true,
+  },
   // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
   // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
   "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },

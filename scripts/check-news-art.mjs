@@ -1512,6 +1512,15 @@ check(
   "the same fallback as /headlines, so the two surfaces cannot drift"
 );
 check(
+  "/sector/*/news: a compact 56px row with no constituent takes a square crop of the generic picture (#553 COWORK #42)",
+  (() => {
+    const sector = readCodeOnly("app/sector/[slug]/news/page.tsx");
+    return /plan=\{withGenericFallback\(planCardArt\(\{\s*variant: "compact",[\s\S]{0,200}canGenerate: symbol !== null,\s*\}\), item\.guid \?\? item\.link, takenGeneric\)\}/.test(sector) &&
+      /const compactThumbStyle: CSSProperties = \{ width: 56, height: 56,[^}]*objectFit: "cover"/.test(sector);
+  })(),
+  "no row without a picture; the lead cards and the rows share one takenGeneric set so a picture is not repeated on the page"
+);
+check(
   "/headlines: the first row loads eagerly, everything below it lazily, with width and height set",
   (() => {
     const page = readCodeOnly("app/headlines/page.tsx");
