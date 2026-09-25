@@ -159,8 +159,8 @@ console.log("\n3. every 20-F filer's cap is refused (the §2.6 ADS guard)");
     M.peRatio(M.valuationInputs(fixture("AZN"), TODAY, { annualForm: "20-F" }), 70)?.ok === false);
   check("a 10-K filer is unaffected", compose(M, "AAPL").marketCap !== null);
   const blind = await loadComposer(once(
-    'if (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F") {',
-    "if (sharesAreIncomparableToPrice(set.symbol)) {"
+    'if (!ads && (sharesAreIncomparableToPrice(set.symbol) || filer.annualForm === "20-F")) {',
+    "if (!ads && (sharesAreIncomparableToPrice(set.symbol))) {"
   ));
   // On the REFUSAL, not the cap: AZN's fixture carries no cover-page count, so
   // its cap is null either way and would not distinguish the two rules.

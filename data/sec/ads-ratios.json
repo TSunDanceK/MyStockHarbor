@@ -1,0 +1,2333 @@
+{
+ "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST 20-F states it (its 12(b) section, then its text), or an F-6 filed after that 20-F (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names.",
+ "entries": {
+  "AAPG": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American depositary shares (each representing four ordinary shares, no par value per share)",
+   "form": "20-F",
+   "source": "0001213900-26-049412",
+   "filed": "2026-04-29"
+  },
+  "ABVX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share, nominal value €0.01 per share",
+   "form": "20-F",
+   "source": "0001956827-26-000012",
+   "filed": "2026-03-23"
+  },
+  "AEFC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares , par value EUR 0.12 per share AEG New York Stock Exchange",
+   "form": "20-F",
+   "source": "0001193125-26-124987",
+   "filed": "2026-03-26"
+  },
+  "AEG": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares , par value EUR 0.12 per share",
+   "form": "20-F",
+   "source": "0001193125-26-124987",
+   "filed": "2026-03-26"
+  },
+  "AER": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001628280-26-007513",
+   "filed": "2026-02-12"
+  },
+  "AERO": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares, each representing ten common shares, no par value",
+   "form": "20-F",
+   "source": "0001193125-26-197494",
+   "filed": "2026-04-30"
+  },
+  "AFYA": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value US$0.00005 per share",
+   "form": "20-F",
+   "source": "0001292814-26-002013",
+   "filed": "2026-03-31"
+  },
+  "AGBK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value US$0.00005 per share",
+   "form": "20-F",
+   "source": "0001292814-26-002716",
+   "filed": "2026-04-30"
+  },
+  "AGRO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares",
+   "form": "20-F",
+   "source": "0001499505-26-000069",
+   "filed": "2026-04-29"
+  },
+  "AIIR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001193125-26-234374",
+   "filed": "2026-05-21"
+  },
+  "ALC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value CHF 0.04 per share",
+   "form": "20-F",
+   "source": "0001167379-26-000014",
+   "filed": "2026-02-24"
+  },
+  "ALVO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001898416-26-000004",
+   "filed": "2026-03-31"
+  },
+  "AMBP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, with a nominal value of €0.01 per share",
+   "form": "20-F",
+   "source": "0001104659-26-024068",
+   "filed": "2026-03-05"
+  },
+  "ARCO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A shares, no par value",
+   "form": "20-F",
+   "source": "0001628280-26-028950",
+   "filed": "2026-04-30"
+  },
+  "ARGX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Symbol: American Depositary Shares, each representing one ordinary share with a nominal value of €0.10 per share",
+   "form": "20-F",
+   "source": "0001697862-26-000032",
+   "filed": "2026-03-19"
+  },
+  "ARM": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Ordinary Share, nominal value £0.001 per share",
+   "form": "20-F",
+   "source": "0001973239-26-000097",
+   "filed": "2026-05-26"
+  },
+  "AS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value EUR 0.0300580119630888 per share",
+   "form": "20-F",
+   "source": "0001988894-26-000004",
+   "filed": "2026-02-26"
+  },
+  "ASML": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001628280-26-011378",
+   "filed": "2026-02-25"
+  },
+  "ASND": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares , each representing one ordinary share, nominal value DKK 1 per share",
+   "form": "20-F",
+   "source": "0001193125-26-046590",
+   "filed": "2026-02-11"
+  },
+  "ASR": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "​ ​ ​ ​ ​ American Depositary Shares, as evidenced by American Depositary Receipts, or ADSs, each representing ten Series B shares ​",
+   "form": "20-F",
+   "source": "0001104659-26-044448",
+   "filed": "2026-04-16"
+  },
+  "ASX": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "Shares , par value NT$10.00 each ASX The New York Stock Exchange * * Traded in the form of American Depositary Receipts evidencing American Depositary Shares (the “ADSs”), each representing two Common Shares of ASE Technology Holding Co., Ltd. Securities registered or to be registered",
+   "form": "20-F",
+   "source": "0001193125-26-135585",
+   "filed": "2026-04-01"
+  },
+  "ATAT": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American depositary shares, each ADS represents three Class A ordinary shares, par value US$0.0001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-044551",
+   "filed": "2026-04-17"
+  },
+  "AUGO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, no par value",
+   "form": "20-F",
+   "source": "0001171843-26-002127",
+   "filed": "2026-04-01"
+  },
+  "AZN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares of 25 ¢ each The New York Stock Exchange",
+   "form": "20-F",
+   "source": "0001104659-26-019130",
+   "filed": "2026-02-24"
+  },
+  "BABA": {
+   "kind": "ads",
+   "ordinaryPerAds": 8,
+   "evidence": "of Hong Kong Limited American Depositary Shares, each representing eight Ordinary Shares",
+   "form": "20-F",
+   "source": "0001193125-26-231755",
+   "filed": "2026-05-20"
+  },
+  "BAP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value $5.00 per share",
+   "form": "20-F",
+   "source": "0001001290-26-000008",
+   "filed": "2026-04-27"
+  },
+  "BBAR": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "installment being paid no earlier than the third business day of each subsequent month. (5) Each ADS represents three ordinary shares. The changes in our consolidated statement of profit or loss",
+   "form": "20-F",
+   "source": "0001628280-26-024441",
+   "filed": "2026-04-09"
+  },
+  "BBDO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares , or ADSs (evidenced by American Depositary Receipts, or ADRs), each representing 1 common share BBDO New York Stock Exchange Common Shares New York Stock Exchange*",
+   "form": "20-F",
+   "source": "0001292814-26-001753",
+   "filed": "2026-03-25"
+  },
+  "BBUC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Subordinate Voting Shares",
+   "form": "20-F",
+   "source": "0001628280-26-022148",
+   "filed": "2026-03-31"
+  },
+  "BBVA": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing the right to receive one ordinary share, par value €0.49 per share",
+   "form": "20-F",
+   "source": "0001628280-26-010001",
+   "filed": "2026-02-20"
+  },
+  "BCH": {
+   "kind": "ads",
+   "ordinaryPerAds": 200,
+   "evidence": "American Depositary Shares, each representing 200 shares of common stock, without nominal (par) value (“ADSs”)",
+   "form": "20-F",
+   "source": "0001213900-26-050243",
+   "filed": "2026-04-30"
+  },
+  "BCS": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "from 9 September 1986. Trading on the NYSE is in the form of ADSs under the symbol ‘BCS’. Each ADS represents four ordinary shares and is evidenced by an American Depositary Receipt (ADR). The",
+   "form": "20-F",
+   "source": "0000312069-26-000004",
+   "filed": "2026-02-10"
+  },
+  "BEKE": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American depositary shares (one American depositary share representing three Class A ordinary shares, par value US$0.00002 per share )",
+   "form": "20-F",
+   "source": "0001104659-26-048109",
+   "filed": "2026-04-24"
+  },
+  "BEPC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Exchangeable Subordinate Voting Shares",
+   "form": "20-F",
+   "source": "0001791863-26-000004",
+   "filed": "2026-02-27"
+  },
+  "BHP": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "Stock Exchange * Evidenced by American Depositary Receipts. Each American Depositary Receipt represents two ordinary shares of BHP Group Limited. ** Not for trading, but only in connection",
+   "form": "20-F",
+   "source": "0001193125-26-354647",
+   "filed": "2026-08-18"
+  },
+  "BIDU": {
+   "kind": "ads",
+   "ordinaryPerAds": 8,
+   "evidence": "American depositary shares (each American depositary share representing eight Class A ordinary shares, par value US$0.000000625 per share)",
+   "form": "20-F",
+   "source": "0001193125-26-109289",
+   "filed": "2026-03-17"
+  },
+  "BILI": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one Class Z ordinary share",
+   "form": "20-F",
+   "source": "0001193125-26-157842",
+   "filed": "2026-04-16"
+  },
+  "BIRK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value",
+   "form": "20-F",
+   "source": "0001193125-25-323599",
+   "filed": "2025-12-18"
+  },
+  "BLSH": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001437749-26-007417",
+   "filed": "2026-03-10"
+  },
+  "BLTE": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one ordinary share ​",
+   "form": "20-F",
+   "source": "0001104659-26-037374",
+   "filed": "2026-03-31"
+  },
+  "BLX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class E Common Stock",
+   "form": "20-F",
+   "source": "0001628280-26-026056",
+   "filed": "2026-04-20"
+  },
+  "BNT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Exchangeable Limited Voting Shares",
+   "form": "20-F",
+   "source": "0001837429-26-000008",
+   "filed": "2026-03-26"
+  },
+  "BNTX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each Representing one ordinary share",
+   "form": "20-F",
+   "source": "0001776985-26-000017",
+   "filed": "2026-03-10"
+  },
+  "BORR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares of par value $0.10 per share",
+   "form": "20-F",
+   "source": "0001628280-26-021450",
+   "filed": "2026-03-26"
+  },
+  "BP": {
+   "kind": "ads",
+   "ordinaryPerAds": 6,
+   "evidence": "agent. The Depositary’s principal office is 270 Park Avenue, Floor 8, New York, NY, 10017, US. Each ADS represents six ordinary shares. ADSs are evidenced by American depositary receipts (ADRs),",
+   "form": "20-F",
+   "source": "0000313807-26-000006",
+   "filed": "2026-03-06"
+  },
+  "BSAC": {
+   "kind": "ads",
+   "ordinaryPerAds": 400,
+   "evidence": "American Depositary Shares (“ADS”), each representing the right to receive 400 Shares of Common Stock without par value",
+   "form": "20-F",
+   "source": "0001027552-26-000038",
+   "filed": "2026-02-27"
+  },
+  "BTDR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, par value US$0.0000001",
+   "form": "20-F",
+   "source": "0001213900-26-049770",
+   "filed": "2026-04-30"
+  },
+  "BTI": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Depositary Shares (evidenced by American Depositary Receipts) BTI New York Stock Exchange each representing one ordinary share Ordinary shares, nominal value 25 pence per share BTI New York",
+   "form": "20-F",
+   "source": "0001303523-26-000017",
+   "filed": "2026-02-13"
+  },
+  "BUD": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share without nominal value",
+   "form": "20-F",
+   "source": "0001193125-26-088105",
+   "filed": "2026-03-03"
+  },
+  "BULL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Ordinary Shares, par value $0.00001 per share",
+   "form": "20-F",
+   "source": "0001213900-26-041653",
+   "filed": "2026-04-09"
+  },
+  "BVC": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "completed its initial public offering (“IPO”) of 3,000,000 ADSs at US$ 10.00 per ADS on NASDAQ. Each ADS represents two ordinary shares of the Company. On August 14, 2024, the Company exited its businesses",
+   "form": "20-F",
+   "source": "0001437749-25-031287",
+   "filed": "2025-10-17"
+  },
+  "BVN": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares (“ADSs”) representing one Common Share each ​ ​",
+   "form": "20-F",
+   "source": "0001104659-26-053101",
+   "filed": "2026-04-30"
+  },
+  "BWLP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-037215",
+   "filed": "2026-03-31"
+  },
+  "BZ": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "(s) ​ ​ ​ Name of each exchange on which registered American depositary shares (each ADS represents two of our Class A ordinary shares, par value US$0.0001 per share) ​ BZ ​ Nasdaq Global Select",
+   "form": "20-F",
+   "source": "0001104659-26-050959",
+   "filed": "2026-04-29"
+  },
+  "CAMT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value NIS 0.01 per share",
+   "form": "20-F",
+   "source": "0001178913-26-001561",
+   "filed": "2026-03-19"
+  },
+  "CCEC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001193125-26-179568",
+   "filed": "2026-04-27"
+  },
+  "CCEP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value €0.01 each",
+   "form": "20-F",
+   "source": "0001650107-26-000029",
+   "filed": "2026-03-13"
+  },
+  "CCU": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, each representing two shares of our Common Stock, without par value",
+   "form": "20-F",
+   "source": "0001292814-26-002680",
+   "filed": "2026-04-29"
+  },
+  "CDLR": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "(1) American Depositary Shares, each representing four (4) ordinary shares",
+   "form": "20-F",
+   "source": "0001978867-26-000022",
+   "filed": "2026-03-24"
+  },
+  "CEPU": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "of the Act. Title of each class Trading Symbol Name of each exchange on which registered American Depositary Shares, each representing 10 common shares of Central Puerto S.A. * CEPU New York Stock Exchange * * Not for trading, but only in connection with the registration of American Depositary Shares pursuant",
+   "form": "20-F",
+   "source": "0001292814-26-002446",
+   "filed": "2026-04-22"
+  },
+  "CHA": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each ADS represents one Class A ordinary share, par value US$0.000 1 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-050766",
+   "filed": "2026-04-29"
+  },
+  "CHKP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares , NIS 0.01 nominal value",
+   "form": "20-F",
+   "source": "0001178913-26-001932",
+   "filed": "2026-03-31"
+  },
+  "CHT": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "Exchange * American Depositary Shares, as evidenced by American Depositary Receipts, each representing 10 Common Shares CHT New York Stock Exchange Securities registered or to be registered",
+   "form": "20-F",
+   "source": "0001193125-26-155848",
+   "filed": "2026-04-15"
+  },
+  "CLBT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value NIS 0.00001",
+   "form": "20-F",
+   "source": "0001628280-26-013790",
+   "filed": "2026-03-03"
+  },
+  "CMBT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, no par value",
+   "form": "20-F",
+   "source": "0001604481-26-000004",
+   "filed": "2026-04-21"
+  },
+  "CMRE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Stock, $0.0001 par value per share",
+   "form": "20-F",
+   "source": "0001140361-26-007868",
+   "filed": "2026-03-04"
+  },
+  "CPA": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Common Stock, without par value",
+   "form": "20-F",
+   "source": "0001345105-26-000019",
+   "filed": "2026-02-26"
+  },
+  "CPAC": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "on which registered American Depositary Shares evidenced by American Depositary Receipts, each American Depositary Share representing five common shares of the Registrant, par value S/1.00 per share (“ADSs”) CPAC",
+   "form": "20-F",
+   "source": "0001213900-26-048232",
+   "filed": "2026-04-28"
+  },
+  "CSAN": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American depositary shares, each representing four common shares, no par value",
+   "form": "20-F",
+   "source": "0001554855-26-000590",
+   "filed": "2026-04-10"
+  },
+  "CYD": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common stock, par value US$0.10 per Share",
+   "form": "20-F",
+   "source": "0001193125-26-191559",
+   "filed": "2026-04-29"
+  },
+  "DAC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common stock, $0.01 par value per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-021574",
+   "filed": "2026-02-27"
+  },
+  "DAO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each ADS represents one Class A ordinary share, par value US$0.0001 per share",
+   "form": "20-F",
+   "source": "0001193125-26-155933",
+   "filed": "2026-04-15"
+  },
+  "DEO": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "shares of Diageo may be issued in the form of American depositary shares, or ADSs. Each Diageo ADS represents four ordinary shares of Diageo. Citibank, N.A. is the depositary with respect to",
+   "form": "20-F",
+   "source": "0001628280-26-057529",
+   "filed": "2026-08-18"
+  },
+  "DHT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Stock, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001140361-26-010407",
+   "filed": "2026-03-19"
+  },
+  "DLO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value US$0.002 per share",
+   "form": "20-F",
+   "source": "0002070979-26-000113",
+   "filed": "2026-03-18"
+  },
+  "DOX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value £0.01",
+   "form": "20-F",
+   "source": "0001193125-25-319187",
+   "filed": "2025-12-15"
+  },
+  "DRD": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares, each representing ten ordinary shares",
+   "form": "20-F",
+   "source": "0001628280-25-047346",
+   "filed": "2025-10-30"
+  },
+  "DRTS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value",
+   "form": "20-F",
+   "source": "0001213900-26-025174",
+   "filed": "2026-03-09"
+  },
+  "E": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "Shares E New York Stock Exchange * American Depositary Shares New York Stock Exchange (Which represent the right to receive two Shares) * Not for trading, but only in connection with the registration",
+   "form": "20-F",
+   "source": "0001554855-26-000390",
+   "filed": "2026-03-23"
+  },
+  "EC": {
+   "kind": "ads",
+   "ordinaryPerAds": 20,
+   "evidence": "registered American Depository Shares (as evidenced by American Depository Receipts), each representing 20 common shares par value COP 609 per share EC ​ New York Stock Exchange Ecopetrol",
+   "form": "20-F",
+   "source": "0001104659-26-053172",
+   "filed": "2026-04-30"
+  },
+  "ECO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Shares of Common Stock, par value $0.001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-032731",
+   "filed": "2026-03-20"
+  },
+  "EDN": {
+   "kind": "ads",
+   "ordinaryPerAds": 20,
+   "evidence": "Shares American Depositary Shares, or ADSs, evidenced by American Depositary Receipts, each representing 20 Class B Common Shares EDN EDN New York Stock Exchange , Inc.* New York Stock Exchange,",
+   "form": "20-F",
+   "source": "0001292814-26-002270",
+   "filed": "2026-04-15"
+  },
+  "EDU": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "12(b) of the Act: Title of Each Class Trading Symbol(s) Name of Exchange on Which Registered American depositary shares, each representing ten common shares * EDU New York Stock Exchange Common shares , par value US$0.001 per share** 9901 The Stock Exchange of Hong Kong Limited * Effective on April 8, 2022, the ratio",
+   "form": "20-F",
+   "source": "0001193125-26-397192",
+   "filed": "2026-09-22"
+  },
+  "ELPC": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "Exchange* American Depositary Shares (as evidenced by American Depositary Receipts), each representing four Common Shares of COPEL ELPC New York Stock Exchange * Shares are not listed",
+   "form": "20-F",
+   "source": "0002070979-26-000155",
+   "filed": "2026-04-16"
+  },
+  "ELVR": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares (“ADS”), each representing 10 ordinary shares",
+   "form": "20-F",
+   "source": "0001140361-25-040022",
+   "filed": "2025-10-31"
+  },
+  "EMBJ": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "Common shares, without par value (represented by, and traded only in the form of, American Depositary Shares (evidenced by American Depositary Receipts), with each American Depositary Share representing four common shares)",
+   "form": "20-F",
+   "source": "0001628280-26-021824",
+   "filed": "2026-03-30"
+  },
+  "ENIC": {
+   "kind": "ads",
+   "ordinaryPerAds": 50,
+   "evidence": "Citibank, N.A., as the depositary, in respect of shares of our company held by the depositary. Each ADS represents 50 shares, and ADSs are traded on the New York Stock Exchange. ​ AFP ​",
+   "form": "20-F",
+   "source": "0001104659-26-050251",
+   "filed": "2026-04-28"
+  },
+  "ENLT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, NIS 0.1 par value per share",
+   "form": "20-F",
+   "source": "0001178913-26-001828",
+   "filed": "2026-03-30"
+  },
+  "EQNR": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "traded on the New York Stock Exchange are evidenced by American Depositary Receipts (ADR), and each ADS represents one ordinary share. B. Plan of Distribution Not applicable. C. Markets See “Item",
+   "form": "20-F",
+   "source": "0001140625-26-000013",
+   "filed": "2026-03-19"
+  },
+  "ERIC": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Trading symbol(s) Name of each exchange on which registered American Depositary Shares (each representing one B share) B Shares * ERIC The NASDAQ Stock Market LLC * Not for trading,",
+   "form": "20-F",
+   "source": "0001193125-26-104149",
+   "filed": "2026-03-12"
+  },
+  "ESLT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value 1.0 New Israeli Shekel per share",
+   "form": "20-F",
+   "source": "0001027664-26-000005",
+   "filed": "2026-03-17"
+  },
+  "ETOR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, no par value",
+   "form": "20-F",
+   "source": "0001213900-26-022034",
+   "filed": "2026-03-02"
+  },
+  "FER": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value EUR 0.01 per share",
+   "form": "20-F",
+   "source": "0001628280-26-011789",
+   "filed": "2026-02-25"
+  },
+  "FLNG": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001628280-26-012574",
+   "filed": "2026-02-27"
+  },
+  "FORTY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Ordinary Share, NIS 1 par value",
+   "form": "20-F",
+   "source": "0001213900-26-055948",
+   "filed": "2026-05-13"
+  },
+  "FRO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, Nominal Value $1.00 Per Share",
+   "form": "20-F",
+   "source": "0001628280-26-021774",
+   "filed": "2026-03-27"
+  },
+  "FUTU": {
+   "kind": "ads",
+   "ordinaryPerAds": 8,
+   "evidence": "American depositary shares (one American depositary share representing eight Class A ordinary shares, par value US$0.00001 per share) ​",
+   "form": "20-F",
+   "source": "0001104659-26-043451",
+   "filed": "2026-04-15"
+  },
+  "GDS": {
+   "kind": "ads",
+   "ordinaryPerAds": 8,
+   "evidence": "of Hong Kong Limited American Depositary Shares, each representing eight Class A ordinary shares",
+   "form": "20-F",
+   "source": "0001104659-26-051006",
+   "filed": "2026-04-29"
+  },
+  "GENI": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares",
+   "form": "20-F",
+   "source": "0001193125-26-110749",
+   "filed": "2026-03-17"
+  },
+  "GFI": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share",
+   "form": "20-F",
+   "source": "0001628280-26-021904",
+   "filed": "2026-03-30"
+  },
+  "GFS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value US$0.02 per share",
+   "form": "20-F",
+   "source": "0001709048-26-000022",
+   "filed": "2026-02-27"
+  },
+  "GGAL": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "registered or to be registered pursuant to Section 12(b) of the Act: American Depositary Shares, each representing ten Class B ordinary Shares Name of each exchange on which registered Nasdaq Capital Market Title of each class Class B Ordinary Shares, Ps.1.00 par value, (not for trading but",
+   "form": "20-F",
+   "source": "0001114700-26-000038",
+   "filed": "2026-04-16"
+  },
+  "GHRS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, nominal value $0.025 per share",
+   "form": "20-F",
+   "source": "0001140361-26-007986",
+   "filed": "2026-03-05"
+  },
+  "GLBE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value",
+   "form": "20-F",
+   "source": "0001178913-26-001772",
+   "filed": "2026-03-26"
+  },
+  "GLNG": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value, $1.00 per share",
+   "form": "20-F",
+   "source": "0001628280-26-021198",
+   "filed": "2026-03-26"
+  },
+  "GLOB": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares, nominal value $ 1.20 per share",
+   "form": "20-F",
+   "source": "0001628280-26-012910",
+   "filed": "2026-02-27"
+  },
+  "GMAB": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.1,
+   "evidence": "American Depositary Shares, each representing one-tenth of one ordinary share",
+   "form": "20-F",
+   "source": "0001434265-26-000014",
+   "filed": "2026-02-17"
+  },
+  "GRAB": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, par value $0.000001 per share",
+   "form": "20-F",
+   "source": "0001855612-26-000020",
+   "filed": "2026-03-06"
+  },
+  "GSK": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares , each representing 2 Ordinary Shares, Par value 31 1⁄4 pence",
+   "form": "20-F",
+   "source": "0001131399-26-000004",
+   "filed": "2026-03-06"
+  },
+  "GSL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Common Shares, par value of $0.01 per share",
+   "form": "20-F",
+   "source": "0001140361-26-009637",
+   "filed": "2026-03-16"
+  },
+  "HAFN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares",
+   "form": "20-F",
+   "source": "0001140361-26-015278",
+   "filed": "2026-04-17"
+  },
+  "HBNB": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value $0.0001 per share",
+   "form": "20-F",
+   "source": "0001213900-26-049771",
+   "filed": "2026-04-30"
+  },
+  "HCM": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American depositary shares, each representing five ordinary shares, par value $0.10 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-023822",
+   "filed": "2026-03-05"
+  },
+  "HDB": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American Depositary Shares, each representing three Equity Shares, Par value Rs. 1.0 per share",
+   "form": "20-F",
+   "source": "0001193125-26-322004",
+   "filed": "2026-07-29"
+  },
+  "HLN": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "1 ​ American Depositary Shares, each representing two ordinary shares ​ ​ ​",
+   "form": "20-F",
+   "source": "0001104659-26-027443",
+   "filed": "2026-03-13"
+  },
+  "HMC": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "shares of Common Stock. ** American Depositary Receipts evidence American Depositary Shares, each American Depositary Share representing three shares of Common Stock. *** Unless otherwise indicated in this Form",
+   "form": "20-F",
+   "source": "0001193125-26-274991",
+   "filed": "2026-06-18"
+  },
+  "HMY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Exchange * American Depositary Shares (as evidenced by American Depositary Receipts), each representing one ordinary share HMY New York Stock Exchange * Not for trading, but only in connection",
+   "form": "20-F",
+   "source": "0001628280-25-047726",
+   "filed": "2025-10-31"
+  },
+  "HSBC": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing 5 Ordinary Shares of nominal value US$0.50 each (US4042804066)",
+   "form": "20-F",
+   "source": "0001089113-26-000010",
+   "filed": "2026-02-26"
+  },
+  "HTHT": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "of Hong Kong Limited American Depositary Shares , each representing ten ordinary shares ​",
+   "form": "20-F",
+   "source": "0001104659-26-048058",
+   "filed": "2026-04-24"
+  },
+  "IBN": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "which registered Equity Shares of ICICI Bank Limited( 1 ) IBN The New York Stock Exchange American Depositary Shares, each representing two Equity Shares of ICICI Bank Limited, par value Rs. 2 per share 1 Not for trading, but only in connection with the registration of American Depositary Shares representing such",
+   "form": "20-F",
+   "source": "0000950103-26-010820",
+   "filed": "2026-07-20"
+  },
+  "ICL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value NIS 1.00 per share",
+   "form": "20-F",
+   "source": "0001178913-26-000817",
+   "filed": "2026-03-11"
+  },
+  "ICLR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "ORDINARY SHARES, PAR VALUE €0.06 EACH",
+   "form": "20-F",
+   "source": "0001628280-26-038487",
+   "filed": "2026-05-27"
+  },
+  "IFS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares",
+   "form": "20-F",
+   "source": "0001193125-26-177617",
+   "filed": "2026-04-24"
+  },
+  "IGIC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares, $0.01 par value per share",
+   "form": "20-F",
+   "source": "0001794338-26-000012",
+   "filed": "2026-04-21"
+  },
+  "IHG": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "ordinary shares are also listed on the NYSE, trading in the form of ADSs evidenced by ADRs. Each ADS represents one ordinary share. The Company has a sponsored ADR facility with J.P. Morgan Chase",
+   "form": "20-F",
+   "source": "0000858446-26-000010",
+   "filed": "2026-02-26"
+  },
+  "IHS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value $0.30 per share",
+   "form": "20-F",
+   "source": "0001104659-26-028162",
+   "filed": "2026-03-16"
+  },
+  "IMTX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, nominal value €0.01 per share",
+   "form": "20-F",
+   "source": "0001193125-26-092529",
+   "filed": "2026-03-05"
+  },
+  "INFY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "ownership is calculated on 4,150,867,464 equity shares. Our ADSs are listed on the NYSE. Each ADS currently represents one equity share of par value ₹5/- per share. ADSs are registered pursuant to",
+   "form": "20-F",
+   "source": "0001193125-26-270520",
+   "filed": "2026-06-15"
+  },
+  "INTR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value of US$0.0000025 per share",
+   "form": "20-F",
+   "source": "0002070979-26-000185",
+   "filed": "2026-04-30"
+  },
+  "IRS": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "Global Depositary Shares, each representing ten shares of Common Stock",
+   "form": "20-F",
+   "source": "0001654954-25-012190",
+   "filed": "2025-10-24"
+  },
+  "ITRN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares , par value NIS 0.33 1 / 3 per share",
+   "form": "20-F",
+   "source": "0001178913-26-002205",
+   "filed": "2026-04-23"
+  },
+  "IX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "(1) American depository shares (the “ADSs”), each of which represents one share",
+   "form": "20-F",
+   "source": "0001193125-26-276640",
+   "filed": "2026-06-22"
+  },
+  "JBS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value €0.01 per share",
+   "form": "20-F",
+   "source": "0001213900-26-034213",
+   "filed": "2026-03-25"
+  },
+  "JD": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American depositary shares (one American depositary share representing two Class A ordinary shares, par value US$0.00002 per share)",
+   "form": "20-F",
+   "source": "0001193125-26-157870",
+   "filed": "2026-04-16"
+  },
+  "JOYY": {
+   "kind": "ads",
+   "ordinaryPerAds": 20,
+   "evidence": "​ ​ American depositary shares (each representing 20 Class A common shares, par value US$0.00001 per share) ​",
+   "form": "20-F",
+   "source": "0001104659-26-049917",
+   "filed": "2026-04-28"
+  },
+  "KARO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value per share",
+   "form": "20-F",
+   "source": "0001213900-26-066795",
+   "filed": "2026-06-09"
+  },
+  "KB": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one share of Common Stock",
+   "form": "20-F",
+   "source": "0001193125-26-183398",
+   "filed": "2026-04-28"
+  },
+  "KC": {
+   "kind": "ads",
+   "ordinaryPerAds": 15,
+   "evidence": "American depositary shares, each ADS represents 15 ordinary shares, par value US$0.001 per share",
+   "form": "20-F",
+   "source": "0001104659-26-047100",
+   "filed": "2026-04-23"
+  },
+  "KEN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, no par value",
+   "form": "20-F",
+   "source": "0001178913-26-001842",
+   "filed": "2026-03-30"
+  },
+  "KEP": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.5,
+   "evidence": "registered: Common stock, par value Won 5,000 per share American depositary shares, each representing one-half of share of common stock KEP KEP New York Stock Exchange * New York Stock",
+   "form": "20-F",
+   "source": "0001193125-26-190113",
+   "filed": "2026-04-29"
+  },
+  "KSPI": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one common share, no par value",
+   "form": "20-F",
+   "source": "0001985487-26-000008",
+   "filed": "2026-03-16"
+  },
+  "KT": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.5,
+   "evidence": "American Depositary Shares , each representing one-half of one share of ordinary share",
+   "form": "20-F",
+   "source": "0001628280-26-028096",
+   "filed": "2026-04-29"
+  },
+  "LAR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "common shares, $0.01 par value per share",
+   "form": "20-F",
+   "source": "0001193125-26-118478",
+   "filed": "2026-03-23"
+  },
+  "LEGN": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American depositary shares, each representing two ordinary shares, par value $0.0001 per share",
+   "form": "20-F",
+   "source": "0001801198-26-000008",
+   "filed": "2026-03-10"
+  },
+  "LI": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "Title of Each Class ​ ​ ​ Trading Symbol ​ ​ ​ Name of Each Exchange on Which Registered American depositary shares, each representing two Class A ordinary shares, par value US$0.0001 per share Class A ordinary shares, par value US$0.0001 per share ​ LI 2015 ​ The Nasdaq Stock Market LLC (The Nasdaq Global Select",
+   "form": "20-F",
+   "source": "0001104659-26-041705",
+   "filed": "2026-04-10"
+  },
+  "LKFT": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "D. American Depositary Shares Citibank, N.A., as depositary, registers and delivers ADSs. Each ADS represents one ordinary share (or a right to receive one ordinary share) deposited with Citibank",
+   "form": "20-F",
+   "source": "0001104659-26-035163",
+   "filed": "2026-03-26"
+  },
+  "LOMA": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing 5 Ordinary Shares of Loma Negra C.I.A.S.A.",
+   "form": "20-F",
+   "source": "0001711375-26-000030",
+   "filed": "2026-04-28"
+  },
+  "LPL": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.5,
+   "evidence": "American Depositary Shares, each representing one-half of one share of Common Stock",
+   "form": "20-F",
+   "source": "0001193125-26-183413",
+   "filed": "2026-04-28"
+  },
+  "LU": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American depositary shares (each representing two ordinary shares, par value US$0.00001 per share)",
+   "form": "20-F",
+   "source": "0001193125-26-194102",
+   "filed": "2026-04-30"
+  },
+  "LUXE": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share, nominal value €0.000015 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-108069",
+   "filed": "2026-09-16"
+  },
+  "LYG": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "Depositary Shares (ADSs) are listed on the New York Stock Exchange (NYSE) under the symbol ‘LYG’. Each ADS represents four ordinary shares. B. Plan of distribution Not applicable. C. Markets Please refer",
+   "form": "20-F",
+   "source": "0001160106-26-000010",
+   "filed": "2026-02-13"
+  },
+  "MAAS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Ordinary Shares, par value $0.09 per share",
+   "form": "20-F",
+   "source": "0001213900-25-103497",
+   "filed": "2025-10-29"
+  },
+  "MANU": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, par value $0.0005 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-110384",
+   "filed": "2026-09-24"
+  },
+  "MESO": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "the Act. Title of each class Trading Symbol(s) Name of each exchange on which registered American Depositary Shares, each representing ten Ordinary Shares * MESO The NASDAQ Global Select Market Securities registered or to be registered",
+   "form": "20-F",
+   "source": "0001345099-26-000081",
+   "filed": "2026-08-27"
+  },
+  "MFG": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "of the Act. Title of each class Trading Symbols Name of each exchange on which registered American depositary shares, each of which represents two shares of common stock Common Stock, without par value * MFG The New",
+   "form": "20-F",
+   "source": "0001193125-26-283791",
+   "filed": "2026-06-26"
+  },
+  "MGRT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, $ 0.000001 par value per share",
+   "form": "20-F",
+   "source": "0001493152-26-004907",
+   "filed": "2026-02-03"
+  },
+  "MICC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, nominal value of €3.50 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-029805",
+   "filed": "2026-03-18"
+  },
+  "MLCO": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American depositary shares each representing three ordinary shares",
+   "form": "20-F",
+   "source": "0001193125-26-105023",
+   "filed": "2026-03-13"
+  },
+  "MMYT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value $0.0005 per share",
+   "form": "20-F",
+   "source": "0001193125-26-318134",
+   "filed": "2026-07-27"
+  },
+  "MNDY": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares , no par",
+   "form": "20-F",
+   "source": "0001178913-26-000870",
+   "filed": "2026-03-13"
+  },
+  "MNSO": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American depositary shares (each American depositary share representing four ordinary shares, par value US$0.00001 per share) ​",
+   "form": "20-F",
+   "source": "0001104659-26-048172",
+   "filed": "2026-04-24"
+  },
+  "MRX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value $ 0.001551",
+   "form": "20-F",
+   "source": "0001997464-26-000018",
+   "filed": "2026-03-25"
+  },
+  "MT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001243429-26-000020",
+   "filed": "2026-03-06"
+  },
+  "MUFG": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "(1) American depositary shares, each of which represents one share of common stock",
+   "form": "20-F",
+   "source": "0001628280-26-047095",
+   "filed": "2026-07-06"
+  },
+  "NAT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, $0.01 par value",
+   "form": "20-F",
+   "source": "0001140361-26-017809",
+   "filed": "2026-04-29"
+  },
+  "NBIS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Ordinary Shares ​",
+   "form": "20-F",
+   "source": "0001104659-26-052948",
+   "filed": "2026-04-30"
+  },
+  "NBTX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one ordinary share, nominal value €0.03 per share",
+   "form": "20-F",
+   "source": "0001760854-26-000003",
+   "filed": "2026-03-31"
+  },
+  "NEXA": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares, each with par value of US$1.00",
+   "form": "20-F",
+   "source": "0001292814-26-001787",
+   "filed": "2026-03-26"
+  },
+  "NGG": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "Rosput Reynolds, Earl Shipp and Martha Wyrsch: Hold American Depositary Shares (ADSs) and each ADS represents five ordinary shares, as presented in the table above. National Grid plc Annual Report",
+   "form": "20-F",
+   "source": "0001004315-26-000006",
+   "filed": "2026-06-03"
+  },
+  "NICE": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Ordinary Share, par value one New Israeli Shekel per share",
+   "form": "20-F",
+   "source": "0001003935-26-000010",
+   "filed": "2026-02-26"
+  },
+  "NIO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares (each representing one Class A ordinary share),par value US$0.00025 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-041765",
+   "filed": "2026-04-10"
+  },
+  "NMR": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "the Act: Title of Each Class Trading Symbol(s) Name of Each Exchange On Which Registered American Depositary Shares Common Stock * NMR New York Stock Exchange * No t for trading, but only in connection with the registration of the American Depositary Shares, each representing one share of Common Stock. Securities",
+   "form": "20-F",
+   "source": "0001193125-26-277134",
+   "filed": "2026-06-22"
+  },
+  "NOK": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Nokia’s capital consists of shares traded on Nasdaq Helsinki under the symbol “NOKIA”. Nokia’s ADSs, each representing one share, are traded on the NYSE under the symbol “NOK”. The ADSs are",
+   "form": "20-F",
+   "source": "0001628280-26-015034",
+   "filed": "2026-03-05"
+  },
+  "NOMD": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, no par value",
+   "form": "20-F",
+   "source": "0001651717-26-000006",
+   "filed": "2026-02-26"
+  },
+  "NTB": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Voting ordinary shares of par value BM$ 0.01 each",
+   "form": "20-F",
+   "source": "0001653242-26-000006",
+   "filed": "2026-02-18"
+  },
+  "NTES": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing five ordinary shares, par value US$0.0001 per share",
+   "form": "20-F",
+   "source": "0001104659-26-043468",
+   "filed": "2026-04-15"
+  },
+  "NU": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares , par value US$0.000006666666667 per share",
+   "form": "20-F",
+   "source": "0001292814-26-002166",
+   "filed": "2026-04-08"
+  },
+  "NVGS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Stock",
+   "form": "20-F",
+   "source": "0001628280-26-017320",
+   "filed": "2026-03-12"
+  },
+  "NVMI": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares",
+   "form": "20-F",
+   "source": "0001178913-26-000504",
+   "filed": "2026-02-17"
+  },
+  "NVO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "nominal value DKK 0.10 each New York Stock Exchange * American Depositary Receipts, each representing one B Share NVO New York Stock Exchange * Not for trading, but only in connection",
+   "form": "20-F",
+   "source": "0000353278-26-000012",
+   "filed": "2026-02-04"
+  },
+  "NVS": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares each representing 1 share",
+   "form": "20-F",
+   "source": "0001114448-26-000004",
+   "filed": "2026-02-04"
+  },
+  "NWG": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, each representing 2 ordinary shares, nominal value £1.0769 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-016245",
+   "filed": "2026-02-17"
+  },
+  "NYAX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares , par value NIS 0.001 per share",
+   "form": "20-F",
+   "source": "0001178913-26-000779",
+   "filed": "2026-03-09"
+  },
+  "ODD": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Ordinary Shares, par value NIS 0.001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-029490",
+   "filed": "2026-03-17"
+  },
+  "OMAB": {
+   "kind": "ads",
+   "ordinaryPerAds": 8,
+   "evidence": "American Depositary Shares (ADSs) each representing 8 Series B shares",
+   "form": "20-F",
+   "source": "0001104659-26-051987",
+   "filed": "2026-04-30"
+  },
+  "ONON": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, par value CHF 0.10 per share",
+   "form": "20-F",
+   "source": "0001858985-26-000008",
+   "filed": "2026-03-03"
+  },
+  "OPRA": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one ordinary share, par value $0.0002 per share",
+   "form": "20-F",
+   "source": "0001737450-26-000005",
+   "filed": "2026-03-27"
+  },
+  "PAC": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares (ADSs), each representing ten Series B Shares",
+   "form": "20-F",
+   "source": "0001193125-26-161714",
+   "filed": "2026-04-17"
+  },
+  "PAGS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value US$0.000025",
+   "form": "20-F",
+   "source": "0001554855-26-000826",
+   "filed": "2026-04-29"
+  },
+  "PAM": {
+   "kind": "ads",
+   "ordinaryPerAds": 25,
+   "evidence": "Common Stock American Depositary Shares, each representing 25 shares of common stock, par value Ps.1.00 per share",
+   "form": "20-F",
+   "source": "0001292814-26-002185",
+   "filed": "2026-04-09"
+  },
+  "PAX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value US$0.0001 per share",
+   "form": "20-F",
+   "source": "0002070979-26-000201",
+   "filed": "2026-04-30"
+  },
+  "PAYP": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one common share",
+   "form": "20-F",
+   "source": "0001193125-26-289382",
+   "filed": "2026-06-30"
+  },
+  "PBR": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, or ADSs (evidenced by American Depositary Receipts, or ADRs), each representing two Common Shares PBR /PBRA New York Stock Exchange Petrobras Preferred Shares,",
+   "form": "20-F",
+   "source": "0001292814-26-002168",
+   "filed": "2026-04-09"
+  },
+  "PDD": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American Depositary Shares (one American depositary share representing four Class A ordinary shares, par value US$0.000005 per share) ​",
+   "form": "20-F",
+   "source": "0001104659-26-050727",
+   "filed": "2026-04-29"
+  },
+  "PHG": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares - par value EURO (EUR) 0.20 per share",
+   "form": "20-F",
+   "source": "0001628280-26-009470",
+   "filed": "2026-02-19"
+  },
+  "PHI": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Stock Exchange * American Depositary Shares, evidenced by American Depositary Receipts, each representing one share of Common Capital Stock PHI New York Stock Exchange * Registered",
+   "form": "20-F",
+   "source": "0001193125-26-182147",
+   "filed": "2026-04-27"
+  },
+  "PHVS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value €0.12 per share",
+   "form": "20-F",
+   "source": "0001830487-26-000013",
+   "filed": "2026-04-02"
+  },
+  "PICS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, each with a nominal value of EUR0.01",
+   "form": "20-F",
+   "source": "0001213900-26-049950",
+   "filed": "2026-04-30"
+  },
+  "PKX": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.25,
+   "evidence": "N.A. as ADR depositary and are listed on the New York Stock Exchange under the symbol “PKX.” One ADS represents one-fourth of one share of common stock. As of December 31, 2025, there were 2,289,755",
+   "form": "20-F",
+   "source": "0001193125-26-188766",
+   "filed": "2026-04-29"
+  },
+  "PLBL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, par value US$0.00001 per share",
+   "form": "20-F",
+   "source": "0001213900-26-047262",
+   "filed": "2026-04-24"
+  },
+  "POET": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, no par value",
+   "form": "20-F",
+   "source": "0001493152-26-014253",
+   "filed": "2026-03-31"
+  },
+  "PONY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each ADS represents one Class A ordinary share, par value US$0.0005 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-046406",
+   "filed": "2026-04-22"
+  },
+  "PSO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "value PSO New York Stock Exchange American Depositary Shares , each New York Stock Exchange Representing One Ordinary Share, 25p per Ordinary Share * No t for trading, but only in connection",
+   "form": "20-F",
+   "source": "0001193125-26-104945",
+   "filed": "2026-03-13"
+  },
+  "PUK": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, each representing 2 Ordinary Shares, 5 pence par value each",
+   "form": "20-F",
+   "source": "0001628280-26-021178",
+   "filed": "2026-03-26"
+  },
+  "QFIN": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American depositary shares, each representing two Class A ordinary shares, par value US$0.00001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-049501",
+   "filed": "2026-04-27"
+  },
+  "QGEN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value EUR 0.01 per share",
+   "form": "20-F",
+   "source": "0001015820-26-000018",
+   "filed": "2026-03-20"
+  },
+  "RDWR": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, NIS 0.05 par value per share",
+   "form": "20-F",
+   "source": "0001178913-26-001923",
+   "filed": "2026-03-31"
+  },
+  "RDY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Exchange on which Registered American depositary shares, each RDY New York Stock Exchange representing one equity share Equity Shares* * Not for trading, but only in connection with",
+   "form": "20-F",
+   "source": "0001575872-26-000381",
+   "filed": "2026-05-29"
+  },
+  "RELX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Trading Symbol(s) ​ ​ ​ Name of exchange on which registered American Depositary Shares (each representing one RELX PLC ordinary share) ​ RELX ​ New York Stock Exchange Ordinary shares of 14 51/116p",
+   "form": "20-F",
+   "source": "0001104659-26-017277",
+   "filed": "2026-02-19"
+  },
+  "RERE": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.666667,
+   "evidence": "American depositary shares (every three ADSs represent two Class A ordinary shares, par value US$0.001 per share)",
+   "form": "20-F",
+   "source": "0001193125-26-146260",
+   "filed": "2026-04-08"
+  },
+  "RGC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value $0.00001",
+   "form": "20-F",
+   "source": "0001213900-25-104686",
+   "filed": "2025-10-31"
+  },
+  "RIO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Stock Exchange * Evidenced by American Depositary Receipts. Each American Depositary Share Represents one Rio Tinto plc Ordinary Shares of 10p each. ** Not for trading, but only in connection with",
+   "form": "20-F",
+   "source": "0001628280-26-009531",
+   "filed": "2026-02-19"
+  },
+  "RLX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Class A ordinary share, par value US$0.00001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-047278",
+   "filed": "2026-04-23"
+  },
+  "RNW": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Ordinary Shares, par value $0.0001 per share",
+   "form": "20-F",
+   "source": "0001193125-26-325073",
+   "filed": "2026-07-30"
+  },
+  "RTO": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing five ordinary shares of £0.01 each",
+   "form": "20-F",
+   "source": "0001104659-26-034062",
+   "filed": "2026-03-25"
+  },
+  "RYAAY": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, each representing two Ordinary Shares",
+   "form": "20-F",
+   "source": "0001104659-26-076131",
+   "filed": "2026-06-22"
+  },
+  "SAN": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing the right to receive one Share of Capital Stock of Banco Santander, S.A., par value euro 0.50 each",
+   "form": "20-F",
+   "source": "0000891478-26-000030",
+   "filed": "2026-02-27"
+  },
+  "SAP": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "12(b) of the Act: ​ Title of each class (SAP) SAP Name of each exchange on which registered American Depositary Shares, each Representing one Ordinary Share, without nominal value ​ New York Stock Exchange Ordinary Shares , without nominal value ​ New York Stock Exchange * Securities registered or to be registered",
+   "form": "20-F",
+   "source": "0001104659-26-020058",
+   "filed": "2026-02-26"
+  },
+  "SBLK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0000950157-26-000397",
+   "filed": "2026-03-19"
+  },
+  "SBS": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Stock Exchange* American Depositary Shares , evidenced by American Depositary Receipts, each representing one Common Share SBS New York Stock Exchange *Shares are not listed for trading,",
+   "form": "20-F",
+   "source": "0001292814-26-002681",
+   "filed": "2026-04-29"
+  },
+  "SBSW": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American Depositary Shares, each representing four ordinary shares",
+   "form": "20-F",
+   "source": "0001628280-26-026991",
+   "filed": "2026-04-24"
+  },
+  "SE": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Class A ordinary share",
+   "form": "20-F",
+   "source": "0001140361-26-015366",
+   "filed": "2026-04-17"
+  },
+  "SFL": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, $0.01 Par Value",
+   "form": "20-F",
+   "source": "0001289877-26-000008",
+   "filed": "2026-03-16"
+  },
+  "SGHC": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares",
+   "form": "20-F",
+   "source": "0001628280-26-025609",
+   "filed": "2026-04-17"
+  },
+  "SHEL": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "December 31, 2025, the last market day of 2025. [D] Held in American Depositary Shares (ADS). Each ADS represents two ordinary shares. [E] Held as 50,984 ordinary shares and 2,500 ADS. [F] Revised",
+   "form": "20-F",
+   "source": "0001628280-26-017024",
+   "filed": "2026-03-12"
+  },
+  "SHG": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "of our then total outstanding shares (including Citibank, N.A., as the depositary for our ADSs, each representing one share of our common stock effective October 15, 2012, prior to which",
+   "form": "20-F",
+   "source": "0001193125-26-168235",
+   "filed": "2026-04-22"
+  },
+  "SID": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Value * NYSE American Depositary Shares (as evidenced by American Depositary Receipts), each representing one share of Common Stock SID NYSE ____________________ * Not for trading",
+   "form": "20-F",
+   "source": "0001292814-26-002714",
+   "filed": "2026-04-30"
+  },
+  "SIMO": {
+   "kind": "ads",
+   "ordinaryPerAds": 4,
+   "evidence": "American Depositary Shares, each representing four ordinary shares",
+   "form": "20-F",
+   "source": "0001193125-26-197184",
+   "filed": "2026-04-30"
+  },
+  "SLBT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value $0.00001 per share",
+   "form": "20-F",
+   "source": "0001213900-26-070158",
+   "filed": "2026-06-18"
+  },
+  "SMFG": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.6,
+   "evidence": "Not for trading, but only in connection with the listing of the American Depositary Shares, each American Depositary Share representing 3/5 of one share of the registrant’s common stock. Securities registered or to",
+   "form": "20-F",
+   "source": "0001193125-26-283871",
+   "filed": "2026-06-26"
+  },
+  "SNN": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "the form of ADSs, evidenced by ADRs, on the New York Stock Exchange under the symbol SNN. Each American Depositary Share represents two ordinary shares. J.P. Morgan Chase Bank N.A. is the authorised depositary bank",
+   "form": "20-F",
+   "source": "0001104659-26-028258",
+   "filed": "2026-03-16"
+  },
+  "SNY": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.5,
+   "evidence": "American Depositary Shares, each representing one half of one ordinary share, par value €2 per share",
+   "form": "20-F",
+   "source": "0001628280-26-008403",
+   "filed": "2026-02-17"
+  },
+  "SONY": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "the Act: Title of Each Class Trading Symbol(s) Name of Each Exchange on Which Registered American Depositary Shares * SONY New York Stock Exchange Common Stock ** * American Depositary Shares evidenced by American Depositary Receipts. Each American Depositary Share represents one share of Common Stock. ** No",
+   "form": "20-F",
+   "source": "0001193125-26-274893",
+   "filed": "2026-06-18"
+  },
+  "SPOT": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares (par value of €0.000625 per share)",
+   "form": "20-F",
+   "source": "0001628280-26-006874",
+   "filed": "2026-02-10"
+  },
+  "SQM": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Series B common shares, in the form of American Depositary Shares each representing one Series B share",
+   "form": "20-F",
+   "source": "0000909037-26-000023",
+   "filed": "2026-04-22"
+  },
+  "SRAD": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, nominal value CHF 0.10 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-035485",
+   "filed": "2026-03-27"
+  },
+  "STM": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares, nominal value €1.04 per share",
+   "form": "20-F",
+   "source": "0000932787-26-000009",
+   "filed": "2026-02-26"
+  },
+  "STNE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "pursuant to Section 12(b) of the Act: Title of each class Class A common shares, par value US$0.000079365 per share Trading Symbol(s)",
+   "form": "20-F",
+   "source": "0002070979-26-000170",
+   "filed": "2026-04-23"
+  },
+  "STNG": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common stock, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001483934-26-000021",
+   "filed": "2026-03-20"
+  },
+  "STVN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares without par value",
+   "form": "20-F",
+   "source": "0001193125-26-091540",
+   "filed": "2026-03-04"
+  },
+  "SUZ": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "par value* SUZB3/SUZ New York Stock Exchange * American Depositary Shares, or ADSs,** each representing one of our common shares SUZB3/SUZ New York Stock Exchange 6.000% Notes due 2029, issued",
+   "form": "20-F",
+   "source": "0000909327-26-000045",
+   "filed": "2026-03-24"
+  },
+  "TAK": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.5,
+   "evidence": "American Depositary Shares held as of March 31, 2026 and is rounded to the nearest whole number. Each ADS represents one half of an ordinary share. The number of ADSs to be provided includes the number of American",
+   "form": "20-F",
+   "source": "0001395064-26-000177",
+   "filed": "2026-06-17"
+  },
+  "TBBB": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A Common Shares",
+   "form": "20-F",
+   "source": "0001193125-26-140232",
+   "filed": "2026-04-02"
+  },
+  "TCOM": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares (each representing one ordinary share, par value US$0.00125 per share)",
+   "form": "20-F",
+   "source": "0001193125-26-183379",
+   "filed": "2026-04-28"
+  },
+  "TEN": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value $5.00 per share",
+   "form": "20-F",
+   "source": "0001193125-26-144027",
+   "filed": "2026-04-06"
+  },
+  "TEO": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing 5 Class B Shares ​",
+   "form": "20-F",
+   "source": "0001104659-26-026480",
+   "filed": "2026-03-11"
+  },
+  "TGS": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "symbol “TGS.” Citibank NA is the Depositary of our ADSs pursuant to the Deposit Agreement. Each ADS represents the right to receive five shares. Under the terms of the Deposit Agreement, as of the date of",
+   "form": "20-F",
+   "source": "0001140361-26-016167",
+   "filed": "2026-04-22"
+  },
+  "TIGO": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value $1.50 per share",
+   "form": "20-F",
+   "source": "0001628280-26-020831",
+   "filed": "2026-03-24"
+  },
+  "TIMB": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "Exchange American Depositary Shares , as evidenced by American Depositary Receipts, each representing five Common Shares TIMB New York Stock Exchange * Not for trading, but only in",
+   "form": "20-F",
+   "source": "0001292814-26-001915",
+   "filed": "2026-03-30"
+  },
+  "TK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, par value of $0.001 per share",
+   "form": "20-F",
+   "source": "0000911971-26-000015",
+   "filed": "2026-03-13"
+  },
+  "TKC": {
+   "kind": "ads",
+   "ordinaryPerAds": 2.5,
+   "evidence": "symbol Name of each exchange on which registered Ordinary Shares Nominal Value TRY 1.000 * American Depositary Shares, each representing 2.5 ordinary shares ​ TKC ​ New York Stock Exchange ​ * Not for trading on the New",
+   "form": "20-F",
+   "source": "0001104659-26-044740",
+   "filed": "2026-04-17"
+  },
+  "TLK": {
+   "kind": "ads",
+   "ordinaryPerAds": 100,
+   "evidence": "American Depositary Share representing 100 Series B Shares, par value 50 Rupiah per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-062051",
+   "filed": "2026-05-15"
+  },
+  "TLX": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "of the Act: Title of each class Trading Symbol Name of each exchange on which registered American depositary shares , each representing one ordinary share, no par value Ordinary shares, no par value* TLX The Nasdaq Global Select Market • Listed not for trading, but only in connection with the listing of the American",
+   "form": "20-F",
+   "source": "0001628280-26-009943",
+   "filed": "2026-02-20"
+  },
+  "TM": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "the Act: Title of each class Trading Symbol(s) Name of each exchange on which registered American Depositary Shares * Common Stock ** TM The New York Stock Exchange * Each American Depositary Share representing ten shares of the registrant’s Common Stock. ** No par value. Not for trading , but only in connection",
+   "form": "20-F",
+   "source": "0001193125-26-264811",
+   "filed": "2026-06-10"
+  },
+  "TME": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American depositary shares, each ADS represents two Class A ordinary shares, par value US$0.000083 per share",
+   "form": "20-F",
+   "source": "0001193125-26-160257",
+   "filed": "2026-04-17"
+  },
+  "TNK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value of $0.01 per share",
+   "form": "20-F",
+   "source": "0001419945-26-000007",
+   "filed": "2026-03-13"
+  },
+  "TRMD": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A common shares, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001628280-26-011954",
+   "filed": "2026-02-26"
+  },
+  "TS": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "notified the Company that he had sold 1,973 ADSs, corresponding to 3,946 underlying shares (each ADS represents 2 shares). 91 Annual Report 2025 Recovery of Erroneously Awarded Compensation",
+   "form": "20-F",
+   "source": "0001554855-26-000490",
+   "filed": "2026-03-31"
+  },
+  "TSEM": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value New Israeli Shekels 15.00 per share",
+   "form": "20-F",
+   "source": "0001178913-26-002318",
+   "filed": "2026-04-30"
+  },
+  "TSM": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "Company was calculated by including both common shares and shares held in the form of ADSs (each ADS represents five (5) common shares) held by such individuals. (3) Represented shares held by the",
+   "form": "20-F",
+   "source": "0001628280-26-025362",
+   "filed": "2026-04-16"
+  },
+  "TTAM": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, no nominal value",
+   "form": "20-F",
+   "source": "0002035304-26-000047",
+   "filed": "2026-03-24"
+  },
+  "TTE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Shares",
+   "form": "20-F",
+   "source": "0001104659-26-035876",
+   "filed": "2026-03-27"
+  },
+  "TUYA": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one Class A ordinary share, par value US$0.00005 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-046399",
+   "filed": "2026-04-22"
+  },
+  "TX": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "not considered for purposes of the calculation of the weighted average number of shares. Each ADS represents 10 shares. (3) International Accounting Standard N° 1 (IAS 1) (revised)",
+   "form": "20-F",
+   "source": "0001342874-26-000020",
+   "filed": "2026-03-31"
+  },
+  "UBS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares (par value of USD 0.10 each)",
+   "form": "20-F",
+   "source": "0001610520-26-000023",
+   "filed": "2026-03-09"
+  },
+  "UGP": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Common shares , with no par value (represented by, and traded only in the form of American Depositary Shares, evidenced by American Depositary Receipts, with each American Depositary Share representing one common share)",
+   "form": "20-F",
+   "source": "0001554855-26-000796",
+   "filed": "2026-04-29"
+  },
+  "UL": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares (evidenced by Depositary Receipts) each representing one ordinary share of the nominal amount of 3 1 / 2 pence each",
+   "form": "20-F",
+   "source": "0000217410-26-000007",
+   "filed": "2026-03-12"
+  },
+  "UMC": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing five common shares",
+   "form": "20-F",
+   "source": "0001193125-26-193757",
+   "filed": "2026-04-30"
+  },
+  "VALE": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Stock Exchange* American Depositary Shares (evidenced by American Depositary Receipts), each representing one common share of Vale VALE New York Stock Exchange 3.750% Guaranteed Notes",
+   "form": "20-F",
+   "source": "0001292814-26-001844",
+   "filed": "2026-03-27"
+  },
+  "VEON": {
+   "kind": "ads",
+   "ordinaryPerAds": 25,
+   "evidence": "American Depositary Shares, or ADSs, each representing 25 common shares",
+   "form": "20-F",
+   "source": "0001468091-26-000010",
+   "filed": "2026-03-16"
+  },
+  "VFS": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value",
+   "form": "20-F",
+   "source": "0001104659-26-052266",
+   "filed": "2026-04-30"
+  },
+  "VIK": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary Shares, par value $0.01 per share",
+   "form": "20-F",
+   "source": "0001745201-26-000007",
+   "filed": "2026-03-03"
+  },
+  "VIPS": {
+   "kind": "ads",
+   "ordinaryPerAds": 0.2,
+   "evidence": "American depositary shares , each representing 0.2 Class A ordinary shares, par value US$0.0001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-044015",
+   "filed": "2026-04-16"
+  },
+  "VIST": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing 1 series A share, with no par value",
+   "form": "20-F",
+   "source": "0001193125-26-187099",
+   "filed": "2026-04-28"
+  },
+  "VIV": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "Exchange * American Depositary Shares (as evidenced by American Depositary Receipts), each representing two Common Shares VIV New York Stock Exchange *Not for trading purposes, but only",
+   "form": "20-F",
+   "source": "0002070979-26-000018",
+   "filed": "2026-02-24"
+  },
+  "VMET": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Common Shares, no par value",
+   "form": "20-F",
+   "source": "0001104659-26-052847",
+   "filed": "2026-04-30"
+  },
+  "VNET": {
+   "kind": "ads",
+   "ordinaryPerAds": 6,
+   "evidence": "American depositary shares, each representing six Class A ordinary shares, par value US$0.00001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-044361",
+   "filed": "2026-04-16"
+  },
+  "VOD": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "Select Market* American Depositary Shares (evidenced by American Depositary Receipts) each representing ten ordinary shares VOD NASDAQ Global Select Market 6.250% Notes due November 2032",
+   "form": "20-F",
+   "source": "0001193125-26-235425",
+   "filed": "2026-05-22"
+  },
+  "VTMX": {
+   "kind": "ads",
+   "ordinaryPerAds": 10,
+   "evidence": "American Depositary Shares, each representing ten ordinary shares with no par value per share",
+   "form": "20-F",
+   "source": "0001969373-26-000010",
+   "filed": "2026-03-17"
+  },
+  "WB": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one Class A ordinary share ​",
+   "form": "20-F",
+   "source": "0001104659-26-047217",
+   "filed": "2026-04-23"
+  },
+  "WF": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American Depositary Shares , each representing three shares of Common Stock",
+   "form": "20-F",
+   "source": "0001193125-26-168715",
+   "filed": "2026-04-22"
+  },
+  "WIT": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "Philanthropic Initiatives Private Limited and Azim Premji Trust. Our ADSs are listed on the NYSE. Each ADS represents one equity share of par value ₹ 2 per share. Our ADSs are registered pursuant",
+   "form": "20-F",
+   "source": "0001193125-26-253514",
+   "filed": "2026-06-02"
+  },
+  "WIX": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, par value NIS 0.01 per share",
+   "form": "20-F",
+   "source": "0001628280-26-015222",
+   "filed": "2026-03-05"
+  },
+  "WPP": {
+   "kind": "ads",
+   "ordinaryPerAds": 5,
+   "evidence": "American Depositary Shares, each representing five Ordinary Shares (ADSs)",
+   "form": "20-F",
+   "source": "0001628280-26-019643",
+   "filed": "2026-03-19"
+  },
+  "WRD": {
+   "kind": "ads",
+   "ordinaryPerAds": 3,
+   "evidence": "American Depositary Shares, each representing three Class A ordinary shares par value US$0.00001 per share ​",
+   "form": "20-F",
+   "source": "0001104659-26-047323",
+   "filed": "2026-04-23"
+  },
+  "WSE": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Class A ordinary shares, nominal value $0.01 per share",
+   "form": "20-F",
+   "source": "0001193125-26-282911",
+   "filed": "2026-06-25"
+  },
+  "XPEV": {
+   "kind": "ads",
+   "ordinaryPerAds": 2,
+   "evidence": "American Depositary Shares, each representing two Class A ordinary shares",
+   "form": "20-F",
+   "source": "0001193125-26-157849",
+   "filed": "2026-04-16"
+  },
+  "YMM": {
+   "kind": "ads",
+   "ordinaryPerAds": 20,
+   "evidence": "American Depositary Shares, each representing 20 Class A ordinary shares",
+   "form": "20-F",
+   "source": "0001193125-26-153778",
+   "filed": "2026-04-14"
+  },
+  "YPF": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American Depositary Shares, each representing one Class D share, par value 10 pesos per share",
+   "form": "20-F",
+   "source": "0001193125-26-126363",
+   "filed": "2026-03-26"
+  },
+  "ZIM": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Ordinary shares, no par value “",
+   "form": "20-F",
+   "source": "0001178913-26-000784",
+   "filed": "2026-03-09"
+  },
+  "ZTO": {
+   "kind": "ads",
+   "ordinaryPerAds": 1,
+   "evidence": "American depositary shares, each representing one Class A ordinary share par value US$0.0001 per share",
+   "form": "20-F",
+   "source": "0001104659-26-044613",
+   "filed": "2026-04-17"
+  }
+ }
+}
