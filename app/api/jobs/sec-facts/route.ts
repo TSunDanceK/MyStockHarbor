@@ -636,7 +636,11 @@ export async function GET(req: NextRequest) {
       // !== set.contentHash` as the trigger -- that is the whole-hash test
       // this replaces, and reverting to it re-introduces the migration noise.
       const movedPeriods = restatedPeriods(prior, set);
-      if (prior && movedPeriods.length && !entry.needsReverify) {
+      // `entry?.` (#552 COWORK #56): a symbol read by name with no manifest
+      // entry (TSM) has no entry here, and `entry.needsReverify` threw on the
+      // one path that reaches it -- a prior set whose overlap moved, as a
+      // currency flip does -- so the set was never rewritten.
+      if (prior && movedPeriods.length && !entry?.needsReverify) {
         console.warn(
           "[sec-facts] SILENT RESTATEMENT",
           JSON.stringify({ symbol, from: prior.contentHash, to: set.contentHash, movedPeriods })
