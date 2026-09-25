@@ -1252,10 +1252,23 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
+  // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
+  // counts, timings and field names. Stores nothing; 0 Redis commands.
+  "tiingo-verify": { script: "scripts/tiingo-verify.mjs", args: () => [], tiingo: true },
+  // The universe it checks (price pool + Pickers), as tickers only.
+  // Read-only; HKEYS + GET = 2 Redis commands.
+  "write-universe-tickers": { script: "scripts/universe-tickers.mjs", args: () => [], writes: true },
   // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
   // One-time, after the poolField change deploys. 4-5 commands.
   "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
   "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // TIINGO (#553 COWORK #55 §2). The §7 purge: every msh:tiingo: key, counts
+  // only; dry unless applied. ~2 commands dry, ~6 applied.
+  "write-tiingo-purge-dry": { script: "scripts/tiingo-purge.mjs", args: () => [], writes: true },
+  "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
+  // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
+  "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
@@ -1296,6 +1309,20 @@ if (named !== Boolean(spec.writes)) {
       `writes: true. The prefix is what routes it to the credentialled job, so a ` +
       `disagreement here means the routing is wrong.`
   );
+  process.exit(2);
+}
+// THE THIRD JOB (#553 COWORK #49). The tiingo- prefix routes to the job that
+// holds TIINGO_API_KEY and nothing else; the same agreement is enforced here,
+// and nothing else may run where that key is present.
+if (task.startsWith("tiingo-") !== Boolean(spec.tiingo) || (spec.tiingo && spec.writes)) {
+  console.error(
+    `FATAL: "${task}": a Tiingo task MUST be named tiingo-, declare tiingo: true ` +
+      `and not write; a task named tiingo- MUST declare tiingo: true.`
+  );
+  process.exit(2);
+}
+if (!spec.tiingo && process.env.TIINGO_API_KEY) {
+  console.error(`FATAL: "${task}" is not a Tiingo task but TIINGO_API_KEY is present. Refusing.`);
   process.exit(2);
 }
 if (spec.writes && !allowWrites) {
