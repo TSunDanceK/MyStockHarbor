@@ -655,6 +655,9 @@ const TASKS = {
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
   // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
   "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
+  // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
+  // traded unit and every refusal, from the stored sets. No price. 1 MGET.
+  "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -735,6 +738,12 @@ const TASKS = {
   "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
   "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
   // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
+  // Read-only, no credential: each 20-F filer's stated ADS ratio (#552 COWORK #22 §1).
+  "ads-ratio-census-1": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
+  "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
+  "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
+  "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },

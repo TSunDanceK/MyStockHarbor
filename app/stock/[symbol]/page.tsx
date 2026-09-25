@@ -501,7 +501,7 @@ export default async function StockPage({ params }: Props) {
       ? valuationMultiples(secFacts.profileFacts.valuation, secFacts.profileFacts.multiples, quote.price)
       : null;
   const figure = (f: ValuationFigure | null | undefined) => (f && f.ok ? f.val : null);
-  const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? REFUSAL_WORDS[f.why] : null);
+  const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? f.detail ?? REFUSAL_WORDS[f.why] : null);
   const valuation = {
     peRatio: figure(multiples?.pe),
     priceToSalesRatio: figure(multiples?.ps),
