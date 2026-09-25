@@ -12,6 +12,7 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
+import { adsRatioFor } from "../../../../lib/server/secAdsMap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const { symbols } = await getWarmTargetSymbols(base);
-    const result = await warmPickersSec(symbols, registrantFor);
+    // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
+    // pass it: absent keeps the depositary-share refusal. A committed file, so
+    // no Redis cost.
+    const result = await warmPickersSec(symbols, (s) => ({
+      annualForm: registrantFor(s)?.annualForm ?? null,
+      ads: adsRatioFor(s),
+    }));
     console.log("[warm-pickers-sec]", JSON.stringify(result));
     await recordJobRun("warm-pickers-sec", result.ok, {
       targets: result.symbols,
