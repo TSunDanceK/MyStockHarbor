@@ -135,7 +135,7 @@ console.log("B. DOES FRED ACTUALLY SERVE EACH SERIES THE ADAPTER NAMES");
 console.log("=".repeat(76));
 // EVERY entry in FRED_SERIES, not the two that were measured. An id written
 // from a naming pattern and never fetched is a guess with a plausible shape.
-const SERIES = { EUR: "DEXUSEU", GBP: "DEXUSUK", CAD: "DEXCAUS", JPY: "DEXJPUS", CHF: "DEXSZUS", BRL: "DEXBZUS" };
+const SERIES = { EUR: "DEXUSEU", GBP: "DEXUSUK", CAD: "DEXCAUS", JPY: "DEXJPUS", CHF: "DEXSZUS", BRL: "DEXBZUS", TWD: "DEXTAUS" };
 for (const [ccy, id] of Object.entries(SERIES)) {
   const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2019-01-01&coed=2026-12-31`;
   try {
