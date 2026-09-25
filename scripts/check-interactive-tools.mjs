@@ -55,8 +55,8 @@ async function suite(M, chart) {
   const ticked = (k) => menu.find((s) => s.key === k).items.filter((i) => i.checked).map((i) => i.id).join(",");
   ok("the current chart type, timeframe, scale and active indicators are ticked", ticked("type") === "type:area" && ticked("tf") === "tf:w" && ticked("ind") === "ind:RSI" && ticked("scale") === "scale:percent");
   ok("no Fullscreen entry when already fullscreen", !M.buildChartMenu({ interval: "d", chartType: "area", activeIndicators: [], scale: "price", canFullscreen: false }, CAT).some((s) => s.key === "fullscreen"));
-  ok("Measure appears only once the tools ship (part b), with Clear measures", !menu.some((s) => s.key === "measure") &&
-    M.buildChartMenu({ interval: "d", chartType: "area", activeIndicators: [], scale: "price", canFullscreen: false }, { ...CAT, measureTools: [{ key: "range", label: "Price range" }] }).find((s) => s.key === "measure")?.items.at(-1)?.id === "measure-clear");
+  ok("Measure appears only when the tools are given, with no Clear measures (a measure is temporary, #43)", !menu.some((s) => s.key === "measure") &&
+    JSON.stringify(M.buildChartMenu({ interval: "d", chartType: "area", activeIndicators: [], scale: "price", canFullscreen: false }, { ...CAT, measureTools: [{ key: "range", label: "Price range" }] }).find((s) => s.key === "measure")?.items.map((i) => i.id)) === '["measure:range"]');
   ok("actions parse into verb and argument", JSON.stringify(M.parseAction("ind:RSI")) === '["ind","RSI"]' && JSON.stringify(M.parseAction("recenter")) === '["recenter",null]');
 
   // 2. The % base: the first VISIBLE bar.
