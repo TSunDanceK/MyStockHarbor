@@ -107,11 +107,14 @@ const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descri
 // an unlettered one can be Item 5's (RYAAY).
 const ITEM4 = /^item4(informationonthecompany)?$/;
 const ITEM4_TITLE = /^informationonthecompany$/;
-// ITEM 6 / 7 TOO (#552 COWORK #48): BIP's body has no "Item 4A" or "Item 5"
-// heading line (its next body heading is "ITEM 6."), so Item 4 fell back to an
-// 8,000-character window and its 4.B, past a long history table, was outside it.
-// A TOC pair is still skipped as too short; where 4A or 5 exists it comes first.
-const ITEM4_END = /^item(4a|5|6|7)[a-z]*$/;
+const ITEM4_END = /^item(4a|5)[a-z]*$/;
+// ITEM 6 / 7 TOO, BUT ONLY WHEN 4A AND 5 ARE MISSING (#552 COWORK #48): BIP's
+// body has no "Item 4A" or "Item 5" heading line (its next body heading is
+// "ITEM 6."), so Item 4 fell back to an 8,000-character window and its 4.B,
+// past a long history table, was outside it. A 6/7 line closes Item 4 only when
+// no 4A/5 line has come since the last Item 4 start: otherwise a TOC's
+// "Item 4 … Item 7" run (TK: ~1,530 chars) is long enough to pass as a section.
+const ITEM4_LATE_END = /^item(6|7)[a-z]*$/;
 const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;
 const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;
 const B_ALONE = /^(item4|4)?b$/;
@@ -212,8 +215,16 @@ export function locateSection(text: string, form: string): Located {
   }
 
   // 20-F. Item 4 first.
-  const item4 = pairSection(L, 0, n, (i) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE),
-    (i) => L[i].key.length <= HEADING_KEY_MAX && ITEM4_END.test(L[i].key), MIN_SECTION_CHARS, bounded);
+  const item4Start = (i: number) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE);
+  const shortKey = (i: number, re: RegExp) => L[i].key.length <= HEADING_KEY_MAX && re.test(L[i].key);
+  const item4Ends = new Set<number>();
+  let open = false;
+  for (let i = 0; i < n; i++) {
+    if (item4Start(i) >= 0) open = true;
+    else if (shortKey(i, ITEM4_END)) { item4Ends.add(i); open = false; }
+    else if (open && shortKey(i, ITEM4_LATE_END)) { item4Ends.add(i); open = false; }
+  }
+  const item4 = pairSection(L, 0, n, item4Start, (i) => item4Ends.has(i), MIN_SECTION_CHARS, bounded);
   if (item4.span) {
     const lo = L.findIndex((l) => l.start >= item4.span!.from);
     const hiIdx = L.findIndex((l) => l.start >= item4.span!.to);
