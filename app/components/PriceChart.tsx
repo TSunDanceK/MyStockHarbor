@@ -9,6 +9,7 @@ import {
   TREND_HELPER_COLORS,
 } from "@/lib/ta/trendHelper";
 import TradingViewChartEmbed from "./TradingViewChartEmbed";
+import { utcMonthDay } from "@/lib/utcDate";
 
 type Point = {
   date: string;
@@ -93,12 +94,9 @@ function fmtXLabel(s: string) {
     return m ? m[1] : s.slice(-5);
   }
 
-  const d = new Date(s);
-  if (!Number.isFinite(d.getTime())) return s;
-
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${mm}/${dd}`;
+  // In UTC: "2026-06-08" is UTC midnight, and reading it in the viewer's zone
+  // gave 06/07 west of UTC -- and a hydration mismatch (#553 COWORK #45).
+  return utcMonthDay(s) ?? s;
 }
 
 // Simple 3-period moving average over a nullable series. Used to turn the
