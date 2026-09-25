@@ -79,6 +79,17 @@ async function suite(mod) {
   ok("a non-payer has no dividend figures, not zero (TSLA)",
     figs.TSLA.divPerShare === null && figs.TSLA.divYield === null && figs.TSLA.divGrowth === null);
 
+  // ── THE CITED ADS RATIO (#553 COWORK #44) ─────────────────────────────
+  // A 20-F filer with no cited ratio keeps the refusal; with one (TSM-shaped:
+  // 1 ADS = 5 ordinary), the cap is price x ADS-equivalents, through JSON.
+  const f20 = { annualForm: "20-F" };
+  const refused = mod.applySecPickerRow(JSON.parse(JSON.stringify(mod.buildSecPickerRow(aapl, TODAY, f20, NOW))), PRICE);
+  const cited = mod.applySecPickerRow(JSON.parse(JSON.stringify(
+    mod.buildSecPickerRow(aapl, TODAY, { ...f20, ads: { ordinaryPerAds: 5, source: "fixture", kind: "ads" } }, NOW))), PRICE);
+  ok("ADS: a 20-F filer with no cited ratio has no market cap", refused.marketCap === null);
+  ok("ADS: with a cited ratio of 5, the cap is price x (ordinary shares / 5)",
+    close(cited.marketCap, (inputs.shares.val / 5) * PRICE), `${cited.marketCap} vs ${(inputs.shares.val / 5) * PRICE}`);
+
   const guarded = JSON.parse(JSON.stringify(rows.AAPL));
   guarded.m.revenueIncomplete = true;
   const g = mod.applySecPickerRow(guarded, PRICE);
@@ -236,6 +247,10 @@ checks.push(
   ["Payout Ratio stays on its stored figure on a filings row", /if \(e\.fundamentalsFrom === "sec"\) return num\(e\.payoutRatio\);/.test(grid)],
   ["the job is scheduled daily and needs no FMP key",
     vercel.crons.some((c) => c.path === "/api/jobs/warm-pickers-sec" && c.schedule === "35 5 * * *") && !/FMP_API_KEY/.test(job)],
+  ["the daily job passes the cited ADS ratio from A's map, imported (#553 COWORK #44)",
+    /import \{ adsRatioFor \} from "[./]+lib\/server\/secAdsMap";/.test(job) &&
+      /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),\s*\}\)\)/.test(job) &&
+      /buildSecPickerRow\(set, today, filerFor\(symbol\), nowMs\)/.test(readCodeOnly(MODULE))],
   ["the job reads the shared revenue guard through multipleInputs (imported, not copied)",
     !/revenueLineIncomplete/.test(readCodeOnly(MODULE)) && /multipleInputs\(set\)/.test(readCodeOnly(MODULE))],
 );

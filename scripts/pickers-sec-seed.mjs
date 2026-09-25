@@ -17,11 +17,17 @@ if (!process.argv.includes("--allow-writes")) {
 }
 const redis = Redis.fromEnv();
 const { warmPickersSec } = await import("../lib/server/pickersSecFundamentals.ts");
+const { lookupSpellingIn } = await import("../lib/symbolSpellings.mjs");
 const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows ?? {};
+// The cited ADS ratios (#553 COWORK #44), looked up as secAdsMap.adsRatioFor does.
+const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
 
 const symbols = (await redis.hkeys("msh:price-pool:v1")).map(String);
 console.log(`universe: ${symbols.length} symbols (msh:price-pool:v1)`);
-const result = await warmPickersSec(symbols, (s) => REGISTRANTS[s] ?? null);
+const result = await warmPickersSec(symbols, (s) => ({
+  annualForm: REGISTRANTS[s]?.annualForm ?? null,
+  ads: lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null,
+}));
 console.log(JSON.stringify(result));
 console.log(`field count now: ${await redis.hlen("msh:pickers:sec-fundamentals:v1")}`);
 process.exit(result.ok ? 0 : 1);
