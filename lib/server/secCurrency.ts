@@ -109,9 +109,19 @@ export function unitKeysFor(unit: string, currency: string): string[] {
  * mapped set, a convenience translation covers a handful of lines. RYAAY's
  * euros cover most of the 43 money fields; its dollars cover about ten.
  *
- * USD WINS A TIE, which preserves the original guarantee where it matters: a
- * filer whose dollars cover as many fields as any other currency is read as a
- * dollar filer, so no symbol rendering today moves.
+ * A TIE ON FIELDS IS BROKEN BY RECENCY, THEN ROWS, THEN USD (#552 COWORK #55,
+ * rule (c)). TSM files TWD and USD convenience rows over the same 33 fields,
+ * so "USD takes any tie" read its year-end-rate convenience figures and locked
+ * out its TWD-only FY2025 20-F. Measured over 407 20-F/40-F filers (relay
+ * currency-vote-census): 21 tie on fields.
+ *   1. the currency whose NEWEST ANNUAL PERIOD is latest wins: it is what the
+ *      company files now. DEO's GBP stops at FY2023 while its USD runs to
+ *      FY2025, so DEO stays USD (as do GMAB, JOYY, NBIS, RTO, YPF).
+ *   2. still tied, MORE ROWS wins: the primary statements' full history
+ *      against a convenience column (TSM: TWD 865 rows, USD 314).
+ *   3. still tied, USD; then alphabetical, only to be stable.
+ * "More rows" ALONE (rule a) would move those six to years-old figures or to a
+ * currency with no rate; recency alone (rule b) flips nobody, TSM included.
  *
  * NO MIXING IS POSSIBLE whichever way this goes, and that is what makes a
  * "winner" safe at all: the caller admits ONE unit and refuses every other, so
@@ -120,6 +130,9 @@ export function unitKeysFor(unit: string, currency: string): string[] {
 export function reportingCurrency(facts: CompanyFacts): string | null {
   /** currency -> the set of FIELD KEYS it publishes at least one row for. */
   const fieldsPerCurrency = new Map<string, Set<string>>();
+  /** currency -> money rows published, and the newest end of an annual (~1 year) duration row. */
+  const rowsPerCurrency = new Map<string, number>();
+  const newestAnnual = new Map<string, string>();
   for (const field of SEC_FIELDS) {
     if (!MONEY_UNITS.has(field.unit)) continue;
     const sources: { ns: string; chain: string[] }[] = [
@@ -141,6 +154,12 @@ export function reportingCurrency(facts: CompanyFacts): string | null {
           let seen = fieldsPerCurrency.get(code);
           if (!seen) fieldsPerCurrency.set(code, (seen = new Set()));
           seen.add(field.key);
+          rowsPerCurrency.set(code, (rowsPerCurrency.get(code) ?? 0) + rows.length);
+          for (const r of rows) {
+            if (!r.start || !r.end) continue;
+            const days = (Date.parse(r.end) - Date.parse(r.start)) / 86_400_000;
+            if (days >= 350 && days <= 380 && r.end > (newestAnnual.get(code) ?? "")) newestAnnual.set(code, r.end);
+          }
         }
       }
     }
@@ -156,6 +175,10 @@ export function reportingCurrency(facts: CompanyFacts): string | null {
   // alphabetically. The last rule is arbitrary and is there only to be STABLE.
   const ranked = [...fieldsPerCurrency.entries()].sort((a, b) => {
     if (b[1].size !== a[1].size) return b[1].size - a[1].size;
+    const na = newestAnnual.get(a[0]) ?? "", nb = newestAnnual.get(b[0]) ?? "";
+    if (na !== nb) return na < nb ? 1 : -1;
+    const ra = rowsPerCurrency.get(a[0]) ?? 0, rb = rowsPerCurrency.get(b[0]) ?? 0;
+    if (ra !== rb) return rb - ra;
     if (a[0] === "USD") return -1;
     if (b[0] === "USD") return 1;
     return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
