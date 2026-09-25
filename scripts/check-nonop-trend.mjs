@@ -64,7 +64,7 @@ const emptyWords = (c) => c.emptyText ?? (c.val === null ? "Not captured from th
   check("MUTATION: the derived fallback removed → 'Not captured' is back on AXTI (caught)",
     mo.some((r) => emptyWords(r) === "Not captured from this filing"));
   const view = readCodeOnly("lib/server/secEarningsView.ts");
-  check("the income statement is built through it", /incomeStatement: withDerivedNonOperating\(PL\.map/.test(view));
+  check("the income statement is built through it", /const incomeRows = withNonOperatingMarker\(withDerivedNonOperating\(withComputedGrossProfit\(PL\.map/.test(view) && /incomeStatement: incomeRows,/.test(view));
   const cards = readCodeOnly("app/stock/[symbol]/earnings/SecEarningsCards.tsx");
   check("the card prints the view's own empty words first", /empty=\{c\.emptyText \?\?/.test(cards));
 }

@@ -607,7 +607,7 @@ export function waterfallGate(view: SecEarningsView): WaterfallGate {
   const parts: { key: string; label: string }[] = [
     { key: "costOfRevenue", label: "Cost of revenue" },
     { key: "researchAndDevelopment", label: "R&D" },
-    { key: "sellingGeneralAndAdministrative", label: "SG&A" },
+    { key: "sellingGeneralAndAdministrative", label: view.sgaSummed ? "S&M + G&A" : "SG&A" },
     { key: "otherOperatingExpense", label: "Other operating" },
   ];
   if (revenue === null || operating === null) return { ok: false, why: "missing-lines" };

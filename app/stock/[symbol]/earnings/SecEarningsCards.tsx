@@ -1308,7 +1308,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
       <PlWaterfall view={view} />
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
-          <Row key={c.label} label={c.label}>
+          <Row key={c.label} label={c.label} sub={c.sub}>
             <CellValue
               cell={c}
               compact
@@ -1886,7 +1886,7 @@ export function SecValuationCard({
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
       : pe.ok ? pe.val.toFixed(1)
-        : pe.why === "eps-is-zero-or-negative" ? "Not meaningful" : "Not available";
+        : pe.why === "eps-is-zero-or-negative" || pe.why === "eps-near-zero" ? "Not meaningful" : "Not available";
   // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
     ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`

@@ -308,6 +308,21 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   deferredRevenueNoncurrent: ["NoncurrentContractLiabilities"],
 };
 
+/**
+ * SALES & MARKETING PLUS G&A, SUMMED (#552 COWORK #40, CODE-A #33).
+ *
+ * 297 universe filers (CY2026Q2 frames) file GeneralAndAdministrativeExpense
+ * and a selling/marketing line with no SellingGeneralAndAdministrativeExpense.
+ * The chain then fell through to G&A alone, so GOOGL's "SG&A" read 6.46B while
+ * its sales & marketing (8.40B) sat unread, the lines missed operating income
+ * by 8.41B and the waterfall was hidden. The sum is synthesized under this
+ * name, which no taxonomy uses, so its provenance is never mistaken for a
+ * filed combined figure. A CHAIN edit: secFieldsHash does not move.
+ */
+export const SUMMED_SGA_TAG = "SellingAndMarketingPlusGeneralAndAdministrativeExpense";
+/** The selling side, in the order it is looked for. One is used per period, never two. */
+export const SELLING_TAGS = ["SellingAndMarketingExpense", "MarketingExpense", "SellingExpense"];
+
 // ── Income statement ────────────────────────────────────────────────────────
 // Every line is a DURATION and every one is filed cumulatively within the year.
 const INCOME: FieldDef[] = ([
@@ -325,7 +340,12 @@ const INCOME: FieldDef[] = ([
   // vacuous passes this whole section exists to avoid.
   { key: "grossProfit", chain: ["GrossProfit"], unit: "USD" },
   { key: "researchAndDevelopment", chain: ["ResearchAndDevelopmentExpense"], unit: "USD" },
-  { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense"], unit: "USD" },
+  // SUMMED_SGA_TAG (#552 COWORK #40): not an SEC concept. It is written into
+  // the payload by secExtract.withSummedSga, only for a period where the filer
+  // files G&A and a selling/marketing line and NO combined SG&A. Ranked after
+  // the combined tag (which always wins) and before G&A alone, which used to
+  // stand in for the whole line (GOOGL: 6.46B of 14.86B).
+  { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", SUMMED_SGA_TAG, "GeneralAndAdministrativeExpense"], unit: "USD" },
   { key: "otherOperatingExpense", chain: ["OtherOperatingIncomeExpenseNet"], unit: "USD" },
   { key: "operatingIncome", chain: ["OperatingIncomeLoss"], unit: "USD" },
   // InterestExpenseNonoperating (#552 COWORK #47): the ASU 2023-era spelling
