@@ -104,3 +104,65 @@ if (both.length) {
   console.log(`   |cross - DEXTAUS| %: median ${abs[Math.floor(abs.length / 2)].toFixed(3)}, p95 ${abs[Math.floor(abs.length * 0.95)].toFixed(3)}, max ${abs.at(-1).toFixed(3)}`);
   for (const g of gaps.slice(-3)) console.log(`   ${g.d}: DEXTAUS ${g.fred}  ECB cross ${g.cross.toFixed(4)}  (${g.pct.toFixed(3)}%)`);
 }
+
+// ── 5: WHICH CURRENCIES TSM'S AND CHT'S companyfacts CARRY, BY YEAR ───────
+// The lock only matters if companyfacts has TWD rows beside the USD
+// convenience ones. If it does, a TWD rate lets the whole set read in the
+// filer's own currency; if it doesn't, FY2025 would be the only TWD year.
+// Counts only, per currency and period end: SEC values, never a price.
+console.log("\n" + "=".repeat(74));
+console.log("5. companyfacts money units by period end (TSM, CHT)");
+console.log("=".repeat(74));
+const tick = await get("https://www.sec.gov/files/company_tickers.json", "application/json");
+let cikOf = () => null;
+try {
+  const rows = Object.values(JSON.parse(tick.body ?? "{}"));
+  const m = new Map(rows.map((r) => [String(r.ticker).toUpperCase(), String(r.cik_str).padStart(10, "0")]));
+  cikOf = (s) => m.get(s) ?? null;
+} catch { console.log(`ticker file unreadable (status ${tick.status})`); }
+for (const sym of ["TSM", "CHT"]) {
+  const cik = cikOf(sym);
+  if (!cik) { console.log(`${sym}: no CIK`); continue; }
+  const r = await get(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, "application/json");
+  if (!r.ok) { console.log(`${sym}: companyfacts HTTP ${r.status}`); continue; }
+  const facts = JSON.parse(r.body).facts ?? {};
+  // currency -> annual period end -> set of tags
+  const byCcy = new Map();
+  for (const [ns, tags] of Object.entries(facts)) {
+    for (const [tag, def] of Object.entries(tags ?? {})) {
+      for (const [unit, list] of Object.entries(def?.units ?? {})) {
+        const ccy = unit.split("/")[0];
+        if (!/^[A-Z]{3}$/.test(ccy)) continue;
+        for (const row of list ?? []) {
+          // Annual duration rows only: a year's income-statement lines.
+          if (!row.start || !row.end) continue;
+          const days = (Date.parse(row.end) - Date.parse(row.start)) / 86_400_000;
+          if (days < 350 || days > 380) continue;
+          const y = byCcy.get(ccy) ?? new Map();
+          byCcy.set(ccy, y);
+          const s = y.get(row.end) ?? new Set();
+          y.set(row.end, s);
+          s.add(`${ns}:${tag}`);
+        }
+      }
+    }
+  }
+  console.log(`\n${sym} (CIK ${cik})`);
+  for (const [ccy, years] of [...byCcy].sort()) {
+    const ends = [...years.keys()].sort().slice(-7);
+    console.log(`  ${ccy}: ${ends.map((e) => `${e}:${years.get(e).size}`).join("  ")}`);
+  }
+  // The revenue and EPS rows themselves for the newest years, both currencies:
+  // TSM's FY2024 card reads $88.27B / $1.36, so this shows where that came from.
+  for (const tag of ["Revenue", "Revenues", "BasicEarningsLossPerShare", "EarningsPerShareBasic"]) {
+    for (const ns of ["ifrs-full", "us-gaap"]) {
+      const units = facts[ns]?.[tag]?.units;
+      if (!units) continue;
+      for (const [unit, list] of Object.entries(units)) {
+        const annual = (list ?? []).filter((x) => x.start && x.end && (Date.parse(x.end) - Date.parse(x.start)) / 86_400_000 > 350);
+        const newest = [...new Map(annual.map((x) => [x.end, x])).values()].sort((a, b) => (a.end < b.end ? -1 : 1)).slice(-3);
+        console.log(`  ${ns}:${tag} [${unit}] ${newest.map((x) => `${x.end}=${x.val} (${x.form} ${x.filed})`).join("  ")}`);
+      }
+    }
+  }
+}
