@@ -959,6 +959,31 @@ async function waitForHistoryBudget(deadlineMs: number): Promise<"ok" | "out-of-
   }
 }
 
+// ── THE LIMITER FAILS CLOSED (#553 COWORK #53; CODE-B #39) ──────────────────
+// Every catch below used to `return` -- a Redis error meant "no throttle", so
+// during a Redis outage stock-data, fundamentals and history all called FMP
+// unthrottled while their writes failed silently. Now a Redis error in the
+// limiter REFUSES the call, and keeps refusing for LIMITER_DOWN_COOLDOWN_MS
+// without touching Redis: the waiters that poll hasFmpCapacity every ~2 s then
+// sleep for free until their own deadline instead of hammering a dead store.
+// No Redis configured at all (local dev) still means "no limiter", unchanged.
+export const LIMITER_DOWN_COOLDOWN_MS = 60_000;
+let limiterDownUntil = 0;
+export function fmpLimiterDown(nowMs = Date.now()): boolean {
+  return nowMs < limiterDownUntil;
+}
+function markFmpLimiterDown(err: unknown) {
+  if (!fmpLimiterDown()) {
+    console.warn(`[fmp-limiter] Redis error -- refusing FMP calls for ${LIMITER_DOWN_COOLDOWN_MS / 1000}s:`, err instanceof Error ? err.message : err);
+  }
+  limiterDownUntil = Date.now() + LIMITER_DOWN_COOLDOWN_MS;
+}
+/** Test hook: clear the cooldown. */
+export function resetFmpLimiterForTests() {
+  limiterDownUntil = 0;
+}
+const limiterRefusal = () => new FmpHistoryError("FMP call guard unavailable (Redis error): refused", "capacity-timeout");
+
 /**
  * Reserve one slot in the current minute's FMP budget, waiting for room if the
  * minute is already spoken for.
@@ -982,6 +1007,7 @@ async function waitForHistoryBudget(deadlineMs: number): Promise<"ok" | "out-of-
  */
 export async function reserveFmpCallSlot() {
   if (!redis) return;
+  if (fmpLimiterDown()) throw limiterRefusal();
 
   const startedAt = Date.now();
   let waitMs = FMP_WAIT_STEP_MS;
@@ -1006,8 +1032,10 @@ export async function reserveFmpCallSlot() {
       // not a call we are going to make, and leaving it counted would charge
       // the rest of the minute for a call that never happened.
       await redis.decr(key);
-    } catch {
-      return;
+    } catch (err) {
+      // FAIL CLOSED: an unthrottled FMP call is what this guard exists to prevent.
+      markFmpLimiterDown(err);
+      throw limiterRefusal();
     }
 
     // READ-ONLY WAIT. Re-INCR only once this says there is room. If the minute
@@ -1022,6 +1050,7 @@ export async function reserveFmpCallSlot() {
 
       await sleep(Math.min(waitMs, FMP_MAX_WAIT_MS - elapsed));
       waitMs = Math.min(waitMs * 2, FMP_WAIT_STEP_MAX_MS);
+      if (fmpLimiterDown()) throw limiterRefusal();
 
       if ((await getFmpMinuteUsage()) < FMP_SAFE_CALLS_PER_MINUTE) break;
     }
@@ -1054,6 +1083,7 @@ export async function reserveFmpCallSlot() {
  */
 export async function tryReserveFmpCallSlot(): Promise<boolean> {
   if (!redis) return true;
+  if (fmpLimiterDown()) return false;
 
   const now = new Date();
   const key = getFmpCounterKey(now);
@@ -1073,21 +1103,29 @@ export async function tryReserveFmpCallSlot(): Promise<boolean> {
     // would charge the rest of the minute for nothing.
     await redis.decr(key);
     return false;
-  } catch {
-    // Fail OPEN. The counter is a pacing aid; a Redis blip must not stop a page
-    // rendering a price.
-    return true;
+  } catch (err) {
+    // FAIL CLOSED (#553 COWORK #53). This was fail-open ("a Redis blip must not
+    // stop a page rendering a price"), but with Redis down every render is also
+    // a cache miss, so fail-open meant every render called FMP unthrottled --
+    // the runaway the limiter exists for. The page shows its cached or "--"
+    // state for the cooldown instead.
+    markFmpLimiterDown(err);
+    return false;
   }
 }
 
 export async function getFmpMinuteUsage() {
   if (!redis) return 0;
+  // FAIL CLOSED: an unreadable minute reads as FULL, and the cooldown answers
+  // without a Redis call so a waiter's poll costs nothing.
+  if (fmpLimiterDown()) return FMP_SAFE_CALLS_PER_MINUTE;
 
   try {
     const current = await redis.get<number>(getFmpCounterKey(new Date()));
     return typeof current === "number" && Number.isFinite(current) ? current : 0;
-  } catch {
-    return 0;
+  } catch (err) {
+    markFmpLimiterDown(err);
+    return FMP_SAFE_CALLS_PER_MINUTE;
   }
 }
 
@@ -1116,7 +1154,10 @@ async function acquireHistoryLock(symbol: string) {
     if (result === "OK") return token;
     return null;
   } catch {
-    return null;
+    // NOT null (#553 COWORK #53). null means "someone else holds it", which
+    // sends the caller into a 12 s poll -- up to 40 GETs per symbol, ~28K in a
+    // 700-symbol run, exactly when Redis is refusing. An error is its own answer.
+    return "lock-error" as const;
   }
 }
 
@@ -1506,6 +1547,13 @@ async function getDailyHistoryInner(symbol: string, force = false, caller?: stri
   }
 
   const lockToken = await acquireHistoryLock(normalized);
+
+  // THE LOCK COULD NOT BE TAKEN BECAUSE REDIS ERRORED: skip this symbol this
+  // run. No wait-poll, no fetch, no write -- the next run tries again.
+  if (lockToken === "lock-error") {
+    console.warn(`[history] ${normalized}: lock unavailable (Redis error) -- skipped this run`);
+    return [] as Point[];
+  }
 
   if (!lockToken) {
     const waited = await waitForHistoryCache(normalized);

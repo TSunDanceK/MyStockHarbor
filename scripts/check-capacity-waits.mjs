@@ -138,6 +138,12 @@ check(
 );
 
 check(
+  "the poll looks for the v10 MANIFEST, the key the builder actually writes (#553 COWORK #51)",
+  /redis\.exists\(PICKERS_MANIFEST_KEY/.test(waitFn),
+  "polling only the v9 key never saw a v10 build publish: every lock loser waited out the budget and built anyway"
+);
+
+check(
   "the wait is bounded",
   /PICKERS_MAX_WAIT_MS/.test(waitFn),
   "an unbounded wait on a winner that never publishes is a hang, which is worse than the duplicate build"

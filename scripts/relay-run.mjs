@@ -40,6 +40,10 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE CURRENCY VOTE (#552 COWORK #50/#55): ties on fields and rules (a)/(b)/(c),
+  // against the SHIPPED reportingCurrency. ALL=1 widens to every registrant.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
+  "currency-vote-census-all": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true, env: { ALL: "1" } },
   // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
   // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
@@ -185,6 +189,8 @@ const TASKS = {
   "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
   // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
   "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
+  // Item 4's sub-headings, read from the filing (#552 COWORK #48). Read-only.
+  "sec-description-heads": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { HEADS: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
   // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
@@ -1246,38 +1252,13 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
-  // READ-ONLY (Relay C, #563 COWORK #16): phase 2 named-links precision probe.
-  // Latest 10-K/20-F text across the universe, 12 shards; LINK lines carry the
-  // filed sentence and accession for the hand check. No store, Redis 0.
-  "capex-links-probe-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/12" } },
-  "capex-links-probe-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/12" } },
-  "capex-links-probe-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/12" } },
-  "capex-links-probe-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4/12" } },
-  "capex-links-probe-5": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5/12" } },
-  "capex-links-probe-6": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6/12" } },
-  "capex-links-probe-7": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "7/12" } },
-  "capex-links-probe-8": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "8/12" } },
-  "capex-links-probe-9": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "9/12" } },
-  "capex-links-probe-10": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "10/12" } },
-  "capex-links-probe-11": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "11/12" } },
-  "capex-links-probe-12": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { SHARD: "12/12" } },
-  "capex-links-probe-named": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true },
-  // The same universe under RULES=v2 (the three rules CODE-C #18 measured in-sample).
-  "capex-links-probe-v2-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "1/4" } },
-  "capex-links-probe-v2-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "2/4" } },
-  "capex-links-probe-v2-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "3/4" } },
-  "capex-links-probe-v2-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v2", SHARD: "4/4" } },
-  // RULES=v3, frozen before the fresh gate sample (#563 COWORK #17).
-  "capex-links-probe-v3-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "1/4" } },
-  "capex-links-probe-v3-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "2/4" } },
-  "capex-links-probe-v3-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "3/4" } },
-  "capex-links-probe-v3-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v3", SHARD: "4/4" } },
-  // RULES=v4, the final pattern round, frozen before its draw (#563 COWORK #18).
-  "capex-links-probe-v4-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "1/4" } },
-  "capex-links-probe-v4-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "2/4" } },
-  "capex-links-probe-v4-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "3/4" } },
-  "capex-links-probe-v4-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SHARD: "4/4" } },
-  // Plan (c) batch 1 (#563 COWORK #19): candidate sentences naming a receiver, for review.
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
+  // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
+  // Candidates for review only; nothing is published unreviewed. Redis 0.
   "capex-receiver-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "1/4" } },
   "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
   "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
