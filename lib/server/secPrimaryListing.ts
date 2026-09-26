@@ -38,3 +38,26 @@ export function nonEquityListingOf(symbol: string): { cls: string; primary: stri
   }
   return null;
 }
+
+/**
+ * THE COVER COUNT CITED FROM THE PRIMARY'S OWN LATEST 20-F (#552 COWORK #56):
+ * parsed from the entry's evidence line ("460,488,788 Limited Partnership
+ * Units as of December 31, 2025"), never typed twice. BIP's dei cover count is
+ * 295,429,987 as of 2020 and is refused as stale; the 20-F cover states the
+ * current one. Only for the PRIMARY: a debt ticker gets nothing here.
+ */
+const MONTHS: Record<string, string> = {
+  january: "01", february: "02", march: "03", april: "04", may: "05", june: "06",
+  july: "07", august: "08", september: "09", october: "10", november: "11", december: "12",
+};
+export function citedCoverFor(symbol: string): { val: number; asOf: string; quote: string; source: string } | null {
+  const s = String(symbol ?? "").toUpperCase();
+  const e = Object.values(ENTRIES).find((x) => x.primary === s);
+  const line = e?.evidence?.[1];
+  const m = line ? /^([\d,]+)\s+.+?\s+as of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/.exec(line) : null;
+  const mm = m ? MONTHS[m[2].toLowerCase()] : undefined;
+  if (!e || !m || !mm) return null;
+  const val = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(val) || val <= 0) return null;
+  return { val, asOf: `${m[4]}-${mm}-${m[3].padStart(2, "0")}`, quote: line!, source: e.source };
+}

@@ -41,7 +41,7 @@ import {
 import { buildShareHistory, type ShareHistory } from "./secShareHistory";
 import { registrantFor } from "./stockProfile";
 import { adsRatioFor } from "./secAdsMap";
-import { nonEquityListingOf } from "./secPrimaryListing";
+import { nonEquityListingOf, citedCoverFor } from "./secPrimaryListing";
 import {
   TIMING_WORDING, type ReportTiming,
 } from "./secReportDates";
@@ -538,6 +538,7 @@ export async function getStockPageSecFacts(symbol: string): Promise<{
             ads: adsRatioFor(clean),
             // A NOTE'S TICKER on a shared CIK (BIPI): refused, not valued (#552 COWORK #48).
             nonEquity: nonEquityListingOf(clean),
+            citedCover: citedCoverFor(clean),
           })
         : null,
       shareHistory: buildShareHistory(set),
