@@ -1096,7 +1096,9 @@ export function extractCompanyFacts(
       // SAME SELECTOR EITHER WAY. The mark changes what happens to the OTHER
       // concepts (see `restrict`), not which one is chosen — the ruling
       // anchors both on the filer's newest period carrying a figure.
-      preferredTag(all)
+      // A rankPerPeriod field (a total ahead of its component) takes no
+      // preference: chain rank decides each period. See FieldDef.rankPerPeriod.
+      field.rankPerPeriod ? null : preferredTag(all)
     );
   }
 

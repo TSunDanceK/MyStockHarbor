@@ -1135,8 +1135,8 @@ check("a period the chosen concept does not cover is NOT filled from the other",
   // 119-symbol run is why it did not stay.
   const rankAnywhere = await liftMutated((src) =>
     src.replace(
-      "      preferredTag(all)",
-      "      field.oneConceptPerFiler\n" +
+      "      field.rankPerPeriod ? null : preferredTag(all)",
+      "      field.rankPerPeriod ? null : field.oneConceptPerFiler\n" +
       "        ? (() => { let b = null; for (const c of all) if (!b || c.rank < b.rank) b = c;\n" +
       "                   return b ? `${b.ns}|${b.tag}` : null; })()\n" +
       "        : preferredTag(all)"
@@ -1169,6 +1169,39 @@ check("oneConceptPerFiler is fed into secChainsHash",
     fieldsSrc.replace('+ `|one:${f.oneConceptPerFiler ? 1 : 0}`', "+ ``")
   )).secChainsHash(),
   "a set written under the old resolution must not report itself current");
+
+// A TOTAL IS NEVER DISPLACED BY ITS COMPONENT (#552 COWORK #57/#58, JD).
+// JD tags the non-operating TOTAL (NonoperatingIncomeExpense) through FY2023
+// only, and the COMPONENT (OtherNonoperatingIncomeExpense, "Others, net")
+// through FY2025. The newest-period preference took the component for every
+// year, so FY2023 read 7,496 where the total is 5,625 = pre-tax 31,650 −
+// operating 26,025. rankPerPeriod: the total wherever it is tagged, the
+// component only where it is not. Values are JD's own (CNY millions), as USD.
+{
+  const yr = (y, v) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val: v * 1e6, accn: `a${y}`, filed: `${y + 1}-04-15`, form: "20-F", fy: y, fp: "FY" });
+  const series = (pairs) => ({ units: { USD: pairs.map(([y, v]) => yr(y, v)) } });
+  const jd = { cik: 1549802, facts: { "us-gaap": {
+    Revenues: series([[2022, 1046236], [2023, 1084662], [2024, 1158819], [2025, 1309140]]),
+    OperatingIncomeLoss: series([[2022, 19723], [2023, 26025], [2024, 38736], [2025, 2774]]),
+    IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: series([[2022, 13867], [2023, 31650], [2024, 51538], [2025, 25323]]),
+    NonoperatingIncomeExpense: series([[2022, -5856], [2023, 5625]]),
+    OtherNonoperatingIncomeExpense: series([[2022, -1555], [2023, 7496], [2024, 13371], [2025, 17327]]),
+  } } };
+  const nonOpBy = (out) => Object.fromEntries(out.years.map((y) => [y.end.slice(0, 4), at(y, "nonOperatingIncomeExpense")?.val ?? null]));
+  const got = nonOpBy(extractCompanyFacts("JD", jd));
+  check("JD: the total wins every year it is tagged, the component fills only the rest",
+    got["2023"] === 5625e6 && got["2022"] === -5856e6 && got["2024"] === 13371e6 && got["2025"] === 17327e6,
+    JSON.stringify(got));
+  check("...and FY2023 reconciles: pre-tax = operating + non-operating", 31650e6 === 26025e6 + got["2023"]);
+  const newestWins = await lift(`${fieldsSrc.replace('unit: "USD", rankPerPeriod: true },', 'unit: "USD" },')}\n${fxSrc}\n${currencySrc}\n${extractSrc}`);
+  const bad = nonOpBy(newestWins.extractCompanyFacts("JD", jd));
+  check("MUTATION: the component beats the total when the flag is dropped (JD FY2023 reads 7,496)",
+    bad["2023"] === 7496e6 && bad["2022"] === -1555e6, JSON.stringify(bad));
+  check("rankPerPeriod is fed into secChainsHash (a set written under the old choice must not read as current)",
+    mod.secChainsHash() !== (await lift(fieldsSrc.replace('+ (f.rankPerPeriod ? "|rank:1" : "")', '+ ""'))).secChainsHash());
+  check("...and secFieldsHash does NOT move (a chain policy, not a layout change)",
+    secFieldsHash() === newestWins.secFieldsHash());
+}
 
 // ── 8. the free arithmetic assertion ────────────────────────────────────────
 console.log("\n8. internal identities");
