@@ -89,8 +89,13 @@ symbols.forEach((s, i) => {
   const recentOff = common.slice(-5).filter((d) => rel(tMap.get(d), fMap.get(d)) > 0.005).length;
   const oldOff = common.slice(0, -5).filter((d) => rel(tMap.get(d), fMap.get(d)) > 0.005).length;
   if (dClose > 0.005 || (dMa ?? 0) > 0.005) {
-    const reason = tLast !== fLast && recentOff === 0 ? `date (last bar ${tLast === end ? "FMP" : "Tiingo"} ahead)`
-      : recentOff === 0 && oldOff > 0 ? "adjustment basis (older closes only)"
+    // Basis first: a close that matches on recent dates and differs only on
+    // older ones is a dividend back-adjustment on one side, whatever the last
+    // dates are. (The first version tested the date first and labelled 20 of
+    // 22 dividend payers "date" on 2026-09-26.)
+    const reason = recentOff === 0 && oldOff > 0 ? "adjustment basis (older closes only)"
+      : tLast !== fLast && recentOff === 0 ? `date (last bar ${tLast === end ? "FMP" : "Tiingo"} ahead)`
+      : recentOff > 0 && recentOff < common.slice(-5).length && oldOff > 0 ? "adjustment basis (a dividend inside the last 5 dates)"
       : oldOff === 0 ? "the recent close itself (venue or print)"
       : "throughout (spelling/listing or basis) — check";
     flagged.push(`${s}: close ${pct(dClose)}, MA200 ${dMa === null ? "n/a" : pct(dMa)}, RSI ${dRsi === null ? "n/a" : dRsi.toFixed(1) + " pts"}; dates over 0.5%: last 5 ${recentOff}, older ${oldOff}; likely: ${reason}`);
