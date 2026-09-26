@@ -5,7 +5,8 @@
 // shipped by #613), over every registrant whose companyfacts carries BOTH
 // NonoperatingIncomeExpense and OtherNonoperatingIncomeExpense -- the only
 // filers the flag can move. For each: how many period cells change, and how
-// many periods reconcile (pre-tax = operating + non-operating, within 0.5%)
+// many periods reconcile (pre-tax = operating + non-operating, or that less
+// interest expense where the total excludes it; within 0.5%)
 // under each rule. Tickers and counts only; no figure is printed.
 // Read-only, uncredentialled. ALL registrants by default (~2,600 fetches).
 //   relay task: nonop-rank-census   (SYMBOLS=... to narrow)
@@ -49,7 +50,11 @@ const val = (p, k) => p.values[I[k]]?.val ?? null;
 const reconciles = (p) => {
   const pre = val(p, "preTaxIncome"), op = val(p, "operatingIncome"), non = val(p, "nonOperatingIncomeExpense");
   if (pre == null || op == null || non == null) return null;
-  return Math.abs(pre - op - non) <= 0.005 * Math.max(Math.abs(pre), 1);
+  const tol = 0.005 * Math.max(Math.abs(pre), 1);
+  // EITHER IDENTITY: a filer whose non-operating total excludes interest
+  // expense (SMCI) reconciles as pre = op + non-op - interest.
+  const int = val(p, "interestExpense");
+  return Math.abs(pre - op - non) <= tol || (int != null && Math.abs(pre - op - non + Math.abs(int)) <= tol);
 };
 const periods = (out) => [...out.years, ...out.quarters];
 
@@ -90,7 +95,7 @@ for (const [cik, sym] of byCik) {
 console.log(`\nregistrants ${byCik.size} (one per CIK) · fetched ${scanned} · failed ${failed}`);
 console.log(`file BOTH NonoperatingIncomeExpense and OtherNonoperatingIncomeExpense: ${candidates}`);
 console.log(`filers whose non-operating cells change: ${moved} (${cellsMoved} period cells)`);
-console.log(`periods that reconcile (pre-tax = operating + non-op, 0.5%) over those ${candidates} filers:`);
+console.log(`periods that reconcile (pre-tax = operating + non-op [- interest], 0.5%) over those ${candidates} filers:`);
 console.log(`  before (newest-period preference): ${tot.before.ok} reconcile, ${tot.before.bad} do not`);
 console.log(`  after  (rank per period):          ${tot.after.ok} reconcile, ${tot.after.bad} do not`);
 console.log(`filers that reconcile FEWER periods after: ${worse.length}${worse.length ? `: ${worse.join(" ")}` : ""}`);
