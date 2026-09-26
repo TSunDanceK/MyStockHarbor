@@ -139,7 +139,22 @@ console.log("\n8. hand-reviewed entries (#552 COWORK #29): cited from the filer'
   check("MUTATION: the excerpt ignored → a phrase past the display text fails the build",
     throws(() => withBoth(Mx, { AAA: { industry: "Semiconductors", phrase: "sales of integrated circuit products" } })));
   const manual = read("data/sec/classification-manual.json").entries;
-  check("every committed entry uses a label from the fixed list", Object.values(manual).every((m) => table.labels[m.industry]));
+  check("every committed entry uses a label from the fixed list, or is the sector-only form with a reason",
+    Object.values(manual).every((m) => table.labels[m.industry] || (m.industry === null && String(m.review ?? "").trim())));
+  // THE SECTOR-ONLY FORM (#552 COWORK #58/#59): hides a contradicted industry,
+  // never moves a sector.
+  const regN = { NGX: { sic: "4922" } };
+  const nullForm = (M, m) => M.buildOverrides({ registrants: regN, table, rules, descriptions: {}, manual: { NGX: m } }).overrides.NGX;
+  const sicSector = table.codes["4922"].sector;
+  const nf = nullForm(B, { industry: null, review: "no text to cite" });
+  check("industry null + review: the SIC sector is kept, the industry is withheld, the row is marked reviewed",
+    nf?.sector === sicSector && nf.industry === null && nf.reviewed === true && nf.review === "no text to cite", JSON.stringify(nf));
+  check("industry null WITHOUT a review reason fails the build", throws(() => nullForm(B, { industry: null })));
+  check("the sector-only form cannot MOVE a sector (that needs a cited quote)", throws(() => nullForm(B, { industry: null, review: "x", sector: "Utilities" })));
+  const Mv = await load(SRC.replace("if (m.sector != null && m.sector !== sicSector) throw", "if (false) throw"));
+  check("MUTATION: the sector guard removed → a sector moves with no quote", !throws(() => nullForm(Mv, { industry: null, review: "x", sector: "Utilities" })));
+  check("a cited manual entry is marked reviewed too (it outranks a cached vendor label)", ok?.reviewed === true);
+  check("NGG is committed in the sector-only form", manual.NGG?.industry === null && /no Item headings/.test(manual.NGG?.review ?? ""));
 }
 
 console.log("\n6. the committed file is current");

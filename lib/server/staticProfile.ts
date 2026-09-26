@@ -60,7 +60,7 @@ export type ResolvedProfile = StaticProfileRow & {
 // data/sec/sic-sector.json and SEC's raw SIC descriptions as industries.
 type RegistrantRow = { sic?: string | null };
 type ClassRow = { sector: string | null; industry: string | null };
-type OverrideRow = ClassRow & { filedOn?: string | null };
+type OverrideRow = ClassRow & { filedOn?: string | null; reviewed?: boolean };
 
 const REGISTRANTS = (registrantsFile as unknown as { rows: Record<string, RegistrantRow> }).rows ?? {};
 const CLASSIFICATION = classificationFile as unknown as {
@@ -125,6 +125,20 @@ function resolveQuiet(
   symbol: string,
   cached: { sector?: string | null; industry?: string | null } | null | undefined
 ): ResolvedProfile {
+  // A HAND-REVIEWED MANUAL ENTRY OUTRANKS THE CACHE (#552 COWORK #59), and
+  // nothing else changes order. A cached vendor industry is renewed daily by
+  // the warm, so without this a reviewed `industry: null` (NGG) or a cited
+  // placement could never show. Scoped to `reviewed` rows only: rule-derived
+  // overrides still sit behind the cache, exactly as before.
+  const reviewed = lookupSpellingIn(OVERRIDES, String(symbol ?? "").trim().toUpperCase())?.value;
+  if (reviewed?.reviewed && (clean(reviewed.sector) || clean(reviewed.industry))) {
+    return {
+      sector: clean(reviewed.sector), industry: clean(reviewed.industry), source: "filing",
+      sectorSource: clean(reviewed.sector) ? "filing" : "none",
+      industrySource: clean(reviewed.industry) ? "filing" : "none",
+      filedOn: reviewed.filedOn ?? null,
+    };
+  }
   const cachedSector = clean(cached?.sector);
   const cachedIndustry = clean(cached?.industry);
   // EITHER FIELD COUNTS AS A CACHE HIT. A row with a sector and no industry is

@@ -3377,7 +3377,8 @@
    "quote": "ERP Operating Limited Partnership (“ERPOP”) is focused on conducting the multifamily property business of EQR.",
    "form": "10-K",
    "filedOn": "2026-02-13",
-   "accession": "0001193125-26-051433"
+   "accession": "0001193125-26-051433",
+   "reviewed": true
   },
   "VNT": {
    "sector": "Technology",
@@ -3630,7 +3631,8 @@
    "quote": "Amphenol Corporation is one of the world’s largest designers, manufacturers and marketers of electrical, electronic and fiber optic connectors and interconnect systems, antennas…",
    "form": "10-K",
    "filedOn": "2026-02-11",
-   "accession": "0001104659-26-013549"
+   "accession": "0001104659-26-013549",
+   "reviewed": true
   },
   "BIP": {
    "sector": "Utilities",
@@ -3641,7 +3643,8 @@
    "quote": "74 Brookfield Infrastructure Overview Our utilities segment is comprised of businesses from which we earn a return on a regulated or notionally stipulated asset base, which we r…",
    "form": "20-F",
    "filedOn": "2026-03-17",
-   "accession": "0001406234-26-000002"
+   "accession": "0001406234-26-000002",
+   "reviewed": true
   },
   "BKNG": {
    "sector": "Consumer Cyclical",
@@ -3652,7 +3655,8 @@
    "quote": "Accommodations Ground Transportation Flights Activities Restaurants Meta Search Booking.",
    "form": "10-K",
    "filedOn": "2026-02-18",
-   "accession": "0001075531-26-000009"
+   "accession": "0001075531-26-000009",
+   "reviewed": true
   },
   "GOOGL": {
    "sector": "Communication Services",
@@ -3663,7 +3667,8 @@
    "quote": "We report Google in two segments, Google Services and Google Cloud, and all non-Google businesses collectively as Other Bets.",
    "form": "10-K",
    "filedOn": "2026-02-05",
-   "accession": "0001652044-26-000018"
+   "accession": "0001652044-26-000018",
+   "reviewed": true
   },
   "GOOG": {
    "sector": "Communication Services",
@@ -3674,7 +3679,8 @@
    "quote": "We report Google in two segments, Google Services and Google Cloud, and all non-Google businesses collectively as Other Bets.",
    "form": "10-K",
    "filedOn": "2026-02-05",
-   "accession": "0001652044-26-000018"
+   "accession": "0001652044-26-000018",
+   "reviewed": true
   },
   "ACN": {
    "sector": "Technology",
@@ -3685,7 +3691,8 @@
    "quote": "Accenture is a leading solutions and global professional services company that helps the world’s leading enterprises reinvent by building their digital core and unleashing the p…",
    "form": "10-K",
    "filedOn": "2025-10-10",
-   "accession": "0001467373-25-000217"
+   "accession": "0001467373-25-000217",
+   "reviewed": true
   },
   "APP": {
    "sector": "Technology",
@@ -3696,7 +3703,8 @@
    "quote": "We provide end-to-end artificial intelligence-powered (\"AI\") advertising solutions for businesses to reach, monetize and grow their global audience.",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001751008-26-000010"
+   "accession": "0001751008-26-000010",
+   "reviewed": true
   },
   "PEP": {
    "sector": "Consumer Defensive",
@@ -3707,7 +3715,8 @@
    "quote": "We are a leading global beverage and convenient food company with a complementary portfolio of brands, including Lay’s, Doritos, Cheetos, Gatorade, Pepsi-Cola, Mountain Dew, Qua…",
    "form": "10-K",
    "filedOn": "2026-02-03",
-   "accession": "0000077476-26-000007"
+   "accession": "0000077476-26-000007",
+   "reviewed": true
   },
   "TT": {
    "sector": "Industrials",
@@ -3718,7 +3727,8 @@
    "quote": "We generate revenue and cash primarily through the design, manufacture, sales and service of solutions for Heating, Ventilation and Air Conditioning (HVAC), transport refrigerat…",
    "form": "10-K",
    "filedOn": "2026-02-05",
-   "accession": "0001628280-26-005731"
+   "accession": "0001628280-26-005731",
+   "reviewed": true
   },
   "GWW": {
    "sector": "Industrials",
@@ -3729,7 +3739,8 @@
    "quote": "Grainger, Inc., incorporated in the State of Illinois in 1928, is a broad line, distributor of maintenance, repair and operating (MRO) products and services with operations prim…",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0000277135-26-000011"
+   "accession": "0000277135-26-000011",
+   "reviewed": true
   },
   "CIEN": {
    "sector": "Technology",
@@ -3740,7 +3751,8 @@
    "quote": "We are a network technology company, providing hardware, software, and services to a wide range of network operators and enabling enhanced network capacity, service delivery, an…",
    "form": "10-K",
    "filedOn": "2025-12-12",
-   "accession": "0001628280-25-056698"
+   "accession": "0001628280-25-056698",
+   "reviewed": true
   },
   "ENTG": {
    "sector": "Technology",
@@ -3751,7 +3763,8 @@
    "quote": "is a leading supplier of critical advanced materials and process solutions for the semiconductor and other high-technology industries.",
    "form": "10-K",
    "filedOn": "2026-02-11",
-   "accession": "0001101302-26-000012"
+   "accession": "0001101302-26-000012",
+   "reviewed": true
   },
   "TPR": {
    "sector": "Consumer Cyclical",
@@ -3762,7 +3775,8 @@
    "quote": "(the \"Company\") is a global house of iconic accessories and lifestyle brands uniting the magic of Coach and kate spade new york.",
    "form": "10-K",
    "filedOn": "2026-08-13",
-   "accession": "0001116132-26-000018"
+   "accession": "0001116132-26-000018",
+   "reviewed": true
   },
   "XPO": {
    "sector": "Industrials",
@@ -3773,7 +3787,8 @@
    "quote": "Our company has two reportable segments: North American Less-Than-Truckload (“LTL”), the largest component of our business; and European Transportation.",
    "form": "10-K",
    "filedOn": "2026-02-05",
-   "accession": "0001166003-26-000016"
+   "accession": "0001166003-26-000016",
+   "reviewed": true
   },
   "RS": {
    "sector": "Industrials",
@@ -3784,7 +3799,8 @@
    "quote": "Reliance operates a network of companies providing diversified metal solutions and is the largest metals service center company in North America (U.S.",
    "form": "10-K",
    "filedOn": "2026-02-26",
-   "accession": "0001104659-26-020651"
+   "accession": "0001104659-26-020651",
+   "reviewed": true
   },
   "BBY": {
    "sector": "Consumer Cyclical",
@@ -3795,7 +3811,8 @@
    "quote": "We accomplish this by leveraging our unique combination of tech expertise and a human touch to meet our customers’ everyday needs, whether they come to us online, visit our stor…",
    "form": "10-K",
    "filedOn": "2026-03-18",
-   "accession": "0000764478-26-000009"
+   "accession": "0000764478-26-000009",
+   "reviewed": true
   },
   "FDXF": {
    "sector": "Industrials",
@@ -3806,7 +3823,8 @@
    "quote": "Headquartered in Memphis, Tennessee, FedEx Freight is the largest North American less-than-truckload (“LTL”) freight carrier, with industry-leading transit times and service lev…",
    "form": "10-K",
    "filedOn": "2026-08-05",
-   "accession": "0001628280-26-053359"
+   "accession": "0001628280-26-053359",
+   "reviewed": true
   },
   "GPC": {
    "sector": "Consumer Cyclical",
@@ -3817,7 +3835,8 @@
    "quote": "Incorporated in the State of Georgia in 1928, Genuine Parts Company is a leading global service provider of automotive and industrial replacement parts and value-added solutions.",
    "form": "10-K",
    "filedOn": "2026-02-20",
-   "accession": "0000040987-26-000003"
+   "accession": "0000040987-26-000003",
+   "reviewed": true
   },
   "INVH": {
    "sector": "Real Estate",
@@ -3828,7 +3847,8 @@
    "quote": "Invitation Homes is a leading owner and operator of single-family homes for lease, offering residents high-quality homes in sought-after neighborhoods across the United States.",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001687229-26-000016"
+   "accession": "0001687229-26-000016",
+   "reviewed": true
   },
   "JHX": {
    "sector": "Basic Materials",
@@ -3839,7 +3859,8 @@
    "quote": "James Hardie Industries plc is a leading provider of exterior home and outdoor living solutions, serving the new home construction, repair and remodel and outdoor living markets.",
    "form": "10-K",
    "filedOn": "2026-05-19",
-   "accession": "0001159152-26-000045"
+   "accession": "0001159152-26-000045",
+   "reviewed": true
   },
   "FN": {
    "sector": "Technology",
@@ -3850,7 +3871,8 @@
    "quote": "We provide advanced optical packaging and precision optical, electro-mechanical and electronic manufacturing services to original equipment manufacturers (“OEMs”) of complex pro…",
    "form": "10-K",
    "filedOn": "2026-08-18",
-   "accession": "0001408710-26-000028"
+   "accession": "0001408710-26-000028",
+   "reviewed": true
   },
   "OHI": {
    "sector": "Real Estate",
@@ -3861,7 +3883,8 @@
    "quote": "(“Parent”) is a Maryland corporation that invests in healthcare-related real estate properties located in the United States (“U.S.”), the United Kingdom (“U.K.”) and Canada, whi…",
    "form": "10-K",
    "filedOn": "2026-02-09",
-   "accession": "0000888491-26-000008"
+   "accession": "0000888491-26-000008",
+   "reviewed": true
   },
   "SGI": {
    "sector": "Consumer Cyclical",
@@ -3872,7 +3895,8 @@
    "quote": "Somnigroup is the world's largest bedding company, dedicated to enriching people's lives through the power of a good night's sleep and transforming how the world sleeps.",
    "form": "10-K",
    "filedOn": "2026-02-27",
-   "accession": "0001206264-26-000015"
+   "accession": "0001206264-26-000015",
+   "reviewed": true
   },
   "SJM": {
    "sector": "Consumer Defensive",
@@ -3883,7 +3907,8 @@
    "quote": "We operate principally in one industry, the manufacturing and marketing of branded food and beverage products on a worldwide basis, although the majority of our sales are in the…",
    "form": "10-K",
    "filedOn": "2026-06-09",
-   "accession": "0000091419-26-000050"
+   "accession": "0000091419-26-000050",
+   "reviewed": true
   },
   "QXO": {
    "sector": "Industrials",
@@ -3894,7 +3919,8 @@
    "quote": "was created to build a tech-forward leader in the approximately $800 billion building products distribution sector.",
    "form": "10-K",
    "filedOn": "2026-02-27",
-   "accession": "0001628280-26-012601"
+   "accession": "0001628280-26-012601",
+   "reviewed": true
   },
   "BF-B": {
    "sector": "Consumer Defensive",
@@ -3905,7 +3931,8 @@
    "quote": "We primarily manufacture, distill, bottle, import, export, market, and sell a wide variety of beverage alcohol products under recognized brands.",
    "form": "10-K",
    "filedOn": "2026-06-12",
-   "accession": "0000014693-26-000024"
+   "accession": "0000014693-26-000024",
+   "reviewed": true
   },
   "HAS": {
    "sector": "Consumer Cyclical",
@@ -3916,7 +3943,8 @@
    "quote": "(“Hasbro”) is a leading game, intellectual property (\"IP\"), and toy company whose mission is to create joy and community through the magic of play.",
    "form": "10-K",
    "filedOn": "2026-02-25",
-   "accession": "0000046080-26-000011"
+   "accession": "0000046080-26-000011",
+   "reviewed": true
   },
   "DKS": {
    "sector": "Consumer Cyclical",
@@ -3927,7 +3955,8 @@
    "quote": "is a leading global sports retailer offering an extensive assortment of authentic, high-quality sports equipment, apparel, footwear and accessories.",
    "form": "10-K",
    "filedOn": "2026-03-27",
-   "accession": "0001089063-26-000007"
+   "accession": "0001089063-26-000007",
+   "reviewed": true
   },
   "AA": {
    "sector": "Basic Materials",
@@ -3938,7 +3967,8 @@
    "quote": "Alcoa Corporation, a Delaware corporation (Alcoa or the Company) which became an independent, publicly traded company on November 1, 2016, is active in all aspects of the upstre…",
    "form": "10-K",
    "filedOn": "2026-02-26",
-   "accession": "0001193125-26-077167"
+   "accession": "0001193125-26-077167",
+   "reviewed": true
   },
   "CSGP": {
    "sector": "Real Estate",
@@ -3949,7 +3979,8 @@
    "quote": "CoStar Group is a leading provider of online real estate marketplaces, information, analytics, and 3D digital twin technology in the property markets.",
    "form": "10-K",
    "filedOn": "2026-02-26",
-   "accession": "0001057352-26-000020"
+   "accession": "0001057352-26-000020",
+   "reviewed": true
   },
   "IT": {
    "sector": "Industrials",
@@ -3960,7 +3991,8 @@
    "quote": "(NYSE: IT) delivers actionable, objective business and technology insights that drive smarter decisions and stronger performance on an organization’s mission-critical priorities.",
    "form": "10-K",
    "filedOn": "2026-02-12",
-   "accession": "0000749251-26-000112"
+   "accession": "0000749251-26-000112",
+   "reviewed": true
   },
   "HII": {
    "sector": "Industrials",
@@ -3971,7 +4003,8 @@
    "quote": "is a global, all-domain defense partner, building and delivering the world's most powerful, survivable naval ships and technologies that safeguard America’s seas, sky, land, spa…",
    "form": "10-K",
    "filedOn": "2026-02-05",
-   "accession": "0001501585-26-000006"
+   "accession": "0001501585-26-000006",
+   "reviewed": true
   },
   "HSIC": {
    "sector": "Healthcare",
@@ -3982,7 +4015,8 @@
    "quote": "We believe we are the world’s largest provider of health care products and services primarily to office- based dental and medical practitioners, as well as alternate sites of care.",
    "form": "10-K",
    "filedOn": "2026-02-24",
-   "accession": "0001000228-26-000013"
+   "accession": "0001000228-26-000013",
+   "reviewed": true
   },
   "LKQ": {
    "sector": "Consumer Cyclical",
@@ -3993,7 +4027,8 @@
    "quote": "LKQ Corporation is a global distributor of vehicle products, including replacement parts, components and systems used in the repair and maintenance of vehicles, and specialty af…",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001065696-26-000012"
+   "accession": "0001065696-26-000012",
+   "reviewed": true
   },
   "UPST": {
    "sector": "Financial Services",
@@ -4004,7 +4039,8 @@
    "quote": "Upstart is the leading artificial intelligence (“AI”) lending marketplace.",
    "form": "10-K",
    "filedOn": "2026-02-10",
-   "accession": "0001647639-26-000027"
+   "accession": "0001647639-26-000027",
+   "reviewed": true
   },
   "ZM": {
    "sector": "Technology",
@@ -4015,7 +4051,8 @@
    "quote": "From entrepreneurs to global enterprises, customers choose Zoom to seamlessly collaborate, communicate, and drive outcomes across meetings, chat, phone, contact center, events, …",
    "form": "10-K",
    "filedOn": "2026-02-27",
-   "accession": "0001585521-26-000030"
+   "accession": "0001585521-26-000030",
+   "reviewed": true
   },
   "TSN": {
    "sector": "Consumer Defensive",
@@ -4026,7 +4063,8 @@
    "quote": "and its subsidiaries (NYSE: TSN) is a world-class food company and recognized leader in protein.",
    "form": "10-K",
    "filedOn": "2025-11-10",
-   "accession": "0000100493-25-000095"
+   "accession": "0000100493-25-000095",
+   "reviewed": true
   },
   "ULS": {
    "sector": "Industrials",
@@ -4037,7 +4075,8 @@
    "quote": "is a global safety science leader that provides Testing, Inspection and Certification (“TIC”) services and related software and advisory offerings to customers worldwide.",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001901440-26-000005"
+   "accession": "0001901440-26-000005",
+   "reviewed": true
   },
   "RDDT": {
    "sector": "Communication Services",
@@ -4048,7 +4087,8 @@
    "quote": "Our over 100,000 active communities have channeled the power of human creativity to grow Reddit since our founding.",
    "form": "10-K",
    "filedOn": "2026-02-06",
-   "accession": "0001713445-26-000022"
+   "accession": "0001713445-26-000022",
+   "reviewed": true
   },
   "SNY": {
    "sector": "Healthcare",
@@ -4059,7 +4099,8 @@
    "quote": "Sanofi’s activities are organized around the following categories within the Biopharma operating segment: Immunology, Rare Diseases, Neurology, Oncology, Other Medicines and Vac…",
    "form": "20-F",
    "filedOn": "2026-02-17",
-   "accession": "0001628280-26-008403"
+   "accession": "0001628280-26-008403",
+   "reviewed": true
   },
   "ONC": {
    "sector": "Healthcare",
@@ -4070,7 +4111,8 @@
    "quote": "We are a leading global oncology company discovering and developing innovative treatments that are more accessible to cancer patients worldwide.",
    "form": "10-K",
    "filedOn": "2026-02-26",
-   "accession": "0001628280-26-011946"
+   "accession": "0001628280-26-011946",
+   "reviewed": true
   },
   "ZTS": {
    "sector": "Healthcare",
@@ -4081,7 +4123,8 @@
    "quote": "is a global leader in the animal health industry, focused on the discovery, development, manufacture and commercialization of medicines, vaccines, diagnostic products and servic…",
    "form": "10-K",
    "filedOn": "2026-02-12",
-   "accession": "0001555280-26-000011"
+   "accession": "0001555280-26-000011",
+   "reviewed": true
   },
   "ELAN": {
    "sector": "Healthcare",
@@ -4092,7 +4135,8 @@
    "quote": "Elanco Animal Health Incorporated and its subsidiaries is a global leader in animal health, dedicated to innovating and delivering products and services to prevent and treat dis…",
    "form": "10-K",
    "filedOn": "2026-02-24",
-   "accession": "0001739104-26-000012"
+   "accession": "0001739104-26-000012",
+   "reviewed": true
   },
   "PAHC": {
    "sector": "Healthcare",
@@ -4103,7 +4147,8 @@
    "quote": "Phibro Animal Health Corporation is a leading global diversified animal health and mineral nutrition company.",
    "form": "10-K",
    "filedOn": "2026-08-26",
-   "accession": "0001104659-26-101493"
+   "accession": "0001104659-26-101493",
+   "reviewed": true
   },
   "NXT": {
    "sector": "Energy",
@@ -4114,7 +4159,8 @@
    "quote": "Founded in 2013 by our Chief Executive Officer, Dan Shugar, we pioneered and remain the global market leader in solar tracking systems.",
    "form": "10-K",
    "filedOn": "2026-05-19",
-   "accession": "0001852131-26-000017"
+   "accession": "0001852131-26-000017",
+   "reviewed": true
   },
   "ENPH": {
    "sector": "Energy",
@@ -4125,7 +4171,8 @@
    "quote": "Our intelligent microinverters work with virtually every solar panel made, and when paired with our smart technology, result in one of the industry’s best-performing clean energ…",
    "form": "10-K",
    "filedOn": "2026-02-17",
-   "accession": "0001463101-26-000013"
+   "accession": "0001463101-26-000013",
+   "reviewed": true
   },
   "SEDG": {
    "sector": "Energy",
@@ -4136,7 +4183,8 @@
    "quote": "We are a global smart energy technology company that changed the way power is harvested and managed in photovoltaic (also known as PV) systems.",
    "form": "10-K",
    "filedOn": "2026-02-25",
-   "accession": "0001178913-26-000632"
+   "accession": "0001178913-26-000632",
+   "reviewed": true
   },
   "VIAV": {
    "sector": "Technology",
@@ -4147,7 +4195,8 @@
    "quote": "Our test and measurement, and resilient Position, Navigation and Timing (PNT) solutions enable and secure critical infrastructure ranging from data center ecosystems and communi…",
    "form": "10-K",
    "filedOn": "2026-08-13",
-   "accession": "0001628280-26-056765"
+   "accession": "0001628280-26-056765",
+   "reviewed": true
   },
   "QCOM": {
    "sector": "Technology",
@@ -4158,7 +4207,8 @@
    "quote": "We derive revenues principally from sales of integrated circuit products, including our Snapdragon® and Qualcomm Dragonwing™ families of highly-integrated, system-based solution…",
    "form": "10-K",
    "filedOn": "2025-11-05",
-   "accession": "0000804328-25-000085"
+   "accession": "0000804328-25-000085",
+   "reviewed": true
   },
   "LRCX": {
    "sector": "Technology",
@@ -4169,7 +4219,8 @@
    "quote": "We are a global supplier of innovative wafer fabrication equipment and services to the semiconductor industry.",
    "form": "10-K",
    "filedOn": "2026-08-07",
-   "accession": "0000707549-26-000037"
+   "accession": "0000707549-26-000037",
+   "reviewed": true
   },
   "KLAC": {
    "sector": "Technology",
@@ -4180,7 +4231,8 @@
    "quote": "We provide advanced process control and process-enabling solutions for manufacturing wafers, reticles/masks, chemicals/materials, integrated circuits, packaged ICs and printed c…",
    "form": "10-K",
    "filedOn": "2026-08-06",
-   "accession": "0000319201-26-000027"
+   "accession": "0000319201-26-000027",
+   "reviewed": true
   },
   "TER": {
    "sector": "Technology",
@@ -4191,7 +4243,16 @@
    "quote": "Teradyne's automated test systems are used to test semiconductors, wireless products, data storage, silicon photonics, and complex electronics systems in many industries includi…",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001193125-26-059002"
+   "accession": "0001193125-26-059002",
+   "reviewed": true
+  },
+  "NGG": {
+   "sector": "Energy",
+   "industry": null,
+   "sic": "4922",
+   "basis": "reviewed: industry withheld",
+   "review": "UK-layout 20-F with no Item headings, so the locator stores no 4.B text to cite. The SIC 4922 industry (Oil & Gas Midstream) is withheld until a quote exists; the sector stays as SIC gives it.",
+   "reviewed": true
   },
   "NVMI": {
    "sector": "Technology",
@@ -4202,7 +4263,8 @@
    "quote": "Nova is a leading innovator and key provider of metrology solutions for advanced process control used in semiconductor manufacturing.",
    "form": "20-F",
    "filedOn": "2026-02-17",
-   "accession": "0001178913-26-000504"
+   "accession": "0001178913-26-000504",
+   "reviewed": true
   },
   "ABT": {
    "sector": "Healthcare",
@@ -4213,7 +4275,8 @@
    "quote": "NARRATIVE DESCRIPTION OF BUSINESS Abbott has four reportable segments: Established Pharmaceutical Products, Diagnostic Products, Nutritional Products, and Medical Devices.",
    "form": "10-K",
    "filedOn": "2026-02-20",
-   "accession": "0001628280-26-010185"
+   "accession": "0001628280-26-010185",
+   "reviewed": true
   },
   "GLW": {
    "sector": "Technology",
@@ -4224,7 +4287,8 @@
    "quote": "In addition to optical fiber and cable, our carrier network product portfolio also includes hardware and equipment products, including cable assemblies, fiber-optic hardware, fi…",
    "form": "10-K",
    "filedOn": "2026-02-12",
-   "accession": "0000024741-26-000124"
+   "accession": "0000024741-26-000124",
+   "reviewed": true
   },
   "PLD": {
    "sector": "Real Estate",
@@ -4235,7 +4299,8 @@
    "quote": "THE COMPANY Prologis is the global leader in logistics real estate, operating in high-barrier, high-growth markets across 20 countries on four continents.",
    "form": "10-K",
    "filedOn": "2026-02-13",
-   "accession": "0001193125-26-051453"
+   "accession": "0001193125-26-051453",
+   "reviewed": true
   },
   "O": {
    "sector": "Real Estate",
@@ -4246,7 +4311,8 @@
    "quote": "Our Primary Business Activities Our primary business is the acquisition, ownership, and active management of freestanding commercial properties leased under long‑term net lease …",
    "form": "10-K",
    "filedOn": "2026-02-25",
-   "accession": "0000726728-26-000011"
+   "accession": "0000726728-26-000011",
+   "reviewed": true
   },
   "ESS": {
    "sector": "Real Estate",
@@ -4257,7 +4323,8 @@
    "quote": "The Company is engaged primarily in the ownership, operation, management, acquisition, development and redevelopment of predominantly apartment communities, located along the We…",
    "form": "10-K",
    "filedOn": "2026-02-20",
-   "accession": "0000920522-26-000003"
+   "accession": "0000920522-26-000003",
+   "reviewed": true
   },
   "FRT": {
    "sector": "Real Estate",
@@ -4268,7 +4335,8 @@
    "quote": "As of December 31, 2025, we owned or had a majority interest in community and neighborhood shopping centers and mixed-use properties which are operated as 104 predominantly reta…",
    "form": "10-K",
    "filedOn": "2026-02-12",
-   "accession": "0000034903-26-000017"
+   "accession": "0000034903-26-000017",
+   "reviewed": true
   },
   "SPG": {
    "sector": "Real Estate",
@@ -4279,7 +4347,8 @@
    "quote": "We own, develop and manage premier shopping, dining, entertainment and mixed-use destinations, which consist primarily of malls, Premium Outlets ® , and The Mills ® .",
    "form": "10-K",
    "filedOn": "2026-02-25",
-   "accession": "0001104659-26-019419"
+   "accession": "0001104659-26-019419",
+   "reviewed": true
   },
   "BIDU": {
    "sector": "Communication Services",
@@ -4290,7 +4359,8 @@
    "quote": "We have been consistently investing in AI since 2010 to advance our technological capabilities, enhance our search functionality and boost overall monetization.",
    "form": "20-F",
    "filedOn": "2026-03-17",
-   "accession": "0001193125-26-109289"
+   "accession": "0001193125-26-109289",
+   "reviewed": true
   },
   "EBAY": {
    "sector": "Consumer Cyclical",
@@ -4301,7 +4371,8 @@
    "quote": "is a global commerce leader that connects people and builds communities to create economic opportunity for all.",
    "form": "10-K",
    "filedOn": "2026-02-19",
-   "accession": "0001065088-26-000027"
+   "accession": "0001065088-26-000027",
+   "reviewed": true
   },
   "SE": {
    "sector": "Consumer Cyclical",
@@ -4312,7 +4383,8 @@
    "quote": "Overview Sea is a global technology company operating three core businesses of e-commerce, digital financial services, and digital entertainment, known as Shopee, Monee and Garena.",
    "form": "20-F",
    "filedOn": "2026-04-17",
-   "accession": "0001140361-26-015366"
+   "accession": "0001140361-26-015366",
+   "reviewed": true
   },
   "VRSK": {
    "sector": "Industrials",
@@ -4323,7 +4395,8 @@
    "quote": "Verisk is a leading data, analytics, and technology provider serving clients in the insurance ecosystem.",
    "form": "10-K",
    "filedOn": "2026-02-18",
-   "accession": "0001437749-26-004452"
+   "accession": "0001437749-26-004452",
+   "reviewed": true
   },
   "SOFI": {
    "sector": "Financial Services",
@@ -4334,7 +4407,8 @@
    "quote": "We offer personal loans, student loans, home loans and related servicing and offer a variety of financial services products, such as SoFi Money, SoFi Credit Card, SoFi Crypto, S…",
    "form": "10-K",
    "filedOn": "2026-02-17",
-   "accession": "0001818874-26-000013"
+   "accession": "0001818874-26-000013",
+   "reviewed": true
   },
   "WEX": {
    "sector": "Technology",
@@ -4345,7 +4419,8 @@
    "quote": "WEX is a global commerce platform that provides seamlessly embedded, personalized payments solutions across three business segments: Mobility, Benefits, and Corporate Payments.",
    "form": "10-K",
    "filedOn": "2026-02-13",
-   "accession": "0001309108-26-000010"
+   "accession": "0001309108-26-000010",
+   "reviewed": true
   },
   "BR": {
    "sector": "Technology",
@@ -4356,7 +4431,8 @@
    "quote": "Broadridge, a Delaware corporation, is a global financial technology leader powering investing, corporate governance, and communications.",
    "form": "10-K",
    "filedOn": "2026-08-04",
-   "accession": "0001628280-26-052243"
+   "accession": "0001628280-26-052243",
+   "reviewed": true
   }
  },
  "needsClassification": [
