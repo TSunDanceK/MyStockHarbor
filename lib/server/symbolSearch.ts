@@ -46,7 +46,7 @@ const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX", "NYSE ARCA", "CBOE"
 // as literally, so structural ranking alone can't separate them, and FMP's own
 // result order doesn't reliably favour the mega cap. Adding a symbol here only
 // helps it beat equally-relevant matches; it can never jump an exact-symbol hit.
-const POPULAR_SYMBOLS = new Set([
+export const POPULAR_SYMBOLS = new Set([
   "AAPL", "ABBV", "ABT", "ADBE", "AMD", "AMZN", "ARM", "AVGO", "BA", "BAC",
   "BRK.B", "C", "CAT", "COIN", "COST", "CRM", "CSCO", "CVX", "DIA", "DIS",
   "F", "GE", "GM", "GOOG", "GOOGL", "GS", "HD", "IBM", "INTC", "IWM",

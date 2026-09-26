@@ -33,7 +33,7 @@ import {
   REQUEST_BYTE_BUDGET,
 } from "./chunkByBytes";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
-import { lookupBySpelling } from "../symbolSpellings.mjs";
+import { lookupBySpelling, toDashed, toDotted } from "../symbolSpellings.mjs";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import type { TickerEntry } from "./secTickerMap";
 import { EARNINGS_PEAK_DAY_SHARE } from "./earningsPlan";
@@ -507,6 +507,12 @@ export type SeedResult = {
  * Verified against the committed ticker file: BRK.B -> BRK-B, BF.B -> BF-B,
  * MKC.V -> MKC-V, all three absent on a direct read.
  */
+/** A symbol's dot and dash spellings, itself first (BRK.B -> BRK.B, BRK-B). */
+export function dotDashSpellings(symbol: string): string[] {
+  const raw = String(symbol ?? "").trim().toUpperCase();
+  return [...new Set([raw, toDashed(raw), toDotted(raw)])];
+}
+
 export function seedManifest(
   manifest: SecManifest,
   universe: string[],
@@ -520,7 +526,12 @@ export function seedManifest(
     const found = lookupBySpelling(cikByTicker, symbol)?.value ?? null;
     const cik = found?.cik ?? null;
     if (!cik) withoutCik.push(symbol);
-    const existing = manifest.symbols[symbol];
+    // ONE ENTRY PER SECURITY ACROSS DOT/DASH (#552 COWORK #59): the stored-set
+    // index keys a set by the spelling it was written under (BRK-B), the lists
+    // by theirs (BRK.B). Only the dot/dash pair, not symbolSpellings' wider
+    // $-forms: this decides identity, and a wider rule is not ours to adopt.
+    const existingKey = dotDashSpellings(symbol).find((k) => Object.prototype.hasOwnProperty.call(manifest.symbols, k));
+    const existing = existingKey ? manifest.symbols[existingKey] : undefined;
     if (existing) {
       // Fill what was missing last time without touching anything else.
       if (!existing.cik && cik) existing.cik = cik;
@@ -561,6 +572,60 @@ export function symbolsByCik(manifest: SecManifest): Map<string, string> {
 /** Where step 3 will store the extracted fact set. Named here because this is
  *  the module that has to discard one. */
 export const SEC_FACTS_PREFIX = "msh:sec:facts:v1";
+
+/**
+ * THE INDEX OF STORED FACT SETS (#552 COWORK #57/#58/#59). One Redis set,
+ * SADDed on every fact-set write (writeFactSet), SREMed on every discard
+ * (discardFactSets) and eviction (symbolEviction.PER_SYMBOL_SETS). The daily
+ * index unions its members into the manifest, so a set written by the cold
+ * path or an on-demand read (TSM: 54 of 961 stored sets on 2026-09-25) gets an
+ * entry and is re-read. NOT a SCAN: SCAN's COUNT pages over the whole
+ * keyspace, not the matches, so its cost grows with every per-symbol key family
+ * and a capped scan returns a partial list silently. This is 1 SMEMBERS a day
+ * at any universe size.
+ */
+export const SEC_FACTS_INDEX_KEY = "msh:sec:facts:index:v1";
+
+export async function readFactSetIndex(): Promise<{ symbols: string[]; commands: number; failed: boolean }> {
+  if (!redis) return { symbols: [], commands: 0, failed: false };
+  try {
+    const members = await redis.smembers(SEC_FACTS_INDEX_KEY);
+    return { symbols: (members ?? []).map((m) => String(m)), commands: 1, failed: false };
+  } catch {
+    // Seeding only adds: a failed read costs a day, never an entry.
+    return { symbols: [], commands: 1, failed: true };
+  }
+}
+
+/**
+ * THE ONE-TIME BACKFILL. The index starts empty while ~961 sets already exist.
+ * The relay cannot do it (its Upstash token is read-only), so the daily index
+ * does, ONCE: when the index read comes back empty and this deployment may
+ * write SEC state. It SCANs the fact-set prefix to cursor 0 -- no call cap, so
+ * it cannot stop partway and look finished -- and SADDs what it found. After
+ * that the index is never empty again (writes keep it), so this never runs.
+ */
+export async function backfillFactSetIndex(): Promise<{ added: number; scanned: number; commands: number } | null> {
+  if (!redis) return null;
+  if (!canWriteSecState()) { noteSecWriteBlocked("backfillFactSetIndex"); return null; }
+  const found = new Set<string>();
+  let cursor: string | number = 0;
+  let commands = 0;
+  do {
+    const [next, keys]: [string | number, string[]] = await redis.scan(cursor, { match: `${SEC_FACTS_PREFIX}:*`, count: 1000 });
+    commands++;
+    cursor = next;
+    for (const k of keys) found.add(k.slice(SEC_FACTS_PREFIX.length + 1));
+  } while (String(cursor) !== "0");
+  const all = [...found];
+  let added = 0;
+  for (let i = 0; i < all.length; i += 500) {
+    const chunk = all.slice(i, i + 500) as [string, ...string[]];
+    added += await redis.sadd(SEC_FACTS_INDEX_KEY, ...chunk);
+    commands++;
+  }
+  return { added, scanned: all.length, commands };
+}
 // Registered in symbolEviction.PER_SYMBOL_KEYS, so evicting a delisted symbol
 // deletes its fact set with everything else.
 //
@@ -744,7 +809,11 @@ export async function discardFactSets(symbols: string[]): Promise<number> {
   if (!redis || symbols.length === 0) return 0;
   if (!canWriteSecState()) { noteSecWriteBlocked("discardFactSets"); return 0; }
   try {
-    return await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
+    const n = await redis.del(...symbols.map((s) => `${SEC_FACTS_PREFIX}:${s}`));
+    // AND OUT OF THE INDEX (#552 COWORK #59), or the daily index re-seeds a
+    // symbol whose set was discarded for a reassigned CIK.
+    await redis.srem(SEC_FACTS_INDEX_KEY, ...symbols.map((s) => s.toUpperCase()));
+    return n;
   } catch (err) {
     console.error("[sec-manifest] fact-set discard failed", err);
     return 0;
