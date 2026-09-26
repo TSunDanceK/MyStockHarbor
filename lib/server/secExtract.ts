@@ -1037,14 +1037,57 @@ const periodKey = (r: FactRow) => `${r.start ?? ""}..${r.end}`;
  * `asOf` exists so a check can pin the window; it does not change what is read,
  * only which periods survive the retention slice.
  */
-export function extractCompanyFacts(
+type ExtractOpts = {
+  quarters?: number; years?: number; instants?: number;
+  /** A cited naming exception (data/sec/fiscal-year-naming-overrides.json), via secExtractFor. */
+  namingOffset?: number;
+};
+
+/**
+ * THE EXTRACTION, WITH rankPerPeriod FILL-BACK (#552 COWORK #58, JD).
+ *
+ * A rankPerPeriod field (a total ahead of its component) resolves each period
+ * by chain rank, so the total wins wherever it is tagged. Measured over all
+ * 2,532 registrants, that alone EMPTIED 37 cells in 25 filers (FIGR, UBER,
+ * RCL…): a quarter derived by differencing now met the total on one frame and
+ * the component on the other, and a mixed-concept difference is refused. So a
+ * second reading with the old newest-concept preference fills exactly those
+ * empty cells and nothing else: never a cell the per-period rule filled. Run
+ * only for a filer that tags two or more concepts of such a field -- the only
+ * case where the two readings can differ.
+ */
+export function extractCompanyFacts(symbol: string, facts: CompanyFacts, opts: ExtractOpts = {}): ExtractResult {
+  const primary = extractCompanyFactsWith(symbol, facts, opts, false);
+  const ranked = SEC_FIELDS.filter((f) => f.rankPerPeriod && taggedConcepts(facts, f) > 1);
+  if (!ranked.length) return primary;
+  const fallback = extractCompanyFactsWith(symbol, facts, opts, true);
+  const idx = ranked.map((f) => SEC_FIELD_INDEX[f.key]);
+  for (const key of ["quarters", "years"] as const) {
+    const byPeriod = new Map(fallback[key].map((p) => [`${p.start}|${p.end}`, p]));
+    for (const p of primary[key]) {
+      const alt = byPeriod.get(`${p.start}|${p.end}`);
+      if (!alt) continue;
+      for (const i of idx) if (p.values[i] == null && alt.values[i] != null) p.values[i] = alt.values[i];
+    }
+  }
+  return primary;
+}
+
+/** How many of a field's chain concepts this payload publishes, either namespace. */
+function taggedConcepts(facts: CompanyFacts, field: FieldDef): number {
+  const sources: { ns: string; chain: string[] }[] = [{ ns: field.taxonomy, chain: field.chain }];
+  if (field.ifrsChain?.length) sources.push({ ns: "ifrs-full", chain: field.ifrsChain });
+  let n = 0;
+  for (const { ns, chain } of sources) for (const tag of chain) if (facts.facts?.[ns]?.[tag]) n++;
+  return n;
+}
+
+function extractCompanyFactsWith(
   symbol: string,
   facts: CompanyFacts,
-  opts: {
-    quarters?: number; years?: number; instants?: number;
-    /** A cited naming exception (data/sec/fiscal-year-naming-overrides.json), via secExtractFor. */
-    namingOffset?: number;
-  } = {}
+  opts: ExtractOpts,
+  /** The fallback reading: a rankPerPeriod field keeps the newest-concept preference. */
+  ignoreRankPerPeriod: boolean
 ): ExtractResult {
   const keepQuarters = opts.quarters ?? SEC_QUARTER_WINDOW;
   const keepYears = opts.years ?? SEC_YEAR_WINDOW;
@@ -1096,7 +1139,9 @@ export function extractCompanyFacts(
       // SAME SELECTOR EITHER WAY. The mark changes what happens to the OTHER
       // concepts (see `restrict`), not which one is chosen — the ruling
       // anchors both on the filer's newest period carrying a figure.
-      preferredTag(all)
+      // A rankPerPeriod field (a total ahead of its component) takes no
+      // preference: chain rank decides each period. See FieldDef.rankPerPeriod.
+      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)
     );
   }
 

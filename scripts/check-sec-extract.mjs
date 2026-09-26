@@ -1135,8 +1135,8 @@ check("a period the chosen concept does not cover is NOT filled from the other",
   // 119-symbol run is why it did not stay.
   const rankAnywhere = await liftMutated((src) =>
     src.replace(
-      "      preferredTag(all)",
-      "      field.oneConceptPerFiler\n" +
+      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : preferredTag(all)",
+      "      field.rankPerPeriod && !ignoreRankPerPeriod ? null : field.oneConceptPerFiler\n" +
       "        ? (() => { let b = null; for (const c of all) if (!b || c.rank < b.rank) b = c;\n" +
       "                   return b ? `${b.ns}|${b.tag}` : null; })()\n" +
       "        : preferredTag(all)"
@@ -1169,6 +1169,66 @@ check("oneConceptPerFiler is fed into secChainsHash",
     fieldsSrc.replace('+ `|one:${f.oneConceptPerFiler ? 1 : 0}`', "+ ``")
   )).secChainsHash(),
   "a set written under the old resolution must not report itself current");
+
+// A TOTAL IS NEVER DISPLACED BY ITS COMPONENT (#552 COWORK #57/#58, JD).
+// JD tags the non-operating TOTAL (NonoperatingIncomeExpense) through FY2023
+// only, and the COMPONENT (OtherNonoperatingIncomeExpense, "Others, net")
+// through FY2025. The newest-period preference took the component for every
+// year, so FY2023 read 7,496 where the total is 5,625 = pre-tax 31,650 −
+// operating 26,025. rankPerPeriod: the total wherever it is tagged, the
+// component only where it is not. Values are JD's own (CNY millions), as USD.
+{
+  const yr = (y, v) => ({ start: `${y}-01-01`, end: `${y}-12-31`, val: v * 1e6, accn: `a${y}`, filed: `${y + 1}-04-15`, form: "20-F", fy: y, fp: "FY" });
+  const series = (pairs) => ({ units: { USD: pairs.map(([y, v]) => yr(y, v)) } });
+  const jd = { cik: 1549802, facts: { "us-gaap": {
+    Revenues: series([[2022, 1046236], [2023, 1084662], [2024, 1158819], [2025, 1309140]]),
+    OperatingIncomeLoss: series([[2022, 19723], [2023, 26025], [2024, 38736], [2025, 2774]]),
+    IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: series([[2022, 13867], [2023, 31650], [2024, 51538], [2025, 25323]]),
+    NonoperatingIncomeExpense: series([[2022, -5856], [2023, 5625]]),
+    OtherNonoperatingIncomeExpense: series([[2022, -1555], [2023, 7496], [2024, 13371], [2025, 17327]]),
+  } } };
+  const nonOpBy = (out) => Object.fromEntries(out.years.map((y) => [y.end.slice(0, 4), at(y, "nonOperatingIncomeExpense")?.val ?? null]));
+  const got = nonOpBy(extractCompanyFacts("JD", jd));
+  check("JD: the total wins every year it is tagged, the component fills only the rest",
+    got["2023"] === 5625e6 && got["2022"] === -5856e6 && got["2024"] === 13371e6 && got["2025"] === 17327e6,
+    JSON.stringify(got));
+  check("...and FY2023 reconciles: pre-tax = operating + non-operating", 31650e6 === 26025e6 + got["2023"]);
+  const newestWins = await lift(`${fieldsSrc.replace('unit: "USD", rankPerPeriod: true },', 'unit: "USD" },')}\n${fxSrc}\n${currencySrc}\n${extractSrc}`);
+  const bad = nonOpBy(newestWins.extractCompanyFacts("JD", jd));
+  check("MUTATION: the component beats the total when the flag is dropped (JD FY2023 reads 7,496)",
+    bad["2023"] === 7496e6 && bad["2022"] === -1555e6, JSON.stringify(bad));
+  // THE FILL-BACK (FIGR's shape, 37 cells in 25 filers on the census): the
+  // total is tagged for FY2024 only, the component for every frame. Per-period
+  // rank takes the total for FY2024 and the component for 9M-2024, so the
+  // differenced Q4 2024 mixes concepts and is refused. The second reading
+  // (newest-concept preference) fills that cell, and only that cell.
+  {
+    const fr = (s0, e, v, y) => ({ start: s0, end: e, val: v * 1e6, accn: `f${y}`, filed: `${y + 1}-03-01`, form: "10-K", fy: y, fp: "FY" });
+    const figr = { cik: 1, facts: { "us-gaap": {
+      OperatingIncomeLoss: { units: { USD: [fr("2024-01-01", "2024-12-31", 100, 2024), fr("2024-01-01", "2024-09-30", 70, 2024), fr("2025-01-01", "2025-12-31", 120, 2025), fr("2025-01-01", "2025-09-30", 90, 2025)] } },
+      NonoperatingIncomeExpense: { units: { USD: [fr("2024-01-01", "2024-12-31", 12, 2024)] } },
+      OtherNonoperatingIncomeExpense: { units: { USD: [fr("2024-01-01", "2024-12-31", 10, 2024), fr("2024-01-01", "2024-09-30", 6, 2024), fr("2025-01-01", "2025-12-31", 9, 2025), fr("2025-01-01", "2025-09-30", 5, 2025)] } },
+    } } };
+    const q4 = (out) => out.quarters.find((q) => q.end === "2024-12-31");
+    const got = extractCompanyFacts("FIGR", figr);
+    const fy = got.years.find((y) => y.end === "2024-12-31");
+    const cell = q4(got) ? at(q4(got), "nonOperatingIncomeExpense") : null;
+    check("FIGR shape: the annual keeps the TOTAL, and the differenced Q4 is filled back, not emptied",
+      at(fy, "nonOperatingIncomeExpense")?.val === 12e6 && cell?.val === 4e6,
+      `FY2024 ${at(fy, "nonOperatingIncomeExpense")?.val} · Q4 2024 ${cell?.val ?? "empty"}`);
+    const noFill = await liftMutated((src) => src.replace("if (!ranked.length) return primary;", "return primary;"));
+    const bad = q4(noFill.extractCompanyFacts("FIGR", figr));
+    check("MUTATION: without the fill-back, Q4 2024 is emptied (the 37-cell cost on the census)",
+      !bad || at(bad, "nonOperatingIncomeExpense") == null, bad ? String(at(bad, "nonOperatingIncomeExpense")?.val) : "no Q4 row");
+    const jdAgain = nonOpBy(noFill.extractCompanyFacts("JD", jd));
+    check("...and the fill-back never overrides a cell the per-period rule filled (JD FY2023 stays the total)",
+      nonOpBy(extractCompanyFacts("JD", jd))["2023"] === 5625e6 && jdAgain["2023"] === 5625e6);
+  }
+  check("rankPerPeriod is fed into secChainsHash (a set written under the old choice must not read as current)",
+    mod.secChainsHash() !== (await lift(fieldsSrc.replace('+ (f.rankPerPeriod ? "|rank:1" : "")', '+ ""'))).secChainsHash());
+  check("...and secFieldsHash does NOT move (a chain policy, not a layout change)",
+    secFieldsHash() === newestWins.secFieldsHash());
+}
 
 // ── 8. the free arithmetic assertion ────────────────────────────────────────
 console.log("\n8. internal identities");
