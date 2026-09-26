@@ -268,6 +268,8 @@ const TASKS = {
   "write-manifest-gap": { script: "scripts/manifest-gap-probe.mjs", args: () => [], writes: true },
   // READS ONLY: presence of a cached vendor profile row (#552 COWORK #58).
   "write-cached-profile": { script: "scripts/cached-profile-probe.mjs", args: () => [], writes: true },
+  // READS ONLY: CODE-A daily check-in, one pass (#552). 3 commands.
+  "write-code-a-checkin": { script: "scripts/code-a-checkin-probe.mjs", args: () => [], writes: true },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
