@@ -1272,6 +1272,8 @@ const TASKS = {
   "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
   // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
   "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // Pickers stored rows for the ADS filers (side branch, #553 COWORK #51). 3 commands.
+  "write-pickers-stored-census": { script: "scripts/pickers-stored-census.mjs", args: () => [], writes: true },
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
