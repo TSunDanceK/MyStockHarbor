@@ -99,6 +99,22 @@ const pypl = sp.resolveProfile("PYPL", null);
 check("an override from the filer's own text wins over the table (PYPL, SIC 7389 → payments)",
   pypl.source === "filing" && pypl.industry === OV.PYPL.industry && pypl.industry === "Financial - Credit Services" &&
     pypl.filedOn === OV.PYPL.filedOn, JSON.stringify(pypl));
+// A REVIEWED MANUAL ENTRY OUTRANKS THE CACHE (#552 COWORK #59); nothing else
+// does. NGG carries a daily-renewed vendor row, so without this its reviewed
+// `industry: null` could never show.
+{
+  const cachedRow = { sector: "Utilities", industry: "Regulated Electric" };
+  const ngg = sp.resolveProfile("NGG", cachedRow);
+  check("NGG: the reviewed sector-only entry beats a cached vendor row — sector as SIC gives it, industry withheld",
+    ngg.source === "filing" && ngg.sector === OV.NGG.sector && ngg.industry === null && ngg.industrySource === "none", JSON.stringify(ngg));
+  const bip = sp.resolveProfile("BIP", { sector: "Industrials", industry: "Marine Shipping" });
+  check("BIP: a reviewed cited placement beats a cached vendor row too", bip.source === "filing" && bip.industry === "Diversified Utilities", JSON.stringify(bip));
+  check("...and a rule-derived override does NOT (PYPL with a cache row still answers from the cache)",
+    OV.PYPL.reviewed !== true && sp.resolveProfile("PYPL", cachedRow).source === "cache");
+  const M = await load(once(SOURCE, "  if (reviewed?.reviewed && (clean(reviewed.sector) || clean(reviewed.industry))) {", "  if (false) {"));
+  const back = M.resolveProfile("NGG", cachedRow);
+  check("MUTATION: the reviewed leg removed → the cache wins again (NGG shows the vendor industry)", back.source === "cache" && back.industry === "Regulated Electric");
+}
 {
   const M = await load(once(SOURCE, "  if (o && (clean(o.sector) || clean(o.industry))) {", "  if (false) {"));
   check("MUTATION: without the override leg PYPL is no longer placed by its filing", M.resolveProfile("PYPL", null).source !== "filing");

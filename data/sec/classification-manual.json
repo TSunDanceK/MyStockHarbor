@@ -53,6 +53,7 @@
   "LRCX": { "industry": "Semiconductors", "phrase": "wafer fabrication equipment and services to the semiconductor industry" },
   "KLAC": { "industry": "Semiconductors", "phrase": "process-enabling solutions for manufacturing wafers" },
   "TER": { "industry": "Semiconductors", "phrase": "automated test systems are used to test semiconductors" },
+  "NGG": { "industry": null, "review": "UK-layout 20-F with no Item headings, so the locator stores no 4.B text to cite. The SIC 4922 industry (Oil & Gas Midstream) is withheld until a quote exists; the sector stays as SIC gives it." },
   "NVMI": { "industry": "Semiconductors", "phrase": "metrology solutions for advanced process control used in semiconductor manufacturing" },
   "ABT": { "industry": "Medical - Devices", "phrase": "Diagnostic Products, Nutritional Products, and Medical Devices" },
   "GLW": { "industry": "Hardware, Equipment & Parts", "phrase": "fiber-optic hardware, fiber-optic connectors, optical components" },
