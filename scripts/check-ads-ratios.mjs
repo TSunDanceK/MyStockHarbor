@@ -152,7 +152,10 @@ const MAP = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entr
 const rowOk = (sym, e) => {
   if (!/^\d{10}-\d{2}-\d{6}$/.test(e.source) || !/^\d{4}-\d{2}-\d{2}$/.test(e.filed) || !e.evidence) return false;
   if (e.kind === "ordinary") return e.ordinaryPerAds === 1 && e.form === "20-F" && !/depositary|\bADSs?\b|preferred|preference/i.test(e.evidence)
-    && /(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b/i.test(e.evidence);
+    // A PARTNERSHIP'S EQUITY IS UNITS (BIP, #552 COWORK #56: "Limited
+    // Partnership Units" under the ticker, cited in primary-listings.json).
+    // Preferred units stay out through the exclusion above.
+    && /(?:ordinary|common)\s+(?:shares?|stock)|\bshares?\b|\blimited\s+partnership\s+units\b/i.test(e.evidence);
   if (e.kind !== "ads") return false;
   // The same reader that produced it: a row's own title, or its 12(b) section's footnote.
   const got = R.sectionRatioOf(e.evidence);
@@ -160,6 +163,8 @@ const rowOk = (sym, e) => {
 };
 const bad = Object.entries(MAP).filter(([k, e]) => !rowOk(k, e)).map(([k]) => k);
 check(`every one of ${Object.keys(MAP).length} rows restates its ratio from its own quoted evidence`, bad.length === 0, bad.join(", "));
+check("...a partnership's units count as its directly listed equity (BIP), preferred units do not",
+  rowOk("BIP", MAP.BIP) && !rowOk("BIPX", { ...MAP.BIP, evidence: "Class A Preferred Limited Partnership Units, Series 13" }));
 const first = Object.entries(MAP).find(([, e]) => e.kind === "ads");
 if (first) check(`MUTATION: ${first[0]}'s ratio changed by one → caught`, !rowOk(first[0], { ...first[1], ordinaryPerAds: first[1].ordinaryPerAds + 1 }));
 

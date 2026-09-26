@@ -66,11 +66,42 @@ const mIn = M.valuationInputs(set, "2026-09-25", { annualForm: "20-F", nonEquity
 check("MUTATION: the debt guard removed → a note's ticker is valued like equity (caught)",
   M.marketCap(mIn, 35)?.why !== "ticker-is-a-debt-security");
 
+console.log("\n2b. the cover count cited from the primary's own 20-F (#552 COWORK #56)");
+const cc = P.citedCoverFor("BIP");
+check("BIP: 460,488,788 as of 2025-12-31, parsed from the evidence line, with its accession",
+  cc?.val === 460488788 && cc.asOf === "2025-12-31" && cc.source === "0001406234-26-000002" && cc.quote === bip.evidence[1], JSON.stringify(cc));
+check("a debt ticker gets no cited cover", P.citedCoverFor("BIPI") === null && P.citedCoverFor("BIPH") === null);
+const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries;
+check("BIP is in the ADS map as directly listed (ordinary, 1), cited to the same 20-F",
+  ADS.BIP?.kind === "ordinary" && ADS.BIP.ordinaryPerAds === 1 && ADS.BIP.source === bip.source && bip.evidence[0].startsWith(ADS.BIP.evidence));
+// BIP's stored dei count: 295,429,987 as of 2020 (refused as stale on its own).
+const bipSet = { symbol: "BIP", quarters: [], years: [], instants: [], cur: "USD",
+  cover: { asOf: "2020-12-31", accession: "dei", filed: "2021-03-01", val: 295429987, derived: "as-filed" } };
+const bipFiler = { annualForm: "20-F", ads: ADS.BIP, citedCover: cc };
+const bi = V.valuationInputs(bipSet, "2026-09-26", bipFiler);
+check("BIP: the cited 2025 count replaces the 2020 dei count, and the share count is current",
+  bi.shares?.val === 460488788 && bi.shares.asOf === "2025-12-31" && !bi.refusals.includes("share-count-is-stale"), JSON.stringify(bi.shares) + " " + bi.refusals.join(","));
+check("...without the cited count the 2020 dei count is refused as stale (the gap this closes)",
+  V.valuationInputs(bipSet, "2026-09-26", { ...bipFiler, citedCover: null }).refusals.includes("share-count-is-stale"));
+const newerDei = { ...bipSet, cover: { ...bipSet.cover, asOf: "2026-06-30", val: 461000000 } };
+check("a dei count NEWER than the cited one keeps its place",
+  V.valuationInputs(newerDei, "2026-09-26", bipFiler).shares?.val === 461000000);
+const tmp2 = `lib/server/.check-pl-cov-${process.pid}.ts`;
+const ANCHOR = "(!set.cover?.asOf || cited.asOf > set.cover.asOf)";
+if (VS.split(ANCHOR).length !== 2) throw new Error("cited-cover mutation anchor must match once");
+fs.writeFileSync(tmp2, VS.replace(ANCHOR, "(!set.cover?.asOf || cited.asOf < set.cover.asOf)"));
+let M2;
+try { M2 = await import(`../${tmp2}`); } finally { fs.rmSync(tmp2, { force: true }); }
+const older = M2.valuationInputs(bipSet, "2026-09-26", bipFiler);
+check("MUTATION: the older count wins → BIP is back on the 2020 count, refused as stale (caught)",
+  older.shares === null && older.refusals.includes("share-count-is-stale"), JSON.stringify(older.shares));
+
 console.log("\n3. wiring");
 const route = fs.readFileSync("app/api/jobs/sec-daily-index/route.ts", "utf8");
 check("the SEC universe includes every cited primary", /\.\.\.primaryListingSymbols\(\)/.test(route) && P.primaryListingSymbols().includes("BIP"));
 const snap = fs.readFileSync("lib/server/secEarningsSnapshot.ts", "utf8"), page = fs.readFileSync("app/stock/[symbol]/earnings/page.tsx", "utf8");
 check("both valuation callers pass nonEquity", /nonEquity: nonEquityListingOf\(clean\)/.test(snap) && /nonEquity: nonEquityListingOf\(symbol\)/.test(page));
+check("...and both pass the cited cover", /citedCover: citedCoverFor\(clean\)/.test(snap) && /citedCover: citedCoverFor\(symbol\)/.test(page));
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
