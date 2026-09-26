@@ -78,6 +78,30 @@ const NAMES = read("data/company-names.json").rows ?? {};
 
 console.log(`universe from SYMBOLS: ${universe.length} tickers${universe.length ? "" : " (none given: sections 3, 4 and 6 are skipped)"}`);
 
+// COVERAGE GAPS (MODE=gaps, #553 COWORK #58): why a universe symbol got no
+// history or no IEX quote on the first night. For each SYMBOLS ticker: the
+// metadata status, the price CSV's status, row count and column NAMES, and
+// which IEX price fields are null. 3 requests per ticker, at most 15. No values.
+if (process.env.MODE === "gaps") {
+  const { toTiingo } = await import("../lib/symbolSpellings.mjs");
+  for (const s of universe.slice(0, 5)) {
+    const t = toTiingo(s);
+    const meta = await get(`/tiingo/daily/${encodeURIComponent(t)}`);
+    const metaFields = meta.body && typeof meta.body === "object" ? Object.keys(meta.body).filter((k) => meta.body[k] === null || meta.body[k] === "").join(", ") : "";
+    const px = await get(`/tiingo/daily/${encodeURIComponent(t)}/prices?format=csv&startDate=2022-01-01`, { text: true });
+    const lines = typeof px.body === "string" ? px.body.split(/\r?\n/).filter(Boolean) : [];
+    const head = lines[0] ?? "";
+    const looksCsv = /^date,/.test(head);
+    const iex = await get(`/iex/?tickers=${encodeURIComponent(t)}`);
+    const row = Array.isArray(iex.body) ? iex.body[0] : null;
+    const nulls = row ? ["last", "tngoLast", "lastSaleTimestamp", "timestamp", "open", "high", "low", "prevClose"].filter((k) => row[k] === null || row[k] === undefined).join(", ") : "(no row)";
+    console.log(`${s} as ${t}: metadata HTTP ${meta.status} (empty fields: ${metaFields || "none"}); prices HTTP ${px.status}, ${looksCsv ? `${lines.length - 1} rows, columns: ${head}` : `not a CSV (${Buffer.byteLength(String(px.body ?? ""))} bytes, body not printed)`}; IEX HTTP ${iex.status}, rows ${Array.isArray(iex.body) ? iex.body.length : 0}, null fields: ${nulls || "none"}`);
+    if ([meta.status, px.status, iex.status].includes(429)) break;
+  }
+  console.log(`\nTiingo requests used: ${requests} (cap 15); Redis commands: 0; stored: nothing`);
+  process.exit(0);
+}
+
 // PREFERRED SPELLINGS (MODE=spellings, #553 COWORK #55 §2): how Tiingo writes
 // the three preferreds its metadata endpoint missed. Reads the PUBLIC
 // supported_tickers file for rows under those roots (ticker spellings only),

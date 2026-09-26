@@ -48,6 +48,7 @@ const net = {
   redisCmds: [],
   bulkDate: "2026-09-24",
   iex: null,
+  shortTickers: [],
 };
 const reset = () => {
   net.redisStatus = 200;
@@ -59,6 +60,7 @@ const reset = () => {
   net.redisCmds = [];
   net.bulkDate = "2026-09-24";
   net.iex = null;
+  net.shortTickers = [];
   globalThis.__nextCacheStub = { revalidated: [], cached: [] };
 };
 const b64 = (v) => (typeof v === "string" ? Buffer.from(v).toString("base64") : Array.isArray(v) ? v.map(b64) : v);
@@ -104,7 +106,16 @@ globalThis.fetch = async (input, init = {}) => {
       return new Response(lines.join("\n"), { status: 200 });
     }
     const m = u.pathname.match(/^\/tiingo\/daily\/([^/]+)\/prices$/);
-    if (m) return new Response(csv(["2026-09-23,10,11,9,10,100,10,11,9,10,100,0,1", "2026-09-24,10.5,11,9,10,100,10.5,11,9,10,100,0,1"]), { status: 200 });
+    if (m) {
+      // 40 weekdays ending 2026-09-24; a ticker in net.shortTickers answers 5.
+      const n = net.shortTickers.includes(decodeURIComponent(m[1])) ? 5 : 40;
+      const rows = [];
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10);
+        rows.push(`${d},10,11,9,10,100,10,11,9,10,100,0,1`);
+      }
+      return new Response(csv(rows), { status: 200 });
+    }
     return new Response("not found", { status: 404 });
   }
   return new Response("unexpected host", { status: 599 });
@@ -232,6 +243,13 @@ check("...stamps the night complete, and revalidates eod", net.strings.has(K.TII
 const sent = net.tiingo.length;
 e = await J.runTiingoEod(NIGHT + 2 * 3600_000);
 check("nightly: the 02:45 retry after a complete night is one GET and no Tiingo call", e.skipped === "already-complete" && net.tiingo.length === sent, JSON.stringify(e));
+reset();
+net.shortTickers = ["BRK-B"];
+net.strings.set(K.tiingoEodKey("BRK-B"), "{}"); // last night's value
+e = await J.runTiingoEod(NIGHT);
+check("nightly: a short answer (<30 bars) is not stored as a history", e.written === 2 && e.failed?.short === 1 && e.shortOrEmpty?.includes("BRK-B"), JSON.stringify(e));
+check("...and last night's value is deleted, so a reader falls back to FMP", net.redisCmds.some((c) => c[0] === "del" && c.includes(K.tiingoEodKey("BRK-B"))));
+check("...with the minimum pinned at 30, as historyCache qualifies", J.EOD_MIN_BARS === 30);
 reset();
 net.bulkDate = "2026-09-23";
 e = await J.runTiingoEod(NIGHT);
