@@ -71,7 +71,15 @@ for (const [cik, sym] of byCik) {
   let n = 0, okA = 0, badA = 0, okB = 0, badB = 0;
   for (const p of periods(a)) {
     const q = bByEnd.get(`${p.start}|${p.end}`);
-    if (q && val(p, "nonOperatingIncomeExpense") !== val(q, "nonOperatingIncomeExpense")) n++;
+    if (q && val(p, "nonOperatingIncomeExpense") !== val(q, "nonOperatingIncomeExpense")) {
+      n++;
+      // DETAIL=1 (with SYMBOLS): each changed period, SEC values and tags only.
+      if (process.env.DETAIL) {
+        const c = (x) => x.values[I.nonOperatingIncomeExpense];
+        const m = (v) => (v == null ? "-" : (v / 1e6).toFixed(1) + "M");
+        console.log(`  ${sym} ${p.start}..${p.end}: pre ${m(val(p, "preTaxIncome"))} op ${m(val(p, "operatingIncome"))} | before ${c(q)?.tag} ${m(c(q)?.val)} (${reconciles(q)}) | after ${c(p)?.tag} ${m(c(p)?.val)} (${reconciles(p)})`);
+      }
+    }
     const ra = reconciles(p); if (ra === true) okA++; else if (ra === false) badA++;
     if (q) { const rb = reconciles(q); if (rb === true) okB++; else if (rb === false) badB++; }
   }
