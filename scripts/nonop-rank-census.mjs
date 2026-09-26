@@ -58,7 +58,8 @@ const reconciles = (p) => {
 };
 const periods = (out) => [...out.years, ...out.quarters];
 
-let scanned = 0, failed = 0, candidates = 0, moved = 0, cellsMoved = 0;
+let scanned = 0, failed = 0, candidates = 0, moved = 0, cellsMoved = 0, emptied = 0, filled = 0;
+const emptiedSyms = [];
 const tot = { before: { ok: 0, bad: 0 }, after: { ok: 0, bad: 0 } };
 const movedSyms = [], worse = [];
 for (const [cik, sym] of byCik) {
@@ -78,6 +79,10 @@ for (const [cik, sym] of byCik) {
     const q = bByEnd.get(`${p.start}|${p.end}`);
     if (q && val(p, "nonOperatingIncomeExpense") !== val(q, "nonOperatingIncomeExpense")) {
       n++;
+      // A CELL THE NEW RULE EMPTIES (a figure before, none after) is a cost,
+      // counted apart from a cell that merely changes measure.
+      if (val(p, "nonOperatingIncomeExpense") == null) { emptied++; if (!emptiedSyms.includes(sym)) emptiedSyms.push(sym); }
+      if (val(q, "nonOperatingIncomeExpense") == null) filled++;
       // DETAIL=1 (with SYMBOLS): each changed period, SEC values and tags only.
       if (process.env.DETAIL) {
         const c = (x) => x.values[I.nonOperatingIncomeExpense];
@@ -99,4 +104,5 @@ console.log(`periods that reconcile (pre-tax = operating + non-op [- interest], 
 console.log(`  before (newest-period preference): ${tot.before.ok} reconcile, ${tot.before.bad} do not`);
 console.log(`  after  (rank per period):          ${tot.after.ok} reconcile, ${tot.after.bad} do not`);
 console.log(`filers that reconcile FEWER periods after: ${worse.length}${worse.length ? `: ${worse.join(" ")}` : ""}`);
+console.log(`cells EMPTIED by the new rule (a figure before, none after): ${emptied}${emptiedSyms.length ? ` in ${emptiedSyms.join(" ")}` : ""} · cells newly filled: ${filled}`);
 console.log(`changed: ${movedSyms.join(" ")}`);
