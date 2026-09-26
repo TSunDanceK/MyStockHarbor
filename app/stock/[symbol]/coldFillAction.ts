@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { checkBotId } from "botid/server";
 import { verifyQuoteToken } from "@/lib/server/quoteToken";
 import { cikForSymbol, fillColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
+import { factSetExists } from "@/lib/server/secFactStore";
 import {
   COLD_FILL_SYMBOL,
   clientIpFrom,
@@ -83,4 +84,20 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
   } finally {
     await releaseColdFillLock(clean);
   }
+}
+
+/**
+ * IS THE SET STORED YET? The cold-fill client's poll (#552 COWORK #46).
+ *
+ * A server action, so a POST: never served from the CDN or an ISR copy, which
+ * is the "no-store" the poll needs. It reads, never fills: no BotID, no
+ * counter, no lock. ONE Redis EXISTS per call; the free gates (token, symbol,
+ * CIK) refuse before it. Null Redis reads as "not yet" — the poll gives up on
+ * its own ceiling rather than refreshing into a page that is still cold.
+ */
+export async function coldFillStatus(symbol: unknown, token: unknown): Promise<{ ready: boolean }> {
+  const clean = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
+  if (typeof token !== "string" || !verifyQuoteToken(token).ok) return { ready: false };
+  if (!COLD_FILL_SYMBOL.test(clean) || cikForSymbol(clean) === null) return { ready: false };
+  return { ready: (await factSetExists(clean)) === true };
 }
