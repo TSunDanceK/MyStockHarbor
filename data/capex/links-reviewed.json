@@ -2,182 +2,18 @@
  "about": "Named supplier/customer links for the capex page's receivers, plan (c) batch 1 (#563 COWORK #19). Each link was checked against the company's own filed sentence and is kept with that quote, the filing's accession and its date. Only verdict 'correct' is published; 'rejected' and 'deferred' are the review trail. No dollar amounts: a filed percentage appears only inside a quote.",
  "batch": 1,
  "reviewer": "CODE-C review (a Claude Code session), Cowork-audited",
- "reviewedAt": "2026-09-25",
+ "reviewedAt": "2026-09-27",
  "excludedReceivers": [
   "AMZN",
   "GOOGL",
   "MSFT"
  ],
  "method": "Candidates: the capex links probe output (v1-v4) plus a read-only scan of every tracked filer's latest 10-K/20-F for sentences naming a receiver next to a trade word. Each candidate's sentences were read; a link is correct only when the sentence itself states that the filer buys from / is supplied by the party, or that the party buys from the filer. Hedged or conditional wording, partnerships, competitors, parent/subsidiary and corporate-history mentions are never links.",
- "audit": {
-  "by": "Cowork",
-  "status": "passed",
-  "result": "COWORK #20: 0 of 20 disagree",
-  "seed": 563019,
-  "draw": "import random; random.Random(563019).sample(population, 20) -- Python 3; population is the list below exactly as stored (sorted 'filer|party|role' keys of the 105 links published at audit time). drawOrder is sample()'s return order; sample is the same 20 sorted.",
-  "population": [
-   "AAOI|ORCL|customer",
-   "ACA|GEV|customer",
-   "ADEA|MU|customer",
-   "ADEA|SNDK|customer",
-   "AERO|ORCL|supplier",
-   "AMKR|AAPL|customer",
-   "AMKR|QCOM|customer",
-   "AMSC|MU|customer",
-   "ANET|AVGO|supplier",
-   "ANET|JBL|supplier",
-   "ASX|LRCX|supplier",
-   "ASX|TER|supplier",
-   "BKR|GEV|supplier",
-   "CDW|AVGO|supplier",
-   "CDW|CSCO|supplier",
-   "CDW|DELL|supplier",
-   "CDW|HPE|supplier",
-   "CDW|IBM|supplier",
-   "CDW|INTC|supplier",
-   "CDW|NVDA|supplier",
-   "CIEN|T|customer",
-   "CLS|AMAT|customer",
-   "CLS|CIEN|customer",
-   "CLS|DELL|customer",
-   "CLS|HON|customer",
-   "CLS|HPE|customer",
-   "CLS|IBM|customer",
-   "CLS|LRCX|customer",
-   "CLS|META|customer",
-   "CNXN|DELL|supplier",
-   "COHR|NVDA|customer",
-   "COHU|JBL|supplier",
-   "CRDO|AMKR|supplier",
-   "CX|IBM|supplier",
-   "EMBJ|ETN|supplier",
-   "EXTR|AVGO|supplier",
-   "FFIV|FLEX|supplier",
-   "FLEX|F|customer",
-   "FORTY|IBM|supplier",
-   "FTNT|AMD|supplier",
-   "FTNT|AVGO|supplier",
-   "FTNT|INTC|supplier",
-   "FTNT|MRVL|supplier",
-   "FTNT|MU|supplier",
-   "FTNT|WDC|supplier",
-   "HPQ|AMD|supplier",
-   "HPQ|INTC|supplier",
-   "HPQ|NVDA|supplier",
-   "ICHR|AMAT|customer",
-   "ICHR|ASML|customer",
-   "ICHR|LRCX|customer",
-   "INGM|AMD|supplier",
-   "INGM|CSCO|supplier",
-   "INGM|DELL|supplier",
-   "INGM|HPE|supplier",
-   "INGM|NVDA|supplier",
-   "INTC|ASML|supplier",
-   "IREN|AMD|supplier",
-   "IREN|DELL|supplier",
-   "JKHY|IBM|supplier",
-   "LIF|JBL|supplier",
-   "LI|NVDA|supplier",
-   "LRCX|MU|customer",
-   "LSCC|AMKR|supplier",
-   "MTZ|T|customer",
-   "MXL|INTC|supplier",
-   "NBIS|META|customer",
-   "NBIS|NVDA|supplier",
-   "NPO|AMAT|customer",
-   "NPO|ASML|customer",
-   "NSIT|CSCO|supplier",
-   "NSIT|DELL|supplier",
-   "NVDA|FN|supplier",
-   "NVDA|MU|supplier",
-   "OUST|FN|supplier",
-   "PAGS|CSCO|supplier",
-   "PAGS|ORCL|supplier",
-   "PCAR|ETN|supplier",
-   "PENG|CLS|supplier",
-   "PLUS|CSCO|supplier",
-   "QCOM|AMKR|supplier",
-   "RNG|EQIX|supplier",
-   "SCSC|CSCO|supplier",
-   "SCSC|DELL|supplier",
-   "SCSC|HPE|supplier",
-   "SEDG|JBL|supplier",
-   "SHAZ|NVDA|supplier",
-   "SIMO|MU|customer",
-   "STVN|GLW|supplier",
-   "TDC|DELL|supplier",
-   "TDC|FLEX|supplier",
-   "TDC|NVDA|supplier",
-   "TRMB|JBL|supplier",
-   "TSEM|INTC|supplier",
-   "UCTT|AMAT|customer",
-   "UCTT|ASML|customer",
-   "UCTT|LRCX|customer",
-   "UI|AVGO|supplier",
-   "UMC|INTC|customer",
-   "VIAV|AMD|customer",
-   "VIAV|CIEN|customer",
-   "VIAV|CSCO|customer",
-   "WWD|GEV|customer",
-   "XP|ORCL|supplier",
-   "YELP|ORCL|supplier"
-  ],
-  "drawOrder": [
-   "STVN|GLW|supplier",
-   "HPQ|INTC|supplier",
-   "UCTT|AMAT|customer",
-   "EXTR|AVGO|supplier",
-   "INTC|ASML|supplier",
-   "FTNT|MRVL|supplier",
-   "CDW|NVDA|supplier",
-   "NBIS|NVDA|supplier",
-   "ICHR|AMAT|customer",
-   "JKHY|IBM|supplier",
-   "VIAV|CIEN|customer",
-   "ACA|GEV|customer",
-   "UI|AVGO|supplier",
-   "FTNT|WDC|supplier",
-   "FTNT|AVGO|supplier",
-   "PCAR|ETN|supplier",
-   "MTZ|T|customer",
-   "SCSC|CSCO|supplier",
-   "PAGS|ORCL|supplier",
-   "ANET|AVGO|supplier"
-  ],
-  "sample": [
-   "ACA|GEV|customer",
-   "ANET|AVGO|supplier",
-   "CDW|NVDA|supplier",
-   "EXTR|AVGO|supplier",
-   "FTNT|AVGO|supplier",
-   "FTNT|MRVL|supplier",
-   "FTNT|WDC|supplier",
-   "HPQ|INTC|supplier",
-   "ICHR|AMAT|customer",
-   "INTC|ASML|supplier",
-   "JKHY|IBM|supplier",
-   "MTZ|T|customer",
-   "NBIS|NVDA|supplier",
-   "PAGS|ORCL|supplier",
-   "PCAR|ETN|supplier",
-   "SCSC|CSCO|supplier",
-   "STVN|GLW|supplier",
-   "UCTT|AMAT|customer",
-   "UI|AVGO|supplier",
-   "VIAV|CIEN|customer"
-  ],
-  "addedAfterDraw": [
-   "AMD|TSM|supplier",
-   "AVGO|TSM|supplier",
-   "NVDA|TSM|supplier"
-  ],
-  "addedAfterDrawNote": "The three TSMC links moved from deferred per COWORK #20 F1; their sentences were read by Cowork in that ruling. They were not in the population the audit sample was drawn from."
- },
  "counts": {
-  "reviewed": 250,
-  "confirmed": 108,
-  "notEstablished": 124,
-  "wrongEntity": 18,
+  "reviewed": 293,
+  "confirmed": 120,
+  "notEstablished": 151,
+  "wrongEntity": 22,
   "deferred": 0
  },
  "links": [
@@ -192,7 +28,8 @@
    "quote": "Direct sales to Apple and Qualcomm accounted for 29.8% and 11.1% of our net sales, respectively, for the year ended December 31, 2025.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Direct sales to Apple 29.8% of net sales"
+   "note": "Direct sales to Apple 29.8% of net sales",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -205,7 +42,8 @@
    "quote": "Our ATS segment customers include Applied Materials, Inc., LAM Research and Honeywell Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "ATS segment customers include Applied Materials"
+   "note": "ATS segment customers include Applied Materials",
+   "batch": "1"
   },
   {
    "filer": "ICHR",
@@ -218,7 +56,8 @@
    "quote": "For 2025, two customers with individual sales over 10%, Lam Research and Applied Materials, accounted for a combined 76% of total sales.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Applied Materials >10% customer of total sales"
+   "note": "Applied Materials >10% customer of total sales",
+   "batch": "1"
   },
   {
    "filer": "NPO",
@@ -231,7 +70,8 @@
    "quote": "Representative customers include leading global manufacturers of semiconductor manufacturing equipment, such as Applied Materials and ASML, as well as manufacturers of equipment used in the life sciences and industrial technology industries and government defense contractors.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Representative customers include Applied Materials"
+   "note": "Representative customers include Applied Materials",
+   "batch": "1"
   },
   {
    "filer": "UCTT",
@@ -244,7 +84,8 @@
    "quote": "Our two largest revenue customers in fiscal years 2025, 2024 and 2023 were Applied Materials, Inc. and Lam Research Corporation, each of which accounted for more than 10% of our total revenues in those three years.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Largest revenue customer, >10% of revenues"
+   "note": "Largest revenue customer, >10% of revenues",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -257,7 +98,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "CPUs supplied from AMD as limited source components"
+   "note": "CPUs supplied from AMD as limited source components",
+   "batch": "1"
   },
   {
    "filer": "HPQ",
@@ -270,7 +112,8 @@
    "quote": "We also rely on Intel, AMD, and NVIDIA, or other suppliers to provide us with a sufficient supply of processors for the majority of our PCs and workstations.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "AMD provides supply of processors for our PCs"
+   "note": "AMD provides supply of processors for our PCs",
+   "batch": "1"
   },
   {
    "filer": "INGM",
@@ -283,7 +126,8 @@
    "quote": "Our vendors include many of the largest tech companies, including Advanced Micro Devices, Apple, Amazon Web Services (AWS), Cisco, Dell Technologies, Hewlett Packard Enterprise, HP Inc., Lenovo, Microsoft, NVIDIA and Super Micro Computer.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our vendors include Advanced Micro Devices"
+   "note": "Our vendors include Advanced Micro Devices",
+   "batch": "1"
   },
   {
    "filer": "IREN",
@@ -296,7 +140,8 @@
    "quote": "In particular, we source certain hardware solutions (such as GPUs, networking and storage equipment utilized for AI Cloud Services) from a limited number of suppliers, including NVIDIA, AMD, Dell Technologies, Lenovo, Supermicro, Gigabyte and leading storage and networking providers.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We source hardware from suppliers including AMD"
+   "note": "We source hardware from suppliers including AMD",
+   "batch": "1"
   },
   {
    "filer": "VIAV",
@@ -309,7 +154,8 @@
    "quote": "Examples of our customers include Advanced Micro Devices, Inc., Am rica M vil, AT&T Inc., British Telecom Openreach, Ciena, Cisco Systems, Inc., Deutsche Telekom AG, Ericsson, Lumen Technologies, Inc., Nokia Corporation and Verizon Communications Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our customers include Advanced Micro Devices"
+   "note": "Our customers include Advanced Micro Devices",
+   "batch": "1"
   },
   {
    "filer": "CRDO",
@@ -322,7 +168,8 @@
    "quote": "We also use third-party contract manufacturers for a significant majority of our assembly and test operations, including Amkor, ASE, KYEC and Sigurd for our IC products, and BizLink for our AEC products.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Contract manufacturer for assembly and test"
+   "note": "Contract manufacturer for assembly and test",
+   "batch": "1"
   },
   {
    "filer": "LSCC",
@@ -335,7 +182,8 @@
    "quote": "All ASE and Amkor manufacturing of our products is in Asia.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Amkor manufactures our products"
+   "note": "Amkor manufactures our products",
+   "batch": "1"
   },
   {
    "filer": "QCOM",
@@ -348,7 +196,8 @@
    "quote": "Our primary semiconductor assembly and test suppliers are Advanced Semiconductor Engineering, Amkor Technology, Siliconware Precision Industries and STATSChipPAC. The majority of our foundry and semiconductor assembly and test suppliers are located in the Asia-Pacific region.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Primary assembly and test supplier"
+   "note": "Primary assembly and test supplier",
+   "batch": "1"
   },
   {
    "filer": "ICHR",
@@ -361,7 +210,8 @@
    "quote": "We have long standing relationships with top tier OEM customers, including Lam Research, Applied Materials, and ASML which were our largest customers by sales in 2025.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "ASML among largest customers by sales"
+   "note": "ASML among largest customers by sales",
+   "batch": "1"
   },
   {
    "filer": "INTC",
@@ -374,7 +224,8 @@
    "quote": "For example, ASML Holding N.V. (ASML) is currently the sole supplier of EUV lithography tools that we are deploying in our Intel 4, Intel 3, Intel 18A and planned future leading-edge manufacturing process nodes.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "ASML sole supplier of EUV tools we deploy"
+   "note": "ASML sole supplier of EUV tools we deploy",
+   "batch": "1"
   },
   {
    "filer": "NPO",
@@ -387,7 +238,8 @@
    "quote": "Representative customers include leading global manufacturers of semiconductor manufacturing equipment, such as Applied Materials and ASML, as well as manufacturers of equipment used in the life sciences and industrial technology industries and government defense contractors.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Representative customers include ASML"
+   "note": "Representative customers include ASML",
+   "batch": "1"
   },
   {
    "filer": "UCTT",
@@ -400,7 +252,8 @@
    "quote": "Three customers' gross accounts receivable balances, Applied Materials, Inc., Lam Research Corporation and ASML Holding NV were individually greater than 10.0% of gross accounts receivable as of December 27, 2024, in the aggregate approximately 41.9 % of accounts receivable.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "ASML customer >10% of receivables"
+   "note": "ASML customer >10% of receivables",
+   "batch": "1"
   },
   {
    "filer": "ANET",
@@ -413,7 +266,8 @@
    "quote": "In particular, we are primarily reliant upon our predominant merchant silicon vendor, Broadcom, for our switching chips.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Broadcom predominant silicon vendor for switching chips"
+   "note": "Broadcom predominant silicon vendor for switching chips",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -426,7 +280,8 @@
    "quote": "We offer more than 100,000 products and services from more than 1,000 vendor partners, including well-established companies such as Adobe, APC, Apple, Amazon Web Services, Broadcom Inc., Cisco, Dell Technologies, Google, Hewlett Packard Enterprise, HP Inc., IBM, Intel, Lenovo, Microsoft, NetApp, Nutanix, Nvidia, Palo Alto Networks, Pure Storage, and Samsung, as well as from emerging technology companies.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "CDW offers products from vendor partner Broadcom"
+   "note": "CDW offers products from vendor partner Broadcom",
+   "batch": "1"
   },
   {
    "filer": "EXTR",
@@ -439,7 +294,8 @@
    "quote": "Our product development efforts also depend upon continued collaboration with our key suppliers, including our merchant silicon vendors such as Broadcom, Inc.. As we develop our product roadmap and continue to expand our relationships with these and other merchant silicon vendors, it is critical that we work in tandem with our key vendors to ensure that their silicon includes improved features and that our products take advantage of such improved features.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Broadcom named key supplier, merchant silicon vendor"
+   "note": "Broadcom named key supplier, merchant silicon vendor",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -452,7 +308,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Network chips from Broadcom are supplied components"
+   "note": "Network chips from Broadcom are supplied components",
+   "batch": "1"
   },
   {
    "filer": "UI",
@@ -462,10 +319,11 @@
    "filingDate": "2026-08-21",
    "role": "supplier",
    "partyAsFiled": "Broadcom",
-   "quote": "example, we currently rely upon some chipset suppliers, such as Qualcomm and Broadcom, as single-source suppliers of certain components for some of our products, and a disruption in the supply of those components would significantly disrupt our business.",
+   "quote": "For example, we currently rely upon some chipset suppliers, such as Qualcomm and Broadcom, as single-source suppliers of certain components for some of our products, and a disruption in the supply of those components would significantly disrupt our business.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Broadcom single-source supplier of components"
+   "note": "Broadcom single-source supplier of components (quote extended to its sentence start, 'For', from the same accession; the filing's page-break footer '16' between 'For' and 'example' is not part of the sentence) (COWORK #24)",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -478,7 +336,8 @@
    "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "CCS segment customers include Ciena"
+   "note": "CCS segment customers include Ciena",
+   "batch": "1"
   },
   {
    "filer": "VIAV",
@@ -491,7 +350,8 @@
    "quote": "Examples of our customers include Advanced Micro Devices, Inc., Am rica M vil, AT&T Inc., British Telecom Openreach, Ciena, Cisco Systems, Inc., Deutsche Telekom AG, Ericsson, Lumen Technologies, Inc., Nokia Corporation and Verizon Communications Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our customers include Ciena"
+   "note": "Our customers include Ciena",
+   "batch": "1"
   },
   {
    "filer": "PENG",
@@ -504,7 +364,8 @@
    "quote": "Our contract manufacturers include NEC Corporation, Advantech Co., Ltd. and Celestica Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Celestica is our contract manufacturer"
+   "note": "Celestica is our contract manufacturer",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -517,7 +378,8 @@
    "quote": "A significant portion of our sales are derived from products manufactured by Apple, Cisco, Dell Technologies, HP Inc., Lenovo, and Microsoft.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Sales derived from products manufactured by Cisco"
+   "note": "Sales derived from products manufactured by Cisco",
+   "batch": "1"
   },
   {
    "filer": "INGM",
@@ -530,7 +392,8 @@
    "quote": "Our vendors include many of the largest tech companies, including Advanced Micro Devices, Apple, Amazon Web Services (AWS), Cisco, Dell Technologies, Hewlett Packard Enterprise, HP Inc., Lenovo, Microsoft, NVIDIA and Super Micro Computer.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our vendors include Cisco"
+   "note": "Our vendors include Cisco",
+   "batch": "1"
   },
   {
    "filer": "NSIT",
@@ -543,7 +406,8 @@
    "quote": "Our top five partners as a group for 2025 were Microsoft, TD Synnex (a distributor), Google, Cisco Systems, and Ingram Micro (a distributor), and approximately 63 % of our total purchases during 2025 came from this group of partners.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "63% of purchases from partners incl. Cisco"
+   "note": "63% of purchases from partners incl. Cisco",
+   "batch": "1"
   },
   {
    "filer": "PAGS",
@@ -556,7 +420,8 @@
    "quote": "We operate software products under licenses, including certain open-source licenses, from our vendors, including, among others, Verifone, Oracle, Feedzai and Cisco.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Software licenses from vendors including Cisco"
+   "note": "Software licenses from vendors including Cisco",
+   "batch": "1"
   },
   {
    "filer": "PLUS",
@@ -569,7 +434,8 @@
    "quote": "Products manufactured by Cisco Systems represented approximately 29%, 32%, and 44% of net sales for the years ended March 31, 2026, 2025, and 2024, respectively.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Cisco-manufactured products 29% of our net sales"
+   "note": "Cisco-manufactured products 29% of our net sales",
+   "batch": "1"
   },
   {
    "filer": "SCSC",
@@ -582,7 +448,8 @@
    "quote": "A significant percentage of our net sales relates to products we purchase from relatively few supplie rs, including Cisco and Zebra.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Products we purchase from Cisco"
+   "note": "Products we purchase from Cisco",
+   "batch": "1"
   },
   {
    "filer": "VIAV",
@@ -595,7 +462,8 @@
    "quote": "Examples of our customers include Advanced Micro Devices, Inc., Am rica M vil, AT&T Inc., British Telecom Openreach, Ciena, Cisco Systems, Inc., Deutsche Telekom AG, Ericsson, Lumen Technologies, Inc., Nokia Corporation and Verizon Communications Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our customers include Cisco Systems"
+   "note": "Our customers include Cisco Systems",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -608,7 +476,8 @@
    "quote": "A significant portion of our sales are derived from products manufactured by Apple, Cisco, Dell Technologies, HP Inc., Lenovo, and Microsoft.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Sales derived from products manufactured by Dell"
+   "note": "Sales derived from products manufactured by Dell",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -621,7 +490,8 @@
    "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Dell listed among CCS segment customers"
+   "note": "Dell listed among CCS segment customers",
+   "batch": "1"
   },
   {
    "filer": "CNXN",
@@ -634,7 +504,8 @@
    "quote": "Product purchases from Ingram Micro, Inc., TD Synnex Corporation, and Dell Inc. accounted for approximately 25%, 23%, and 11%, respectively, of our total product purchases in 2024.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Product purchases from Dell Inc. 11% of purchases"
+   "note": "Product purchases from Dell Inc. 11% of purchases",
+   "batch": "1"
   },
   {
    "filer": "INGM",
@@ -647,7 +518,8 @@
    "quote": "Our suppliers are the world's most trusted technology leaders, along with emerging technology brands, which include the industry's premier hyperscalers, computer hardware suppliers, mobility hardware suppliers, networking equipment suppliers and software publishers such as Microsoft, Amazon Web Services, Google Cloud, NVIDIA, Advanced Micro Devices, Apple, Cisco, Dell Technologies, Hewlett Packard Enterprise, HP Inc., Lenovo, and Super Micro Computer.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Dell listed among our suppliers"
+   "note": "Dell listed among our suppliers",
+   "batch": "1"
   },
   {
    "filer": "IREN",
@@ -660,7 +532,8 @@
    "quote": "In particular, we source certain hardware solutions (such as GPUs, networking and storage equipment utilized for AI Cloud Services) from a limited number of suppliers, including NVIDIA, AMD, Dell Technologies, Lenovo, Supermicro, Gigabyte and leading storage and networking providers.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We source hardware from suppliers including Dell"
+   "note": "We source hardware from suppliers including Dell",
+   "batch": "1"
   },
   {
    "filer": "NSIT",
@@ -673,7 +546,8 @@
    "quote": "Sales of product from our top five manufacturers/publishers as a group (Microsoft, Dell, Cisco Systems, HP Inc. and Lenovo) accounted for approximately 50% of our consolidated net sales during 2025.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Dell among our top manufacturers whose product we sell"
+   "note": "Dell among our top manufacturers whose product we sell",
+   "batch": "1"
   },
   {
    "filer": "SCSC",
@@ -686,7 +560,8 @@
    "quote": "Our key suppliers includ e AT&T, Avaya, Axis, Cisco, Comcast Business, Dell, Elo, Extreme, Five9, Fortinet, Hanwha, Honeywell, HP Poly, HPE/Aruba, HPE/Juniper, Ingenico, Lumen, Microsoft, NiCE, RingCentral, Ubiquiti, Verifone, Verizon, Zebra Technologies and Zoom.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Dell listed among key suppliers"
+   "note": "Dell listed among key suppliers",
+   "batch": "1"
   },
   {
    "filer": "TDC",
@@ -699,7 +574,8 @@
    "quote": "In addition, we buy servers from Dell Technologies Inc., storage disk systems from NetApp, Inc., and graphics processing units (\"GPU\") from NVIDIA. Some components supplied by third parties may be critical to our solutions, and several of our suppliers may terminate their agreements with us without cause with 180-days' notice.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We buy servers from Dell"
+   "note": "We buy servers from Dell",
+   "batch": "1"
   },
   {
    "filer": "RNG",
@@ -712,7 +588,8 @@
    "quote": "We currently serve our North American customers from geographically disparate data center hosting facilities in North America, where we lease space from Equinix, Inc., and other providers, and we serve our European customers from third-party data center hosting facilities in Europe.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We lease data center space from Equinix"
+   "note": "We lease data center space from Equinix",
+   "batch": "1"
   },
   {
    "filer": "EMBJ",
@@ -725,7 +602,8 @@
    "quote": "The risk-sharing partners for the Phenom 100EX and Phenom 300E jets are Pratt & Whitney Canada, the engines supplier; Garmin, the avionics systems supplier; and Eaton Corporation, the hydraulic systems supplier.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Eaton is hydraulic systems supplier for Phenom jets"
+   "note": "Eaton is hydraulic systems supplier for Phenom jets",
+   "batch": "1"
   },
   {
    "filer": "PCAR",
@@ -738,7 +616,8 @@
    "quote": "The Company purchased a significant portion of its transmissions from Eaton Corporation Plc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Company purchased transmissions from Eaton"
+   "note": "Company purchased transmissions from Eaton",
+   "batch": "1"
   },
   {
    "filer": "FLEX",
@@ -751,7 +630,8 @@
    "quote": "We also received recognition from our customers, including being named a top-performing supplier at Ford's annual Supplier",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Ford among our customers; named top supplier"
+   "note": "Ford among our customers; named top supplier",
+   "batch": "1"
   },
   {
    "filer": "FFIV",
@@ -764,7 +644,8 @@
    "quote": "We outsource the manufacturing of our products to various manufacturing partners, including our primary third-party manufacturer service provider, Flex Ltd.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Flex is our primary third-party manufacturer"
+   "note": "Flex is our primary third-party manufacturer",
+   "batch": "1"
   },
   {
    "filer": "TDC",
@@ -777,7 +658,8 @@
    "quote": "Our hardware components are assembled and configured by Flex Ltd.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Hardware components assembled and configured by Flex"
+   "note": "Hardware components assembled and configured by Flex",
+   "batch": "1"
   },
   {
    "filer": "NVDA",
@@ -790,7 +672,8 @@
    "quote": "We engage with independent subcontractors and contract manufacturers such as Hon Hai Precision Industry Co., Ltd., Wistron Corporation, and Fabrinet to perform assembly, testing and packaging of our final products.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Fabrinet contract manufacturer for our final products"
+   "note": "Fabrinet contract manufacturer for our final products",
+   "batch": "1"
   },
   {
    "filer": "OUST",
@@ -803,7 +686,8 @@
    "quote": "Benchmark and Fabrinet manufacture the majority of our products, which we expect will reduce our product costs and allow us to rapidly scale production to meet our anticipated product demand.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Fabrinet manufactures majority of our products"
+   "note": "Fabrinet manufactures majority of our products",
+   "batch": "1"
   },
   {
    "filer": "ACA",
@@ -816,7 +700,8 @@
    "quote": "GE Vernova accounted for approximately 12.2% of our consolidated revenues in 2025 up from 10.8% of consolidated revenues in 2024.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "GE Vernova 12.2% of consolidated revenues"
+   "note": "GE Vernova 12.2% of consolidated revenues",
+   "batch": "1"
   },
   {
    "filer": "BKR",
@@ -829,7 +714,8 @@
    "quote": "The partial or complete loss of GE Vernova or GE Aerospace as suppliers, as well as contracts with our Aero JV with GE Vernova, may adversely affect our business, financial condition, results of operations and cash flows.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "GE Vernova stated as a supplier"
+   "note": "GE Vernova stated as a supplier",
+   "batch": "1"
   },
   {
    "filer": "WWD",
@@ -842,7 +728,8 @@
    "quote": "OEM customers with internal capabilities for similar products include Caterpillar, Cummins, GE Vernova, Rolls-Royce Power Systems, W rtsil , and Weichai Power.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "GE Vernova named among OEM customers"
+   "note": "GE Vernova named among OEM customers",
+   "batch": "1"
   },
   {
    "filer": "STVN",
@@ -855,7 +742,8 @@
    "quote": "We currently have access to adequate supplies of glass tubes to meet our production needs through agreements with four suppliers: Schott, NEG, Nipro and Corning.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Corning among glass tube suppliers under agreements"
+   "note": "Corning among glass tube suppliers under agreements",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -868,7 +756,8 @@
    "quote": "Our ATS segment customers include Applied Materials, Inc., LAM Research and Honeywell Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Honeywell among ATS segment customers"
+   "note": "Honeywell among ATS segment customers",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -881,7 +770,8 @@
    "quote": "We offer more than 100,000 products and services from more than 1,000 vendor partners, including well-established companies such as Adobe, APC, Apple, Amazon Web Services, Broadcom Inc., Cisco, Dell Technologies, Google, Hewlett Packard Enterprise, HP Inc., IBM, Intel, Lenovo, Microsoft, NetApp, Nutanix, Nvidia, Palo Alto Networks, Pure Storage, and Samsung, as well as from emerging technology companies.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We offer products from vendor partners incl. HPE"
+   "note": "We offer products from vendor partners incl. HPE",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -894,7 +784,8 @@
    "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "HPE among CCS segment customers"
+   "note": "HPE among CCS segment customers",
+   "batch": "1"
   },
   {
    "filer": "INGM",
@@ -907,7 +798,8 @@
    "quote": "Our suppliers are the world's most trusted technology leaders, along with emerging technology brands, which include the industry's premier hyperscalers, computer hardware suppliers, mobility hardware suppliers, networking equipment suppliers and software publishers such as Microsoft, Amazon Web Services, Google Cloud, NVIDIA, Advanced Micro Devices, Apple, Cisco, Dell Technologies, Hewlett Packard Enterprise, HP Inc., Lenovo, and Super Micro Computer.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "HPE listed among our suppliers"
+   "note": "HPE listed among our suppliers",
+   "batch": "1"
   },
   {
    "filer": "SCSC",
@@ -920,7 +812,8 @@
    "quote": "Our key suppliers includ e AT&T, Avaya, Axis, Cisco, Comcast Business, Dell, Elo, Extreme, Five9, Fortinet, Hanwha, Honeywell, HP Poly, HPE/Aruba, HPE/Juniper, Ingenico, Lumen, Microsoft, NiCE, RingCentral, Ubiquiti, Verifone, Verizon, Zebra Technologies and Zoom.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "HPE/Aruba listed among key suppliers"
+   "note": "HPE/Aruba listed among key suppliers",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -933,7 +826,8 @@
    "quote": "We offer more than 100,000 products and services from more than 1,000 vendor partners, including well-established companies such as Adobe, APC, Apple, Amazon Web Services, Broadcom Inc., Cisco, Dell Technologies, Google, Hewlett Packard Enterprise, HP Inc., IBM, Intel, Lenovo, Microsoft, NetApp, Nutanix, Nvidia, Palo Alto Networks, Pure Storage, and Samsung, as well as from emerging technology companies.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We offer products from vendor partners incl. IBM"
+   "note": "We offer products from vendor partners incl. IBM",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -946,7 +840,8 @@
    "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "IBM among CCS segment customers"
+   "note": "IBM among CCS segment customers",
+   "batch": "1"
   },
   {
    "filer": "CX",
@@ -959,7 +854,8 @@
    "quote": "Our systems and technology, as well as those provided by our third-party service providers, such as International Business Machines Corporation (\" IBM \"),",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "IBM named as third-party service provider of systems/technology"
+   "note": "IBM named as third-party service provider of systems/technology",
+   "batch": "1"
   },
   {
    "filer": "FORTY",
@@ -969,10 +865,11 @@
    "filingDate": "2026-05-13",
    "role": "supplier",
    "partyAsFiled": "IBM",
-   "quote": "and software product distribution services particularly IBM, BMC and Atlassian products to customers in the public-government sector in",
+   "quote": "Furthermore, the activity in this segment includes dedicated solutions for the GovCon Government contracting market, IT help desk services specializing in healthcare and software product distribution services particularly IBM, BMC and Atlassian products to customers in the public-government sector in the U.S,.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "filer distributes IBM products to government customers"
+   "note": "filer distributes IBM products to government customers (quote restored to its whole sentence, 'Furthermore, …' through '… in the U.S,.', verbatim from the same accession; the filing's line breaks are spaces) (COWORK #24)",
+   "batch": "1"
   },
   {
    "filer": "JKHY",
@@ -985,7 +882,8 @@
    "quote": "We have established remarketing agreements with IBM Corporation, and many other hardware providers that allow Jack Henry to purchase hardware and related maintenance services at a discount and resell them directly to our clients.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "remarketing agreement lets Jack Henry purchase IBM hardware to resell"
+   "note": "remarketing agreement lets Jack Henry purchase IBM hardware to resell",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -998,7 +896,8 @@
    "quote": "We offer more than 100,000 products and services from more than 1,000 vendor partners, including well-established companies such as Adobe, APC, Apple, Amazon Web Services, Broadcom Inc., Cisco, Dell Technologies, Google, Hewlett Packard Enterprise, HP Inc., IBM, Intel, Lenovo, Microsoft, NetApp, Nutanix, Nvidia, Palo Alto Networks, Pure Storage, and Samsung, as well as from emerging technology companies.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "CDW offers products from vendor partners including Intel"
+   "note": "CDW offers products from vendor partners including Intel",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -1011,7 +910,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Intel named supplier of CPUs and components"
+   "note": "Intel named supplier of CPUs and components",
+   "batch": "1"
   },
   {
    "filer": "HPQ",
@@ -1024,7 +924,8 @@
    "quote": "We also rely on Intel, AMD, and NVIDIA, or other suppliers to provide us with a sufficient supply of processors for the majority of our PCs and workstations.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "rely on Intel to provide processors supply"
+   "note": "rely on Intel to provide processors supply",
+   "batch": "1"
   },
   {
    "filer": "MXL",
@@ -1037,7 +938,8 @@
    "quote": "Additionally, certain products are supplied to us by Intel Corporation, or Intel, on a turnkey basis.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "products supplied to us by Intel"
+   "note": "products supplied to us by Intel",
+   "batch": "1"
   },
   {
    "filer": "TSEM",
@@ -1050,7 +952,8 @@
    "quote": "In September 2023, Tower and Intel signed an agreement under which Intel has committed to build a capacity corridor at Tower's instructions, in order for Intel to manufacture wafers for Tower's customers in Intel's 300mm facility in New Mexico, USA. Under this agreement, Tower has committed to invest up to $ 300,000 for equipment and other fixed assets to be owned by Tower and to be installed and qualified for Tower processes and for its customer products in this Intel facility.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Intel to manufacture wafers for Tower under agreement"
+   "note": "Intel to manufacture wafers for Tower under agreement",
+   "batch": "1"
   },
   {
    "filer": "UMC",
@@ -1063,7 +966,8 @@
    "quote": "Our primary customers, in terms of our sales revenues, include premier integrated device manufacturers, such as Texas Instruments and Intel, plus leading fabless design companies, such as MediaTek, Realtek and Novatek.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "primary customers include Intel"
+   "note": "primary customers include Intel",
+   "batch": "1"
   },
   {
    "filer": "ANET",
@@ -1076,7 +980,8 @@
    "quote": "Our primary manufacturing partners are Jabil Inc., Sanmina Corporation and Foxconn Hon Hai.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Jabil is primary manufacturing partner"
+   "note": "Jabil is primary manufacturing partner",
+   "batch": "1"
   },
   {
    "filer": "COHU",
@@ -1089,7 +994,8 @@
    "quote": "For example, we depend upon Jabil to manufacture most of our semiconductor test systems from its facility located in Malaysia.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Jabil manufactures most of Cohu test systems"
+   "note": "Jabil manufactures most of Cohu test systems",
+   "batch": "1"
   },
   {
    "filer": "LIF",
@@ -1102,7 +1008,8 @@
    "quote": "Jabil has been designated the sole contract manufacturer of our hardware products.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Jabil is sole contract manufacturer"
+   "note": "Jabil is sole contract manufacturer",
+   "batch": "1"
   },
   {
    "filer": "SEDG",
@@ -1115,7 +1022,8 @@
    "quote": "We currently contract to have our solar products manufactured by two of the world's leading global electronics manufacturing service providers, Jabil Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "solar products manufactured by Jabil"
+   "note": "solar products manufactured by Jabil",
+   "batch": "1"
   },
   {
    "filer": "TRMB",
@@ -1128,7 +1036,8 @@
    "quote": "We outsource the manufacturing of many of our hardware products to our key contract manufacturing partners, which include Jabil and Benchmark Electronics Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Jabil is contract manufacturing partner"
+   "note": "Jabil is contract manufacturing partner",
+   "batch": "1"
   },
   {
    "filer": "ASX",
@@ -1141,7 +1050,8 @@
    "quote": "We purchase our packaging equipment from major international manufacturers, including All Ring Tech Co., Ltd., Marketech lnternational Corp., Grand Process Technology Corporation, Tokyo Electron Limited, and Lam Research Corporation.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "purchase packaging equipment from Lam Research"
+   "note": "purchase packaging equipment from Lam Research",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -1154,7 +1064,8 @@
    "quote": "Our ATS segment customers include Applied Materials, Inc., LAM Research and Honeywell Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "ATS segment customers include LAM Research"
+   "note": "ATS segment customers include LAM Research",
+   "batch": "1"
   },
   {
    "filer": "ICHR",
@@ -1167,7 +1078,8 @@
    "quote": "For 2025, two customers with individual sales over 10%, Lam Research and Applied Materials, accounted for a combined 76% of total sales.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Lam accounted for significant share of sales"
+   "note": "Lam accounted for significant share of sales",
+   "batch": "1"
   },
   {
    "filer": "UCTT",
@@ -1180,7 +1092,8 @@
    "quote": "Our two largest revenue customers in fiscal years 2025, 2024 and 2023 were Applied Materials, Inc. and Lam Research Corporation, each of which accounted for more than 10% of our total revenues in those three years.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Lam among largest revenue customers"
+   "note": "Lam among largest revenue customers",
+   "batch": "1"
   },
   {
    "filer": "CLS",
@@ -1193,7 +1106,8 @@
    "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "CCS segment customers include Meta"
+   "note": "CCS segment customers include Meta",
+   "batch": "1"
   },
   {
    "filer": "NBIS",
@@ -1206,7 +1120,8 @@
    "quote": "Although we have entered into, and expect to continue to pursue, longer-term customer arrangements such as those we have secured with Meta and Microsoft, including multi-year agreements that may involve significant capital expenditures, technical requirements, service level commitments and capacity reservations, we have limited experience in delivering, implementing and managing such contracts at scale.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "customer arrangements secured with Meta"
+   "note": "customer arrangements secured with Meta",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -1219,7 +1134,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Marvell supplies network and wireless chips"
+   "note": "Marvell supplies network and wireless chips",
+   "batch": "1"
   },
   {
    "filer": "ADEA",
@@ -1232,7 +1148,8 @@
    "quote": "These agreements are typically for specified periods of time, and our customers include Kioxia, Micron, Samsung, SanDisk, SK Hynix, Sony, ST Microelectronics, and UMC.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "customers include Micron"
+   "note": "customers include Micron",
+   "batch": "1"
   },
   {
    "filer": "AMSC",
@@ -1245,7 +1162,8 @@
    "quote": "We have served over 100 customers in the grid market since our inception, including a variety of U.S based power utilities, Huntington Ingalls Shipbuilding, Innomotics LLC, the U.S. Navy, Capital Power Corp., Targa Resources Corp., Micron Technology Inc., SSE plc in the United Kingdom, Consolidated Power Projects (Pty) Ltd in South Africa, the Royal Canadian Navy in Canada, Fuji Bridex in Singapore, Copel Distribui o in Brazil and Ergon Energy in Australia.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "served customers including Micron"
+   "note": "served customers including Micron",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -1258,7 +1176,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Micron supplies memory devices"
+   "note": "Micron supplies memory devices",
+   "batch": "1"
   },
   {
    "filer": "LRCX",
@@ -1271,7 +1190,8 @@
    "quote": "Our most significant customers during the fiscal years ending June 28, 2026, June 29, 2025, and June 30, 2024 included Micron Technology, Inc., Samsung Electronics Company, Ltd., SK hynix Inc., and Taiwan Semiconductor Manufacturing Company.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Micron among most significant customers"
+   "note": "Micron among most significant customers",
+   "batch": "1"
   },
   {
    "filer": "NVDA",
@@ -1284,7 +1204,8 @@
    "quote": "We purchase memory from SK Hynix Inc., Micron Technology, Inc., and Samsung.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "we purchase memory from Micron"
+   "note": "we purchase memory from Micron",
+   "batch": "1"
   },
   {
    "filer": "SIMO",
@@ -1297,7 +1218,8 @@
    "quote": "Our customers constituting more than 10% of our net revenue were (i) Micron, SK Hynix and AFASTOR in 2023, (ii) Micron, Kioxia, PHISEMI and AFASTOR in 2024 and (iii) PHISEMI, Kioxia, AFASTOR, and Micron in 2025.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Micron over 10% of net revenue"
+   "note": "Micron over 10% of net revenue",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -1310,7 +1232,8 @@
    "quote": "We offer more than 100,000 products and services from more than 1,000 vendor partners, including well-established companies such as Adobe, APC, Apple, Amazon Web Services, Broadcom Inc., Cisco, Dell Technologies, Google, Hewlett Packard Enterprise, HP Inc., IBM, Intel, Lenovo, Microsoft, NetApp, Nutanix, Nvidia, Palo Alto Networks, Pure Storage, and Samsung, as well as from emerging technology companies.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Filer offers products from vendor partners incl. Nvidia"
+   "note": "Filer offers products from vendor partners incl. Nvidia",
+   "batch": "1"
   },
   {
    "filer": "COHR",
@@ -1323,7 +1246,8 @@
    "quote": "During fiscal 2026, we announced the expansion of our Sherman, Texas, manufacturing facility, entered into a strategic multi-year supply agreement with NVIDIA for advanced lasers and optical networking products supporting next-generation AI infrastructure, and received a $50 million preliminary memorandum of terms under the CHIPS and Science Act to support the Sherman expansion.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Supply agreement with NVIDIA for filer's lasers and optical products"
+   "note": "Supply agreement with NVIDIA for filer's lasers and optical products",
+   "batch": "1"
   },
   {
    "filer": "HPQ",
@@ -1336,7 +1260,8 @@
    "quote": "We also rely on Intel, AMD, and NVIDIA, or other suppliers to provide us with a sufficient supply of processors for the majority of our PCs and workstations.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "NVIDIA named as supplier of processors for filer's PCs"
+   "note": "NVIDIA named as supplier of processors for filer's PCs",
+   "batch": "1"
   },
   {
    "filer": "INGM",
@@ -1349,7 +1274,8 @@
    "quote": "Our vendors include many of the largest tech companies, including Advanced Micro Devices, Apple, Amazon Web Services (AWS), Cisco, Dell Technologies, Hewlett Packard Enterprise, HP Inc., Lenovo, Microsoft, NVIDIA and Super Micro Computer.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our vendors include NVIDIA"
+   "note": "Our vendors include NVIDIA",
+   "batch": "1"
   },
   {
    "filer": "LI",
@@ -1362,7 +1288,8 @@
    "quote": "Our current high-end models rely on chips produced by NVIDIA to a great extent, and if the supply of NVIDIA chips were to be negatively affected by such geopolitical tensions, and we fail to find alternative suppliers in time, or at all, our production and deliveries could be materially disrupted.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Filer's models use NVIDIA-produced chips; NVIDIA treated as supplier"
+   "note": "Filer's models use NVIDIA-produced chips; NVIDIA treated as supplier",
+   "batch": "1"
   },
   {
    "filer": "NBIS",
@@ -1375,7 +1302,8 @@
    "quote": "We currently rely on Nvidia for the GPU chips we use and on a limited number of other suppliers for other key components in our infrastructure.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Rely on Nvidia for GPU chips we use, among suppliers"
+   "note": "Rely on Nvidia for GPU chips we use, among suppliers",
+   "batch": "1"
   },
   {
    "filer": "SHAZ",
@@ -1388,7 +1316,8 @@
    "quote": "We are substantially dependent on NVIDIA Corporation as a supplier of graphics",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Dependent on NVIDIA as supplier of graphics processors"
+   "note": "Dependent on NVIDIA as supplier of graphics processors",
+   "batch": "1"
   },
   {
    "filer": "TDC",
@@ -1401,7 +1330,8 @@
    "quote": "In addition, we buy servers from Dell Technologies Inc., storage disk systems from NetApp, Inc., and graphics processing units (\"GPU\") from NVIDIA. Some components supplied by third parties may be critical to our solutions, and several of our suppliers may terminate their agreements with us without cause with 180-days' notice.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We buy GPUs from NVIDIA"
+   "note": "We buy GPUs from NVIDIA",
+   "batch": "1"
   },
   {
    "filer": "AAOI",
@@ -1414,7 +1344,8 @@
    "quote": "In 2025 , our key customer in the internet data center market was Microsoft . In 2025, 2024 and 2023 , Microsoft accounted for 28.8%, 43.7% and 46.6% of our revenue, respectively, and in 2024, Oracle accounted for 12.4% of our revenue.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Oracle accounted for 12.4% of revenue in 2024"
+   "note": "Oracle accounted for 12.4% of revenue in 2024",
+   "batch": "1"
   },
   {
    "filer": "AERO",
@@ -1427,7 +1358,8 @@
    "quote": "We also license certain software and other technology from certain third-party providers, including Sabre and Oracle.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We license software from Oracle"
+   "note": "We license software from Oracle",
+   "batch": "1"
   },
   {
    "filer": "PAGS",
@@ -1440,7 +1372,8 @@
    "quote": "We operate software products under licenses, including certain open-source licenses, from our vendors, including, among others, Verifone, Oracle, Feedzai and Cisco.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Operate software under licenses from vendors including Oracle"
+   "note": "Operate software under licenses from vendors including Oracle",
+   "batch": "1"
   },
   {
    "filer": "XP",
@@ -1453,7 +1386,8 @@
    "quote": "We rely on a number of external service providers for certain key market information and data, technology, processing and supporting functions, such as Microsoft, SAP and Oracle, among others.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Oracle named as external service provider for filer's technology"
+   "note": "Oracle named as external service provider for filer's technology",
+   "batch": "1"
   },
   {
    "filer": "YELP",
@@ -1466,7 +1400,8 @@
    "quote": "We also have a vendor management program to manage cybersecurity risks associated with our use of third-party service providers, such as AWS, Oracle and Workday, to perform various functions throughout our business.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Filer uses third-party service providers such as Oracle"
+   "note": "Filer uses third-party service providers such as Oracle",
+   "batch": "1"
   },
   {
    "filer": "AMKR",
@@ -1479,7 +1414,8 @@
    "quote": "Direct sales to Apple and Qualcomm accounted for 29.8% and 11.1% of our net sales, respectively, for the year ended December 31, 2025.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Qualcomm accounted for 11.1% of net sales"
+   "note": "Qualcomm accounted for 11.1% of net sales",
+   "batch": "1"
   },
   {
    "filer": "ADEA",
@@ -1492,7 +1428,8 @@
    "quote": "These agreements are typically for specified periods of time, and our customers include Kioxia, Micron, Samsung, SanDisk, SK Hynix, Sony, ST Microelectronics, and UMC.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Our customers include SanDisk"
+   "note": "Our customers include SanDisk",
+   "batch": "1"
   },
   {
    "filer": "CIEN",
@@ -1505,7 +1442,8 @@
    "quote": "Sales to AT&T were $500.7 million, or 10.5% of total revenue, in fiscal 2025, and $475.3 million, or 11.8% of total revenue, in fiscal 2024.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Sales to AT&T were 10.5% of revenue"
+   "note": "Sales to AT&T were 10.5% of revenue",
+   "batch": "1"
   },
   {
    "filer": "MTZ",
@@ -1518,7 +1456,8 @@
    "quote": "For the year ended December 31, 2025, AT&T represented approximately 10 % of the Company's total consolidated revenue.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "AT&T represented about 10% of revenue"
+   "note": "AT&T represented about 10% of revenue",
+   "batch": "1"
   },
   {
    "filer": "ASX",
@@ -1531,7 +1470,8 @@
    "quote": "We purchase testers from major international manufacturers, primarily Teradyne, Inc., Tokyo Electron Limited, and Advantest Corporation.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "We purchase testers from Teradyne"
+   "note": "We purchase testers from Teradyne",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -1544,7 +1484,8 @@
    "quote": "Our limited source components for particular appliances and suppliers of those components include specific types of CPUs from Intel and AMD, network and wireless chips from Broadcom, Marvell, Qualcomm and Intel, and memory devices from Intel, Micron, ADATA, Toshiba, Samsung and Western Digital.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Western Digital listed as supplier of memory components"
+   "note": "Western Digital listed as supplier of memory components",
+   "batch": "1"
   },
   {
    "filer": "AMD",
@@ -1557,7 +1498,8 @@
    "quote": "We rely on Taiwan Semiconductor Manufacturing Company Limited (TSMC) for the production of all wafers for microprocessor and GPU products at 7 nanometer (nm) or smaller nodes, and we rely primarily on GLOBALFOUNDRIES Inc.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "TSMC produces filer's wafers (receiver's own supplier; published per COWORK #20 F1)"
+   "note": "TSMC produces filer's wafers (receiver's own supplier; published per COWORK #20 F1)",
+   "batch": "1"
   },
   {
    "filer": "AVGO",
@@ -1570,7 +1512,8 @@
    "quote": "The majority of our front-end wafer manufacturing operations is outsourced to external foundries, including Taiwan Semiconductor Manufacturing Company Limited (\"TSMC\").",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Wafer manufacturing outsourced to foundries including TSMC (receiver's own supplier; published per COWORK #20 F1)"
+   "note": "Wafer manufacturing outsourced to foundries including TSMC (receiver's own supplier; published per COWORK #20 F1)",
+   "batch": "1"
   },
   {
    "filer": "NVDA",
@@ -1583,7 +1526,176 @@
    "quote": "We utilize foundries, such as Taiwan Semiconductor Manufacturing Company Limited, or TSMC, and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Utilize TSMC foundry to produce our wafers (receiver's own supplier; published per COWORK #20 F1)"
+   "note": "Utilize TSMC foundry to produce our wafers (receiver's own supplier; published per COWORK #20 F1)",
+   "batch": "1"
+  },
+  {
+   "filer": "AAOI",
+   "party": "AMZN",
+   "form": "10-K",
+   "accession": "0001437749-26-005875",
+   "filingDate": "2026-02-26",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Amazon",
+   "quote": "The Company accounts for the Customer Warrant as an equity classified share-based consideration to a customer and will recognize the grant-date fair value of the Customer Warrant as a reduction of revenue from Amazon as the related goods or services are transferred.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "revenue from Amazon as goods are transferred"
+  },
+  {
+   "filer": "AAOI",
+   "party": "MSFT",
+   "form": "10-K",
+   "accession": "0001437749-26-005875",
+   "filingDate": "2026-02-26",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Microsoft",
+   "quote": "In 2025 , the largest customer who contributed most to our internet data center revenue was Microsoft.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "largest internet data center customer"
+  },
+  {
+   "filer": "APLD",
+   "party": "CAT",
+   "form": "10-K",
+   "accession": "0001144879-26-000048",
+   "filingDate": "2026-07-29",
+   "batch": "2",
+   "role": "supplier",
+   "partyAsFiled": "Caterpillar",
+   "quote": "Because power distribution, cooling architecture, and data hall layouts are standardized across our campuses, we are able to consolidate purchasing around a common set of trusted, qualified partners—including ABB for electrical equipment, BASX for mechanical and cooling systems, and Caterpillar for backup generation—and to place bulk orders against a multi-gigawatt development pipeline.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "purchasing and bulk orders; Caterpillar for backup generation"
+  },
+  {
+   "filer": "CLS",
+   "party": "GOOGL",
+   "form": "10-K",
+   "accession": "0001030894-26-000011",
+   "filingDate": "2026-02-27",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Google",
+   "quote": "Our CCS segment customers include Amazon Fulfillment Services, Inc., Meta Platforms, Inc., Google Inc., Ciena Corporation, Dell Technologies, Hewlett-Packard Enterprise, and IBM Corporation, Inc.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "CCS segment customers include Google Inc."
+  },
+  {
+   "filer": "JBL",
+   "party": "AMZN",
+   "form": "10-K",
+   "accession": "0001628280-25-045293",
+   "filingDate": "2025-10-17",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Amazon",
+   "quote": "During fiscal year 2025, the Company provided manufacturing services to Amazon's home security business.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "provided manufacturing services to Amazon's home security business"
+  },
+  {
+   "filer": "LRCX",
+   "party": "TSM",
+   "form": "10-K",
+   "accession": "0000707549-26-000037",
+   "filingDate": "2026-08-07",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Taiwan Semiconductor",
+   "quote": "Our most significant customers during the fiscal years ending June 28, 2026, June 29, 2025, and June 30, 2024 included Micron Technology, Inc., Samsung Electronics Company, Ltd., SK hynix Inc., and Taiwan Semiconductor Manufacturing Company.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "most significant customers included TSMC"
+  },
+  {
+   "filer": "MOD",
+   "party": "CAT",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Caterpillar",
+   "quote": "Our top customers across both of our segments, listed alphabetically, include: Carrier; Caterpillar; Deere; Stellantis (including Chrysler, Fiat, PSA-Peugeot-Citroen, and VM Motori); Trane; Volkswagen (including Audi, MAN, Porsche, Scania, and International); and Volvo (including Mack Trucks and Renault Trucks).",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "top customers include Caterpillar"
+  },
+  {
+   "filer": "MOD",
+   "party": "DE",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Deere",
+   "quote": "Our top customers across both of our segments, listed alphabetically, include: Carrier; Caterpillar; Deere; Stellantis (including Chrysler, Fiat, PSA-Peugeot-Citroen, and VM Motori); Trane; Volkswagen (including Audi, MAN, Porsche, Scania, and International); and Volvo (including Mack Trucks and Renault Trucks).",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "top customers include Deere"
+  },
+  {
+   "filer": "MOD",
+   "party": "STLA",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Stellantis",
+   "quote": "Our top customers across both of our segments, listed alphabetically, include: Carrier; Caterpillar; Deere; Stellantis (including Chrysler, Fiat, PSA-Peugeot-Citroen, and VM Motori); Trane; Volkswagen (including Audi, MAN, Porsche, Scania, and International); and Volvo (including Mack Trucks and Renault Trucks).",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "top customers include Stellantis"
+  },
+  {
+   "filer": "MOD",
+   "party": "TT",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Trane",
+   "quote": "Our top customers across both of our segments, listed alphabetically, include: Carrier; Caterpillar; Deere; Stellantis (including Chrysler, Fiat, PSA-Peugeot-Citroen, and VM Motori); Trane; Volkswagen (including Audi, MAN, Porsche, Scania, and International); and Volvo (including Mack Trucks and Renault Trucks).",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "top customers include Trane"
+  },
+  {
+   "filer": "NBIS",
+   "party": "MSFT",
+   "form": "20-F",
+   "accession": "0001104659-26-052948",
+   "filingDate": "2026-04-30",
+   "batch": "2",
+   "role": "customer",
+   "partyAsFiled": "Microsoft",
+   "quote": "In addition, while we have secured longer-term customer contracts with Meta and Microsoft, most of our customer engagements to date have been relatively short-term.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "secured longer-term customer contracts with Meta and Microsoft"
+  },
+  {
+   "filer": "TER",
+   "party": "PLXS",
+   "form": "10-K",
+   "accession": "0001193125-26-059002",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "role": "supplier",
+   "partyAsFiled": "Plexus",
+   "quote": "We depend on Flex Ltd. (\"Flex\") to manufacture and test our FLEX and J750 family of products from its facility in Malaysia; Plexus Corp. (\"Plexus\") to manufacture and test our FLEX and Magnum products from its facilities in Malaysia and Thailand and our ETS family of products from its facility in Malaysia; SAM Meerkat to manufacture and test our storage test family of products from its facilities in Malaysia and Thailand and on other contract manufacturers to manufacture other products.",
+   "verdict": "correct",
+   "reviewedAt": "2026-09-27",
+   "note": "Plexus manufactures and tests the filer's products (quote extended to its sentence start, verbatim from the same accession) (COWORK #24)"
   }
  ],
  "rejected": [
@@ -1594,7 +1706,8 @@
    "accession": "0001104659-26-020461",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "Competitors in ion implant"
+   "note": "Competitors in ion implant",
+   "batch": "1"
   },
   {
    "filer": "NVMI",
@@ -1603,7 +1716,8 @@
    "accession": "0001178913-26-000504",
    "filingDate": "2026-02-17",
    "verdict": "not-established",
-   "note": "Fragment; no filer sale/purchase stated"
+   "note": "Fragment; no filer sale/purchase stated",
+   "batch": "1"
   },
   {
    "filer": "ABSI",
@@ -1612,7 +1726,8 @@
    "accession": "0001672688-26-000068",
    "filingDate": "2026-03-24",
    "verdict": "not-established",
-   "note": "Equity investment by AMD"
+   "note": "Equity investment by AMD",
+   "batch": "1"
   },
   {
    "filer": "CRSR",
@@ -1621,7 +1736,8 @@
    "accession": "0001193125-26-067833",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "Industry suppliers meeting; no purchase stated"
+   "note": "Industry suppliers meeting; no purchase stated",
+   "batch": "1"
   },
   {
    "filer": "CRWV",
@@ -1630,7 +1746,8 @@
    "accession": "0001769628-26-000104",
    "filingDate": "2026-03-02",
    "verdict": "not-established",
-   "note": "Clusters use AMD chips; no purchase stated"
+   "note": "Clusters use AMD chips; no purchase stated",
+   "batch": "1"
   },
   {
    "filer": "DRD",
@@ -1639,7 +1756,8 @@
    "accession": "0001628280-25-047346",
    "filingDate": "2025-10-30",
    "verdict": "wrong-entity",
-   "note": "AMD means acid mine drainage"
+   "note": "AMD means acid mine drainage",
+   "batch": "1"
   },
   {
    "filer": "IBP",
@@ -1648,7 +1766,8 @@
    "accession": "0001580905-26-000004",
    "filingDate": "2026-02-26",
    "verdict": "wrong-entity",
-   "note": "AMD is an insulation distributor, not Advanced Micro Devices"
+   "note": "AMD is an insulation distributor, not Advanced Micro Devices",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -1657,7 +1776,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "Stock sale and partnership only"
+   "note": "Stock sale and partnership only",
+   "batch": "1"
   },
   {
    "filer": "OCUL",
@@ -1666,7 +1786,8 @@
    "accession": "0001104659-26-010664",
    "filingDate": "2026-02-05",
    "verdict": "wrong-entity",
-   "note": "AMD means macular degeneration"
+   "note": "AMD means macular degeneration",
+   "batch": "1"
   },
   {
    "filer": "PENG",
@@ -1675,7 +1796,8 @@
    "accession": "0001616533-25-000061",
    "filingDate": "2025-10-21",
    "verdict": "not-established",
-   "note": "Unclear antecedent 'they'; no relationship stated"
+   "note": "Unclear antecedent 'they'; no relationship stated",
+   "batch": "1"
   },
   {
    "filer": "POET",
@@ -1684,7 +1806,8 @@
    "accession": "0001493152-26-014253",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Industry context, hyperscaler adoption"
+   "note": "Industry context, hyperscaler adoption",
+   "batch": "1"
   },
   {
    "filer": "SANM",
@@ -1693,7 +1816,8 @@
    "accession": "0000897723-25-000042",
    "filingDate": "2025-11-13",
    "verdict": "not-established",
-   "note": "Equity purchase agreement, acquisition"
+   "note": "Equity purchase agreement, acquisition",
+   "batch": "1"
   },
   {
    "filer": "TLK",
@@ -1702,7 +1826,8 @@
    "accession": "0001104659-26-062051",
    "filingDate": "2026-05-15",
    "verdict": "not-established",
-   "note": "Subsidiary agreements, relationship direction unclear"
+   "note": "Subsidiary agreements, relationship direction unclear",
+   "batch": "1"
   },
   {
    "filer": "BW",
@@ -1711,7 +1836,8 @@
    "accession": "0001630805-26-000018",
    "filingDate": "2026-03-16",
    "verdict": "not-established",
-   "note": "Stock and warrant issuance, financing"
+   "note": "Stock and warrant issuance, financing",
+   "batch": "1"
   },
   {
    "filer": "GEN",
@@ -1720,7 +1846,8 @@
    "accession": "0000849399-26-000017",
    "filingDate": "2026-05-21",
    "verdict": "not-established",
-   "note": "Dependent on Broadcom services; reliance only"
+   "note": "Dependent on Broadcom services; reliance only",
+   "batch": "1"
   },
   {
    "filer": "SYNA",
@@ -1729,7 +1856,8 @@
    "accession": "0000817720-26-000055",
    "filingDate": "2026-08-10",
    "verdict": "not-established",
-   "note": "Transition agreements after divestiture"
+   "note": "Transition agreements after divestiture",
+   "batch": "1"
   },
   {
    "filer": "DLR",
@@ -1738,7 +1866,8 @@
    "accession": "0001104659-26-015365",
    "filingDate": "2026-02-13",
    "verdict": "not-established",
-   "note": "Joint venture contribution"
+   "note": "Joint venture contribution",
+   "batch": "1"
   },
   {
    "filer": "APLD",
@@ -1747,7 +1876,8 @@
    "accession": "0001144879-26-000048",
    "filingDate": "2026-07-29",
    "verdict": "not-established",
-   "note": "Consolidated subsidiary"
+   "note": "Consolidated subsidiary",
+   "batch": "1"
   },
   {
    "filer": "HPE",
@@ -1756,7 +1886,8 @@
    "accession": "0001645590-25-000130",
    "filingDate": "2025-12-18",
    "verdict": "not-established",
-   "note": "Competitor list"
+   "note": "Competitor list",
+   "batch": "1"
   },
   {
    "filer": "OTF",
@@ -1765,7 +1896,8 @@
    "accession": "0001747777-26-000012",
    "filingDate": "2026-02-18",
    "verdict": "wrong-entity",
-   "note": "Coherent Group portfolio company, not Coherent Corp"
+   "note": "Coherent Group portfolio company, not Coherent Corp",
+   "batch": "1"
   },
   {
    "filer": "ATEN",
@@ -1774,7 +1906,8 @@
    "accession": "0001580808-26-000014",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "Competitor vendors"
+   "note": "Competitor vendors",
+   "batch": "1"
   },
   {
    "filer": "ESTC",
@@ -1783,7 +1916,8 @@
    "accession": "0001707753-26-000018",
    "filingDate": "2026-06-08",
    "verdict": "not-established",
-   "note": "Competitors owned by Cisco"
+   "note": "Competitors owned by Cisco",
+   "batch": "1"
   },
   {
    "filer": "NTCT",
@@ -1792,7 +1926,8 @@
    "accession": "0001078075-26-000050",
    "filingDate": "2026-05-14",
    "verdict": "not-established",
-   "note": "Vendor list likely competitors; no trade stated"
+   "note": "Vendor list likely competitors; no trade stated",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -1801,7 +1936,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "OEM partner platforms"
+   "note": "OEM partner platforms",
+   "batch": "1"
   },
   {
    "filer": "P",
@@ -1810,7 +1946,8 @@
    "accession": "0001474432-26-000027",
    "filingDate": "2026-03-25",
    "verdict": "not-established",
-   "note": "Technology partners"
+   "note": "Technology partners",
+   "batch": "1"
   },
   {
    "filer": "RDWR",
@@ -1819,7 +1956,8 @@
    "accession": "0001178913-26-001923",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Channel access fragment, not trade"
+   "note": "Channel access fragment, not trade",
+   "batch": "1"
   },
   {
    "filer": "SEI",
@@ -1828,7 +1966,8 @@
    "accession": "0001628280-26-012501",
    "filingDate": "2026-02-27",
    "verdict": "wrong-entity",
-   "note": "Cisco Logistics LLC, not Cisco Systems"
+   "note": "Cisco Logistics LLC, not Cisco Systems",
+   "batch": "1"
   },
   {
    "filer": "SHAZ",
@@ -1837,7 +1976,8 @@
    "accession": "0001493152-26-014068",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Fragments; leveraging Cisco network, OEM engagement"
+   "note": "Fragments; leveraging Cisco network, OEM engagement",
+   "batch": "1"
   },
   {
    "filer": "SMCI",
@@ -1846,7 +1986,8 @@
    "accession": "0001375365-26-000022",
    "filingDate": "2026-08-31",
    "verdict": "not-established",
-   "note": "Fragment listing vendors, likely competitors"
+   "note": "Fragment listing vendors, likely competitors",
+   "batch": "1"
   },
   {
    "filer": "VIST",
@@ -1855,7 +1996,8 @@
    "accession": "0001193125-26-187099",
    "filingDate": "2026-04-28",
    "verdict": "not-established",
-   "note": "Rely on Cisco; partners of choice, no purchase"
+   "note": "Rely on Cisco; partners of choice, no purchase",
+   "batch": "1"
   },
   {
    "filer": "HIMX",
@@ -1864,7 +2006,8 @@
    "accession": "0001104659-26-035507",
    "filingDate": "2026-03-27",
    "verdict": "not-established",
-   "note": "Adoption by Dell, no explicit sale stated"
+   "note": "Adoption by Dell, no explicit sale stated",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -1873,7 +2016,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "OEM partner platform and competitor mention"
+   "note": "OEM partner platform and competitor mention",
+   "batch": "1"
   },
   {
    "filer": "PLUS",
@@ -1882,7 +2026,8 @@
    "accession": "0001140361-26-023171",
    "filingDate": "2026-05-28",
    "verdict": "not-established",
-   "note": "Products manufactured by Dell; purchase source not stated"
+   "note": "Products manufactured by Dell; purchase source not stated",
+   "batch": "1"
   },
   {
    "filer": "RBRK",
@@ -1891,7 +2036,8 @@
    "accession": "0001943896-26-000013",
    "filingDate": "2026-03-19",
    "verdict": "not-established",
-   "note": "Dell EMC listed as competitor"
+   "note": "Dell EMC listed as competitor",
+   "batch": "1"
   },
   {
    "filer": "SMCI",
@@ -1900,7 +2046,8 @@
    "accession": "0001375365-26-000022",
    "filingDate": "2026-08-31",
    "verdict": "not-established",
-   "note": "Dell listed as competitor"
+   "note": "Dell listed as competitor",
+   "batch": "1"
   },
   {
    "filer": "FTNT",
@@ -1909,7 +2056,8 @@
    "accession": "0001262039-26-000007",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "Rely on colocation providers such as Equinix"
+   "note": "Rely on colocation providers such as Equinix",
+   "batch": "1"
   },
   {
    "filer": "OKLO",
@@ -1918,7 +2066,8 @@
    "accession": "0001628280-26-018698",
    "filingDate": "2026-03-17",
    "verdict": "not-established",
-   "note": "Prospective customer and letter of intent only"
+   "note": "Prospective customer and letter of intent only",
+   "batch": "1"
   },
   {
    "filer": "CHPT",
@@ -1927,7 +2076,8 @@
    "accession": "0001777393-26-000013",
    "filingDate": "2026-04-02",
    "verdict": "not-established",
-   "note": "Strategic channel relationship, hedged wording"
+   "note": "Strategic channel relationship, hedged wording",
+   "batch": "1"
   },
   {
    "filer": "EIX",
@@ -1936,7 +2086,8 @@
    "accession": "0000827052-26-000012",
    "filingDate": "2026-02-18",
    "verdict": "wrong-entity",
-   "note": "Eaton Fire wildfire, not Eaton Corp"
+   "note": "Eaton Fire wildfire, not Eaton Corp",
+   "batch": "1"
   },
   {
    "filer": "FIX",
@@ -1945,7 +2096,8 @@
    "accession": "0001104659-26-017530",
    "filingDate": "2026-02-19",
    "verdict": "not-established",
-   "note": "Industry context: manufacturers of MEP components"
+   "note": "Industry context: manufacturers of MEP components",
+   "batch": "1"
   },
   {
    "filer": "HLIO",
@@ -1954,7 +2106,8 @@
    "accession": "0001193125-26-087747",
    "filingDate": "2026-03-03",
    "verdict": "not-established",
-   "note": "Eaton described as competitor"
+   "note": "Eaton described as competitor",
+   "batch": "1"
   },
   {
    "filer": "MCY",
@@ -1963,7 +2116,8 @@
    "accession": "0000064996-26-000005",
    "filingDate": "2026-02-17",
    "verdict": "wrong-entity",
-   "note": "Eaton wildfire, not Eaton Corp"
+   "note": "Eaton wildfire, not Eaton Corp",
+   "batch": "1"
   },
   {
    "filer": "RUSHA",
@@ -1972,7 +2126,8 @@
    "accession": "0001437749-26-005424",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "Authorized service center, no purchase/sale stated"
+   "note": "Authorized service center, no purchase/sale stated",
+   "batch": "1"
   },
   {
    "filer": "WAB",
@@ -1981,7 +2136,8 @@
    "accession": "0001628280-26-008067",
    "filingDate": "2026-02-13",
    "verdict": "not-established",
-   "note": "Peer group listing"
+   "note": "Peer group listing",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -1990,7 +2146,8 @@
    "accession": "0001402057-26-000011",
    "filingDate": "2026-02-20",
    "verdict": "not-established",
-   "note": "Peer group listing"
+   "note": "Peer group listing",
+   "batch": "1"
   },
   {
    "filer": "ENPH",
@@ -1999,7 +2156,8 @@
    "accession": "0001463101-26-000013",
    "filingDate": "2026-02-17",
    "verdict": "not-established",
-   "note": "Utilize Flex, purpose not stated (truncated)"
+   "note": "Utilize Flex, purpose not stated (truncated)",
+   "batch": "1"
   },
   {
    "filer": "RELY",
@@ -2008,7 +2166,8 @@
    "accession": "0001628280-26-009038",
    "filingDate": "2026-02-18",
    "verdict": "wrong-entity",
-   "note": "Remitly Flex is a product name"
+   "note": "Remitly Flex is a product name",
+   "batch": "1"
   },
   {
    "filer": "FRMI",
@@ -2017,7 +2176,8 @@
    "accession": "0002071778-26-000010",
    "filingDate": "2026-03-30",
    "verdict": "not-established",
-   "note": "'sourced from GE Vernova assets' does not state a purchase from GE Vernova (CODE-C override)"
+   "note": "'sourced from GE Vernova assets' does not state a purchase from GE Vernova (CODE-C override)",
+   "batch": "1"
   },
   {
    "filer": "GE",
@@ -2026,7 +2186,8 @@
    "accession": "0000040545-26-000008",
    "filingDate": "2026-01-29",
    "verdict": "not-established",
-   "note": "Former parent guarantees, not trade"
+   "note": "Former parent guarantees, not trade",
+   "batch": "1"
   },
   {
    "filer": "KEN",
@@ -2035,7 +2196,8 @@
    "accession": "0001178913-26-001842",
    "filingDate": "2026-03-30",
    "verdict": "not-established",
-   "note": "Agreement party unclear/subsidiary project, fragmentary"
+   "note": "Agreement party unclear/subsidiary project, fragmentary",
+   "batch": "1"
   },
   {
    "filer": "AMD",
@@ -2044,7 +2206,8 @@
    "accession": "0000002488-26-000018",
    "filingDate": "2026-02-04",
    "verdict": "not-established",
-   "note": "Rely on GlobalFoundries, truncated, product not stated"
+   "note": "Rely on GlobalFoundries, truncated, product not stated",
+   "batch": "1"
   },
   {
    "filer": "BCO",
@@ -2053,7 +2216,8 @@
    "accession": "0000078890-26-000010",
    "filingDate": "2026-02-26",
    "verdict": "wrong-entity",
-   "note": "Owens Corning, not Corning Inc"
+   "note": "Owens Corning, not Corning Inc",
+   "batch": "1"
   },
   {
    "filer": "IBP",
@@ -2062,7 +2226,8 @@
    "accession": "0001580905-26-000004",
    "filingDate": "2026-02-26",
    "verdict": "wrong-entity",
-   "note": "Owens Corning, not Corning Inc"
+   "note": "Owens Corning, not Corning Inc",
+   "batch": "1"
   },
   {
    "filer": "KLAR",
@@ -2071,7 +2236,8 @@
    "accession": "0002003292-26-000007",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "Director biography mention"
+   "note": "Director biography mention",
+   "batch": "1"
   },
   {
    "filer": "NFG",
@@ -2080,7 +2246,8 @@
    "accession": "0000070145-25-000039",
    "filingDate": "2025-11-21",
    "verdict": "wrong-entity",
-   "note": "Corning is a place name"
+   "note": "Corning is a place name",
+   "batch": "1"
   },
   {
    "filer": "OC",
@@ -2089,7 +2256,8 @@
    "accession": "0001370946-26-000067",
    "filingDate": "2026-02-25",
    "verdict": "wrong-entity",
-   "note": "Owens Corning is filer, not Corning Inc"
+   "note": "Owens Corning is filer, not Corning Inc",
+   "batch": "1"
   },
   {
    "filer": "QXO",
@@ -2098,7 +2266,8 @@
    "accession": "0001628280-26-012601",
    "filingDate": "2026-02-27",
    "verdict": "wrong-entity",
-   "note": "Owens Corning, not Corning Inc"
+   "note": "Owens Corning, not Corning Inc",
+   "batch": "1"
   },
   {
    "filer": "TE",
@@ -2107,7 +2276,8 @@
    "accession": "0001992243-26-000007",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Supply chain effort, expected/forward-looking"
+   "note": "Supply chain effort, expected/forward-looking",
+   "batch": "1"
   },
   {
    "filer": "WSO",
@@ -2116,7 +2286,8 @@
    "accession": "0001193125-26-082486",
    "filingDate": "2026-02-27",
    "verdict": "wrong-entity",
-   "note": "Owens Corning, not Corning Inc"
+   "note": "Owens Corning, not Corning Inc",
+   "batch": "1"
   },
   {
    "filer": "ACIW",
@@ -2125,7 +2296,8 @@
    "accession": "0000935036-26-000011",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "Partnership for compatibility"
+   "note": "Partnership for compatibility",
+   "batch": "1"
   },
   {
    "filer": "CWT",
@@ -2134,7 +2306,8 @@
    "accession": "0001628280-26-012444",
    "filingDate": "2026-02-27",
    "verdict": "not-established",
-   "note": "Executive biography mention"
+   "note": "Executive biography mention",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -2143,7 +2316,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "HPE listed as competitor"
+   "note": "HPE listed as competitor",
+   "batch": "1"
   },
   {
    "filer": "PLUS",
@@ -2152,7 +2326,8 @@
    "accession": "0001140361-26-023171",
    "filingDate": "2026-05-28",
    "verdict": "not-established",
-   "note": "Products manufactured by HPE; purchase source not stated"
+   "note": "Products manufactured by HPE; purchase source not stated",
+   "batch": "1"
   },
   {
    "filer": "RACE",
@@ -2161,7 +2336,8 @@
    "accession": "0001648416-26-000024",
    "filingDate": "2026-02-19",
    "verdict": "wrong-entity",
-   "note": "HPE S.r.l. is a different Italian company"
+   "note": "HPE S.r.l. is a different Italian company",
+   "batch": "1"
   },
   {
    "filer": "SMCI",
@@ -2170,7 +2346,8 @@
    "accession": "0001375365-26-000022",
    "filingDate": "2026-08-31",
    "verdict": "not-established",
-   "note": "HPE listed as competitor"
+   "note": "HPE listed as competitor",
+   "batch": "1"
   },
   {
    "filer": "ACIW",
@@ -2179,7 +2356,8 @@
    "accession": "0000935036-26-000011",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "Partnership for compatibility"
+   "note": "Partnership for compatibility",
+   "batch": "1"
   },
   {
    "filer": "BRC",
@@ -2188,7 +2366,8 @@
    "accession": "0000746598-26-000044",
    "filingDate": "2026-09-03",
    "verdict": "not-established",
-   "note": "Executive biography mention"
+   "note": "Executive biography mention",
+   "batch": "1"
   },
   {
    "filer": "DOCN",
@@ -2197,7 +2376,8 @@
    "accession": "0001582961-26-000019",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "IBM listed as cloud vendor in market category"
+   "note": "IBM listed as cloud vendor in market category",
+   "batch": "1"
   },
   {
    "filer": "KD",
@@ -2206,7 +2386,8 @@
    "accession": "0001104659-26-067881",
    "filingDate": "2026-05-29",
    "verdict": "not-established",
-   "note": "director biography, prior IBM employment"
+   "note": "director biography, prior IBM employment",
+   "batch": "1"
   },
   {
    "filer": "MANH",
@@ -2215,7 +2396,8 @@
    "accession": "0001193125-26-037138",
    "filingDate": "2026-02-04",
    "verdict": "not-established",
-   "note": "IBM listed as competing vendor"
+   "note": "IBM listed as competing vendor",
+   "batch": "1"
   },
   {
    "filer": "MDB",
@@ -2224,7 +2406,8 @@
    "accession": "0001628280-26-016799",
    "filingDate": "2026-03-11",
    "verdict": "not-established",
-   "note": "partnership, not trade"
+   "note": "partnership, not trade",
+   "batch": "1"
   },
   {
    "filer": "NTCT",
@@ -2233,7 +2416,8 @@
    "accession": "0001078075-26-000050",
    "filingDate": "2026-05-14",
    "verdict": "not-established",
-   "note": "IBM listed among competing vendors"
+   "note": "IBM listed among competing vendors",
+   "batch": "1"
   },
   {
    "filer": "P",
@@ -2242,7 +2426,8 @@
    "accession": "0001474432-26-000027",
    "filingDate": "2026-03-25",
    "verdict": "not-established",
-   "note": "technology partner"
+   "note": "technology partner",
+   "batch": "1"
   },
   {
    "filer": "PENG",
@@ -2251,7 +2436,8 @@
    "accession": "0001616533-25-000061",
    "filingDate": "2025-10-21",
    "verdict": "not-established",
-   "note": "mere list of memory manufacturers, relation unstated"
+   "note": "mere list of memory manufacturers, relation unstated",
+   "batch": "1"
   },
   {
    "filer": "RBRK",
@@ -2260,7 +2446,8 @@
    "accession": "0001943896-26-000013",
    "filingDate": "2026-03-19",
    "verdict": "not-established",
-   "note": "IBM listed as competitor"
+   "note": "IBM listed as competitor",
+   "batch": "1"
   },
   {
    "filer": "RGTI",
@@ -2269,7 +2456,8 @@
    "accession": "0001104659-26-023454",
    "filingDate": "2026-03-04",
    "verdict": "not-established",
-   "note": "IBM as competing quantum computer maker"
+   "note": "IBM as competing quantum computer maker",
+   "batch": "1"
   },
   {
    "filer": "UMC",
@@ -2278,7 +2466,8 @@
    "accession": "0001193125-26-193757",
    "filingDate": "2026-04-30",
    "verdict": "not-established",
-   "note": "mutual patent cross-licensing, not purchase"
+   "note": "mutual patent cross-licensing, not purchase",
+   "batch": "1"
   },
   {
    "filer": "AIP",
@@ -2287,7 +2476,8 @@
    "accession": "0001628280-26-007726",
    "filingDate": "2026-02-12",
    "verdict": "not-established",
-   "note": "ecosystem support mention"
+   "note": "ecosystem support mention",
+   "batch": "1"
   },
   {
    "filer": "AMD",
@@ -2296,7 +2486,8 @@
    "accession": "0000002488-26-000018",
    "filingDate": "2026-02-04",
    "verdict": "not-established",
-   "note": "Intel described as competitor"
+   "note": "Intel described as competitor",
+   "batch": "1"
   },
   {
    "filer": "ARM",
@@ -2305,7 +2496,8 @@
    "accession": "0001973239-26-000097",
    "filingDate": "2026-05-26",
    "verdict": "not-established",
-   "note": "executive biography"
+   "note": "executive biography",
+   "batch": "1"
   },
   {
    "filer": "CRSR",
@@ -2314,7 +2506,8 @@
    "accession": "0001193125-26-067833",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "industry suppliers meetings, no supply to filer stated"
+   "note": "industry suppliers meetings, no supply to filer stated",
+   "batch": "1"
   },
   {
    "filer": "CRWV",
@@ -2323,7 +2516,8 @@
    "accession": "0001769628-26-000104",
    "filingDate": "2026-03-02",
    "verdict": "not-established",
-   "note": "uses Intel chips; supply not stated"
+   "note": "uses Intel chips; supply not stated",
+   "batch": "1"
   },
   {
    "filer": "KEN",
@@ -2332,7 +2526,8 @@
    "accession": "0001178913-26-001842",
    "filingDate": "2026-03-30",
    "verdict": "not-established",
-   "note": "fragment, subject unclear, electricity supply to Intel"
+   "note": "fragment, subject unclear, electricity supply to Intel",
+   "batch": "1"
   },
   {
    "filer": "MBLY",
@@ -2341,7 +2536,8 @@
    "accession": "0001104659-26-014300",
    "filingDate": "2026-02-12",
    "verdict": "not-established",
-   "note": "parent relationship; license hedged with may"
+   "note": "parent relationship; license hedged with may",
+   "batch": "1"
   },
   {
    "filer": "NATL",
@@ -2350,7 +2546,8 @@
    "accession": "0001628280-26-012576",
    "filingDate": "2026-02-27",
    "verdict": "not-established",
-   "note": "depend on chips from Intel; supply not explicit"
+   "note": "depend on chips from Intel; supply not explicit",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -2359,7 +2556,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "strategic technology partnership"
+   "note": "strategic technology partnership",
+   "batch": "1"
   },
   {
    "filer": "PENG",
@@ -2368,7 +2566,8 @@
    "accession": "0001616533-25-000061",
    "filingDate": "2025-10-21",
    "verdict": "not-established",
-   "note": "unclear subject list of providers"
+   "note": "unclear subject list of providers",
+   "batch": "1"
   },
   {
    "filer": "PI",
@@ -2377,7 +2576,8 @@
    "accession": "0001193125-26-042813",
    "filingDate": "2026-02-09",
    "verdict": "not-established",
-   "note": "exhibit title; direction of purchase unclear"
+   "note": "exhibit title; direction of purchase unclear",
+   "batch": "1"
   },
   {
    "filer": "TSM",
@@ -2386,7 +2586,8 @@
    "accession": "0001628280-26-025362",
    "filingDate": "2026-04-16",
    "verdict": "not-established",
-   "note": "executive biography"
+   "note": "executive biography",
+   "batch": "1"
   },
   {
    "filer": "JBL",
@@ -2395,7 +2596,8 @@
    "accession": "0001628280-25-045293",
    "filingDate": "2025-10-17",
    "verdict": "wrong-entity",
-   "note": "Intelligent Infrastructure segment, not Intuitive Machines/INTJ"
+   "note": "Intelligent Infrastructure segment, not Intuitive Machines/INTJ",
+   "batch": "1"
   },
   {
    "filer": "CDW",
@@ -2404,7 +2606,8 @@
    "accession": "0001402057-26-000011",
    "filingDate": "2026-02-20",
    "verdict": "not-established",
-   "note": "peer group index"
+   "note": "peer group index",
+   "batch": "1"
   },
   {
    "filer": "EQIX",
@@ -2413,7 +2616,8 @@
    "accession": "0001101239-26-000032",
    "filingDate": "2026-02-11",
    "verdict": "wrong-entity",
-   "note": "Joint Ventures, not The Joint Corp"
+   "note": "Joint Ventures, not The Joint Corp",
+   "batch": "1"
   },
   {
    "filer": "AVGO",
@@ -2422,7 +2626,8 @@
    "accession": "0001730168-25-000121",
    "filingDate": "2025-12-18",
    "verdict": "not-established",
-   "note": "divestiture of business to KKR"
+   "note": "divestiture of business to KKR",
+   "batch": "1"
   },
   {
    "filer": "UCTT",
@@ -2431,7 +2636,8 @@
    "accession": "0001628280-26-010744",
    "filingDate": "2026-02-23",
    "verdict": "not-established",
-   "note": "executive biography"
+   "note": "executive biography",
+   "batch": "1"
   },
   {
    "filer": "THRM",
@@ -2440,7 +2646,8 @@
    "accession": "0001193125-26-059602",
    "filingDate": "2026-02-19",
    "verdict": "not-established",
-   "note": "business combination"
+   "note": "business combination",
+   "batch": "1"
   },
   {
    "filer": "CRSR",
@@ -2449,7 +2656,8 @@
    "accession": "0001193125-26-067833",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "uses ICs produced by Micron; supply not stated"
+   "note": "uses ICs produced by Micron; supply not stated",
+   "batch": "1"
   },
   {
    "filer": "ICL",
@@ -2458,7 +2666,8 @@
    "accession": "0001178913-26-000817",
    "filingDate": "2026-03-11",
    "verdict": "not-established",
-   "note": "executive biography"
+   "note": "executive biography",
+   "batch": "1"
   },
   {
    "filer": "IDA",
@@ -2467,7 +2676,8 @@
    "accession": "0001057877-26-000028",
    "filingDate": "2026-02-19",
    "verdict": "not-established",
-   "note": "fragment, subject unclear"
+   "note": "fragment, subject unclear",
+   "batch": "1"
   },
   {
    "filer": "MCHP",
@@ -2476,7 +2686,8 @@
    "accession": "0000827054-26-000016",
    "filingDate": "2026-05-21",
    "verdict": "not-established",
-   "note": "China restrictions on Micron products"
+   "note": "China restrictions on Micron products",
+   "batch": "1"
   },
   {
    "filer": "MRVL",
@@ -2485,7 +2696,8 @@
    "accession": "0001835632-26-000011",
    "filingDate": "2026-03-11",
    "verdict": "not-established",
-   "note": "China ban on Micron products"
+   "note": "China ban on Micron products",
+   "batch": "1"
   },
   {
    "filer": "OUST",
@@ -2494,7 +2706,8 @@
    "accession": "0001628280-26-013313",
    "filingDate": "2026-03-02",
    "verdict": "not-established",
-   "note": "director biography"
+   "note": "director biography",
+   "batch": "1"
   },
   {
    "filer": "PENG",
@@ -2503,7 +2716,8 @@
    "accession": "0001616533-25-000061",
    "filingDate": "2025-10-21",
    "verdict": "not-established",
-   "note": "mere list of memory manufacturers"
+   "note": "mere list of memory manufacturers",
+   "batch": "1"
   },
   {
    "filer": "AKAM",
@@ -2512,7 +2726,8 @@
    "accession": "0001086222-26-000022",
    "filingDate": "2026-02-20",
    "verdict": "not-established",
-   "note": "architectures by NVIDIA, no trade stated"
+   "note": "architectures by NVIDIA, no trade stated",
+   "batch": "1"
   },
   {
    "filer": "CRSR",
@@ -2521,7 +2736,8 @@
    "accession": "0001193125-26-067833",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "NVIDIA called industry supplier; meetings only, no purchase stated"
+   "note": "NVIDIA called industry supplier; meetings only, no purchase stated",
+   "batch": "1"
   },
   {
    "filer": "CRWV",
@@ -2530,7 +2746,8 @@
    "accession": "0001769628-26-000104",
    "filingDate": "2026-03-02",
    "verdict": "not-established",
-   "note": "Equity investment and NVIDIA's own suppliers"
+   "note": "Equity investment and NVIDIA's own suppliers",
+   "batch": "1"
   },
   {
    "filer": "FRHC",
@@ -2539,7 +2756,8 @@
    "accession": "0000924805-26-000012",
    "filingDate": "2026-06-01",
    "verdict": "not-established",
-   "note": "Hedged risk-factor wording"
+   "note": "Hedged risk-factor wording",
+   "batch": "1"
   },
   {
    "filer": "HPE",
@@ -2548,7 +2766,8 @@
    "accession": "0001645590-25-000130",
    "filingDate": "2025-12-18",
    "verdict": "not-established",
-   "note": "Competitor list"
+   "note": "Competitor list",
+   "batch": "1"
   },
   {
    "filer": "INFQ",
@@ -2557,7 +2776,8 @@
    "accession": "0001193125-26-134544",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Partners and customers mixed; ambiguous"
+   "note": "Partners and customers mixed; ambiguous",
+   "batch": "1"
   },
   {
    "filer": "INTC",
@@ -2566,7 +2786,8 @@
    "accession": "0000050863-26-000011",
    "filingDate": "2026-01-23",
    "verdict": "not-established",
-   "note": "Equity sale to NVIDIA"
+   "note": "Equity sale to NVIDIA",
+   "batch": "1"
   },
   {
    "filer": "IREN",
@@ -2575,7 +2796,8 @@
    "accession": "0001878848-26-000052",
    "filingDate": "2026-08-27",
    "verdict": "not-established",
-   "note": "Maintained relationships only; no purchase stated"
+   "note": "Maintained relationships only; no purchase stated",
+   "batch": "1"
   },
   {
    "filer": "LCID",
@@ -2584,7 +2806,8 @@
    "accession": "0001628280-26-011053",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "Partnership"
+   "note": "Partnership",
+   "batch": "1"
   },
   {
    "filer": "LITE",
@@ -2593,7 +2816,8 @@
    "accession": "0001628280-26-057358",
    "filingDate": "2026-08-17",
    "verdict": "not-established",
-   "note": "Equity private placement"
+   "note": "Equity private placement",
+   "batch": "1"
   },
   {
    "filer": "NTNX",
@@ -2602,7 +2826,8 @@
    "accession": "0001193125-26-394793",
    "filingDate": "2026-09-18",
    "verdict": "not-established",
-   "note": "Technology partnership"
+   "note": "Technology partnership",
+   "batch": "1"
   },
   {
    "filer": "P",
@@ -2611,7 +2836,8 @@
    "accession": "0001474432-26-000027",
    "filingDate": "2026-03-25",
    "verdict": "not-established",
-   "note": "Technology partner"
+   "note": "Technology partner",
+   "batch": "1"
   },
   {
    "filer": "POET",
@@ -2620,7 +2846,8 @@
    "accession": "0001493152-26-014253",
    "filingDate": "2026-03-31",
    "verdict": "not-established",
-   "note": "Industry context"
+   "note": "Industry context",
+   "batch": "1"
   },
   {
    "filer": "PONY",
@@ -2629,7 +2856,8 @@
    "accession": "0001104659-26-046406",
    "filingDate": "2026-04-22",
    "verdict": "not-established",
-   "note": "Co-development collaboration"
+   "note": "Co-development collaboration",
+   "batch": "1"
   },
   {
    "filer": "RXRX",
@@ -2638,7 +2866,8 @@
    "accession": "0001601830-26-000039",
    "filingDate": "2026-02-25",
    "verdict": "not-established",
-   "note": "Equity financing"
+   "note": "Equity financing",
+   "batch": "1"
   },
   {
    "filer": "SMCI",
@@ -2647,7 +2876,8 @@
    "accession": "0001375365-26-000022",
    "filingDate": "2026-08-31",
    "verdict": "not-established",
-   "note": "Compatible products only"
+   "note": "Compatible products only",
+   "batch": "1"
   },
   {
    "filer": "SNPS",
@@ -2656,7 +2886,8 @@
    "accession": "0000883241-25-000028",
    "filingDate": "2025-12-22",
    "verdict": "not-established",
-   "note": "Equity private placement"
+   "note": "Equity private placement",
+   "batch": "1"
   },
   {
    "filer": "ACIW",
@@ -2665,7 +2896,8 @@
    "accession": "0000935036-26-000011",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "Partnership for compatibility"
+   "note": "Partnership for compatibility",
+   "batch": "1"
   },
   {
    "filer": "COLD",
@@ -2674,7 +2906,8 @@
    "accession": "0001628280-26-012274",
    "filingDate": "2026-02-26",
    "verdict": "not-established",
-   "note": "ERP project name mention"
+   "note": "ERP project name mention",
+   "batch": "1"
   },
   {
    "filer": "CXM",
@@ -2683,7 +2916,8 @@
    "accession": "0001569345-26-000015",
    "filingDate": "2026-03-19",
    "verdict": "not-established",
-   "note": "Partner categories list"
+   "note": "Partner categories list",
+   "batch": "1"
   },
   {
    "filer": "DOCN",
@@ -2692,7 +2926,8 @@
    "accession": "0001582961-26-000019",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "Competitor vendor list"
+   "note": "Competitor vendor list",
+   "batch": "1"
   },
   {
    "filer": "FIVN",
@@ -2701,7 +2936,8 @@
    "accession": "0001288847-26-000023",
    "filingDate": "2026-02-20",
    "verdict": "not-established",
-   "note": "Integration"
+   "note": "Integration",
+   "batch": "1"
   },
   {
    "filer": "HURN",
@@ -2710,7 +2946,8 @@
    "accession": "0001628280-26-011093",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "Consulting offerings about Oracle"
+   "note": "Consulting offerings about Oracle",
+   "batch": "1"
   },
   {
    "filer": "INFY",
@@ -2719,7 +2956,8 @@
    "accession": "0001193125-26-270520",
    "filingDate": "2026-06-15",
    "verdict": "not-established",
-   "note": "Services around Oracle applications; no trade stated"
+   "note": "Services around Oracle applications; no trade stated",
+   "batch": "1"
   },
   {
    "filer": "LIFE",
@@ -2728,7 +2966,8 @@
    "accession": "0001193125-26-108887",
    "filingDate": "2026-03-17",
    "verdict": "not-established",
-   "note": "Executive biography"
+   "note": "Executive biography",
+   "batch": "1"
   },
   {
    "filer": "LKQ",
@@ -2737,7 +2976,8 @@
    "accession": "0001065696-26-000012",
    "filingDate": "2026-02-19",
    "verdict": "not-established",
-   "note": "Security incident mention"
+   "note": "Security incident mention",
+   "batch": "1"
   },
   {
    "filer": "MANH",
@@ -2746,7 +2986,8 @@
    "accession": "0001193125-26-037138",
    "filingDate": "2026-02-04",
    "verdict": "not-established",
-   "note": "Vendor category list, likely competitors/integrations"
+   "note": "Vendor category list, likely competitors/integrations",
+   "batch": "1"
   },
   {
    "filer": "MDB",
@@ -2755,7 +2996,8 @@
    "accession": "0001628280-26-016799",
    "filingDate": "2026-03-11",
    "verdict": "not-established",
-   "note": "Competitor"
+   "note": "Competitor",
+   "batch": "1"
   },
   {
    "filer": "NOW",
@@ -2764,7 +3006,8 @@
    "accession": "0001373715-26-000007",
    "filingDate": "2026-01-29",
    "verdict": "not-established",
-   "note": "Competitor list"
+   "note": "Competitor list",
+   "batch": "1"
   },
   {
    "filer": "OTEX",
@@ -2773,7 +3016,8 @@
    "accession": "0001002638-26-000068",
    "filingDate": "2026-08-06",
    "verdict": "not-established",
-   "note": "Depends on third-party software; no supply stated"
+   "note": "Depends on third-party software; no supply stated",
+   "batch": "1"
   },
   {
    "filer": "P",
@@ -2782,7 +3026,8 @@
    "accession": "0001474432-26-000027",
    "filingDate": "2026-03-25",
    "verdict": "not-established",
-   "note": "Technology partner"
+   "note": "Technology partner",
+   "batch": "1"
   },
   {
    "filer": "ROP",
@@ -2791,7 +3036,8 @@
    "accession": "0000882835-26-000009",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "Rely on business partners for hosting"
+   "note": "Rely on business partners for hosting",
+   "batch": "1"
   },
   {
    "filer": "SRAD",
@@ -2800,7 +3046,8 @@
    "accession": "0001104659-26-035485",
    "filingDate": "2026-03-27",
    "verdict": "not-established",
-   "note": "Depend/rely wording, risk factor"
+   "note": "Depend/rely wording, risk factor",
+   "batch": "1"
   },
   {
    "filer": "TDC",
@@ -2809,7 +3056,8 @@
    "accession": "0001628280-26-012671",
    "filingDate": "2026-02-27",
    "verdict": "not-established",
-   "note": "Executive biography"
+   "note": "Executive biography",
+   "batch": "1"
   },
   {
    "filer": "VERX",
@@ -2818,7 +3066,8 @@
    "accession": "0001104659-26-019165",
    "filingDate": "2026-02-24",
    "verdict": "not-established",
-   "note": "Relationship with vendors as tax provider; partnership"
+   "note": "Relationship with vendors as tax provider; partnership",
+   "batch": "1"
   },
   {
    "filer": "APLD",
@@ -2827,7 +3076,8 @@
    "accession": "0001144879-26-000048",
    "filingDate": "2026-07-29",
    "verdict": "wrong-entity",
-   "note": "Polaris Forge is a data center campus, not Polaris Inc."
+   "note": "Polaris Forge is a data center campus, not Polaris Inc.",
+   "batch": "1"
   },
   {
    "filer": "IREN",
@@ -2836,7 +3086,8 @@
    "accession": "0001878848-26-000052",
    "filingDate": "2026-08-27",
    "verdict": "not-established",
-   "note": "Maintained relationships only; no purchase stated"
+   "note": "Maintained relationships only; no purchase stated",
+   "batch": "1"
   },
   {
    "filer": "INTC",
@@ -2845,7 +3096,8 @@
    "accession": "0000050863-26-000011",
    "filingDate": "2026-01-23",
    "verdict": "not-established",
-   "note": "Hypothetical interruption wording"
+   "note": "Hypothetical interruption wording",
+   "batch": "1"
   },
   {
    "filer": "SIMO",
@@ -2854,7 +3106,8 @@
    "accession": "0001193125-26-197184",
    "filingDate": "2026-04-30",
    "verdict": "not-established",
-   "note": "Executive biography"
+   "note": "Executive biography",
+   "batch": "1"
   },
   {
    "filer": "SNDK",
@@ -2863,12 +3116,562 @@
    "accession": "0001628280-26-057406",
    "filingDate": "2026-08-17",
    "verdict": "not-established",
-   "note": "Former parent; separation-related licensing"
+   "note": "Former parent; separation-related licensing",
+   "batch": "1"
+  },
+  {
+   "filer": "AMAT",
+   "party": "GM",
+   "form": "10-K",
+   "accession": "0001628280-25-056742",
+   "filingDate": "2025-12-12",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "AMAT",
+   "party": "T",
+   "form": "10-K",
+   "accession": "0001628280-25-056742",
+   "filingDate": "2025-12-12",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "AMD",
+   "party": "MSFT",
+   "form": "10-K",
+   "accession": "0000002488-26-000018",
+   "filingDate": "2026-02-04",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "OS/console dependency; no sale to Microsoft stated"
+  },
+  {
+   "filer": "AMD",
+   "party": "SANM",
+   "form": "10-K",
+   "accession": "0000002488-26-000018",
+   "filingDate": "2026-02-04",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "business sale (M&A) and a future 'preferred partner'"
+  },
+  {
+   "filer": "AMD",
+   "party": "SONY",
+   "form": "10-K",
+   "accession": "0000002488-26-000018",
+   "filingDate": "2026-02-04",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "console success; no sale stated"
+  },
+  {
+   "filer": "ASML",
+   "party": "TSM",
+   "form": "20-F",
+   "accession": "0001628280-26-011378",
+   "filingDate": "2026-02-25",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "name only, no relationship in the sentence"
+  },
+  {
+   "filer": "COHR",
+   "party": "RTX",
+   "form": "10-K",
+   "accession": "0000820318-26-000020",
+   "filingDate": "2026-08-14",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "DELL",
+   "party": "CAT",
+   "form": "10-K",
+   "accession": "0001571996-26-000008",
+   "filingDate": "2026-03-16",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "ETN",
+   "party": "PII",
+   "form": "10-K",
+   "accession": "0001551182-26-000007",
+   "filingDate": "2026-02-26",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "FIX",
+   "party": "CAT",
+   "form": "10-K",
+   "accession": "0001104659-26-017530",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "industry description of component makers; no purchase by the filer stated"
+  },
+  {
+   "filer": "FIX",
+   "party": "CMI",
+   "form": "10-K",
+   "accession": "0001104659-26-017530",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "industry description; no purchase stated"
+  },
+  {
+   "filer": "FIX",
+   "party": "HAL",
+   "form": "10-K",
+   "accession": "0001104659-26-017530",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "biography"
+  },
+  {
+   "filer": "FIX",
+   "party": "JCI",
+   "form": "10-K",
+   "accession": "0001104659-26-017530",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "industry description; no purchase stated"
+  },
+  {
+   "filer": "FIX",
+   "party": "TT",
+   "form": "10-K",
+   "accession": "0001104659-26-017530",
+   "filingDate": "2026-02-19",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "industry description; no purchase stated"
+  },
+  {
+   "filer": "FN",
+   "party": "AMZN",
+   "form": "10-K",
+   "accession": "0001408710-26-000028",
+   "filingDate": "2026-08-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "warrant exhibit line"
+  },
+  {
+   "filer": "INTC",
+   "party": "UMC",
+   "form": "10-K",
+   "accession": "0000050863-26-000011",
+   "filingDate": "2026-01-23",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "collaboration, production expected in 2027"
+  },
+  {
+   "filer": "IREN",
+   "party": "MSFT",
+   "form": "10-K",
+   "accession": "0001878848-26-000052",
+   "filingDate": "2026-08-27",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "conditional ('if Microsoft validly terminates'); financing guarantee"
+  },
+  {
+   "filer": "KLAC",
+   "party": "TSM",
+   "form": "10-K",
+   "accession": "0000319201-26-000027",
+   "filingDate": "2026-08-06",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "name only, no relationship in the sentence"
+  },
+  {
+   "filer": "MOD",
+   "party": "EAT",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "verdict": "wrong-entity",
+   "note": "'Brinker' is a person's name, not Brinker International"
+  },
+  {
+   "filer": "MOD",
+   "party": "THRM",
+   "form": "10-K",
+   "accession": "0001104659-26-066795",
+   "filingDate": "2026-05-27",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "pending Reverse Morris Trust transaction (M&A)"
+  },
+  {
+   "filer": "MRVL",
+   "party": "VATE",
+   "form": "10-K",
+   "accession": "0001835632-26-000011",
+   "filingDate": "2026-03-11",
+   "batch": "2",
+   "verdict": "wrong-entity",
+   "note": "'Innovate' is a word, not Innovate Corp"
+  },
+  {
+   "filer": "MTZ",
+   "party": "CETY",
+   "form": "10-K",
+   "accession": "0000015615-26-000020",
+   "filingDate": "2026-02-26",
+   "batch": "2",
+   "verdict": "wrong-entity",
+   "note": "'Clean Energy' is a segment name, not Clean Energy Technologies"
+  },
+  {
+   "filer": "MU",
+   "party": "TRTN-PA",
+   "form": "10-K",
+   "accession": "0000723125-25-000028",
+   "filingDate": "2025-10-03",
+   "batch": "2",
+   "verdict": "wrong-entity",
+   "note": "'Triton' is a Micron LLC, not Triton International"
+  },
+  {
+   "filer": "NVDA",
+   "party": "MSFT",
+   "form": "10-K",
+   "accession": "0001045810-26-000021",
+   "filingDate": "2026-02-25",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "right of first refusal on a share purchase; no sale stated"
+  },
+  {
+   "filer": "NVT",
+   "party": "PNR",
+   "form": "10-K",
+   "accession": "0001628280-26-008608",
+   "filingDate": "2026-02-17",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "spin-off history (Pentair plans)"
+  },
+  {
+   "filer": "HPE",
+   "party": "EXTR",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
+  },
+  {
+   "filer": "HPE",
+   "party": "PANW",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
+  },
+  {
+   "filer": "HPE",
+   "party": "FTNT",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
+  },
+  {
+   "filer": "HPE",
+   "party": "ZS",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
+  },
+  {
+   "filer": "HPE",
+   "party": "NTSK",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
+  },
+  {
+   "filer": "HPE",
+   "party": "UI",
+   "form": "10-K",
+   "accession": "0001645590-25-000130",
+   "filingDate": "2025-12-18",
+   "batch": "2",
+   "verdict": "not-established",
+   "note": "reseller rule (COWORK #20): a vendor-list sentence counts only when the filer is a reseller or distributor; removed before review",
+   "quote": "Ltd., Ciena Corporation, NVIDIA Corporation, Extreme Networks, Inc., Palo Alto Networks, Fortinet, Inc., Zscaler, Inc., Netskope, Inc., Ruckus Networks, and Ubiquiti and networking-as-a-service vendors such as Nile and Meter."
   }
  ],
  "deferred": [],
  "scope": "Batch receivers (the curated list minus excludedReceivers) as a supplier, as a customer, and their own named suppliers (COWORK #20 F1).",
  "reviewNotes": [
   "COWORK #20: a reseller or distributor 'vendor partners' list counts only when the filer is a reseller or distributor (CDW, SCSC, ARW, SNX...); in any other filer it is 'not established'. Applies from batch 2."
- ]
+ ],
+ "audits": [
+  {
+   "batch": 1,
+   "by": "Cowork",
+   "status": "passed",
+   "result": "COWORK #20: 0 of 20 disagree",
+   "seed": 563019,
+   "draw": "import random; random.Random(563019).sample(population, 20) -- Python 3; population is the list below exactly as stored (sorted 'filer|party|role' keys of the 105 links published at audit time). drawOrder is sample()'s return order; sample is the same 20 sorted.",
+   "population": [
+    "AAOI|ORCL|customer",
+    "ACA|GEV|customer",
+    "ADEA|MU|customer",
+    "ADEA|SNDK|customer",
+    "AERO|ORCL|supplier",
+    "AMKR|AAPL|customer",
+    "AMKR|QCOM|customer",
+    "AMSC|MU|customer",
+    "ANET|AVGO|supplier",
+    "ANET|JBL|supplier",
+    "ASX|LRCX|supplier",
+    "ASX|TER|supplier",
+    "BKR|GEV|supplier",
+    "CDW|AVGO|supplier",
+    "CDW|CSCO|supplier",
+    "CDW|DELL|supplier",
+    "CDW|HPE|supplier",
+    "CDW|IBM|supplier",
+    "CDW|INTC|supplier",
+    "CDW|NVDA|supplier",
+    "CIEN|T|customer",
+    "CLS|AMAT|customer",
+    "CLS|CIEN|customer",
+    "CLS|DELL|customer",
+    "CLS|HON|customer",
+    "CLS|HPE|customer",
+    "CLS|IBM|customer",
+    "CLS|LRCX|customer",
+    "CLS|META|customer",
+    "CNXN|DELL|supplier",
+    "COHR|NVDA|customer",
+    "COHU|JBL|supplier",
+    "CRDO|AMKR|supplier",
+    "CX|IBM|supplier",
+    "EMBJ|ETN|supplier",
+    "EXTR|AVGO|supplier",
+    "FFIV|FLEX|supplier",
+    "FLEX|F|customer",
+    "FORTY|IBM|supplier",
+    "FTNT|AMD|supplier",
+    "FTNT|AVGO|supplier",
+    "FTNT|INTC|supplier",
+    "FTNT|MRVL|supplier",
+    "FTNT|MU|supplier",
+    "FTNT|WDC|supplier",
+    "HPQ|AMD|supplier",
+    "HPQ|INTC|supplier",
+    "HPQ|NVDA|supplier",
+    "ICHR|AMAT|customer",
+    "ICHR|ASML|customer",
+    "ICHR|LRCX|customer",
+    "INGM|AMD|supplier",
+    "INGM|CSCO|supplier",
+    "INGM|DELL|supplier",
+    "INGM|HPE|supplier",
+    "INGM|NVDA|supplier",
+    "INTC|ASML|supplier",
+    "IREN|AMD|supplier",
+    "IREN|DELL|supplier",
+    "JKHY|IBM|supplier",
+    "LIF|JBL|supplier",
+    "LI|NVDA|supplier",
+    "LRCX|MU|customer",
+    "LSCC|AMKR|supplier",
+    "MTZ|T|customer",
+    "MXL|INTC|supplier",
+    "NBIS|META|customer",
+    "NBIS|NVDA|supplier",
+    "NPO|AMAT|customer",
+    "NPO|ASML|customer",
+    "NSIT|CSCO|supplier",
+    "NSIT|DELL|supplier",
+    "NVDA|FN|supplier",
+    "NVDA|MU|supplier",
+    "OUST|FN|supplier",
+    "PAGS|CSCO|supplier",
+    "PAGS|ORCL|supplier",
+    "PCAR|ETN|supplier",
+    "PENG|CLS|supplier",
+    "PLUS|CSCO|supplier",
+    "QCOM|AMKR|supplier",
+    "RNG|EQIX|supplier",
+    "SCSC|CSCO|supplier",
+    "SCSC|DELL|supplier",
+    "SCSC|HPE|supplier",
+    "SEDG|JBL|supplier",
+    "SHAZ|NVDA|supplier",
+    "SIMO|MU|customer",
+    "STVN|GLW|supplier",
+    "TDC|DELL|supplier",
+    "TDC|FLEX|supplier",
+    "TDC|NVDA|supplier",
+    "TRMB|JBL|supplier",
+    "TSEM|INTC|supplier",
+    "UCTT|AMAT|customer",
+    "UCTT|ASML|customer",
+    "UCTT|LRCX|customer",
+    "UI|AVGO|supplier",
+    "UMC|INTC|customer",
+    "VIAV|AMD|customer",
+    "VIAV|CIEN|customer",
+    "VIAV|CSCO|customer",
+    "WWD|GEV|customer",
+    "XP|ORCL|supplier",
+    "YELP|ORCL|supplier"
+   ],
+   "drawOrder": [
+    "STVN|GLW|supplier",
+    "HPQ|INTC|supplier",
+    "UCTT|AMAT|customer",
+    "EXTR|AVGO|supplier",
+    "INTC|ASML|supplier",
+    "FTNT|MRVL|supplier",
+    "CDW|NVDA|supplier",
+    "NBIS|NVDA|supplier",
+    "ICHR|AMAT|customer",
+    "JKHY|IBM|supplier",
+    "VIAV|CIEN|customer",
+    "ACA|GEV|customer",
+    "UI|AVGO|supplier",
+    "FTNT|WDC|supplier",
+    "FTNT|AVGO|supplier",
+    "PCAR|ETN|supplier",
+    "MTZ|T|customer",
+    "SCSC|CSCO|supplier",
+    "PAGS|ORCL|supplier",
+    "ANET|AVGO|supplier"
+   ],
+   "sample": [
+    "ACA|GEV|customer",
+    "ANET|AVGO|supplier",
+    "CDW|NVDA|supplier",
+    "EXTR|AVGO|supplier",
+    "FTNT|AVGO|supplier",
+    "FTNT|MRVL|supplier",
+    "FTNT|WDC|supplier",
+    "HPQ|INTC|supplier",
+    "ICHR|AMAT|customer",
+    "INTC|ASML|supplier",
+    "JKHY|IBM|supplier",
+    "MTZ|T|customer",
+    "NBIS|NVDA|supplier",
+    "PAGS|ORCL|supplier",
+    "PCAR|ETN|supplier",
+    "SCSC|CSCO|supplier",
+    "STVN|GLW|supplier",
+    "UCTT|AMAT|customer",
+    "UI|AVGO|supplier",
+    "VIAV|CIEN|customer"
+   ],
+   "addedAfterDraw": [
+    "AMD|TSM|supplier",
+    "AVGO|TSM|supplier",
+    "NVDA|TSM|supplier"
+   ],
+   "addedAfterDrawNote": "The three TSMC links moved from deferred per COWORK #20 F1; their sentences were read by Cowork in that ruling. They were not in the population the audit sample was drawn from."
+  },
+  {
+   "batch": 2,
+   "by": "Cowork",
+   "status": "pending",
+   "seed": 563023,
+   "seedPosted": "CODE-C #27, before any batch-2 population existed",
+   "draw": "import random; random.Random(563023).sample(population, min(20, len(population))) -- Python 3; population = sorted (code-point) 'filer|party|role' keys of the batch-2 published links. Batch 2 has fewer than 20, so the audit covers all of them.",
+   "population": [
+    "AAOI|AMZN|customer",
+    "AAOI|MSFT|customer",
+    "APLD|CAT|supplier",
+    "CLS|GOOGL|customer",
+    "JBL|AMZN|customer",
+    "LRCX|TSM|customer",
+    "MOD|CAT|customer",
+    "MOD|DE|customer",
+    "MOD|STLA|customer",
+    "MOD|TT|customer",
+    "NBIS|MSFT|customer",
+    "TER|PLXS|supplier"
+   ],
+   "drawOrder": [
+    "TER|PLXS|supplier",
+    "APLD|CAT|supplier",
+    "NBIS|MSFT|customer",
+    "LRCX|TSM|customer",
+    "CLS|GOOGL|customer",
+    "AAOI|AMZN|customer",
+    "MOD|TT|customer",
+    "MOD|DE|customer",
+    "MOD|CAT|customer",
+    "MOD|STLA|customer",
+    "JBL|AMZN|customer",
+    "AAOI|MSFT|customer"
+   ],
+   "sample": [
+    "AAOI|AMZN|customer",
+    "AAOI|MSFT|customer",
+    "APLD|CAT|supplier",
+    "CLS|GOOGL|customer",
+    "JBL|AMZN|customer",
+    "LRCX|TSM|customer",
+    "MOD|CAT|customer",
+    "MOD|DE|customer",
+    "MOD|STLA|customer",
+    "MOD|TT|customer",
+    "NBIS|MSFT|customer",
+    "TER|PLXS|supplier"
+   ],
+   "addedAfterDraw": []
+  }
+ ],
+ "batches": {
+  "1": {
+   "reviewedAt": "2026-09-25",
+   "confirmed": 108
+  },
+  "2": {
+   "reviewedAt": "2026-09-27",
+   "confirmed": 12,
+   "reviewed": 37,
+   "resellerRuleRemoved": 6,
+   "alreadyInBatch1": 38,
+   "secFetches": 5022,
+   "note": "Receivers' own latest annual reports (SCAN=own), plus a universe re-scan with filed names for AAOI, FIX, HUBB, LITE, NVT, PWR, which found no candidates."
+  }
+ }
 }
