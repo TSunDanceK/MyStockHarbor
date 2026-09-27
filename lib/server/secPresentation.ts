@@ -180,6 +180,25 @@ export type TrendLine = {
   counted: number;
   /** Periods left out because they were n/m or absent. */
   skipped: number;
+  /**
+   * WHY A REFUSED LINE IS REFUSED, in words (#552 COWORK #47). AXTI has eight
+   * quarters on file and read "needs 3, has 0" — true of the arithmetic, but it
+   * reads as missing data when every year-earlier quarter was a loss. Null when
+   * the line has a value.
+   */
+  reason: string | null;
+  /**
+   * THE NEWEST PERIOD'S CROSSING, in the snapshot's words ("Latest: turned
+   * profitable"), where the newest comparison crosses between profit and loss.
+   */
+  latestWords: string | null;
+  /**
+   * A LEVEL'S DIRECTION (operating margin): the latest against the typical, on
+   * the same ±MARGIN_BAND_PP band and verb rule as Growth & Margins. The level
+   * itself stays untoned. Null on a rate line, or when the move is not
+   * meaningful (marginMoveMeaningful).
+   */
+  move: { tone: EarningsTone; word: string } | null;
 };
 
 export type TrendSummary = {
@@ -242,25 +261,36 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   // and an absence is a null, and once both have been filtered out by isPct
   // the difference is unrecoverable.
   let crossings = 0;
-  const line = (label: string, values: Pct[]): TrendLine => {
+  const line = (label: string, subject: string, values: Pct[]): TrendLine => {
     const nums = values.filter(isPct) as number[];
     const skipped = values.length - nums.length;
-    crossings += values.filter(isCrossing).length;
+    const crossed = values.filter(isCrossing);
+    crossings += crossed.length;
     // `values` is oldest first (see GrowthMarginsChart), so the newest is last.
     const last = values.length ? values[values.length - 1] : null;
     const latest = isPct(last) ? last : null;
     const latestTone = toneForGrowth(latest);
+    const latestWords = last === "turned-profitable" ? "Latest: turned profitable"
+      : last === "swung-to-loss" ? "Latest: swung to a loss" : null;
     if (nums.length < TREND_MIN_PERIODS) {
-      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped };
+      // THE REASON THAT HAPPENED: enough periods on file, but the comparisons
+      // cross zero — a loss a year earlier makes a % change meaningless.
+      const lossEarlier = crossed.length > 0 && crossed.every((c) => c === "loss-both" || c === "turned-profitable");
+      const reason = crossed.length > 0 && nums.length + crossed.length >= TREND_MIN_PERIODS
+        ? lossEarlier
+          ? `Not measured: ${subject} was a loss in the year-earlier ${w.many}, so a % change isn't meaningful.`
+          : `Not measured: ${subject} crossed between profit and loss in these ${w.many}, so a % change isn't meaningful.`
+        : `Not measured: needs ${TREND_MIN_PERIODS} comparable ${w.many}, has ${nums.length}.`;
+      return { label, kind: "rate", value: null, tone: null, latest, latestTone, counted: nums.length, skipped, reason, latestWords, move: null };
     }
     const m = median(nums);
-    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped };
+    return { label, kind: "rate", value: m, tone: toneForGrowth(m as Pct), latest, latestTone, counted: nums.length, skipped, reason: null, latestWords, move: null };
   };
 
   const growth = view.growth ?? [];
   const lines = [
-    line("Revenue growth", growth.map((g) => g.revenueYoY)),
-    line("EPS growth", growth.map((g) => g.epsYoY)),
+    line("Revenue growth", "revenue", growth.map((g) => g.revenueYoY)),
+    line("EPS growth", "EPS", growth.map((g) => g.epsYoY)),
   ];
 
   // MARGIN IS A LEVEL, NOT A RATE, so it gets its own line rather than being
@@ -268,6 +298,10 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
   const opMargins = view.margins.map((m) => m.operating).filter((x): x is number => x !== null);
   if (opMargins.length >= TREND_MIN_PERIODS) {
     const m = median(opMargins);
+    const newest = view.margins.length ? view.margins[view.margins.length - 1].operating : null;
+    // THE DIRECTION, NOT THE LEVEL (#552 COWORK #47): AXTI's typical −15.5%
+    // beside a latest 21.9% had no chip, while revenue had "Growing".
+    const moveTone = m !== null && newest !== null && marginMoveMeaningful(m, newest) ? toneForMarginDelta(newest - m) : null;
     lines.push({
       label: "Operating margin",
       kind: "level",
@@ -276,10 +310,13 @@ export function trendSummary(view: SecEarningsView): TrendSummary {
       // on the industry, and this page has no industry comparison — colouring
       // it would be inventing a judgement. The DIRECTION is toned below.
       tone: null,
-      latest: view.margins.length ? view.margins[view.margins.length - 1].operating : null,
+      latest: newest,
       latestTone: null,
       counted: opMargins.length,
       skipped: view.margins.length - opMargins.length,
+      reason: null,
+      latestWords: null,
+      move: moveTone && m !== null && newest !== null ? { tone: moveTone, word: marginToneWord(moveTone, { older: m, newer: newest }) } : null,
     });
   }
 

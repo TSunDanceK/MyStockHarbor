@@ -40,8 +40,21 @@ const origin = url.origin;
 const SECTIONS = {
   about: "/^About /",
   returns: "/close-over-close change/i",
+  // THE WHOLE EARNINGS PAGE (CODE-A, #552 COWORK #37): /stock/X/earnings, from
+  // the top, up to FULL_PAGE_MAX_PX. No heading test: the page is the subject.
+  earnings: null,
 };
-const tokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+const PATHS = { earnings: "/earnings" };
+const FULL_PAGE_MAX_PX = 14000;
+const allTokens = (process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
+// OPTIONAL PAGE TOKEN (Relay B, #553 COWORK #27): "page=dashboard" shoots
+// /dashboard's chart in each mode, normal and wide, and measures the layout.
+// "page=storage" (#553 COWORK #33 / #40) loads five pages with browser storage
+// BLOCKED and asserts each still renders its header.
+const pageToken = allTokens.find((t) => t.startsWith("page="));
+const page = pageToken ? pageToken.slice("page=".length) : "stock";
+if (!["stock", "dashboard", "storage"].includes(page)) throw new Error("page= takes stock, dashboard or storage");
+const tokens = allTokens.filter((t) => t !== pageToken);
 const sectionToken = tokens.find((t) => t.startsWith("section="));
 const section = sectionToken ? sectionToken.slice("section=".length) : "about";
 if (!Object.hasOwn(SECTIONS, section)) throw new Error(`section= takes one of: ${Object.keys(SECTIONS).join(", ")}`);
@@ -123,12 +136,121 @@ async function load(url) {
 
 
 const out = { origin, takenAt: new Date().toISOString(), shots: {} };
-for (const sym of symbols) {
+
+// ── /dashboard WIDE CHART (#553 COWORK #27) ───────────────────────────────
+// For each chart mode, normal then wide, at a 1440px desktop: a screenshot of
+// the chart + cards area, and a RENDERED TEST of the layout --
+//   wide:   the chart card spans the grid; Overview and Breakdown sit below
+//           it, side by side; the chart engine fills the wider card;
+//   normal: the chart shares the row with the 360px card column;
+//   Basic:  the SVG re-measures (its viewBox widens) so its rendered height
+//           stays within 6% of normal -- a chart that merely stretched would
+//           grow ~45% taller.
+// A failed assertion is printed as FAIL and recorded; the run still pushes
+// the screenshots so the failure can be seen.
+if (page === "dashboard") {
+  const sym = symbols[0];
+  await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1200, deviceScaleFactor: 1, mobile: false });
+  await load(`${origin}/dashboard?symbol=${encodeURIComponent(sym)}`);
+  const click = (expr) => evaluate(`(() => { const b = ${expr}; if (!b) return false; b.click(); return true; })()`);
+  const measure = () => evaluate(`(() => {
+    const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) }; };
+    const grid = document.querySelector(".msh-grid.msh-desktop-only");
+    const chart = document.getElementById("chart");
+    const card = (t) => [...grid.querySelectorAll("*")].find((e) => e.childElementCount === 0 && e.textContent.trim() === t)?.closest("section, div[style*='border-radius']");
+    // The engine is the WIDEST drawing surface in the card: the header's line /
+    // candle / widen icons are small SVGs too, and lightweight-charts stacks
+    // several canvases.
+    const widest = (els) => els.sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0] || null;
+    const engine = chart && widest([...chart.querySelectorAll("iframe, canvas, svg[viewBox]")]);
+    const svg = engine && engine.tagName.toLowerCase() === "svg" ? engine : null;
+    const btn = document.querySelector(".msh-widebtn");
+    return { grid: box(grid), chart: box(chart), overview: box(card(${JSON.stringify(sym)} + " Overview")), breakdown: box(card("Breakdown") || card("Selected Indicators")),
+      engine: box(engine), engineTag: engine && engine.tagName, viewBox: svg && svg.getAttribute("viewBox"),
+      button: btn && { pressed: btn.getAttribute("aria-pressed"), label: btn.getAttribute("aria-label") }, wideAttr: grid && grid.getAttribute("data-wide-chart") };
+  })()`);
+  const results = [];
+  const assert = (name, cond, detail) => { results.push({ name, ok: Boolean(cond), detail }); console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? ` -- ${detail}` : ""}`); };
+  const normalBasicHeight = {};
+  for (const mode of ["Basic", "Interactive", "TradingView"]) {
+    await click(`[...document.querySelectorAll("button[aria-pressed]")].find((b) => b.textContent.trim() === ${JSON.stringify(mode)})`);
+    await sleep(mode === "TradingView" ? 6000 : 2500);
+    for (const wide of [false, true]) {
+      const m0 = await measure();
+      if ((m0?.wideAttr === "1") !== wide) { await click(`document.querySelector(".msh-widebtn")`); await sleep(mode === "TradingView" ? 5000 : 2500); }
+      const m = await measure();
+      const key = `dashboard-${mode.toLowerCase()}-${wide ? "wide" : "normal"}`;
+      if (!m?.grid || !m.chart) { assert(`${key}: layout found`, false, JSON.stringify(m)); continue; }
+      if (wide) {
+        assert(`${key}: chart card spans the grid`, Math.abs(m.chart.w - m.grid.w) <= 4, `chart ${m.chart.w} vs grid ${m.grid.w}`);
+        assert(`${key}: Overview and Breakdown below the chart`, m.overview && m.breakdown && m.overview.y >= m.chart.y + m.chart.h && m.breakdown.y >= m.chart.y + m.chart.h, JSON.stringify({ chart: m.chart, overview: m.overview, breakdown: m.breakdown }));
+        assert(`${key}: the two cards side by side`, m.overview && m.breakdown && Math.abs(m.overview.y - m.breakdown.y) <= 4 && m.breakdown.x > m.overview.x + m.overview.w - 4, JSON.stringify({ overview: m.overview, breakdown: m.breakdown }));
+        assert(`${key}: the chart engine fills the wide card`, m.engine && m.engine.w >= m.chart.w - 80, `${m.engineTag} ${m.engine?.w} in ${m.chart.w}`);
+        assert(`${key}: button pressed, labelled "Back to two columns"`, m.button?.pressed === "true" && m.button.label === "Back to two columns", JSON.stringify(m.button));
+        if (mode === "Basic") assert(`${key}: the Basic SVG re-measured (viewBox widened, height kept)`, m.viewBox && Number(m.viewBox.split(" ")[2]) > 760 && Math.abs(m.engine.h - normalBasicHeight.h) / normalBasicHeight.h <= 0.06, `viewBox ${m.viewBox}; height ${m.engine?.h} vs normal ${normalBasicHeight.h}`);
+      } else {
+        assert(`${key}: the chart shares the row with the card column`, m.chart.w <= m.grid.w - 300, `chart ${m.chart.w} vs grid ${m.grid.w}`);
+        assert(`${key}: button not pressed, labelled "Widen chart"`, m.button?.pressed === "false" && m.button.label === "Widen chart", JSON.stringify(m.button));
+        if (mode === "Basic") normalBasicHeight.h = m.engine?.h ?? 0;
+      }
+      const top = Math.max(0, m.grid.y - 8);
+      const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: top, width: 1440, height: Math.min(m.grid.h + 16, 3000), scale: 1 } });
+      out.shots[key] = { png: data, height: Math.round(m.grid.h), text: JSON.stringify({ chart: m.chart, overview: m.overview, breakdown: m.breakdown, engine: m.engine, engineTag: m.engineTag, viewBox: m.viewBox }) };
+    }
+  }
+  // Leave the viewer's stored choice as it was found (normal).
+  if ((await measure())?.wideAttr === "1") await click(`document.querySelector(".msh-widebtn")`);
+  out.results = results;
+  console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
+}
+
+// ── BLOCKED STORAGE (#553 COWORK #33, #40) ───────────────────────────────
+// Privacy modes and some embedded browsers block site data; reading
+// window.localStorage then throws a SecurityError. Before lib/browserStorage.ts
+// the site header read it bare and every page without a symbol in its URL
+// crashed. Two ways of blocking, five pages each: the header must render and
+// no storage error may reach the page. A RENDERED TEST: FAIL lines are
+// recorded and the run still writes its output.
+if (page === "storage") {
+  const sym = symbols[0];
+  const results = [];
+  const assert = (name, cond, detail) => { results.push({ name, ok: Boolean(cond), detail }); console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? ` -- ${detail}` : ""}`); };
+  const BLOCKERS = {
+    "property-throws": `for (const n of ["localStorage", "sessionStorage"]) Object.defineProperty(window, n, { configurable: true, get() { throw new DOMException("The operation is insecure.", "SecurityError"); } });`,
+    "methods-throw": `for (const m of ["getItem", "setItem", "removeItem"]) Storage.prototype[m] = function () { throw new DOMException("blocked", "SecurityError"); };`,
+  };
+  const PAGES = ["/", `/dashboard?symbol=${encodeURIComponent(sym)}`, "/platforms", "/pickers", `/stock/${encodeURIComponent(sym)}`];
+  await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  for (const [kind, source] of Object.entries(BLOCKERS)) {
+    const { identifier } = await send("Page.addScriptToEvaluateOnNewDocument", { source });
+    for (const path of PAGES) {
+      await load(`${origin}${path}`);
+      const thrown = events.filter((e) => e.method === "Runtime.exceptionThrown").map((e) => String(e.params?.exceptionDetails?.exception?.description ?? e.params?.exceptionDetails?.text ?? ""));
+      const storageErrors = thrown.filter((t) => /insecure|SecurityError|blocked/i.test(t));
+      const state = await evaluate(`(() => ({ header: !!document.querySelector("header"), crashed: /Application error|client-side exception/i.test(document.body.innerText) }))()`);
+      assert(`${kind} ${path}: renders with its header`, state?.header && !state.crashed && storageErrors.length === 0, JSON.stringify({ ...state, storageErrors: storageErrors.slice(0, 2) }));
+      if (path === "/") {
+        const { data } = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1280, height: 900, scale: 1 } });
+        out.shots[`storage-${kind}-home`] = { png: data, text: JSON.stringify(state) };
+      }
+    }
+    await send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+  }
+  out.results = results;
+  console.log(`rendered test: ${results.filter((r) => r.ok).length}/${results.length} passed`);
+}
+
+for (const sym of page !== "stock" ? [] : symbols) {
   for (const [label, width, mobile] of [["desktop", 1280, false], ["mobile", 390, true]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile });
-    await load(`${origin}/stock/${encodeURIComponent(sym)}`);
-    // The chosen section: the <section> whose h2 matches (default "About …").
-    const box = await evaluate(`(() => {
+    await load(`${origin}/stock/${encodeURIComponent(sym)}${PATHS[section] ?? ""}`);
+    // The chosen section: the <section> whose h2 matches (default "About …"),
+    // or the whole page for a section with no heading test.
+    const box = SECTIONS[section] === null ? await evaluate(`(() => {
+      const el = document.querySelector("main") ?? document.body;
+      return { x: 0, y: 0, width: document.documentElement.clientWidth, height: Math.min(document.documentElement.scrollHeight, ${FULL_PAGE_MAX_PX}),
+               text: el.innerText.slice(0, 6000) };
+    })()`) : await evaluate(`(() => {
       const h = [...document.querySelectorAll("h2")].find((e) => ${SECTIONS[section]}.test(e.textContent.trim()));
       const s = h && h.closest("section");
       if (!s) return null;
@@ -144,11 +266,11 @@ for (const sym of symbols) {
     }
     const { data } = await send("Page.captureScreenshot", {
       format: "png", captureBeyondViewport: true,
-      clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 4000), scale: 1 },
+      clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, SECTIONS[section] === null ? FULL_PAGE_MAX_PX : 4000), scale: 1 },
     });
     out.shots[`${sym}-${label}`] = { png: data, text: box.text, height: Math.round(box.height) };
     console.log(`${sym} ${label}: ${Math.round(box.height)}px`);
-    console.log(box.text.split("\n").slice(0, 12).map((l) => `    | ${l}`).join("\n"));
+    console.log(box.text.split("\n").slice(0, SECTIONS[section] === null ? 400 : 12).map((l) => `    | ${l}`).join("\n"));
   }
 }
 

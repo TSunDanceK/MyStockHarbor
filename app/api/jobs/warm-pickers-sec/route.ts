@@ -9,9 +9,11 @@
 // EXPIRE), hard-capped by MAX_SYMBOLS_PER_RUN; the first write error stops it.
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardJob } from "../../../../lib/server/jobGuard";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPickersSec } from "../../../../lib/server/pickersSecFundamentals";
 import { registrantFor } from "../../../../lib/server/stockProfile";
+import { adsRatioFor } from "../../../../lib/server/secAdsMap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +26,7 @@ function isAuthorized(req: NextRequest) {
   return auth === `Bearer ${secret}`;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -33,7 +35,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const { symbols } = await getWarmTargetSymbols(base);
-    const result = await warmPickersSec(symbols, registrantFor);
+    // The cited ADS ratio (#553 COWORK #44), as the stock and earnings pages
+    // pass it: absent keeps the depositary-share refusal. A committed file, so
+    // no Redis cost.
+    const result = await warmPickersSec(symbols, (s) => ({
+      annualForm: registrantFor(s)?.annualForm ?? null,
+      ads: adsRatioFor(s),
+    }));
     console.log("[warm-pickers-sec]", JSON.stringify(result));
     await recordJobRun("warm-pickers-sec", result.ok, {
       targets: result.symbols,
@@ -49,3 +57,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-pickers-sec", handleGET);

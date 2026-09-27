@@ -34,6 +34,7 @@ import { PICKER_ROUTES } from "@/lib/pickerRoutes";
 import { GET_WARM as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
 import { readLastBuildStats } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardJob } from "../../../../lib/server/jobGuard";
 
 // WRAPPED, NOT REWRITTEN. This stays the identical handler -- the whole point of
 // the re-export is that this route and /api/pickers can never drift -- with one
@@ -54,7 +55,7 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 // mean cloning a payload that carries the entire picker universe, on a route
 // whose own comment records a timeout cliff; the question this answers is "did
 // the daily build run, and did it succeed".
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   // READ-AND-DISCARD IN THE CATCH, not a finally.
   //
   // The counters are module state and a warm Lambda is reused across
@@ -265,3 +266,7 @@ export async function GET(req: NextRequest) {
     throw error;
   }
 }
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-picker-universe", handleGET);
