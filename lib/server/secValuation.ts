@@ -464,6 +464,12 @@ export type FilerFacts = {
    * refused, naming the class and the equity's own listing. Passed in, like `ads`.
    */
   nonEquity?: { cls: string; primary: string } | null;
+  /**
+   * A COVER COUNT CITED FROM THE FILER'S OWN LATEST 20-F COVER
+   * (secPrimaryListing.citedCoverFor, #552 COWORK #56): used instead of the
+   * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
+   */
+  citedCover?: { val: number; asOf: string; source: string } | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -515,7 +521,14 @@ export function valuationInputs(
   }
 
   let shares: SharesBasis | null = null;
-  const cover = set.cover;
+  // THE NEWER OF THE STORED dei COUNT AND A CITED 20-F COVER COUNT. Never the
+  // older: a cited count as of 2025 beats a dei count as of 2020, and a dei
+  // count filed after the cited one keeps its place. A multi-class set
+  // (candidates) is left to its own refusal below.
+  const cited = filer.citedCover && filer.citedCover.val > 0 ? filer.citedCover : null;
+  const cover = cited && !set.cover?.candidates?.length && (!set.cover?.asOf || cited.asOf > set.cover.asOf)
+    ? { ...set.cover, val: cited.val, asOf: cited.asOf }
+    : set.cover;
   if (cover?.candidates?.length) {
     // THE EXTRACTOR ALREADY REFUSED TO PICK. Picking here would route around
     // that decision from the other end of the pipeline.
