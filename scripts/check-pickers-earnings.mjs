@@ -123,6 +123,12 @@ async function suite(mod, code) {
   ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis\)/.test(code.grid));
   ok("a fiscal-year figure is marked FY", /basis\.startsWith\("FY"\) \? <span className="basisFy">FY<\/span>/.test(code.grid));
   ok("the header explains the column", /title=\{col\.tip\}/.test(code.grid));
+  // 5. The preview reads and writes its own copy (#553 COWORK #60), so the
+  // production job's 05:35 rewrite cannot erase a seeded preview.
+  ok("a preview uses the preview-only key", mod.pickersSecKey({ VERCEL_ENV: "preview" }) === mod.PICKERS_SEC_PREVIEW_KEY);
+  ok("production (and no VERCEL_ENV) uses the production key",
+    mod.pickersSecKey({ VERCEL_ENV: "production" }) === mod.PICKERS_SEC_KEY && mod.pickersSecKey({}) === mod.PICKERS_SEC_KEY);
+  ok("the two keys differ, both under msh:pickers:", mod.PICKERS_SEC_KEY !== mod.PICKERS_SEC_PREVIEW_KEY && [mod.PICKERS_SEC_KEY, mod.PICKERS_SEC_PREVIEW_KEY].every((k) => k.startsWith("msh:pickers:")));
   return fails;
 }
 
@@ -148,6 +154,7 @@ const MUTANTS = [
   ["a legacy row refuses instead of leaving", () => [mut("legacy", src, `if (!("eps" in row)) return null;`, ""), code]],
   ["the page keeps FMP's figure on a refusal", () => [src, { ...code, page: mut("clear", code.page, `const v = earnings[field];\n              if (v === null) delete rec[field];`, `const v = earnings[field];\n              if (v === null) continue;`) }]],
   ["the grid recomputes payout on a filings row", () => [src, { ...code, grid: mut("grid", code.grid, `if (e.fundamentalsFrom === "sec") return num(e.payoutRatio);`, "") }]],
+  ["previews read the production key", () => [mut("prevkey", src, `return env.VERCEL_ENV === "preview" ? PICKERS_SEC_PREVIEW_KEY : PICKERS_SEC_KEY;`, `return PICKERS_SEC_KEY;`), code]],
   ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `<span className="basisFy">FY</span>`, `null`) }]],
 ];
 
