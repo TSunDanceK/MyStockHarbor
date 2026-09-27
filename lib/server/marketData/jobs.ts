@@ -55,6 +55,7 @@ import {
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
 import { isDebtListing } from "./universe";
+import { isPriceExcluded } from "../../priceExcluded";
 
 /** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
 export const QUOTE_CADENCE_MINUTES = 60;
@@ -89,12 +90,13 @@ function mustRedis(): Redis {
 
 /**
  * The universe: the price pool's fields (dashed), less debt listings (CCZ and
- * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts). 1 HKEYS.
+ * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts) and the
+ * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61). 1 HKEYS.
  */
 async function universe(): Promise<string[]> {
   const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
   return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
-    .filter((s) => !isDebtListing(s))
+    .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
     .sort();
 }
 
