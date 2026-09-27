@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 import { rememberSymbol, SYMBOL_STORAGE_KEY } from "@/lib/symbol";
 import { readStored } from "@/lib/browserStorage";
+import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
 
 type StockNavKind = "earnings" | "analysis" | "news";
 
@@ -1059,7 +1060,7 @@ export default function SiteHeader({
             isActive: (path) =>
               path === "/stocks-with-positive-last-earnings" ||
               path === "/stocks-with-strong-earnings-growth",
-            items: [
+            items: ([
               {
                 label: "Positive Last Earnings",
                 href: "/stocks-with-positive-last-earnings",
@@ -1070,7 +1071,8 @@ export default function SiteHeader({
                 href: "/stocks-with-strong-earnings-growth",
                 isActive: (path) => path === "/stocks-with-strong-earnings-growth",
               },
-            ],
+              // Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts.
+            ] satisfies NavChild[]).filter((item) => !positiveLastEarningsHidden(item.href)),
           },
           {
             kind: "submenu",
