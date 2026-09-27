@@ -1,3 +1,4 @@
+import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
 // ---------------------------------------------------------------------------
 // The site's full navigation link set, as plain data.
 //
@@ -185,7 +186,8 @@ export const CRAWLABLE_NAV_SECTIONS: NavSection[] = [
         href: "/stocks-with-strong-earnings-growth",
         label: "Strong Earnings Growth",
       },
-    ],
+      // Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts.
+    ].filter((link) => !positiveLastEarningsHidden(link.href)),
   },
   {
     heading: "News & Markets",

@@ -1,3 +1,5 @@
+import { POSITIVE_LAST_EARNINGS_ENABLED } from "@/lib/positiveLastEarnings";
+
 // Shared "custom builder" filter definitions -- the same boolean-field
 // checklist used by /pickers' own filter chips (app/pickers/PickersClient.tsx)
 // and by the single-category picker pages (via ScreenerNav's FilterChecklist
@@ -32,7 +34,7 @@ export type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
 export type FilterDef = { key: FilterKey; label: string; tone: PickerTone };
 
-export const FILTER_DEFS: FilterDef[] = [
+export const FILTER_DEFS: FilterDef[] = ([
   { key: "oversold", label: "Oversold", tone: "green" },
   { key: "overbought", label: "Overbought", tone: "red" },
   { key: "buyTheDip", label: "20%+ From ATH", tone: "yellow" },
@@ -57,7 +59,9 @@ export const FILTER_DEFS: FilterDef[] = [
   { key: "bearishMacdDivergence", label: "Bearish MACD Divergence", tone: "red" },
   { key: "positiveLastEarnings", label: "Positive Last Earnings", tone: "green" },
   { key: "strongEarningsGrowth", label: "Strong Earnings Growth", tone: "green" },
-];
+  // Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts. The
+  // key stays in FilterKey, so a stored or linked filter still type-checks.
+] satisfies FilterDef[]).filter((d) => POSITIVE_LAST_EARNINGS_ENABLED || d.key !== "positiveLastEarnings");
 
 // A second, separate set of checkable keys -- NOT part of the 18-condition
 // custom builder above, so adding to this list never changes what /pickers'
