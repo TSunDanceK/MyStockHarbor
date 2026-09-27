@@ -297,6 +297,15 @@
    "source": "0001193125-26-157842",
    "filed": "2026-04-16"
   },
+  "BIP": {
+   "kind": "ordinary",
+   "ordinaryPerAds": 1,
+   "evidence": "Limited Partnership Units",
+   "form": "20-F",
+   "source": "0001406234-26-000002",
+   "filed": "2026-03-17",
+   "note": "Added by hand (#552 COWORK #56): the 12(b) row 'Limited Partnership Units BIP; BIP UN New York Stock Exchange ; Toronto Stock Exchange' lists the units themselves under BIP and no ADS, as cited in data/sec/primary-listings.json. The census matcher reads ordinary/common-share rows only, so it did not produce this row."
+  },
   "BIRK": {
    "kind": "ordinary",
    "ordinaryPerAds": 1,
