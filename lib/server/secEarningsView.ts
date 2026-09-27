@@ -662,10 +662,14 @@ export function largeNonOperating(rows: ViewCell[]): { amount: number } | null {
   if (Math.abs(nonOp) <= Math.abs(op) || Math.abs(nonOp) <= rev * LARGE_NON_OPERATING_SHARE_OF_REVENUE) return null;
   return { amount: nonOp };
 }
-export function withNonOperatingMarker(rows: ViewCell[]): ViewCell[] {
+/** The marker's words, or null. One source for the rows and the snapshot's EPS-growth tile (#552 COWORK #60). */
+export function largeNonOperatingNote(rows: ViewCell[]): string | null {
   const big = largeNonOperating(rows);
-  if (!big) return rows;
-  const sub = `Includes a large non-operating ${big.amount > 0 ? "gain" : "loss"}; see the filing.`;
+  return big ? `Includes a large non-operating ${big.amount > 0 ? "gain" : "loss"}; see the filing.` : null;
+}
+export function withNonOperatingMarker(rows: ViewCell[]): ViewCell[] {
+  const sub = largeNonOperatingNote(rows);
+  if (!sub) return rows;
   return rows.map((r) => (r.key === "nonOperatingIncomeExpense" || r.key === "netIncome" ? { ...r, sub } : r));
 }
 
@@ -919,6 +923,8 @@ export type SecEarningsView = {
   sgaSummed?: boolean;
   /** The latest period carries a large non-operating item (largeNonOperating). The score skips EPS growth. */
   largeNonOperating?: boolean;
+  /** Its note, the same words as the marked rows: shown under the snapshot's YoY EPS growth (#552 COWORK #60, ZM). */
+  largeNonOperatingNote?: string | null;
   /**
    * The filed periods, newest first, for the earnings-history table.
    *
@@ -1696,6 +1702,7 @@ export function buildSecEarningsView(
       : null,
     incomeStatement: incomeRows,
     largeNonOperating: largeNonOperating(incomeRows) !== null,
+    largeNonOperatingNote: largeNonOperatingNote(incomeRows),
     incomeStatementComplete,
     sgaSummed,
     // ── THE SAME THIN-ROW BAR AS THE GROWTH TABLE, AND THE SAME CAP ─────────

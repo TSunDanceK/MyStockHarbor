@@ -68,13 +68,26 @@ console.log("\n3. a large non-operating item (GOOGL Q2 FY2026)");
   check("AAPL's 0.57B is not marked", V.largeNonOperating(aapl) === null);
   const lossy = rows({ revenue: 10 * B, operatingIncome: 1 * B, preTaxIncome: -4 * B, netIncome: -4 * B, nonOperatingIncomeExpense: null });
   check("derived from pre-tax less operating when untagged, and a loss says 'loss'", V.withNonOperatingMarker(lossy).find((r) => r.key === "netIncome").sub?.includes("non-operating loss"));
-  const M = await loadMutant(VIEW_FILE, once(VS, "  if (!big) return rows;", "  return rows; void big;"));
+  const M = await loadMutant(VIEW_FILE, once(VS, "  if (!sub) return rows;", "  return rows; void sub;"));
   check("MUTATION: marker removed → GOOGL's quarter reads unmarked (caught)", M.withNonOperatingMarker(googl).find((r) => r.key === "netIncome").sub === undefined);
   const score = fs.readFileSync("lib/server/secEarningsScore.ts", "utf8");
   check("the score skips EPS growth when the view flags it, and says why",
     /isPct\(s\.epsYoY\) && !view\.largeNonOperating/.test(score) && /if \(view\.largeNonOperating && isPct\(s\.epsYoY\)\) return SCORE_LARGE_NON_OPERATING_EPS;/.test(score));
   check("the view sets largeNonOperating from the same rows the card shows",
     /largeNonOperating: largeNonOperating\(incomeRows\) !== null/.test(VS) && /incomeStatement: incomeRows,/.test(VS));
+  // THE SNAPSHOT'S EPS-GROWTH TILE SAYS IT TOO (#552 COWORK #60, ZM +344.0%),
+  // in the marker's own words, from the same rows.
+  check("largeNonOperatingNote gives the marker's words (GOOGL gain) and null when unmarked (AAPL)",
+    V.largeNonOperatingNote(googl) === "Includes a large non-operating gain; see the filing." && V.largeNonOperatingNote(aapl) === null);
+  check("the view carries the note from the same rows", /largeNonOperatingNote: largeNonOperatingNote\(incomeRows\),/.test(VS));
+  const CARDS = fs.readFileSync("app/stock/[symbol]/earnings/SecEarningsCards.tsx", "utf8");
+  const tileSaysIt = (src) => {
+    const i = src.indexOf('label="YoY EPS growth"');
+    return i > 0 && /view\.largeNonOperatingNote && s\.epsYoY != null \? <div className="metricSubNote">\{view\.largeNonOperatingNote\}<\/div>/.test(src.slice(i, i + 600));
+  };
+  check("the YoY EPS growth tile shows the note beneath the figure when the marker fires", tileSaysIt(CARDS));
+  check("MUTATION: the tile note removed → caught",
+    !tileSaysIt(CARDS.replace('{view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}', "")));
 }
 
 console.log("\n4. the balance-sheet date is never an opening balance (CHT)");
