@@ -364,6 +364,15 @@ export type SecEarningsFigures = {
   payoutBasis: string | null;
 };
 
+/**
+ * WITHHELD, NOT LABELLED (#553 COWORK #60). samePeriodPayout never divides two
+ * periods, but its fiscal-year fallback can sit in a row whose P/E and EPS are
+ * TTM: two figures from different periods side by side. Cowork ruled that a
+ * label isn't enough, so that payout shows "–" with this tooltip instead.
+ * Read-time only: the stored row keeps it, so un-withholding is this one test.
+ */
+export const PAYOUT_PERIODS_DIFFER = "Not shown: the EPS and dividend periods differ";
+
 export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["peRatio", "epsTtm", "payoutRatio"];
 
 /**
@@ -382,13 +391,15 @@ export function applySecEarnings(row: SecPickerRow, price: number | null): SecEa
   const ads = row.inputs.refusals.includes("ads-ratio-makes-eps-incomparable");
   const pe = usd ? ok(peRatio(inputs, price)) : null;
   const epsTtm = usd && !ads && eps ? eps.val : null;
-  const payout = usd && !ads && row.payout ? row.payout : null;
+  const filed = usd && !ads && row.payout ? row.payout : null;
+  const periodsDiffer = filed !== null && eps !== null && (filed.basis !== eps.basis || filed.periodEnd !== eps.periodEnd);
+  const payout = periodsDiffer ? null : filed;
   return {
     peRatio: pe,
     epsTtm,
     payoutRatio: payout ? payout.val : null,
     epsBasis: eps && (pe !== null || epsTtm !== null) ? basisLabel(eps) : null,
-    payoutBasis: payout ? basisLabel(payout) : null,
+    payoutBasis: payout ? basisLabel(payout) : periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,
   };
 }
 
