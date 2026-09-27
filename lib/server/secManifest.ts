@@ -600,11 +600,36 @@ export async function readFactSetIndex(): Promise<{ symbols: string[]; commands:
 /**
  * THE ONE-TIME BACKFILL. The index starts empty while ~961 sets already exist.
  * The relay cannot do it (its Upstash token is read-only), so the daily index
- * does, ONCE: when the index read comes back empty and this deployment may
- * write SEC state. It SCANs the fact-set prefix to cursor 0 -- no call cap, so
- * it cannot stop partway and look finished -- and SADDs what it found. After
- * that the index is never empty again (writes keep it), so this never runs.
+ * does, ONCE, on a run that may write SEC state. It SCANs the fact-set prefix
+ * to cursor 0 -- no call cap, so it cannot stop partway and look finished --
+ * SADDs what it found, and then SETs SEC_FACTS_INDEX_BACKFILLED_KEY.
+ *
+ * GATED ON THAT MARKER, NOT ON AN EMPTY INDEX (#552 COWORK #60). Any
+ * writeFactSet between the deploy and the next daily index (a cold fill, an
+ * on-demand read) SADDs one member; an emptiness gate would then see a
+ * non-empty index and never backfill, leaving ~960 sets unindexed for good.
  */
+export const SEC_FACTS_INDEX_BACKFILLED_KEY = "msh:sec:facts:index:v1:backfilled";
+
+/** Whether the one-time backfill has completed (EXISTS on the marker). null = the read failed. */
+export async function factSetIndexBackfilled(): Promise<{ done: boolean | null; commands: number }> {
+  if (!redis) return { done: null, commands: 0 };
+  try {
+    return { done: (await redis.exists(SEC_FACTS_INDEX_BACKFILLED_KEY)) > 0, commands: 1 };
+  } catch {
+    return { done: null, commands: 1 };
+  }
+}
+
+/**
+ * THE DECISION, PURE, so the check can drive it: run the backfill when the
+ * marker is known ABSENT on a run that writes. The index's size is taken only
+ * to be ignored -- it is the parameter the old, wrong gate used.
+ */
+export function shouldBackfillFactSetIndex(s: { marker: boolean | null; indexSize: number; dryRun: boolean; inspectionOnly: boolean }): boolean {
+  return s.marker === false && !s.dryRun && !s.inspectionOnly;
+}
+
 export async function backfillFactSetIndex(): Promise<{ added: number; scanned: number; commands: number } | null> {
   if (!redis) return null;
   if (!canWriteSecState()) { noteSecWriteBlocked("backfillFactSetIndex"); return null; }
@@ -624,6 +649,10 @@ export async function backfillFactSetIndex(): Promise<{ added: number; scanned: 
     added += await redis.sadd(SEC_FACTS_INDEX_KEY, ...chunk);
     commands++;
   }
+  // ONLY AFTER EVERY SADD: a backfill that throws partway leaves the marker
+  // unset, so the next daily index runs it again.
+  await redis.set(SEC_FACTS_INDEX_BACKFILLED_KEY, new Date().toISOString());
+  commands++;
   return { added, scanned: all.length, commands };
 }
 // Registered in symbolEviction.PER_SYMBOL_KEYS, so evicting a delisted symbol

@@ -15,6 +15,8 @@ import {
   discardFactSets,
   readFactSetIndex,
   backfillFactSetIndex,
+  factSetIndexBackfilled,
+  shouldBackfillFactSetIndex,
   type SecManifest,
 } from "@/lib/server/secManifest";
 import { resolveTickerMap, refreshTickerMap } from "@/lib/server/secTickerMap";
@@ -394,10 +396,14 @@ export async function GET(req: NextRequest) {
   // so a set written on demand (TSM) or by the cold path had no entry and was
   // never re-read: 54 of 961 stored sets on 2026-09-25. JNJ, on the popular
   // list, had neither an entry nor a set. Read from the fact-set INDEX, one
-  // SMEMBERS; the index is backfilled once, the first run that finds it empty.
+  // SMEMBERS; the index is backfilled once, gated on a marker key, NOT on the
+  // index being empty (#552 COWORK #60: a write before this run would make it
+  // non-empty and skip the backfill for good). See backfillFactSetIndex.
   const stored = await readFactSetIndex();
+  const marker = await factSetIndexBackfilled();
   const indexBackfill =
-    !stored.failed && stored.symbols.length === 0 && !dryRun && !inspectionOnly ? await backfillFactSetIndex().catch(() => null) : null;
+    shouldBackfillFactSetIndex({ marker: marker.done, indexSize: stored.symbols.length, dryRun, inspectionOnly })
+      ? await backfillFactSetIndex().catch(() => null) : null;
   if (indexBackfill) stored.symbols = (await readFactSetIndex()).symbols;
   const universe = [
     // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
@@ -609,9 +615,10 @@ export async function GET(req: NextRequest) {
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
-    // Plus the fact-set index read: 1 SMEMBERS (#552 COWORK #59). The one-time
+    // Plus the fact-set index read (1 SMEMBERS) and the backfill marker (1
+    // EXISTS) (#552 COWORK #59/#60). The one-time
     // backfill's SCAN and SADDs are reported on their own line below.
-    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands,
+    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands + marker.commands,
     factSetIndex: stored.symbols.length,
     factSetIndexBackfillScanned: indexBackfill?.scanned ?? null,
     factSetIndexBackfillAdded: indexBackfill?.added ?? null,
