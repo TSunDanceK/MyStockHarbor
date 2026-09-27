@@ -34,6 +34,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const FORMS = new Set(["10-K", "10-KT", "20-F"]);
 const HAND_CLAIM = /\bby hand\b|\bhand[- ](?:checked|reviewed|picked)\b|\bhuman (?:review|analyst)/i;
 const MAX_QUOTE = 700;
+const SENTENCE_START = /^["“'‘]?[A-Z0-9]/;
 
 function validate(d) {
   const fails = [];
@@ -41,22 +42,34 @@ function validate(d) {
   ok("top-level shape", d && typeof d === "object" && Array.isArray(d.links) && Array.isArray(d.rejected));
   if (!Array.isArray(d?.links) || !Array.isArray(d?.rejected)) return fails;
   ok("reviewer names the real reviewer", typeof d.reviewer === "string" && /CODE-C/.test(d.reviewer));
-  ok("audit block with a seed", d.audit && Number.isInteger(d.audit.seed) && typeof d.audit.status === "string");
-  const a = d.audit ?? {};
-  if (Array.isArray(a.population) && Array.isArray(a.drawOrder) && Array.isArray(a.sample)) {
+  // ONE PINNED AUDIT PER BATCH (#563 COWORK #20/#23). Each batch's population is
+  // exactly that batch's published links (less any added after its draw); the
+  // draw is random.Random(seed).sample(population, min(20, n)), re-run here.
+  const audits = Array.isArray(d.audits) ? d.audits : [];
+  const batches = [...new Set(d.links.map((l) => l.batch))].sort();
+  ok("every link carries a batch tag", d.links.every((l) => typeof l.batch === "string" && l.batch.length > 0));
+  ok("one audit per batch", audits.length === batches.length && batches.every((b) => audits.some((a) => String(a.batch) === b)));
+  ok("audit seeds are distinct", new Set(audits.map((a) => a.seed)).size === audits.length);
+  for (const a of audits) {
+    const tag = `audit (batch ${a.batch})`;
+    ok(`${tag}: a seed and status`, Number.isInteger(a.seed) && typeof a.status === "string");
+    if (!(Array.isArray(a.population) && Array.isArray(a.drawOrder) && Array.isArray(a.sample))) {
+      ok(`${tag}: stores population, drawOrder and sample`, false);
+      continue;
+    }
     const pop = a.population;
-    ok("audit population is sorted as stored (Python's sorted() on ASCII keys)", pop.every((k, i) => i === 0 || pop[i - 1] < k));
+    ok(`${tag}: population sorted as stored (Python's sorted() on ASCII keys)`, pop.every((k, i) => i === 0 || pop[i - 1] < k));
+    const n = Math.min(20, pop.length);
+    ok(`${tag}: draws min(20, population)`, a.drawOrder.length === n);
     const redraw = pyRandom(a.seed).sample(pop, a.drawOrder.length);
-    ok("audit draw reproduces: random.Random(seed).sample(population, n) == drawOrder", JSON.stringify(redraw) === JSON.stringify(a.drawOrder));
-    ok("audit sample is the draw, sorted", JSON.stringify([...a.drawOrder].sort()) === JSON.stringify(a.sample));
-    ok("audit sample has 20 distinct links", new Set(a.sample).size === 20);
-    const published = new Set(d.links.map((l) => `${l.filer}|${l.party}|${l.role}`));
-    ok("every audited link is still published", a.sample.every((k) => published.has(k)));
+    ok(`${tag}: random.Random(seed).sample(population, n) == drawOrder`, JSON.stringify(redraw) === JSON.stringify(a.drawOrder));
+    ok(`${tag}: sample is the draw, sorted`, JSON.stringify([...a.drawOrder].sort()) === JSON.stringify(a.sample));
+    ok(`${tag}: sample distinct`, new Set(a.sample).size === a.sample.length);
+    const published = new Set(d.links.filter((l) => l.batch === String(a.batch)).map((l) => `${l.filer}|${l.party}|${l.role}`));
+    ok(`${tag}: every audited link is still published in its batch`, a.sample.every((k) => published.has(k)));
     const after = new Set(a.addedAfterDraw ?? []);
-    ok("the population is exactly the published links, less those added after the draw",
+    ok(`${tag}: population is exactly the batch's published links, less those added after the draw`,
       pop.length + after.size === published.size && pop.every((k) => published.has(k) && !after.has(k)) && [...after].every((k) => published.has(k)));
-  } else {
-    ok("audit block stores population, drawOrder and sample", false);
   }
   ok("no claim of hand or human review anywhere", !HAND_CLAIM.test(JSON.stringify(d)));
   const excluded = new Set(d.excludedReceivers ?? []);
@@ -78,6 +91,10 @@ function validate(d) {
     ok(`${at}: filing date`, ISO_DATE.test(l.filingDate ?? ""));
     ok(`${at}: review date`, ISO_DATE.test(l.reviewedAt ?? ""));
     ok(`${at}: quote present and bounded`, typeof l.quote === "string" && l.quote.length >= 20 && l.quote.length <= MAX_QUOTE);
+    // a quote is a whole filed sentence from its start (#563 COWORK #24): a
+    // capital, digit or opening quote -- never "(" or a lower-case word, which
+    // means the splitter cut it mid-sentence
+    ok(`${at}: quote starts at a sentence start`, SENTENCE_START.test(l.quote ?? ""));
     ok(`${at}: quote names the party as filed`, typeof l.partyAsFiled === "string" && l.partyAsFiled.length > 1 && (l.quote ?? "").includes(l.partyAsFiled));
     ok(`${at}: no numeric fields (no dollar flows)`, numericKeys(l).length === 0);
     const key = `${l.filer}|${l.party}|${l.role}`;
@@ -116,13 +133,17 @@ const MUTANTS = {
   "a dollar figure on a link": (d) => { first(d).amount = 5e9; },
   "a bad accession": (d) => { first(d).accession = "123"; },
   "an untracked party": (d) => { first(d).party = "ZZZZNOTREAL"; },
-  "a party outside the batch (hyperscaler excluded)": (d) => { const l = d.links.find((x) => x.role === "supplier"); l.party = "AMZN"; },
+  "a party outside the batch (hyperscaler excluded)": (d) => { const l = d.links.find((x) => x.role === "supplier" && x.filer === "FTNT"); l.party = "AMZN"; },
   "a link with no receiver on either side": (d) => { const l = d.links.find((x) => x.filer === "FTNT") ?? first(d); l.party = "HON"; },
   "a deferred link also published": (d) => { const l = { ...first(d) }; d.deferred = [{ ...l, reason: "held" }]; },
-  "an audit sample that is not the seeded draw": (d) => { d.audit.drawOrder[0] = d.audit.population.find((k) => !d.audit.drawOrder.includes(k)); d.audit.sample = [...d.audit.drawOrder].sort(); },
-  "an audit population missing a published link": (d) => { d.audit.population = d.audit.population.slice(1); },
-  "a different audit seed": (d) => { d.audit.seed += 1; },
-  "an audited link no longer published": (d) => { const k = d.audit.sample[0]; d.links = d.links.filter((l) => `${l.filer}|${l.party}|${l.role}` !== k); d.counts.confirmed--; d.counts.reviewed--; },
+  "an audit sample that is not the seeded draw": (d) => { const a = d.audits[0]; a.drawOrder[0] = a.population.find((k) => !a.drawOrder.includes(k)); a.sample = [...a.drawOrder].sort(); },
+  "an audit population missing a published link": (d) => { d.audits[0].population = d.audits[0].population.slice(1); },
+  "a different audit seed": (d) => { d.audits[0].seed += 1; },
+  "an audited link no longer published": (d) => { const k = d.audits[0].sample[0]; d.links = d.links.filter((l) => `${l.filer}|${l.party}|${l.role}` !== k); d.counts.confirmed--; d.counts.reviewed--; },
+  "batch 2's draw tampered": (d) => { const a = d.audits[1]; a.drawOrder = [...a.drawOrder].reverse(); },
+  "batch 2 without its audit": (d) => { d.audits = d.audits.slice(0, 1); },
+  "a batch-2 link moved into batch 1's population": (d) => { const l = d.links.find((x) => x.batch === "2"); l.batch = "1"; },
+  "two batches sharing one seed": (d) => { d.audits[1].seed = d.audits[0].seed; },
   "a filer linked to itself": (d) => { first(d).party = first(d).filer; },
   "the same link twice": (d) => { d.links.push({ ...first(d) }); d.counts.confirmed++; d.counts.reviewed++; },
   "a hand-review claim": (d) => { d.about = `${d.about} Checked by hand.`; },
@@ -130,6 +151,8 @@ const MUTANTS = {
   "counts out of step": (d) => { d.counts.confirmed += 1; },
   "a rejection with no note": (d) => { if (d.rejected[0]) d.rejected[0].note = ""; else d.rejected.push({ verdict: "not-established", accession: "0000000000-00-000000", note: "" }); },
   "a role outside supplier/customer": (d) => { first(d).role = "partner"; },
+  "a quote cut mid-sentence (opens with a parenthesis)": (d) => { const l = first(d); l.quote = `("${l.partyAsFiled}") ${l.quote}`; },
+  "a quote cut mid-sentence (opens lower-case)": (d) => { const l = first(d); l.quote = `and ${l.quote}`; },
 };
 for (const [name, mutate] of Object.entries(MUTANTS)) {
   const d = clone();

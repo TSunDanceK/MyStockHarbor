@@ -306,7 +306,35 @@ export type WarmPickersSecResult = {
   noFactSet: number;
   stoppedEarly: string | null;
   commands: number;
+  /** Rows for symbols no longer targeted, removed after the write (COWORK #60). */
+  pruned?: number;
+  /** Why the prune was skipped, when it was. */
+  pruneSkipped?: string | null;
 };
+
+/** Below this share of the hash's current rows, today's targets look like a bad read. */
+export const PRUNE_MIN_TARGET_SHARE = 0.5;
+
+/**
+ * WHICH STORED ROWS TO DROP (#553 COWORK #60, CODE-B #51). Pure.
+ *
+ * THE BUG: the hash's TTL is refreshed whole every day, so a symbol that left
+ * the targets kept its last row forever. TSM's was 38 h old on 26 Sep and still
+ * carried refusals #618 had fixed -- a row nothing would ever rewrite.
+ *
+ * THE GUARD: if today's targets are empty, or fewer than half the rows already
+ * stored, the targets read is suspect (a cold universe key, a failed fetch) and
+ * pruning against it would wipe good rows. Skip, and say so; the rows carry
+ * their own `at`, so keeping them one more day is the safe error.
+ */
+export function rowsToPrune(stored: string[], targets: string[]): { drop: string[]; skipped: string | null } {
+  if (!targets.length) return { drop: [], skipped: "no targets" };
+  if (targets.length < stored.length * PRUNE_MIN_TARGET_SHARE) {
+    return { drop: [], skipped: `targets ${targets.length} < ${PRUNE_MIN_TARGET_SHARE * 100}% of ${stored.length} stored` };
+  }
+  const keep = new Set(targets);
+  return { drop: stored.filter((f) => !keep.has(f)), skipped: null };
+}
 
 /**
  * The daily job's work. RUNAWAY GUARDS, stated as numbers:
@@ -314,7 +342,8 @@ export type WarmPickersSecResult = {
  *   - one GET per symbol (readFactSet) + one HSET per 100 symbols + one EXPIRE;
  *   - the FIRST Redis write error stops the run -- a failing store is not
  *     retried 850 times.
- * So a run costs about 850 + 9 + 1 ≈ 860 commands, and cannot exceed ~2,050.
+ *   - then 1 HKEYS + 1 HDEL to drop rows no longer targeted (rowsToPrune).
+ * So a run costs about 850 + 9 + 1 + 2 ≈ 862 commands, and cannot exceed ~2,052.
  */
 export const MAX_SYMBOLS_PER_RUN = 2_000;
 
@@ -363,6 +392,24 @@ export async function warmPickersSec(
     if (Object.keys(batch).length >= 100 && !(await flush())) return result;
   }
   if (!(await flush())) return result;
+
+  // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
+  try {
+    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+    result.commands++;
+    const { drop, skipped } = rowsToPrune(stored, list);
+    result.pruneSkipped = skipped;
+    if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
+    if (drop.length) {
+      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
+      result.commands++;
+    } else {
+      result.pruned = 0;
+    }
+  } catch (err) {
+    // A failed prune leaves stale rows one more day; it is not a failed run.
+    result.pruneSkipped = `redis error (${err instanceof Error ? err.name : "unknown"})`;
+  }
 
   try {
     await redis.expire(PICKERS_SEC_KEY, PICKERS_SEC_TTL_SECONDS);
