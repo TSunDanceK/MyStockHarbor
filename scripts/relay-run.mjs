@@ -1293,6 +1293,8 @@ const TASKS = {
   "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
   "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
   "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
 };
 
 const argv = process.argv.slice(2);

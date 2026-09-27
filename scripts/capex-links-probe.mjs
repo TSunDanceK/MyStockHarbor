@@ -591,6 +591,28 @@ async function get(url, json = true) {
   return null;
 }
 
+// ── QUOTE_CONTEXT (#563 COWORK #24): the text just BEFORE a stored quote, read
+// from the same accession with the same htmlToText as the scan, so a quote cut
+// mid-sentence can be extended back to its sentence start verbatim. Read-only.
+//   env QUOTE_CONTEXT="cik|accession|first words of the stored quote;;…" (or, on the
+//   relay, the same string in SYMBOLS with QUOTE_CONTEXT_FROM_SYMBOLS=1)
+const QUOTE_CONTEXT = process.env.QUOTE_CONTEXT || (process.env.QUOTE_CONTEXT_FROM_SYMBOLS ? process.env.SYMBOLS || "" : "");
+if (QUOTE_CONTEXT) {
+  for (const item of QUOTE_CONTEXT.split(";;").filter(Boolean)) {
+    const [cik, accn, needle] = item.split("|");
+    const sub = await get(`https://data.sec.gov/submissions/CIK${String(cik).padStart(10, "0")}.json`);
+    const f = sub?.filings?.recent;
+    const k = f ? f.accessionNumber.indexOf(accn) : -1;
+    if (k < 0) { console.log(`CONTEXT ${JSON.stringify({ cik, accn, error: "accession not in recent filings" })}`); continue; }
+    const html = await get(`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accn.replace(/-/g, "")}/${f.primaryDocument[k]}`, false);
+    const text = html ? htmlToText(html) : "";
+    const at = text.indexOf(needle);
+    console.log(`CONTEXT ${JSON.stringify({ cik, accn, found: at >= 0, before: at >= 0 ? text.slice(Math.max(0, at - 600), at) : null, from: at >= 0 ? text.slice(at, at + 300) : null })}`);
+  }
+  console.log("Redis commands: 0 (no store touched).");
+  process.exit(0);
+}
+
 // ── run ─────────────────────────────────────────────────────────────────────
 const [si, sn] = (process.env.SHARD || "1/1").split("/").map(Number);
 const only = (process.env.ONLY || process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
