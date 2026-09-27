@@ -497,11 +497,45 @@ if (process.env.EVAL) {
 // receivers (the curated list minus AMZN, GOOGL, MSFT) next to a trade word, after
 // all of v4's sentence drops. Name matching is v4's (A1, R1a-d). Nothing here is
 // published; the review decides.
-const SCAN = process.env.SCAN === "receivers";
+//
+// Batch 2 (#563 COWORK #23) adds, for the scans only (the frozen gate rules
+// v1-v4 are untouched):
+//   SCAN=own        the receivers' OWN latest annual reports; every tracked
+//                   company named next to a trade word is a candidate (their
+//                   own suppliers and customers).
+//   RECEIVERS=a,b   restrict SCAN=receivers to these tickers (the six receivers
+//                   that had no batch-1 candidates).
+//   BATCH2_NAMES    the receivers' filed names the listed-name index misses
+//                   ("Quanta Services" is PWR; bare "Quanta" stays Quanta
+//                   Computer, which is not a tracked listing).
+const SCAN = process.env.SCAN === "receivers" || process.env.SCAN === "own";
+const SCAN_OWN = process.env.SCAN === "own";
 const RECEIVER_ROWS = JSON.parse(fs.readFileSync("data/capex/receivers.json", "utf8")).rows;
 const BATCH1_EXCLUDED = new Set(["AMZN", "GOOGL", "MSFT"]);
+const ONLY_RECEIVERS = new Set((process.env.RECEIVERS || "").split(",").map((x) => x.trim()).filter(Boolean));
 const RECEIVER_CIKS = new Map(); // cik -> ticker
-for (const r of RECEIVER_ROWS) if (!BATCH1_EXCLUDED.has(r.ticker)) RECEIVER_CIKS.set(Number(r.cik), r.ticker);
+for (const r of RECEIVER_ROWS) {
+  if (BATCH1_EXCLUDED.has(r.ticker)) continue;
+  if (ONLY_RECEIVERS.size && !ONLY_RECEIVERS.has(r.ticker)) continue;
+  RECEIVER_CIKS.set(Number(r.cik), r.ticker);
+}
+const BATCH2_NAMES = {
+  "Applied Optoelectronics": "AAOI", "Comfort Systems USA": "FIX", "Comfort Systems": "FIX", "Hubbell": "HUBB",
+  "Lumentum": "LITE", nVent: "NVT", "Quanta Services": "PWR",
+};
+const BATCH2_RE = new RegExp(`(?<![A-Za-z])(${Object.keys(BATCH2_NAMES).sort((a, b) => b.length - a.length).join("|")})(?![A-Za-z])`, "g");
+function scanParties(seg, ctx) {
+  const found = partiesIn(seg, ctx);
+  const have = new Set(found.map((p) => p.cik));
+  for (const m of seg.matchAll(BATCH2_RE)) {
+    const t = BATCH2_NAMES[m[1]];
+    const cik = Number(tickerMap.get(t)?.cik) || null;
+    if (!cik || have.has(cik) || cik === ctx.cik) continue;
+    have.add(cik);
+    found.push({ name: m[1], cik, ticker: t, how: "batch2-name" });
+  }
+  return found;
+}
 const TRADE_CUE = /\b(suppl(?:y|ies|ied|ier|iers)|vendors?|purchas\w*|buy|buys|bought|sourc(?:e|es|ed|ing) from|procure\w*|manufactur\w*|fabricat\w*|foundr(?:y|ies)|licens\w* from|sales to|sold to|sell\w* to|ship\w* to|customers?|clients?|distributors?|resellers?|accounted for|% of (?:our )?(?:total |net )?(?:sales|revenues?))\b/i;
 function scanReceivers(text, self, drops) {
   const segs = segments(text);
@@ -520,8 +554,9 @@ function scanReceivers(text, self, drops) {
       if (re.test(seg)) { drops[k] = (drops[k] ?? 0) + 1; dropped = true; break; }
     }
     if (dropped) continue;
-    for (const party of partiesIn(seg, ctx)) {
-      if (!party.cik || !RECEIVER_CIKS.has(party.cik)) continue;
+    for (const party of scanParties(seg, ctx)) {
+      if (!party.cik || party.cik === ctx.cik) continue;
+      if (!SCAN_OWN && !RECEIVER_CIKS.has(party.cik)) continue;
       const arr = out.get(party.cik) ?? [];
       if (arr.length < 3 && !arr.some((a) => a.quote === seg)) arr.push({ party: party.name, how: party.how, quote: seg.length > 700 ? `${seg.slice(0, 700)}…` : seg });
       out.set(party.cik, arr);
@@ -560,7 +595,8 @@ async function get(url, json = true) {
 const [si, sn] = (process.env.SHARD || "1/1").split("/").map(Number);
 const only = (process.env.ONLY || process.env.SYMBOLS || "").split(/[,\s]+/).filter(Boolean);
 let ciks = [...UNIVERSE.keys()].sort((a, b) => a - b);
-if (only.length) ciks = ciks.filter((c) => UNIVERSE.get(c).symbols.some((s) => only.includes(s)));
+if (SCAN_OWN) ciks = ciks.filter((c) => RECEIVER_CIKS.has(c));
+else if (only.length) ciks = ciks.filter((c) => UNIVERSE.get(c).symbols.some((s) => only.includes(s)));
 else ciks = ciks.filter((_, k) => k % sn === si - 1);
 const DEADLINE = Date.now() + Number(process.env.BUDGET_MIN || 26) * 60_000;
 console.log(`=== capex links probe shard ${si}/${sn}: ${ciks.length} filers; dictionary ${LISTED.size} listed names ===`);
@@ -589,7 +625,7 @@ for (const cik of ciks) {
     const rank = SIZE_RANK.get(cik) ?? null;
     console.log(`FILER ${JSON.stringify({ cik, sym: u.symbols[0], form: f.form[k], date: f.filingDate[k], accn, rank, sentences: sentenceCount, receivers: out.size })}`);
     for (const [rc, arr] of out) {
-      console.log(`CAND ${JSON.stringify({ filer: u.symbols[0], filerCik: cik, form: f.form[k], date: f.filingDate[k], accn, receiver: RECEIVER_CIKS.get(rc), receiverCik: rc, sentences: arr })}`);
+      console.log(`CAND ${JSON.stringify({ filer: u.symbols[0], filerCik: cik, form: f.form[k], date: f.filingDate[k], accn, receiver: RECEIVER_CIKS.get(rc) ?? tickerForCik(rc), receiverCik: rc, scan: SCAN_OWN ? "own" : "receivers", sentences: arr })}`);
     }
     continue;
   }
