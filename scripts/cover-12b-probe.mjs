@@ -47,5 +47,25 @@ for (const s of syms) {
     // Every F-6 family filing on the recent list, newest first.
     const f6 = (r.form ?? []).map((f, i) => (/^F-6/.test(f) ? `${f} ${r.accessionNumber[i]} ${r.filingDate[i]}` : null)).filter(Boolean);
     console.log(`  F-6 family on the recent list: ${f6.length ? f6.join(" | ") : "none"}`);
+    // OLDER=1: the F-6 family on the older submission pages too, and the newest
+    // one's text through GREP (#552 COWORK #63: MFG's ratio after the 2020 consolidation).
+    if (process.env.OLDER) {
+      const sub = await get(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`);
+      const all = [];
+      const add = (p) => (p.form ?? []).forEach((f, i) => { if (/^F-6/.test(f)) all.push({ f, acc: p.accessionNumber[i], filed: p.filingDate[i], doc: p.primaryDocument[i] }); });
+      add(sub.filings?.recent ?? {});
+      for (const f of sub.filings?.files ?? []) add(await get(`https://data.sec.gov/submissions/${f.name}`));
+      all.sort((a, b) => b.filed.localeCompare(a.filed));
+      console.log(`  F-6 family, all pages: ${all.map((x) => `${x.f} ${x.acc} ${x.filed}`).join(" | ") || "none"}`);
+      for (const x of all.slice(0, 3)) {
+        const flat = D.filingText(await get(`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${x.acc.replace(/-/g, "")}/${x.doc}`, "text")).replace(/\s+/g, " ");
+        console.log(`  -- ${x.f} ${x.acc} ${x.filed}`);
+        let n = 0;
+        for (const m of flat.matchAll(/[^.]{0,250}(?:represent|each American Depositary Share|ADSs? (?:to|for))[^.]{0,250}/gi)) {
+          if (n++ >= 6) break;
+          console.log(`  f6: ${m[0].trim()}`);
+        }
+      }
+    }
   } catch (e) { console.log(`\n== ${s} ERROR ${String(e?.message ?? e).slice(0, 80)}`); }
 }

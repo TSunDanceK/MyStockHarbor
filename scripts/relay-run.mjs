@@ -276,6 +276,7 @@ const TASKS = {
   // Read-only: the Section 12(b) table and cover count of the newest annual filing (#552 COWORK #61/#63).
   "sec-cover-12b": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-12b-ads": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { GREP: "represents? (?:one|two|[0-9.]+|one-fifth|0\\.2) (?:share|of one)|depositary share[s]? (?:to|for) (?:ordinary|common) share|ADS ratio|ratio of (?:ADSs?|American depositary)|share consolidation|reverse (?:stock|share) split" } },
+  "sec-cover-12b-f6": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { FORMS: "20-F", OLDER: "1" } },
   "sec-cover-12b-notes": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { FORMS: "10-K", GREP: "Trading Symbol|ZONES|Exchangeable Subordinated|\\bCCZ\\b" } },
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
