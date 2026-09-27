@@ -181,7 +181,7 @@ console.log(`EPS: FMP ${t.fmpEps}, SEC ${t.secEps}; both ${t.epsBoth}, within 5%
 console.log("\n== Payout");
 console.log(`FMP ${t.fmpPayout}; SEC ${t.secPayout} (same basis+period ${t.payoutSameBasis}, MIXED ${t.payoutMixed}); both ${t.payoutBoth}, within 5 points ${t.payoutAgree5}`);
 console.log(`  mixed examples: ${ex.payoutMixed.join("; ")}`);
-console.log(`shipped (samePeriodPayout): ${JSON.stringify(t.shipped)} -- every one DPS and EPS from ONE period; none shown ${t.shippedNull}; on a different period from the row's EPS column ${t.shippedOtherPeriodThanEps} (labelled with its own period)`);
+console.log(`shipped (samePeriodPayout): ${JSON.stringify(t.shipped)} -- every one DPS and EPS from ONE period; none shown ${t.shippedNull}; on a different period from the row's EPS column ${t.shippedOtherPeriodThanEps} (withheld at read time: \"–\", periods differ)`);
 console.log("\n== Presets (after the debt/preferred exclusion): today -> shipped");
 for (const [name, fn] of Object.entries(presets)) {
   const kept = rows.filter((r) => !r.excluded);

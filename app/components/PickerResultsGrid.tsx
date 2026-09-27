@@ -584,7 +584,9 @@ type Col = {
 const BASIS_TIP = "Trailing twelve months from the filings where filed quarterly, else the latest fiscal year (marked FY). Hover a value for its period.";
 
 function basisCell(value: ReactNode, v: number | null, basis: string | undefined): ReactNode {
-  if (v == null || !Number.isFinite(v)) return MUTED;
+  // A withheld figure (payout whose period differs from the row's EPS, #553
+  // COWORK #60) arrives as a null with its reason in `basis`: "–", hover to see why.
+  if (v == null || !Number.isFinite(v)) return basis ? <span className="muted" title={basis}>–</span> : MUTED;
   if (!basis) return value;
   return (
     <span title={basis}>

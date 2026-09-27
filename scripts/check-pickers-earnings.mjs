@@ -76,14 +76,22 @@ async function suite(mod, code) {
   const y = mixed.years[0];
   const m = earn(mixed);
   const fyPair = (valueOf(y, "dividendsDeclaredPerShare") / valueOf(y, "epsDiluted")) * 100;
-  ok("mixed periods: payout is the fiscal year's DPS ÷ THAT year's EPS", close(m.payoutRatio, fyPair), `${m.payoutRatio} vs ${fyPair}`);
-  ok("...and says so", m.payoutBasis === `FY${y.fy}`, String(m.payoutBasis));
+  const mRow = viaRedis(mod.buildSecPickerRow(mixed, TODAY, {}, NOW));
+  ok("mixed periods: the stored payout is the fiscal year's DPS ÷ THAT year's EPS", close(mRow.payout?.val ?? null, fyPair) && mRow.payout?.basis === "fiscal-year", JSON.stringify(mRow.payout));
+  // COWORK #60: beside a TTM P/E and EPS, a fiscal-year payout is withheld, not labelled.
+  ok("...but beside a TTM EPS it is withheld (\"–\")", m.payoutRatio === null, String(m.payoutRatio));
+  ok("...with the reason as its tooltip", m.payoutBasis === mod.PAYOUT_PERIODS_DIFFER, String(m.payoutBasis));
   ok("...while P/E stays on the TTM EPS", close(m.peRatio, a.peRatio) && m.epsBasis === "TTM to 27 Jun 2026");
+  // Same period on both sides (an annual-only filer): shown, marked FY.
+  const fyOnly = JSON.parse(JSON.stringify(mRow));
+  fyOnly.eps = { ...fyOnly.eps, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy ?? null };
+  const f = mod.applySecEarnings(fyOnly, PRICE);
+  ok("a fiscal-year EPS with that year's payout: shown, labelled FY", close(f.payoutRatio, fyPair) && f.payoutBasis === `FY${y.fy}`, JSON.stringify(f));
 
   // A loss has no payout, in either period.
   const loss = JSON.parse(JSON.stringify(mixed));
   loss.years[0].v[idx("epsDiluted")] = -1;
-  ok("a fiscal-year loss gives no payout ratio", earn(loss).payoutRatio === null);
+  ok("a fiscal-year loss gives no payout ratio", earn(loss).payoutRatio === null && viaRedis(mod.buildSecPickerRow(loss, TODAY, {}, NOW)).payout === null);
   const avav = earn(fixture("AVAV"));
   ok("a TTM loss: no P/E, no payout, EPS shown as filed", avav.peRatio === null && avav.payoutRatio === null && avav.epsTtm < 0 && avav.epsBasis?.startsWith("TTM"));
   ok("a non-payer has no payout, not 0% (TSLA)", earn(fixture("TSLA")).payoutRatio === null);
@@ -121,6 +129,7 @@ async function suite(mod, code) {
   ok("the page carries the basis to the grid", /entry\.epsBasis = earnings\.epsBasis/.test(code.page) && /entry\.payoutBasis = earnings\.payoutBasis/.test(code.page));
   ok("the grid takes a filings row's payout as filed", /if \(e\.fundamentalsFrom === "sec"\) return num\(e\.payoutRatio\);/.test(code.grid));
   ok("P/E and EPS cells carry their basis", /basisCell\(numCell\(num\(e\.peRatio\)\), num\(e\.peRatio\), e\.epsBasis\)/.test(code.grid) && /basisCell\(numCell\(num\(e\.epsTtm\)\), num\(e\.epsTtm\), e\.epsBasis\)/.test(code.grid));
+  ok("a withheld figure shows its reason on hover", /return basis \? <span className="muted" title=\{basis\}>–<\/span> : MUTED;/.test(code.grid));
   ok("a fiscal-year figure is marked FY", /basis\.startsWith\("FY"\) \? <span className="basisFy">FY<\/span>/.test(code.grid));
   ok("the header explains the column", /title=\{col\.tip\}/.test(code.grid));
   // 5. The preview reads and writes its own copy (#553 COWORK #60), so the
@@ -155,6 +164,9 @@ const MUTANTS = [
   ["the page keeps FMP's figure on a refusal", () => [src, { ...code, page: mut("clear", code.page, `const v = earnings[field];\n              if (v === null) delete rec[field];`, `const v = earnings[field];\n              if (v === null) continue;`) }]],
   ["the grid recomputes payout on a filings row", () => [src, { ...code, grid: mut("grid", code.grid, `if (e.fundamentalsFrom === "sec") return num(e.payoutRatio);`, "") }]],
   ["previews read the production key", () => [mut("prevkey", src, `return env.VERCEL_ENV === "preview" ? PICKERS_SEC_PREVIEW_KEY : PICKERS_SEC_KEY;`, `return PICKERS_SEC_KEY;`), code]],
+  ["a TTM row shows the fiscal-year payout (labelled only)", () => [mut("withhold", src, `const payout = periodsDiffer ? null : filed;`, `const payout = filed;`), code]],
+  ["withheld with no reason", () => [mut("reason", src, `: periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,`, `: null,`), code]],
+  ["the withheld dash has no tooltip", () => [src, { ...code, grid: mut("tip", code.grid, `return basis ? <span className="muted" title={basis}>–</span> : MUTED;`, `return MUTED;`) }]],
   ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `<span className="basisFy">FY</span>`, `null`) }]],
 ];
 
