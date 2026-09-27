@@ -34,6 +34,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const FORMS = new Set(["10-K", "10-KT", "20-F"]);
 const HAND_CLAIM = /\bby hand\b|\bhand[- ](?:checked|reviewed|picked)\b|\bhuman (?:review|analyst)/i;
 const MAX_QUOTE = 700;
+const SENTENCE_START = /^["“'‘]?[A-Z0-9]/;
 
 function validate(d) {
   const fails = [];
@@ -90,6 +91,10 @@ function validate(d) {
     ok(`${at}: filing date`, ISO_DATE.test(l.filingDate ?? ""));
     ok(`${at}: review date`, ISO_DATE.test(l.reviewedAt ?? ""));
     ok(`${at}: quote present and bounded`, typeof l.quote === "string" && l.quote.length >= 20 && l.quote.length <= MAX_QUOTE);
+    // a quote is a whole filed sentence from its start (#563 COWORK #24): a
+    // capital, digit or opening quote -- never "(" or a lower-case word, which
+    // means the splitter cut it mid-sentence
+    ok(`${at}: quote starts at a sentence start`, SENTENCE_START.test(l.quote ?? ""));
     ok(`${at}: quote names the party as filed`, typeof l.partyAsFiled === "string" && l.partyAsFiled.length > 1 && (l.quote ?? "").includes(l.partyAsFiled));
     ok(`${at}: no numeric fields (no dollar flows)`, numericKeys(l).length === 0);
     const key = `${l.filer}|${l.party}|${l.role}`;
@@ -146,6 +151,8 @@ const MUTANTS = {
   "counts out of step": (d) => { d.counts.confirmed += 1; },
   "a rejection with no note": (d) => { if (d.rejected[0]) d.rejected[0].note = ""; else d.rejected.push({ verdict: "not-established", accession: "0000000000-00-000000", note: "" }); },
   "a role outside supplier/customer": (d) => { first(d).role = "partner"; },
+  "a quote cut mid-sentence (opens with a parenthesis)": (d) => { const l = first(d); l.quote = `("${l.partyAsFiled}") ${l.quote}`; },
+  "a quote cut mid-sentence (opens lower-case)": (d) => { const l = first(d); l.quote = `and ${l.quote}`; },
 };
 for (const [name, mutate] of Object.entries(MUTANTS)) {
   const d = clone();

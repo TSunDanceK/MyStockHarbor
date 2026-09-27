@@ -319,10 +319,10 @@
    "filingDate": "2026-08-21",
    "role": "supplier",
    "partyAsFiled": "Broadcom",
-   "quote": "example, we currently rely upon some chipset suppliers, such as Qualcomm and Broadcom, as single-source suppliers of certain components for some of our products, and a disruption in the supply of those components would significantly disrupt our business.",
+   "quote": "For example, we currently rely upon some chipset suppliers, such as Qualcomm and Broadcom, as single-source suppliers of certain components for some of our products, and a disruption in the supply of those components would significantly disrupt our business.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "Broadcom single-source supplier of components",
+   "note": "Broadcom single-source supplier of components (quote extended to its sentence start, 'For', from the same accession; the filing's page-break footer '16' between 'For' and 'example' is not part of the sentence) (COWORK #24)",
    "batch": "1"
   },
   {
@@ -865,10 +865,10 @@
    "filingDate": "2026-05-13",
    "role": "supplier",
    "partyAsFiled": "IBM",
-   "quote": "and software product distribution services particularly IBM, BMC and Atlassian products to customers in the public-government sector in",
+   "quote": "Furthermore, the activity in this segment includes dedicated solutions for the GovCon Government contracting market, IT help desk services specializing in healthcare and software product distribution services particularly IBM, BMC and Atlassian products to customers in the public-government sector in the U.S,.",
    "verdict": "correct",
    "reviewedAt": "2026-09-25",
-   "note": "filer distributes IBM products to government customers",
+   "note": "filer distributes IBM products to government customers (quote restored to its whole sentence, 'Furthermore, …' through '… in the U.S,.', verbatim from the same accession; the filing's line breaks are spaces) (COWORK #24)",
    "batch": "1"
   },
   {
@@ -1692,10 +1692,10 @@
    "batch": "2",
    "role": "supplier",
    "partyAsFiled": "Plexus",
-   "quote": "(\"Plexus\") to manufacture and test our FLEX and Magnum products from its facilities in Malaysia and Thailand and our ETS family of products from its facility in Malaysia; SAM Meerkat to manufacture and test our storage test family of products from its facilities in Malaysia and Thailand and on other contract manufacturers to manufacture other products.",
+   "quote": "We depend on Flex Ltd. (\"Flex\") to manufacture and test our FLEX and J750 family of products from its facility in Malaysia; Plexus Corp. (\"Plexus\") to manufacture and test our FLEX and Magnum products from its facilities in Malaysia and Thailand and our ETS family of products from its facility in Malaysia; SAM Meerkat to manufacture and test our storage test family of products from its facilities in Malaysia and Thailand and on other contract manufacturers to manufacture other products.",
    "verdict": "correct",
    "reviewedAt": "2026-09-27",
-   "note": "Plexus manufactures and tests the filer's products"
+   "note": "Plexus manufactures and tests the filer's products (quote extended to its sentence start, verbatim from the same accession) (COWORK #24)"
   }
  ],
  "rejected": [
@@ -3662,15 +3662,15 @@
  "batches": {
   "1": {
    "reviewedAt": "2026-09-25",
-   "confirmed": "108"
+   "confirmed": 108
   },
   "2": {
    "reviewedAt": "2026-09-27",
-   "confirmed": "12",
-   "reviewed": "37",
-   "resellerRuleRemoved": "6",
-   "alreadyInBatch1": "38",
-   "secFetches": "5022",
+   "confirmed": 12,
+   "reviewed": 37,
+   "resellerRuleRemoved": 6,
+   "alreadyInBatch1": 38,
+   "secFetches": 5022,
    "note": "Receivers' own latest annual reports (SCAN=own), plus a universe re-scan with filed names for AAOI, FIX, HUBB, LITE, NVT, PWR, which found no candidates."
   }
  }
