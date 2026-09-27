@@ -16,6 +16,20 @@
    "form": "20-F",
    "source": "0001406234-26-000002",
    "filed": "2026-03-17"
+  },
+  "0001166691": {
+   "primary": "CMCSA",
+   "class": "Class A Common Stock, $0.01 par value",
+   "evidence": [
+    "Class A Common Stock, $0.01 par value CMCSA The Nasdaq Stock Market LLC",
+    "As of January 15, 2026, there were 3,588,401,619 shares of Comcast Corporation Class A common stock"
+   ],
+   "nonEquity": {
+    "CCZ": "2.0% Exchangeable Subordinated Debentures due 2029"
+   },
+   "form": "10-K",
+   "source": "0001628280-26-004994",
+   "filed": "2026-02-03"
   }
  }
 }
