@@ -501,7 +501,8 @@ export default async function StockPage({ params }: Props) {
       ? valuationMultiples(secFacts.profileFacts.valuation, secFacts.profileFacts.multiples, quote.price)
       : null;
   const figure = (f: ValuationFigure | null | undefined) => (f && f.ok ? f.val : null);
-  const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? f.detail ?? REFUSAL_WORDS[f.why] : null);
+  // A computed figure with a note (P/B on NCI-inclusive equity) shows the note in the same line.
+  const why = (f: ValuationFigure | null | undefined) => (f && !f.ok ? f.detail ?? REFUSAL_WORDS[f.why] : f?.ok ? f.note ?? null : null);
   const valuation = {
     peRatio: figure(multiples?.pe),
     priceToSalesRatio: figure(multiples?.ps),
