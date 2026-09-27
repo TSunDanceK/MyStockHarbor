@@ -28,6 +28,9 @@ import {
 
 // THE TYPE COMES FROM THE RULES MODULE, so a fourth tone could not be added to
 // one side only.
+
+/** Why EPS growth is not scored in a period with a large non-operating item (#552 COWORK #40). */
+export const SCORE_LARGE_NON_OPERATING_EPS = "EPS this period includes a large non-operating item, so its growth is not scored";
 export type EarningsTone = PresentationTone;
 
 /**
@@ -288,6 +291,9 @@ function gapReason(key: ScoreComponent, view: SecEarningsView): string {
       return crossing(s.revenueYoY) ?? (s.comparedWith ? `no revenue on file for ${s.comparedWith}` : noPrior);
     case "epsGrowth":
       if (epsCrossing(s.epsYoY)) return epsCrossing(s.epsYoY)!;
+      // Only where EPS growth WOULD have been scored: the crossing and absence
+      // reasons above and below are the truer ones when they apply.
+      if (view.largeNonOperating && isPct(s.epsYoY)) return SCORE_LARGE_NON_OPERATING_EPS;
       if (s.epsDiluted?.val == null) return derivedQ4 ? "Q4 EPS isn't filed separately" : absent("epsDiluted", "EPS");
       return s.comparedWith ? `no EPS on file for ${s.comparedWith}` : noPrior;
     case "profitability":
@@ -508,7 +514,10 @@ export function scoreFromSec(view: SecEarningsView | null, symbol: string, cold:
   if (isPct(s.revenueYoY) && !revenueBaseTooSmall(s.revenue?.val ?? null, s.revenueYoY)) {
     contribute("revenueGrowth", clamp(s.revenueYoY * 0.55, -22, 22));
   }
-  if (isPct(s.epsYoY)) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
+  // NOT OFF A LARGE NON-OPERATING ITEM (#552 COWORK #40 §4): the income card
+  // marks GOOGL's 97.98B other income; scoring the EPS it produced as growth
+  // would contradict that marker. Net income still counts for profitability.
+  if (isPct(s.epsYoY) && !view.largeNonOperating) contribute("epsGrowth", clamp(s.epsYoY * 0.30, -20, 20));
   if (s.netIncome.val != null) contribute("profitability", s.netIncome.val > 0 ? 6 : -8);
 
   // MARGIN DIRECTION, over the four most recent quarters that have one. Not a
