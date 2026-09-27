@@ -184,6 +184,21 @@ export function buildOverrides({ registrants, table, rules, descriptions, manual
   // (data/sec/item1-excerpts.json) may, under the same verbatim guard. The
   // display text is tried first, and the basis says which one was cited.
   for (const [symbol, m] of Object.entries(manual)) {
+    // THE SECTOR-ONLY FORM (#552 COWORK #58/#59): `industry: null` with a
+    // `review` reason HIDES a SIC-derived industry the filer's own words
+    // contradict, where no quote exists to cite a replacement (NGG: SIC 4922
+    // "Oil & Gas Midstream", a UK-layout 20-F with no Item headings). It never
+    // moves a sector: the sector stays the SIC table's, and naming a different
+    // one here FAILS -- changing a sector still needs a cited quote.
+    if (m.industry === null) {
+      if (!String(m.review ?? "").trim()) throw new Error(`manual ${symbol}: industry null needs a review reason`);
+      const sic = registrants[symbol]?.sic ?? null;
+      const sicSector = sic ? (table.codes[sic]?.sector ?? table.majorGroups[String(sic).slice(0, 2)] ?? null) : null;
+      if (!sicSector) throw new Error(`manual ${symbol}: industry null, but SIC gives no sector to keep`);
+      if (m.sector != null && m.sector !== sicSector) throw new Error(`manual ${symbol}: the sector-only form cannot move a sector (${sicSector} -> ${m.sector}); that needs a cited quote`);
+      overrides[symbol] = { sector: sicSector, industry: null, sic, basis: "reviewed: industry withheld", review: String(m.review).trim(), reviewed: true };
+      continue;
+    }
     const shown = descriptions[symbol], longer = excerpts[symbol];
     if (!shown && !longer) throw new Error(`manual ${symbol}: no stored description to cite`);
     const sector = m.sector ?? labels[m.industry];
@@ -200,6 +215,8 @@ export function buildOverrides({ registrants, table, rules, descriptions, manual
       basis: `${row[0] === "20-F" ? "20-F Item 4.B" : "10-K Item 1"}${fromExcerpt ? " (longer excerpt)" : ""}, reviewed`,
       phrase: m.phrase, quote: quote(text, at, m.phrase.length),
       form: row[0], filedOn: row[1], accession: row[2],
+      // HAND-REVIEWED, so it outranks a cached vendor label (staticProfile).
+      reviewed: true,
     };
   }
   const placed = new Set(Object.keys(manual));
