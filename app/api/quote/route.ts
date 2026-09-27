@@ -1,3 +1,4 @@
+import { cryptoHidden } from "@/lib/cryptoMode";
 import { NextResponse } from "next/server";
 import { isUnwantedBot } from "@/lib/botid-guard";
 import { fetchQuoteSnapshot, emptyQuote } from "@/lib/server/quoteData";
@@ -41,6 +42,12 @@ function clientIp(req: Request): string {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
+
+  // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): a
+  // crypto pair is "not available", answered before any bot check or FMP call.
+  if (cryptoHidden(symbol)) {
+    return NextResponse.json({ symbol, error: "not available" }, { status: 404, headers: { "Cache-Control": "public, s-maxage=86400" } });
+  }
 
   // Deep Analysis: fetchQuoteSnapshot() (lib/server/quoteData.ts) now sits
   // behind a short (60s) Redis cache + in-flight request dedupe -- see that
