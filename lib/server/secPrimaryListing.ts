@@ -15,7 +15,7 @@ export type PrimaryListing = {
   class: string;
   /** Verbatim: the 12(b) row, then the cover's count for that class. */
   evidence: string[];
-  /** Tickers on the same CIK that the 12(b) table lists as debt, with their class. */
+  /** Tickers on the same CIK that the 12(b) table lists as notes, debentures or units, with their class. */
   nonEquity?: Record<string, string>;
   form: string;
   source: string;
@@ -54,11 +54,14 @@ export function citedCoverFor(symbol: string): { val: number; asOf: string; quot
   const s = String(symbol ?? "").toUpperCase();
   const e = Object.values(ENTRIES).find((x) => x.primary === s);
   const line = e?.evidence?.[1];
-  // Two cover wordings: "N <class> as of <date>" (BIP's 20-F) and "As of
-  // <date>, there were N shares of <class>" (CMCSA's 10-K, #552 COWORK #61).
+  // Three cover wordings: "N <class> as of <date>" (BIP's 20-F); "As of
+  // <date>, there were N shares of <class>" (CMCSA's 10-K, #552 COWORK #61);
+  // and a table, "Shares Outstanding at <date> <registrant> <class> N" (SO's
+  // 10-K, #552 COWORK #63).
   const a = line ? /^([\d,]+)\s+.+?\s+as of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/.exec(line) : null;
   const b = line && !a ? /^As of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4}),\s+there were\s+([\d,]+)\s+shares of\s+.+$/.exec(line) : null;
-  const [count, month, day, year] = a ? [a[1], a[2], a[3], a[4]] : b ? [b[4], b[1], b[2], b[3]] : [];
+  const c = line && !a && !b ? /^Shares Outstanding at\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\s+.+?\s+([\d,]+)$/.exec(line) : null;
+  const [count, month, day, year] = a ? [a[1], a[2], a[3], a[4]] : b ? [b[4], b[1], b[2], b[3]] : c ? [c[4], c[1], c[2], c[3]] : [];
   const mm = month ? MONTHS[month.toLowerCase()] : undefined;
   if (!e || !count || !day || !mm) return null;
   const val = Number(count.replace(/,/g, ""));
