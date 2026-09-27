@@ -35,6 +35,17 @@ for (const s of syms) {
       for (const m of flat.matchAll(/[^.]{0,200}\b(outstanding|American depositary share[s]? represent|represents?\s+(one|two|[\d.\/]+))[^.]{0,200}/gi)) {
         if (shown < 8 && /depositary|outstanding/i.test(m[0]) && shown++ >= 0) console.log(`  line: ${m[0].trim().slice(0, 400)}`);
       }
+      // GREP=regex: every sentence matching it, capped at 15 (#552 COWORK #63, MFG 12.D).
+      if (process.env.GREP) {
+        let n = 0;
+        for (const m of flat.matchAll(new RegExp(`[^.]{0,250}(?:${process.env.GREP})[^.]{0,250}`, "gi"))) {
+          if (n++ >= 15) break;
+          console.log(`  grep: ${m[0].trim()}`);
+        }
+      }
     }
+    // Every F-6 family filing on the recent list, newest first.
+    const f6 = (r.form ?? []).map((f, i) => (/^F-6/.test(f) ? `${f} ${r.accessionNumber[i]} ${r.filingDate[i]}` : null)).filter(Boolean);
+    console.log(`  F-6 family on the recent list: ${f6.length ? f6.join(" | ") : "none"}`);
   } catch (e) { console.log(`\n== ${s} ERROR ${String(e?.message ?? e).slice(0, 80)}`); }
 }
