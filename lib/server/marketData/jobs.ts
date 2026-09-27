@@ -54,6 +54,7 @@ import {
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
+import { isDebtListing } from "./universe";
 
 /** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
 export const QUOTE_CADENCE_MINUTES = 60;
@@ -86,10 +87,15 @@ function mustRedis(): Redis {
   return redis;
 }
 
-/** The universe: the price pool's fields (dashed). 1 HKEYS. */
+/**
+ * The universe: the price pool's fields (dashed), less debt listings (CCZ and
+ * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts). 1 HKEYS.
+ */
 async function universe(): Promise<string[]> {
   const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
-  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))].sort();
+  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+    .filter((s) => !isDebtListing(s))
+    .sort();
 }
 
 function refusalResult(err: unknown) {
@@ -230,7 +236,7 @@ export async function runTiingoEod(
   for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
     const p = r.pipeline();
     for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
-      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, bars: b };
+      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
       const json = JSON.stringify(value);
       bytesWritten += json.length;
       p.set(tiingoEodKey(sym), json, { ex: TIINGO_EOD_TTL_SECONDS });
