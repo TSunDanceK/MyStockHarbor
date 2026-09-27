@@ -262,7 +262,6 @@ const TASKS = {
   // Read-only: the shipped fetch + extraction on named symbols, printing the
   // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
-<<<<<<< HEAD
   // Read-only: annual values of named tags from companyfacts (#552 COWORK #57).
   "sec-tag-values": { script: "scripts/tag-values-probe.mjs", args: () => [] },
   // READS ONLY: stored fact sets with no manifest entry (#552 COWORK #57, TSM).
@@ -271,12 +270,10 @@ const TASKS = {
   "write-cached-profile": { script: "scripts/cached-profile-probe.mjs", args: () => [], writes: true },
   // READS ONLY: CODE-A daily check-in, one pass (#552). 3 commands.
   "write-code-a-checkin": { script: "scripts/code-a-checkin-probe.mjs", args: () => [], writes: true },
-=======
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
   "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
   "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
->>>>>>> origin/main
   // READS ONLY: the income waterfall from stored sets, SEC values (#552 COWORK #60). 1 MGET.
   "write-waterfall": { script: "scripts/waterfall-probe.mjs", args: () => [], writes: true },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
