@@ -175,22 +175,44 @@ function csvFields(line: string): string[] {
 
 const r4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
-/** Parse a per-ticker price CSV into adjusted bars, oldest first. Exported for the checks. */
+/**
+ * Parse a per-ticker price CSV into SPLIT-ADJUSTED bars, oldest first.
+ * Exported for the checks.
+ *
+ * PRICE BASIS B (#553 COWORK #60): split-adjusted only, NOT Tiingo's adjClose.
+ * adjClose is also dividend-adjusted, which moved MA200 by 0.5-3.5% on the
+ * dividend payers in the first parity run (CODE-B #50) against the basis the
+ * site's signals use today. So the raw open/high/low/close are divided, and the
+ * raw volume multiplied, by the product of every splitFactor dated AFTER the
+ * bar -- applied backward from the newest bar, so the newest price is the
+ * traded price and a 2-for-1 halves everything before its ex-date.
+ *
+ * Only the fetched window matters: a split before the window's first bar
+ * moves nothing inside it, and the window always ends at the latest session.
+ */
 export function parseEodCsv(text: string): EodBar[] {
   const lines = text.split(/\r?\n/).filter(Boolean);
   const h = csvFields(lines[0] ?? "").map((f) => f.trim());
   const at = (name: string) => h.indexOf(name);
-  const [iD, iO, iH, iL, iC, iV] = [at("date"), at("adjOpen"), at("adjHigh"), at("adjLow"), at("adjClose"), at("adjVolume")];
-  if ([iD, iO, iH, iL, iC, iV].some((i) => i < 0)) return [];
-  const bars: EodBar[] = [];
-  for (const l of lines.slice(1)) {
-    const f = csvFields(l);
+  const [iD, iO, iH, iL, iC, iV, iS] = [at("date"), at("open"), at("high"), at("low"), at("close"), at("volume"), at("splitFactor")];
+  if ([iD, iO, iH, iL, iC, iV, iS].some((i) => i < 0)) return [];
+  type Raw = { d: string; o: number; h: number; l: number; c: number; v: number; s: number };
+  const raw: Raw[] = [];
+  for (const line of lines.slice(1)) {
+    const f = csvFields(line);
     const d = String(f[iD] ?? "").slice(0, 10);
-    const [o, hi, lo, c, v] = [f[iO], f[iH], f[iL], f[iC], f[iV]].map(Number);
+    const [o, hi, lo, c, v, sf] = [f[iO], f[iH], f[iL], f[iC], f[iV], f[iS]].map(Number);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || ![o, hi, lo, c].every((x) => Number.isFinite(x) && x > 0)) continue;
-    bars.push([d, r4(o), r4(hi), r4(lo), r4(c), Number.isFinite(v) ? Math.round(v) : 0]);
+    raw.push({ d, o, h: hi, l: lo, c, v: Number.isFinite(v) ? v : 0, s: Number.isFinite(sf) && sf > 0 ? sf : 1 });
   }
-  bars.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  raw.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  const bars: EodBar[] = new Array(raw.length);
+  let factor = 1; // product of the split factors dated after the bar being written
+  for (let i = raw.length - 1; i >= 0; i--) {
+    const r = raw[i];
+    bars[i] = [r.d, r4(r.o / factor), r4(r.h / factor), r4(r.l / factor), r4(r.c / factor), Math.round(r.v * factor)];
+    factor *= r.s; // a split ON this date applies to every bar before it
+  }
   return bars;
 }
 
