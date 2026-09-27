@@ -153,13 +153,25 @@ export type FieldDef = {
    * same column heading.
    */
   oneConceptPerFiler?: boolean;
+  /**
+   * A TOTAL AHEAD OF ITS COMPONENT: chain rank decides EACH PERIOD, and the
+   * filer's newest concept is NOT preferred (#552 COWORK #57/#58, JD). The
+   * default anchors a column on the concept covering the filer's newest period;
+   * for nonOperatingIncomeExpense that let a component
+   * (OtherNonoperatingIncomeExpense, "Others, net") displace the total
+   * (NonoperatingIncomeExpense) across every year where the total IS tagged,
+   * simply because the component runs two years longer. JD FY2023: total
+   * CNY 5,625M = pre-tax 31,650M − operating 26,025M; component 7,496M. With
+   * this set, the component fills only the periods where no total is tagged.
+   */
+  rankPerPeriod?: boolean;
 };
 
 // The per-block literals below carry only what VARIES. `satisfies` on each
 // array supplies the contextual type, so `unit: "USD"` stays the literal type
 // rather than widening to `string` before the `.map()` re-adds the rest.
 type Seed = Pick<FieldDef, "key" | "chain" | "unit"> &
-  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler">>;
+  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler" | "rankPerPeriod">>;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
 
 // THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
@@ -336,7 +348,7 @@ const INCOME: FieldDef[] = ([
   // OtherNonoperatingIncomeExpense fills the "Other income / expense" row where
   // no non-operating total is tagged (AVAV, and the COWORK #47 list). Where
   // neither is, the view derives it: pre-tax less operating income.
-  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD" },
+  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD", rankPerPeriod: true },
   // THE TWO TAGS DIFFER PRECISELY ON MINORITY INTEREST -- which is why
   // netIncomeToNoncontrollingInterest is stored: without it the two cannot be
   // reconciled and the chain's own ambiguity is unresolvable after the fact.
@@ -710,7 +722,11 @@ export function secChainsHash(): string {
     // without it holds different numbers from one written with it. Left out,
     // every stored set would report itself current and keep the mixed column.
     feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`
-      + `|one:${f.oneConceptPerFiler ? 1 : 0}`);
+      + `|one:${f.oneConceptPerFiler ? 1 : 0}`
+      // rankPerPeriod too, for the same reason: it changes which concept a
+      // cell resolves from. Appended only when set, so every other field's
+      // feed is unchanged.
+      + (f.rankPerPeriod ? "|rank:1" : ""));
   }
   // ── THE READING OF THE CHAINS, NOT ONLY THEIR CONTENT ───────────────────
   // A change to HOW a chain is resolved moves stored values exactly as a
