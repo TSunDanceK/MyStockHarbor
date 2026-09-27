@@ -1273,6 +1273,14 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // WHY AN FY-MARKED P/E LOOKS WRONG (#553 COWORK #64): what #587 ships for a
+  // few symbols beside its inputs. Read-only; ~15 Redis reads.
+  "write-pickers-pe-probe": {
+    script: "scripts/pickers-pe-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
   // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
   // counts, timings and field names. Stores nothing; 0 Redis commands.
