@@ -22,7 +22,7 @@ syms.forEach((s, n) => {
     const p = [...(list ?? [])].sort((a, b) => (a.e < b.e ? 1 : -1))[0];
     if (!p) continue;
     const rev = v(p, "revenue"), cogs = v(p, "costOfRevenue"), rd = v(p, "researchAndDevelopment"), sga = v(p, "sellingGeneralAndAdministrative"), oth = v(p, "otherOperatingExpense"), op = v(p, "operatingIncome");
-    const summed = (set.sg ?? []).includes(p.e);
+    const summed = (set.sg ?? []).includes(`${p.s ?? ""}|${p.e}`);
     const left = [rev, cogs, rd, sga, op].every((x) => x != null) ? rev - cogs - rd - sga - (oth ?? 0) - op : null;
     console.log(`${s} ${label} ${p.s}..${p.e}: revenue ${m(rev)} · cost ${m(cogs)} · R&D ${m(rd)} · SG&A ${m(sga)}${summed ? " (S&M + G&A, summed)" : ""} · other opex ${m(oth)} · operating income ${m(op)} · left over ${left == null ? "-" : m(left)}${left != null && rev ? ` (${((left / rev) * 100).toFixed(2)}% of revenue)` : ""}`);
   }
