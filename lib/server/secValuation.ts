@@ -38,7 +38,7 @@
 // assume the company has no earnings, which is a claim about the company. The
 // true claim is almost always about the filing.
 import type { StoredFactSet, StoredPeriod } from "./secFactCodec";
-import { valueOf } from "./secFactCodec";
+import { balanceSheetInstant, valueOf } from "./secFactCodec";
 import { isConsecutive, revenueLineIncomplete } from "./secEarningsView";
 import { DEADLINE_FALLBACK } from "./secReportDates";
 import { annualOnlyForm } from "./annualOnly";
@@ -55,9 +55,11 @@ export type ValuationRefusal =
   | "eps-period-is-stale"
   | "share-basis-changed"
   | "eps-is-zero-or-negative"
+  | "eps-near-zero"
   | "no-twelve-month-revenue"
   | "revenue-line-incomplete"
   | "no-balance-sheet-equity"
+  | "equity-tagged-only-incl-nci"
   | "equity-is-zero-or-negative"
   | "enterprise-value-input-missing"
   | "ebitda-is-zero-or-negative";
@@ -77,8 +79,12 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "twelve months of diluted EPS are not on file",
   "eps-period-is-stale":
     "the latest twelve months of EPS on file ended more than 15 months ago",
+  // NEUTRAL ABOUT THE CAUSE (#552 COWORK #51): for BABA the likely cause is
+  // our cover read, not a corporate action, so no cause is suggested.
   "share-basis-changed":
-    "the share count has changed by more than a fifth since the period the EPS covers (a split, bonus issue or depositary-ratio change), so the per-share figures do not line up",
+    "the share count on file differs by more than a fifth from the one behind the EPS, so these figures aren't comparable",
+  "eps-near-zero":
+    "trailing EPS is close to zero, so a P/E is not meaningful",
   "eps-is-zero-or-negative":
     "diluted EPS over the last twelve months is not positive, so a P/E is not meaningful",
   "no-twelve-month-revenue":
@@ -89,12 +95,15 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "this ticker is a debt security of the issuer, not its equity, so equity multiples do not apply",
   "no-balance-sheet-equity":
     "the latest balance sheet on file states no shareholders' equity",
+  // NEVER "no shareholders' equity" when an equity figure IS on file (#552 COWORK #54).
+  "equity-tagged-only-incl-nci":
+    "equity is tagged only including noncontrolling interests, so a P/B for shareholders is not computed",
   "equity-is-zero-or-negative":
     "shareholders' equity on the latest balance sheet is not positive, so a P/B is not meaningful",
   "enterprise-value-input-missing":
     "one of the enterprise-value or EBITDA inputs is not on file, and it is not approximated",
   "ebitda-is-zero-or-negative":
-    "operating income plus depreciation over the last twelve months is not positive, so EV/EBITDA is not meaningful",
+    "EBITDA over the last twelve months is not positive, so EV/EBITDA is not meaningful",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -464,6 +473,12 @@ export type FilerFacts = {
    * refused, naming the class and the equity's own listing. Passed in, like `ads`.
    */
   nonEquity?: { cls: string; primary: string } | null;
+  /**
+   * A COVER COUNT CITED FROM THE FILER'S OWN LATEST 20-F COVER
+   * (secPrimaryListing.citedCoverFor, #552 COWORK #56): used instead of the
+   * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
+   */
+  citedCover?: { val: number; asOf: string; source: string } | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -515,7 +530,14 @@ export function valuationInputs(
   }
 
   let shares: SharesBasis | null = null;
-  const cover = set.cover;
+  // THE NEWER OF THE STORED dei COUNT AND A CITED 20-F COVER COUNT. Never the
+  // older: a cited count as of 2025 beats a dei count as of 2020, and a dei
+  // count filed after the cited one keeps its place. A multi-class set
+  // (candidates) is left to its own refusal below.
+  const cited = filer.citedCover && filer.citedCover.val > 0 ? filer.citedCover : null;
+  const cover = cited && !set.cover?.candidates?.length && (!set.cover?.asOf || cited.asOf > set.cover.asOf)
+    ? { ...set.cover, val: cited.val, asOf: cited.asOf }
+    : set.cover;
   if (cover?.candidates?.length) {
     // THE EXTRACTOR ALREADY REFUSED TO PICK. Picking here would route around
     // that decision from the other end of the pipeline.
@@ -609,6 +631,12 @@ export function valuationInputs(
   return { shares, eps, refusals, ...(staleEpsEnd ? { staleEpsEnd, staleEpsYear } : {}) };
 }
 
+/** Shown under a P/B computed on NCI-inclusive equity (#552 COWORK #54). */
+export const PB_INCL_NCI_NOTE = "Book value incl. noncontrolling interests (the only equity figure the filer tags)";
+
+/** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
+export const PE_MIN_EPS = 0.05;
+
 /** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
 export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
   return { ok: false, why: "ticker-is-a-debt-security",
@@ -657,7 +685,8 @@ export function epsUnitWords(eps: Pick<EpsBasis, "adsRatio" | "adsKind">): strin
 }
 
 export type ValuationFigure =
-  | { ok: true; val: number }
+  /** `note`: what the figure is, where it is not the plain one (P/B on NCI-inclusive equity). */
+  | { ok: true; val: number; note?: string }
   /** `detail`: the refusal in words with its own date, where one exists (stale EPS). */
   | { ok: false; why: ValuationRefusal; detail?: string };
 
@@ -757,6 +786,13 @@ export function peRatio(
       : null;
   }
   if (inputs.eps.val <= 0) return { ok: false, why: "eps-is-zero-or-negative" };
+  // NEAR-ZERO EPS IS NOT A P/E (#552 COWORK #49): AXTI's $75.90 / $0.01 printed
+  // 7590.0, arithmetically true and falsely precise. Below the floor the figure
+  // is withheld with the EPS said. EPS-based, not "P/E above N": a very high
+  // P/E on real earnings is still a real figure.
+  if (inputs.eps.val > 0 && inputs.eps.val < PE_MIN_EPS) {
+    return { ok: false, why: "eps-near-zero", detail: `Not meaningful: trailing EPS is close to zero ($${inputs.eps.val.toFixed(2)})` };
+  }
   if (price === null || !Number.isFinite(price) || price <= 0) return null;
   return { ok: true, val: price / inputs.eps.val };
 }
@@ -833,27 +869,62 @@ export type MultipleInputs = {
    */
   revenueIncomplete?: boolean;
   ebitda: TwelveMonths | null;
+  /** Which EBITDA inputs have no twelve months on file, when `ebitda` is null (#552 COWORK #54). */
+  ebitdaMissing?: string[];
   balanceSheet: {
     asOf: string;
     equity: number | null;
+    /** `equity` is the NCI-inclusive total: no parent-only figure is tagged and no NCI is (#552 COWORK #54). */
+    equityIncludesNci?: boolean;
+    /** Only an NCI-inclusive total is tagged AND the filer reports a non-zero NCI: P/B refused by name. */
+    equityOnlyInclNci?: boolean;
     shortTermDebt: number | null;
     longTermDebt: number | null;
     cash: number | null;
   } | null;
 };
 
+/**
+ * BOOK EQUITY FOR P/B (#552 COWORK #54, AVAV).
+ *
+ * Parent-only StockholdersEquity when tagged. Where it is not, the NCI-inclusive
+ * total, but only when the filer reports no noncontrolling interest: AVAV tags
+ * only the inclusive total ($4.40B) and no NCI, and P/B read "no shareholders'
+ * equity" beside an equity figure the earnings page shows.
+ *
+ * WHICH NCI: no balance-sheet NCI line is stored (adding a field would move
+ * secFieldsHash), so the test is the NCI the filer tags on the income statement
+ * for the period that closes at this balance-sheet date. Non-zero there, and
+ * the inclusive total is not shareholders' book value: refused by name.
+ */
+export function bookEquityAt(set: StoredFactSet, b: StoredPeriod): { equity: number | null; equityIncludesNci: boolean; equityOnlyInclNci: boolean } {
+  const parent = valueOf(b, "stockholdersEquity");
+  if (parent !== null) return { equity: parent, equityIncludesNci: false, equityOnlyInclNci: false };
+  const total = valueOf(b, "totalEquity");
+  if (total === null) return { equity: null, equityIncludesNci: false, equityOnlyInclNci: false };
+  const closing = [...set.quarters, ...set.years].filter((p) => p.e === b.e);
+  const nciTagged = closing.some((p) => { const n = valueOf(p, "netIncomeToNoncontrollingInterest"); return n !== null && n !== 0; });
+  return nciTagged
+    ? { equity: null, equityIncludesNci: false, equityOnlyInclNci: true }
+    : { equity: total, equityIncludesNci: true, equityOnlyInclNci: false };
+}
+
 export function multipleInputs(set: StoredFactSet): MultipleInputs {
-  const b = set.instants[0] ?? null;
+  const b = balanceSheetInstant(set);
   const revenue = twelveMonthsOf(set, ["revenue"]);
   const periods = revenue?.basis === "four-quarters" ? set.quarters.slice(0, 4) : set.years.slice(0, 1);
   return {
     revenue,
     revenueIncomplete: Boolean(revenue && periods.some((p) => revenueLineIncomplete(p))),
     ebitda: twelveMonthsOf(set, ["operatingIncome", "depreciationAndAmortization"]),
+    ebitdaMissing: [
+      ...(twelveMonthsOf(set, ["operatingIncome"]) ? [] : ["operating income"]),
+      ...(twelveMonthsOf(set, ["depreciationAndAmortization"]) ? [] : ["depreciation & amortization"]),
+    ],
     balanceSheet: b
       ? {
           asOf: b.e,
-          equity: valueOf(b, "stockholdersEquity"),
+          ...bookEquityAt(set, b),
           shortTermDebt: valueOf(b, "shortTermDebt"),
           longTermDebt: valueOf(b, "longTermDebt"),
           cash: valueOf(b, "cash"),
@@ -896,15 +967,29 @@ export function valuationMultiples(
   const equity = m.balanceSheet?.equity ?? null;
   const pb: ValuationFigure =
     equity === null
-      ? { ok: false, why: "no-balance-sheet-equity" }
+      ? { ok: false, why: m.balanceSheet?.equityOnlyInclNci ? "equity-tagged-only-incl-nci" : "no-balance-sheet-equity" }
       : equity <= 0
         ? { ok: false, why: "equity-is-zero-or-negative" }
-        : { ok: true, val: cap.val / equity };
+        : { ok: true, val: cap.val / equity,
+            ...(m.balanceSheet?.equityIncludesNci ? { note: PB_INCL_NCI_NOTE } : {}) };
 
   const bs = m.balanceSheet;
   let evEbitda: ValuationFigure;
-  if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {
-    evEbitda = { ok: false, why: "enterprise-value-input-missing" };
+  // NAME WHAT IS MISSING (#552 COWORK #54), and a known non-positive EBITDA is
+  // "not meaningful" before it is "not on file": EV cannot rescue it.
+  const missing = [
+    ...(bs ? [] : ["the balance sheet"]),
+    ...(bs && bs.shortTermDebt === null ? ["short-term debt"] : []),
+    ...(bs && bs.longTermDebt === null ? ["long-term debt"] : []),
+    ...(bs && bs.cash === null ? ["cash"] : []),
+    ...(m.ebitda ? [] : (m.ebitdaMissing?.length ? m.ebitdaMissing : ["twelve months of EBITDA"]).map((x) => `${x} (twelve months)`)),
+  ];
+  const knownEbitda = m.ebitda ? m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization : null;
+  if (knownEbitda !== null && knownEbitda <= 0) {
+    evEbitda = { ok: false, why: "ebitda-is-zero-or-negative" };
+  } else if (!bs || bs.shortTermDebt === null || bs.longTermDebt === null || bs.cash === null || !m.ebitda) {
+    evEbitda = { ok: false, why: "enterprise-value-input-missing",
+      detail: `not on file: ${missing.join(", ")}; it is not approximated` };
   } else {
     const ebitda = m.ebitda.vals.operatingIncome + m.ebitda.vals.depreciationAndAmortization;
     const ev = cap.val + bs.shortTermDebt + bs.longTermDebt - bs.cash;
