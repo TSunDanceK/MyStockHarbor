@@ -95,7 +95,8 @@ const inc = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
 const push = (o, k, v, cap = 400) => { if ((o[k] ??= []).length < cap) o[k].push(v); };
 const t = { fmpPe: 0, fmpPeNeg: 0, secPe: 0, secRefused: {}, secNull: 0, noSet: 0, both: 0, agree5: 0, agree20: 0, off: 0,
   basis: {}, fyLabels: {}, derivedQ4: 0, fmpEps: 0, secEps: 0, epsAgree5: 0, epsBoth: 0,
-  fmpPayout: 0, secPayout: 0, payoutSameBasis: 0, payoutMixed: 0, payoutBoth: 0, payoutAgree5: 0 };
+  fmpPayout: 0, secPayout: 0, payoutSameBasis: 0, payoutMixed: 0, payoutBoth: 0, payoutAgree5: 0,
+  shipped: {}, shippedNull: 0, shippedOtherPeriodThanEps: 0 };
 const ex = { secRefused: {}, payoutMixed: [], capRefused: {} };
 const rows = [];
 for (const s of universe) {
@@ -130,6 +131,15 @@ for (const s of universe) {
         if (same) t.payoutSameBasis++;
         else { t.payoutMixed++; if (ex.payoutMixed.length < 25) ex.payoutMixed.push(`${s}(eps ${inputs.eps.basis} ${inputs.eps.periodEnd} / dps ${dps.basis} ${dps.periodEnd})`); }
       }
+    }
+    // WHAT #587 SHIPS (samePeriodPayout), beside the naive ratio above: one
+    // period or nothing, and whether that period differs from the row's EPS.
+    {
+      const shipped = inputs.eps && !inputs.refusals.includes("ads-ratio-makes-eps-incomparable") ? P.samePeriodPayout(set, inputs.eps) : null;
+      if (shipped) {
+        inc(t.shipped, shipped.basis);
+        if (shipped.basis !== inputs.eps.basis || shipped.periodEnd !== inputs.eps.periodEnd) t.shippedOtherPeriodThanEps++;
+      } else if (inputs.eps) t.shippedNull++;
     }
     const row = secRows.get(s);
     if (row) {
@@ -171,6 +181,7 @@ console.log(`EPS: FMP ${t.fmpEps}, SEC ${t.secEps}; both ${t.epsBoth}, within 5%
 console.log("\n== Payout");
 console.log(`FMP ${t.fmpPayout}; SEC ${t.secPayout} (same basis+period ${t.payoutSameBasis}, MIXED ${t.payoutMixed}); both ${t.payoutBoth}, within 5 points ${t.payoutAgree5}`);
 console.log(`  mixed examples: ${ex.payoutMixed.join("; ")}`);
+console.log(`shipped (samePeriodPayout): ${JSON.stringify(t.shipped)} -- every one DPS and EPS from ONE period; none shown ${t.shippedNull}; on a different period from the row's EPS column ${t.shippedOtherPeriodThanEps} (labelled with its own period)`);
 console.log("\n== Presets (after the debt/preferred exclusion): today -> shipped");
 for (const [name, fn] of Object.entries(presets)) {
   const kept = rows.filter((r) => !r.excluded);

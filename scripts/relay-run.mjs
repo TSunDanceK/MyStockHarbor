@@ -1209,6 +1209,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // The same seed into the PREVIEW-ONLY key (#553 COWORK #60), which production
+  // never reads or overwrites, so a Cowork preview check isn't raced by the
+  // 05:35 job. ~860 commands per seed; the key lapses on the 3-day TTL.
+  "write-pickers-sec-seed-preview": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes", "--preview"],
+    needsTypescript: true,
+    writes: true,
+  },
   // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
   // --dry mode against the live Pickers universe -- prints the issue body, writes
   // nothing. 2 Redis reads.

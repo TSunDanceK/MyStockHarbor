@@ -65,6 +65,20 @@ import {
 } from "./secValuation";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
+/**
+ * A PREVIEW-ONLY COPY (#553 COWORK #60). A preview of this branch used to read
+ * the production hash, which production's 05:35 job (main's code, no `eps`
+ * fields) rewrote every morning -- so a seed from the branch vanished before
+ * Cowork could look. Previews now read and write their own key; only an
+ * explicit seed (write-pickers-sec-seed --preview) fills it. Production never
+ * touches it, and it lapses on the same TTL.
+ */
+export const PICKERS_SEC_PREVIEW_KEY = "msh:pickers:sec-fundamentals:preview:v1";
+
+/** The hash this deployment reads and writes: previews use their own copy. */
+export function pickersSecKey(env: Record<string, string | undefined> = process.env): string {
+  return env.VERCEL_ENV === "preview" ? PICKERS_SEC_PREVIEW_KEY : PICKERS_SEC_KEY;
+}
 /** Survives two missed daily runs; a row older than this is served as absent. */
 export const PICKERS_SEC_TTL_SECONDS = 3 * 24 * 60 * 60;
 
@@ -403,7 +417,7 @@ export async function readSecPickerRows(symbols: string[]): Promise<Map<string, 
   const fields = [...new Set(symbols.filter(Boolean))];
   if (!redis || !fields.length) return out;
   try {
-    const raw = (await redis.hmget(PICKERS_SEC_KEY, ...fields)) as unknown;
+    const raw = (await redis.hmget(pickersSecKey(), ...fields)) as unknown;
     const get = (sym: string, i: number): unknown =>
       Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[sym] : null;
     const staleBefore = Date.now() - PICKERS_SEC_TTL_SECONDS * 1000;
@@ -442,7 +456,8 @@ export async function warmPickersSec(
   // the 20-F form and the cited ADS ratio from A's map (secAdsMap.adsRatioFor).
   // A callback, so this module stays free of JSON imports like secValuation.
   filerFor: (symbol: string) => FilerFacts,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  key = pickersSecKey()
 ): Promise<WarmPickersSecResult> {
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
@@ -458,7 +473,7 @@ export async function warmPickersSec(
     const n = Object.keys(batch).length;
     if (!n) return true;
     try {
-      await redis.hset(PICKERS_SEC_KEY, batch);
+      await redis.hset(key, batch);
       result.commands++;
       result.written += n;
       batch = {};
@@ -483,7 +498,7 @@ export async function warmPickersSec(
   if (!(await flush())) return result;
 
   try {
-    await redis.expire(PICKERS_SEC_KEY, PICKERS_SEC_TTL_SECONDS);
+    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);
     result.commands++;
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.
