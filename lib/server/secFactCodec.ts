@@ -192,6 +192,13 @@ export type StoredFactSet = {
    */
   cc?: Record<string, string>;
   /**
+   * `start|end` of periods whose SG&A is sales & marketing + G&A summed
+   * (secFields.SUMMED_SGA_TAG, #552 COWORK #40), so the card labels the row
+   * for what it is. Optional; absent = none, or written before it existed.
+   * NOT in contentHashOf: provenance, not a value (the value itself is hashed).
+   */
+  sg?: string[];
+  /**
    * Fiscal-year basic shares, every year in the payload: `[yearEnd, shares]`.
    * See ExtractResult.annualShares. Optional; not in contentHashOf, since it
    * duplicates a field the hashed years already carry for the retained span.
@@ -316,6 +323,7 @@ export function encodeFactSet(
     ...(result.annualShares?.length ? { as: result.annualShares } : {}),
     ...(result.untagged ? { nt: result.untagged } : {}),
     ...(result.readNamespaces ? { rns: result.readNamespaces } : {}),
+    ...(result.summedSga?.length ? { sg: result.summedSga } : {}),
     w: SEC_QUARTER_WINDOW,
     y: SEC_YEAR_WINDOW,
     lv: SEC_LABEL_VERSION,
@@ -439,4 +447,20 @@ export function reactionPeriodLabels(set: {
     out.set(p.e, reportsQuarters && p.fy ? `Q4 FY${p.fy}` : periodLabel(p));
   }
   return out;
+}
+
+/**
+ * THE BALANCE-SHEET DATE A PAGE SHOWS: the newest instant that closes a stored
+ * quarter or year, never an opening balance (#552 COWORK #50 / #52).
+ *
+ * IFRS filers restate an opening balance sheet (CHT: 2020-01-01, 2019-01-01,
+ * three fields each). While CHT's later periods were refused for want of a
+ * rate, `instants[0]` was that opening date, so the card read "as at
+ * 2020-01-01" with every line "Not reported". An opening balance closes no
+ * period, so it never matches a period end; with no match there is no
+ * balance sheet to show, which is the honest answer.
+ */
+export function balanceSheetInstant(set: Pick<StoredFactSet, "instants" | "quarters" | "years">): StoredPeriod | null {
+  const ends = new Set([...set.quarters, ...set.years].map((p) => p.e));
+  return set.instants.find((i) => ends.has(i.e)) ?? null;
 }
