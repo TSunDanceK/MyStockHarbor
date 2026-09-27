@@ -103,6 +103,26 @@ async function suite(mod, code) {
   ok("A's year-to-date twelve months read as TTM, and basic EPS says so (#588)",
     mod.basisLabel({ basis: "year-to-date", periodEnd: "2026-06-30", kind: "basic" }) === "TTM to 30 Jun 2026, basic EPS");
 
+  // 3b. THE FISCAL-YEAR PATH TAKES THE SAME REFUSALS AS TTM (#553 COWORK #64).
+  // KGC is an annual-only filer (FY EPS), reshaped into the three cases the
+  // preview raised: MFG/TM (20-F, depositary shares), BCE (40-F, CAD).
+  const kgcFy = fixture("KGC");
+  const fyEps = V.valuationInputs(kgcFy, TODAY, {}).eps.val;
+  const fy20f = earn(kgcFy, { annualForm: "20-F" });
+  ok("FY path, 20-F with no cited ADS ratio (MFG-shaped): no P/E, no EPS", fy20f.peRatio === null && fy20f.epsTtm === null && fy20f.epsBasis === null, JSON.stringify(fy20f));
+  const fyAds = earn(kgcFy, { annualForm: "20-F", ads: { kind: "ads", ordinaryPerAds: 10 } });
+  ok("FY path, 20-F with a cited ratio of 10 (TM-shaped): EPS per ADS, P/E = price ÷ it",
+    close(fyAds.epsTtm, fyEps * 10) && close(fyAds.peRatio, PRICE / (fyEps * 10)) && fyAds.epsBasis === "FY2025", JSON.stringify(fyAds));
+  const cad = JSON.parse(JSON.stringify(kgcFy));
+  cad.cur = "CAD";
+  delete cad.fx;
+  const fyCad = earn(cad, { annualForm: "40-F" });
+  ok("FY path, CAD with no conversion (BCE-shaped): no P/E, no EPS", fyCad.peRatio === null && fyCad.epsTtm === null, JSON.stringify(fyCad));
+  const cadFx = JSON.parse(JSON.stringify(cad));
+  cadFx.fx = { from: "CAD", source: "fixture", applied: kgcFy.years.map((y) => ({ end: y.e, usdPerUnit: 0.73, basis: "average" })), refused: [] };
+  const fyCadFx = earn(cadFx, { annualForm: "40-F" });
+  ok("FY path, CAD converted at extraction: P/E on the stored (dollar) EPS", close(fyCadFx.peRatio, PRICE / fyEps) && fyCadFx.epsBasis === "FY2025", JSON.stringify(fyCadFx));
+
   // 4. ADS stays "–".
   const azn = earn(fixture("AZN"), { annualForm: "20-F" });
   ok("an ADS filer: no P/E, no EPS, no payout, no label", azn.peRatio === null && azn.epsTtm === null && azn.payoutRatio === null && azn.epsBasis === null, JSON.stringify(azn));
@@ -167,6 +187,8 @@ const MUTANTS = [
   ["a TTM row shows the fiscal-year payout (labelled only)", () => [mut("withhold", src, `const payout = periodsDiffer ? null : filed;`, `const payout = filed;`), code]],
   ["withheld with no reason", () => [mut("reason", src, `: periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,`, `: null,`), code]],
   ["the withheld dash has no tooltip", () => [src, { ...code, grid: mut("tip", code.grid, `return basis ? <span className="muted" title={basis}>–</span> : MUTED;`, `return MUTED;`) }]],
+  ["the row drops A's refusals (raw per-ordinary FY EPS gets a P/E)", () => [mut("refusals", src, `    inputs: { shares: inputs.shares, refusals: inputs.refusals },\n    m: multipleInputs(set),`, `    inputs: { shares: inputs.shares, refusals: [] },\n    m: multipleInputs(set),`), code]],
+  ["an unconverted currency keeps its EPS (and so a P/E)", () => [mut("usd", mut("usd-read", src, `const pe = usd ? ok(peRatio(inputs, price)) : null;`, `const pe = ok(peRatio(inputs, price));`), `      eps: null,\n      payout: null,`, `      eps: inputs.eps,\n      payout: null,`), code]],
   ["no FY marker", () => [src, { ...code, grid: mut("fy", code.grid, `<span className="basisFy">FY</span>`, `null`) }]],
 ];
 
