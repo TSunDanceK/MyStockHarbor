@@ -49,6 +49,7 @@ export type ValuationRefusal =
   | "multi-class-share-count-is-ambiguous"
   | "ads-ratio-makes-shares-incomparable"
   | "ads-ratio-makes-eps-incomparable"
+  | "ticker-is-a-debt-security"
   | "share-count-is-stale"
   | "no-twelve-month-eps"
   | "eps-period-is-stale"
@@ -90,6 +91,8 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
     "twelve months of revenue are not on file",
   "revenue-line-incomplete":
     "not meaningful — this filer's revenue line is incomplete in its tagged data",
+  "ticker-is-a-debt-security":
+    "this ticker is a debt security of the issuer, not its equity, so equity multiples do not apply",
   "no-balance-sheet-equity":
     "the latest balance sheet on file states no shareholders' equity",
   // NEVER "no shareholders' equity" when an equity figure IS on file (#552 COWORK #54).
@@ -222,6 +225,8 @@ export type ValuationInputs = {
   staleEpsYear?: boolean;
   /** Every refusal that applies, in the order they were decided. */
   refusals: ValuationRefusal[];
+  /** Set when the ticker is a debt security on a shared CIK (secPrimaryListing). */
+  debtListing?: { cls: string; primary: string };
 };
 
 /**
@@ -461,6 +466,19 @@ export type FilerFacts = {
    * keeps the depositary-share refusal exactly as before. Never defaulted.
    */
   ads?: { ordinaryPerAds: number; source: string; kind?: "ads" | "ordinary" } | null;
+  /**
+   * A DEBT TICKER on a shared CIK (#552 COWORK #48, secPrimaryListing): BIPI is
+   * Brookfield Infrastructure's "5.125% Perpetual Subordinated Notes". The
+   * filer's figures are the equity's, so a cap or P/E under a note's ticker is
+   * refused, naming the class and the equity's own listing. Passed in, like `ads`.
+   */
+  nonEquity?: { cls: string; primary: string } | null;
+  /**
+   * A COVER COUNT CITED FROM THE FILER'S OWN LATEST 20-F COVER
+   * (secPrimaryListing.citedCoverFor, #552 COWORK #56): used instead of the
+   * stored dei count only when it is NEWER. BIP's dei count is as of 2020.
+   */
+  citedCover?: { val: number; asOf: string; source: string } | null;
 };
 
 /** How far the filer's own EPS identity may sit from 1 or from the ratio. */
@@ -488,6 +506,11 @@ export function valuationInputs(
   filer: FilerFacts = {}
 ): ValuationInputs {
   const refusals: ValuationRefusal[] = [];
+  // A NOTE'S TICKER HAS NO SHARE COUNT OR EPS OF ITS OWN: refused outright.
+  if (filer.nonEquity) {
+    return { shares: null, eps: null, refusals: ["ticker-is-a-debt-security"],
+      debtListing: filer.nonEquity };
+  }
 
   // BEFORE THE COVER PAGE IS EVEN READ. This is a fact about the UNIT the
   // count is in, so it holds whatever the cover page turns out to say -- a
@@ -507,7 +530,14 @@ export function valuationInputs(
   }
 
   let shares: SharesBasis | null = null;
-  const cover = set.cover;
+  // THE NEWER OF THE STORED dei COUNT AND A CITED 20-F COVER COUNT. Never the
+  // older: a cited count as of 2025 beats a dei count as of 2020, and a dei
+  // count filed after the cited one keeps its place. A multi-class set
+  // (candidates) is left to its own refusal below.
+  const cited = filer.citedCover && filer.citedCover.val > 0 ? filer.citedCover : null;
+  const cover = cited && !set.cover?.candidates?.length && (!set.cover?.asOf || cited.asOf > set.cover.asOf)
+    ? { ...set.cover, val: cited.val, asOf: cited.asOf }
+    : set.cover;
   if (cover?.candidates?.length) {
     // THE EXTRACTOR ALREADY REFUSED TO PICK. Picking here would route around
     // that decision from the other end of the pipeline.
@@ -607,6 +637,12 @@ export const PB_INCL_NCI_NOTE = "Book value incl. noncontrolling interests (the 
 /** Positive trailing EPS below this (in the price's unit, per share or per ADS) gives no P/E. */
 export const PE_MIN_EPS = 0.05;
 
+/** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
+export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
+  return { ok: false, why: "ticker-is-a-debt-security",
+    detail: `this ticker is the issuer's ${d.cls}, a debt security; its equity trades as ${d.primary}, so equity multiples do not apply here` };
+}
+
 /** P/E is withheld when its EPS period ended more than this long before today. */
 export const EPS_MAX_AGE_MONTHS = 15;
 /** More than this relative move between the EPS period's diluted shares and today's cover count is a basis change. */
@@ -672,6 +708,7 @@ export function marketCap(
   // It is also the more specific answer when both apply: a multi-class ADS
   // filer is refused for the unit mismatch, which is certain, rather than for
   // the class ambiguity, which is merely also true.
+  if (inputs.debtListing) return debtRefusal(inputs.debtListing);
   if (inputs.refusals.includes("ads-ratio-makes-shares-incomparable")) {
     return { ok: false, why: "ads-ratio-makes-shares-incomparable" };
   }
@@ -734,6 +771,7 @@ export function peRatio(
   // HAVE a clean twelve months of EPS on file. The figure is present, well
   // formed and in the wrong unit, so nothing downstream of `!inputs.eps` can
   // catch it.
+  if (inputs.debtListing) return debtRefusal(inputs.debtListing);
   if (inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
     return { ok: false, why: "ads-ratio-makes-eps-incomparable" };
   }

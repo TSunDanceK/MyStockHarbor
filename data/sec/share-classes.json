@@ -217,6 +217,31 @@
    ],
    "source": "0001628280-26-003942"
   },
+  "MSTR": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "Each share of class B common stock is convertible at any time, at the option of the holder, into one share of class A common stock.",
+    "Holders of class A common stock generally have the same rights, including rights to dividends, as holders of class B common stock, except that holders of class A common stock have one vote per share while holders of class B common stock have ten votes per share."
+   ],
+   "source": "0001050446-26-000020"
+  },
+  "NET": {
+   "listed": "CommonClassAMember",
+   "weights": {
+    "CommonClassAMember": 1,
+    "CommonClassBMember": 1
+   },
+   "evidence": [
+    "The rights of the holders of Class A and Class B common stock are identical, except with respect to voting and conversion.",
+    "Shares of the Company's Class B common stock are convertible into an equivalent number of shares of the Company's Class A common stock and generally convert into shares of the Company's Class A common stock upon cessation of employment or transfer, except for certain transfers described in the Company's amended and restated certificate of incorporation.",
+    "The rights, including the liquidation and dividend rights, of the Class A common stock and Class B common stock are substantially identical, other than voting rights."
+   ],
+   "source": "0001477333-26-000016"
+  },
   "NKE": {
    "listed": "CommonClassBMember",
    "weights": {

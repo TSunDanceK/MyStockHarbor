@@ -40,6 +40,10 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE CURRENCY VOTE (#552 COWORK #50/#55): ties on fields and rules (a)/(b)/(c),
+  // against the SHIPPED reportingCurrency. ALL=1 widens to every registrant.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
+  "currency-vote-census-all": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true, env: { ALL: "1" } },
   // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
   // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
   "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
@@ -185,6 +189,8 @@ const TASKS = {
   "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
   // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
   "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
+  // Item 4's sub-headings, read from the filing (#552 COWORK #48). Read-only.
+  "sec-description-heads": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { HEADS: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
   // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
@@ -253,6 +259,13 @@ const TASKS = {
   // changed -- conditional requests on companyfacts and submissions, both with
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
+  // Read-only: the shipped fetch + extraction on named symbols, printing the
+  // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
+  "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
@@ -1248,6 +1261,33 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
+  // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
+  // counts, timings and field names. Stores nothing; 0 Redis commands.
+  "tiingo-verify": { script: "scripts/tiingo-verify.mjs", args: () => [], tiingo: true },
+  // The universe it checks (price pool + Pickers), as tickers only.
+  // Read-only; HKEYS + GET = 2 Redis commands.
+  "write-universe-tickers": { script: "scripts/universe-tickers.mjs", args: () => [], writes: true },
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // TIINGO (#553 COWORK #55 §2). The §7 purge: every msh:tiingo: key, counts
+  // only; dry unless applied. ~2 commands dry, ~6 applied.
+  "write-tiingo-purge-dry": { script: "scripts/tiingo-purge.mjs", args: () => [], writes: true },
+  "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
+  // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
+  "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
+  // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
+  // Candidates for review only; nothing is published unreviewed. Redis 0.
+  "capex-receiver-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "1/4" } },
+  "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
+  "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
+  "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
 };
 
 const argv = process.argv.slice(2);
@@ -1285,6 +1325,20 @@ if (named !== Boolean(spec.writes)) {
       `writes: true. The prefix is what routes it to the credentialled job, so a ` +
       `disagreement here means the routing is wrong.`
   );
+  process.exit(2);
+}
+// THE THIRD JOB (#553 COWORK #49). The tiingo- prefix routes to the job that
+// holds TIINGO_API_KEY and nothing else; the same agreement is enforced here,
+// and nothing else may run where that key is present.
+if (task.startsWith("tiingo-") !== Boolean(spec.tiingo) || (spec.tiingo && spec.writes)) {
+  console.error(
+    `FATAL: "${task}": a Tiingo task MUST be named tiingo-, declare tiingo: true ` +
+      `and not write; a task named tiingo- MUST declare tiingo: true.`
+  );
+  process.exit(2);
+}
+if (!spec.tiingo && process.env.TIINGO_API_KEY) {
+  console.error(`FATAL: "${task}" is not a Tiingo task but TIINGO_API_KEY is present. Refusing.`);
   process.exit(2);
 }
 if (spec.writes && !allowWrites) {

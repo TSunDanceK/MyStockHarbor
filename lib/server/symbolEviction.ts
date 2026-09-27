@@ -71,6 +71,7 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { toDashed } from "../symbolSpellings.mjs";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -741,11 +742,13 @@ export async function writeStaleBarDays(
 export async function clearAbsence(symbols: string[]): Promise<void> {
   if (!redis || !symbols.length) return;
   try {
+    // ONE MULTI-KEY DEL PER 500, NOT A PIPELINE OF 500 DELs (#553 COWORK #53).
+    // Upstash bills a pipeline per command and a multi-key DEL as one, and this
+    // runs daily over the whole present universe (~850 keys, most of which do
+    // not exist): ~850 commands a day became 2.
     for (let i = 0; i < symbols.length; i += 500) {
-      const group = symbols.slice(i, i + 500);
-      const p = redis.pipeline();
-      for (const s of group) p.del(`${ABSENCE_KEY_PREFIX}${s}`);
-      await p.exec();
+      const keys = symbols.slice(i, i + 500).map((s) => `${ABSENCE_KEY_PREFIX}${s}`);
+      await redis.del(...keys);
     }
   } catch {
     // fail open -- stale evidence expires on its own, and shouldEvict still
@@ -866,7 +869,12 @@ export async function evictSymbol(
   try {
     const p = redis.pipeline();
     for (const { prefix, sep } of PER_SYMBOL_KEYS) p.del(`${prefix}${sep}${symbol}`);
-    for (const hash of PER_SYMBOL_HASHES) p.hdel(hash, symbol);
+    // THE PRICE POOL KEYS ITS FIELDS DASHED (pricePool.poolField, #553 COWORK
+    // #53), so a dotted universe symbol's row lives under the dashed field.
+    for (const hash of PER_SYMBOL_HASHES) {
+      const fields = hash === "msh:price-pool:v1" ? [...new Set([symbol, toDashed(symbol)])] : [symbol];
+      p.hdel(hash, ...fields);
+    }
     for (const zset of PER_SYMBOL_ZSETS) p.zrem(zset, symbol);
     // COUNTED FROM WHAT THE PIPELINE ACTUALLY DID, not from the length of the
     // list we sent. Reporting PER_SYMBOL_KEYS.length claims 14 deletions when
