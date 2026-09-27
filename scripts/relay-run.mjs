@@ -270,6 +270,11 @@ const TASKS = {
   "write-cached-profile": { script: "scripts/cached-profile-probe.mjs", args: () => [], writes: true },
   // READS ONLY: CODE-A daily check-in, one pass (#552). 3 commands.
   "write-code-a-checkin": { script: "scripts/code-a-checkin-probe.mjs", args: () => [], writes: true },
+  // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
+  // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
+  "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
+  // Read-only: the Section 12(b) table and cover count of the newest annual filing (#552 COWORK #61/#63).
+  "sec-cover-12b": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true },
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
   "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
@@ -1298,6 +1303,15 @@ const TASKS = {
   "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
   "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
   "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
+  // Batch 2 (#563 COWORK #23): the receivers' own reports (all named tracked
+  // parties), and the six zero-candidate receivers re-scanned with filed names.
+  "capex-receiver-own-scan": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "own" } },
+  "capex-receiver-six-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "1/4" } },
+  "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
+  "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
+  "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
 };
 
 const argv = process.argv.slice(2);

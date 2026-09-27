@@ -49,6 +49,8 @@ async function handleGET(req: NextRequest) {
       noFactSet: result.noFactSet,
       stoppedEarly: result.stoppedEarly,
       commands: result.commands,
+      pruned: result.pruned ?? null,
+      pruneSkipped: result.pruneSkipped ?? null,
     });
     return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   } catch (err) {

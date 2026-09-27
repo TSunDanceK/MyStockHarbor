@@ -1,4 +1,5 @@
 // app/stock/[symbol]/page.tsx
+import { cryptoHidden } from "@/lib/cryptoMode";
 import type { Metadata } from "next";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { toDashed } from "@/lib/symbolSpellings.mjs";
@@ -365,6 +366,10 @@ function valuationSourceNote(m: MultipleInputs | null, v: ValuationInputs | null
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
+  // Crypto mode hidden (lib/cryptoMode.ts): no data fetch, not indexable.
+  if (cryptoHidden(upper)) {
+    return { title: `${upper} | Not available | MyStockHarbor`, robots: { index: false, follow: true } };
+  }
 
   // Run history + quote in parallel; we only need these for meta generation.
   const [rawHistory, quoteResult] = await Promise.all([
@@ -437,6 +442,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
+
+  // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): a
+  // crypto pair gets a plain "not available" page, with no FMP call behind it.
+  if (cryptoHidden(upper)) {
+    return (
+      <main style={{ maxWidth: 720, margin: "0 auto", padding: "48px 20px 96px" }}>
+        <h1 style={{ fontSize: "1.6rem", marginBottom: 12 }}>{upper} is not available</h1>
+        <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+          Crypto prices are not currently available on MyStockHarbor. Try{" "}
+          <Link href="/">searching for a stock</Link>, or browse the <Link href="/pickers">stock screeners</Link>.
+        </p>
+      </main>
+    );
+  }
 
   // Fetch everything in parallel — none of these block each other.
   const [historyResult, quoteResult, companyName, secFacts, fundamentals, directory] =
