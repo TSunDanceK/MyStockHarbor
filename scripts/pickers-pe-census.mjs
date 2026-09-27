@@ -32,6 +32,11 @@ import ts from "typescript";
 import { lookupSpellingIn, lookupBySpelling, toDashed } from "../lib/symbolSpellings.mjs";
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
+// THE FILER FACTS THE SEED AND THE DAILY JOB PASS (#553 COWORK #64): the form
+// AND the cited ADS ratio. Without the ratio every 20-F filer refused here while
+// #587 ships a per-ADS P/E for it, so the census undercounted the presets.
+const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
+const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: lookupSpellingIn(ADS, s)?.value ?? null });
 const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
 const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
@@ -114,7 +119,7 @@ for (const s of universe) {
   let secPe = null, secEps = null, secPayout = null;
   if (!set) t.noSet++;
   else {
-    const inputs = V.valuationInputs(set, today, registrantFor(s) ?? {});
+    const inputs = V.valuationInputs(set, today, filerFor(s));
     const fig = V.peRatio(inputs, price);
     if (fig?.ok) { secPe = fig.val; t.secPe++; }
     else if (fig) { inc(t.secRefused, fig.why); push(ex.secRefused, fig.why, s); }
