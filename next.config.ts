@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 import { withBotId } from "botid/next/config";
 import { NOINDEX_PICKER_PAGES } from "./lib/noindexPickerPages";
+import {
+  POSITIVE_LAST_EARNINGS_ENABLED,
+  POSITIVE_LAST_EARNINGS_PATH,
+  POSITIVE_LAST_EARNINGS_REDIRECT,
+} from "./lib/positiveLastEarnings";
 
 const nextConfig: NextConfig = {
   // ── Picker pages dropped from the index (noindex, follow) ────
@@ -61,6 +66,13 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // ── Positive Last Earnings, hidden 2026-09-27 (#553 COWORK #64) ──
+      // Ranked on FMP surprise fields that end 14 Oct; see
+      // lib/positiveLastEarnings.ts. Off the flag, the page 301s to the
+      // closest live screener. The flag on drops this redirect.
+      ...(POSITIVE_LAST_EARNINGS_ENABLED
+        ? []
+        : [{ source: POSITIVE_LAST_EARNINGS_PATH, destination: POSITIVE_LAST_EARNINGS_REDIRECT, permanent: true }]),
       // ── Duplicate consolidation (301) ────────────────────────────
       // /bullish-divergence-stocks and /bearish-divergence-stocks are both
       // byte-for-byte identical to /bullish-bearish-divergence-stocks (same
