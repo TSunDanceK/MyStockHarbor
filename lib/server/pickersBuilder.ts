@@ -39,6 +39,7 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { isPriceExcluded } from "../priceExcluded.mjs";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -3348,7 +3349,9 @@ async function buildPickersPayload(
       if (universeSlots.size >= UNIVERSE_CAP) break;
       if (added >= maxFromThisSource) break;
       const s = String(raw).trim().toUpperCase();
-      if (!s || universeSlots.has(s)) continue;
+      // The dated PRICE_EXCLUDED list (#553 COWORK #61): hidden from the
+      // universe, so from every preset, signal and section built on it.
+      if (!s || universeSlots.has(s) || isPriceExcluded(s)) continue;
       universeSlots.add(s);
       added++;
     }
@@ -4311,6 +4314,9 @@ async function buildPickersPayload(
   // client-side from filteredSignalRecords, so they aren't duplicated here.
   const topMoversForTicker = topMoversRaw
     .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
+    // The market's movers come from outside the universe, so the dated
+    // PRICE_EXCLUDED list (#553 COWORK #61) is applied here too.
+    .filter((row) => !isPriceExcluded(row.symbol))
     .slice(0, 8);
 
   const earningsGrowthForTicker: TickerEarningsGrowthItem[] = strongEarningsGrowth

@@ -69,7 +69,10 @@ const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
     key: "earnings",
     icon: "📅",
     label: "Earnings",
-    text: "Beat, miss & surprise % — decoded",
+    // Was "Beat, miss & surprise % — decoded" until 2026-09-27 (#553 COWORK
+    // #63): the earnings pages run on SEC filings since 21 Sep and carry no
+    // estimates, so there is no beat, miss or surprise to decode.
+    text: "Revenue, EPS & margins — as filed",
     accent: "#22d3ee",
     defaultHref: "/stock/AAPL/earnings",
   },

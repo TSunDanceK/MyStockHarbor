@@ -56,7 +56,7 @@ const reset = () => {
   net.redisStatus = 200;
   net.counters = new Map();
   net.strings = new Map();
-  net.hashes = new Map([["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"], ["CCZ", "{}"]])]]);
+  net.hashes = new Map([["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"], ["CCZ", "{}"], ["EQR", "{}"]])]]);
   net.expires = new Map();
   net.tiingo = [];
   net.redisCmds = [];
@@ -254,6 +254,7 @@ check("nightly: a landed night writes every symbol", e.ok && e.written === 3 && 
 check("...each under msh:tiingo:eod:v2:<our spelling>, with a TTL", ["AAPL", "EP-PC", "BRK-B"].every((s) => net.strings.has(K.tiingoEodKey(s)) && net.expires.get(K.tiingoEodKey(s)) === K.TIINGO_EOD_TTL_SECONDS));
 check("...asking Tiingo in its spelling", net.tiingo.some((u) => u.startsWith("/tiingo/daily/EP-P-C/prices")));
 check("...and never for CCZ, a note (COWORK #60: debt is not priced as equity)", !net.tiingo.some((u) => u.includes("CCZ")) && !net.strings.has(K.tiingoEodKey("CCZ")));
+check("...nor for EQR, on the dated PRICE_EXCLUDED list (COWORK #61)", !net.tiingo.some((u) => u.includes("EQR")) && !net.strings.has(K.tiingoEodKey("EQR")));
 check("...every stored history states its basis: split", ["AAPL", "EP-PC", "BRK-B"].every((s) => JSON.parse(net.strings.get(K.tiingoEodKey(s)) ?? "{}").basis === "split"));
 check("...never reading stored history back", !net.redisCmds.some((c) => c[0] === "get" && String(c[1]).includes(":eod:")));
 check("...stamps the night complete, and revalidates eod", net.strings.has(K.TIINGO_EOD_META_KEY) && globalThis.__nextCacheStub.revalidated.some(([t]) => t === K.EOD_TAG));

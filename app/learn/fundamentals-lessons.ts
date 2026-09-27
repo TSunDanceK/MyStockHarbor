@@ -137,7 +137,7 @@ export const FUNDAMENTALS_LESSONS = [
         heading: "Growth and earnings surprises",
         body: [
           "Growth is usually quoted year-over-year (this quarter versus the same quarter a year ago), which strips out seasonal effects. Steady, durable revenue and EPS growth is worth more than a single explosive quarter that cannot be repeated.",
-          "At each earnings date, results are compared against analysts' consensus estimates. Beating on EPS and revenue is a positive surprise; missing is a negative one. MyStockHarbor's earnings card shows the actual, the estimate and the surprise for exactly this reason.",
+          "At each earnings date, results are compared against analysts' consensus estimates. Beating on EPS and revenue is a positive surprise; missing is a negative one. MyStockHarbor's earnings pages show the figures as filed with the SEC (revenue, EPS and margins) and do not carry analyst estimates, so they show no beat or miss.",
           "Crucially, the market often reacts more to guidance - management's forecast for upcoming quarters - than to the results just reported. A company can beat on the quarter but fall sharply because it cut its outlook, because share prices reflect the future, not the past.",
         ],
       },

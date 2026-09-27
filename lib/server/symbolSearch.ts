@@ -1,3 +1,4 @@
+import { CRYPTO_MODE_ENABLED } from "../cryptoMode";
 import { getSearchIndex, normalise, type IndexRow, type SymbolRow } from "./searchIndex";
 
 export type { SymbolRow };
@@ -169,7 +170,8 @@ export function rankIndex(rows: IndexRow[], q: string, limit = 20): SymbolRow[] 
 // convention app/api/symbols/route.ts used before this was extracted). `type`
 // of "crypto" returns the static crypto pairs.
 export async function searchSymbols(q: string, type: string): Promise<SymbolRow[]> {
-  if (type === "crypto") return searchCryptoPairs(q);
+  // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): no rows.
+  if (type === "crypto") return CRYPTO_MODE_ENABLED ? searchCryptoPairs(q) : [];
   if (!q) return [];
   return rankIndex(await getSearchIndex(), q);
 }
