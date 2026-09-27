@@ -54,12 +54,23 @@ import {
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
+import { isDebtListing } from "./universe";
+import { isPriceExcluded } from "../../priceExcluded.mjs";
 
 /** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
 export const QUOTE_CADENCE_MINUTES = 60;
 
 /** The window we keep, as today's FMP history does (MAX_CACHED_HISTORY_DAYS). */
 export const EOD_WINDOW_DAYS = 1400;
+/**
+ * Fewer bars than this is not a history, and is not stored (mirrors
+ * historyCache's MIN_QUALIFIED_POINTS). Measured on the first night
+ * (2026-09-26, CODE-B #50): Tiingo answered BK with 5 rows since 2022 and the
+ * job stored them as BK's history, which a chart or MA200 would have read as
+ * the whole record. A short answer now deletes the key instead, so a reader
+ * falls back to FMP rather than to a truncated series.
+ */
+export const EOD_MIN_BARS = 30;
 /** A night is "landed" when at least this share of the universe has tonight's date in the bulk file. */
 export const EOD_LANDED_SHARE = 0.9;
 const EOD_CONCURRENCY = 8;
@@ -77,10 +88,16 @@ function mustRedis(): Redis {
   return redis;
 }
 
-/** The universe: the price pool's fields (dashed). 1 HKEYS. */
+/**
+ * The universe: the price pool's fields (dashed), less debt listings (CCZ and
+ * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts) and the
+ * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61). 1 HKEYS.
+ */
 async function universe(): Promise<string[]> {
   const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
-  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))].sort();
+  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+    .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
+    .sort();
 }
 
 function refusalResult(err: unknown) {
@@ -178,6 +195,8 @@ export async function runTiingoEod(
   let reserved = 0;
   let stoppedBy: string | null = null;
   let reserving: Promise<void> | null = null;
+  const shortOrEmpty: string[] = [];
+  const dropKeys: string[] = [];
   let next = 0;
   const worker = async () => {
     while (!stoppedBy && next < symbols.length) {
@@ -197,8 +216,13 @@ export async function runTiingoEod(
       try {
         const got = await fetchEodHistory(sym, start);
         bytesDownloaded += got.bytes;
-        if (got.bars.length) bars.set(sym, got.bars);
-        else failed.set("empty", (failed.get("empty") ?? 0) + 1);
+        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars);
+        else {
+          const why = got.bars.length ? "short" : "empty";
+          failed.set(why, (failed.get(why) ?? 0) + 1);
+          if (shortOrEmpty.length < 20) shortOrEmpty.push(sym);
+          dropKeys.push(tiingoEodKey(sym));
+        }
       } catch (err) {
         const key = err instanceof TiingoHttpError ? String(err.status) : "error";
         failed.set(key, (failed.get(key) ?? 0) + 1);
@@ -214,13 +238,17 @@ export async function runTiingoEod(
   for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
     const p = r.pipeline();
     for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
-      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, bars: b };
+      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
       const json = JSON.stringify(value);
       bytesWritten += json.length;
       p.set(tiingoEodKey(sym), json, { ex: TIINGO_EOD_TTL_SECONDS });
     }
     await p.exec();
   }
+  // A short or empty answer removes last night's value too: stale is not
+  // better than absent when the absent case falls back to FMP. 1 DEL (one
+  // command, however many keys).
+  if (dropKeys.length) await r.del(...dropKeys);
   const complete = !stoppedBy && bars.size >= Math.ceil(symbols.length * EOD_LANDED_SHARE);
   const summary = {
     asOf: expected,
@@ -228,6 +256,7 @@ export async function runTiingoEod(
     universe: symbols.length,
     written: bars.size,
     failed: Object.fromEntries(failed),
+    shortOrEmpty,
   };
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });

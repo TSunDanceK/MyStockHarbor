@@ -1,5 +1,6 @@
 "use client";
 
+import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -1333,7 +1334,8 @@ export default function DashboardClient({
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}><Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", flex: "0 0 auto" }}><img src="/logo.png" alt="MyStockHarbor" style={{ height: 48, width: "auto", objectFit: "contain", display: "block" }} /></Link><div style={{ fontSize: 12, fontWeight: 700, color: COLORS.mutedFg, lineHeight: 1.35 }}>Educational stock dashboard and market research tools.</div></div>
         <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Stock Analysis Tools, Stock Pickers & Market Insights</div>
         <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
-        <div style={{ marginTop: 14 }}><AssetTypeToggle /></div>
+        {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+        {CRYPTO_MODE_ENABLED ? <div style={{ marginTop: 14 }}><AssetTypeToggle /></div> : null}
         <button type="button" onClick={() => router.push("/pickers")} style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(47,107,255,0.5)", background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span><span>→</span></button>
         <div style={{ marginTop: 12 }} ref={mobileSearchBoxRef}>
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>{assetType === "crypto" ? "Search Crypto (USD pairs)" : "Search Any Stock"}</div>
@@ -1378,7 +1380,8 @@ export default function DashboardClient({
       <div className="msh-wrap">
         <div className="msh-hero">
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
-          <AssetTypeToggle compact />
+          {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+          {CRYPTO_MODE_ENABLED ? <AssetTypeToggle compact /> : null}
           <div className="msh-hero-actions">
             <div className="msh-searchbox" ref={searchBoxRef}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>

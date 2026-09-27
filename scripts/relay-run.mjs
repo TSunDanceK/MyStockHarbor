@@ -262,6 +262,13 @@ const TASKS = {
   // Read-only: the shipped fetch + extraction on named symbols, printing the
   // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
+  // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
+  "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
@@ -667,6 +674,8 @@ const TASKS = {
   // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
   // traded unit and every refusal, from the stored sets. No price. 1 MGET.
   "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Pages the layout pass touches (#552 COWORK #40/#49). Reads only; ~51 MGETs.
+  "write-layout-pass-census": { script: "scripts/layout-pass-census.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -1308,6 +1317,15 @@ const TASKS = {
   "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
   "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
   "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
+  // Batch 2 (#563 COWORK #23): the receivers' own reports (all named tracked
+  // parties), and the six zero-candidate receivers re-scanned with filed names.
+  "capex-receiver-own-scan": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "own" } },
+  "capex-receiver-six-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "1/4" } },
+  "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
+  "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
+  "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
 };
 
 const argv = process.argv.slice(2);

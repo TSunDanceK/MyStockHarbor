@@ -586,10 +586,18 @@ export function SecSnapshotCard({
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
         </Metric>
+        {/* A GROWTH FIGURE THE SCORE WILL NOT USE SAYS WHY, beside the figure
+            (#552 COWORK #60: ZM's +344.0% with nothing next to it). The same
+            words as the marked income rows, from the same view field. */}
         <Metric
           label="YoY EPS growth"
           tone={toneForGrowth(s.epsYoY)}
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+          sub={
+            <>
+              {s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+              {view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}
+            </>
+          }
         >
           <PctCell v={s.epsYoY} />
         </Metric>
@@ -1308,7 +1316,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
       <PlWaterfall view={view} />
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
-          <Row key={c.label} label={c.label}>
+          <Row key={c.label} label={c.label} sub={c.sub}>
             <CellValue
               cell={c}
               compact
@@ -1886,7 +1894,7 @@ export function SecValuationCard({
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
       : pe.ok ? pe.val.toFixed(1)
-        : pe.why === "eps-is-zero-or-negative" ? "Not meaningful" : "Not available";
+        : pe.why === "eps-is-zero-or-negative" || pe.why === "eps-near-zero" ? "Not meaningful" : "Not available";
   // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
     ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`

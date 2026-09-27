@@ -827,6 +827,14 @@ export const PER_SYMBOL_HASHES = [
 // The sorted sets a symbol is a member of. Unlike the string keys these have no
 // TTL of their own either, and an evicted symbol left in a staleness queue is
 // counted permanently stale in every /cache-health denominator.
+// PLAIN SETS HOLDING A SYMBOL AS A MEMBER: SREM. The stored-fact-set index
+// (secManifest.SEC_FACTS_INDEX_KEY, #552 COWORK #59) -- the fact set itself is
+// deleted above, so its index entry must go with it or the daily index
+// re-seeds an evicted symbol.
+export const PER_SYMBOL_SETS = [
+  "msh:sec:facts:index:v1",
+];
+
 export const PER_SYMBOL_ZSETS = [
   "msh:dynamic-universe:v2:score",
   "msh:dynamic-universe:v2:seen",
@@ -854,7 +862,7 @@ export const PER_SYMBOL_ZSETS = [
 export async function evictSymbol(
   symbol: string,
   nowMs = Date.now()
-): Promise<{ keys: number; hashes: number; zsets: number; tombstoned: boolean }> {
+): Promise<{ keys: number; hashes: number; zsets: number; sets: number; tombstoned: boolean }> {
   // `tombstoned` IS REPORTED RATHER THAN INFERRED, and that is the whole point
   // of this field. The run record used to derive its tombstone counts by
   // aliasing the eviction counts -- "every eviction writes exactly one log
@@ -863,7 +871,7 @@ export async function evictSymbol(
   // catch does the same for a Redis failure after the deletes. So the two
   // numbers could differ, and the one case where they do is exactly the case
   // the guard exists for, which is when the record most needs to be true.
-  const out = { keys: 0, hashes: 0, zsets: 0, tombstoned: false };
+  const out = { keys: 0, hashes: 0, zsets: 0, sets: 0, tombstoned: false };
   if (!redis || !symbol) return out;
 
   try {
@@ -876,6 +884,7 @@ export async function evictSymbol(
       p.hdel(hash, ...fields);
     }
     for (const zset of PER_SYMBOL_ZSETS) p.zrem(zset, symbol);
+    for (const set of PER_SYMBOL_SETS) p.srem(set, symbol);
     // COUNTED FROM WHAT THE PIPELINE ACTUALLY DID, not from the length of the
     // list we sent. Reporting PER_SYMBOL_KEYS.length claims 14 deletions when
     // 14 keys were absent -- which makes an eviction that removed nothing
@@ -887,6 +896,7 @@ export async function evictSymbol(
     for (const _ of PER_SYMBOL_KEYS) out.keys += counted[i++] ?? 0;
     for (const _ of PER_SYMBOL_HASHES) out.hashes += counted[i++] ?? 0;
     for (const _ of PER_SYMBOL_ZSETS) out.zsets += counted[i++] ?? 0;
+    for (const _ of PER_SYMBOL_SETS) out.sets += counted[i++] ?? 0;
 
     // AN AUDIT ENTRY, NOT A TOMBSTONE. It records that this happened and when,
     // so a symbol vanishing from the site has an answer. It deliberately does

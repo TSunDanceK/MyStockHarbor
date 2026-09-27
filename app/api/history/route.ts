@@ -1,3 +1,4 @@
+import { cryptoHidden } from "@/lib/cryptoMode";
 import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
 import { isUnwantedBot } from "@/lib/botid-guard";
@@ -101,6 +102,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
+
+  // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): a
+  // crypto pair is "not available", answered before any bot check or FMP call.
+  if (cryptoHidden(symbol)) {
+    return NextResponse.json({ symbol, error: "not available" }, { status: 404 });
+  }
   const days = Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")));
   const interval = parseInterval(searchParams.get("interval"));
 

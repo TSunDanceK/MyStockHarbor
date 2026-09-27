@@ -47,7 +47,7 @@ import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
 import { outlookForEarningsCard } from "@/lib/server/symbolOutlook";
 import { firstFilerNextReport } from "@/lib/server/firstFilerOutlook";
 import { adsRatioFor } from "@/lib/server/secAdsMap";
-import { nonEquityListingOf } from "@/lib/server/secPrimaryListing";
+import { nonEquityListingOf, citedCoverFor } from "@/lib/server/secPrimaryListing";
 import NextReportCard from "./NextReportCard";
 import { reactionPeriodLabels } from "@/lib/server/secFactStore";
 import { NO_PRICE_HISTORY_NOTE, reactionBarLabels } from "@/lib/server/secReportDates";
@@ -473,7 +473,7 @@ async function getEarningsData(symbol: string) {
   // THE SAME 20-F RULE THE /stock PROFILE APPLIES, from the same registrant
   // file, so the two pages cannot disagree about whether a cap is computable.
   const valuation = cold.status === "ready"
-    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol) })
+    ? valuationInputs(cold.set, todayIso, { annualForm: registrantFor(symbol)?.annualForm ?? null, ads: adsRatioFor(symbol), nonEquity: nonEquityListingOf(symbol), citedCover: citedCoverFor(symbol) })
     : { shares: null, eps: null, refusals: [] };
   const lastBar = (latestBars as Point[]).at(-1) ?? null;
   const latestClose = typeof lastBar?.close === "number" && Number.isFinite(lastBar.close) ? lastBar.close : null;
@@ -717,6 +717,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .metricValue { margin-top: 8px; font-size: 24px; font-weight: 950; letter-spacing: -0.035em; }
         .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: 12px; line-height: 1.45; }
         .metricSub { margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgba(226,232,240,0.66); }
+        .metricSubNote { margin-top: 4px; font-style: italic; color: rgba(251,191,36,0.85); }
         .trendDots { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
         .trendDot { text-align: center; min-width: 52px; }
         .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }
