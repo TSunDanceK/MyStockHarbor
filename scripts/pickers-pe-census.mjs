@@ -29,7 +29,7 @@ const S = await import("../lib/server/secFactStore.ts");
 // not a copy.
 import fs from "node:fs";
 import ts from "typescript";
-import { lookupSpellingIn, lookupBySpelling } from "../lib/symbolSpellings.mjs";
+import { lookupSpellingIn, lookupBySpelling, toDashed } from "../lib/symbolSpellings.mjs";
 const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
 const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
 const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
@@ -58,10 +58,12 @@ const today = new Date().toISOString().slice(0, 10);
 const raw = await redis.get("msh:pickers:v10:symbols");
 const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbols : [];
 const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean))];
-const poolRaw = await redis.hmget("msh:price-pool:v1", ...universe);
+// The pool keys every field by the DASHED spelling since #623 (poolField), so
+// BRK.B is read as BRK-B; a raw HMGET by the universe spelling found no price.
+const poolRaw = await redis.hmget("msh:price-pool:v1", ...universe.map(toDashed));
 const pool = new Map();
 universe.forEach((s, i) => {
-  let r = Array.isArray(poolRaw) ? poolRaw[i] : poolRaw?.[s];
+  let r = Array.isArray(poolRaw) ? poolRaw[i] : poolRaw?.[toDashed(s)];
   if (typeof r === "string") try { r = JSON.parse(r); } catch { r = null; }
   if (r && typeof r === "object") pool.set(s, r);
 });
