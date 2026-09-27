@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordJobRun } from "@/lib/server/jobRuns";
+import { guardJob } from "@/lib/server/jobGuard";
 import { guardDebugRequest } from "@/lib/server/backfillAuth";
 import {
   IPO_COLD_START_DAYS,
@@ -75,7 +76,7 @@ async function authorize(req: NextRequest): Promise<Response | null> {
   return guardDebugRequest(req);
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
 
@@ -314,3 +315,7 @@ export async function GET(req: NextRequest) {
       : "this run did NOT complete cleanly; the watermark only advanced over the dates that did",
   });
 }
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("ipo-refresh", handleGET);

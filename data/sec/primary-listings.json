@@ -1,0 +1,21 @@
+{
+ "_comment": "The primary common listing per shared CIK (#552 COWORK #48/#55), cited from the filer's own annual-report cover: the Section 12(b) row naming the class and its ticker, and the cover's share count for that class (the class the stored cover count must be of). The primary is added to the SEC universe so it is stored and read under its own symbol. `nonEquity` names tickers on the same CIK that the 12(b) table lists as notes or other debt: equity multiples are refused for them. Read by lib/server/secPrimaryListing.ts; checked by scripts/check-primary-listings.mjs.",
+ "entries": {
+  "0001406234": {
+   "primary": "BIP",
+   "class": "Limited Partnership Units",
+   "evidence": [
+    "Limited Partnership Units BIP; BIP UN New York Stock Exchange ; Toronto Stock Exchange",
+    "460,488,788 Limited Partnership Units as of December 31, 2025"
+   ],
+   "nonEquity": {
+    "BIPH": "5.000% Subordinated Notes due 2081",
+    "BIPI": "5.125% Perpetual Subordinated Notes",
+    "BIPJ": "7.250% Subordinated Notes due 2084"
+   },
+   "form": "20-F",
+   "source": "0001406234-26-000002",
+   "filed": "2026-03-17"
+  }
+ }
+}

@@ -87,10 +87,16 @@ check(
   /redis\.decr\(key\)/.test(tryBlock),
   "a refused reservation is not a call anyone will make, and leaving it counted charges the minute for nothing"
 );
+// REVERSED 2026-09-25 (#553 COWORK #53): this asserted fail-OPEN ("a Redis blip
+// must not stop a page rendering a price"). With Redis down every render is also
+// a cache miss, so fail-open meant every render called FMP unthrottled -- the
+// runaway the limiter exists for. scripts/check-fmp-limiter-fail-closed.mjs
+// runs the real function against a failing store; this pins the shape.
 check(
-  "it fails OPEN on a Redis error",
-  /catch \{[\s\S]{0,200}return true;/.test(tryBlock),
-  "the counter is a pacing aid; a Redis blip must not stop a page rendering a price"
+  "it fails CLOSED on a Redis error",
+  /catch \(err\) \{[\s\S]{0,600}markFmpLimiterDown\(err\);\s*return false;/.test(tryBlock) &&
+    !/catch \{[\s\S]{0,200}return true;/.test(tryBlock),
+  "a Redis outage must not turn every page render into an unthrottled FMP call"
 );
 
 console.log("\n=== 4. The warm path is untouched ===\n");
