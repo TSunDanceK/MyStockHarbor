@@ -19,7 +19,9 @@
 //
 //   node scripts/check-tiingo-step1.mjs
 import { register } from "node:module";
-import "./lib/register-ts-here.mjs";
+// register-capex-ts, not register-ts-here: jobs.ts now reaches the committed
+// company-name snapshot (a JSON import through the "@/" alias) via universe.ts.
+import "./lib/register-capex-ts.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -48,17 +50,19 @@ const net = {
   redisCmds: [],
   bulkDate: "2026-09-24",
   iex: null,
+  shortTickers: [],
 };
 const reset = () => {
   net.redisStatus = 200;
   net.counters = new Map();
   net.strings = new Map();
-  net.hashes = new Map([["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"]])]]);
+  net.hashes = new Map([["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"], ["CCZ", "{}"], ["EQR", "{}"]])]]);
   net.expires = new Map();
   net.tiingo = [];
   net.redisCmds = [];
   net.bulkDate = "2026-09-24";
   net.iex = null;
+  net.shortTickers = [];
   globalThis.__nextCacheStub = { revalidated: [], cached: [] };
 };
 const b64 = (v) => (typeof v === "string" ? Buffer.from(v).toString("base64") : Array.isArray(v) ? v.map(b64) : v);
@@ -104,7 +108,16 @@ globalThis.fetch = async (input, init = {}) => {
       return new Response(lines.join("\n"), { status: 200 });
     }
     const m = u.pathname.match(/^\/tiingo\/daily\/([^/]+)\/prices$/);
-    if (m) return new Response(csv(["2026-09-23,10,11,9,10,100,10,11,9,10,100,0,1", "2026-09-24,10.5,11,9,10,100,10.5,11,9,10,100,0,1"]), { status: 200 });
+    if (m) {
+      // 40 weekdays ending 2026-09-24; a ticker in net.shortTickers answers 5.
+      const n = net.shortTickers.includes(decodeURIComponent(m[1])) ? 5 : 40;
+      const rows = [];
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10);
+        rows.push(`${d},10,11,9,10,100,10,11,9,10,100,0,1`);
+      }
+      return new Response(csv(rows), { status: 200 });
+    }
     return new Response("not found", { status: 404 });
   }
   return new Response("unexpected host", { status: 599 });
@@ -181,9 +194,22 @@ async function adapterSuite(T) {
   ok("...tngoLast stands in when IEX has no last", got.quotes.get("EP-PC")?.price === 50.1);
   ok("...one request per 100 tickers, reserved first", got.requests === 1 && (net.counters.get(hourKey) ?? 0) === 1);
 
-  const bars = T.parseEodCsv(csv(["2026-09-24,10,11,9,10,100,5,5.5,4.5,5,200,0,1", "2026-09-23,10,11,9,10,100,4,4.4,3.6,4,200,0,1"]));
-  ok("history uses the ADJUSTED columns, oldest first", bars.length === 2 && bars[0][0] === "2026-09-23" && bars[1][4] === 5 && bars[1][5] === 200, JSON.stringify(bars));
-  ok("a CSV without adjusted columns parses to nothing (not to unadjusted bars)", T.parseEodCsv("date,close\n2026-09-24,1").length === 0);
+  // PRICE BASIS B (COWORK #60): a planted 2-for-1 on 2026-09-23, and a
+  // dividend that moves adjClose on every row, which must NOT reach the bars.
+  // Columns: date,close,high,low,open,volume,adjClose,adjHigh,adjLow,adjOpen,adjVolume,divCash,splitFactor
+  const bars = T.parseEodCsv(csv([
+    "2026-09-24,51,52,49,50,300,40,41,39,40,999,0,1",
+    "2026-09-22,100,104,96,98,100,80,83,77,78,999,0.5,1",
+    "2026-09-23,50,51,48,49,200,40,41,38,39,999,0,2",
+  ]));
+  const byDate = Object.fromEntries(bars.map((b) => [b[0], b]));
+  ok("history is oldest first", bars.map((b) => b[0]).join() === "2026-09-22,2026-09-23,2026-09-24", JSON.stringify(bars));
+  ok("basis B: a bar BEFORE a 2-for-1 is halved (OHLC) and its volume doubled",
+    JSON.stringify(byDate["2026-09-22"]?.slice(1)) === JSON.stringify([49, 52, 48, 50, 200]), JSON.stringify(byDate["2026-09-22"]));
+  ok("basis B: the split day and after are the traded prices",
+    byDate["2026-09-23"]?.[4] === 50 && byDate["2026-09-23"]?.[5] === 200 && byDate["2026-09-24"]?.[4] === 51 && byDate["2026-09-24"]?.[5] === 300, JSON.stringify(bars));
+  ok("basis B: dividend adjustment (adjClose) never reaches the bars", !bars.some((b) => b[4] === 40 || b[4] === 80));
+  ok("a CSV without splitFactor parses to nothing (a basis it cannot state)", T.parseEodCsv("date,close,high,low,open,volume\n2026-09-24,1,1,1,1,1").length === 0);
   return fails;
 }
 
@@ -225,13 +251,23 @@ reset();
 const NIGHT = Date.parse("2026-09-25T00:45:00Z");
 let e = await J.runTiingoEod(NIGHT);
 check("nightly: a landed night writes every symbol", e.ok && e.written === 3 && e.asOf === "2026-09-24", JSON.stringify(e));
-check("...each under msh:tiingo:eod:v1:<our spelling>, with a TTL", ["AAPL", "EP-PC", "BRK-B"].every((s) => net.strings.has(K.tiingoEodKey(s)) && net.expires.get(K.tiingoEodKey(s)) === K.TIINGO_EOD_TTL_SECONDS));
+check("...each under msh:tiingo:eod:v2:<our spelling>, with a TTL", ["AAPL", "EP-PC", "BRK-B"].every((s) => net.strings.has(K.tiingoEodKey(s)) && net.expires.get(K.tiingoEodKey(s)) === K.TIINGO_EOD_TTL_SECONDS));
 check("...asking Tiingo in its spelling", net.tiingo.some((u) => u.startsWith("/tiingo/daily/EP-P-C/prices")));
-check("...never reading stored history back", !net.redisCmds.some((c) => c[0] === "get" && String(c[1]).includes(":eod:v1:")));
+check("...and never for CCZ, a note (COWORK #60: debt is not priced as equity)", !net.tiingo.some((u) => u.includes("CCZ")) && !net.strings.has(K.tiingoEodKey("CCZ")));
+check("...nor for EQR, on the dated PRICE_EXCLUDED list (COWORK #61)", !net.tiingo.some((u) => u.includes("EQR")) && !net.strings.has(K.tiingoEodKey("EQR")));
+check("...every stored history states its basis: split", ["AAPL", "EP-PC", "BRK-B"].every((s) => JSON.parse(net.strings.get(K.tiingoEodKey(s)) ?? "{}").basis === "split"));
+check("...never reading stored history back", !net.redisCmds.some((c) => c[0] === "get" && String(c[1]).includes(":eod:")));
 check("...stamps the night complete, and revalidates eod", net.strings.has(K.TIINGO_EOD_META_KEY) && globalThis.__nextCacheStub.revalidated.some(([t]) => t === K.EOD_TAG));
 const sent = net.tiingo.length;
 e = await J.runTiingoEod(NIGHT + 2 * 3600_000);
 check("nightly: the 02:45 retry after a complete night is one GET and no Tiingo call", e.skipped === "already-complete" && net.tiingo.length === sent, JSON.stringify(e));
+reset();
+net.shortTickers = ["BRK-B"];
+net.strings.set(K.tiingoEodKey("BRK-B"), "{}"); // last night's value
+e = await J.runTiingoEod(NIGHT);
+check("nightly: a short answer (<30 bars) is not stored as a history", e.written === 2 && e.failed?.short === 1 && e.shortOrEmpty?.includes("BRK-B"), JSON.stringify(e));
+check("...and last night's value is deleted, so a reader falls back to FMP", net.redisCmds.some((c) => c[0] === "del" && c.includes(K.tiingoEodKey("BRK-B"))));
+check("...with the minimum pinned at 30, as historyCache qualifies", J.EOD_MIN_BARS === 30);
 reset();
 net.bulkDate = "2026-09-23";
 e = await J.runTiingoEod(NIGHT);
@@ -300,7 +336,9 @@ const MUTANTS = [
   ["the limiter checks > cap as >= (refuses the cap itself)", (s) => s.replace("if (h > TIINGO_HOURLY_CAP)", "if (h >= TIINGO_HOURLY_CAP)")],
   ["previews may call", (s) => s.replace('if (env.VERCEL_ENV !== "production")', "if (false)")],
   ["the IEX call uses our spelling", (s) => s.replace("new Map(symbols.map((s) => [toTiingo(s), s] as const))", "new Map(symbols.map((s) => [s, s] as const))")],
-  ["history reads the unadjusted close", (s) => s.replace('at("adjClose")', 'at("close")')],
+  ["history reads Tiingo's dividend-adjusted close (basis A)", (s) => s.replace('at("close")', 'at("adjClose")')],
+  ["the split is applied FORWARD (to bars after the ex-date)", (s) => s.replace("for (let i = raw.length - 1; i >= 0; i--) {", "for (let i = 0; i < raw.length; i++) {")],
+  ["the volume is not adjusted inversely", (s) => s.replace("Math.round(r.v * factor)", "Math.round(r.v)")],
 ];
 for (const [label, mutate] of MUTANTS) {
   const m = mutate(src);

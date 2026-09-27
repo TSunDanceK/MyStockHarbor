@@ -11,6 +11,7 @@
 // endpoint and SSR share the same in-memory cache Map defined in this
 // module and stay perfectly consistent.
 
+import { CRYPTO_MODE_ENABLED } from "../cryptoMode";
 import { Redis } from "@upstash/redis";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
@@ -171,6 +172,12 @@ async function getBenchmarksDataInner(
   scopeInput?: string | null
 ): Promise<BenchmarksDataResult> {
   const scope = normalizeScope(scopeInput);
+
+  // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): no FMP
+  // call, no Redis read, an empty payload the dashboard would render as nothing.
+  if (scope === "crypto" && !CRYPTO_MODE_ENABLED) {
+    return { data: { updatedAt: new Date().toISOString(), scope, items: [] }, headers: FRESH_HEADERS };
+  }
 
   const cached = cache.get(scope);
   if (cached && Date.now() - cached.at < CACHE_MS) {

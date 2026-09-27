@@ -153,13 +153,25 @@ export type FieldDef = {
    * same column heading.
    */
   oneConceptPerFiler?: boolean;
+  /**
+   * A TOTAL AHEAD OF ITS COMPONENT: chain rank decides EACH PERIOD, and the
+   * filer's newest concept is NOT preferred (#552 COWORK #57/#58, JD). The
+   * default anchors a column on the concept covering the filer's newest period;
+   * for nonOperatingIncomeExpense that let a component
+   * (OtherNonoperatingIncomeExpense, "Others, net") displace the total
+   * (NonoperatingIncomeExpense) across every year where the total IS tagged,
+   * simply because the component runs two years longer. JD FY2023: total
+   * CNY 5,625M = pre-tax 31,650M − operating 26,025M; component 7,496M. With
+   * this set, the component fills only the periods where no total is tagged.
+   */
+  rankPerPeriod?: boolean;
 };
 
 // The per-block literals below carry only what VARIES. `satisfies` on each
 // array supplies the contextual type, so `unit: "USD"` stays the literal type
 // rather than widening to `string` before the `.map()` re-adds the rest.
 type Seed = Pick<FieldDef, "key" | "chain" | "unit"> &
-  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler">>;
+  Partial<Pick<FieldDef, "ifrsChain" | "oneConceptPerFiler" | "rankPerPeriod">>;
 type BalanceSeed = Seed & Pick<FieldDef, "taxonomy"> & Partial<Pick<FieldDef, "singleValued">>;
 
 // THE FOUR INCOME-STATEMENT LINES THAT ARE DURATIONS BUT DO NOT ADD. Held as a
@@ -308,6 +320,21 @@ const IFRS_CHAIN: Record<string, string[] | undefined> = {
   deferredRevenueNoncurrent: ["NoncurrentContractLiabilities"],
 };
 
+/**
+ * SALES & MARKETING PLUS G&A, SUMMED (#552 COWORK #40, CODE-A #33).
+ *
+ * 297 universe filers (CY2026Q2 frames) file GeneralAndAdministrativeExpense
+ * and a selling/marketing line with no SellingGeneralAndAdministrativeExpense.
+ * The chain then fell through to G&A alone, so GOOGL's "SG&A" read 6.46B while
+ * its sales & marketing (8.40B) sat unread, the lines missed operating income
+ * by 8.41B and the waterfall was hidden. The sum is synthesized under this
+ * name, which no taxonomy uses, so its provenance is never mistaken for a
+ * filed combined figure. A CHAIN edit: secFieldsHash does not move.
+ */
+export const SUMMED_SGA_TAG = "SellingAndMarketingPlusGeneralAndAdministrativeExpense";
+/** The selling side, in the order it is looked for. One is used per period, never two. */
+export const SELLING_TAGS = ["SellingAndMarketingExpense", "MarketingExpense", "SellingExpense"];
+
 // ── Income statement ────────────────────────────────────────────────────────
 // Every line is a DURATION and every one is filed cumulatively within the year.
 const INCOME: FieldDef[] = ([
@@ -325,7 +352,12 @@ const INCOME: FieldDef[] = ([
   // vacuous passes this whole section exists to avoid.
   { key: "grossProfit", chain: ["GrossProfit"], unit: "USD" },
   { key: "researchAndDevelopment", chain: ["ResearchAndDevelopmentExpense"], unit: "USD" },
-  { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense"], unit: "USD" },
+  // SUMMED_SGA_TAG (#552 COWORK #40): not an SEC concept. It is written into
+  // the payload by secExtract.withSummedSga, only for a period where the filer
+  // files G&A and a selling/marketing line and NO combined SG&A. Ranked after
+  // the combined tag (which always wins) and before G&A alone, which used to
+  // stand in for the whole line (GOOGL: 6.46B of 14.86B).
+  { key: "sellingGeneralAndAdministrative", chain: ["SellingGeneralAndAdministrativeExpense", SUMMED_SGA_TAG, "GeneralAndAdministrativeExpense"], unit: "USD" },
   { key: "otherOperatingExpense", chain: ["OtherOperatingIncomeExpenseNet"], unit: "USD" },
   { key: "operatingIncome", chain: ["OperatingIncomeLoss"], unit: "USD" },
   // InterestExpenseNonoperating (#552 COWORK #47): the ASU 2023-era spelling
@@ -336,7 +368,7 @@ const INCOME: FieldDef[] = ([
   // OtherNonoperatingIncomeExpense fills the "Other income / expense" row where
   // no non-operating total is tagged (AVAV, and the COWORK #47 list). Where
   // neither is, the view derives it: pre-tax less operating income.
-  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD" },
+  { key: "nonOperatingIncomeExpense", chain: ["NonoperatingIncomeExpense", "OtherNonoperatingIncomeExpense"], unit: "USD", rankPerPeriod: true },
   // THE TWO TAGS DIFFER PRECISELY ON MINORITY INTEREST -- which is why
   // netIncomeToNoncontrollingInterest is stored: without it the two cannot be
   // reconciled and the chain's own ambiguity is unresolvable after the fact.
@@ -710,7 +742,11 @@ export function secChainsHash(): string {
     // without it holds different numbers from one written with it. Left out,
     // every stored set would report itself current and keep the mixed column.
     feed(`${f.key}|${f.taxonomy}|${f.chain.join(",")}|${(f.ifrsChain ?? []).join(",")}|${f.unit}`
-      + `|one:${f.oneConceptPerFiler ? 1 : 0}`);
+      + `|one:${f.oneConceptPerFiler ? 1 : 0}`
+      // rankPerPeriod too, for the same reason: it changes which concept a
+      // cell resolves from. Appended only when set, so every other field's
+      // feed is unchanged.
+      + (f.rankPerPeriod ? "|rank:1" : ""));
   }
   // ── THE READING OF THE CHAINS, NOT ONLY THEIR CONTENT ───────────────────
   // A change to HOW a chain is resolved moves stored values exactly as a
