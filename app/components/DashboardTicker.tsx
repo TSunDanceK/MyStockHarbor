@@ -322,7 +322,10 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
     .forEach((item) => {
       items.push({
         id: `posearnings-${item.symbol}`,
-        text: `${item.symbol} beat on its last earnings report`,
+        // Was "... beat on its last earnings report" until 2026-09-27 (#553
+        // COWORK #63): the earnings page it links to shows filed figures, with
+        // no estimate to have beaten.
+        text: `${item.symbol}: latest earnings, as filed`,
         href: `${href(item.symbol)}/earnings`,
         color: COLOR_EARNINGS,
         symbol: item.symbol,
