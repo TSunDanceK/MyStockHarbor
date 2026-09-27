@@ -31,8 +31,9 @@ for (const s of syms) {
       console.log(`\n== ${s} ${f} ${r.accessionNumber[i]} filed ${r.filingDate[i]}`);
       const at = flat.search(/registered,?\s+(or\s+to\s+be\s+registered,?\s+)?pursuant\s+to\s+Section\s+12\s*\(\s*b\s*\)/i);
       console.log(`  12(b): ${at < 0 ? "not found" : flat.slice(at, at + 1800)}`);
+      let shown = 0;
       for (const m of flat.matchAll(/[^.]{0,200}\b(outstanding|American depositary share[s]? represent|represents?\s+(one|two|[\d.\/]+))[^.]{0,200}/gi)) {
-        if (/depositary|outstanding/i.test(m[0])) console.log(`  line: ${m[0].trim().slice(0, 400)}`);
+        if (shown < 8 && /depositary|outstanding/i.test(m[0]) && shown++ >= 0) console.log(`  line: ${m[0].trim().slice(0, 400)}`);
       }
     }
   } catch (e) { console.log(`\n== ${s} ERROR ${String(e?.message ?? e).slice(0, 80)}`); }
