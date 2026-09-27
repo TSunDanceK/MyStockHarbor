@@ -4246,14 +4246,6 @@
    "accession": "0001193125-26-059002",
    "reviewed": true
   },
-  "NGG": {
-   "sector": "Energy",
-   "industry": null,
-   "sic": "4922",
-   "basis": "reviewed: industry withheld",
-   "review": "UK-layout 20-F with no Item headings, so the locator stores no 4.B text to cite. The SIC 4922 industry (Oil & Gas Midstream) is withheld until a quote exists; the sector stays as SIC gives it.",
-   "reviewed": true
-  },
   "NVMI": {
    "sector": "Technology",
    "industry": "Semiconductors",
