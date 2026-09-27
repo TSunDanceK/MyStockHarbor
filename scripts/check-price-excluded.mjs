@@ -23,7 +23,7 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const X = await import(pathToFileURL(path.join(ROOT, "lib/priceExcluded.ts")).href);
+const X = await import(pathToFileURL(path.join(ROOT, "lib/priceExcluded.mjs")).href);
 const rows = X.PRICE_EXCLUDED;
 check("the list is exactly EQR, BK, CCZ", Object.keys(rows).sort().join() === "BK,CCZ,EQR", Object.keys(rows).join());
 check("EQR and BK are tiingo-gap; CCZ is debt-security", rows.EQR?.reason === "tiingo-gap" && rows.BK?.reason === "tiingo-gap" && rows.CCZ?.reason === "debt-security");

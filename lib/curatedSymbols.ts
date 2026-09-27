@@ -14,7 +14,7 @@
 //
 // This file is the single source of truth for these arrays — do not
 // redefine them inline elsewhere.
-import { isPriceExcluded } from "./priceExcluded";
+import { isPriceExcluded } from "./priceExcluded.mjs";
 
 export const coreMegaCaps = [
   "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "AVGO",

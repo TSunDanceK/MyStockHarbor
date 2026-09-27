@@ -22,6 +22,8 @@
 // correct — a fund trading as a series of a trust is never its own registrant.
 // Requiring them to resolve would be asserting something false about funds.
 import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { lookupBySpelling } from "../lib/symbolSpellings.mjs";
 import { readCodeOnly } from "./lib/source-code.mjs";
@@ -45,7 +47,10 @@ check("the committed registrant file parses", map.size > 1000, `${map.size} tick
 
 const js = ts.transpileModule(fs.readFileSync("lib/curatedSymbols.ts", "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-}).outputText;
+}).outputText
+  // The temp copy lives in scripts/, so point its one relative import (the
+  // dated PRICE_EXCLUDED list, a plain .mjs) back at lib/.
+  .replace(/from "\.\/priceExcluded\.mjs"/, `from "${pathToFileURL(path.resolve("lib/priceExcluded.mjs")).href}"`);
 const tmp = `scripts/.curated-check-${process.pid}.mjs`;
 fs.writeFileSync(tmp, js);
 let curated;
