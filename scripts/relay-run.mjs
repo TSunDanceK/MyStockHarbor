@@ -262,6 +262,10 @@ const TASKS = {
   // Read-only: the shipped fetch + extraction on named symbols, printing the
   // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
