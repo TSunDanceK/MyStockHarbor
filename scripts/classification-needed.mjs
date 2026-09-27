@@ -7,15 +7,18 @@
 // row and it lands by PR. The issue body carries no links, tokens or
 // credentials (public repo; see cell() in scripts/lib/classification-needed.mjs).
 //
-// REDIS: 2 commands a run, both reads -- GET msh:pickers:v10:symbols (the
-// Pickers universe) and HGETALL msh:sec:sic-changes:v1 (A's notices). Daily,
-// so 2 a day. The Actions secret is Upstash's read-only token.
+// REDIS: 4 commands a run, all reads -- GET msh:pickers:v10:symbols (the
+// Pickers universe), HGETALL msh:sec:sic-changes:v1 (A's notices), GET
+// msh:universe:sec-changes:v1 (the delisting sweep's ticker changes, #553
+// COWORK #22) and HGETALL msh:sec:succession-flags:v1 (A's possible
+// holding-company successions, #553 COWORK #44 -- shown as flags, never
+// linked). Daily, so 4 a day. The Actions secret is Upstash's read-only token.
 //
 //   node scripts/classification-needed.mjs            (writes the issue)
 //   node scripts/classification-needed.mjs --dry      (prints the body only)
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
-import { ISSUE_TITLE, buildRows, issueAction, issueBody } from "./lib/classification-needed.mjs";
+import { ISSUE_TITLE, buildRows, citedPredecessors, issueAction, issueBody, listingLines, successionLines } from "./lib/classification-needed.mjs";
 
 const dry = process.argv.includes("--dry");
 const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
@@ -33,11 +36,19 @@ const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbol
 if (!list?.length) throw new Error("the Pickers universe (msh:pickers:v10:symbols) is empty or unreadable -- refusing to close the issue on no data");
 const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").trim().toUpperCase()).filter(Boolean))];
 const notices = (await redis.hgetall("msh:sec:sic-changes:v1")) ?? {};
+// The delisting sweep's ticker changes (#553 COWORK #22): information lines.
+const LISTING_CHANGES_KEY = "msh:universe:sec-changes:v1";
+const changeLog = await redis.get(LISTING_CHANGES_KEY);
+// A's possible successions (lib/server/secSuccessionFlags.ts): flags only.
+const SUCCESSION_FLAGS_KEY = "msh:sec:succession-flags:v1";
+const successionFlags = (await redis.hgetall(SUCCESSION_FLAGS_KEY)) ?? {};
+const succession = successionLines(successionFlags, citedPredecessors(read("data/sec/successor-ciks.json")));
 
 const rows = buildRows(universe, data, notices);
 const asOf = new Date().toISOString().slice(0, 10);
-const body = issueBody(rows, asOf, universe.length);
-console.log(`universe ${universe.length}; unplaced ${rows.missing.length}; SIC-change notices ${rows.changed.length}; Redis commands 2`);
+const listing = listingLines(changeLog, asOf);
+const body = issueBody(rows, asOf, universe.length, listing, succession);
+console.log(`universe ${universe.length}; unplaced ${rows.missing.length}; SIC-change notices ${rows.changed.length}; ticker changes ${listing.length}; possible successions ${succession.length}; Redis commands 4`);
 
 if (dry) {
   console.log(body ?? "(nothing to classify -- the issue would be closed)");
@@ -69,7 +80,7 @@ if (action.kind === "update") await gh(`/issues/${existing.number}`, { method: "
 if (action.kind === "close") {
   await gh(`/issues/${existing.number}`, {
     method: "PATCH",
-    body: JSON.stringify({ body: `Nothing needs classification as of ${asOf}: every Pickers universe symbol has a sector and an industry, and there are no SIC-change notices.`, state: "closed", state_reason: "completed" }),
+    body: JSON.stringify({ body: `Nothing needs classification as of ${asOf}: every Pickers universe symbol has a sector and an industry, and there are no SIC-change notices, ticker changes or possible successions.`, state: "closed", state_reason: "completed" }),
   });
 }
 console.log(`issue: ${action.kind}${existing ? ` #${existing.number}` : ""}`);

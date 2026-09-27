@@ -193,6 +193,7 @@ console.log("\nA REPORT THE SERIES DOES NOT COVER GETS NO ANSWER");
   const react = await lift(
     [
       `const REACTION_SESSION_GAP_DAYS = ${GAP};`,
+      (PAGE_SRC.match(/const VOLUME_MIN_SESSIONS = \d+;/) ?? [""])[0],
       grabFunction(PAGE_SRC, "computeEarningsReactionDetail"),
       "export { computeEarningsReactionDetail };",
     ].join("\n")

@@ -89,10 +89,47 @@ console.log("\n2. 20-F: Item 4, then its Business Overview");
     "Item 5. Operating and Financial Review and Prospects", "Business Overview", "wrong " + filler("Item5")].join("\n");
   const r = D.locateSection(ryaay, "20-F");
   check("no Business Overview inside Item 4 → no description, not Item 5's (RYAAY)", !r.found);
-  const unbounded = await load((src) => once("const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;", "const ITEM4B_LETTERED = /^(item4)?b?businessoverview$/;")(
+  const unbounded = await load((src) => once("const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;", "const ITEM4B_LETTERED = /^(item4|4)?b?businessoverview$/;")(
     once("if (item4.span) {", "if (false) {")(src)));
   const leaked = unbounded.locateSection(ryaay, "20-F");
   check("...and CATCHES a search outside Item 4 that takes Item 5's Business Overview", leaked.found && /^wrong/.test(leaked.body));
+  // BIP (#552 COWORK #48): numbered sub-headings, "4.B BUSINESS OVERVIEW".
+  const bip = [...toc, "ITEM 4. INFORMATION ON THE COMPANY", "4.A HISTORY AND DEVELOPMENT OF BROOKFIELD INFRASTRUCTURE", filler("History"),
+    "4.B BUSINESS OVERVIEW", "Our Operations", "Brookfield Infrastructure owns and operates utilities, transport, midstream and data infrastructure. " + filler("BIP"),
+    "4.C ORGANIZATIONAL STRUCTURE", filler("Org"), "Item 4A. UNRESOLVED STAFF COMMENTS", "none", "ITEM 5. Operating and Financial Review and Prospects", filler("Item5")].join("\n");
+  const b = D.locateSection(bip, "20-F");
+  check("a numbered '4.B BUSINESS OVERVIEW' inside Item 4 is found, and ends at '4.C' (BIP)",
+    b.found && b.body.startsWith("Our Operations") && !b.body.includes("ORGANIZATIONAL"), b.found ? b.body.slice(0, 60) : b.why);
+  // BIP's real layout: no Item 4A / Item 5 heading in the body, the next is Item 6,
+  // and 4.A carries a long history table before 4.B.
+  const bipReal = ["Item 4.", "INFORMATION ON THE COMPANY", "68", "Item 4A.", "UNRESOLVED STAFF COMMENTS", "111", "Item 5.", "OPERATING AND FINANCIAL REVIEW", "111",
+    "ITEM 4. INFORMATION ON THE COMPANY", "4.A HISTORY AND DEVELOPMENT OF BROOKFIELD INFRASTRUCTURE", "x".repeat(12000),
+    "4.B BUSINESS OVERVIEW", "Our Operations", "Brookfield Infrastructure owns and operates utilities, transport, midstream and data. " + filler("BIP"),
+    "4.C ORGANIZATIONAL STRUCTURE", filler("Org"), "Operating results are discussed below. " + filler("MDA"), "ITEM 6. DIRECTORS, SENIOR MANAGEMENT AND EMPLOYEES", filler("Dir")].join("\n");
+  const br = D.locateSection(bipReal, "20-F");
+  check("Item 4 ends at Item 6 when the body has no 4A/5 heading, so a 4.B past a long 4.A is found (BIP)",
+    br.found && br.body.startsWith("Our Operations"), br.found ? br.body.slice(0, 40) : br.why);
+  const noSix = await load(once("else if (open && shortKey(i, ITEM4_LATE_END))", "else if (false)"));
+  check("...and CATCHES Item 6 removed as an end (BIP back to 'no Business Overview heading')", !noSix.locateSection(bipReal, "20-F").found);
+  // TK (branch regression, 201 of 210): the TOC lists 4, 4A, 5, 6, 7 with sub-entries,
+  // so TOC "Item 4" to TOC "Item 7" is past 1,500 chars. With 6/7 as ends
+  // unconditionally that TOC run won, and the body's Business Overview was never read.
+  const tocLong = ["Item 4. Information on the Company", "24", "A. History and Development", "25", "B. Business Overview", "25",
+    "Item 4A. Unresolved Staff Comments", "41", "Item 5. Operating and Financial Review and Prospects", "42",
+    ...Array.from({ length: 40 }, (_, k) => `Sub-entry number ${k} of the table of contents`),
+    "Item 6. Directors, Senior Management and Employees", "60", "Item 7. Major Shareholders and Related Party Transactions", "70"];
+  const tk = [...tocLong, "Item 4. Information on the Company", "A. History and Development", filler("History"), "B. Business Overview",
+    "Teekay Tankers owns and operates a fleet of crude oil tankers. " + filler("TK"), "C. Organizational Structure", filler("Org"),
+    "Item 4A. Unresolved Staff Comments", "none", "Item 5. Operating and Financial Review and Prospects", filler("MDA"),
+    "Item 6. Directors, Senior Management and Employees", filler("Dir")].join("\n");
+  check("the TOC's own 'Item 4 … Item 7' run is not taken as Item 4 (TK)", tocLong.slice(0, -4).join("\n").length >= 1500
+    && (() => { const t = D.locateSection(tk, "20-F"); return t.found && t.body.startsWith("Teekay Tankers"); })());
+  const always = await load(once("else if (open && shortKey(i, ITEM4_LATE_END))", "else if (shortKey(i, ITEM4_LATE_END))"));
+  const tkBad = always.locateSection(tk, "20-F");
+  check("...and CATCHES Item 6/7 as ends even after a 4A/5 (TK's TOC run wins again)", !tkBad.found || !tkBad.body.startsWith("Teekay Tankers"),
+    tkBad.found ? tkBad.body.slice(0, 40) : tkBad.why);
+  const noFour = await load(once("const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;", "const ITEM4B_ANY = /^(item4)?b?businessoverview$/;"));
+  check("...and CATCHES the '4' prefix removed (BIP back to 'no Business Overview heading')", !noFour.locateSection(bip, "20-F").found);
   check("40-F has no description", !D.locateSection("x", "40-F").found);
 }
 
@@ -131,6 +168,19 @@ const long = " It sells these products to industrial customers and government ag
 
   const rklb = D.cleanDescription(["Who We Are", "Our Mission: We Open Access to Space to Improve Life on Earth.", "Rocket Lab is an end-to-end space company with an established track record of mission success." + long + long].join("\n"));
   check("a leading one-line slogan is dropped (RKLB)", rklb.ok && rklb.text.startsWith("Rocket Lab is"));
+}
+
+console.log("\n6a. a description names its subject (ABBV, #552 COWORK #38)");
+{
+  const sky = "In psoriatic disease (plaque psoriasis or psoriatic arthritis), Skyrizi is administered as a quarterly subcutaneous injection following two induction doses. When administered for Crohn's disease and ulcerative colitis, Skyrizi is given as three induction doses via IV infusion, followed by subcutaneous injection via an on-body injector every eight weeks. Skyrizi is sold in numerous other markets worldwide.";
+  check("ABBV's Skyrizi dosing line is not AbbVie's description", !D.cleanDescription(sky, { companyName: "AbbVie Inc." }).ok);
+  check("the company's own name keeps a description", D.cleanDescription("Apple Inc. designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services." + long, { companyName: "Apple Inc." }).ok);
+  check("\"we\" keeps a description", D.cleanDescription("We are a leading provider of cloud software for finance teams, and our products help customers close their books faster." + long, { companyName: "Blackline, Inc." }).ok);
+  check("the company's initials keep a description (IBM)", D.cleanDescription("IBM is a hybrid cloud and artificial intelligence company serving enterprise clients in more than 175 countries around the world." + long, { companyName: "INTERNATIONAL BUSINESS MACHINES CORP" }).ok);
+  check("a short name keeps a description (PCG: \"PG&E Corporation … is a holding company\")", D.cleanDescription("PG&E Corporation, incorporated in California in 1995, is a holding company whose primary operating subsidiary is Pacific Gas and Electric Company, a public utility serving northern and central California." + long, { companyName: "PG&E CORP" }).ok);
+  check("CEG's notes table of contents is refused", !D.cleanDescription("Combined Notes to Consolidated Financial Statements 95 1. Basis of Presentation 95 2. Mergers, Acquisitions, and Dispositions 101 3. Revenue from Contracts with Customers 104 4. Segment Information 110 5. Accounts Receivable 115 6. Inventories 117 and more notes follow in order.", { companyName: "Constellation Energy Corp" }).ok);
+  const M = await load(once("if (opts.companyName && !speaksOfTheCompany(text, opts.companyName)) {", "if (false) {"));
+  check("MUTATION: the rule removed → the Skyrizi line ships as AbbVie's description", M.cleanDescription(sky, { companyName: "AbbVie Inc." }).ok);
 }
 
 console.log("\n6b. full-build rules: rosters, tables, run-ons, name-on-its-own-line");

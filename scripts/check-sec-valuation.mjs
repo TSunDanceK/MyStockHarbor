@@ -199,7 +199,9 @@ console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 
     // extractor gap, pinned here as a named refusal, not a number.
     XOM: { annualForm: null, cur: null, q: [["2026-06-30", null, null, 3.48, null], ["2025-06-30", null, null, 1.64, null]], y: [] },
     // Annual-only (#548): 20-F, no structured quarter. Keeps its fiscal year.
-    TSM: { annualForm: "20-F", cur: "USD", q: [], y: [["2024-12-31", "FY", 2024, 1.36, 25929700000]] },
+    // FY2025, not FY2024: a year ended over 15 months before PIN_TODAY is
+    // withheld as stale (#552 COWORK #45; pinned in check-ads-ratios §4b).
+    TSM: { annualForm: "20-F", cur: "USD", q: [], y: [["2025-12-31", "FY", 2025, 1.36, 25929700000]] },
   };
   const pinSet = (p) => set({ symbol: "PIN", cur: p.cur ?? undefined,
     quarters: p.q.map(([e, fp, fy, eps, sh]) => q(fy, fp, e, eps, sh)),
@@ -221,8 +223,8 @@ console.log("\n2b. FISCAL Q4 IS DERIVED; ANNUAL-ONLY FILERS KEEP THE YEAR (#552 
   check("XOM: no fiscal labels, no years → a named refusal, not a number",
     xom.eps === null && xom.refusals.includes("no-twelve-month-eps"), JSON.stringify(xom.eps));
   const tsm = epsOf(mod, "TSM");
-  check("TSM (annual-only, 20-F): the fiscal year, labelled FY2024",
-    near(tsm?.val, 1.36) && tsm.basis === "fiscal-year" && tsm.fiscalYear === 2024, JSON.stringify(tsm));
+  check("TSM (annual-only, 20-F): the fiscal year, labelled FY2025",
+    near(tsm?.val, 1.36) && tsm.basis === "fiscal-year" && tsm.fiscalYear === 2025, JSON.stringify(tsm));
 
   // THE MUTATION COWORK #8 ASKED FOR: the old rule (no derivation, any year as
   // a fallback) puts NVDA back on 4.90.

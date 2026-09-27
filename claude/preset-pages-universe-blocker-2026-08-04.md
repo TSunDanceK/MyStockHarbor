@@ -1,5 +1,8 @@
 # Preset landing pages — blocked on universe coverage (2026-08-04)
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 Investigation note. **No code changed.** Records why the first attempt at
 combination-generated preset pages (`/cheap-semiconductor-stocks` and similar)
 was stopped before any page was written, and what has to be true before it
@@ -30,7 +33,7 @@ Measured on production, 2026-08-04 (all counts `of 260`):
 
 | Filter | Rows |
 |---|---|
-| `industry=Semiconductors` | **4** — LRCX, MU, ARM, TSM |
+| `industry=Semiconductors` | **4** — [removed 2026-09-24] |
 | `industry=Semiconductors&peRatio=..25` | 1 |
 | `industry=Semiconductors&peRatio=..40` | 2 |
 

@@ -131,7 +131,6 @@ const KNOWN_MISSING = new Set([
   "claude/sector-news-plan-2026-08-07.md",
   "claude/picker-signals-and-news-bandwidth-2026-08-22.md",
   "claude/picker-pages-demand-data-2026-08-15.md",
-  "claude/seo-recovery-progress-2026-08-17.md",
   "claude/firewall-allowed-bot-scraping-audit-2026-07-21.md",
   "claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md",
 ]);

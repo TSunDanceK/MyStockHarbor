@@ -18,7 +18,7 @@ import {
 } from "@/lib/server/secPresentation";
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import {
-  REFUSAL_WORDS, marketCap, peRatio, type ValuationInputs,
+  REFUSAL_WORDS, epsUnitWords, marketCap, peRatio, sharesBasisWords, type ValuationInputs,
 } from "@/lib/server/secValuation";
 
 /**
@@ -555,10 +555,10 @@ export function SecSnapshotCard({
           as "under accession 0000320193-26-000081" in the middle of a sentence
           a reader was meant to understand. It still identifies the filing, so
           it carries the link rather than the prose. */}
-      {view.latestAccession ? (
+      {view.latestFilingUrl ? (
         <p style={{ marginTop: -4 }}>
           <a
-            href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(view.symbol)}&type=10-&dateb=&owner=include&count=10`}
+            href={view.latestFilingUrl}
             style={{ color: "#93c5fd", fontWeight: 800 }}
           >
             View this filing on SEC EDGAR
@@ -743,11 +743,29 @@ function MarginDelta({ view }: { view: SecEarningsView }) {
   );
 }
 
+/** The Growth & Margins card's whole body when no period can be compared yet. */
+export const GROWTH_MARGINS_EMPTY = (one: string) =>
+  `No ${one} on file has the same ${one} a year earlier to compare it with yet, so there is no growth or margin trend to show.`;
+
+function GrowthMarginsEmpty({ one }: { one: string }) {
+  return (
+    <section className="card">
+      <div className="eyebrow">Growth &amp; margins</div>
+      <h2>Is growth accelerating, and are margins holding up?</h2>
+      <p>{GROWTH_MARGINS_EMPTY(one)}</p>
+    </section>
+  );
+}
+
 export function SecGrowthMarginsCard({ view }: { view: SecEarningsView }) {
   // TABLE NOUNS COME FROM tableBasis. This card describes the TABLE, not the
   // latest period, and the two differ when a filer's newest annual period ends
   // after its newest quarter.
   const w = periodWords(view.tableBasis);
+  // ── NO ROW, ONE SENTENCE (#552 COWORK #37) ──────────────────────────────
+  // Every row needs the same period a year earlier on file. When none has it
+  // this rendered a header row over an empty body; it now says why instead.
+  if (view.margins.length === 0) return <GrowthMarginsEmpty one={w.one} />;
   return (
     <section className="card">
       <div className="eyebrow">Growth &amp; margins</div>
@@ -1050,6 +1068,8 @@ function BalanceSheetBars({ view }: { view: SecEarningsView }) {
   );
 }
 
+const lcFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
 export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
   const c = view.cashQuality;
   const w = periodWords(view.basis);
@@ -1081,6 +1101,17 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
           not {view.latestLabel}.
         </p>
       ) : null}
+      {/* A FIRST FILER'S YEAR-TO-DATE FRAME (#552 COWORK #37). Its first 10-Q
+          carries cash flow over the year so far and nothing earlier to
+          subtract, so the card is that span, named, rather than "not filed". */}
+      {c.basis === "year-to-date" ? (
+        <p style={{ marginTop: 8, marginBottom: 0 }}>
+          <strong>{view.symbol}&apos;s filings so far carry its cash-flow statement for the{" "}
+          {lcFirst(c.period)} only.</strong> There is no earlier quarter on file to subtract, so
+          the latest quarter alone cannot be separated out: every figure on this card —
+          including the net income it is compared against — covers those {c.months ?? ""} months.
+        </p>
+      ) : null}
       {/* ── THE MAGNITUDES, EACH WITH ITS FIGURE ─────────────────────────────
           The question this card asks — is the profit turning into cash — is a
           COMPARISON of three magnitudes, and three numbers in a column is the
@@ -1094,7 +1125,7 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
         {/* OPERATING CASH FLOW, CAPEX AND FREE CASH FLOW ARE THE BARS ABOVE —
             the rows that repeated them are gone (see CashQualityBars). What
             follows is only what the bars do not show. */}
-        <Row label={c.basis === "year" ? "Net income (same period)" : "Net income"}>
+        <Row label={c.basis === "quarter" ? "Net income" : "Net income (same period)"}>
           <CellValue cell={c.netIncome} compact />
         </Row>
         {/* BOTH LEGS ARE THE SAME PERIOD. Annual operating cash flow against a
@@ -1121,6 +1152,8 @@ export function SecCashQualityCard({ view }: { view: SecEarningsView }) {
       <p className="earningsDataNote">
         {c.basis === "year" ? (
           <>Annual cash-flow figures as filed, for {c.period}. Source: {SEC_ATTRIBUTION}.</>
+        ) : c.basis === "year-to-date" ? (
+          <>Cash-flow figures as filed, for the {lcFirst(c.period)}. Source: {SEC_ATTRIBUTION}.</>
         ) : (
           <>
             Cash-flow figures are filed year-to-date, so every {w.one} except the first is the
@@ -1281,7 +1314,7 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
               compact
              
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
+              empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
             />
           </Row>
         ))}
@@ -1768,14 +1801,20 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
                   <span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}
                 </span>
               ) : null}
+              {/* THE NEWEST CROSSING, in the snapshot's words (#552 COWORK #47):
+                  AXTI's EPS growth is refused, but its latest quarter turned
+                  profitable, and that is the news. */}
+              {l.latestWords ? <span className="trendLatest">{l.latestWords}</span> : null}
               <div className="trendChipRow">
-                {/* A LEVEL GETS NO VERDICT CHIP. trendSummary leaves the
-                    operating-margin line untoned on purpose: whether 6% is good
-                    depends on the industry and this page has no comparison. */}
-                {l.tone === null && l.value !== null ? null : <ToneChip tone={l.tone} word={word} />}
+                {/* A LEVEL GETS NO VERDICT CHIP ON ITS VALUE — whether 6% is
+                    good depends on the industry. Its DIRECTION does get one
+                    (latest against typical, the Growth & Margins band): l.move. */}
+                {l.kind === "level"
+                  ? (l.move ? <ToneChip tone={l.move.tone} word={l.move.word} /> : null)
+                  : l.value === null ? null : <ToneChip tone={l.tone} word={word} />}
                 <span className="trendCount">
                   {l.value === null
-                    ? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`
+                    ? (l.reason ?? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`)
                     : `${l.counted} of ${l.counted + l.skipped} ${l.counted + l.skipped === 1 ? w.one : w.many}`}
                 </span>
               </div>
@@ -1842,7 +1881,7 @@ export function SecValuationCard({
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} shares × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
@@ -1858,9 +1897,9 @@ export function SecValuationCard({
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
         ? `${inputs.eps && inputs.eps.val < 0 ? "Loss" : "No earnings"} over ${epsSpan}`
-        : sentence(REFUSAL_WORDS[pe.why])
+        : sentence(pe.detail ?? REFUSAL_WORDS[pe.why])
       : inputs.eps
-        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"} over ${epsSpan}`
+        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"}${epsUnitWords(inputs.eps)} over ${epsSpan}`
         : null;
   return (
     <section className="card">

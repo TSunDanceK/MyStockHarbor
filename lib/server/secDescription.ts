@@ -99,18 +99,28 @@ const ITEM1_END = /^item(1a(riskfactors)?|1b(unresolvedstaffcomments)?|2((descri
 //   RYAAY — Item 4 has NO Business Overview sub-heading at all (Introduction,
 //           Strategy, Route System, …); "Business Overview" appears only under
 //           Item 5. Inside Item 4 or nowhere, so RYAAY has no description.
+//   BIP   — numbered sub-headings, "4.B BUSINESS OVERVIEW" / "4.C ORGANIZATIONAL
+//           STRUCTURE" (#552 COWORK #48): the key is "4bbusinessoverview", so
+//           a bare "4" prefix is accepted wherever "item4" is.
 // Inside Item 4 an UNLETTERED "Business Overview" is accepted; outside it
 // (a filing whose Item 4 heading is not found) only a lettered 4.B is, since
 // an unlettered one can be Item 5's (RYAAY).
 const ITEM4 = /^item4(informationonthecompany)?$/;
 const ITEM4_TITLE = /^informationonthecompany$/;
 const ITEM4_END = /^item(4a|5)[a-z]*$/;
-const ITEM4B_LETTERED = /^(item4)?bbusinessoverview$/;
-const ITEM4B_ANY = /^(item4)?b?businessoverview$/;
-const B_ALONE = /^(item4)?b$/;
+// ITEM 6 / 7 TOO, BUT ONLY WHEN 4A AND 5 ARE MISSING (#552 COWORK #48): BIP's
+// body has no "Item 4A" or "Item 5" heading line (its next body heading is
+// "ITEM 6."), so Item 4 fell back to an 8,000-character window and its 4.B,
+// past a long history table, was outside it. A 6/7 line closes Item 4 only when
+// no 4A/5 line has come since the last Item 4 start: otherwise a TOC's
+// "Item 4 … Item 7" run (TK: ~1,530 chars) is long enough to pass as a section.
+const ITEM4_LATE_END = /^item(6|7)[a-z]*$/;
+const ITEM4B_LETTERED = /^(item4|4)?bbusinessoverview$/;
+const ITEM4B_ANY = /^(item4|4)?b?businessoverview$/;
+const B_ALONE = /^(item4|4)?b$/;
 const BUSINESS_OVERVIEW = /^businessoverview$/;
-const ITEM4C = /^(item4)?c?organi[sz]ationalstructure$/;
-const C_ALONE = /^(item4)?c$/;
+const ITEM4C = /^(item4|4)?c?organi[sz]ationalstructure$/;
+const C_ALONE = /^(item4|4)?c$/;
 const ORG_STRUCTURE = /^organi[sz]ationalstructure$/;
 /** A heading line is short; a long line that happens to fold to a pattern is prose. */
 const HEADING_KEY_MAX = 80;
@@ -205,8 +215,16 @@ export function locateSection(text: string, form: string): Located {
   }
 
   // 20-F. Item 4 first.
-  const item4 = pairSection(L, 0, n, (i) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE),
-    (i) => L[i].key.length <= HEADING_KEY_MAX && ITEM4_END.test(L[i].key), MIN_SECTION_CHARS, bounded);
+  const item4Start = (i: number) => headingAt(L, i, n, ITEM4, /^item4$/, ITEM4_TITLE);
+  const shortKey = (i: number, re: RegExp) => L[i].key.length <= HEADING_KEY_MAX && re.test(L[i].key);
+  const item4Ends = new Set<number>();
+  let open = false;
+  for (let i = 0; i < n; i++) {
+    if (item4Start(i) >= 0) open = true;
+    else if (shortKey(i, ITEM4_END)) { item4Ends.add(i); open = false; }
+    else if (open && shortKey(i, ITEM4_LATE_END)) { item4Ends.add(i); open = false; }
+  }
+  const item4 = pairSection(L, 0, n, item4Start, (i) => item4Ends.has(i), MIN_SECTION_CHARS, bounded);
   if (item4.span) {
     const lo = L.findIndex((l) => l.start >= item4.span!.from);
     const hiIdx = L.findIndex((l) => l.start >= item4.span!.to);
@@ -392,6 +410,26 @@ function nameWords(s: string): string[] {
  * fragment; only a proper suffix is, which reads as a defined short name whose
  * definition was stripped.
  */
+// A DESCRIPTION NAMES ITS SUBJECT (#552 COWORK #38). ABBV's Item 1 opens with
+// product tables, so the first prose line was "In psoriatic disease …, Skyrizi
+// is administered as a quarterly subcutaneous injection…", shown as AbbVie's
+// description. Text that names neither the company (a distinctive word of its
+// name, or its initials) nor itself ("we", "our", "the Company") is about
+// something else, and no description beats a wrong one.
+const GENERIC_NAME_WORDS = new Set([
+  "inc", "corp", "corporation", "co", "company", "companies", "group", "holdings", "holding", "ltd", "limited", "plc",
+  "lp", "llc", "sa", "nv", "ag", "se", "trust", "the", "and", "of", "international", "global", "new",
+]);
+export function speaksOfTheCompany(text: string, companyName: string): boolean {
+  if (/\b(we|our|us|the company|the corporation|the partnership|the trust|the bank)\b/i.test(text)) return true;
+  const words = nameWords(companyName);
+  const hay = ` ${nameWords(text).join(" ")} `;
+  // Two letters count: PG&E's name words are "pg" and "e" (census, #552 COWORK #38).
+  if (words.some((w) => w.length >= 2 && !GENERIC_NAME_WORDS.has(w) && hay.includes(` ${w} `))) return true;
+  const initials = words.filter((w) => !GENERIC_NAME_WORDS.has(w) || w === "international").map((w) => w[0]).join("");
+  return initials.length >= 2 && hay.includes(` ${initials} `);
+}
+
 export function opensWithNameFragment(paragraph: string, companyName: string): boolean {
   const name = nameWords(companyName);
   const head = nameWords(paragraph.slice(0, 120));
@@ -601,6 +639,9 @@ export function cleanDescription(body: string, opts: CleanOptions = {}): Cleaned
   // Rule 4, on what would render.
   for (const [re, label] of REJECT) if (re.test(text)) return { ok: false, why: `rejected: ${label}` };
   if (text.length < DESCRIPTION_MIN_CHARS) return { ok: false, why: `too short after cleaning (${text.length} chars)` };
+  if (opts.companyName && !speaksOfTheCompany(text, opts.companyName)) {
+    return { ok: false, why: "rejected: the opening does not describe the company" };
+  }
   return { ok: true, text, joined };
 }
 
@@ -648,4 +689,27 @@ export function joinSplitWords(text: string, isWord: (w: string) => boolean): { 
     out.push(tokens[i]);
   }
   return { text: out.join(" "), joined };
+}
+
+// ── THE LONGER EXCERPT, FOR CLASSIFICATION ONLY (#552 COWORK #32/#37) ─────
+//
+// The display description above is the opening ~900 characters, and for many
+// filers that paragraph names no business at all ("We incorporated in
+// California in 1985…", QCOM) or is rejected outright for a cross-reference
+// (LRCX). A reviewed classification entry may cite a phrase from further into
+// the same Item 1 / Item 4.B section: this is that text, the section's opening
+// ITEM1_EXCERPT_MAX_CHARS, whitespace-normalised and cut at a sentence end.
+//
+// NEVER RENDERED. It is a citation source for data/sec/classification-manual.json,
+// under the same verbatim guard (the build fails on a phrase not in it). It is
+// not cleaned of cross-references because nothing is shown from it: a
+// cross-reference sentence cannot be a phrase anyone would cite.
+export const ITEM1_EXCERPT_MAX_CHARS = 6000;
+
+export function itemExcerpt(body: string): string {
+  const flat = String(body ?? "").replace(/\s+/g, " ").trim();
+  if (flat.length <= ITEM1_EXCERPT_MAX_CHARS) return flat;
+  const cut = flat.slice(0, ITEM1_EXCERPT_MAX_CHARS);
+  const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".” "));
+  return end > ITEM1_EXCERPT_MAX_CHARS / 2 ? cut.slice(0, end + 1) : cut;
 }

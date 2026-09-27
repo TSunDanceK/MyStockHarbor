@@ -1,5 +1,8 @@
 # News art v2 on the symbol-led surfaces: the industry layer (2026-09-22)
 
+> **2026-09-24 (#552 COWORK #41):** per-ticker vendor (FMP) sector and industry labels in this doc are
+> redacted as "[removed 2026-09-24]". The findings and counts are kept.
+
 > **2026-09-23 (#552, COWORK #4/#5):** FMP values in this doc are redacted as
 > "[removed 2026-09-23]", and so is text describing keeping FMP data after the key lapses. The findings are kept.
 
@@ -197,9 +200,8 @@ snapshot actually contains — a dead row looks exactly like a live one.
 `ecommerce`, `ev`, `phones`, `reit-datacenter`, `rockets-space`, `satellites`,
 `wind`.
 
-Some are surprising and none is a bug in the table: AMZN's label is "Specialty
-Retail", so `ecommerce` never fires; ASML's is "Semiconductors", so
-`chip-equipment` never fires; TSLA's is "Auto - Manufacturers", so `ev` never
+Some are surprising and none is a bug in the table: [removed 2026-09-24]'s label is [removed 2026-09-24], so `ecommerce` never fires; [removed 2026-09-24]'s is [removed 2026-09-24], so
+`chip-equipment` never fires; [removed 2026-09-24]'s is [removed 2026-09-24], so `ev` never
 fires. They remain reachable from layer 1 when an article says so. A megacap
 override list is deliberately not in this change.
 
@@ -234,11 +236,11 @@ One ordinary headline with no subject and no event type, so layer 3 decides:
 
 | symbol | industry | before | after |
 |---|---|---|---|
-| AAPL | Consumer Electronics | `sector-software` | `consumer-electronics` |
-| NVDA | Semiconductors | `sector-semiconductors` | `chips` |
-| KTOS | Aerospace & Defense | `sector-aerospace` | `aerospace-defence` |
-| JPM | Banks - Diversified | `sector-banks` | `banks` |
-| ONDS | Communication Equipment | `sector-software` | `telecom` |
+| [removed 2026-09-24] | [removed 2026-09-24] | `sector-software` | `consumer-electronics` |
+| [removed 2026-09-24] | [removed 2026-09-24] | `sector-semiconductors` | `chips` |
+| [removed 2026-09-24] | [removed 2026-09-24] | `sector-aerospace` | `aerospace-defence` |
+| [removed 2026-09-24] | [removed 2026-09-24] | `sector-banks` | `banks` |
+| [removed 2026-09-24] | [removed 2026-09-24] | `sector-software` | `telecom` |
 
 Unchanged, verified by calling the same rules: the compact rows (still the
 generated data card), an earnings item on the same page (still `event-earnings`),
@@ -577,8 +579,8 @@ can lose the word "bank". Before building:
 - **Twelve subjects unreachable from any industry label**: `ai-compute`,
   `chip-equipment`, `cruise-lines`, `crypto`, `cybersecurity`, `ecommerce`,
   `ev`, `phones`, `reit-datacenter`, `rockets-space`, `satellites`, `wind`.
-  AMZN's label is "Specialty Retail", ASML's is "Semiconductors", TSLA's is
-  "Auto - Manufacturers". All stay reachable from layer 1 when an article says
+  [removed 2026-09-24]'s label is [removed 2026-09-24], [removed 2026-09-24]'s is [removed 2026-09-24], [removed 2026-09-24]'s is
+  [removed 2026-09-24]. All stay reachable from layer 1 when an article says
   so; a megacap override list is deliberately not in this change.
 - **UMAC is outside the universe**, §7. Whether it belongs on the site is a
   universe question, not a news-art one.
