@@ -55,7 +55,7 @@ import {
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
 import { isDebtListing } from "./universe";
-import { isPriceExcluded } from "../../priceExcluded";
+import { isPriceExcluded } from "../../priceExcluded.mjs";
 
 /** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
 export const QUOTE_CADENCE_MINUTES = 60;

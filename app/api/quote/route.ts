@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   // Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62): a
   // crypto pair is "not available", answered before any bot check or FMP call.
   if (cryptoHidden(symbol)) {
-    return NextResponse.json({ symbol, error: "not available" }, { status: 404, headers: { "Cache-Control": "public, s-maxage=86400" } });
+    return NextResponse.json({ symbol, error: "not available" }, { status: 404 });
   }
 
   // Deep Analysis: fetchQuoteSnapshot() (lib/server/quoteData.ts) now sits

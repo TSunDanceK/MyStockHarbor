@@ -39,7 +39,7 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
-import { isPriceExcluded } from "../priceExcluded";
+import { isPriceExcluded } from "../priceExcluded.mjs";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
