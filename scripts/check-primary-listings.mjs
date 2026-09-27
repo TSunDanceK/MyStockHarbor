@@ -23,8 +23,12 @@ const entryOk = (cik, e) => {
   return Boolean(row && cover && e.source && e.class && e.primary)
     // the 12(b) row: class, then the primary's ticker
     && new RegExp(`^${escape(e.class)}\\s+${escape(e.primary)}\\b`).test(row)
-    // the cover count is a number OF THAT CLASS
-    && new RegExp(`^[\\d,]+\\s+${escape(e.class)}\\s+as of\\b`).test(cover)
+    // the cover count is a number OF THAT CLASS: "N <class> as of <date>" (a
+    // 20-F), or "As of <date>, there were N shares of … <class>" (a 10-K, whose
+    // cover names the class without its par value: matched case-blind on the
+    // class up to its first comma, and it must END the quote)
+    && (new RegExp(`^[\\d,]+\\s+${escape(e.class)}\\s+as of\\b`).test(cover)
+      || new RegExp(`^As of [A-Za-z]+ \\d{1,2}, \\d{4}, there were [\\d,]+ shares of .*\\b${escape(e.class.split(",")[0])}$`, "i").test(cover))
     // the primary and every debt ticker belong to this CIK
     && [e.primary, ...Object.keys(e.nonEquity ?? {})].every((t) => !REG[t] || String(REG[t].cik).padStart(10, "0") === cik)
     // no ticker is both the primary and debt
@@ -38,6 +42,14 @@ check("MUTATION: a cover count of another class (preferred units) → caught",
   !entryOk("0001406234", { ...bip, evidence: [bip.evidence[0], "8,000,000 Class A Preferred Limited Partnership Units, Series 13 as of December 31, 2025"] }));
 check("MUTATION: the primary set to a note's ticker (BIPI) → caught",
   !entryOk("0001406234", { ...bip, primary: "BIPI" }));
+
+const cmcsa = MAP["0001166691"];
+check("CMCSA: 'Class A Common Stock, $0.01 par value CMCSA …' and 'As of January 15, 2026, there were 3,588,401,619 shares of … Class A common stock'",
+  cmcsa?.primary === "CMCSA" && entryOk("0001166691", cmcsa));
+check("MUTATION: CMCSA's cover count swapped for the Class B count → caught",
+  !entryOk("0001166691", { ...cmcsa, evidence: [cmcsa.evidence[0], "As of January 15, 2026, there were 9,444,375 shares of Comcast Corporation Class B common stock"] }));
+check("MUTATION: CCZ (the exchangeable debentures) made the primary → caught",
+  !entryOk("0001166691", { ...cmcsa, primary: "CCZ" }));
 
 console.log("\n2. a debt ticker is refused, not valued");
 // THE SHIPPED MODULE, its `@/data` JSON import inlined (bare Node has no alias).
@@ -71,6 +83,25 @@ const cc = P.citedCoverFor("BIP");
 check("BIP: 460,488,788 as of 2025-12-31, parsed from the evidence line, with its accession",
   cc?.val === 460488788 && cc.asOf === "2025-12-31" && cc.source === "0001406234-26-000002" && cc.quote === bip.evidence[1], JSON.stringify(cc));
 check("a debt ticker gets no cited cover", P.citedCoverFor("BIPI") === null && P.citedCoverFor("BIPH") === null);
+const ccz = P.nonEquityListingOf("CCZ"), cc2 = P.citedCoverFor("CMCSA");
+check("CCZ resolves to '2.0% Exchangeable Subordinated Debentures due 2029' and CMCSA (#552 COWORK #61)",
+  ccz?.cls === "2.0% Exchangeable Subordinated Debentures due 2029" && ccz?.primary === "CMCSA" && P.nonEquityListingOf("CMCSA") === null, JSON.stringify(ccz));
+check("CMCSA: the 10-K cover wording parses to 3,588,401,619 as of 2026-01-15, with its accession",
+  cc2?.val === 3588401619 && cc2.asOf === "2026-01-15" && cc2.source === "0001628280-26-004994", JSON.stringify(cc2));
+check("CCZ gets no cited cover", P.citedCoverFor("CCZ") === null);
+const B_ANCHOR = "const b = line && !a ?";
+if (PSRC.split(B_ANCHOR).length !== 2) throw new Error("10-K cover-wording mutation anchor must match once");
+const ptmp2 = `lib/server/.check-pl-b-${process.pid}.ts`;
+fs.writeFileSync(ptmp2, PSRC.replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`).replace(B_ANCHOR, "const b = false && line && !a ?"));
+let PB;
+try { PB = await import(`../${ptmp2}`); } finally { fs.rmSync(ptmp2, { force: true }); }
+check("MUTATION: the 10-K cover wording not parsed → CMCSA has no cited count (caught), BIP unchanged",
+  PB.citedCoverFor("CMCSA") === null && PB.citedCoverFor("BIP")?.val === 460488788);
+const cczSet = { ...set, symbol: "CCZ", cover: { ...set.cover, val: 3588401619 } };
+const cczIn = V.valuationInputs(cczSet, "2026-09-27", { annualForm: "10-K", nonEquity: ccz });
+check("CCZ: cap and P/E refused as a debt security, naming the debentures and CMCSA",
+  V.marketCap(cczIn, 30)?.why === "ticker-is-a-debt-security" && V.peRatio(cczIn, 30)?.why === "ticker-is-a-debt-security"
+  && /Exchangeable Subordinated Debentures.*CMCSA/.test(V.marketCap(cczIn, 30)?.detail ?? ""));
 const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries;
 check("BIP is in the ADS map as directly listed (ordinary, 1), cited to the same 20-F",
   ADS.BIP?.kind === "ordinary" && ADS.BIP.ordinaryPerAds === 1 && ADS.BIP.source === bip.source && bip.evidence[0].startsWith(ADS.BIP.evidence));
