@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
+import { POSITIVE_LAST_EARNINGS_ENABLED, POSITIVE_LAST_EARNINGS_REDIRECT } from "@/lib/positiveLastEarnings";
 import PickerResultPage, {
   type PickerResultConfig,
 } from "@/app/components/PickerResultPage";
@@ -61,6 +63,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://www.mystockharbor.com/stocks-with-positive-last-earnings",
   },
+  // Hidden 2026-09-27 (#553 COWORK #64): noindex while the flag is off, as well
+  // as the 301 in next.config.ts, so a render that slips past it is not indexed.
+  ...(POSITIVE_LAST_EARNINGS_ENABLED ? {} : { robots: { index: false, follow: true } }),
   openGraph: {
     title: "Stocks With Positive Last Earnings | MyStockHarbor",
     description:
@@ -78,5 +83,8 @@ export const metadata: Metadata = {
 };
 
 export default function StocksWithPositiveLastEarningsPage() {
+  // Hidden 2026-09-27 (#553 COWORK #64): the same 301 as next.config.ts, here
+  // too so the page itself never renders while the flag is off.
+  if (!POSITIVE_LAST_EARNINGS_ENABLED) permanentRedirect(POSITIVE_LAST_EARNINGS_REDIRECT);
   return <PickerResultPage config={config} />;
 }
