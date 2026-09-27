@@ -265,6 +265,10 @@ const TASKS = {
   // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
   // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
   "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
@@ -670,6 +674,8 @@ const TASKS = {
   // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
   // traded unit and every refusal, from the stored sets. No price. 1 MGET.
   "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Pages the layout pass touches (#552 COWORK #40/#49). Reads only; ~51 MGETs.
+  "write-layout-pass-census": { script: "scripts/layout-pass-census.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
