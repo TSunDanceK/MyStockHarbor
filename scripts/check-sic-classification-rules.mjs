@@ -154,7 +154,9 @@ console.log("\n8. hand-reviewed entries (#552 COWORK #29): cited from the filer'
   const Mv = await load(SRC.replace("if (m.sector != null && m.sector !== sicSector) throw", "if (false) throw"));
   check("MUTATION: the sector guard removed → a sector moves with no quote", !throws(() => nullForm(Mv, { industry: null, review: "x", sector: "Utilities" })));
   check("a cited manual entry is marked reviewed too (it outranks a cached vendor label)", ok?.reviewed === true);
-  check("NGG is committed in the sector-only form", manual.NGG?.industry === null && /no Item headings/.test(manual.NGG?.review ?? ""));
+  // NGG WAS DROPPED (#552 COWORK #60): "Energy" read less accurately than the
+  // vendor's Utilities. The form stays; no committed row uses it yet.
+  check("no committed entry moves NGG off its vendor label before a Utilities quote exists", !("NGG" in manual));
 }
 
 console.log("\n6. the committed file is current");
