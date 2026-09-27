@@ -262,6 +262,9 @@ const TASKS = {
   // Read-only: the shipped fetch + extraction on named symbols, printing the
   // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
   "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
+  // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
+  "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
   "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
