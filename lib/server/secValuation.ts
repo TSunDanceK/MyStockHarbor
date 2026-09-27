@@ -92,7 +92,7 @@ export const REFUSAL_WORDS: Record<ValuationRefusal, string> = {
   "revenue-line-incomplete":
     "not meaningful — this filer's revenue line is incomplete in its tagged data",
   "ticker-is-a-debt-security":
-    "this ticker is a debt security of the issuer, not its equity, so equity multiples do not apply",
+    "this ticker is not the issuer's common stock (it is notes, debentures or units), so equity multiples do not apply",
   "no-balance-sheet-equity":
     "the latest balance sheet on file states no shareholders' equity",
   // NEVER "no shareholders' equity" when an equity figure IS on file (#552 COWORK #54).
@@ -225,7 +225,7 @@ export type ValuationInputs = {
   staleEpsYear?: boolean;
   /** Every refusal that applies, in the order they were decided. */
   refusals: ValuationRefusal[];
-  /** Set when the ticker is a debt security on a shared CIK (secPrimaryListing). */
+  /** Set when the ticker is notes, debentures or units on a shared CIK (secPrimaryListing). */
   debtListing?: { cls: string; primary: string };
 };
 
@@ -640,7 +640,7 @@ export const PE_MIN_EPS = 0.05;
 /** A debt ticker's refusal, naming its class and the equity's listing (#552 COWORK #48). */
 export function debtRefusal(d: { cls: string; primary: string }): ValuationFigure {
   return { ok: false, why: "ticker-is-a-debt-security",
-    detail: `this ticker is the issuer's ${d.cls}, a debt security; its equity trades as ${d.primary}, so equity multiples do not apply here` };
+    detail: `this ticker is the issuer's ${d.cls}, not its common stock; the common stock trades as ${d.primary}, so equity multiples do not apply here` };
 }
 
 /** P/E is withheld when its EPS period ended more than this long before today. */
