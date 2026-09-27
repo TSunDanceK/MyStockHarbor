@@ -937,7 +937,7 @@ check("exchange is reconciled on every run with a map, not gated on a refresh",
 check("the exchange histogram reaches the job output",
   /exchangeHistogram: exchanges\?\.histogram/.test(routeCode));
 check("the Redis budget is stated as three, not still claiming two",
-  /redisCommands: \(dryRun \|\| inspectionOnly \? 2 : 3\) \+ stored\.commands/.test(routeCode), "manifest GET + tickers GET + manifest SET, plus the stored-set SCAN");
+  /redisCommands: \(dryRun \|\| inspectionOnly \? 2 : 3\) \+ stored\.commands \+ marker\.commands/.test(routeCode), "manifest GET + tickers GET + manifest SET, plus the index SMEMBERS and the backfill-marker EXISTS");
 
 // ── 12. The manifest is BOUNDED — the pre-merge question ───────────────────
 //
@@ -1389,8 +1389,24 @@ console.log("\n17c. PRESET_UNIVERSE is guaranteed a manifest entry");
     check("the one-time backfill SCANs to cursor 0 with NO call cap, SADDs, and is write-gated", fillOk(fillFn));
     check("...and CATCHES a call cap (a partial backfill that looks finished)",
       !fillOk(fillFn.replace('} while (String(cursor) !== "0");', '} while (String(cursor) !== "0" && commands < 50);')));
-    check("the backfill runs only when the index read came back empty, and never on a dry or inspection run",
-      /!stored\.failed && stored\.symbols\.length === 0 && !dryRun && !inspectionOnly \? await backfillFactSetIndex\(\)/.test(routeCode));
+    // GATED ON A MARKER, NOT ON EMPTINESS (#552 COWORK #60): a write between
+    // deploy and the first daily index SADDs one member, and an emptiness gate
+    // would then never backfill the other ~960.
+    check("the route decides the backfill from the marker (shouldBackfillFactSetIndex), not from the index's size",
+      /shouldBackfillFactSetIndex\(\{ marker: marker\.done, indexSize: stored\.symbols\.length, dryRun, inspectionOnly \}\)\s*\?\s*await backfillFactSetIndex\(\)/.test(routeCode));
+    const decideSrc = grabFunction(MANIFEST_SRC, "shouldBackfillFactSetIndex");
+    const D = await lift(`${decideSrc}\nexport { shouldBackfillFactSetIndex };`);
+    const base = { marker: false, indexSize: 1, dryRun: false, inspectionOnly: false };
+    check("an index PRE-SEEDED with one member still backfills while the marker is absent",
+      D.shouldBackfillFactSetIndex(base) === true);
+    check("...and never once the marker is set, on a dry or inspection run, or when the marker read failed",
+      !D.shouldBackfillFactSetIndex({ ...base, marker: true }) && !D.shouldBackfillFactSetIndex({ ...base, dryRun: true }) &&
+        !D.shouldBackfillFactSetIndex({ ...base, inspectionOnly: true }) && !D.shouldBackfillFactSetIndex({ ...base, marker: null }));
+    const Dm = await lift(`${decideSrc.replace("return s.marker === false && !s.dryRun && !s.inspectionOnly;", "return s.indexSize === 0 && !s.dryRun && !s.inspectionOnly;")}\nexport { shouldBackfillFactSetIndex };`);
+    check("MUTATION: gating on an empty index → the pre-seeded index never backfills (caught)",
+      Dm.shouldBackfillFactSetIndex(base) === false);
+    const markerSet = (f) => /redis\.sadd\(SEC_FACTS_INDEX_KEY[\s\S]*?\}\s*[\s\S]{0,200}redis\.set\(SEC_FACTS_INDEX_BACKFILLED_KEY/.test(f);
+    check("the marker is SET only after every SADD (a backfill that throws runs again tomorrow)", markerSet(fillFn));
   }
   // ONE ENTRY PER SECURITY ACROSS DOT/DASH (#552 COWORK #59, the #623 class):
   // the lists spell BRK.B, a stored set may be indexed as BRK-B.

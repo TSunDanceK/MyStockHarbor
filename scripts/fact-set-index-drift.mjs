@@ -7,7 +7,7 @@
 // duplicates (one security, two entries). Tickers and counts only.
 // Read-only (read-only token). Weekly or on demand.
 //   relay task: write-fact-set-index-drift
-//   Redis: 1 DBSIZE + 1 SMEMBERS + 1 GET + ceil(DBSIZE / 1000) SCANs.
+//   Redis: 1 DBSIZE + 1 SMEMBERS + 2 GET + the SCAN pages.
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { toDashed, toDotted } from "../lib/symbolSpellings.mjs";
@@ -15,12 +15,13 @@ import { toDashed, toDotted } from "../lib/symbolSpellings.mjs";
 const redis = Redis.fromEnv();
 const src = fs.readFileSync("lib/server/secManifest.ts", "utf8");
 const pick = (name) => (src.match(new RegExp(`${name} = "([^"]+)"`)) ?? [])[1];
-const FACTS = pick("SEC_FACTS_PREFIX"), INDEX = pick("SEC_FACTS_INDEX_KEY"), MANIFEST = pick("SEC_MANIFEST_KEY");
-if (!FACTS || !INDEX || !MANIFEST) { console.error("FATAL: key names not found"); process.exit(2); }
+const FACTS = pick("SEC_FACTS_PREFIX"), INDEX = pick("SEC_FACTS_INDEX_KEY"), MANIFEST = pick("SEC_MANIFEST_KEY"), MARKER = pick("SEC_FACTS_INDEX_BACKFILLED_KEY");
+if (!FACTS || !INDEX || !MANIFEST || !MARKER) { console.error("FATAL: key names not found"); process.exit(2); }
 
 const dbsize = await redis.dbsize();
 const indexed = new Set((await redis.smembers(INDEX)).map(String));
 const manifest = await redis.get(MANIFEST);
+const marker = await redis.get(MARKER);
 let cursor = "0", scans = 0;
 const stored = new Set();
 do {
@@ -41,5 +42,6 @@ console.log(`stored but NOT indexed ${notIndexed.length}${notIndexed.length ? `:
 console.log(`indexed but NOT stored ${notStored.length}${notStored.length ? `: ${notStored.join(" ")}` : ""}`);
 console.log(`stored with no manifest entry (any dot/dash spelling) ${noEntry.length}${noEntry.length ? `: ${noEntry.join(" ")}` : ""}`);
 console.log(`manifest dot/dash duplicates ${dupes.length}${dupes.length ? `: ${dupes.map((d) => `${toDotted(d)}/${d}`).join(" ")}` : ""}`);
+console.log(`backfill marker: ${marker ? `set ${marker}` : "absent (the next daily index backfills)"}`);
 console.log(`DRIFT ${notIndexed.length + notStored.length === 0 ? "none" : notIndexed.length + notStored.length}`);
-console.log(`Redis commands: ${3 + scans}`);
+console.log(`Redis commands: ${4 + scans}`);
