@@ -15,7 +15,7 @@
 //
 //   relay task: write-pickers-pe-census
 //   Redis: 1 GET (universe) + 1 HMGET (pool) + fundamentals bulk + stock-data
-//   bulk + 1 HMGET (SEC rows) + 700 GET (fact sets) = ~710, once.
+//   bulk + 1 HMGET (SEC rows) + 700 GET (fact sets) + 1 GET (job run) = ~711, once.
 import "./lib/register-ts-here.mjs";
 import { Redis } from "@upstash/redis";
 
@@ -36,7 +36,9 @@ const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
 // AND the cited ADS ratio. Without the ratio every 20-F filer refused here while
 // #587 ships a per-ADS P/E for it, so the census undercounted the presets.
 const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
-const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: lookupSpellingIn(ADS, s)?.value ?? null });
+const { loadNonEquityListingOf } = await import("./lib/non-equity-listing.mjs");
+const nonEquityListingOf = await loadNonEquityListingOf();
+const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s)?.value ?? null), nonEquity: nonEquityListingOf(s) });
 const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
 const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
@@ -196,6 +198,40 @@ for (const [name, fn] of Object.entries(presets)) {
   const joined = then.filter((s) => !now.includes(s));
   console.log(`${name}: ${now.length} -> ${then.length}; leave ${left.length}: ${left.join(" ")}; join ${joined.length}: ${joined.join(" ")}`);
 }
+// ── PRODUCTION AS THE PAGE LAYERS IT (#553 COWORK #66) ────────────────────
+// What the live page shows from the STORED production rows: a row the daily
+// job wrote with `eps` replaces P/E, EPS and Payout (null = "–"); a row from
+// before #587 leaves the stored FMP figure, exactly as PickerResultPage does.
+{
+  const lastRun = await redis.get("msh:job-run:v1:warm-pickers-sec").catch(() => null);
+  const run = typeof lastRun === "string" ? (() => { try { return JSON.parse(lastRun); } catch { return null; } })() : lastRun;
+  console.log("\n== Production (stored rows, as the page layers them)");
+  console.log(`warm-pickers-sec last run: ${run ? JSON.stringify({ at: new Date(run.at).toISOString(), ok: run.ok, ...run.summary }) : "no record"}`);
+  let withEps = 0, legacy = 0, payoutShown = 0, payoutWithheld = 0, payoutNone = 0;
+  const prodPe = new Map();
+  for (const s of universe) {
+    const row = secRows.get(s);
+    const price = num(pool.get(s)?.price);
+    const fmpPe = num(pool.get(s)?.pe) ?? num(fund.get(s)?.peRatio);
+    const e = row ? P.applySecEarnings(row, price) : null;
+    if (!row || !e) { if (row) legacy++; prodPe.set(s, fmpPe); continue; }
+    withEps++;
+    prodPe.set(s, e.peRatio);
+    if (e.payoutRatio !== null) payoutShown++;
+    else if (e.payoutBasis === P.PAYOUT_PERIODS_DIFFER) payoutWithheld++;
+    else payoutNone++;
+  }
+  console.log(`rows with the #587 fields ${withEps}; legacy rows (FMP figures left) ${legacy}; no row ${universe.length - withEps - legacy}`);
+  console.log(`payout: shown with a period tooltip ${payoutShown}; withheld "–" with the periods-differ tooltip ${payoutWithheld}; none ${payoutNone}`);
+  const kept = rows.filter((r) => !r.excluded);
+  const lowPe = kept.filter((r) => { const pe = prodPe.get(r.s); return pe !== null && pe !== undefined && pe <= 15; });
+  console.log(`low-pe (P/E <= 15) on production: ${lowPe.length}`);
+  for (const s of ["NMR", "NWG", "KSPI", "MFG"]) {
+    const pe = prodPe.get(s);
+    console.log(`  ${s}: P/E ${pe === null || pe === undefined ? "–" : pe.toFixed(2)}${secRows.get(s) && "eps" in secRows.get(s) ? "" : " (legacy row)"}`);
+  }
+}
+
 console.log("\n== Refused Market Caps, per reason (for A, COWORK #19)");
 console.log("REFUSED-CAPS-JSON " + JSON.stringify(ex.capRefused));
 console.log("REFUSED-PE-JSON " + JSON.stringify(ex.secRefused));
