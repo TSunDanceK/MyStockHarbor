@@ -39,7 +39,7 @@ const EXCH = /(?:The\s+)?(?:New York Stock Exchange(?:\s*\(NYSE\))?(?:\s+(?:LLC|
 const NONCOMMON = /\bnotes?\b|debentures?|\bbonds?\b|preferred|preference|warrants?\b|\brights?\b|corporate units|equity units|tangible equity units|purchase contracts?|capital securities|trust securities|subordinated|depositary shares,?\s+each representing (?:a|one)[-\s]\S+(?:th|ths)? (?:interest|of a share)|\bunits?\b(?!\s+representing)/i;
 const COMMONISH = /common|ordinary|class [a-c] shares?|american depositary shares?|limited partnership units|common units|units representing|shares of beneficial interest|limited partner interests|capital stock|subordinate voting shares/i;
 const tally = { ciks: 0, noAnnual: 0, no12b: 0, common: 0, nonCommon: 0, notOnRow: 0, error: 0 };
-const out = [];
+const out = [], rowsOut = [];
 for (const cik of ciks) {
   if (Date.now() - started > BUDGET_MS) break;
   tally.ciks++;
@@ -54,11 +54,15 @@ for (const cik of ciks) {
     if (at < 0) { tally.no12b++; console.log(`NO12B ${g.tickers.map((t) => t.tk).join(",")} ${r.form[i]} ${r.accessionNumber[i]}`); continue; }
     const endG = flat.slice(at).search(/Section\s*12\s*\(\s*g\s*\)/i);
     const sec = flat.slice(at, at + (endG > 0 ? Math.min(endG, 6000) : 4000));
+    const verdicts = [];
     for (const { tk } of g.tickers) {
       const spells = [...new Set([tk, ...symbolSpellings(tk), tk.replace(/-/g, " "), tk.replace(/-/g, "/")])];
+      // The ticker as a whole symbol, not the stem of a unit/warrant/right
+      // symbol ("KRSP U", "ALUB.U", "XYZ WS"): those suffixes are skipped.
       let hit = null;
       for (const s of spells) {
-        const m = new RegExp(`(?<![A-Za-z0-9.])${s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![A-Za-z0-9])`).exec(sec);
+        const re = new RegExp(`(?<![A-Za-z0-9.])${s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![A-Za-z0-9])(?![.\\-/ ](?:U|UN|WS|W|WT|R|RT)\\b)`, "g");
+        const m = re.exec(sec);
         if (m) { hit = m; break; }
       }
       if (!hit) { tally.notOnRow++; continue; }
@@ -70,17 +74,29 @@ for (const cik of ciks) {
       const hdr = before.search(/Name of each exchange on which registered/i);
       if (hdr >= 0 && from < hdr) from = hdr + "Name of each exchange on which registered".length;
       const cls = before.slice(from).replace(/^[\s:;)(]+/, "").trim().slice(-200);
-      const non = NONCOMMON.test(cls) && !/^(?:class [a-c] )?(?:common|ordinary)/i.test(cls);
-      if (non) {
+      // An ADS of shares/units (not of preferred) is the common listing (SAN, KOF).
+      const adsOfCommon = /american depositary (?:shares?|receipts?)/i.test(cls) && !/preferred|preference/i.test(cls);
+      const non = NONCOMMON.test(cls) && !/^(?:class [a-c] )?(?:common|ordinary)/i.test(cls) && !adsOfCommon;
+      // The CIK's FIRST company-tickers row is its main listing (RIO, SAN, BBD):
+      // never marked non-common here, only reported for a person.
+      const first = g.tickers[0].tk === tk;
+      verdicts.push({ tk, cls, non: non && !first, flagFirst: non && first });
+    }
+    const commons = verdicts.filter((v) => !v.non).map((v) => v.tk);
+    for (const v of verdicts) {
+      if (v.non) {
         tally.nonCommon++;
-        const commons = g.tickers.map((t) => t.tk).filter((t) => t !== tk);
-        out.push(`NONCOMMON ${tk.padEnd(8)} | ${cls} | cik ${cik} ${g.name} | others ${commons.join(",")} | ${r.form[i]} ${r.accessionNumber[i]} ${r.filingDate[i]}${mapped.has(tk) ? " | ALREADY MAPPED" : ""}`);
+        out.push(`NONCOMMON ${v.tk.padEnd(8)} | ${v.cls} | cik ${cik} ${g.name} | common ${commons.join(",") || "-"} | ${r.form[i]} ${r.accessionNumber[i]} ${r.filingDate[i]}${mapped.has(v.tk) ? " | ALREADY MAPPED" : ""}`);
+        rowsOut.push({ ticker: v.tk, cls: v.cls, cik: String(cik).padStart(10, "0"), common: commons, form: r.form[i], source: r.accessionNumber[i], filed: r.filingDate[i], mapped: mapped.has(v.tk) });
       } else {
         tally.common++;
-        if (!COMMONISH.test(cls)) out.push(`UNCLEAR   ${tk.padEnd(8)} | ${cls} | cik ${cik} ${g.name}`);
+        if (v.flagFirst) out.push(`FIRSTROW  ${v.tk.padEnd(8)} | ${v.cls} | cik ${cik} ${g.name}`);
+        else if (!COMMONISH.test(v.cls)) out.push(`UNCLEAR   ${v.tk.padEnd(8)} | ${v.cls} | cik ${cik} ${g.name}`);
       }
     }
   } catch (e) { tally.error++; console.log(`ERROR ${g.tickers.map((t) => t.tk).join(",")} ${String(e?.message ?? e).slice(0, 60)}`); }
 }
 for (const l of out.sort()) console.log(l);
+// MACHINE-READABLE, one per line, for building the cited data file.
+for (const r of rowsOut) console.log(`ROW ${JSON.stringify(r)}`);
 console.log(`\nshard ${K}/${N} ${JSON.stringify(tally)} | ${Math.round((Date.now() - started) / 1000)}s`);
