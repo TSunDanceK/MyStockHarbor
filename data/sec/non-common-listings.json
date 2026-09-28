@@ -1,0 +1,446 @@
+{
+ "_comment": "Non-common listings on a common filer's CIK (#552 COWORK #64), from the shared-CIK census (scripts/shared-cik-census.mjs on the probes branch): each ticker's class is quoted verbatim from its filer's latest 10-K/20-F Section 12(b) table, with that filing's accession. `primary` is the common listing on the same CIK. Only tickers in data/sec/registrants.json, each reviewed; common listings the parser misread (BIP, BRK-A) and issuers whose only US listings are preferred (OAK, SEAL, BPY preferred units, ATHS) are left out. Hand-cited entries in primary-listings.json take precedence. Read by lib/server/secPrimaryListing.ts; checked by scripts/check-non-common-listings.mjs.",
+ "asOf": "2026-09-28",
+ "entries": {
+  "ABXL": {
+   "cls": "9.875% Fixed Rate Senior Notes due 2028",
+   "primary": "ABX",
+   "cik": "0001814287",
+   "form": "10-K",
+   "source": "0001628280-26-017775",
+   "filed": "2026-03-13"
+  },
+  "AEFC": {
+   "cls": "5.100% Subordinated Notes due 2049 issued by Aegon Funding Company LLC",
+   "primary": "AEG",
+   "cik": "0000769218",
+   "form": "20-F",
+   "source": "0001193125-26-124987",
+   "filed": "2026-03-26"
+  },
+  "AFGB": {
+   "cls": "5.875% Subordinated Debentures due March 30, 2059",
+   "primary": "AFG",
+   "cik": "0001042046",
+   "form": "10-K",
+   "source": "0001042046-26-000010",
+   "filed": "2026-02-25"
+  },
+  "AFGC": {
+   "cls": "5.125% Subordinated Debentures due December 15, 2059",
+   "primary": "AFG",
+   "cik": "0001042046",
+   "form": "10-K",
+   "source": "0001042046-26-000010",
+   "filed": "2026-02-25"
+  },
+  "AFGD": {
+   "cls": "5.625% Subordinated Debentures due June 1, 2060",
+   "primary": "AFG",
+   "cik": "0001042046",
+   "form": "10-K",
+   "source": "0001042046-26-000010",
+   "filed": "2026-02-25"
+  },
+  "AFGE": {
+   "cls": "4.50% Subordinated Debentures due September 15, 2060",
+   "primary": "AFG",
+   "cik": "0001042046",
+   "form": "10-K",
+   "source": "0001042046-26-000010",
+   "filed": "2026-02-25"
+  },
+  "AIZN": {
+   "cls": "5.25% Subordinated Notes due 2061",
+   "primary": "AIZ",
+   "cik": "0001267238",
+   "form": "10-K",
+   "source": "0001267238-26-000010",
+   "filed": "2026-02-19"
+  },
+  "APOS": {
+   "cls": "7.625% Fixed-Rate Resettable Junior Subordinated Notes due 2053",
+   "primary": "APO",
+   "cik": "0001858681",
+   "form": "10-K",
+   "source": "0001858681-26-000013",
+   "filed": "2026-02-25"
+  },
+  "AQNB": {
+   "cls": "6.20% Fixed-to-Floating Subordinated Notes - Series 2019-A due July 1, 2079",
+   "primary": "AQN",
+   "cik": "0001174169",
+   "form": "40-F",
+   "source": "0001174169-26-000015",
+   "filed": "2026-03-06"
+  },
+  "ASBA": {
+   "cls": "6.625% Fixed-Rate Reset Subordinated Notes due 2033",
+   "primary": "ASB",
+   "cik": "0000007789",
+   "form": "10-K",
+   "source": "0000007789-26-000071",
+   "filed": "2026-02-12"
+  },
+  "BEPH": {
+   "cls": "4.625% Perpetual Subordinated Notes",
+   "primary": "BEP",
+   "cik": "0001533232",
+   "form": "20-F",
+   "source": "0001533232-26-000011",
+   "filed": "2026-02-27"
+  },
+  "BEPI": {
+   "cls": "4.875% Perpetual Subordinated Notes",
+   "primary": "BEP",
+   "cik": "0001533232",
+   "form": "20-F",
+   "source": "0001533232-26-000011",
+   "filed": "2026-02-27"
+  },
+  "BNH": {
+   "cls": "4.625% Subordinated Notes due October 16, 2080",
+   "primary": "BN",
+   "cik": "0001001085",
+   "form": "40-F",
+   "source": "0001001085-26-000006",
+   "filed": "2026-03-18"
+  },
+  "BNJ": {
+   "cls": "4.50% Perpetual Subordinated Notes",
+   "primary": "BN",
+   "cik": "0001001085",
+   "form": "40-F",
+   "source": "0001001085-26-000006",
+   "filed": "2026-03-18"
+  },
+  "CCXIW": {
+   "cls": "Warrants, each whole Warrant exercisable for one Class A Ordinary Share at an exercise price of $11.50 per share",
+   "primary": "CCXI",
+   "cik": "0002074973",
+   "form": "10-K",
+   "source": "0001213900-26-034863",
+   "filed": "2026-03-26"
+  },
+  "CGABL": {
+   "cls": "4.625% Subordinated Notes due 2061 of Carlyle Finance L.L.C.",
+   "primary": "CG",
+   "cik": "0001527166",
+   "form": "10-K",
+   "source": "0001527166-26-000009",
+   "filed": "2026-02-27"
+  },
+  "CIMP": {
+   "cls": "8.875% Senior Notes due 2030",
+   "primary": "CIM",
+   "cik": "0001409493",
+   "form": "10-K",
+   "source": "0001409493-26-000017",
+   "filed": "2026-02-18"
+  },
+  "CMSA": {
+   "cls": "CMS Energy Corporation 5.625% Junior Subordinated Notes due 2078",
+   "primary": "CMS",
+   "cik": "0000811156",
+   "form": "10-K",
+   "source": "0000811156-26-000004",
+   "filed": "2026-02-10"
+  },
+  "CMSC": {
+   "cls": "CMS Energy Corporation 5.875% Junior Subordinated Notes due 2078",
+   "primary": "CMS",
+   "cik": "0000811156",
+   "form": "10-K",
+   "source": "0000811156-26-000004",
+   "filed": "2026-02-10"
+  },
+  "CMSD": {
+   "cls": "CMS Energy Corporation 5.875% Junior Subordinated Notes due 2079",
+   "primary": "CMS",
+   "cik": "0000811156",
+   "form": "10-K",
+   "source": "0000811156-26-000004",
+   "filed": "2026-02-10"
+  },
+  "DTB": {
+   "cls": "2020 Series G 4.375% Junior Subordinated Debentures due 2080",
+   "primary": "DTE",
+   "cik": "0000936340",
+   "form": "10-K",
+   "source": "0000936340-26-000054",
+   "filed": "2026-02-17"
+  },
+  "DTG": {
+   "cls": "DTE Energy 2021 Series E 4.375% Junior Subordinated Debentures due 2081",
+   "primary": "DTE",
+   "cik": "0000936340",
+   "form": "10-K",
+   "source": "0000936340-26-000054",
+   "filed": "2026-02-17"
+  },
+  "DTW": {
+   "cls": "DTE Energy 2017 Series E 5.25% Junior Subordinated Debentures due 2077",
+   "primary": "DTE",
+   "cik": "0000936340",
+   "form": "10-K",
+   "source": "0000936340-26-000054",
+   "filed": "2026-02-17"
+  },
+  "DUKB": {
+   "cls": "Duke Energy 5.625% Junior Subordinated Debentures due",
+   "primary": "DUK",
+   "cik": "0001326160",
+   "form": "10-K",
+   "source": "0001326160-26-000014",
+   "filed": "2026-02-26"
+  },
+  "FCNCN": {
+   "cls": "Depository Shares, Each Representing 1/40th Interest in a Share of 6.625% Non-Cumulative Perpetual Preferred Stock, Series E",
+   "primary": "FCNCA",
+   "cik": "0000798941",
+   "form": "10-K",
+   "source": "0000798941-26-000015",
+   "filed": "2026-02-24"
+  },
+  "FGN": {
+   "cls": "7.950% Senior Notes due 2053",
+   "primary": "FG",
+   "cik": "0001934850",
+   "form": "10-K",
+   "source": "0001934850-26-000026",
+   "filed": "2026-02-26"
+  },
+  "HCXY": {
+   "cls": "6.25% Notes due 2033",
+   "primary": "HTGC",
+   "cik": "0001280784",
+   "form": "10-K",
+   "source": "0001280784-26-000009",
+   "filed": "2026-02-12"
+  },
+  "JSM": {
+   "cls": "6% Senior Notes due December 15, 2043",
+   "primary": "NAVI",
+   "cik": "0001593538",
+   "form": "10-K",
+   "source": "0001193125-26-076753",
+   "filed": "2026-02-26"
+  },
+  "KKRS": {
+   "cls": "4.625% Subordinated Notes due 2061 of KKR Group Finance Co. IX LLC",
+   "primary": "KKR",
+   "cik": "0001404912",
+   "form": "10-K",
+   "source": "0001404912-26-000007",
+   "filed": "2026-02-27"
+  },
+  "KMPB": {
+   "cls": "5.875% Fixed-Rate Reset Junior Subordinated Debentures due 2062",
+   "primary": "KMPR",
+   "cik": "0000860748",
+   "form": "10-K",
+   "source": "0000860748-26-000014",
+   "filed": "2026-02-11"
+  },
+  "MGR": {
+   "cls": "5.875% Junior Subordinated Notes due 2059",
+   "primary": "AMG",
+   "cik": "0001004434",
+   "form": "10-K",
+   "source": "0001628280-26-008665",
+   "filed": "2026-02-17"
+  },
+  "MGRB": {
+   "cls": "4.750% Junior Subordinated Notes due 2060",
+   "primary": "AMG",
+   "cik": "0001004434",
+   "form": "10-K",
+   "source": "0001628280-26-008665",
+   "filed": "2026-02-17"
+  },
+  "MGRD": {
+   "cls": "4.200% Junior Subordinated Notes due 2061",
+   "primary": "AMG",
+   "cik": "0001004434",
+   "form": "10-K",
+   "source": "0001628280-26-008665",
+   "filed": "2026-02-17"
+  },
+  "MGRE": {
+   "cls": "6.750% Junior Subordinated Notes due 2064",
+   "primary": "AMG",
+   "cik": "0001004434",
+   "form": "10-K",
+   "source": "0001628280-26-008665",
+   "filed": "2026-02-17"
+  },
+  "MLCIL": {
+   "cls": "8.00% Senior Notes Due 2031",
+   "primary": "MLCI",
+   "cik": "0002051820",
+   "form": "10-K",
+   "source": "0002051820-26-000039",
+   "filed": "2026-03-19"
+  },
+  "NOVTU": {
+   "cls": "6.50% Tangible Equity Units",
+   "primary": "NOVT",
+   "cik": "0001076930",
+   "form": "10-K",
+   "source": "0001193125-26-064230",
+   "filed": "2026-02-23"
+  },
+  "PFH": {
+   "cls": "4.125% Junior Subordinated Notes",
+   "primary": "PRU",
+   "cik": "0001137774",
+   "form": "10-K",
+   "source": "0001137774-26-000048",
+   "filed": "2026-02-12"
+  },
+  "PRH": {
+   "cls": "5.950% Junior Subordinated Notes",
+   "primary": "PRU",
+   "cik": "0001137774",
+   "form": "10-K",
+   "source": "0001137774-26-000048",
+   "filed": "2026-02-12"
+  },
+  "PRS": {
+   "cls": "5.625% Junior Subordinated Notes",
+   "primary": "PRU",
+   "cik": "0001137774",
+   "form": "10-K",
+   "source": "0001137774-26-000048",
+   "filed": "2026-02-12"
+  },
+  "RWTN": {
+   "cls": "9.125% Senior Notes Due 2029",
+   "primary": "RWT",
+   "cik": "0000930236",
+   "form": "10-K",
+   "source": "0000930236-26-000007",
+   "filed": "2026-02-27"
+  },
+  "RWTQ": {
+   "cls": "9.500% Senior Notes Due 2030",
+   "primary": "RWT",
+   "cik": "0000930236",
+   "form": "10-K",
+   "source": "0000930236-26-000007",
+   "filed": "2026-02-27"
+  },
+  "RZC": {
+   "cls": "7.125% Fixed Rate Reset Subordinated Debentures due 2052",
+   "primary": "RGA",
+   "cik": "0000898174",
+   "form": "10-K",
+   "source": "0000898174-26-000006",
+   "filed": "2026-02-20"
+  },
+  "SATA": {
+   "cls": "Variable Rate Series A Perpetual Preferred Stock, $0.001 par value per share",
+   "primary": "ASST",
+   "cik": "0001920406",
+   "form": "10-K",
+   "source": "0001628280-26-019879",
+   "filed": "2026-03-19"
+  },
+  "SFB": {
+   "cls": "5.20% Senior Notes due 2047",
+   "primary": "SF",
+   "cik": "0000720672",
+   "form": "10-K",
+   "source": "0001193125-26-067130",
+   "filed": "2026-02-24"
+  },
+  "SREA": {
+   "cls": "5.75% Junior Subordinated Notes Due 2079, $25 par value",
+   "primary": "SRE",
+   "cik": "0001032208",
+   "form": "10-K",
+   "source": "0001032208-26-000010",
+   "filed": "2026-02-26"
+  },
+  "STRC": {
+   "cls": "Variable Rate Series A Perpetual Stretch Preferred Stock, $0.001 par value per share",
+   "primary": "MSTR",
+   "cik": "0001050446",
+   "form": "10-K",
+   "source": "0001050446-26-000020",
+   "filed": "2026-02-19"
+  },
+  "STRD": {
+   "cls": "10.00% Series A Perpetual Stride Preferred Stock, $0.001 par value per share",
+   "primary": "MSTR",
+   "cik": "0001050446",
+   "form": "10-K",
+   "source": "0001050446-26-000020",
+   "filed": "2026-02-19"
+  },
+  "STRF": {
+   "cls": "10.00% Series A Perpetual Strife Preferred Stock, $0.001 par value per share",
+   "primary": "MSTR",
+   "cik": "0001050446",
+   "form": "10-K",
+   "source": "0001050446-26-000020",
+   "filed": "2026-02-19"
+  },
+  "STRK": {
+   "cls": "8.00% Series A Perpetual Strike Preferred Stock, $0.001 par value per share",
+   "primary": "MSTR",
+   "cik": "0001050446",
+   "form": "10-K",
+   "source": "0001050446-26-000020",
+   "filed": "2026-02-19"
+  },
+  "TBB": {
+   "cls": "AT&T Inc. 5.350% Global Notes due November 1, 2066",
+   "primary": "T",
+   "cik": "0000732717",
+   "form": "10-K",
+   "source": "0000732717-26-000120",
+   "filed": "2026-02-09"
+  },
+  "UNMA": {
+   "cls": "6.250% Junior Subordinated Notes due 2058",
+   "primary": "UNM",
+   "cik": "0000005513",
+   "form": "10-K",
+   "source": "0000005513-26-000008",
+   "filed": "2026-02-17"
+  },
+  "UZD": {
+   "cls": "6.25% Senior Notes due 2069",
+   "primary": "AD",
+   "cik": "0000821130",
+   "form": "10-K",
+   "source": "0000821130-26-000012",
+   "filed": "2026-02-20"
+  },
+  "UZE": {
+   "cls": "5.50% Senior Notes due 2070",
+   "primary": "AD",
+   "cik": "0000821130",
+   "form": "10-K",
+   "source": "0000821130-26-000012",
+   "filed": "2026-02-20"
+  },
+  "UZF": {
+   "cls": "5.50% Senior Notes due 2070",
+   "primary": "AD",
+   "cik": "0000821130",
+   "form": "10-K",
+   "source": "0000821130-26-000012",
+   "filed": "2026-02-20"
+  },
+  "XELLL": {
+   "cls": "6.25% Junior Subordinated Notes due 2085",
+   "primary": "XEL",
+   "cik": "0000072903",
+   "form": "10-K",
+   "source": "0000072903-26-000009",
+   "filed": "2026-02-25"
+  }
+ }
+}
