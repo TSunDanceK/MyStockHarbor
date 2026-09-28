@@ -20,10 +20,18 @@ export type AdsRatioEntry = {
   /** Accession of the filing the sentence is quoted from. */
   source: string;
   filed: string;
+  /**
+   * WITHHELD (#552 COWORK #64): the row stays cited, but is not used, when
+   * there is good reason to think its ratio is stale (MFG: a cover saying
+   * "two shares" after a 1-for-10 consolidation). The depositary-share
+   * refusal then applies, exactly as for a symbol with no row.
+   */
+  withheld?: { since: string; reason: string };
 };
 
 const ENTRIES = (ratiosFile as unknown as { entries: Record<string, AdsRatioEntry> }).entries;
 
 export function adsRatioFor(symbol: string): AdsRatioEntry | null {
-  return lookupSpellingIn(ENTRIES, String(symbol ?? "").toUpperCase())?.value ?? null;
+  const e = lookupSpellingIn(ENTRIES, String(symbol ?? "").toUpperCase())?.value ?? null;
+  return e && !e.withheld ? e : null;
 }
