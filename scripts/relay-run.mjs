@@ -289,6 +289,7 @@ const TASKS = {
   "shared-cik-census-6": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6", SHARDS: "6" } },
   "shared-cik-census": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true },
   "sec-6k-grep": { script: "scripts/sixk-grep-probe.mjs", args: () => [], needsTypescript: true, env: { FROM: "2020-06-01", TO: "2021-03-31" } },
+  "ads-stale-ratio": { script: "scripts/ads-stale-ratio-probe.mjs", args: () => [] },
   "sec-cover-12b-notes": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { FORMS: "10-K", GREP: "Trading Symbol|ZONES|Exchangeable Subordinated|\\bCCZ\\b" } },
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
