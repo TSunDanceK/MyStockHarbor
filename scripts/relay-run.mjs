@@ -280,6 +280,15 @@ const TASKS = {
   "sec-f6-search": { script: "scripts/f6-search-probe.mjs", args: () => [], needsTypescript: true },
   "sec-ttm-eps": { script: "scripts/ttm-eps-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-12b-so": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { FORMS: "10-K", GREP: "\\bSOMN\\b|\\bSOJ[A-Z]\\b|Equity Units|Corporate Units" } },
+  // Read-only, SEC text only: every multi-ticker CIK's 12(b) rows (#552 COWORK #64).
+  "shared-cik-census-1": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1", SHARDS: "6" } },
+  "shared-cik-census-2": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2", SHARDS: "6" } },
+  "shared-cik-census-3": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3", SHARDS: "6" } },
+  "shared-cik-census-4": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "4", SHARDS: "6" } },
+  "shared-cik-census-5": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "5", SHARDS: "6" } },
+  "shared-cik-census-6": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "6", SHARDS: "6" } },
+  "shared-cik-census": { script: "scripts/shared-cik-census.mjs", args: () => [], needsTypescript: true },
+  "sec-6k-grep": { script: "scripts/sixk-grep-probe.mjs", args: () => [], needsTypescript: true, env: { FROM: "2020-06-01", TO: "2021-03-31" } },
   "sec-cover-12b-notes": { script: "scripts/cover-12b-probe.mjs", args: () => [], needsTypescript: true, env: { FORMS: "10-K", GREP: "Trading Symbol|ZONES|Exchangeable Subordinated|\\bCCZ\\b" } },
   // Read-only, uncredentialled: non-operating total vs component, before and
   // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
