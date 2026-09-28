@@ -36,7 +36,9 @@ const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
 // AND the cited ADS ratio. Without the ratio every 20-F filer refused here while
 // #587 ships a per-ADS P/E for it, so the census undercounted the presets.
 const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
-const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: lookupSpellingIn(ADS, s)?.value ?? null });
+const { loadNonEquityListingOf } = await import("./lib/non-equity-listing.mjs");
+const nonEquityListingOf = await loadNonEquityListingOf();
+const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s)?.value ?? null), nonEquity: nonEquityListingOf(s) });
 const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
 const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
