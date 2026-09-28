@@ -252,11 +252,41 @@ checks.push(
     vercel.crons.some((c) => c.path === "/api/jobs/warm-pickers-sec" && c.schedule === "35 5 * * *") && !/FMP_API_KEY/.test(job)],
   ["the daily job passes the cited ADS ratio from A's map, imported (#553 COWORK #44)",
     /import \{ adsRatioFor \} from "[./]+lib\/server\/secAdsMap";/.test(job) &&
-      /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),\s*\}\)\)/.test(job) &&
+      /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),/.test(job) &&
       /buildSecPickerRow\(set, today, filerFor\(symbol\), nowMs\)/.test(readCodeOnly(MODULE))],
   ["the job reads the shared revenue guard through multipleInputs (imported, not copied)",
     !/revenueLineIncomplete/.test(readCodeOnly(MODULE)) && /multipleInputs\(set\)/.test(readCodeOnly(MODULE))],
 );
+
+// ── A NON-COMMON LISTING IS REFUSED, NOT VALUED (#553 COWORK #67) ─────────────
+// SOMN is SO's "2025 Series A Corporate Units" (A's primary-listings.json). Its
+// fact set is SO's, so without the mark Pickers priced it as SO's common stock.
+{
+  const mod = await loadSibling(MODULE, src);
+  const P = await import(pathToFileURL(path.join(ROOT, "scripts/lib/non-equity-listing.mjs")).href);
+  const nonEquityListingOf = await P.loadNonEquityListingOf(ROOT);
+  const somnMark = nonEquityListingOf("SOMN");
+  const somnSet = { ...fixture("AAPL"), symbol: "SOMN" };
+  const valued = (filer) => {
+    const row = JSON.parse(JSON.stringify(mod.buildSecPickerRow(somnSet, TODAY, filer, NOW)));
+    const e = mod.applySecEarnings(row, PRICE);
+    const f = mod.applySecPickerRow(row, PRICE);
+    return { pe: e?.peRatio ?? null, eps: e?.epsTtm ?? null, cap: f.marketCap };
+  };
+  const refused = valued({ annualForm: "10-K", nonEquity: somnMark });
+  checks.push(["A's map marks SOMN as SO's non-common listing (read through the loader the seed uses)", somnMark?.primary === "SO" && Boolean(somnMark?.cls), JSON.stringify(somnMark)]);
+  checks.push(["SOMN with the mark: no P/E, no EPS, no market cap", refused.pe === null && refused.eps === null && refused.cap === null, JSON.stringify(refused)]);
+  const unmarked = valued({ annualForm: "10-K" });
+  checks.push(["...and without it the same set IS valued (so the mark is what refuses it)", unmarked.pe !== null && unmarked.cap !== null, JSON.stringify(unmarked)]);
+  const passes = (c) => /import \{ nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),\s*\}\)\)/.test(c);
+  checks.push(["the daily job passes A's non-common mark, imported", passes(job)]);
+  const mutJob = job.replace(/\s*nonEquity: nonEquityListingOf\(s\),/, "");
+  checks.push(["mutant caught: the job drops nonEquity (SOMN valued as SO's common again)", mutJob !== job && !passes(mutJob)]);
+  const seed = readCodeOnly("scripts/pickers-sec-seed.mjs");
+  const seedPasses = (c) => /nonEquity: nonEquityListingOf\(s\),/.test(c) && /await loadNonEquityListingOf\(\)/.test(c);
+  checks.push(["the seed passes the same mark, through A's module", seedPasses(seed)]);
+  checks.push(["mutant caught: the seed drops nonEquity", !seedPasses(seed.replace("nonEquity: nonEquityListingOf(s),", ""))]);
+}
 
 // ── PRUNING ROWS NO LONGER TARGETED (#553 COWORK #60, CODE-B #51) ─────────────
 // TSM's row outlived its place in the targets by 38 h because the hash TTL is
