@@ -1307,6 +1307,10 @@ const TASKS = {
   "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
   // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
   "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // TIINGO: ONE DAY'S MEASURED NUMBERS (#553 COWORK #59 §1): the limiter's day
+  // and hour counters, the guard's per-job commands and the last run records.
+  // Read-only; 6 Redis commands. Prints counts only.
+  "write-tiingo-day-stats": { script: "scripts/tiingo-day-stats.mjs", args: () => [], needsTypescript: true, writes: true },
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
