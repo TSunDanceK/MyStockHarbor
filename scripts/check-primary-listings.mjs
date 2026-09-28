@@ -67,8 +67,14 @@ console.log("\n2. a debt ticker is refused, not valued");
 const PSRC = fs.readFileSync("lib/server/secPrimaryListing.ts", "utf8");
 const IMPORT = 'import listingsFile from "@/data/sec/primary-listings.json";';
 if (!PSRC.includes(IMPORT)) throw new Error("secPrimaryListing no longer imports the map the expected way");
+// Both maps inlined (bare Node has no @/ alias): the hand-cited entries and the census rows (#552 COWORK #64).
+const IMPORT2 = 'import nonCommonFile from "@/data/sec/non-common-listings.json";';
+if (!PSRC.includes(IMPORT2)) throw new Error("secPrimaryListing no longer imports the census rows the expected way");
+const inline = (src, nonCommon = fs.readFileSync("data/sec/non-common-listings.json", "utf8")) => src
+  .replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`)
+  .replace(IMPORT2, `const nonCommonFile = ${nonCommon};`);
 const ptmp = `lib/server/.check-pl-src-${process.pid}.ts`;
-fs.writeFileSync(ptmp, PSRC.replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`));
+fs.writeFileSync(ptmp, inline(PSRC));
 let P;
 try { P = await import(`../${ptmp}`); } finally { fs.rmSync(ptmp, { force: true }); }
 const V = await import("../lib/server/secValuation.ts");
@@ -111,13 +117,13 @@ check("SOMN: cap and P/E refused, saying it is not the common stock and naming S
 const B_ANCHOR = "const b = line && !a ?";
 if (PSRC.split(B_ANCHOR).length !== 2) throw new Error("10-K cover-wording mutation anchor must match once");
 const ptmp2 = `lib/server/.check-pl-b-${process.pid}.ts`;
-fs.writeFileSync(ptmp2, PSRC.replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`).replace(B_ANCHOR, "const b = false && line && !a ?"));
+fs.writeFileSync(ptmp2, inline(PSRC).replace(B_ANCHOR, "const b = false && line && !a ?"));
 let PB;
 try { PB = await import(`../${ptmp2}`); } finally { fs.rmSync(ptmp2, { force: true }); }
 const C_ANCHOR = "const c = line && !a && !b ?";
 if (PSRC.split(C_ANCHOR).length !== 2) throw new Error("table cover-wording mutation anchor must match once");
 const ptmp3 = `lib/server/.check-pl-c-${process.pid}.ts`;
-fs.writeFileSync(ptmp3, PSRC.replace(IMPORT, `const listingsFile = ${fs.readFileSync("data/sec/primary-listings.json", "utf8")};`).replace(C_ANCHOR, "const c = false && line && !a && !b ?"));
+fs.writeFileSync(ptmp3, inline(PSRC).replace(C_ANCHOR, "const c = false && line && !a && !b ?"));
 let PC;
 try { PC = await import(`../${ptmp3}`); } finally { fs.rmSync(ptmp3, { force: true }); }
 check("MUTATION: the table cover wording not parsed → SO has no cited count (caught), CMCSA unchanged",
