@@ -30,7 +30,8 @@ const symbols = (await redis.hkeys("msh:price-pool:v1")).map(String);
 console.log(`universe: ${symbols.length} symbols (msh:price-pool:v1)`);
 const result = await warmPickersSec(symbols, (s) => ({
   annualForm: REGISTRANTS[s]?.annualForm ?? null,
-  ads: lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null,
+  // A withheld row (#552 COWORK #64, MFG) is not used, as in adsRatioFor.
+  ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null),
 }), Date.now(), KEY);
 console.log(JSON.stringify(result));
 console.log(`key ${KEY}; field count now: ${await redis.hlen(KEY)}; seeded at ${new Date().toISOString()}`);
