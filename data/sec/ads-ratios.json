@@ -1,5 +1,5 @@
 {
- "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST 20-F states it (its 12(b) section, then its text), or an F-6 filed after that 20-F (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names.",
+ "_comment": "Cited ADS ratios (#552 COWORK #22 §1): ordinary shares per American Depositary Share, as each filer's own LATEST 20-F states it (its 12(b) section, then its text), or an F-6 filed after that 20-F (#552 COWORK #45: an older F-6 never wins), verbatim. Found by scripts/ads-ratio-census.mjs (lib/server/secAdsRatio.ts). A symbol not listed keeps the depositary-share refusal; a ratio is never inferred or defaulted to 1. Read by lib/server/secAdsMap.ts. kind 'ordinary' = the 20-F cover's Section 12(b) row lists ordinary/common shares under the ticker and the filing has no ADS (ratio 1, cited). BBD and CIG are left out: their ADSs are of preferred shares and the quoted line is the common-share ADS. Also left out, by rule: depositary shares of preferred shares or CPOs, and a class ticker (PBR-A, CIG-C) that no 12(b) row names. A row with `withheld` keeps its citation but is not used: adsRatioFor returns nothing for it, so the depositary-share refusal applies (MFG, #552 COWORK #64: a cited ratio with good reason to think it stale).",
  "entries": {
   "AAPG": {
    "kind": "ads",
@@ -1248,7 +1248,11 @@
    "evidence": "of the Act. Title of each class Trading Symbols Name of each exchange on which registered American depositary shares, each of which represents two shares of common stock Common Stock, without par value * MFG The New",
    "form": "20-F",
    "source": "0001193125-26-283791",
-   "filed": "2026-06-26"
+   "filed": "2026-06-26",
+   "withheld": {
+    "since": "2026-09-28",
+    "reason": "the cover's 'two shares of common stock' conflicts with Mizuho's 2020 1-for-10 share consolidation; per-ADS figures are withheld until a depositary or issuer filing cites the current ratio (#552 COWORK #64)"
+   }
   },
   "MGRT": {
    "kind": "ordinary",
