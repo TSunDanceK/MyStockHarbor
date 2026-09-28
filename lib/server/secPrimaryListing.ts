@@ -15,7 +15,7 @@ export type PrimaryListing = {
   class: string;
   /** Verbatim: the 12(b) row, then the cover's count for that class. */
   evidence: string[];
-  /** Tickers on the same CIK that the 12(b) table lists as debt, with their class. */
+  /** Tickers on the same CIK that the 12(b) table lists as notes, debentures or units, with their class. */
   nonEquity?: Record<string, string>;
   form: string;
   source: string;
@@ -40,7 +40,7 @@ export function nonEquityListingOf(symbol: string): { cls: string; primary: stri
 }
 
 /**
- * THE COVER COUNT CITED FROM THE PRIMARY'S OWN LATEST 20-F (#552 COWORK #56):
+ * THE COVER COUNT CITED FROM THE PRIMARY'S OWN LATEST ANNUAL REPORT (#552 COWORK #56):
  * parsed from the entry's evidence line ("460,488,788 Limited Partnership
  * Units as of December 31, 2025"), never typed twice. BIP's dei cover count is
  * 295,429,987 as of 2020 and is refused as stale; the 20-F cover states the
@@ -54,10 +54,17 @@ export function citedCoverFor(symbol: string): { val: number; asOf: string; quot
   const s = String(symbol ?? "").toUpperCase();
   const e = Object.values(ENTRIES).find((x) => x.primary === s);
   const line = e?.evidence?.[1];
-  const m = line ? /^([\d,]+)\s+.+?\s+as of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/.exec(line) : null;
-  const mm = m ? MONTHS[m[2].toLowerCase()] : undefined;
-  if (!e || !m || !mm) return null;
-  const val = Number(m[1].replace(/,/g, ""));
+  // Three cover wordings: "N <class> as of <date>" (BIP's 20-F); "As of
+  // <date>, there were N shares of <class>" (CMCSA's 10-K, #552 COWORK #61);
+  // and a table, "Shares Outstanding at <date> <registrant> <class> N" (SO's
+  // 10-K, #552 COWORK #63).
+  const a = line ? /^([\d,]+)\s+.+?\s+as of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/.exec(line) : null;
+  const b = line && !a ? /^As of\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4}),\s+there were\s+([\d,]+)\s+shares of\s+.+$/.exec(line) : null;
+  const c = line && !a && !b ? /^Shares Outstanding at\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\s+.+?\s+([\d,]+)$/.exec(line) : null;
+  const [count, month, day, year] = a ? [a[1], a[2], a[3], a[4]] : b ? [b[4], b[1], b[2], b[3]] : c ? [c[4], c[1], c[2], c[3]] : [];
+  const mm = month ? MONTHS[month.toLowerCase()] : undefined;
+  if (!e || !count || !day || !mm) return null;
+  const val = Number(count.replace(/,/g, ""));
   if (!Number.isFinite(val) || val <= 0) return null;
-  return { val, asOf: `${m[4]}-${mm}-${m[3].padStart(2, "0")}`, quote: line!, source: e.source };
+  return { val, asOf: `${year}-${mm}-${day.padStart(2, "0")}`, quote: line!, source: e.source };
 }
