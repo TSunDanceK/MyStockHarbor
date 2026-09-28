@@ -19,9 +19,11 @@ import { isRegularSessionOpen } from "@/lib/server/marketHours";
 import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
+  applySecEarnings,
   applySecPickerRow,
   pickersFundamentalsSource,
   readSecPickerRows,
+  SEC_EARNINGS_FIELDS,
   SEC_PICKER_FIELDS,
 } from "@/lib/server/pickersSecFundamentals";
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
@@ -339,9 +341,16 @@ export type ResultEntry = ResultEntryFlags & {
    * "sec" when this row's Market Cap / PS / PB / EV / P/FCF / Revenue /
    * Op. Income / Net Income / FCF / Div ($) / Div Yield / Div Growth came from
    * the filings (lib/server/pickersSecFundamentals.ts). The grid reads it to
-   * keep Payout Ratio on its stored figure until the TTM EPS fix (COWORK #5 Q1).
+   * take Payout Ratio as filed rather than recomputing it from EPS.
    */
   fundamentalsFrom?: "sec";
+  /**
+   * What period the filed P/E and EPS cover, and the Payout's: "TTM to 30 Jun
+   * 2026" or "FY2025" (#553 COWORK #21). The grid shows it as the cell's
+   * tooltip and marks fiscal-year rows; absent when the figure is not filed.
+   */
+  epsBasis?: string;
+  payoutBasis?: string;
 };
 
 // Deliberately typed as FilterKey (the exact 18-key union from
@@ -1253,8 +1262,9 @@ async function getPickerData(config: PickerResultConfig) {
     // the SEC fact sets via the shipped secValuation functions, divided by the
     // price this row shows. ONE HMGET for the whole page. A REFUSAL CLEARS the
     // field rather than leaving FMP's figure behind it -- see the header of
-    // lib/server/pickersSecFundamentals.ts. P/E, EPS and Payout Ratio are
-    // untouched until the TTM EPS fix; sector and industry are a separate PR.
+    // lib/server/pickersSecFundamentals.ts. P/E, EPS and Payout Ratio follow
+    // (COWORK #21), each labelled with its period; sector and industry are a
+    // separate PR.
     // PICKERS_FUNDAMENTALS=fmp (plus a redeploy) skips this block entirely.
     if (pickersFundamentalsSource() === "sec") {
       try {
@@ -1269,6 +1279,21 @@ async function getPickerData(config: PickerResultConfig) {
             const v = figures[field];
             if (v === null) delete rec[field];
             else rec[field] = v;
+          }
+          // P/E, EPS AND PAYOUT (#553 COWORK #21), the same rule: a refusal
+          // clears the stored FMP figure. Null for a row written before they
+          // moved -- then the stored figures stand, as for a row not yet built.
+          const earnings = applySecEarnings(row, typeof shown === "number" ? shown : null);
+          if (earnings) {
+            for (const field of SEC_EARNINGS_FIELDS) {
+              const v = earnings[field];
+              if (v === null) delete rec[field];
+              else rec[field] = v;
+            }
+            if (earnings.epsBasis) entry.epsBasis = earnings.epsBasis;
+            else delete entry.epsBasis;
+            if (earnings.payoutBasis) entry.payoutBasis = earnings.payoutBasis;
+            else delete entry.payoutBasis;
           }
           entry.fundamentalsFrom = "sec";
         }
@@ -1662,6 +1687,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
+        .basisFy { margin-left: 4px; font-size: 0.72em; letter-spacing: 0.02em; color: rgba(148,163,184,0.75); }
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
