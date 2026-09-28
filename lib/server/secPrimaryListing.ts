@@ -8,6 +8,7 @@
 // from the cover: the 12(b) row that names the class and ticker, and the
 // cover's count for that class. Nothing here is inferred from ticker spelling.
 import listingsFile from "@/data/sec/primary-listings.json";
+import nonCommonFile from "@/data/sec/non-common-listings.json";
 
 export type PrimaryListing = {
   primary: string;
@@ -24,6 +25,10 @@ export type PrimaryListing = {
 
 const ENTRIES = (listingsFile as unknown as { entries: Record<string, PrimaryListing> }).entries;
 
+/** A census row (#552 COWORK #64): one non-common ticker, its 12(b) class and its CIK's common listing. */
+export type NonCommonListing = { cls: string; primary: string; cik: string; form: string; source: string; filed: string };
+const NON_COMMON = (nonCommonFile as unknown as { entries: Record<string, NonCommonListing> }).entries;
+
 /** The primaries, for the SEC universe: each is stored and read under its own symbol. */
 export function primaryListingSymbols(): string[] {
   return Object.values(ENTRIES).map((e) => e.primary);
@@ -36,7 +41,9 @@ export function nonEquityListingOf(symbol: string): { cls: string; primary: stri
     const cls = e.nonEquity?.[s];
     if (cls) return { cls, primary: e.primary };
   }
-  return null;
+  // THE CENSUS ROWS (#552 COWORK #64), after the hand-cited entries above.
+  const c = Object.prototype.hasOwnProperty.call(NON_COMMON, s) ? NON_COMMON[s] : null;
+  return c ? { cls: c.cls, primary: c.primary } : null;
 }
 
 /**

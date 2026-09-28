@@ -147,6 +147,11 @@ console.log("\n2b. the newest source wins (COWORK #45)");
   check("MUTATION: an older F-6 allowed to override the newer 20-F → AZN no longer reads as ordinary (caught)", !("row" in dm && dm.row.kind === "ordinary"), JSON.stringify(dm));
 }
 
+const V0 = await import("../lib/server/secValuation.ts");
+const { SEC_FIELD_KEYS: KEYS0 } = await import("../lib/server/secFields.ts");
+const yearOrdMfg = () => ({ e: "2026-03-31", s: "2025-04-01", fp: "FY", fy: 2025, a: null, f: null, d: "",
+  v: KEYS0.map((k) => ({ epsDiluted: 3.1, sharesDiluted: 2.5e9, netIncome: 3.1 * 2.5e9 })[k] ?? null) });
+
 console.log("\n3. the committed map");
 const MAP = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries;
 const rowOk = (sym, e) => {
@@ -167,6 +172,31 @@ check("...a partnership's units count as its directly listed equity (BIP), prefe
   rowOk("BIP", MAP.BIP) && !rowOk("BIPX", { ...MAP.BIP, evidence: "Class A Preferred Limited Partnership Units, Series 13" }));
 const first = Object.entries(MAP).find(([, e]) => e.kind === "ads");
 if (first) check(`MUTATION: ${first[0]}'s ratio changed by one → caught`, !rowOk(first[0], { ...first[1], ordinaryPerAds: first[1].ordinaryPerAds + 1 }));
+
+console.log("\n3b. a withheld row is cited but not used (#552 COWORK #64, MFG)");
+{
+  const MSRC = fs.readFileSync("lib/server/secAdsMap.ts", "utf8");
+  const IMP = 'import ratiosFile from "@/data/sec/ads-ratios.json";';
+  if (!MSRC.includes(IMP)) throw new Error("secAdsMap no longer imports the map the expected way");
+  const loadMap = async (src) => {
+    const tmp = `lib/server/.check-ads-map-${process.pid}-${Math.random().toString(36).slice(2)}.ts`;
+    fs.writeFileSync(tmp, src.replace(IMP, `const ratiosFile = ${fs.readFileSync("data/sec/ads-ratios.json", "utf8")};`));
+    try { return await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  };
+  const Mp = await loadMap(MSRC);
+  const held = Object.entries(MAP).filter(([, e]) => e.withheld);
+  check("every withheld row carries a date and a reason", held.every(([, e]) => /^\d{4}-\d{2}-\d{2}$/.test(e.withheld.since) && e.withheld.reason?.length > 20), held.map(([k]) => k).join(","));
+  check("MFG is withheld: its row stays cited (2, the 20-F cover) but adsRatioFor returns nothing",
+    MAP.MFG?.withheld && MAP.MFG.ordinaryPerAds === 2 && Mp.adsRatioFor("MFG") === null && Mp.adsRatioFor("TSM")?.ordinaryPerAds === 5);
+  const mfgSet = { symbol: "MFG", quarters: [], years: [yearOrdMfg()], instants: [], cover: { asOf: "2026-03-31", accession: null, filed: null, val: 2.5e9, derived: "as-filed" }, cur: "USD" };
+  const mi = V0.valuationInputs(mfgSet, "2026-09-28", { annualForm: "20-F", ads: Mp.adsRatioFor("MFG") });
+  check("MFG: cap and P/E refused with the depositary-share refusal ('Not available'), never on the 2",
+    V0.marketCap(mi, 11).ok === false && V0.peRatio(mi, 11).ok === false && mi.refusals.includes("ads-ratio-makes-eps-incomparable"));
+  const Mm = await loadMap(once(MSRC, "return e && !e.withheld ? e : null;", "return e;"));
+  check("MUTATION: the withheld flag ignored → MFG valued on the 2 again (caught)", Mm.adsRatioFor("MFG")?.ordinaryPerAds === 2);
+  const seed = readCodeOnly("scripts/pickers-sec-seed.mjs");
+  check("the Pickers seed skips a withheld row too", /e && !e\.withheld \? e : null/.test(seed));
+}
 
 console.log("\n4. valuationInputs");
 const V = await import("../lib/server/secValuation.ts");
