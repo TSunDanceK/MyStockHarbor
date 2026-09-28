@@ -1218,6 +1218,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // The same seed into the PREVIEW-ONLY key (#553 COWORK #60), which production
+  // never reads or overwrites, so a Cowork preview check isn't raced by the
+  // 05:35 job. ~860 commands per seed; the key lapses on the 3-day TTL.
+  "write-pickers-sec-seed-preview": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes", "--preview"],
+    needsTypescript: true,
+    writes: true,
+  },
   // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
   // --dry mode against the live Pickers universe -- prints the issue body, writes
   // nothing. 2 Redis reads.
@@ -1260,6 +1269,23 @@ const TASKS = {
   },
   "write-pickers-ticker-swap": {
     script: "scripts/pickers-ticker-swap.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // P/E, EPS AND PAYOUT: FMP TODAY VS secValuation (#553 COWORK #18/#19),
+  // measured before the move, plus the refused caps per reason for A.
+  // Read-only; ~705 Redis reads (one GET per fact set).
+  "write-pickers-pe-census": {
+    script: "scripts/pickers-pe-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY AN FY-MARKED P/E LOOKS WRONG (#553 COWORK #64): what #587 ships for a
+  // few symbols beside its inputs. Read-only; ~15 Redis reads.
+  "write-pickers-pe-probe": {
+    script: "scripts/pickers-pe-probe.mjs",
     args: () => [],
     needsTypescript: true,
     writes: true,
