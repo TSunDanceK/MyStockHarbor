@@ -133,6 +133,8 @@ const KNOWN_MISSING = new Set([
   "claude/picker-pages-demand-data-2026-08-15.md",
   "claude/firewall-allowed-bot-scraping-audit-2026-07-21.md",
   "claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md",
+  // moved to private storage
+  "claude/tiingo-contract-and-limits-2026-09-23.md",
 ]);
 
 // TRACKED **AND** UNTRACKED-BUT-NOT-IGNORED. `git ls-files` alone misses a file
