@@ -101,8 +101,11 @@ async function suite(mod) {
 
   ok("every figure the module returns is one of SEC_PICKER_FIELDS, and vice versa",
     Object.keys(figs.AAPL).sort().join() === [...mod.SEC_PICKER_FIELDS].sort().join());
-  ok("P/E, EPS and Payout Ratio are NOT owned by the filings yet (COWORK #5 Q1)",
-    !["peRatio", "epsTtm", "payoutRatio"].some((k) => mod.SEC_PICKER_FIELDS.includes(k)));
+  // P/E, EPS and Payout moved with COWORK #21 as their OWN list, applied only
+  // to rows that carry `eps` (scripts/check-pickers-earnings.mjs covers them).
+  ok("P/E, EPS and Payout Ratio are the separate SEC_EARNINGS_FIELDS, not among the twelve",
+    !["peRatio", "epsTtm", "payoutRatio"].some((k) => mod.SEC_PICKER_FIELDS.includes(k)) &&
+      ["peRatio", "epsTtm", "payoutRatio"].every((k) => mod.SEC_EARNINGS_FIELDS.includes(k)));
 
   // ── CURRENCY (#553 COWORK #11: EC revenue 123.86T COP, HMY 179.91B ZAR) ──
   // EC-like: a 20-F filer in a currency A's FX sources do not serve -> `cur`
@@ -249,11 +252,74 @@ checks.push(
     vercel.crons.some((c) => c.path === "/api/jobs/warm-pickers-sec" && c.schedule === "35 5 * * *") && !/FMP_API_KEY/.test(job)],
   ["the daily job passes the cited ADS ratio from A's map, imported (#553 COWORK #44)",
     /import \{ adsRatioFor \} from "[./]+lib\/server\/secAdsMap";/.test(job) &&
-      /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),\s*\}\)\)/.test(job) &&
+      /warmPickersSec\(symbols, \(s\) => \(\{\s*annualForm: registrantFor\(s\)\?\.annualForm \?\? null,\s*ads: adsRatioFor\(s\),/.test(job) &&
       /buildSecPickerRow\(set, today, filerFor\(symbol\), nowMs\)/.test(readCodeOnly(MODULE))],
   ["the job reads the shared revenue guard through multipleInputs (imported, not copied)",
     !/revenueLineIncomplete/.test(readCodeOnly(MODULE)) && /multipleInputs\(set\)/.test(readCodeOnly(MODULE))],
 );
+
+// ── A NON-COMMON LISTING IS REFUSED, NOT VALUED (#553 COWORK #67) ─────────────
+// SOMN is SO's "2025 Series A Corporate Units" (A's primary-listings.json). Its
+// fact set is SO's, so without the mark Pickers priced it as SO's common stock.
+{
+  const mod = await loadSibling(MODULE, src);
+  const P = await import(pathToFileURL(path.join(ROOT, "scripts/lib/non-equity-listing.mjs")).href);
+  const nonEquityListingOf = await P.loadNonEquityListingOf(ROOT);
+  const somnMark = nonEquityListingOf("SOMN");
+  const somnSet = { ...fixture("AAPL"), symbol: "SOMN" };
+  const valued = (filer) => {
+    const row = JSON.parse(JSON.stringify(mod.buildSecPickerRow(somnSet, TODAY, filer, NOW)));
+    const e = mod.applySecEarnings(row, PRICE);
+    const f = mod.applySecPickerRow(row, PRICE);
+    return { pe: e?.peRatio ?? null, eps: e?.epsTtm ?? null, cap: f.marketCap };
+  };
+  const refused = valued({ annualForm: "10-K", nonEquity: somnMark });
+  checks.push(["A's map marks SOMN as SO's non-common listing (read through the loader the seed uses)", somnMark?.primary === "SO" && Boolean(somnMark?.cls), JSON.stringify(somnMark)]);
+  checks.push(["SOMN with the mark: no P/E, no EPS, no market cap", refused.pe === null && refused.eps === null && refused.cap === null, JSON.stringify(refused)]);
+  const unmarked = valued({ annualForm: "10-K" });
+  checks.push(["...and without it the same set IS valued (so the mark is what refuses it)", unmarked.pe !== null && unmarked.cap !== null, JSON.stringify(unmarked)]);
+  const passes = (c) => /import \{ nonEquityListingOf \} from "[./]+lib\/server\/secPrimaryListing";/.test(c) && /ads: adsRatioFor\(s\),\s*nonEquity: nonEquityListingOf\(s\),\s*\}\)\)/.test(c);
+  checks.push(["the daily job passes A's non-common mark, imported", passes(job)]);
+  const mutJob = job.replace(/\s*nonEquity: nonEquityListingOf\(s\),/, "");
+  checks.push(["mutant caught: the job drops nonEquity (SOMN valued as SO's common again)", mutJob !== job && !passes(mutJob)]);
+  const seed = readCodeOnly("scripts/pickers-sec-seed.mjs");
+  const seedPasses = (c) => /nonEquity: nonEquityListingOf\(s\),/.test(c) && /await loadNonEquityListingOf\(\)/.test(c);
+  checks.push(["the seed passes the same mark, through A's module", seedPasses(seed)]);
+  checks.push(["mutant caught: the seed drops nonEquity", !seedPasses(seed.replace("nonEquity: nonEquityListingOf(s),", ""))]);
+}
+
+// ── PRUNING ROWS NO LONGER TARGETED (#553 COWORK #60, CODE-B #51) ─────────────
+// TSM's row outlived its place in the targets by 38 h because the hash TTL is
+// refreshed whole. rowsToPrune is the decision; the job must act on it.
+{
+  const prune = async (source) => (await loadSibling(MODULE, source)).rowsToPrune;
+  const exercise = (fn) => {
+    const stored = ["AAPL", "MSFT", "TSM", "NVDA"];
+    const a = fn(stored, ["AAPL", "MSFT", "NVDA"]);
+    const b = fn(stored, []);
+    const c = fn(stored, ["AAPL"]);
+    return {
+      dropsStale: JSON.stringify(a.drop) === '["TSM"]' && a.skipped === null,
+      emptySkips: b.drop.length === 0 && Boolean(b.skipped),
+      shortSkips: c.drop.length === 0 && Boolean(c.skipped),
+    };
+  };
+  const real = exercise(await prune(src));
+  checks.push(["prune: a row whose symbol left the targets is dropped (the TSM case)", real.dropsStale]);
+  checks.push(["prune: an EMPTY targets read drops nothing, and says why", real.emptySkips]);
+  checks.push(["prune: a targets read under 50% of the stored rows drops nothing", real.shortSkips]);
+  const code = readCodeOnly(MODULE);
+  const actsOnPrune = (c) =>
+    /const \{ drop, skipped \} = rowsToPrune\(stored, list\);/.test(c) && /redis\.hdel\(PICKERS_SEC_KEY, \.\.\.drop\)/.test(c) &&
+    c.indexOf("const { drop, skipped } = rowsToPrune(stored, list)") > c.lastIndexOf("await flush()");
+  checks.push(["the job HDELs exactly what rowsToPrune returns, after the write", actsOnPrune(code)]);
+  const mutDrop = exercise(await prune(src.replace("return { drop: stored.filter((f) => !keep.has(f)), skipped: null };", "return { drop: [], skipped: null };")));
+  checks.push(["mutant caught: the prune drops nothing (the stale row survives)", !mutDrop.dropsStale]);
+  const mutGuard = exercise(await prune(src.replace("if (!targets.length) return { drop: [], skipped: \"no targets\" };", "").replace(/if \(targets\.length < stored\.length \* PRUNE_MIN_TARGET_SHARE\) \{[\s\S]*?\n  \}\n/, "")));
+  checks.push(["mutant caught: the guard is removed (a bad targets read wipes the hash)", !mutGuard.emptySkips || !mutGuard.shortSkips]);
+  const mutHdel = readCodeOnly(MODULE).replace(/redis\.hdel\(PICKERS_SEC_KEY, \.\.\.drop\)/, "Promise.resolve(0)");
+  checks.push(["mutant caught: the job computes the prune but never sends the HDEL", mutHdel !== code && !actsOnPrune(mutHdel)]);
+}
 
 for (const [label, pass, detail] of checks) {
   console.log(`  ${pass ? "PASS" : "FAIL"}  ${label}${!pass && detail ? ` — ${detail}` : ""}`);

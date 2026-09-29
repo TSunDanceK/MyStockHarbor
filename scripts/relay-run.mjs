@@ -1218,6 +1218,15 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // The same seed into the PREVIEW-ONLY key (#553 COWORK #60), which production
+  // never reads or overwrites, so a Cowork preview check isn't raced by the
+  // 05:35 job. ~860 commands per seed; the key lapses on the 3-day TTL.
+  "write-pickers-sec-seed-preview": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes", "--preview"],
+    needsTypescript: true,
+    writes: true,
+  },
   // READ-ONLY (Relay B, #553 COWORK #3): the "Classification needed" helper in
   // --dry mode against the live Pickers universe -- prints the issue body, writes
   // nothing. 2 Redis reads.
@@ -1264,6 +1273,23 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // P/E, EPS AND PAYOUT: FMP TODAY VS secValuation (#553 COWORK #18/#19),
+  // measured before the move, plus the refused caps per reason for A.
+  // Read-only; ~705 Redis reads (one GET per fact set).
+  "write-pickers-pe-census": {
+    script: "scripts/pickers-pe-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY AN FY-MARKED P/E LOOKS WRONG (#553 COWORK #64): what #587 ships for a
+  // few symbols beside its inputs. Read-only; ~15 Redis reads.
+  "write-pickers-pe-probe": {
+    script: "scripts/pickers-pe-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
   // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
   // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
   // counts, timings and field names. Stores nothing; 0 Redis commands.
@@ -1291,6 +1317,15 @@ const TASKS = {
   "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
   "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
   "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
+  // Batch 2 (#563 COWORK #23): the receivers' own reports (all named tracked
+  // parties), and the six zero-candidate receivers re-scanned with filed names.
+  "capex-receiver-own-scan": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "own" } },
+  "capex-receiver-six-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "1/4" } },
+  "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
+  "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
+  "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
 };
 
 const argv = process.argv.slice(2);

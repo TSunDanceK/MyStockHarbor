@@ -1,6 +1,6 @@
 // Tiingo vs FMP daily history, ~50 symbols (#553 COWORK #55 §2).
 //
-// Reads what the nightly job stored (msh:tiingo:eod:v1:<SYM>) beside today's
+// Reads what the nightly job stored (msh:tiingo:eod:v2:<SYM>) beside today's
 // FMP history (msh:history:v7:<SYM>) and compares last close, 200-day MA and
 // RSI(14) (COWORK #58 item 2), each from its own source's series.
 // PRINTS COUNTS AND DIFFERENCES ONLY, never a price: Actions logs are public,
@@ -18,6 +18,9 @@ import { Redis } from "@upstash/redis";
 import { symbolSpellings } from "../lib/symbolSpellings.mjs";
 
 const redis = Redis.fromEnv();
+// v2 = price basis B, split-adjusted only (#553 COWORK #60); EOD_VERSION=v1
+// reads the dividend-adjusted keys while they last (8-day TTL).
+const EOD_VERSION = /^v\d+$/.test(process.env.EOD_VERSION ?? "") ? process.env.EOD_VERSION : "v2";
 let commands = 0;
 const pool = ((await redis.hkeys("msh:price-pool:v1")) ?? []).map(String).sort();
 commands++;
@@ -25,7 +28,7 @@ const given = (process.env.SYMBOLS ?? "").split(",").map((s) => s.trim().toUpper
 const symbols = given.length ? given : pool.filter((_, i) => i % 17 === 0).slice(0, 50);
 
 const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
-const tiingo = await redis.mget(...symbols.map((s) => `msh:tiingo:eod:v1:${s}`));
+const tiingo = await redis.mget(...symbols.map((s) => `msh:tiingo:eod:${EOD_VERSION}:${s}`));
 commands++;
 // FMP's key uses whatever spelling the caller had; try the first two spellings.
 const spell = symbols.map((s) => symbolSpellings(s).slice(0, 2));
@@ -113,15 +116,17 @@ for (const l of flagged) console.log(`  ${l}`);
 const eodKeys = [];
 let cursor = "0";
 do {
-  const [next, batch] = await redis.scan(cursor, { match: "msh:tiingo:eod:v1:*", count: 1000 });
+  const [next, batch] = await redis.scan(cursor, { match: `msh:tiingo:eod:${EOD_VERSION}:*`, count: 1000 });
   commands++;
   cursor = String(next);
-  eodKeys.push(...batch.map((k) => String(k).slice("msh:tiingo:eod:v1:".length)));
+  eodKeys.push(...batch.map((k) => String(k).slice(`msh:tiingo:eod:${EOD_VERSION}:`.length)));
 } while (cursor !== "0");
 const haveEod = new Set(eodKeys);
 const quoteKeys = new Set(((await redis.hkeys("msh:tiingo:quotes:v1")) ?? []).map(String));
 commands++;
 const noEod = pool.filter((s) => !haveEod.has(s));
 const noQuote = pool.filter((s) => !quoteKeys.has(s));
+// The known Tiingo gaps, named every run so a fix shows up (COWORK #60).
+for (const s of ["EQR", "BK"]) console.log(`watched gap ${s}: Tiingo history ${haveEod.has(s) ? "present" : "absent"}; Tiingo quote ${quoteKeys.has(s) ? "present" : "absent"}`);
 console.log(`\ncoverage: pool ${pool.length}; with Tiingo history ${pool.length - noEod.length} (missing: ${noEod.join(", ") || "none"}); with a Tiingo quote ${pool.length - noQuote.length} (missing: ${noQuote.join(", ") || "none"})`);
 console.log(`Redis commands: ${commands}; Tiingo requests: 0`);
