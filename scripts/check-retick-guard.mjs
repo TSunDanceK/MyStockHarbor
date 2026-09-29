@@ -79,5 +79,19 @@ check("mutant caught: a dead ticker (BK, EQR) is sent", (await suite(await load(
 const m2 = jobs.replace("return { symbols: r.keep,", "return { symbols: pool,");
 check("mutant caught: the universe ignores the guard", m2 !== jobs && !wired(m2));
 
+console.log("\n4. the pool cleanup's apply deletes only the reviewed list (COWORK #73)");
+const REVIEWED = ["BK", "EQR", "WBA", "CTRA", "EA", "K", "PXD", "WBS"];
+const cleanup = (mod) => {
+  const today = mod.planPoolDeletion(["EQR", "WBA", "BK", "CTRA", "EA", "K", "PXD", "WBS"], REVIEWED);
+  const extra = mod.planPoolDeletion(["EQR", "BK", "IWM"], REVIEWED);
+  const relisted = mod.planPoolDeletion(["EQR"], REVIEWED);
+  return today.ok && today.delete.length === 8 && extra.ok === false && extra.unreviewed.join() === "IWM" && relisted.ok && relisted.delete.join() === "EQR";
+};
+check("the 8 reviewed are deleted; an extra unlisted symbol (IWM) makes it refuse; a relisted one is kept", cleanup(await load(src)));
+const m3 = src.replace("if (unreviewed.length) return { ok: false, unreviewed };", "");
+check("mutant caught: an extra unlisted symbol no longer refuses the apply", m3 !== src && !cleanup(await load(m3)));
+const relay = readCodeOnly("scripts/relay-run.mjs");
+check("the relay's apply passes the reviewed list explicitly", /"write-pool-retick-drop": \{[^}]*"--apply", "--only", "BK,EQR,WBA,CTRA,EA,K,PXD,WBS"/.test(relay));
+
 console.log(failures ? `\nFAILED (${failures})` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);
