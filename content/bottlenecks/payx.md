@@ -63,12 +63,11 @@ supplyChain:
       partner integrated into Paychex's PEO health-benefits offerings for
       client employees.
   - name: HireRight Holdings Corporation
-    ticker: HRT
+    ticker: null
     pct: 12
     blurb: >
-      A publicly traded background-check provider integrated directly
-      into Paychex's hiring and onboarding tools, screening candidates on
-      behalf of Paychex clients.
+      A background-check provider integrated into Paychex's hiring and
+      onboarding tools. Privately held since 2024, with no public ticker.
   - name: Checkr, Inc.
     ticker: null
     pct: 8
