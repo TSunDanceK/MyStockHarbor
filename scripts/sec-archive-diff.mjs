@@ -22,7 +22,7 @@ const { extractForSymbol } = await import("../lib/server/secExtractFor.ts");
 const { withPredecessorFacts } = await import("../lib/server/secSuccession.ts");
 const { toStoredSet } = await import("../lib/server/secFactBuild.ts");
 const { defaultSources } = await import("../lib/server/fxRates.ts");
-const { SEC_FIELD_KEYS } = await import("../lib/server/secFields.ts");
+const { SEC_FIELD_KEYS, secChainsHash } = await import("../lib/server/secFields.ts");
 // THE KEYS, READ FROM THE SOURCE (secManifest.ts imports the Redis client,
 // which this workflow does not install; the constants are all it needs).
 const keyOf = (n) => (fs.readFileSync("lib/server/secManifest.ts", "utf8").match(new RegExp(`export const ${n} = "([^"]+)"`)) ?? [])[1];
@@ -70,17 +70,21 @@ const archiveFacts = async (cik) => {
   return rowsToFacts(header, rows);
 };
 const fx = new Map();
-const tally = { stored: symbols.length, "identical": 0, "identical-plus-newer": 0, "differs": 0, "hash-differs": 0, "rebuilt-empty": 0, "no-stored-set": 0, "no-cik": 0, error: 0 };
-const lists = { "identical-plus-newer": [], "differs": [], "hash-differs": [], "rebuilt-empty": [], "no-cik": [], error: [] };
+const tally = { stored: symbols.length, "not-archived": 0, "identical": 0, "identical-plus-newer": 0, "differs": 0, "hash-differs": 0, "rebuilt-empty": 0, "no-stored-set": 0, "no-cik": 0, error: 0 };
+const lists = { "not-archived": [], "identical-plus-newer": [], "differs": [], "hash-differs": [], "rebuilt-empty": [], "no-cik": [], error: [] };
 const fieldSets = {};
 let coverDiffers = 0, teStoredOnly = 0, predecessorsRead = 0;
 const errorSample = [];
+const differsBy = {};
 const started = Date.now();
 for (const sym of symbols) {
   const s = stored.get(sym);
   if (!s) { tally["no-stored-set"]++; continue; }
   const cik = manifest.symbols?.[sym]?.cik ?? s.cik ?? REG[sym]?.cik ?? null;
   if (!cik) { tally["no-cik"]++; lists["no-cik"].push(sym); continue; }
+  // OUTSIDE THE ARCHIVE'S UNIVERSE (a symbol whose CIK is not a registrant row):
+  // not a "no companyfacts" filer, and the switch PR must widen the universe first.
+  if (!archiveIndex.entries[String(cik).padStart(10, "0")]) { tally["not-archived"]++; lists["not-archived"].push(sym); continue; }
   try {
     const facts = await archiveFacts(cik);
     let rebuilt = null;
@@ -94,6 +98,14 @@ for (const sym of symbols) {
     const c = compareSets(s, rebuilt, SEC_FIELD_KEYS);
     tally[c.verdict]++;
     if (lists[c.verdict]) lists[c.verdict].push(sym);
+    // WHY A SET DIFFERS, where the cause is known without reading values: it
+    // was written under OLDER tag chains (the rebuild uses today's), and/or its
+    // figures are CONVERTED from another reporting currency (FX series re-read).
+    if (c.verdict === "differs") {
+      const older = s.c !== secChainsHash(), fxConv = Boolean(s.cur && s.cur !== "USD");
+      const tag = older && fxConv ? "older chains + converted" : older ? "older chains" : fxConv ? "converted currency" : "current chains, USD";
+      (differsBy[tag] ??= []).push(sym);
+    }
     for (const f of Object.keys(c.fields)) (fieldSets[f] ??= []).push(sym);
     if (rebuilt && (s.cover?.val ?? null) !== (rebuilt.cover?.val ?? null)) coverDiffers++;
     if (s.te && !rebuilt?.te) teStoredOnly++;
@@ -103,8 +115,10 @@ for (const sym of symbols) {
   }
 }
 
-console.log(`\nstored sets ${tally.stored} · identical ${tally.identical} · identical + newer periods in the archive ${tally["identical-plus-newer"]} · differs ${tally.differs} · stored under another field hash ${tally["hash-differs"]} · rebuilt empty ${tally["rebuilt-empty"]} · no stored set ${tally["no-stored-set"]} · no CIK ${tally["no-cik"]} · errors ${tally.error}`);
+console.log(`\nstored sets ${tally.stored} · not in the archive universe ${tally["not-archived"]} · identical ${tally.identical} · identical + newer periods in the archive ${tally["identical-plus-newer"]} · differs ${tally.differs} · stored under another field hash ${tally["hash-differs"]} · rebuilt empty ${tally["rebuilt-empty"]} · no stored set ${tally["no-stored-set"]} · no CIK ${tally["no-cik"]} · errors ${tally.error}`);
 console.log(`outside the archive (not counted as differences): cover count differs ${coverDiffers} · stored instance-EPS frame the rebuild cannot make ${teStoredOnly} · predecessor CIKs read from the archive ${predecessorsRead}`);
+console.log(`\ndiffers, by known cause: ${Object.entries(differsBy).map(([k, v]) => `${k} ${v.length}`).join(" · ")}`);
+for (const [k, v] of Object.entries(differsBy)) console.log(`  ${k}: ${v.join(" ")}`);
 console.log("\nfields that differ on a shared period (field: sets):");
 for (const [f, ss] of Object.entries(fieldSets).sort((a, b) => b[1].length - a[1].length)) console.log(`  ${f}: ${ss.length} · ${ss.join(" ")}`);
 for (const [k, ss] of Object.entries(lists)) if (ss.length) console.log(`\n${k} (${ss.length}): ${ss.join(" ")}`);
