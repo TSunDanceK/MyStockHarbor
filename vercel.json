@@ -86,7 +86,7 @@
     },
     {
       "path": "/api/jobs/tiingo-quotes",
-      "schedule": "11 * * * *"
+      "schedule": "11-59/15 * * * *"
     },
     {
       "path": "/api/jobs/tiingo-eod",
