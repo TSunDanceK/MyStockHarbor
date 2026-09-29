@@ -1,6 +1,7 @@
 // DROP RETICKERED SYMBOLS FROM THE PRICE POOL (#553 COWORK #70).
 //
-// BK and EQR outlived their CIKs' move to BNY and VMRK as price-pool fields,
+// DEAD TICKERS OUT OF THE PRICE POOL. BK and EQR outlived their CIKs' move to
+// BNY and VMRK as price-pool fields,
 // with NO CIK on record in the rename sweep's last-seen snapshot (they had left
 // the Pickers universe before it existed). This finds them with the Tiingo
 // universe's own rule (retickeredOut), taking each old ticker's CIK from the
@@ -63,18 +64,26 @@ for (const s of missing) {
   }
 }
 const r = U.retickeredOut(fields, live, lastSeen);
+// EVERY pool symbol SEC's ticker file no longer lists is a candidate here
+// (COWORK #70: BK and EQR had no CIK on record anywhere, so the CIK rule alone
+// cannot name them). The runtime guard stays CIK-based -- SEC's file omits some
+// ETFs the pool will need (IWM, TLT) -- so this one-off delete is by review:
+// the dry run lists them, the owner OKs the --apply.
+const successor = new Map(r.dropped.map((d) => [d.symbol, d.listed.join("/")]));
+const dead = unlisted.map((s) => ({ symbol: s, listed: successor.get(s) ? [successor.get(s)] : [] }));
 console.log(`pool fields ${fields.length}; not in SEC's ticker file ${unlisted.length}; CIK from the last-seen snapshot ${fromSnapshot}, from registrants or A's manifest ${lastSeen.size - fromSnapshot} (manifest: ${fromManifest.join(" ") || "none"})`);
 console.log(`not in SEC's ticker file: ${unlisted.join(" ")}`);
 for (const s2 of missing) {
   const e = manifest?.symbols?.[s2];
   console.log(`  manifest ${s2}: ${e ? `fields ${Object.keys(e).sort().join(",")}; retickeredTo ${e.retickeredTo ?? "-"}` : "no entry"}`);
 }
-console.log(`retickered: ${r.dropped.length ? r.dropped.map((d) => `${d.symbol} -> ${d.listed.join("/")}`).join(", ") : "none"}`);
-if (!apply || !r.dropped.length) {
+console.log(`retickered (successor known by CIK): ${r.dropped.length ? r.dropped.map((d) => `${d.symbol} -> ${d.listed.join("/")}`).join(", ") : "none"}`);
+console.log(`to delete from the pool (not in SEC's ticker file): ${dead.map((d) => d.symbol).join(" ") || "none"}`);
+if (!apply || !dead.length) {
   console.log(apply ? "nothing to delete" : "dry run: nothing deleted");
   process.exit(0);
 }
-const n = await redis.hdel(POOL_KEY, ...r.dropped.map((d) => d.symbol));
+const n = await redis.hdel(POOL_KEY, ...dead.map((d) => d.symbol));
 console.log(`deleted ${n} field(s) from the price pool`);
 // So the Tiingo jobs' guard knows these CIKs if the old ticker ever returns.
 const seed = Object.fromEntries(r.dropped.map((d) => [d.symbol, lastSeen.get(d.symbol)]).filter(([, c]) => c));
