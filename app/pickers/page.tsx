@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PickersClient from "./PickersClient";
+import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
 import type { PickersPayload } from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
@@ -166,7 +167,8 @@ export default async function PickersPage() {
             <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 22, padding: "18px 20px", background: "rgba(10,14,24,0.96)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 12 }}>All screened setups on this page</div>
               <div className="hero-bullet-grid">
-                {SETUP_LINKS.map((s) => (
+                {/* Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts. */}
+                {SETUP_LINKS.filter((s) => !positiveLastEarningsHidden(s.href)).map((s) => (
                   <Link key={s.href} href={s.href} className="hero-bullet-item" style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", color: "#cbd5e1", fontSize: 12, fontWeight: 500, lineHeight: 1.3, padding: "3px 0", transition: "color 120ms ease" }}>
                     <span style={{ width: 5, height: 5, borderRadius: 999, background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.70)", flex: "0 0 auto" }} />
                     {s.label}

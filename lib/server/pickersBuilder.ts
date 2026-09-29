@@ -39,6 +39,8 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { isPriceExcluded } from "../priceExcluded.mjs";
+import { POSITIVE_LAST_EARNINGS_ENABLED } from "../positiveLastEarnings";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -3348,7 +3350,9 @@ async function buildPickersPayload(
       if (universeSlots.size >= UNIVERSE_CAP) break;
       if (added >= maxFromThisSource) break;
       const s = String(raw).trim().toUpperCase();
-      if (!s || universeSlots.has(s)) continue;
+      // The dated PRICE_EXCLUDED list (#553 COWORK #61): hidden from the
+      // universe, so from every preset, signal and section built on it.
+      if (!s || universeSlots.has(s) || isPriceExcluded(s)) continue;
       universeSlots.add(s);
       added++;
     }
@@ -3462,7 +3466,12 @@ async function buildPickersPayload(
           const popularName = isPopularSearch(symbol);
           const chartPoints = buildPickerChartPoints(pts);
 
-          const positiveLastEarningsCandidate = computePositiveLastEarningsCandidate(earningsRows);
+          // Hidden 2026-09-27 (#553 COWORK #64): ranked on FMP surprise fields
+          // that end 14 Oct; see lib/positiveLastEarnings.ts. Off the flag
+          // nothing is scored, so the section and the signal flag stay empty.
+          const positiveLastEarningsCandidate = POSITIVE_LAST_EARNINGS_ENABLED
+            ? computePositiveLastEarningsCandidate(earningsRows)
+            : null;
           if (positiveLastEarningsCandidate) {
             positiveLastEarnings.push({
               symbol,
@@ -4165,13 +4174,15 @@ async function buildPickersPayload(
       source: trendLeaders,
       take: 20,
     }),
-    buildSection({
+    // Hidden 2026-09-27 (#553 COWORK #64): the section is left out while the
+    // flag is off, not shipped empty. See lib/positiveLastEarnings.ts.
+    ...(POSITIVE_LAST_EARNINGS_ENABLED ? [buildSection({
       title: "Stocks With Positive Last Earnings",
       description:
         "Stocks ranked by the latest reported earnings beat, using EPS surprise, revenue surprise, positive EPS and report freshness.",
       source: positiveLastEarnings,
       take: 20,
-    }),
+    })] : []),
     buildSection({
       title: "Stocks With Strong Earnings Growth",
       description:
@@ -4311,6 +4322,9 @@ async function buildPickersPayload(
   // client-side from filteredSignalRecords, so they aren't duplicated here.
   const topMoversForTicker = topMoversRaw
     .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
+    // The market's movers come from outside the universe, so the dated
+    // PRICE_EXCLUDED list (#553 COWORK #61) is applied here too.
+    .filter((row) => !isPriceExcluded(row.symbol))
     .slice(0, 8);
 
   const earningsGrowthForTicker: TickerEarningsGrowthItem[] = strongEarningsGrowth

@@ -586,10 +586,18 @@ export function SecSnapshotCard({
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
         </Metric>
+        {/* A GROWTH FIGURE THE SCORE WILL NOT USE SAYS WHY, beside the figure
+            (#552 COWORK #60: ZM's +344.0% with nothing next to it). The same
+            words as the marked income rows, from the same view field. */}
         <Metric
           label="YoY EPS growth"
           tone={toneForGrowth(s.epsYoY)}
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+          sub={
+            <>
+              {s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+              {view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}
+            </>
+          }
         >
           <PctCell v={s.epsYoY} />
         </Metric>

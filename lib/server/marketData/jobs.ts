@@ -54,9 +54,16 @@ import {
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
+import { isDebtListing } from "./universe";
+import { isPriceExcluded } from "../../priceExcluded.mjs";
 
-/** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
-export const QUOTE_CADENCE_MINUTES = 60;
+/**
+ * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
+ * 15 since 2026-09-28 (#553 COWORK #60, pre-approved on a clean Monday): hourly
+ * measured 9 requests and 7 Redis commands per active run, so 33 active runs a
+ * day are ~297 requests (0.1% of the daily cap) and ~231 commands.
+ */
+export const QUOTE_CADENCE_MINUTES = 15;
 
 /** The window we keep, as today's FMP history does (MAX_CACHED_HISTORY_DAYS). */
 export const EOD_WINDOW_DAYS = 1400;
@@ -86,10 +93,16 @@ function mustRedis(): Redis {
   return redis;
 }
 
-/** The universe: the price pool's fields (dashed). 1 HKEYS. */
+/**
+ * The universe: the price pool's fields (dashed), less debt listings (CCZ and
+ * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts) and the
+ * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61). 1 HKEYS.
+ */
 async function universe(): Promise<string[]> {
   const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
-  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))].sort();
+  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+    .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
+    .sort();
 }
 
 function refusalResult(err: unknown) {
@@ -230,7 +243,7 @@ export async function runTiingoEod(
   for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
     const p = r.pipeline();
     for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
-      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, bars: b };
+      const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
       const json = JSON.stringify(value);
       bytesWritten += json.length;
       p.set(tiingoEodKey(sym), json, { ex: TIINGO_EOD_TTL_SECONDS });

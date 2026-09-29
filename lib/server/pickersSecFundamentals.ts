@@ -18,10 +18,17 @@
 //   Div Yield       Div ($) ÷ price
 //   Div Growth      TTM vs the prior TTM, else FY vs FY
 //
-// NOT MOVED, BY RULING (COWORK #5 Q1): P/E, EPS and Payout Ratio stay on their
-// current source until Relay A fixes the TTM EPS basis in valuationInputs (for
-// most filers it currently falls back to the last fiscal year). Sector and
-// industry are out of scope too (Q3) -- they move to A's resolver in their own PR.
+//   P/E             price ÷ twelve months of diluted EPS  secValuation.peRatio
+//   EPS             that twelve months, basis named       valuationInputs (post-#577)
+//   Payout Ratio    DPS ÷ EPS from ONE period             samePeriodPayout, below
+//
+// P/E, EPS AND PAYOUT (#553 COWORK #18/#21) moved once A's TTM EPS fix (#577)
+// landed. Their basis varies by ROW -- four quarters for a quarterly filer, the
+// fiscal year for an annual-only one -- so every figure carries a label
+// ("TTM to 30 Jun 2026", "FY2025") that the grid puts in the cell's tooltip.
+// They are applied separately (applySecEarnings) because a row written before
+// they existed has no `eps` key, and must leave the stored figures alone rather
+// than clear them. Sector and industry move to A's resolver in their own PR.
 //
 // ── TWO HALVES, AND WHY ────────────────────────────────────────────────────
 // A ratio against price has to be divided at READ time or it is frozen at the
@@ -47,15 +54,31 @@ import { storedInReportingCurrency } from "./secCurrency";
 import {
   marketCap,
   multipleInputs,
+  peRatio,
   twelveMonthsOf,
   valuationInputs,
   valuationMultiples,
+  type EpsBasis,
   type FilerFacts,
   type MultipleInputs,
   type ValuationInputs,
 } from "./secValuation";
 
 export const PICKERS_SEC_KEY = "msh:pickers:sec-fundamentals:v1";
+/**
+ * A PREVIEW-ONLY COPY (#553 COWORK #60). A preview of this branch used to read
+ * the production hash, which production's 05:35 job (main's code, no `eps`
+ * fields) rewrote every morning -- so a seed from the branch vanished before
+ * Cowork could look. Previews now read and write their own key; only an
+ * explicit seed (write-pickers-sec-seed --preview) fills it. Production never
+ * touches it, and it lapses on the same TTL.
+ */
+export const PICKERS_SEC_PREVIEW_KEY = "msh:pickers:sec-fundamentals:preview:v1";
+
+/** The hash this deployment reads and writes: previews use their own copy. */
+export function pickersSecKey(env: Record<string, string | undefined> = process.env): string {
+  return env.VERCEL_ENV === "preview" ? PICKERS_SEC_PREVIEW_KEY : PICKERS_SEC_KEY;
+}
 /** Survives two missed daily runs; a row older than this is served as absent. */
 export const PICKERS_SEC_TTL_SECONDS = 3 * 24 * 60 * 60;
 
@@ -110,7 +133,72 @@ export type SecPickerRow = {
   freeCashFlow: number | null;
   divPerShare: number | null;
   divGrowth: number | null;
+  /**
+   * Twelve months of diluted EPS as valuationInputs chose it, or null. OPTIONAL
+   * ON PURPOSE: a row written before P/E moved has no key at all, and
+   * applySecEarnings reads that as "leave the stored figures", not as a refusal.
+   */
+  eps?: EpsBasis | null;
+  /** Payout from one period only, or null. Same optionality as `eps`. */
+  payout?: PayoutBasis | null;
 };
+
+/** A payout ratio (PERCENT) whose dividend and EPS cover the same period. */
+export type PayoutBasis = {
+  val: number;
+  basis: "four-quarters" | "fiscal-year";
+  periodEnd: string;
+  fiscalYear?: number | null;
+};
+
+/**
+ * PAYOUT FROM ONE PERIOD, OR NOTHING (#553 COWORK #21).
+ *
+ * The census found 70 of 260 payers whose EPS is TTM to June while their
+ * dividends-per-share are only on file for the fiscal year to December: the Q4
+ * dividend sits inside the 10-K and is never filed as a quarter. Dividing one
+ * by the other is a ratio of two different years. So:
+ *   1. TTM DPS over TTM EPS, when both are four quarters ending the same day;
+ *   2. else the newest fiscal year's DPS over THAT year's diluted EPS;
+ *   3. else null ("–").
+ * A loss (EPS <= 0) has no payout ratio, as it has no P/E.
+ */
+export function samePeriodPayout(set: StoredFactSet, eps: EpsBasis | null): PayoutBasis | null {
+  if (eps && eps.basis === "four-quarters" && eps.val > 0) {
+    const dps = twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
+    if (dps && dps.basis === "four-quarters" && dps.periodEnd === eps.periodEnd) {
+      return { val: (dps.vals.dividendsDeclaredPerShare / eps.val) * 100, basis: "four-quarters", periodEnd: eps.periodEnd };
+    }
+  }
+  const y = set.years[0];
+  if (!y) return null;
+  const e = valueOf(y, "epsDiluted");
+  const d = valueOf(y, "dividendsDeclaredPerShare");
+  if (e === null || e <= 0 || d === null) return null;
+  return { val: (d / e) * 100, basis: "fiscal-year", periodEnd: y.e, fiscalYear: y.fy ?? null };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * "TTM to 30 Jun 2026" or "FY2025" -- what the cell's tooltip says, in the
+ * stock page's words (stockProfile.peBasisLabel, which this module cannot
+ * import: that file pulls JSON through the "@/" alias the relay's loader and
+ * the checks do not resolve). A's "year-to-date" basis (#588: fiscal year +
+ * year-to-date - the prior year-to-date) IS twelve trailing months, so it reads
+ * TTM; a filer that states only basic EPS (BRK) says so.
+ */
+export function basisLabel(b: {
+  basis: "four-quarters" | "fiscal-year" | "year-to-date";
+  periodEnd: string;
+  fiscalYear?: number | null;
+  kind?: "basic";
+}): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b.periodEnd);
+  const date = m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : b.periodEnd;
+  const label = b.basis === "fiscal-year" ? (b.fiscalYear ? `FY${b.fiscalYear}` : `FY to ${date}`) : `TTM to ${date}`;
+  return b.kind === "basic" ? `${label}, basic EPS` : label;
+}
 
 /** The columns a row can fill, as the picker entry names them. */
 export type SecPickerFigures = {
@@ -190,6 +278,10 @@ export function buildSecPickerRow(
       freeCashFlow: null,
       divPerShare: null,
       divGrowth: null,
+      // EPS is money per share: not in dollars, not written. Payout goes too --
+      // the row carries nothing derived from a figure it refused.
+      eps: null,
+      payout: null,
     };
   }
   const oi = twelveMonthsOf(set, ["operatingIncome"]);
@@ -209,6 +301,8 @@ export function buildSecPickerRow(
     freeCashFlow: cf ? cf.vals.operatingCashFlow - Math.abs(cf.vals.capex) : null,
     divPerShare: dps ? dps.vals.dividendsDeclaredPerShare : null,
     divGrowth: dividendGrowth(set),
+    eps: inputs.eps,
+    payout: samePeriodPayout(set, inputs.eps),
   };
 }
 
@@ -260,6 +354,55 @@ export function applySecPickerRow(row: SecPickerRow, price: number | null): SecP
   };
 }
 
+/** P/E, EPS and Payout, the three that moved with #553 COWORK #21. */
+export type SecEarningsFigures = {
+  peRatio: number | null;
+  epsTtm: number | null;
+  payoutRatio: number | null;
+  /** "TTM to 30 Jun 2026" / "FY2025" for the P/E and EPS cells, or null. */
+  epsBasis: string | null;
+  payoutBasis: string | null;
+};
+
+/**
+ * WITHHELD, NOT LABELLED (#553 COWORK #60). samePeriodPayout never divides two
+ * periods, but its fiscal-year fallback can sit in a row whose P/E and EPS are
+ * TTM: two figures from different periods side by side. Cowork ruled that a
+ * label isn't enough, so that payout shows "–" with this tooltip instead.
+ * Read-time only: the stored row keeps it, so un-withholding is this one test.
+ */
+export const PAYOUT_PERIODS_DIFFER = "Not shown: the EPS and dividend periods differ";
+
+export const SEC_EARNINGS_FIELDS: ("peRatio" | "epsTtm" | "payoutRatio")[] = ["peRatio", "epsTtm", "payoutRatio"];
+
+/**
+ * READ half for the three. NULL (not a figures object) for a row written
+ * before they moved: the page then leaves the stored values, exactly as for a
+ * symbol with no row. Pure.
+ */
+export function applySecEarnings(row: SecPickerRow, price: number | null): SecEarningsFigures | null {
+  if (!("eps" in row)) return null;
+  const usd = moneyIsUsd(row.unit);
+  const eps = row.eps ?? null;
+  const inputs: ValuationInputs = { shares: row.inputs.shares, eps, refusals: row.inputs.refusals };
+  // ADS NAMES STAY "–" (COWORK #18): EPS per ordinary share beside a price per
+  // depositary share is the same unit error the P/E refusal exists for, and a
+  // payout beside them would be the only figure left standing in the row.
+  const ads = row.inputs.refusals.includes("ads-ratio-makes-eps-incomparable");
+  const pe = usd ? ok(peRatio(inputs, price)) : null;
+  const epsTtm = usd && !ads && eps ? eps.val : null;
+  const filed = usd && !ads && row.payout ? row.payout : null;
+  const periodsDiffer = filed !== null && eps !== null && (filed.basis !== eps.basis || filed.periodEnd !== eps.periodEnd);
+  const payout = periodsDiffer ? null : filed;
+  return {
+    peRatio: pe,
+    epsTtm,
+    payoutRatio: payout ? payout.val : null,
+    epsBasis: eps && (pe !== null || epsTtm !== null) ? basisLabel(eps) : null,
+    payoutBasis: payout ? basisLabel(payout) : periodsDiffer ? PAYOUT_PERIODS_DIFFER : null,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────── I/O
 
 const redis =
@@ -285,7 +428,7 @@ export async function readSecPickerRows(symbols: string[]): Promise<Map<string, 
   const fields = [...new Set(symbols.filter(Boolean))];
   if (!redis || !fields.length) return out;
   try {
-    const raw = (await redis.hmget(PICKERS_SEC_KEY, ...fields)) as unknown;
+    const raw = (await redis.hmget(pickersSecKey(), ...fields)) as unknown;
     const get = (sym: string, i: number): unknown =>
       Array.isArray(raw) ? raw[i] : raw && typeof raw === "object" ? (raw as Record<string, unknown>)[sym] : null;
     const staleBefore = Date.now() - PICKERS_SEC_TTL_SECONDS * 1000;
@@ -306,7 +449,35 @@ export type WarmPickersSecResult = {
   noFactSet: number;
   stoppedEarly: string | null;
   commands: number;
+  /** Rows for symbols no longer targeted, removed after the write (COWORK #60). */
+  pruned?: number;
+  /** Why the prune was skipped, when it was. */
+  pruneSkipped?: string | null;
 };
+
+/** Below this share of the hash's current rows, today's targets look like a bad read. */
+export const PRUNE_MIN_TARGET_SHARE = 0.5;
+
+/**
+ * WHICH STORED ROWS TO DROP (#553 COWORK #60, CODE-B #51). Pure.
+ *
+ * THE BUG: the hash's TTL is refreshed whole every day, so a symbol that left
+ * the targets kept its last row forever. TSM's was 38 h old on 26 Sep and still
+ * carried refusals #618 had fixed -- a row nothing would ever rewrite.
+ *
+ * THE GUARD: if today's targets are empty, or fewer than half the rows already
+ * stored, the targets read is suspect (a cold universe key, a failed fetch) and
+ * pruning against it would wipe good rows. Skip, and say so; the rows carry
+ * their own `at`, so keeping them one more day is the safe error.
+ */
+export function rowsToPrune(stored: string[], targets: string[]): { drop: string[]; skipped: string | null } {
+  if (!targets.length) return { drop: [], skipped: "no targets" };
+  if (targets.length < stored.length * PRUNE_MIN_TARGET_SHARE) {
+    return { drop: [], skipped: `targets ${targets.length} < ${PRUNE_MIN_TARGET_SHARE * 100}% of ${stored.length} stored` };
+  }
+  const keep = new Set(targets);
+  return { drop: stored.filter((f) => !keep.has(f)), skipped: null };
+}
 
 /**
  * The daily job's work. RUNAWAY GUARDS, stated as numbers:
@@ -314,7 +485,8 @@ export type WarmPickersSecResult = {
  *   - one GET per symbol (readFactSet) + one HSET per 100 symbols + one EXPIRE;
  *   - the FIRST Redis write error stops the run -- a failing store is not
  *     retried 850 times.
- * So a run costs about 850 + 9 + 1 ≈ 860 commands, and cannot exceed ~2,050.
+ *   - then 1 HKEYS + 1 HDEL to drop rows no longer targeted (rowsToPrune).
+ * So a run costs about 850 + 9 + 1 + 2 ≈ 862 commands, and cannot exceed ~2,052.
  */
 export const MAX_SYMBOLS_PER_RUN = 2_000;
 
@@ -324,7 +496,8 @@ export async function warmPickersSec(
   // the 20-F form and the cited ADS ratio from A's map (secAdsMap.adsRatioFor).
   // A callback, so this module stays free of JSON imports like secValuation.
   filerFor: (symbol: string) => FilerFacts,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  key = pickersSecKey()
 ): Promise<WarmPickersSecResult> {
   const result: WarmPickersSecResult = {
     ok: true, symbols: 0, written: 0, noFactSet: 0, stoppedEarly: null, commands: 0,
@@ -340,7 +513,7 @@ export async function warmPickersSec(
     const n = Object.keys(batch).length;
     if (!n) return true;
     try {
-      await redis.hset(PICKERS_SEC_KEY, batch);
+      await redis.hset(key, batch);
       result.commands++;
       result.written += n;
       batch = {};
@@ -364,8 +537,26 @@ export async function warmPickersSec(
   }
   if (!(await flush())) return result;
 
+  // Drop the rows of symbols no longer targeted: 1 HKEYS + 1 multi-key HDEL.
   try {
-    await redis.expire(PICKERS_SEC_KEY, PICKERS_SEC_TTL_SECONDS);
+    const stored = ((await redis.hkeys(PICKERS_SEC_KEY)) ?? []).map(String);
+    result.commands++;
+    const { drop, skipped } = rowsToPrune(stored, list);
+    result.pruneSkipped = skipped;
+    if (skipped) console.warn(`[warm-pickers-sec] prune skipped: ${skipped}`);
+    if (drop.length) {
+      result.pruned = await redis.hdel(PICKERS_SEC_KEY, ...drop);
+      result.commands++;
+    } else {
+      result.pruned = 0;
+    }
+  } catch (err) {
+    // A failed prune leaves stale rows one more day; it is not a failed run.
+    result.pruneSkipped = `redis error (${err instanceof Error ? err.name : "unknown"})`;
+  }
+
+  try {
+    await redis.expire(key, PICKERS_SEC_TTL_SECONDS);
     result.commands++;
   } catch {
     // The rows carry their own `at`; a missed EXPIRE is not a correctness issue.

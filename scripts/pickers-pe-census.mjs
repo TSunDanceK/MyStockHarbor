@@ -1,0 +1,238 @@
+// P/E, EPS and Payout Ratio in Pickers: FMP today vs secValuation (Relay B,
+// #553 COWORK #18/#19, "measure first"). READ-ONLY.
+//
+// For the 700-symbol Pickers universe:
+//   TODAY    P/E = price pool `pe`, else the stored fundamentals row's peRatio
+//            (the page's layering order); EPS and Payout from stockDataCache.
+//   SEC      valuationInputs (post-#577 TTM EPS, basis labelled) and peRatio
+//            at the pool price; Payout = TTM declared DPS / that EPS, and
+//            whether the two share a basis and period end.
+//   PRESETS  row counts for low-P/E (<=15), cash-rich (FCF >= $10B, P/E <= 20),
+//            cheap-tech (Technology, P/E <= 25), high-dividend (yield >= 4) and
+//            dividend-growth (yield >= 2, growth >= 5), today vs shipped, after
+//            the fundamentals presets' debt/preferred exclusion.
+// Also the 189 refused Market Caps per reason, for A (COWORK #19).
+//
+//   relay task: write-pickers-pe-census
+//   Redis: 1 GET (universe) + 1 HMGET (pool) + fundamentals bulk + stock-data
+//   bulk + 1 HMGET (SEC rows) + 700 GET (fact sets) + 1 GET (job run) = ~711, once.
+import "./lib/register-ts-here.mjs";
+import { Redis } from "@upstash/redis";
+
+const V = await import("../lib/server/secValuation.ts");
+const P = await import("../lib/server/pickersSecFundamentals.ts");
+const S = await import("../lib/server/secFactStore.ts");
+// stockProfile, pickerEquity and staticProfile import JSON through the "@/"
+// alias, which the relay's loader does not resolve. The committed files are
+// read directly instead, and A's guard is loaded the way check-non-equity
+// loads it (its render-path loaders stubbed), so the exclusion is A's rule,
+// not a copy.
+import fs from "node:fs";
+import ts from "typescript";
+import { lookupSpellingIn, lookupBySpelling, toDashed } from "../lib/symbolSpellings.mjs";
+const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
+const registrantFor = (s) => lookupSpellingIn(REG, s)?.value ?? null;
+// THE FILER FACTS THE SEED AND THE DAILY JOB PASS (#553 COWORK #64): the form
+// AND the cited ADS ratio. Without the ratio every 20-F filer refused here while
+// #587 ships a per-ADS P/E for it, so the census undercounted the presets.
+const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
+const { loadNonEquityListingOf } = await import("./lib/non-equity-listing.mjs");
+const nonEquityListingOf = await loadNonEquityListingOf();
+const filerFor = (s) => ({ annualForm: registrantFor(s)?.annualForm ?? null, ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s)?.value ?? null), nonEquity: nonEquityListingOf(s) });
+const NAMES = JSON.parse(fs.readFileSync("data/company-names.json", "utf8")).rows;
+const transpile = (src) => ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+const dataUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+const guardSrc = fs.readFileSync("lib/server/securityKind.ts", "utf8")
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+  .replace(/\/\/ ─+\n\/\/ THE RENDER-PATH ENTRY POINT[\s\S]*$/, "");
+const equitySrc = fs.readFileSync("lib/server/pickerEquity.ts", "utf8")
+  .replace(/import \{ admitForExtraction \} from "\.\/securityKind";/, `import { admitForExtraction } from "${dataUrl(transpile(guardSrc))}";`)
+  .replace(/import \{ loadTickerMap \} from "\.\/secTickerMap";/, "const loadTickerMap = () => ({ present: false, map: new Map() });")
+  .replace(/import \{ snapshotCompanyName \} from "\.\/companyNameSnapshot";/, "const snapshotCompanyName = () => \"\";")
+  .replace(/import \{ lookupBySpelling \} from "\.\.\/symbolSpellings\.mjs";/, "const lookupBySpelling = () => null;");
+const { fundamentalsExclusion } = await import(dataUrl(transpile(equitySrc)));
+const tickerFile = (await import("../lib/server/secTickerMap.ts")).loadTickerMap();
+const groups = new Map();
+for (const [sym, e] of tickerFile.map) if (e?.cik) groups.set(e.cik, [...(groups.get(e.cik) ?? []), sym]);
+const excludedFromFundamentals = (s) => {
+  const cik = lookupBySpelling(tickerFile.map, s)?.value?.cik ?? null;
+  return fundamentalsExclusion({ symbol: s, cik, cikGroup: cik ? groups.get(cik) ?? [] : [], securityName: lookupSpellingIn(NAMES, s)?.value ?? null });
+};
+const redis = Redis.fromEnv();
+const today = new Date().toISOString().slice(0, 10);
+
+const raw = await redis.get("msh:pickers:v10:symbols");
+const list = Array.isArray(raw) ? raw : Array.isArray(raw?.symbols) ? raw.symbols : [];
+const universe = [...new Set(list.map((x) => String(typeof x === "string" ? x : x?.symbol ?? "").toUpperCase()).filter(Boolean))];
+// The pool keys every field by the DASHED spelling since #623 (poolField), so
+// BRK.B is read as BRK-B; a raw HMGET by the universe spelling found no price.
+const poolRaw = await redis.hmget("msh:price-pool:v1", ...universe.map(toDashed));
+const pool = new Map();
+universe.forEach((s, i) => {
+  let r = Array.isArray(poolRaw) ? poolRaw[i] : poolRaw?.[toDashed(s)];
+  if (typeof r === "string") try { r = JSON.parse(r); } catch { r = null; }
+  if (r && typeof r === "object") pool.set(s, r);
+});
+// The two stored FMP rows, read by key exactly as fundamentalsCache and
+// stockDataCache do (one MGET each); those modules are not imported for the
+// alias reason above.
+const mgetMap = async (prefix) => {
+  const vals = await redis.mget(...universe.map((s) => `${prefix}${s}`));
+  const m = new Map();
+  universe.forEach((s, i) => { const v = vals[i]; if (v && typeof v === "object") m.set(s, v); });
+  return m;
+};
+const fund = await mgetMap("msh:pickers:fundamentals:v1:");
+const extra = await mgetMap("msh:stockdata:v1:");
+const secRows = await P.readSecPickerRows(universe);
+// The sector the page shows TODAY (stored row; #578 is held), on both sides,
+// so only P/E differs between the two counts.
+const sectorOf = (s) => fund.get(s)?.sector ?? null;
+
+const sets = new Map();
+for (let i = 0; i < universe.length; i += 25) {
+  const batch = universe.slice(i, i + 25);
+  const got = await Promise.all(batch.map((s) => S.readFactSet(s).catch(() => null)));
+  batch.forEach((s, j) => { if (got[j]) sets.set(s, got[j]); });
+}
+
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const inc = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
+const push = (o, k, v, cap = 400) => { if ((o[k] ??= []).length < cap) o[k].push(v); };
+const t = { fmpPe: 0, fmpPeNeg: 0, secPe: 0, secRefused: {}, secNull: 0, noSet: 0, both: 0, agree5: 0, agree20: 0, off: 0,
+  basis: {}, fyLabels: {}, derivedQ4: 0, fmpEps: 0, secEps: 0, epsAgree5: 0, epsBoth: 0,
+  fmpPayout: 0, secPayout: 0, payoutSameBasis: 0, payoutMixed: 0, payoutBoth: 0, payoutAgree5: 0,
+  shipped: {}, shippedNull: 0, shippedOtherPeriodThanEps: 0 };
+const ex = { secRefused: {}, payoutMixed: [], capRefused: {} };
+const rows = [];
+for (const s of universe) {
+  const p = pool.get(s);
+  const price = num(p?.price);
+  const fmpPe = num(p?.pe) ?? num(fund.get(s)?.peRatio);
+  const d = extra.get(s);
+  const fmpEps = num(d?.epsTtm);
+  const fmpPayout = num(d?.payoutRatio);
+  if (fmpPe !== null) { t.fmpPe++; if (fmpPe <= 0) t.fmpPeNeg++; }
+  if (fmpEps !== null) t.fmpEps++;
+  if (fmpPayout !== null) t.fmpPayout++;
+
+  const set = sets.get(s);
+  let secPe = null, secEps = null, secPayout = null;
+  if (!set) t.noSet++;
+  else {
+    const inputs = V.valuationInputs(set, today, filerFor(s));
+    const fig = V.peRatio(inputs, price);
+    if (fig?.ok) { secPe = fig.val; t.secPe++; }
+    else if (fig) { inc(t.secRefused, fig.why); push(ex.secRefused, fig.why, s); }
+    else t.secNull++;
+    if (inputs.eps && !inputs.refusals.includes("ads-ratio-makes-eps-incomparable")) {
+      secEps = inputs.eps.val; t.secEps++;
+      const b = inputs.eps.basis === "fiscal-year" ? `FY${inputs.eps.fiscalYear ?? "?"}` : "TTM";
+      inc(t.basis, inputs.eps.basis === "fiscal-year" ? "fiscal-year" : inputs.eps.basis === "year-to-date" ? `TTM (FY + YTD - prior YTD${inputs.eps.kind === "basic" ? ", basic" : ""})` : inputs.eps.derivedQ4 ? "TTM (Q4 derived)" : "TTM (4 filed quarters)");
+      if (inputs.eps.basis === "fiscal-year") inc(t.fyLabels, b);
+      const dps = V.twelveMonthsOf(set, ["dividendsDeclaredPerShare"]);
+      if (dps && secEps > 0) {
+        secPayout = (dps.vals.dividendsDeclaredPerShare / secEps) * 100; t.secPayout++;
+        const same = dps.basis === inputs.eps.basis && dps.periodEnd === inputs.eps.periodEnd;
+        if (same) t.payoutSameBasis++;
+        else { t.payoutMixed++; if (ex.payoutMixed.length < 25) ex.payoutMixed.push(`${s}(eps ${inputs.eps.basis} ${inputs.eps.periodEnd} / dps ${dps.basis} ${dps.periodEnd})`); }
+      }
+    }
+    // WHAT #587 SHIPS (samePeriodPayout), beside the naive ratio above: one
+    // period or nothing, and whether that period differs from the row's EPS.
+    {
+      const shipped = inputs.eps && !inputs.refusals.includes("ads-ratio-makes-eps-incomparable") ? P.samePeriodPayout(set, inputs.eps) : null;
+      if (shipped) {
+        inc(t.shipped, shipped.basis);
+        if (shipped.basis !== inputs.eps.basis || shipped.periodEnd !== inputs.eps.periodEnd) t.shippedOtherPeriodThanEps++;
+      } else if (inputs.eps) t.shippedNull++;
+    }
+    const row = secRows.get(s);
+    if (row) {
+      const cap = V.marketCap({ shares: row.inputs.shares, eps: null, refusals: row.inputs.refusals }, price);
+      if (cap && !cap.ok) push(ex.capRefused, cap.why, s);
+    }
+  }
+  if (fmpPe !== null && secPe !== null) {
+    t.both++;
+    const r = Math.abs(secPe / fmpPe - 1);
+    if (r <= 0.05) t.agree5++; else if (r <= 0.2) t.agree20++; else { t.off++; if (excludedFromFundamentals(s) !== null) t.offExcluded = (t.offExcluded ?? 0) + 1; }
+  }
+  if (fmpEps !== null && secEps !== null) { t.epsBoth++; if (Math.abs(secEps / fmpEps - 1) <= 0.05) t.epsAgree5++; }
+  if (fmpPayout !== null && secPayout !== null) { t.payoutBoth++; if (Math.abs(secPayout - fmpPayout) <= 5) t.payoutAgree5++; }
+
+  const row = secRows.get(s);
+  const secFig = row ? P.applySecPickerRow(row, price) : null;
+  rows.push({ s, fmpPe, secPe, fcf: secFig?.freeCashFlow ?? null, divYield: secFig?.divYield ?? null, divGrowth: secFig?.divGrowth ?? null, sector: sectorOf(s), excluded: excludedFromFundamentals(s) !== null });
+}
+
+const presets = {
+  "low-pe (P/E <= 15)": (r, pe) => pe !== null && pe <= 15,
+  "cash-rich (FCF >= 10B, P/E <= 20)": (r, pe) => pe !== null && pe <= 20 && r.fcf !== null && r.fcf >= 1e10,
+  "cheap-tech (Technology, P/E <= 25)": (r, pe) => pe !== null && pe <= 25 && r.sector === "Technology",
+  "high-dividend (yield >= 4)": (r) => r.divYield !== null && r.divYield >= 4,
+  "dividend-growth (yield >= 2, growth >= 5)": (r) => r.divYield !== null && r.divYield >= 2 && r.divGrowth !== null && r.divGrowth >= 5,
+};
+console.log(`Pickers universe ${universe.length}; fact sets ${sets.size}; SEC rows ${secRows.size}; pool ${pool.size}; stock-data ${extra.size}`);
+console.log("\n== P/E");
+console.log(`FMP today: ${t.fmpPe} rows (${t.fmpPeNeg} of them zero/negative, which the <= presets admit)`);
+console.log(`SEC: ${t.secPe} P/E; refused ${JSON.stringify(t.secRefused)}; no price/unstated ${t.secNull}; no fact set ${t.noSet}`);
+for (const [why, xs] of Object.entries(ex.secRefused)) console.log(`  ${why}: ${xs.slice(0, 12).join(" ")}`);
+console.log(`both present ${t.both}: within 5% ${t.agree5}, 5-20% ${t.agree20}, over 20% ${t.off}`);
+// AGGREGATE ONLY: no per-ticker FMP value is printed or kept (owner's ruling, #553 COWORK #23).
+console.log(`  over 20%: ${t.off - (t.offExcluded ?? 0)} operating companies, ${t.offExcluded ?? 0} notes/preferreds the presets exclude`);
+console.log("\n== EPS basis (SEC)");
+console.log(`${JSON.stringify(t.basis)}; FY labels ${JSON.stringify(t.fyLabels)}`);
+console.log(`EPS: FMP ${t.fmpEps}, SEC ${t.secEps}; both ${t.epsBoth}, within 5% ${t.epsAgree5}`);
+console.log("\n== Payout");
+console.log(`FMP ${t.fmpPayout}; SEC ${t.secPayout} (same basis+period ${t.payoutSameBasis}, MIXED ${t.payoutMixed}); both ${t.payoutBoth}, within 5 points ${t.payoutAgree5}`);
+console.log(`  mixed examples: ${ex.payoutMixed.join("; ")}`);
+console.log(`shipped (samePeriodPayout): ${JSON.stringify(t.shipped)} -- every one DPS and EPS from ONE period; none shown ${t.shippedNull}; on a different period from the row's EPS column ${t.shippedOtherPeriodThanEps} (withheld at read time: \"–\", periods differ)`);
+console.log("\n== Presets (after the debt/preferred exclusion): today -> shipped");
+for (const [name, fn] of Object.entries(presets)) {
+  const kept = rows.filter((r) => !r.excluded);
+  const now = kept.filter((r) => fn(r, r.fmpPe)).map((r) => r.s);
+  const then = kept.filter((r) => fn(r, r.secPe)).map((r) => r.s);
+  const left = now.filter((s) => !then.includes(s));
+  const joined = then.filter((s) => !now.includes(s));
+  console.log(`${name}: ${now.length} -> ${then.length}; leave ${left.length}: ${left.join(" ")}; join ${joined.length}: ${joined.join(" ")}`);
+}
+// ── PRODUCTION AS THE PAGE LAYERS IT (#553 COWORK #66) ────────────────────
+// What the live page shows from the STORED production rows: a row the daily
+// job wrote with `eps` replaces P/E, EPS and Payout (null = "–"); a row from
+// before #587 leaves the stored FMP figure, exactly as PickerResultPage does.
+{
+  const lastRun = await redis.get("msh:job-run:v1:warm-pickers-sec").catch(() => null);
+  const run = typeof lastRun === "string" ? (() => { try { return JSON.parse(lastRun); } catch { return null; } })() : lastRun;
+  console.log("\n== Production (stored rows, as the page layers them)");
+  console.log(`warm-pickers-sec last run: ${run ? JSON.stringify({ at: new Date(run.at).toISOString(), ok: run.ok, ...run.summary }) : "no record"}`);
+  let withEps = 0, legacy = 0, payoutShown = 0, payoutWithheld = 0, payoutNone = 0;
+  const prodPe = new Map();
+  for (const s of universe) {
+    const row = secRows.get(s);
+    const price = num(pool.get(s)?.price);
+    const fmpPe = num(pool.get(s)?.pe) ?? num(fund.get(s)?.peRatio);
+    const e = row ? P.applySecEarnings(row, price) : null;
+    if (!row || !e) { if (row) legacy++; prodPe.set(s, fmpPe); continue; }
+    withEps++;
+    prodPe.set(s, e.peRatio);
+    if (e.payoutRatio !== null) payoutShown++;
+    else if (e.payoutBasis === P.PAYOUT_PERIODS_DIFFER) payoutWithheld++;
+    else payoutNone++;
+  }
+  console.log(`rows with the #587 fields ${withEps}; legacy rows (FMP figures left) ${legacy}; no row ${universe.length - withEps - legacy}`);
+  console.log(`payout: shown with a period tooltip ${payoutShown}; withheld "–" with the periods-differ tooltip ${payoutWithheld}; none ${payoutNone}`);
+  const kept = rows.filter((r) => !r.excluded);
+  const lowPe = kept.filter((r) => { const pe = prodPe.get(r.s); return pe !== null && pe !== undefined && pe <= 15; });
+  console.log(`low-pe (P/E <= 15) on production: ${lowPe.length}`);
+  for (const s of ["NMR", "NWG", "KSPI", "MFG"]) {
+    const pe = prodPe.get(s);
+    console.log(`  ${s}: P/E ${pe === null || pe === undefined ? "–" : pe.toFixed(2)}${secRows.get(s) && "eps" in secRows.get(s) ? "" : " (legacy row)"}`);
+  }
+}
+
+console.log("\n== Refused Market Caps, per reason (for A, COWORK #19)");
+console.log("REFUSED-CAPS-JSON " + JSON.stringify(ex.capRefused));
+console.log("REFUSED-PE-JSON " + JSON.stringify(ex.secRefused));
+console.log(`\nRedis commands: ~${5 + universe.length} (read-only)`);
