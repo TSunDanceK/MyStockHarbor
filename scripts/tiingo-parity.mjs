@@ -127,6 +127,8 @@ commands++;
 const noEod = pool.filter((s) => !haveEod.has(s));
 const noQuote = pool.filter((s) => !quoteKeys.has(s));
 // The known Tiingo gaps, named every run so a fix shows up (COWORK #60).
-for (const s of ["EQR", "BK"]) console.log(`watched gap ${s}: Tiingo history ${haveEod.has(s) ? "present" : "absent"}; Tiingo quote ${quoteKeys.has(s) ? "present" : "absent"}`);
+// EQR and BK were retickers, not Tiingo gaps (COWORK #70): watch their live
+// tickers instead, which must be present.
+for (const s of ["BNY", "VMRK"]) console.log(`retick ${s}: Tiingo history ${haveEod.has(s) ? "present" : "ABSENT"}; Tiingo quote ${quoteKeys.has(s) ? "present" : "ABSENT"}`);
 console.log(`\ncoverage: pool ${pool.length}; with Tiingo history ${pool.length - noEod.length} (missing: ${noEod.join(", ") || "none"}); with a Tiingo quote ${pool.length - noQuote.length} (missing: ${noQuote.join(", ") || "none"})`);
 console.log(`Redis commands: ${commands}; Tiingo requests: 0`);

@@ -40,6 +40,25 @@ import {
 import { addToDynamicUniverse, readUniverseScores } from "../../../../lib/server/dynamicUniverseCache";
 import { registrantFor } from "../../../../lib/server/stockProfile";
 import { lookupBySpelling } from "../../../../lib/symbolSpellings.mjs";
+import { Redis } from "@upstash/redis";
+import { PRICE_POOL_KEY } from "../../../../lib/server/pricePool";
+
+/**
+ * THE PRICE POOL'S SYMBOLS, for the last-seen CIK snapshot (#553 COWORK #70).
+ * The Tiingo universe is the pool, not the Pickers universe: BK and EQR sat in
+ * the pool with no CIK on record, so when SEC moved them to BNY and VMRK
+ * nothing could say so and they were sent to Tiingo as dead tickers. Recording
+ * the pool's CIKs too lets the Tiingo jobs' retickeredOut catch the next one.
+ * 1 HKEYS a day; [] on any failure (the snapshot then covers the universe only).
+ */
+async function readPricePoolSymbols(): Promise<string[]> {
+  try {
+    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return [];
+    return ((await Redis.fromEnv().hkeys(PRICE_POOL_KEY)) ?? []).map(String);
+  } catch {
+    return [];
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -477,7 +496,7 @@ async function handleGET(req: NextRequest) {
     // read against yesterday's CIKs. Only from a map the pass trusted.
     if (verdict.skipped === null) {
       const pairs: Record<string, string> = {};
-      for (const s of universe) {
+      for (const s of [...universe, ...(await readPricePoolSymbols())]) {
         const cik = lookupBySpelling(live.map, s)?.value?.cik;
         if (cik) pairs[s] = cik;
       }
