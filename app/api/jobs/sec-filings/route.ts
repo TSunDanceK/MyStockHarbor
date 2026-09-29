@@ -22,6 +22,8 @@ import {
   FILING_JOB_FILLS_PER_RUN,
   FILING_JOB_PACE_MS,
   catchUpDone,
+  isNoXbrlFacts,
+  secStatusError,
   checkAndFill,
   markCatchUpDone,
   pickCandidates,
@@ -59,7 +61,7 @@ async function secGet(url: string): Promise<Response> {
     cache: "no-store",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw secStatusError(url, res.status);
   return res;
 }
 async function secJson<T>(url: string): Promise<T> {
@@ -121,7 +123,7 @@ export async function GET(req: NextRequest) {
   const candidates = pickCandidates(mode, entries, state, new Set(due), started);
   const updates = new Map<string, FilingState>();
   const fxSeries = new Map<string, FxSeries | null>();
-  const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0 };
+  const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0, noXbrlFacts: 0 };
   const sicChanges: SicChange[] = [];
   const failures: string[] = [];
   let stoppedBy: "done" | "fill-cap" | "budget" = "done";
@@ -149,6 +151,13 @@ export async function GET(req: NextRequest) {
         revalidatePath(`/stock/${symbol}`);
       } else noteSecWriteBlocked("revalidatePath");
     } catch (err) {
+      // No companyfacts at all (IBN): counted on its own line, stamped like a
+      // check so it is not retried every hour, and not a failure (#552 COWORK #69).
+      if (isNoXbrlFacts(err)) {
+        tally.noXbrlFacts++;
+        updates.set(symbol, { c: Date.now(), lag: state.get(symbol)?.lag ?? null });
+        continue;
+      }
       tally.failed++;
       failures.push(`${symbol}: ${String((err as Error)?.message ?? err).slice(0, 120)}`);
       // Checked, and it failed: stamped so the next run does not spin on it,

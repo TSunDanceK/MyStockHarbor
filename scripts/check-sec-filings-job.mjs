@@ -120,6 +120,31 @@ check("...and keeps a filled period by the set's own stamp until the feed carrie
   /const keepFilled = Boolean\(prior\?\.ff && freshNewest < prior\.ff\.reportDate\);/.test(FACTS) &&
     /const keepNotice = Boolean\(prior\?\.lg && freshNewest < prior\.lg\.reportDate\);/.test(FACTS));
 
+console.log("\n6. a companyfacts 404 is 'no XBRL facts', not a failure (#552 COWORK #69, IBN)");
+{
+  const pieces = (src) => [
+    constant("NO_XBRL_FACTS").replace("export const", "const"),
+    grabFunction(src, "secStatusError"),
+    grabFunction(src, "isNoXbrlFacts"),
+    "export { secStatusError, isNoXbrlFacts };",
+  ].join("\n");
+  const N = await lift(pieces(SRC));
+  const CF = "https://data.sec.gov/api/xbrl/companyfacts/CIK0001103838.json";
+  const SUB = "https://data.sec.gov/submissions/CIK0001103838.json";
+  check("companyfacts 404 → no XBRL facts (IBN)", N.isNoXbrlFacts(N.secStatusError(CF, 404)));
+  check("NARROW: companyfacts 500/503/429 stay errors", [500, 503, 429].every((st) => !N.isNoXbrlFacts(N.secStatusError(CF, st))));
+  check("NARROW: a 404 on submissions or an index stays an error",
+    !N.isNoXbrlFacts(N.secStatusError(SUB, 404)) && !N.isNoXbrlFacts(N.secStatusError("https://www.sec.gov/Archives/edgar/data/1/0001/index.json", 404)));
+  const ANCHOR = "if (status === 404 && /";
+  if (SRC.split(ANCHOR).length !== 2) throw new Error("no-facts mutation anchor must match once");
+  const M = await lift(pieces(SRC.replace(ANCHOR, "if ((status === 404 || status >= 500) && /")));
+  check("MUTATION: a 5xx classed as 'no facts' → caught", M.isNoXbrlFacts(M.secStatusError(CF, 503)) && !N.isNoXbrlFacts(N.secStatusError(CF, 503)));
+  check("wiring: every SEC error goes through secStatusError, and 'no facts' is counted before failed++",
+    /if \(!res\.ok\) throw secStatusError\(url, res\.status\);/.test(ROUTE) &&
+    ROUTE.indexOf("tally.noXbrlFacts++") > 0 && ROUTE.indexOf("tally.noXbrlFacts++") < ROUTE.indexOf("tally.failed++") &&
+    /noXbrlFacts: 0/.test(ROUTE));
+}
+
 if (failures) {
   console.log(`\n${failures} assertion(s) failed.`);
   process.exit(1);
