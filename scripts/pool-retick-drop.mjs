@@ -24,6 +24,14 @@ if (!process.argv.includes("--allow-writes")) {
   process.exit(2);
 }
 const apply = process.argv.includes("--apply");
+// THE REVIEWED LIST (#553 COWORK #73): --apply needs --only A,B,C, and deletes
+// nothing if the run-time unlisted set holds anything outside it.
+const onlyAt = process.argv.indexOf("--only");
+const reviewed = onlyAt > 0 ? String(process.argv[onlyAt + 1] ?? "").split(",").map((x) => x.trim().toUpperCase()).filter(Boolean) : [];
+if (apply && !reviewed.length) {
+  console.error("REFUSED: --apply needs --only <the reviewed symbols>; nothing deleted.");
+  process.exit(2);
+}
 const U = await import("../lib/server/marketData/universe.ts");
 const { loadTickerMap } = await import("../lib/server/secTickerMap.ts");
 const { LAST_SEEN_CIK_KEY } = await import("../lib/server/secListing.ts");
@@ -79,6 +87,15 @@ for (const s2 of missing) {
 }
 console.log(`retickered (successor known by CIK): ${r.dropped.length ? r.dropped.map((d) => `${d.symbol} -> ${d.listed.join("/")}`).join(", ") : "none"}`);
 console.log(`to delete from the pool (not in SEC's ticker file): ${dead.map((d) => d.symbol).join(" ") || "none"}`);
+if (apply) {
+  const plan = U.planPoolDeletion(unlisted, reviewed);
+  if (!plan.ok) {
+    console.error(`REFUSED: unlisted now but not in the reviewed list: ${plan.unreviewed.join(" ")}; nothing deleted.`);
+    process.exit(1);
+  }
+  dead.splice(0, dead.length, ...dead.filter((d) => plan.delete.includes(d.symbol)));
+  console.log(`reviewed list ${reviewed.join(" ")}; deleting ${dead.map((d) => d.symbol).join(" ") || "none"}`);
+}
 if (!apply || !dead.length) {
   console.log(apply ? "nothing to delete" : "dry run: nothing deleted");
   process.exit(0);

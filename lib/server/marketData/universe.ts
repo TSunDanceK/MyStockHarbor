@@ -60,3 +60,24 @@ export function retickeredOut(
   const out = new Set(dropped.map((d) => d.symbol));
   return { keep: symbols.filter((s) => !out.has(s)), dropped, guard: "on" };
 }
+
+/**
+ * THE POOL CLEANUP'S APPLY, BY REVIEWED LIST ONLY (#553 COWORK #73).
+ *
+ * Pure. `unlisted` is every pool field SEC's ticker file does not list at run
+ * time; `reviewed` is the list the owner OKed from the dry run. The apply
+ * deletes exactly the reviewed symbols that are still unlisted, and REFUSES --
+ * deleting nothing -- if anything outside the reviewed list is unlisted too
+ * (an ETF SEC's company file omits, added to the pool after the review, must
+ * never be deleted by a run that was OKed for eight dead tickers). A reviewed
+ * symbol SEC lists again is simply not deleted.
+ */
+export function planPoolDeletion(
+  unlisted: string[],
+  reviewed: string[]
+): { ok: true; delete: string[] } | { ok: false; unreviewed: string[] } {
+  const ok = new Set(reviewed.map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const unreviewed = unlisted.filter((s) => !ok.has(s.toUpperCase()));
+  if (unreviewed.length) return { ok: false, unreviewed };
+  return { ok: true, delete: unlisted.filter((s) => ok.has(s.toUpperCase())) };
+}
