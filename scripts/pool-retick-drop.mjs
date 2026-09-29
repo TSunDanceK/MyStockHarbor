@@ -64,6 +64,11 @@ for (const s of missing) {
 }
 const r = U.retickeredOut(fields, live, lastSeen);
 console.log(`pool fields ${fields.length}; not in SEC's ticker file ${unlisted.length}; CIK from the last-seen snapshot ${fromSnapshot}, from registrants or A's manifest ${lastSeen.size - fromSnapshot} (manifest: ${fromManifest.join(" ") || "none"})`);
+console.log(`not in SEC's ticker file: ${unlisted.join(" ")}`);
+for (const s2 of missing) {
+  const e = manifest?.symbols?.[s2];
+  console.log(`  manifest ${s2}: ${e ? `fields ${Object.keys(e).sort().join(",")}; retickeredTo ${e.retickeredTo ?? "-"}` : "no entry"}`);
+}
 console.log(`retickered: ${r.dropped.length ? r.dropped.map((d) => `${d.symbol} -> ${d.listed.join("/")}`).join(", ") : "none"}`);
 if (!apply || !r.dropped.length) {
   console.log(apply ? "nothing to delete" : "dry run: nothing deleted");
