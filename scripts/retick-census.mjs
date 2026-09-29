@@ -9,7 +9,7 @@
 //   relay task: write-retick-census   (SYMBOLS="A,B" to override)
 //   Redis: 1 GET + 1 HMGET (pool) + 1 GET per symbol (history) + 1 HMGET
 //   (quotes) + 1 HMGET (Pickers rows) = 8 for the four, once.
-import "./lib/register-ts-here.mjs";
+import "./lib/register-capex-ts.mjs";
 import { Redis } from "@upstash/redis";
 import { toDashed } from "../lib/symbolSpellings.mjs";
 import { isPriceExcluded } from "../lib/priceExcluded.mjs";
