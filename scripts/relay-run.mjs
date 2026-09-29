@@ -1307,6 +1307,11 @@ const TASKS = {
   "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
   // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
   "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // RETICKERED SYMBOLS OUT OF THE PRICE POOL (#553 COWORK #70): found by the
+  // Tiingo universe's own rule (retickeredOut). Dry run first; --apply only on
+  // the owner's OK. 2-3 Redis commands, once.
+  "write-pool-retick-drop-dry": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes"], needsTypescript: true, writes: true },
+  "write-pool-retick-drop": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes", "--apply"], needsTypescript: true, writes: true },
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },

@@ -224,7 +224,8 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "BDX",
   "BEN",
   "BIIB",
-  "BK",
+  // 2026-09-29 (#553 COWORK #70): BK retickered to BNY (same CIK, 1390777).
+  "BNY",
   "BKNG",
   "BKR",
   "BLK",
@@ -288,7 +289,8 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "EOG",
   "EPAM",
   "EQIX",
-  "EQR",
+  // 2026-09-29 (#553 COWORK #70): EQR retickered to VMRK (same CIK, 906107).
+  "VMRK",
   "EQT",
   "ES",
   "ESS",
