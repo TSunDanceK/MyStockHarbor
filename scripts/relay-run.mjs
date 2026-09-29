@@ -1307,6 +1307,14 @@ const TASKS = {
   "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
   // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
   "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // RETICKERED SYMBOLS OUT OF THE PRICE POOL (#553 COWORK #70): found by the
+  // Tiingo universe's own rule (retickeredOut), old CIKs from the sweep's chain
+  // then A's manifest. Dry run first; --apply (delete + record the CIKs) only
+  // on the owner's OK. 3-5 Redis commands, once.
+  "write-pool-retick-drop-dry": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes"], needsTypescript: true, writes: true },
+  // The apply deletes ONLY the owner-reviewed list (COWORK #73) and refuses,
+  // deleting nothing, if anything else is unlisted at run time.
+  "write-pool-retick-drop": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes", "--apply", "--only", "BK,EQR,WBA,CTRA,EA,K,PXD,WBS"], needsTypescript: true, writes: true },
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
