@@ -282,21 +282,6 @@
    "reason": "#552 COWORK #37: first filer — the six-month cash-flow frame (yt) is read on the next extraction"
   },
   {
-   "symbol": "ACA",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "BELFB",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "BIIB",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "BMNP",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
@@ -307,27 +292,7 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "CCC",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "CCL",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "CNK",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "CNR",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "CXW",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
@@ -337,57 +302,7 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "DRH",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "DXPE",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "EMAT",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "ETSY",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "FLNC",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "FLOC",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "GTX",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "HROW",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "IDT",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "INSP",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "IPAR",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
@@ -402,16 +317,6 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "LHX",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "MAAS",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "MDLZ",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
@@ -422,17 +327,7 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "PGNY",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "PLUG",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "QS",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
@@ -447,11 +342,6 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "RITM",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "SEDG",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
@@ -462,17 +352,7 @@
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
   {
-   "symbol": "SYNA",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
    "symbol": "SYY",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "TNC",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
@@ -488,11 +368,6 @@
   },
   {
    "symbol": "ULS",
-   "requestedAt": "2026-09-27T09:10:40Z",
-   "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
-  },
-  {
-   "symbol": "VSTS",
    "requestedAt": "2026-09-27T09:10:40Z",
    "reason": "#638: non-operating total ahead of its component (rankPerPeriod + fill-back) changes this filer's cells; a secChainsHash move retries only empty sets, so the stored set needs a re-read"
   },
