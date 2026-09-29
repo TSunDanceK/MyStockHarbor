@@ -60,8 +60,13 @@ import { loadTickerMap } from "../secTickerMap";
 import { readLastSeenCiks } from "../secListing";
 import { lookupBySpelling } from "../../symbolSpellings.mjs";
 
-/** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
-export const QUOTE_CADENCE_MINUTES = 60;
+/**
+ * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
+ * 15 since 2026-09-28 (#553 COWORK #60, pre-approved on a clean Monday): hourly
+ * measured 9 requests and 7 Redis commands per active run, so 33 active runs a
+ * day are ~297 requests (0.1% of the daily cap) and ~231 commands.
+ */
+export const QUOTE_CADENCE_MINUTES = 15;
 
 /** The window we keep, as today's FMP history does (MAX_CACHED_HISTORY_DAYS). */
 export const EOD_WINDOW_DAYS = 1400;
