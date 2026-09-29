@@ -1,5 +1,7 @@
-// The dated PRICE_EXCLUDED list (#553 COWORK #61 §1): EQR, BK and CCZ hidden
-// from every price surface, and nowhere else.
+// The dated PRICE_EXCLUDED list (#553 COWORK #61 §1): CCZ hidden from every
+// price surface, and nowhere else. EQR and BK left it on 2026-09-29 (COWORK
+// #70): they were retickers (VMRK, BNY), now handled by rule -- see
+// check-retick-guard.
 //
 // WHAT IS AT RISK: a hidden name comes back through one path that forgot the
 // list (the market's movers come from outside the universe, related-stock
@@ -25,11 +27,12 @@ const check = (label, ok, detail = "") => {
 
 const X = await import(pathToFileURL(path.join(ROOT, "lib/priceExcluded.mjs")).href);
 const rows = X.PRICE_EXCLUDED;
-check("the list is exactly EQR, BK, CCZ", Object.keys(rows).sort().join() === "BK,CCZ,EQR", Object.keys(rows).join());
-check("EQR and BK are tiingo-gap; CCZ is debt-security", rows.EQR?.reason === "tiingo-gap" && rows.BK?.reason === "tiingo-gap" && rows.CCZ?.reason === "debt-security");
+check("the list is exactly CCZ (EQR and BK removed as retickers, COWORK #70)", Object.keys(rows).sort().join() === "CCZ", Object.keys(rows).join());
+check("CCZ is debt-security", rows.CCZ?.reason === "debt-security");
+check("no row blames Tiingo for a retickered symbol (no tiingo-gap reason left)", Object.values(rows).every((r) => r.reason !== "tiingo-gap"));
 check("every row is dated and says why", Object.values(rows).every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.since) && String(r.note).length > 5));
-check("isPriceExcluded: any case, either spelling", X.isPriceExcluded("eqr") && X.isPriceExcluded(" BK ") && X.isPriceExcluded("CCZ"));
-check("...and nothing else", !X.isPriceExcluded("AAPL") && !X.isPriceExcluded(["BRK", "B"].join(".")) && !X.isPriceExcluded("BKNG"));
+check("isPriceExcluded: any case", X.isPriceExcluded("ccz") && X.isPriceExcluded(" CCZ "));
+check("...and nothing else (the live tickers BNY and VMRK are priced)", !X.isPriceExcluded("AAPL") && !X.isPriceExcluded(["BRK", "B"].join(".")) && !X.isPriceExcluded("BNY") && !X.isPriceExcluded("VMRK"));
 
 // ── where it is applied ──────────────────────────────────────────────────────
 const SITES = [
