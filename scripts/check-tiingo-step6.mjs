@@ -1,0 +1,187 @@
+// Tiingo step 6 (#563 COWORK #30/#31): the SPX page on SPY, the video pages,
+// and the news page's hero price, each behind its own PRICE_PROVIDER_<SURFACE>.
+//
+// WHAT IS AT RISK, none of which breaks a build:
+//   1. TIINGO PRICES INTO AI OUTPUT (contract §5.3(x)): the SPX analysis, the
+//      news AI card or "Why this matters" reading a Tiingo-derived value. The
+//      news hero price sits on the same page as both news AI calls.
+//   2. A SURFACE SWITCHED WITHOUT ITS GATE, or without the FMP fallback that
+//      COWORK #30 keeps until the owner flips the env var.
+//   3. THE LABEL LIES: yesterday's close shown as today's, or an IEX trade
+//      presented as the consolidated close (#553 COWORK #56).
+//   4. THE CREDIT IS MISSING OR UNLINKED on a switched figure (COWORK #31 §5).
+//   5. THE SPX CHART IS SPY WITHOUT SAYING SO, under copy quoting index levels.
+//
+// Section 1 runs the real pickSurfacePrice. Sections 2-4 read source; section
+// 5 plants a mutant for every static rule, and each must fail.
+//
+//   node scripts/check-tiingo-step6.mjs
+import { register } from "node:module";
+import "./lib/register-capex-ts.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { stripComments } from "./lib/source-code.mjs";
+
+register("./lib/next-cache-stub-hooks.mjs", import.meta.url);
+delete process.env.UPSTASH_REDIS_REST_URL;
+delete process.env.UPSTASH_REDIS_REST_TOKEN;
+
+const ROOT = process.cwd();
+const raw = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+const code = (p) => stripComments(raw(p), { file: p });
+
+let failures = 0;
+const check = (label, ok, detail = "") => {
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) failures++;
+};
+
+const FILES = {
+  provider: "lib/server/marketData/provider.ts",
+  surface: "lib/server/tiingoSurfacePrice.ts",
+  spx: "app/markets/spx/page.tsx",
+  spxChart: "app/markets/spx/SPXChartClient.tsx",
+  video: "lib/videoStockData.ts",
+  videoPage: "app/insights/videos/[videoId]/page.tsx",
+  news: "app/stock/[symbol]/news/page.tsx",
+  newsData: "lib/stock-news-data.ts",
+  aiMarket: "lib/ai-market.ts",
+  aiNews: "lib/ai-news-briefs.ts",
+  insightRoute: "app/api/stock-news/insight/route.ts",
+  whyRoute: "app/api/stock-news/why-it-matters/route.ts",
+};
+
+// ── 1. The label rule, on the real module ─────────────────────────────────
+console.log("\n=== 1. pickSurfacePrice: the newer of IEX and the EOD close, named ===\n");
+const S = await import(pathToFileURL(path.join(ROOT, FILES.surface)).href);
+const P = await import(pathToFileURL(path.join(ROOT, FILES.provider)).href);
+
+// 2026-09-29 18:05 UTC = 14:05 EDT; 2026-12-01 19:05 UTC = 14:05 EST.
+const TUE_1405_EDT = Date.UTC(2026, 8, 29, 18, 5);
+const bar = (date, close) => [date, close, close, close, close, 1000];
+const row = (at, price = 101) => ({ price, open: null, high: null, low: null, prevClose: null, at });
+
+let r = S.pickSurfacePrice(row(TUE_1405_EDT), [bar("2026-09-28", 99)], TUE_1405_EDT);
+check("in session, IEX newer than the last close: the IEX trade, with its ET time",
+  r?.kind === "iex" && r.price === 101 && r.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
+
+r = S.pickSurfacePrice(row(TUE_1405_EDT), [bar("2026-09-29", 100)], TUE_1405_EDT);
+check("same trading day: the consolidated close wins the tie",
+  r?.kind === "close" && r.price === 100 && r.label === "close, 29 Sep 2026", JSON.stringify(r));
+
+const WED_0300_UTC = Date.UTC(2026, 8, 30, 3, 0); // 23:00 ET Tue, before the EOD job
+r = S.pickSurfacePrice(row(Date.UTC(2026, 8, 29, 19, 59)), [bar("2026-09-28", 99)], Date.UTC(2026, 8, 30, 14, 0));
+check("an IEX trade from an earlier day names its date",
+  r?.kind === "iex" && r.label === "last IEX trade, 15:59 ET, 29 Sep", JSON.stringify(r));
+r = S.pickSurfacePrice(row(Date.UTC(2026, 8, 29, 19, 59)), [bar("2026-09-28", 99)], WED_0300_UTC);
+check("after the close, before the EOD job: still the IEX trade, never yesterday's close as current",
+  r?.kind === "iex" && r.date === "2026-09-29", JSON.stringify(r));
+
+r = S.pickSurfacePrice(row(Date.UTC(2026, 11, 1, 19, 5)), [], Date.UTC(2026, 11, 1, 19, 6));
+check("ET across the DST change (EST in December)", r?.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
+
+check("no row, no bars: null (the caller keeps FMP), never a zero", S.pickSurfacePrice(null, null, TUE_1405_EDT) === null);
+check("a zero or negative price is not a price",
+  S.pickSurfacePrice(row(TUE_1405_EDT, 0), [bar("2026-09-28", -1)], TUE_1405_EDT) === null);
+r = S.pickSurfacePrice(null, [bar("2026-09-28", 99)], TUE_1405_EDT);
+check("no pool row: the close", r?.kind === "close" && r.price === 99, JSON.stringify(r));
+
+check("the credit is the contract's words", S.TIINGO_CREDIT === "Market data from Tiingo.com" && S.TIINGO_URL === "https://www.tiingo.com/");
+check("the three surfaces are appended", ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.PRICE_SURFACES.includes(s)));
+check("and are fmp unless set to tiingo",
+  ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.priceProviderFor(s, {}) === "fmp" && P.priceProviderFor(s, { [`PRICE_PROVIDER_${s}`]: "tiingo" }) === "tiingo"));
+const readsNone = await S.readSurfacePrice("SPY");
+check("with no Redis configured, the read is null, not a throw", readsNone === null);
+
+// ── the static rules, each a function of source so section 5 can mutate it ──
+const TIINGO_READS = /readTiingoPool|readTiingoHistory|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/;
+const PRICE_READS = /readTiingo|tiingoSurfacePrice|marketData\/|pricePool|historyCache|getDailyHistory|fetchQuote|quoteData/;
+
+const rules = {
+  // 1. AI isolation
+  "ai-market reads no price and takes no price argument": (src) =>
+    !PRICE_READS.test(src) && /async function generateSpxMarketAnalysis\(\s*_timeBucket\?: number\s*\)/.test(src),
+  "ai-news-briefs reads no price source": (src) => !PRICE_READS.test(src),
+  "the news data module never sees the Tiingo hero price": (src) => !TIINGO_READS.test(src),
+  "the AI routes read no price source": (src) => !PRICE_READS.test(src),
+  "the news AI components get no hero price": (src) => {
+    const blocks = [...src.matchAll(/<(AiInsightCard|WhyThisMatters)\b[\s\S]*?\/>/g)].map((m) => m[0]);
+    return blocks.length >= 2 && blocks.every((b) => !/heroPrice|readSurfacePrice|TIINGO/.test(b));
+  },
+  // 2. gates and fallbacks
+  "SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept": (src) =>
+    /priceProviderFor\("SPX"\) === "tiingo"/.test(src) && /readTiingoHistory\("SPY"\)/.test(src) &&
+    /getDailyHistory\("\^GSPC"/.test(src) && !/readTiingoHistory\("\^GSPC"\)/.test(src),
+  "videos: gated, FMP path kept after a Tiingo miss": (src) =>
+    /priceProviderFor\("VIDEOS"\) === "tiingo"/.test(src) && /if \(tiingo\) return tiingo;/.test(src) &&
+    /fetchQuoteSnapshotForRender\(/.test(src),
+  "videos: market cap and P/E through A's modules, not copied": (src) =>
+    /from "@\/lib\/server\/secValuation"/.test(src) && /marketCap\(valuation, surface\.price\)/.test(src) &&
+    /peRatio\(valuation, surface\.price\)/.test(src) && /getStockPageSecFacts\(/.test(src),
+  "news hero: gated, and the FMP title reads skipped only when Tiingo answered": (src) =>
+    /priceProviderFor\("NEWS_HERO"\) !== "tiingo"\) return null/.test(src) &&
+    /const hero = await readNewsHeroPrice\(symbol\);\s*if \(hero\) return \{[^}]*source: "tiingo" \}/.test(src) &&
+    /source === "tiingo"\s*\?\s*\[\]\s*:\s*await getDailyHistory\(/.test(src) &&
+    /titlePrice = source === "tiingo" \? price : seed\.lastClose/.test(src),
+  // 4. credit
+  "SPX: the linked credit under the chart": (src) => /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+  "video page: the linked credit with the label": (src) =>
+    /stockData\?\.priceLabel/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+  "news hero: the label and the linked credit": (src) =>
+    /\{heroPrice\.label\}/.test(src) && /<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/.test(src),
+  // 5. SPY says so
+  "SPX: the approved caption, shown only for SPY": (src) =>
+    /chartSeries === "SPY" \?/.test(src) &&
+    src.includes("Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index."),
+  "SPX chart: the symbol is passed through, not fixed to SPX": (src) => /symbol=\{symbol\}/.test(src) && !/symbol="SPX"/.test(src),
+};
+const sourceOf = {
+  "ai-market reads no price and takes no price argument": FILES.aiMarket,
+  "ai-news-briefs reads no price source": FILES.aiNews,
+  "the news data module never sees the Tiingo hero price": FILES.newsData,
+  "the AI routes read no price source": [FILES.insightRoute, FILES.whyRoute],
+  "the news AI components get no hero price": FILES.news,
+  "SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept": FILES.spx,
+  "videos: gated, FMP path kept after a Tiingo miss": FILES.video,
+  "videos: market cap and P/E through A's modules, not copied": FILES.video,
+  "news hero: gated, and the FMP title reads skipped only when Tiingo answered": FILES.news,
+  "SPX: the linked credit under the chart": FILES.spx,
+  "video page: the linked credit with the label": FILES.videoPage,
+  "news hero: the label and the linked credit": FILES.news,
+  "SPX: the approved caption, shown only for SPY": FILES.spx,
+  "SPX chart: the symbol is passed through, not fixed to SPX": FILES.spxChart,
+};
+const srcFor = (name) => [sourceOf[name]].flat().map((f) => (name.includes("caption") ? raw(f) : code(f))).join("\n");
+
+console.log("\n=== 2-4. AI isolation, gates and fallbacks, the credit and the caption ===\n");
+for (const [name, rule] of Object.entries(rules)) check(name, rule(srcFor(name)));
+
+// ── 5. Every static rule bites ────────────────────────────────────────────
+console.log("\n=== 5. Mutants: each must FAIL its rule ===\n");
+const mutants = [
+  ["ai-market reads no price and takes no price argument", (s) => s.replace("_timeBucket?: number", "lastClose: number")],
+  ["ai-market reads no price and takes no price argument", (s) => `import { readTiingoHistory } from "@/lib/server/marketData/read";\n${s}`],
+  ["ai-news-briefs reads no price source", (s) => `import { readSurfacePrice } from "@/lib/server/tiingoSurfacePrice";\n${s}`],
+  ["the news data module never sees the Tiingo hero price", (s) => `import { readTiingoPool } from "@/lib/server/marketData/read";\n${s}`],
+  ["the AI routes read no price source", (s) => `${s}\nconst p = getDailyHistory("X");`],
+  ["the news AI components get no hero price", (s) => s.replace("<AiInsightCard", "<AiInsightCard heroPrice={heroPrice}")],
+  ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('priceProviderFor("SPX") === "tiingo"', "true")],
+  ["SPX: gated, SPY only on the Tiingo path, FMP ^GSPC kept", (s) => s.replace('getDailyHistory("^GSPC"', 'getDailyHistory("SPY"')],
+  ["videos: gated, FMP path kept after a Tiingo miss", (s) => s.replace("if (tiingo) return tiingo;", "return tiingo;")],
+  ["videos: market cap and P/E through A's modules, not copied", (s) => s.replace("peRatio(valuation, surface.price)", "surface.price / 20")],
+  ["news hero: gated, and the FMP title reads skipped only when Tiingo answered", (s) => s.replace('priceProviderFor("NEWS_HERO") !== "tiingo") return null', "false) return null")],
+  ["SPX: the linked credit under the chart", (s) => s.replace("<a href={TIINGO_URL}", "<span data-href={TIINGO_URL}")],
+  ["video page: the linked credit with the label", (s) => s.replace(/<a href=\{TIINGO_URL\}[^>]*>\{TIINGO_CREDIT\}<\/a>/, "{TIINGO_CREDIT}")],
+  ["news hero: the label and the linked credit", (s) => s.replace("{heroPrice.label}", "")],
+  ["SPX: the approved caption, shown only for SPY", (s) => s.replace("Levels quoted in the text refer to the S&amp;P 500 index.", "")],
+  ["SPX chart: the symbol is passed through, not fixed to SPX", (s) => s.replace("symbol={symbol}", 'symbol="SPX"')],
+];
+for (const [name, mutate] of mutants) {
+  const before = srcFor(name);
+  const after = mutate(before);
+  check(`mutant bites: ${name}`, after !== before && !rules[name](after), after === before ? "the mutation did not apply" : "");
+}
+
+console.log(`\n${failures ? `${failures} FAILED` : "all passed"}\n`);
+process.exit(failures ? 1 : 0);

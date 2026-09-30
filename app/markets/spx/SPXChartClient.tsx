@@ -88,8 +88,11 @@ function formatPostDate(dateString: string) {
 
 export default function SPXChartClient({
   chartPoints,
+  symbol = "SPX",
 }: {
   chartPoints: Point[];
+  /** "SPY" when the page is on the Tiingo path (the ETF, not the index). */
+  symbol?: "SPX" | "SPY";
 }) {
   const weeklyPoints = useMemo(() => aggregateToWeekly(chartPoints), [chartPoints]);
 
@@ -151,7 +154,7 @@ export default function SPXChartClient({
       }}
     >
       <PriceChart
-        symbol="SPX"
+        symbol={symbol}
         data={chartSlice}
         ma50={ma50}
         ma200={ma200}

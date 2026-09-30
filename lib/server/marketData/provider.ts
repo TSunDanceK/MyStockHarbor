@@ -8,7 +8,7 @@
 //
 // Step 1 ships this switch with every surface on fmp and no caller reading it
 // yet: backend only, no page switches (COWORK #55).
-export const PRICE_SURFACES = ["POOL", "HISTORY", "CHARTS", "PICKERS", "STOCK_PAGE"] as const;
+export const PRICE_SURFACES = ["POOL", "HISTORY", "CHARTS", "PICKERS", "STOCK_PAGE", "SPX", "VIDEOS", "NEWS_HERO"] as const;
 export type PriceSurface = (typeof PRICE_SURFACES)[number];
 export type PriceProvider = "fmp" | "tiingo";
 
