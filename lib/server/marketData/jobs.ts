@@ -173,7 +173,9 @@ export function eodLanded(counts: Map<string, number>, expected: string, univers
 
 /**
  * Nightly EOD. `onBars` receives every symbol's fresh bars in memory -- the
- * hook #57 §4 moves the Pickers daily computation onto (not wired in step 1).
+ * hook #57 §4 moves the Pickers daily computation onto (wired in step 2 by the
+ * EOD route). Called on a COMPLETE night only: a partial night's build would
+ * mix tonight's bars with the Data Cache's, and the 02:45 retry re-runs it.
  */
 export async function runTiingoEod(
   nowMs = Date.now(),
@@ -281,7 +283,7 @@ export async function runTiingoEod(
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
-  if (onBars && bars.size) await onBars(bars);
+  if (onBars && complete && bars.size) await onBars(bars);
   return {
     ok: complete,
     ...summary,
