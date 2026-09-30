@@ -128,9 +128,17 @@ for (const c of sample) {
     const accn = r.accessionNumber[i], filed = r.filingDate[i];
     const base = `https://www.sec.gov/Archives/edgar/data/${Number(c.cik)}/${accn.replace(/-/g, "")}`;
     const idx = await sec(`${base}/index.json`);
-    const names = (idx.directory?.item ?? []).map((x) => String(x.name ?? ""));
+    const items = (idx.directory?.item ?? []).map((x) => ({ name: String(x.name ?? ""), size: Number(x.size) || 0 }));
+    const names = items.map((x) => x.name);
+    const primary = String(r.primaryDocument?.[i] ?? "");
+    // BY NAME FIRST (ex99.1 and its spellings), THEN the largest other .htm in
+    // the filing: many filers name the release after the period
+    // ("q2fy27pr.htm"), not the exhibit number. The 8-K itself, XBRL viewer
+    // pages (R1.htm…) and the index are never it.
+    const htm = items.filter((x) => /\.html?$/i.test(x.name) && x.name !== primary && !/^R\d+\.htm$|index|FilingSummary/i.test(x.name));
     const ex = names.find((n) => /ex-?99[-_.]?0?1\b|ex991|ex-99\.1|exhibit991|ex99-1|ex99_1/i.test(n) && /\.html?$/i.test(n))
-      ?? names.find((n) => /ex-?99/i.test(n) && /\.html?$/i.test(n));
+      ?? names.find((n) => /ex-?99/i.test(n) && /\.html?$/i.test(n))
+      ?? htm.sort((a, b) => b.size - a.size)[0]?.name;
     if (!ex) { noExhibit++; rows.push({ ...c, filed, status: "no EX-99 document" }); continue; }
     const html = await sec(`${base}/${ex}`, "text");
     rows.push({ ...c, filed, status: "read", ...classify(html) });
