@@ -7,6 +7,9 @@ import { getSpxMarketAnalysis } from "@/lib/ai-market";
 import { buildMarketMoodScore } from "@/lib/market-mood";
 import { rsiWilder as sharedRsiWilder, lastNum } from "@/lib/indicators";
 import PageShareBar from "@/app/components/PageShareBar";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { readTiingoHistory } from "@/lib/server/marketData/read";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 export const dynamic = "force-dynamic";
 
@@ -60,9 +63,33 @@ type SpxChartRead = {
   // True when `points` reflects a real answer from upstream. False ONLY when
   // the read failed, in which case `points` is [] and means nothing.
   ok: boolean;
+  /**
+   * Which series `points` is. "SPY" on the Tiingo path: Tiingo does not
+   * license index levels, so the chart is the SPDR S&P 500 ETF, and the page
+   * says so under it (#553 CODE-B #42 §3, #563 COWORK #30/#31).
+   */
+  series: "^GSPC" | "SPY";
 };
 
+/**
+ * THE TIINGO PATH (#563 COWORK #30), behind PRICE_PROVIDER_SPX: SPY's stored
+ * EOD bars, read through B's adapter (one cached entry, 24 h safety TTL). Null
+ * on no data, so the page keeps the FMP ^GSPC path: FMP stays this surface's
+ * fallback until the owner flips it. ^GSPC is not requested on this path.
+ */
+async function getSpyPointsTiingo(): Promise<Point[] | null> {
+  const eod = await readTiingoHistory("SPY").catch(() => null);
+  const points = (eod?.bars ?? [])
+    .map(([date, , high, low, close, volume]) => ({ date, close, high, low, volume }))
+    .filter((point) => point.date && Number.isFinite(point.close) && point.close > 0);
+  return points.length ? points : null;
+}
+
 async function getSpxChartPoints(): Promise<SpxChartRead> {
+  if (priceProviderFor("SPX") === "tiingo") {
+    const spy = await getSpyPointsTiingo();
+    if (spy) return { points: spy, ok: true, series: "SPY" };
+  }
   try {
     const points = await getDailyHistory("^GSPC", { caller: "spx-page" });
 
@@ -89,14 +116,14 @@ async function getSpxChartPoints(): Promise<SpxChartRead> {
       );
     }
 
-    return { points: mapped, ok: true };
+    return { points: mapped, ok: true, series: "^GSPC" };
   } catch (err) {
     console.error(
       "[spx] history read failed -- page renders as unavailable, not as a " +
         "market with no data:",
       err
     );
-    return { points: [], ok: false };
+    return { points: [], ok: false, series: "^GSPC" };
   }
 }
 
@@ -362,7 +389,7 @@ function sectionEyebrowStyle(type: "green" | "red" | "blue" | "yellow"): React.C
 }
 
 export default async function SPXPage() {
-  const { points: spxChartPoints, ok: chartOk } = await getSpxChartPoints();
+  const { points: spxChartPoints, ok: chartOk, series: chartSeries } = await getSpxChartPoints();
   const marketAnalysis = await getSpxMarketAnalysis();
 
   const closes = spxChartPoints.map((point) => point.close);
@@ -1072,8 +1099,19 @@ export default async function SPXPage() {
             </div>
 
             <div style={{ marginTop: 18 }}>
-              <SPXChartClient chartPoints={spxChartPoints} />
+              <SPXChartClient chartPoints={spxChartPoints} symbol={chartSeries === "SPY" ? "SPY" : "SPX"} />
             </div>
+
+            {/* THE CHART IS THE ETF ON THE TIINGO PATH, and says so (#563 COWORK
+                #31 §3, wording approved there): the weekly copy above quotes
+                index levels, a SPY chart runs at about a tenth of them. The
+                credit is linked (COWORK #31 §5). */}
+            {chartSeries === "SPY" ? (
+              <p style={{ margin: "12px 0 0", fontSize: 13, opacity: 0.7, lineHeight: 1.6 }}>
+                Chart shows the SPDR S&amp;P 500 ETF (SPY). Levels quoted in the text refer to the S&amp;P 500 index.{" "}
+                <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              </p>
+            ) : null}
           </section>
 
           <section
