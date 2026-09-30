@@ -234,19 +234,63 @@ console.log("\n3c. the diff run's comparison (lib/secArchiveDiff.mjs)");
   check("no companyfacts → rebuilt-empty", D.compareSets(base, null, K).verdict === "rebuilt-empty");
   check("floating noise below 1e-9 relative is not a difference", D.compareSets(base, (() => { const x = clone(base); x.quarters[1].v[2] = 0.6 + 1e-12; return x; })(), K).verdict === "identical");
   const SRC = fs.readFileSync("lib/secArchiveDiff.mjs", "utf8");
-  const ANCHOR = "if (!s) { if (r.e > storedNewest) out.newerInArchive++; else out.onlyInRebuilt++; continue; }";
-  if (SRC.split(ANCHOR).length !== 2) throw new Error("diff mutation anchor must match once");
-  const tmp = `lib/.check-sec-archive-d-${process.pid}.mjs`;
-  fs.writeFileSync(tmp, SRC.replace(ANCHOR, "if (!s) { out.newerInArchive++; continue; }"));
-  let MD;
-  try { MD = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  // THE UNMATCHED PERIODS BY DATE (COWORK #71): dates only, never a value.
+  const both = clone(base); both.years = []; both.quarters.unshift(P("2025-10-01", "2025-12-31", [9, 1, 0.4])); both.quarters.push(P("2026-07-01", "2026-09-30", [12, 4, 0.7]));
+  const ub = D.compareSets(base, both, K).unmatched;
+  check("unmatched dates: stored-only year, archive-only older quarter, archive-newer quarter, each named by its dates",
+    JSON.stringify(ub) === JSON.stringify({ storedOnly: ["Y 2025-01-01..2025-12-31"], rebuiltOnly: ["Q 2025-10-01..2025-12-31"], newer: ["Q 2026-07-01..2026-09-30"] }), JSON.stringify(ub));
+  check("unmatched lists carry no value (no field value of the fixture appears)", !/\b(9|40|12|0\.4|0\.7|2\.1)\b(?![-.\d])/.test(JSON.stringify(ub).replace(/\d{4}-\d{2}-\d{2}/g, "")));
+  const inst = { ...clone(base), instants: [{ s: null, e: "2025-12-31", v: [1, 1, 1] }] };
+  check("an instant is named by its date alone", D.compareSets(inst, clone(base), K).unmatched.storedOnly[0] === "I 2025-12-31");
+  const mutate = (anchor, repl, tag) => {
+    if (SRC.split(anchor).length !== 2) throw new Error(`diff mutation anchor must match once: ${tag}`);
+    const tmp = `lib/.check-sec-archive-d${tag}-${process.pid}.mjs`;
+    fs.writeFileSync(tmp, SRC.replace(anchor, repl));
+    return import(`../${tmp}`).finally(() => fs.rmSync(tmp, { force: true }));
+  };
+  const MD = await mutate("if (!s) { if (r.e > storedNewest) { out.newerInArchive++; out.unmatched.newer.push(dates(g, r)); } else { out.onlyInRebuilt++; out.unmatched.rebuiltOnly.push(dates(g, r)); } continue; }",
+    "if (!s) { out.newerInArchive++; out.unmatched.newer.push(dates(g, r)); continue; }", "a");
   check("MUTATION: every rebuild-only period called 'newer' → an older missing period hides (caught)", MD.compareSets(base, older, K).verdict !== "differs");
+  const MU = await mutate("out.onlyInStored++; out.unmatched.storedOnly.push(dates(g, p));", "out.onlyInStored++;", "b");
+  check("MUTATION: stored-only dates not recorded → the stored-only year is missing from the dates line (caught)", MU.compareSets(base, both, K).unmatched.storedOnly.length === 0);
+  check("the diff prints the dates line for differing sets", /unmatched periods on differing sets, dates only/.test(readCodeOnly("scripts/sec-archive-diff.mjs")) && /c\.unmatched/.test(readCodeOnly("scripts/sec-archive-diff.mjs")));
   const DIFF = readCodeOnly("scripts/sec-archive-diff.mjs");
   const cmds = [...DIFF.matchAll(/redis\(\[\s*"([A-Z]+)"/g)].map((m) => m[1]);
   check("the diff issues Redis READS only (SMEMBERS, GET, MGET) and writes nothing to R2",
     cmds.length >= 3 && cmds.every((c) => ["SMEMBERS", "GET", "MGET"].includes(c)) && !/r2\.put|writeFactSet/.test(DIFF), cmds.join(","));
   check("the rebuild goes through the shipped pipeline: rowsToFacts → withPredecessorFacts → extractForSymbol → toStoredSet",
     /rowsToFacts\(/.test(DIFF) && /withPredecessorFacts\(/.test(DIFF) && /toStoredSet\(extractForSymbol\(/.test(DIFF));
+}
+
+console.log("\n3d. the archive universe = registrants ∪ stored-set CIKs ∪ predecessors (COWORK #71)");
+{
+  const U = await import("../lib/secArchiveUniverse.mjs");
+  const fx = { registrants: { AAA: { cik: 1 }, BBB: { cik: 2 }, BBBW: { cik: 2 } }, extra: { SPY: "0000884394", SPYW: "884394" }, successors: [{ symbol: "AAA", cik: 1, predecessorCik: 34088 }] };
+  const u = U.archiveUniverse(fx);
+  check("fixture: registrants, extra and predecessor CIKs, deduplicated, 10 digits, sorted",
+    JSON.stringify(u) === JSON.stringify(["0000000001", "0000000002", "0000034088", "0000884394"]), u.join(","));
+  const real = U.readArchiveUniverse(fs);
+  const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
+  const EXTRA = JSON.parse(fs.readFileSync("data/sec/archive-extra-ciks.json", "utf8")).rows;
+  const SUCC = JSON.parse(fs.readFileSync("data/sec/successor-ciks.json", "utf8")).successors;
+  const rs = new Set(real);
+  check("the real universe holds every registrant CIK, every stored-set CIK in archive-extra-ciks.json, and every predecessor CIK",
+    Object.values(REG).every((r) => rs.has(U.cik10(r.cik))) && Object.values(EXTRA).every((c) => rs.has(U.cik10(c))) && SUCC.every((x) => rs.has(U.cik10(x.predecessorCik))), `${real.length}`);
+  check("archive-extra-ciks.json: 10-digit CIKs keyed by symbol (the 85 stored sets outside registrants)",
+    Object.values(EXTRA).every((c) => /^\d{10}$/.test(c)) && Object.keys(EXTRA).length >= 85 && EXTRA.SPY === "0000884394", `${Object.keys(EXTRA).length}`);
+  check("backfill, incremental and diff all read the universe through readArchiveUniverse (no registrants-only universe left)",
+    ["scripts/sec-archive-backfill.mjs", "scripts/sec-archive-incremental.mjs", "scripts/sec-archive-diff.mjs"].every((f) => /readArchiveUniverse\(fs\)/.test(readCodeOnly(f))) &&
+    !/const universe = \[\.\.\.new Set\(Object\.values\(REG\)/.test(readCodeOnly("scripts/sec-archive-backfill.mjs") + readCodeOnly("scripts/sec-archive-incremental.mjs")));
+  check("the diff names a stored set whose CIK is outside the universe (SYMBOL:CIK), apart from 'not archived yet'",
+    /"outside-universe"/.test(readCodeOnly("scripts/sec-archive-diff.mjs")) && /!universe\.has\(c10\)/.test(readCodeOnly("scripts/sec-archive-diff.mjs")));
+  const SRC = fs.readFileSync("lib/secArchiveUniverse.mjs", "utf8");
+  const ANCHOR = "  for (const c of Object.values(extra ?? {})) if (c) out.add(cik10(c));\n";
+  if (SRC.split(ANCHOR).length !== 2) throw new Error("universe mutation anchor must match once");
+  const tmp = `lib/.check-sec-archive-u-${process.pid}.mjs`;
+  fs.writeFileSync(tmp, SRC.replace(ANCHOR, ""));
+  let MU;
+  try { MU = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  check("MUTATION: stored-set CIKs left out of the universe → SPY's CIK is missing (caught)", !MU.archiveUniverse(fx).includes("0000884394"));
 }
 
 console.log("\n4. the workflow and isolation");

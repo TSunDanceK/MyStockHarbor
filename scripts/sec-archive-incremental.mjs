@@ -9,10 +9,11 @@
 //   (workflow: .github/workflows/sec-archive.yml, task "incremental", daily)
 import fs from "node:fs";
 import { r2Client } from "../lib/secArchive.mjs";
+import { readArchiveUniverse } from "../lib/secArchiveUniverse.mjs";
 import { runIncremental } from "../lib/secArchiveIncremental.mjs";
 
-const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
-const universe = [...new Set(Object.values(REG).map((r) => String(r.cik).padStart(10, "0")))].sort();
+// THE UNIVERSE: registrants ∪ stored-set CIKs ∪ predecessor CIKs (COWORK #71).
+const universe = readArchiveUniverse(fs);
 
 const { status, T } = await runIncremental({
   universe,
