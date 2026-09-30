@@ -280,6 +280,11 @@ e = await J.runTiingoEod(NIGHT);
 check("nightly: a night that has not landed stores nothing and stamps nothing", e.ok === false && e.notLanded === "2026-09-24" && !net.redisCmds.some((c) => c[0] === "set"), JSON.stringify(e));
 check("...and asks for no per-symbol history", net.tiingo.length === 1);
 check("eodLanded wants 90% of the universe", J.eodLanded(new Map([["d", 9]]), "d", 10) && !J.eodLanded(new Map([["d", 8]]), "d", 10));
+// The window is BARS, as FMP's MAX_CACHED_HISTORY_DAYS is (#553 step 2 parity:
+// 1,400 calendar days was ~960 bars, and Weekly MA200 went 39 -> 0).
+const windowDays = (Date.parse("2026-09-25") - Date.parse(J.eodStartDate(NIGHT))) / 86_400_000;
+check("the EOD window keeps 1,400 bars, as FMP's history does", J.EOD_WINDOW_BARS === 1400);
+check("...and asks for enough calendar days to hold them (252 sessions a year)", (windowDays * 252) / 365.25 >= J.EOD_WINDOW_BARS, `${windowDays} days`);
 // onBars (#553 step 2): the Pickers build rides on a COMPLETE night only.
 reset();
 let seen = null;

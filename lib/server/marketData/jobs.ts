@@ -68,8 +68,18 @@ import { lookupBySpelling } from "../../symbolSpellings.mjs";
  */
 export const QUOTE_CADENCE_MINUTES = 15;
 
-/** The window we keep, as today's FMP history does (MAX_CACHED_HISTORY_DAYS). */
-export const EOD_WINDOW_DAYS = 1400;
+/**
+ * The window we keep, as today's FMP history does: MAX_CACHED_HISTORY_DAYS is a
+ * BAR count (1,400 sessions), not calendar days.
+ *
+ * FIXED 2026-09-30 (#553 step 2). This read 1,400 CALENDAR days, about 960
+ * bars. The step 2 parity run caught it: Weekly MA200 (200 weekly closes) went
+ * 39 -> 0 on Tiingo's bars, and the all-time-high screens saw a shorter past.
+ * So the request now covers EOD_WINDOW_BARS sessions (252 a year, plus 2%) and
+ * the stored series keeps the last EOD_WINDOW_BARS of them.
+ */
+export const EOD_WINDOW_BARS = 1400;
+export const EOD_WINDOW_DAYS = Math.ceil(((EOD_WINDOW_BARS * 365.25) / 252) * 1.02);
 /**
  * Fewer bars than this is not a history, and is not stored (mirrors
  * historyCache's MIN_QUALIFIED_POINTS). Measured on the first night
@@ -236,7 +246,7 @@ export async function runTiingoEod(
       try {
         const got = await fetchEodHistory(sym, start);
         bytesDownloaded += got.bytes;
-        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars);
+        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars.slice(-EOD_WINDOW_BARS));
         else {
           const why = got.bars.length ? "short" : "empty";
           failed.set(why, (failed.get(why) ?? 0) + 1);

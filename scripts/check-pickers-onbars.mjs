@@ -115,6 +115,14 @@ const b = builderRules(builderSrc);
 for (const f of b) check(f, false);
 check("the builder's rules hold", b.length === 0);
 
+// The nightly window must hold what the build slices: `const days = N` bars.
+{
+  const jobs = stripComments(read("lib/server/marketData/jobs.ts"), { file: "lib/server/marketData/jobs.ts" });
+  const bars = Number(/export const EOD_WINDOW_BARS = (\d+);/.exec(jobs)?.[1]);
+  const days = Number(/const days = (\d+);/.exec(stripComments(builderSrc, { file: BUILDER }))?.[1]);
+  check("the nightly window (bars) holds every bar the build slices", bars >= days && days > 0, `${bars} >= ${days}`);
+}
+
 // ── 3. the EOD route ────────────────────────────────────────────────────────
 function routeRules(src) {
   const code = stripComments(src, { file: ROUTE });

@@ -44,10 +44,13 @@ const linkStyle: React.CSSProperties = {
 // features and linked to none of them, which made the one page whose whole
 // job is explaining the site a dead end.
 const SECTIONS: { href: string; title: string; body: string }[] = [
+  // 2026-09-30 (#553 COWORK #71): "and analyst data" dropped (those columns
+  // are hidden, lib/pickerHiddenFields.ts), and with it the field count, which
+  // no longer matched the offered list.
   {
     href: "/stock-screener",
     title: "Advanced Screener",
-    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data, with a search box that finds any field or industry value by name rather than making you hunt a list. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
+    body: "One sortable table with filterable fields across valuation, dividends, financials and performance, with a search box that finds any field or industry value by name rather than making you hunt a list. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
   },
   {
     href: "/pickers",
@@ -343,9 +346,12 @@ export default function AboutPage() {
             .
           </p>
 
+          {/* 2026-09-30 (#553 COWORK #71): "analyst figures" dropped from this
+              list. The analyst columns are hidden on every screener
+              (lib/pickerHiddenFields.ts), so there are none to refresh. */}
           <p style={paraStyle}>
-            Company profiles, financial statements, dividend history and
-            analyst figures refresh on their own slower schedules, since they
+            Company profiles, financial statements and dividend history
+            refresh on their own slower schedules, since they
             change far less often than a price does. Every screener page shows
             when its data was last updated at the bottom of the results, so you
             can always see how fresh the list you are reading actually is.
