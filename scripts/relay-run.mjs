@@ -1318,6 +1318,11 @@ const TASKS = {
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // PICKERS SIGNAL PARITY (#553 step 2): the real build twice, on FMP's and on
+  // Tiingo's bars, compared per section and per flag. READ-ONLY DESPITE THE
+  // PREFIX: the script refuses any write verb before it is sent; `write-` is the
+  // credential boundary. Counts, symbols and flag names only in the log.
+  "write-pickers-history-parity": { script: "scripts/pickers-history-parity.mjs", args: () => [], needsTypescript: true, writes: true },
   // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
   // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
   // Candidates for review only; nothing is published unreviewed. Redis 0.
