@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmFundamentals } from "../../../../lib/server/fundamentalsCache";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { guardJob } from "../../../../lib/server/jobGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ function isAuthorized(req: NextRequest) {
   return auth === `Bearer ${secret}`;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -104,6 +105,9 @@ export async function GET(req: NextRequest) {
       industryMissing: result.industryMissing ?? null,
       screenerCovered: result.screenerCovered ?? null,
       selection: result.quoteSelection ?? null,
+      // Rows written vs skipped as unchanged (#553 COWORK #53 cheap win).
+      written: result.written ?? null,
+      unchanged: result.unchanged ?? null,
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -115,3 +119,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
+
+// RUNAWAY-COST GUARD (#553 COWORK #51 item 3): kill switch, daily circuit
+// breaker, per-run command budget, stop on Redis errors. See lib/server/jobGuard.ts.
+export const GET = guardJob("warm-fundamentals", handleGET);

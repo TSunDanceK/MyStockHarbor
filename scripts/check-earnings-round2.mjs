@@ -11,6 +11,10 @@
 //      which stays the page's word for real absences (Q4 EPS). "Not found in
 //      the filing's tagged data" stays only where the concept is truly absent
 //      (AVAV total liabilities). #535 COWORK #1.
+//      SINCE #552 COWORK #47: where BOTH ends (operating and pre-tax income)
+//      are filed, the gap is shown instead — "Other income (net)", derived,
+//      AVAV +$3.5M (= +$4.1M − $0.6M, the two tags named above) — and the
+//      tag-gap words remain for a period missing one end (AVAV_NO_PRETAX).
 //   g. The trend card adds ONE hedged line when typical sits >50 points above
 //      latest (AVAV: +133.3% vs +5.7%).
 //
@@ -30,6 +34,11 @@ const AVAV = fixture("AVAV");
 const AAPL = fixture("AAPL");
 const vAvav = M.buildSecEarningsView(AVAV);
 const vAapl = M.buildSecEarningsView(AAPL);
+// AVAV with its newest quarter's pre-tax income removed: one end missing, so
+// nothing can be derived and the tag-gap words are what the card must say.
+const PRE_TAX_AT = AVAV.quarters[0].v.length && (await import("../lib/server/secFields.ts")).SEC_FIELD_KEYS.indexOf("preTaxIncome");
+const AVAV_NO_PRETAX = JSON.parse(JSON.stringify(AVAV));
+AVAV_NO_PRETAX.quarters[0].v[PRE_TAX_AT] = null;
 const card = (mod, C, view) => visibleText(html(React.createElement(mod[C], { view })));
 const NOT_FOUND = "Not found in the filing’s tagged data";
 const NOT_CAPTURED = "Not captured from this filing";
@@ -49,8 +58,10 @@ console.log("\nc. the balance sheet on AVAV");
   const t = card(M, "SecBalanceSheetCard", vAvav);
   check("total equity is shown under its own label, with the filed figure",
     /Total equity \(incl\. noncontrolling interests\).*\$4\.40B/.test(t) && !/Shareholders' equity/.test(t), t.slice(-420));
-  check("total liabilities says the tags do not carry it",
-    new RegExp(`Total liabilities ${NOT_FOUND}`).test(t));
+  // COWORK #54: untagged, but total assets and total equity are filed at the
+  // same date, so it is derived (assets - equity) and marked, not "not found".
+  check("total liabilities is derived from assets less equity, and marked (COWORK #54)",
+    /Total liabilities \$1\.3\dB\s*derived/.test(t) && !new RegExp(`Total liabilities ${NOT_FOUND}`).test(t), (t.match(/Total liabilities[^A-Z]{0,40}/) ?? [""])[0]);
   check("a filer with the parent-only figure keeps the plain label (AAPL)",
     /Shareholders' equity/.test(card(M, "SecBalanceSheetCard", vAapl)) &&
       !/incl\. noncontrolling/.test(card(M, "SecBalanceSheetCard", vAapl)));
@@ -61,8 +72,11 @@ console.log("\nc. the balance sheet on AVAV");
 
 console.log("\nd. the income statement on AVAV (fixture predates any chain change)");
 {
-  const t = card(M, "SecIncomeStatementCard", vAvav);
-  check("interest expense and other income say 'Not captured from this filing'",
+  const d = card(M, "SecIncomeStatementCard", vAvav);
+  check("both ends filed: 'Other income (net) $3.5M derived', interest 'Included in other income (net) below' (COWORK #47)",
+    /Interest expense Included in other income \(net\) below/.test(d) && /Other income \(net\) \$3\.5M derived/.test(d) && !d.includes(NOT_CAPTURED), d);
+  const t = card(M, "SecIncomeStatementCard", M.buildSecEarningsView(AVAV_NO_PRETAX));
+  check("one end missing: interest expense and other income say 'Not captured from this filing'",
     new RegExp(`Interest expense ${NOT_CAPTURED}`).test(t) && new RegExp(`Other income / expense ${NOT_CAPTURED}`).test(t), t);
   check("...and never 'Not found in the filing's tagged data' (AVAV tags both, outside our chains)",
     !t.includes(NOT_FOUND), t);
@@ -71,10 +85,10 @@ console.log("\nd. the income statement on AVAV (fixture predates any chain chang
     /Other operating expense Not reported/.test(t) && /Less: noncontrolling interest Not reported/.test(t));
   await underMutation("tag-gap copy dropped from the income statement",
     "TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED", "NOT_REPORTED",
-    (mod) => card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV)).includes(`Interest expense ${NOT_CAPTURED}`));
+    (mod) => card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)).includes(`Interest expense ${NOT_CAPTURED}`));
   await underMutation("interest/other income back on the tagged-data wording",
     "TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED", "TAG_GAP_LINES.has(c.key) ? NOT_IN_TAGGED_DATA : NOT_REPORTED",
-    (mod) => !card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV)).includes(NOT_FOUND));
+    (mod) => !card(mod, "SecIncomeStatementCard", mod.buildSecEarningsView(AVAV_NO_PRETAX)).includes(NOT_FOUND));
 }
 
 console.log("\ng. the trend card's skew line");

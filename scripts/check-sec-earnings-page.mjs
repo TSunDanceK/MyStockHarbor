@@ -474,7 +474,8 @@ console.log("\n7d. an absent component leaves the scale — it is not a penalty"
   check("...and an absent component contributes exactly zero, not a default",
     /const pts = sc/.test("") ||
       /if \(isPct\(s\.revenueYoY\) && !revenueBaseTooSmall\(s\.revenue\?\.val \?\? null, s\.revenueYoY\)\) \{\s*contribute\(/.test(scoreRaw) &&
-      /if \(isPct\(s\.epsYoY\)\) contribute\(/.test(scoreRaw) &&
+      // #552 COWORK #40: also not off a large non-operating item (still no else).
+      /if \(isPct\(s\.epsYoY\) && !view\.largeNonOperating\) contribute\(/.test(scoreRaw) &&
       /if \(s\.netIncome\.val != null\) contribute\(/.test(scoreRaw) &&
       /if \(marginPair && marginMoveMeaningful\(marginPair\.first, marginPair\.last\)\) \{\s*contribute\(/.test(scoreRaw) &&
       /if \(acc != null && ni != null && ni !== 0\) \{\s*contribute\(/.test(scoreRaw),
@@ -958,6 +959,19 @@ check("the run logs one line whatever happens",
   /console\.log\("\[sec-facts\]"/.test(jobRaw));
 check("a content-hash move with no filing event is logged as a silent restatement",
   /SILENT RESTATEMENT/.test(jobRaw));
+// AN OFF-MANIFEST SYMBOL HAS NO ENTRY (#552 COWORK #56, TSM): inside the facts
+// loop, every read of `entry` before its `if (entry)` block must be guarded.
+// TSM's re-read threw "reading 'needsReverify'" on the restatement line.
+const entryUnguarded = (src) => {
+  const from = src.indexOf("const entry = manifest.symbols[symbol];");
+  const to = src.indexOf("if (entry) {", from);
+  const body = src.slice(from, to).replace(/\/\/.*$/gm, "");
+  return from < 0 || to < 0 ? ["loop not found"] : [...body.matchAll(/\bentry\.(\w+)/g)].map((m) => m[0]);
+};
+check("an off-manifest symbol reads its entry only through entry?. before `if (entry)` (TSM)",
+  entryUnguarded(jobRaw).length === 0, entryUnguarded(jobRaw).join(" "));
+check("...and CATCHES the restatement line's `entry.needsReverify` restored",
+  entryUnguarded(jobRaw.replace("!entry?.needsReverify", "!entry.needsReverify")).includes("entry.needsReverify"));
 check("it is registered as a cron",
   JSON.parse(fs.readFileSync("vercel.json", "utf8")).crons.some((c) => c.path === "/api/jobs/sec-facts"));
 

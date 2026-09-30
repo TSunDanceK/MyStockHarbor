@@ -191,6 +191,10 @@ const CURATED_UNIVERSE: string[] = [
 ].filter(Boolean);
 
 const DISCOVERY_MASTER_LIST: string[] = [
+  // 2026-09-29 (#553 COWORK #70): WBA, CTRA, EA, K and PXD removed -- no longer
+  // in SEC's ticker file, and this list kept re-admitting them to the price
+  // pool, where the Tiingo jobs then asked for dead tickers. BK and EQR are
+  // replaced by their new tickers below.
   "A",
   "AAL",
   "AAP",
@@ -224,7 +228,8 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "BDX",
   "BEN",
   "BIIB",
-  "BK",
+  // 2026-09-29 (#553 COWORK #70): BK retickered to BNY (same CIK, 1390777).
+  "BNY",
   "BKNG",
   "BKR",
   "BLK",
@@ -257,7 +262,6 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "CRL",
   "CSGP",
   "CTAS",
-  "CTRA",
   "CTSH",
   "CVS",
   "DAL",
@@ -276,7 +280,6 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "DUK",
   "DVN",
   "DXCM",
-  "EA",
   "EBAY",
   "ECL",
   "ED",
@@ -288,7 +291,8 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "EOG",
   "EPAM",
   "EQIX",
-  "EQR",
+  // 2026-09-29 (#553 COWORK #70): EQR retickered to VMRK (same CIK, 906107).
+  "VMRK",
   "EQT",
   "ES",
   "ESS",
@@ -349,7 +353,6 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "JBHT",
   "JBL",
   "JKHY",
-  "K",
   "KDP",
   "KEY",
   "KHC",
@@ -423,7 +426,6 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "PSA",
   "PSX",
   "PTC",
-  "PXD",
   "RCL",
   "REG",
   "REGN",
@@ -487,7 +489,6 @@ const DISCOVERY_MASTER_LIST: string[] = [
   "VRSN",
   "VRTX",
   "WAB",
-  "WBA",
   "WDAY",
   "WEC",
   "WELL",

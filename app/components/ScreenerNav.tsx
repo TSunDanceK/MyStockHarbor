@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import ScreenerFilterSearch from "@/app/components/ScreenerFilterSearch";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
+import { positiveLastEarningsHidden } from "@/lib/positiveLastEarnings";
 import { describePredicate } from "@/lib/screenerFields";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -153,10 +154,11 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Earnings",
     headingColor: "#34d399",
-    items: [
+    items: ([
       { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", icon: "✓", tone: "green", filterKey: "positiveLastEarnings" },
       { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "↗", tone: "green", filterKey: "strongEarningsGrowth" },
-    ],
+      // Hidden 2026-09-27 (#553 COWORK #64): see lib/positiveLastEarnings.ts.
+    ] satisfies NavItem[]).filter((item) => !positiveLastEarningsHidden(item.href)),
   },
   {
     heading: "Chart Plays",
