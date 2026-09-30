@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
-import { warmPricePool, keepPricePoolAlive } from "../../../../lib/server/pricePool";
+import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS } from "../../../../lib/server/pricePool";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 
 export const runtime = "nodejs";
@@ -172,10 +172,17 @@ export async function GET(req: NextRequest) {
       `[warm-price-pool] targets: ${symbols.length} (displayed ${displayed}, universe ${universe}, tier1 ${tier1})`
     );
 
-    const result = await warmPricePool(symbols, Date.now());
+    // THE BENCHMARK ETFs (#553 COWORK #77/#78): SPY for C's SPX page (step 6),
+    // and QQQ/DIA/IWM for the dashboard benchmarks (step 4). None is in the
+    // Pickers universe or the dynamic one, so nothing else puts them in the
+    // pool -- and the Tiingo quote and EOD jobs take their universe from the
+    // pool's fields. Added HERE, not in getWarmTargetSymbols, which the
+    // fundamentals warms share: an ETF has no filings to warm.
+    const poolSymbols = [...new Set([...symbols, ...POOL_BENCHMARK_ETFS])];
+    const result = await warmPricePool(poolSymbols, Date.now());
     console.log("[warm-price-pool]", JSON.stringify(result));
     await recordJobRun("warm-price-pool", result.ok !== false, {
-      targets: symbols.length,
+      targets: poolSymbols.length,
       written: result.written ?? null,
       // Surfaced on the cache health page next to priceRefreshed. Zero opens
       // against a non-zero refresh count means stable/quote stopped carrying
