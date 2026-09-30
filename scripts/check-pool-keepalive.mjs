@@ -150,6 +150,7 @@ const releaseLock = async () => { S().released += 1; };
 const recordJobRun = async (job, ok, summary) => { S().records.push({ job, ok, summary }); };
 const getWarmTargetSymbols = async () => { S().derivedTargets += 1; return { symbols: ["AAPL"], displayed: 1, universe: 1, tier1: 1 }; };
 const warmPricePool = async () => { S().warmed += 1; return { ok: true, written: 1 }; };
+const POOL_BENCHMARK_ETFS = ["SPY", "QQQ", "DIA", "IWM"]; // #553 COWORK #78: the route appends these
 const isActiveMarketWindow = () => S().marketOpen;
 const keepPricePoolAlive = async () => { S().keptAlive += 1; return true; };
 const process = { env: { FMP_API_KEY: "x", NEXT_PUBLIC_SITE_URL: "https://x" } };
