@@ -102,6 +102,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          SKIP_UNIVERSE: ${{ inputs.limit == '1' && 'yes' || 'no' }}
 
   # PROBE BRANCH ONLY (never merged): the #552 COWORK #78 bank-revenue
   # measurement. Reads R2 and Upstash (read commands only); writes nothing.
@@ -123,3 +124,4 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          SKIP_UNIVERSE: ${{ inputs.limit == '1' && 'yes' || 'no' }}

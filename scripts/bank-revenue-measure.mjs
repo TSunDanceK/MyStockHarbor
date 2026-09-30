@@ -43,7 +43,7 @@ const band = (sic) => !sic ? "no SIC" : sic >= "6000" && sic <= "6199" ? "banks 
 // ── Population A: stored sets with no revenue in their newest year ─────────
 const symbols = ((await redis(["SMEMBERS", INDEX])) ?? []).map(String).sort();
 const manifest = parse(await redis(["GET", MANIFEST])) ?? { symbols: {} };
-const noRevStored = [];
+const noRevStored = [], noRevQuarter = [];
 for (let i = 0; i < symbols.length; i += 25) {
   const chunk = symbols.slice(i, i + 25);
   const got = await redis(["MGET", ...chunk.map((s) => `${PREFIX}:${s}`)]);
@@ -51,7 +51,10 @@ for (let i = 0; i < symbols.length; i += 25) {
     const set = got?.[j] ? parse(got[j]) : null;
     if (!set?.years?.length) return;
     const newest = [...set.years].sort((a, b) => (a.e < b.e ? 1 : -1))[0];
-    if (newest.v?.[REV] == null) noRevStored.push({ sym: s, cik: String(manifest.symbols?.[s]?.cik ?? set.cik ?? "").padStart(10, "0") });
+    const cik = String(manifest.symbols?.[s]?.cik ?? set.cik ?? "").padStart(10, "0");
+    if (newest.v?.[REV] == null) noRevStored.push({ sym: s, cik });
+    const nq = [...(set.quarters ?? [])].sort((a, b) => (a.e < b.e ? 1 : -1))[0];
+    if (nq && nq.v?.[REV] == null && newest.v?.[REV] != null) noRevQuarter.push({ sym: s, cik, end: nq.e, start: nq.s });
   });
 }
 
@@ -74,6 +77,17 @@ const classify = async (cik) => {
     I: at.has("InterestAndDividendIncomeOperating"),
   };
 };
+// THE NEWEST QUARTER: the same concepts, on a ~3-month duration ending at `end`.
+const classifyQuarter = async (cik, end) => {
+  const buf = await r2.get(`facts/${cik}.ndjson.br`);
+  if (!buf) return null;
+  const { rows } = decodeFacts(buf);
+  const q = rows.filter((r) => r[4] === end && r[3] && (Date.parse(r[4]) - Date.parse(r[3])) / 86_400_000 < 100);
+  const at = new Set(q.map((r) => r[1]));
+  return { newest: end, today: [...at].some((c) => TODAY_CHAIN.has(c)), R: at.has("RevenuesNetOfInterestExpense"),
+    N: at.has("InterestIncomeExpenseNet") && at.has("NoninterestIncome"), I: at.has("InterestAndDividendIncomeOperating"),
+    todayYtdOnly: rows.some((r) => r[4] === end && TODAY_CHAIN.has(r[1])) && ![...at].some((c) => TODAY_CHAIN.has(c)) };
+};
 const tallyOf = () => ({ n: 0, R: 0, N: 0, RorN: 0, neither: 0, Ionly: 0, noArchive: 0, symbols: { R: [], NonlyN: [], neither: [] } });
 const add = (t, sym, c) => {
   t.n++;
@@ -95,6 +109,23 @@ for (const [b, t] of Object.entries(byBandA).sort((x, y) => y[1].n - x[1].n)) {
   console.log(`     NII+NI only: ${t.symbols.NonlyN.join(" ") || "-"}`);
   console.log(`     neither: ${t.symbols.neither.join(" ") || "-"}`);
 }
+
+console.log(`\nA2. STORED SETS WHOSE NEWEST QUARTER HAS NO REVENUE (their newest year has it): ${noRevQuarter.length}`);
+const byBandQ = {};
+let ytdOnly = [];
+for (const { sym, cik, end } of noRevQuarter) {
+  const c = idx.entries[cik] ? await classifyQuarter(cik, end) : null;
+  if (c?.todayYtdOnly) ytdOnly.push(sym);
+  add(byBandQ[band(sicOf(cik))] ??= tallyOf(), sym, c);
+}
+for (const [b, t] of Object.entries(byBandQ).sort((x, y) => y[1].n - x[1].n)) {
+  console.log(`  ${b}: ${t.n} · RevenuesNetOfInterestExpense ${t.R} · NII+noninterest ${t.N} · either ${t.RorN} · neither ${t.neither} · not archived ${t.noArchive}`);
+  console.log(`     R: ${t.symbols.R.join(" ") || "-"}`);
+  console.log(`     NII+NI only: ${t.symbols.NonlyN.join(" ") || "-"}`);
+  console.log(`     neither: ${t.symbols.neither.join(" ") || "-"}`);
+}
+console.log(`  of which today's revenue concepts exist only as year-to-date at that end (a derivation gap, not a tag gap): ${ytdOnly.length} ${ytdOnly.join(" ")}`);
+if (process.env.SKIP_UNIVERSE === "yes") { console.log(`\nRedis commands ${cmds} (reads only) · SEC requests 0 · R2 reads only`); process.exit(0); }
 
 console.log(`\nB. ARCHIVE UNIVERSE: filers whose newest annual year has none of today's revenue concepts`);
 const byBandB = {};
