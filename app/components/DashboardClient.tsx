@@ -1,5 +1,6 @@
 "use client";
 
+import { CRYPTO_MODE_ENABLED } from "@/lib/cryptoMode";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -18,6 +19,7 @@ import { breakdownChipValue } from "@/lib/breakdownChip";
 import { SHOW_PUBLISHER_IMAGES } from "@/lib/news-image-policy";
 import type { CardArt } from "@/lib/server/news/art";
 import NewsCardArt from "@/app/components/NewsCardArt";
+import { utcDay, utcStamp } from "@/lib/utcDate";
 import { browserStorage, readWideChoice, WIDE_ARROW_LEFT, WIDE_ARROW_RIGHT, wideViewWidth, writeWideChoice } from "@/lib/dashboardWide";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string | null; };
@@ -1233,7 +1235,7 @@ export default function DashboardClient({
     };
     return (
       <SectionCard title={assetType === "crypto" ? "Crypto Benchmarks" : "Market Benchmarks"} right={assetType === "stock" ? <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link> : null}>
-        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}</div>
+        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {(bench?.updatedAt && utcStamp(bench.updatedAt)) || "—"} · {bench?.scope ?? "Benchmarks"}</div>
         {isMobile ? (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
             {items.map(it => <BenchCard key={it.key} it={it} />)}
@@ -1270,7 +1272,7 @@ export default function DashboardClient({
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : news.cards.length >= 3 ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: 12 }}>
             {news.cards.map((item, idx) => (
               <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{(item.pubDate && utcDay(item.pubDate)) || "Recent"}</div></div>
                 {/*
                   HIDDEN, NOT DELETED — publisher thumbnails passed through by
                   FMP, who were never the rights holder. See
@@ -1332,7 +1334,8 @@ export default function DashboardClient({
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}><Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", flex: "0 0 auto" }}><img src="/logo.png" alt="MyStockHarbor" style={{ height: 48, width: "auto", objectFit: "contain", display: "block" }} /></Link><div style={{ fontSize: 12, fontWeight: 700, color: COLORS.mutedFg, lineHeight: 1.35 }}>Educational stock dashboard and market research tools.</div></div>
         <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Stock Analysis Tools, Stock Pickers & Market Insights</div>
         <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
-        <div style={{ marginTop: 14 }}><AssetTypeToggle /></div>
+        {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+        {CRYPTO_MODE_ENABLED ? <div style={{ marginTop: 14 }}><AssetTypeToggle /></div> : null}
         <button type="button" onClick={() => router.push("/pickers")} style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(47,107,255,0.5)", background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span><span>→</span></button>
         <div style={{ marginTop: 12 }} ref={mobileSearchBoxRef}>
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>{assetType === "crypto" ? "Search Crypto (USD pairs)" : "Search Any Stock"}</div>
@@ -1377,7 +1380,8 @@ export default function DashboardClient({
       <div className="msh-wrap">
         <div className="msh-hero">
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
-          <AssetTypeToggle compact />
+          {/* Crypto mode hidden 2026-09-27 (lib/cryptoMode.ts, #553 COWORK #62). */}
+          {CRYPTO_MODE_ENABLED ? <AssetTypeToggle compact /> : null}
           <div className="msh-hero-actions">
             <div className="msh-searchbox" ref={searchBoxRef}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>

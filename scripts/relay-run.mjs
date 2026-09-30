@@ -40,6 +40,13 @@ const TASKS = {
   // series, because fx-sources guessed a DDP hash and cannot distinguish a bad
   // URL from an unavailable source. Read-only and uncredentialled likewise.
   "fred-fx": { script: "scripts/fred-fx-probe.mjs", args: () => [] },
+  // THE CURRENCY VOTE (#552 COWORK #50/#55): ties on fields and rules (a)/(b)/(c),
+  // against the SHIPPED reportingCurrency. ALL=1 widens to every registrant.
+  "currency-vote-census": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true },
+  "currency-vote-census-all": { script: "scripts/currency-vote-census.mjs", args: () => [], needsTypescript: true, env: { ALL: "1" } },
+  // IS DEXTAUS CURRENT, WHICH WAY IT POINTS, AND WHAT ECB'S TWD LEG LOOKS
+  // LIKE BESIDE IT (#552, COWORK #22 §0). Read-only and uncredentialled likewise.
+  "twd-rate": { script: "scripts/twd-rate-probe.mjs", args: () => [] },
   // WHY TWO OF THE THREE EYE-CHECK FILERS DID NOT CONVERT. Reads companyfacts
   // and every FRED series the adapter names; touches no store, so read-only.
   "fx-filer-diagnosis": {
@@ -182,6 +189,8 @@ const TASKS = {
   "sec-description-probe": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true },
   // The same probe with DIAGNOSE=1: prints every Item-heading line per filing.
   "sec-description-diagnose": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { DIAGNOSE: "1" } },
+  // Item 4's sub-headings, read from the filing (#552 COWORK #48). Read-only.
+  "sec-description-heads": { script: "scripts/sec-description-probe.mjs", args: () => [], needsTypescript: true, env: { HEADS: "1" } },
   // Points and bytes of the fiscal-year share series (StoredFactSet.as) per
   // symbol, from the shipped extractor on the live payload. Read-only.
   // XOM (#518): which CIK — predecessor 34088 or holding company 2115436 —
@@ -250,6 +259,16 @@ const TASKS = {
   // changed -- conditional requests on companyfacts and submissions, both with
   // negative controls, plus whether submissions' isXBRL flag can tell a
   // quarter-carrying 6-K from a press release.
+  // Read-only: the shipped fetch + extraction on named symbols, printing the
+  // error sec-reread.yml's public log only counts (#552 COWORK #56, TSM).
+  "sec-facts-one": { script: "scripts/sec-facts-one.mjs", args: (env) => [env.SYMBOLS ?? ""], needsTypescript: true },
+  // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
+  // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
+  "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
+  // Read-only, uncredentialled: non-operating total vs component, before and
+  // after rankPerPeriod, over every registrant filing both tags (#552 COWORK #58).
+  "nonop-rank-census": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true },
+  "nonop-rank-census-detail": { script: "scripts/nonop-rank-census.mjs", args: () => [], needsTypescript: true, env: { DETAIL: "1" } },
   "sec-reread": { script: "scripts/sec-reread-probe.mjs", args: (env) => [env.SYMBOLS ?? ""] },
   // Read-only, no dump: it fetches public endpoints only. The runner is a
   // DATACENTRE IP, so its Nasdaq result stands in for NEITHER the owner's
@@ -652,6 +671,11 @@ const TASKS = {
   "write-reread-drain-probe": { script: "scripts/reread-drain-probe.mjs", args: () => [], writes: true },
   // READS ONLY: first-filers' stored sets (#552 COWORK #37). 1 MGET.
   "write-new-listing-sets": { script: "scripts/new-listing-sets-probe.mjs", args: () => [], writes: true },
+  // THE ADS MAP'S PREVIEW FIGURES (#552 COWORK #45): EPS and shares per the
+  // traded unit and every refusal, from the stored sets. No price. 1 MGET.
+  "write-ads-preview-figures": { script: "scripts/ads-preview-figures-probe.mjs", args: () => [], writes: true },
+  // Pages the layout pass touches (#552 COWORK #40/#49). Reads only; ~51 MGETs.
+  "write-layout-pass-census": { script: "scripts/layout-pass-census.mjs", args: () => [], writes: true },
   "write-ttm-eps-measure": {
     script: "scripts/ttm-eps-measure.mjs",
     args: () => [],
@@ -732,6 +756,12 @@ const TASKS = {
   "sec-instance-facts-asconverted": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "AsConverted|ConversionRate", LIMIT: "300" } },
   "sec-instance-facts": { script: "scripts/instance-facts-probe.mjs", args: (env) => [env.SYMBOLS || ""], env: { PATTERN: "Conversion|AsConverted|Converted|ExchangeRatio" } },
   // Read-only, no credential: the automatic two-class cover path on live filings (#552 COWORK #37).
+  // Read-only, no credential: each 20-F filer's stated ADS ratio (#552 COWORK #22 §1).
+  "ads-ratio-census-1": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "1/3" } },
+  "ads-ratio-census-2": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "2/3" } },
+  "ads-ratio-census-3": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHARD: "3/3" } },
+  "ads-ratio-census": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true },
+  "ads-ratio-12b": { script: "scripts/ads-ratio-census.mjs", args: () => [], needsTypescript: true, env: { SHOW12B: "1" } },
   "sec-cover-auto": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true },
   "sec-cover-auto-show": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { SHOW: "1" } },
   "sec-cover-auto-prospectus": { script: "scripts/sec-cover-auto-probe.mjs", args: () => [], needsTypescript: true, env: { DOCFORMS: "424B4,S-1" } },
@@ -1039,6 +1069,10 @@ const TASKS = {
   // question, explicitly not to be settled by assuming symmetry. This settles
   // it from the filers' own arithmetic. Read-only, uncredentialled, no dump.
   "ads-eps-unit": { script: "scripts/ads-eps-unit-probe.mjs", args: () => [] },
+  // NON-OPERATING TAG COVERAGE (#552 COWORK #47): SEC frames, counts only. Read-only.
+  "nonop-tag-coverage": { script: "scripts/nonop-tag-coverage.mjs", args: () => [] },
+  // STORED SETS AS JSON for a local render fixture (#552 COWORK #47). 1 MGET.
+  "write-factset-dump": { script: "scripts/factset-dump-probe.mjs", args: () => [], writes: true },
   // CAN A MULTI-CLASS FILER'S SHARES BE SPLIT BY CLASS AT ALL? BUILD-BRIEF §5
   // prescribes summing each class's shares x that class's close; secFields.ts
   // records from measurement that companyfacts carries no class label. Both
@@ -1162,6 +1196,14 @@ const TASKS = {
   "capex-ifrs-diag": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrsdiag" } },
   "capex-ifrs-cf": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "ifrscf" } },
   "capex-receivers": { script: "scripts/capex-probe.mjs", args: () => [], env: { PART: "receivers" } },
+  // Credentialled because Upstash lives in that job; performs NO writes.
+  // Relay C (#563 COWORK #12): prints the capex page's three records (1 MGET)
+  // for a local render against production data.
+  "write-capex-records-dump": {
+    script: "scripts/capex-records-dump.mjs",
+    args: () => [],
+    writes: true,
+  },
   // READ-ONLY (Relay C, #563 COWORK #5): a filing's own wording for a line
   // (e.g. ASML's NXE), so a sub-label is verbatim. SYMBOLS="CIK=..;TERM=..;PHRASES=a|b".
   "capex-text-probe": { script: "scripts/capex-text-probe.mjs", args: () => [] },
@@ -1173,6 +1215,15 @@ const TASKS = {
   "write-pickers-sec-seed": {
     script: "scripts/pickers-sec-seed.mjs",
     args: () => ["--allow-writes"],
+    needsTypescript: true,
+    writes: true,
+  },
+  // The same seed into the PREVIEW-ONLY key (#553 COWORK #60), which production
+  // never reads or overwrites, so a Cowork preview check isn't raced by the
+  // 05:35 job. ~860 commands per seed; the key lapses on the 3-day TTL.
+  "write-pickers-sec-seed-preview": {
+    script: "scripts/pickers-sec-seed.mjs",
+    args: () => ["--allow-writes", "--preview"],
     needsTypescript: true,
     writes: true,
   },
@@ -1222,6 +1273,67 @@ const TASKS = {
     needsTypescript: true,
     writes: true,
   },
+  // P/E, EPS AND PAYOUT: FMP TODAY VS secValuation (#553 COWORK #18/#19),
+  // measured before the move, plus the refused caps per reason for A.
+  // Read-only; ~705 Redis reads (one GET per fact set).
+  "write-pickers-pe-census": {
+    script: "scripts/pickers-pe-census.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // WHY AN FY-MARKED P/E LOOKS WRONG (#553 COWORK #64): what #587 ships for a
+  // few symbols beside its inputs. Read-only; ~15 Redis reads.
+  "write-pickers-pe-probe": {
+    script: "scripts/pickers-pe-probe.mjs",
+    args: () => [],
+    needsTypescript: true,
+    writes: true,
+  },
+  // TIINGO, VERIFIED BEFORE BUILDING (#553 COWORK #49). Runs in relay.yml's
+  // `tiingo` job (TIINGO_API_KEY only). Prints no Tiingo data: statuses,
+  // counts, timings and field names. Stores nothing; 0 Redis commands.
+  "tiingo-verify": { script: "scripts/tiingo-verify.mjs", args: () => [], tiingo: true },
+  // The universe it checks (price pool + Pickers), as tickers only.
+  // Read-only; HKEYS + GET = 2 Redis commands.
+  "write-universe-tickers": { script: "scripts/universe-tickers.mjs", args: () => [], writes: true },
+  // THE PRICE POOL'S DOTTED ORPHANS (#553 COWORK #53): fold BRK.B into BRK-B.
+  // One-time, after the poolField change deploys. 4-5 commands.
+  "write-pool-spelling-migrate-dry": { script: "scripts/pool-spelling-migrate.mjs", args: () => [], writes: true },
+  "write-pool-spelling-migrate": { script: "scripts/pool-spelling-migrate.mjs", args: () => ["--apply"], writes: true },
+  // TIINGO (#553 COWORK #55 §2). The §7 purge: every msh:tiingo: key, counts
+  // only; dry unless applied. ~2 commands dry, ~6 applied.
+  "write-tiingo-purge-dry": { script: "scripts/tiingo-purge.mjs", args: () => [], writes: true },
+  "write-tiingo-purge": { script: "scripts/tiingo-purge.mjs", args: () => ["--apply"], writes: true },
+  // Tiingo vs FMP history on ~50 symbols, counts and differences only. ~4 commands.
+  "write-tiingo-parity": { script: "scripts/tiingo-parity.mjs", args: () => [], writes: true },
+  // RETICKERED SYMBOLS OUT OF THE PRICE POOL (#553 COWORK #70): found by the
+  // Tiingo universe's own rule (retickeredOut), old CIKs from the sweep's chain
+  // then A's manifest. Dry run first; --apply (delete + record the CIKs) only
+  // on the owner's OK. 3-5 Redis commands, once.
+  "write-pool-retick-drop-dry": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes"], needsTypescript: true, writes: true },
+  // The apply deletes ONLY the owner-reviewed list (COWORK #73) and refuses,
+  // deleting nothing, if anything else is unlisted at run time.
+  "write-pool-retick-drop": { script: "scripts/pool-retick-drop.mjs", args: () => ["--allow-writes", "--apply", "--only", "BK,EQR,WBA,CTRA,EA,K,PXD,WBS"], needsTypescript: true, writes: true },
+  // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
+  // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
+  "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
+  // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
+  // Candidates for review only; nothing is published unreviewed. Redis 0.
+  "capex-receiver-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "1/4" } },
+  "capex-receiver-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "2/4" } },
+  "capex-receiver-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "3/4" } },
+  "capex-receiver-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", SHARD: "4/4" } },
+  // Batch 2 (#563 COWORK #23): the receivers' own reports (all named tracked
+  // parties), and the six zero-candidate receivers re-scanned with filed names.
+  "capex-receiver-own-scan": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "own" } },
+  "capex-receiver-six-scan-1": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "1/4" } },
+  "capex-receiver-six-scan-2": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "2/4" } },
+  "capex-receiver-six-scan-3": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "3/4" } },
+  "capex-receiver-six-scan-4": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", SCAN: "receivers", RECEIVERS: "AAOI,FIX,HUBB,LITE,NVT,PWR", SHARD: "4/4" } },
+  // Batch 2 fix (#563 COWORK #24): the filed text before a truncated quote. SYMBOLS carries QUOTE_CONTEXT.
+  "capex-quote-context": { script: "scripts/capex-links-probe.mjs", args: () => [], needsTypescript: true, env: { RULES: "v4", QUOTE_CONTEXT_FROM_SYMBOLS: "1" } },
 };
 
 const argv = process.argv.slice(2);
@@ -1259,6 +1371,20 @@ if (named !== Boolean(spec.writes)) {
       `writes: true. The prefix is what routes it to the credentialled job, so a ` +
       `disagreement here means the routing is wrong.`
   );
+  process.exit(2);
+}
+// THE THIRD JOB (#553 COWORK #49). The tiingo- prefix routes to the job that
+// holds TIINGO_API_KEY and nothing else; the same agreement is enforced here,
+// and nothing else may run where that key is present.
+if (task.startsWith("tiingo-") !== Boolean(spec.tiingo) || (spec.tiingo && spec.writes)) {
+  console.error(
+    `FATAL: "${task}": a Tiingo task MUST be named tiingo-, declare tiingo: true ` +
+      `and not write; a task named tiingo- MUST declare tiingo: true.`
+  );
+  process.exit(2);
+}
+if (!spec.tiingo && process.env.TIINGO_API_KEY) {
+  console.error(`FATAL: "${task}" is not a Tiingo task but TIINGO_API_KEY is present. Refusing.`);
   process.exit(2);
 }
 if (spec.writes && !allowWrites) {

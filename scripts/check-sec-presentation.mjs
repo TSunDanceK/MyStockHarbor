@@ -247,7 +247,7 @@ console.log("\n3b. A LEGEND FOR A MARKER THAT NEVER APPEARS IS NOT SHOWN");
     `got ${tCrossed.crossings} — revenue and EPS each carry the same crossing`);
   await underMutation(
     "crossings counted as everything skipped",
-    "    crossings += values.filter(isCrossing).length;",
+    "    crossings += crossed.length;",
     "    crossings += skipped;",
     (m) => m.trendSummary(viewOf(clean, cleanMargins)).crossings === 0
   );

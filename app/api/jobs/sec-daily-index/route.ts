@@ -13,6 +13,10 @@ import {
   reconcileDelistings,
   reconcileExchanges,
   discardFactSets,
+  readFactSetIndex,
+  backfillFactSetIndex,
+  factSetIndexBackfilled,
+  shouldBackfillFactSetIndex,
   type SecManifest,
 } from "@/lib/server/secManifest";
 import { resolveTickerMap, refreshTickerMap } from "@/lib/server/secTickerMap";
@@ -31,6 +35,8 @@ import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { refreshSecFilingNews } from "@/lib/server/news/secFilingsJob";
 import { recordSuccessionEvents, successionEventsOf, type SuccessionEvent } from "@/lib/server/secSuccessionFlags";
 import { CITED_PREDECESSOR_CIKS } from "@/lib/server/secSuccession";
+import { primaryListingSymbols } from "@/lib/server/secPrimaryListing";
+import { POPULAR_SYMBOLS } from "@/lib/server/symbolSearch";
 import {
   readDynamicUniverse,
 } from "@/lib/server/dynamicUniverseCache";
@@ -385,8 +391,24 @@ export async function GET(req: NextRequest) {
   // rendered `noindex` because their CIK has no companyfacts (a 404, now
   // stored as the empty answer — see companyFactsAbsent), and only a manifest
   // entry puts them in the job's populate queue to have it stored.
+  // AND EVERY SYMBOL THAT ALREADY HAS A STORED SET, AND THE POPULAR LIST
+  // (#552 COWORK #57/#58/#59). The dynamic pool ages names out after 14 days,
+  // so a set written on demand (TSM) or by the cold path had no entry and was
+  // never re-read: 54 of 961 stored sets on 2026-09-25. JNJ, on the popular
+  // list, had neither an entry nor a set. Read from the fact-set INDEX, one
+  // SMEMBERS; the index is backfilled once, gated on a marker key, NOT on the
+  // index being empty (#552 COWORK #60: a write before this run would make it
+  // non-empty and skip the backfill for good). See backfillFactSetIndex.
+  const stored = await readFactSetIndex();
+  const marker = await factSetIndexBackfilled();
+  const indexBackfill =
+    shouldBackfillFactSetIndex({ marker: marker.done, indexSize: stored.symbols.length, dryRun, inspectionOnly })
+      ? await backfillFactSetIndex().catch(() => null) : null;
+  if (indexBackfill) stored.symbols = (await readFactSetIndex()).symbols;
   const universe = [
-    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
+    // AND EACH CITED PRIMARY LISTING (#552 COWORK #48): BIP was never in any
+    // list above while its notes' ticker BIPI was, so the set lived under a note.
+    ...new Set([...PRESET_UNIVERSE, ...priorityStocks, ...uniqueEtfs, ...primaryListingSymbols(), ...POPULAR_SYMBOLS, ...stored.symbols, ...(await readDynamicUniverse()).map((e) => e.symbol)]),
   ];
   const seed = seedManifest(manifest, universe, tickers.map, tickers.source !== "none");
 
@@ -593,7 +615,14 @@ export async function GET(req: NextRequest) {
     // One GET for the manifest, one for the ticker map, one SET for the
     // manifest. Up from two: the ticker map is read daily (seeding and
     // reconciliation both need it) and written weekly.
-    redisCommands: dryRun || inspectionOnly ? 2 : 3,
+    // Plus the fact-set index read (1 SMEMBERS) and the backfill marker (1
+    // EXISTS) (#552 COWORK #59/#60). The one-time
+    // backfill's SCAN and SADDs are reported on their own line below.
+    redisCommands: (dryRun || inspectionOnly ? 2 : 3) + stored.commands + marker.commands,
+    factSetIndex: stored.symbols.length,
+    factSetIndexBackfillScanned: indexBackfill?.scanned ?? null,
+    factSetIndexBackfillAdded: indexBackfill?.added ?? null,
+    factSetIndexBackfillCommands: indexBackfill?.commands ?? null,
     // Stated rather than left to be inferred from a watermark that did not move.
     watermarkMoved: !dryRun && !inspectionOnly && written,
     inspectionOnly,

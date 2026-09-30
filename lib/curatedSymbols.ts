@@ -14,6 +14,7 @@
 //
 // This file is the single source of truth for these arrays — do not
 // redefine them inline elsewhere.
+import { isPriceExcluded } from "./priceExcluded.mjs";
 
 export const coreMegaCaps = [
   "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "AVGO",
@@ -122,7 +123,8 @@ export function getRelatedSymbols(symbol: string, count = 10): string[] {
   const addFrom = (list: string[]) => {
     for (const candidate of rotate(list, upper)) {
       if (ordered.length >= count) break;
-      if (seen.has(candidate)) continue;
+      // The dated PRICE_EXCLUDED list (#553 COWORK #61): never linked to.
+      if (seen.has(candidate) || isPriceExcluded(candidate)) continue;
       seen.add(candidate);
       ordered.push(candidate);
     }

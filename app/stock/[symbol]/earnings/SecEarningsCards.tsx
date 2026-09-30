@@ -18,7 +18,7 @@ import {
 } from "@/lib/server/secPresentation";
 import { SCORE_BANDS, scoreBandNote, toneLabel, type SecEarningsScore } from "@/lib/server/secEarningsScore";
 import {
-  REFUSAL_WORDS, marketCap, peRatio, type ValuationInputs,
+  REFUSAL_WORDS, epsUnitWords, marketCap, peRatio, sharesBasisWords, type ValuationInputs,
 } from "@/lib/server/secValuation";
 
 /**
@@ -586,10 +586,18 @@ export function SecSnapshotCard({
         <Metric label={`Diluted EPS (${epsStandardWord(view.accounting)})`} tone={signTone(s.epsDiluted.val)}>
           <CellValue cell={s.epsDiluted} empty={epsEmpty(view, view.latestLabel)} />
         </Metric>
+        {/* A GROWTH FIGURE THE SCORE WILL NOT USE SAYS WHY, beside the figure
+            (#552 COWORK #60: ZM's +344.0% with nothing next to it). The same
+            words as the marked income rows, from the same view field. */}
         <Metric
           label="YoY EPS growth"
           tone={toneForGrowth(s.epsYoY)}
-          sub={s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+          sub={
+            <>
+              {s.comparedWith ? `Compared with ${s.comparedWith}` : `Prior-year ${w.one} not on file`}
+              {view.largeNonOperatingNote && s.epsYoY != null ? <div className="metricSubNote">{view.largeNonOperatingNote}</div> : null}
+            </>
+          }
         >
           <PctCell v={s.epsYoY} />
         </Metric>
@@ -1308,13 +1316,13 @@ export function SecIncomeStatementCard({ view }: { view: SecEarningsView }) {
       <PlWaterfall view={view} />
       <div style={{ marginTop: 12 }}>
         {view.incomeStatement.map((c) => (
-          <Row key={c.label} label={c.label}>
+          <Row key={c.label} label={c.label} sub={c.sub}>
             <CellValue
               cell={c}
               compact
              
               currency={!c.label.includes("shares")}
-              empty={c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED}
+              empty={c.emptyText ?? (c.key === "revenue" ? revenueEmpty(view) : EPS_LINES.has(c.key) ? epsEmpty(view, view.latestLabel) : TAG_GAP_LINES.has(c.key) ? EMPTY_REASONS.notCaptured : NOT_REPORTED)}
             />
           </Row>
         ))}
@@ -1801,14 +1809,20 @@ export function SecTrendSummaryCard({ view }: { view: SecEarningsView }) {
                   <span className="trendTag">Latest </span>{fmtTrend(l.kind, l.latest)}
                 </span>
               ) : null}
+              {/* THE NEWEST CROSSING, in the snapshot's words (#552 COWORK #47):
+                  AXTI's EPS growth is refused, but its latest quarter turned
+                  profitable, and that is the news. */}
+              {l.latestWords ? <span className="trendLatest">{l.latestWords}</span> : null}
               <div className="trendChipRow">
-                {/* A LEVEL GETS NO VERDICT CHIP. trendSummary leaves the
-                    operating-margin line untoned on purpose: whether 6% is good
-                    depends on the industry and this page has no comparison. */}
-                {l.tone === null && l.value !== null ? null : <ToneChip tone={l.tone} word={word} />}
+                {/* A LEVEL GETS NO VERDICT CHIP ON ITS VALUE — whether 6% is
+                    good depends on the industry. Its DIRECTION does get one
+                    (latest against typical, the Growth & Margins band): l.move. */}
+                {l.kind === "level"
+                  ? (l.move ? <ToneChip tone={l.move.tone} word={l.move.word} /> : null)
+                  : l.value === null ? null : <ToneChip tone={l.tone} word={word} />}
                 <span className="trendCount">
                   {l.value === null
-                    ? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`
+                    ? (l.reason ?? `needs ${TREND_MIN_PERIODS}, has ${l.counted}`)
                     : `${l.counted} of ${l.counted + l.skipped} ${l.counted + l.skipped === 1 ? w.one : w.many}`}
                 </span>
               </div>
@@ -1875,12 +1889,12 @@ export function SecValuationCard({
     : cap !== null && !cap.ok
       ? sentence(REFUSAL_WORDS[cap.why])
       : inputs.shares
-        ? `${scaledAmount(inputs.shares.val, false)} shares × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
+        ? `${scaledAmount(inputs.shares.val, false)} ${sharesBasisWords(inputs.shares)} × $${price.toFixed(2)} close${priceAsOf ? `, ${priceAsOf}` : ""}`
         : null;
   const peValue = !current ? STALE_PRICE_WORDS
     : pe === null ? NOT_REPORTED
       : pe.ok ? pe.val.toFixed(1)
-        : pe.why === "eps-is-zero-or-negative" ? "Not meaningful" : "Not available";
+        : pe.why === "eps-is-zero-or-negative" || pe.why === "eps-near-zero" ? "Not meaningful" : "Not available";
   // WHICH TWELVE MONTHS, and a derived Q4 said so (#552 COWORK #8/#9).
   const epsSpan = inputs.eps?.basis === "four-quarters"
     ? `the four quarters to ${inputs.eps.periodEnd}${inputs.eps.derivedQ4 ? " (Q4 is the fiscal year less Q1–Q3)" : ""}`
@@ -1891,9 +1905,9 @@ export function SecValuationCard({
     : pe !== null && !pe.ok
       ? pe.why === "eps-is-zero-or-negative"
         ? `${inputs.eps && inputs.eps.val < 0 ? "Loss" : "No earnings"} over ${epsSpan}`
-        : sentence(REFUSAL_WORDS[pe.why])
+        : sentence(pe.detail ?? REFUSAL_WORDS[pe.why])
       : inputs.eps
-        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"} over ${epsSpan}`
+        ? `$${price.toFixed(2)} ÷ $${inputs.eps.val.toFixed(2)} ${inputs.eps.kind === "basic" ? "basic EPS (no diluted figure is stated)" : "diluted EPS"}${epsUnitWords(inputs.eps)} over ${epsSpan}`
         : null;
   return (
     <section className="card">

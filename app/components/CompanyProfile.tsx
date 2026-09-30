@@ -344,6 +344,9 @@ export default function CompanyProfile({
   // THE COMPANY'S OWN WORDS, one <p> per paragraph (the cleaner keeps at most
   // two), with its attribution line under them. A single wrapper carries the
   // cp-desc class so the mobile reading order is unchanged.
+  // NO DESCRIPTION IS SAID, NEVER LEFT AS A GAP (#552 COWORK #57): a filer
+  // whose annual report yields no usable opening (data/sec/descriptions.json
+  // `misses`) gets one neutral line in the same place, not an empty column.
   const descriptionBlock = hasDescription ? (
     <div className="cp-desc">
       {String(profile.description).split(/\n{2,}/).map((para, i) => (
@@ -353,7 +356,11 @@ export default function CompanyProfile({
         <p style={descAttributionStyle}>{profile.descriptionAttribution}</p>
       ) : null}
     </div>
-  ) : null;
+  ) : (
+    <div className="cp-desc">
+      <p style={descAttributionStyle}>{NO_DESCRIPTION_LINE}</p>
+    </div>
+  );
 
   const statBoxes = rows.map((r) => (
     <div key={r.label} style={cellStyle}>
@@ -439,6 +446,7 @@ export default function CompanyProfile({
         </>
       ) : (
         <>
+          {descriptionBlock}
           <div style={gridStyle} className="cp-grid-fallback">{statBoxes}</div>
           {belowDescription}
           {belowStats}
@@ -523,6 +531,8 @@ export default function CompanyProfile({
 
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const headingStyle: CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+/** Shown where the filing gives no usable description (#552 COWORK #57). */
+export const NO_DESCRIPTION_LINE = "Description not available from the filing.";
 const descStyle: CSSProperties = { margin: 0, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
 const descAttributionStyle: CSSProperties = { margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, fontStyle: "italic", color: "rgba(148,163,184,0.72)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };

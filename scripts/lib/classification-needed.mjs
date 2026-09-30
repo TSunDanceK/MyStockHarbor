@@ -140,9 +140,43 @@ export function listingLines(stored, asOf, days = 14) {
     .map((c) => `${c.at}: ${c.line}`);
 }
 
+const padCik = (c) => String(c ?? "").replace(/\D/g, "").padStart(10, "0");
+
+/**
+ * POSSIBLE HOLDING-COMPANY SUCCESSIONS (#553 COWORK #44), from A's flag hash
+ * (msh:sec:succession-flags:v1, lib/server/secSuccessionFlags.ts). A FLAG
+ * ONLY: nothing here links two CIKs. The owner approves a pair and it is added
+ * to data/sec/successor-ciks.json by PR; a pair whose predecessor is already
+ * on that list (`cited`) is not shown again, even though its flag stays in the
+ * hash.
+ */
+export function successionLines(flags, cited = new Set()) {
+  if (!flags || typeof flags !== "object") return [];
+  const out = [];
+  for (const raw of Object.values(flags)) {
+    let f = raw;
+    if (typeof f === "string") {
+      try { f = JSON.parse(f); } catch { continue; }
+    }
+    if (!f || !f.symbol || !f.successorCik || !f.predecessorCik) continue;
+    if (cited.has(padCik(f.predecessorCik))) continue;
+    out.push({
+      symbol: String(f.symbol),
+      line: `${f.symbol}: possible successor: ${f.successorName ?? "?"} (CIK ${padCik(f.successorCik)}) ← ${f.predecessorName ?? "?"} (CIK ${padCik(f.predecessorCik)}), evidence: 8-K12B ${f.eightK12b ?? "?"}, 25-NSE ${f.nse25 ?? "?"}`,
+    });
+  }
+  return out.sort((a, b) => a.symbol.localeCompare(b.symbol)).map((o) => o.line);
+}
+
+/** Predecessor CIKs already on the cited successor list, padded. */
+export function citedPredecessors(successorFile) {
+  const rows = Array.isArray(successorFile?.successors) ? successorFile.successors : [];
+  return new Set(rows.filter((r) => r?.predecessorCik != null).map((r) => padCik(r.predecessorCik)));
+}
+
 /** The issue body, or null when there is nothing to classify or report (close the issue). */
-export function issueBody({ missing, changed }, asOf, universeSize, listing = []) {
-  if (!missing.length && !changed.length && !listing.length) return null;
+export function issueBody({ missing, changed }, asOf, universeSize, listing = [], succession = []) {
+  if (!missing.length && !changed.length && !listing.length && !succession.length) return null;
   const lines = [
     `Checked ${universeSize} Pickers universe symbols on ${asOf}. The resolver (10-K override, then SIC table) could not fully place the ones below.`,
     "",
@@ -163,6 +197,11 @@ export function issueBody({ missing, changed }, asOf, universeSize, listing = []
   if (listing.length) {
     lines.push(`### Ticker changes (information; no action needed) (${listing.length})`, "", "Made automatically by the daily delisting sweep: a rename keeps the company (same SEC CIK) under its new ticker; a delisting leaves the universe. Lines marked \"check by hand\" were not decided automatically.", "");
     for (const l of listing.slice(0, MAX_ROWS)) lines.push(`- ${cell(l, 200)}`);
+    lines.push("");
+  }
+  if (succession.length) {
+    lines.push(`### Possible holding-company successions (flag only; never linked automatically) (${succession.length})`, "", "An 8-K12B by a new registrant and a 25-NSE for a tracked one with the same name. To link a pair, add it to data/sec/successor-ciks.json in a PR after checking both filings; this helper never links them.", "");
+    for (const l of succession.slice(0, MAX_ROWS)) lines.push(`- ${cell(l, 240)}`);
     lines.push("");
   }
   lines.push("_Generated daily by the Classification needed helper (Relay B)._");

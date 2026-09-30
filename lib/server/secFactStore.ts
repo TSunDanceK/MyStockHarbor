@@ -11,7 +11,7 @@
 // the I/O and nothing else.
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
-import { SEC_FACTS_PREFIX } from "./secManifest";
+import { SEC_FACTS_INDEX_KEY, SEC_FACTS_PREFIX } from "./secManifest";
 import { secFieldsHash } from "./secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "./secWriteGate";
 import type { StoredFactSet } from "./secFactCodec";
@@ -123,6 +123,14 @@ export async function writeFactSet(set: StoredFactSet): Promise<boolean> {
   if (!canWriteSecState()) { noteSecWriteBlocked("writeFactSet"); return false; }
   try {
     await redis.set(factKey(set.symbol), set);
+    // INDEXED ON EVERY WRITE (#552 COWORK #59): the daily index reads this set
+    // to give every stored set a manifest entry. A failed SADD is reported, not
+    // fatal -- the set is stored, and the drift probe counts what is missing.
+    try {
+      await redis.sadd(SEC_FACTS_INDEX_KEY, set.symbol.toUpperCase());
+    } catch (err) {
+      console.error("[sec-facts] index add failed", set.symbol, err);
+    }
     try {
       await redis.hset(SEC_FIGURES_CHANGED_KEY, { [set.symbol.toUpperCase()]: Date.now() });
     } catch {
