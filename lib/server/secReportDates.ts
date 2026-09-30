@@ -141,7 +141,13 @@ export type Submissions = {
   /** SEC's Standard Industrial Classification code, and its description. */
   sic?: unknown;
   sicDescription?: unknown;
-  filings?: { recent?: SubmissionsFilings };
+  /**
+   * `files` names the OLDER pages. Present and non-empty means `recent` is not
+   * the whole list: SEC keeps about 1,000 filings (or a year) in `recent`, so a
+   * filer with heavy other filing (JPM's structured-note prospectuses) shows
+   * only its last few results there.
+   */
+  filings?: { recent?: SubmissionsFilings; files?: unknown[] };
 };
 
 /**

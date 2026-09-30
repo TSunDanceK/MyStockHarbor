@@ -19,7 +19,7 @@ import { SEC_FIELD_KEYS } from "@/lib/server/secFields";
 import { canWriteSecState, noteSecWriteBlocked } from "@/lib/server/secWriteGate";
 import type { Submissions } from "@/lib/server/secReportDates";
 import { newestStoredEnd } from "@/lib/server/secFilingFill";
-import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue } from "@/lib/server/secReportDatesWrite";
+import { buildAndWriteReportDates, carryEventQueued, reportDatesQueue, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 import dueStripCut from "@/data/due-strip.json";
 import { makeJobBudget, FETCH_TIMEOUT_MS, JOB_BUDGET_MS, REPORT_DATES_RESERVE_MS } from "@/lib/server/jobBudget";
 
@@ -807,7 +807,8 @@ export async function GET(req: NextRequest) {
         // period every time — rows that cannot be charted and cannot be
         // estimated from. It waits for populate to reach it.
         if (!set) continue;
-        const subs = await fetchSubmissions(cik);
+        // A CITED SUCCESSOR (XOM) reads its predecessor's filing list too.
+        const subs = await withPredecessorSubmissions(cik, await fetchSubmissions(cik), fetchSubmissions);
         // ONE BUILDER, SHARED WITH THE PAIRING REWRITE (lib/server/
         // secReportDatesWrite.ts), so the two routes cannot write two shapes.
         const { ok, events, next, pending } = await buildAndWriteReportDates(symbol, cik, set, subs, todayIso);

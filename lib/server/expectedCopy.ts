@@ -131,7 +131,7 @@ export function outlookNoEstimateLabel(symbol: string): string {
  * sentence which of the two they are being told.
  */
 export function outlookReasonLabel(
-  reason: "no-record" | "no-period-end" | "thin-history" | "below-precision-bar" | "estimate-in-past",
+  reason: "no-record" | "no-period-end" | "thin-history" | "short-feed" | "below-precision-bar" | "estimate-in-past",
 ): string {
   switch (reason) {
     case "no-record":
@@ -140,6 +140,11 @@ export function outlookReasonLabel(
       return "We can't tell when its current fiscal period ends.";
     case "thin-history":
       return "It has filed too few periods for us to estimate from.";
+    // OUR LIMIT, NOT THE FILER'S (#552 COWORK #78, JPM): SEC's filing list we
+    // read holds about its last 1,000 filings, and a filer with thousands of
+    // other documents a year shows only its latest few results there.
+    case "short-feed":
+      return "It files so many other documents with the SEC that the filing list we read shows only its latest few results, too few to estimate from.";
     case "below-precision-bar":
       return "Its filing dates move around too much for an estimate to be worth showing.";
     case "estimate-in-past":
