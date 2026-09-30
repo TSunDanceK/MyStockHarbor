@@ -48,6 +48,7 @@ export default function ScanFooter({
   poolSize,
   updatedLabel,
   priceLabel,
+  marketDataCredit = null,
 }: {
   serverMatchCount: number;
   universeSize: number | null;
@@ -61,6 +62,12 @@ export default function ScanFooter({
    * is.
    */
   priceLabel: string | null;
+  /**
+   * The per-surface source line (#553 COWORK #71): "Market data from
+   * Tiingo.com" once this page's history is Tiingo's (PRICE_PROVIDER_PICKERS),
+   * null while it is still FMP's. Chosen by the server page, not here.
+   */
+  marketDataCredit?: string | null;
 }) {
   const { matchCount } = usePickerFilter();
   const live = matchCount ?? serverMatchCount;
@@ -73,6 +80,7 @@ export default function ScanFooter({
       {universeSize == null && poolSize == null ? <> · Universe Live</> : null}
       {" "}· Updated {updatedLabel}
       {priceLabel ? <> · {priceLabel}</> : null}
+      {marketDataCredit ? <> · {marketDataCredit}</> : null}
     </div>
   );
 }
