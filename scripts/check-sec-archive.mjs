@@ -151,17 +151,167 @@ const harness = (Bmod, statusFor = () => 200) => {
   check("public log lines carry counts and status only: no URL, CIK, value or row", h.logs.length >= 2 && h.logs.every((l) => !/https?:|000000000\d|\[|\bval\b/.test(l)), h.logs.join(" | ").slice(0, 120));
 }
 
+console.log("\n3b. the daily incremental job, driven with stubs (lib/secArchiveIncremental.mjs)");
+const I = await import("../lib/secArchiveIncremental.mjs");
+{
+  const IDX = [
+    "Description:           Daily Index of EDGAR Dissemination Feed by Form Type",
+    "Form Type   Company Name                                                  CIK         Date Filed  File Name",
+    "---------------------------------------------------------------------------------------------------------------------------------------------",
+    "10-Q        ONE INC                                                       1           20260929    edgar/data/1/0000000001-26-000001.txt",
+    "8-K         TWO CORP                                                      2           20260929    edgar/data/2/0000000002-26-000001.txt",
+    "10-K        NOT IN UNIVERSE LTD                                           9           20260929    edgar/data/9/0000000009-26-000001.txt",
+    "SC 13G/A    ONE INC                                                       1           20260929    edgar/data/1/0000000001-26-000002.txt",
+  ].join("\n");
+  const rows = I.parseFormIndex(IDX);
+  check("form.idx parsed: 4 rows, multi-word forms kept ('SC 13G/A'), CIKs padded", rows.length === 4 && rows[3].form === "SC 13G/A" && rows[0].cik === "0000000001");
+  const ch = I.changedCiks(rows, new Set(["0000000001", "0000000002", "0000000003"]));
+  check("a 10-Q refreshes facts; an 8-K (or a 13G) is submissions only; a CIK outside the universe is ignored",
+    ch.get("0000000001") === true && ch.get("0000000002") === false && !ch.has("0000000009") && ch.size === 2);
+  check("pending days skip weekends and stop before today", JSON.stringify(I.pendingDays("2026-09-25", "2026-09-30")) === JSON.stringify(["2026-09-28", "2026-09-29"]));
+
+  // A fake archive (3 CIKs, as the backfill left them) + a fake SEC serving one day's index.
+  const incHarness = (Imod, statusFor = () => 200) => {
+    let n = 0, t = 0;
+    const store = new Map(), urls = [];
+    const fetchImpl = async (url) => {
+      n++; urls.push(url);
+      const status = statusFor(n, url);
+      const body = /form\.20260929\.idx/.test(url) ? IDX : /daily-index/.test(url) ? "" : /companyfacts/.test(url) ? JSON.stringify(CF) : JSON.stringify({ cik: "1", filings: { recent: {}, files: [] } });
+      const st = /daily-index/.test(url) && !/20260929/.test(url) ? 404 : status;
+      return { status: st, ok: st >= 200 && st < 300, arrayBuffer: async () => new TextEncoder().encode(body).buffer };
+    };
+    const r2 = { get: async (k) => store.get(k) ?? null, put: async (k, b) => { store.set(k, Buffer.from(b)); } };
+    const seed = { v: 1, updatedAt: "2026-09-28T13:31:50Z", lastDaily: "2026-09-28", entries: Object.fromEntries(["0000000001", "0000000002", "0000000003"].map((c) => [c, { rows: 6, factsSha: "old", subSha: "old", pages: 0 }])) };
+    store.set("index.json", Buffer.from(JSON.stringify(seed)));
+    const run = (opts = {}) => Imod.runIncremental({ universe: ["0000000001", "0000000002", "0000000003", "0000000004"], r2, fetchImpl,
+      sleep: async (ms) => { t += ms; }, now: () => t, log: () => {}, userAgent: "test", todayIso: "2026-09-30", ...opts });
+    return { run, store, urls, requests: () => n };
+  };
+  const h = incHarness(I);
+  const r = await h.run();
+  const idx = JSON.parse(h.store.get("index.json"));
+  const cf1 = h.urls.filter((u) => /companyfacts\/CIK0000000001/.test(u)).length, cf2 = h.urls.filter((u) => /companyfacts\/CIK0000000002/.test(u)).length;
+  check("one day read: CIK 1 facts + submissions, CIK 2 submissions only, CIK 3 untouched, lastDaily → 2026-09-29",
+    r.status === "complete" && cf1 === 1 && cf2 === 0 && h.urls.some((u) => /submissions\/CIK0000000002/.test(u)) && !h.urls.some((u) => /CIK0000000003/.test(u)) && idx.lastDaily === "2026-09-29", `${r.status} ${idx.lastDaily}`);
+  check("the new universe CIK (4) is archived in full", r.T.newCiks === 1 && Boolean(idx.entries["0000000004"]?.factsSha));
+  const again = await h.run();
+  check("a second run the same day reads no index and makes 0 SEC requests", again.T.days === 0 && again.T.secRequests === 0);
+  const th = incHarness(I, (n, url) => (/submissions\/CIK0000000002/.test(url) ? 429 : 200));
+  const rt = await th.run();
+  const ti = JSON.parse(th.store.get("index.json"));
+  check("429 mid-day → stops, index saved, lastDaily NOT advanced past the unfinished day", rt.status === "throttled" && ti.lastDaily === "2026-09-28" && !th.urls.some((u) => /CIK0000000004/.test(u)));
+  const SRC = fs.readFileSync("lib/secArchiveIncremental.mjs", "utf8");
+  const ANCHOR = "export const FACT_FORMS = /^(10-K|10-Q|20-F|40-F|10-KT|6-K)(\\/A)?$/;";
+  if (SRC.split(ANCHOR).length !== 2) throw new Error("fact-forms mutation anchor must match once");
+  const tmp = `lib/.check-sec-archive-i-${process.pid}.mjs`;
+  fs.writeFileSync(tmp, SRC.replace(ANCHOR, "export const FACT_FORMS = /^(10-K|20-F)(\\/A)?$/;"));
+  let MI;
+  try { MI = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  const mh = incHarness(MI);
+  await mh.run();
+  check("MUTATION: 10-Q not treated as a financial form → CIK 1's facts not refreshed (caught)", !mh.urls.some((u) => /companyfacts\/CIK0000000001/.test(u)));
+}
+
+console.log("\n3c. the diff run's comparison (lib/secArchiveDiff.mjs)");
+{
+  const D = await import("../lib/secArchiveDiff.mjs");
+  const K = ["revenue", "netIncome", "epsDiluted"];
+  const P = (s, e, v) => ({ s, e, fp: null, fy: null, a: null, f: null, v, d: "FFF" });
+  const base = { h: "H1", quarters: [P("2026-01-01", "2026-03-31", [10, 2, 0.5]), P("2026-04-01", "2026-06-30", [11, 3, 0.6])], years: [P("2025-01-01", "2025-12-31", [40, 9, 2.1])], instants: [] };
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  check("the same set → identical", D.compareSets(base, clone(base), K).verdict === "identical");
+  const newer = clone(base); newer.quarters.push(P("2026-07-01", "2026-09-30", [12, 4, 0.7]));
+  check("a newer quarter only in the archive → identical-plus-newer (new data, not a disagreement)", D.compareSets(base, newer, K).verdict === "identical-plus-newer");
+  const moved = clone(base); moved.quarters[0].v[1] = 2.5;
+  const cm = D.compareSets(base, moved, K);
+  check("one value moved on a shared period → differs, named by field (netIncome: 1)", cm.verdict === "differs" && cm.fields.netIncome === 1 && Object.keys(cm.fields).length === 1);
+  const lost = clone(base); lost.years = [];
+  check("a stored period the rebuild lacks → differs (onlyInStored 1)", D.compareSets(base, lost, K).onlyInStored === 1 && D.compareSets(base, lost, K).verdict === "differs");
+  const older = clone(base); older.quarters.unshift(P("2025-10-01", "2025-12-31", [9, 1, 0.4]));
+  check("an OLDER period only in the rebuild → differs (onlyInRebuilt), not 'newer'", D.compareSets(base, older, K).verdict === "differs" && D.compareSets(base, older, K).onlyInRebuilt === 1);
+  check("another field hash → hash-differs, not compared position by position", D.compareSets(base, { ...clone(base), h: "H2" }, K).verdict === "hash-differs");
+  check("no companyfacts → rebuilt-empty", D.compareSets(base, null, K).verdict === "rebuilt-empty");
+  check("floating noise below 1e-9 relative is not a difference", D.compareSets(base, (() => { const x = clone(base); x.quarters[1].v[2] = 0.6 + 1e-12; return x; })(), K).verdict === "identical");
+  const SRC = fs.readFileSync("lib/secArchiveDiff.mjs", "utf8");
+  // THE UNMATCHED PERIODS BY DATE (COWORK #71): dates only, never a value.
+  const both = clone(base); both.years = []; both.quarters.unshift(P("2025-10-01", "2025-12-31", [9, 1, 0.4])); both.quarters.push(P("2026-07-01", "2026-09-30", [12, 4, 0.7]));
+  const ub = D.compareSets(base, both, K).unmatched;
+  check("unmatched dates: stored-only year, archive-only older quarter, archive-newer quarter, each named by its dates",
+    JSON.stringify(ub) === JSON.stringify({ storedOnly: ["Y 2025-01-01..2025-12-31"], rebuiltOnly: ["Q 2025-10-01..2025-12-31"], newer: ["Q 2026-07-01..2026-09-30"] }), JSON.stringify(ub));
+  check("unmatched lists carry no value (no field value of the fixture appears)", !/\b(9|40|12|0\.4|0\.7|2\.1)\b(?![-.\d])/.test(JSON.stringify(ub).replace(/\d{4}-\d{2}-\d{2}/g, "")));
+  const inst = { ...clone(base), instants: [{ s: null, e: "2025-12-31", v: [1, 1, 1] }] };
+  check("an instant is named by its date alone", D.compareSets(inst, clone(base), K).unmatched.storedOnly[0] === "I 2025-12-31");
+  const mutate = (anchor, repl, tag) => {
+    if (SRC.split(anchor).length !== 2) throw new Error(`diff mutation anchor must match once: ${tag}`);
+    const tmp = `lib/.check-sec-archive-d${tag}-${process.pid}.mjs`;
+    fs.writeFileSync(tmp, SRC.replace(anchor, repl));
+    return import(`../${tmp}`).finally(() => fs.rmSync(tmp, { force: true }));
+  };
+  const MD = await mutate("if (!s) { if (r.e > storedNewest) { out.newerInArchive++; out.unmatched.newer.push(dates(g, r)); } else { out.onlyInRebuilt++; out.unmatched.rebuiltOnly.push(dates(g, r)); } continue; }",
+    "if (!s) { out.newerInArchive++; out.unmatched.newer.push(dates(g, r)); continue; }", "a");
+  check("MUTATION: every rebuild-only period called 'newer' → an older missing period hides (caught)", MD.compareSets(base, older, K).verdict !== "differs");
+  const MU = await mutate("out.onlyInStored++; out.unmatched.storedOnly.push(dates(g, p));", "out.onlyInStored++;", "b");
+  check("MUTATION: stored-only dates not recorded → the stored-only year is missing from the dates line (caught)", MU.compareSets(base, both, K).unmatched.storedOnly.length === 0);
+  check("the diff prints the dates line for differing sets", /unmatched periods on differing sets, dates only/.test(readCodeOnly("scripts/sec-archive-diff.mjs")) && /c\.unmatched/.test(readCodeOnly("scripts/sec-archive-diff.mjs")));
+  const DIFF = readCodeOnly("scripts/sec-archive-diff.mjs");
+  const cmds = [...DIFF.matchAll(/redis\(\[\s*"([A-Z]+)"/g)].map((m) => m[1]);
+  check("the diff issues Redis READS only (SMEMBERS, GET, MGET) and writes nothing to R2",
+    cmds.length >= 3 && cmds.every((c) => ["SMEMBERS", "GET", "MGET"].includes(c)) && !/r2\.put|writeFactSet/.test(DIFF), cmds.join(","));
+  check("the rebuild goes through the shipped pipeline: rowsToFacts → withPredecessorFacts → extractForSymbol → toStoredSet",
+    /rowsToFacts\(/.test(DIFF) && /withPredecessorFacts\(/.test(DIFF) && /toStoredSet\(extractForSymbol\(/.test(DIFF));
+}
+
+console.log("\n3d. the archive universe = registrants ∪ stored-set CIKs ∪ predecessors (COWORK #71)");
+{
+  const U = await import("../lib/secArchiveUniverse.mjs");
+  const fx = { registrants: { AAA: { cik: 1 }, BBB: { cik: 2 }, BBBW: { cik: 2 } }, extra: { SPY: "0000884394", SPYW: "884394" }, successors: [{ symbol: "AAA", cik: 1, predecessorCik: 34088 }] };
+  const u = U.archiveUniverse(fx);
+  check("fixture: registrants, extra and predecessor CIKs, deduplicated, 10 digits, sorted",
+    JSON.stringify(u) === JSON.stringify(["0000000001", "0000000002", "0000034088", "0000884394"]), u.join(","));
+  const real = U.readArchiveUniverse(fs);
+  const REG = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf8")).rows;
+  const EXTRA = JSON.parse(fs.readFileSync("data/sec/archive-extra-ciks.json", "utf8")).rows;
+  const SUCC = JSON.parse(fs.readFileSync("data/sec/successor-ciks.json", "utf8")).successors;
+  const rs = new Set(real);
+  check("the real universe holds every registrant CIK, every stored-set CIK in archive-extra-ciks.json, and every predecessor CIK",
+    Object.values(REG).every((r) => rs.has(U.cik10(r.cik))) && Object.values(EXTRA).every((c) => rs.has(U.cik10(c))) && SUCC.every((x) => rs.has(U.cik10(x.predecessorCik))), `${real.length}`);
+  check("archive-extra-ciks.json: 10-digit CIKs keyed by symbol (the 85 stored sets outside registrants)",
+    Object.values(EXTRA).every((c) => /^\d{10}$/.test(c)) && Object.keys(EXTRA).length >= 85 && EXTRA.SPY === "0000884394", `${Object.keys(EXTRA).length}`);
+  check("backfill, incremental and diff all read the universe through readArchiveUniverse (no registrants-only universe left)",
+    ["scripts/sec-archive-backfill.mjs", "scripts/sec-archive-incremental.mjs", "scripts/sec-archive-diff.mjs"].every((f) => /readArchiveUniverse\(fs\)/.test(readCodeOnly(f))) &&
+    !/const universe = \[\.\.\.new Set\(Object\.values\(REG\)/.test(readCodeOnly("scripts/sec-archive-backfill.mjs") + readCodeOnly("scripts/sec-archive-incremental.mjs")));
+  check("the diff names a stored set whose CIK is outside the universe (SYMBOL:CIK), apart from 'not archived yet'",
+    /"outside-universe"/.test(readCodeOnly("scripts/sec-archive-diff.mjs")) && /!universe\.has\(c10\)/.test(readCodeOnly("scripts/sec-archive-diff.mjs")));
+  const SRC = fs.readFileSync("lib/secArchiveUniverse.mjs", "utf8");
+  const ANCHOR = "  for (const c of Object.values(extra ?? {})) if (c) out.add(cik10(c));\n";
+  if (SRC.split(ANCHOR).length !== 2) throw new Error("universe mutation anchor must match once");
+  const tmp = `lib/.check-sec-archive-u-${process.pid}.mjs`;
+  fs.writeFileSync(tmp, SRC.replace(ANCHOR, ""));
+  let MU;
+  try { MU = await import(`../${tmp}`); } finally { fs.rmSync(tmp, { force: true }); }
+  check("MUTATION: stored-set CIKs left out of the universe → SPY's CIK is missing (caught)", !MU.archiveUniverse(fx).includes("0000884394"));
+}
+
 console.log("\n4. the workflow and isolation");
 const WF = fs.readFileSync(".github/workflows/sec-archive.yml", "utf8");
-const code = readCodeOnly("scripts/sec-archive-backfill.mjs") + readCodeOnly("lib/secArchive.mjs") + readCodeOnly("lib/secArchiveBackfill.mjs");
+const yamlCode = (t) => t.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+const jobOf = (name) => (yamlCode(WF).split(/\n  (?=[a-z]+:\n)/).find((b) => b.startsWith(`${name}:`)) ?? "");
+const code = readCodeOnly("scripts/sec-archive-backfill.mjs") + readCodeOnly("scripts/sec-archive-incremental.mjs") + readCodeOnly("lib/secArchive.mjs") + readCodeOnly("lib/secArchiveBackfill.mjs") + readCodeOnly("lib/secArchiveIncremental.mjs");
 check("one runner: no shard input or SHARD variable", !/SHARD/.test(code + WF));
 check("R2 credentials come only from the workflow's secrets", /R2_SECRET_ACCESS_KEY: \$\{\{ secrets\.R2_SECRET_ACCESS_KEY \}\}/.test(WF) && !/R2_SECRET_ACCESS_KEY\s*=\s*["']/.test(code));
-const yamlCode = (t) => t.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
-check("the archive workflow references no Upstash secret, and the relay references no R2 secret",
-  !/UPSTASH/i.test(yamlCode(WF)) && !/R2_/.test(yamlCode(fs.readFileSync(".github/workflows/relay.yml", "utf8"))));
-check("dispatch-only, one at a time (concurrency group), read-only repo token", /workflow_dispatch:/.test(WF) && !/schedule:/.test(WF) && /group: sec-archive/.test(WF) && /contents: read/.test(WF));
-check("a throttled run exits red, as does >2% failed", /status === "throttled" \|\| T\.failed > Math\.max\(5, T\.archived \* 0\.02\)/.test(readCodeOnly("scripts/sec-archive-backfill.mjs")));
-check("nothing here touches Redis or Layer 2 (code, not comments)", !/redis|upstash|secFactStore|writeFactSet/i.test(code));
+check("three jobs; Upstash appears ONLY in the diff job, never in backfill or incremental",
+  Boolean(jobOf("backfill") && jobOf("incremental") && jobOf("diff")) && /UPSTASH_REDIS_REST_TOKEN/.test(jobOf("diff")) && !/UPSTASH/i.test(jobOf("backfill") + jobOf("incremental")));
+check("the relay references no R2 secret", !/R2_/.test(yamlCode(fs.readFileSync(".github/workflows/relay.yml", "utf8"))));
+check("schedule: daily 03:05 UTC, and only the incremental job runs on it; one at a time; read-only repo token",
+  /cron: "5 3 \* \* \*"/.test(WF) && /github\.event_name == 'schedule' \|\| inputs\.task == 'incremental'/.test(jobOf("incremental")) &&
+  /github\.event_name == 'workflow_dispatch'/.test(jobOf("backfill")) && /github\.event_name == 'workflow_dispatch'/.test(jobOf("diff")) &&
+  /group: sec-archive/.test(WF) && /contents: read/.test(WF));
+check("the incremental budget (30 min) ends before 03:40", /budgetMs = 30 \* 60 \* 1000/.test(readCodeOnly("lib/secArchiveIncremental.mjs")));
+check("a throttled run exits red, as does >2% failed (backfill and incremental)",
+  /status === "throttled" \|\| T\.failed > Math\.max\(5, T\.archived \* 0\.02\)/.test(readCodeOnly("scripts/sec-archive-backfill.mjs")) &&
+  /status === "throttled" \|\| status === "no-archive" \|\| T\.failed > Math\.max\(5, T\.filers \* 0\.02\)/.test(readCodeOnly("scripts/sec-archive-incremental.mjs")));
+check("backfill and incremental touch no Redis and no Layer 2 (code, not comments)", !/redis|upstash|secFactStore|writeFactSet/i.test(code));
 
 console.log(`\n${failures ? `${failures} FAILED` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
