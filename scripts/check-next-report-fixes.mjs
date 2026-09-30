@@ -155,7 +155,7 @@ console.log("\n2b. JPM: a short filing list is named as ours, not the filer's");
   check("the record stores feedShort", rec.feedShort === true, String(rec.feedShort));
   const o = outlookFrom("JPM", rec, TODAY);
   check("JPM's refusal is 'short-feed', with its own sentence (not 'too few periods')",
-    o.kind === "no-estimate" && o.reason === "short-feed" && /files so many other documents/.test(o.hedge ?? "") && !/too few periods for us/.test(o.hedge ?? ""),
+    o.kind === "no-estimate" && o.reason === "short-feed" && /crowded with other documents, so the part we read holds too few of its results/.test(o.hedge ?? "") && !/too few periods for us/.test(o.hedge ?? ""),
     `${o.reason} · ${o.hedge}`);
   const whole = { ...rec, feedShort: false };
   check("the same thin record with a whole feed stays 'thin-history' (the filer's gap)", outlookFrom("JPM", whole, TODAY).reason === "thin-history");
@@ -191,8 +191,21 @@ console.log("\n3. WDFC: a cold fill seeds the report-dates record");
     (await C.seedColdReportDates("WDFC", "0000105132", () => new Promise(() => {}), TODAY, 50, deps(null))) === "timeout");
   const A = readCodeOnly("app/stock/[symbol]/coldFillAction.ts");
   check("the action seeds on 'filled' only, BEFORE revalidating the pages",
-    /const dates = outcome === "filled"\s*\?\s*await seedColdReportDates\(/.test(A) &&
-      A.indexOf("? await seedColdReportDates(") < A.indexOf("revalidatePath(`/stock/${clean}`)"));
+    /const dates = outcome !== "filled" \? null/.test(A) &&
+      A.indexOf(": await seedColdReportDates(") > 0 && A.indexOf(": await seedColdReportDates(") < A.indexOf("revalidatePath(`/stock/${clean}`)"));
+  check("the seed's SEC fetch is the cold path's own (fetchColdSubmissions), with no hand-rolled fetch or User-Agent fallback in the action",
+    /seedColdReportDates\(clean, cikForSymbol\(clean\) as string, fetchColdSubmissions,/.test(A) &&
+      !/data\.sec\.gov/.test(A) && !/SEC_USER_AGENT/.test(A) && /!coldSecConfigured\(\) \? "skipped-no-user-agent"/.test(A));
+  const CF = readCodeOnly("lib/server/secColdFetch.ts");
+  const body = CF.slice(CF.indexOf("export async function fetchColdSubmissions"), CF.indexOf("async function fetchFactsFor"));
+  check("...which refuses with no User-Agent and claims the cold minute bucket (secCounterPrefix) before any request",
+    /if \(!SEC_UA\) throw/.test(body) && /await claimColdFetch\(/.test(body) &&
+      body.indexOf("await claimColdFetch(") < body.indexOf("await fetch(") && !/cache: "no-store"/.test(body) &&
+      /const coldRateKey = \(d = new Date\(\)\) =>\s*`\$\{secCounterPrefix\(RATE_PREFIX\)\}/.test(CF));
+  const claims = (b) => /if \(!SEC_UA\) throw/.test(b) && /await claimColdFetch\(/.test(b) && b.indexOf("await claimColdFetch(") < b.indexOf("await fetch(");
+  const CLAIM = '  if (!(await claimColdFetch(`submissions ${cik}`))) throw new Error("cold rate budget exhausted");\n';
+  if (body.split(CLAIM).length !== 2) throw new Error("claim mutation anchor must match once");
+  check("MUTATION: the bucket claim removed → an uncounted SEC request from a page view (caught)", claims(body) && !claims(body.replace(CLAIM, "")));
   check("the bound is inside the client's 12 s ceiling", C.COLD_DATES_TIMEOUT_MS <= 4000, String(C.COLD_DATES_TIMEOUT_MS));
   // MUTATION: the "exists" guard removed → a warm fill re-fetches and rewrites.
   const CS = fs.readFileSync("lib/server/secColdReportDates.ts", "utf8");
