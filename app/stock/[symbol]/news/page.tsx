@@ -44,6 +44,8 @@ import SharedLatestEarningsCard from "@/app/components/LatestEarningsCard";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { readSurfacePrice, TIINGO_CREDIT, TIINGO_URL, type SurfacePrice } from "@/lib/server/tiingoSurfacePrice";
 
 export const runtime = "nodejs";
 
@@ -291,7 +293,11 @@ function structuredNews(news: NewsItem[], summaryByTitle: Record<string, string>
 // computeIndicatorSeed falls back to the last close of getDailyHistory --
 // which converts. So the visible symptom was a title with a price above a body
 // saying the price was unavailable, from two failures and one fallback.
-async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
+async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null; source?: "tiingo" }> {
+  // The Tiingo hero price, when that surface is switched and has one: the
+  // title then matches the Last Price tile exactly (#563 COWORK #31 §4).
+  const hero = await readNewsHeroPrice(symbol);
+  if (hero) return { price: hero.price, date: hero.date, source: "tiingo" };
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
   try {
@@ -307,14 +313,34 @@ async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null
   }
 }
 
+/**
+ * THE NEWS HERO'S PRICE ON TIINGO (#563 COWORK #30/#31 §4), behind
+ * PRICE_PROVIDER_NEWS_HERO: the Last Price tile and the price in the <title>,
+ * nothing else on the page. Null when the switch is off or Tiingo has no price
+ * for the symbol, and both callers then keep their FMP path.
+ *
+ * NEVER AN AI INPUT (contract §5.3(x)). The AI card and "Why this matters" are
+ * fed from getStockNewsBaseData, which does not see this value; the check
+ * scripts/check-tiingo-step6.mjs pins that.
+ */
+async function readNewsHeroPrice(symbol: string): Promise<SurfacePrice | null> {
+  if (priceProviderFor("NEWS_HERO") !== "tiingo") return null;
+  return readSurfacePrice(symbol).catch(() => null);
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
-  const [rawHistory, { price, date }] = await Promise.all([
-    getDailyHistory(upper, { caller: "stock-news" }).catch(() => []),
-    fetchQuoteForMeta(upper),
-  ]);
+  // THE TIINGO PATH ANSWERS FIRST (#563 COWORK #31 §4): when fetchQuoteForMeta
+  // comes back from Tiingo, the title uses that price and the FMP history read
+  // below is not made. On the FMP path both reads are made as before, now one
+  // after the other (the quote is a cached fetch, and the title needs the answer
+  // to know whether the history read is wanted).
+  const { price, date, source } = await fetchQuoteForMeta(upper);
+  const rawHistory = source === "tiingo"
+    ? []
+    : await getDailyHistory(upper, { caller: "stock-news" }).catch(() => []);
 
   const points: Point[] = (rawHistory as Point[]).filter(
     (p) => p.date && Number.isFinite(p.close)
@@ -322,7 +348,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const seed = computeIndicatorSeed(points, "", price, date);
 
-  const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
+  const titlePrice = source === "tiingo" ? price : seed.lastClose;
+  const priceStr = titlePrice != null ? ` — Price $${titlePrice.toFixed(2)}` : "";
 
   const title = `${upper} Stock News${priceStr} | MyStockHarbor`;
   // NO TREND LABEL. This interpolated `seed.trend` as a BARE LABEL mid-sentence
@@ -568,7 +595,10 @@ export default async function StockNewsPage({ params }: Props) {
   // now that similarity dedup has replaced the one-article-per-date rule, so the
   // old 3 was a limit set by how little the source gate cleared.
   const endNews = beginTiming("page", `newsBaseData ${upper}`);
-  const newsData = await getStockNewsBaseData(upper, { maxDetailedItems: 5 });
+  const [newsData, heroPrice] = await Promise.all([
+    getStockNewsBaseData(upper, { maxDetailedItems: 5 }),
+    readNewsHeroPrice(upper),
+  ]);
   endNews();
 
   const {
@@ -726,7 +756,18 @@ export default async function StockNewsPage({ params }: Props) {
             <div style={miniScoreGridStyle}>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Last Price</div>
-                <div style={heroMetricValueStyle}>{isDataUnavailable ? "DATA UNAVAILABLE" : formatMoney(quote?.price ?? lastClose)}</div>
+                {heroPrice ? (
+                  <>
+                    <div style={heroMetricValueStyle}>{formatMoney(heroPrice.price)}</div>
+                    {/* What the figure is and where it is from (#553 COWORK #56,
+                        #563 COWORK #31 §4-5): the credit is linked. */}
+                    <div style={{ marginTop: 4, fontSize: 11, opacity: 0.6, lineHeight: 1.4 }}>
+                      {heroPrice.label} · <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+                    </div>
+                  </>
+                ) : (
+                  <div style={heroMetricValueStyle}>{isDataUnavailable ? "DATA UNAVAILABLE" : formatMoney(quote?.price ?? lastClose)}</div>
+                )}
               </div>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Trend Context</div>
