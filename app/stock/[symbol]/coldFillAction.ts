@@ -10,6 +10,8 @@ import { checkBotId } from "botid/server";
 import { verifyQuoteToken } from "@/lib/server/quoteToken";
 import { cikForSymbol, fillColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
 import { factSetExists } from "@/lib/server/secFactStore";
+import { seedColdReportDates } from "@/lib/server/secColdReportDates";
+import type { Submissions } from "@/lib/server/secReportDates";
 import {
   COLD_FILL_SYMBOL,
   clientIpFrom,
@@ -73,17 +75,32 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
   if (!(await takeColdFillLock(clean))) return refuse("in-flight");
   try {
     const outcome = await fillColdSymbol(clean);
+    // THE REPORT-DATES RECORD RIDES ALONG (#552 COWORK #78, WDFC), before the
+    // revalidation so the page it rebuilds has both. Bounded, best effort.
+    const dates = outcome === "filled"
+      ? await seedColdReportDates(clean, cikForSymbol(clean) as string, fetchColdSubmissions, new Date().toISOString().slice(0, 10))
+      : null;
     if (outcome === "filled" || outcome === "no-data") {
       // Permitted here, unlike in a render's after(): see secColdFetch's history.
       revalidatePath(`/stock/${clean}`);
       revalidatePath(`/stock/${clean}/earnings`);
     }
     await countColdFillOutcome(outcome);
-    console.log("[cold-fill]", JSON.stringify({ symbol: clean, outcome }));
+    console.log("[cold-fill]", JSON.stringify({ symbol: clean, outcome, ...(dates ? { dates } : {}) }));
     return { ok: true, outcome };
   } finally {
     await releaseColdFillLock(clean);
   }
+}
+
+/** Submissions for the report-dates seed: the cold path's own User-Agent, no cache hint. */
+async function fetchColdSubmissions(cik: string): Promise<Submissions> {
+  const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+    headers: { "User-Agent": process.env.SEC_USER_AGENT || "", "Accept-Encoding": "gzip, deflate" },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as Submissions;
 }
 
 /**
