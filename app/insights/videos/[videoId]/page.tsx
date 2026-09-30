@@ -10,6 +10,7 @@ import {
   toFallbackVideo,
 } from "@/lib/videoContent";
 import { getVideoStockData } from "@/lib/videoStockData";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { remark } from "remark";
 import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
@@ -237,7 +238,16 @@ export default async function VideoPage({ params }: Props) {
                 ))}
               </div>
             )}
-            {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>}
+            {/* THE TIINGO PATH NAMES ITS PRICE AND CREDITS ITS SOURCE (#563 COWORK
+                #30/#31): "update live" is not true of a pooled IEX trade or an EOD
+                close, and the contract asks for the linked credit on each figure. */}
+            {stockData?.priceLabel ? (
+              <p style={{ fontSize: 11, opacity: 0.5, marginBottom: 0, fontStyle: "italic" }}>
+                Price: {stockData.priceLabel}. Market cap is the SEC cover-page share count times that price. Figures will differ from those in the video. <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              </p>
+            ) : stockData ? (
+              <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live &mdash; figures will differ from those in the video.</p>
+            ) : null}
           </div>
 
           {/* ── MOBILE ── */}

@@ -56,7 +56,12 @@ const reset = () => {
   net.redisStatus = 200;
   net.counters = new Map();
   net.strings = new Map();
-  net.hashes = new Map([["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"], ["CCZ", "{}"], ["EQR", "{}"]])]]);
+  net.hashes = new Map([
+    ["msh:price-pool:v1", new Map([["AAPL", "{}"], ["EP-PC", "{}"], ["BRK-B", "{}"], ["CCZ", "{}"], ["EQR", "{}"]])],
+    // EQR's CIK as the rename sweep last saw it (#593). SEC's committed ticker
+    // file lists that CIK as VMRK now, so EQR is a reticker (COWORK #70).
+    ["msh:universe:sec-cik:v1", new Map([["EQR", "0000906107"]])],
+  ]);
   net.expires = new Map();
   net.tiingo = [];
   net.redisCmds = [];
@@ -75,6 +80,7 @@ function redisAnswer(cmd) {
     case "hkeys": return [...(net.hashes.get(key)?.keys() ?? [])];
     case "hset": { const h = net.hashes.get(key) ?? new Map(); for (let i = 0; i < rest.length; i += 2) h.set(rest[i], rest[i + 1]); net.hashes.set(key, h); return rest.length / 2; }
     case "hgetall": return [...(net.hashes.get(key) ?? new Map()).entries()].flat();
+    case "hmget": return rest.map((f) => net.hashes.get(key)?.get(f) ?? null);
     case "get": return net.strings.get(key) ?? null;
     case "set": { net.strings.set(key, rest[0]); const ex = rest.findIndex((x) => x.toLowerCase() === "ex"); if (ex >= 0) net.expires.set(key, Number(rest[ex + 1])); return "OK"; }
     default: return null;
@@ -233,17 +239,17 @@ reset();
 const THU_11ET = Date.parse("2026-09-24T15:00:00Z");
 let q = await J.runTiingoQuotes(THU_11ET);
 const pool = net.hashes.get(K.TIINGO_QUOTES_KEY);
-check("hourly: in market hours it writes ONE HSET of the pool", q.ok && net.redisCmds.filter((c) => c[0] === "hset").length === 1, JSON.stringify(q));
+check("quotes: in market hours it writes ONE HSET of the pool", q.ok && net.redisCmds.filter((c) => c[0] === "hset").length === 1, JSON.stringify(q));
 check("...under our spelling, with a run stamp", pool?.has("EP-PC") && pool?.has(K.TIINGO_QUOTES_META_FIELD));
 check("...with a TTL", net.expires.get(K.TIINGO_QUOTES_KEY) === K.TIINGO_QUOTES_TTL_SECONDS);
 check("...and revalidates the prices tag", globalThis.__nextCacheStub.revalidated.some(([t]) => t === K.PRICES_TAG));
 reset();
 q = await J.runTiingoQuotes(Date.parse("2026-09-26T15:00:00Z"));
-check("hourly: on a Saturday it does nothing at all", q.skipped === "outside-market-window" && net.tiingo.length === 0 && net.redisCmds.length === 0, JSON.stringify(q));
+check("quotes: on a Saturday it does nothing at all", q.skipped === "outside-market-window" && net.tiingo.length === 0 && net.redisCmds.length === 0, JSON.stringify(q));
 reset();
 setEnv({ ...PROD, VERCEL_ENV: "preview" });
 q = await J.runTiingoQuotes(THU_11ET);
-check("hourly: a preview skips before any Redis or Tiingo call", String(q.skipped).startsWith("tiingo:") && net.tiingo.length === 0 && net.redisCmds.length === 0, JSON.stringify(q));
+check("quotes: a preview skips before any Redis or Tiingo call", String(q.skipped).startsWith("tiingo:") && net.tiingo.length === 0 && net.redisCmds.length === 0, JSON.stringify(q));
 
 // Nightly job.
 setEnv(PROD);
@@ -254,7 +260,7 @@ check("nightly: a landed night writes every symbol", e.ok && e.written === 3 && 
 check("...each under msh:tiingo:eod:v2:<our spelling>, with a TTL", ["AAPL", "EP-PC", "BRK-B"].every((s) => net.strings.has(K.tiingoEodKey(s)) && net.expires.get(K.tiingoEodKey(s)) === K.TIINGO_EOD_TTL_SECONDS));
 check("...asking Tiingo in its spelling", net.tiingo.some((u) => u.startsWith("/tiingo/daily/EP-P-C/prices")));
 check("...and never for CCZ, a note (COWORK #60: debt is not priced as equity)", !net.tiingo.some((u) => u.includes("CCZ")) && !net.strings.has(K.tiingoEodKey("CCZ")));
-check("...nor for EQR, on the dated PRICE_EXCLUDED list (COWORK #61)", !net.tiingo.some((u) => u.includes("EQR")) && !net.strings.has(K.tiingoEodKey("EQR")));
+check("...nor for EQR, retickered to VMRK by CIK (COWORK #70), and the run says so", !net.tiingo.some((u) => u.includes("EQR")) && !net.strings.has(K.tiingoEodKey("EQR")) && JSON.stringify(e.retickered) === '["EQR"]' && e.retickerGuard === "on", JSON.stringify({ retickered: e.retickered, guard: e.retickerGuard }));
 check("...every stored history states its basis: split", ["AAPL", "EP-PC", "BRK-B"].every((s) => JSON.parse(net.strings.get(K.tiingoEodKey(s)) ?? "{}").basis === "split"));
 check("...never reading stored history back", !net.redisCmds.some((c) => c[0] === "get" && String(c[1]).includes(":eod:")));
 check("...stamps the night complete, and revalidates eod", net.strings.has(K.TIINGO_EOD_META_KEY) && globalThis.__nextCacheStub.revalidated.some(([t]) => t === K.EOD_TAG));
@@ -274,6 +280,21 @@ e = await J.runTiingoEod(NIGHT);
 check("nightly: a night that has not landed stores nothing and stamps nothing", e.ok === false && e.notLanded === "2026-09-24" && !net.redisCmds.some((c) => c[0] === "set"), JSON.stringify(e));
 check("...and asks for no per-symbol history", net.tiingo.length === 1);
 check("eodLanded wants 90% of the universe", J.eodLanded(new Map([["d", 9]]), "d", 10) && !J.eodLanded(new Map([["d", 8]]), "d", 10));
+// The window is BARS, as FMP's MAX_CACHED_HISTORY_DAYS is (#553 step 2 parity:
+// 1,400 calendar days was ~960 bars, and Weekly MA200 went 39 -> 0).
+const windowDays = (Date.parse("2026-09-25") - Date.parse(J.eodStartDate(NIGHT))) / 86_400_000;
+check("the EOD window keeps 1,400 bars, as FMP's history does", J.EOD_WINDOW_BARS === 1400);
+check("...and asks for enough calendar days to hold them (252 sessions a year)", (windowDays * 252) / 365.25 >= J.EOD_WINDOW_BARS, `${windowDays} days`);
+// onBars (#553 step 2): the Pickers build rides on a COMPLETE night only.
+reset();
+let seen = null;
+e = await J.runTiingoEod(NIGHT, (bars) => { seen = [...bars.keys()].sort().join(); });
+check("nightly: a complete night hands every fetched symbol's bars to onBars", e.ok && seen === "AAPL,BRK-B,EP-PC", String(seen));
+reset();
+net.shortTickers = ["BRK-B"];
+seen = null;
+e = await J.runTiingoEod(NIGHT, (bars) => { seen = [...bars.keys()].join(); });
+check("...and a partial night (2 of 3, under 90%) does not call it", e.ok === false && seen === null, JSON.stringify({ ok: e.ok, seen }));
 
 // Helpers.
 check("the spelling rule: preferreds gain a dash, classes do not", ["EP-PC", ["FITB", "PM"].join("."), "MER-PK", ["BRK", "B"].join("."), "XYZ-P", "AAPL"].map(S.toTiingo).join(" ") === "EP-P-C FITB-P-M MER-P-K BRK-B XYZ-P AAPL");

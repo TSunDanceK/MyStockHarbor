@@ -26,11 +26,17 @@ const REGISTRANTS = JSON.parse(fs.readFileSync("data/sec/registrants.json", "utf
 // The cited ADS ratios (#553 COWORK #44), looked up as secAdsMap.adsRatioFor does.
 const ADS = JSON.parse(fs.readFileSync("data/sec/ads-ratios.json", "utf8")).entries ?? {};
 
+// A's non-common listings (#553 COWORK #67), as the daily job passes them.
+const { loadNonEquityListingOf } = await import("./lib/non-equity-listing.mjs");
+const nonEquityListingOf = await loadNonEquityListingOf();
+
 const symbols = (await redis.hkeys("msh:price-pool:v1")).map(String);
 console.log(`universe: ${symbols.length} symbols (msh:price-pool:v1)`);
 const result = await warmPickersSec(symbols, (s) => ({
   annualForm: REGISTRANTS[s]?.annualForm ?? null,
-  ads: lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null,
+  // A withheld row (#552 COWORK #64, MFG) is not used, as in adsRatioFor.
+  ads: ((e) => (e && !e.withheld ? e : null))(lookupSpellingIn(ADS, s.toUpperCase())?.value ?? null),
+  nonEquity: nonEquityListingOf(s),
 }), Date.now(), KEY);
 console.log(JSON.stringify(result));
 console.log(`key ${KEY}; field count now: ${await redis.hlen(KEY)}; seeded at ${new Date().toISOString()}`);

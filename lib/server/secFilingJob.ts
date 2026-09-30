@@ -38,6 +38,27 @@ const redis =
     : null;
 
 export const FILING_JOB_FILLS_PER_RUN = 60;
+/**
+ * A COMPANYFACTS 404 IS "NO XBRL FACTS", NOT A FAILURE (#552 COWORK #69/#72).
+ * A filer whose statements are on a basis SEC does not tag (ICICI, IBN: Indian
+ * GAAP) has no companyfacts at all, so that 404 recurs every night. NARROW:
+ * only a 404, and only on companyfacts. Any other status there, and a 404 on
+ * submissions or an index, is still an error, so `failed` keeps meaning
+ * "something broke".
+ */
+export const NO_XBRL_FACTS = "NoXbrlFacts";
+export function secStatusError(url: string, status: number): Error {
+  if (status === 404 && /\/api\/xbrl\/companyfacts\//.test(url)) {
+    const e = new Error("no XBRL facts (companyfacts 404)");
+    e.name = NO_XBRL_FACTS;
+    return e;
+  }
+  return new Error(`HTTP ${status}`);
+}
+export function isNoXbrlFacts(err: unknown): boolean {
+  return (err as Error)?.name === NO_XBRL_FACTS;
+}
+
 /** 200 ms between SEC requests: 5 a second, half SEC's fair-access ceiling. */
 export const FILING_JOB_PACE_MS = 200;
 export const FILING_JOB_BUDGET_MS = 240_000;

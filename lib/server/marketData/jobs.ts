@@ -5,7 +5,7 @@
 // breaker, per-run command budget, stop on a Redis error). Both write under
 // msh:tiingo: only; no page reads those keys until a surface is switched.
 //
-// ── HOURLY QUOTES ────────────────────────────────────────────────────────────
+// ── QUOTES EVERY 15 MINUTES ──────────────────────────────────────────────────
 // The IEX batch: ~9 requests for ~844 tickers, then ONE HSET of the whole pool
 // and one revalidateTag('prices'). Acts only inside the buffered market window
 // (marketHours.ts); outside it the run returns at once, spending nothing but
@@ -13,7 +13,7 @@
 //
 //   THE FRESHNESS KNOB is QUOTE_CADENCE_MINUTES, with the cron line in
 //   vercel.json and jobRuns.ts beside it (check-tiingo-step1 keeps the three in
-//   step). Hourly now; the PR body prices 15 minutes.
+//   step). 15 minutes since 2026-09-29 (#656); hourly before.
 //
 // ── NIGHTLY EOD ──────────────────────────────────────────────────────────────
 // A FULL RE-PULL, NOT A TAIL MERGE (COWORK #56 asks which, and why):
@@ -54,14 +54,32 @@ import {
   tiingoCallRefusal,
 } from "./tiingo";
 import type { EodBar, StoredEod } from "./types";
-import { isDebtListing } from "./universe";
+import { isDebtListing, retickeredOut } from "./universe";
 import { isPriceExcluded } from "../../priceExcluded.mjs";
+import { loadTickerMap } from "../secTickerMap";
+import { readLastSeenCiks } from "../secListing";
+import { lookupBySpelling } from "../../symbolSpellings.mjs";
 
-/** THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step. */
-export const QUOTE_CADENCE_MINUTES = 60;
+/**
+ * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
+ * 15 since 2026-09-28 (#553 COWORK #60, pre-approved on a clean Monday): hourly
+ * measured 9 requests and 7 Redis commands per active run, so 33 active runs a
+ * day are ~297 requests (0.1% of the daily cap) and ~231 commands.
+ */
+export const QUOTE_CADENCE_MINUTES = 15;
 
-/** The window we keep, as today's FMP history does (MAX_CACHED_HISTORY_DAYS). */
-export const EOD_WINDOW_DAYS = 1400;
+/**
+ * The window we keep, as today's FMP history does: MAX_CACHED_HISTORY_DAYS is a
+ * BAR count (1,400 sessions), not calendar days.
+ *
+ * FIXED 2026-09-30 (#553 step 2). This read 1,400 CALENDAR days, about 960
+ * bars. The step 2 parity run caught it: Weekly MA200 (200 weekly closes) went
+ * 39 -> 0 on Tiingo's bars, and the all-time-high screens saw a shorter past.
+ * So the request now covers EOD_WINDOW_BARS sessions (252 a year, plus 2%) and
+ * the stored series keeps the last EOD_WINDOW_BARS of them.
+ */
+export const EOD_WINDOW_BARS = 1400;
+export const EOD_WINDOW_DAYS = Math.ceil(((EOD_WINDOW_BARS * 365.25) / 252) * 1.02);
 /**
  * Fewer bars than this is not a history, and is not stored (mirrors
  * historyCache's MIN_QUALIFIED_POINTS). Measured on the first night
@@ -90,14 +108,22 @@ function mustRedis(): Redis {
 
 /**
  * The universe: the price pool's fields (dashed), less debt listings (CCZ and
- * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts) and the
- * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61). 1 HKEYS.
+ * the other exchange-traded notes, #553 COWORK #60 -- see universe.ts), the
+ * dated PRICE_EXCLUDED list (lib/priceExcluded.ts, COWORK #61) and any ticker
+ * SEC has moved to another (retickeredOut, COWORK #70). 1 HKEYS, plus 1 HMGET
+ * of last-seen CIKs when some pool symbol is missing from SEC's live map.
  */
-async function universe(): Promise<string[]> {
+async function universe(): Promise<{ symbols: string[]; retickered: string[]; retickerGuard: string }> {
   const keys = await mustRedis().hkeys(PRICE_POOL_KEY);
-  return [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
+  const pool = [...new Set(keys.map((k) => String(k).trim().toUpperCase()).filter(Boolean))]
     .filter((s) => !isDebtListing(s) && !isPriceExcluded(s))
     .sort();
+  const live = loadTickerMap();
+  const unlisted = live.present ? pool.filter((s) => !lookupBySpelling(live.map, s)) : [];
+  const lastSeen = unlisted.length ? await readLastSeenCiks(unlisted) : new Map<string, string>();
+  const r = retickeredOut(pool, live, lastSeen);
+  if (r.dropped.length) console.warn(`[tiingo] retickered, not sent: ${r.dropped.map((d) => `${d.symbol}->${d.listed.join("/")}`).join(" ")}`);
+  return { symbols: r.keep, retickered: r.dropped.map((d) => d.symbol), retickerGuard: r.guard };
 }
 
 function refusalResult(err: unknown) {
@@ -106,13 +132,13 @@ function refusalResult(err: unknown) {
   return null;
 }
 
-// ── hourly ──────────────────────────────────────────────────────────────────
+// ── quotes (every QUOTE_CADENCE_MINUTES) ─────────────────────────────────────
 
 export async function runTiingoQuotes(nowMs = Date.now()) {
   if (!isActiveMarketWindow(new Date(nowMs))) return { ok: true, skipped: "outside-market-window" };
   const refusal = tiingoCallRefusal();
   if (refusal) return { ok: true, skipped: `tiingo: ${refusal}` };
-  const symbols = await universe();
+  const { symbols, retickered, retickerGuard } = await universe();
   if (!symbols.length) return { ok: false, error: "empty universe" };
   let fetched;
   try {
@@ -139,6 +165,8 @@ export async function runTiingoQuotes(nowMs = Date.now()) {
     requests: fetched.requests,
     bytesDownloaded: fetched.bytes,
     bytesWritten: Object.entries(fields).reduce((n, [k, v]) => n + k.length + v.length, 0),
+    retickered,
+    retickerGuard,
   };
 }
 
@@ -155,7 +183,9 @@ export function eodLanded(counts: Map<string, number>, expected: string, univers
 
 /**
  * Nightly EOD. `onBars` receives every symbol's fresh bars in memory -- the
- * hook #57 §4 moves the Pickers daily computation onto (not wired in step 1).
+ * hook #57 §4 moves the Pickers daily computation onto (wired in step 2 by the
+ * EOD route). Called on a COMPLETE night only: a partial night's build would
+ * mix tonight's bars with the Data Cache's, and the 02:45 retry re-runs it.
  */
 export async function runTiingoEod(
   nowMs = Date.now(),
@@ -171,7 +201,7 @@ export async function runTiingoEod(
   const metaAsOf = typeof meta === "string" ? (JSON.parse(meta) as { asOf?: string }).asOf : meta?.asOf;
   if (metaAsOf === expected) return { ok: true, skipped: "already-complete", asOf: expected };
 
-  const symbols = await universe();
+  const { symbols, retickered, retickerGuard } = await universe();
   if (!symbols.length) return { ok: false, error: "empty universe" };
 
   let bytesDownloaded = 0;
@@ -216,7 +246,7 @@ export async function runTiingoEod(
       try {
         const got = await fetchEodHistory(sym, start);
         bytesDownloaded += got.bytes;
-        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars);
+        if (got.bars.length >= EOD_MIN_BARS) bars.set(sym, got.bars.slice(-EOD_WINDOW_BARS));
         else {
           const why = got.bars.length ? "short" : "empty";
           failed.set(why, (failed.get(why) ?? 0) + 1);
@@ -257,11 +287,13 @@ export async function runTiingoEod(
     written: bars.size,
     failed: Object.fromEntries(failed),
     shortOrEmpty,
+    retickered,
+    retickerGuard,
   };
   // Only a complete night stamps the meta key, so the 02:45 retry re-runs a partial one.
   if (complete) await r.set(TIINGO_EOD_META_KEY, JSON.stringify(summary), { ex: TIINGO_EOD_TTL_SECONDS });
   if (bars.size) revalidateTag(EOD_TAG, "max");
-  if (onBars && bars.size) await onBars(bars);
+  if (onBars && complete && bars.size) await onBars(bars);
   return {
     ok: complete,
     ...summary,

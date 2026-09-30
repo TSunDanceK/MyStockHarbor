@@ -25,12 +25,16 @@ import { Redis } from "@upstash/redis";
 import { EOD_TAG, PRICES_TAG, TIINGO_QUOTES_KEY, TIINGO_QUOTES_META_FIELD, eodSymbolTag, tiingoEodKey } from "./keys";
 import type { StoredEod, StoredQuote } from "./types";
 import { toDashed } from "../../symbolSpellings.mjs";
+import { PAGE_READ_CACHE } from "../redisCacheMode";
 
 export const POOL_CACHE_SECONDS = 60 * 60;
 export const EOD_CACHE_SECONDS = 24 * 60 * 60;
 
+// PAGE_READ_CACHE since step 2 (#553): the Pickers pages now reach this file
+// through pickersBuilder -> pickerHistory, and a bare (no-store) client on a
+// prerendered route throws DYNAMIC_SERVER_USAGE (scripts/check-page-read-cache).
 const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv(PAGE_READ_CACHE) : null;
 
 export type TiingoPool = { at: number | null; rows: Record<string, StoredQuote> };
 

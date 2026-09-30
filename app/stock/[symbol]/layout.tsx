@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import PageViewTracker from "@/app/components/PageViewTracker";
 import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
+import SecLoadedNotice from "@/app/components/SecLoadedNotice";
 
 // Wraps every /stock/[symbol]/* route (overview, /news, /earnings) so the
 // real-page-view beacon fires exactly once per real navigation into any of
@@ -21,6 +22,9 @@ export default function StockSymbolLayout({ children }: { children: ReactNode })
     <>
       <PageViewTracker category="stock" />
       {children}
+      {/* The cold fill's "SEC data loaded" (#552 COWORK #46): here, because
+          the block that announces it is replaced by the refresh it triggers. */}
+      <SecLoadedNotice />
       <StockPagesBottomNav />
     </>
   );
