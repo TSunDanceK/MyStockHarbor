@@ -14,8 +14,9 @@ import fs from "node:fs";
 
 const { readReportDatesChecked } = await import("../lib/server/secReportDatesStore.ts");
 const { buildReportDatesRecord } = await import("../lib/server/secReportDatesWrite.ts");
-const { lagHabit } = await import("../lib/server/expectedToReport.ts");
-const { outlookFrom } = await import("../lib/server/symbolOutlook.ts");
+// expectedFrom, not symbolOutlook (which pulls next/server via pickersBuilder):
+// the outlook's no-estimate reason IS expectedFrom's skip.
+const { lagHabit, expectedFrom } = await import("../lib/server/expectedToReport.ts");
 const { readFactSet } = await import("../lib/server/secFactStore.ts");
 const { readManifest } = await import("../lib/server/secManifest.ts");
 
@@ -41,9 +42,9 @@ function mergeRecent(base, extra) {
 const span = (subs) => { const d = subs.filings.recent.filingDate ?? []; return d.length ? `${d.at(-1)}..${d[0]} (${d.length} filings)` : "-"; };
 const count8k = (subs) => (subs.filings.recent.form ?? []).filter((f, i) => /^(8-K|6-K)$/.test(f) && /2\.02/.test(subs.filings.recent.items?.[i] ?? "")).length;
 const summary = (rec, today) => {
-  const h = lagHabit(rec), o = outlookFrom(rec.symbol, rec, today);
+  const h = lagHabit(rec), g = expectedFrom(rec.symbol, rec, today, new Set());
   const ev = rec.events.slice(0, 3).map((e) => `${e.announcedOn}→${e.periodEnd}`).join(" ");
-  return `events ${rec.events.length} [${ev}] · nextPeriodEnd ${rec.nextPeriodEnd ?? "-"} · fye ${rec.fye ?? "-"} · pool ${h.fromPeriods}${h.pooled ? " (Q4-split)" : ""} · scored ${h.scored ? h.scored.predictions : "no"} · outlook ${o.kind}${o.reason ? `/${o.reason}` : ""}`;
+  return `events ${rec.events.length} [${ev}] · nextPeriodEnd ${rec.nextPeriodEnd ?? "-"} · fye ${rec.fye ?? "-"} · pool ${h.fromPeriods}${h.pooled ? " (Q4-split)" : ""} · scored ${h.scored ? h.scored.predictions : "no"} · estimate ${"row" in g ? `row ${g.row.band}` : `skip ${g.skip}`}`;
 };
 
 const today = new Date().toISOString().slice(0, 10);
