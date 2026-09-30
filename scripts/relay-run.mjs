@@ -275,6 +275,8 @@ const TASKS = {
   // READS ONLY: stored-set CIKs outside registrants.json (#552 COWORK #71). 2 commands.
   // READS ONLY: cold (no stored set) or stored, per named symbol (#552 COWORK #71). 1 EXISTS each.
   // READS ONLY: the next-report box, stored vs a fresh build (#552 COWORK #78). Redis reads + a few SEC requests.
+  // READS ONLY: outlook in results releases, 100-filer sample (#552 COWORK #82). ~300 SEC requests at 4/s.
+  "write-outlook-sample": { script: "scripts/outlook-sample-probe.mjs", args: () => [], writes: true },
   "write-next-report-probe": { script: "scripts/next-report-probe.mjs", args: () => [], writes: true },
   "write-cold-symbol": { script: "scripts/cold-symbol-probe.mjs", args: () => [], writes: true },
   "write-stored-cik-union": { script: "scripts/stored-cik-union-probe.mjs", args: () => [], writes: true },
