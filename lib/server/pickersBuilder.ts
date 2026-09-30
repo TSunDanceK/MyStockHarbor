@@ -23,6 +23,9 @@ import {
   trendTailForPoints,
 } from "../ta/trendHelper";
 import { getDailyHistoryBulk } from "./historyCache";
+import { priceProviderFor, type PriceProvider } from "./marketData/provider";
+import { tiingoPickerHistory, type PickerHistoryStats } from "./marketData/pickerHistory";
+import type { EodBar } from "./marketData/types";
 import { recordRedisRead, flushRedisReadMeter } from "./redisBandwidth";
 import {
   chunkByBytes,
@@ -3246,9 +3249,13 @@ const POPULAR_SEARCH_QUOTA = 30; // FMP sub-cap: max promoted names per build
 // 07:00 warm exists to do. Only the second is gated on cron/owner auth.
 async function buildPickersPayload(
   origin: string,
-  opts: { forceHistoryRefresh?: boolean } = {}
+  opts: PickersBuildOptions = {}
 ): Promise<PickersPayload> {
   const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
+  // A DRY RUN WRITES NOTHING (the signal-parity relay, #553 step 2): no
+  // dynamic-universe promotion, no earnings queue, no staleness registration.
+  // The payload itself is written by the callers, never by this function.
+  const dryRun = opts.dryRun ?? false;
   const buildStartedAt = Date.now();
   const market = await fetchMarket();
 
@@ -3294,11 +3301,13 @@ async function buildPickersPayload(
     )
   );
 
-  await addToDynamicUniverse(
-    [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
-    "market",
-    1
-  );
+  if (!dryRun) {
+    await addToDynamicUniverse(
+      [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
+      "market",
+      1
+    );
+  }
 
   const dynamicUniverseSet = new Set(dynamicUniverse);
 
@@ -3328,7 +3337,7 @@ async function buildPickersPayload(
   // decay as market names) their presence accumulates across builds while people
   // keep looking them up. The raw demand score stays separate (searchDemand.ts)
   // for the /popular-searches ranking; this is only membership/provenance.
-  if (popularSearchSymbols.length) {
+  if (popularSearchSymbols.length && !dryRun) {
     await addToDynamicUniverse(popularSearchSymbols, "search", 1);
   }
 
@@ -3369,7 +3378,7 @@ async function buildPickersPayload(
 
   // Queue missing earnings data for the background warmer. The picker route reads
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
-  await queueEarningsWarmupSymbols(universe, earningsBySymbol);
+  if (!dryRun) await queueEarningsWarmupSymbols(universe, earningsBySymbol);
 
   // Same idea for price history: one pipelined mget for the whole universe
   // up front instead of one Redis GET per symbol inside the loop below (was
@@ -3387,7 +3396,13 @@ async function buildPickersPayload(
   // than after means a run that dies halfway still leaves a truthful
   // denominator: the symbols it failed to refresh show as stale instead of
   // vanishing from the count.
-  if (forceHistoryRefresh) {
+  // WHICH HISTORY (#553 step 2). PRICE_PROVIDER_PICKERS=tiingo reads Tiingo's
+  // bars: the EOD job's in-memory ones when it triggered this build (`onBars`,
+  // COWORK #57 §4), else the Data Cache, with FMP only for symbols Tiingo has
+  // no stored history for and only while FMP_API_KEY is set. Unset or "fmp" is
+  // exactly the path below, so switching back is an env change.
+  const historyProvider: PriceProvider = priceProviderFor("PICKERS");
+  if (forceHistoryRefresh && historyProvider === "fmp" && !dryRun && !opts.historyOverride) {
     // AUTHORITATIVE, and this is the one call site that can honestly claim it.
     //
     // `universe` is handed to getDailyHistoryBulk two lines below, so the list
@@ -3406,10 +3421,28 @@ async function buildPickersPayload(
     await registerSymbols("dailyHistory", universe, { authoritative: true });
   }
 
-  const historyBySymbol = await getDailyHistoryBulk(universe, {
-    caller: "pickers-build",
-    force: forceHistoryRefresh,
-  });
+  // NOT REGISTERED ON THE TIINGO PATH: `dailyHistory` is FMP's dataset, and
+  // registering only the fallback symbols would be a truncated list, which
+  // reconcileToList refuses by design.
+  let historyBySymbol: ReadonlyMap<string, Point[]>;
+  if (opts.historyOverride && dryRun) {
+    historyBySymbol = opts.historyOverride;
+    lastHistoryStats = null;
+  } else if (historyProvider === "tiingo") {
+    const got = await tiingoPickerHistory(universe, opts.eodBars, {
+      fmpBulk: process.env.FMP_API_KEY
+        ? (symbols) => getDailyHistoryBulk(symbols, { caller: "pickers-build-fallback", force: forceHistoryRefresh })
+        : null,
+    });
+    historyBySymbol = got.bySymbol;
+    lastHistoryStats = { provider: "tiingo", universe: universe.length, ...got.stats };
+  } else {
+    historyBySymbol = await getDailyHistoryBulk(universe, {
+      caller: "pickers-build",
+      force: forceHistoryRefresh,
+    });
+    lastHistoryStats = { provider: "fmp", universe: universe.length, memory: 0, cache: 0, fmpFallback: 0, missing: 0 };
+  }
 
   const limit = pLimit(10);
   const days = 1300;
@@ -4913,12 +4946,45 @@ export async function buildPickerJitterDiagnostics(opts: {
  * refused to publish. Without `wrote`, "guard fired" and "guard was not needed"
  * look identical from outside.
  */
+/** Where the last build's history came from, by tier (#553 step 2). Read-and-reset, like lastBuildStats. */
+export type PickersHistoryRecord = { provider: PriceProvider; universe: number } & PickerHistoryStats;
+let lastHistoryStats: PickersHistoryRecord | null = null;
+export function readLastHistoryStats(): PickersHistoryRecord | null {
+  const out = lastHistoryStats;
+  lastHistoryStats = null;
+  return out;
+}
+
+/** What a build may be told beyond force (#553 step 2). */
+export type PickersBuildOptions = {
+  forceHistoryRefresh?: boolean;
+  /** The EOD job's fresh bars, keyed by dashed symbol (its `onBars` hook). */
+  eodBars?: ReadonlyMap<string, readonly EodBar[]>;
+  /**
+   * The parity relay only: each symbol's bars, already read (read-only) by the
+   * relay, so the build reads no history and the Redis read meter never flushes.
+   * Requires dryRun.
+   */
+  historyOverride?: ReadonlyMap<string, Point[]>;
+  /** Write nothing (the parity relay). */
+  dryRun?: boolean;
+};
+
 let lastBuildStats: {
   universeSize: number;
   degradedSymbolPct: number | null;
   degradedFallbackUsed: boolean;
   wrote: boolean;
 } | null = null;
+
+/**
+ * A build that writes nothing, over history the caller has already read: the
+ * signal-parity relay (#553 step 2) runs it once on FMP's bars and once on
+ * Tiingo's, and compares the screens. Never the page path.
+ */
+export function buildPickersPayloadDryRun(history: ReadonlyMap<string, Point[]>): Promise<PickersPayload> {
+  return buildPickersPayload("", { historyOverride: history, dryRun: true });
+}
 
 export function readLastBuildStats() {
   const out = lastBuildStats;
@@ -5033,7 +5099,7 @@ async function recordBuildTrigger(entry: "getPickersData" | "GET" | "GET_WARM", 
 
 export async function getPickersData(
   origin: string,
-  opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean } = {}
+  opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean; eodBars?: PickersBuildOptions["eodBars"] } = {}
 ): Promise<PickersPayload> {
   const forceRefresh = opts.forceRefresh ?? false;
   const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
@@ -5101,7 +5167,7 @@ export async function getPickersData(
 
   await recordBuildTrigger("getPickersData", forceRefresh ? "forced" : cached?.data ? "cached-but-built" : lockToken ? "no-payload" : "no-payload-lock-lost");
   try {
-    const data = await buildPickersPayload(origin, { forceHistoryRefresh });
+    const data = await buildPickersPayload(origin, { forceHistoryRefresh, eodBars: opts.eodBars });
     // FLUSH THE READ METER ONCE, HERE, rather than per symbol inside the loop.
     // This build just made ~700 single-symbol history reads; each used to write a
     // 6-command pipeline (~4,200 billed write commands to measure one build).
