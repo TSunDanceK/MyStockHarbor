@@ -273,6 +273,8 @@ const TASKS = {
   // READS ONLY: the stored-fact-set index against a SCAN, DBSIZE, manifest
   // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
   // READS ONLY: stored-set CIKs outside registrants.json (#552 COWORK #71). 2 commands.
+  // READS ONLY: cold (no stored set) or stored, per named symbol (#552 COWORK #71). 1 EXISTS each.
+  "write-cold-symbol": { script: "scripts/cold-symbol-probe.mjs", args: () => [], writes: true },
   "write-stored-cik-union": { script: "scripts/stored-cik-union-probe.mjs", args: () => [], writes: true },
   "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
   // Read-only: the Section 12(b) table and cover count of the newest annual filing (#552 COWORK #61/#63).
