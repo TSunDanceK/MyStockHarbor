@@ -61,11 +61,11 @@ for (const sym of syms) {
   const set = await readFactSet(sym); redisCmds++;
   if (set) {
     const nq = [...set.quarters].sort((a, b) => (a.e < b.e ? 1 : -1))[0], ny = [...set.years].sort((a, b) => (a.e < b.e ? 1 : -1))[0];
-    console.log(`fact set: quarters ${set.quarters.length} (newest ${nq?.e ?? "-"} filed ${nq?.f ?? "-"}) · years ${set.years.length} (newest ${ny?.e ?? "-"})`);
+    console.log(`fact set: quarters ${set.quarters.length} (newest ${nq?.e ?? "-"} filed ${nq?.f ?? "-"}) · years ${set.years.length} (newest ${ny?.e ?? "-"}) · built ${new Date(set.at).toISOString().slice(0, 16)} · filled-from-filing ${set.ff ? "yes" : "no"}`);
   } else console.log("fact set: none");
   if (!read.ok) { console.log("STORED: read failed"); continue; }
-  console.log(`STORED: ${read.rec ? `at ${read.rec.at.slice(0, 16)} · ${summary(read.rec, today)}` : "no record"}`);
-  if (!set || !m.cik) continue;
+  console.log(`STORED: ${read.rec ? `at ${read.rec.at.slice(0, 16)} · feedShort ${read.rec.feedShort ?? "-"} · ${summary(read.rec, today)}` : "no record"}`);
+  if (!set || !m.cik || process.env.STORED_ONLY === "yes") continue;
   try {
     const subs = await sec(`https://data.sec.gov/submissions/CIK${pad(m.cik)}.json`);
     console.log(`submissions recent: ${span(subs)} · results 8-K/6-K ${count8k(subs)} · older pages ${(subs.filings.files ?? []).length}`);
