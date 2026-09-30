@@ -7,9 +7,9 @@
 //
 // Reads: the fact-set index, the manifest and the stored sets (Upstash REST,
 // the READ-ONLY token; ~2 + ceil(n/25) commands), and one R2 GET per filer.
-// Prints counts, the per-field difference table, and the SYMBOLS in each
-// non-identical class (tickers only, never a value), plus the named
-// no-companyfacts filers.
+// Prints counts, the per-field difference table, the SYMBOLS in each
+// non-identical class, the DATES of each differing set's unmatched periods
+// (never a value), and the named no-companyfacts filers.
 //
 //   UPSTASH_REDIS_REST_URL/TOKEN (read-only) + R2_… · node scripts/sec-archive-diff.mjs
 //   (workflow: .github/workflows/sec-archive.yml, task "diff")
@@ -17,6 +17,7 @@ import "./lib/register-ts-app.mjs";
 import fs from "node:fs";
 import { r2Client, decodeFacts, rowsToFacts } from "../lib/secArchive.mjs";
 import { compareSets } from "../lib/secArchiveDiff.mjs";
+import { readArchiveUniverse } from "../lib/secArchiveUniverse.mjs";
 
 const { extractForSymbol } = await import("../lib/server/secExtractFor.ts");
 const { withPredecessorFacts } = await import("../lib/server/secSuccession.ts");
@@ -53,6 +54,7 @@ for (let i = 0; i < symbols.length; i += 25) {
   chunk.forEach((s, j) => stored.set(s, got?.[j] ? parse(got[j]) : null));
 }
 const archiveIndex = JSON.parse((await r2.get("index.json")).toString("utf8"));
+const universe = new Set(readArchiveUniverse(fs));
 
 // THE NO-COMPANYFACTS FILERS, NAMED: index entries with no facts object.
 const byCik = new Map();
@@ -60,6 +62,11 @@ for (const [sym, r] of Object.entries(REG)) {
   const c = String(r.cik).padStart(10, "0");
   if (!byCik.has(c)) byCik.set(c, []);
   byCik.get(c).push(sym);
+}
+for (const [sym, c] of Object.entries(JSON.parse(fs.readFileSync("data/sec/archive-extra-ciks.json", "utf8")).rows)) {
+  const k = String(c).padStart(10, "0");
+  if (!byCik.has(k)) byCik.set(k, []);
+  if (!byCik.get(k).includes(sym)) byCik.get(k).push(sym);
 }
 const noFacts = Object.entries(archiveIndex.entries).filter(([, e]) => !e.factsSha).map(([c]) => `${(byCik.get(c) ?? ["?"]).join("/")}`).sort();
 
@@ -70,21 +77,25 @@ const archiveFacts = async (cik) => {
   return rowsToFacts(header, rows);
 };
 const fx = new Map();
-const tally = { stored: symbols.length, "not-archived": 0, "identical": 0, "identical-plus-newer": 0, "differs": 0, "hash-differs": 0, "rebuilt-empty": 0, "no-stored-set": 0, "no-cik": 0, error: 0 };
-const lists = { "not-archived": [], "identical-plus-newer": [], "differs": [], "hash-differs": [], "rebuilt-empty": [], "no-cik": [], error: [] };
+const tally = { stored: symbols.length, "outside-universe": 0, "not-archived": 0, "identical": 0, "identical-plus-newer": 0, "differs": 0, "hash-differs": 0, "rebuilt-empty": 0, "no-stored-set": 0, "no-cik": 0, error: 0 };
+const lists = { "outside-universe": [], "not-archived": [], "identical-plus-newer": [], "differs": [], "hash-differs": [], "rebuilt-empty": [], "no-cik": [], error: [] };
 const fieldSets = {};
 let coverDiffers = 0, teStoredOnly = 0, predecessorsRead = 0;
 const errorSample = [];
 const differsBy = {};
+const unmatchedLines = [];
 const started = Date.now();
 for (const sym of symbols) {
   const s = stored.get(sym);
   if (!s) { tally["no-stored-set"]++; continue; }
   const cik = manifest.symbols?.[sym]?.cik ?? s.cik ?? REG[sym]?.cik ?? null;
   if (!cik) { tally["no-cik"]++; lists["no-cik"].push(sym); continue; }
-  // OUTSIDE THE ARCHIVE'S UNIVERSE (a symbol whose CIK is not a registrant row):
-  // not a "no companyfacts" filer, and the switch PR must widen the universe first.
-  if (!archiveIndex.entries[String(cik).padStart(10, "0")]) { tally["not-archived"]++; lists["not-archived"].push(sym); continue; }
+  // OUTSIDE THE ARCHIVE'S UNIVERSE: archive-extra-ciks.json needs this CIK
+  // (named SYMBOL:CIK, an SEC identifier). IN IT but not archived yet: the
+  // incremental job archives it on its next run.
+  const c10 = String(cik).padStart(10, "0");
+  if (!universe.has(c10)) { tally["outside-universe"]++; lists["outside-universe"].push(`${sym}:${c10}`); continue; }
+  if (!archiveIndex.entries[c10]) { tally["not-archived"]++; lists["not-archived"].push(sym); continue; }
   try {
     const facts = await archiveFacts(cik);
     let rebuilt = null;
@@ -106,6 +117,11 @@ for (const sym of symbols) {
       const tag = older && fxConv ? "older chains + converted" : older ? "older chains" : fxConv ? "converted currency" : "current chains, USD";
       (differsBy[tag] ??= []).push(sym);
     }
+    // THE UNMATCHED PERIODS, BY DATE ONLY (COWORK #71): which periods one side has and the other lacks.
+    const u = c.unmatched;
+    if (c.verdict === "differs" && (u.storedOnly.length || u.rebuiltOnly.length)) {
+      unmatchedLines.push(`  ${sym}: ${[u.storedOnly.length && `stored only ${u.storedOnly.join(", ")}`, u.rebuiltOnly.length && `archive only (older) ${u.rebuiltOnly.join(", ")}`, u.newer.length && `archive newer ${u.newer.length}`].filter(Boolean).join(" · ")}`);
+    }
     for (const f of Object.keys(c.fields)) (fieldSets[f] ??= []).push(sym);
     if (rebuilt && (s.cover?.val ?? null) !== (rebuilt.cover?.val ?? null)) coverDiffers++;
     if (s.te && !rebuilt?.te) teStoredOnly++;
@@ -115,12 +131,14 @@ for (const sym of symbols) {
   }
 }
 
-console.log(`\nstored sets ${tally.stored} · not in the archive universe ${tally["not-archived"]} · identical ${tally.identical} · identical + newer periods in the archive ${tally["identical-plus-newer"]} · differs ${tally.differs} · stored under another field hash ${tally["hash-differs"]} · rebuilt empty ${tally["rebuilt-empty"]} · no stored set ${tally["no-stored-set"]} · no CIK ${tally["no-cik"]} · errors ${tally.error}`);
+console.log(`\nstored sets ${tally.stored} · outside the archive universe ${tally["outside-universe"]} · in it, not archived yet ${tally["not-archived"]} · identical ${tally.identical} · identical + newer periods in the archive ${tally["identical-plus-newer"]} · differs ${tally.differs} · stored under another field hash ${tally["hash-differs"]} · rebuilt empty ${tally["rebuilt-empty"]} · no stored set ${tally["no-stored-set"]} · no CIK ${tally["no-cik"]} · errors ${tally.error}`);
 console.log(`outside the archive (not counted as differences): cover count differs ${coverDiffers} · stored instance-EPS frame the rebuild cannot make ${teStoredOnly} · predecessor CIKs read from the archive ${predecessorsRead}`);
 console.log(`\ndiffers, by known cause: ${Object.entries(differsBy).map(([k, v]) => `${k} ${v.length}`).join(" · ")}`);
 for (const [k, v] of Object.entries(differsBy)) console.log(`  ${k}: ${v.join(" ")}`);
 console.log("\nfields that differ on a shared period (field: sets):");
 for (const [f, ss] of Object.entries(fieldSets).sort((a, b) => b[1].length - a[1].length)) console.log(`  ${f}: ${ss.length} · ${ss.join(" ")}`);
+console.log(`\nunmatched periods on differing sets, dates only (${unmatchedLines.length}):`);
+for (const l of unmatchedLines) console.log(l);
 for (const [k, ss] of Object.entries(lists)) if (ss.length) console.log(`\n${k} (${ss.length}): ${ss.join(" ")}`);
 if (errorSample.length) console.log(`\nerror sample: ${errorSample.join(" | ")}`);
 console.log(`\nno companyfacts in the archive (${noFacts.length}): ${noFacts.join(" ")}`);
