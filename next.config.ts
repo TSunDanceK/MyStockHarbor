@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { withBotId } from "botid/next/config";
 import { NOINDEX_PICKER_PAGES } from "./lib/noindexPickerPages";
+import { retickRedirects } from "./lib/retickRedirects";
 import {
   POSITIVE_LAST_EARNINGS_ENABLED,
   POSITIVE_LAST_EARNINGS_PATH,
@@ -66,6 +67,10 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // ── Retickered symbols, 2026-09-30 (#553 COWORK #73/#75) ─────────
+      // /stock/BK -> /stock/BNY and /stock/EQR -> /stock/VMRK (and their
+      // earnings pages), every case spelling. See lib/retickRedirects.ts.
+      ...retickRedirects(),
       // ── Positive Last Earnings, hidden 2026-09-27 (#553 COWORK #64) ──
       // Ranked on FMP surprise fields that end 14 Oct; see
       // lib/positiveLastEarnings.ts. Off the flag, the page 301s to the
