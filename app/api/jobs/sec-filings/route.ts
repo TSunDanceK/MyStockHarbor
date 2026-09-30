@@ -36,6 +36,8 @@ import {
 } from "@/lib/server/secFilingJob";
 import { buildDueList } from "@/lib/server/secFilingDue";
 import { recordSicChanges, type SicChange } from "@/lib/server/secSicChange";
+import { readReportDatesChecked } from "@/lib/server/secReportDatesStore";
+import { buildAndWriteReportDates, reportDatesNeedRebuild, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,10 +125,27 @@ export async function GET(req: NextRequest) {
   const candidates = pickCandidates(mode, entries, state, new Set(due), started);
   const updates = new Map<string, FilingState>();
   const fxSeries = new Map<string, FxSeries | null>();
-  const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0, noXbrlFacts: 0 };
+  const tally = { checked: 0, current: 0, lagging: 0, filled: 0, notice: 0, caughtUp: 0, failed: 0, noSet: 0, noXbrlFacts: 0, datesRewritten: 0, datesFailed: 0 };
   const sicChanges: SicChange[] = [];
   const failures: string[] = [];
   let stoppedBy: "done" | "fill-cap" | "budget" = "done";
+
+  // THE REPORT-DATES RECORD FOLLOWS THE FIGURES (#552 COWORK #78, KO). A fill
+  // put Q2 in the snapshot while "Last reported" still named Q1, because only
+  // sec-facts rewrote the record and a filled set is not "changed" there.
+  // Rebuilt from the submissions this check already read: no extra request
+  // (one more for a cited successor's predecessor), 2 Redis commands a write.
+  // Best effort: a failure is counted, never fails the check.
+  const refreshDates = async (symbol: string, cik: string, set: Parameters<typeof buildAndWriteReportDates>[2], subs: Submissions | undefined) => {
+    if (!subs) return;
+    try {
+      const all = await withPredecessorSubmissions(cik, subs, fetchers.submissions);
+      if ((await buildAndWriteReportDates(symbol, cik, set, all, today)).ok) tally.datesRewritten++;
+      else tally.datesFailed++;
+    } catch {
+      tally.datesFailed++;
+    }
+  };
 
   for (const { symbol, cik } of candidates) {
     if (Date.now() - started > FILING_JOB_BUDGET_MS) { stoppedBy = "budget"; break; }
@@ -139,13 +158,23 @@ export async function GET(req: NextRequest) {
       const out = await checkAndFill(symbol, cik, stored, state.get(symbol), fetchers, fxSeries);
       updates.set(symbol, { c: Date.now(), lag: out.lag ?? null });
       if (out.sicChange) sicChanges.push(out.sicChange);
-      if (out.kind === "current") { tally.current++; continue; }
+      if (out.kind === "current") {
+        tally.current++;
+        // A SET FILLED EARLIER whose record lags it (KO today): rebuilt on the
+        // nightly runs only, so an hourly season run adds no GET.
+        if (stored.ff && (mode === "nightly" || mode === "catch-up")) {
+          const read = await readReportDatesChecked(symbol);
+          if (read.ok && reportDatesNeedRebuild(read.rec, stored, Date.now())) await refreshDates(symbol, cik, stored, out.subs);
+        }
+        continue;
+      }
       tally.lagging++;
       if (out.kind === "noted") continue;
       if (out.kind === "filled") tally.filled++;
       else if (out.kind === "notice") tally.notice++;
       else tally.caughtUp++;
       if (!(await writeFactSet(out.set))) throw new Error("fact-set write failed");
+      await refreshDates(symbol, cik, out.set, out.subs);
       if (canWriteSecState()) {
         revalidatePath(`/stock/${symbol}/earnings`);
         revalidatePath(`/stock/${symbol}`);

@@ -8,8 +8,9 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { checkBotId } from "botid/server";
 import { verifyQuoteToken } from "@/lib/server/quoteToken";
-import { cikForSymbol, fillColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
+import { cikForSymbol, coldSecConfigured, fetchColdSubmissions, fillColdSymbol, type ColdFillOutcome } from "@/lib/server/secColdFetch";
 import { factSetExists } from "@/lib/server/secFactStore";
+import { seedColdReportDates } from "@/lib/server/secColdReportDates";
 import {
   COLD_FILL_SYMBOL,
   clientIpFrom,
@@ -73,13 +74,20 @@ export async function requestColdFill(symbol: unknown, token: unknown): Promise<
   if (!(await takeColdFillLock(clean))) return refuse("in-flight");
   try {
     const outcome = await fillColdSymbol(clean);
+    // THE REPORT-DATES RECORD RIDES ALONG (#552 COWORK #78, WDFC), before the
+    // revalidation so the page it rebuilds has both. Bounded, best effort.
+    // Through the cold path's own SEC fetch and rate bucket; skipped, and said
+    // so in the log line, when no User-Agent is configured.
+    const dates = outcome !== "filled" ? null
+      : !coldSecConfigured() ? "skipped-no-user-agent"
+        : await seedColdReportDates(clean, cikForSymbol(clean) as string, fetchColdSubmissions, new Date().toISOString().slice(0, 10));
     if (outcome === "filled" || outcome === "no-data") {
       // Permitted here, unlike in a render's after(): see secColdFetch's history.
       revalidatePath(`/stock/${clean}`);
       revalidatePath(`/stock/${clean}/earnings`);
     }
     await countColdFillOutcome(outcome);
-    console.log("[cold-fill]", JSON.stringify({ symbol: clean, outcome }));
+    console.log("[cold-fill]", JSON.stringify({ symbol: clean, outcome, ...(dates ? { dates } : {}) }));
     return { ok: true, outcome };
   } finally {
     await releaseColdFillLock(clean);

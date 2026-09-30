@@ -196,6 +196,12 @@ export type CheckOutcome = (
 ) & {
   /** The filer's SIC code moved since registrants.json (#552 COWORK #3). Flag only. */
   sicChange?: SicChange | null;
+  /**
+   * The submissions payload the check read, handed back so the route can
+   * rebuild the report-dates record from it at no extra request (#552
+   * COWORK #78: a fill must move "Last reported" with the snapshot).
+   */
+  subs?: Submissions;
 };
 
 /**
@@ -214,7 +220,7 @@ export async function checkAndFill(
   // THE SAME PAYLOAD, READ TWICE: the SIC comparison costs no request.
   const subs = await fetch.submissions(cik);
   const sicChange = sicChangeOf(symbol, subs);
-  return { ...(await checkAndFillFrom(symbol, cik, stored, prior, fetch, fxSeries, subs)), sicChange };
+  return { ...(await checkAndFillFrom(symbol, cik, stored, prior, fetch, fxSeries, subs)), sicChange, subs };
 }
 
 async function checkAndFillFrom(

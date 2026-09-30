@@ -78,6 +78,7 @@
 // underneath. A swallowed DynamicServerError is not a handled error.
 import { Redis } from "@upstash/redis";
 import { canWriteSecState, noteSecWriteBlocked, secCounterPrefix } from "./secWriteGate";
+import type { Submissions } from "./secReportDates";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { loadTickerMap } from "./secTickerMap";
 import { lookupBySpelling } from "../symbolSpellings.mjs";
@@ -499,6 +500,31 @@ async function fetchAndStore(symbol: string, cik: string): Promise<StoredFactSet
   // rather than written into the 417 KB manifest from a render. See secColdCik.
   await recordColdCik(symbol, cik);
   return set;
+}
+
+/** Is the cold path able to call SEC at all? No User-Agent, no request (#552 COWORK #80). */
+export function coldSecConfigured(): boolean {
+  return Boolean(SEC_UA);
+}
+
+/**
+ * SUBMISSIONS FOR THE REPORT-DATES SEED (#552 COWORK #78/#80), THROUGH THIS
+ * FILE'S OWN SEC PATH: the same User-Agent source, and one claim on the same
+ * site-wide minute bucket (claimColdFetch, keyed through secCounterPrefix so a
+ * preview counts in its own bucket), so every SEC request a page view triggers
+ * is counted and capped. Over budget it throws and the seed is skipped; the
+ * cron writes the record later, as before. No User-Agent, no request.
+ */
+export async function fetchColdSubmissions(cik: string): Promise<Submissions> {
+  if (!SEC_UA) throw new Error("SEC_USER_AGENT unset");
+  if (!(await claimColdFetch(`submissions ${cik}`))) throw new Error("cold rate budget exhausted");
+  const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+    headers: { "User-Agent": SEC_UA, "Accept-Encoding": "gzip, deflate" },
+    // THE SAME HINT AS fetchFactsFor, for the same reason: never "no-store".
+    next: { revalidate: SEC_COLD_FETCH_REVALIDATE },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as Submissions;
 }
 
 async function fetchFactsFor(cik: string): Promise<CompanyFacts> {
