@@ -1,5 +1,10 @@
 // Fetches live market data for video pages.
-// Uses fetchQuoteSnapshot() (lib/server/quoteData.ts) to pull price, marketCap,
+//
+// TWO PATHS since step 6 of the Tiingo switch (#563 COWORK #30): Tiingo via
+// getVideoStockDataTiingo when PRICE_PROVIDER_VIDEOS=tiingo, else (and on any
+// Tiingo miss) the FMP path below, unchanged.
+//
+// The FMP path uses fetchQuoteSnapshot() (lib/server/quoteData.ts) to pull price, marketCap,
 // name, pe, priceAvg50, priceAvg200 all in one FMP stable/quote call — no
 // separate profile call needed.
 //
@@ -18,6 +23,11 @@
 // endpoint, with no HTTP round-trip and nothing for BotID to reject.
 
 import { fetchQuoteSnapshotForRender } from "@/lib/server/quoteData";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { pickSurfacePrice, readSurfaceInputs } from "@/lib/server/tiingoSurfacePrice";
+import { getStockPageSecFacts } from "@/lib/server/secEarningsSnapshot";
+import { marketCap, peRatio } from "@/lib/server/secValuation";
+import { snapshotCompanyName } from "@/lib/server/companyNameSnapshot";
 
 // Ticker remapping for non-US tickers.
 // Use US-listed ADR equivalents where available — all FMP endpoints work reliably for US symbols.
@@ -43,6 +53,12 @@ export type VideoStockData = {
   trend: string | null;
   peRatio: number | null;
   sector: string | null;
+  /**
+   * Set on the Tiingo path only (#563 COWORK #30): what the price is ("last IEX
+   * trade, 14:05 ET" / "close, 29 Sep 2026"). Its presence is also what tells
+   * the page to show the linked "Market data from Tiingo.com" credit.
+   */
+  priceLabel?: string;
 };
 
 function formatMarketCap(value: number | null): string | null {
@@ -53,8 +69,71 @@ function formatMarketCap(value: number | null): string | null {
   return `$${value.toLocaleString()}`;
 }
 
+function average(values: number[]): number | null {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+}
+
+/** Uptrend / Downtrend / Mixed, the rule the FMP path has always used. */
+function trendOf(price: number | null, ma50: number | null, ma200: number | null): string | null {
+  if (price === null || ma50 === null || ma200 === null) return null;
+  if (price > ma50 && ma50 > ma200) return "Uptrend";
+  if (price < ma50 && ma50 < ma200) return "Downtrend";
+  return "Mixed";
+}
+
+/**
+ * THE TIINGO PATH (#563 COWORK #30/#31), behind PRICE_PROVIDER_VIDEOS.
+ *
+ *   price       the pool row or the newest EOD close, whichever is newer, labelled
+ *   MA50/MA200  simple averages of the last 50/200 stored EOD closes
+ *   market cap  the SEC cover-page share count x that price -- A's marketCap(),
+ *               the stock page's own rule (import, not copy: COWORK #31 §2)
+ *   P/E         A's peRatio(), with its named refusals; a refusal shows no tile
+ *
+ * Null when Tiingo has no price for the symbol, so the caller keeps the FMP
+ * path: FMP stays this surface's fallback until the owner flips it.
+ *
+ * NO REMAP. IFX -> IFNNY exists for FMP; the Tiingo universe is our own price
+ * pool, and a symbol it does not carry simply falls back.
+ */
+async function getVideoStockDataTiingo(upper: string): Promise<VideoStockData | null> {
+  const [{ row, bars }, secFacts] = await Promise.all([
+    readSurfaceInputs(upper),
+    getStockPageSecFacts(upper).catch(() => null),
+  ]);
+  const surface = pickSurfacePrice(row, bars, Date.now());
+  if (!surface) return null;
+
+  const closes = (bars ?? []).map((b) => b[4]).filter((c) => Number.isFinite(c) && c > 0);
+  const ma50 = closes.length >= 50 ? average(closes.slice(-50)) : null;
+  const ma200 = closes.length >= 200 ? average(closes.slice(-200)) : null;
+
+  const valuation = secFacts?.profileFacts.valuation ?? null;
+  const cap = valuation ? marketCap(valuation, surface.price) : null;
+  const pe = valuation ? peRatio(valuation, surface.price) : null;
+
+  return {
+    ticker: upper,
+    companyName: secFacts?.profileFacts.entityName ?? (snapshotCompanyName(upper) || null),
+    price: surface.price,
+    marketCap: formatMarketCap(cap && cap.ok ? cap.val : null),
+    ma50,
+    ma200,
+    ma50Pct: pctFromBase(surface.price, ma50),
+    ma200Pct: pctFromBase(surface.price, ma200),
+    trend: trendOf(surface.price, ma50, ma200),
+    peRatio: pe && pe.ok ? pe.val : null,
+    sector: null,
+    priceLabel: surface.label,
+  };
+}
+
 export async function getVideoStockData(ticker: string): Promise<VideoStockData> {
   const upper = ticker.trim().toUpperCase();
+  if (priceProviderFor("VIDEOS") === "tiingo") {
+    const tiingo = await getVideoStockDataTiingo(upper).catch(() => null);
+    if (tiingo) return tiingo;
+  }
   const fmpSymbol = TICKER_REMAP[upper] ?? upper;
 
   let price: number | null = null;
@@ -77,12 +156,7 @@ export async function getVideoStockData(ticker: string): Promise<VideoStockData>
   const ma50Pct = pctFromBase(price, ma50);
   const ma200Pct = pctFromBase(price, ma200);
 
-  let trend: string | null = null;
-  if (price !== null && ma50 !== null && ma200 !== null) {
-    if (price > ma50 && ma50 > ma200) trend = "Uptrend";
-    else if (price < ma50 && ma50 < ma200) trend = "Downtrend";
-    else trend = "Mixed";
-  }
+  const trend = trendOf(price, ma50, ma200);
 
   return {
     ticker: upper,
