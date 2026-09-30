@@ -11,8 +11,9 @@ import {
   latestResultsAnnouncement, pairingPeriodEnds, pendingResults,
   type NextReportEstimate, type PendingResults, type ReportEvent, type Submissions,
 } from "./secReportDates";
-import { writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
+import { latestResults, writeReportDates, STORED_EVENT_LIMIT, type StoredReportDates } from "./secReportDatesStore";
 import { recordResultsDays } from "./secResultsDays";
+import { predecessorCikFor } from "./secSuccession";
 import type { StoredFactSet } from "./secFactCodec";
 
 /**
@@ -84,8 +85,99 @@ export function buildReportDatesRecord(
     annual: cadence?.annual ?? null,
     // "MM-DD" of the newest annual period end — see StoredReportDates.fye.
     fye: [...yearEnds].sort().at(-1)?.slice(5) ?? null,
+    feedShort: feedIsShort(subs, todayIso),
     earlyNonResults,
   };
+}
+
+/**
+ * HOW FAR BACK A FEED MUST REACH TO NOT COUNT AS SHORT: three years, i.e. the
+ * twelve quarters the estimator's eight usable lags need with room to spare.
+ */
+export const FEED_SHORT_YEARS = 3;
+
+/**
+ * Was the filing list cut short (StoredReportDates.feedShort)? Older pages
+ * exist AND `recent` reaches back less than FEED_SHORT_YEARS. KO has older
+ * pages too, but its `recent` covers eight years, so it is not short.
+ */
+export function feedIsShort(subs: Submissions, todayIso: string): boolean {
+  const files = subs.filings?.files;
+  if (!Array.isArray(files) || files.length === 0) return false;
+  const dates = (subs.filings?.recent?.filingDate ?? []).filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d));
+  if (!dates.length) return true;
+  const earliest = dates.reduce((m, d) => (d < m ? d : m));
+  const cutoff = `${Number(todayIso.slice(0, 4)) - FEED_SHORT_YEARS}${todayIso.slice(4, 10)}`;
+  return earliest > cutoff;
+}
+
+/**
+ * THE PREDECESSOR'S FILINGS, FOR A CITED SUCCESSOR (#552 COWORK #78, XOM).
+ *
+ * The successor CIK's own list starts at the reorganization (XOM: one results
+ * 8-K since 2026-07-01), so its cadence is "too few periods" by construction.
+ * The predecessor's list is the same company's history, cited in
+ * data/sec/successor-ciks.json, exactly as withPredecessorFacts uses it for
+ * the figures. APPENDED AFTER the successor's own rows: the pairing reads each
+ * period's 2.02 against its 10-Q/10-K, and the successor's rows come first so
+ * they win any overlap. One extra SEC request, for cited successors only; a
+ * failed fetch keeps the successor's own list (the old behaviour).
+ */
+export function mergeSubmissions(own: Submissions, older: Submissions): Submissions {
+  const a = own.filings?.recent ?? {};
+  const b = older.filings?.recent ?? {};
+  const n = (r: SubmissionsFilingsLike) => (Array.isArray(r.accessionNumber) ? r.accessionNumber.length : 0);
+  const keys = ["accessionNumber", "filingDate", "reportDate", "acceptanceDateTime", "form", "items"] as const;
+  const recent: Record<string, unknown[]> = {};
+  for (const k of keys) {
+    const pad = (r: SubmissionsFilingsLike) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : Array(n(r)).fill(null));
+    recent[k] = [...pad(a), ...pad(b)];
+  }
+  return { ...own, filings: { ...own.filings, recent } };
+}
+type SubmissionsFilingsLike = NonNullable<NonNullable<Submissions["filings"]>["recent"]>;
+
+export async function withPredecessorSubmissions(
+  cik: string,
+  subs: Submissions,
+  fetchSubmissions: (cik: string) => Promise<Submissions>,
+): Promise<Submissions> {
+  const pred = predecessorCikFor(cik);
+  if (!pred) return subs;
+  try {
+    return mergeSubmissions(subs, await fetchSubmissions(pred));
+  } catch (err) {
+    console.warn("[sec-report-dates] predecessor submissions failed", cik, String((err as Error)?.message ?? err));
+    return subs;
+  }
+}
+
+/**
+ * DOES THE RECORD LAG THE FIGURES BESIDE IT? (#552 COWORK #78, KO.)
+ *
+ * KO's snapshot showed Q2 (filled from the 10-Q, filed 2026-07-29) while its
+ * "Last reported" line said 2026-04-28: the record was last written on
+ * 2026-09-23 under the older pairing, and nothing queues a record whose set
+ * moved through the filing job rather than through sec-facts. Rebuilt when:
+ *   - there is no record; or
+ *   - it was written before the set it sits beside was built; or
+ *   - its newest results event is for an OLDER period than the set's newest,
+ *     and it is at least REBUILD_AFTER_MS old (a filer with no results 8-K for
+ *     its newest quarter would otherwise be rebuilt on every nightly check).
+ */
+export const REBUILD_AFTER_MS = 20 * 60 * 60 * 1000;
+
+export function reportDatesNeedRebuild(
+  rec: StoredReportDates | null,
+  set: Pick<StoredFactSet, "at" | "quarters" | "years">,
+  nowMs: number,
+): boolean {
+  if (!rec) return true;
+  const at = Date.parse(rec.at);
+  if (!Number.isFinite(at) || at < set.at) return true;
+  const newest = [...set.quarters, ...set.years].map((p) => p.e).filter(Boolean).sort().at(-1) ?? null;
+  const last = latestResults(rec)?.periodEnd ?? null;
+  return newest !== null && (last === null || last < newest) && nowMs - at >= REBUILD_AFTER_MS;
 }
 
 export async function buildAndWriteReportDates(

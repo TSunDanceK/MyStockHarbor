@@ -33,7 +33,8 @@ const decl = (file, name) => {
 const RD = readCodeOnly("lib/server/secReportDates.ts").replace(/^import[\s\S]*?from\s*"[^"]+";$/gm, "")
   .replace(/export (const|function|type)/g, "$1");
 const STORE_LIMIT = decl("lib/server/secReportDatesStore.ts", "STORED_EVENT_LIMIT");
-const BUILDER = decl("lib/server/secReportDatesWrite.ts", "buildReportDatesRecord");
+const BUILDER = decl("lib/server/secReportDatesWrite.ts", "buildReportDatesRecord") + "\n" +
+  decl("lib/server/secReportDatesWrite.ts", "FEED_SHORT_YEARS") + "\n" + decl("lib/server/secReportDatesWrite.ts", "feedIsShort");
 const GUARD = "  if (looksLikeEarlyNonResults(daysBetween(periodEnd, latest.announcedOn), pattern)) return null;\n";
 if (!RD.includes(GUARD)) { console.error("FATAL: the pendingResults guard line moved"); process.exit(2); }
 const loadBuilder = (mutate = (s) => s) => lift(mutate(RD) + "\n" + STORE_LIMIT + "\n" + BUILDER +

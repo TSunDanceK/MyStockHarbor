@@ -48,7 +48,7 @@ export type OutlookKind = "due" | "expected" | "beyond-window" | "no-estimate" |
 
 /** The named reason behind "no-estimate". Reported, never rendered raw. */
 export type OutlookReason =
-  "no-record" | "no-period-end" | "thin-history" | "below-precision-bar" | "estimate-in-past";
+  "no-record" | "no-period-end" | "thin-history" | "short-feed" | "below-precision-bar" | "estimate-in-past";
 
 /**
  * EXACTLY WHAT THE READER SEES, COMPOSED SERVER-SIDE.
@@ -160,7 +160,11 @@ export function outlookFrom(
   // is only ever produced by a non-empty `alreadyDue` set, which this call does
   // not pass. It is mapped rather than thrown so a later change to expectedFrom
   // degrades into a named refusal instead of a crash.
-  const reason: OutlookReason = got.skip === "already-due" ? "estimate-in-past" : got.skip;
+  const skip: OutlookReason = got.skip === "already-due" ? "estimate-in-past" : got.skip;
+  // A THIN HISTORY WE CAUSED IS SAID AS OURS (#552 COWORK #78, JPM): when the
+  // filing list we read was cut short (StoredReportDates.feedShort), "too few
+  // periods" would blame the filer for the feed's limit.
+  const reason: OutlookReason = skip === "thin-history" && rec?.feedShort === true ? "short-feed" : skip;
   return {
     symbol, kind: "no-estimate", reason,
     headline: outlookNoEstimateLabel(symbol),

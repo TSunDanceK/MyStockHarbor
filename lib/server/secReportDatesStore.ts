@@ -138,6 +138,16 @@ export type StoredReportDates = {
    * period; readers then use one pool, exactly as before.
    */
   fye?: string | null;
+  /**
+   * THE FILING LIST WE READ WAS CUT SHORT (#552 COWORK #78, JPM): SEC's
+   * `recent` array ends at about 1,000 filings, and older pages exist. For a
+   * filer that files thousands of other documents a year, that window holds
+   * only its last few results, so "too few periods" would blame the filer for
+   * a limit of the feed. With this set, the outlook names the real reason.
+   *
+   * Optional: absent on records written before it, read as "not known".
+   */
+  feedShort?: boolean | null;
 };
 
 /**
