@@ -274,6 +274,8 @@ const TASKS = {
   // dot/dash duplicates (#552 COWORK #59). Weekly or on demand.
   // READS ONLY: stored-set CIKs outside registrants.json (#552 COWORK #71). 2 commands.
   // READS ONLY: cold (no stored set) or stored, per named symbol (#552 COWORK #71). 1 EXISTS each.
+  // READS ONLY: the next-report box, stored vs a fresh build (#552 COWORK #78). Redis reads + a few SEC requests.
+  "write-next-report-probe": { script: "scripts/next-report-probe.mjs", args: () => [], writes: true },
   "write-cold-symbol": { script: "scripts/cold-symbol-probe.mjs", args: () => [], writes: true },
   "write-stored-cik-union": { script: "scripts/stored-cik-union-probe.mjs", args: () => [], writes: true },
   "write-fact-set-index-drift": { script: "scripts/fact-set-index-drift.mjs", args: () => [], writes: true },
