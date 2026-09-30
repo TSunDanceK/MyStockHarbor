@@ -32,20 +32,23 @@ const TIMEOUT = 60;
 const hung = () => new Promise(() => {});
 // Resolves to "hung" if the settle did not answer within 4× its own ceiling.
 const within = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r("hung"), TIMEOUT * 4))]);
-const phase = (step) => (step === "hung" ? "hung" : step.kind === "phase" ? step.phase : `refresh+${step.afterMs}`);
+const phase = (step) => (step === "hung" ? "hung" : step.kind === "phase" ? step.phase : step.kind);
 
 console.log("1. the client always settles");
 {
   const cases = [
-    ["a hung call (BotID's challenge never answers)", hung, "slow"],
-    ["a rejected call", () => Promise.reject(new Error("botid")), "slow"],
-    ["a synchronous throw", () => { throw new Error("sync"); }, "slow"],
-    ["a bot refusal", async () => ({ ok: false, refused: "bot" }), "slow"],
-    ["a malformed reply", async () => null, "slow"],
-    ["filled", async () => ({ ok: true, outcome: "filled" }), "refresh+0"],
-    ["another visitor's fill in flight", async () => ({ ok: false, refused: "in-flight" }), `refresh+${S.IN_FLIGHT_RETRY_MS}`],
+    // A SLOW FILL IS NOT A FAILED ONE (#552 COWORK #46): these poll the store.
+    ["a hung call (BotID's challenge never answers, or a slow fill: AXTI)", hung, "poll"],
+    ["a rejected call", () => Promise.reject(new Error("botid")), "poll"],
+    ["a synchronous throw", () => { throw new Error("sync"); }, "poll"],
+    ["a malformed reply", async () => null, "poll"],
+    ["another visitor's fill in flight", async () => ({ ok: false, refused: "in-flight" }), "poll"],
+    ["queued for the job", async () => ({ ok: true, outcome: "queued" }), "poll"],
+    ["busy", async () => ({ ok: true, outcome: "busy" }), "poll"],
+    // …and these end the sequence.
+    ["a bot refusal (no fill is coming from it)", async () => ({ ok: false, refused: "bot" }), "slow"],
+    ["filled", async () => ({ ok: true, outcome: "filled" }), "filled"],
     ["no usable data", async () => ({ ok: true, outcome: "no-data" }), "none"],
-    ["queued for the job", async () => ({ ok: true, outcome: "queued" }), "slow"],
     ["an over-limit address", async () => ({ ok: false, refused: "ip-limit" }), "waiting"],
   ];
   for (const [name, call, want] of cases) {
@@ -59,6 +62,7 @@ console.log("1. the client always settles");
   // MUTATION: the timer removed. The hung case must then NOT settle, or the
   // assertion above is not what is guarding it.
   const noTimer = settleSrc.replace("const timer = setTimeout(() => finish(FALLBACK), timeoutMs);", "const timer = undefined;");
+  // FALLBACK is POLL now: the timer is still what ends the wait for the reply.
   check("the no-timer mutation applied", noTimer !== settleSrc);
   const M = await lift(noTimer, "", "coldFillSettle-mutant");
   check("MUTATION: without the timer a hung BotID call hangs (so the timer is what settles it)",
@@ -68,10 +72,10 @@ console.log("1. the client always settles");
 console.log("\n2. the component goes through the settle rule");
 {
   const ui = readCodeOnly("app/stock/[symbol]/ColdFill.tsx");
-  check("the action is called only inside settleColdFill", /settleColdFill\(\(\) => requestColdFill\(symbol, token\)\)/.test(ui) &&
+  check("the action is called only inside settleColdFill", /settleColdFill\(\(\) => requestColdFill\(symbol, tokenRef\.current\)\)/.test(ui) &&
     (ui.match(/requestColdFill\(/g) ?? []).length === 1);
   check("no bare await of the action", !/await requestColdFill/.test(ui));
-  check("a still-cold page after a refresh settles on the fallback", /REFRESH_GRACE_MS/.test(ui) && /setPhase\("slow"\)/.test(ui));
+  check("the rest of the sequence is the shipped poll controller (check-cold-fill-poll)", /runColdFill\(\{/.test(ui));
   check("the words come from the settle module, not a second copy", !/taking longer than usual/.test(ui));
 }
 
