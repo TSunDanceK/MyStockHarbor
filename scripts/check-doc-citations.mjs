@@ -135,6 +135,10 @@ const KNOWN_MISSING = new Set([
   "claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md",
   // moved to private storage
   "claude/tiingo-contract-and-limits-2026-09-23.md",
+  // ADDED 2026-09-30: app/robots.ts (#648) cites the firewall watch that found
+  // SERankingBacklinksBot. The daily firewall watches are written Project-side
+  // and never mirrored to the repo, like the two firewall entries above.
+  "claude/firewall-daily-watch-2026-09-27.md",
 ]);
 
 // TRACKED **AND** UNTRACKED-BUT-NOT-IGNORED. `git ls-files` alone misses a file
