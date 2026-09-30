@@ -93,6 +93,14 @@ const redis =
 
 export const PRICE_POOL_KEY = "msh:price-pool:v1";
 
+/**
+ * Always in the pool, whatever the Pickers universe holds (#553 COWORK #78):
+ * the ETFs the benchmark surfaces price from. SPY carries the SPX page (C's
+ * step 6); QQQ, DIA and IWM the dashboard benchmarks (step 4). Labelled as
+ * ETFs wherever shown (COWORK #71). Added by the warm-price-pool route only.
+ */
+export const POOL_BENCHMARK_ETFS: readonly string[] = ["SPY", "QQQ", "DIA", "IWM"];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // A HEALTH RECORD THE MARKET-HOURS SKIP CANNOT ERASE.
 //
