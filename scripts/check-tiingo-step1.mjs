@@ -280,6 +280,16 @@ e = await J.runTiingoEod(NIGHT);
 check("nightly: a night that has not landed stores nothing and stamps nothing", e.ok === false && e.notLanded === "2026-09-24" && !net.redisCmds.some((c) => c[0] === "set"), JSON.stringify(e));
 check("...and asks for no per-symbol history", net.tiingo.length === 1);
 check("eodLanded wants 90% of the universe", J.eodLanded(new Map([["d", 9]]), "d", 10) && !J.eodLanded(new Map([["d", 8]]), "d", 10));
+// onBars (#553 step 2): the Pickers build rides on a COMPLETE night only.
+reset();
+let seen = null;
+e = await J.runTiingoEod(NIGHT, (bars) => { seen = [...bars.keys()].sort().join(); });
+check("nightly: a complete night hands every fetched symbol's bars to onBars", e.ok && seen === "AAPL,BRK-B,EP-PC", String(seen));
+reset();
+net.shortTickers = ["BRK-B"];
+seen = null;
+e = await J.runTiingoEod(NIGHT, (bars) => { seen = [...bars.keys()].join(); });
+check("...and a partial night (2 of 3, under 90%) does not call it", e.ok === false && seen === null, JSON.stringify({ ok: e.ok, seen }));
 
 // Helpers.
 check("the spelling rule: preferreds gain a dash, classes do not", ["EP-PC", ["FITB", "PM"].join("."), "MER-PK", ["BRK", "B"].join("."), "XYZ-P", "AAPL"].map(S.toTiingo).join(" ") === "EP-P-C FITB-P-M MER-P-K BRK-B XYZ-P AAPL");

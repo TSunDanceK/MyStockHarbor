@@ -32,7 +32,7 @@ import type { NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { PICKER_ROUTES } from "@/lib/pickerRoutes";
 import { GET_WARM as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
-import { readLastBuildStats } from "../../../../lib/server/pickersBuilder";
+import { readLastBuildStats, readLastHistoryStats } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { guardJob } from "../../../../lib/server/jobGuard";
 
@@ -157,6 +157,8 @@ async function handleGET(req: NextRequest) {
     // the request never reached a build (served from memo or cache), which is
     // itself the answer to "did the forced warm actually build".
     const build = readLastBuildStats();
+    // Which provider the build's history came from, by tier (#553 step 2).
+    const historySource = readLastHistoryStats();
 
     // THE INVARIANT, CHECKED WHERE IT CAN BE SEEN. A forced run must never yield
     // a thinner universe than an unforced one; that is the property the
@@ -213,6 +215,7 @@ async function handleGET(req: NextRequest) {
       // is uncapped, so "capacity-timeout:20" and "http-429:18,network:2" are
       // both readable in one glance, and they want opposite fixes.
       historyForcedRefetchFailureReasons: barAge.forcedRefetchFailureReasons.join(",") || null,
+      historySource: historySource ? JSON.stringify(historySource) : null,
     });
 
     // REGENERATE WHEN THE DATA MOVES, not when a timer expires.
