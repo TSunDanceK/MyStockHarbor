@@ -50,7 +50,10 @@ const summary = (rec, today) => {
 const today = new Date().toISOString().slice(0, 10);
 const now = new Date().toISOString();
 const manifest = await readManifest();
-const syms = String(process.env.SYMBOLS ?? "").split(/[,\s]+/).filter(Boolean).map((s) => s.toUpperCase()).slice(0, 10);
+const rawSyms = String(process.env.SYMBOLS ?? "").split(/[,\s]+/).filter(Boolean).map((s) => s.toUpperCase());
+// "STORED-ONLY" as the first symbol: the stored side only, no SEC request.
+const STORED_ONLY = rawSyms[0] === "STORED-ONLY";
+const syms = rawSyms.filter((s) => s !== "STORED-ONLY").slice(0, 10);
 let redisCmds = 1;
 for (const sym of syms) {
   console.log(`\n== ${sym}`);
@@ -65,7 +68,7 @@ for (const sym of syms) {
   } else console.log("fact set: none");
   if (!read.ok) { console.log("STORED: read failed"); continue; }
   console.log(`STORED: ${read.rec ? `at ${read.rec.at.slice(0, 16)} · feedShort ${read.rec.feedShort ?? "-"} · ${summary(read.rec, today)}` : "no record"}`);
-  if (!set || !m.cik || process.env.STORED_ONLY === "yes") continue;
+  if (!set || !m.cik || STORED_ONLY) continue;
   try {
     const subs = await sec(`https://data.sec.gov/submissions/CIK${pad(m.cik)}.json`);
     console.log(`submissions recent: ${span(subs)} · results 8-K/6-K ${count8k(subs)} · older pages ${(subs.filings.files ?? []).length}`);
