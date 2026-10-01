@@ -4,6 +4,8 @@
 // no bar, no other market value (the logs are public).
 //
 //   relay task: tiingo-carries   (SYMBOLS=IFNNY,ASTS,...)
+import { toTiingo } from "../lib/symbolSpellings.mjs";
+
 const KEY = process.env.TIINGO_API_KEY ?? "";
 if (!KEY) {
   console.error("FATAL: TIINGO_API_KEY is not set in this job. Refusing (nothing was requested).");
@@ -14,7 +16,7 @@ let requests = 0;
 for (const s of symbols) {
   requests++;
   try {
-    const res = await fetch(`https://api.tiingo.com/tiingo/daily/${encodeURIComponent(s.replace(/\./g, "-"))}`, {
+    const res = await fetch(`https://api.tiingo.com/tiingo/daily/${encodeURIComponent(toTiingo(s))}`, {
       headers: { Authorization: `Token ${KEY}`, "Content-Type": "application/json" },
     });
     if (!res.ok) { console.log(`${s}: NOT carried (HTTP ${res.status})`); continue; }
