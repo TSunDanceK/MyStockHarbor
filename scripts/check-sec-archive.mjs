@@ -201,6 +201,43 @@ const I = await import("../lib/secArchiveIncremental.mjs");
   const rt = await th.run();
   const ti = JSON.parse(th.store.get("index.json"));
   check("429 mid-day → stops, index saved, lastDaily NOT advanced past the unfinished day", rt.status === "throttled" && ti.lastDaily === "2026-09-28" && !th.urls.some((u) => /CIK0000000004/.test(u)));
+  // ── THE CLOCK GUARD (#552 CODE-A #86) ────────────────────────────────
+  const at = (iso) => Date.parse(iso);
+  check("windows: 04:00 sec-daily-index, 06:30 capex, 16:40 sec-filings are inside; 03:05, 07:00, 13:00 are outside",
+    I.inSecJobWindow(at("2026-10-01T04:00:00Z")) && I.inSecJobWindow(at("2026-10-01T06:30:00Z")) && I.inSecJobWindow(at("2026-10-01T16:40:00Z")) &&
+      !I.inSecJobWindow(at("2026-10-01T03:05:00Z")) && !I.inSecJobWindow(at("2026-10-01T07:00:00Z")) && !I.inSecJobWindow(at("2026-10-01T13:00:00Z")));
+  check("in reporting season, an even hour's :38–:48 is inside (sec-filings); off season it is not; an odd hour never",
+    I.inSecJobWindow(at("2026-10-20T10:40:00Z")) && !I.inSecJobWindow(at("2026-10-01T10:40:00Z")) && !I.inSecJobWindow(at("2026-10-20T11:40:00Z")) && !I.inSecJobWindow(at("2026-10-20T10:50:00Z")));
+  const FJ = fs.readFileSync("lib/server/secFilingJob.ts", "utf8");
+  const seasonsTs = [...FJ.slice(FJ.indexOf("export const REPORTING_SEASONS"), FJ.indexOf("];", FJ.indexOf("export const REPORTING_SEASONS"))).matchAll(/\["(\d\d-\d\d)", "(\d\d-\d\d)"\]/g)].map((m) => [m[1], m[2]]);
+  check("the guard's reporting seasons match the filing job's own list", JSON.stringify(seasonsTs) === JSON.stringify(I.REPORTING_SEASONS), JSON.stringify(seasonsTs));
+  check("the incremental job paces at ≤4 requests/s (≥250 ms apart)", I.INCREMENTAL_GAP_MS >= 250 && /gapMs: INCREMENTAL_GAP_MS/.test(readCodeOnly("lib/secArchiveIncremental.mjs")));
+  const wh = incHarness(I);
+  const before = wh.store.get("index.json").toString();
+  const ws = await wh.run({ now: () => at("2026-10-01T09:30:00Z") - 5 * 3600_000 });   // 04:30, a late 03:05 schedule
+  check("a start inside a window: status 'window', 0 SEC requests, the index not even read or rewritten",
+    ws.status === "window" && wh.requests() === 0 && wh.store.get("index.json").toString() === before);
+  // Mid-run: starts 03:54:58, the clock crosses 03:55 after the first requests.
+  let mt = at("2026-10-01T03:54:58Z");
+  const mid = incHarness(I);
+  const mr = await mid.run({ now: () => mt, sleep: async (ms) => { mt += ms + 1000; } });
+  const mi = JSON.parse(mid.store.get("index.json"));
+  check("reaching a window mid-run: stops 'window', index saved, lastDaily not advanced past an unfinished day, no new-CIK pass",
+    mr.status === "window" && mi.lastDaily === "2026-09-28" && !mid.urls.some((u) => /CIK0000000004/.test(u)), `${mr.status} ${mi.lastDaily}`);
+  check("the wrapper exits green on a window skip (red only on throttled / no archive / >2% failed)",
+    !/status === "window"/.test(readCodeOnly("scripts/sec-archive-incremental.mjs").match(/process\.exit\(([^;]*)\)/)?.[1] ?? "x"));
+  {
+    const GS = fs.readFileSync("lib/secArchiveIncremental.mjs", "utf8");
+    const GA = "  if (blockedAt(started)) {";
+    if (GS.split(GA).length !== 2) throw new Error("clock-guard mutation anchor must match once");
+    const tmpg = `lib/.check-sec-archive-g-${process.pid}.mjs`;
+    fs.writeFileSync(tmpg, GS.replace(GA, "  if (false) {").replace(/if \(blockedAt\(now\(\)\)\) \{ status = "window"; break(?: outer)?; \}/g, ""));
+    let MG;
+    try { MG = await import(`../${tmpg}`); } finally { fs.rmSync(tmpg, { force: true }); }
+    const gh = incHarness(MG);
+    await gh.run({ now: () => at("2026-10-01T04:30:00Z") });
+    check("MUTATION: the clock guard removed → a late start at 04:30 reads SEC during sec-facts (caught)", gh.requests() > 0);
+  }
   const SRC = fs.readFileSync("lib/secArchiveIncremental.mjs", "utf8");
   const ANCHOR = "export const FACT_FORMS = /^(10-K|10-Q|20-F|40-F|10-KT|6-K)(\\/A)?$/;";
   if (SRC.split(ANCHOR).length !== 2) throw new Error("fact-forms mutation anchor must match once");
