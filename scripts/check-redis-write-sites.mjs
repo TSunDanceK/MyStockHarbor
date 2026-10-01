@@ -120,6 +120,12 @@ check(
   `${chunk} x ${EOD_ROW_BYTES_MEASURED} B x ${escaping} = ${(worst / 1024 / 1024).toFixed(2)} MB against ${(budget / 1024 / 1024).toFixed(0)} MB at ${bars} bars; more bars or a bigger chunk needs a re-measure`
 );
 
+const eodLogRule = (src) =>
+  /largestWriteRequestBytes = Math\.max\(largestWriteRequestBytes, pipelineRequestBytes\(cmds\)\)/.test(src) &&
+  /console\.log\(\s*`\[tiingo-eod\] largest write request \$\{largestWriteRequestBytes\} bytes/.test(src) &&
+  /bytesWritten,\s*largestWriteRequestBytes,/.test(src);
+check("the EOD job measures, logs and records its largest write request every run (COWORK #83)", eodLogRule(jobs));
+
 // ── mutants ────────────────────────────────────────────────────────────────
 console.log("\n5. Mutants");
 {
@@ -138,6 +144,11 @@ console.log("\n5. Mutants");
   const i = src.indexOf(`await redis.set(${BUILDERS[1][1]}, entry`);
   const m = src.slice(0, i) + src.slice(i).replace("} catch (error) {", "} catch {");
   check("mutant caught: a builder back on a silent catch", m !== src && builderRule(m, BUILDERS[1][1], BUILDERS[1][2]) !== null);
+}
+
+{
+  const m = jobs.replace(/console\.log\(\s*`\[tiingo-eod\] largest write request/, "void (`[tiingo-eod] largest write request");
+  check("mutant caught: the EOD largest-request log removed", m !== jobs && !eodLogRule(m));
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
