@@ -5,7 +5,7 @@ import { readFactSet } from "@/lib/server/secFactStore";
 import { cikForSymbol } from "@/lib/server/secColdFetch";
 import { SEC_REPORT_DATES_PREFIX, pairingRewriteDone, readReportDates } from "@/lib/server/secReportDatesStore";
 import { RESULTS_DAYS_BACKFILL_BELOW, backfillResultsDays, resultsDaysCount } from "@/lib/server/secResultsDays";
-import { buildAndWriteReportDates, rewriteQueue } from "@/lib/server/secReportDatesWrite";
+import { buildAndWriteReportDates, rewriteQueue, withPredecessorSubmissions } from "@/lib/server/secReportDatesWrite";
 import type { Submissions } from "@/lib/server/secReportDates";
 import reportDatesRewrite from "@/data/sec/report-dates-rewrite.json";
 import dueStripCut from "@/data/due-strip.json";
@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
     try {
       const set = await readFactSet(symbol);
       if (!set) { tally.noFactSet++; skipped.push(symbol); continue; }
-      const subs = await fetchSubmissions(cik);
+      // A CITED SUCCESSOR (XOM) reads its predecessor's filing list too.
+      const subs = await withPredecessorSubmissions(cik, await fetchSubmissions(cik), fetchSubmissions);
       const { ok } = await buildAndWriteReportDates(symbol, cik, set, subs, todayIso);
       if (ok) { tally.written++; written.add(symbol); }
       else { tally.failed++; failures.push(symbol); }
