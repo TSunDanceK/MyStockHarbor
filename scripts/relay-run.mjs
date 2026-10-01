@@ -1318,6 +1318,10 @@ const TASKS = {
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // UPSTASH 10 MB LIMIT CENSUS (#553 COWORK #82): dry forced builds of the three
+  // plays builders (writes measured, never sent) plus live key sizes. READ-ONLY
+  // DESPITE THE PREFIX: the credential boundary.
+  "write-redis-size-census": { script: "scripts/redis-size-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // PICKERS SIGNAL PARITY (#553 step 2): the real build twice, on FMP's and on
   // Tiingo's bars, compared per section and per flag. READ-ONLY DESPITE THE
   // PREFIX: the script refuses any write verb before it is sent; `write-` is the
