@@ -147,6 +147,7 @@ const PIPELINED = [
   { prefix: "msh:pickers:screener-fundamentals:v1:", chunk: 500, writer: "fundamentalsCache (SCREENER_WRITE_CHUNK)" },
   { prefix: "msh:pickers:fundamentals:v1:", chunk: 2000, writer: "fundamentalsCache (one pipeline, whole universe)" },
   { prefix: "msh:history:v7:", chunk: 1, writer: "historyCache (one SET per symbol)" },
+  { prefix: "msh:sec:facts:v1:", chunk: 1, writer: "secFactStore (A; one SET per symbol)" },
 ];
 console.log("\n3. PIPELINED WRITERS: worst-case request = sum of the largest `chunk` stored rows");
 for (const w of PIPELINED) {
