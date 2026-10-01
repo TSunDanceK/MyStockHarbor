@@ -59,7 +59,7 @@ const redis =
 
 // v2: rows carry dayBasis/sessionDate. A v1 row read by v2 code would render
 // with no basis, i.e. with the wrong label.
-const PERFORMANCE_KEY = "msh:sector-performance:v2";
+export const PERFORMANCE_KEY = "msh:sector-performance:v2";
 const PERFORMANCE_TTL_SECONDS = 15 * 60;
 
 const BREADTH_KEY_PREFIX = "msh:sector-breadth:v1:";

@@ -13,6 +13,7 @@
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
 import { flushRedisReadMeter } from "./redisBandwidth";
@@ -156,7 +157,7 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 60;
 const STALE_SECONDS = 60 * 60;
 
-const PLAYS_REDIS_KEY = "msh:bull-flags:v1:main";
+export const PLAYS_REDIS_KEY = "msh:bull-flags:v1:main";
 const PLAYS_REDIS_TTL_SECONDS = 60 * 60;
 const PLAYS_LOCK_KEY = "msh:bull-flags:v1:main:lock";
 const PLAYS_LOCK_TTL_SECONDS = 120;
@@ -318,11 +319,26 @@ async function writePlaysCache(data: PlaysPayload) {
       data,
     };
 
+    // MEASURED AND LOGGED (#553 COWORK #82). An over-limit write returns an
+    // error rather than truncating, and a bare catch here hid any rejection.
+    // The body is measured first; an over-budget one is refused loudly. The
+    // log carries sizes only.
+    const measured = trySetRequestBytes(PLAYS_REDIS_KEY, entry, PLAYS_REDIS_TTL_SECONDS);
+    if (measured && measured.bodyBytes > REQUEST_BYTE_BUDGET) {
+      console.error(
+        `[bull-flags] payload write ${measured.bodyBytes} bytes refused: over the ${REQUEST_BYTE_BUDGET}-byte budget (${pctOfRequestLimit(measured.bodyBytes)} of the limit)`
+      );
+      return;
+    }
     await redis.set(PLAYS_REDIS_KEY, entry, {
       ex: PLAYS_REDIS_TTL_SECONDS,
     });
-  } catch {
-    // fail open
+    console.log(`[bull-flags] payload write ${measured?.bodyBytes ?? "?"} bytes ok`);
+  } catch (error) {
+    // Still fail-open for the page, but never silent.
+    console.error(
+      `[bull-flags] payload write failed: ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`
+    );
   }
 }
 
