@@ -276,6 +276,8 @@ const TASKS = {
   // READS ONLY: cold (no stored set) or stored, per named symbol (#552 COWORK #71). 1 EXISTS each.
   // READS ONLY: the next-report box, stored vs a fresh build (#552 COWORK #78). Redis reads + a few SEC requests.
   // READS ONLY: outlook in results releases, 100-filer sample (#552 COWORK #82). ~300 SEC requests at 4/s.
+  // ONE-OFF PRODUCTION WRITE (owner GO, #552 CODE-A #83): XOM/JPM report-dates rebuild. Allow-listed.
+  "write-report-dates-oneoff": { script: "scripts/report-dates-oneoff.mjs", args: () => [], writes: true },
   "write-outlook-sample": { script: "scripts/outlook-sample-probe.mjs", args: () => [], writes: true },
   "write-next-report-probe": { script: "scripts/next-report-probe.mjs", args: () => [], writes: true },
   "write-cold-symbol": { script: "scripts/cold-symbol-probe.mjs", args: () => [], writes: true },
