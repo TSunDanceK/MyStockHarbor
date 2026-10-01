@@ -25,23 +25,26 @@ const check = (label, ok, detail = "") => {
 };
 const imp = (f) => import(pathToFileURL(path.join(ROOT, f)).href);
 
-const { POOL_BENCHMARK_ETFS } = await imp("lib/server/pricePool.ts");
+const { POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } = await imp("lib/server/pricePool.ts");
 check("the list is SPY, QQQ, DIA, IWM", JSON.stringify(POOL_BENCHMARK_ETFS) === '["SPY","QQQ","DIA","IWM"]', JSON.stringify(POOL_BENCHMARK_ETFS));
 
 const routeRule = (code) =>
-  /const poolSymbols = \[\.\.\.new Set\(\[\.\.\.symbols, \.\.\.POOL_BENCHMARK_ETFS\]\)\];/.test(code) &&
+  /const poolSymbols = \[\.\.\.new Set\(\[\.\.\.symbols, \.\.\.POOL_BENCHMARK_ETFS, \.\.\.POOL_VIDEO_TICKERS\]\)\];/.test(code) &&
   /warmPricePool\(poolSymbols, /.test(code);
 const route = readCodeOnly("app/api/jobs/warm-price-pool/route.ts");
 check("warm-price-pool warms the Pickers/dynamic targets plus the ETFs", routeRule(route));
+check("C's video-page tickers are ASTS, KRMN, LUNR, MOD, IFNNY (#553 COWORK #83)", JSON.stringify(POOL_VIDEO_TICKERS) === '["ASTS","KRMN","LUNR","MOD","IFNNY"]', JSON.stringify(POOL_VIDEO_TICKERS));
 check("getWarmTargetSymbols does not carry them (the fundamentals warms share it)", !/POOL_BENCHMARK_ETFS/.test(readCodeOnly("lib/server/warmTargets.ts")));
 
 const { isDebtListing } = await imp("lib/server/marketData/universe.ts");
 const { isPriceExcluded } = await imp("lib/priceExcluded.mjs");
-const dropped = POOL_BENCHMARK_ETFS.filter((s) => isDebtListing(s) || isPriceExcluded(s));
+const dropped = [...POOL_BENCHMARK_ETFS, ...POOL_VIDEO_TICKERS].filter((s) => isDebtListing(s) || isPriceExcluded(s));
 check("the Tiingo universe's filters keep every one", dropped.length === 0, dropped.join());
 
 const mutant = route.replace("warmPricePool(poolSymbols, ", "warmPricePool(symbols, ");
 check("mutant caught: the route warms `symbols` alone", mutant !== route && !routeRule(mutant));
+const mutant2 = route.replace(", ...POOL_VIDEO_TICKERS]", "]");
+check("mutant caught: the video tickers dropped from the warm", mutant2 !== route && !routeRule(mutant2));
 
 console.log(failures ? `\n${failures} FAILED` : "\nALL CHECKS PASSED");
 process.exit(failures ? 1 : 0);

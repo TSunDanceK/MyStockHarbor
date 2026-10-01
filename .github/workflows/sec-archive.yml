@@ -14,11 +14,13 @@ name: SEC archive — backfill, incremental, diff (Cloudflare R2)
 # only (SMEMBERS, GET, MGET — checked by check-sec-archive); the backfill and
 # incremental jobs never see it.
 #
-# ONE runner, ≤8 SEC requests/s: SEC's fair-access limit is per requester, not
-# per machine, so this is never sharded. 03:05 UTC is an odd hour, when
-# sec-filings never acts (nightly 04/16, even hours in season), and the
-# incremental budget (30 min) ends before 03:40. Resumable, and SEC 429/403
-# stops a run with the index saved.
+# ONE runner: SEC's fair-access limit is per requester, not per machine, so
+# this is never sharded. The backfill paces at ≤8 SEC requests/s; the
+# incremental at ≤4/s. 03:05 UTC is when no app job reads SEC, BUT GitHub starts
+# this repo's schedules hours late, so the incremental job also carries a CLOCK
+# GUARD (lib/secArchiveIncremental.mjs inSecJobWindow): it will not start, and
+# stops, inside the app's SEC job windows. Resumable, and SEC 429/403 stops a
+# run with the index saved.
 #
 # PUBLIC LOGS: status and counts (the diff also names symbols, never values).
 

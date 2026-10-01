@@ -101,6 +101,17 @@ export const PRICE_POOL_KEY = "msh:price-pool:v1";
  */
 export const POOL_BENCHMARK_ETFS: readonly string[] = ["SPY", "QQQ", "DIA", "IWM"];
 
+/**
+ * Video-page tickers with no pool row of their own (#553 COWORK #83, C's list
+ * from #563): without a pool field they get no Tiingo quote and no stored EOD
+ * history, and their video pages would be empty once FMP ends. ASTS, KRMN,
+ * LUNR and MOD are US common stock in SEC's ticker file. IFNNY (Infineon's OTC
+ * ADR; the video uses IFX, which C remaps) is in because Tiingo carries it:
+ * checked 2026-10-01 with the count-only relay tiingo-carries (exchange PINK).
+ * Added by the warm-price-pool route only.
+ */
+export const POOL_VIDEO_TICKERS: readonly string[] = ["ASTS", "KRMN", "LUNR", "MOD", "IFNNY"];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // A HEALTH RECORD THE MARKET-HOURS SKIP CANNOT ERASE.
 //

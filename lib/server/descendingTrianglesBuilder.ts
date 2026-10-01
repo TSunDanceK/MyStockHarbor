@@ -14,6 +14,7 @@
 
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { REQUEST_BYTE_BUDGET, pctOfRequestLimit, trySetRequestBytes } from "./chunkByBytes";
 import {
   detectDescendingTriangle,
   type DescendingTriangleResult,
@@ -151,7 +152,7 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 60;
 const STALE_SECONDS = 60 * 60;
 
-const DESCENDING_REDIS_KEY = "msh:descending-triangles:v4:main";
+export const DESCENDING_REDIS_KEY = "msh:descending-triangles:v4:main";
 const DESCENDING_REDIS_TTL_SECONDS = 60 * 60;
 const DESCENDING_LOCK_KEY = "msh:descending-triangles:v4:main:lock";
 const DESCENDING_LOCK_TTL_SECONDS = 120;
@@ -311,11 +312,26 @@ async function writeDescendingCache(data: PlaysPayload) {
       data,
     };
 
+    // MEASURED AND LOGGED (#553 COWORK #82). An over-limit write returns an
+    // error rather than truncating, and a bare catch here hid any rejection.
+    // The body is measured first; an over-budget one is refused loudly. The
+    // log carries sizes only.
+    const measured = trySetRequestBytes(DESCENDING_REDIS_KEY, entry, DESCENDING_REDIS_TTL_SECONDS);
+    if (measured && measured.bodyBytes > REQUEST_BYTE_BUDGET) {
+      console.error(
+        `[desc-tri] payload write ${measured.bodyBytes} bytes refused: over the ${REQUEST_BYTE_BUDGET}-byte budget (${pctOfRequestLimit(measured.bodyBytes)} of the limit)`
+      );
+      return;
+    }
     await redis.set(DESCENDING_REDIS_KEY, entry, {
       ex: DESCENDING_REDIS_TTL_SECONDS,
     });
-  } catch {
-    // fail open
+    console.log(`[desc-tri] payload write ${measured?.bodyBytes ?? "?"} bytes ok`);
+  } catch (error) {
+    // Still fail-open for the page, but never silent.
+    console.error(
+      `[desc-tri] payload write failed: ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`
+    );
   }
 }
 

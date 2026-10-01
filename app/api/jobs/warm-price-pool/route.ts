@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
-import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS } from "../../../../lib/server/pricePool";
+import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "../../../../lib/server/pricePool";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
 
 export const runtime = "nodejs";
@@ -178,7 +178,8 @@ export async function GET(req: NextRequest) {
     // pool -- and the Tiingo quote and EOD jobs take their universe from the
     // pool's fields. Added HERE, not in getWarmTargetSymbols, which the
     // fundamentals warms share: an ETF has no filings to warm.
-    const poolSymbols = [...new Set([...symbols, ...POOL_BENCHMARK_ETFS])];
+    // And C's video-page tickers (#553 COWORK #83), for the same reason.
+    const poolSymbols = [...new Set([...symbols, ...POOL_BENCHMARK_ETFS, ...POOL_VIDEO_TICKERS])];
     const result = await warmPricePool(poolSymbols, Date.now());
     console.log("[warm-price-pool]", JSON.stringify(result));
     await recordJobRun("warm-price-pool", result.ok !== false, {
