@@ -94,8 +94,13 @@ export const EOD_LANDED_SHARE = 0.9;
 const EOD_CONCURRENCY = 8;
 /** Requests reserved per limiter round trip (4 commands each). */
 const EOD_RESERVE_BLOCK = 100;
-/** SETs per pipeline. Billed per command either way; this bounds the body size. */
-const EOD_WRITE_CHUNK = 50;
+/**
+ * SETs per pipeline. Billed per command either way; this bounds the body size.
+ * 25, not 50, since 2026-10-01 (#553 COWORK #82): at 1,400 bars the largest
+ * stored row measured 81,492 B, so 50 rows came to ~4.2 MB with escaping, 83%
+ * of REQUEST_BYTE_BUDGET. 25 keeps one request near 2.1 MB (check-redis-write-sites).
+ */
+const EOD_WRITE_CHUNK = 25;
 const EOD_BUDGET_MS = 240_000;
 
 const redis =
