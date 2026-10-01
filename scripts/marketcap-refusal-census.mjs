@@ -7,7 +7,7 @@
 //   relay task: write-marketcap-refusal-census
 //   Redis: 1 GET (universe) + 1 HMGET (stored rows) + 1 GET per refused or
 //   row-less symbol (its fact set), read-only.
-import "./lib/register-ts-here.mjs";
+import "./lib/register-ts-app.mjs";
 import fs from "node:fs";
 import { Redis } from "@upstash/redis";
 import { lookupSpellingIn } from "../lib/symbolSpellings.mjs";
