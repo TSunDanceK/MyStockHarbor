@@ -598,6 +598,28 @@ check(
     `says the refusal branch is load-bearing rather than defensive decoration`
 );
 
+// ── 6. THE KEYS COWORK #82 ADDED (2026-10-01) ───────────────────────────────
+// The whole-collection writes the 21 Sep list predates. Each must be classified
+// "listed" in the write-site registry, which check-redis-write-sites.mjs holds
+// against the code and the debug tool, so this list and that one cannot drift.
+console.log("\n6. The COWORK #82 keys are listed in the write-site registry");
+const { WRITE_SITES } = await import("./lib/redis-write-sites.mjs");
+const listed = new Set(WRITE_SITES.filter((s) => s.cls === "listed").map((s) => `${s.file} ${s.key}`));
+for (const site of [
+  "lib/server/playsBuilder.ts PLAYS_REDIS_KEY",
+  "lib/server/bullFlagsBuilder.ts PLAYS_REDIS_KEY",
+  "lib/server/descendingTrianglesBuilder.ts DESCENDING_REDIS_KEY",
+  "lib/server/benchmarksBuilder.ts `${REDIS_PREFIX}:${scope}`",
+  "lib/server/sectorPanels.ts PERFORMANCE_KEY",
+  "lib/server/capexSpending.ts SPENDING_KEY",
+  "lib/server/capexContracts.ts CONTRACTS_KEY",
+  "lib/server/capexReceivers.ts RECEIVERS_KEY",
+  "lib/server/secListing.ts LAST_SEEN_CIK_KEY",
+  "lib/server/marketData/jobs.ts TIINGO_QUOTES_KEY",
+]) {
+  check(`listed: ${site}`, listed.has(site));
+}
+
 console.log(
   failures === 0
     ? "\nAll request-size assertions hold.\n"
