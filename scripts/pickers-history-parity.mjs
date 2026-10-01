@@ -114,12 +114,21 @@ for (const [s, pts] of fmp) {
   const first = tiingo.get(s)?.[0]?.date;
   fmpCut.set(s, first ? pts.filter((p) => String(p.date) >= first) : pts);
 }
+// SAME LAST DATE TOO. The nightly Tiingo job lands the session that FMP's 07:02
+// refresh only picks up the next morning, so between 00:45 and 07:02 UTC Tiingo
+// is one bar ahead. Comparing different days measures the day, not the
+// provider: (b) compares FMP cut against Tiingo cut to the same last date.
+const tiingoCut = new Map();
+for (const [s, pts] of tiingo) {
+  const last = fmp.get(s)?.at(-1)?.date;
+  tiingoCut.set(s, last ? pts.filter((p) => String(p.date) <= String(last)) : pts);
+}
 const barsMedian = (m) => { const n = [...m.values()].map((p) => p.length).sort((a, b) => a - b); return n.length ? n[Math.floor(n.length / 2)] : 0; };
 console.log(`bars per symbol (median) — FMP: ${barsMedian(fmp)}, FMP cut: ${barsMedian(fmpCut)}, Tiingo: ${barsMedian(tiingo)}`);
 
 // ── three builds ────────────────────────────────────────────────────────────
 const builds = {};
-for (const [name, hist] of [["FMP", fmp], ["FMP cut", fmpCut], ["Tiingo", tiingo]]) {
+for (const [name, hist] of [["FMP", fmp], ["FMP cut", fmpCut], ["Tiingo", tiingo], ["Tiingo cut", tiingoCut]]) {
   const t = Date.now();
   builds[name] = await buildPickersPayloadDryRun(hist);
   console.log(`build ${name}: universe ${builds[name].universeSize}, failed ${builds[name].degradedSymbolCount ?? 0} (${Date.now() - t} ms)`);
@@ -167,7 +176,7 @@ function compare(label, before, after) {
   console.log(`summary: ${sectionsChanged} section(s) changed; ${flagChanges} flag change(s) (unchanged flags not listed)`);
 }
 compare("(a) LENGTH: FMP full → FMP cut to Tiingo's span", builds["FMP"], builds["FMP cut"]);
-compare("(b) PROVIDER: FMP cut → Tiingo, same span", builds["FMP cut"], builds["Tiingo"]);
+compare("(b) PROVIDER: FMP cut → Tiingo cut, same first AND last date", builds["FMP cut"], builds["Tiingo cut"]);
 compare("(c) OVERALL: FMP full → Tiingo as stored", builds["FMP"], builds["Tiingo"]);
 console.log(`Redis commands: ${meter.commands} (read-only${meter.refused.size ? `; REFUSED ${JSON.stringify(Object.fromEntries(meter.refused))}` : ", 0 refused"})`);
 process.exit(meter.refused.size ? 1 : 0);
