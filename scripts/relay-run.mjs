@@ -1326,6 +1326,11 @@ const TASKS = {
   // PREFIX: the script refuses any write verb before it is sent; `write-` is the
   // credential boundary. Counts, symbols and flag names only in the log.
   "write-pickers-history-parity": { script: "scripts/pickers-history-parity.mjs", args: () => [], needsTypescript: true, writes: true },
+  // Pickers "–" census (#553 COWORK #87a), READ-ONLY despite the prefix: the
+  // script refuses any write verb before it is sent. Names (live exact / dotted /
+  // committed floor / none) and empty-cell reason codes per column; counts,
+  // symbols and codes only in the log. Redis: GET + one HMGET per page of rows.
+  "write-pickers-why-census": { script: "scripts/pickers-why-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // Capex named links, plan (c) (#563 COWORK #19): read-only scan of every tracked
   // filer's latest 10-K/20-F for sentences naming a receiver next to a trade word.
   // Candidates for review only; nothing is published unreviewed. Redis 0.

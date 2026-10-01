@@ -10,7 +10,7 @@ import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
 import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
-import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { cleanName, getCompanyNameMap } from "@/lib/server/companyNames";
 import { resolveProfileBulk } from "@/lib/server/staticProfile";
 import { excludedFromFundamentals } from "@/lib/server/pickerEquity";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
@@ -20,6 +20,7 @@ import { recordAboveFold } from "@/lib/server/priceTiers";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import {
   applySecEarnings,
+  secPickerWhy,
   applySecPickerRow,
   pickersFundamentalsSource,
   readSecPickerRows,
@@ -27,6 +28,9 @@ import {
   SEC_PICKER_FIELDS,
 } from "@/lib/server/pickersSecFundamentals";
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
+import type { CellWhyCode, CellWhyColumn } from "@/lib/pickerCellWhy";
+import { gridCompanyName } from "@/lib/server/secTickerNames";
+import { toDotted } from "@/lib/symbolSpellings.mjs";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
@@ -345,6 +349,8 @@ export type ResultEntry = ResultEntryFlags & {
    * take Payout Ratio as filed rather than recomputing it from EPS.
    */
   fundamentalsFrom?: "sec";
+  /** Grid column key -> lib/pickerCellWhy.ts code, for each empty filings cell (#553 COWORK #69). */
+  cellWhy?: Partial<Record<CellWhyColumn, CellWhyCode>>;
   /**
    * What period the filed P/E and EPS cover, and the Payout's: "TTM to 30 Jun
    * 2026" or "FY2025" (#553 COWORK #21). The grid shows it as the cell's
@@ -1121,12 +1127,22 @@ async function getPickerData(config: PickerResultConfig) {
       const nameMap = await getCompanyNameMap();
       if (nameMap.size) {
         for (const entry of entries) {
-          const name = nameMap.get(entry.symbol);
+          const name = nameMap.get(entry.symbol) ?? nameMap.get(toDotted(entry.symbol));
           if (name) entry.companyName = name;
         }
       }
     } catch {
       // names are optional
+    }
+    // THE COMMITTED FLOOR (#553 COWORK #69: MKC-V showed no name). The live
+    // directory spells dual-class and preferred listings dotted (MKC.V) while
+    // the universe is dashed, and the directory can be unreachable; a row the
+    // live map misses takes the committed directory snapshot's name, else SEC's
+    // registrant name (gridCompanyName), never an invented one.
+    for (const entry of entries) {
+      if (entry.companyName) continue;
+      const name = cleanName(gridCompanyName(entry.symbol));
+      if (name) entry.companyName = name;
     }
 
     // One switch for where Market Cap comes from (see the filings overlay).
@@ -1297,6 +1313,12 @@ async function getPickerData(config: PickerResultConfig) {
             else delete entry.payoutBasis;
           }
           entry.fundamentalsFrom = "sec";
+          // WHY EACH EMPTY CELL IS EMPTY (#553 COWORK #69): a short code per
+          // refused column, read from A's refusals; the grid turns it into a
+          // reason on hover or tap (lib/pickerCellWhy.ts holds the words).
+          const why = secPickerWhy(row, typeof shown === "number" ? shown : null, figures, earnings, entry.industry);
+          if (Object.keys(why).length) entry.cellWhy = why;
+          else delete entry.cellWhy;
         }
       } catch {
         // A failed read leaves the stored values, as before this block existed.

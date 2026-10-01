@@ -9,6 +9,7 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pick
 import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
 import { valueSatisfies } from "@/lib/screenerFields";
 import { HIDDEN_COLUMN_KEYS, HIDDEN_PICKER_TABS } from "@/lib/pickerHiddenFields";
+import { CELL_WHY_TABLE_NOTE, NOT_APPLICABLE_CODES, cellWhyWords } from "@/lib/pickerCellWhy";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -571,8 +572,80 @@ type Col = {
   /** Header tooltip, for a column whose meaning needs one line of explanation. */
   tip?: string;
   get: (e: ResultEntry, d: DerivedRow) => string | number | null;
-  cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
+  /** `inert`: inside the phone row's toggle button, where a nested control is invalid. */
+  cell: (e: ResultEntry, d: DerivedRow, inert?: boolean) => ReactNode;
 };
+
+// ── WHY A CELL IS EMPTY (#553 COWORK #69) ───────────────────────────────────
+// Every "–" carries its reason on hover (title) and on tap (a small popover),
+// and a figure that doesn't apply (a bank's Ent. Value, P/S, P/FCF) reads
+// "n/a" in a lighter tone. Filings columns take the code the page attached
+// (entry.cellWhy, from A's refusals); every other dash gets its column's line.
+const COLUMN_DASH_WHY: Record<string, string> = {
+  name: "No company name on file for this listing",
+  industry: "Industry not classified yet",
+  signals: "None of the tracked conditions is met",
+  price: "No current price for this stock",
+  change: "No current price for this stock",
+  volume: "No volume for the latest session",
+  ma200: "Not enough price history for a 200-day average",
+  perf1w: "Not enough price history for this period",
+  perf1m: "Not enough price history for this period",
+  perf6m: "Not enough price history for this period",
+  perfYtd: "Not enough price history for this period",
+  perf1y: "Not enough price history for this period",
+};
+
+/** The reason for an empty cell in column `key`, and whether it is "n/a". */
+export function cellWhyFor(e: Pick<ResultEntry, "cellWhy">, key: string): { text: string; na: boolean } {
+  const code = (e.cellWhy as Record<string, string> | undefined)?.[key];
+  if (code) return { text: cellWhyWords(code), na: NOT_APPLICABLE_CODES.has(code) };
+  return { text: COLUMN_DASH_WHY[key] ?? cellWhyWords(null), na: false };
+}
+
+function WhyMark({ text, na, inert }: { text: string; na: boolean; inert?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const mark = na ? "n/a" : "–";
+  const cls = na ? "whyMark whyNa" : "whyMark muted";
+  if (inert) return <span className={cls} title={text}>{mark}</span>;
+  const toggle = () => setOpen((o) => !o);
+  return (
+    <span
+      className={cls}
+      title={text}
+      role="button"
+      tabIndex={0}
+      aria-label={`${na ? "Not applicable" : "Not available"}: ${text}`}
+      aria-expanded={open}
+      onClick={(ev) => { ev.stopPropagation(); toggle(); }}
+      onKeyDown={(ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); toggle(); }
+        if (ev.key === "Escape") setOpen(false);
+      }}
+      onBlur={() => setOpen(false)}
+    >
+      {mark}
+      {open ? <span className="whyPop" role="tooltip">{text}</span> : null}
+    </span>
+  );
+}
+
+const isEmptyValue = (v: string | number | null) =>
+  v == null || v === "" || (typeof v === "number" && !Number.isFinite(v));
+
+/** A column whose empty cells explain themselves. Exported for the check. */
+export function withWhy(col: Col): Col {
+  if (col.key === "symbol") return col;
+  const filled = col.cell;
+  return {
+    ...col,
+    cell: (e, d, inert) => {
+      if (!isEmptyValue(col.get(e, d))) return filled(e, d, inert);
+      const why = cellWhyFor(e, col.key);
+      return <WhyMark text={why.text} na={why.na} inert={inert} />;
+    },
+  };
+}
 
 // ── THE PERIOD A FILED FIGURE COVERS (#553 COWORK #21) ─────────────────────
 // P/E, EPS and Payout from the filings cover four quarters for most filers and
@@ -936,7 +1009,7 @@ export default function PickerResultsGrid({
     // THE REGISTRY, APPLIED ONCE: every tab drops the hidden columns, so a
     // hidden column cannot be rendered, sorted or picked as a phone headline.
     for (const tab of Object.keys(sets) as TabKey[]) {
-      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key));
+      sets[tab] = sets[tab].filter((col) => !HIDDEN_COLUMN_KEYS.has(col.key)).map(withWhy);
     }
     return sets;
     // displayTone is a real dependency: the symbol cell renders the dot, so
@@ -1290,7 +1363,10 @@ export default function PickerResultsGrid({
               // message says N/A rather than promising the number is on its way.
               const panelColumns = metricColumns.filter((col) => {
                 const value = col.get(entry, d);
-                return value != null && value !== "";
+                // AN EXPLAINED GAP IS SHOWN (#553 COWORK #69): a filings
+                // figure refused for a stated reason stays in the panel, as a
+                // dash (or n/a) the reader can tap for why.
+                return (value != null && value !== "") || Boolean(entry.cellWhy?.[col.key as keyof NonNullable<ResultEntry["cellWhy"]>]);
               });
               const closes = sparkCloses(entry);
               // Direction comes from the day's % change where we have it, so
@@ -1336,10 +1412,10 @@ export default function PickerResultsGrid({
                         {headlineColumn ? (
                           <>
                             <span className="mRowLabel">{headlineColumn.label}</span>
-                            <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                            <span className="mRowValue">{headlineColumn.cell(entry, d, true)}</span>
                           </>
                         ) : null}
-                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d, true)}</span> : null}
                       </span>
                       <span className="mRowChev" aria-hidden="true">{open ? "▲" : "▼"}</span>
                     </button>
@@ -1511,6 +1587,11 @@ export default function PickerResultsGrid({
         </div>
       ) : null}
 
+      {/* THE TABLE NOTE (#553 COWORK #69 item 4), wherever cells are shown. */}
+      {shown.length && (showMobileRows || viewMode === "list") ? (
+        <p className="cellWhyNote">{CELL_WHY_TABLE_NOTE}</p>
+      ) : null}
+
       <style>{`
         .screenerControls {
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -1521,6 +1602,20 @@ export default function PickerResultsGrid({
            hidden anyway (the tab row and column headers do those jobs there), so
            a break would just leave a gap under a lone view-mode button. */
         .ctrlBreak { display: none; }
+        /* #553 COWORK #69: a dash (or n/a) that explains itself. The dotted
+           underline says "there is more here"; the popover is the tap path,
+           since a phone has no hover. */
+        .whyMark { position: relative; cursor: help; text-decoration: underline dotted rgba(148,163,184,0.45); text-underline-offset: 3px; }
+        .whyMark:focus-visible { outline: 1px solid rgba(96,165,250,0.7); outline-offset: 2px; border-radius: 2px; }
+        .whyNa { color: rgba(148,163,184,0.4); font-size: 0.86em; letter-spacing: 0.02em; }
+        .whyPop {
+          position: absolute; z-index: 30; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
+          width: max-content; max-width: min(260px, 70vw); white-space: normal; text-align: left;
+          padding: 7px 9px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.35;
+          color: #e2e8f0; background: #0f172a; border: 1px solid rgba(148,163,184,0.35);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35); text-decoration: none;
+        }
+        .cellWhyNote { margin: 10px 2px 0; font-size: 12px; line-height: 1.45; color: rgba(148,163,184,0.8); }
 
         .viewToggleLabel { display: inline; }
 
