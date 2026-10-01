@@ -20,4 +20,11 @@ symbols.forEach((s, i) => {
   const q = quotes[s] ? parse(quotes[s]) : null;
   console.log(`${s}: price pool ${p ? `yes (row age ${age(p.at)})` : "NO"}; Tiingo quote pool ${q ? `yes (age ${age(q.at)})` : "no"}; Tiingo EOD history ${eodHas[i] ? "yes" : "no"}`);
 });
-console.log(`Redis commands: ${2 + symbols.length} (read-only)`);
+// Do the pool adds leak into Pickers or the warm targets? (#553 COWORK #85)
+const parse2 = (v) => (typeof v === "string" ? JSON.parse(v) : v);
+const pickers = new Set((parse2(await redis.get("msh:pickers:v10:symbols")) ?? []).map(String));
+const wt = parse2(await redis.get("msh:warm-targets:v1"));
+const targets = new Set(((wt && wt.symbols) || []).map(String));
+console.log(`in the Pickers symbol list (${pickers.size}): ${symbols.filter((s) => pickers.has(s)).join(", ") || "none"}`);
+console.log(`in the warm targets (${targets.size}): ${symbols.filter((s) => targets.has(s)).join(", ") || "none"}`);
+console.log(`Redis commands: ${4 + symbols.length} (read-only)`);
