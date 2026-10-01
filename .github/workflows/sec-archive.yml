@@ -105,6 +105,27 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
 
+  # PROBE BRANCH ONLY (never merged): the #552 COWORK #88 dilution-trend
+  # measurement. Reads R2 and Upstash (read commands only); writes nothing.
+  dilution-trend:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.task == 'dilution-trend' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dilution trend measurement (reads only)
+        run: node scripts/dilution-trend-measure.mjs
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+
   # PROBE BRANCH ONLY (never merged): the #552 COWORK #78 bank-revenue
   # measurement. Reads R2 and Upstash (read commands only); writes nothing.
   bank-revenue:
