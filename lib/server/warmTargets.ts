@@ -151,7 +151,7 @@ const redis =
     ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
-const WARM_TARGETS_KEY = "msh:warm-targets:v1";
+export const WARM_TARGETS_KEY = "msh:warm-targets:v1";
 const WARM_TARGETS_TTL_SECONDS = 30 * 60;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ const WARM_TARGETS_TTL_SECONDS = 30 * 60;
 // A WEEK, NOT FOREVER. Long enough that no ordinary outage exhausts it, short
 // enough that a permanently broken payload eventually reports an empty list
 // rather than warming a set of tickers from an abandoned universe forever.
-const WARM_TARGETS_FALLBACK_KEY = "msh:warm-targets:v1:last-good";
+export const WARM_TARGETS_FALLBACK_KEY = "msh:warm-targets:v1:last-good";
 const WARM_TARGETS_FALLBACK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export type WarmTargets = {
