@@ -49,14 +49,15 @@ async function firstPeriodic(cik) {
 
 const BAND = 0.05; // percent: the chart's own "Roughly flat" band
 const dir = (a, b, band = BAND) => { const p = ((b - a) / a) * 100; return p > band ? "up" : p < -band ? "down" : "flat"; };
-const minusYears = (iso, n) => `${Number(iso.slice(0, 4)) - n}${iso.slice(4)}`;
+const minusYears = (iso, n) => new Date(Date.parse(iso) - n * 365.25 * 86400000).toISOString().slice(0, 10);
 
 const symbols = ((await redis(["SMEMBERS", INDEX])) ?? []).map(String).sort();
 const manifest = parse(await redis(["GET", MANIFEST])) ?? { symbols: {} };
-const T = { sets: symbols.length, charted: 0, short3y: 0, matrix: {}, material: {}, preListing: 0, preFlip: 0, noSubs: 0, jumps: 0 };
-const ex = { allUpRecentDown: [], allDownRecentUp: [], allUpRecentDownMaterial: [], preFlip: [], jumps: [] };
+const T = { sets: symbols.length, charted: 0, short3y: 0, matrix: {}, material: {}, preListing: 0, preFlip: 0, noSubs: 0, jumps: 0, gap3y: 0, holes: 0, splitLike: 0, scale: 0 };
+const ex = { allUpRecentDown: [], allDownRecentUp: [], allUpRecentDownMaterial: [], preFlip: [], jumps: [], gap: [], holes: [], splitLike: [], scale: [] };
 const push = (k, s) => ex[k].length < 40 && ex[k].push(s);
 const watch = new Set(["GDDY", "AAPL", "PAC", "ONDS"]);
+const SHOW = new Set(["GDDY", "PAC", "AMZN", "NVDA", "AVGO"]);
 for (let i = 0; i < symbols.length; i += 25) {
   const chunk = symbols.slice(i, i + 25);
   const got = await redis(["MGET", ...chunk.map((s) => `${PREFIX}:${s}`)]);
@@ -68,9 +69,12 @@ for (let i = 0; i < symbols.length; i += 25) {
     const pts = h.points, first = pts[0], last = pts.at(-1);
     const all = dir(first.shares, last.shares);
     const cut = minusYears(last.date, 3);
-    const base = [...pts].reverse().find((p) => p.date <= cut);
-    const recent = base ? dir(base.shares, last.shares) : "short";
-    if (!base) T.short3y++;
+    const cand = [...pts].reverse().find((p) => p.date <= cut);
+    const base = cand && cand.date >= minusYears(cut, 0.5) ? cand : null;
+    const recent = base ? dir(base.shares, last.shares) : cand ? "gap" : "short";
+    if (!cand) T.short3y++; else if (!base) { T.gap3y++; push("gap", s); }
+    // Interior gaps: consecutive points more than 15 months apart.
+    if (pts.some((p, n) => n > 0 && (Date.parse(p.date) - Date.parse(pts[n - 1].date)) / 86400000 > 460)) { T.holes++; push("holes", s); }
     const k = `${all}->${recent}`;
     T.matrix[k] = (T.matrix[k] ?? 0) + 1;
     if (base) {
@@ -85,6 +89,13 @@ for (let i = 0; i < symbols.length; i += 25) {
     // Step jumps (> 25% between consecutive points): upper bound on IPO / Up-C / class events.
     const jump = pts.some((p, n) => n > 0 && Math.abs(p.shares / pts[n - 1].shares - 1) > 0.25);
     if (jump) { T.jumps++; push("jumps", s); }
+    // A step at a whole split ratio (2,3,4,5,8,10,15,20,25,40,50 within 3%), either way:
+    // a split drawn as dilution. A step over 100x: a unit/scale error.
+    const RATIOS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 40, 50];
+    const steps = pts.slice(1).map((p, n) => p.shares / pts[n].shares);
+    if (steps.some((r) => r > 100 || r < 0.01)) { T.scale++; push("scale", s); }
+    else if (steps.some((r) => RATIOS.some((k) => Math.abs(r / k - 1) < 0.03 || Math.abs(r * k - 1) < 0.03))) { T.splitLike++; push("splitLike", s); }
+    if (SHOW.has(s)) console.log(`  ${s} series: ${pts.map((p) => `${p.date}=${p.shares}`).join(" ")}`);
     // Pre-listing points: before the first periodic report's own period.
     const cik = String(manifest.symbols?.[s]?.cik ?? set.cik ?? "").padStart(10, "0");
     const pred = predecessorCikFor(cik);
@@ -111,6 +122,10 @@ console.log(`  of those, down by 2%+ over 3y: ${ex.allUpRecentDownMaterial.join(
 console.log(`  down overall, up over 3y: ${ex.allDownRecentUp.join(" ")}`);
 console.log(`Series with points before the first periodic report: ${T.preListing}; trend flips when they are dropped: ${T.preFlip}; no archived submissions: ${T.noSubs}`);
 console.log(`  flips: ${ex.preFlip.join(" ")}`);
+console.log(`3-year base missing because of a gap in the series (no point within 6 months before the cut): ${T.gap3y}: ${ex.gap.join(" ")}`);
+console.log(`Series with an interior gap > 15 months between points: ${T.holes}: ${ex.holes.join(" ")}`);
+console.log(`Series with a step at a whole split ratio (±3%): ${T.splitLike}: ${ex.splitLike.join(" ")}`);
+console.log(`Series with a step over 100x either way (unit/scale): ${T.scale}: ${ex.scale.join(" ")}`);
 console.log(`Series with a step jump > 25% between consecutive points: ${T.jumps}`);
 console.log(`  e.g. ${ex.jumps.join(" ")}`);
 console.log(`\nRedis commands ${cmds} (reads only) · R2 reads ${r2reads} · SEC requests 0`);
