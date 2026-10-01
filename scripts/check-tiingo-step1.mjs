@@ -257,6 +257,7 @@ reset();
 const NIGHT = Date.parse("2026-09-25T00:45:00Z");
 let e = await J.runTiingoEod(NIGHT);
 check("nightly: a landed night writes every symbol", e.ok && e.written === 3 && e.asOf === "2026-09-24", JSON.stringify(e));
+check("...and reports its largest write request, measured as the sent body (COWORK #83)", e.largestWriteRequestBytes > 0 && e.largestWriteRequestBytes === J.pipelineRequestBytes(JSON.parse(JSON.stringify([...net.strings.entries()].filter(([k]) => k.includes(":eod:v2:")).map(([k, v]) => ["set", k, v, "ex", K.TIINGO_EOD_TTL_SECONDS])))), String(e.largestWriteRequestBytes));
 check("...each under msh:tiingo:eod:v2:<our spelling>, with a TTL", ["AAPL", "EP-PC", "BRK-B"].every((s) => net.strings.has(K.tiingoEodKey(s)) && net.expires.get(K.tiingoEodKey(s)) === K.TIINGO_EOD_TTL_SECONDS));
 check("...asking Tiingo in its spelling", net.tiingo.some((u) => u.startsWith("/tiingo/daily/EP-P-C/prices")));
 check("...and never for CCZ, a note (COWORK #60: debt is not priced as equity)", !net.tiingo.some((u) => u.includes("CCZ")) && !net.strings.has(K.tiingoEodKey("CCZ")));

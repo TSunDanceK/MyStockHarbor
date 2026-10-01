@@ -19,6 +19,19 @@ import { SECTOR_INDEX_KEY } from "@/lib/server/sectorUniverse";
 import { TIER1_KEY } from "@/lib/server/priceTiers";
 import { IPO_FILINGS_REDIS_KEY } from "@/lib/server/ipoSecStore";
 import { PICKER_CHARTS_KEY } from "@/lib/server/pickerChartsCache";
+// Added 2026-10-01 (#553 COWORK #82): every whole-collection write the 21 Sep
+// list predates. scripts/check-redis-write-sites.mjs now fails on a write site
+// that is neither here nor classified as bounded.
+import { PLAYS_REDIS_KEY } from "@/lib/server/playsBuilder";
+import { PLAYS_REDIS_KEY as BULL_FLAGS_REDIS_KEY } from "@/lib/server/bullFlagsBuilder";
+import { DESCENDING_REDIS_KEY } from "@/lib/server/descendingTrianglesBuilder";
+import { PERFORMANCE_KEY as SECTOR_PERFORMANCE_KEY } from "@/lib/server/sectorPanels";
+import { WARM_TARGETS_KEY, WARM_TARGETS_FALLBACK_KEY } from "@/lib/server/warmTargets";
+import { SPENDING_KEY } from "@/lib/server/capexSpending";
+import { CONTRACTS_KEY } from "@/lib/server/capexContracts";
+import { RECEIVERS_KEY } from "@/lib/server/capexReceivers";
+import { LAST_SEEN_CIK_KEY } from "@/lib/server/secListing";
+import { TIINGO_QUOTES_KEY } from "@/lib/server/marketData/keys";
 import {
   PICKERS_MANIFEST_KEY,
   PICKERS_SYMBOLS_KEY,
@@ -163,6 +176,60 @@ const CANDIDATES: Candidate[] = [
     shape: "hash",
     writeChunkFields: 40,
     note: "Chunked by COUNT (40), not by bytes -- safe while a series stays ~11KB.",
+  },
+  // ── Added 2026-10-01 (#553 COWORK #82), sizes from the CODE-B #75 census ──
+  {
+    key: PLAYS_REDIS_KEY,
+    owner: "lib/server/playsBuilder.ts writePlaysCache()",
+    writtenBy: "on demand (page or /api/plays build), 1 h TTL",
+    shape: "string",
+    note: "Measured 0.13 MB on a dry forced build (2026-10-01). Bounded by section take counts.",
+  },
+  {
+    key: BULL_FLAGS_REDIS_KEY,
+    owner: "lib/server/bullFlagsBuilder.ts writePlaysCache()",
+    writtenBy: "on demand, 1 h TTL",
+    shape: "string",
+    note: "Measured 0.84 MB on a dry forced build (2026-10-01): the largest of the three.",
+  },
+  {
+    key: DESCENDING_REDIS_KEY,
+    owner: "lib/server/descendingTrianglesBuilder.ts",
+    writtenBy: "on demand, 1 h TTL",
+    shape: "string",
+    note: "Measured 0.19 MB on a dry forced build (2026-10-01).",
+  },
+  {
+    key: "msh:market:state",
+    owner: "app/api/market/route.ts (REDIS_KEY; a route file cannot export it)",
+    writtenBy: "market refresh",
+    shape: "string",
+  },
+  {
+    key: "msh:benchmarks:stock",
+    owner: "lib/server/benchmarksBuilder.ts writeRedis() (one key per scope)",
+    writtenBy: "dashboard benchmarks, 24 h TTL",
+    shape: "string",
+  },
+  { key: SECTOR_PERFORMANCE_KEY, owner: "lib/server/sectorPanels.ts", writtenBy: "sector pages, short TTL", shape: "string" },
+  { key: WARM_TARGETS_KEY, owner: "lib/server/warmTargets.ts", writtenBy: "warm jobs, on a target-cache miss", shape: "string" },
+  { key: WARM_TARGETS_FALLBACK_KEY, owner: "lib/server/warmTargets.ts", writtenBy: "warm jobs, with the key above", shape: "string" },
+  { key: SPENDING_KEY, owner: "lib/server/capexSpending.ts (C)", writtenBy: "capex job", shape: "string" },
+  { key: CONTRACTS_KEY, owner: "lib/server/capexContracts.ts (C)", writtenBy: "capex job", shape: "string" },
+  { key: RECEIVERS_KEY, owner: "lib/server/capexReceivers.ts (C)", writtenBy: "capex job", shape: "string" },
+  {
+    key: LAST_SEEN_CIK_KEY,
+    owner: "lib/server/secListing.ts writeLastSeenCiks()",
+    writtenBy: "warm-screener-fundamentals rename sweep, daily",
+    shape: "hash",
+    note: "ONE HSET of the whole map (~840 fields, 20 KB measured 2026-10-01).",
+  },
+  {
+    key: TIINGO_QUOTES_KEY,
+    owner: "lib/server/marketData/jobs.ts runTiingoQuotes()",
+    writtenBy: "tiingo-quotes, every 15 min in session",
+    shape: "hash",
+    note: "ONE HSET of every quote (~820 fields, 79 KB measured 2026-09-30).",
   },
 ];
 
