@@ -59,6 +59,7 @@ import { isPriceExcluded } from "../../priceExcluded.mjs";
 import { loadTickerMap } from "../secTickerMap";
 import { readLastSeenCiks } from "../secListing";
 import { lookupBySpelling } from "../../symbolSpellings.mjs";
+import { pctOfRequestLimit } from "../chunkByBytes";
 
 /**
  * THE FRESHNESS KNOB. Keep vercel.json's tiingo-quotes cron and jobRuns.ts in step.
@@ -269,16 +270,28 @@ export async function runTiingoEod(
 
   // Write. Symbols that failed keep last night's value until its TTL lapses.
   let bytesWritten = 0;
+  // THE LARGEST REQUEST, LOGGED EVERY RUN (#553 COWORK #83): this pipeline is
+  // the only multi-MB request the census found, so it must not be the one whose
+  // size is invisible. Measured as the body the client sends.
+  let largestWriteRequestBytes = 0;
   const entries = [...bars.entries()];
   for (let i = 0; i < entries.length; i += EOD_WRITE_CHUNK) {
     const p = r.pipeline();
+    const cmds: Array<[string, string, string, string, number]> = [];
     for (const [sym, b] of entries.slice(i, i + EOD_WRITE_CHUNK)) {
       const value: StoredEod = { asOf: b[b.length - 1][0], fetchedAt: nowMs, basis: "split", bars: b };
       const json = JSON.stringify(value);
       bytesWritten += json.length;
+      cmds.push(["set", tiingoEodKey(sym), json, "ex", TIINGO_EOD_TTL_SECONDS]);
       p.set(tiingoEodKey(sym), json, { ex: TIINGO_EOD_TTL_SECONDS });
     }
+    largestWriteRequestBytes = Math.max(largestWriteRequestBytes, pipelineRequestBytes(cmds));
     await p.exec();
+  }
+  if (entries.length) {
+    console.log(
+      `[tiingo-eod] largest write request ${largestWriteRequestBytes} bytes (${pctOfRequestLimit(largestWriteRequestBytes)} of the 10MB limit), ${Math.ceil(entries.length / EOD_WRITE_CHUNK)} requests`
+    );
   }
   // A short or empty answer removes last night's value too: stale is not
   // better than absent when the absent case falls back to FMP. 1 DEL (one
@@ -306,8 +319,14 @@ export async function runTiingoEod(
     requests,
     bytesDownloaded,
     bytesWritten,
+    largestWriteRequestBytes,
     ms: Date.now() - started,
   };
+}
+
+/** The body @upstash/redis sends for a pipeline: the JSON array of its commands. Pure; exported for the checks. */
+export function pipelineRequestBytes(cmds: ReadonlyArray<ReadonlyArray<string | number>>): number {
+  return Buffer.byteLength(JSON.stringify(cmds), "utf8");
 }
 
 /** A job result as a run-record summary: scalars kept, anything nested as JSON. */
