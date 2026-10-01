@@ -1321,6 +1321,8 @@ const TASKS = {
   // UPSTASH 10 MB LIMIT CENSUS (#553 COWORK #82): dry forced builds of the three
   // plays builders (writes measured, never sent) plus live key sizes. READ-ONLY
   // DESPITE THE PREFIX: the credential boundary.
+  // What wrote in the 1 Oct 07:12-07:27 UTC window (#553 COWORK #84). Read-only.
+  "write-window-probe": { script: "scripts/window-probe.mjs", args: () => [], needsTypescript: true, writes: true },
   "write-redis-size-census": { script: "scripts/redis-size-census.mjs", args: () => [], needsTypescript: true, writes: true },
   // PICKERS SIGNAL PARITY (#553 step 2): the real build twice, on FMP's and on
   // Tiingo's bars, compared per section and per flag. READ-ONLY DESPITE THE
