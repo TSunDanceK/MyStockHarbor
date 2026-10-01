@@ -57,7 +57,7 @@ const T = { sets: symbols.length, charted: 0, short3y: 0, matrix: {}, material: 
 const ex = { allUpRecentDown: [], allDownRecentUp: [], allUpRecentDownMaterial: [], preFlip: [], jumps: [], gap: [], holes: [], splitLike: [], scale: [] };
 const push = (k, s) => ex[k].length < 40 && ex[k].push(s);
 const watch = new Set(["GDDY", "AAPL", "PAC", "ONDS"]);
-const SHOW = new Set(["GDDY", "PAC", "AMZN", "NVDA", "AVGO"]);
+const SHOW = new Set(["GDDY", "PAC", "AMZN", "NVDA", "AVGO", "KO", "MSFT", "PG", "JNJ"]);
 for (let i = 0; i < symbols.length; i += 25) {
   const chunk = symbols.slice(i, i + 25);
   const got = await redis(["MGET", ...chunk.map((s) => `${PREFIX}:${s}`)]);
@@ -95,6 +95,9 @@ for (let i = 0; i < symbols.length; i += 25) {
     const steps = pts.slice(1).map((p, n) => p.shares / pts[n].shares);
     if (steps.some((r) => r > 100 || r < 0.01)) { T.scale++; push("scale", s); }
     else if (steps.some((r) => RATIOS.some((k) => Math.abs(r / k - 1) < 0.03 || Math.abs(r * k - 1) < 0.03))) { T.splitLike++; push("splitLike", s); }
+    const holeHere = pts.some((p, n) => n > 0 && (Date.parse(p.date) - Date.parse(pts[n - 1].date)) / 86400000 > 460);
+    const stepHere = steps.some((r) => r > 100 || r < 0.01 || RATIOS.some((k) => Math.abs(r / k - 1) < 0.03 || Math.abs(r * k - 1) < 0.03));
+    if (SHOW.has(s)) console.log(`  ${s} guard: ${holeHere || stepHere ? "WITHHELD" : "clean"}`);
     if (SHOW.has(s)) console.log(`  ${s} series: ${pts.map((p) => `${p.date}=${p.shares}`).join(" ")}`);
     // Pre-listing points: before the first periodic report's own period.
     const cik = String(manifest.symbols?.[s]?.cik ?? set.cik ?? "").padStart(10, "0");
