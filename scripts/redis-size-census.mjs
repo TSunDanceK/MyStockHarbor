@@ -137,5 +137,31 @@ for (const key of live) {
     console.log(`  ${key}: ${type}, TTL ${ttl}`);
   }
 }
+// ── 3. pipelined writers: worst-case request from the stored row sizes ──────
+// A pipeline is ONE request, so the limit applies to the sum of its commands.
+// For each prefix: every key's STRLEN (pipelined, read-only), then the worst
+// case = the sum of the largest `chunk` rows (an upper bound on one request).
+const PIPELINED = [
+  { prefix: "msh:stockdata:v1:", chunk: 40, writer: "stockDataCache warm (REFRESH_SLICE_SIZE, one pipeline)" },
+  { prefix: "msh:tiingo:eod:v2:", chunk: 50, writer: "Tiingo EOD job (EOD_WRITE_CHUNK)" },
+  { prefix: "msh:pickers:screener-fundamentals:v1:", chunk: 500, writer: "fundamentalsCache (SCREENER_WRITE_CHUNK)" },
+  { prefix: "msh:pickers:fundamentals:v1:", chunk: 2000, writer: "fundamentalsCache (one pipeline, whole universe)" },
+  { prefix: "msh:history:v7:", chunk: 1, writer: "historyCache (one SET per symbol)" },
+];
+console.log("\n3. PIPELINED WRITERS: worst-case request = sum of the largest `chunk` stored rows");
+for (const w of PIPELINED) {
+  const keys = (await scanAll(`${w.prefix}*`)).filter((k) => !k.includes(":lock") && !k.endsWith(":due"));
+  const lens = [];
+  for (let i = 0; i < keys.length; i += 500) {
+    const p = redis.pipeline();
+    for (const k of keys.slice(i, i + 500)) p.strlen(k);
+    lens.push(...((await p.exec()).map(Number).filter(Number.isFinite)));
+  }
+  lens.sort((x, y) => y - x);
+  const worst = lens.slice(0, w.chunk).reduce((t, n) => t + n, 0);
+  const median = lens.length ? lens[Math.floor(lens.length / 2)] : 0;
+  console.log(`  ${w.prefix}* — ${keys.length} keys; row max ${lens[0] ?? 0} B, median ${median} B; ${w.writer}: worst request ≈ ${fmt(worst)}`);
+}
+
 console.log(`\nRedis: ${meter.reads} read commands sent; ${meter.faked} write commands measured and NOT sent.`);
 process.exit(0);
