@@ -1318,6 +1318,9 @@ const TASKS = {
   // THE USAGE ALERT, DRY (#553 COWORK #53): prints what the daily Action would
   // open, without writing an issue. 8 HGETALL. --weekly also prints the report.
   "write-usage-alert-dry": { script: "scripts/usage-alert.mjs", args: () => ["--dry", "--weekly"], writes: true },
+  // Pickers footer credit on production (#553 COWORK #81): public pages, no
+  // credentials, presence only.
+  "pickers-footer-check": { script: "scripts/pickers-footer-check.mjs", args: () => [] },
   // PICKERS SIGNAL PARITY (#553 step 2): the real build twice, on FMP's and on
   // Tiingo's bars, compared per section and per flag. READ-ONLY DESPITE THE
   // PREFIX: the script refuses any write verb before it is sent; `write-` is the
