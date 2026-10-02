@@ -17,6 +17,9 @@ import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { withRedisTimeout } from "./redisGuardTimeout";
 import { timingCache, beginTiming } from "./timing";
+import { readTiingoPool, readTiingoHistory } from "./marketData/read";
+import { pickSurfacePrice } from "./tiingoSurfacePrice";
+import { closeBefore, stockPageOnTiingo } from "./tiingoQuote";
 
 export type BenchScope = "stock" | "crypto";
 
@@ -29,12 +32,16 @@ type BenchItem = {
   close: number | null;
   prevClose: number | null;
   changePct: number | null;
+  /** Tiingo path only: "last IEX trade, 14:05 ET" | "close, 1 Oct 2026" (#553 COWORK #56). */
+  priceLabel?: string | null;
 };
 
 export type BenchPayload = {
   updatedAt: string;
   scope: string;
   items: BenchItem[];
+  /** "tiingo" when the tiles are Tiingo prices; the dashboard then shows the linked credit. */
+  provider?: "tiingo";
 };
 
 const CACHE_MS = 5 * 60_000;
@@ -109,11 +116,15 @@ function toNum(x: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const BENCH_DEFS_STOCK = [
-  { key: "spy", label: "S&P 500 (via SPY)",     symbol: "SPY" },
-  { key: "ndx", label: "Nasdaq 100 (via QQQ)",  symbol: "QQQ" },
-  { key: "dia", label: "Dow Jones (via DIA)",    symbol: "DIA" },
-  { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "IWM" },
+// ETFs, NAMED AS ETFs (#553 COWORK #32 §3, owner ruling): the tile is the fund,
+// not the index. Tiingo licenses no index levels, and an "index level" is never
+// computed from the ETF price times a ratio. On both providers, since the tiles
+// were always these four ETFs.
+export const BENCH_DEFS_STOCK = [
+  { key: "spy", label: "SPY · S&P 500 ETF",      symbol: "SPY" },
+  { key: "ndx", label: "QQQ · Nasdaq 100 ETF",   symbol: "QQQ" },
+  { key: "dia", label: "DIA · Dow Jones ETF",    symbol: "DIA" },
+  { key: "iwm", label: "IWM · Russell 2000 ETF", symbol: "IWM" },
 ] as const;
 
 const BENCH_DEFS_CRYPTO = [
@@ -142,6 +153,42 @@ async function fetchFmpQuote(symbol: string, apiKey: string): Promise<any | null
   } catch {
     return null;
   }
+}
+
+/**
+ * STEP 4 (#553 COWORK #71), behind PRICE_PROVIDER_STOCK_PAGE: the four ETF rows
+ * from the Tiingo pool (SPY/QQQ/DIA/IWM are pool members since #666) and their
+ * stored closes, through the Data Cache. Each tile is the newer of the IEX trade
+ * and the close, labelled; its change is against the previous session's
+ * consolidated close. Null when no tile has a price, so FMP stays the fallback.
+ */
+async function getBenchmarksTiingo(nowMs: number): Promise<BenchPayload | null> {
+  const [pool, ...histories] = await Promise.all([
+    readTiingoPool().catch(() => null),
+    ...BENCH_DEFS_STOCK.map((d) => readTiingoHistory(d.symbol).catch(() => null)),
+  ]);
+  const items: BenchItem[] = BENCH_DEFS_STOCK.map((d, i) => {
+    const row = pool?.rows[d.symbol] ?? null;
+    const bars = histories[i]?.bars ?? [];
+    const surface = pickSurfacePrice(row, bars, nowMs);
+    const prev = surface
+      ? closeBefore(bars, surface.date) ?? (surface.kind === "iex" && row?.prevClose ? row.prevClose : null)
+      : null;
+    const time = surface?.kind === "iex" ? /\d\d:\d\d/.exec(surface.label)?.[0] ?? null : null;
+    return {
+      key: d.key,
+      label: d.label,
+      symbol: d.symbol,
+      date: surface?.date ?? null,
+      time,
+      close: surface?.price ?? null,
+      prevClose: prev,
+      changePct: surface && prev ? ((surface.price - prev) / prev) * 100 : null,
+      priceLabel: surface?.label ?? null,
+    };
+  });
+  const payload: BenchPayload = { updatedAt: new Date(nowMs).toISOString(), scope: "Benchmarks", items, provider: "tiingo" };
+  return hasRealData(payload) ? payload : null;
 }
 
 function normalizeScope(scopeInput?: string | null): BenchScope {
@@ -186,6 +233,18 @@ async function getBenchmarksDataInner(
   }
 
   timingCache("benchmarks", "memcache", "miss", scope);
+
+  // The Tiingo tiles. Held in this instance's Map only, never written to
+  // msh:benchmarks:* -- a Tiingo price must not be stored outside msh:tiingo:
+  // (contract §7, the purge). The Data Cache already shares the reads across
+  // instances, so the Redis layer below has nothing to add here.
+  if (scope === "stock" && stockPageOnTiingo()) {
+    const tiingo = await getBenchmarksTiingo(Date.now()).catch(() => null);
+    if (tiingo) {
+      cache.set(scope, { at: Date.now(), payload: tiingo });
+      return { data: tiingo, headers: FRESH_HEADERS };
+    }
+  }
 
   // Second layer: another instance's recent fetch, or this instance's own
   // from before it was recycled. Promoted into the Map so the rest of this
