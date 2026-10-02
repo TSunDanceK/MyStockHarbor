@@ -4,7 +4,7 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool, keepPricePoolAlive, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS } from "../../../../lib/server/pricePool";
 import { isActiveMarketWindow } from "../../../../lib/server/marketHours";
-import { planTiingoUniverse, writeTiingoUniverse } from "../../../../lib/server/tiingoUniverse";
+import { planTiingoUniverse, writeTiingoUniverse, STOCK_PAGE_SYMBOLS } from "../../../../lib/server/tiingoUniverse";
 import { priceProviderFor } from "../../../../lib/server/marketData/provider";
 
 export const runtime = "nodejs";
@@ -184,12 +184,15 @@ export async function GET(req: NextRequest) {
 
     // THE TIINGO UNIVERSE, WITH NO FMP CALL (step 5, #553 COWORK #98 ruling 2):
     // the symbols the Tiingo quote and EOD jobs fetch, from the lists already
-    // in hand. Written on every in-session run, FMP_API_KEY or not; its 4-day
+    // in hand, plus every symbol with a stock page (5b). Written on every
+    // in-session run, FMP_API_KEY or not; its 4-day
     // TTL carries it across nights and weekends. See lib/server/tiingoUniverse.ts.
     const tiingoUniverse = planTiingoUniverse({
       targets: symbols,
       etfs: POOL_BENCHMARK_ETFS,
       video: POOL_VIDEO_TICKERS,
+      // Step 5b (the owner's widening): every symbol with a stock page.
+      stockPages: STOCK_PAGE_SYMBOLS,
     });
     const tiingoUniverseWritten = await writeTiingoUniverse(tiingoUniverse);
 

@@ -192,6 +192,12 @@ const plan = U.planTiingoUniverse({ targets: ["AAPL", "BRK.B", "TBB", "CCZ"], et
 check("the plan unions every source, in pool spelling, sorted", plan.symbols.join() === "AAPL,BRK-B,IFNNY,SPY", plan.symbols.join());
 check("...less debt listings (TBB, CCZ) by the jobs' own rules", !plan.symbols.includes("TBB") && !plan.symbols.includes("CCZ") && plan.dropped.debt + plan.dropped.excluded === 2, JSON.stringify(plan.dropped));
 check("...and says how many each source gave", plan.sources.targets === 4 && plan.sources.etfs === 1 && plan.sources.video === 2);
+const NAMES = Object.keys(JSON.parse(raw("data/company-names.json")).rows);
+const pagesPlan = U.planTiingoUniverse({ stockPages: U.STOCK_PAGE_SYMBOLS });
+check("5b: every symbol with a stock page is in (the name file + the sitemap's curated list)",
+  NAMES.every((s) => U.STOCK_PAGE_SYMBOLS.includes(s)) && ["VTI", "GLD", "KO", "BRK.B"].every((s) => U.STOCK_PAGE_SYMBOLS.includes(s)), `${U.STOCK_PAGE_SYMBOLS.length} listed`);
+check("5b: ...with debt dropped, ~2,580 symbols (the PR's cost figures assume this size)",
+  pagesPlan.symbols.length >= 2400 && pagesPlan.symbols.length <= 3000 && pagesPlan.dropped.debt > 0 && pagesPlan.symbols.includes("BRK-B"), `${pagesPlan.symbols.length} kept, ${pagesPlan.dropped.debt} debt dropped`);
 check("a stored list parses; an empty or junk one is null (the jobs fall back)",
   U.parseTiingoUniverse(JSON.stringify({ at: 1, symbols: ["aapl"] }))?.symbols.join() === "AAPL" &&
   U.parseTiingoUniverse({ at: 1, symbols: [] }) === null && U.parseTiingoUniverse("nope") === null && U.parseTiingoUniverse(null) === null);
@@ -325,6 +331,7 @@ const getWarmTargetSymbols = async () => ({ symbols: ["AAPL"], displayed: 1, uni
 const warmPricePool = async (syms, now, opts) => { S().log.push("warm"); S().warmOpts = opts; return { ok: true, written: 1 }; };
 const POOL_BENCHMARK_ETFS = ["SPY"];
 const POOL_VIDEO_TICKERS = ["IFNNY"];
+const STOCK_PAGE_SYMBOLS = ["KO"];
 const isActiveMarketWindow = () => S().open;
 const keepPricePoolAlive = async () => { S().log.push("keepalive"); return true; };
 const planTiingoUniverse = (parts) => ({ symbols: Object.values(parts).flat(), sources: {}, dropped: { debt: 0, excluded: 0 } });
@@ -343,7 +350,7 @@ export { GET };`,
   };
   const noKey = await run(true, {});
   want("FMP_API_KEY unset, in session: no 500", noKey.res?.init?.status !== 500 && noKey.res?.body?.ok === true);
-  want("...the Tiingo universe is still written, from targets + ETFs + video tickers", noKey.log.includes("universe") && noKey.universe?.join() === "AAPL,SPY,IFNNY");
+  want("...the Tiingo universe is still written, from targets + ETFs + video tickers + stock pages (5b)", noKey.log.includes("universe") && noKey.universe?.join() === "AAPL,SPY,IFNNY,KO");
   want("...the pool is kept alive BEFORE the run returns, and recorded", noKey.log.includes("keepalive") && noKey.log.indexOf("keepalive") < noKey.log.indexOf("record") && noKey.records[0]?.poolKeptAlive === true);
   want("...and no FMP warm is attempted", !noKey.log.includes("warm"));
   const shut = await run(false, {});
@@ -363,6 +370,7 @@ const R_MUTANTS = [
   ["the early 500 restored", /(if \(!isAuthorized\(req\)\) \{[\s\S]*?\n {2}\})/, '$1\n  if (!process.env.FMP_API_KEY) {\n    return NextResponse.json({ error: "Missing FMP_API_KEY environment variable." }, { status: 500 });\n  }'],
   ["the universe written only with an FMP key", /const tiingoUniverseWritten = await writeTiingoUniverse\(tiingoUniverse\);/, "const tiingoUniverseWritten = process.env.FMP_API_KEY ? await writeTiingoUniverse(tiingoUniverse) : false;"],
   ["the mover buckets kept on Tiingo", /moverBuckets: priceProviderFor\("POOL"\) !== "tiingo",/, "moverBuckets: true,"],
+  ["5b: the stock-page symbols left out", /\n\s*stockPages: STOCK_PAGE_SYMBOLS,/, ""],
 ];
 for (const [label, from, to] of R_MUTANTS) {
   const m = ROUTE_SRC.replace(from, to);

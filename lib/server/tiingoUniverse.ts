@@ -9,7 +9,8 @@
 //
 // THE FIX. A symbols-only key, msh:tiingo:universe:v1, written by the
 // warm-price-pool route on every in-session run from what it already has in
-// hand (the warm targets, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS), with no FMP
+// hand (the warm targets, POOL_BENCHMARK_ETFS, POOL_VIDEO_TICKERS, and -- step
+// 5b -- every symbol with a stock page, STOCK_PAGE_SYMBOLS below), with no FMP
 // call and whether or not FMP_API_KEY is set. jobs.ts universe() reads it first
 // and falls back to the pool's HKEYS only while it is absent. Debt listings and
 // PRICE_EXCLUDED are dropped here; jobs.ts drops them again, and applies the
@@ -27,9 +28,34 @@ import { TIINGO_UNIVERSE_KEY, TIINGO_UNIVERSE_TTL_SECONDS } from "./marketData/k
 import { isDebtListing } from "./marketData/universe";
 import { isPriceExcluded } from "../priceExcluded.mjs";
 import { poolField } from "./pricePool";
+import companyNameSnapshot from "@/data/company-names.json";
+import { priorityStocks, uniqueEtfs } from "../curatedSymbols";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? Redis.fromEnv() : null;
+
+/**
+ * EVERY SYMBOL WITH A STOCK PAGE (step 5b, #553 COWORK #98 ruling 2, the owner's
+ * widening). /stock/[symbol] renders for any ticker, so "has a stock page" is
+ * taken as the two committed lists the site itself treats as its stock pages:
+ *
+ *   data/company-names.json   the stock page's committed name floor
+ *                             (companyNameSnapshot.ts): 2,610 symbols, the same
+ *                             set as data/sec/registrants.json ("every profiled
+ *                             symbol"), i.e. every page with an About block
+ *   curatedSymbols            priorityStocks + uniqueEtfs: the sitemap's
+ *                             /stock/{sym} entries and the /stocks A-Z directory
+ *                             (161, including the 32 ETFs the name file lacks)
+ *
+ * 2,580 after the debt filter (61 notes dropped), counted from the repo on
+ * 2026-10-02. Committed files, so the list needs no Redis read, no FMP call
+ * and no visitor.
+ */
+export const STOCK_PAGE_SYMBOLS: readonly string[] = [
+  ...Object.keys((companyNameSnapshot as { rows?: Record<string, string> }).rows ?? {}),
+  ...priorityStocks,
+  ...uniqueEtfs,
+];
 
 export type TiingoUniversePlan = {
   symbols: string[];
