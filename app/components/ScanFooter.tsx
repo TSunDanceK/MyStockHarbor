@@ -49,6 +49,7 @@ export default function ScanFooter({
   updatedLabel,
   priceLabel,
   marketDataCredit = null,
+  marketDataHref = null,
 }: {
   serverMatchCount: number;
   universeSize: number | null;
@@ -68,6 +69,11 @@ export default function ScanFooter({
    * null while it is still FMP's. Chosen by the server page, not here.
    */
   marketDataCredit?: string | null;
+  /**
+   * Where the credit links (#553 COWORK #92): every other Tiingo surface links
+   * it, and so does this line. Null renders the credit as plain text.
+   */
+  marketDataHref?: string | null;
 }) {
   const { matchCount } = usePickerFilter();
   const live = matchCount ?? serverMatchCount;
@@ -80,7 +86,16 @@ export default function ScanFooter({
       {universeSize == null && poolSize == null ? <> · Universe Live</> : null}
       {" "}· Updated {updatedLabel}
       {priceLabel ? <> · {priceLabel}</> : null}
-      {marketDataCredit ? <> · {marketDataCredit}</> : null}
+      {marketDataCredit ? (
+        <>
+          {" "}·{" "}
+          {marketDataHref ? (
+            <a href={marketDataHref} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{marketDataCredit}</a>
+          ) : (
+            marketDataCredit
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

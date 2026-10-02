@@ -29,6 +29,7 @@ import {
 import { HIDDEN_FIELD_KEYS } from "@/lib/pickerHiddenFields";
 import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
@@ -1878,7 +1879,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                   poolSize={dynamicUniverseCount}
                   updatedLabel={formatUpdatedAt(updatedAt)}
                   priceLabel={formatPriceWindow(priceOldestTs, priceNewestTs)}
-                  marketDataCredit={priceProviderFor("PICKERS") === "tiingo" ? "Market data from Tiingo.com" : null}
+                  marketDataCredit={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_CREDIT : null}
+                  marketDataHref={priceProviderFor("PICKERS") === "tiingo" ? TIINGO_URL : null}
                 />
 
                 <HideWatermarksBar />
