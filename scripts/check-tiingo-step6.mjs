@@ -81,6 +81,28 @@ check("after the close, before the EOD job: still the IEX trade, never yesterday
 r = S.pickSurfacePrice(row(Date.UTC(2026, 11, 1, 19, 5)), [], Date.UTC(2026, 11, 1, 19, 6));
 check("ET across the DST change (EST in December)", r?.label === "last IEX trade, 14:05 ET", JSON.stringify(r));
 
+// THE SESSION SUFFIX (#563 COWORK #35), from the trade's own ET time.
+const labelAt = (utcMs, nowMs = utcMs + 60_000) => S.pickSurfacePrice(row(utcMs), [bar("2026-09-28", 99)], nowMs)?.label;
+const SESSION_CASES = [
+  ["08:40 EDT is pre-market", Date.UTC(2026, 8, 29, 12, 40), "last IEX trade, 08:40 ET (pre-market)"],
+  ["10:00 EDT is in session: no suffix", Date.UTC(2026, 8, 29, 14, 0), "last IEX trade, 10:00 ET"],
+  ["16:30 EDT is after hours", Date.UTC(2026, 8, 29, 20, 30), "last IEX trade, 16:30 ET (after hours)"],
+  ["09:30 and 16:00 themselves are in session", Date.UTC(2026, 8, 29, 13, 30), "last IEX trade, 09:30 ET"],
+  ["16:00 EDT is in session", Date.UTC(2026, 8, 29, 20, 0), "last IEX trade, 16:00 ET"],
+  // DST: 13:40 UTC is 09:40 EDT on 30 Oct but 08:40 EST on 3 Nov (US clocks change 1 Nov 2026).
+  ["across DST, 13:40 UTC on 30 Oct is 09:40 EDT, in session", Date.UTC(2026, 9, 30, 13, 40), "last IEX trade, 09:40 ET"],
+  ["across DST, 13:40 UTC on 3 Nov is 08:40 EST, pre-market", Date.UTC(2026, 10, 3, 13, 40), "last IEX trade, 08:40 ET (pre-market)"],
+  ["an earlier day's after-hours trade names its date and session",
+    Date.UTC(2026, 8, 29, 21, 5), "last IEX trade, 17:05 ET, 29 Sep (after hours)", Date.UTC(2026, 8, 30, 12, 0)],
+];
+/** Every session case, against a given pickSurfacePrice. */
+const sessionLabelsHold = (pick) =>
+  SESSION_CASES.every(([, at, want, now]) => pick(row(at), [bar("2026-09-28", 99)], now ?? at + 60_000)?.label === want);
+for (const [name, at, want, now] of SESSION_CASES) {
+  const got = labelAt(at, now);
+  check(`session label: ${name}`, got === want, got);
+}
+
 check("no row, no bars: null (the caller keeps FMP), never a zero", S.pickSurfacePrice(null, null, TUE_1405_EDT) === null);
 check("a zero or negative price is not a price",
   S.pickSurfacePrice(row(TUE_1405_EDT, 0), [bar("2026-09-28", -1)], TUE_1405_EDT) === null);
@@ -93,6 +115,24 @@ check("and are fmp unless set to tiingo",
   ["SPX", "VIDEOS", "NEWS_HERO"].every((s) => P.priceProviderFor(s, {}) === "fmp" && P.priceProviderFor(s, { [`PRICE_PROVIDER_${s}`]: "tiingo" }) === "tiingo"));
 const readsNone = await S.readSurfacePrice("SPY");
 check("with no Redis configured, the read is null, not a throw", readsNone === null);
+
+// THE SUFFIX MUTANT (COWORK #35): the same module with the suffix dropped must
+// fail the session cases. The copy sits beside the original so its relative
+// imports resolve, and is removed straight after.
+{
+  const src = raw(FILES.surface);
+  const mutated = src.replace("${sessionSuffix(iex.time)}`", "`");
+  const copy = path.join(ROOT, "lib/server", `.tiingoSurfacePrice.mutant-${process.pid}.ts`);
+  let bites = false;
+  if (mutated !== src) {
+    fs.writeFileSync(copy, mutated);
+    try { bites = !sessionLabelsHold((await import(pathToFileURL(copy).href)).pickSurfacePrice); }
+    catch { bites = true; }
+    finally { fs.rmSync(copy, { force: true }); }
+  }
+  check("mutant bites: dropping the session suffix fails the session labels", mutated !== src && bites,
+    mutated === src ? "the mutation did not apply" : "");
+}
 
 // ── the static rules, each a function of source so section 5 can mutate it ──
 const TIINGO_READS = /readTiingoPool|readTiingoHistory|readSurfacePrice|readSurfaceInputs|tiingoSurfacePrice|marketData\/read/;
