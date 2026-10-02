@@ -7,6 +7,8 @@ import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
 import { getPickersData } from "@/lib/server/pickersBuilder";
+import { priceProviderFor } from "@/lib/server/marketData/provider";
+import { TIINGO_CREDIT, TIINGO_URL } from "@/lib/server/tiingoSurfacePrice";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -208,6 +210,14 @@ export default async function PickersPage() {
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
             <PickersClient latestInsights={latestInsights} initialPickersPayload={initialPickersPayload ?? undefined} />
+            {/* THE CREDIT ON THE HUB TOO (#553 COWORK #92): the cards show prices
+                from the same Pickers build, so the hub carries the same linked
+                credit as every result page, under the same switch. */}
+            {priceProviderFor("PICKERS") === "tiingo" ? (
+              <p className="pickersCredit" style={{ margin: "12px 2px 0", fontSize: 12, color: "rgba(148,163,184,0.8)" }}>
+                <a href={TIINGO_URL} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{TIINGO_CREDIT}</a>
+              </p>
+            ) : null}
           </div>
         </section>
 
