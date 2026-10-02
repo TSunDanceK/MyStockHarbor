@@ -12,13 +12,21 @@ const age = (at) => (Number.isFinite(at) ? `${((Date.now() - at) / 3_600_000).to
 
 const pool = (await redis.hmget("msh:price-pool:v1", ...symbols)) ?? {};
 const quotes = (await redis.hmget("msh:tiingo:quotes:v1", ...symbols)) ?? {};
+// BAR COUNT, NOT EXISTS (#553 COWORK #88): MA200 needs >=200 stored bars.
+// The count and the newest bar's DATE are printed; no price or volume.
 const eod = await redis.pipeline();
-for (const s of symbols) eod.exists(`msh:tiingo:eod:v2:${s}`);
-const eodHas = await eod.exec();
+for (const s of symbols) eod.get(`msh:tiingo:eod:v2:${s}`);
+const eodRows = (await eod.exec()).map((v) => (v ? parse(v) : null));
+const eodHas = eodRows.map((r) => {
+  const bars = r && Array.isArray(r.bars) ? r.bars : null;
+  if (!bars) return r ? "yes (no bars array)" : null;
+  const last = bars[bars.length - 1];
+  return `yes, ${bars.length} bars${bars.length >= 200 ? " (>=200, MA200 computes)" : " (<200)"}, newest ${Array.isArray(last) ? last[0] : "?"}`;
+});
 symbols.forEach((s, i) => {
   const p = pool[s] ? parse(pool[s]) : null;
   const q = quotes[s] ? parse(quotes[s]) : null;
-  console.log(`${s}: price pool ${p ? `yes (row age ${age(p.at)})` : "NO"}; Tiingo quote pool ${q ? `yes (age ${age(q.at)})` : "no"}; Tiingo EOD history ${eodHas[i] ? "yes" : "no"}`);
+  console.log(`${s}: price pool ${p ? `yes (row age ${age(p.at)})` : "NO"}; Tiingo quote pool ${q ? `yes (age ${age(q.at)})` : "no"}; Tiingo EOD history ${eodHas[i] ?? "no"}`);
 });
 // Do the pool adds leak into Pickers or the warm targets? (#553 COWORK #85)
 const parse2 = (v) => (typeof v === "string" ? JSON.parse(v) : v);
